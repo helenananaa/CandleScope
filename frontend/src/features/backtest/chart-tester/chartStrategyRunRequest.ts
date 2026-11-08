@@ -9,6 +9,7 @@ import {
 } from "../backtestApi.js";
 import { validExecutionOverrides } from "../../../shared/strategyRunSettings.js";
 import { pollBacktestRunToTerminal, type waitForBacktestPoll } from "../backtestRunClient.js";
+import type { PreparationJob } from "../../data-preparation/api.js";
 import type { BacktestRunRecord } from "../backtestTypes.js";
 import { StrategyRunStreamError } from "../backtestRunStream.js";
 import {
@@ -37,6 +38,7 @@ export type ChartStrategyRunApi = Pick<BacktestApiClient,
 
 export type ResearchRunSource =
   | { kind: "CURRENT_CHART"; materializeResolution?: ChartContextResolution | null }
+  | { kind: "MARKET_HISTORY"; endTimeMsExclusive: number }
   | {
     kind: "IMPORTED_DATASET";
     datasetId: string;
@@ -591,6 +593,7 @@ export async function runResearchBacktest(options: {
   wait?: typeof waitForBacktestPoll;
   onStage?(stage: ChartStrategyRunStage): void;
   onRevision?(revision: StrategyRevisionRecord): void;
+  onPreparation?(job: PreparationJob): void | Promise<void>;
   onResolution?(resolution: ChartContextResolution): void;
   onRunCreated?(run: BacktestRunRecord, identity: ResultProjectionIdentity): void | Promise<void>;
   onRunUpdate?(run: BacktestRunRecord): void;
@@ -650,7 +653,8 @@ export async function runResearchBacktest(options: {
       throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "The saved continuous profile needs Python 1-minute BAR preparation");
     }
     const contextRequest = chartContextRequestForFrozen(frozen);
-    if (!precise && options.source.materializeResolution) {
+    if (options.source.kind === "MARKET_HISTORY") contextRequest.end_time_ms = options.source.endTimeMsExclusive - 1;
+    if (!precise && options.source.kind === "CURRENT_CHART" && options.source.materializeResolution) {
       options.onStage?.("MATERIALIZING");
       await options.api.materializeChartContext({
         resolution_token: options.source.materializeResolution.resolution_token,
@@ -686,7 +690,7 @@ export async function runResearchBacktest(options: {
       };
       const preparationKey = await chartStrategySha256({ context: contextRequest, strategy: strategyIntent,
         resolved_context: resolution.chart_context_hash });
-      resolution = await options.api.prepareChartContext(contextRequest, options.signal, strategyIntent, preparationKey);
+      resolution = await options.api.prepareChartContext(contextRequest, options.signal, strategyIntent, preparationKey, options.onPreparation);
       options.onResolution?.(resolution);
     }
     if (profile && resolution.status === "READY" && !resolution.prepared_run) {

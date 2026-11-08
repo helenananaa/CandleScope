@@ -177,3 +177,71 @@ test("precise batches keep each trade dataset's declared range and reject BAR-on
   owner.dispose();
   reopened.dispose();
 });
+
+test("mixed market preparation saves progress and reconnects to the original failed job after restart", async () => {
+  const local = dataset("a");
+  const prepared = { ...dataset("exchange"), data_epoch: "fixed-epoch" };
+  const startMs = Date.UTC(2026, 0, 1), endMs = startMs + 5 * 60_000;
+  const market = { session: { exchange: "binance", marketType: "spot", symbol: "BTCUSDT", interval: "5m" }, startMs, endMs };
+  const storage = memory();
+  const id = "c".repeat(32);
+  const revision = "revision-exchange";
+  const run = dataRun("exchange", prepared);
+  const progress = (scope: string, ready = false): import("../../data-preparation/api.js").PreparationJob => ({
+    id, state: ready ? "READY" : "FAILED", stage: ready ? "READY" : "ACQUIRING",
+    completed: ready ? 4 : 2, total: 4, revision: ready ? 6 : 3, cancel_requested: false,
+    request: { consumer: "STRATEGY", requirements: [{ symbol: "BTCUSDT" }],
+      intent: { strategy: { chart_cell_scope: scope, strategy_revision_id: revision } } },
+    result: ready ? { strategy_run: run, resolution: {
+      status: "READY", dataset_id: prepared.dataset_id, data_epoch: prepared.data_epoch, snapshot_hash: run.snapshot_hash,
+    } as import("../../backtest/backtestApi.js").ChartContextResolution } : null,
+    error: ready ? null : { code: "SOURCE_TEMPORARY", message: "Source temporarily unavailable", retryable: true },
+  });
+  const owner = new StrategyResearchBatch({
+    async runResearch(input) {
+      if (input.source.kind === "IMPORTED_DATASET") {
+        await input.onRunCreated?.(dataRun("a", local), { strategyRevisionId: "revision-a", snapshotHash: "snapshot-a" } as ResultProjectionIdentity);
+        return done;
+      }
+      assert.deepEqual(input.source, { kind: "MARKET_HISTORY", endTimeMsExclusive: endMs });
+      assert.deepEqual(input.request.session, market.session);
+      assert.deepEqual(input.request.attachment.customRange, { startMs, endMs });
+      assert.equal(input.request.attachment.parameters.size, 3);
+      await input.onPreparation?.(progress(input.request.cellScope));
+      throw new Error("Source temporarily unavailable");
+    },
+    async restoreRun() { assert.fail("must not restore a run before preparation"); },
+  }, storage);
+  await owner.submit(request(), [local], [market]);
+  await waitFor(() => owner.snapshot().jobs[0]?.status === "COMPLETED" && owner.snapshot().jobs[1]?.status === "FAILED");
+  const failed = owner.snapshot().jobs[1]!;
+  assert.equal(failed.preparation?.id, id);
+  assert.equal(failed.preparation?.completed, 2);
+  assert.equal(failed.preparation?.retryable, true);
+  owner.dispose();
+
+  const restored = new StrategyResearchBatch({
+    async runResearch() { assert.fail("must not launch a second preparation"); },
+    async observeResearchPreparation(jobId, scope, retry, onProgress) {
+      assert.equal(jobId, id);
+      assert.equal(scope, failed.market?.scope);
+      assert.equal(retry, true);
+      const ready = progress(scope, true);
+      await onProgress(ready);
+      return ready;
+    },
+    async restoreRun(runId) {
+      assert.equal(runId, run.run_id);
+      return { run: { ...run, state: "COMPLETED" }, config: { strategy_revision_id: revision, start_time_ms: startMs, end_time_ms: endMs - 1 } };
+    },
+  }, storage);
+  restored.start();
+  restored.resume(failed.id, true);
+  await waitFor(() => restored.snapshot().jobs[1]?.status === "COMPLETED");
+  const result = restored.snapshot().jobs[1]!;
+  assert.equal(result.datasetId, prepared.dataset_id);
+  assert.equal(result.dataEpoch, prepared.data_epoch);
+  assert.equal(result.snapshotHash, run.snapshot_hash);
+  assert.equal(result.preparation?.id, id);
+  restored.dispose();
+});

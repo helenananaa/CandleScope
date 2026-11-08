@@ -191,7 +191,9 @@ export interface BacktestApiClient {
     execution_overrides?: import("../../shared/strategyRunSettings.js").StrategyExecutionOverrides;
     chart_cell_scope: string;
     strategy_draft_id: string;
-  }, idempotencyKey?: string): Promise<ChartContextResolution>;
+  }, idempotencyKey?: string, onProgress?: (job: PreparationJob) => void | Promise<void>): Promise<ChartContextResolution>;
+  observeStrategyPreparation?(jobId: string, scope: string, retry: boolean,
+    onProgress: (job: PreparationJob) => void | Promise<void>, signal?: AbortSignal): Promise<PreparationJob>;
   capabilities(signal?: AbortSignal): Promise<BacktestCapabilities>;
   listDatasets(signal?: AbortSignal): Promise<BacktestDataset[]>;
   previewSnapshot(
@@ -413,19 +415,39 @@ export function createBacktestApi(base = `${API_BASE}/backtests`): BacktestApiCl
         }, signal)),
       );
     },
-    async prepareChartContext(body, signal, strategy, idempotencyKey = crypto.randomUUID()) {
+    async prepareChartContext(body, signal, strategy, idempotencyKey = crypto.randomUUID(), onProgress = () => undefined) {
       const transport = { basePath: base.replace(/\/backtests$/, "/data-preparations") };
       const initial = await preparationRequest<PreparationJob>("/strategy", {
         method: "POST", headers: { "content-type": "application/json" }, signal: signal ?? null,
         body: JSON.stringify({ idempotency_key: idempotencyKey, context: body, ...(strategy ? { strategy } : {}) }),
       }, transport);
-      const ready = await waitForPreparation(initial, () => undefined, signal, transport);
+      const ready = await waitForPreparation(initial, onProgress, signal, transport);
       if (!ready.result?.resolution) throw new Error("Prepared strategy context is missing");
       if (ready.result.strategy_run) return { ...ready.result.resolution, prepared_run: ready.result.strategy_run };
       return readJson(await fetch(`${base}/chart-context/resolve`, requestOptions({
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify(ready.result.resolution.request),
       }, signal)));
+    },
+    async observeStrategyPreparation(jobId, scope, retry, onProgress, signal) {
+      const transport = { basePath: base.replace(/\/backtests$/, "/data-preparations") };
+      const path = `/${encodeURIComponent(jobId)}`;
+      const verify = (job: PreparationJob) => {
+        const intent = job.request.intent.strategy as { chart_cell_scope?: unknown } | undefined;
+        if (job.id !== jobId || job.request.consumer !== "STRATEGY" || intent?.chart_cell_scope !== scope) {
+          throw new Error("STRATEGY_PREPARATION_IDENTITY_MISMATCH");
+        }
+      };
+      let job = await preparationRequest<PreparationJob>(path, { signal: signal ?? null }, transport);
+      verify(job);
+      if (retry && (job.state === "BLOCKED_STORAGE" || (job.state === "FAILED" && job.error?.retryable))
+        && !job.cancel_requested) {
+        job = await preparationRequest<PreparationJob>(path + "/retry", { method: "POST", signal: signal ?? null }, transport);
+      }
+      return waitForPreparation(job, async update => {
+        verify(update);
+        await onProgress(update);
+      }, signal, transport);
     },
     async listRuns(signal) {
       const payload = await readJson<{ runs: BacktestRunRecord[] }>(

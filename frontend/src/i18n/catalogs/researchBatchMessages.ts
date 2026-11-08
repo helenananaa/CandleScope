@@ -1,4 +1,16 @@
 export const researchBatchEnglish = {
+  "researchBatch.marketHelp": "Choose up to {max} data sources. Every task uses the same strategy and its own fixed data.",
+  "researchBatch.allSources": "Batch data sources",
+  "researchBatch.marketAdd": "Add exchange history",
+  "researchBatch.marketSymbol": "Choose a market symbol",
+  "researchBatch.marketInterval": "Historical interval",
+  "researchBatch.marketStart": "Start (UTC)",
+  "researchBatch.marketEnd": "End (UTC, exclusive)",
+  "researchBatch.marketRange": "Choose past times that align with the selected interval.",
+  "researchBatch.marketUnavailable": "No historical interval is available for this symbol.",
+  "researchBatch.marketSave": "Add to batch",
+  "researchBatch.marketWaiting": "Source waiting until {time}",
+  "researchBatch.marketReconnect": "Reconnect to preparation",
   "researchBatch.studyScope": "Indicator data scope",
   "researchBatch.studyHint": "Choose the data for this indicator. Parameter changes update each selected data version.",
   "researchBatch.studyApply": "Apply to selected data",
@@ -26,6 +38,18 @@ export const researchBatchEnglish = {
 } as const;
 
 export const researchBatchChinese: Record<keyof typeof researchBatchEnglish, string> = {
+  "researchBatch.marketHelp": "最多选择 {max} 份数据。各项任务使用同一策略和各自的固定数据。",
+  "researchBatch.allSources": "批量数据来源",
+  "researchBatch.marketAdd": "添加交易所历史数据",
+  "researchBatch.marketSymbol": "选择市场商品",
+  "researchBatch.marketInterval": "历史周期",
+  "researchBatch.marketStart": "开始时间（UTC）",
+  "researchBatch.marketEnd": "结束时间（UTC，不含）",
+  "researchBatch.marketRange": "请选择与所选周期对齐的过去时间。",
+  "researchBatch.marketUnavailable": "此商品没有可用的历史周期。",
+  "researchBatch.marketSave": "加入批次",
+  "researchBatch.marketWaiting": "数据源等待至 {time}",
+  "researchBatch.marketReconnect": "重新连接准备任务",
   "researchBatch.studyScope": "指标数据范围",
   "researchBatch.studyHint": "为此指标选择数据。修改参数会更新所选的每个数据版本。",
   "researchBatch.studyApply": "应用到所选数据",
@@ -53,6 +77,18 @@ export const researchBatchChinese: Record<keyof typeof researchBatchEnglish, str
 };
 
 export const researchBatchKorean: Record<keyof typeof researchBatchEnglish, string> = {
+  "researchBatch.marketHelp": "데이터 소스를 최대 {max}개 선택하세요. 각 작업은 같은 전략과 개별 고정 데이터를 사용합니다.",
+  "researchBatch.allSources": "일괄 데이터 소스",
+  "researchBatch.marketAdd": "거래소 과거 데이터 추가",
+  "researchBatch.marketSymbol": "시장 종목 선택",
+  "researchBatch.marketInterval": "과거 데이터 주기",
+  "researchBatch.marketStart": "시작 (UTC)",
+  "researchBatch.marketEnd": "종료 (UTC, 미포함)",
+  "researchBatch.marketRange": "선택한 주기와 맞는 과거 시간을 선택하세요.",
+  "researchBatch.marketUnavailable": "이 종목에서 사용할 수 있는 과거 데이터 주기가 없습니다.",
+  "researchBatch.marketSave": "일괄 작업에 추가",
+  "researchBatch.marketWaiting": "{time}까지 데이터 소스 대기",
+  "researchBatch.marketReconnect": "준비 작업에 다시 연결",
   "researchBatch.studyScope": "지표 데이터 범위",
   "researchBatch.studyHint": "이 지표의 데이터를 선택하세요. 매개변수를 바꾸면 선택한 모든 데이터 버전의 결과가 갱신됩니다.",
   "researchBatch.studyApply": "선택한 데이터에 적용",
@@ -80,6 +116,18 @@ export const researchBatchKorean: Record<keyof typeof researchBatchEnglish, stri
 };
 
 export const researchBatchBrazilian: Record<keyof typeof researchBatchEnglish, string> = {
+  "researchBatch.marketHelp": "Escolha até {max} fontes de dados. Cada tarefa usa a mesma estratégia e seus próprios dados fixos.",
+  "researchBatch.allSources": "Fontes de dados do lote",
+  "researchBatch.marketAdd": "Adicionar histórico da corretora",
+  "researchBatch.marketSymbol": "Escolher um ativo",
+  "researchBatch.marketInterval": "Período do histórico",
+  "researchBatch.marketStart": "Início (UTC)",
+  "researchBatch.marketEnd": "Fim (UTC, exclusivo)",
+  "researchBatch.marketRange": "Escolha horários no passado alinhados ao período selecionado.",
+  "researchBatch.marketUnavailable": "Não há período de histórico disponível para este ativo.",
+  "researchBatch.marketSave": "Adicionar ao lote",
+  "researchBatch.marketWaiting": "Fonte em espera até {time}",
+  "researchBatch.marketReconnect": "Reconectar à preparação",
   "researchBatch.studyScope": "Escopo de dados do indicador",
   "researchBatch.studyHint": "Escolha os dados para este indicador. Ao alterar os parâmetros, os resultados são atualizados para cada versão selecionada.",
   "researchBatch.studyApply": "Aplicar aos dados selecionados",

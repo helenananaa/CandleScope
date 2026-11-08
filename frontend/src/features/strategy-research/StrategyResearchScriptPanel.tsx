@@ -75,6 +75,8 @@ export function StrategyResearchScriptPanel({
   configuration = DEFAULT_STRATEGY_RUN_SETTINGS,
   onConfigure,
   batchControls,
+  batchSession,
+  marketBatchAvailable,
 }: {
   cellScope: string;
   session: ChartSession | null;
@@ -92,6 +94,8 @@ export function StrategyResearchScriptPanel({
   configuration?: StrategyRunSettings | undefined;
   onConfigure?(settings: StrategyRunSettings): void;
   batchControls?(request: ChartStrategyRunRequest | null): ReactNode;
+  batchSession?: ChartSession | null;
+  marketBatchAvailable?: boolean;
 }) {
   const draftStore = useMemo(() => getChartStrategyDraftStore(), []);
   const [draft, setDraft] = useState<StrategyDraftRecord | null>(null);
@@ -256,12 +260,13 @@ export function StrategyResearchScriptPanel({
     onOpenAdvanced();
   }, [draftId, flushPendingDraft, onOpenAdvanced]);
 
+  const editorSession = session ?? batchSession;
   const preciseBlocked = barOnly && configuration.fidelityPreference === "PRECISE";
   const runRequest = useMemo<ChartStrategyRunRequest | null>(() => {
-    if (draft === null || session === null || preciseBlocked || !validStrategyRunSettings(configuration)) return null;
+    if (draft === null || !editorSession || (preciseBlocked && !marketBatchAvailable) || !validStrategyRunSettings(configuration)) return null;
     return {
       cellScope,
-      session,
+      session: editorSession,
       draftId: draft.id,
       draftContentRevision: strategyDraftContentRevision(source),
       displayName: draft.displayName,
@@ -276,17 +281,17 @@ export function StrategyResearchScriptPanel({
         language: draft.language,
         parameters: {},
         fidelityPreference: "FAST",
-        quickPresetId: chartStrategyQuickPresetIdForMarket(session.marketType),
+        quickPresetId: chartStrategyQuickPresetIdForMarket(editorSession.marketType),
         autoRun: false,
         ...configuration,
       },
     };
-  }, [cellScope, configuration, draft, preciseBlocked, session, source, pythonTrustedConfirmed]);
+  }, [cellScope, configuration, draft, editorSession, marketBatchAvailable, preciseBlocked, source, pythonTrustedConfirmed]);
 
   const run = useCallback(() => {
-    if (!runRequest) { setPane("conditions"); return; }
+    if (!runRequest || !session || preciseBlocked) { setPane("conditions"); return; }
     onRun(runRequest);
-  }, [onRun, runRequest]);
+  }, [onRun, preciseBlocked, runRequest, session]);
 
   const controlReady = () => session !== null && sourceKind !== null && !["RUNNING", "QUEUED", "RESOLVING"].includes(runStatus);
   useControlCommands(() => ({ id: `host-strategy:${cellScope}`, title: "Host strategy editor and saved drafts", context: () => ({ session, sourceKind, draftId, source, configuration, runStatus }),
@@ -301,8 +306,10 @@ export function StrategyResearchScriptPanel({
       command("prepare", "Confirm the current missing-data preparation workflow.", empty, () => onConfirmNeedsData(), { available: () => controlReady() && needsData && runRequest !== null }),
       command("openAdvanced", "Flush the draft and open advanced research.", empty, () => openAdvanced()),
     ] }));
-  if (session === null || sourceKind === null) {
-    return <p data-testid="strategy-research-script-empty">{t("strategy.scriptSlot")}</p>;
+  if (!editorSession) {
+    return <><p data-testid="strategy-research-script-empty">{t("strategy.scriptSlot")}</p>
+      {marketBatchAvailable && batchControls?.(null)}
+    </>;
   }
 
   return (
@@ -350,7 +357,7 @@ export function StrategyResearchScriptPanel({
             {(["parameters", "code", "conditions"] as const).map((value) => <button type="button" role="tab" key={value} aria-selected={pane === value} onClick={() => setPane(value)}>{t(value === "parameters" ? "ux.parameters" : value === "code" ? "chartTester.tab.script" : "chartTester.tab.settings")}</button>)}
           </div>
           {pane === "parameters" && <StrategyParametersEditor source={source} onChange={setSource} />}
-          {pane === "conditions" && onConfigure && <StrategyConditionsEditor settings={configuration} marketType={session.marketType} capitalAsset={capitalAsset} preciseAvailable={!barOnly} preciseArchiveHint={sourceKind === "CURRENT_CHART"} onChange={onConfigure} />}
+          {pane === "conditions" && onConfigure && <StrategyConditionsEditor settings={configuration} marketType={editorSession.marketType} capitalAsset={capitalAsset} preciseAvailable={!barOnly || !!marketBatchAvailable} preciseArchiveHint={sourceKind === "CURRENT_CHART"} onChange={onConfigure} />}
           {openEditor && pane === "code" ? (
             <Suspense fallback={<p>{t("strategy.scriptSlot")}</p>}>
               <StrategyScriptWorkspace
@@ -370,14 +377,11 @@ export function StrategyResearchScriptPanel({
             type="button"
             data-testid="strategy-research-run"
             className="research-primary"
-            disabled={(draft.language === "python" && !pythonTrustedConfirmed) || !runRequest || runStatus === "RUNNING" || runStatus === "QUEUED" || runStatus === "RESOLVING"}
+            disabled={!session || preciseBlocked || (draft.language === "python" && !pythonTrustedConfirmed) || !runRequest || runStatus === "RUNNING" || runStatus === "QUEUED" || runStatus === "RESOLVING"}
             onClick={needsData ? onConfirmNeedsData : run}
           >
             {t(needsData ? "chartTester.prepareDataRun" : "chartTester.run")}
           </button>
-          {batchControls?.(runRequest
-            && !runRequest.attachment.pythonBarExecution
-            && (runRequest.language !== "python" || pythonTrustedConfirmed) ? runRequest : null)}
           <button
             type="button"
             className="chart-strategy-advanced-link"
@@ -388,6 +392,8 @@ export function StrategyResearchScriptPanel({
           </button>
         </>
       )}
+      {batchControls?.(runRequest && !runRequest.attachment.pythonBarExecution
+        && (runRequest.language !== "python" || pythonTrustedConfirmed) ? runRequest : null)}
     </section>
   );
 }

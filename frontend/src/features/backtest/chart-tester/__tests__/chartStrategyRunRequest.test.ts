@@ -796,3 +796,27 @@ test("Strategy Manager rejects a replay response for a different cursor or resul
   await assert.rejects(manager.loadResultReplay(withMa), /requested boundary/);
   manager.dispose();
 });
+
+test("explicit market batch uses its own interval and sends the last included millisecond to preparation", async () => {
+  const calls: string[] = [];
+  const api = apiWithResolutions([resolution("NEEDS_DATA")], calls);
+  const startMs = Date.UTC(2026, 0, 1);
+  const endMs = startMs + 3_600_000;
+  let observed = false;
+  api.prepareChartContext = async (context, _signal, intent, key, progress) => {
+    assert.equal(context.end_time_ms, endMs - 1);
+    assert.equal(context.start_time_ms, startMs);
+    assert.equal(context.interval, "1h");
+    assert.equal(intent?.chart_cell_scope, request.cellScope);
+    assert.match(key!, /^sha256:[a-f0-9]{64}$/);
+    await progress?.({ id: "fixture" } as import("../../../data-preparation/api.js").PreparationJob);
+    return { ...resolution(), prepared_run: completed() };
+  };
+  const outcome = await runResearchBacktest({
+    api, request: { ...request, attachment: { ...request.attachment, rangeMode: "CUSTOM", customRange: { startMs, endMs } } },
+    source: { kind: "MARKET_HISTORY", endTimeMsExclusive: endMs },
+    onPreparation: () => { observed = true; },
+  });
+  assert.equal(outcome.kind, "TERMINAL");
+  assert.equal(observed, true);
+});
