@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { replayChartNotePoints, replayChartNoteVersions } from "../replayChartAnnotations.js";
+import { replayChartNotePoints, replayChartNoteVersions, type ReplayChartNoteFilter } from "../replayChartAnnotations.js";
 import type { ReplayNote, ReplayNotesResponse } from "../replayNotes.js";
 
 const at = 1_700_000_400_000;
@@ -54,7 +54,7 @@ test("note filters match only the revealed version's source and attachments", ()
     id: "image", runId: "run", trackId: "btc", dataEpoch: "btc-epoch", marketTimeMs: at,
     timelineSequence: 11, savedAtMs: at, width: 1, height: 1, interval: "5m", chartType: "candles",
   }] };
-  const markers = (versions: ReplayNote[], filter: Parameters<typeof replayChartNotePoints>[4]) =>
+  const markers = (versions: ReplayNote[], filter: ReplayChartNoteFilter) =>
     replayChartNotePoints(versions, "5m", true, () => true, () => "Notes", filter).map(point => [point.id, point.revision]);
   assert.deepEqual(markers([note, supplement], { noteFilter: "linked" }), []);
   assert.deepEqual(markers([linked, supplement], { noteSource: "original", noteFilter: "linked" }), [["plan", 2]]);
