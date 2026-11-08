@@ -97,6 +97,7 @@ export function StrategyResearchScriptPanel({
   batchSession?: ChartSession | null;
   marketBatchAvailable?: boolean;
 }) {
+  const editorSession = session ?? batchSession;
   const draftStore = useMemo(() => getChartStrategyDraftStore(), []);
   const [draft, setDraft] = useState<StrategyDraftRecord | null>(null);
   const [source, setSource] = useState("");
@@ -231,7 +232,7 @@ export function StrategyResearchScriptPanel({
 
   const startDraft = useCallback(async (templateId: string) => {
     const template = CHART_STRATEGY_TEMPLATES.find((item) => item.id === templateId);
-    if (!template || session === null) return;
+    if (!template || !editorSession) return;
     const generation = restoreGenerationRef.current + 1;
     restoreGenerationRef.current = generation;
     const record = await saveDraft({
@@ -247,7 +248,7 @@ export function StrategyResearchScriptPanel({
     setCursor(record.cursor);
     setOpenEditor(true);
     onDraftId(record.id);
-  }, [onDraftId, saveDraft, session]);
+  }, [editorSession, onDraftId, saveDraft]);
 
   const openAdvanced = useCallback(async () => {
     try {
@@ -260,7 +261,6 @@ export function StrategyResearchScriptPanel({
     onOpenAdvanced();
   }, [draftId, flushPendingDraft, onOpenAdvanced]);
 
-  const editorSession = session ?? batchSession;
   const preciseBlocked = barOnly && configuration.fidelityPreference === "PRECISE";
   const runRequest = useMemo<ChartStrategyRunRequest | null>(() => {
     if (draft === null || !editorSession || (preciseBlocked && !marketBatchAvailable) || !validStrategyRunSettings(configuration)) return null;
@@ -293,17 +293,17 @@ export function StrategyResearchScriptPanel({
     onRun(runRequest);
   }, [onRun, preciseBlocked, runRequest, session]);
 
-  const controlReady = () => session !== null && sourceKind !== null && !["RUNNING", "QUEUED", "RESOLVING"].includes(runStatus);
+  const controlReady = () => !!editorSession && !["RUNNING", "QUEUED", "RESOLVING"].includes(runStatus);
   useControlCommands(() => ({ id: `host-strategy:${cellScope}`, title: "Host strategy editor and saved drafts", context: () => ({ session, sourceKind, draftId, source, configuration, runStatus }),
     snapshot: () => ({ session, sourceKind, draft, source, configuration, runStatus, needsData, recentDrafts, templates: CHART_STRATEGY_TEMPLATES, pane, openEditor }), commands: [
       command("template", "Create a saved draft from an existing template.", object({ templateId: text(128) }), ({ templateId }) => { if (!CHART_STRATEGY_TEMPLATES.some((row) => row.id === templateId)) throw new Error("TEMPLATE_UNAVAILABLE"); return startDraft(templateId); }, { available: controlReady }),
       command("selectDraft", "Select a currently listed draft.", object({ draftId: nullable(text(128)) }), ({ draftId }) => { if (draftId && !recentDrafts.some((row) => row.id === draftId)) throw new Error("DRAFT_UNAVAILABLE"); onDraftId(draftId); }, { available: controlReady }),
       command("source", "Edit the saved strategy source; flush separately to verify persistence.", object({ source: text(48000, 0) }), ({ source }) => setSource(source), { available: () => controlReady() && !!draft }),
       command("flush", "Flush the existing strategy draft persistence workflow.", empty, () => flushPendingDraft(), { available: () => !!draft }),
-      command("configure", "Edit known host run settings using the same validation as the UI.", object({ rangeMode: choice(["ALL_AVAILABLE", "CUSTOM"]), customRange: nullable(object({ startMs: number(0, 1e15, true), endMs: number(0, 1e15, true) })), parameters: optional(record), fidelityPreference: optional(choice(["FAST", "PRECISE"])), executionOverrides: optional(object({ initialBalance: text(64), equityPercent: text(64), leverage: text(64), feeBps: text(64), slippageBps: text(64) })) }), (value) => { if (!validStrategyRunSettings(value) || (barOnly && value.fidelityPreference === "PRECISE") || !onConfigure) throw new Error("RUN_SETTINGS_INVALID"); onConfigure(value); }, { available: () => controlReady() && !!onConfigure }),
+      command("configure", "Edit known host run settings using the same validation as the UI.", object({ rangeMode: choice(["ALL_AVAILABLE", "CUSTOM"]), customRange: nullable(object({ startMs: number(0, 1e15, true), endMs: number(0, 1e15, true) })), parameters: optional(record), fidelityPreference: optional(choice(["FAST", "PRECISE"])), executionOverrides: optional(object({ initialBalance: text(64), equityPercent: text(64), leverage: text(64), feeBps: text(64), slippageBps: text(64) })) }), (value) => { if (!validStrategyRunSettings(value) || (barOnly && !marketBatchAvailable && value.fidelityPreference === "PRECISE") || !onConfigure) throw new Error("RUN_SETTINGS_INVALID"); onConfigure(value); }, { available: () => controlReady() && !!onConfigure }),
       command("pane", "Select editor pane.", object({ pane: choice(["parameters", "code", "conditions"]) }), ({ pane }) => { setPane(pane); setOpenEditor(true); }),
-      command("run", "Start the host strategy through its draft/session/attachment ownership workflow.", empty, () => run(), { available: () => controlReady() && runRequest !== null }),
-      command("prepare", "Confirm the current missing-data preparation workflow.", empty, () => onConfirmNeedsData(), { available: () => controlReady() && needsData && runRequest !== null }),
+      command("run", "Start the host strategy through its draft/session/attachment ownership workflow.", empty, () => run(), { available: () => controlReady() && session !== null && !preciseBlocked && runRequest !== null }),
+      command("prepare", "Confirm the current missing-data preparation workflow.", empty, () => onConfirmNeedsData(), { available: () => controlReady() && session !== null && !preciseBlocked && needsData && runRequest !== null }),
       command("openAdvanced", "Flush the draft and open advanced research.", empty, () => openAdvanced()),
     ] }));
   if (!editorSession) {
