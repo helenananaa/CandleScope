@@ -144,6 +144,14 @@ class ContinuousStrategyAccess:
             return {"creation":{field:row[field] for field in CREATION_FIELDS},"run":run}
         return await self._command(apply)
 
+    async def auto_repair(self, run_id):
+        controller = self.controller()
+        return await self.work(controller.store.auto_repair.get, run_id)
+
+    async def set_auto_repair(self, run_id, **setting):
+        controller = self.controller()
+        return await self._command(controller.repairs.set_automatic, run_id, **setting)
+
     async def repair_preview(self,run_id,*,expected,resume_after):
         controller=self.controller()
         async def apply():

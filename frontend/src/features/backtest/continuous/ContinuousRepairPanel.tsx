@@ -122,6 +122,7 @@ export default function ContinuousRepairPanel({ manager, view, repair, active, a
   if (!stale && !repair && !intent) return null;
   const progress = repair ? repairProgress(repair) : null;
   const reason = preview?.plan.expanded_range_reason;
+  const automaticReason = repair?.expanded_range_reason;
   const statusMessage = repair?.phase === "COMMITTED" && stale
     ? sameCommit(repair.base_identity, view.identity) ? "repair.updatingView" : "repair.revisedAgain"
     : repair ? phaseMessages[repair.phase] : "repair.preparing";
@@ -129,7 +130,11 @@ export default function ContinuousRepairPanel({ manager, view, repair, active, a
     <h3>{t("repair.title")}</h3><p>{t("repair.hint")}</p>
     {!enabled && <p role="status">{t("repair.unavailable")}</p>}
     {repair && <div aria-live="polite">
-      <p role="status">{t(statusMessage)}</p>
+      <p role="status">{t(statusMessage)}{repair.automatic ? ` · ${t("repair.autoRequest")}` : ""}</p>
+      {repair.automatic && <>
+        <p>{t("repair.from")} {utc(repair.from_ms)} · {t("repair.through")} {utc(repair.through_ms)}</p>
+        {automaticReason && <p>{t(reasonMessages[automaticReason as keyof typeof reasonMessages] ?? "repair.unknownRange")}</p>}
+      </>}
       {repairing && progress && progress.total > 0 && <><progress max={progress.total} value={progress.done} aria-label={t("repair.preparing")} />
         <p>{t("repair.progress", progress)}</p></>}
       {repairing && repair.progress?.waiting && <p>{t("repair.waiting")}</p>}

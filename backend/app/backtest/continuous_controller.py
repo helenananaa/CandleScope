@@ -445,7 +445,9 @@ class ContinuousStrategyController:
         await self._drain_job(key)
         row=await run_storage(self.store.creations.describe,key)
         if row["phase"]=="COMMITTED":
-            if action=="pause":await self.runtime.pause(row["run_id"])
+            if action=="pause":
+                await self.runtime.pause(row["run_id"])
+                await run_storage(self.store.auto_repair.suppress, row["run_id"])
             else:
                 await self.runtime.cancel(row["run_id"])
             return row
@@ -508,6 +510,7 @@ class ContinuousStrategyController:
                     result["preparing"].append(row["run_id"])
                 except BacktestError as failure:
                     result["not_admitted"][row["run_id"]]={"code":failure.code,"message":str(failure)[:256]}
+        self.repairs.automatic.start()
         return result
 
     async def close(self):
@@ -533,6 +536,8 @@ class ContinuousStrategyController:
         if self.restore_task is not None:await asyncio.gather(self.restore_task,return_exceptions=True)
         await asyncio.gather(*tuple(self.actions.values()),return_exceptions=True)
         for key in tuple(self.jobs):await self._drain_job(key)
+        if self.repairs.automatic.task is not None:
+            await asyncio.gather(self.repairs.automatic.task, return_exceptions=True)
         await self.repairs.close_job()
         await self.runtime.shutdown()
         self.executor.shutdown(wait=True)
