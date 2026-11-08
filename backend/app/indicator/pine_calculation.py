@@ -91,7 +91,8 @@ class PineCalculationRuntime:
             if receipt is not None and not receipt.ok:
                 if not rebuild and any(item.code in {'PINE_HOST_JOURNAL_MISMATCH', 'PINE_SESSION_JOURNAL_INVALID'}
                         for item in receipt.diagnostics):
-                    raise RuntimeTailReset()
+                    raise RuntimeTailReset(next(item.code for item in receipt.diagnostics
+                        if item.code in {'PINE_HOST_JOURNAL_MISMATCH', 'PINE_SESSION_JOURNAL_INVALID'}))
                 raise CalculationOwnerError('INDICATOR_CALCULATION_EXECUTION_FAILED',
                     payload=serialize_plugin_runtime_result(receipt))
             if receipt is None:
@@ -99,7 +100,7 @@ class PineCalculationRuntime:
             acknowledged = receipt.meta.get('chartCommit') == commit
             if (previous_commit and not acknowledged) or (
                     receipt.meta.get('sessionRecovered') is True and (not previous_commit or not acknowledged)):
-                raise RuntimeTailReset()
+                raise RuntimeTailReset('unacknowledgedJournal')
             receipt = replace(receipt, meta={key: value for key, value in receipt.meta.items() if key != 'chartCommit'})
             snapshot = await self.service.host.read_output(self.runtime_id, self.owner.plan.owner_id)
             if snapshot is None or snapshot.output is not receipt.output:

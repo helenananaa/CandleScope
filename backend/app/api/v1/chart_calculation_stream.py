@@ -120,7 +120,8 @@ async def handle_chart_calculation_subscribe(*, dm, service, meta, reference, cl
             chart.invalidate()
             entry['_disposed'] = True
             await queue_critical(queue,build_ws_error_payload(
-                getattr(exc,'code','INDICATOR_CALCULATION_RECOVERY_REQUIRED'), str(exc),client_id=client_id))
+                getattr(exc,'code','INDICATOR_CALCULATION_RECOVERY_REQUIRED'), str(exc),client_id=client_id,
+                detail=getattr(exc,'detail',None)))
             # Disposal cancels/drains the pump. Let this task return before
             # waiting on disposal, so it cannot await its own cancellation.
             task = asyncio.create_task(unsubscribe_client(client_id), name='chart-domain-resync:' + client_id)

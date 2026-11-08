@@ -149,13 +149,17 @@ class ChartCalculation:
             async with self._lock:
                 try:
                     return await operation()
-                except RuntimeTailReset:
+                except RuntimeTailReset as rejected:
                     if not recover_tail:
                         raise
                     # The rejected tail never becomes a public cursor. Keep
                     # the writer and reseed once from the canonical origin.
                     self.invalidate()
-                    return await operation(reset_reason='runtimeRebuild')
+                    try:
+                        return await operation(reset_reason='runtimeRebuild')
+                    except CalculationOwnerError as exc:
+                        exc.detail = {**(exc.detail or {}), 'after':rejected.detail}
+                        raise
         task = asyncio.create_task(run(), name='chart-calculation:' + self.owner_id)
         self._tasks.add(task)
         def finished(done):
@@ -266,7 +270,13 @@ class ChartCalculation:
                 self.owner.cursor.observed_through if self.owner.cursor else None,
                 result.metadata.get('storage_revision'),
             )
-            raise CalculationOwnerError('INDICATOR_CALCULATION_ORIGIN_REQUIRED')
+            raise CalculationOwnerError('INDICATOR_CALCULATION_ORIGIN_REQUIRED', detail={
+                'stage':'sourceQuery', 'requestedStart':start, 'requestedEnd':end,
+                'returnedStart':rows[0].time if rows else None, 'returnedEnd':rows[-1].time if rows else None,
+                'observedThrough':self.owner.cursor.observed_through if self.owner.cursor else None,
+                'closedThrough':self.owner.cursor.closed_through if self.owner.cursor else None,
+                'storageRevision':result.metadata.get('storage_revision'),
+            })
         if not paged:
             await acquisition.query_proof(result)
         return rows
@@ -286,7 +296,8 @@ class ChartCalculation:
             check_reference(self.owner, reference)
             self._require_source_ready()
             if start < self.owner.plan.start or end < start:
-                raise CalculationOwnerError('INDICATOR_CALCULATION_ORIGIN_REQUIRED')
+                raise CalculationOwnerError('INDICATOR_CALCULATION_ORIGIN_REQUIRED', detail={'stage':'viewBounds',
+                    'requestedStart':start,'requestedEnd':end,'origin':self.owner.plan.start})
             cursor, revision, epoch = self.owner.cursor, self._revision(), self._source_epoch
             reset = rebuild or self._input_token(revision,epoch) != cursor.input_revision or self.source.needs_rebuild()
             acquisition = await self.source.acquire(start_ms=self.owner.plan.start*1000,

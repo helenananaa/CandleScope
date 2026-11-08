@@ -21,17 +21,18 @@ logger = logging.getLogger(__name__)
 
 
 class CalculationOwnerError(RuntimeError):
-    def __init__(self, code: str, *, payload: dict | None = None):
+    def __init__(self, code: str, *, payload: dict | None = None, detail: dict | None = None):
         self.code = code
         self.payload = payload
+        self.detail = detail
         super().__init__(code)
 
 
 class RuntimeTailReset(CalculationOwnerError):
     """A real runtime reset its partial input and must be reseeded from origin."""
 
-    def __init__(self):
-        super().__init__('INDICATOR_CALCULATION_ORIGIN_REQUIRED')
+    def __init__(self, reason='workerReset'):
+        super().__init__('INDICATOR_CALCULATION_ORIGIN_REQUIRED', detail={'stage':'worker', 'reason':reason})
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,7 +144,8 @@ class ScriptCalculationOwner:
                     self.plan.owner_id, self.plan.start, input_start, observed_through,
                     old is not None, rebuild, self._stale,
                 )
-                raise CalculationOwnerError('INDICATOR_CALCULATION_ORIGIN_REQUIRED')
+                raise CalculationOwnerError('INDICATOR_CALCULATION_ORIGIN_REQUIRED', detail={'stage':'ownerAdmission',
+                    'origin':self.plan.start,'start':input_start,'through':observed_through})
             if self._stale and not rebuild:
                 raise CalculationOwnerError('INDICATOR_CALCULATION_REBUILD_REQUIRED')
             if old is not None and input_revision != old.input_revision and not rebuild:
@@ -166,7 +168,8 @@ class ScriptCalculationOwner:
                         self.plan.owner_id, self.plan.start, input_start, observed_through,
                         execution.reset,
                     )
-                    raise CalculationOwnerError('INDICATOR_CALCULATION_ORIGIN_REQUIRED')
+                    raise CalculationOwnerError('INDICATOR_CALCULATION_ORIGIN_REQUIRED', detail={'stage':'workerRetention',
+                        'origin':self.plan.start,'start':input_start,'through':observed_through})
                 if execution.reset and input_start != self.plan.start:
                     raise RuntimeTailReset()
                 snapshot = await self._read(execution.output)
