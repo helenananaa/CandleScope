@@ -226,7 +226,9 @@ class PineSessions:
         confirmed = bars[:-1] if forming else bars
         entry = self.entries.get(session_id) if session_id else None
         recovered = False
-        if entry is None and session_id:
+        # A new chart epoch explicitly reseeds. Its replacement must be
+        # possible even when the preceding journal is incomplete.
+        if entry is None and session_id and (not chart_commit or expected_chart_commit):
             record = self.journal.read(session_id)
             if record is not None:
                 if expected_chart_commit and record.get("state", {}).get("chartCommit") != expected_chart_commit:
