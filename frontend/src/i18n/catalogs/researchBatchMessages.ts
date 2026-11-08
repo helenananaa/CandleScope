@@ -1,4 +1,7 @@
 export const researchBatchEnglish = {
+  "research.external.registerManifest": "Register manifest",
+  "research.external.outputMode": "Output mode",
+  "research.external.checkAndRun": "Check model and run",
   "chartTester.template.pineSample": "Entry and Exit",
   "chartTester.template.pineSampleDescription": "Place a long entry on the first bar and close it after five bars.",
   "researchBatch.marketHelp": "Choose up to {max} data sources. Every task uses the same strategy and its own fixed data.",
@@ -40,6 +43,9 @@ export const researchBatchEnglish = {
 } as const;
 
 export const researchBatchChinese: Record<keyof typeof researchBatchEnglish, string> = {
+  "research.external.registerManifest": "注册模型清单",
+  "research.external.outputMode": "输出模式",
+  "research.external.checkAndRun": "检查模型并运行",
   "chartTester.template.pineSample": "开仓与平仓",
   "chartTester.template.pineSampleDescription": "在首根 K 线发出多头开仓指令，五根 K 线后发出平仓指令。",
   "researchBatch.marketHelp": "最多选择 {max} 份数据。各项任务使用同一策略和各自的固定数据。",
@@ -81,6 +87,9 @@ export const researchBatchChinese: Record<keyof typeof researchBatchEnglish, str
 };
 
 export const researchBatchKorean: Record<keyof typeof researchBatchEnglish, string> = {
+  "research.external.registerManifest": "매니페스트 등록",
+  "research.external.outputMode": "출력 모드",
+  "research.external.checkAndRun": "모델 확인 후 실행",
   "chartTester.template.pineSample": "진입과 청산",
   "chartTester.template.pineSampleDescription": "첫 번째 봉에서 롱 진입 주문을 내고 다섯 봉 뒤에 청산합니다.",
   "researchBatch.marketHelp": "데이터 소스를 최대 {max}개 선택하세요. 각 작업은 같은 전략과 개별 고정 데이터를 사용합니다.",
@@ -122,6 +131,9 @@ export const researchBatchKorean: Record<keyof typeof researchBatchEnglish, stri
 };
 
 export const researchBatchBrazilian: Record<keyof typeof researchBatchEnglish, string> = {
+  "research.external.registerManifest": "Registrar manifesto",
+  "research.external.outputMode": "Modo de saída",
+  "research.external.checkAndRun": "Verificar modelo e executar",
   "chartTester.template.pineSample": "Entrada e saída",
   "chartTester.template.pineSampleDescription": "Envia uma ordem de compra na primeira barra e encerra a posição após cinco barras.",
   "researchBatch.marketHelp": "Escolha até {max} fontes de dados. Cada tarefa usa a mesma estratégia e seus próprios dados fixos.",

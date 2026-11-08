@@ -78,7 +78,8 @@ export default function StrategyRunHistory({ manager, draftId, currentRunId, onO
   }, [manager, requested]);
 
   const entries = runs.map(run => ({ run, config: researchRunConfig(run) }));
-  const history = entries.filter(({ config }) => (config.strategy_draft_id ?? null) === draftId);
+  const history = entries.filter(({ config }) => (config.strategy_draft_id ?? null) === draftId
+    || typeof config.external_connection_id === "string");
   const completed = entries.filter(({ run }) => run.state === "COMPLETED");
   const activeResponse = response?.pair === requested ? response : null;
   const comparison = activeResponse?.comparison;
@@ -101,7 +102,8 @@ export default function StrategyRunHistory({ manager, draftId, currentRunId, onO
   const date = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? new Date(value).toLocaleString(locale) : "—";
   const optionLabel = ({ run, config }: (typeof completed)[number]) => {
     const name = typeof config.strategy_draft_id === "string" ? names.get(config.strategy_draft_id) : undefined;
-    return [name, config.symbol, config.interval, date(config.start_time_ms), run.run_id.slice(-8)].filter(Boolean).join(" · ");
+    const label = name ?? (typeof config.external_connection_id === "string" ? t("research.external.title") : undefined);
+    return [label, config.symbol, config.interval, date(config.start_time_ms), run.run_id.slice(-8)].filter(Boolean).join(" · ");
   };
   const canCompare = selected[0] !== selected[1]
     && selected.every(id => completed.some(({ run }) => run.run_id === id));
@@ -116,7 +118,7 @@ export default function StrategyRunHistory({ manager, draftId, currentRunId, onO
     {historyError && <p role="alert">{historyError}</p>}
     {!history.length && <p>{t("ux.historyEmpty")}</p>}
     <div className="strategy-history-list">{history.map(({ run, config }) => <article key={run.run_id}>
-      <div><strong>{String(config.symbol ?? "—")} · {String(config.interval ?? "—")}</strong><p>{date(config.start_time_ms)} — {date(config.end_time_ms)}</p><small>{run.state} · {run.run_id.slice(-8)}</small></div>
+      <div><strong>{String(config.symbol ?? "—")} · {String(config.interval ?? "—")}</strong><p>{date(config.start_time_ms)} — {date(config.end_time_ms)}</p><small>{typeof config.external_connection_id === "string" && `${t("research.external.title")} · `}{run.state} · {run.run_id.slice(-8)}</small></div>
       <button type="button" disabled={run.state !== "COMPLETED"} onClick={() => onOpen(run.run_id)}>{t("ux.openResult")}</button>
       <button type="button" disabled={run.state !== "COMPLETED" || !currentAvailable || run.run_id === currentRunId}
         onClick={() => { if (currentRunId) openComparison([run.run_id, currentRunId]); }}>{t("ux.compare")}</button>

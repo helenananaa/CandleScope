@@ -820,3 +820,80 @@ test("explicit market batch uses its own interval and sends the last included mi
   assert.equal(outcome.kind, "TERMINAL");
   assert.equal(observed, true);
 });
+
+test("external models use the fixed BAR snapshot and pass smoke with the same parameters as the saved run", async () => {
+  const calls: string[] = [];
+  const externalRevision: StrategyRevisionRecord = {
+    ...revision,
+    revision_id: "external-revision",
+    provider_kind: "EXTERNAL_PROVIDER",
+    output_modes: ["TARGET_POSITION"],
+    warmup_requirement: { bars: 3 },
+    external_provider: {
+      manifest_hash: "manifest",
+      provider_id: "model",
+      provider_revision: "v1",
+      provider_kind: "MODEL",
+      artifact_sha256: "artifact",
+      runtime_lock: "runtime",
+      reproducibility: "RECORDED_OUTPUT_ONLY",
+    },
+  };
+  const connection = {
+    connection_id: "external-connection",
+    scope: {
+      strategy_revision_id: externalRevision.revision_id,
+      dataset_id: importedSource.datasetId,
+      data_epoch: importedSource.dataEpoch,
+      snapshot_hash: importedPreview().snapshot_hash,
+      manifest_hash: externalRevision.external_provider!.manifest_hash,
+    },
+    scope_hash: "scope",
+    connection_file: "/private/connection.json",
+    ready: true,
+    example_command: null,
+  };
+  const parameters = { quantity: "0.003" };
+  const api = {
+    ...importedApi(calls),
+    externalProviders: {
+      async list() { return [connection, { ...connection, scope: { ...connection.scope, data_epoch: "other" } }]; },
+      async smoke(id: string, body: Record<string, unknown>, signal: AbortSignal) {
+        calls.push("external-smoke");
+        assert.ok(!signal.aborted);
+        assert.equal(id, connection.connection_id);
+        assert.equal(body.snapshot_hash, connection.scope.snapshot_hash);
+        assert.equal(body.output_mode, "TARGET_POSITION");
+        assert.deepEqual(body.parameters, parameters);
+        return {};
+      },
+    },
+    async validate(body: Record<string, unknown>) {
+      calls.push("validate");
+      assert.equal(body.external_connection_id, connection.connection_id);
+      assert.deepEqual(body.parameters, parameters);
+      return { ok: true };
+    },
+    async createRun(body: Record<string, unknown>, key: string) {
+      calls.push("create");
+      assert.ok(key);
+      assert.equal(body.snapshot_hash, connection.scope.snapshot_hash);
+      assert.equal(body.account_model, "SPOT_CASH_V1");
+      assert.equal(body.warmup_bars, 3);
+      assert.equal(body.strategy_draft_id, undefined);
+      assert.deepEqual(body.parameters, parameters);
+      return completed();
+    },
+  } as StrategyDataApi;
+  const manager = new StrategyDataManager(api);
+  const draft = await manager.prepareExternalModel({ source: importedSource, revision: externalRevision,
+    settings: { rangeMode: "ALL_AVAILABLE", customRange: null }, outputMode: "TARGET_POSITION" });
+  assert.deepEqual(await manager.externalModelConnections(draft), [connection]);
+  await assert.rejects(manager.startExternalModel(draft, {
+    ...connection, scope: { ...connection.scope, snapshot_hash: "other" },
+  }, parameters), { code: "PROVIDER_CONNECTION_REQUIRED" });
+  assert.deepEqual(calls, ["preview"]);
+  await manager.startExternalModel(draft, connection, parameters);
+  assert.deepEqual(calls, ["preview", "external-smoke", "validate", "create"]);
+  manager.dispose();
+});
