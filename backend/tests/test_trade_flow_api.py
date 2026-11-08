@@ -280,3 +280,78 @@ def test_real_rollup_history_only_pages_to_an_existing_local_row(tmp_path) -> No
         assert page["terminal_reason"] == "unverified_continuity"
         final = client.get("/api/v1/trade-flow/history", params={**params, **page["next_cursor"], "limit": 1}).json()
         assert final["count"] == 1 and final["has_more"] is False and final["next_cursor"] is None
+
+
+def test_bounded_history_rebuilds_only_from_verified_archive_objects(tmp_path) -> None:
+    from datetime import datetime, timezone
+
+    from app.data_engine.market_data.trade_flow_service import TradeFlowService
+    from app.data_engine.storage.raw_trade_archive import (
+        DisabledRawAggTradeArchive, ParquetRawAggTradeArchive, VerifiedRawAggTradeDay,
+    )
+    from app.data_engine.storage.trade_flow_store import SQLiteTradeFlowRollupStore
+    from tests.test_trade_flow_storage import _raw_trade, _rollup
+
+    first = 1_700_000_040_000
+    third, fourth = first + 120_000, first + 180_000
+    root = tmp_path / "replay-archive"
+    archive = ParquetRawAggTradeArchive(root)
+    archive_rows = [
+        {**_raw_trade(i, trade_time_ms=opened + offset), "source": "binance_public"}
+        for i, opened, offset in [
+            (10, first, 10), (11, first, 11), (12, third, 10), (13, fourth, 10),
+        ]
+    ]
+    # This trade is present in a best-effort file but outside the verified
+    # object set. It must never alter the verified rollups.
+    archive.append([_raw_trade(10, trade_time_ms=first + 10, price=900)])
+    day = datetime.fromtimestamp(first / 1000, tz=timezone.utc).date()
+    archive.import_verified_day(archive_rows, VerifiedRawAggTradeDay(
+        exchange="binance", market_type="futures", symbol="BTCUSDT",
+        date=day.isoformat(), source_url="https://data.binance.vision/example.zip",
+        source_file="example.zip", source_checksum_sha256="a" * 64,
+        row_count=len(archive_rows), first_agg_trade_id=10, last_agg_trade_id=13,
+        first_trade_time_ms=first + 10, last_trade_time_ms=fourth + 10,
+    ))
+
+    store = SQLiteTradeFlowRollupStore(tmp_path / "trades.sqlite")
+    asyncio.run(store.upsert_rollups([
+        _rollup(first, revision=1, is_complete=False, is_final=True, buy_base=9),
+        _rollup(third, revision=2, is_complete=True, is_final=True, buy_base=5),
+    ]))
+    service = TradeFlowService(
+        object(), rollup_store=store, raw_archive=DisabledRawAggTradeArchive(),
+        verified_archive_root=root,
+    )
+    with _client(SimpleNamespace(trade_flow_ready=True, trade_flow_history=service.history)) as client:
+        params = {"start_ms": first, "end_ms": fourth, "limit": 2}
+        response = client.get("/api/v1/trade-flow/history", params=params)
+        assert response.status_code == 200, response.text
+        page = response.json()
+        rebuilt, existing = page["data"]
+        assert rebuilt["bucket_start_ms"] == first
+        assert rebuilt["source"] == "verified_archive" and rebuilt["is_complete"] and rebuilt["is_final"]
+        assert rebuilt["archive_data_epoch"].startswith("sha256:")
+        assert rebuilt["agg_trade_count"] == 2 and rebuilt["max_trade_notional"] == 50.0
+        assert existing["bucket_start_ms"] == third and existing["buy_base_volume"] == 5.0
+        assert page["next_cursor"] == {"start_ms": fourth} and page["complete"] is False
+
+        final = client.get("/api/v1/trade-flow/history", params={**params, **page["next_cursor"]}).json()
+        assert final["data"][0]["bucket_start_ms"] == fourth and final["has_more"] is False
+        quiet = client.get("/api/v1/trade-flow/history", params={
+            "start_ms": first + 60_000, "end_ms": first + 60_000,
+        }).json()
+        assert quiet["data"] == []
+
+        # The read never replaces SQLite, and a later corrupt verified object
+        # must leave the observed SQLite rows available without promotion.
+        stored = asyncio.run(store.query_rollups(
+            exchange="binance", market_type="futures", symbol="BTCUSDT", limit=10,
+        ))
+        assert len(stored) == 2 and not stored[0]["is_complete"] and stored[0]["buy_base_volume"] == 9
+        with next(root.rglob("part-verified-*.parquet")).open("ab") as corrupt:
+            corrupt.write(b"changed")
+        fallback = client.get("/api/v1/trade-flow/history", params=params).json()
+        assert fallback["data"][0]["buy_base_volume"] == 9
+        assert fallback["data"][0]["is_complete"] is False
+        assert "archive_data_epoch" not in fallback["data"][0]

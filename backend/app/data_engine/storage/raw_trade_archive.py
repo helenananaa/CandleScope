@@ -1855,6 +1855,40 @@ class ParquetRawAggTradeArchive:
         end_time_ms: int,
         page_rows: int = 50_000,
     ) -> RawAggTradeDatasetRef:
+        return self._freeze_dataset(
+            exchange=exchange, market_type=market_type, symbol=symbol,
+            start_time_ms=start_time_ms, end_time_ms=end_time_ms, page_rows=page_rows,
+        )
+
+    def read_verified_range(
+        self, *, exchange: str, market_type: str, symbol: str,
+        start_time_ms: int, end_time_ms: int, limit: int,
+    ) -> tuple[RawAggTradeDatasetRef, list[dict[str, Any]]]:
+        """Read a bounded exact range using the same proof as replay freezing."""
+        rows: list[dict[str, Any]] = []
+        ref = self._freeze_dataset(
+            exchange=exchange, market_type=market_type, symbol=symbol,
+            start_time_ms=start_time_ms, end_time_ms=end_time_ms,
+            page_rows=limit, collected=rows, max_rows=limit,
+        )
+        return ref, rows
+
+    def _freeze_dataset(
+        self,
+        *,
+        exchange: str,
+        market_type: str,
+        symbol: str,
+        start_time_ms: int,
+        end_time_ms: int,
+        page_rows: int = 50_000,
+        collected: list[dict[str, Any]] | None = None,
+        max_rows: int | None = None,
+    ) -> RawAggTradeDatasetRef:
+        if max_rows is not None:
+            if max_rows < 1:
+                raise ValueError("max_rows must be positive")
+            page_rows = min(page_rows, max_rows)
         bounds = self._normalize_scan_bounds(
             start_time_ms=start_time_ms,
             end_time_ms=end_time_ms,
@@ -1907,6 +1941,12 @@ class ParquetRawAggTradeArchive:
                 limit=page_rows,
                 dataset_ref=provisional,
             )
+            if max_rows is not None and (
+                row_count + len(page.rows) > max_rows
+                or (row_count + len(page.rows) == max_rows and not page.exhausted)
+            ):
+                self._record_scan_limit_rejection()
+                raise RawAggTradeScanLimitError("exact raw aggTrade generation exceeds max_rows")
             for row in page.rows:
                 order = (row["trade_time_ms"], row["agg_trade_id"])
                 if previous_order is not None and order <= previous_order:
@@ -1921,6 +1961,8 @@ class ParquetRawAggTradeArchive:
                 last_id = row["agg_trade_id"]
                 previous_order = order
                 row_count += 1
+            if collected is not None:
+                collected.extend(page.rows)
             if page.exhausted:
                 break
             if page.next_cursor is None or page.next_cursor == cursor:
