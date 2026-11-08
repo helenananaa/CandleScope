@@ -68,8 +68,8 @@ function entry(value: unknown): JournalEntry {
   return value as unknown as JournalEntry;
 }
 
-async function reviewRequest(path: string, method = "GET", payload?: unknown): Promise<unknown> {
-  try { return await accountRequest(path, method, payload); }
+async function reviewRequest(path: string, method = "GET", payload?: unknown, signal?: AbortSignal): Promise<unknown> {
+  try { return await accountRequest(path, method, payload, signal); }
   catch (cause) {
     if (cause instanceof AccountApiError) throw new Error(cause.code === "TRADING_JOURNAL_CONFLICT"
       ? t("trading.journal.draftChanged") : accountErrorHelp(cause.code));
@@ -81,11 +81,15 @@ async function reviewRequest(path: string, method = "GET", payload?: unknown): P
 export function reviewJournalApi(trade: Trade): JournalApi {
   const version = trade.readonlySource?.version;
   if (!version) return invalid();
+  return versionedReviewJournalApi(version);
+}
+
+export function versionedReviewJournalApi(version: string): JournalApi {
   const id = encodeURIComponent;
   const journal = (entryId: string) => `/review/journal/${id(entryId)}`;
   return {
-    async trade(accountId, tradeId) {
-      const value = await reviewRequest(`/review/accounts/${id(accountId)}/trades/${id(tradeId)}?version=${id(version)}`);
+    async trade(accountId, tradeId, signal) {
+      const value = await reviewRequest(`/review/accounts/${id(accountId)}/trades/${id(tradeId)}?version=${id(version)}`, "GET", undefined, signal);
       parseReviewTrade(value);
       if (!record(value) || !Array.isArray(value.entries) || !Array.isArray(value.linkSuggestions)) return invalid();
       value.entries.forEach(entry);

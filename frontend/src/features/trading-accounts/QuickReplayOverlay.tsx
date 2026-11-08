@@ -54,12 +54,20 @@ export default function QuickReplayOverlay({
   style,
   indicatorDefinitions,
   accountOverlay,
+  active = true,
+  savedCursorSec,
+  savedStep,
+  onProgress,
   onExit,
 }: {
   request: QuickReplayRequest;
   style: QuickReplayChartStyle;
   indicatorDefinitions: readonly IndicatorDefinition[];
   accountOverlay?: ChartAccountOverlaySettings | undefined;
+  active?: boolean;
+  savedCursorSec?: number | undefined;
+  savedStep?: string | undefined;
+  onProgress?: (cursorSec: number, step: string) => void;
   onExit(): void;
 }) {
   const locale = useLocale();
@@ -77,8 +85,9 @@ export default function QuickReplayOverlay({
   const [reload, setReload] = useState(0);
   const [loadFailed, setLoadFailed] = useState(false);
   const [truncated, setTruncated] = useState(false);
-  const [step, setStep] = useState(request.interval);
-  const [cursor, setCursor] = useState(() => initialCursor(trade, intervalSec));
+  const [step, setStep] = useState(() => savedStep && stepSeconds(savedStep, intervalSec) <= intervalSec ? savedStep : request.interval);
+  const [cursor, setCursor] = useState(() => savedCursorSec ?? initialCursor(trade, intervalSec));
+  useEffect(() => { onProgress?.(cursor, step); }, [cursor, onProgress, step]);
   const [playing, setPlaying] = useState<0 | 1 | 2>(0);
   const [showOutcome, setShowOutcome] = useState(false);
   const stepSec = Math.min(stepSeconds(step, intervalSec), intervalSec);
@@ -124,7 +133,7 @@ export default function QuickReplayOverlay({
       })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     setDetail(null);
-    api.trade(request.accountId, trade.id)
+    api.trade(request.accountId, trade.id, controller.signal)
       .then(result => { if (!controller.signal.aborted) setDetail(result); })
       .catch(() => { if (!controller.signal.aborted) setDetail(null); });
     return () => controller.abort();
@@ -150,7 +159,7 @@ export default function QuickReplayOverlay({
   const maxCursor = Math.max(lastChartEnd, lastFineEnd);
   const entryCandleOpen = !loading && chartBars.length > 0
     && initialCursor(trade, intervalSec) + intervalSec > lastChartEnd;
-  const autoStepRef = useRef(false);
+  const autoStepRef = useRef(savedStep !== undefined);
   useEffect(() => {
     if (autoStepRef.current || !entryCandleOpen || intervalSec <= 60) return;
     autoStepRef.current = true;
@@ -298,9 +307,10 @@ export default function QuickReplayOverlay({
   }, [canNavigate, clamp, playing, stepSec]);
 
   useEffect(() => {
+    if (!active) return;
     const onKey = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (event.defaultPrevented || target?.closest('input, textarea, select, dialog, [role="dialog"]') || target?.isContentEditable) return;
       if (event.key === "Escape") { event.preventDefault(); onExit(); }
       else if (event.key === "ArrowRight" && event.shiftKey) { event.preventDefault(); jumpNext(); }
       else if (event.key === "ArrowLeft" && event.shiftKey) { event.preventDefault(); jumpPrevious(); }
@@ -313,7 +323,7 @@ export default function QuickReplayOverlay({
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [canNavigate, jumpNext, jumpPrevious, move, onExit, stepSec]);
+  }, [active, canNavigate, jumpNext, jumpPrevious, move, onExit, stepSec]);
 
   const stepOptions = useMemo(() => {
     const span = window_.endSec - Math.floor(trade.openedAtMs / 1000);
@@ -345,7 +355,7 @@ export default function QuickReplayOverlay({
   };
 
   return (
-    <div className="quick-replay" role="region" aria-label={t("trading.replay.title")}>
+    <div className="quick-replay" data-replay-cursor-sec={cursor} data-replay-account={request.accountId} role="region" aria-label={t("trading.replay.title")}>
       <header className="quick-replay-banner">
         <span className="trading-badge" data-tone="warning">{t("trading.replay.badge")}</span>
         <strong>{trade.symbol}</strong>

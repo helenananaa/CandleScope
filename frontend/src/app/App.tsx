@@ -660,6 +660,7 @@ function LiveWorkspaceApp() {
                       onToggleMaximize={workspace.actions.toggleMaximize}
                       onSessionChange={workspace.actions.updateCellSession}
                       onChartSettingsChange={workspace.actions.updateCellChartSettings}
+                      onQuickReplayChange={workspace.actions.updateCellQuickReplay}
                       onAccountOverlayChange={workspace.actions.updateCellAccountOverlay}
                       onPriceScaleChange={workspace.actions.updateCellPriceScale}
                       onIndicatorsChange={workspace.actions.updateCellIndicators}

@@ -71,9 +71,12 @@ export async function checkQuickReplayStep() {
     const input = host.querySelector(".quick-replay-step select"); assert(input instanceof HTMLSelectElement, "step input missing");
     flushSync(() => { input.value = step; input.dispatchEvent(new Event("change", { bubbles: true })); });
   }
-  function render(noteSource = "original") {
+  let lastProgress: { cursorSec: number; step: string } | undefined;
+  const recordProgress = (cursorSec: number, step: string) => { lastProgress = { cursorSec, step }; };
+  function render(noteSource = "original", active = true, saved?: typeof lastProgress) {
     flushSync(() => root.render(<MarketDataWorkspaceContext.Provider value={partialMock<MarketDataWorkspaceResources>({ dataManager: manager })}>
-      <QuickReplayOverlay request={request} style={{ theme: "dark", customBg: "", upColor: "green", downColor: "red" }} indicatorDefinitions={[]} accountOverlay={normalizeChartAccountOverlay({ accountId: "other-chart-account", notes: true, noteSource, noteFilter: "screenshots" })} onExit={() => undefined} />
+      <QuickReplayOverlay key={saved ? "restored" : "initial"} request={request} active={active}
+        savedCursorSec={saved?.cursorSec} savedStep={saved?.step} onProgress={recordProgress} style={{ theme: "dark", customBg: "", upColor: "green", downColor: "red" }} indicatorDefinitions={[]} accountOverlay={normalizeChartAccountOverlay({ accountId: "other-chart-account", notes: true, noteSource, noteFilter: "screenshots" })} onExit={() => undefined} />
     </MarketDataWorkspaceContext.Provider>));
   }
   try {
@@ -94,6 +97,13 @@ export async function checkQuickReplayStep() {
     assert(markerIds().join() === "original", "captured original screenshot missing");
     await move("ArrowLeft");
     assert(markerIds().length === 0, "rewind retained a future screenshot");
-    return { passed: true, noteFilters: "original screenshot cutoff, review supplement, trade account, rewind", scope: "Actual QuickReplayOverlay and chart input with deferred controlled history transport; not installed native acceptance", pendingLast: pending.at(-1), resolvedLast: resolved.at(-1) };
+    const saved = lastProgress;
+    assert(saved?.step === "1m" && saved.cursorSec === entry + 60, "rewind did not publish exact cursor and step");
+    render("original", false); await settle(); await move("ArrowRight");
+    assert(lastProgress?.cursorSec === saved.cursorSec, "inactive chart consumed the replay shortcut");
+    render("original", true, saved); await settle();
+    assert(lastProgress?.step === "1m" && lastProgress.cursorSec === saved.cursorSec, "remount discarded the saved cursor or step");
+    assert(markerIds().length === 0, "restore admitted a future screenshot");
+    return { passed: true, restored: lastProgress, noteFilters: "original screenshot cutoff, review supplement, trade account, rewind", scope: "Actual QuickReplayOverlay and chart input with deferred controlled history transport; not installed native acceptance", pendingLast: pending.at(-1), resolvedLast: resolved.at(-1) };
   } finally { flushSync(() => root.unmount()); host.remove(); }
 }

@@ -153,6 +153,7 @@ export interface ChartCellState {
   drawingLayerSet: ChartDrawingLayerSetId;
   session: ChartSession;
   chartSettings: ChartCellChartSettings;
+  quickReplay?: import("./chartQuickReplayState.js").ChartQuickReplayState;
   accountOverlay?: import("./chartAccountOverlaySettings.js").ChartAccountOverlaySettings;
   priceScale: ChartCellPriceScale;
   indicators: IndicatorDefinition[];
