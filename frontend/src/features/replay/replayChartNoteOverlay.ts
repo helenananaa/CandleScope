@@ -30,11 +30,15 @@ export function replayChartNoteVersions(
 export function replayChartNotePoints(
   versions: ReturnType<typeof replayChartNoteVersions>,
   interval: string,
+  closedBarClock: boolean,
   hasBar: (time: number) => boolean,
   label: (reviewNote: boolean) => string,
 ) {
   return versions.flatMap(note => {
-    const time = floorIntervalTime(interval, Math.floor(note.marketTimeMs / 1_000));
+    // A BAR replay advances to the closed candle's exclusive end. The
+    // candle starting at that exact instant has not been revealed yet.
+    const anchorMs = note.marketTimeMs - (closedBarClock ? 1 : 0);
+    const time = floorIntervalTime(interval, Math.floor(anchorMs / 1_000));
     return time !== null && hasBar(time) ? [{
       id: note.id, revision: note.revisionCount, time,
       shape: "circle", color: note.reviewNote ? "#a855f7" : "#d97706",

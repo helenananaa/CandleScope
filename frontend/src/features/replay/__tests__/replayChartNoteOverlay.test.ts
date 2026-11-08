@@ -29,10 +29,18 @@ test("formal chart notes reject newer time, another track or epoch, and a differ
 test("note versions land on loaded display buckets without copying note text into markers", () => {
   const earlier = { ...note, id: "unloaded", marketTimeMs: at - 600_000 };
   const reviewNote = { ...note, id: "supplement", revisionCount: 2, reviewNote: true };
-  const points = replayChartNotePoints([earlier, note, reviewNote], "5m", time => time === at / 1_000,
+  const points = replayChartNotePoints([earlier, note, reviewNote], "5m", true, time => time === at / 1_000,
     supplement => supplement ? "Review supplement" : "Replay notes");
   assert.deepEqual(points.map(({ id, revision, text, time }) => ({ id, revision, text, time })), [
     { id: "plan", revision: 1, text: "Replay notes", time: at / 1_000 },
     { id: "supplement", revision: 2, text: "Review supplement", time: at / 1_000 },
   ]);
+});
+
+test("a note saved at a BAR close stays on the closed candle after the next candle opens", () => {
+  const atClose = { ...note, marketTimeMs: at };
+  const positions = (closedBarClock: boolean) =>
+    replayChartNotePoints([atClose], "5m", closedBarClock, () => true, () => "Notes").map(point => point.time);
+  assert.deepEqual(positions(true), [at / 1_000 - 300]);
+  assert.deepEqual(positions(false), [at / 1_000]);
 });
