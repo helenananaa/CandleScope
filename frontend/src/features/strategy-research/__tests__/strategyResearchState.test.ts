@@ -1,3 +1,4 @@
+import { changeReplayChartDisplay, DEFAULT_REPLAY_DISPLAY, replayDisplayKey } from "../strategyResultReplayDisplay.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
@@ -214,8 +215,16 @@ test("result replay persists its committed cursor and both immutable hashes", ()
       comparisonDataset: { datasetId: "local-" + "d".repeat(32), dataEpoch: "sha256:" + "e".repeat(64) } };
     persistStrategyResearchWorkspace(strategyResearchReducer(selected, { type: "result/replay", replay: pinned }));
     assert.deepEqual(loadStrategyResearchWorkspace().result.replay, pinned);
+    const key = replayDisplayKey(pinned);
+    const display = changeReplayChartDisplay(DEFAULT_REPLAY_DISPLAY, "comparison", "candleStyle", "hollow");
+    const configured = strategyResearchReducer(loadStrategyResearchWorkspace(), { type: "result/replayDisplay", key, display });
+    const differentRun = strategyResearchReducer(configured, { type: "result/viewHistory", runId: "bt_other" });
+    persistStrategyResearchWorkspace(differentRun);
+    assert.deepEqual(loadStrategyResearchWorkspace().replayDisplays, { [key]: display });
+    assert.equal(strategyResearchReducer(differentRun, { type: "result/replayDisplay", key, display }), differentRun);
+    assert.equal(loadStrategyResearchWorkspace().result.replay, undefined);
     const raw = JSON.parse(store.get(STRATEGY_RESEARCH_WORKSPACE_KEY)!) as Record<string, unknown>;
-    store.set(STRATEGY_RESEARCH_WORKSPACE_KEY, JSON.stringify({ ...raw, replay: { ...replay, reportHash: "wrong" } }));
+    store.set(STRATEGY_RESEARCH_WORKSPACE_KEY, JSON.stringify({ ...raw, runId: replay.runId, replay: { ...replay, reportHash: "wrong" } }));
     assert.equal(loadStrategyResearchWorkspace().result.replay, undefined);
   } finally {
     if (original) Object.defineProperty(globalThis, "window", original);

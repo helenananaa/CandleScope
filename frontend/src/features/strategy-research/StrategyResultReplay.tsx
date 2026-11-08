@@ -1,45 +1,15 @@
 import { useEffect, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { describeError } from "../../i18n/serverErrors.js";
-import type { BacktestResultReplayCursor, BacktestResultReplayFrame, BacktestResultReplayMA, BacktestResultReplayNote, BacktestResultReplayNoteDraft } from "../backtest/backtestTypes.js";
+import type { BacktestResultReplayCursor, BacktestResultReplayFrame, BacktestResultReplayNote, BacktestResultReplayNoteDraft } from "../backtest/backtestTypes.js";
 import type { LocalDatasetManifest } from "../local-data/localDataTypes.js";
 import type { StrategyDataManager } from "../market-data/manager/strategyDataManager.js";
 import { formatIntervalLabel } from "../../utils/intervals.js";
 
-const MA_PERIODS = [2, 3, 5, 10, 20, 50, 100, 200, 500];
+import { StrategyResultReplayChart } from "./StrategyResultReplayChart.js";
+import { changeReplayChartDisplay, replayDisplayKey, type ReplayDisplay, type ReplayChartDisplay, type ReplayChartSlot } from "./strategyResultReplayDisplay.js";
 
-function ReplayCandles({ bars, ma }: { bars: BacktestResultReplayFrame["bars"]; ma: BacktestResultReplayMA | undefined }) {
-  if (bars.length === 0) return null;
-  const values = ma?.points.map(point => point.value) ?? [];
-  const high = Math.max(...bars.map(bar => Number(bar.high)), ...values);
-  const low = Math.min(...bars.map(bar => Number(bar.low)), ...values);
-  const y = (price: string | number) => high === low ? 170 : 316 - (Number(price) - low) / (high - low) * 292;
-  const spacing = Math.min(48, 968 / bars.length);
-  const points = new Map(ma?.points.map(point => [point.open_time_ms, point.value]));
-  const line = bars.flatMap((bar, index) => {
-    const value = points.get(bar.open_time_ms);
-    if (value === undefined) return [];
-    const previous = bars[index - 1];
-    const adjacent = previous?.close_time_ms === bar.open_time_ms - 1 && points.has(previous.open_time_ms);
-    const at = `${24 + index * spacing} ${y(value)}`;
-    return adjacent ? `L ${at}` : `M ${at} h 0`;
-  }).join(" ");
-  return <svg viewBox="0 0 1000 340" role="img" aria-label={t("strategy.chartSlot")} className="strategy-result-replay-candles">
-    {bars.map((bar, index) => {
-      const x = 24 + index * spacing;
-      const open = y(bar.open);
-      const close = y(bar.close);
-      const color = Number(bar.close) >= Number(bar.open) ? "#159b84" : "#df595e";
-      return <g key={bar.open_time_ms} opacity={bar.closed ? 1 : 0.65}>
-        <line x1={x} x2={x} y1={y(bar.high)} y2={y(bar.low)} stroke={color} strokeWidth="2" />
-        <rect x={x - spacing * 0.28} y={Math.min(open, close)} width={spacing * 0.56}
-          height={Math.max(2, Math.abs(open - close))} fill={color} />
-        <title>{new Date(bar.open_time_ms).toISOString()} · {bar.open} / {bar.high} / {bar.low} / {bar.close}</title>
-      </g>;
-    })}
-    {line && <path d={line} stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none" />}
-  </svg>;
-}
+const MA_PERIODS = [2, 3, 5, 10, 20, 50, 100, 200, 500];
 
 function ReplayMaControl({ testId, interval, period, onChange }: {
   testId: string; interval: string; period: number | undefined; onChange(period: number | undefined): void;
@@ -53,18 +23,12 @@ function ReplayMaControl({ testId, interval, period, onChange }: {
   </label>;
 }
 
-function ReplayMaLegend({ ma }: { ma: BacktestResultReplayMA | undefined }) {
-  if (!ma) return null;
-  const last = ma.points.at(-1);
-  return <p data-testid="strategy-replay-ma" data-period={ma.period} data-value={last?.value}>
-    {t("replay.indicator.sma.name")} ({ma.period}) · {last?.value.toLocaleString(undefined, { maximumSignificantDigits: 12 }) ?? "—"}
-  </p>;
-}
-
-export default function StrategyResultReplay({ initial, manager, datasets, onCommit, onClose }: {
+export default function StrategyResultReplay({ initial, manager, datasets, display, onCommit, onClose, onDisplay }: {
   initial: BacktestResultReplayCursor;
   manager: StrategyDataManager;
   datasets: readonly LocalDatasetManifest[];
+  display: ReplayDisplay;
+  onDisplay(key: string, display: ReplayDisplay): void;
   onCommit(cursor: BacktestResultReplayCursor): void;
   onClose(): void;
 }) {
@@ -156,7 +120,11 @@ export default function StrategyResultReplay({ initial, manager, datasets, onCom
   };
 
   const canAdvance = frame !== null && frame.cursor < frame.total;
-  const lastBar = frame?.bars.at(-1);
+  const displayKey = replayDisplayKey(initial);
+  const updateChart = <K extends keyof ReplayChartDisplay>(slot: ReplayChartSlot, field: K, value: ReplayChartDisplay[K]) => {
+    const next = changeReplayChartDisplay(display, slot, field, value);
+    onDisplay(displayKey, request.comparisonInterval ? next : { ...display, primary: next.primary });
+  };
   return (
     <main className="strategy-result-replay" data-testid="strategy-result-replay"
       data-cursor={frame?.cursor} data-interval={frame?.interval}>
@@ -215,6 +183,19 @@ export default function StrategyResultReplay({ initial, manager, datasets, onCom
         {request.comparisonInterval && <ReplayMaControl testId="strategy-replay-comparison-ma" interval={request.comparisonInterval}
           period={request.comparisonMaPeriod} onChange={comparisonMaPeriod => navigate(request.cursor, { comparisonMaPeriod })} />}
       </fieldset>
+      {request.comparisonInterval && <fieldset className="strategy-result-replay-view-controls"
+        data-testid="strategy-replay-display-links" disabled={noteDraft !== null}>
+        <legend>{t("workspace.tab.links")}</legend>
+        {([
+          ["chartStyle", "workspace.link.chartStyle"],
+          ["fills", "researchBatch.replayFillMarkers"],
+          ["notes", "researchBatch.replayNoteMarkers"],
+        ] as const).map(([channel, label]) => <label key={channel}>
+          <input type="checkbox" data-testid={`strategy-replay-link-${channel}`} checked={display.links[channel]}
+            onChange={event => onDisplay(displayKey, { ...display, links: { ...display.links, [channel]: event.target.checked } })} />
+          {t(label)}
+        </label>)}
+      </fieldset>}
       {error ? <p role="alert">{error} <button type="button" onClick={() => navigate(request.cursor)}>{t("shell.retry")}</button></p>
         : !frame ? <p role="status">{t("research.loading")}</p> : <>
           <div className="strategy-result-replay-status" role="status">
@@ -223,21 +204,10 @@ export default function StrategyResultReplay({ initial, manager, datasets, onCom
             {frame.source_sequence !== null && <span>#{frame.source_sequence}</span>}
           </div>
           <div className="strategy-result-replay-charts">
-            <section aria-label={formatIntervalLabel(frame.interval)} data-testid="strategy-replay-primary-chart">
-              <strong>{formatIntervalLabel(frame.interval)}</strong>
-              <ReplayCandles bars={frame.bars} ma={frame.ma} />
-              <ReplayMaLegend ma={frame.ma} />
-              {lastBar && <p data-testid="strategy-replay-last-ohlc">{lastBar.open} / {lastBar.high} / {lastBar.low} / {lastBar.close}</p>}
-            </section>
-            {frame.comparison && <section aria-label={`${frame.comparison.symbol ?? frame.symbol} · ${formatIntervalLabel(frame.comparison.interval)}`} data-testid="strategy-replay-comparison-chart"
-              data-dataset-epoch={frame.comparison.data_epoch}>
-              <strong>{frame.comparison.symbol && `${frame.comparison.symbol} · `}{formatIntervalLabel(frame.comparison.interval)}</strong>
-              <ReplayCandles bars={frame.comparison.bars} ma={frame.comparison.ma} />
-              <ReplayMaLegend ma={frame.comparison.ma} />
-              {frame.comparison.bars.slice(-1).map(bar => <p key={bar.open_time_ms} data-testid="strategy-replay-comparison-ohlc">
-                {bar.open} / {bar.high} / {bar.low} / {bar.close}
-              </p>)}
-            </section>}
+            <StrategyResultReplayChart slot="primary" chart={frame} frame={frame} display={display.primary}
+              disabled={noteDraft !== null} onChange={updateChart} />
+            {frame.comparison && <StrategyResultReplayChart slot="comparison" chart={frame.comparison} frame={frame}
+              display={display.comparison} disabled={noteDraft !== null} onChange={updateChart} />}
           </div>
           <dl className="strategy-result-replay-status">
             <div><dt>{t("replay.wb.balance")}</dt><dd>{frame.cash} {frame.quote_asset}</dd></div>
