@@ -21,7 +21,6 @@ import { StrategyParametersEditor } from "../backtest/chart-tester/StrategyParam
 import { DEFAULT_STRATEGY_RUN_SETTINGS, validStrategyRunSettings, type StrategyRunSettings } from "../../shared/strategyRunSettings.js";
 import type { ChartSession } from "../chart-session/chartSessionTypes.js";
 import {
-  CHART_STRATEGY_TEMPLATES,
   diagnoseChartStrategyDraft,
   type ChartStrategyRunRequest,
 } from "../backtest/chart-tester/chartStrategyTesterUiModel.js";
@@ -38,6 +37,7 @@ import {
   type StrategyDraftRecord,
 } from "../backtest/chart-tester/StrategyDraftStore.js";
 import type { ResearchSourceKind } from "../research-data/researchDataTypes.js";
+import { RESEARCH_STRATEGY_TEMPLATES } from "./strategyTemplateDraft.js";
 
 const StrategyScriptWorkspace = lazy(() => import("../backtest/chart-tester/StrategyScriptWorkspace.js"));
 
@@ -231,7 +231,7 @@ export function StrategyResearchScriptPanel({
   }, [flushPendingDraft]);
 
   const startDraft = useCallback(async (templateId: string) => {
-    const template = CHART_STRATEGY_TEMPLATES.find((item) => item.id === templateId);
+    const template = RESEARCH_STRATEGY_TEMPLATES.find((item) => item.id === templateId);
     if (!template || !editorSession) return;
     const generation = restoreGenerationRef.current + 1;
     restoreGenerationRef.current = generation;
@@ -295,8 +295,8 @@ export function StrategyResearchScriptPanel({
 
   const controlReady = () => !!editorSession && !["RUNNING", "QUEUED", "RESOLVING"].includes(runStatus);
   useControlCommands(() => ({ id: `host-strategy:${cellScope}`, title: "Host strategy editor and saved drafts", context: () => ({ session, sourceKind, draftId, source, configuration, runStatus }),
-    snapshot: () => ({ session, sourceKind, draft, source, configuration, runStatus, needsData, recentDrafts, templates: CHART_STRATEGY_TEMPLATES, pane, openEditor }), commands: [
-      command("template", "Create a saved draft from an existing template.", object({ templateId: text(128) }), ({ templateId }) => { if (!CHART_STRATEGY_TEMPLATES.some((row) => row.id === templateId)) throw new Error("TEMPLATE_UNAVAILABLE"); return startDraft(templateId); }, { available: controlReady }),
+    snapshot: () => ({ session, sourceKind, draft, source, configuration, runStatus, needsData, recentDrafts, templates: RESEARCH_STRATEGY_TEMPLATES, pane, openEditor }), commands: [
+      command("template", "Create a saved draft from an existing template.", object({ templateId: text(128) }), ({ templateId }) => { if (!RESEARCH_STRATEGY_TEMPLATES.some((row) => row.id === templateId)) throw new Error("TEMPLATE_UNAVAILABLE"); return startDraft(templateId); }, { available: controlReady }),
       command("selectDraft", "Select a currently listed draft.", object({ draftId: nullable(text(128)) }), ({ draftId }) => { if (draftId && !recentDrafts.some((row) => row.id === draftId)) throw new Error("DRAFT_UNAVAILABLE"); onDraftId(draftId); }, { available: controlReady }),
       command("source", "Edit the saved strategy source; flush separately to verify persistence.", object({ source: text(48000, 0) }), ({ source }) => setSource(source), { available: () => controlReady() && !!draft }),
       command("flush", "Flush the existing strategy draft persistence workflow.", empty, () => flushPendingDraft(), { available: () => !!draft }),
@@ -317,7 +317,7 @@ export function StrategyResearchScriptPanel({
       <header><strong>{draft?.displayName ?? t("strategy.scriptSlot")}</strong></header>
       {recentDrafts.length > 0 && <label className="strategy-condition-range">{t("chartTester.recentTitle")}
         <select value={draftId ?? ""} onChange={(event) => onDraftId(event.target.value || null)}>
-          <option value="">{t("chartTester.autosave.none")}</option>
+          <option value="">{t("chartTester.templateTitle")}</option>
           {recentDrafts.map((record) => <option key={record.id} value={record.id}>{record.displayName}</option>)}
         </select>
       </label>}
@@ -328,7 +328,7 @@ export function StrategyResearchScriptPanel({
       ) : null}
       {draft === null ? (
         <div className="strategy-research-templates" data-testid="strategy-research-templates">
-          {CHART_STRATEGY_TEMPLATES.map((template) => (
+          {RESEARCH_STRATEGY_TEMPLATES.map((template) => (
             <button
               key={template.id}
               type="button"

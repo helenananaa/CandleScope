@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { strategyLanguageLabel } from "../backtest/chart-tester/strategyLanguageLabel.js";
-import { CHART_STRATEGY_TEMPLATES } from "../backtest/chart-tester/chartStrategyTesterUiModel.js";
+import { RESEARCH_STRATEGY_TEMPLATES } from "./strategyTemplateDraft.js";
 import { getChartStrategyDraftStore } from "../backtest/chart-tester/chartStrategyTesterDrafts.js";
 import type { StrategyDraftRecord } from "../backtest/chart-tester/StrategyDraftStore.js";
 
@@ -43,7 +43,7 @@ export function StrategyResearchFirstOpen({
         </div>
       )}
       <div className="strategy-research-templates" data-testid="strategy-research-templates">
-        {CHART_STRATEGY_TEMPLATES.map((template) => (
+        {RESEARCH_STRATEGY_TEMPLATES.map((template) => (
           <button
             key={template.id}
             type="button"
