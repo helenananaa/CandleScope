@@ -185,9 +185,10 @@ class ChartCalculation:
         meta = {**self.meta, 'pineLiveUpdate':bool(bar_time), 'pineLiveBarTime':int(bar_time)}
         async def publish(cursor, result):
             nonlocal payload
+            recovered = result.meta.get('sessionRecovered') is True
             payload = await run_indicator(_plugin_snapshot_or_patch_from_result,
-                client_id, meta, rows, result, bar_time=bar_time, reason='chart-domain')
-            if not bar_time:
+                client_id, meta, rows, result, bar_time=0 if recovered else bar_time, reason='chart-domain')
+            if recovered or not bar_time:
                 payload['type'] = 'indicator.snapshot'
                 payload['range'] = {'start':self.owner.plan.start, 'end':cursor.observed_through}
             self._stamp(payload, cursor, revision, acquisition)

@@ -1791,6 +1791,13 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
                 not isinstance(session_id, str) or not session_id or len(session_id) > 128
             ):
                 raise BridgeError("PINE_INVALID_INPUT", "pineSessionId must be 1-128 characters")
+            chart_commit = request.options.get("pineChartCommit")
+            expected_chart_commit = request.options.get("pineExpectedChartCommit")
+            if chart_commit is not None or expected_chart_commit is not None:
+                commits = (chart_commit,) if expected_chart_commit is None else (chart_commit, expected_chart_commit)
+                if (not session_id or chart_commit == expected_chart_commit
+                        or any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{32}", value) for value in commits)):
+                    raise BridgeError("PINE_HOST_INPUT_INVALID", "Invalid chart journal commit identity.")
             forming = bool(request.bars and not request.bars[-1].is_closed)
             execution_meta = {"executionMode": "historical-batch", "incremental": False,
                               "formingBar": False, "sessionRetained": False}
@@ -1804,6 +1811,7 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
                     providers=host_environment.get("contexts", []),
                     verify_history_clocks=isinstance(request.options.get("pineExecutionTimeMs"), list),
                     validated_prefix=prefix_capture[0] if prefix_capture else None,
+                    chart_commit=chart_commit, expected_chart_commit=expected_chart_commit,
                 )
             else:
                 raw = engine.run_script(request.source, runtime_bars, **options,
@@ -1878,7 +1886,9 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
             meta["pineAlerts"] = raw.get("alerts", [])
             meta["symbolMetadataSource"] = "host" if grid else "synthetic-defaults"
             meta["closedBarsOnly"] = False
-            self._sessions.commit(session_id)
+            self._sessions.commit(session_id, chart_commit=chart_commit, expected_chart_commit=expected_chart_commit)
+            if chart_commit:
+                meta["chartCommit"] = chart_commit
             revision = None
             if entry is not None:
                 entry.output = None

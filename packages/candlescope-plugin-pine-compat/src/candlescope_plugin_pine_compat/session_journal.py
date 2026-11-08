@@ -37,22 +37,30 @@ class SessionJournal:
         self.max_sessions, self.max_bytes = max_sessions, max_bytes
 
     def read(self, key):
-        row = self.db.execute("SELECT header, state, seq FROM journal_sessions WHERE id=?", (key,)).fetchone()
-        if row is None:
-            legacy = self.db.execute("SELECT body FROM sessions WHERE id=?", (key,)).fetchone()
-            return json.loads(legacy[0]) if legacy else None
-        operations = [json.loads(op) for (op,) in self.db.execute(
-            "SELECT op FROM journal_operations WHERE session_id=? ORDER BY seq", (key,))]
-        if len(operations) != row[2]:
+        self.db.execute("BEGIN")
+        with self.db:
+            row = self.db.execute("SELECT header, state, seq FROM journal_sessions WHERE id=?", (key,)).fetchone()
+            if row is None:
+                legacy = self.db.execute("SELECT body FROM sessions WHERE id=?", (key,)).fetchone()
+                return json.loads(legacy[0]) if legacy else None
+            records = self.db.execute(
+                "SELECT seq, op FROM journal_operations WHERE session_id=? ORDER BY seq", (key,),
+            ).fetchall()
+        if len(records) != row[2] or any(seq != index for index, (seq, _) in enumerate(records)):
             raise ValueError("PINE_SESSION_JOURNAL_INVALID: incomplete observation journal")
-        return {"schema": 2, "header": json.loads(row[0]), "state": json.loads(row[1]), "operations": operations}
+        return {"schema": 2, "header": json.loads(row[0]), "state": json.loads(row[1]),
+                "operations": [json.loads(op) for _, op in records]}
 
-    def append(self, key, header, state, operations, seq):
+    def append(self, key, header, state, operations, seq, *, expected_chart_commit=None):
         """Append encoded operations after ``seq``; a header starts a new log."""
         added = len(state.encode()) + sum(len(op.encode()) for op in operations)
         self.db.execute("BEGIN IMMEDIATE")
         with self.db:
-            current = self.db.execute("SELECT seq, bytes, length(CAST(state AS BLOB)) FROM journal_sessions WHERE id=?", (key,)).fetchone()
+            current = self.db.execute(
+                "SELECT seq, bytes, length(CAST(state AS BLOB)), state FROM journal_sessions WHERE id=?", (key,),
+            ).fetchone()
+            if expected_chart_commit and (current is None or json.loads(current[3]).get("chartCommit") != expected_chart_commit):
+                raise ValueError("PINE_HOST_JOURNAL_MISMATCH: journal changed before the chart input committed")
             legacy = self.db.execute("SELECT length(CAST(body AS BLOB)) FROM sessions WHERE id=?", (key,)).fetchone()
             sessions, total = self.db.execute("SELECT sessions, bytes FROM journal_budget WHERE id=0").fetchone()
             released = (current[1] if current else 0) + (legacy[0] if legacy else 0)

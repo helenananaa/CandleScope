@@ -160,3 +160,47 @@ def test_reconnect_fences_forming_observations_missed_while_detached(real_bus_wi
         assert transport.value(next_frame) == 502
         assert next_frame['calculation']['generation'] == recovered['calculation']['generation']
     assert wire.client.delete('/indicators/calculations/' + transport.ref(initial)['domainId']).json()['state'] == 'closed'
+
+
+@pytest.mark.parametrize('journal_fault', [None, 'wrong_commit', 'missing_slot'])
+def test_worker_restart_proves_the_last_admitted_observation(real_bus_wire, journal_fault):
+    journal_matches = journal_fault is None
+    wire = real_bus_wire
+    initial = open_chart(wire)
+    with wire.client.websocket_connect('/ws') as ws:
+        join(ws, initial)
+        for close in (101, 102):
+            assert wire.client.post('/fixture/tick/501', params={'close': close}).json()['ok']
+            admitted = transport.receive(ws, 'indicator.replace_range')
+        assert transport.value(admitted) == 502
+        before = journal_sequences(wire)
+        wire.extra_processes.extend(s._process for s in wire.host._supervisors.values() if s._process is not None)
+        wire.client.portal.call(wire.host.stop)
+        if journal_fault:
+            with closing(sqlite3.connect(wire.tmp_path / 'wire.sqlite')) as db, db:
+                if journal_fault == 'wrong_commit':
+                    # A commit token can differ even if the operation count did not change.
+                    row, = db.execute('SELECT state FROM journal_sessions').fetchone()
+                    state = json.loads(row)
+                    state['chartCommit'] = 'a' * 32
+                    db.execute('UPDATE journal_sessions SET state=?', (json.dumps(state),))
+                else:
+                    db.execute('UPDATE journal_operations SET seq=seq+100 WHERE seq=(SELECT MAX(seq) FROM journal_operations)')
+        # This distinct observation has the same BAR and price as the last
+        # acknowledged one. It must advance varip exactly once after restore.
+        assert wire.client.post('/fixture/tick/501?close=102').json()['ok']
+        restored = transport.receive(ws, 'indicator.snapshot')
+        assert restored['calculation']['domainId'] == admitted['calculation']['domainId']
+        assert restored['calculation']['generation'] == admitted['calculation']['generation'] + 1
+        assert restored['calculation']['sequence'] == admitted['calculation']['sequence'] + 1
+        assert restored['range']['start'] == admitted['calculation']['origin']
+        assert restored['meta']['sessionRecovered'] is journal_matches
+        assert restored['meta']['sessionReset'] is not journal_matches
+        assert transport.value(restored) == (503 if journal_matches else 501)
+        if journal_matches:
+            assert journal_sequences(wire) == {key: seq + 1 for key, seq in before.items()}
+        assert wire.client.post('/fixture/tick/501?close=104').json()['ok']
+        next_frame = transport.receive(ws, 'indicator.replace_range')
+        assert transport.value(next_frame) == (504 if journal_matches else 502)
+        assert next_frame['calculation']['generation'] == restored['calculation']['generation']
+    assert wire.client.delete('/indicators/calculations/' + transport.ref(initial)['domainId']).json()['state'] == 'closed'

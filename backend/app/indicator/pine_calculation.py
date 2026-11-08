@@ -9,10 +9,11 @@ from dataclasses import replace
 import hashlib
 import json
 import logging
+from uuid import uuid4
 
 from candlescope_plugin_sdk import FEATURE_RENDER_OUTPUT_PATCH_V1, FEATURE_STREAM_RELEASE_V1
 
-from .calculation_owner import CalculationCursor, CalculationExecution, CalculationOwnerError, CalculationPlan, ScriptCalculationOwner
+from .calculation_owner import CalculationCursor, CalculationExecution, CalculationOwnerError, CalculationPlan, RuntimeTailReset, ScriptCalculationOwner
 from .runtime_routes import ROUTE_MODE_SIDECAR
 from .runtime_service import IndicatorRuntimeRequest, IndicatorRuntimeService, removed_in_process_runtime, _value
 from .serialization import serialize_plugin_runtime_result
@@ -51,6 +52,7 @@ class PineCalculationRuntime:
             raise CalculationOwnerError('INDICATOR_CALCULATION_OUTPUT_UNSUPPORTED')
         self = cls()
         self.service, self.runtime_id = service, route.runtime_id
+        self._chart_commit = None
         self.owner = ScriptCalculationOwner(CalculationPlan(owner_id, identity, start), read=self._read, max_pending=max_pending)
         return self
 
@@ -80,25 +82,39 @@ class PineCalculationRuntime:
                 nonlocal receipt
                 receipt = result
                 return {'ok': result.ok}
+            commit = uuid4().hex
+            previous_commit = None if rebuild else self._chart_commit
             bound = replace(request, options={**request.options, 'pineSessionId': self.owner.plan.owner_id,
-                'pineSessionEpoch': epoch, 'pineLeaseId': self.owner.plan.owner_id})
+                'pineSessionEpoch': epoch, 'pineLeaseId': self.owner.plan.owner_id, 'pineChartCommit': commit,
+                **({'pineExpectedChartCommit': previous_commit} if previous_commit else {})})
             await self.service.execute(bound, legacy=removed_in_process_runtime, adapt_sidecar=capture, notify_result=False)
             if receipt is not None and not receipt.ok:
+                if not rebuild and any(item.code in {'PINE_HOST_JOURNAL_MISMATCH', 'PINE_SESSION_JOURNAL_INVALID'}
+                        for item in receipt.diagnostics):
+                    raise RuntimeTailReset()
                 raise CalculationOwnerError('INDICATOR_CALCULATION_EXECUTION_FAILED',
                     payload=serialize_plugin_runtime_result(receipt))
             if receipt is None:
                 raise CalculationOwnerError('INDICATOR_CALCULATION_EXECUTION_FAILED')
+            acknowledged = receipt.meta.get('chartCommit') == commit
+            if (previous_commit and not acknowledged) or (
+                    receipt.meta.get('sessionRecovered') is True and (not previous_commit or not acknowledged)):
+                raise RuntimeTailReset()
+            receipt = replace(receipt, meta={key: value for key, value in receipt.meta.items() if key != 'chartCommit'})
             snapshot = await self.service.host.read_output(self.runtime_id, self.owner.plan.owner_id)
             if snapshot is None or snapshot.output is not receipt.output:
                 raise CalculationOwnerError('INDICATOR_CALCULATION_OUTPUT_LOST')
-            publication = (bound, receipt)
+            publication = (bound, receipt, commit if acknowledged else None)
             return CalculationExecution(snapshot.reference, receipt.meta.get('sessionRetained') is True,
                 receipt.meta.get('sessionReset') is True)
         async def notify(_cursor):
-            if on_result is not None and publication is not None:
-                await on_result(_cursor, publication[1])
-            if self.service.observe_result is not None and publication is not None:
-                try: await self.service.observe_result(*publication)
+            if publication is None:
+                return
+            bound, receipt, self._chart_commit = publication
+            if on_result is not None:
+                await on_result(_cursor, receipt)
+            if self.service.observe_result is not None:
+                try: await self.service.observe_result(bound, receipt)
                 except Exception:
                     logger.exception('Admitted indicator result notification failed')
         return await self.owner.advance(semantic_identity=identity,

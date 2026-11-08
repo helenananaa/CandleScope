@@ -104,6 +104,7 @@ class Session:
     seq: int = 0
     observation: Any = None
     last_observation: str | None = None
+    chart_commit: str | None = None
     # Last output returned to a host that accepts output patches (runtime-owned).
     output: Any = None
     input_window: Any = field(default=None, repr=False, compare=False)
@@ -138,22 +139,24 @@ class PineSessions:
     def clear(self) -> None:
         self.entries.clear()
 
-    def commit(self, key):
+    def commit(self, key, *, chart_commit=None, expected_chart_commit=None):
         entry = self.entries.get(key) if key else None
         if entry is None or entry.pending is None:
             return
         try:
             observation = digest(entry.observation)
-            state = encode({"formingTime": entry.forming_time, "observedAt": entry.observed_at, "observation": observation})
+            state = encode({"formingTime": entry.forming_time, "observedAt": entry.observed_at,
+                            "observation": observation, **({"chartCommit": chart_commit} if chart_commit else {})})
             header = None if entry.header is None else encode({"schema": 2, **entry.header})
-            self.journal.append(key, header, state, [encode(op) for op in entry.pending], entry.seq)
+            self.journal.append(key, header, state, [encode(op) for op in entry.pending], entry.seq,
+                                expected_chart_commit=expected_chart_commit)
         except Exception:
             # The journal still holds the previous commit; never continue past it.
             self.entries.pop(key, None)
             raise
         entry.seq += len(entry.pending)
         entry.pending.clear()
-        entry.header, entry.last_observation = None, observation
+        entry.header, entry.last_observation, entry.chart_commit = None, observation, chart_commit
 
     def release(self, key):
         if key:
@@ -183,7 +186,7 @@ class PineSessions:
         entry = Session(header["identity"], RecordedSession(native, pending), clocks=[] if header["clocked"] else None,
                         history_start=header["historyStart"], forming_time=state["formingTime"],
                         observed_at=state["observedAt"], header=header if seq == 0 else None,
-                        pending=pending, seq=seq, last_observation=state["observation"])
+                        pending=pending, seq=seq, last_observation=state["observation"], chart_commit=state.get("chartCommit"))
         providers = {}
         for name, args, kwargs in operations:
             if name == "$requested":
@@ -207,7 +210,7 @@ class PineSessions:
                            for key, (rows, forming) in providers.items()}
         return entry
 
-    def execute(self, engine, source, bars, options, *, session_id, forming, execution_times=None, calculation_bars_count=None, request_observation=None, epoch="0", providers=(), verify_history_clocks=False, validated_prefix=None):
+    def execute(self, engine, source, bars, options, *, session_id, forming, execution_times=None, calculation_bars_count=None, request_observation=None, epoch="0", providers=(), verify_history_clocks=False, validated_prefix=None, chart_commit=None, expected_chart_commit=None):
         native_options, request_updates = requested_tail(options, bars[-1]["time"] if forming else None)
         observed_at = session_requests.observation_clock(engine, request_observation)
         identity_options = options
@@ -226,8 +229,12 @@ class PineSessions:
         if entry is None and session_id:
             record = self.journal.read(session_id)
             if record is not None:
+                if expected_chart_commit and record.get("state", {}).get("chartCommit") != expected_chart_commit:
+                    raise ValueError("PINE_HOST_JOURNAL_MISMATCH: journal commit differs from the admitted chart input")
                 entry = self._restore(engine, record)
                 recovered = True
+        if expected_chart_commit and (entry is None or entry.chart_commit != expected_chart_commit):
+            raise ValueError("PINE_HOST_JOURNAL_MISMATCH: journal commit differs from the admitted chart input")
         # A sliding UI window may omit an immutable retained prefix. The host
         # forwards no correction marker: a corrected bar is only a changed row,
         # so every retained row the window repeats is compared.
@@ -254,6 +261,8 @@ class PineSessions:
             or (not immutable_overlap and confirmed[:overlap] != entry.confirmed[offset:])
             or (entry.forming_time is not None and not has_time(bars, entry.forming_time))
         )
+        if reset and expected_chart_commit:
+            raise ValueError("PINE_HOST_JOURNAL_MISMATCH: committed journal no longer matches the chart inputs")
         if not reset and observed_at is not None and observed_at < entry.observed_at:
             raise ValueError("PINE_REQUEST_DATA_INVALID: requested observation clock regressed")
         if not reset:
@@ -330,7 +339,9 @@ class PineSessions:
             observation = {"bar": bars[-1] if bars else None, "forming": forming,
                 "providers": list(providers), "clock": execution_times[-1] if execution_times else None,
                 "requested": request_observation}
-            duplicate_recovery = recovered and not reset and entry.last_observation == digest(observation)
+            # A chart command has an admitted predecessor. Identical prices
+            # on the next command are a new observation, including after a crash.
+            duplicate_recovery = not chart_commit and recovered and not reset and entry.last_observation == digest(observation)
             if duplicate_recovery and forming:
                 entry.forming_time = bars[-1]["time"]
             if forming and not duplicate_recovery:
