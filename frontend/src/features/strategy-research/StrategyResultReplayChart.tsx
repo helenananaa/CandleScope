@@ -39,7 +39,7 @@ function ReplayCandles({ bars, ma, display, markers }: {
         <title>{new Date(bar.open_time_ms).toISOString()} · {bar.open} / {bar.high} / {bar.low} / {bar.close}</title>
       </g>;
     })}
-    {line && <path d={line} stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none" />}
+    {line && <path d={line} data-testid="strategy-replay-ma-line" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none" />}
     {[...markers].map(([index, { fills, notes }]) => {
       const x = 24 + index * spacing;
       const radius = Math.min(7, spacing * 0.42);
@@ -79,6 +79,7 @@ export function StrategyResultReplayChart({ slot, chart, frame, display, disable
   const symbol = chart.symbol ?? frame.symbol;
   const interval = formatIntervalLabel(chart.interval);
   const markers = replayChartMarkers(frame, chart.bars, ownsMarkers, display);
+  const ma = display.showMa ? chart.ma : undefined;
   const last = chart.bars.at(-1);
   return <section aria-label={`${symbol} · ${interval}`} data-testid={`strategy-replay-${slot}-chart`}
     data-dataset-epoch={chart.data_epoch} data-candle-style={display.candleStyle}>
@@ -103,11 +104,16 @@ export function StrategyResultReplayChart({ slot, chart, frame, display, disable
               onChange={event => onChange(slot, field, event.target.checked)} />
             {t(key)}
           </label>)}
+        {chart.ma && <label>
+          <input type="checkbox" data-testid="strategy-replay-show-ma" checked={display.showMa}
+            onChange={event => onChange(slot, "showMa", event.target.checked)} />
+          {t("replay.indicator.sma.name")}
+        </label>}
       </fieldset>
       {!ownsMarkers && <p>{t("researchBatch.replayReferenceMarkers")}</p>}
     </details>
-    <ReplayCandles bars={chart.bars} ma={chart.ma} display={display} markers={markers} />
-    <ReplayMaLegend ma={chart.ma} />
+    <ReplayCandles bars={chart.bars} ma={ma} display={display} markers={markers} />
+    <ReplayMaLegend ma={ma} />
     {last && <p data-testid={slot === "primary" ? "strategy-replay-last-ohlc" : `strategy-replay-${slot}-ohlc`}>
       {last.open} / {last.high} / {last.low} / {last.close}
     </p>}

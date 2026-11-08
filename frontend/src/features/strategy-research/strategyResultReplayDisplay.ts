@@ -8,8 +8,9 @@ export type ReplayChartDisplay = {
   downColor: string;
   fills: boolean;
   notes: boolean;
+  showMa: boolean;
 };
-type DisplayLink = "chartStyle" | "fills" | "notes";
+type DisplayLink = "chartStyle" | "fills" | "notes" | "indicatorVisibility";
 export type ReplayDisplay = Record<"primary" | "comparison", ReplayChartDisplay> &
   Partial<Record<BacktestReplayExtraSlot, ReplayChartDisplay>> & {
   references?: BacktestReplayExtraCharts;
@@ -17,11 +18,13 @@ export type ReplayDisplay = Record<"primary" | "comparison", ReplayChartDisplay>
   links: Record<DisplayLink, boolean>;
 };
 
-const defaultChart: ReplayChartDisplay = { candleStyle: "solid", upColor: "#159b84", downColor: "#df595e", fills: true, notes: true };
+const defaultChart: ReplayChartDisplay = {
+  candleStyle: "solid", upColor: "#159b84", downColor: "#df595e", fills: true, notes: true, showMa: true,
+};
 export const DEFAULT_REPLAY_DISPLAY: ReplayDisplay = {
   primary: defaultChart,
   comparison: defaultChart,
-  links: { chartStyle: false, fills: false, notes: false },
+  links: { chartStyle: false, fills: false, notes: false, indicatorVisibility: false },
 };
 
 export function replayDisplayKey(replay: Pick<BacktestResultReplayCursor, "runId" | "snapshotHash" | "reportHash">): string {
@@ -42,6 +45,7 @@ function chartDisplay(value: unknown): ReplayChartDisplay {
     downColor: color(chart.downColor, defaultChart.downColor),
     fills: typeof chart.fills === "boolean" ? chart.fills : defaultChart.fills,
     notes: typeof chart.notes === "boolean" ? chart.notes : defaultChart.notes,
+    showMa: typeof chart.showMa === "boolean" ? chart.showMa : defaultChart.showMa,
   };
 }
 
@@ -116,7 +120,8 @@ export function readReplayDisplays(value: unknown): Record<string, ReplayDisplay
       ...(Object.keys(references).length ? { references } : {}),
       ...Object.fromEntries(BACKTEST_REPLAY_EXTRA_SLOTS.filter(slot => display[slot] !== undefined)
         .map(slot => [slot, chartDisplay(display[slot])])),
-      links: { chartStyle: links.chartStyle === true, fills: links.fills === true, notes: links.notes === true } }];
+      links: { chartStyle: links.chartStyle === true, fills: links.fills === true, notes: links.notes === true,
+        indicatorVisibility: links.indicatorVisibility === true } }];
   }));
 }
 
@@ -125,7 +130,8 @@ export function changeReplayChartDisplay<K extends keyof ReplayChartDisplay>(
   activeSlots: readonly ReplayChartSlot[] = ["primary", "comparison"],
 ): ReplayDisplay {
   if (replayChartDisplay(display, slot)[field] === value) return display;
-  const channel: DisplayLink = field === "fills" ? "fills" : field === "notes" ? "notes" : "chartStyle";
+  const channel: DisplayLink = field === "showMa" ? "indicatorVisibility"
+    : field === "fills" || field === "notes" ? field : "chartStyle";
   const targets = display.links[channel] ? activeSlots : [slot];
   const next = { ...display };
   for (const target of targets) next[target] = { ...replayChartDisplay(display, target), [field]: value };

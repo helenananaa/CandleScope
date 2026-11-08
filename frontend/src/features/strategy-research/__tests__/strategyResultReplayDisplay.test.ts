@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import type { BacktestResultReplayBar, BacktestResultReplayFrame } from "../../backtest/backtestTypes.js";
 import { changeReplayChartDisplay, DEFAULT_REPLAY_DISPLAY, readReplayDisplays, replayChartDisplay, replayChartMarkers, replayLayout, restoreReplayLayout } from "../strategyResultReplayDisplay.js";
+import { StrategyResultReplayChart } from "../StrategyResultReplayChart.js";
 
 test("only the edited setting follows its opt-in link", () => {
   const initial = changeReplayChartDisplay(DEFAULT_REPLAY_DISPLAY, "primary", "upColor", "#123456");
@@ -17,6 +20,23 @@ test("only the edited setting follows its opt-in link", () => {
   const hiddenNotes = changeReplayChartDisplay(hiddenFills, "comparison", "notes", false);
   assert.equal(hiddenNotes.primary.notes, false);
   assert.equal(hiddenNotes.comparison.notes, false);
+});
+
+test("the moving average visibility link affects visible slots and survives reload", () => {
+  const key = `bt_first:sha256:${"1".repeat(64)}:sha256:${"2".repeat(64)}`;
+  const legacy = readReplayDisplays({ [key]: { primary: { candleStyle: "hollow" }, links: { chartStyle: true } } })![key]!;
+  assert.equal(legacy.primary.showMa, true);
+  assert.equal(legacy.links.indicatorVisibility, false);
+  const local = changeReplayChartDisplay(legacy, "primary", "showMa", false);
+  assert.equal(local.comparison.showMa, true);
+  const linked = changeReplayChartDisplay({ ...local, links: { ...local.links, indicatorVisibility: true } },
+    "comparison", "showMa", false, ["primary", "comparison", "extra1"]);
+  const restored = readReplayDisplays(JSON.parse(JSON.stringify({ [key]: linked })))![key]!;
+  assert.equal(restored.links.indicatorVisibility, true);
+  const slots = ["primary", "comparison", "extra1", "extra2"] as const;
+  assert.deepEqual(slots.map(slot => replayChartDisplay(restored, slot).showMa), [false, false, false, true]);
+  assert.equal(restored.primary.candleStyle, "hollow");
+  assert.equal(restored.comparison.fills, true);
 });
 
 test("markers require an owned chart, a revealed cursor and a matching candle", () => {
@@ -46,6 +66,17 @@ test("markers require an owned chart, a revealed cursor and a matching candle", 
     [0, { fills: [fill], notes: [] }],
   ]);
   assert.equal(replayChartMarkers(rewind, bars, true, { fills: false, notes: true }).size, 0);
+
+  const chart = { ...frame, ma: { period: 2, points: [{ open_time_ms: 100, value: 1.5 }] } };
+  const render = (showMa: boolean) => renderToStaticMarkup(createElement(StrategyResultReplayChart, {
+    slot: "primary", chart, frame, display: { ...DEFAULT_REPLAY_DISPLAY.primary, showMa }, disabled: false, onChange() {},
+  }));
+  assert.match(render(true), /data-testid="strategy-replay-ma-line"/);
+  assert.match(render(true), /data-testid="strategy-replay-ma"/);
+  const hidden = render(false);
+  assert.doesNotMatch(hidden, /data-testid="strategy-replay-ma(?:-line)?"/);
+  assert.match(hidden, /data-testid="strategy-replay-fill-marker"/);
+  assert.match(hidden, /data-testid="strategy-replay-last-ohlc"/);
 });
 
 test("saved references and styles are isolated by result and links touch only visible slots", () => {
