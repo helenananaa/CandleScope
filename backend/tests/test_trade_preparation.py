@@ -332,7 +332,7 @@ async def test_trade_flow_history_preparation_reuses_the_official_day(tmp_path, 
         adapter = desktop
     monkeypatch.setattr(config, "REPLAY_AGG_TRADE_ARCHIVE_DIR", archive.root)
     repo = PreparationRepository(tmp_path / "jobs.db")
-    prep = PreparationService(repo, adapter)
+    prep = PreparationService(repo, adapter, workers=2 if desktop_wrapper else 1)
     store = SQLiteTradeFlowRollupStore(tmp_path / "rollups.db")
     before = START_MS - 60_000
     await store.upsert_rollups([_rollup(before, revision=1, is_final=True)])
