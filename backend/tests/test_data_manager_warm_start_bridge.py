@@ -4,6 +4,8 @@ import asyncio
 import time as py_time
 from unittest.mock import patch
 
+import pytest
+
 from app.data_engine.bar_aggregator import (
     BarAggregator,
     BarAggregatorConfig,
@@ -18,6 +20,7 @@ from app.data_engine.data_manager.event_bus import DataEventBus
 from app.data_engine.data_manager.models import BarData, DataEventType, SeriesKey
 from app.data_engine.data_manager.warm_start import AggregatorWarmStartService
 from app.data_engine.storage import klines_repo
+from app.data_engine.series_identity import KlineSeriesIdentity
 
 
 def _row(open_time_ms: int, interval_ms: int, close: float) -> dict:
@@ -406,6 +409,68 @@ def test_warm_start_requests_repair_for_an_elapsed_provisional_component():
             repaired = aggregator.get_bucket_state("BTC-USDT", "45m", bucket_start, exchange="okx", market_type="spot")
             assert repaired is not None and repaired.last_close_received and repaired.volume == 100
             assert len(triggers) == 1
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("cached_source", ["data_manager_exchange_closed", "source_snapshot_verified"])
+def test_derived_warm_start_prefers_the_committed_final_component(cached_source):
+    async def run():
+        base_ms = 15 * 60_000
+        bucket_start = 3 * base_ms
+        now_ms = bucket_start + base_ms + 1
+        aggregator = BarAggregator()
+        aggregator.add_target("BTC-USDT", "45m", exchange="okx")
+        storage = _Storage([dict(_row(bucket_start, base_ms, 10), source="source_snapshot_verified")])
+        cache = BarCache()
+        key = SeriesKey("BTC-USDT", "15m", exchange="okx")
+        cache.upsert(key, BarData(time=bucket_start // 1000, open=20, high=25, low=19, close=22,
+                                  volume=999, is_closed=True, source=cached_source))
+        service = _service(cache=cache, aggregator=aggregator, storage=storage, triggers=[], base_interval="15m")
+        with patch("app.data_engine.data_manager.warm_start.time.time", return_value=now_ms / 1000):
+            await service.seed_if_needed("BTC-USDT", "45m", exchange="okx", market_type="spot", had_stream=True)
+        result = aggregator.get_bucket_state("BTC-USDT", "45m", bucket_start, exchange="okx")
+        assert result is not None and result.last_close_received and result.volume == 100
+        assert result.high == 12 and result.close == 11
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize(("interval", "source_interval", "width", "source_width"), [
+    ("15m", "15m", 900_000, 900_000), ("45m", "15m", 2_700_000, 900_000),
+])
+def test_warm_start_keeps_nondefault_identity_on_storage_target_and_repair(interval, source_interval, width, source_width):
+    async def run():
+        opened = 3 * width
+        now_ms = opened + 1
+        identities = [KlineSeriesIdentity.for_exchange("okx", series_variant=variant)
+                      for variant in ("archive", "alternate")]
+        aggregator = BarAggregator()
+        for identity in identities:
+            aggregator.add_target("BTC-USDT", interval, exchange="okx", series_identity=identity)
+        storage = _Storage([_row(opened, source_width, 10)])
+        triggers = []
+        service = AggregatorWarmStartService(
+            cache=BarCache(), bar_aggregator=aggregator, base_interval=source_interval,
+            storage_provider=lambda: storage,
+            backfill_trigger_provider=lambda: lambda *args, **kwargs: triggers.append((args, kwargs)),
+        )
+        with patch("app.data_engine.data_manager.warm_start.time.time", return_value=now_ms / 1000):
+            for identity in identities:
+                await service.seed_if_needed("BTC-USDT", interval, exchange="okx", market_type="spot",
+                                             had_stream=False, series_identity=identity)
+                result = aggregator.get_bucket_state("BTC-USDT", interval, opened,
+                                                     exchange="okx", series_identity=identity)
+                assert result is not None and result.series_identity == identity and result.volume == 100
+        assert [call["series_identity"] for call in storage.query_calls] == identities
+        assert all(call["interval"] == source_interval for call in storage.query_calls)
+        assert aggregator.get_bucket_state("BTC-USDT", interval, opened, exchange="okx") is None
+        if interval != source_interval:
+            assert [kw["metadata"]["series_identity"] for _, kw in triggers] == [
+                identity.to_dict() for identity in identities
+            ]
+        else:
+            assert not triggers
 
     asyncio.run(run())
 

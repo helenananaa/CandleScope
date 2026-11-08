@@ -20,8 +20,9 @@ from app.data_engine.interval_resolution import (
     IntervalRoute,
     IntervalRouteKind,
 )
-from app.data_engine.kline_quality import source_is_trusted_final
+from app.data_engine.kline_quality import source_is_trusted_final, source_rank
 from app.data_engine.market_data.kline_metrics import declared_enhanced_fields
+from app.data_engine.series_identity import KlineSeriesIdentity, SERIES_IDENTITY_METADATA_KEY
 
 from ..bar_aggregator import (
     BarAggregator,
@@ -65,10 +66,7 @@ class AggregatorWarmStartService:
         self._backfill_trigger_provider = backfill_trigger_provider
         self._interval_resolver = interval_resolver or IntervalResolver()
         self.history_prefix_runtime = None
-        self._tail_repair_buckets: dict[
-            tuple[str, str, str, str],
-            int,
-        ] = {}
+        self._tail_repair_buckets: dict[SeriesKey, int] = {}
 
     async def seed_if_needed(
         self,
@@ -80,7 +78,7 @@ class AggregatorWarmStartService:
         had_stream: bool,
         focus_scope: str = "foreground",
         subscription_tier: str | None = None,
-        series_identity: Any = None,
+        series_identity: KlineSeriesIdentity | None = None,
     ) -> None:
         """Seed the relevant active bucket after DataManager starts a stream."""
         market_type = self._normalize_market_type(market_type)
@@ -120,6 +118,7 @@ class AggregatorWarmStartService:
                     focus_scope=focus_scope,
                     subscription_tier=subscription_tier,
                     route=route,
+                    series_identity=series_identity,
                 )
             return
 
@@ -132,6 +131,7 @@ class AggregatorWarmStartService:
                 interval,
                 exchange=exchange,
                 market_type=market_type,
+                series_identity=series_identity,
             )
         except Exception as exc:
             logger.warning(
@@ -151,7 +151,7 @@ class AggregatorWarmStartService:
         focus_scope: str = "foreground",
         subscription_tier: str | None = None,
         route: IntervalRoute | None = None,
-        series_identity: Any = None,
+        series_identity: KlineSeriesIdentity | None = None,
     ) -> None:
         """Seed the currently-forming custom bucket from recent base bars."""
         symbol = symbol.upper()
@@ -167,7 +167,9 @@ class AggregatorWarmStartService:
         base_seconds = parse_custom_interval(base_interval) or 60
         base_spec = parse_interval_spec(base_interval)
         now_ms = int(time.time() * 1000)
-        bucket_start_ms = self._bar_aggregator.compute_bucket(interval, now_ms)
+        bucket_start_ms = self._bar_aggregator.compute_bucket(
+            interval, now_ms, exchange=exchange, series_identity=series_identity,
+        )
         if bucket_start_ms is None:
             return
         if self.history_prefix_runtime is not None and base_spec is not None:
@@ -187,7 +189,9 @@ class AggregatorWarmStartService:
                     if self._cache.get_latest(key, 1) != [bar]:
                         await self._cache.apply_protected(self._cache.upsert_if_accepted, key, bar)
                 return
-        prev_bucket_start_ms = self._bar_aggregator.previous_bucket(interval, bucket_start_ms)
+        prev_bucket_start_ms = self._bar_aggregator.previous_bucket(
+            interval, bucket_start_ms, exchange=exchange, series_identity=series_identity,
+        )
         fetch_start_ms = (
             prev_bucket_start_ms
             if prev_bucket_start_ms is not None
@@ -243,8 +247,11 @@ class AggregatorWarmStartService:
                 else open_time_ms + (base_seconds * 1000) - 1
             )
             stored = rows_by_open_time.get(open_time_ms)
-            if stored is not None and _base_row_is_final(stored) and not cached.trusted_final:
-                continue
+            if stored is not None and _base_row_is_final(stored):
+                # The committed row decides equal-rank conflicts: the cache
+                # has no evidence that its older copy is still canonical.
+                if not cached.trusted_final or source_rank(cached.source) <= source_rank(stored.get("source")):
+                    continue
             rows_by_open_time[open_time_ms] = {
                 "open_time": open_time_ms,
                 "close_time": close_time_ms,
@@ -304,6 +311,7 @@ class AggregatorWarmStartService:
                             "had_stream": True,
                             "requires_trusted_finality": True,
                         },
+                        series_identity=series_identity,
                     )
                 except Exception as exc:
                     logger.warning(
@@ -415,6 +423,7 @@ class AggregatorWarmStartService:
         interval: str,
         exchange: str = "binance",
         market_type: str = "spot",
+        series_identity: KlineSeriesIdentity | None = None,
     ) -> None:
         """Seed the BarAggregator with the currently-forming standard bar."""
         symbol = symbol.upper()
@@ -427,7 +436,9 @@ class AggregatorWarmStartService:
         interval_seconds = parse_custom_interval(interval) or 60
         interval_ms = interval_seconds * 1000
         now_ms = int(time.time() * 1000)
-        bucket_start_ms = self._bar_aggregator.compute_bucket(interval, now_ms)
+        bucket_start_ms = self._bar_aggregator.compute_bucket(
+            interval, now_ms, exchange=exchange, series_identity=series_identity,
+        )
         if bucket_start_ms is None:
             return
 
@@ -437,6 +448,7 @@ class AggregatorWarmStartService:
             bucket_start_ms,
             exchange=exchange,
             market_type=market_type,
+            series_identity=series_identity,
         ) is not None:
             return
 
@@ -449,6 +461,7 @@ class AggregatorWarmStartService:
             order="ASC",
             exchange=exchange,
             market_type=market_type,
+            **({"series_identity": series_identity} if series_identity is not None else {}),
         )
         if not rows:
             return
@@ -484,6 +497,7 @@ class AggregatorWarmStartService:
             taker_buy_quote=float(row.get("taker_buy_quote", 0) or 0),
             enhanced_fields=enhanced_fields,
             sequence=open_time_ms,
+            series_identity=series_identity,
         )
 
         await self._bar_aggregator.seed_active_bar(
@@ -515,16 +529,16 @@ class AggregatorWarmStartService:
         focus_scope: str = "foreground",
         subscription_tier: str | None = None,
         route: IntervalRoute | None = None,
+        series_identity: KlineSeriesIdentity | None = None,
     ) -> None:
         """Force a recent custom-interval rebuild to overwrite stale rows."""
         interval_seconds = parse_custom_interval(interval) or 60
         now_ms = int(time.time() * 1000)
-        repair_bucket_ms = self._bar_aggregator.compute_bucket(interval, now_ms)
-        repair_key = (
-            exchange.strip().lower(),
-            self._normalize_market_type(market_type),
-            symbol.upper(),
-            interval,
+        repair_bucket_ms = self._bar_aggregator.compute_bucket(
+            interval, now_ms, exchange=exchange, series_identity=series_identity,
+        )
+        repair_key = SeriesKey.create(
+            symbol, interval, exchange=exchange, market_type=market_type, identity=series_identity,
         )
         if (
             repair_bucket_ms is not None
@@ -567,6 +581,7 @@ class AggregatorWarmStartService:
                     ),
                     "had_stream": False,
                 },
+                series_identity=series_identity,
             )
             if submitted and repair_bucket_ms is not None:
                 self._tail_repair_buckets[repair_key] = repair_bucket_ms
@@ -596,6 +611,7 @@ class AggregatorWarmStartService:
         reason: str,
         requester: str,
         metadata: dict[str, Any] | None = None,
+        series_identity: KlineSeriesIdentity | None = None,
     ) -> bool:
         trigger = self._backfill_trigger_provider()
         if trigger is None:
@@ -610,6 +626,8 @@ class AggregatorWarmStartService:
                 if value is not None
             },
         }
+        if series_identity is not None:
+            raw_kwargs["metadata"][SERIES_IDENTITY_METADATA_KEY] = series_identity.to_dict()
         kwargs: dict[str, Any] = {
             key: value
             for key, value in raw_kwargs.items()
