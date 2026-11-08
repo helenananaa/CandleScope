@@ -529,6 +529,8 @@ export function createBacktestApi(base = `${API_BASE}/backtests`): BacktestApiCl
         ...(cursor.maPeriod !== undefined ? { ma_period: String(cursor.maPeriod) } : {}),
         ...(cursor.comparisonMaPeriod !== undefined ? { comparison_ma_period: String(cursor.comparisonMaPeriod) } : {}),
       });
+      if (cursor.additionalCharts && Object.keys(cursor.additionalCharts).length)
+        query.set("additional_charts", JSON.stringify(cursor.additionalCharts));
       return readJson(await fetch(
         `${base}/runs/${encodeURIComponent(cursor.runId)}/result-replay?${query}`,
         requestOptions({}, signal),

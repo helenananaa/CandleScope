@@ -1,4 +1,5 @@
 from decimal import Decimal
+import json
 import time
 
 from app.backtest.result_replay import MAX_REVEALED_BARS, _display_chart
@@ -107,6 +108,30 @@ def test_pinned_bar_result_replay_links_two_periods_and_survives_reimport(tmp_pa
         assert {k: v for k, v in full_reference.items() if k != "comparison"} == {
             k: v for k, v in frame(10).items() if k != "comparison"
         }
+        additional = {
+            "extra1": {"interval": "1m", "maPeriod": 2},
+            "extra2": {"interval": "5m", "maPeriod": 2, "dataset": {
+                "datasetId": reference["dataset_id"], "dataEpoch": reference["data_epoch"],
+            }},
+        }
+        for at in (0, 4, 5, 10, 4):
+            replay = client.get(replay_path, params={**replay_params, "cursor": at,
+                                                    "additional_charts": json.dumps(additional)})
+            assert replay.status_code == 200, replay.text
+            combined = replay.json()
+            charts = combined.pop("additional_charts")
+            assert combined == frame(at)
+            assert charts["extra1"] == {key: combined[key] for key in ("interval", "bars", "ma")}
+            assert charts["extra2"] == reference_frame(at)["comparison"]
+        for invalid in [
+            {"extra3": additional["extra1"]},
+            {"extra1": {"interval": "1m", "maPeriod": True}},
+            {"extra2": {"interval": "5m", "dataset": {"datasetId": reference["dataset_id"]}}},
+        ]:
+            rejected = client.get(replay_path, params={**replay_params, "cursor": 4,
+                                                       "additional_charts": json.dumps(invalid)})
+            assert rejected.status_code == 400, rejected.text
+
         pending_coarse = client.get(replay_path, params={**reference_replay_params, "cursor": 10,
                                                        "comparison_interval": "15m"})
         assert pending_coarse.status_code == 200, pending_coarse.text

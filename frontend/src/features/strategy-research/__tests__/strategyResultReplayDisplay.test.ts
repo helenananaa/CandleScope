@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { BacktestResultReplayBar, BacktestResultReplayFrame } from "../../backtest/backtestTypes.js";
-import { changeReplayChartDisplay, DEFAULT_REPLAY_DISPLAY, replayChartMarkers } from "../strategyResultReplayDisplay.js";
+import { changeReplayChartDisplay, DEFAULT_REPLAY_DISPLAY, readReplayDisplays, replayChartDisplay, replayChartMarkers } from "../strategyResultReplayDisplay.js";
 
 test("only the edited setting follows its opt-in link", () => {
   const initial = changeReplayChartDisplay(DEFAULT_REPLAY_DISPLAY, "primary", "upColor", "#123456");
@@ -46,4 +46,23 @@ test("markers require an owned chart, a revealed cursor and a matching candle", 
     [0, { fills: [fill], notes: [] }],
   ]);
   assert.equal(replayChartMarkers(rewind, bars, true, { fills: false, notes: true }).size, 0);
+});
+
+test("saved references and styles are isolated by result and links touch only visible slots", () => {
+  const key = `bt_first:sha256:${"1".repeat(64)}:sha256:${"2".repeat(64)}`;
+  const other = `bt_other:sha256:${"3".repeat(64)}:sha256:${"4".repeat(64)}`;
+  const references = {
+    extra1: { interval: "15m", maPeriod: 8 },
+    extra2: { interval: "1m", dataset: { datasetId: `local-${"a".repeat(32)}`, dataEpoch: `sha256:${"a".repeat(64)}` } },
+  };
+  const raw = { ...DEFAULT_REPLAY_DISPLAY, links: { ...DEFAULT_REPLAY_DISPLAY.links, chartStyle: true }, references };
+  const linked = changeReplayChartDisplay(raw, "extra1", "candleStyle", "hollow", ["primary", "extra1", "extra2"]);
+  assert.equal(replayChartDisplay(linked, "extra2").candleStyle, "hollow");
+  assert.equal(linked.comparison.candleStyle, "solid");
+  assert.equal(linked.references, references);
+  const restored = readReplayDisplays(JSON.parse(JSON.stringify({ [key]: linked, [other]: DEFAULT_REPLAY_DISPLAY })))!;
+  assert.deepEqual(restored[key]!.references, references);
+  assert.equal(replayChartDisplay(restored[key]!, "extra1").candleStyle, "hollow");
+  assert.equal(restored[other]!.references, undefined);
+  assert.equal(replayChartDisplay(restored[other]!, "extra1").candleStyle, "solid");
 });

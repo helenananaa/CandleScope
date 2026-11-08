@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { describeError } from "../../i18n/serverErrors.js";
-import type { BacktestResultReplayCursor, BacktestResultReplayFrame, BacktestResultReplayNote, BacktestResultReplayNoteDraft } from "../backtest/backtestTypes.js";
+import { BACKTEST_REPLAY_EXTRA_SLOTS, type BacktestReplayChartOptions, type BacktestReplayExtraSlot, type BacktestReplayExtraCharts, type BacktestResultReplayCursor, type BacktestResultReplayFrame, type BacktestResultReplayNote, type BacktestResultReplayNoteDraft } from "../backtest/backtestTypes.js";
 import type { LocalDatasetManifest } from "../local-data/localDataTypes.js";
 import type { StrategyDataManager } from "../market-data/manager/strategyDataManager.js";
 import { formatIntervalLabel } from "../../utils/intervals.js";
 
 import { StrategyResultReplayChart } from "./StrategyResultReplayChart.js";
-import { changeReplayChartDisplay, replayDisplayKey, type ReplayDisplay, type ReplayChartDisplay, type ReplayChartSlot } from "./strategyResultReplayDisplay.js";
+import { changeReplayChartDisplay, replayChartDisplay, replayDisplayKey, type ReplayDisplay, type ReplayChartDisplay, type ReplayChartSlot } from "./strategyResultReplayDisplay.js";
 
 const MA_PERIODS = [2, 3, 5, 10, 20, 50, 100, 200, 500];
 
@@ -32,7 +32,7 @@ export default function StrategyResultReplay({ initial, manager, datasets, displ
   onCommit(cursor: BacktestResultReplayCursor): void;
   onClose(): void;
 }) {
-  const [request, setRequest] = useState(initial);
+  const [request, setRequest] = useState(() => ({ ...initial, ...(display.references ? { additionalCharts: display.references } : {}) }));
   const [received, setReceived] = useState<{ request: BacktestResultReplayCursor; frame: BacktestResultReplayFrame } | null>(null);
   const [playing, setPlaying] = useState(false);
   const [target, setTarget] = useState(String(initial.cursor));
@@ -60,7 +60,9 @@ export default function StrategyResultReplay({ initial, manager, datasets, displ
     void manager.loadResultReplay(request, controller.signal).then(value => {
       if (controller.signal.aborted) return;
       setReceived({ request, frame: value });
-      onCommit(request);
+      const saved = { ...request };
+      delete saved.additionalCharts; // Reference preferences live with the run's display settings.
+      onCommit(saved);
     }).catch((reason: unknown) => {
       if (controller.signal.aborted) return;
       setPlaying(false);
@@ -85,6 +87,7 @@ export default function StrategyResultReplay({ initial, manager, datasets, displ
     comparisonDataset?: BacktestResultReplayCursor["comparisonDataset"];
     maPeriod?: number | undefined;
     comparisonMaPeriod?: number | undefined;
+    additionalCharts?: BacktestReplayExtraCharts;
   } = {}) => {
     setPlaying(false);
     setError(null);
@@ -121,9 +124,18 @@ export default function StrategyResultReplay({ initial, manager, datasets, displ
 
   const canAdvance = frame !== null && frame.cursor < frame.total;
   const displayKey = replayDisplayKey(initial);
+  const extraSlots = BACKTEST_REPLAY_EXTRA_SLOTS.filter(slot => request.additionalCharts?.[slot]);
+  const nextSlot = BACKTEST_REPLAY_EXTRA_SLOTS.find(slot => !request.additionalCharts?.[slot]);
+  const activeSlots: ReplayChartSlot[] = ["primary", ...(request.comparisonInterval ? ["comparison" as const] : []), ...extraSlots];
+  const changeReference = (slot: BacktestReplayExtraSlot, chart: BacktestReplayChartOptions | null) => {
+    const additionalCharts = { ...request.additionalCharts };
+    if (chart) additionalCharts[slot] = chart;
+    else delete additionalCharts[slot];
+    onDisplay(displayKey, { ...display, references: additionalCharts });
+    navigate(request.cursor, { additionalCharts });
+  };
   const updateChart = <K extends keyof ReplayChartDisplay>(slot: ReplayChartSlot, field: K, value: ReplayChartDisplay[K]) => {
-    const next = changeReplayChartDisplay(display, slot, field, value);
-    onDisplay(displayKey, request.comparisonInterval ? next : { ...display, primary: next.primary });
+    onDisplay(displayKey, changeReplayChartDisplay(display, slot, field, value, activeSlots));
   };
   return (
     <main className="strategy-result-replay" data-testid="strategy-result-replay"
@@ -182,8 +194,52 @@ export default function StrategyResultReplay({ initial, manager, datasets, displ
           onChange={maPeriod => navigate(request.cursor, { maPeriod })} />
         {request.comparisonInterval && <ReplayMaControl testId="strategy-replay-comparison-ma" interval={request.comparisonInterval}
           period={request.comparisonMaPeriod} onChange={comparisonMaPeriod => navigate(request.cursor, { comparisonMaPeriod })} />}
+        {nextSlot && <button type="button" data-testid="strategy-replay-add-chart"
+          onClick={() => changeReference(nextSlot, { interval: request.interval })}>{t("replay.workspace.openNew")}</button>}
       </fieldset>
-      {request.comparisonInterval && <fieldset className="strategy-result-replay-view-controls"
+      {extraSlots.map(slot => {
+        const chart = request.additionalCharts![slot]!;
+        const datasetKey = chart.dataset ? `${chart.dataset.datasetId}:${chart.dataset.dataEpoch}` : "";
+        const previous = received?.frame.additional_charts?.[slot];
+        const intervals = chart.dataset
+          ? previous?.dataset_id === chart.dataset.datasetId && previous?.data_epoch === chart.dataset.dataEpoch
+            ? previous.display_intervals ?? [chart.interval] : [chart.interval]
+          : selectableIntervals;
+        return <fieldset key={slot} className="strategy-result-replay-view-controls" disabled={noteDraft !== null}
+          data-testid={`strategy-replay-${slot}-controls`}>
+          <legend>{t("workspace.cellN", { n: activeSlots.indexOf(slot) + 1 })}</legend>
+          <label>{t("researchBatch.replayComparisonSource")}
+            <select data-testid={`strategy-replay-${slot}-source`} value={datasetKey} onChange={event => {
+              const dataset = comparisonDatasets.find(item => `${item.dataset_id}:${item.data_epoch}` === event.target.value);
+              changeReference(slot, dataset
+                ? { ...chart, interval: dataset.interval, dataset: { datasetId: dataset.dataset_id, dataEpoch: dataset.data_epoch } }
+                : { interval: request.interval, ...(chart.maPeriod === undefined ? {} : { maPeriod: chart.maPeriod }) });
+            }}>
+              <option value="">{t("researchBatch.replayRunSource")}</option>
+              {chart.dataset && !comparisonDatasets.some(dataset => `${dataset.dataset_id}:${dataset.data_epoch}` === datasetKey) &&
+                <option value={datasetKey}>{previous?.symbol ?? chart.dataset.datasetId} · {chart.dataset.dataEpoch.slice(-8)}</option>}
+              {comparisonDatasets.map(dataset => <option key={dataset.dataset_id} value={`${dataset.dataset_id}:${dataset.data_epoch}`}>
+                {dataset.name} · {dataset.symbol}
+              </option>)}
+            </select>
+          </label>
+          <label>{t("local.interval")}
+            <select data-testid={`strategy-replay-${slot}-period`} value={chart.interval}
+              onChange={event => changeReference(slot, { ...chart, interval: event.target.value })}>
+              {intervals.map(interval => <option key={interval} value={interval}>{formatIntervalLabel(interval)}</option>)}
+            </select>
+          </label>
+          <ReplayMaControl testId={`strategy-replay-${slot}-ma`} interval={chart.interval} period={chart.maPeriod} onChange={maPeriod => {
+            const next = { ...chart };
+            if (maPeriod === undefined) delete next.maPeriod;
+            else next.maPeriod = maPeriod;
+            changeReference(slot, next);
+          }} />
+          <button type="button" data-testid={`strategy-replay-${slot}-close`}
+            onClick={() => changeReference(slot, null)}>{t("workspace.closeChart")}</button>
+        </fieldset>;
+      })}
+      {activeSlots.length > 1 && <fieldset className="strategy-result-replay-view-controls"
         data-testid="strategy-replay-display-links" disabled={noteDraft !== null}>
         <legend>{t("workspace.tab.links")}</legend>
         {([
@@ -208,6 +264,11 @@ export default function StrategyResultReplay({ initial, manager, datasets, displ
               disabled={noteDraft !== null} onChange={updateChart} />
             {frame.comparison && <StrategyResultReplayChart slot="comparison" chart={frame.comparison} frame={frame}
               display={display.comparison} disabled={noteDraft !== null} onChange={updateChart} />}
+            {extraSlots.map(slot => {
+              const chart = frame.additional_charts?.[slot];
+              return chart && <StrategyResultReplayChart key={slot} slot={slot} chart={chart} frame={frame}
+                display={replayChartDisplay(display, slot)} disabled={noteDraft !== null} onChange={updateChart} />;
+            })}
           </div>
           <dl className="strategy-result-replay-status">
             <div><dt>{t("replay.wb.balance")}</dt><dd>{frame.cash} {frame.quote_asset}</dd></div>
