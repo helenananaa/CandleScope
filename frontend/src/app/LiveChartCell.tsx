@@ -884,8 +884,10 @@ function LiveChartCell({
   const studyMaskedRef = useRef(study.masked);
   useLayoutEffect(() => {
     studyMaskedRef.current = study.masked;
-    if (study.masked && replay.key) exitQuickReplay();
-  }, [exitQuickReplay, replay.key, study.masked]);
+    // Initial study recovery masks the live chart before its mode is known.
+    // Only an acknowledged active study supersedes the saved trade replay.
+    if (study.active && replay.key) exitQuickReplay();
+  }, [exitQuickReplay, replay.key, study.active, study.masked]);
   const openTradeReplay = useCallback((request: QuickReplayRequest) => {
     if (!studyMaskedRef.current) openSavedReplay(request);
   }, [openSavedReplay]);
