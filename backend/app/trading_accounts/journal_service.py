@@ -175,8 +175,9 @@ class JournalService:
         }
 
     def journal_at_time(self, account_id: str, *, exchange: str, market_type: str,
-                        symbol: str, cursor_ms: int, limit: int = 100) -> dict[str, Any]:
-        """Bounded text-only projection; never reads trades, marks or snapshots.
+                        symbol: str, cursor_ms: int, limit: int = 100,
+                        note_source: str = "all", note_filter: str = "all") -> dict[str, Any]:
+        """Bounded text projection without loading trades or attachment payloads.
 
         Original text/deletions use the same exclusive save-time boundary as
         quick replay. Later supplements use their market anchor and retain
@@ -186,16 +187,31 @@ class JournalService:
             raise invalid("Invalid journal cursor")
         if type(limit) is not int or not 1 <= limit <= 100:
             raise invalid("Invalid journal limit")
+        if note_source not in ("all", "original", "review") or note_filter not in ("all", "linked", "screenshots"):
+            raise invalid("Invalid journal note filters")
         instrument = normalize_instrument(exchange, market_type, symbol)
+        criteria = {
+            "all": "",
+            "original": " AND market_time_ms IS NULL",
+            "review": " AND market_time_ms IS NOT NULL",
+        }[note_source]
+        attachment = {
+            "all": "",
+            "linked": " AND trade_id IS NOT NULL AND (market_time_ms IS NOT NULL OR COALESCE(trade_linked_at_ms,updated_at_ms)<?)",
+            "screenshots": " AND EXISTS (SELECT 1 FROM snapshots WHERE entry_id=journal_entries.id "
+                           "AND image_file<>'' AND (journal_entries.market_time_ms IS NOT NULL OR snapshots.created_at_ms<?))",
+        }[note_filter]
+        bounds = () if note_filter == "all" else (cursor_ms,)
         with self.store.read_snapshot():
             self._account(account_id)
             entries = self.store.all(
-                "SELECT id,created_at_ms,updated_at_ms,market_time_ms FROM journal_entries "
+                "SELECT id,created_at_ms,market_time_ms FROM journal_entries "
                 "WHERE account_id=? AND exchange=? AND market_type=? AND symbol=? AND ("
                 "(market_time_ms IS NULL AND created_at_ms<? AND (deleted=0 OR updated_at_ms>=?)) OR "
-                "(market_time_ms IS NOT NULL AND market_time_ms<? AND deleted=0)) "
-                "ORDER BY COALESCE(market_time_ms,created_at_ms) DESC,id DESC LIMIT ?",
-                (account_id, *instrument, cursor_ms, cursor_ms, cursor_ms, limit + 1),
+                "(market_time_ms IS NOT NULL AND market_time_ms<? AND deleted=0))"
+                + criteria + attachment +
+                " ORDER BY COALESCE(market_time_ms,created_at_ms) DESC,id DESC LIMIT ?",
+                (account_id, *instrument, cursor_ms, cursor_ms, cursor_ms, *bounds, limit + 1),
             )
             original, reviews = [], []
             remaining_bytes = 512_000
@@ -225,7 +241,8 @@ class JournalService:
                     "body": "" if unavailable or text_unavailable else revision["body"],
                     "reviewNote": review, "historyUnavailable": unavailable, "textUnavailable": text_unavailable}
                 (reviews if review else original).append(note)
-            return {"accountId": account_id, "cursorMs": cursor_ms,
+            return {"accountId": account_id, "cursorMs": cursor_ms, "exchange": instrument[0],
+                "marketType": instrument[1], "symbol": instrument[2], "noteSource": note_source, "noteFilter": note_filter,
                 "original": original[::-1], "reviews": reviews[::-1], "hasMore": len(entries) > limit}
 
     def create_entry(self, account_id: str, payload: dict[str, Any]) -> dict[str, Any]:
