@@ -719,7 +719,7 @@ export default function StrategyResearchApp({
   if (state.result.replay) {
     return <Suspense fallback={<p role="status">{t("research.loading")}</p>}>
       <StrategyResultReplay key={state.result.replay.runId} initial={state.result.replay}
-        manager={researchRun.historyManager} onCommit={saveResultReplay} onClose={closeResultReplay} />
+        manager={researchRun.historyManager} datasets={libraryDatasets} onCommit={saveResultReplay} onClose={closeResultReplay} />
     </Suspense>;
   }
 

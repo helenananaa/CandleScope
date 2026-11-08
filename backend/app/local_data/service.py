@@ -1897,6 +1897,49 @@ class LocalDatasetService:
             )
         return manifest, canonical
 
+    def load_pinned_closed_bars(
+        self,
+        dataset_id: str,
+        *,
+        data_epoch: str,
+        interval: str,
+        through_ms: int | None,
+        limit: int,
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        """Read a bounded chart tail from a pinned imported candle revision."""
+        manifest, revision_dir = self._validated_pinned_revision_dir(dataset_id, data_epoch)
+        if manifest.get("source") != "local_dataset":
+            raise LocalDatasetError("Comparison requires imported candles", code="FIDELITY_UNSUPPORTED")
+        plan = self.resolve_interval(manifest, interval)
+        if through_ms is None:
+            return manifest, []
+        if plan.derived:
+            if plan.factor * limit > 200_000:
+                raise LocalDatasetError("Comparison exceeds the source bar budget", code="BUDGET_EXCEEDED")
+            # Use the first target bucket whose close is later than the
+            # replay boundary. An unfinished bucket cannot supply OHLC.
+            before = plan.target.floor_ms(through_ms + 1)
+            start = before
+            for _ in range(limit):
+                start = plan.target.previous_ms(start)
+            rows = self._read_derived_rows(revision_dir, plan=plan, fetch_limit=limit,
+                                           before_ms=before, start_ms=start)
+            return manifest, [row for row in reversed(rows) if row["is_closed"]]
+        try:
+            connection = sqlite3.connect((revision_dir / "bars.sqlite").as_uri() + "?mode=ro", uri=True)
+            try:
+                connection.row_factory = sqlite3.Row
+                rows = connection.execute(
+                    """SELECT * FROM bars WHERE open_time_ms <= ? AND close_time_ms <= ?
+                       AND is_closed = 1 ORDER BY open_time_ms DESC LIMIT ?""",
+                    (through_ms, through_ms, limit),
+                ).fetchall()
+            finally:
+                connection.close()
+        except sqlite3.DatabaseError as exc:
+            raise LocalDatasetError("Dataset bars are unreadable", code="dataset_corrupt") from exc
+        return manifest, [dict(row) for row in reversed(rows)]
+
     @staticmethod
     def resolve_interval(
         manifest: dict[str, Any],

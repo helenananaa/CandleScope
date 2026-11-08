@@ -156,13 +156,18 @@ function loadResultReplay(value: unknown, runId: unknown): BacktestResultReplayC
     || typeof replay.reportHash !== "string" || !hash.test(replay.reportHash)
     || typeof replay.cursor !== "number" || !Number.isSafeInteger(replay.cursor) || replay.cursor < 0
     || typeof replay.interval !== "string" || replay.interval.length < 2 || replay.interval.length > 64) return undefined;
-  const comparisonInterval = typeof replay.comparisonInterval === "string" && replay.comparisonInterval !== replay.interval
+  const dataset = replay.comparisonDataset;
+  const comparisonDataset = dataset && typeof dataset.datasetId === "string" && /^local-[0-9a-f]{32}$/.test(dataset.datasetId)
+    && typeof dataset.dataEpoch === "string" && hash.test(dataset.dataEpoch)
+    ? { datasetId: dataset.datasetId, dataEpoch: dataset.dataEpoch } : undefined;
+  const comparisonInterval = typeof replay.comparisonInterval === "string"
+    && (dataset === undefined ? replay.comparisonInterval !== replay.interval : comparisonDataset !== undefined)
     && replay.comparisonInterval.length >= 2 && replay.comparisonInterval.length <= 64 ? replay.comparisonInterval : undefined;
   const validPeriod = (period: number | undefined): period is number =>
     typeof period === "number" && Number.isInteger(period) && period >= 1 && period <= 500;
   return { runId: replay.runId, snapshotHash: replay.snapshotHash, reportHash: replay.reportHash,
     cursor: replay.cursor, interval: replay.interval,
-    ...(comparisonInterval ? { comparisonInterval } : {}),
+    ...(comparisonInterval ? { comparisonInterval, ...(comparisonDataset ? { comparisonDataset } : {}) } : {}),
     ...(validPeriod(replay.maPeriod) ? { maPeriod: replay.maPeriod } : {}),
     ...(comparisonInterval && validPeriod(replay.comparisonMaPeriod) ? { comparisonMaPeriod: replay.comparisonMaPeriod } : {}) };
 }

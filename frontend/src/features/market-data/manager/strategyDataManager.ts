@@ -188,6 +188,14 @@ export class StrategyDataManager {
           return invalid;
         });
       };
+      const comparison = frame.comparison;
+      const invalidReference = cursor.comparisonDataset !== undefined && (!comparison
+        || typeof comparison.symbol !== "string" || !comparison.symbol
+        || !Array.isArray(comparison.display_intervals)
+        || !comparison.display_intervals.includes(comparison.interval)
+        || comparison.display_intervals.some(interval => typeof interval !== "string")
+        || !Array.isArray(comparison.bars)
+        || comparison.bars.some(bar => !bar || !bar.closed || !Number.isSafeInteger(bar.close_time_ms)));
       const notes = frame.notes;
       const invalidNotes = notes !== undefined && (!Array.isArray(notes) || notes.length > 100
         || new Set(notes.map(note => note?.id)).size !== notes.length
@@ -203,7 +211,10 @@ export class StrategyDataManager {
         || !Number.isSafeInteger(frame.total) || frame.total < cursor.cursor
         || (frame.display_intervals !== undefined && (!Array.isArray(frame.display_intervals)
           || frame.display_intervals.some(interval => typeof interval !== "string")))
-        || frame.comparison?.interval !== cursor.comparisonInterval
+        || comparison?.interval !== cursor.comparisonInterval
+        || comparison?.dataset_id !== cursor.comparisonDataset?.datasetId
+        || comparison?.data_epoch !== cursor.comparisonDataset?.dataEpoch
+        || invalidReference
         || invalidBars(frame.bars) || (frame.comparison && invalidBars(frame.comparison.bars))
         || invalidStudy(frame.ma, cursor.maPeriod, frame.bars)
         || invalidStudy(frame.comparison?.ma, cursor.comparisonMaPeriod, frame.comparison?.bars ?? [])

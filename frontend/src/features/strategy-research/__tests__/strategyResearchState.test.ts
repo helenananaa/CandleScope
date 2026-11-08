@@ -210,6 +210,10 @@ test("result replay persists its committed cursor and both immutable hashes", ()
     assert.deepEqual(loadStrategyResearchWorkspace().result.replay, replay);
     assert.equal(strategyResearchReducer(saved, { type: "result/setRun", runId: "bt_other" }).result.replay, undefined);
     assert.equal(strategyResearchReducer(saved, { type: "result/replay", replay: { ...replay, runId: "bt_other" } }), saved);
+    const pinned = { ...replay, comparisonInterval: replay.interval,
+      comparisonDataset: { datasetId: "local-" + "d".repeat(32), dataEpoch: "sha256:" + "e".repeat(64) } };
+    persistStrategyResearchWorkspace(strategyResearchReducer(selected, { type: "result/replay", replay: pinned }));
+    assert.deepEqual(loadStrategyResearchWorkspace().result.replay, pinned);
     const raw = JSON.parse(store.get(STRATEGY_RESEARCH_WORKSPACE_KEY)!) as Record<string, unknown>;
     store.set(STRATEGY_RESEARCH_WORKSPACE_KEY, JSON.stringify({ ...raw, replay: { ...replay, reportHash: "wrong" } }));
     assert.equal(loadStrategyResearchWorkspace().result.replay, undefined);

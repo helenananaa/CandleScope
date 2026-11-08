@@ -72,6 +72,53 @@ def test_pinned_bar_result_replay_links_two_periods_and_survives_reimport(tmp_pa
             assert response.status_code == 200, response.text
             return response.json()
 
+        reference_params = {**params, "name": "Second symbol", "symbol": "SOLUSDC",
+                            "base_asset": "SOL", "interval": "5m"}
+
+        def reference_csv(final):
+            return "time,open,high,low,close,volume\n" + "".join(
+                f"{START + index * 300_000},{value},{value},{value},{value},1\n"
+                for index, value in enumerate((30, final, 9000))
+            )
+
+        imported = client.post(import_path, params=reference_params, content=reference_csv(4000))
+        assert imported.status_code == 201, imported.text
+        reference = imported.json()
+        reference_replay_params = {**replay_params,
+                                   "comparison_dataset_id": reference["dataset_id"],
+                                   "comparison_data_epoch": reference["data_epoch"]}
+
+        def reference_frame(cursor):
+            response = client.get(replay_path, params={**reference_replay_params, "cursor": cursor})
+            assert response.status_code == 200, response.text
+            return response.json()
+
+        assert reference_frame(0)["comparison"]["bars"] == []
+        assert reference_frame(4)["comparison"]["bars"] == []
+        at_five = reference_frame(5)
+        assert at_five["comparison"]["symbol"] == "SOLUSDC"
+        assert at_five["comparison"]["display_intervals"] == ["5m", "15m", "1h"]
+        assert [bar["high"] for bar in at_five["comparison"]["bars"]] == ["30"]
+        assert at_five["comparison"]["ma"]["points"] == []
+        full_reference = reference_frame(10)
+        assert [bar["high"] for bar in full_reference["comparison"]["bars"]] == ["30", "4000"]
+        assert full_reference["comparison"]["ma"]["points"] == [{"open_time_ms": START + 300_000, "value": 2015}]
+        assert reference_frame(4)["comparison"]["bars"] == []
+        assert {k: v for k, v in full_reference.items() if k != "comparison"} == {
+            k: v for k, v in frame(10).items() if k != "comparison"
+        }
+        pending_coarse = client.get(replay_path, params={**reference_replay_params, "cursor": 10,
+                                                       "comparison_interval": "15m"})
+        assert pending_coarse.status_code == 200, pending_coarse.text
+        assert pending_coarse.json()["comparison"]["bars"] == []
+        bad_pin = client.get(replay_path, params={**reference_replay_params, "cursor": 4,
+                                                "comparison_data_epoch": manifest["data_epoch"]})
+        assert bad_pin.status_code == 400
+        changed_reference = client.post(import_path, params={**reference_params, "dataset_id": reference["dataset_id"]},
+                                        content=reference_csv(8000))
+        assert changed_reference.status_code == 201 and changed_reference.json()["data_epoch"] != reference["data_epoch"]
+        assert reference_frame(10) == full_reference
+
         for cursor in range(11):
             visible = frame(cursor)
             assert visible["schema"] == "candlescope.local-bar-result-replay/1"
@@ -157,6 +204,8 @@ def test_pinned_bar_result_replay_links_two_periods_and_survives_reimport(tmp_pa
     try:
         restored = app_client(cold).get(replay_path, params={**replay_params, "cursor": 4})
         assert restored.status_code == 200 and restored.json() == before
+        pinned = app_client(cold).get(replay_path, params={**reference_replay_params, "cursor": 10})
+        assert pinned.status_code == 200 and pinned.json()["comparison"] == full_reference["comparison"]
         latest = app_client(cold).get(replay_path, params={**replay_params, "cursor": 10})
         assert latest.status_code == 200 and latest.json() == after
     finally:

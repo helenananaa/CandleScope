@@ -783,6 +783,16 @@ test("Strategy Manager rejects a replay response for a different cursor or resul
   await assert.rejects(manager.loadResultReplay({ ...linked, comparisonInterval: "15m" }), /requested boundary/);
   response = { ...response, comparison: { interval: "1m", bars: [{ ...bar, close_time_ms: 1001 }] } };
   await assert.rejects(manager.loadResultReplay(linked), /requested boundary/);
+  const reference = { ...linked, comparisonDataset: { datasetId: "other", dataEpoch: "pinned" } };
+  const comparison = { interval: "1m", bars: [bar], dataset_id: "other", data_epoch: "pinned",
+    symbol: "SOLUSDC", display_intervals: ["1m", "5m"] };
+  response = { ...good, comparison };
+  assert.deepEqual(await manager.loadResultReplay(reference), response);
+  await assert.rejects(manager.loadResultReplay(linked), /requested boundary/);
+  response = { ...good, comparison: { ...comparison, data_epoch: "replacement" } };
+  await assert.rejects(manager.loadResultReplay(reference), /requested boundary/);
+  response = { ...good, comparison: { ...comparison, bars: [{ ...bar, closed: false }] } };
+  await assert.rejects(manager.loadResultReplay(reference), /requested boundary/);
   const withMa = { ...linked, comparisonMaPeriod: 2 };
   const ma = { period: 2, points: [{ open_time_ms: bar.open_time_ms, value: 1.5 }] };
   response = { ...response, comparison: { interval: "1m", bars: [bar], ma } };

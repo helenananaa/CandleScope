@@ -513,16 +513,21 @@ def get_result_replay(
     cursor: int = Query(ge=0),
     interval: str = Query(min_length=2, max_length=64),
     comparison_interval: str | None = Query(default=None, min_length=2, max_length=64),
+    comparison_dataset_id: str | None = Query(default=None, min_length=1, max_length=80),
+    comparison_data_epoch: str | None = Query(default=None, pattern=r"^sha256:[a-f0-9]{64}$"),
     ma_period: int | None = Query(default=None, ge=1, le=500),
     comparison_ma_period: int | None = Query(default=None, ge=1, le=500),
 ) -> dict[str, Any]:
     from app.backtest.result_replay import project_result_replay
 
     try:
+        if (comparison_dataset_id is None) != (comparison_data_epoch is None):
+            raise BacktestError("SCHEMA_UNKNOWN_FIELD", "Comparison dataset and revision are required together")
+        comparison_dataset = (comparison_dataset_id, comparison_data_epoch) if comparison_dataset_id and comparison_data_epoch else None
         return project_result_replay(
             _runtime(request), run_id, snapshot_hash=snapshot_hash, report_hash=report_hash,
             cursor=cursor, interval=interval, comparison_interval=comparison_interval,
-            ma_period=ma_period, comparison_ma_period=comparison_ma_period,
+            ma_period=ma_period, comparison_ma_period=comparison_ma_period, comparison_dataset=comparison_dataset,
         )
     except BacktestError as exc:
         return _error(exc)
