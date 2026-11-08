@@ -1,4 +1,6 @@
 export const researchBatchEnglish = {
+  "chartTester.template.pineSample": "Entry and Exit",
+  "chartTester.template.pineSampleDescription": "Place a long entry on the first bar and close it after five bars.",
   "researchBatch.marketHelp": "Choose up to {max} data sources. Every task uses the same strategy and its own fixed data.",
   "researchBatch.allSources": "Batch data sources",
   "researchBatch.marketAdd": "Add exchange history",
@@ -38,6 +40,8 @@ export const researchBatchEnglish = {
 } as const;
 
 export const researchBatchChinese: Record<keyof typeof researchBatchEnglish, string> = {
+  "chartTester.template.pineSample": "开仓与平仓",
+  "chartTester.template.pineSampleDescription": "在首根 K 线发出多头开仓指令，五根 K 线后发出平仓指令。",
   "researchBatch.marketHelp": "最多选择 {max} 份数据。各项任务使用同一策略和各自的固定数据。",
   "researchBatch.allSources": "批量数据来源",
   "researchBatch.marketAdd": "添加交易所历史数据",
@@ -77,6 +81,8 @@ export const researchBatchChinese: Record<keyof typeof researchBatchEnglish, str
 };
 
 export const researchBatchKorean: Record<keyof typeof researchBatchEnglish, string> = {
+  "chartTester.template.pineSample": "진입과 청산",
+  "chartTester.template.pineSampleDescription": "첫 번째 봉에서 롱 진입 주문을 내고 다섯 봉 뒤에 청산합니다.",
   "researchBatch.marketHelp": "데이터 소스를 최대 {max}개 선택하세요. 각 작업은 같은 전략과 개별 고정 데이터를 사용합니다.",
   "researchBatch.allSources": "일괄 데이터 소스",
   "researchBatch.marketAdd": "거래소 과거 데이터 추가",
@@ -116,6 +122,8 @@ export const researchBatchKorean: Record<keyof typeof researchBatchEnglish, stri
 };
 
 export const researchBatchBrazilian: Record<keyof typeof researchBatchEnglish, string> = {
+  "chartTester.template.pineSample": "Entrada e saída",
+  "chartTester.template.pineSampleDescription": "Envia uma ordem de compra na primeira barra e encerra a posição após cinco barras.",
   "researchBatch.marketHelp": "Escolha até {max} fontes de dados. Cada tarefa usa a mesma estratégia e seus próprios dados fixos.",
   "researchBatch.allSources": "Fontes de dados do lote",
   "researchBatch.marketAdd": "Adicionar histórico da corretora",
