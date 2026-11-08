@@ -7,7 +7,7 @@ import type { StrategyDataManager } from "../market-data/manager/strategyDataMan
 import { formatIntervalLabel } from "../../utils/intervals.js";
 
 import { StrategyResultReplayChart } from "./StrategyResultReplayChart.js";
-import { changeReplayChartDisplay, replayChartDisplay, replayDisplayKey, type ReplayDisplay, type ReplayChartDisplay, type ReplayChartSlot } from "./strategyResultReplayDisplay.js";
+import { changeReplayChartDisplay, replayChartDisplay, replayDisplayKey, replayLayout, restoreReplayLayout, type ReplayDisplay, type ReplayChartDisplay, type ReplayChartSlot } from "./strategyResultReplayDisplay.js";
 
 const MA_PERIODS = [2, 3, 5, 10, 20, 50, 100, 200, 500];
 
@@ -32,7 +32,7 @@ export default function StrategyResultReplay({ initial, manager, datasets, displ
   onCommit(cursor: BacktestResultReplayCursor): void;
   onClose(): void;
 }) {
-  const [request, setRequest] = useState(() => ({ ...initial, ...(display.references ? { additionalCharts: display.references } : {}) }));
+  const [request, setRequest] = useState(() => restoreReplayLayout(initial, display));
   const [received, setReceived] = useState<{ request: BacktestResultReplayCursor; frame: BacktestResultReplayFrame } | null>(null);
   const [playing, setPlaying] = useState(false);
   const [target, setTarget] = useState(String(initial.cursor));
@@ -81,7 +81,7 @@ export default function StrategyResultReplay({ initial, manager, datasets, displ
     return () => clearTimeout(timer);
   }, [frame, playing, request]);
 
-  const navigate = (cursor: number, display: {
+  const navigate = (cursor: number, changes: {
     interval?: string;
     comparisonInterval?: string | undefined;
     comparisonDataset?: BacktestResultReplayCursor["comparisonDataset"];
@@ -92,12 +92,16 @@ export default function StrategyResultReplay({ initial, manager, datasets, displ
     setPlaying(false);
     setError(null);
     setTarget(String(cursor));
-    const { comparisonInterval, comparisonDataset, maPeriod, comparisonMaPeriod, ...identity } = { ...request, ...display };
-    setRequest({ ...identity, cursor,
+    const { comparisonInterval, comparisonDataset, maPeriod, comparisonMaPeriod, ...identity } = { ...request, ...changes };
+    const next = { ...identity, cursor,
       ...(maPeriod === undefined ? {} : { maPeriod }),
       ...(comparisonInterval ? { comparisonInterval,
         ...(comparisonDataset ? { comparisonDataset } : {}),
         ...(comparisonMaPeriod === undefined ? {} : { comparisonMaPeriod }) } : {}),
+    };
+    setRequest(next);
+    if (Object.keys(changes).length) onDisplay(displayKey, {
+      ...display, layout: replayLayout(next), ...(next.additionalCharts ? { references: next.additionalCharts } : {}),
     });
   };
   const editNote = (note?: BacktestResultReplayNote) => {
@@ -131,7 +135,6 @@ export default function StrategyResultReplay({ initial, manager, datasets, displ
     const additionalCharts = { ...request.additionalCharts };
     if (chart) additionalCharts[slot] = chart;
     else delete additionalCharts[slot];
-    onDisplay(displayKey, { ...display, references: additionalCharts });
     navigate(request.cursor, { additionalCharts });
   };
   const updateChart = <K extends keyof ReplayChartDisplay>(slot: ReplayChartSlot, field: K, value: ReplayChartDisplay[K]) => {

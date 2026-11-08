@@ -1,4 +1,4 @@
-import { BACKTEST_REPLAY_EXTRA_SLOTS, type BacktestReplayExtraCharts, type BacktestReplayExtraSlot } from "../backtest/backtestTypes.js";
+import { BACKTEST_REPLAY_EXTRA_SLOTS, type BacktestReplayChartOptions, type BacktestReplayExtraCharts, type BacktestReplayExtraSlot } from "../backtest/backtestTypes.js";
 import type { BacktestResultReplayBar, BacktestResultReplayCursor, BacktestResultReplayFrame, BacktestResultReplayNote } from "../backtest/backtestTypes.js";
 
 export type ReplayChartSlot = "primary" | "comparison" | BacktestReplayExtraSlot;
@@ -13,6 +13,7 @@ type DisplayLink = "chartStyle" | "fills" | "notes";
 export type ReplayDisplay = Record<"primary" | "comparison", ReplayChartDisplay> &
   Partial<Record<BacktestReplayExtraSlot, ReplayChartDisplay>> & {
   references?: BacktestReplayExtraCharts;
+  layout?: { primary: BacktestReplayChartOptions; comparison?: BacktestReplayChartOptions };
   links: Record<DisplayLink, boolean>;
 };
 
@@ -44,23 +45,56 @@ function chartDisplay(value: unknown): ReplayChartDisplay {
   };
 }
 
+function readChartOptions(value: unknown): BacktestReplayChartOptions | undefined {
+  const entry = record(value);
+  if (typeof entry.interval !== "string" || entry.interval.length < 2 || entry.interval.length > 64) return;
+  const dataset = record(entry.dataset);
+  if (entry.dataset !== undefined && (typeof dataset.datasetId !== "string" || !/^local-[0-9a-f]{32}$/.test(dataset.datasetId)
+    || typeof dataset.dataEpoch !== "string" || !/^sha256:[a-f0-9]{64}$/.test(dataset.dataEpoch))) return;
+  return { interval: entry.interval,
+    ...(typeof dataset.datasetId === "string" && typeof dataset.dataEpoch === "string"
+      ? { dataset: { datasetId: dataset.datasetId, dataEpoch: dataset.dataEpoch } } : {}),
+    ...(typeof entry.maPeriod === "number" && Number.isInteger(entry.maPeriod) && entry.maPeriod >= 1 && entry.maPeriod <= 500
+      ? { maPeriod: entry.maPeriod } : {}),
+  };
+}
+
 function readReferences(value: unknown): BacktestReplayExtraCharts {
   const settings = record(value);
   const charts: BacktestReplayExtraCharts = {};
   for (const slot of BACKTEST_REPLAY_EXTRA_SLOTS) {
-    const entry = record(settings[slot]);
-    if (typeof entry.interval !== "string" || entry.interval.length < 2 || entry.interval.length > 64) continue;
-    const dataset = record(entry.dataset);
-    if (entry.dataset !== undefined && (typeof dataset.datasetId !== "string" || !/^local-[0-9a-f]{32}$/.test(dataset.datasetId)
-      || typeof dataset.dataEpoch !== "string" || !/^sha256:[a-f0-9]{64}$/.test(dataset.dataEpoch))) continue;
-    charts[slot] = { interval: entry.interval,
-      ...(typeof dataset.datasetId === "string" && typeof dataset.dataEpoch === "string"
-        ? { dataset: { datasetId: dataset.datasetId, dataEpoch: dataset.dataEpoch } } : {}),
-      ...(typeof entry.maPeriod === "number" && Number.isInteger(entry.maPeriod) && entry.maPeriod >= 1 && entry.maPeriod <= 500
-        ? { maPeriod: entry.maPeriod } : {}),
-    };
+    const chart = readChartOptions(settings[slot]);
+    if (chart) charts[slot] = chart;
   }
   return charts;
+}
+
+export function replayLayout(request: BacktestResultReplayCursor): NonNullable<ReplayDisplay["layout"]> {
+  return {
+    primary: { interval: request.interval, ...(request.maPeriod === undefined ? {} : { maPeriod: request.maPeriod }) },
+    ...(request.comparisonInterval ? { comparison: { interval: request.comparisonInterval,
+      ...(request.comparisonDataset ? { dataset: request.comparisonDataset } : {}),
+      ...(request.comparisonMaPeriod === undefined ? {} : { maPeriod: request.comparisonMaPeriod }),
+    } } : {}),
+  };
+}
+
+export function restoreReplayLayout(initial: BacktestResultReplayCursor, display: ReplayDisplay): BacktestResultReplayCursor {
+  const request = { ...initial, ...(display.references ? { additionalCharts: display.references } : {}) };
+  if (!display.layout) return request;
+  const { primary, comparison } = display.layout;
+  request.interval = primary.interval;
+  delete request.maPeriod;
+  delete request.comparisonInterval;
+  delete request.comparisonDataset;
+  delete request.comparisonMaPeriod;
+  if (primary.maPeriod !== undefined) request.maPeriod = primary.maPeriod;
+  if (comparison) {
+    request.comparisonInterval = comparison.interval;
+    if (comparison.dataset) request.comparisonDataset = comparison.dataset;
+    if (comparison.maPeriod !== undefined) request.comparisonMaPeriod = comparison.maPeriod;
+  }
+  return request;
 }
 
 export function replayChartDisplay(display: ReplayDisplay, slot: ReplayChartSlot): ReplayChartDisplay {
@@ -74,7 +108,11 @@ export function readReplayDisplays(value: unknown): Record<string, ReplayDisplay
     const display = record(raw);
     const links = record(display.links);
     const references = readReferences(display.references);
+    const layout = record(display.layout);
+    const primary = readChartOptions(layout.primary);
+    const comparison = readChartOptions(layout.comparison);
     return [key, { primary: chartDisplay(display.primary), comparison: chartDisplay(display.comparison),
+      ...(primary ? { layout: { primary, ...(comparison ? { comparison } : {}) } } : {}),
       ...(Object.keys(references).length ? { references } : {}),
       ...Object.fromEntries(BACKTEST_REPLAY_EXTRA_SLOTS.filter(slot => display[slot] !== undefined)
         .map(slot => [slot, chartDisplay(display[slot])])),
