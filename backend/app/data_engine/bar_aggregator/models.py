@@ -258,6 +258,26 @@ class BarState:
     # the mutable accumulator above remains private to the live builder.
     _history_prefix: Any = field(default=None, repr=False, compare=False)
 
+    def matches_source_components(self, components: list[BarInput]) -> bool:
+        """Compare accepted leaves rather than an aggregate of their values."""
+        if self._history_prefix is not None:
+            return False
+        fields = (
+            "open_time_ms", "close_time_ms", "open", "high", "low", "close",
+            "volume", "quote_volume", "trades", "taker_buy_base", "taker_buy_quote",
+            "enhanced_fields", "is_closed",
+        )
+        matched = set()
+        for component in components:
+            if not self.bucket_start_ms <= component.open_time_ms < self.bucket_end_ms:
+                continue
+            key = component.input_key
+            held = self.source_snapshots.get(key)
+            if held is None or key in matched or any(held.get(name) != getattr(component, name) for name in fields):
+                return False
+            matched.add(key)
+        return 0 < len(matched) == len(self.source_snapshots)
+
     def __deepcopy__(self, memo):
         # Builder scalars are immutable. Share immutable component values and
         # copy only their index; foreign mutable components retain isolation.

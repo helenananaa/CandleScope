@@ -329,41 +329,110 @@ def test_warm_start_exchange_derived_standard_uses_resolved_four_hour_base() -> 
     asyncio.run(_run())
 
 
-def test_custom_sync_ignores_rows_from_previous_target_bucket() -> None:
-    bucket_start = 45 * 60_000
-    base_ms = 15 * 60_000
-    previous = _row(bucket_start - base_ms, base_ms, close=9)
-    current = [
-        _row(bucket_start, base_ms, close=10),
-        _row(bucket_start + base_ms, base_ms, close=11),
-    ]
-    current[-1]["is_closed"] = False
-    state = BarState(
-        symbol="BTC-USDT",
-        interval="45m",
-        bucket_start_ms=bucket_start,
-        bucket_end_ms=bucket_start + (45 * 60_000),
-        open=current[0]["open"],
-        high=max(row["high"] for row in current),
-        low=min(row["low"] for row in current),
-        close=current[-1]["close"],
-        volume=sum(row["volume"] for row in current),
-        exchange="okx",
-        market_type="spot",
-        quote_volume=sum(row["quote_volume"] for row in current),
-        trades=sum(row["trades"] for row in current),
-        taker_buy_base=sum(row["taker_buy_base"] for row in current),
-        taker_buy_quote=sum(row["taker_buy_quote"] for row in current),
-        enhanced_fields=frozenset({"quote_volume"}),
-        tick_count=len(current),
-    )
+def test_warm_start_does_not_close_derived_history_from_a_forming_base_row():
+    async def run():
+        base_ms = 15 * 60_000
+        now_ms = 4 * base_ms
+        aggregator = BarAggregator(BarAggregatorConfig(update_throttle_ms=0))
+        aggregator.add_target("BTC-USDT", "45m", exchange="okx", market_type="spot")
+        rows = [{**_row(index * base_ms, base_ms, close=10 + index),
+                 "source": "backfill", "is_closed": index != 2} for index in range(3)]
+        service = _service(cache=BarCache(), aggregator=aggregator, storage=_Storage(rows),
+                           triggers=[], base_interval="15m")
+        with patch("app.data_engine.data_manager.warm_start.time.time", return_value=now_ms / 1000):
+            await service.seed_if_needed("BTC-USDT", "45m", exchange="okx", market_type="spot", had_stream=True)
+        previous = aggregator.get_latest_bar("BTC-USDT", "45m", exchange="okx", market_type="spot")
+        assert previous is not None and previous.bucket_start_ms == 0
+        assert previous.finality != BarFinality.AUTHORITATIVE
+        assert any(not component["is_closed"] for component in previous.source_snapshots.values())
 
-    assert AggregatorWarmStartService._custom_bucket_is_synced(
-        state,
-        [previous, *current],
-        exchange="okx",
-        market_type="spot",
-    )
+    asyncio.run(run())
+
+
+def test_warm_start_replaces_changed_components_even_when_target_totals_match():
+    async def run():
+        base_ms = 15 * 60_000
+        bucket_start = 3 * base_ms
+        now_ms = bucket_start + 2 * base_ms - 1
+        aggregator = BarAggregator(BarAggregatorConfig(update_throttle_ms=0))
+        aggregator.add_target("BTC-USDT", "45m", exchange="okx", market_type="spot")
+        rows = [{**_row(bucket_start + index * base_ms, base_ms, close=10 + index),
+                 "source": "backfill", "is_closed": index == 0} for index in range(2)]
+        storage = _Storage(rows)
+        service = _service(cache=BarCache(), aggregator=aggregator, storage=storage, triggers=[], base_interval="15m")
+        with patch("app.data_engine.data_manager.warm_start.time.time", return_value=now_ms / 1000):
+            await service.seed_if_needed("BTC-USDT", "45m", exchange="okx", market_type="spot", had_stream=True)
+            storage.rows[0]["volume"] -= 5
+            storage.rows[1]["volume"] += 5
+            await service.seed_if_needed("BTC-USDT", "45m", exchange="okx", market_type="spot", had_stream=True)
+        state = aggregator.get_bucket_state("BTC-USDT", "45m", bucket_start, exchange="okx", market_type="spot")
+        assert state.volume == 210
+        assert {item["open_time_ms"]: item["volume"] for item in state.source_snapshots.values()} == {
+            bucket_start: 95, bucket_start + base_ms: 115,
+        }
+
+    asyncio.run(run())
+
+
+def test_warm_start_requests_repair_for_an_elapsed_provisional_component():
+    async def run():
+        base_ms = 15 * 60_000
+        bucket_start = 3 * base_ms
+        now_ms = bucket_start + base_ms + 1
+        aggregator = BarAggregator(BarAggregatorConfig(update_throttle_ms=0))
+        aggregator.add_target("BTC-USDT", "45m", exchange="okx", market_type="spot")
+        storage = _Storage([{**_row(bucket_start, base_ms, close=10),
+                             "source": "data_manager_closed", "is_closed": True}])
+        cache = BarCache()
+        triggers = []
+        service = AggregatorWarmStartService(
+            cache=cache, bar_aggregator=aggregator, base_interval="15m",
+            storage_provider=lambda: storage,
+            backfill_trigger_provider=lambda: lambda *args, **kwargs: triggers.append((args, kwargs)),
+        )
+        with patch("app.data_engine.data_manager.warm_start.time.time", return_value=now_ms / 1000):
+            await service.seed_if_needed("BTC-USDT", "45m", exchange="okx", market_type="spot", had_stream=True)
+            state = aggregator.get_bucket_state("BTC-USDT", "45m", bucket_start, exchange="okx", market_type="spot")
+            assert state is not None and not state.last_close_received
+            assert len(triggers) == 1
+            assert triggers[0][1]["requester"] == "warm_start_custom_seed"
+            assert triggers[0][1]["metadata"]["requires_trusted_finality"] is True
+
+            storage.rows[0]["source"] = "backfill"
+            cache.upsert(SeriesKey("BTC-USDT", "15m", exchange="okx", market_type="spot"),
+                         BarData(time=bucket_start // 1000, open=10, high=12, low=9, close=11,
+                                 volume=999, is_closed=False))
+            await service.seed_if_needed("BTC-USDT", "45m", exchange="okx", market_type="spot", had_stream=True)
+            repaired = aggregator.get_bucket_state("BTC-USDT", "45m", bucket_start, exchange="okx", market_type="spot")
+            assert repaired is not None and repaired.last_close_received and repaired.volume == 100
+            assert len(triggers) == 1
+
+    asyncio.run(run())
+
+
+def test_custom_sync_ignores_rows_from_previous_target_bucket():
+    async def run():
+        base_ms = 15 * 60_000
+        bucket_start = 3 * base_ms
+        aggregator = BarAggregator(BarAggregatorConfig(update_throttle_ms=0))
+        aggregator.add_target("BTC-USDT", "45m", exchange="okx", market_type="spot")
+        rows = [_row(bucket_start + index * base_ms, base_ms, close=10 + index)
+                for index in (-1, 0, 1)]
+        storage = _Storage(rows)
+        service = _service(cache=BarCache(), aggregator=aggregator, storage=storage, triggers=[], base_interval="15m")
+        events = []
+
+        async def capture(event):
+            events.append(event)
+
+        aggregator.publisher.on_bar_event(capture)
+        now_ms = bucket_start + 2 * base_ms - 1
+        with patch("app.data_engine.data_manager.warm_start.time.time", return_value=now_ms / 1000):
+            for _ in range(2):
+                await service.seed_if_needed("BTC-USDT", "45m", exchange="okx", market_type="spot", had_stream=True)
+        assert [event.event_type for event in events] == [BarEventType.UPDATED]
+
+    asyncio.run(run())
 
 
 def test_warm_start_marks_full_subscription_base_backfill_priority() -> None:
