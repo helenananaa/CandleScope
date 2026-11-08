@@ -146,6 +146,7 @@ export interface IndicatorPanelProps {
   onClose(): void;
   activeIndicators: IndicatorDefinition[];
   paramSchemas?: Record<string, IndicatorParameterSchema[]>;
+  activeControls?: (indicator: IndicatorDefinition) => ReactNode;
   onAddIndicator(indicator: IndicatorDefinition): void;
   onRemoveIndicator(indicatorId: string): void;
   onToggleVisibility(indicatorId: string): void;
@@ -305,6 +306,7 @@ export default function IndicatorPanel({
   onClose,
   activeIndicators,
   paramSchemas = {},
+  activeControls,
   onAddIndicator,
   onRemoveIndicator,
   onToggleVisibility,
@@ -1072,6 +1074,7 @@ export default function IndicatorPanel({
                           </div>
                         )}
 
+                        {activeControls?.(ind)}
                         {ind.error && (
                           <div className="indicator-error-msg">{ind.error}</div>
                         )}

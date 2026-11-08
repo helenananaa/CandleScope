@@ -1,4 +1,10 @@
 export const researchBatchEnglish = {
+  "researchBatch.studyScope": "Indicator data scope",
+  "researchBatch.studyHint": "Choose the data for this indicator. Parameter changes update each selected data version.",
+  "researchBatch.studyApply": "Apply to selected data",
+  "researchBatch.studyReady": "Ready · {count} points",
+  "researchBatch.studyUnavailable": "Selected data version is unavailable.",
+  "researchBatch.studyFailed": "Indicator calculation failed.",
   "researchBatch.compareFirst": "First run",
   "researchBatch.compareSecond": "Second run",
   "researchBatch.compareDelta": "Difference",
@@ -20,6 +26,12 @@ export const researchBatchEnglish = {
 } as const;
 
 export const researchBatchChinese: Record<keyof typeof researchBatchEnglish, string> = {
+  "researchBatch.studyScope": "指标数据范围",
+  "researchBatch.studyHint": "为此指标选择数据。修改参数会更新所选的每个数据版本。",
+  "researchBatch.studyApply": "应用到所选数据",
+  "researchBatch.studyReady": "已就绪 · {count} 个数据点",
+  "researchBatch.studyUnavailable": "所选数据版本已不可用。",
+  "researchBatch.studyFailed": "指标计算失败。",
   "researchBatch.compareFirst": "第一项运行",
   "researchBatch.compareSecond": "第二项运行",
   "researchBatch.compareDelta": "差值",
@@ -41,6 +53,12 @@ export const researchBatchChinese: Record<keyof typeof researchBatchEnglish, str
 };
 
 export const researchBatchKorean: Record<keyof typeof researchBatchEnglish, string> = {
+  "researchBatch.studyScope": "지표 데이터 범위",
+  "researchBatch.studyHint": "이 지표의 데이터를 선택하세요. 매개변수를 바꾸면 선택한 모든 데이터 버전의 결과가 갱신됩니다.",
+  "researchBatch.studyApply": "선택한 데이터에 적용",
+  "researchBatch.studyReady": "준비 완료 · 데이터 포인트 {count}개",
+  "researchBatch.studyUnavailable": "선택한 데이터 버전을 사용할 수 없습니다.",
+  "researchBatch.studyFailed": "지표 계산에 실패했습니다.",
   "researchBatch.compareFirst": "첫 번째 실행",
   "researchBatch.compareSecond": "두 번째 실행",
   "researchBatch.compareDelta": "차이",
@@ -62,6 +80,12 @@ export const researchBatchKorean: Record<keyof typeof researchBatchEnglish, stri
 };
 
 export const researchBatchBrazilian: Record<keyof typeof researchBatchEnglish, string> = {
+  "researchBatch.studyScope": "Escopo de dados do indicador",
+  "researchBatch.studyHint": "Escolha os dados para este indicador. Ao alterar os parâmetros, os resultados são atualizados para cada versão selecionada.",
+  "researchBatch.studyApply": "Aplicar aos dados selecionados",
+  "researchBatch.studyReady": "Pronto · {count} pontos",
+  "researchBatch.studyUnavailable": "A versão selecionada dos dados está indisponível.",
+  "researchBatch.studyFailed": "Falha ao calcular o indicador.",
   "researchBatch.compareFirst": "Primeira execução",
   "researchBatch.compareSecond": "Segunda execução",
   "researchBatch.compareDelta": "Diferença",

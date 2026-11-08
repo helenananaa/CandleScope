@@ -11,10 +11,12 @@ test("profile state survives asset-port changes and queued writes finish before 
     const file = path.join(root, "strategy-storage.json");
     const first = new DesktopStrategyStorage(file);
     await first.load();
+    const scopeKey = "candlescope:research-indicator-scopes:v1";
+    const scope = JSON.stringify({schema: 1, scopes: [{indicator: {id: "ma"}, datasets: []}]});
     const batchKey = "candlescope:strategy-research-batch:v1";
     const batch = JSON.stringify({schema: 1, jobs: [{id: "batch-job", runId: "bt_saved"}]});
     const writes = [first.setItem("candlescope-strategy-drafts-v1", '{"fast":4}'),
-      first.setItem("candlescope:strategy-research:v1", '{"draftId":"saved","runId":"completed"}'), first.setItem(batchKey, batch)];
+      first.setItem("candlescope:strategy-research:v1", '{"draftId":"saved","runId":"completed"}'), first.setItem(batchKey, batch), first.setItem(scopeKey, scope)];
     assert.equal(first.getItem("candlescope-strategy-drafts-v1"), '{"fast":4}');
     await first.flush();
     await Promise.all(writes);
@@ -23,9 +25,11 @@ test("profile state survives asset-port changes and queued writes finish before 
     assert.equal(restarted.getItem("candlescope-strategy-drafts-v1"), '{"fast":4}');
     assert.equal(restarted.getItem("candlescope:strategy-research:v1"), '{"draftId":"saved","runId":"completed"}');
     assert.equal(restarted.getItem(batchKey), batch);
+    assert.equal(restarted.getItem(scopeKey), scope);
+    assert.throws(() => restarted.setItem(scopeKey, "x".repeat(128 * 1024 + 1)), /Invalid/);
     assert.throws(() => restarted.setItem(batchKey, "x".repeat(256 * 1024 + 1)), /Invalid/);
     assert.deepEqual(Object.keys(JSON.parse(await readFile(file, "utf8")).values).sort(),
-      ["candlescope-strategy-drafts-v1", "candlescope:strategy-research:v1", batchKey].sort());
+      ["candlescope-strategy-drafts-v1", "candlescope:strategy-research:v1", batchKey, scopeKey].sort());
     assert.throws(() => restarted.setItem("../../secret", "bad"), /Invalid/);
     assert.throws(() => restarted.getItem("access-token"), /Unsupported/);
     assert.throws(() => restarted.setItem("candlescope-strategy-drafts-v1", "x".repeat(17 * 1024 * 1024)), /Invalid/);

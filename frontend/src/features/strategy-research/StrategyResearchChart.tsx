@@ -41,7 +41,8 @@ import {
 } from "../local-data/useLocalChartRuntime.js";
 import { useLocalIndicatorRuntime } from "../local-data/useLocalIndicatorRuntime.js";
 import type { IndicatorRuntime } from "../indicators/indicatorRuntimeContract.js";
-import type { IndicatorPreset } from "../indicators/indicatorTypes.js";
+import type { ActiveIndicatorPersistence } from "../indicators/activeIndicatorStore.js";
+import type { IndicatorDefinition, IndicatorPreset } from "../indicators/indicatorTypes.js";
 import IndicatorPanel from "../indicators/IndicatorPanel.js";
 import { useDrawingRuntime } from "../drawings/useDrawingRuntime.js";
 import type { DrawingRuntime } from "../drawings/useDrawingRuntime.js";
@@ -258,6 +259,8 @@ export function StrategyResearchImportedWorkspace({
   manifest,
   interval,
   indicatorPresets,
+  indicatorPersistence,
+  indicatorScopeControls,
   eventStore,
   focusRequest,
   indicatorPanelOpen,
@@ -273,6 +276,8 @@ export function StrategyResearchImportedWorkspace({
   manifest: LocalDatasetManifest;
   interval: string;
   indicatorPresets: readonly IndicatorPreset[];
+  indicatorPersistence?: ActiveIndicatorPersistence;
+  indicatorScopeControls?(indicator: IndicatorDefinition): ReactNode;
   eventStore: LocalAnalysisEventStore;
   focusRequest: LocalAnalysisFocusRequest | null;
   indicatorPanelOpen: boolean;
@@ -322,6 +327,7 @@ export function StrategyResearchImportedWorkspace({
     seriesVersion,
     candleUpColor: settings.upColor,
     candleDownColor: settings.downColor,
+    ...(indicatorPersistence ? { persistence: indicatorPersistence } : {}),
   });
   const drawings = useDrawingRuntime({
     chartSurfaceActions: chartSurface.actions,
@@ -469,6 +475,7 @@ export function StrategyResearchImportedWorkspace({
       onClose={onCloseIndicatorPanel}
       activeIndicators={indicators.view.activeIndicators}
       paramSchemas={indicators.view.paramSchemas}
+      {...(indicatorScopeControls ? { activeControls: indicatorScopeControls } : {})}
       onAddIndicator={indicators.actions.addIndicator}
       onRemoveIndicator={removeIndicator}
       onToggleVisibility={indicators.actions.toggleVisibility}

@@ -9,12 +9,15 @@ const KEYS = new Set([
 const MAX_VALUE_BYTES = 16 * 1024 * 1024;
 const RESEARCH_BATCH_KEY = "candlescope:strategy-research-batch:v1";
 const MAX_RESEARCH_BATCH_BYTES = 256 * 1024;
+const RESEARCH_INDICATOR_SCOPES_KEY = "candlescope:research-indicator-scopes:v1";
+const MAX_RESEARCH_INDICATOR_SCOPES_BYTES = 128 * 1024;
 const RESEARCH_RETURN_KEY = /^candlescope:research-return:[\w-]{8,80}$/;
 const MAX_RESEARCH_RETURNS = 64;
 
 function valueLimit(key) {
   if (KEYS.has(key)) return MAX_VALUE_BYTES;
   if (key === RESEARCH_BATCH_KEY) return MAX_RESEARCH_BATCH_BYTES;
+  if (key === RESEARCH_INDICATOR_SCOPES_KEY) return MAX_RESEARCH_INDICATOR_SCOPES_BYTES;
   return typeof key === "string" && RESEARCH_RETURN_KEY.test(key) ? 2048 : 0;
 }
 

@@ -17,6 +17,11 @@ import {
 
 import type { MainSeriesCrosshairValue } from "../../chart-adapter/chartAdapterTypes.js";
 const PreparationJobsPanel = lazy(() => import("../data-preparation/PreparationJobsPanel.js"));
+import { createActiveIndicatorPersistence } from "../indicators/activeIndicatorStore.js";
+import { getStrategyStorage } from "../../shared/strategyStorage.js";
+import { ResearchIndicatorScopeStore } from "./researchIndicatorScope.js";
+import { ResearchIndicatorScopeControl } from "./ResearchIndicatorScopeControl.js";
+import { useResearchIndicatorScopeResults } from "./useResearchIndicatorScopeResults.js";
 import { ResearchBatchResults, ResearchBatchSources } from "./ResearchBatchPanel.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -258,6 +263,15 @@ export default function StrategyResearchApp({
   }, [dispatch, runtime, setLibrarySelectedId]);
 
   const importedManifest = importedManifestForSource(source, library.selected);
+  const [indicatorScopes] = useState(() => new ResearchIndicatorScopeStore(getStrategyStorage()));
+  const indicatorScopeState = useSyncExternalStore(indicatorScopes.subscribe, indicatorScopes.snapshot, indicatorScopes.snapshot);
+  const indicatorResults = useResearchIndicatorScopeResults(indicatorScopeState.scopes, libraryDatasets);
+  const localIndicatorPersistence = useMemo(() => importedManifest && createActiveIndicatorPersistence(
+    `candlescope:local-indicators:v1:${importedManifest.dataset_id}:${importedManifest.data_epoch}`,
+  ), [importedManifest]);
+  const scopedIndicatorPersistence = useMemo(() => importedManifest && localIndicatorPersistence
+    ? indicatorScopes.chartPersistence(importedManifest, indicatorScopeState.scopes, localIndicatorPersistence)
+    : null, [importedManifest, indicatorScopes, indicatorScopeState.scopes, localIndicatorPersistence]);
 
   const { intervalScope, selectedInterval, handleIntervalSelect } = useLocalIntervalSelection(
     importedManifest,
@@ -712,7 +726,7 @@ export default function StrategyResearchApp({
     );
   }
 
-  if (importedManifest !== null && analysisStore !== null && selectedInterval !== null) {
+  if (importedManifest !== null && analysisStore !== null && selectedInterval !== null && scopedIndicatorPersistence && localIndicatorPersistence) {
     const analysis = (
       <ImportedAnalysisPanel
         manifest={importedManifest}
@@ -729,6 +743,11 @@ export default function StrategyResearchApp({
         manifest={importedManifest}
         interval={selectedInterval}
         indicatorPresets={library.indicatorPresets}
+        indicatorPersistence={scopedIndicatorPersistence}
+        indicatorScopeControls={indicator => <ResearchIndicatorScopeControl indicator={indicator} current={importedManifest}
+          datasets={libraryDatasets} targets={indicatorScopeState.scopes.find(scope => scope.indicator.id === indicator.id)?.datasets ?? []}
+          results={indicatorResults} storageError={indicatorScopeState.storageError} local={localIndicatorPersistence}
+          apply={(definition, current, selected, local) => indicatorScopes.apply(definition, current, selected, local)} />}
         eventStore={analysisStore}
         focusRequest={focusRequest}
         indicatorPanelOpen={indicatorPanelOpen}
