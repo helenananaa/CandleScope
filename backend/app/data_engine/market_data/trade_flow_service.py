@@ -40,6 +40,7 @@ from app.data_engine.continuity_policy import ContinuityPolicy
 from .lifecycle import KeyedAsyncLockPool, drain_cancellation_safe_cleanup
 from .models import DeliveryClass, MarketChannel, MarketStreamKey, TransportMode
 from .trade_flow import (
+    BUCKET_INTERVAL_MS,
     NormalizedAggTrade,
     StreamIdentity,
     TradeFlowBucket,
@@ -97,6 +98,7 @@ class _IngestCommand:
     event: MarketEvent | NormalizedAggTrade
     gap_fill: bool = False
     acknowledgement: asyncio.Future[TradeFlowIngestResult] | None = None
+    archive_prefix: tuple[NormalizedAggTrade, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +106,11 @@ class _RepairRequest:
     identity: StreamIdentity
     gap: TradeFlowGap
     attempt: int = 1
+
+
+@dataclass(frozen=True, slots=True)
+class _BootstrapRequest:
+    anchor: NormalizedAggTrade
 
 
 class _RepairError(RuntimeError):
@@ -172,7 +179,7 @@ class TradeFlowService:
             maxsize=max(1, int(command_queue_size)),
         )
         self._repair_queue: asyncio.Queue[
-            _RepairRequest | None
+            _RepairRequest | _BootstrapRequest | None
         ] = asyncio.Queue(maxsize=max(1, int(repair_queue_size)))
         self._archive_queue: asyncio.Queue[NormalizedAggTrade | None] = asyncio.Queue(
             maxsize=max(1, int(archive_forward_queue_size)),
@@ -263,6 +270,9 @@ class TradeFlowService:
             "repair_rows_fetched": 0,
             "repair_rows_reused_from_archive": 0,
             "repair_archive_reads_rejected": 0,
+            "archive_bootstraps_queued": 0,
+            "archive_bootstraps_queue_full": 0,
+            "archive_bootstraps_applied": 0,
             "repair_trades_filled": 0,
             "rollup_offer_rejected": 0,
             "rollup_write_failures": 0,
@@ -1290,6 +1300,12 @@ class TradeFlowService:
                     raise ValueError(
                         "aggregate trade identity does not match physical stream",
                     )
+                if command.archive_prefix is not None:
+                    buckets = self.engine.adopt_initial_archive_prefix(trade, command.archive_prefix)
+                    if buckets:
+                        await self._persist_buckets(buckets, source=DataSource.ARCHIVE.value)
+                        self._metrics["archive_bootstraps_applied"] += 1
+                    continue
                 result = (
                     self.engine.ingest_gap_fill(trade)
                     if command.gap_fill
@@ -1334,15 +1350,22 @@ class TradeFlowService:
             else:
                 self._mark_repair_degraded(request.identity)
 
-        await self._persist_rollups(result)
+        await self._persist_buckets(result.buckets, source=result.trade.source.value)
         if self.raw_archive.enabled and result.trade.source is not DataSource.ARCHIVE:
+            if self.engine.is_initial_archive_anchor(result.trade):
+                # Optional history work shares the existing bounded repair lane.
+                # The serial ingest owner must never wait for its own consumer.
+                try:
+                    self._repair_queue.put_nowait(_BootstrapRequest(result.trade))
+                except asyncio.QueueFull:
+                    self._metrics["archive_bootstraps_queue_full"] += 1
+                else:
+                    self._metrics["archive_bootstraps_queued"] += 1
             await self._archive_queue.put(result.trade)
 
-    async def _persist_rollups(self, result: TradeFlowIngestResult) -> None:
-        assert result.trade is not None
-        source = result.trade.source.value
+    async def _persist_buckets(self, buckets: tuple[TradeFlowBucket, ...], *, source: str) -> None:
         final_rows: list[dict[str, Any]] = []
-        for bucket in result.buckets:
+        for bucket in buckets:
             row = _rollup_row(bucket, source=source)
             if bucket.is_final:
                 final_rows.append(row)
@@ -1423,8 +1446,14 @@ class TradeFlowService:
                 return
             self._repair_in_flight += 1
             try:
-                await self._repair_gap(request.identity, request.gap)
+                if isinstance(request, _BootstrapRequest):
+                    await self._bootstrap_from_archive(request.anchor)
+                else:
+                    await self._repair_gap(request.identity, request.gap)
             except Exception as exc:
+                if isinstance(request, _BootstrapRequest):
+                    logger.warning("Failed to plan local aggTrade bootstrap: %s", exc)
+                    continue
                 self._metrics["repairs_failed"] += 1
                 self._metrics["last_repair_error"] = str(exc)[:500]
                 logger.warning(
@@ -1464,6 +1493,26 @@ class TradeFlowService:
                 self._repair_in_flight -= 1
                 self._repair_queue.task_done()
 
+    async def _bootstrap_from_archive(self, anchor: NormalizedAggTrade) -> None:
+        if not self.engine.is_initial_archive_anchor(anchor) or anchor.agg_trade_id == 0:
+            return
+        last = anchor.agg_trade_id - 1
+        first = max(0, anchor.agg_trade_id - self._repair_page_size)
+        local = await self._read_archive_id_page(anchor.stream_identity, first, last)
+        start = anchor.trade_time_ms // BUCKET_INTERVAL_MS * BUCKET_INTERVAL_MS
+        suffix = []
+        for trade_id in range(last, first - 1, -1):
+            trade = local.get(trade_id)
+            if trade is None:
+                return
+            suffix.append(trade)
+            if trade.trade_time_ms < start:
+                await self._command_queue.put(_IngestCommand(
+                    identity=anchor.stream_identity, event=anchor,
+                    archive_prefix=tuple(reversed(suffix)),
+                ))
+                return
+
     async def _repair_gap(
         self,
         identity: StreamIdentity,
@@ -1484,10 +1533,14 @@ class TradeFlowService:
             self.engine.gap_snapshot(identity),
             gap,
         )
+        time_bounds = (
+            min(gap.left_trade_time_ms, gap.right_trade_time_ms),
+            max(gap.left_trade_time_ms, gap.right_trade_time_ms),
+        )
         for start_id, end_id in open_ranges:
             for first in range(start_id, end_id + 1, self._repair_page_size):
                 last = min(first + self._repair_page_size - 1, end_id)
-                local = await self._read_archive_repair_page(identity, gap, first, last)
+                local = await self._read_archive_id_page(identity, first, last, time_bounds=time_bounds)
                 for archived, run in groupby(range(first, last + 1), key=local.__contains__):
                     ids = list(run)
                     trades = (
@@ -1503,12 +1556,12 @@ class TradeFlowService:
             raise _RepairError("engine still reports the repaired ID range incomplete")
         self._metrics["repairs_succeeded"] += 1
 
-    async def _read_archive_repair_page(
-        self, identity: StreamIdentity, gap: TradeFlowGap, first: int, last: int,
+    async def _read_archive_id_page(
+        self, identity: StreamIdentity, first: int, last: int, *,
+        time_bounds: tuple[int, int] | None = None,
     ) -> dict[int, NormalizedAggTrade]:
         if not self.raw_archive.enabled:
             return {}
-        start_time, end_time = sorted((gap.left_trade_time_ms, gap.right_trade_time_ms))
         try:
             page = await run_storage(
                 self.raw_archive.scan_page,
@@ -1529,13 +1582,13 @@ class TradeFlowService:
                 if (
                     trade.stream_identity != identity
                     or not first <= trade_id <= last
-                    or not start_time <= trade.trade_time_ms <= end_time
+                    or (time_bounds is not None and not time_bounds[0] <= trade.trade_time_ms <= time_bounds[1])
                     or trade_id in rows
                 ):
-                    raise _RepairError("archive returned an invalid repair page")
+                    raise _RepairError("archive returned an invalid ID page")
                 rows[trade_id] = trade
             if not page.exhausted:
-                raise _RepairError("archive repair page did not finish the ID window")
+                raise _RepairError("archive read did not finish the ID window")
             return rows
         except (KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
             self._metrics["repair_archive_reads_rejected"] += 1

@@ -1095,3 +1095,55 @@ async def test_repair_reuses_local_parquet_and_only_fetches_unproved_id_runs(
     assert diagnostics["repair_rows_reused_from_archive"] == reused
     assert diagnostics["repair_archive_reads_rejected"] == int(conflict)
     assert diagnostics["archive_writer"]["rows_archived"] == 7 - reused
+
+
+@pytest.mark.parametrize(
+    ("archived", "proven", "expected_count"),
+    [
+        ([(10, -1), (11, 0), (12, 10)], True, 3),
+        ([(12, -1)], True, 1),
+        ([(10, 0), (11, 1), (12, 10)], False, 1),
+        ([(10, -1), (12, 10)], False, 1),
+        ([(10, -1), (11, 40), (12, 10)], False, 1),
+    ],
+)
+@_async_test
+async def test_live_initial_bucket_requires_archive_boundary_and_contiguous_prefix(
+    tmp_path, archived, proven, expected_count,
+) -> None:
+    pytest.importorskip("pyarrow")
+    archive = ParquetRawAggTradeArchive(tmp_path / "archive")
+    archive.append([
+        NormalizedAggTrade.from_market_event(_event(i, trade_time_ms=START_MS + offset)).to_dict()
+        for i, offset in archived
+    ])
+    factory = _Factory()
+    store = SQLiteTradeFlowRollupStore(tmp_path / "rollups.sqlite")
+    service = TradeFlowService(
+        factory, engine=TradeFlowEngine(raw_ring_size=1),
+        rollup_store=store, raw_archive=archive,
+    )
+    await service.ensure_stream(_key(), consumer_id="archive-initial-minute")
+    await service.ensure_stream(_key(), consumer_id="archive-initial-sibling")
+    await factory.emit(_event(13, trade_time_ms=START_MS + 25))
+    await factory.emit(_event(14, trade_time_ms=START_MS + MINUTE))
+    await service.shutdown()
+
+    assert not factory.fetch_calls
+    assert service.diagnostics()["archive_bootstraps_queued"] == 1
+    assert service.diagnostics()["archive_bootstraps_applied"] == int(proven)
+    assert service.diagnostics()["archive_writer"]["rows_archived"] == 2
+    bucket, next_bucket = service.engine.bucket_snapshot(IDENTITY)
+    assert bucket.is_complete is proven
+    assert bucket.is_final
+    assert bucket.agg_trade_count == expected_count
+    assert next_bucket.agg_trade_count == 1
+    assert [row.agg_trade_id for row in service.engine.raw_tail(IDENTITY, 1)] == [14]
+    reopened = SQLiteTradeFlowRollupStore(tmp_path / "rollups.sqlite")
+    stored, = await reopened.query_rollups(
+        exchange="binance", market_type="futures", symbol="BTCUSDT",
+        start_ms=START_MS, end_ms=START_MS,
+    )
+    assert stored["is_final"] == 1
+    assert stored["is_complete"] == int(proven)
+    assert stored["agg_trade_count"] == expected_count

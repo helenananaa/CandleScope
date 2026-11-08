@@ -379,6 +379,7 @@ class _StreamState:
     highest_trade_time_ms: int | None = None
     active_bucket_start_ms: int | None = None
     bootstrap_incomplete_buckets: set[int] = field(default_factory=set)
+    bootstrap_anchor: NormalizedAggTrade | None = None
     # The optional initial-minute prefix can be larger than the raw ring, so it
     # has its own temporary exact dedupe set until bootstrap is confirmed.
     bootstrap_seen_ids: set[int] = field(default_factory=set)
@@ -572,6 +573,39 @@ class TradeFlowEngine:
             and (state.gaps or state.permanently_incomplete_buckets)
         )
 
+    def is_initial_archive_anchor(self, trade: NormalizedAggTrade) -> bool:
+        state = self._streams.get(trade.stream_identity)
+        return state is not None and state.bootstrap_anchor is trade
+
+    def adopt_initial_archive_prefix(
+        self, anchor: NormalizedAggTrade, rows: tuple[NormalizedAggTrade, ...],
+    ) -> tuple[TradeFlowBucket, ...]:
+        """Atomically add a proven prefix without altering the live tape."""
+        state = self._streams.get(anchor.stream_identity)
+        if state is None or state.bootstrap_anchor is not anchor or not rows:
+            return ()
+        start = anchor.trade_time_ms // BUCKET_INTERVAL_MS * BUCKET_INTERVAL_MS
+        bucket = state.buckets.get(start)
+        if bucket is None or bucket.first_id != anchor.agg_trade_id:
+            return ()
+        predecessor, *prefix = rows
+        chain = (*rows, anchor)
+        if (
+            predecessor.trade_time_ms >= start
+            or any(row.trade_time_ms < start for row in prefix)
+            or any(row.stream_identity != anchor.stream_identity for row in rows)
+            or any(
+                right.agg_trade_id != left.agg_trade_id + 1
+                or right.trade_time_ms < left.trade_time_ms
+                for left, right in zip(chain, chain[1:])
+            )
+        ):
+            return ()
+        for trade in prefix:
+            bucket.add(trade)
+        self._metrics["bootstrap_trades_filled"] += len(prefix)
+        return self.confirm_bootstrap_complete(anchor.stream_identity, bucket_start_ms=start)
+
     def confirm_bootstrap_complete(
         self,
         identity: StreamIdentity,
@@ -602,6 +636,7 @@ class TradeFlowEngine:
             return ()
         state.bootstrap_incomplete_buckets.difference_update(confirmed)
         if not state.bootstrap_incomplete_buckets:
+            state.bootstrap_anchor = None
             state.bootstrap_seen_ids.clear()
         self._touch_buckets(state, confirmed)
         self._metrics["bootstrap_buckets_confirmed"] += len(confirmed)
@@ -702,6 +737,7 @@ class TradeFlowEngine:
         state.highest_trade_time_ms = trade.trade_time_ms
         state.active_bucket_start_ms = current_bucket_start
         if first_trade and not self._initial_bucket_complete:
+            state.bootstrap_anchor = trade
             state.bootstrap_incomplete_buckets.add(state.active_bucket_start_ms)
             state.bootstrap_seen_ids.add(trade.agg_trade_id)
         if previous_active is not None and previous_active != state.active_bucket_start_ms:
@@ -899,6 +935,7 @@ class TradeFlowEngine:
             state.permanently_incomplete_buckets.discard(start)
             if start in state.bootstrap_incomplete_buckets:
                 state.bootstrap_incomplete_buckets.discard(start)
+                state.bootstrap_anchor = None
                 state.bootstrap_seen_ids.clear()
             self._metrics["buckets_evicted"] += 1
         if state.buckets and state.gaps:
