@@ -58,6 +58,7 @@ class DataSource(str, enum.Enum):
     WEBSOCKET = "websocket"
     HTTP = "http"
     HTTP_BACKFILL = "http_backfill"  # gap-fill fetches
+    ARCHIVE = "archive"  # re-adopted from durable local trade history
     PLUGIN = "plugin"
     MOCK = "mock"
 

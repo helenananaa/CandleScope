@@ -512,6 +512,7 @@ class RawAggTradeArchive(Protocol):
         after: RawAggTradeCursor | None = None,
         limit: int = 50_000,
         dataset_ref: RawAggTradeDatasetRef | None = None,
+        reject_id_conflicts: bool = False,
     ) -> RawAggTradePage:
         """Read one bounded page after an exclusive stable cursor."""
 
@@ -653,6 +654,7 @@ class DisabledRawAggTradeArchive:
         after: RawAggTradeCursor | None = None,
         limit: int = 50_000,
         dataset_ref: RawAggTradeDatasetRef | None = None,
+        reject_id_conflicts: bool = False,
     ) -> RawAggTradePage:
         del (
             exchange,
@@ -664,6 +666,7 @@ class DisabledRawAggTradeArchive:
             end_agg_trade_id,
             after,
             limit,
+            reject_id_conflicts,
         )
         return RawAggTradePage(
             rows=(),
@@ -2032,6 +2035,7 @@ class ParquetRawAggTradeArchive:
         after: RawAggTradeCursor | None = None,
         limit: int = 50_000,
         dataset_ref: RawAggTradeDatasetRef | None = None,
+        reject_id_conflicts: bool = False,
     ) -> RawAggTradePage:
         page_limit = max(1, min(int(limit), 1_000_000))
         bounded_limit = page_limit + 1
@@ -2043,6 +2047,11 @@ class ParquetRawAggTradeArchive:
             start_agg_trade_id=start_agg_trade_id,
             end_agg_trade_id=end_agg_trade_id,
         )
+        if reject_id_conflicts and (
+            after is not None or start_time_ms is not None or end_time_ms is not None
+            or bounds[2] is None or bounds[3] is None or bounds[3] - bounds[2] + 1 > page_limit
+        ):
+            raise ValueError("conflict checking requires an entire bounded ID window")
         if dataset_ref is None:
             manifests = self._discover_manifests(
                 exchange=exchange,
@@ -2173,10 +2182,10 @@ class ParquetRawAggTradeArchive:
                     if not _row_matches_bounds(row, bounds):
                         continue
                     current = deduplicated.get(row["agg_trade_id"])
-                    if current is not None and dataset_ref is not None:
+                    if current is not None and (dataset_ref is not None or reject_id_conflicts):
                         if _immutable_trade_payload(current) != _immutable_trade_payload(row):
                             raise RuntimeError(
-                                "exact raw aggTrade generation contains conflicting "
+                                "raw aggTrade read contains conflicting "
                                 f"duplicate aggregate-trade ID {row['agg_trade_id']}"
                             )
                     if current is None or row["received_at_ms"] >= current["received_at_ms"]:

@@ -165,6 +165,27 @@ class NormalizedAggTrade:
             last_trade_id=data.get("last_trade_id"),
         )
 
+    @classmethod
+    def from_archive_row(cls, row: dict[str, Any]) -> NormalizedAggTrade:
+        """Admit supported native and official archive records for ID repair."""
+        if row["source"] not in {"websocket", "http", "http_backfill", "binance_public"}:
+            raise ValueError("unsupported raw aggTrade archive provenance")
+        return cls(
+            exchange=row["exchange"],
+            market_type=row["market_type"],
+            symbol=row["symbol"],
+            agg_trade_id=row["agg_trade_id"],
+            price=row["price"],
+            quantity=row["quantity"],
+            trade_time_ms=row["trade_time_ms"],
+            event_time_ms=row["event_time_ms"],
+            received_at_ms=row["received_at_ms"],
+            is_buyer_maker=row["is_buyer_maker"],
+            first_trade_id=row["first_trade_id"],
+            last_trade_id=row["last_trade_id"],
+            source=DataSource.ARCHIVE,
+        )
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "exchange": self.exchange,

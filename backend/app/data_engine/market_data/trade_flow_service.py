@@ -12,10 +12,12 @@ import asyncio
 import logging
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
+from itertools import groupby
 from typing import Any, Protocol
 
 from app.core.executors import run_storage
 from app.data_engine.ingestion.models import (
+    DataSource,
     MarketEvent,
     StreamDescriptor,
     StreamType,
@@ -259,6 +261,8 @@ class TradeFlowService:
             "repair_budget_exceeded": 0,
             "repair_pages_fetched": 0,
             "repair_rows_fetched": 0,
+            "repair_rows_reused_from_archive": 0,
+            "repair_archive_reads_rejected": 0,
             "repair_trades_filled": 0,
             "rollup_offer_rejected": 0,
             "rollup_write_failures": 0,
@@ -1331,7 +1335,7 @@ class TradeFlowService:
                 self._mark_repair_degraded(request.identity)
 
         await self._persist_rollups(result)
-        if self.raw_archive.enabled:
+        if self.raw_archive.enabled and result.trade.source is not DataSource.ARCHIVE:
             await self._archive_queue.put(result.trade)
 
     async def _persist_rollups(self, result: TradeFlowIngestResult) -> None:
@@ -1476,65 +1480,98 @@ class TradeFlowService:
                 f"({gap.missing_count} > {self._max_repair_trades_per_gap})",
             )
 
-        descriptor = _descriptor(identity)
         open_ranges = _open_gap_intersections(
             self.engine.gap_snapshot(identity),
             gap,
         )
         for start_id, end_id in open_ranges:
-            cursor = start_id
-            while cursor <= end_id:
-                page_count = min(
-                    self._repair_page_size,
-                    end_id - cursor + 1,
-                )
-                events = await self._factory.fetch_market(
-                    descriptor,
-                    from_id=cursor,
-                    limit=page_count,
-                    history=True,
-                )
-                self._metrics["repair_pages_fetched"] += 1
-                self._metrics["repair_rows_fetched"] += len(events)
-                trades = [
-                    NormalizedAggTrade.from_market_event(event)
-                    for event in events
-                ]
-                expected_ids = list(range(cursor, cursor + page_count))
-                actual_ids = [trade.agg_trade_id for trade in trades]
-                if actual_ids != expected_ids:
-                    raise _RepairError(
-                        "REST repair page is not the exact requested ID range "
-                        f"(expected {expected_ids[0]}-{expected_ids[-1]}, "
-                        f"got {actual_ids})",
+            for first in range(start_id, end_id + 1, self._repair_page_size):
+                last = min(first + self._repair_page_size - 1, end_id)
+                local = await self._read_archive_repair_page(identity, gap, first, last)
+                for archived, run in groupby(range(first, last + 1), key=local.__contains__):
+                    ids = list(run)
+                    trades = (
+                        [local[trade_id] for trade_id in ids]
+                        if archived else await self._fetch_repair_run(identity, ids)
                     )
-                if any(trade.stream_identity != identity for trade in trades):
-                    raise _RepairError(
-                        "REST repair page contains a foreign identity",
-                    )
-
-                for trade in trades:
-                    acknowledgement = asyncio.get_running_loop().create_future()
-                    await self._command_queue.put(
-                        _IngestCommand(
-                            identity=identity,
-                            event=trade,
-                            gap_fill=True,
-                            acknowledgement=acknowledgement,
-                        ),
-                    )
-                    result = await asyncio.shield(acknowledgement)
-                    if not result.accepted:
-                        raise _RepairError(
-                            "engine rejected validated gap-fill trade "
-                            f"{trade.agg_trade_id}: {result.reason}",
-                        )
-                    self._metrics["repair_trades_filled"] += 1
-                cursor += page_count
+                    for trade in trades:
+                        await self._adopt_repair_trade(identity, trade)
+                    if archived:
+                        self._metrics["repair_rows_reused_from_archive"] += len(trades)
 
         if _range_is_open(self.engine.gap_snapshot(identity), gap):
             raise _RepairError("engine still reports the repaired ID range incomplete")
         self._metrics["repairs_succeeded"] += 1
+
+    async def _read_archive_repair_page(
+        self, identity: StreamIdentity, gap: TradeFlowGap, first: int, last: int,
+    ) -> dict[int, NormalizedAggTrade]:
+        if not self.raw_archive.enabled:
+            return {}
+        start_time, end_time = sorted((gap.left_trade_time_ms, gap.right_trade_time_ms))
+        try:
+            page = await run_storage(
+                self.raw_archive.scan_page,
+                exchange=identity[0],
+                market_type=identity[1],
+                symbol=identity[2],
+                # Search by ID before validating time so conflicting copies
+                # in different date partitions cannot evade the check.
+                start_agg_trade_id=first,
+                end_agg_trade_id=last,
+                limit=last - first + 1,
+                reject_id_conflicts=True,
+            )
+            rows = {}
+            for row in page.rows:
+                trade = NormalizedAggTrade.from_archive_row(row)
+                trade_id = trade.agg_trade_id
+                if (
+                    trade.stream_identity != identity
+                    or not first <= trade_id <= last
+                    or not start_time <= trade.trade_time_ms <= end_time
+                    or trade_id in rows
+                ):
+                    raise _RepairError("archive returned an invalid repair page")
+                rows[trade_id] = trade
+            if not page.exhausted:
+                raise _RepairError("archive repair page did not finish the ID window")
+            return rows
+        except (KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
+            self._metrics["repair_archive_reads_rejected"] += 1
+            logger.warning("Could not reuse local aggTrade archive for %s %s-%s: %s", identity, first, last, exc)
+            return {}
+
+    async def _fetch_repair_run(
+        self, identity: StreamIdentity, ids: list[int],
+    ) -> list[NormalizedAggTrade]:
+        events = await self._factory.fetch_market(
+            _descriptor(identity), from_id=ids[0], limit=len(ids), history=True,
+        )
+        self._metrics["repair_pages_fetched"] += 1
+        self._metrics["repair_rows_fetched"] += len(events)
+        trades = [NormalizedAggTrade.from_market_event(event) for event in events]
+        actual_ids = [trade.agg_trade_id for trade in trades]
+        if actual_ids != ids:
+            raise _RepairError(
+                "REST repair page is not the exact requested ID range "
+                f"(expected {ids[0]}-{ids[-1]}, got {actual_ids})",
+            )
+        if any(trade.stream_identity != identity for trade in trades):
+            raise _RepairError("REST repair page contains a foreign identity")
+        return trades
+
+    async def _adopt_repair_trade(self, identity: StreamIdentity, trade: NormalizedAggTrade) -> None:
+        acknowledgement = asyncio.get_running_loop().create_future()
+        await self._command_queue.put(_IngestCommand(
+            identity=identity, event=trade, gap_fill=True, acknowledgement=acknowledgement,
+        ))
+        result = await asyncio.shield(acknowledgement)
+        if not result.accepted:
+            raise _RepairError(
+                f"engine rejected validated gap-fill trade {trade.agg_trade_id}: {result.reason}",
+            )
+        self._metrics["repair_trades_filled"] += 1
 
     async def _run_flush(self) -> None:
         while not self._flush_stop.is_set():

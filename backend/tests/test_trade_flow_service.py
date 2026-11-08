@@ -9,7 +9,7 @@ import pytest
 from app.data_engine.ingestion.models import DataSource, MarketEvent, StreamType
 from app.data_engine.market_data.append_hub import AppendBatchHub
 from app.data_engine.market_data.models import MarketChannel, MarketStreamKey
-from app.data_engine.market_data.trade_flow import TradeFlowEngine
+from app.data_engine.market_data.trade_flow import NormalizedAggTrade, TradeFlowEngine
 from app.data_engine.market_data.trade_flow_service import TradeFlowService
 from app.data_engine.storage.raw_trade_archive import DisabledRawAggTradeArchive
 from app.data_engine.storage.raw_trade_archive import (
@@ -1049,3 +1049,49 @@ def test_capability_validation_fails_closed(tmp_path) -> None:
         await service.shutdown()
 
     asyncio.run(_run())
+
+
+@pytest.mark.parametrize(
+    ("local_ids", "conflict", "failures", "expected_calls", "reused"),
+    [
+        ([2, 3, 4, 5, 6], False, 0, [], 5),
+        ([2, 4, 6], False, 0, [(3, 1), (5, 1)], 3),
+        ([2, 4, 6], False, 1, [(3, 1), (3, 1), (5, 1)], 3),
+        ([2, 3, 4, 5, 6], True, 0, [(2, 5)], 0),
+    ],
+)
+@_async_test
+async def test_repair_reuses_local_parquet_and_only_fetches_unproved_id_runs(
+    tmp_path, local_ids, conflict, failures, expected_calls, reused,
+) -> None:
+    pytest.importorskip("pyarrow")
+    root = tmp_path / "archive"
+    archive = ParquetRawAggTradeArchive(root)
+    archive.append([NormalizedAggTrade.from_market_event(_event(i)).to_dict() for i in local_ids])
+    if conflict:
+        # A conflicting copy outside the live time bracket must also veto reuse.
+        archive.append([NormalizedAggTrade.from_market_event(
+            _event(4, trade_time_ms=START_MS + 86_400_000),
+        ).to_dict()])
+
+    factory = _Factory()
+    factory.fetch_failures_remaining = failures
+    factory.repair_rows = {i: _event(i, source=DataSource.HTTP_BACKFILL) for i in range(2, 7)}
+    store = SQLiteTradeFlowRollupStore(tmp_path / "rollups.sqlite")
+    service = TradeFlowService(
+        factory, engine=TradeFlowEngine(initial_bucket_complete=True),
+        rollup_store=store, raw_archive=ParquetRawAggTradeArchive(root),
+    )
+    await service.ensure_stream(_key(), consumer_id="archive-repair")
+    await factory.emit(_event(1))
+    await factory.emit(_event(7))
+    await _wait_until(lambda: service.diagnostics()["repairs_succeeded"] == 1)
+    assert service.engine.gap_snapshot(IDENTITY) == ()
+    bucket, = service.engine.bucket_snapshot(IDENTITY)
+    assert bucket.is_complete and bucket.agg_trade_count == 7
+    assert [(kwargs["from_id"], kwargs["limit"]) for _, kwargs in factory.fetch_calls] == expected_calls
+    await service.shutdown()
+    diagnostics = service.diagnostics()
+    assert diagnostics["repair_rows_reused_from_archive"] == reused
+    assert diagnostics["repair_archive_reads_rejected"] == int(conflict)
+    assert diagnostics["archive_writer"]["rows_archived"] == 7 - reused
