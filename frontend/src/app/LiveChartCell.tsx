@@ -1148,7 +1148,7 @@ function LiveChartCell({
             paused={obscured || !!replay.key || study.masked}
           />}
           {quickReplay && !study.masked && (
-            <Suspense fallback={null}>
+            <Suspense fallback={<div className="history-study-mask" role="status">{t("study.loading")}</div>}>
               <QuickReplayOverlay
                 key={replay.key}
                 request={quickReplay}
