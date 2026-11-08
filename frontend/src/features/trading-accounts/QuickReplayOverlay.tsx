@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ChartErrorBoundary } from "../../app/AppProviders.js";
+import { createPriceLineSource } from "../../chart-adapter/externalPriceLineSource.js";
 import { useChartSurfaceRuntime } from "../../chart-adapter/useChartSurfaceRuntime.js";
 import SingleChartPanes from "../../components/SingleChartPanes.js";
 import { t } from "../../i18n/index.js";
@@ -254,11 +255,12 @@ export default function QuickReplayOverlay({
     down: style.downColor,
     note: tokenColor("--accent-purple", "violet"),
   }), [style.downColor, style.upColor]);
+  const priceLineSource = useMemo(() => createPriceLineSource(), []);
   const entries = useMemo(() => detail?.entries.filter(entry => entry.accountId === request.accountId) ?? [], [detail, request.accountId]);
   const { notes, reviewNotes } = useMemo(() => journalAtCursor(entries, cursor), [cursor, entries]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     markerSource.update({
-      legs: trade.legs,
+      legs: overlay.trades ? trade.legs : [],
       notes: overlay.notes ? filterJournalNoteMarkers([...notes, ...reviewNotes], overlay, cursor * 1000) : [],
       cursorSec: cursor,
       intervalSec,
@@ -275,6 +277,23 @@ export default function QuickReplayOverlay({
     const fine = positionAt(trade, fineClosed, cursor, stepSec);
     return { ...atCursor, mfe: fine.mfe, mae: fine.mae };
   }, [cursor, fineBars, intervalSec, shown, stepSec, trade]);
+  const entryLineColor = tokenColor("--accent-blue", "royalblue");
+  useLayoutEffect(() => {
+    const price = position.avgEntry;
+    if (!overlay.positions || lastVisible === null || price === null || !Number.isFinite(price) || price <= 0) {
+      priceLineSource.setLines([]);
+      return;
+    }
+    // Only committed fills before the cursor establish an open position.
+    priceLineSource.setLines([{
+      id: `quick-replay:entry:${trade.id}`,
+      price,
+      color: entryLineColor,
+      title: t(trade.direction === "long" ? "trading.chart.long" : "trading.chart.short", { qty: formatQty(position.qty) }),
+      style: "solid",
+      width: 2,
+    }]);
+  }, [entryLineColor, lastVisible, locale, overlay.positions, position.avgEntry, position.qty, priceLineSource, trade.direction, trade.id]);
   const plan = detail?.plan && detail.plan.lockedAtMs < cursor * 1000 ? detail.plan : null;
   const risk = plan?.riskUsdt ? Number(plan.riskUsdt) : null;
   const toR = (value: number | null) => (value === null || !risk ? null : (value / risk).toFixed(2));
@@ -411,6 +430,7 @@ export default function QuickReplayOverlay({
               canLoadMoreLeft={false}
               canRestoreLatestWindow={false}
               externalMarkerSource={markerSource}
+              externalPriceLineSource={priceLineSource}
               mainOverlayLines={indicators.view.mainOverlayLines}
               subPanes={indicators.view.subPanes}
               indicatorMarkers={indicators.view.markers}
