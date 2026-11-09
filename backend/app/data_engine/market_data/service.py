@@ -40,6 +40,8 @@ from app.exchanges import (
     get_shared_rate_limit_manager,
 )
 
+from app.exchanges.models import ExchangeCapabilities, HistoryEmptyPageSemantics
+
 from .events import HubRecord, MarketStateEvent
 from .hub import MarketEventHub, MarketHubSubscription
 from .lifecycle import KeyedAsyncLockPool, drain_cancellation_safe_cleanup
@@ -455,7 +457,7 @@ class MarketDataService:
         """
 
         self._ensure_open()
-        self._validate_key(key, history=True)
+        capabilities = self._validate_key(key, history=True)
         if mode not in {None, "local_only", "fill_missing", "refresh"}:
             raise ValueError("history mode must be local_only, fill_missing or refresh")
         if not 1 <= limit <= 1000:
@@ -542,6 +544,13 @@ class MarketDataService:
             )
         if mode == "fill_missing" and not hybrid_funding:
             raise ValueError("fill_missing requires bounded native Binance futures funding or OI history")
+        capability = capabilities.channel_capability(key.channel, key.market_type)
+        policy = capability.history_policy if capability else None
+        if policy and policy.empty_page_semantics is HistoryEmptyPageSemantics.INCONCLUSIVE:
+            return await self._observed_metric_history_page(
+                event_key, descriptor, start_ms=start_ms, end_ms=end_ms, limit=limit,
+                mode=mode, plan=refresh_plan,
+            )
         if mode == "local_only":
             if hybrid_funding:
                 result = await self._build_hybrid_funding_history(
@@ -658,6 +667,63 @@ class MarketDataService:
         return MarketHistoryPage(
             events=self._apply_history_event_cutoff(persisted_events, refresh_plan),
             excluded_ranges=refresh_plan.excluded_ranges,
+        )
+
+    async def _observed_metric_history_page(
+        self, key: MarketStreamKey, descriptor: StreamDescriptor, *,
+        start_ms: int | None, end_ms: int | None, limit: int,
+        mode: str | None, plan: _HistoryRefreshPlan,
+    ) -> MarketHistoryPage:
+        # The unified method returns observations. An empty or short result
+        # supplies neither a proof of absence nor a provider pagination cursor.
+        async def read_local() -> list[MarketStateEvent]:
+            events = await self._read_persisted_history(
+                key, period=descriptor.interval, limit=limit, start_ms=start_ms, end_ms=end_ms,
+            )
+            return self._apply_history_event_cutoff(events, plan)
+
+        events = await read_local()
+        fallback = False
+        if mode != "local_only" and plan.should_fetch:
+            try:
+                raw = await self._fetch_market(
+                    descriptor, limit=min(limit, plan.max_page_size or limit),
+                    start_ms=plan.start_ms, end_ms=plan.end_ms, history=True,
+                )
+            except ValueError:
+                raise
+            except Exception:
+                if not events:
+                    raise
+                logger.warning("Metric history fetch failed; serving local %s observations",
+                               key.topic, exc_info=True)
+                fallback = True
+            else:
+                projected = [
+                    projected for event in raw
+                    if (plan.start_ms is None or event.event_time_ms >= plan.start_ms)
+                    and (plan.end_ms is None or event.event_time_ms <= plan.end_ms)
+                    and (projected := self._project(event, key)) is not None
+                ]
+                if self._metrics_repository is None:
+                    events = self._apply_history_event_cutoff(projected, plan)
+                else:
+                    await self._persist_final_history(projected, period=descriptor.interval)
+                    events = await read_local()
+
+        missing = (
+            missing_ranges(start_ms, end_ms, list(plan.excluded_ranges))
+            if start_ms is not None and end_ms is not None else []
+        )
+        complete = start_ms is not None and end_ms is not None and not missing
+        return MarketHistoryPage(
+            events=events, fallback=fallback, complete=complete, retryable=fallback,
+            terminal_reason=plan.terminal_reason if complete else None,
+            earliest_available_ms=plan.earliest_available_ms,
+            availability_revision=plan.availability_revision,
+            excluded_ranges=plan.excluded_ranges, covered_ranges=(),
+            missing_ranges=tuple(missing), has_more=False,
+            query_mode=mode, coverage_basis="observations_only",
         )
 
     async def _sparse_funding_history_page(
@@ -2840,7 +2906,7 @@ class MarketDataService:
             raise RuntimeError("market data service is closed")
 
     @staticmethod
-    def _validate_key(key: MarketStreamKey, *, history: bool) -> None:
+    def _validate_key(key: MarketStreamKey, *, history: bool) -> ExchangeCapabilities:
         if key.params:
             raise ValueError("P1 realtime market streams do not accept params")
         if len(key.symbol) > 64:
@@ -2869,6 +2935,7 @@ class MarketDataService:
             raise ValueError(
                 f"{key.exchange}:{key.market_type}:{key.channel.value} does not support {mode}",
             )
+        return capabilities
 
 
 def _inferred_funding_interval_ms(

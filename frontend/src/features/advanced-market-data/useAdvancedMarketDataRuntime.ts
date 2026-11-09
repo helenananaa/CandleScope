@@ -26,6 +26,8 @@ import {
   coverageRangesForHistoryPage,
   mergeHistoryCoverage,
   nextUncoveredHistoryRange,
+  observationHistoryWindowKey,
+  OBSERVATIONS_ONLY_HISTORY,
   OpenInterestHistoryRetryBudget,
   openInterestSampleCells,
   type MarketHistoryRange,
@@ -87,6 +89,7 @@ interface OwnedHistoryErrorState {
 const MAX_HISTORY_PAGES_PER_LOAD = 8;
 const HISTORY_RETRY_DELAY_MS = 30_000;
 const HISTORY_CONTINUATION_DELAY_MS = 50;
+const MAX_OBSERVATION_HISTORY_WINDOWS = 128;
 const INITIAL_HISTORY_TAIL_BARS = 120;
 const INITIAL_HISTORY_TAIL_DURATION_MS = 10 * 24 * 60 * 60 * 1000;
 const EMPTY_HISTORY_ERRORS: Partial<Record<MarketStateMetricChannel, string>> = Object.freeze({});
@@ -358,6 +361,7 @@ export function useAdvancedMarketDataRuntime({
   const inFlightRef = useRef(new Set<string>());
   const inFlightCoverageRef = useRef(new Map<string, MarketHistoryRange[]>());
   const coverageRef = useRef(new Map<string, MarketHistoryRange[]>());
+  const observedHistoryWindowsRef = useRef(new Map<string, Set<string>>());
   const coverageIdentityRef = useRef(identityKey);
   const historyRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const historyContinuationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -417,6 +421,7 @@ export function useAdvancedMarketDataRuntime({
     clearHistoryContinuationTimer();
     if (clearCoverage) {
       coverageRef.current = new Map();
+      observedHistoryWindowsRef.current.clear();
       coverageExpiryRef.current.clear();
     }
   }, [clearHistoryContinuationTimer, clearHistoryRetryTimer]);
@@ -517,7 +522,8 @@ export function useAdvancedMarketDataRuntime({
     for (const descriptor of requests) {
       const nativeOi = descriptor.channel === "open_interest"
         && context.identity.exchange === "binance" && context.identity.marketType === "futures";
-      const forceRefresh = nativeOi && (refresh === true || refresh === descriptor.channel);
+      const observationHistory = !nativeOi && capabilitySnapshot.channels[descriptor.channel].observationsOnly;
+      const forceRefresh = (nativeOi || observationHistory) && (refresh === true || refresh === descriptor.channel);
       const stepMs = nativeOi ? (parseIntervalSeconds(oiPeriod) ?? 0) * 1000 : 0;
       const oiBudget = oiHistoryRetryBudgetRef.current;
       const deferredRanges = (range: MarketHistoryRange) => {
@@ -544,11 +550,20 @@ export function useAdvancedMarketDataRuntime({
         requested,
       );
       if (!requestRange) continue;
-      const requestKey = [
-        coverageKey,
-        requestRange.startMs,
-        requestRange.endMs,
-      ].join(":");
+      const observationWindow = observationHistory
+        ? observationHistoryWindowKey(requested,
+          (parseIntervalSeconds(descriptor.period || context.interval) ?? 60) * 1000)
+        : null;
+      const observedWindows = observedHistoryWindowsRef.current;
+      if (observationWindow && observedWindows.get(coverageKey)?.has(observationWindow)) continue;
+      const requestKey = `${coverageKey}:${observationWindow ?? `${requestRange.startMs}:${requestRange.endMs}`}`;
+      const recordObservationAttempt = () => {
+        if (observationWindow === null) return;
+        const windows = observedWindows.get(coverageKey) || new Set<string>();
+        windows.add(observationWindow);
+        if (windows.size > MAX_OBSERVATION_HISTORY_WINDOWS) windows.delete(windows.values().next().value!);
+        observedWindows.set(coverageKey, windows);
+      };
       if (inFlight.has(requestKey)) continue;
       scheduled = true;
       const sampleCells = stepMs ? openInterestSampleCells(requestRange, stepMs) : null;
@@ -642,6 +657,23 @@ export function useAdvancedMarketDataRuntime({
               payload.data,
               descriptor.period,
             );
+            if (payload.coverage.basis === OBSERVATIONS_ONLY_HISTORY) {
+              // Remember the acquisition window, without promoting it to coverage.
+              recordObservationAttempt();
+              if (payload.fallback) {
+                setHistoryErrorState((current) => !isCurrentRequest() ? current : ({
+                  historyContextKey: expectedHistoryContextKey,
+                  errors: {
+                    ...(current.historyContextKey === expectedHistoryContextKey ? current.errors : {}),
+                    [descriptor.channel]: locale === "zh-CN" ? "来源请求失败，正在显示本地观测。"
+                      : "The source request failed. Showing local observations.",
+                  },
+                }));
+              } else {
+                clearHistoryError();
+              }
+              return;
+            }
             const covered = coverageRangesForHistoryPage(
               pageRange,
               payload,
@@ -726,6 +758,10 @@ export function useAdvancedMarketDataRuntime({
               },
             };
           });
+          if (observationHistory) {
+            recordObservationAttempt();
+            return;
+          }
           const retryAllowed = stepMs && lastPageRange && openInterestSampleCells(lastPageRange, stepMs)
             ? failOiRange(lastPageRange)
             : lastGapKey === null || historyGapBudgetRef.current.fail(lastGapKey);
@@ -754,7 +790,7 @@ export function useAdvancedMarketDataRuntime({
       })();
     }
     return scheduled;
-  }, [locale, scheduleHistoryContinuation, scheduleHistoryRetry]);
+  }, [capabilitySnapshot, locale, scheduleHistoryContinuation, scheduleHistoryRetry]);
 
   const ensureVisibleRange = useCallback((range: unknown): boolean => {
     const requested = parseVisibleTimeRange(range);
@@ -777,18 +813,22 @@ export function useAdvancedMarketDataRuntime({
     liquidations.retry();
   }, [historyContextKey, identityKey, invalidateHistoryRequests, liquidations, streamEnabled]);
 
-  const retryOpenInterestHistory = useCallback(() => {
+  const retryMarketHistory = useCallback((channel: MarketStateMetricChannel) => {
     const context = activeRef.current;
-    if (!context.metricChannels.includes("open_interest")
-      || context.identity.exchange !== "binance" || context.identity.marketType !== "futures") return;
+    const nativeOi = channel === "open_interest"
+      && context.identity.exchange === "binance" && context.identity.marketType === "futures";
+    if (!context.metricChannels.includes(channel)
+      || (!nativeOi && !capabilitySnapshot.channels[channel].observationsOnly)) return;
     invalidateHistoryRequests();
-    const coverageKey = [context.identityKey, "open_interest", resolveOpenInterestPeriod(context.interval), "sparse"].join(":");
+    const period = channel === "open_interest" ? resolveOpenInterestPeriod(context.interval) : "none";
+    const coverageKey = [context.identityKey, channel, period, "sparse"].join(":");
     coverageRef.current.delete(coverageKey);
     coverageExpiryRef.current.delete(coverageKey);
-    historyRefreshRef.current = "open_interest";
-    setOiRefreshFallbackContextKey(null);
+    observedHistoryWindowsRef.current.delete(coverageKey);
+    historyRefreshRef.current = channel;
+    if (nativeOi) setOiRefreshFallbackContextKey(null);
     setHistoryRetryToken((value) => value + 1);
-  }, [invalidateHistoryRequests]);
+  }, [capabilitySnapshot, invalidateHistoryRequests]);
 
   useEffect(() => {
     const identityChanged = coverageIdentityRef.current !== identityKey;
@@ -918,6 +958,9 @@ export function useAdvancedMarketDataRuntime({
       const stateCapability = isMarketStateMetricChannel(item.channel)
         ? capabilitySnapshot.channels[item.channel]
         : null;
+      const nativeOi = item.channel === "open_interest"
+        && identity.exchange === "binance" && identity.marketType === "futures";
+      const observationHistory = stateCapability?.observationsOnly && !nativeOi;
       const oiRefreshFallback = item.channel === "open_interest"
         && oiRefreshFallbackContextKey === historyContextKey
         ? (locale === "zh-CN" ? "刷新未完成，正在展示本地历史。"
@@ -947,6 +990,11 @@ export function useAdvancedMarketDataRuntime({
         paneTarget: "sub" as const,
         supported: capability.supported,
         supportReason: capability.reason,
+        canRefreshHistory: !!stateCapability?.history && (nativeOi || !!observationHistory),
+        ...(observationHistory ? {
+          historyNote: locale === "zh-CN" ? "仅显示来源返回的观测，历史覆盖未经验证。"
+            : "Showing available observations. Historical coverage is unverified.",
+        } : {}),
         status,
         error,
       };
@@ -956,6 +1004,8 @@ export function useAdvancedMarketDataRuntime({
     capabilitySnapshot,
     historyContextKey,
     historyErrors,
+    identity.exchange,
+    identity.marketType,
     oiRefreshFallbackContextKey,
     liquidations.view.connectionStatus,
     liquidations.view.error,
@@ -1002,7 +1052,7 @@ export function useAdvancedMarketDataRuntime({
     actions: {
       ensureVisibleRange,
       retry,
-      retryOpenInterestHistory,
+      retryMarketHistory,
       addMarketStudy,
       removeMarketStudy,
       toggleMarketStudyVisibility,
@@ -1016,7 +1066,7 @@ export function useAdvancedMarketDataRuntime({
     liquidations.view.enabled,
     removeMarketStudy,
     retry,
-    retryOpenInterestHistory,
+    retryMarketHistory,
     toggleMarketStudyVisibility,
     view,
   ]);

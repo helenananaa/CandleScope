@@ -954,6 +954,49 @@ async def test_hybrid_funding_is_dense_no_lookahead_and_excludes_forming_bar(
     await service.shutdown()
 
 
+@pytest.mark.parametrize("channel, period", [
+    (MarketChannel.OPEN_INTEREST, "5m"),
+    (MarketChannel.FUNDING_RATE, None),
+])
+@_async_test
+async def test_ccxt_metric_history_observes_without_certifying_empty_or_short_pages(
+    tmp_path, monkeypatch, channel, period,
+) -> None:
+    now_ms = 1_790_000_000_000
+    start_ms, end_ms = now_ms - 2_400_000, now_ms - 1_800_000
+    monkeypatch.setattr("app.data_engine.market_data.service.time.time", lambda: now_ms / 1000)
+    repository = MarketMetricsRepository(tmp_path / "ccxt-metrics.sqlite")
+    factory = _Factory()
+    service = MarketDataService(factory, metrics_repository=repository)
+    key = MarketStreamKey.build("binanceusdm", "swap.linear", "BTCUSDT", channel)
+    kwargs = dict(period=period, start_ms=start_ms, end_ms=end_ms, limit=20)
+
+    class EmptyFactory:
+        async def fetch_market(self, *_args, **_kwargs):
+            return []
+
+    empty_service = MarketDataService(EmptyFactory(), metrics_repository=repository)
+    empty = await empty_service.history_page(key, **kwargs)
+    assert not empty.events and empty.complete is False and empty.has_more is False
+    assert empty.coverage_basis == "observations_only"
+    assert empty.covered_ranges == ()
+    assert empty.missing_ranges == ({"start_ms": start_ms, "end_ms": end_ms},)
+    await empty_service.shutdown()
+
+    observed = await service.history_page(key, **kwargs, mode="refresh")
+    assert [event.event_time_ms for event in observed.events] == [start_ms]
+    assert observed.covered_ranges == () and observed.missing_ranges == empty.missing_ranges
+    assert observed.complete is False and observed.query_mode == "refresh"
+    factory.fail_history = True
+    fallback = await service.history_page(key, **kwargs)
+    assert fallback.events == observed.events and fallback.fallback and fallback.retryable
+    assert fallback.complete is False and fallback.covered_ranges == ()
+    local = await service.history_page(key, **kwargs, mode="local_only")
+    assert local.events == observed.events and local.complete is False
+    assert not local.fallback and not local.retryable and len(factory.fetch_calls) == 2
+    await service.shutdown()
+
+
 @_async_test
 async def test_hybrid_funding_service_canonicalizes_irregular_period_alias(tmp_path) -> None:
     repository = MarketMetricsRepository(tmp_path / "hybrid-canonical-period.sqlite")

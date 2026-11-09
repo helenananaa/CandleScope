@@ -7,6 +7,12 @@ export interface MarketHistoryRange {
 
 export type MarketHistoryPageDirection = "forward" | "backward";
 
+export const OBSERVATIONS_ONLY_HISTORY = "observations_only";
+
+export function observationHistoryWindowKey(range: MarketHistoryRange, stepMs: number): string {
+  return `${Math.floor(range.startMs / stepMs)}:${Math.floor(range.endMs / stepMs)}`;
+}
+
 /** Stop retrying an unresolved native page until explicit retry or context change. */
 export class HistoryGapRetryBudget {
   private readonly failures = new Map<string, number>();

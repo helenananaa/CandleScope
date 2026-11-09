@@ -468,9 +468,7 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
                 history_policy=(
                     HistoryAvailabilityPolicy(
                         cadence=HistoryCadence.SCHEDULED,
-                        empty_page_semantics=(
-                            HistoryEmptyPageSemantics.AUTHORITATIVE_RANGE_EMPTY
-                        ),
+                        empty_page_semantics=HistoryEmptyPageSemantics.INCONCLUSIVE,
                         calendar_id=CRYPTO_24X7_CALENDAR_ID,
                         timezone="UTC",
                         max_page_size=entry.history_limit,
@@ -510,9 +508,7 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
                 history_policy=(
                     HistoryAvailabilityPolicy(
                         cadence=HistoryCadence.REGULAR,
-                        empty_page_semantics=(
-                            HistoryEmptyPageSemantics.AUTHORITATIVE_RANGE_EMPTY
-                        ),
+                        empty_page_semantics=HistoryEmptyPageSemantics.INCONCLUSIVE,
                         calendar_id=CRYPTO_24X7_CALENDAR_ID,
                         timezone="UTC",
                         max_page_size=entry.history_limit,
