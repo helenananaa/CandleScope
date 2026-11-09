@@ -30,18 +30,14 @@ class MemoryReservation:
         self.budget, self.owner, self.size = budget, owner, size
         self.active = True
 
-    def retain(self, bytes_needed, commit):
+    def retain(self, bytes_needed, commit, *, reclaim=None):
         if bytes_needed < 0:
             raise ValueError("retained size must be non-negative")
         with self.budget._lock:
             if not self.active:
                 raise RuntimeError("memory reservation has already been consumed")
-            snapshot = self.budget.snapshot()
-            item = snapshot["owners"][self.owner]
-            if (snapshot["estimated_bytes"] + snapshot["reserved_bytes"] - self.size + bytes_needed > self.budget.total_bytes
-                    or item.get("estimated_bytes", 0) + item["reserved_bytes"] - self.size + bytes_needed > item["limit_bytes"]):
-                self.budget.rejections += 1
-                raise MemoryBudgetExceeded(f"retained memory admission deferred for {self.owner}")
+            self.budget._admit(self.owner, bytes_needed - self.size, reclaim,
+                               operation="retained memory")
             commit()
             self.budget._reserved[self.owner] -= self.size
             self.size = 0
@@ -165,19 +161,41 @@ class MemoryBudget:
                 "admission_rejections": self.rejections, "owners": result,
                 "heap_measurement": "deduplicated reachable Python values; excludes allocator/RSS and external memory" if measure_heap else "not_requested"}
 
+    def _shortfall(self, owner, delta):
+        snapshot = self.snapshot()
+        item = snapshot["owners"][owner]
+        shared = snapshot["estimated_bytes"] + snapshot["reserved_bytes"] + delta - self.total_bytes
+        local = item.get("estimated_bytes", 0) + item["reserved_bytes"] + delta - item["limit_bytes"]
+        return shared, max(local, 0)
+
+    def _admit(self, owner, delta, reclaim, *, reclaim_shared=True, operation="memory"):
+        shared, local = self._shortfall(owner, delta)
+        shortfall = max(shared, local)
+        if reclaim is None:
+            if not shortfall:
+                return
+        elif (reclaim_shared or shared <= local) and reclaim(shortfall):
+            if not shortfall or max(self._shortfall(owner, delta)) == 0:
+                return
+        self.rejections += 1
+        raise MemoryBudgetExceeded(f"{operation} admission deferred for {owner}")
+
     @contextmanager
-    def reserve(self, owner, bytes_needed):
+    def reserve(self, owner, bytes_needed, *, reclaim=None, reclaim_shared=True):
+        """Admit work, optionally reclaiming only this owner's reusable values.
+
+        The synchronous reclaim callback runs under the budget lock and receives
+        the byte shortfall, including zero. It may enforce local capacity as
+        well. The caller must already hold its owner lock; the callback must
+        update the usage counter, avoid I/O and other locks, and return False
+        without evicting if it cannot meet the request. The same rules apply
+        when transferring a reservation with retain(). Opportunistic work
+        can decline reclamation beyond the owner's own limit.
+        """
         if bytes_needed < 0:
             raise ValueError("reservation must be non-negative")
         with self._lock:
-            if owner not in self._owners:
-                raise KeyError(owner)
-            snapshot = self.snapshot()
-            item = snapshot["owners"][owner]
-            if (snapshot["estimated_bytes"] + snapshot["reserved_bytes"] + bytes_needed > self.total_bytes
-                    or item.get("estimated_bytes", 0) + item["reserved_bytes"] + bytes_needed > item["limit_bytes"]):
-                self.rejections += 1
-                raise MemoryBudgetExceeded(f"memory admission deferred for {owner}")
+            self._admit(owner, bytes_needed, reclaim, reclaim_shared=reclaim_shared)
             self._reserved[owner] += bytes_needed
         lease = MemoryReservation(self, owner, bytes_needed)
         try:

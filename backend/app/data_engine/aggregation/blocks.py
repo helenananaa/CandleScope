@@ -248,9 +248,8 @@ class SharedBlockManager:
                 raise BlockRevisionChanged("block manager changed during acquisition")
             if len(self._views) >= self.max_views:
                 raise MemoryBudgetExceeded("block read-view capacity exhausted")
-            self._make_room(size)
             view = BlockView(self, revisions, generation, size)
-            with self.budget.reserve(self.owner, size) as admission:
+            with self.budget.reserve(self.owner, size, reclaim=self._make_room) as admission:
                 def commit():
                     self._views.add(view)
                     self._bytes += size
@@ -294,11 +293,10 @@ class SharedBlockManager:
         else:
             self._bytes -= entry.size
 
-    def _make_room(self, extra, slots=0, exclude=None):
-        bytes_needed = self._bytes + extra - self.max_bytes
+    def _make_room(self, bytes_needed, *, slots=0, exclude=None):
         slots_needed = len(self._entries) + len(self._retired) + slots - self.max_entries
         if bytes_needed <= 0 and slots_needed <= 0:
-            return
+            return True
         # Keep only the LRU victims. A saturated cache usually needs a single
         # eviction, so copying every retained entry would dominate small builds.
         victims = []
@@ -309,12 +307,13 @@ class SharedBlockManager:
                 slots_needed -= 1
                 if bytes_needed <= 0 and slots_needed <= 0:
                     break
+        if bytes_needed > 0 or slots_needed > 0:
+            return False
         for key, entry in victims:
             self._drop(key, entry)
             self._metrics["evictions"] += 1
         self._publish_usage()
-        if bytes_needed > 0 or slots_needed > 0:
-            raise MemoryBudgetExceeded("block capacity is held by active consumers")
+        return True
 
     def _invalidate(self, series, domain, *, except_version=None, start_ms=None, end_ms=None,
                     proof=None):
@@ -411,14 +410,15 @@ class SharedBlockManager:
             self._bytes -= entry.size
         self._publish_usage()
 
-    def acquire(self, key, view, build=None, *, work_bytes=64 * 1024, cancel=None):
+    def acquire(self, key, view, build=None, *, work_bytes=64 * 1024, cancel=None, reclaim_shared=True):
         """Join one pure build; cancellation only releases this participant.
 
         Inputs and output construction must fit work_bytes (caller-owned input
         pages remain charged to their existing owner). Returned leases expire
         with their view. A caller may not publish results until view exit passes.
         With no builder this is a cache-only lookup: a miss returns None without
-        I/O, a flight, or waiting for another consumer's build.
+        I/O, a flight, or waiting for another consumer's build. Optional
+        consumers can avoid displacing retained values under shared pressure.
         """
         cache_key = (key, view.revisions)
         owner = False
@@ -430,8 +430,8 @@ class SharedBlockManager:
                 raise MemoryBudgetExceeded("block lease capacity exhausted")
             entry = self._entries.get(cache_key)
             if entry is not None:
-                self._make_room(self.LEASE_BYTES, exclude=cache_key)
-                with self.budget.reserve(self.owner, self.LEASE_BYTES) as admission:
+                with self.budget.reserve(self.owner, self.LEASE_BYTES,
+                                         reclaim=lambda shortfall: self._make_room(shortfall, exclude=cache_key)) as admission:
                     def commit():
                         self._bytes += self.LEASE_BYTES
                         self._claimed += 1
@@ -451,8 +451,9 @@ class SharedBlockManager:
                     raise MemoryBudgetExceeded("block working allowance exceeds its owner budget")
                 if len(self._flights) >= self.max_flights:
                     raise MemoryBudgetExceeded("block build capacity exhausted")
-                self._make_room(work_bytes + 2048)
-                reservation = self.budget.reserve(self.owner, work_bytes + 2048)
+                reservation = self.budget.reserve(
+                    self.owner, work_bytes + 2048, reclaim=self._make_room, reclaim_shared=reclaim_shared,
+                )
                 admission = reservation.__enter__()
                 flight = _Flight(Future(), owner_thread=threading.get_ident())
                 self._flights[cache_key] = flight
@@ -487,7 +488,6 @@ class SharedBlockManager:
                     self._version += 1
                     entry = _Entry(SharedBlock(key, self._version, summary), size, flight.participants)
                     cost = size + entry.pins * self.LEASE_BYTES
-                    self._make_room(cost, slots=1)
                     def commit():
                         self._entries[cache_key] = entry
                         for dep in view.revisions:
@@ -495,7 +495,7 @@ class SharedBlockManager:
                             versions.setdefault(dep.version, set()).add(cache_key)
                         self._bytes += cost
                         self._publish_usage()
-                    admission.retain(cost, commit)
+                    admission.retain(cost, commit, reclaim=lambda shortfall: self._make_room(shortfall, slots=1))
                     flight.future.set_result(entry)
             except BaseException as exc:
                 with self._lock:
