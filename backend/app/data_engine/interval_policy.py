@@ -63,7 +63,7 @@ INTERVAL_SECONDS = {
 }
 
 
-def row_is_closed(row: dict, default: bool = True) -> bool:
+def row_is_closed(row: Mapping[str, Any], default: bool = True) -> bool:
     """Read the canonical close state while tolerating legacy wire aliases."""
     value = row.get("is_closed", row.get("isClosed"))
     if value is None:
@@ -559,10 +559,13 @@ def aggregate_kline_rows(
     component_rows: Sequence[Mapping[str, Any]],
     *,
     target_interval: str,
-    source_interval: str,
+    source_interval: str | None,
     now_ms: int,
 ) -> list[dict[str, Any]]:
     """Safely rebuild closed target K-lines from complete stored components.
+
+    A single source interval may be passed once. Mixed inputs declare their
+    canonical interval on each row and must tile the target without overlaps.
 
     The helper is intentionally strict.  A target bucket is emitted only when
     every expected source open is present, every component has its canonical
@@ -579,86 +582,54 @@ def aggregate_kline_rows(
     component supplies a valid value, matching the existing calendar-month
     aggregation semantics.
     """
-    target_ms = parse_interval_ms(target_interval)
-    source_spec = parse_interval_spec(source_interval)
-    if (
-        not component_rows
-        or target_ms is None
-        or source_spec is None
-        or target_ms <= source_spec.nominal_ms
-        or source_spec.nominal_ms <= 0
-    ):
+    target = parse_interval_spec(target_interval)
+    source = parse_interval_spec(source_interval) if source_interval is not None else None
+    if not component_rows or target is None or (source_interval is not None and source is None):
         return []
 
-    last_closed_ms = last_closed_bar_open_ms(int(now_ms), target_interval)
-    if last_closed_ms is None:
-        return []
-
-    rows_by_open: dict[int, dict[str, Any]] = {}
-    for raw in component_rows:
+    buckets: dict[int, list[tuple[int, Mapping[str, Any]]]] = {}
+    for row in component_rows:
         try:
-            row = dict(raw)
-            open_time_ms = int(row["open_time"])
+            opened = int(row["open_time"])
         except (KeyError, TypeError, ValueError):
             continue
-        # A duplicate component makes the source ambiguous.  Refuse that
-        # target bucket instead of silently choosing a row.
-        if open_time_ms in rows_by_open:
-            rows_by_open[open_time_ms] = {}
-        else:
-            rows_by_open[open_time_ms] = row
+        bucket_open = target.floor_ms(opened)
+        buckets.setdefault(bucket_open, []).append((opened, row))
 
-    bucket_opens = sorted({
-        compute_bucket_start_ms(
-            open_time_ms,
-            target_ms,
-            interval=target_interval,
-        )
-        for open_time_ms in rows_by_open
-    })
     rebuilt: list[dict[str, Any]] = []
-
-    for bucket_open_ms in bucket_opens:
-        if bucket_open_ms > last_closed_ms:
+    for bucket_open in sorted(buckets):
+        bucket_end = target.next_ms(bucket_open)
+        if bucket_end > now_ms:
             continue
-        bucket_end_ms = compute_bucket_end_ms(
-            bucket_open_ms,
-            target_ms,
-            interval=target_interval,
-        )
-
+        covered_to = bucket_open
         rows = []
-        component_open_ms = bucket_open_ms
-        while component_open_ms < bucket_end_ms:
-            row = rows_by_open.get(component_open_ms)
-            if not row:
+        for opened, row in sorted(buckets[bucket_open], key=lambda item: item[0]):
+            spec = source or parse_interval_spec(row.get("interval"))
+            if (
+                opened != covered_to or spec is None
+                or spec.nominal_ms >= target.nominal_ms or spec.floor_ms(opened) != opened
+            ):
                 break
-            next_open_ms = source_spec.next_ms(component_open_ms)
-            if next_open_ms > bucket_end_ms or not _stored_component_is_closed(
-                row,
-                open_time_ms=component_open_ms,
-                source_end_ms=next_open_ms,
-                now_ms=now_ms,
+            end = spec.next_ms(opened)
+            if end > bucket_end or not _stored_component_is_closed(
+                row, open_time_ms=opened, source_end_ms=end, now_ms=now_ms,
             ):
                 break
             rows.append(row)
-            component_open_ms = next_open_ms
-        # The first missing, ambiguous or unclosed component disproves the
-        # whole bucket. Only retained components need their bounds expanded.
-        if component_open_ms != bucket_end_ms:
-            continue
-
-        try:
-            rebuilt.append({
-                "open_time": bucket_open_ms,
-                "close_time": bucket_end_ms - 1,
-                **chart_field_summary(rows, validate_ohlcv=True).project(),
-                "is_closed": True,
-            })
-        except (KeyError, OverflowError, TypeError, ValueError):
-            # A malformed component must not produce a plausible-looking
-            # reconstructed candle.
-            continue
+            covered_to = end
+        else:
+            if covered_to != bucket_end:
+                continue
+            try:
+                rebuilt.append({
+                    "open_time": bucket_open,
+                    "close_time": bucket_end - 1,
+                    **chart_field_summary(rows, validate_ohlcv=True).project(),
+                    "is_closed": True,
+                })
+            except (KeyError, OverflowError, TypeError, ValueError):
+                # Malformed values cannot prove a final target candle.
+                continue
 
     return rebuilt
 
@@ -671,7 +642,7 @@ def _stored_component_is_closed(
     now_ms: int,
 ) -> bool:
     """Validate one storage-shaped source component for strict reconstruction."""
-    if not row_is_closed(dict(row), default=True):
+    if not row_is_closed(row, default=True):
         return False
     try:
         close_time_ms = int(row["close_time"])

@@ -1010,7 +1010,6 @@ async def start_data_engine() -> DataEngineRuntime:
             _calendar_resolver,
             registry=history_service.calendars,
         )
-        dm.wire_backfill_reconciler(backfill_engine.reconciler)
 
         backfill_coordinator = BackfillCoordinator(
             storage=storage,

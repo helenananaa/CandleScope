@@ -4,7 +4,6 @@ import asyncio
 from datetime import datetime, timezone
 
 from app.data_engine.backfill.config import BackfillConfig
-from app.data_engine.backfill.models import FetchedBar
 from app.data_engine.backfill.reconciler import Reconciler
 from app.data_engine.bar_aggregator import BarAggregator, BarAggregatorConfig
 from app.data_engine.data_manager.cache import BarCache
@@ -144,41 +143,18 @@ def _aggregate_with_maintenance(
     )
 
 
-def _aggregate_with_backfill_fallback(
+def _aggregate_with_reconciler(
     target_interval: str,
+    source_interval: str,
     rows: list[dict],
 ) -> list[dict]:
-    custom_ms = parse_interval_ms(target_interval)
-    assert custom_ms is not None
-    bars = [
-        FetchedBar(
-            symbol="BTC-USDT",
-            interval="base",
-            open_time=int(row["open_time"]),
-            close_time=int(row["close_time"]),
-            open=float(row["open"]),
-            high=float(row["high"]),
-            low=float(row["low"]),
-            close=float(row["close"]),
-            volume=float(row["volume"]),
-            exchange="okx",
-            market_type="spot",
-            quote_volume=float(row.get("quote_volume", 0)),
-            trades=int(row.get("trades", 0)),
-            taker_buy_base=float(row.get("taker_buy_base", 0)),
-            taker_buy_quote=float(row.get("taker_buy_quote", 0)),
-        )
-        for row in rows
-    ]
     reconciler = Reconciler(BackfillConfig(), storage=None)  # type: ignore[arg-type]
     return [
         bar.to_storage_dict()
-        for bar in reconciler._aggregate_to_custom(
-            bars,
-            "BTC-USDT",
-            target_interval,
-            custom_ms,
-            0,
+        for bar in reconciler._reduce_custom_rows(
+            [{**row, "interval": source_interval} for row in rows],
+            "BTC-USDT", target_interval, "okx", "spot",
+            max(row["close_time"] for row in rows) + 1,
         )
     ]
 
@@ -386,7 +362,7 @@ def test_custom_interval_paths_match_for_45m_91m_and_2m() -> None:
         via_agg = await _aggregate_with_bar_aggregator(target_interval, source_interval, rows)
         via_query = await _aggregate_with_query(target_interval, source_interval, rows)
         via_maintenance = _aggregate_with_maintenance(target_interval, source_interval, rows)
-        via_backfill = _aggregate_with_backfill_fallback(target_interval, rows)
+        via_backfill = _aggregate_with_reconciler(target_interval, source_interval, rows)
 
         expected = [_as_ohlcv(row) for row in via_agg]
         assert [_as_ohlcv(row) for row in via_query] == expected

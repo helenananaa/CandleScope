@@ -239,13 +239,6 @@ _FULL_ORDER_BOOK_PROVIDER = MarketDataProviderDescriptor(
 )
 
 
-class BackfillReconcilerLike(Protocol):
-    """Minimal backfill reconciler contract used during runtime wiring."""
-
-    def set_bar_aggregator(self, aggregator: BarAggregator) -> None:
-        ...
-
-
 class PriceStreamControllerLike(Protocol):
     """Optional controller contract for DataManager-owned price streams."""
 
@@ -627,13 +620,6 @@ class DataManager(DataManagerCore):
     @property
     def full_order_book_ready(self) -> bool:
         return self._full_order_book_service is not None
-
-    def wire_backfill_reconciler(self, reconciler: BackfillReconcilerLike) -> None:
-        """Attach this manager's BarAggregator to a backfill reconciler."""
-        set_bar_aggregator = getattr(reconciler, "set_bar_aggregator", None)
-        if not callable(set_bar_aggregator):
-            raise TypeError("reconciler must expose set_bar_aggregator()")
-        set_bar_aggregator(self.bar_aggregator)
 
     async def emit_event(self, event: DataEvent) -> None:
         """Emit a DataEvent through the manager-owned event bus."""
