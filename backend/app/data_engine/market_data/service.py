@@ -45,7 +45,9 @@ from .hub import MarketEventHub, MarketHubSubscription
 from .lifecycle import KeyedAsyncLockPool, drain_cancellation_safe_cleanup
 from .models import MarketChannel, MarketStreamKey
 from .storage_writer import MarketMetricStorageWriter
-from .oi_history import merge_ranges, missing_ranges
+from .oi_history import (
+    merge_ranges, missing_ranges, unsampled_prefixes, verified_sample_ranges,
+)
 
 
 logger = logging.getLogger("data_engine.market_data")
@@ -779,8 +781,8 @@ class MarketDataService:
         self, key, descriptor, *, identity, period, step_ms,
         start_ms, end_ms, limit, mode, plan,
     ) -> MarketHistoryPage:
-        # Timestamps may be irregular and no-trade periods may be absent. Only
-        # a qualified successful bounded response proves acquisition coverage.
+        # Binance USD-M OI is period-sampled. Off-grid observations can be
+        # retained, but only committed on-grid samples prove expected coverage.
         async with self._history_identity_locks.hold(identity):
             self._ensure_open()
             repository = self._metrics_repository
@@ -788,7 +790,7 @@ class MarketDataService:
             now_ms = int(time.time() * 1000)
             page_limit = min(500, plan.max_page_size or 500)
             window_start = max(start_ms, end_ms - 86_400_000 + 1)
-            revision = "binance-oi-range-v1:" + (plan.availability_revision or "static")
+            revision = "binance-oi-grid-v2:" + (plan.availability_revision or "static")
             common = dict(exchange=key.exchange, market_type=key.market_type,
                           symbol=key.symbol, period=period)
 
@@ -812,10 +814,16 @@ class MarketDataService:
                                  "disposition": "not_expected" if reason == "future" else "unavailable",
                                  "reason": reason})
             fetchable = plan.should_fetch and fetch_start <= fetch_end
-            pending = ([{"start_ms": fetch_start, "end_ms": fetch_end}] if mode == "refresh"
-                       else missing_ranges(fetch_start, fetch_end, covered)) if fetchable else []
+            pending = []
+            if fetchable:
+                if mode == "refresh":
+                    pending = [{"start_ms": fetch_start, "end_ms": fetch_end}]
+                else:
+                    empty_prefixes = unsampled_prefixes(fetch_start, fetch_end, covered, step_ms)
+                    pending = missing_ranges(fetch_start, fetch_end, [*covered, *empty_prefixes])
             failed = False
             if mode != "local_only":
+                refreshed = []
                 calls = 0
                 while pending and calls < 16:
                     run = pending.pop(0)
@@ -846,31 +854,41 @@ class MarketDataService:
                                               open_interest=event.data["open_interest"],
                                               open_interest_value=event.data.get("open_interest_value"),
                                               is_final=True) for event in projected]
-                        # Stable history and the mutable tail get independent
-                        # receipts; a new tail does not invalidate old history.
-                        stable_end = now_ms - 2 * step_ms
-                        segments = [(run["start_ms"], min(run["end_ms"], stable_end), None),
-                                    (max(run["start_ms"], stable_end + 1), run["end_ms"], now_ms + 60_000)]
-                        for left, right, expires in segments:
-                            if left > right:
-                                continue
-                            await run_storage(
-                                repository.record_open_interest_query, **common,
-                                start_ms=left, end_ms=right, policy_revision=revision,
-                                expected_rows=[row for row in expected_rows if left <= row["event_time_ms"] <= right],
-                                observed_at_ms=now_ms, expires_at_ms=expires,
-                            )
+                        # Split on a sample boundary so a mutable cell's
+                        # expiration cannot discard established history.
+                        mutable_start = (now_ms // step_ms - 1) * step_ms
+                        for proof in verified_sample_ranges(stamps, run["end_ms"], step_ms):
+                            start, end = proof["start_ms"], proof["end_ms"]
+                            segments = [(start, min(end, mutable_start - 1), None),
+                                        (max(start, mutable_start), end, now_ms + 60_000)]
+                            for left, right, expires in segments:
+                                if left > right:
+                                    continue
+                                recorded = await run_storage(
+                                    repository.record_open_interest_query, **common,
+                                    start_ms=left, end_ms=right, policy_revision=revision,
+                                    expected_rows=[row for row in expected_rows if left <= row["event_time_ms"] <= right],
+                                    observed_at_ms=now_ms, expires_at_ms=expires,
+                                )
+                                if recorded and mode == "refresh":
+                                    refreshed.append({"start_ms": left, "end_ms": right})
                     except ValueError:
                         raise
                     except Exception:
                         logger.warning("OI history range fetch failed", exc_info=True)
                         failed = True
                         break
+                failed = failed or bool(pending)
+                if mode == "refresh" and fetchable:
+                    refresh_prefixes = unsampled_prefixes(fetch_start, fetch_end, refreshed, step_ms)
+                    failed = failed or bool(missing_ranges(fetch_start, fetch_end, [*refreshed, *refresh_prefixes]))
                 if calls:
                     rows, covered, more_rows, revalidate_after_ms = await read()
             response_start = rows[0]["event_time_ms"] if more_rows else window_start
             covered = merge_ranges([{ "start_ms": max(response_start, r["start_ms"]), "end_ms": r["end_ms"] }
                                     for r in covered if r["end_ms"] >= response_start])
+            empty_prefixes = unsampled_prefixes(response_start, end_ms, [*covered, *excluded], step_ms)
+            covered = merge_ranges([*covered, *empty_prefixes])
             unresolved = missing_ranges(response_start, end_ms, [*covered, *excluded])
             events = [MarketStateEvent(
                 key=key, event_time_ms=row["event_time_ms"], received_at_ms=row["received_at_ms"],
@@ -890,7 +908,7 @@ class MarketDataService:
                 terminal_reason=plan.terminal_reason,
                 earliest_available_ms=plan.earliest_available_ms,
                 availability_revision=plan.availability_revision, query_mode=mode,
-                coverage_basis="native_binance_oi_bounded_query_v1",
+                coverage_basis="native_binance_oi_sample_grid_v2",
                 revalidate_after_ms=revalidate_after_ms,
             )
 

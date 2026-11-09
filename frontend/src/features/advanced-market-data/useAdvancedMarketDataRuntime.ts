@@ -628,15 +628,21 @@ export function useAdvancedMarketDataRuntime({
             }
             if (payload.fallback === true || payload.retryable === true || covered.length === 0) {
               const explicit = payload.coverage.ranges !== undefined;
-              const retryAllowed = !explicit || historyGapBudgetRef.current.fail(gapKey);
+              const refreshFallback = explicit && forceRefresh && payload.fallback === true
+                && !nextUncoveredHistoryRange(coverage.get(coverageKey) || [], pageRange);
+              const retryAllowed = !refreshFallback && (!explicit || historyGapBudgetRef.current.fail(gapKey));
               if (explicit) {
+                const message = refreshFallback
+                  ? (locale === "zh-CN" ? "刷新未完成，正在展示本地历史。"
+                    : "Refresh incomplete. Showing local history.")
+                  : locale === "zh-CN"
+                    ? (retryAllowed ? "部分历史尚未取得，正在重试。" : "部分历史尚未取得，请点击重试。")
+                    : (retryAllowed ? "Some history is missing; retrying." : "Some history is missing. Select Retry to try again.");
                 setHistoryErrorState((current) => !isCurrentRequest() ? current : ({
                   historyContextKey: expectedHistoryContextKey,
                   errors: {
                     ...(current.historyContextKey === expectedHistoryContextKey ? current.errors : {}),
-                    [descriptor.channel]: locale === "zh-CN"
-                      ? (retryAllowed ? "部分历史尚未取得，正在重试。" : "部分历史尚未取得，请点击重试。")
-                      : (retryAllowed ? "Some history is missing; retrying." : "Some history is missing. Select Retry to try again."),
+                    [descriptor.channel]: message,
                   },
                 }));
               }

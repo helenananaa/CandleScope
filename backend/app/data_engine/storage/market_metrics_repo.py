@@ -126,6 +126,12 @@ def init_market_metrics_storage(db_path: Path | str | None = None) -> None:
             """
         )
         _migrate_funding_cycle_identity(conn)
+        # v1 could certify a short page containing missing expected samples.
+        # Keep observations and retire the obsolete proof, including on rollback.
+        conn.execute(
+            "DELETE FROM open_interest_query_receipts WHERE exchange='binance' "
+            "AND market_type='futures' AND policy_revision LIKE 'binance-oi-range-v1:%'"
+        )
 
 
 def _migrate_funding_cycle_identity(conn: sqlite3.Connection) -> None:
