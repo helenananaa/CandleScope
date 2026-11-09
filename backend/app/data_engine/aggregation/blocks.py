@@ -6,10 +6,11 @@ No lock is held across a builder, revision I/O, or a joined flight wait.
 """
 from __future__ import annotations
 
+from bisect import bisect_left
 from collections import OrderedDict
 from concurrent.futures import Future, CancelledError, TimeoutError
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import threading
 from typing import TYPE_CHECKING
 
@@ -53,6 +54,17 @@ class SharedBlock:
     key: BlockKey
     version: int
     summary: AggregateSummary
+
+
+@dataclass(frozen=True, slots=True)
+class BlockRevisionRanges:
+    previous: InputRevision
+    current: InputRevision
+    spans: tuple[tuple[int, int], ...]  # Sorted disjoint inclusive footprints.
+
+    def touches(self, key):
+        before_end = bisect_left(self.spans, (key.end_ms,)) - 1
+        return before_end >= 0 and self.spans[before_end][1] >= key.start_ms
 
 
 @dataclass(eq=False)
@@ -140,7 +152,8 @@ class SharedBlockManager:
         self._closed = False
         self._usage = {"estimated_bytes": 0}
         self._metrics = dict(hits=0, builds=0, joins=0, evictions=0,
-                             invalidations=0, stale_builds=0, failures=0, resets=0)
+                             invalidations=0, revalidated_blocks=0,
+                             stale_builds=0, failures=0, resets=0)
         self._last_error = None
         # This callback intentionally does not acquire _lock. Budget admission
         # owns its own lock; reversing that order would deadlock other owners.
@@ -195,8 +208,12 @@ class SharedBlockManager:
                     if reset:
                         self._reset()
                     for change in changes:
-                        self._invalidate(change[0], change[1],
-                                         except_version=change[2] if len(change) > 2 else None)
+                        if isinstance(change, BlockRevisionRanges):
+                            self._invalidate(change.current.series, change.current.domain,
+                                             except_version=change.current.version, proof=change)
+                        else:
+                            self._invalidate(change[0], change[1],
+                                             except_version=change[2] if len(change) > 2 else None)
                     # Observe changed tokens even if the adapter's notification
                     # was coalesced or delivered more than once.
                     for revision in revisions:
@@ -299,7 +316,8 @@ class SharedBlockManager:
         if bytes_needed > 0 or slots_needed > 0:
             raise MemoryBudgetExceeded("block capacity is held by active consumers")
 
-    def _invalidate(self, series, domain, *, except_version=None, start_ms=None, end_ms=None):
+    def _invalidate(self, series, domain, *, except_version=None, start_ms=None, end_ms=None,
+                    proof=None):
         def affected(deps):
             return any(d.series == series and d.domain == domain
                        and d.version != except_version for d in deps)
@@ -309,13 +327,32 @@ class SharedBlockManager:
         # View acquisition and publication recheck unchanged revisions on
         # every page. Only visit entries in older revision buckets.
         by_version = self._dependencies.get((series, domain), {})
+        rekeyed = {}
         for version, keys in tuple(by_version.items()):
             if version == except_version:
                 continue
             for key in tuple(keys):
                 if overlaps(key[0]):
-                    self._drop(key, self._entries[key])
+                    entry = self._entries[key]
+                    if (proof is not None and key[0].series == series and key[1] == (proof.previous,)
+                            and not entry.pins and not proof.touches(key[0])):
+                        new_key = key[0], (proof.current,)
+                        if new_key not in self._entries:
+                            keys.remove(key)
+                            by_version.setdefault(proof.current.version, set()).add(new_key)
+                            rekeyed[key] = new_key
+                            entry.block = replace(entry.block, summary=replace(
+                                entry.block.summary, revisions=new_key[1]))
+                            self._metrics["revalidated_blocks"] += 1
+                            continue
+                    self._drop(key, entry)
                     self._metrics["invalidations"] += 1
+            if rekeyed and not keys:
+                by_version.pop(version, None)
+        if rekeyed:
+            # Preserve LRU order. An input revision check does not count as a hit.
+            self._entries = OrderedDict((rekeyed.get(key, key), entry)
+                                        for key, entry in self._entries.items())
         for (key, deps), flight in self._flights.items():
             if affected(deps) and overlaps(key):
                 flight.invalid = True

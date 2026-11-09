@@ -2,8 +2,8 @@
 
 SQLite triggers cover *every* physical writer (including offline repair and
 another process). One watermark per semantic series replaces a per-row event
-log. Consumers must invalidate the whole reported series: ranges are a
-conservative envelope, not a replayable sequence of individual edits.
+log. Its ranges are conservative envelopes. B130 also consumes a bounded
+transactional suffix of exact footprints when it can prove continuity.
 """
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ from app.data_engine.series_identity import KlineSeriesIdentity
 IDENTITY_COLUMNS = ("exchange", "market_type", "symbol", "interval",
                     "provider_id", "venue", "asset_class", "series_variant",
                     "price_adjustment", "session_variant", "volume_semantics")
+BLOCK_CHANGE_WINDOW = 1024
 
 
 REVISION_CHANGED_FIELDS = (*IDENTITY_COLUMNS, "open_time", "close_time", "open", "high", "low", "close", "volume",
@@ -41,6 +42,17 @@ def _execute_schema(conn, script):
         raise ValueError("incomplete revision schema statement")
 
 
+def _block_change_sql(values, predicate, revision, start_ms, end_ms):
+    return f"""
+        INSERT INTO kline_block_changes VALUES (
+            {revision}, {values},
+            COALESCE((SELECT revision FROM kline_series_changes WHERE {predicate}), 0),
+            {start_ms}, {end_ms}
+        );
+        DELETE FROM kline_block_changes WHERE revision<={revision}-{BLOCK_CHANGE_WINDOW};
+    """
+
+
 def init_revision_storage(conn):
     columns = ", ".join(f"{name} TEXT NOT NULL" for name in IDENTITY_COLUMNS)
     keys = ", ".join(IDENTITY_COLUMNS)
@@ -60,6 +72,10 @@ def init_revision_storage(conn):
         );
         CREATE TABLE IF NOT EXISTS kline_derived_series ({columns}, PRIMARY KEY ({keys}));
         CREATE INDEX IF NOT EXISTS idx_kline_changes_revision ON kline_series_changes(revision);
+        CREATE TABLE IF NOT EXISTS kline_block_changes (
+            revision INTEGER PRIMARY KEY, {columns}, previous_revision INTEGER NOT NULL,
+            start_ms INTEGER NOT NULL, end_ms INTEGER NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS kline_mutation_context (
             singleton INTEGER PRIMARY KEY CHECK(singleton=1), mode TEXT NOT NULL
         );
@@ -116,14 +132,19 @@ def init_revision_storage(conn):
         deletion = revision if operation == "delete" else "0"
         changed_fields = REVISION_CHANGED_FIELDS
         condition = "WHEN " + " OR ".join(f"NEW.{name} IS NOT OLD.{name}" for name in changed_fields) if operation == "update" else ""
+        watermark_predicate = " AND ".join(f"{name}={alias}.{name}" for name in IDENTITY_COLUMNS)
+        # Canonical blocks select candles by open, including inserts and replacements.
+        footprint = _block_change_sql(values, watermark_predicate, revision,
+                                      f"{alias}.open_time", f"{alias}.open_time")
         source_derived_predicate = " AND ".join(f"s.{name}={alias}.{name}" for name in IDENTITY_COLUMNS)
         derived_predicate = " AND ".join(f"d.{name}=klines.{name}" for name in IDENTITY_COLUMNS)
         family_predicate = " AND ".join(f"{name}={alias}.{name}" for name in IDENTITY_COLUMNS if name != "interval")
         _execute_schema(conn, f"""
-            {('DROP TRIGGER IF EXISTS kline_change_delete;' if operation == 'delete' else '')}
-            CREATE TRIGGER IF NOT EXISTS kline_change_{operation}
+            DROP TRIGGER IF EXISTS kline_change_{operation};
+            CREATE TRIGGER kline_change_{operation}
             AFTER {operation.upper()} ON klines {condition} BEGIN
                 UPDATE kline_revision_clock SET revision=revision+1 WHERE singleton=1;
+                {footprint}
                 INSERT INTO kline_series_changes
                 VALUES ({values}, {revision}, {deletion}, {alias}.open_time,
                         COALESCE({alias}.close_time,{alias}.open_time), '{operation}')
@@ -190,11 +211,13 @@ def init_empty_coverage_revision_triggers(conn, table: str, *, native: bool = Fa
         family = " AND ".join(f"d.{name}={value}" for name, value in zip(IDENTITY_COLUMNS, values) if name != "interval")
         selected_family = " AND ".join(f"{name}={value}" for name, value in zip(IDENTITY_COLUMNS, values) if name != "interval")
         match = " AND ".join(f"d.{name}=klines.{name}" for name in IDENTITY_COLUMNS)
+        predicate = " AND ".join(f"{name}={value}" for name, value in zip(IDENTITY_COLUMNS, values))
         conn.executescript(f"""
             {migration_start}
             CREATE TRIGGER IF NOT EXISTS {table}_change_{operation}
             AFTER {operation.upper()} ON {table} BEGIN
                 UPDATE kline_revision_clock SET revision=revision+1 WHERE singleton=1;
+                {_block_change_sql(','.join(values), predicate, head, f'{alias}.start_ms', f'{alias}.end_ms')}
                 INSERT INTO kline_series_changes VALUES
                     ({','.join(values)}, {head}, {deletion}, {alias}.start_ms, {alias}.end_ms, 'empty_{operation}')
                 ON CONFLICT({keys}) DO UPDATE SET revision=excluded.revision,
@@ -236,14 +259,21 @@ def mark_deleted(conn, values, start_ms=None, end_ms=None):
     conn.execute("UPDATE kline_revision_clock SET revision=revision+1 WHERE singleton=1")
     revision = current_revision(conn)
     keys = ",".join(IDENTITY_COLUMNS)
+    start_ms = start_ms if start_ms is not None else 0
+    end_ms = end_ms if end_ms is not None else 9223372036854775807
+    predicate = " AND ".join(f"{name}=?" for name in IDENTITY_COLUMNS)
+    conn.execute(f"""INSERT INTO kline_block_changes VALUES (
+        ?, {','.join('?' for _ in IDENTITY_COLUMNS)},
+        COALESCE((SELECT revision FROM kline_series_changes WHERE {predicate}), 0), ?, ?
+    )""", (revision, *values, *values, start_ms, end_ms))
+    conn.execute("DELETE FROM kline_block_changes WHERE revision<=?", (revision - BLOCK_CHANGE_WINDOW,))
     conn.execute(f"INSERT INTO kline_delete_permissions VALUES ({','.join('?' for _ in range(12))}) "
                  f"ON CONFLICT({keys}) DO UPDATE SET revision=excluded.revision", (*values, revision))
     conn.execute(f"""INSERT INTO kline_series_changes VALUES ({','.join('?' for _ in range(16))})
         ON CONFLICT({keys}) DO UPDATE SET revision=excluded.revision,
         delete_revision=excluded.delete_revision, start_ms=MIN(start_ms,excluded.start_ms),
         end_ms=MAX(end_ms,excluded.end_ms), operation='delete'""",
-        (*values, revision, revision, start_ms if start_ms is not None else 0,
-         end_ms if end_ms is not None else 9223372036854775807, "delete"))
+    (*values, revision, revision, start_ms, end_ms, "delete"))
 
 
 class RevisionStore:
@@ -283,11 +313,36 @@ class RevisionStore:
         with closing(self.connect()) as conn, conn:
             conn.execute("BEGIN")
             head = current_revision(conn)
-            versions = []
-            for key in values:
-                row = series_change(conn, key)
-                versions.append(int(row["revision"]) if row is not None else 0)
-            return head, tuple(versions)
+            return head, self._versions(conn, values)
+
+    @staticmethod
+    def _versions(conn, series):
+        rows = (series_change(conn, key) for key in series)
+        return tuple(int(row["revision"]) if row is not None else 0 for row in rows)
+
+    def read_block_changes(self, revision, series, *, limit=4096):
+        """Read B130 versions and invalidation evidence from one snapshot."""
+        if len(series) > 32:
+            raise ValueError("at most 32 source dependencies per revision view")
+        with closing(self.connect()) as conn, conn:
+            conn.execute("BEGIN")
+            head = current_revision(conn)
+            versions = self._versions(conn, series)
+            changes = conn.execute(
+                "SELECT * FROM kline_series_changes WHERE revision>? ORDER BY revision LIMIT ?",
+                (revision, limit + 1),
+            ).fetchall()
+            reset = len(changes) > limit or revision > head
+            exact = ()
+            if not reset and 0 < head - revision <= BLOCK_CHANGE_WINDOW:
+                receipts = conn.execute(
+                    "SELECT * FROM kline_block_changes WHERE revision>? ORDER BY revision",
+                    (revision,),
+                ).fetchall()
+                if len(receipts) == head - revision:
+                    exact = receipts
+            self.observed_revision = head
+            return head, versions, changes[:limit], reset, exact
 
     def acquisition(self, *, owner=None, revision=None):
         with closing(self.connect()) as conn, conn:
