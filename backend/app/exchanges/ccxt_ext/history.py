@@ -6,7 +6,7 @@ from typing import Any
 from app.data_engine.bar_basis import is_gate_linear_5m
 from app.data_engine.ingestion.config import IngestionConfig
 from app.data_engine.ingestion.models import DataSource, RawMessage, StreamType, TransportRequest
-from app.exchanges.okx_intervals import OKX_FUNDING_HISTORY_LIMIT
+from app.exchanges.okx_intervals import OKX_FUNDING_HISTORY_LIMIT, OKX_OI_HISTORY_LIMIT
 from .generic import _GENERIC_STREAM_METHODS, _rest_method_for, resolve_market_selection, _timestamp
 from .catalog import market_selection_parts
 from .unified import make_unified_payload
@@ -48,6 +48,7 @@ async def fetch_unified_history(
             market_type=selection,
         )
         rows: list[dict[str, Any]] = []
+        request_limit = req.limit
         from app.exchanges.trade_candles import uses_trade_candles
         if descriptor.stream_type == StreamType.KLINE and uses_trade_candles(context.entry.exchange_id, descriptor.market_type, descriptor.interval):
             from .trade_candles import fetch_trade_candles
@@ -210,6 +211,7 @@ async def fetch_unified_history(
                 options = {}
                 if context.entry.exchange_id == "okx":
                     limit = min(limit, OKX_FUNDING_HISTORY_LIMIT)
+                    request_limit = limit
                     if req.end_ms is not None:
                         options["params"] = {"after": req.end_ms + 1}
                 values = await exchange.fetch_funding_rate_history(
@@ -233,7 +235,8 @@ async def fetch_unified_history(
             ) and context.entry.supports("fetchOpenInterestHistory"):
                 if context.entry.exchange_id == "okx":
                     from .venue_history import fetch_okx_contract_oi
-                    values = await fetch_okx_contract_oi(exchange, symbol, req)
+                    request_limit = min(max(1, int(req.limit or 1)), OKX_OI_HISTORY_LIMIT)
+                    values = await fetch_okx_contract_oi(exchange, symbol, req, limit=request_limit)
                 else:
                     options = {}
                     if context.entry.exchange_id == "gate":
@@ -294,7 +297,7 @@ async def fetch_unified_history(
                 received_at_ms=received,
                 endpoint=f"ccxt+rest://{context.entry.exchange_id}",
                 http_status=200,
-                request_limit=req.limit,
+                request_limit=request_limit,
             )
             for row in rows
         ]

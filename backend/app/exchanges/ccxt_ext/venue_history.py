@@ -6,7 +6,7 @@ from math import isfinite
 from typing import Any
 from app.data_engine.ingestion.config import IngestionConfig
 from app.data_engine.ingestion.models import DataSource, RawMessage, StreamDescriptor, StreamType, TransportRequest
-from app.exchanges.okx_intervals import OKX_OI_HISTORY_LIMIT, OKX_OI_HISTORY_PERIODS
+from app.exchanges.okx_intervals import OKX_OI_HISTORY_PERIODS
 from app.exchanges.okx_intervals import okx_utc_interval as _okx_interval
 from .unified import make_unified_payload
 
@@ -311,12 +311,11 @@ async def _fetch_okx_kline_raw(
         )
 
 
-async def fetch_okx_contract_oi(exchange, symbol: str, req: TransportRequest) -> list[dict[str, Any]]:
+async def fetch_okx_contract_oi(exchange, symbol: str, req: TransportRequest, *, limit: int) -> list[dict[str, Any]]:
     """The CCXT unified OKX route reports a currency aggregate, not this contract."""
     period = req.descriptor.interval or "1d"
     if period not in OKX_OI_HISTORY_PERIODS:
         raise ValueError(f"Unsupported OKX open-interest history period: {period!r}")
-    limit = min(max(1, int(req.limit or 1)), OKX_OI_HISTORY_LIMIT)
     params = {"instId": exchange.market(symbol)["id"], "period": _okx_interval(period), "limit": limit}
     if req.start_ms:
         params["begin"] = req.start_ms - 1

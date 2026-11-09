@@ -1731,10 +1731,11 @@ def test_okx_metric_history_preserves_contract_identity_bounds_and_realized_rate
     async def run():
         try:
             output = []
-            for descriptor in (oi, funding):
+            for descriptor, limit in ((oi, 100), (funding, 400)):
                 rows = await plugin.fetch_history_with_config(
                     TransportRequest(descriptor, limit=1000, start_ms=first, end_ms=last, history=True), config,
                 )
+                assert rows and all(row.request_limit == limit for row in rows)
                 normalizer = plugin.normalizer(config, descriptor)
                 output.append([normalizer.parse(row) for row in rows])
             return output
