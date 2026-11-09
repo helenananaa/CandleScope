@@ -276,6 +276,38 @@ def mark_deleted(conn, values, start_ms=None, end_ms=None):
     (*values, revision, revision, start_ms, end_ms, "delete"))
 
 
+class ScopedRevisionRead:
+    """One short-lived connection for sequential checks within a live input.
+
+    SQLite's data_version changes on commits from another connection. Check
+    it before reusing a result, with no read transaction held between checks.
+    """
+
+    def __init__(self, store):
+        self.store = store
+        self._connection = None
+        self._key = None
+        self._result = None
+
+    def read_versions(self, series):
+        if self._connection is None:
+            self._connection = self.store.connect()
+        conn = self._connection
+        version = conn.execute("PRAGMA data_version").fetchone()[0]
+        values = tuple(series)
+        key = (values, version)
+        if key != self._key:
+            self._result = self.store._read_versions(conn, values)
+            self._key = key
+        return self._result
+
+    def close(self):
+        if self._connection is not None:
+            conn, self._connection = self._connection, None
+            self._key = self._result = None
+            conn.close()
+
+
 class RevisionStore:
     def __init__(self, connect):
         self.connect = connect
@@ -307,10 +339,16 @@ class RevisionStore:
         deletions. Unrelated series writes do not change a source's token.
         Consumers still fence their entire acquisition before publication.
         """
-        values = tuple(series)
+        with closing(self.connect()) as conn:
+            return self._read_versions(conn, tuple(series))
+
+    def scoped_version_reader(self):
+        return ScopedRevisionRead(self)
+
+    def _read_versions(self, conn, values):
         if len(values) > 32:
             raise ValueError("at most 32 source dependencies per revision view")
-        with closing(self.connect()) as conn, conn:
+        with conn:
             conn.execute("BEGIN")
             head = current_revision(conn)
             return head, self._versions(conn, values)

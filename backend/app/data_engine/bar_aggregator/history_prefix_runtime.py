@@ -9,11 +9,14 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from typing import Any
 from copy import deepcopy
 import time
 
+from app.core.async_cleanup import finish_cleanup
+from app.core.bounded_executor import ExecutorBusyError
 from app.core.executors import run_storage
 from app.data_engine.aggregation.blocks import BlockRevisionChanged, BlockUnavailable
 from app.data_engine.bar_aggregator.bar_state import has_complete_closed_component_coverage
@@ -49,6 +52,7 @@ class HistoryPrefixRuntime:
         self.seeding = set()
         self.closing = False
         self.last_adoption = None
+        self._input_read_scope = ContextVar("history_prefix_input_read_scope", default=None)
         self.metrics = dict(adoptions=0, validations=0, refreshes=0, empty=0, failures=0,
                             adopted_pages=0, adopted_storage_rows=0, adopted_cache_hits=0)
 
@@ -206,13 +210,48 @@ class HistoryPrefixRuntime:
         finally:
             self.seeding.discard(key)
 
+    @asynccontextmanager
+    async def forming_input_scope(self, event):
+        kind = getattr(event, "event_type", None)
+        data = getattr(event, "data", None) or {}
+        matches = 0
+        if (len(self.targets) > 1 and getattr(kind, "value", kind) == "kline"
+                and data.get("is_closed") is False):
+            source_key = (
+                getattr(event, "symbol", "").upper(), getattr(event, "exchange", "").lower(),
+                getattr(event, "market_type", "").lower(), data.get("interval"),
+            )
+            matches = sum(
+                (slot.source.symbol, slot.source.exchange, slot.source.market_type, slot.source.interval)
+                == source_key for slot in self.targets.values()
+            )
+        read_scope = self.reader.scoped_version_reader() if matches > 1 else None
+        if read_scope is None:
+            yield
+            return
+        token = self._input_read_scope.set((asyncio.current_task(), read_scope))
+        try:
+            yield
+        finally:
+            self._input_read_scope.reset(token)
+
+            try:
+                await finish_cleanup(run_storage(read_scope.close))
+            except ExecutorBusyError:
+                # The dispatch has finished and no worker owns the connection.
+                read_scope.close()
+
     async def _refresh(self, slot, pipeline, state, *, emit_events):
         prefix = state._history_prefix
         if prefix is None:
             return state
         valid = False
         try:
-            await run_storage(self.reader.validate_bound, prefix)
+            owned = self._input_read_scope.get()
+            if owned is not None and owned[0] is asyncio.current_task():
+                await run_storage(self.reader.validate_bound, prefix, read_scope=owned[1])
+            else:
+                await run_storage(self.reader.validate_bound, prefix)
             self.metrics['validations'] += 1
             if not self._current(slot):
                 raise BlockRevisionChanged('history target detached during validation')

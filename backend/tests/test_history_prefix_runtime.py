@@ -1,5 +1,6 @@
 """Real SQLite canonical changes through the actual live aggregator boundary."""
 import asyncio
+import sqlite3
 from dataclasses import replace
 import threading
 
@@ -278,6 +279,77 @@ def test_large_new_bucket_and_partial_history_do_not_query_previous_full_bucket(
         assert current is not None and current._history_prefix is not None
         assert not current._history_prefix.complete
         assert calls and all(call.get('limit', 1000000) <= 257 for call in calls)
+    asyncio.run(check())
+
+
+def test_forming_fanout_reuses_reads_and_observes_a_mid_dispatch_commit(dm, runtime, monkeypatch):
+    agg, service, _ = runtime
+    intervals = ("121d", "122d")
+    agg.add_target("BTCUSDT", intervals[1], market_type="futures")
+    store = dm.query_engine.storage.revision_store
+    original = store._read_versions
+    reads = []
+
+    def count_read(conn, keys):
+        reads.append(conn)
+        return original(conn, keys)
+
+    async def check():
+        for interval in intervals:
+            assert await service.seed(KEY, interval, 0, 120 * DAY)
+        monkeypatch.setattr(store, "_read_versions", count_read)
+        rows = read_rows(dm)
+        tail = replace(rows[-1], time=120 * DAY // 1000, volume=4)
+        changed = replace(rows[31], volume=rows[31].volume / 2)
+        arrivals = []
+        amend = False
+
+        async def dispatch(exchange, market_type, symbol, interval, incoming):
+            await agg._handle_bar_input(exchange, market_type, symbol, interval, incoming,
+                                        emit_events=False)
+            arrivals.append(interval)
+            if amend and len(arrivals) == 1:
+                write([changed])
+
+        agg._router.set_on_bar_input(dispatch)
+
+        async def send(sequence, *, closed=False):
+            await agg.on_market_event(MarketEvent(
+                event_type=StreamType.KLINE, symbol="BTCUSDT", exchange="binance",
+                market_type="futures", event_time_ms=120 * DAY + sequence,
+                received_at_ms=120 * DAY + sequence, sequence=120 * DAY + sequence,
+                source=DataSource.WEBSOCKET,
+                data=dict(interval="1d", open_time=120 * DAY, close_time=121 * DAY - 1,
+                          open=tail.open, high=tail.high, low=tail.low, close=tail.close,
+                          volume=tail.volume, quote_volume=tail.quote_volume, trades=tail.trades,
+                          taker_buy_base=tail.taker_buy_base, taker_buy_quote=tail.taker_buy_quote,
+                          is_closed=closed),
+            ))
+
+        await send(1)
+        assert set(arrivals) == set(intervals)
+        assert len(reads) == 1
+        # The connection lives only for that input.
+        with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
+            reads[0].execute("SELECT 1")
+        before = reference(dm, tail)
+        arrivals.clear()
+        reads.clear()
+        amend = True
+        await send(2)
+        assert len(reads) >= 2 and reads[0] is reads[1]
+        first, second = arrivals
+        assert agg.get_bucket_state("BTCUSDT", first, 0, market_type="futures").volume == pytest.approx(before.volume)
+        equal(agg.get_bucket_state("BTCUSDT", second, 0, market_type="futures"), reference(dm, tail))
+        amend = False
+        await send(3)
+        for interval in intervals:
+            equal(agg.get_bucket_state("BTCUSDT", interval, 0, market_type="futures"), reference(dm, tail))
+        reads.clear()
+        await send(4, closed=True)
+        assert len(reads) == 2 and reads[0] is not reads[1]
+        await service.close()
+
     asyncio.run(check())
 
 

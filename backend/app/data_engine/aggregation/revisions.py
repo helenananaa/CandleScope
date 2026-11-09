@@ -35,7 +35,7 @@ class DurableBlockRevisions:
         self.domain = "d126:" + uuid4().hex
         self.revision = 0
 
-    def validate_detached(self, revisions, *, acquisition_revision):
+    def validate_detached(self, revisions, *, acquisition_revision, read_scope=None):
         """Validate an immutable consumer value in one existing D126 read.
 
         This does not acquire blocks or consume the shared invalidation cursor.
@@ -46,7 +46,8 @@ class DurableBlockRevisions:
             raise BlockRevisionChanged('detached source revision domain changed')
         keys = [(r.series.exchange, r.series.market_type, r.series.symbol, r.series.interval,
                  *r.series.identity.storage_values) for r in revisions]
-        head, versions = self.store.read_versions(keys)
+        reader = read_scope if read_scope is not None and read_scope.store is self.store else self.store
+        head, versions = reader.read_versions(keys)
         if (head < acquisition_revision or head < self.revision
                 or tuple(versions) != tuple(r.version for r in revisions)):
             raise BlockRevisionChanged('detached source revision expired')

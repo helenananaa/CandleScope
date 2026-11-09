@@ -429,7 +429,12 @@ class BarAggregator:
         to all matching interval pipelines.
         """
         await self._publisher.retry_source_deliveries()
-        await self._router.on_market_event(event)
+        runtime = self.history_prefix_runtime
+        if runtime is None:
+            await self._router.on_market_event(event)
+        else:
+            async with runtime.forming_input_scope(event):
+                await self._router.on_market_event(event)
 
     async def on_backfill_bars(
         self,
