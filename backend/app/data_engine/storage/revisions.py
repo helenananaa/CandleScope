@@ -242,6 +242,17 @@ def current_revision(conn):
     return int(conn.execute("SELECT revision FROM kline_revision_clock WHERE singleton=1").fetchone()[0])
 
 
+def block_change_receipts(conn, revision, head):
+    """Read the complete bounded footprint journal in the caller's transaction."""
+    if not 0 < head - revision <= BLOCK_CHANGE_WINDOW:
+        return ()
+    receipts = conn.execute(
+        "SELECT * FROM kline_block_changes WHERE revision>? AND revision<=? ORDER BY revision",
+        (revision, head),
+    ).fetchall()
+    return receipts if len(receipts) == head - revision else ()
+
+
 def series_values(symbol, interval, exchange, market_type, identity=None):
     identity = identity or KlineSeriesIdentity.for_exchange(exchange)
     return (exchange, market_type, symbol, interval, *identity.storage_values)
@@ -371,14 +382,7 @@ class RevisionStore:
                 (revision, limit + 1),
             ).fetchall()
             reset = len(changes) > limit or revision > head
-            exact = ()
-            if not reset and 0 < head - revision <= BLOCK_CHANGE_WINDOW:
-                receipts = conn.execute(
-                    "SELECT * FROM kline_block_changes WHERE revision>? ORDER BY revision",
-                    (revision,),
-                ).fetchall()
-                if len(receipts) == head - revision:
-                    exact = receipts
+            exact = () if reset else block_change_receipts(conn, revision, head)
             self.observed_revision = head
             return head, versions, changes[:limit], reset, exact
 

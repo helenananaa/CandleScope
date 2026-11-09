@@ -92,6 +92,43 @@ def test_current_compact_history_prefix_commits_under_same_source_transaction(jo
     assert journal.commit('current-prefix-close')['phase'] == 'committed'
 
 
+@pytest.mark.parametrize("interference", ["disjoint", "overlap", "missing_receipt"])
+def test_derived_close_requires_complete_disjoint_footprints(journal, interference):
+    old_source = payload()["storage_row"]
+    old_target = {**old_source, "open_time": 0}
+    klines_repo.upsert_klines("BTCUSDT", "1m", [old_source], source="backfill")
+    klines_repo.upsert_klines("BTCUSDT", "2m", [old_target], source="backfill_aggregated")
+
+    derived = payload()
+    derived.update(interval="2m", derived=True)
+    derived["storage_row"].update(open_time=240_000, close_time=359_999)
+    derived["bar"]["time"] = 240
+    journal.enqueue("derived-close", derived)
+
+    if interference == "overlap":
+        # An overlapping source write remains relevant even when the last
+        # change to that same source came from an older historical bucket.
+        inside = {**old_source, "open_time": 240_000, "close_time": 299_999}
+        klines_repo.upsert_klines("BTCUSDT", "1m", [inside], source="backfill")
+    klines_repo.upsert_klines("BTCUSDT", "1m", [{**old_source, "volume": 11}], source="backfill")
+    klines_repo.upsert_klines("BTCUSDT", "2m", [{**old_target, "volume": 11}], source="backfill_aggregated")
+    if interference == "missing_receipt":
+        with klines_repo._connect() as conn:
+            conn.execute("DELETE FROM kline_block_changes WHERE revision=(SELECT MAX(revision) FROM kline_block_changes)")
+
+    reopened = klines_repo.KlinesRepoAdapter().bar_delivery
+    result = reopened.commit("derived-close")
+    if interference != "disjoint":
+        assert result["phase"] == "rejected" and result["recovery_required"] == 1
+        assert result["canonical_row"] is None
+        return
+    assert result["phase"] == "committed" and result["canonical_row"]["volume"] == 10
+    reopened.acknowledge("derived-close")
+    retry = reopened.commit("derived-close")
+    assert retry["phase"] == "published"
+    assert retry["committed_revision"] == result["committed_revision"]
+
+
 @pytest.mark.parametrize("mutation", ["repair", "delete"])
 @pytest.mark.parametrize("other_open", [0, 120_000])
 def test_disjoint_history_change_does_not_reject_a_fresh_native_close(journal, mutation, other_open):

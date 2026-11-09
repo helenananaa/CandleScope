@@ -11,11 +11,24 @@ from contextlib import closing
 
 from app.data_engine.bar_delivery_errors import BarDeliveryUnavailable
 from app.data_engine.series_identity import KlineSeriesIdentity
-from .revisions import current_revision, series_change, series_values, register_derived, IDENTITY_COLUMNS
+from .revisions import block_change_receipts, current_revision, series_change, series_values, register_derived, IDENTITY_COLUMNS
 
 
 def _json(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+
+def _disjoint_changes(change, receipts, observed_revision, start, end):
+    # Fully contained source components are selected by their open times.
+    identity = tuple(change[name] for name in IDENTITY_COLUMNS)
+    series = [row for row in receipts if tuple(row[name] for name in IDENTITY_COLUMNS) == identity]
+    return (
+        bool(series) and series[-1]["revision"] == change["revision"]
+        and series[0]["previous_revision"] <= observed_revision
+        and all(left["revision"] == right["previous_revision"] for left, right in zip(series, series[1:]))
+        and all(row["start_ms"] <= row["end_ms"] and
+                (row["end_ms"] < start or row["start_ms"] > end) for row in series)
+    )
 
 
 def init_bar_delivery_storage(conn):
@@ -124,7 +137,8 @@ class BarDeliveryJournal:
                     conn.execute("UPDATE bar_delivery SET phase='rejected',recovery_required=1 WHERE event_id=?", (event_id,))
                     record['phase'], record['recovery_required'] = 'rejected', 1
                     return self._canonical(conn, record)
-            if payload.get("derived"):
+            derived = payload.get("derived")
+            if derived:
                 # A target may not exist yet when its input is repaired/deleted.
                 # Check its semantic family, including those source revisions.
                 family = [(name, value) for name, value in zip(IDENTITY_COLUMNS, values) if name != "interval"]
@@ -133,29 +147,37 @@ class BarDeliveryJournal:
             else:
                 change = series_change(conn, values)
                 changes = [change] if change is not None else []
+            observed_revision = record["observed_revision"]
+            start = payload["storage_row"]["open_time"]
+            end = payload["storage_row"].get("close_time")
+            valid_window = end is not None and end >= start
+            receipts = None
             for change in changes:
-                if change["revision"] <= record["observed_revision"]:
+                if change["revision"] <= observed_revision:
                     continue
-                if not payload.get("derived"):
-                    start = payload["storage_row"]["open_time"]
-                    end = payload["storage_row"].get("close_time")
+                if not derived:
                     # The durable range encloses every mutation ever observed
                     # for this identity, including empty deletes. A disjoint
                     # native candle cannot depend on those changed rows. This
                     # lets an in-flight forming candle close after older gaps
                     # are repaired, without granting it a newer acquisition.
-                    if end is not None and end >= start and (
+                    if valid_window and (
                         end < change["start_ms"] or start > change["end_ms"]
                     ):
                         continue
                 predecessor = conn.execute("SELECT 1 FROM bar_delivery WHERE sequence<? AND committed_revision=?",
                                            (record["sequence"], change["revision"])).fetchone()
-                if change["delete_revision"] > record["observed_revision"] or predecessor is None:
+                if change["delete_revision"] > observed_revision or predecessor is None:
+                    if derived and valid_window:
+                        if receipts is None:
+                            receipts = block_change_receipts(conn, observed_revision, current_revision(conn))
+                        if _disjoint_changes(change, receipts, observed_revision, start, end):
+                            continue
                     conn.execute("UPDATE bar_delivery SET phase='rejected',recovery_required=1 WHERE event_id=?", (event_id,))
                     record["phase"] = "rejected"
                     record["recovery_required"] = 1
                     return self._canonical(conn, record)
-            if payload.get("derived"):
+            if derived:
                 register_derived(conn, series_values(payload["symbol"], payload["interval"],
                     payload["exchange"], payload["market_type"], identity))
             affected = self._write(payload["symbol"], payload["interval"], [payload["storage_row"]],
