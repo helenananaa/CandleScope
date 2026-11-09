@@ -1305,13 +1305,6 @@ class MaintenanceService:
         market_type: str = "spot",
     ) -> None:
         symbol = symbol.upper()
-        self._cache_invalidator(
-            symbol,
-            interval,
-            exchange=exchange,
-            market_type=market_type,
-        )
-
         rows = await run_storage(
             storage.query_bars,
             symbol=symbol,

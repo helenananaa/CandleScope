@@ -133,6 +133,14 @@ def test_settings_repair_requires_complete_trusted_base_before_atomic_replace(tm
         dm = DataManager()
         dm.set_storage(storage)
         coordinator = Coordinator()
+        invalidations = []
+        invalidate = dm.maintenance._cache_invalidator
+
+        def record_invalidation(*args, **kwargs):
+            invalidations.append(args)
+            invalidate(*args, **kwargs)
+
+        monkeypatch.setattr(dm.maintenance, "_cache_invalidator", record_invalidation)
         targets = [row(0, 120_000, 9), row(120_000, 120_000, 11)]
         storage.upsert_bars("BTCUSDT", "1m", [row(at, 60_000, 1) for at in (0, 60_000, 120_000)], "backfill")
         storage.upsert_bars("BTCUSDT", "1m", [row(180_000, 60_000, 2)], "data_manager_closed")
@@ -190,6 +198,7 @@ def test_settings_repair_requires_complete_trusted_base_before_atomic_replace(tm
         assert all(item["source"] == "repair_derived_verified" for item in repaired)
         assert all(item["quote_volume"] is None and item["trades"] is None for item in repaired)
         assert (await repair())["unchanged_series"] == 1
+        assert invalidations == [("BTCUSDT", "2m")]
         await dm.event_bus.close()
 
     asyncio.run(run())
