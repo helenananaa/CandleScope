@@ -11,7 +11,15 @@ from contextlib import closing
 
 from app.data_engine.bar_delivery_errors import BarDeliveryUnavailable
 from app.data_engine.series_identity import KlineSeriesIdentity
-from .revisions import block_change_receipts, current_revision, series_change, series_values, register_derived, IDENTITY_COLUMNS
+from .revisions import (
+    IDENTITY_COLUMNS,
+    block_change_receipts,
+    current_revision,
+    mutation_mode,
+    register_derived,
+    series_change,
+    series_values,
+)
 
 
 def _json(value):
@@ -198,9 +206,10 @@ class BarDeliveryJournal:
             if derived:
                 register_derived(conn, values)
             before_write = current_revision(conn)
-            affected = self._write(payload["symbol"], payload["interval"], [payload["storage_row"]],
-                                   payload["bar"]["source"], exchange=payload["exchange"],
-                                   market_type=payload["market_type"], series_identity=identity, _connection=conn)
+            with mutation_mode(conn, "bar_delivery"):
+                affected = self._write(payload["symbol"], payload["interval"], [payload["storage_row"]],
+                                       payload["bar"]["source"], exchange=payload["exchange"],
+                                       market_type=payload["market_type"], series_identity=identity, _connection=conn)
             record["phase"] = "committed" if affected else "rejected"
             record["committed_revision"] = current_revision(conn)
             # Preserve the transaction head for publication and separately

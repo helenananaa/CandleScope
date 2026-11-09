@@ -8,6 +8,7 @@ import type {
   EpochSeconds,
   KlineBar,
   MarketSeries,
+  SeriesKey,
   TimeRangeMs,
   TimeRangeSec,
 } from "./marketDataTypes.js";
@@ -88,6 +89,7 @@ export interface KlineFetchResult extends Record<string, unknown> {
   indicatorWindowOwner?: string;
   indicatorWindowEpoch?: number;
   all_rows_final?: boolean;
+  storage_revision?: number;
   has_more?: boolean;
   has_tail_gap?: boolean;
   reached_latest_closed_bar?: boolean;
@@ -107,6 +109,12 @@ export interface KlineFetchResult extends Record<string, unknown> {
   excluded_ranges?: HistoryExcludedRange[];
   missing_ranges?: HistoryMissingRange[];
   verified_contiguous?: boolean;
+}
+
+export interface TerminalHistoryGap {
+  seriesKey: SeriesKey;
+  range: TimeRangeSec;
+  reason: string;
 }
 
 export interface BeforePageAvailability {
@@ -177,7 +185,13 @@ export interface KlineBeforeRequestOptions extends KlineRequestOptions {
   maxWaitMs?: number;
 }
 
+export interface StorageRevisionFloor {
+  epoch: string;
+  revision: number;
+}
+
 export interface KlineRangeRequestOptions extends KlineRequestOptions {
+  storageRevisionFloor?: StorageRevisionFloor;
   repair?: string;
   waitMs?: number;
   strict?: boolean;
@@ -355,6 +369,7 @@ export interface BackfillCompletedMessage {
   price_adjustment?: string;
   session_variant?: string;
   volume_semantics?: string;
+  stream_version?: unknown;
   detail?: BackfillCompletedDetail;
 }
 
@@ -405,6 +420,8 @@ export interface KlineStreamStatusMessage extends Record<string, unknown> {
   type: "stream_status";
   interval?: IntervalString;
   status?: string;
+  stream_version?: unknown;
+  detail?: { gap_id?: unknown; range_start_ms?: unknown; range_end_ms?: unknown };
 }
 
 export interface KlineStreamIntervalFailure extends Record<string, unknown> {

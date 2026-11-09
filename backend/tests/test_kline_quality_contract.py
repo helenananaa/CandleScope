@@ -8,6 +8,7 @@ from app.data_engine.data_manager.config import QueryConfig
 from app.data_engine.data_manager.models import BarData, SeriesKey
 from app.data_engine.data_manager.query import QueryEngine
 from app.data_engine.kline_quality import (
+    BYBIT_LEGACY_FINAL_SOURCE,
     FinalityTrust,
     kline_source_quality,
     repair_requires_trusted_finality,
@@ -367,3 +368,72 @@ def test_sqlite_upsert_uses_monotonic_source_rank_without_new_columns(
         columns = {row[1] for row in conn.execute("PRAGMA table_info(klines)")}
     assert "quality_rank" not in columns
     assert "trusted_final" not in columns
+
+
+def test_bybit_legacy_closes_require_canonical_reverification(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", tmp_path / "bybit.sqlite")
+    klines_repo.init_klines_storage()
+    bybit = {"exchange": "bybit", "market_type": "swap.linear"}
+    start = 1_794_199_800_000
+    row = {
+        **_row(start, 74766.1, source="data_manager_exchange_closed"),
+        "close_time": start + 299_999,
+        "open": 74826.6, "high": 74854.3, "low": 74758.7, "volume": 183.414,
+    }
+    klines_repo.upsert_klines("BTCUSDT", "5m", [row], "data_manager_exchange_closed", **bybit)
+    klines_repo.upsert_klines("BTCUSDT", "5m", [row], "data_manager_exchange_closed")
+    klines_repo.upsert_klines("BTCUSDT", "5m", [{
+        **row, "open_time": start - 300_000, "close_time": start - 1,
+    }], "backfill_rest_verified", **bybit)
+    derived = {**row, "open_time": start - 300_000, "close_time": start + 299_999}
+    klines_repo.upsert_klines("BTCUSDT", "10m", [derived], "data_manager_composite_closed", **bybit)
+    storage = klines_repo.KlinesRepoAdapter()
+    payload = {
+        **bybit, "symbol": "BTCUSDT", "interval": "5m",
+        "bar": {"source": "data_manager_exchange_closed"},
+        "storage_row": {"open_time": start + 300_000},
+    }
+    storage.bar_delivery.enqueue("legacy-bybit", payload)
+    storage.bar_delivery.enqueue("binance", {
+        **payload, "exchange": "binance", "market_type": "spot",
+    })
+    with klines_repo._connect() as conn:
+        # The rows and journal entries were written by the previous version.
+        conn.execute("DELETE FROM kline_quality_migrations")
+
+    klines_repo.init_klines_storage()
+    bybit_rows = klines_repo.query_klines("BTCUSDT", "5m", **bybit)
+    assert [(r["volume"], r["source"]) for r in bybit_rows] == [
+        (183.414, "backfill_rest_verified"),
+        (183.414, BYBIT_LEGACY_FINAL_SOURCE),
+    ]
+    assert klines_repo.query_klines("BTCUSDT", "10m", **bybit)[0]["source"] == BYBIT_LEGACY_FINAL_SOURCE
+    assert klines_repo.query_klines("BTCUSDT", "5m")[0]["source"] == "data_manager_exchange_closed"
+    receipts = {r["event_id"]: r for r in storage.bar_delivery.pending()}
+    assert receipts["legacy-bybit"]["phase"] == "rejected"
+    assert receipts["legacy-bybit"]["recovery_required"]
+    assert receipts["binance"]["phase"] == "pending"
+
+    def query():
+        engine = QueryEngine(
+            cache=BarCache(), storage=storage, config=QueryConfig(auto_backfill=False),
+        )
+        return engine.query("BTCUSDT", "5m", start_ms=start, end_ms=start, **bybit)
+
+    pending = query()
+    assert pending.history_state == "pending"
+    assert pending.metadata["all_rows_final"] is False
+    assert [(r.start_ms, r.end_ms, r.reason) for r in pending.missing_ranges] == [
+        (start, start, "query_untrusted_finality"),
+    ]
+
+    # Values from Bybit's public REST response for this legacy candle.
+    klines_repo.upsert_klines(
+        "BTCUSDT", "5m", [{**row, "volume": 183.532}], "backfill_rest_verified", **bybit,
+    )
+    klines_repo.init_klines_storage()
+    repaired = query()
+    assert repaired.complete is True
+    assert repaired.metadata["all_rows_final"] is True
+    assert repaired.bars[0].volume == 183.532
+    assert repaired.bars[0].source == "backfill_rest_verified"

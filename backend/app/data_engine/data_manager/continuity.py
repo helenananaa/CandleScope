@@ -100,6 +100,14 @@ class SourceGapRegistry:
         return [gap for gap in self.gaps.values()
                 if gap.completed_at is None and (key is None or gap.key == key)]
 
+    def overlaps_pending(self, key: SeriesKey, start_ms: int | None, end_ms: int | None) -> bool:
+        # HTTP readers run off the event loop. Copy the bounded registry
+        # before inspecting it; gap publication fences concurrent changes.
+        return any(gap.key == key and gap.completed_at is None
+                   and (start_ms is None or gap.end_ms >= start_ms)
+                   and (end_ms is None or gap.start_ms <= end_ms)
+                   for gap in tuple(self.gaps.values()))
+
     def open(self, key: SeriesKey, start_ms: int, end_ms: int,
              expected_opens: tuple[int, ...] | None = None) -> tuple[SourceGap, bool]:
         for gap in self.pending(key):
@@ -265,6 +273,8 @@ class ContinuityConsumer:
             if self.error is not None:
                 raise self.error
             if gap.error:
+                if event.detail.get("state") != "failed" and self.wants(event):
+                    yield gap.event()
                 raise ConsumerRecoveryRequired(gap.error)
             if gap.completed_at is None or gap.completed_at > deadline:
                 raise ConsumerRecoveryRequired("source_gap_timeout")

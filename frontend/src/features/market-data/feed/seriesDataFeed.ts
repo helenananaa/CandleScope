@@ -1,3 +1,4 @@
+import { meetsStorageRevisionFloor, parseMarketVersion } from "../manager/marketHealth.js";
 import { BackfillRecoveryQueue } from "./backfillRecoveryQueue.js";
 import { assessKlineQuality, chooseHttpRow, hasFinalityEvidence, hasRetainedFinalRangeProof, hasVerifiedRangeCoverage, preserveFinalRow, recoveryRetryDecision, isKlineResultRepairPending } from "../quality/klineQualityPolicy.js";
 export { isKlineResultRepairPending } from "../quality/klineQualityPolicy.js";
@@ -17,6 +18,7 @@ import type {
   KlineFetchResult,
   KlineHistoryIntent,
   KlineRequestContext,
+  KlineRangeRequestOptions,
   KlineStreamController,
   KlineStreamFactory,
   KlineStreamOptions,
@@ -24,6 +26,8 @@ import type {
   PatchCacheTick,
   PendingBeforePage,
   SeriesDataFeedConfig,
+  StorageRevisionFloor,
+  TerminalHistoryGap,
 } from "../klineContracts.js";
 import type { ForegroundPreloadGate } from "../foregroundPreloadGate.js";
 import type { ChartWorkLane, ChartWorkScheduler } from "../chartWorkScheduler.js";
@@ -131,7 +135,7 @@ interface GetBeforeOptions {
   priority?: FeedRequestPriority;
 }
 
-interface GetRangeOptions {
+interface GetRangeOptions extends Pick<KlineRangeRequestOptions, "storageRevisionFloor"> {
   cacheMode?: KlineRequestContext["cacheMode"];
   start?: unknown;
   end?: unknown;
@@ -237,6 +241,7 @@ interface BackfillReloadJob {
   series: MarketSeries;
   epoch: number;
   range: TimeRangeMs | null;
+  storageRevisionFloor: StorageRevisionFloor | null;
   detail: NonNullable<BackfillCompletedMessage["detail"]>;
   eventKeys: Set<string>;
   userVisibleReason: boolean;
@@ -663,6 +668,8 @@ export class SeriesDataFeed {
   private readonly backfillRecovery: BackfillRecoveryQueue<BackfillReloadJob>;
   get backfillReloadInFlight(): ReadonlySet<string> { return this.backfillRecovery.activeKeys; }
   pendingGapRepairs: Map<string, PendingGapRepair>;
+  private terminalHistoryGaps: readonly TerminalHistoryGap[] = [];
+  private readonly terminalHistoryGapListeners = new Set<() => void>();
   gapRepairInFlight: Map<string, EpochLease>;
   gapRepairGenerationBySeries: Map<SeriesKey, number>;
   repairAbortStateBySeries: Map<SeriesKey, RepairAbortState>;
@@ -691,7 +698,11 @@ export class SeriesDataFeed {
     this.beforePageAvailability = new Map();
     this.backfillRecovery = new BackfillRecoveryQueue({
       merge: (queued, job) => {
-        if (queued.epoch !== job.epoch || !rangesTouch(queued.range, job.range)) return false;
+        if (queued.epoch !== job.epoch || !rangesTouch(queued.range, job.range)
+          || queued.storageRevisionFloor?.epoch !== job.storageRevisionFloor?.epoch) return false;
+        if (job.storageRevisionFloor && job.storageRevisionFloor.revision > (queued.storageRevisionFloor?.revision ?? -1)) {
+          queued.storageRevisionFloor = job.storageRevisionFloor;
+        }
         queued.range = unionRange(queued.range, job.range);
         queued.userVisibleReason ||= job.userVisibleReason;
         queued.detail = { ...queued.detail, ...job.detail };
@@ -878,7 +889,7 @@ export class SeriesDataFeed {
     this.bumpGapRepairGeneration(series);
     this.excludedRangesBySeries.delete(key);
     for (const [repairKey, pending] of this.pendingGapRepairs) {
-      if (this.seriesKey(pending.series) === key) this.pendingGapRepairs.delete(repairKey);
+      if (this.seriesKey(pending.series) === key) this.deletePendingGapRepair(repairKey);
     }
     this.gapPlannerNextAllowedAt.delete(key);
     // The epoch gate makes every request from the previous session stale, so
@@ -1343,6 +1354,7 @@ export class SeriesDataFeed {
     series: MarketSeries,
     detail: NonNullable<BackfillCompletedMessage["detail"]>,
     range: TimeRangeMs | null,
+    floor: StorageRevisionFloor | null,
   ): string {
     const requestId = detail.request_id ?? detail.repair_id ?? detail.job_id ?? "";
     return [
@@ -1351,6 +1363,8 @@ export class SeriesDataFeed {
       String(range?.start ?? ""),
       String(range?.end ?? ""),
       String(detail.reason || ""),
+      floor?.epoch ?? "",
+      floor?.revision ?? "",
     ].join("|");
   }
 
@@ -1375,7 +1389,7 @@ export class SeriesDataFeed {
     const fetchRange = (
       (isPendingInitial || isPendingLoadMore)
         ? job.range
-        : (activeOverlap || intersectRanges(job.range, activeCoverage))
+        : activeOverlap
     );
     let loadedAny = false;
     let initialResolved = false;
@@ -1414,13 +1428,23 @@ export class SeriesDataFeed {
 
     if (fetchRange) {
       try {
-        const result = await this.getBars(job.series, {
-          from: millisecondsToSeconds(fetchRange.start),
-          to: millisecondsToSeconds(fetchRange.end),
+        const read = () => this.getRange(job.series, {
+          start: millisecondsToSeconds(fetchRange.start),
+          end: millisecondsToSeconds(fetchRange.end),
           repair: "none",
           strict: false,
           source: "backfill-completed",
+          ...(job.storageRevisionFloor ? { storageRevisionFloor: job.storageRevisionFloor } : {}),
         });
+        let result = await read();
+        for (let attempt = 1; result.reason === "storage-revision-pending"
+          && attempt < job.options.completionMaxAttempts; attempt += 1) {
+          await new Promise<void>((resolve) => setTimeout(resolve, 100 * attempt));
+          if (!this.isCurrent(job.series, job.epoch) || !this.shouldCommitActive(job.series)) return false;
+          result = await read();
+        }
+        if (result.reason === "storage-revision-pending") return false;
+        if (job.storageRevisionFloor && pendingBeforePage) pendingBeforePage.nextPollAt = Date.now();
         if (result.stale || !this.isCurrent(job.series, job.epoch)) return false;
         if (result.active === false || !this.shouldCommitActive(job.series)) {
           this.clearInactivePendingState(job.series);
@@ -1468,12 +1492,13 @@ export class SeriesDataFeed {
     };
     try {
       const result = pendingInitial.range
-        ? await this.getBars(job.series, {
-          from: millisecondsToSeconds(pendingInitial.range.start),
-          to: millisecondsToSeconds(pendingInitial.range.end),
+        ? await this.getRange(job.series, {
+          start: millisecondsToSeconds(pendingInitial.range.start),
+          end: millisecondsToSeconds(pendingInitial.range.end),
           repair: "none",
           strict: false,
           source: "backfill-initial-range-verification",
+          ...(job.storageRevisionFloor ? { storageRevisionFloor: job.storageRevisionFloor } : {}),
           ...(pendingInitial.indicatorWindowOwner
             ? { indicatorWindowOwner: pendingInitial.indicatorWindowOwner }
             : {}),
@@ -1551,11 +1576,36 @@ export class SeriesDataFeed {
       ...(nextTerminal ? { onTerminal: nextTerminal } : {}),
     };
     this.pendingGapRepairs.set(key, pending);
+    if (current?.terminalReason !== nextTerminalReason) this.publishTerminalHistoryGaps();
     return pending;
   }
 
+  getTerminalHistoryGaps = (): readonly TerminalHistoryGap[] => this.terminalHistoryGaps;
+
+  subscribeTerminalHistoryGaps = (listener: () => void): (() => void) => {
+    this.terminalHistoryGapListeners.add(listener);
+    return () => { this.terminalHistoryGapListeners.delete(listener); };
+  };
+
+  private publishTerminalHistoryGaps(): void {
+    this.terminalHistoryGaps = [...this.pendingGapRepairs.values()].flatMap((pending) => (
+      pending.terminalReason ? [{
+        seriesKey: this.seriesKey(pending.series),
+        range: pending.range,
+        reason: pending.terminalReason,
+      }] : []
+    ));
+    for (const listener of this.terminalHistoryGapListeners) listener();
+  }
+
+  private deletePendingGapRepair(key: string): void {
+    const terminal = this.pendingGapRepairs.get(key)?.terminalReason;
+    this.pendingGapRepairs.delete(key);
+    if (terminal) this.publishTerminalHistoryGaps();
+  }
+
   private clearPendingGapRepair(series: MarketSeries, range: TimeRangeSec): void {
-    this.pendingGapRepairs.delete(this.gapRepairKey(series, range));
+    this.deletePendingGapRepair(this.gapRepairKey(series, range));
   }
 
   private wakePendingGapRepairs(
@@ -1584,6 +1634,7 @@ export class SeriesDataFeed {
     series: MarketSeries,
     fetchedRange: TimeRangeSec,
     result: KlineFetchResult,
+    terminalOnly = false,
   ): void {
     if (
       !createIntervalTimeline(series.interval)
@@ -1595,6 +1646,7 @@ export class SeriesDataFeed {
     const seriesKey = this.seriesKey(series);
     for (const [repairKey, pending] of this.pendingGapRepairs) {
       if (this.seriesKey(pending.series) !== seriesKey) continue;
+      if (terminalOnly && !pending.terminalReason) continue;
       if (
         pending.range.start < fetchedRange.start
         || pending.range.end > fetchedRange.end
@@ -1602,7 +1654,7 @@ export class SeriesDataFeed {
         continue;
       }
       if (!this.isGapRangeSatisfied(result, pending.range, series.interval)) continue;
-      this.pendingGapRepairs.delete(repairKey);
+      this.deletePendingGapRepair(repairKey);
       pending.onResolved?.(result);
     }
   }
@@ -1639,7 +1691,7 @@ export class SeriesDataFeed {
     this.clearPendingBeforePage(series);
     for (const [repairKey, pending] of this.pendingGapRepairs) {
       if (this.seriesKey(pending.series) === seriesKey) {
-        this.pendingGapRepairs.delete(repairKey);
+        this.deletePendingGapRepair(repairKey);
       }
     }
   }
@@ -1659,13 +1711,16 @@ export class SeriesDataFeed {
     if (!Array.isArray(result.excluded_ranges) && !revisionChanged) return;
     const now = Date.now();
     if (revisionChanged) {
+      let reopened = false;
       for (const pending of this.pendingGapRepairs.values()) {
         if (this.seriesKey(pending.series) !== key || !pending.terminalReason
           || pending.terminalReason.startsWith("pagination_")) continue;
         delete pending.terminalReason;
         pending.dormant = false;
         pending.nextPollAt = now;
+        reopened = true;
       }
+      if (reopened) this.publishTerminalHistoryGaps();
     }
     const resultRetryAtMs = retryAtMilliseconds(result.retry_at_ms);
     const incomingRanges = Array.isArray(result.excluded_ranges)
@@ -1853,6 +1908,24 @@ export class SeriesDataFeed {
     return range;
   }
 
+  trackTerminalHistoryGaps(series: MarketSeries, result: KlineFetchResult): void {
+    const decision = recoveryRetryDecision(result, Date.now());
+    if (!this.shouldCommitActive(series) || result.complete === true
+        || !decision || Number.isFinite(decision.retryAt)) return;
+    const missing = missingRanges(result);
+    const request = numericResultRange(result);
+    const bounds = missing.length > 0
+      ? missing.map((gap) => numericResultRange(gap))
+      : [request];
+    for (const bound of bounds) {
+      if (!bound) continue;
+      this.trackPendingGapRepair(series, {
+        start: millisecondsToSeconds(bound.start),
+        end: millisecondsToSeconds(bound.end),
+      }, undefined, true, undefined, decision.reason);
+    }
+  }
+
   clearPendingResultRepair(series: MarketSeries, range: TimeRangeSec | null | undefined): void {
     if (!range) return;
     const seriesKey = this.seriesKey(series);
@@ -1863,7 +1936,7 @@ export class SeriesDataFeed {
         && pending.range.start >= range.start
         && pending.range.end <= range.end
       ) {
-        this.pendingGapRepairs.delete(repairKey);
+        this.deletePendingGapRepair(repairKey);
       }
     }
   }
@@ -1875,7 +1948,7 @@ export class SeriesDataFeed {
     this.gapPlannerNextAllowedAt.delete(seriesKey);
     for (const [repairKey, pending] of this.pendingGapRepairs) {
       if (this.seriesKey(pending.series) === seriesKey) {
-        this.pendingGapRepairs.delete(repairKey);
+        this.deletePendingGapRepair(repairKey);
       }
     }
   }
@@ -1921,7 +1994,7 @@ export class SeriesDataFeed {
       const tracked = this.pendingGapRepairs.get(key);
       if (tracked) tracked.failureAttempts = 0;
       if (result.stale || result.active === false) {
-        this.pendingGapRepairs.delete(key);
+        this.deletePendingGapRepair(key);
         return true;
       }
       this.updatePendingGapRepairFromResult(series, range, result, attempts, dormant);
@@ -1974,7 +2047,12 @@ export class SeriesDataFeed {
       interval: series.interval,
       nowMs: now,
       visibleRange,
-      excludedRanges: this.excludedRangesBySeries.get(key)?.ranges || [],
+      excludedRanges: [
+        ...(this.excludedRangesBySeries.get(key)?.ranges ?? []),
+        ...this.terminalHistoryGaps.filter((gap) => gap.seriesKey === key).map(({ range }) => ({
+          start_ms: secondsToMilliseconds(range.start), end_ms: secondsToMilliseconds(range.end),
+        })),
+      ],
     });
     let requested = 0;
     for (const plan of plans) {
@@ -2146,6 +2224,13 @@ export class SeriesDataFeed {
         || this.pendingDerivedRange(activeSeries, eventRange)
         || projectContinuousRangeToInterval(eventRange, activeSeries.interval);
     }
+    let storageRevisionFloor: StorageRevisionFloor | null = null;
+    if (detail.reason === "storage_history_changed") {
+      const revision = detail.storage_revision;
+      const version = parseMarketVersion(msg.stream_version ?? detail.stream_version, eventSeries);
+      if (!version || typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 0) return true;
+      storageRevisionFloor = { epoch: version.epoch, revision };
+    }
     this.invalidateBeforePageAvailabilityFromObservation(eventSeries, {
       range: eventRange,
       revision: detail.availability_revision,
@@ -2161,7 +2246,7 @@ export class SeriesDataFeed {
     );
     const isPendingLoadMore = Boolean(pendingBeforePage);
 
-    if (isPendingLoadMore && !isPendingInitial) {
+    if (!storageRevisionFloor && isPendingLoadMore && !isPendingInitial) {
       // A completion chunk is only a hint that the owned page may now be
       // readable. Do not fan each chunk out into an exact-range reload plus a
       // second full-page request; the runtime poll is the single validation
@@ -2170,7 +2255,7 @@ export class SeriesDataFeed {
       return true;
     }
 
-    if (isPendingInitial && pendingInitial?.range) {
+    if (!storageRevisionFloor && isPendingInitial && pendingInitial?.range) {
       const initialRange = {
         start: millisecondsToSeconds(pendingInitial.range.start),
         end: millisecondsToSeconds(pendingInitial.range.end),
@@ -2189,6 +2274,7 @@ export class SeriesDataFeed {
 
     const activeRows = getCacheRows(eventSeries) || [];
     const activeCoverage = activeCoverageMsFromRows(activeRows);
+    if (storageRevisionFloor && !eventRange) eventRange = activeCoverage ?? pendingInitial?.range ?? null;
     const activeOverlap = intersectRanges(eventRange, activeCoverage);
     if (
       userVisibleReason
@@ -2203,12 +2289,13 @@ export class SeriesDataFeed {
 
     const fetchRange = (isPendingInitial || isPendingLoadMore)
       ? eventRange
-      : (activeOverlap || intersectRanges(eventRange, activeCoverage));
-    const eventKey = this.backfillEventKey(eventSeries, detail, fetchRange);
+      : activeOverlap;
+    const eventKey = this.backfillEventKey(eventSeries, detail, fetchRange, storageRevisionFloor);
     this.backfillRecovery.enqueue(this.seriesKey(eventSeries), {
       series: eventSeries,
       epoch: this.currentEpoch(eventSeries),
       range: fetchRange,
+      storageRevisionFloor,
       detail,
       eventKeys: new Set([eventKey]),
       userVisibleReason,
@@ -2217,7 +2304,7 @@ export class SeriesDataFeed {
         loading,
         pendingInitial,
         getPendingInitial,
-          getCacheRows,
+        getCacheRows,
         getFallbackDays,
         onRecoveryProgress,
         cooldownMs,
@@ -2603,6 +2690,7 @@ export class SeriesDataFeed {
       indicatorWindowOwner: requestedIndicatorWindowOwner,
       priority = "foreground",
       cacheMode = "network-only",
+      storageRevisionFloor,
     }: GetRangeOptions = {},
   ): Promise<FeedResult> {
     const range = normalizeRangeSec({ start, end, startSec, endSec });
@@ -2651,11 +2739,16 @@ export class SeriesDataFeed {
             repair,
             waitMs,
             strict,
+            ...(storageRevisionFloor ? { storageRevisionFloor } : {}),
             ...(signal === undefined ? {} : { signal }),
             ...transportDemand,
           },
         );
         throwIfAborted(signal);
+        if (storageRevisionFloor && !meetsStorageRevisionFloor(result, series, storageRevisionFloor)) {
+          return { data: [], rows: [], reason: "storage-revision-pending",
+            history_state: "pending", complete: false, retryable: true } satisfies FeedResult;
+        }
         const applied = this.applyResult(series, { ...result, endpoint: "range" }, {
           epoch,
           source,
@@ -2789,6 +2882,10 @@ export class SeriesDataFeed {
       }
       combinedResult.endpoint = "range";
       combinedResult.quality = assessKlineQuality(combinedResult, "range");
+      if ((commit === "active" || commit === "always")
+          && this.isCurrent(series, epoch) && this.shouldCommitActive(series)) {
+        this.resolveVerifiedPendingGapRepairs(series, range, combinedResult, true);
+      }
       return combinedResult;
       },
       signal,

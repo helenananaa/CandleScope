@@ -94,6 +94,84 @@ async def test_strict_and_gap_aware_share_repair_without_blocking_latest(tmp_pat
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("repaired", [True, False])
+async def test_browser_batch_gets_exact_gap_before_repair_and_http_fences_only_that_range(
+    tmp_path, monkeypatch, repaired,
+):
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+    from app.api.v1.klines import router as klines_router
+    from app.api.v1.stream_kline_batch import KlineBatchConnection, KlineBatchLimits, _EVENT_TYPES
+    from tests.test_kline_batch_source_recovery import Socket
+    from starlette.websockets import WebSocketDisconnect
+
+    dm, store, factory, _ = await manager(tmp_path, monkeypatch)
+    socket = Socket()
+    connection = KlineBatchConnection(socket, dm, limits=KlineBatchLimits.from_config())
+    wire = asyncio.create_task(connection.run())
+    app = FastAPI()
+    app.state.data_manager = dm
+    app.include_router(klines_router, prefix="/api/v1")
+    http = AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+    async def strict_range(time):
+        response = await http.get("/api/v1/klines/range", params={
+            **IDENTITY, "start_ms": time, "end_ms": time, "strict": "true", "repair": "none",
+        })
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    opened = T + 60_000
+    handle = await dm.subscribe_async(
+        connection._event_callback("chart"), **IDENTITY, event_types=_EVENT_TYPES,
+        on_recovery=connection._require_resync,
+    )
+    try:
+        await factory.emit(T, 99)
+        await _until(lambda: any(msg.get("event_type") == "bar.closed" for msg in socket.messages))
+        before = dm.query(start_ms=T, end_ms=T, auto_backfill=False, **IDENTITY).metadata["stream_version"]
+        await factory.emit(T + 120_000, 101)
+        await _until(lambda: any(msg.get("status") == "source_gap" for msg in socket.messages))
+        pending = next(msg for msg in socket.messages if msg.get("status") == "source_gap")
+        assert pending["detail"]["state"] == "recovering"
+        assert pending["detail"]["range_start_ms"] == pending["detail"]["range_end_ms"] == opened
+        assert pending["stream_version"]["barrier"] > before["barrier"]
+        assert not any(msg.get("data", {}).get("time") == (T + 120_000) // 1000 for msg in socket.messages)
+
+        affected = await strict_range(opened)
+        disjoint = await strict_range(T)
+        assert affected["stream_version"]["stable"] is False
+        assert affected["retryable"] and not affected["renderable"] and not affected["data"]
+        assert disjoint["stream_version"]["stable"] and disjoint["data"][0]["close"] == 99
+        if repaired:
+            await _history_repair(dm, store, opened, 150)
+            await _until(lambda: any(msg.get("detail", {}).get("reason") == "source_gap_resolved"
+                                     for msg in socket.messages))
+            resolved = next(msg for msg in socket.messages if msg.get("detail", {}).get("reason") == "source_gap_resolved")
+            assert resolved["detail"]["gap_id"] == pending["detail"]["gap_id"]
+            assert resolved["stream_version"]["barrier"] > pending["stream_version"]["barrier"]
+            result = await strict_range(opened)
+            assert result["stream_version"]["stable"] and result["verified_contiguous"]
+            assert result["data"][0]["close"] == 150
+        else:
+            await dm.event_bus.emit(DataEvent(
+                DataEventType.BACKFILL_FAILED, handle.key, detail={"source_gap_id": pending["detail"]["gap_id"]},
+            ))
+            await asyncio.wait_for(wire, 1)
+            failed = next(msg for msg in socket.messages if msg.get("detail", {}).get("state") == "failed")
+            assert failed["detail"]["error"] == "source_repair_failed"
+            assert failed["detail"]["range_start_ms"] == opened
+            assert socket.closes == [(1013, "CONSUMER_RESYNC_REQUIRED")]
+            result = await strict_range(opened)
+            assert not result["stream_version"]["stable"] and not result["data"]
+    finally:
+        await http.aclose()
+        if not wire.done():
+            await socket.input.put(WebSocketDisconnect(1000))
+            await asyncio.wait_for(wire, 1)
+        await _close(dm, factory)
+
+
+@pytest.mark.anyio
 async def test_partial_and_untrusted_repair_cannot_release_strict_subscriber(tmp_path, monkeypatch):
     dm, store, factory, _ = await manager(tmp_path, monkeypatch)
     strict, errors, _ = capture(dm)

@@ -302,9 +302,9 @@ def test_generic_symbol_normalization_preserves_ccxt_unified_symbol() -> None:
 
 
 def test_unified_kline_projection_emits_one_closure_transition() -> None:
-    descriptor = _descriptor(StreamType.KLINE)
+    descriptor = StreamDescriptor("BTC/USDT", StreamType.KLINE, interval="1m", exchange="gate")
     projector = CcxtUnifiedProjector(
-        exchange_id="bybit",
+        exchange_id="gate",
         market_type="spot",
         descriptor=descriptor,
     )
@@ -332,6 +332,81 @@ def test_unified_kline_projection_emits_one_closure_transition() -> None:
     assert event.source == DataSource.PLUGIN
     assert event.data["is_closed"] is True
     assert event.data["open_time"] == first_open
+
+
+def test_bybit_live_close_preserves_venue_confirmation_and_final_volume(tmp_path, monkeypatch) -> None:
+    async def run():
+        descriptor = StreamDescriptor("BTCUSDT", StreamType.KLINE, interval="5m",
+                                      exchange="bybit", market_type="swap.linear")
+        profile = CcxtUnifiedProfile(get_ccxt_catalog_entry("bybit"), "swap.linear")
+        exchange = profile.create_exchange(IngestionConfig(proxy_mode="none"),
+                                           raw_event_sink=None, lifecycle_sink=None)
+        projector = CcxtUnifiedProjector(exchange_id="bybit", market_type="swap.linear",
+                                         descriptor=descriptor)
+        normalizer = CcxtUnifiedNormalizer(descriptor)
+        opened = 1_794_199_800_000
+        confirmed = {"start": opened, "end": opened + 299_999, "confirm": True,
+                     "open": "74826.6", "high": "74854.3", "low": "74758.7",
+                     "close": "74766.1", "volume": "183.532"}
+        preview = {**confirmed, "confirm": False, "high": "74854.4", "volume": "183.414"}
+        successor = {**preview, "start": opened + 300_000, "end": opened + 599_999}
+
+        def project(candle):
+            return projector.project([exchange.parse_ws_ohlcv(candle)])
+
+        try:
+            preview_events = project(preview)
+            assert [event.payload["is_closed"] for event in preview_events] == [False]
+            assert [event.payload["is_closed"] for event in project(successor)] == [False]
+            wrong_end = project({**confirmed, "end": opened + 300_000})[0]
+            assert normalizer.parse(RawMessage(payload=wrong_end.payload, source=DataSource.WEBSOCKET,
+                stream_type=StreamType.KLINE, received_at_ms=opened + 300_000)) is None
+            close_events = project(confirmed)
+            assert [event.payload["is_closed"] for event in close_events] == [True]
+            event = normalizer.parse(RawMessage(payload=close_events[0].payload, source=DataSource.WEBSOCKET,
+                stream_type=StreamType.KLINE, received_at_ms=opened + 300_000))
+            assert event is not None
+            assert event.data["is_closed"] is True and event.data["volume"] == 183.532
+            assert event.data["bybit_close_confirmed"] is True
+            unproved = dict(close_events[0].payload)
+            del unproved["source_close_time_ms"]
+            assert not normalizer.parse(RawMessage(
+                payload=unproved, source=DataSource.WEBSOCKET, stream_type=StreamType.KLINE,
+                received_at_ms=opened + 300_000,
+            )).data["is_closed"]
+
+            from app.data_engine.data_manager.manager import DataManager
+            from app.data_engine.storage import klines_repo
+
+            monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", tmp_path / "live.sqlite")
+            klines_repo.init_klines_storage()
+            manager = DataManager()
+            manager.set_storage(klines_repo.KlinesRepoAdapter())
+            manager._started = True  # Enable the production bridge without opening exchange sockets.
+            agg = manager.bar_aggregator
+            agg.add_target("BTCUSDT", "5m", exchange="bybit", market_type="swap.linear")
+            preview_event = normalizer.parse(RawMessage(
+                payload=preview_events[0].payload, source=DataSource.WEBSOCKET,
+                stream_type=StreamType.KLINE, received_at_ms=opened + 299_000,
+            ))
+            await agg.on_market_event(preview_event)
+            await agg.on_market_event(event)
+            await manager.aggregator_bridge.delivery.stop()
+            await manager.event_bus.close()
+            [saved] = klines_repo.query_klines("BTCUSDT", "5m", exchange="bybit", market_type="swap.linear")
+            assert saved["source"] == "bybit_ws_confirmed"
+            assert saved["high"] == 74854.3 and saved["volume"] == 183.532
+            assert project(preview) == ()
+            assert project({**preview, "confirm": None}) == ()
+            assert project(confirmed) == ()
+            assert project({**successor, "confirm": "true"}) == ()
+            [unconfirmed] = project({**successor, "confirm": None, "volume": "183.415"})
+            assert unconfirmed.payload["is_closed"] is False
+            assert "source_close_time_ms" not in unconfirmed.payload
+        finally:
+            await exchange.close()
+
+    asyncio.run(run())
 
 
 def test_unified_trades_are_deduplicated_without_false_continuity() -> None:
@@ -632,8 +707,8 @@ def test_shared_reset_notifies_all_sessions_without_watch_cancellation():
 
 
 def test_interrupted_unified_kline_does_not_finalize_old_preview():
-    projector = CcxtUnifiedProjector(exchange_id="bybit", market_type="spot",
-                                     descriptor=_descriptor(StreamType.KLINE))
+    descriptor = StreamDescriptor("BTC/USDT", StreamType.KLINE, interval="1m", exchange="gate")
+    projector = CcxtUnifiedProjector(exchange_id="gate", market_type="spot", descriptor=descriptor)
     opened = 1_700_000_040_000
     first = projector.project([[opened, 10, 11, 9, 10, 1]])
     assert first[0].payload["is_closed"] is False
