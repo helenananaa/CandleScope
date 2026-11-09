@@ -162,6 +162,31 @@ test("freshness expires independently of coverage; a historical amendment does n
   assert.equal(health.fresh, false); assert.equal(health.reason, "stale-tail");
 });
 
+test("a historical amendment in a new generation cannot reuse the retired stream's freshness", () => {
+  const cache = healthy();
+  const generation = (sequence: number, barrier = 1) => wire(sequence, barrier, { generation: 2 });
+  read(cache, generation(0, 0));
+  cache.admitRealtime(series, row(60, true, 20), "bar.amended", generation(1), 0);
+  read(cache, generation(1), [row(60, true, 20), row(120)]);
+  const health = cache.planHistory(series, 2).health;
+  assert.equal(health.continuous, true);
+  assert.equal(health.fresh, false);
+  cache.admitRealtime(series, row(180, false, 22), "bar.updated", generation(2), 120_000);
+  assert.equal(cache.planHistory(series, 2).action, "reuse");
+});
+
+test("a new generation announced by a history correction replaces retired row and tail versions", () => {
+  const cache = healthy();
+  read(cache, wire(5), [row(60), row(120, true, 15)]);
+  const version = wire(1, 1, { generation: 2 });
+  cache.invalidateRange(series, { from: 120, to: 120 }, version);
+  read(cache, version, [row(60), row(120, true, 25)]);
+  assert.equal(cache.read(series, { to: 120 }).rows.at(-1)?.close, 25);
+  const health = cache.planHistory(series, 2).health;
+  assert.equal(health.historyCovered, false);
+  assert.equal(health.fresh, false);
+});
+
 test("disconnect and epoch change fence in-flight reads and require a fresh stream/snapshot link", () => {
   const cache = healthy(), token = cache.beginRead(series);
   cache.markDisconnected(series); cache.connect(series);

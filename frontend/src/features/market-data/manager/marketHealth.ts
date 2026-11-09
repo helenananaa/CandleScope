@@ -64,7 +64,7 @@ export class MarketHealthState {
   private subscribed = false;
   private continuous = false;
   private lastEvent: MarketStreamVersion | null = null;
-  private receivedAt = 0;
+  private receivedAt: number | null = null;
   private baseline: MarketStreamVersion | null = null;
   private freshObservedAt = 0;
   private readonly retired = new Set<string>();
@@ -78,7 +78,7 @@ export class MarketHealthState {
     this.subscribed = false; this.connection += 1;
     if (revokeReads) this.invalidation += 1;
     this.continuous = false;
-    this.lastEvent = null; this.receivedAt = 0; this.baseline = null;
+    this.lastEvent = null; this.receivedAt = null; this.baseline = null;
     this.retired.clear(); this.requiresReconnect = false;
   }
   invalidate(): void { this.continuous = false; this.baseline = null; }
@@ -142,6 +142,8 @@ export class MarketHealthState {
       // queued incarnation. A fresh physical connection resets this budget.
       if (this.retired.size >= 64) { this.requiresReconnect = true; this.invalidate(); return false; }
       this.retired.add(this.incarnation(this.version));
+      this.lastEvent = null;
+      this.receivedAt = null;
     }
     this.version = version;
     return true;
@@ -149,7 +151,7 @@ export class MarketHealthState {
 
   status(historyCovered: boolean): MarketHealth {
     const now = this.now();
-    const fresh = this.lastEvent !== null && now - this.receivedAt <= this.freshMs
+    const fresh = this.receivedAt !== null && now - this.receivedAt <= this.freshMs
       && now - this.freshObservedAt <= this.freshMs && this.freshObservedAt <= now + 5_000;
     const reason = !historyCovered ? "missing-history" : !this.subscribed ? "unsubscribed"
       : !this.continuous ? "resync" : !fresh ? "stale-tail" : "healthy";

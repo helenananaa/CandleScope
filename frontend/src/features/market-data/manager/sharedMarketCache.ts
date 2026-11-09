@@ -344,6 +344,7 @@ export class SharedMarketCache {
         && (entry.storageVersion?.epoch !== version.epoch || storageRevision > entry.storageVersion.revision)) {
         entry.storageVersion = { epoch: version.epoch, revision: storageRevision };
       }
+      if (decision.reset) { entry.serverRowVersions.clear(); entry.expectedClosedTime = null; }
       if (decision.reset || decision.gap) range = undefined;
     }
     entry.health.invalidate();

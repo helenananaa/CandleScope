@@ -39,7 +39,8 @@ export async function checkMarketHealth() {
   }));
   const corpus = new Map(["BTCUSDT", "ETHUSDT"].map(symbol => [symbol, bars(symbol)]));
   const revisions = new Map<string, { sequence: number; barrier: number }>();
-  const wire = (symbol: string) => ({ protocol: 1, epoch: "browser-server", generation: 1,
+  const generations = new Map<string, number>();
+  const wire = (symbol: string) => ({ protocol: 1, epoch: "browser-server", generation: generations.get(symbol) ?? 1,
     sequence: revisions.get(symbol)?.sequence ?? 0, barrier: revisions.get(symbol)?.barrier ?? 0,
     observed_at_ms: Date.now(), stable: true,
     series: { exchange: "binance", market_type: "spot", symbol, interval: "1m", provider_id: "binance", venue: "binance",
@@ -203,6 +204,17 @@ export async function checkMarketHealth() {
     emit(eth.symbol, { ...forming, close: 23 }, "bar.updated");
     assert(manager.cache.planHistory(eth, 500).action === "reuse", "verified reconnect did not restore healthy reuse");
     checks.push("after reconnect only a stable read linked to a real stream event restores healthy reuse");
+    generations.set(eth.symbol, 2);
+    revisions.set(eth.symbol, { sequence: 0, barrier: 0 });
+    await manager.fetchKlinesHistory(eth.symbol, eth.interval, null, eth.marketType, eth.exchange,
+      { countBack: 500, maxWaitMs: 0, clientContext: { cacheMode: "network-only" } });
+    emit(eth.symbol, idleCorrection, "bar.amended");
+    const afterAmendment = manager.cache.planHistory(eth, 500);
+    assert(afterAmendment.health.continuous && !afterAmendment.health.fresh && afterAmendment.action !== "reuse",
+      "a historical amendment borrowed freshness from the retired generation");
+    emit(eth.symbol, { ...forming, close: 24 }, "bar.updated");
+    assert(manager.cache.planHistory(eth, 500).action === "reuse", "new-generation tail did not restore healthy reuse");
+    checks.push("a generation rollover requires a current tail event even after a linked historical amendment");
     flushSync(() => root.unmount());
     manager.closeAll(); gate.dispose();
     assert(physical.every(stream => stream.closed), "owned streams leaked");
