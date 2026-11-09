@@ -18,6 +18,7 @@ export interface TradeHistoryPage {
   data: TradeHistoryMinute[];
   complete: boolean;
   has_more: boolean;
+  coverage?: { verified_empty_minutes?: number };
 }
 
 interface TradeHistoryPreparation {

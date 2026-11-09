@@ -94,6 +94,7 @@ from app.data_engine.market_data.catalog import (
     MarketDataProviderDescriptor,
 )
 from app.data_engine.market_data.models import MarketChannel, MarketStreamKey
+from app.data_engine.market_data.trade_flow import TradeHistoryRead
 from app.data_engine.market_data.ports import (
     AdvancedMarketDataPort,
     FullOrderBookPort,
@@ -1740,6 +1741,9 @@ class DataManager(DataManagerCore):
         **kwargs: Any,
     ) -> list[Any]:
         return await self.trades.history(key, **kwargs)
+
+    async def read_trade_flow_history(self, key: MarketStreamKey, **kwargs: Any) -> TradeHistoryRead:
+        return await self.trades.read_history(key, **kwargs)
 
     def attach_trade_flow(self, keys: list[MarketStreamKey], **kwargs: Any) -> Any:
         return self.trades.attach(keys, **kwargs)

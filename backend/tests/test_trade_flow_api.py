@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from app.api.v1.trade_flow import router as trade_flow_router
 from app.data_engine.ingestion.models import DataSource
 from app.data_engine.market_data.models import MarketChannel, MarketStreamKey
-from app.data_engine.market_data.trade_flow import NormalizedAggTrade
+from app.data_engine.market_data.trade_flow import NormalizedAggTrade, TradeHistoryRead
 from app.data_engine.storage.raw_trade_archive import (
     RawAggTradeCoverage,
     RawAggTradeGap,
@@ -56,9 +56,9 @@ class _TradeFlowDataManager:
             )
         ]
 
-    async def trade_flow_history(self, key: MarketStreamKey, **kwargs) -> list[dict]:
+    async def read_trade_flow_history(self, key: MarketStreamKey, **kwargs) -> TradeHistoryRead:
         self.history_calls.append({"key": key, **kwargs})
-        return [
+        return TradeHistoryRead([
             {
                 "exchange": key.exchange,
                 "market_type": key.market_type,
@@ -71,7 +71,7 @@ class _TradeFlowDataManager:
                 "is_final": True,
                 "revision": 2,
             }
-        ]
+        ])
 
     async def trade_flow_archive_coverage(
         self,
@@ -163,8 +163,8 @@ def test_trade_flow_history_is_rollup_only_and_fail_closed() -> None:
 
 def test_empty_history_does_not_claim_complete() -> None:
     class _EmptyManager(_TradeFlowDataManager):
-        async def trade_flow_history(self, key, **kwargs):
-            return []
+        async def read_trade_flow_history(self, key, **kwargs):
+            return TradeHistoryRead([])
 
     response = _client(_EmptyManager()).get("/api/v1/trade-flow/history")
 
@@ -266,7 +266,7 @@ def test_real_rollup_history_only_pages_to_an_existing_local_row(tmp_path) -> No
         for index in range(5001)
     ]))
     service = TradeFlowService(object(), rollup_store=store, raw_archive=DisabledRawAggTradeArchive())
-    with _client(SimpleNamespace(trade_flow_ready=True, trade_flow_history=service.history)) as client:
+    with _client(SimpleNamespace(trade_flow_ready=True, read_trade_flow_history=service.read_history)) as client:
         last = first + 5000 * 120_000
         params = {"start_ms": first, "end_ms": last, "limit": 5000}
         response = client.get("/api/v1/trade-flow/history", params=params)
@@ -325,7 +325,7 @@ def test_bounded_history_rebuilds_only_from_verified_archive_objects(tmp_path, m
         object(), rollup_store=store, raw_archive=DisabledRawAggTradeArchive(),
         verified_archive_root=root,
     )
-    with _client(SimpleNamespace(trade_flow_ready=True, trade_flow_history=service.history)) as client:
+    with _client(SimpleNamespace(trade_flow_ready=True, read_trade_flow_history=service.read_history)) as client:
         params = {"start_ms": first, "end_ms": fourth, "limit": 2}
         response = client.get("/api/v1/trade-flow/history", params=params)
         assert response.status_code == 200, response.text
@@ -340,10 +340,29 @@ def test_bounded_history_rebuilds_only_from_verified_archive_objects(tmp_path, m
 
         final = client.get("/api/v1/trade-flow/history", params={**params, **page["next_cursor"]}).json()
         assert final["data"][0]["bucket_start_ms"] == fourth and final["has_more"] is False
+        assert final["complete"] and final["terminal_reason"] is None
+        whole = client.get("/api/v1/trade-flow/history", params={**params, "limit": 10}).json()
+        assert whole["count"] == 3 and whole["complete"] and not whole["coverage"]["observed_only"]
         quiet = client.get("/api/v1/trade-flow/history", params={
             "start_ms": first + 60_000, "end_ms": first + 60_000,
         }).json()
-        assert quiet["data"] == []
+        assert quiet["data"] == [] and quiet["complete"]
+        assert quiet["coverage"]["verified_empty_minutes"] == 1
+        assert quiet["coverage"]["verified_empty_ranges"] == [
+            {"start_ms": first + 60_000, "end_ms": first + 60_000},
+        ]
+        leading = client.get("/api/v1/trade-flow/history", params={
+            "start_ms": first - 120_000, "end_ms": first - 60_000,
+        }).json()
+        assert leading["data"] == [] and leading["complete"]
+        assert leading["coverage"]["verified_empty_ranges"] == [
+            {"start_ms": first - 120_000, "end_ms": first - 60_000},
+        ]
+        unknown = client.get("/api/v1/trade-flow/history", params={
+            "start_ms": first - 86_400_000, "end_ms": first - 86_400_000,
+        }).json()
+        assert unknown["data"] == [] and not unknown["complete"]
+        assert unknown["coverage"]["verified_empty_ranges"] == []
 
         # The read never replaces SQLite, and a later corrupt verified object
         # must leave the observed SQLite rows available without promotion.
@@ -351,12 +370,21 @@ def test_bounded_history_rebuilds_only_from_verified_archive_objects(tmp_path, m
             exchange="binance", market_type="futures", symbol="BTCUSDT", limit=10,
         ))
         assert len(stored) == 2 and not stored[0]["is_complete"] and stored[0]["buy_base_volume"] == 9
+        asyncio.run(store.upsert_rollups([
+            _rollup(first + 60_000, revision=1, is_complete=False, is_final=True, buy_base=1),
+        ]))
+        conflict = client.get("/api/v1/trade-flow/history", params={
+            "start_ms": first + 60_000, "end_ms": first + 60_000,
+        }).json()
+        assert conflict["count"] == 1 and not conflict["data"][0]["is_complete"]
+        assert not conflict["complete"] and conflict["coverage"]["verified_empty_ranges"] == []
         with next(root.rglob("part-verified-*.parquet")).open("ab") as corrupt:
             corrupt.write(b"changed")
         fallback = client.get("/api/v1/trade-flow/history", params=params).json()
         assert fallback["data"][0]["buy_base_volume"] == 9
         assert fallback["data"][0]["is_complete"] is False
         assert "archive_data_epoch" not in fallback["data"][0]
+        assert not fallback["complete"] and fallback["coverage"]["verified_empty_ranges"] == []
 
         async def reject_archive(*args, **kwargs):
             raise ExecutorBusyError("archive")

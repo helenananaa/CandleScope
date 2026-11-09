@@ -298,7 +298,8 @@ function TradeFlowDock({
   useLocale();
   const preferences = runtime.view.preferences;
   const [historyOpen, setHistoryOpen] = useState(false);
-  const historyAvailable = mode === "profile" && runtime.view.supported;
+  const historyAvailable = mode === "profile" && runtime.view.supported
+    && runtime.view.continuityMode === "strict_repairable";
   const identity = runtime.view.identity;
   return (
     <section

@@ -13,7 +13,16 @@ from app.data_engine.ingestion.models import DataSource, MarketEvent, StreamType
 
 
 BUCKET_INTERVAL_MS = 60_000
+MAX_TRADE_HISTORY_PROOF_MINUTES = 5001
 StreamIdentity = tuple[str, str, str]
+
+
+@dataclass(frozen=True)
+class TradeHistoryRead:
+    rows: list[dict[str, Any]]
+    verified_empty_opens: frozenset[int] = frozenset()
+
+
 IngestReason = Literal[
     "accepted",
     "duplicate",

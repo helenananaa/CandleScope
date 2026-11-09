@@ -45,11 +45,13 @@ from .lifecycle import KeyedAsyncLockPool, drain_cancellation_safe_cleanup
 from .models import DeliveryClass, MarketChannel, MarketStreamKey, TransportMode
 from .trade_flow import (
     BUCKET_INTERVAL_MS,
+    MAX_TRADE_HISTORY_PROOF_MINUTES,
     NormalizedAggTrade,
     StreamIdentity,
     TradeFlowBucket,
     TradeFlowEngine,
     TradeFlowGap,
+    TradeHistoryRead,
     TradeFlowIngestResult,
 )
 
@@ -57,7 +59,6 @@ from .trade_flow import (
 logger = logging.getLogger("data_engine.market_data.trade_flow")
 
 _UTC_DAY_MS = 86_400_000
-_MAX_ARCHIVE_HISTORY_MINUTES = 5001
 _MAX_ARCHIVE_HISTORY_TRADES_PER_DAY = 50_000
 
 
@@ -530,7 +531,14 @@ class TradeFlowService:
         limit: int = 1000,
     ) -> list[dict[str, Any]]:
         """Return an ascending bounded 1m rollup range."""
+        result = await self.read_history(key, start_ms=start_ms, end_ms=end_ms, limit=limit)
+        return result.rows
 
+    async def read_history(
+        self, key: MarketStreamKey | StreamIdentity, *, start_ms: int | None = None,
+        end_ms: int | None = None, limit: int = 1000,
+    ) -> TradeHistoryRead:
+        """Return rows and separate evidence for checksum-verified quiet minutes."""
         self._ensure_readable()
         identity = self._validate_identity(key)
         start = _optional_non_negative_int(start_ms, "start_ms")
@@ -539,6 +547,7 @@ class TradeFlowService:
             raise ValueError("start_ms cannot exceed end_ms")
         bounded = _bounded_limit(limit, self._max_query_limit)
         local = await self._history_rows(identity, start, end, bounded)
+        verified_empty: frozenset[int] = frozenset()
         root = self._verified_archive_root
         if root is not None and start is not None and end is not None:
             first = (start + BUCKET_INTERVAL_MS - 1) // BUCKET_INTERVAL_MS * BUCKET_INTERVAL_MS
@@ -546,7 +555,7 @@ class TradeFlowService:
             last = min(end, last_closed)
             if len(local) >= bounded:
                 last = min(last, local[bounded - 1]["bucket_open_ms"])
-            if first <= last and (last - first) // BUCKET_INTERVAL_MS < _MAX_ARCHIVE_HISTORY_MINUTES:
+            if first <= last and (last - first) // BUCKET_INTERVAL_MS < MAX_TRADE_HISTORY_PROOF_MINUTES:
                 complete = {row["bucket_open_ms"] for row in local if _is_complete_rollup(row)}
                 missing = [
                     minute for minute in range(first, last + 1, BUCKET_INTERVAL_MS)
@@ -554,18 +563,23 @@ class TradeFlowService:
                 ]
                 if missing:
                     try:
-                        rebuilt = await run_archive(_read_verified_archive_rollups, root, identity, missing)
+                        archive = await run_archive(_read_verified_archive_rollups, root, identity, missing)
                     except ExecutorBusyError:
-                        rebuilt = []
-                    if rebuilt:
+                        archive = TradeHistoryRead([])
+                    if archive.rows or archive.verified_empty_opens:
                         # Another task may have committed or received better local
                         # evidence during the archive read. Prefer that evidence.
                         local = await self._history_rows(identity, start, end, bounded)
                         complete = {row["bucket_open_ms"] for row in local if _is_complete_rollup(row)}
                         local = _merge_rollups(local, (
-                            row for row in rebuilt if row["bucket_open_ms"] not in complete
+                            row for row in archive.rows if row["bucket_open_ms"] not in complete
                         ))
-        return [_public_rollup_row(row) for row in local[:bounded]]
+                        # A retained observation disagrees with an empty
+                        # archive minute. Preserve it without an absence proof.
+                        verified_empty = archive.verified_empty_opens.difference(
+                            row["bucket_open_ms"] for row in local
+                        )
+        return TradeHistoryRead([_public_rollup_row(row) for row in local[:bounded]], verified_empty)
 
     async def _history_rows(
         self, identity: StreamIdentity, start: int | None, end: int | None, limit: int,
@@ -1891,22 +1905,23 @@ def _is_complete_rollup(row: dict[str, Any]) -> bool:
 
 def _read_verified_archive_rollups(
     root: Path, identity: StreamIdentity, missing: list[int],
-) -> list[dict[str, Any]]:
+) -> TradeHistoryRead:
     """Project verified daily objects without mutating either archive or SQLite."""
     if not root.is_dir():
-        return []
+        return TradeHistoryRead([])
     try:
         archive = ParquetRawAggTradeArchive(root, read_only=True)
     except (OSError, RuntimeError, ValueError):
-        return []
+        return TradeHistoryRead([])
 
     exchange, market_type, symbol = identity
     scope = {"exchange": exchange, "market_type": market_type, "symbol": symbol}
     result = []
+    quiet = set()
     for _, group in groupby(missing, key=lambda minute: minute // _UTC_DAY_MS):
         minutes = list(group)
         try:
-            ref, rows = archive.read_verified_range(
+            ref, rows = archive.read_verified_daily_slice(
                 **scope,
                 start_time_ms=minutes[0],
                 end_time_ms=minutes[-1] + BUCKET_INTERVAL_MS - 1,
@@ -1920,17 +1935,21 @@ def _read_verified_archive_rollups(
                 trade = NormalizedAggTrade.from_archive_row(raw)
                 if trade.stream_identity != identity or not engine.ingest(trade).accepted:
                     raise ValueError("verified aggTrade archive row failed ordered admission")
-        except (KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        except (AssertionError, KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
             logger.debug("Verified local aggTrade history unavailable for %s at %s: %s", identity, minutes[0], exc)
             continue
 
+        buckets = engine.bucket_snapshot(identity)
         wanted = set(minutes)
+        quiet.update(wanted.difference(bucket.bucket_start_ms for bucket in buckets))
+        if ref is None:
+            continue
         result.extend({
             **_rollup_row(replace(bucket, is_final=True), source="verified_archive"),
             "archive_data_epoch": ref.data_epoch,
             "revision_domain": "archive_data_epoch",
-        } for bucket in engine.bucket_snapshot(identity) if bucket.bucket_start_ms in wanted)
-    return result
+        } for bucket in buckets if bucket.bucket_start_ms in wanted)
+    return TradeHistoryRead(result, frozenset(quiet))
 
 
 def _merge_rollups(

@@ -102,7 +102,9 @@ function TradeHistoryHour({ identity, startMs, canDownload }: {
           : t("trade.history.preparing", { done: job?.completed ?? 0, total: job?.total ?? 1 })}</div>}
         {notice && <div>{t(notice)}</div>}
         {archiveOutcome && <div>{t(archiveOutcome)}</div>}
-        {page && <div>{t("trade.history.rows", { count: rows.length, verified })}</div>}
+        {page && <div>{t("trade.history.rows", {
+          count: rows.length, verified, quiet: page.coverage?.verified_empty_minutes ?? 0,
+        })}</div>}
         {page && <div>{t(complete ? "trade.history.complete" : "trade.history.unverified")}</div>}
       </div>
       {rows.length > 0 && <table className="tf-history-table">

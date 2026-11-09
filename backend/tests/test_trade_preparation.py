@@ -339,7 +339,7 @@ async def test_trade_flow_history_preparation_reuses_the_official_day(tmp_path, 
     trades = TradeFlowService(object(), rollup_store=store, verified_archive_root=archive.root)
     app = FastAPI()
     app.state.data_preparation_service = prep
-    app.state.data_manager = SimpleNamespace(trade_flow_ready=True, trade_flow_history=trades.history)
+    app.state.data_manager = SimpleNamespace(trade_flow_ready=True, read_trade_flow_history=trades.read_history)
     app.include_router(preparation_router, prefix="/api/v1")
     app.include_router(trade_router, prefix="/api/v1")
     path = "/api/v1/data-preparations/trade-flow-history"
@@ -378,6 +378,12 @@ async def test_trade_flow_history_preparation_reuses_the_official_day(tmp_path, 
             page = after.json()
             assert page["mode"] == "local_only" and page["data"][0]["source"] == "verified_archive"
             assert page["data"][0]["agg_trade_count"] == 4 and len(calls) == 2
+            quiet = {"start_ms": START_MS + 3_600_000, "end_ms": START_MS + 3_600_000}
+            quiet_page = (await client.get("/api/v1/trade-flow/history", params=quiet)).json()
+            assert quiet_page["complete"] and quiet_page["data"] == []
+            assert quiet_page["coverage"]["verified_empty_minutes"] == 1
+            no_job = await client.post(path, json={**request, **quiet, "idempotency_key": "verified-quiet"})
+            assert no_job.json()["status"] == "local" and no_job.json()["job"] is None and len(calls) == 2
     finally:
         await prep.shutdown()
 

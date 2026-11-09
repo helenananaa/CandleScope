@@ -1855,10 +1855,12 @@ class ParquetRawAggTradeArchive:
         end_time_ms: int,
         page_rows: int = 50_000,
     ) -> RawAggTradeDatasetRef:
-        return self._freeze_dataset(
+        ref = self._freeze_dataset(
             exchange=exchange, market_type=market_type, symbol=symbol,
             start_time_ms=start_time_ms, end_time_ms=end_time_ms, page_rows=page_rows,
         )
+        assert ref is not None
+        return ref
 
     def read_verified_range(
         self, *, exchange: str, market_type: str, symbol: str,
@@ -1870,6 +1872,22 @@ class ParquetRawAggTradeArchive:
             exchange=exchange, market_type=market_type, symbol=symbol,
             start_time_ms=start_time_ms, end_time_ms=end_time_ms,
             page_rows=limit, collected=rows, max_rows=limit,
+        )
+        assert ref is not None
+        return ref, rows
+
+    def read_verified_daily_slice(
+        self, *, exchange: str, market_type: str, symbol: str,
+        start_time_ms: int, end_time_ms: int, limit: int,
+    ) -> tuple[RawAggTradeDatasetRef | None, list[dict[str, Any]]]:
+        """Read one UTC day's verified history. A successful empty slice proves quiet time."""
+        if start_time_ms // 86_400_000 != end_time_ms // 86_400_000:
+            raise ValueError("verified daily slice must stay inside one UTC day")
+        rows: list[dict[str, Any]] = []
+        ref = self._freeze_dataset(
+            exchange=exchange, market_type=market_type, symbol=symbol,
+            start_time_ms=start_time_ms, end_time_ms=end_time_ms,
+            page_rows=limit, collected=rows, max_rows=limit, allow_empty=True,
         )
         return ref, rows
 
@@ -1884,7 +1902,8 @@ class ParquetRawAggTradeArchive:
         page_rows: int = 50_000,
         collected: list[dict[str, Any]] | None = None,
         max_rows: int | None = None,
-    ) -> RawAggTradeDatasetRef:
+        allow_empty: bool = False,
+    ) -> RawAggTradeDatasetRef | None:
         if max_rows is not None:
             if max_rows < 1:
                 raise ValueError("max_rows must be positive")
@@ -1913,6 +1932,10 @@ class ParquetRawAggTradeArchive:
             end_time_ms=bounds[1],
         )
         if not manifests:
+            if allow_empty:
+                # Discovery already required and checked the daily receipt
+                # and every object, including those outside the slice.
+                return None
             raise RuntimeError("no checksum-verified raw aggTrade objects cover the range")
         objects = tuple(self._object_manifest(item) for item in manifests)
         provisional = self._build_dataset_ref(
@@ -1968,6 +1991,9 @@ class ParquetRawAggTradeArchive:
             if page.next_cursor is None or page.next_cursor == cursor:
                 raise RuntimeError("raw aggTrade pagination cursor did not advance")
             cursor = page.next_cursor
+        if not row_count and allow_empty:
+            self.validate_dataset(provisional)
+            return None
         if first_id is None or last_id is None or row_count != last_id - first_id + 1:
             raise RuntimeError("exact raw aggTrade range is empty or incomplete")
         dataset_ref = self._build_dataset_ref(

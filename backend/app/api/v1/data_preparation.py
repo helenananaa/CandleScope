@@ -462,10 +462,12 @@ async def _prepare_trade_flow_history(request: Request, payload: TradeFlowHistor
     stream_key = MarketStreamKey.build(
         identity["exchange"], identity["market_type"], identity["symbol"], MarketChannel.AGG_TRADE,
     )
-    rows = await dm.trade_flow_history(
+    history = await dm.read_trade_flow_history(
         stream_key, start_ms=start, end_ms=end, limit=(end - start) // 60_000 + 1,
     )
-    complete = {row["bucket_start_ms"] for row in rows if row["is_complete"] and row["is_final"]}
+    complete = history.verified_empty_opens.union(
+        row["bucket_start_ms"] for row in history.rows if row["is_complete"] and row["is_final"]
+    )
     today = instance.repository.now() // DAY_MS * DAY_MS
     past_days = set()
     unavailable = []

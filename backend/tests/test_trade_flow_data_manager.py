@@ -7,6 +7,7 @@ import pytest
 
 from app.data_engine.data_manager import DataManager
 from app.data_engine.market_data.models import MarketChannel, MarketStreamKey
+from app.data_engine.market_data.trade_flow import TradeHistoryRead
 
 
 class _TradeFlowService:
@@ -28,6 +29,10 @@ class _TradeFlowService:
     async def history(self, key, **kwargs):
         self.calls.append(("history", key, kwargs))
         return ["rollup"]
+
+    async def read_history(self, key, **kwargs):
+        self.calls.append(("read_history", key, kwargs))
+        return TradeHistoryRead([], frozenset({60_000}))
 
     def attach(self, keys, **kwargs):
         self.calls.append(("attach", keys, kwargs))
@@ -64,6 +69,7 @@ def test_data_manager_trade_flow_facade_preserves_sync_and_async_contracts() -> 
         ) is True
         assert manager.trade_flow_recent(key, limit=10) == ["raw"]
         assert await manager.trades.history(key, limit=20) == ["rollup"]
+        assert (await manager.read_trade_flow_history(key, limit=20)).verified_empty_opens == {60_000}
         assert manager.attach_trade_flow([key], recent_limit=5).subscription == (
             "subscription"
         )
@@ -80,6 +86,7 @@ def test_data_manager_trade_flow_facade_preserves_sync_and_async_contracts() -> 
             "ensure",
             "recent",
             "history",
+            "read_history",
             "attach",
             "coverage",
             "release",
