@@ -113,6 +113,10 @@ export function buildLazySurfaceViewModel({
           };
         }),
       ],
+      ...(advancedMarketView.identity?.exchange === "binance"
+        && advancedMarketView.identity.marketType === "futures"
+        ? { onRefreshOpenInterestHistory: advancedMarketActions.retryOpenInterestHistory }
+        : {}),
       onAddMarketStudy: (id) => {
         if (isMarketMetricId(id)) advancedMarketActions.addMarketStudy(id);
         else if (isTradeFlowIndicatorId(id)) tradeFlowActions.addIndicator(id);

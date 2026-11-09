@@ -38,10 +38,12 @@ class HistoryEmptyPageSemantics(str, Enum):
     ``AUTHORITATIVE_RANGE_EMPTY`` only proves that the requested range has no
     rows.  It deliberately does not turn one empty response into a permanent
     series boundary. ``TERMINAL_EXHAUSTION`` is reserved for protocols that
-    explicitly return a terminal/exhausted signal.
+    explicitly return a terminal/exhausted signal. ``INCONCLUSIVE`` declares
+    that an empty response supplies neither proof.
     """
 
     UNKNOWN = "unknown"
+    INCONCLUSIVE = "inconclusive"
     AUTHORITATIVE_RANGE_EMPTY = "authoritative_range_empty"
     TERMINAL_EXHAUSTION = "terminal_exhaustion"
 

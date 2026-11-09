@@ -3609,7 +3609,10 @@ class BackfillCoordinator:
             return None, None
 
         semantics = self._context_empty_page_semantics(context)
-        if semantics is HistoryEmptyPageSemantics.UNKNOWN:
+        if semantics not in {
+            HistoryEmptyPageSemantics.AUTHORITATIVE_RANGE_EMPTY,
+            HistoryEmptyPageSemantics.TERMINAL_EXHAUSTION,
+        }:
             return None, None
 
         boundary_ms = await self._left_boundary_value(

@@ -359,7 +359,7 @@ export function useAdvancedMarketDataRuntime({
   const historyRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const historyContinuationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const historyGapBudgetRef = useRef(new HistoryGapRetryBudget());
-  const historyRefreshRef = useRef(false);
+  const historyRefreshRef = useRef<boolean | MarketStateMetricChannel>(false);
   const coverageExpiryRef = useRef(new Map<string, number>());
   const streamRef = useRef<MarketStreamController | null>(null);
 
@@ -475,7 +475,7 @@ export function useAdvancedMarketDataRuntime({
         scheduleHistoryRetry(context.historyContextKey, historyGenerationRef.current);
       }
     }
-    const forceRefresh = historyRefreshRef.current;
+    const refresh = historyRefreshRef.current;
     historyRefreshRef.current = false;
     const oiPeriod = resolveOpenInterestPeriod(context.interval);
     const expectedHistoryGeneration = historyGenerationRef.current;
@@ -509,6 +509,7 @@ export function useAdvancedMarketDataRuntime({
     }
     let scheduled = false;
     for (const descriptor of requests) {
+      const forceRefresh = refresh === true || refresh === descriptor.channel;
       const coverageKey = [
         context.identityKey,
         descriptor.channel,
@@ -723,6 +724,18 @@ export function useAdvancedMarketDataRuntime({
     liquidations.retry();
   }, [historyContextKey, identityKey, invalidateHistoryRequests, liquidations, streamEnabled]);
 
+  const retryOpenInterestHistory = useCallback(() => {
+    const context = activeRef.current;
+    if (!context.metricChannels.includes("open_interest")
+      || context.identity.exchange !== "binance" || context.identity.marketType !== "futures") return;
+    invalidateHistoryRequests();
+    const coverageKey = [context.identityKey, "open_interest", resolveOpenInterestPeriod(context.interval), "sparse"].join(":");
+    coverageRef.current.delete(coverageKey);
+    coverageExpiryRef.current.delete(coverageKey);
+    historyRefreshRef.current = "open_interest";
+    setHistoryRetryToken((value) => value + 1);
+  }, [invalidateHistoryRequests]);
+
   useEffect(() => {
     const identityChanged = coverageIdentityRef.current !== identityKey;
     coverageIdentityRef.current = identityKey;
@@ -927,6 +940,7 @@ export function useAdvancedMarketDataRuntime({
     actions: {
       ensureVisibleRange,
       retry,
+      retryOpenInterestHistory,
       addMarketStudy,
       removeMarketStudy,
       toggleMarketStudyVisibility,
@@ -940,6 +954,7 @@ export function useAdvancedMarketDataRuntime({
     liquidations.view.enabled,
     removeMarketStudy,
     retry,
+    retryOpenInterestHistory,
     toggleMarketStudyVisibility,
     view,
   ]);

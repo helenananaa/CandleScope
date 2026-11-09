@@ -11,10 +11,12 @@ test("indicator panel receives capability-aware market studies and routed action
   const context = structuralMock<LazyContext>({
     advancedMarketActions: {
       addMarketStudy: (id: string) => calls.push(`add:${id}`),
+      retryOpenInterestHistory: () => calls.push("refresh:open-interest"),
       removeMarketStudy: (id: string) => calls.push(`remove:${id}`),
       toggleMarketStudyVisibility: (id: string) => calls.push(`toggle:${id}`),
     },
     advancedMarketView: {
+      identity: { exchange: "binance", marketType: "spot" },
       marketStudies: [
         {
           id: "market:funding-rate",
@@ -102,6 +104,16 @@ test("indicator panel receives capability-aware market studies and routed action
   panel.onRemoveMarketStudy?.("trade-flow:cvd");
   panel.onToggleMarketStudyVisibility?.("trade-flow:cvd");
   panel.onAddMarketStudy?.("unknown");
+  assert.equal(panel.onRefreshOpenInterestHistory, undefined);
+  const futuresPanel = buildLazySurfaceViewModel({
+    ...context,
+    advancedMarketView: {
+      ...context.advancedMarketView,
+      identity: { ...context.advancedMarketView.identity, marketType: "futures" },
+    },
+  }).indicatorPanel;
+  assert.ok(futuresPanel.onRefreshOpenInterestHistory);
+  futuresPanel.onRefreshOpenInterestHistory();
   assert.deepEqual(calls, [
     "add:market:funding-rate",
     "remove:market:funding-rate",
@@ -109,6 +121,7 @@ test("indicator panel receives capability-aware market studies and routed action
     "add:trade-flow:delta",
     "remove:trade-flow:cvd",
     "toggle:trade-flow:cvd",
+    "refresh:open-interest",
   ]);
 });
 

@@ -204,6 +204,7 @@ export interface AdvancedMarketRuntime {
   actions: {
     ensureVisibleRange(range: unknown): boolean;
     retry(): void;
+    retryOpenInterestHistory(): void;
     addMarketStudy(id: MarketMetricId): void;
     removeMarketStudy(id: MarketMetricId): void;
     toggleMarketStudyVisibility(id: MarketMetricId): void;

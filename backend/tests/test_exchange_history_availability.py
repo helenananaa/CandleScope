@@ -118,6 +118,8 @@ def test_builtin_v3_capabilities_expose_typed_history_contracts() -> None:
                 continue
             assert channel.history_policy is not None
             assert channel.history_policy.cadence is not HistoryCadence.UNKNOWN
+            if adapter.id == "binance" and channel.channel is MarketChannel.OPEN_INTEREST:
+                continue  # The sparse source cannot prove emptiness.
             assert (
                 channel.history_policy.empty_page_semantics
                 is HistoryEmptyPageSemantics.AUTHORITATIVE_RANGE_EMPTY
@@ -130,6 +132,7 @@ def test_builtin_v3_capabilities_expose_typed_history_contracts() -> None:
     assert binance_oi is not None and binance_oi.history_policy is not None
     assert binance_oi.history_policy.max_age_ms == 2_592_000_000
     assert binance_oi.history_policy.max_page_size == 500
+    assert binance_oi.history_policy.empty_page_semantics is HistoryEmptyPageSemantics.INCONCLUSIVE
 
 
 def test_binance_futures_maps_onboard_date_but_ignores_perpetual_delivery_placeholder() -> None:
