@@ -23,6 +23,14 @@ interface StreamTransport {
   closeAll(): void;
   diagnostics(): object;
 }
+
+function sourceGapNotice(detail: { gap_id?: unknown; range_start_ms?: unknown; range_end_ms?: unknown } | undefined) {
+  const { gap_id: id, range_start_ms: from, range_end_ms: to } = detail ?? {};
+  if (typeof id !== "string" || !id || id.length > 128
+    || typeof from !== "number" || !Number.isSafeInteger(from) || from < 0
+    || typeof to !== "number" || !Number.isSafeInteger(to) || to < from) return null;
+  return { id, range: { from: from / 1000, to: to / 1000 } };
+}
 export interface MarketDataManagerOptions {
   api: KlineApi;
   streams: StreamTransport;
@@ -127,7 +135,12 @@ export class MarketDataManager extends MarketDataManagerCore implements MarketDa
         },
         onStreamStatus: (event, controller) => {
           if (!current()) return;
-          if (event.status !== "online" && event.status !== "connected") this.cache.markDisconnected(series);
+          if (event.status === "source_gap") {
+            const gap = sourceGapNotice(event.detail);
+            if (!connected || !event.interval || !admits(event.interval) || !gap
+              || !this.cache.invalidateRange({ ...series, interval: event.interval },
+                gap.range, event.stream_version, undefined, { id: gap.id, resolved: false })) return;
+          } else if (event.status !== "online" && event.status !== "connected") this.cache.markDisconnected(series);
           streamOptions.onStreamStatus?.(event, controller);
         },
         onControlMessage: (event, controller) => {
@@ -160,6 +173,12 @@ export class MarketDataManager extends MarketDataManagerCore implements MarketDa
         },
         onBackfillCompleted: (event, controller) => {
           if (!current() || !connected || (event.interval && !admits(event.interval))) return false;
+          if (event.detail?.reason === "source_gap_resolved") {
+            const gap = sourceGapNotice(event.detail);
+            if (!event.interval || !gap || !this.cache.invalidateRange({ ...series, interval: event.interval },
+              gap.range, event.stream_version, undefined, { id: gap.id, resolved: true })) return false;
+            return streamOptions.onBackfillCompleted?.(event, controller) ?? false;
+          }
           // A new backend completion is not validated by an earlier cache proof.
           const from = event.detail?.range_start_ms ?? event.detail?.request_start_ms;
           const to = event.detail?.range_end_ms ?? event.detail?.request_end_ms;
@@ -181,7 +200,7 @@ export class MarketDataManager extends MarketDataManagerCore implements MarketDa
           this.cache.connect({ ...series, interval: event.interval });
           const accepted = this.cache.admitRealtime({ ...series, interval: event.interval }, event.tick,
             typeof event.message.event_type === "string" ? event.message.event_type : undefined,
-            event.message.stream_version, event.message.previous_open_ms);
+            event.message.stream_version, event.message.previous_open_ms, event.message.continuity_replayed === true);
           this.healthRecovery.request({ ...series, interval: event.interval });
           if (!accepted.accepted || !accepted.row) { this.rejectedRealtime += 1; return; }
           streamOptions.onKline?.({ ...event, tick: accepted.row, message: { ...event.message, data: accepted.row } }, controller);

@@ -234,9 +234,10 @@ export class SharedMarketCache {
     return { ...result, quality, cacheRevision: entry.version };
   }
 
-  admitRealtime(series: MarketSeries, row: KlineBar, eventType?: string, wireVersion?: unknown, previousOpenMs?: unknown): { accepted: boolean; row?: KlineBar; changed?: boolean } {
+  admitRealtime(series: MarketSeries, row: KlineBar, eventType?: string, wireVersion?: unknown,
+    previousOpenMs?: unknown, replayed = false): { accepted: boolean; row?: KlineBar; changed?: boolean } {
     if (this.publishing) {
-      this.pendingRealtime.push(() => { this.admitRealtime(series, row, eventType, wireVersion, previousOpenMs); });
+      this.pendingRealtime.push(() => { this.admitRealtime(series, row, eventType, wireVersion, previousOpenMs, replayed); });
       return { accepted: false };
     }
     const issue = validateKlineDomain(row);
@@ -248,7 +249,8 @@ export class SharedMarketCache {
     if (!effect.accepted) return { accepted: false };
     const version = parseMarketVersion(wireVersion, series);
     if (wireVersion != null && !version) { entry.health.invalidate(); return { accepted: false }; }
-    const decision = entry.health.event(version, eventType !== "bar.updated", effect.updatesFreshness);
+    const updatesFreshness = effect.updatesFreshness && !replayed;
+    const decision = entry.health.event(version, eventType !== "bar.updated", updatesFreshness);
     if (!decision.accept) return { accepted: false };
     if (decision.reset || decision.gap) {
       entry.proofs = []; entry.inputInvalidation += 1;
@@ -259,7 +261,7 @@ export class SharedMarketCache {
     const changed = this.merge(entry, [incoming]);
     if (version) entry.serverRowVersions.set(row.time, version.sequence);
     const accepted = entry.rows.get(row.time)!;
-    if (version && effect.updatesFreshness && typeof previousOpenMs === "number" && Number.isSafeInteger(previousOpenMs)) {
+    if (version && updatesFreshness && typeof previousOpenMs === "number" && Number.isSafeInteger(previousOpenMs)) {
       const expected = row.is_closed === true ? Number(row.time) : previousOpenMs / 1000;
       entry.expectedClosedTime = Math.max(entry.expectedClosedTime ?? expected, expected);
     }
@@ -337,24 +339,35 @@ export class SharedMarketCache {
 
   invalidateRange(
     series: MarketSeries, range?: { from: number; to: number }, wireVersion?: unknown, storageRevision?: unknown,
-  ): void {
+    sourceGap?: { id: string; resolved: boolean },
+  ): boolean {
     const entry = this.entries.get(String(buildSeriesWindowKey(series)));
-    if (!entry) return;
+    if (!entry) return false;
     const version = parseMarketVersion(wireVersion, series);
+    if (sourceGap && wireVersion != null && !version) return false;
     if (version) {
       const decision = entry.health.event(version, true, false);
-      if (!decision.accept) return;
-      if (typeof storageRevision === "number" && Number.isSafeInteger(storageRevision) && storageRevision >= 0
+      const current = entry.health.version;
+      // A disjoint HTTP response can advance the clock while the strict
+      // stream still holds the source notice. Apply its gap ID and range
+      // without rewinding the delivery clock.
+      const delayedSourceNotice = sourceGap && current?.epoch === version.epoch
+        && (version.generation < current.generation
+          || (version.generation === current.generation && version.sequence < current.sequence));
+      if (!decision.accept && !delayedSourceNotice) return false;
+      if (decision.accept && typeof storageRevision === "number" && Number.isSafeInteger(storageRevision) && storageRevision >= 0
         && (entry.storageVersion?.epoch !== version.epoch || storageRevision > entry.storageVersion.revision)) {
         entry.storageVersion = { epoch: version.epoch, revision: storageRevision };
       }
       if (decision.reset) { entry.serverRowVersions.clear(); entry.expectedClosedTime = null; }
       if (decision.reset || decision.gap) range = undefined;
     }
+    if (sourceGap) entry.health.sourceGap(sourceGap.id, sourceGap.resolved);
     entry.health.invalidate();
     if (!range) { entry.proofs = []; entry.inputInvalidation += 1; }
     else this.revokeRange(entry, range);
     this.finish(entry, [], "http");
+    return true;
   }
 
   captureVersion(series: MarketSeries, range: Pick<MarketRange, "from" | "to"> = {}): MarketInputVersion {

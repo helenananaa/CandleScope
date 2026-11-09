@@ -15,10 +15,10 @@ from typing import Any, Callable
 from fastapi import WebSocket, WebSocketDisconnect
 
 from app.api.v1.stream_klines import (
+    _BROWSER_KLINE_EVENTS,
     _KlineWsOutbox,
     _require_active_stream_info,
-    _serialize_backfill_completed,
-    _serialize_kline_event,
+    _serialize_browser_kline_event,
     _subscription_failure,
     should_forward_browser_event,
 )
@@ -41,13 +41,7 @@ from app.exchanges.symbols import normalize_symbol
 
 KLINE_BATCH_PROTOCOL = "candlescope.kline-batch/1"
 _CLIENT_ID_RE = re.compile(r"^[A-Za-z0-9_.:@|/-]{1,128}$")
-_EVENT_TYPES = {
-    DataEventType.BAR_CREATED,
-    DataEventType.BAR_UPDATED,
-    DataEventType.BAR_CLOSED,
-    DataEventType.BAR_AMENDED,
-    DataEventType.BACKFILL_COMPLETED,
-}
+_EVENT_TYPES = _BROWSER_KLINE_EVENTS
 _INITIAL_SUBSCRIBE_MAX_CONCURRENCY = 4
 
 
@@ -702,22 +696,18 @@ class KlineBatchConnection:
                 event.key.symbol,
                 event.key.interval,
             )
-            if event.event_type == DataEventType.BACKFILL_COMPLETED:
-                payload = _serialize_backfill_completed(event)
-                payload.update(protocol=KLINE_BATCH_PROTOCOL, client_id=client_id)
-                queued = await self.outbox.put(payload, key=key, timeout=1.0)
-            else:
-                payload = _serialize_kline_event(event)
-                payload.update({
-                    "protocol": KLINE_BATCH_PROTOCOL,
-                    "client_id": client_id,
-                })
-                queued = await self.outbox.put(
-                    payload,
-                    key=key,
-                    replaceable=event.event_type == DataEventType.BAR_UPDATED,
-                    timeout=1.0,
-                )
+            payload = _serialize_browser_kline_event(event)
+            payload.update(protocol=KLINE_BATCH_PROTOCOL, client_id=client_id)
+            if event.event_type == DataEventType.SOURCE_GAP and event.detail.get("state") == "failed":
+                # The strict worker requests resync as soon as this callback
+                # returns. Send the terminal range before closing its socket.
+                await self._safe_send_json(payload)
+                return
+            queued = await self.outbox.put(
+                payload, key=key,
+                replaceable=event.event_type == DataEventType.BAR_UPDATED,
+                timeout=1.0,
+            )
             if not queued and event.event_type != DataEventType.BAR_UPDATED:
                 self.closed = True
                 try:

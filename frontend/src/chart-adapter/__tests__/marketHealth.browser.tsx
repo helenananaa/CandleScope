@@ -227,6 +227,33 @@ export async function checkMarketHealth() {
     emit(eth.symbol, { ...forming, close: 23 }, "bar.updated");
     assert(manager.cache.planHistory(eth, 500).action === "reuse", "acknowledged interval did not regain verified reuse");
     checks.push("a failed interval rejects queued frames until re-acknowledgement and a verified cutover");
+    const sourceGapRow = corpus.get(eth.symbol)![18]!;
+    const disjoint = corpus.get(eth.symbol)![17]!.time;
+    const affectedStamp = manager.cache.captureVersion(eth, { from: sourceGapRow.time, to: sourceGapRow.time });
+    const disjointStamp = manager.cache.captureVersion(eth, { from: disjoint, to: disjoint });
+    const gapDetail = { gap_id: "browser-source-gap", range_start_ms: sourceGapRow.time * 1000,
+      range_end_ms: sourceGapRow.time * 1000 };
+    const bumpBarrier = () => {
+      const previous = revisions.get(eth.symbol)!;
+      revisions.set(eth.symbol, { sequence: previous.sequence + 1, barrier: previous.barrier + 1 });
+    };
+    bumpBarrier();
+    stream.options.onStreamStatus?.({ type: "stream_status", status: "source_gap", interval: eth.interval,
+      stream_version: wire(eth.symbol), detail: gapDetail }, stream.controller);
+    assert(!affectedStamp.isCurrent() && disjointStamp.isCurrent(), "source gap invalidated the wrong inputs");
+    assert(manager.cache.read(eth, { from: disjoint, to: disjoint }).complete,
+      "source gap revoked disjoint historical proof");
+    assert(!manager.cache.planHistory(eth, 500).health.continuous, "source repair wait retained live continuity");
+    assert(cells.get("A")!.store.snapshot().length >= 500, "source repair wait discarded the visible chart");
+    corpus.get(eth.symbol)![18] = { ...sourceGapRow, close: 26 };
+    bumpBarrier();
+    stream.options.onBackfillCompleted?.({ type: "backfill_completed", exchange: eth.exchange,
+      market_type: eth.marketType, symbol: eth.symbol, interval: eth.interval, stream_version: wire(eth.symbol),
+      detail: { ...gapDetail, reason: "source_gap_resolved" } }, stream.controller);
+    await until(() => cells.get("A")!.store.snapshot().find(row => row.time === sourceGapRow.time)?.close === 26,
+      "source resolution did not perform exact canonical readback");
+    assert(!manager.cache.planHistory(eth, 500).health.fresh, "source resolution supplied fictitious freshness");
+    checks.push("pending source repair preserves disjoint evidence and resolution reads the exact corrected candle");
     generations.set(eth.symbol, 2);
     revisions.set(eth.symbol, { sequence: 0, barrier: 0 });
     await manager.fetchKlinesHistory(eth.symbol, eth.interval, null, eth.marketType, eth.exchange,

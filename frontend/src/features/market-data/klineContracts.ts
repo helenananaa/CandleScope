@@ -420,6 +420,8 @@ export interface KlineStreamStatusMessage extends Record<string, unknown> {
   type: "stream_status";
   interval?: IntervalString;
   status?: string;
+  stream_version?: unknown;
+  detail?: { gap_id?: unknown; range_start_ms?: unknown; range_end_ms?: unknown };
 }
 
 export interface KlineStreamIntervalFailure extends Record<string, unknown> {

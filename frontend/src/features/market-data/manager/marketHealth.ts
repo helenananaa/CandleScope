@@ -69,6 +69,8 @@ export class MarketHealthState {
   private freshObservedAt = 0;
   private readonly retired = new Set<string>();
   private requiresReconnect = false;
+  private readonly sourceGaps = new Set<string>();
+  private sourceGapsExhausted = false;
 
   constructor(private readonly now: () => number = Date.now, private readonly freshMs = 15_000) {}
 
@@ -80,8 +82,20 @@ export class MarketHealthState {
     this.continuous = false;
     this.lastEvent = null; this.receivedAt = null; this.baseline = null;
     this.retired.clear(); this.requiresReconnect = false;
+    this.sourceGaps.clear(); this.sourceGapsExhausted = false;
   }
   invalidate(): void { this.continuous = false; this.baseline = null; }
+
+  sourceGap(id: string, resolved: boolean): void {
+    this.invalidation += 1;
+    if (resolved) {
+      this.sourceGaps.delete(id);
+    } else {
+      this.receivedAt = null;
+      if (this.sourceGaps.size < 256) this.sourceGaps.add(id);
+      else if (!this.sourceGaps.has(id)) this.sourceGapsExhausted = true;
+    }
+  }
 
   snapshot(version: MarketStreamVersion | null, fence: HealthReadFence, historyRead: boolean): boolean {
     if (fence.invalidation !== this.invalidation) return false;
@@ -158,11 +172,13 @@ export class MarketHealthState {
 
   status(historyCovered: boolean): MarketHealth {
     const now = this.now();
-    const fresh = this.receivedAt !== null && now - this.receivedAt <= this.freshMs
+    const sourceReady = !this.sourceGaps.size && !this.sourceGapsExhausted;
+    const continuous = this.continuous && sourceReady;
+    const fresh = sourceReady && this.receivedAt !== null && now - this.receivedAt <= this.freshMs
       && now - this.freshObservedAt <= this.freshMs && this.freshObservedAt <= now + 5_000;
     const reason = !historyCovered ? "missing-history" : !this.subscribed ? "unsubscribed"
-      : !this.continuous ? "resync" : !fresh ? "stale-tail" : "healthy";
-    return { historyCovered, subscribed: this.subscribed, continuous: this.continuous, fresh,
+      : !continuous ? "resync" : !fresh ? "stale-tail" : "healthy";
+    return { historyCovered, subscribed: this.subscribed, continuous, fresh,
       healthy: reason === "healthy", reason };
   }
 }

@@ -205,7 +205,7 @@ def _serialize_kline_event(event) -> dict[str, Any]:
         "market_type": event.key.market_type,
         "data": data,
         **{name: event.detail[name] for name in (
-            "stream_version", "affected_range", "previous_open_ms",
+            "stream_version", "affected_range", "previous_open_ms", "continuity_replayed",
         ) if name in event.detail},
     }
 
@@ -223,6 +223,27 @@ def _serialize_backfill_completed(event) -> dict[str, Any]:
     if "stream_version" in detail:
         payload["stream_version"] = detail["stream_version"]
     return payload
+
+
+_BROWSER_KLINE_EVENTS = {
+    DataEventType.BAR_CREATED, DataEventType.BAR_UPDATED, DataEventType.BAR_CLOSED,
+    DataEventType.BAR_AMENDED, DataEventType.BACKFILL_COMPLETED,
+    DataEventType.SOURCE_GAP, DataEventType.SOURCE_GAP_RESOLVED,
+}
+
+
+def _serialize_browser_kline_event(event) -> dict[str, Any]:
+    if event.event_type == DataEventType.SOURCE_GAP:
+        payload = _serialize_backfill_completed(event)
+        payload.update(type="stream_status", status="source_gap")
+        return payload
+    if event.event_type == DataEventType.SOURCE_GAP_RESOLVED:
+        payload = _serialize_backfill_completed(event)
+        payload["detail"] = {**payload["detail"], "reason": "source_gap_resolved"}
+        return payload
+    if event.event_type == DataEventType.BACKFILL_COMPLETED:
+        return _serialize_backfill_completed(event)
+    return _serialize_kline_event(event)
 
 
 async def stream_single_kline(
@@ -372,19 +393,11 @@ async def stream_multi_kline(
             event.key.interval,
         )
         try:
-            if event.event_type == DataEventType.BACKFILL_COMPLETED:
-                queued = await event_queue.put(
-                    _serialize_backfill_completed(event),
-                    key=event_key,
-                    timeout=1.0,
-                )
-                if not queued:
-                    await require_resync()
+            if event.event_type == DataEventType.SOURCE_GAP and event.detail.get("state") == "failed":
+                await safe_send_json(_serialize_browser_kline_event(event))
                 return
-
-            bar_dict = _serialize_kline_event(event)
             queued = await event_queue.put(
-                bar_dict,
+                _serialize_browser_kline_event(event),
                 key=event_key,
                 replaceable=event.event_type == DataEventType.BAR_UPDATED,
                 timeout=1.0,
@@ -483,13 +496,7 @@ async def stream_multi_kline(
                                     interval=iv,
                                     exchange=exchange,
                                     market_type=market_type,
-                                    event_types={
-                                        DataEventType.BAR_CREATED,
-                                        DataEventType.BAR_UPDATED,
-                                        DataEventType.BAR_CLOSED,
-                                        DataEventType.BAR_AMENDED,
-                                        DataEventType.BACKFILL_COMPLETED,
-                                    },
+                                    event_types=_BROWSER_KLINE_EVENTS,
                                 )
                             except asyncio.CancelledError:
                                 # A stream claim can precede the callback handle.
@@ -640,26 +647,12 @@ async def forward_events_to_ws(
                 interval=interval,
                 exchange=exchange,
                 market_type=market_type,
-                event_types={
-                    DataEventType.BAR_CREATED,
-                    DataEventType.BAR_UPDATED,
-                    DataEventType.BAR_CLOSED,
-                    DataEventType.BAR_AMENDED,
-                    DataEventType.BACKFILL_COMPLETED,
-                },
+                event_types=_BROWSER_KLINE_EVENTS,
             ):
-                if event.event_type == DataEventType.BACKFILL_COMPLETED:
-                    if not should_forward_browser_event(event):
-                        continue
-                    try:
-                        await send_json_with_timeout(websocket, _serialize_backfill_completed(event))
-                    except Exception:
-                        return
+                if not should_forward_browser_event(event):
                     continue
-                bar_dict = _serialize_kline_event(event)
-
                 try:
-                    await send_json_with_timeout(websocket, bar_dict)
+                    await send_json_with_timeout(websocket, _serialize_browser_kline_event(event))
                 except Exception:
                     return
     except ConsumerRecoveryRequired:

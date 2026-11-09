@@ -22,6 +22,7 @@ export const USER_VISIBLE_BACKFILL_REASONS: ReadonlySet<string> = new Set([
   "visible_seed_gap",
   "tail_gap",
   "storage_history_changed",
+  "source_gap_resolved",
 ]);
 
 interface RangeInput {

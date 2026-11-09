@@ -303,6 +303,32 @@ test("targeted backfill preserves nonintersecting historical coverage", () => {
   assert.equal(cache.read(series, { from: 60, to: 120 }).complete, false);
 });
 
+test("a source gap holds stream health until canonical readback and a fresh non-replayed event", () => {
+  const cache = healthy();
+  const oldRead = cache.beginRead(series);
+  const affected = cache.captureVersion(series, { from: 60, to: 60 });
+  const disjoint = cache.captureVersion(series, { from: 120, to: 120 });
+  const range = { from: 60, to: 60 };
+  assert.ok(cache.invalidateRange(series, range, wire(2, 2), undefined, { id: "gap", resolved: false }));
+  try {
+    assert.throws(() => cache.admitResponse(oldRead, proof(wire(1))), /Obsolete market snapshot/);
+  } finally { oldRead.release(); }
+  assert.equal(affected.isCurrent(), false);
+  assert.equal(disjoint.isCurrent(), true);
+  read(cache, wire(2, 2), [row(120)]);
+  assert.equal(cache.planHistory(series, 1).health.historyCovered, true);
+  assert.equal(cache.planHistory(series, 1).health.continuous, false);
+  assert.equal(cache.read(series, range).complete, false);
+  read(cache, wire(5, 4), [row(120)]);
+  assert.ok(cache.invalidateRange(series, range, wire(3, 3), undefined, { id: "gap", resolved: true }));
+  read(cache, wire(5, 4), [row(60, true, 18), row(120)]);
+  cache.admitRealtime(series, row(180, false, 20), "bar.updated", wire(6, 4), 120_000, true);
+  assert.equal(cache.planHistory(series, 2).health.fresh, false);
+  cache.admitRealtime(series, row(180, false, 21), "bar.updated", wire(7, 4), 120_000);
+  assert.equal(cache.planHistory(series, 2).action, "reuse");
+  assert.equal(cache.read(series, range).rows[0]?.close, 18);
+});
+
 test("a stable empty read revokes the named gap without revoking unaffected historical proof", () => {
   const cache = new SharedMarketCache({ now: () => now });
   const first = cache.beginRead(series);

@@ -89,6 +89,7 @@ class StreamVersionClock:
             DataEventType.BAR_CREATED, DataEventType.BAR_UPDATED,
             DataEventType.BAR_CLOSED, DataEventType.BAR_AMENDED,
             DataEventType.BACKFILL_COMPLETED,
+            DataEventType.SOURCE_GAP, DataEventType.SOURCE_GAP_RESOLVED,
         }:
             return None
         with self._lock:

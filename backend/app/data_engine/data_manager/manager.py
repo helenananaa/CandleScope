@@ -1142,7 +1142,7 @@ class DataManager(DataManagerCore):
             auto_backfill=auto_backfill,
             **({"min_revision": min_revision} if min_revision is not None else {}),
         )
-        self._finish_query_snapshot(version_key, version_before, result)
+        self._finish_query_snapshot(version_key, version_before, result, start_ms=start_ms, end_ms=end_ms)
         return self._submit_missing_ranges(
             result,
             reason=backfill_reason,
@@ -1188,7 +1188,7 @@ class DataManager(DataManagerCore):
             series_identity=series_identity, auto_backfill=False,
             _materialized_only=True,
         )
-        self._finish_query_snapshot(version_key, version_before, result)
+        self._finish_query_snapshot(version_key, version_before, result, start_ms=start_ms, end_ms=end_ms)
         result.metadata["target_materialized_only"] = True
         return result
 
@@ -1277,7 +1277,7 @@ class DataManager(DataManagerCore):
             auto_backfill=auto_backfill,
             **({"min_revision": min_revision} if min_revision is not None else {}),
         )
-        self._finish_query_snapshot(version_key, version_before, result)
+        self._finish_query_snapshot(version_key, version_before, result, end_ms=before_ms - 1)
         return self._submit_missing_ranges(
             result,
             reason=backfill_reason,
@@ -1290,12 +1290,16 @@ class DataManager(DataManagerCore):
             ),
         )
 
-    def _finish_query_snapshot(self, key: SeriesKey, before: dict, result: QueryResult) -> None:
+    def _finish_query_snapshot(self, key: SeriesKey, before: dict, result: QueryResult, *,
+                               start_ms: int | None = None, end_ms: int | None = None) -> None:
         consumer = self.cache.revision_consumer
         pending = consumer is not None and consumer.readback_pending(key)
+        if start_ms is None and result.bars:
+            start_ms = result.bars[0].time_ms
+        source_pending = self.source_gaps.overlaps_pending(key, start_ms, end_ms)
         version = self.event_bus.stream_versions.finish_snapshot(
             key, before, final_only=result.metadata.get("all_rows_final") is True)
-        if pending:
+        if pending or source_pending:
             version["stable"] = False
         result.metadata["stream_version"] = version
 
