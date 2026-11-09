@@ -2,9 +2,11 @@
 from __future__ import annotations
 import asyncio
 import time
+from math import isfinite
 from typing import Any
 from app.data_engine.ingestion.config import IngestionConfig
 from app.data_engine.ingestion.models import DataSource, RawMessage, StreamDescriptor, StreamType, TransportRequest
+from app.exchanges.okx_intervals import OKX_OI_HISTORY_LIMIT, OKX_OI_HISTORY_PERIODS
 from app.exchanges.okx_intervals import okx_utc_interval as _okx_interval
 from .unified import make_unified_payload
 
@@ -309,6 +311,41 @@ async def _fetch_okx_kline_raw(
         )
 
 
+async def fetch_okx_contract_oi(exchange, symbol: str, req: TransportRequest) -> list[dict[str, Any]]:
+    """The CCXT unified OKX route reports a currency aggregate, not this contract."""
+    period = req.descriptor.interval or "1d"
+    if period not in OKX_OI_HISTORY_PERIODS:
+        raise ValueError(f"Unsupported OKX open-interest history period: {period!r}")
+    limit = min(max(1, int(req.limit or 1)), OKX_OI_HISTORY_LIMIT)
+    params = {"instId": exchange.market(symbol)["id"], "period": _okx_interval(period), "limit": limit}
+    if req.start_ms:
+        params["begin"] = req.start_ms - 1
+    if req.end_ms is not None:
+        params["end"] = req.end_ms + 1
+    response = await exchange.public_get_rubik_stat_contracts_open_interest_history(params)
+    data = response.get("data") if isinstance(response, dict) and response.get("code") == "0" else None
+    if not isinstance(data, list) or len(data) > limit:
+        raise RuntimeError("Invalid OKX contract open-interest page")
+    result = {}
+    for row in data:
+        try:
+            if not isinstance(row, list) or len(row) != 4:
+                raise ValueError
+            timestamp = int(row[0])
+            contracts, usd = float(row[1]), float(row[3])
+            if timestamp <= 0 or not all(isfinite(value) and value >= 0 for value in (contracts, usd)):
+                raise ValueError
+        except (OverflowError, TypeError, ValueError) as exc:
+            raise RuntimeError("Invalid OKX contract open-interest observation") from exc
+        if (req.start_ms is not None and timestamp < req.start_ms
+                or req.end_ms is not None and timestamp > req.end_ms):
+            continue
+        if timestamp in result:
+            raise RuntimeError("Duplicate OKX contract open-interest timestamp")
+        result[timestamp] = {"timestamp": timestamp, "openInterestAmount": contracts, "openInterestValue": usd}
+    return [result[timestamp] for timestamp in sorted(result)]
+
+
 async def _fetch_okx_summary(
     req: TransportRequest,
     config: IngestionConfig,
@@ -422,6 +459,11 @@ def rate_limit_endpoint(venue, req: TransportRequest) -> str | None:
     if venue == "okx":
         if descriptor.stream_type == StreamType.KLINE:
             return "/api/v5/market/history-candles"
+        if req.history or req.start_ms is not None or req.end_ms is not None:
+            return {
+                StreamType.OPEN_INTEREST: "/api/v5/rubik/stat/contracts/open-interest-history",
+                StreamType.FUNDING_RATE: "/api/v5/public/funding-rate-history",
+            }.get(descriptor.stream_type)
         return None
     futures = descriptor.market_type.strip().lower() == "futures"
     if descriptor.stream_type == StreamType.KLINE:

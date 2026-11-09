@@ -20,6 +20,7 @@ from app.data_engine.market_data.models import (
     MarketChannel,
     TransportMode,
 )
+from app.exchanges.okx_intervals import OKX_FUNDING_HISTORY_LIMIT, OKX_OI_HISTORY_LIMIT, OKX_OI_HISTORY_PERIODS
 from app.exchanges.models import (
     CRYPTO_24X7_CALENDAR_ID,
     ExchangeCapabilities,
@@ -478,7 +479,7 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
                         empty_page_semantics=HistoryEmptyPageSemantics.INCONCLUSIVE,
                         calendar_id=CRYPTO_24X7_CALENDAR_ID,
                         timezone="UTC",
-                        max_page_size=entry.history_limit,
+                        max_page_size=OKX_FUNDING_HISTORY_LIMIT if entry.exchange_id == "okx" else entry.history_limit,
                     )
                     if fetch_funding_history
                     else None
@@ -509,6 +510,8 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
                 snapshot=True,
                 available_fields=("open_interest", "open_interest_value"),
                 connection_model="polling_only",
+                params=({"period": OKX_OI_HISTORY_PERIODS}
+                        if entry.exchange_id == "okx" and fetch_open_interest_history else {}),
                 known_limitations=(
                     "Pinned CCXT exposes open interest through REST for this exchange",
                 ),
@@ -518,7 +521,7 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
                         empty_page_semantics=HistoryEmptyPageSemantics.INCONCLUSIVE,
                         calendar_id=CRYPTO_24X7_CALENDAR_ID,
                         timezone="UTC",
-                        max_page_size=entry.history_limit,
+                        max_page_size=OKX_OI_HISTORY_LIMIT if entry.exchange_id == "okx" else entry.history_limit,
                     )
                     if fetch_open_interest_history
                     else None

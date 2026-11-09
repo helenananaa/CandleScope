@@ -1681,3 +1681,73 @@ def test_global_registry_contains_every_pinned_id() -> None:
     assert {"bybit", "kraken", "bitget", "gate"}.issubset(ids)
     assert len(ids) == 106
     assert "twelvedata" in ids
+
+
+def test_okx_metric_history_preserves_contract_identity_bounds_and_realized_rate(monkeypatch: Any) -> None:
+    from ccxt.async_support import okx
+
+    symbol = "BTC/USDT:USDT"
+    instrument = "BTC-USDT-SWAP"
+    exchange = okx()
+    market = {"id": instrument, "symbol": symbol, "baseId": "BTC", "swap": True, "linear": True}
+    exchange.markets = {symbol: market}
+    exchange.markets_by_id = {instrument: [market]}
+    first, last = 1_794_220_500_000, 1_794_220_800_000
+    calls = []
+
+    async def load_markets():
+        return exchange.markets
+
+    async def fetch_contract_oi(params):
+        calls.append(("oi", params))
+        return {"code": "0", "data": [
+            [str(last), "27.5", "0.275", "18700"],
+            [str(first), "24.5", "0.245", "17000"],
+        ]}
+
+    async def reject_currency_oi(*_args, **_kwargs):
+        pytest.fail("Currency-wide open interest cannot populate a contract")
+
+    async def fetch_funding(params):
+        calls.append(("funding", params))
+        return {"code": "0", "data": [
+            {"instId": instrument, "fundingTime": str(last), "fundingRate": "0.0003", "realizedRate": ""},
+            {"instId": instrument, "fundingTime": str(first), "fundingRate": "0.0004", "realizedRate": "-0.0001"},
+        ]}
+
+    monkeypatch.setattr(exchange, "load_markets", load_markets)
+    monkeypatch.setattr(exchange, "public_get_rubik_stat_contracts_open_interest_history", fetch_contract_oi)
+    monkeypatch.setattr(exchange, "fetch_open_interest_history", reject_currency_oi)
+    monkeypatch.setattr(exchange, "publicGetPublicFundingRateHistory", fetch_funding)
+    monkeypatch.setattr(
+        "app.exchanges.ccxt_ext.generic._create_exchange", lambda *_args, **_kwargs: exchange,
+    )
+    bootstrap_default_adapters()
+    plugin = get_exchange_registry().get_plugin("okx")
+    config = IngestionConfig(proxy_mode="none")
+    oi = StreamDescriptor(instrument, StreamType.OPEN_INTEREST, interval="5m", exchange="okx", market_type="futures")
+    funding = StreamDescriptor(instrument, StreamType.FUNDING_RATE, exchange="okx", market_type="futures")
+
+    async def run():
+        try:
+            output = []
+            for descriptor in (oi, funding):
+                rows = await plugin.fetch_history_with_config(
+                    TransportRequest(descriptor, limit=1000, start_ms=first, end_ms=last, history=True), config,
+                )
+                normalizer = plugin.normalizer(config, descriptor)
+                output.append([normalizer.parse(row) for row in rows])
+            return output
+        finally:
+            await plugin.close_history_transport(config)
+
+    oi_events, funding_events = asyncio.run(run())
+    assert calls == [
+        ("oi", {"instId": instrument, "period": "5m", "limit": 100, "begin": first - 1, "end": last + 1}),
+        ("funding", {"instId": instrument, "limit": 400, "before": first - 1, "after": last + 1}),
+    ]
+    assert [(e.event_time_ms, e.data["open_interest"], e.data["open_interest_value"]) for e in oi_events] == [
+        (first, 24.5, 17000), (last, 27.5, 18700),
+    ]
+    assert [(e.event_time_ms, e.data["funding_rate"]) for e in funding_events] == [(first, -0.0001)]
+    assert plugin.capabilities().channel_capability(MarketChannel.OPEN_INTEREST, "futures").history_policy.max_page_size == 100

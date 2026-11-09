@@ -700,7 +700,7 @@ class CcxtUnifiedNormalizer:
             info,
             "openInterestValue",
             "open_interest_value",
-            "oiCcy",
+            "oiUsd" if self._descriptor.exchange == "okx" else "oiCcy",
         )
         if notional is not None:
             data["open_interest_value"] = notional

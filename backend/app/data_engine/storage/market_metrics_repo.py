@@ -682,6 +682,7 @@ class MarketMetricsRepository:
             where=where,
             params=params,
             limit=limit,
+            max_limit=1001,  # Public pages may read one extra row for a local cursor.
         )
         return [dict(row) for row in rows]
 

@@ -994,6 +994,36 @@ async def test_ccxt_metric_history_observes_without_certifying_empty_or_short_pa
     local = await service.history_page(key, **kwargs, mode="local_only")
     assert local.events == observed.events and local.complete is False
     assert not local.fallback and not local.retryable and len(factory.fetch_calls) == 2
+
+    identity = {"exchange": "binanceusdm", "market_type": "swap.linear"}
+    if channel == MarketChannel.FUNDING_RATE:
+        repository.upsert_funding([{
+            **_funding_row(rate=0.001, received_at_ms=end_ms, is_final=True, funding_time_ms=end_ms),
+            **identity,
+        }])
+    else:
+        repository.upsert_open_interest([{
+            **_oi_row(period="5m", value=9, received_at_ms=end_ms, event_time_ms=end_ms),
+            **identity,
+        }])
+    page = await service.history_page(key, **(kwargs | {"limit": 1}), mode="local_only")
+    assert page.has_more and not page.complete and not page.covered_ranges
+    if channel == MarketChannel.FUNDING_RATE:
+        assert page.next_start_ms == start_ms + 1 and page.next_end_ms is None
+        assert [event.event_time_ms for event in page.events] == [start_ms]
+        continued = await service.history_page(
+            key, **(kwargs | {"start_ms": page.next_start_ms, "limit": 1}), mode="local_only",
+        )
+        assert [event.event_time_ms for event in continued.events] == [end_ms]
+    else:
+        assert page.next_end_ms == end_ms - 1 and page.next_start_ms is None
+        assert [event.event_time_ms for event in page.events] == [end_ms]
+        continued = await service.history_page(
+            key, **(kwargs | {"end_ms": page.next_end_ms, "limit": 1}), mode="local_only",
+        )
+        assert [event.event_time_ms for event in continued.events] == [start_ms]
+    assert not continued.has_more and not continued.complete and not continued.covered_ranges
+    assert len(factory.fetch_calls) == 2
     await service.shutdown()
 
 

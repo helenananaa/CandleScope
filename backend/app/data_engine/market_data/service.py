@@ -676,11 +676,14 @@ class MarketDataService:
     ) -> MarketHistoryPage:
         # The unified method returns observations. An empty or short result
         # supplies neither a proof of absence nor a provider pagination cursor.
+        read_end = end_ms
+        if plan.event_cutoff_ms is not None:
+            read_end = min(end_ms, plan.event_cutoff_ms) if end_ms is not None else plan.event_cutoff_ms
+
         async def read_local() -> list[MarketStateEvent]:
-            events = await self._read_persisted_history(
-                key, period=descriptor.interval, limit=limit, start_ms=start_ms, end_ms=end_ms,
+            return await self._read_persisted_history(
+                key, period=descriptor.interval, limit=limit + 1, start_ms=start_ms, end_ms=read_end,
             )
-            return self._apply_history_event_cutoff(events, plan)
 
         events = await read_local()
         fallback = False
@@ -716,13 +719,23 @@ class MarketDataService:
             if start_ms is not None and end_ms is not None else []
         )
         complete = start_ms is not None and end_ms is not None and not missing
+        # A cursor proves only another stored observation, never source coverage.
+        more = len(events) > limit
+        next_start = next_end = None
+        if more and key.channel == MarketChannel.FUNDING_RATE:
+            events = events[:limit]
+            next_start = events[-1].event_time_ms + 1
+        elif more:
+            events = events[-limit:]
+            next_end = events[0].event_time_ms - 1
         return MarketHistoryPage(
             events=events, fallback=fallback, complete=complete, retryable=fallback,
             terminal_reason=plan.terminal_reason if complete else None,
             earliest_available_ms=plan.earliest_available_ms,
             availability_revision=plan.availability_revision,
             excluded_ranges=plan.excluded_ranges, covered_ranges=(),
-            missing_ranges=tuple(missing), has_more=False,
+            missing_ranges=tuple(missing), has_more=more,
+            next_start_ms=next_start, next_end_ms=next_end,
             query_mode=mode, coverage_basis="observations_only",
         )
 

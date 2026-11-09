@@ -6,6 +6,7 @@ from typing import Any
 from app.data_engine.bar_basis import is_gate_linear_5m
 from app.data_engine.ingestion.config import IngestionConfig
 from app.data_engine.ingestion.models import DataSource, RawMessage, StreamType, TransportRequest
+from app.exchanges.okx_intervals import OKX_FUNDING_HISTORY_LIMIT
 from .generic import _GENERIC_STREAM_METHODS, _rest_method_for, resolve_market_selection, _timestamp
 from .catalog import market_selection_parts
 from .unified import make_unified_payload
@@ -205,11 +206,20 @@ async def fetch_unified_history(
             rows = [make_unified_payload("derivatives_summary", dict(value))]
         elif descriptor.stream_type == StreamType.FUNDING_RATE:
             if req.history or req.start_ms is not None or req.end_ms is not None:
+                limit = max(1, int(req.limit or 1))
+                options = {}
+                if context.entry.exchange_id == "okx":
+                    limit = min(limit, OKX_FUNDING_HISTORY_LIMIT)
+                    if req.end_ms is not None:
+                        options["params"] = {"after": req.end_ms + 1}
                 values = await exchange.fetch_funding_rate_history(
-                    symbol,
-                    since=req.start_ms,
-                    limit=max(1, int(req.limit or 1)),
+                    symbol, since=req.start_ms, limit=limit, **options,
                 )
+                if context.entry.exchange_id == "okx":
+                    # The pinned method only sets this field from realizedRate.
+                    # Do not fall through to the raw projected rate in normalization.
+                    values = [value for value in values
+                              if isinstance(value, dict) and value.get("fundingRate") is not None]
             else:
                 values = [await exchange.fetch_funding_rate(symbol)]
             rows = [
@@ -221,26 +231,30 @@ async def fetch_unified_history(
             if (
                 req.history or req.start_ms is not None or req.end_ms is not None
             ) and context.entry.supports("fetchOpenInterestHistory"):
-                options = {}
-                if context.entry.exchange_id == "gate":
-                    # Keep CCXT's unified since filter in milliseconds.
-                    # Gate's contract statistics query takes Unix seconds.
-                    params = {}
-                    if req.start_ms is not None:
-                        params["from"] = (req.start_ms + 999) // 1000
-                    if req.end_ms is not None:
-                        params["to"] = req.end_ms // 1000
-                    if "from" in params and "to" in params and params["from"] > params["to"]:
-                        return []
-                    if params:
-                        options["params"] = params
-                values = await exchange.fetch_open_interest_history(
-                    symbol,
-                    timeframe=descriptor.interval,
-                    since=req.start_ms,
-                    limit=max(1, int(req.limit or 1)),
-                    **options,
-                )
+                if context.entry.exchange_id == "okx":
+                    from .venue_history import fetch_okx_contract_oi
+                    values = await fetch_okx_contract_oi(exchange, symbol, req)
+                else:
+                    options = {}
+                    if context.entry.exchange_id == "gate":
+                        # Keep CCXT's unified since filter in milliseconds.
+                        # Gate's contract statistics query takes Unix seconds.
+                        params = {}
+                        if req.start_ms is not None:
+                            params["from"] = (req.start_ms + 999) // 1000
+                        if req.end_ms is not None:
+                            params["to"] = req.end_ms // 1000
+                        if "from" in params and "to" in params and params["from"] > params["to"]:
+                            return []
+                        if params:
+                            options["params"] = params
+                    values = await exchange.fetch_open_interest_history(
+                        symbol,
+                        timeframe=descriptor.interval,
+                        since=req.start_ms,
+                        limit=max(1, int(req.limit or 1)),
+                        **options,
+                    )
             else:
                 values = [await exchange.fetch_open_interest(symbol)]
             rows = [
