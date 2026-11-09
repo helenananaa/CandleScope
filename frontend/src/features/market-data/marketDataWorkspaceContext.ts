@@ -16,6 +16,7 @@ export interface KlineStreamCoordinator {
 
 export interface MarketDataWorkspaceResources {
   brokerEnabled: boolean;
+  batchStreamEnabled?: boolean;
   dataManager: MarketDataManager;
   indicatorDataManager: IndicatorDataManager;
   dataFlow: ChartDataFlowManager;

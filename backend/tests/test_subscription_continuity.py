@@ -101,7 +101,7 @@ async def test_browser_batch_gets_exact_gap_before_repair_and_http_fences_only_t
     from fastapi import FastAPI
     from httpx import ASGITransport, AsyncClient
     from app.api.v1.klines import router as klines_router
-    from app.api.v1.stream_kline_batch import KlineBatchConnection, KlineBatchLimits, _EVENT_TYPES
+    from app.api.v1.stream_kline_batch import KlineBatchConnection, KlineBatchLimits, _BatchSubscription, _EVENT_TYPES
     from tests.test_kline_batch_source_recovery import Socket
     from starlette.websockets import WebSocketDisconnect
 
@@ -121,8 +121,12 @@ async def test_browser_batch_gets_exact_gap_before_repair_and_http_fences_only_t
         return response.json()
 
     opened = T + 60_000
+    subscription = _BatchSubscription(
+        client_id="chart", consumer_id="chart-owner", exchange=IDENTITY["exchange"],
+        market_type=IDENTITY["market_type"], symbol=IDENTITY["symbol"],
+    )
     handle = await dm.subscribe_async(
-        connection._event_callback("chart"), **IDENTITY, event_types=_EVENT_TYPES,
+        connection._event_callback(subscription), **IDENTITY, event_types=_EVENT_TYPES,
         on_recovery=connection._require_resync,
     )
     try:

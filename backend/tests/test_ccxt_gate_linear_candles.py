@@ -1,15 +1,21 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 
+import pytest
+
+from app.data_engine.bar_basis import GATE_INVERSE_CONTRACTS
 from app.data_engine.data_manager import DataManager
 from app.data_engine.ingestion.config import IngestionConfig
 from app.data_engine.ingestion.models import DataSource, RawMessage, StreamDescriptor, StreamType, TransportRequest
-from app.data_engine.interval_resolution import IntervalResolver
-from app.data_engine.kline_quality import GATE_LEGACY_VOLUME_SOURCE, GATE_WS_CONFIRMED_SOURCE, source_is_trusted_final
+from app.data_engine.interval_resolution import IntervalResolutionError, IntervalResolver
+from app.data_engine.kline_quality import (
+    GATE_INVERSE_WS_CONFIRMED_SOURCE, GATE_LEGACY_VOLUME_SOURCE, GATE_WS_CONFIRMED_SOURCE, source_is_trusted_final,
+)
 from app.data_engine.storage import klines_repo
 from app.exchanges.ccxt_ext.catalog import get_ccxt_catalog_entry
-from app.exchanges.ccxt_ext.gate_candles import fetch_linear_candles
+from app.exchanges.ccxt_ext.gate_candles import fetch_perpetual_candles
 from app.exchanges.ccxt_ext.generic import CcxtUnifiedProfile
 from app.exchanges.ccxt_ext.unified import CcxtUnifiedNormalizer, CcxtUnifiedProjector
 from tests.test_bar_delivery_journal import payload
@@ -24,32 +30,43 @@ CONTRACT = {"id": "BTC_USDT", "settleId": "usdt", "swap": True, "linear": True, 
 VENUE_BAR = {"t": OPENED // 1000, "o": "74161.1", "h": "74188", "l": "73948.4", "c": "73985.1", "v": 3683966}
 
 
-def test_gate_linear_ws_only_finalizes_confirmed_native_snapshot(tmp_path, monkeypatch):
+@pytest.mark.parametrize("inverse", [False, True])
+def test_gate_ws_only_finalizes_confirmed_native_snapshot(tmp_path, monkeypatch, inverse):
+    identity = GATE_INVERSE_CONTRACTS if inverse else None
+    market = "swap.inverse" if inverse else MARKET
+    symbol = "BTC/USD:BTC" if inverse else SYMBOL
+    contract = ({"id": "BTC_USD", "settleId": "btc", "swap": True, "inverse": True, "contractSize": 1}
+                if inverse else CONTRACT)
+    descriptor = replace(DESCRIPTOR, market_type=market, symbol=symbol, series_identity=identity)
+    kwargs = {"series_identity": identity} if inverse else {}
+    volume = 8250 if inverse else VENUE_BAR["v"]
+    venue_bar = {**VENUE_BAR, "v": volume}
+    scale = 1 if inverse else 0.0001
     async def exercise():
         resolver = IntervalResolver()
         for purpose in ("history", "realtime"):
-            assert resolver.resolve(exchange="gate", market_type=MARKET, interval="5m", purpose=purpose).is_native
+            assert resolver.resolve(exchange="gate", market_type=market, interval="5m", purpose=purpose).is_native
 
         monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", tmp_path / "bars.sqlite")
         klines_repo.init_klines_storage()
         manager = DataManager()
         manager.set_storage(klines_repo.KlinesRepoAdapter())
         manager._started = True
-        manager.bar_aggregator.add_target(SYMBOL, "5m", exchange="gate", market_type=MARKET)
-        profile = CcxtUnifiedProfile(get_ccxt_catalog_entry("gate"), MARKET)
+        manager.bar_aggregator.add_target(symbol, "5m", exchange="gate", market_type=market, **kwargs)
+        profile = CcxtUnifiedProfile(get_ccxt_catalog_entry("gate"), market)
         exchange = profile.create_exchange(IngestionConfig(proxy_mode="none"), raw_event_sink=None, lifecycle_sink=None)
-        monkeypatch.setattr(exchange, "market", lambda _symbol: CONTRACT)
-        projector = CcxtUnifiedProjector(exchange_id="gate", market_type=MARKET, descriptor=DESCRIPTOR)
-        normalizer = CcxtUnifiedNormalizer(DESCRIPTOR)
+        monkeypatch.setattr(exchange, "market", lambda _symbol: contract)
+        projector = CcxtUnifiedProjector(exchange_id="gate", market_type=market, descriptor=descriptor)
+        normalizer = CcxtUnifiedNormalizer(descriptor)
 
         def stored():
-            return klines_repo.query_klines(SYMBOL, "5m", exchange="gate", market_type=MARKET)
+            return klines_repo.query_klines(symbol, "5m", exchange="gate", market_type=market, **kwargs)
 
         async def project(candle):
             async def watch(_symbol, _interval):
-                return [exchange.parse_ohlcv({**candle, "n": "5m_BTC_USDT"})]
+                return [exchange.parse_ohlcv({**candle, "n": "5m_" + contract["id"]})]
             monkeypatch.setattr(exchange, "watch_ohlcv", watch)
-            rows = await profile.watch(exchange, DESCRIPTOR, SYMBOL)
+            rows = await profile.watch(exchange, descriptor, symbol)
             events = []
             for raw in projector.project(rows):
                 event = normalizer.parse(RawMessage(raw.payload, DataSource.WEBSOCKET, StreamType.KLINE, OPENED + WIDTH))
@@ -58,22 +75,24 @@ def test_gate_linear_ws_only_finalizes_confirmed_native_snapshot(tmp_path, monke
             return events
 
         try:
-            preview = {**VENUE_BAR, "h": "74190", "v": "3683965.5", "w": "true"}
+            preview = {**venue_bar, "h": "74190", "v": str(volume - 0.5), "w": "true"}
             [forming] = await project(preview)
             assert not forming.data["is_closed"]
-            assert forming.data["volume"] == 368.39655
-            [successor] = await project({**VENUE_BAR, "t": (OPENED + WIDTH) // 1000})
+            assert forming.data["volume"] == pytest.approx((volume - 0.5) * scale)
+            [successor] = await project({**venue_bar, "t": (OPENED + WIDTH) // 1000})
             assert not successor.data["is_closed"]
             assert stored() == []
 
-            [final] = await project({**VENUE_BAR, "w": True})
+            [final] = await project({**venue_bar, "w": True})
             assert final.data["is_closed"]
             await manager.aggregator_bridge.delivery.stop()
             [saved] = stored()
-            assert saved["source"] == GATE_WS_CONFIRMED_SOURCE
-            assert (saved["high"], saved["volume"]) == (74188.0, 368.3966)
+            assert saved["source"] == (GATE_INVERSE_WS_CONFIRMED_SOURCE if inverse else GATE_WS_CONFIRMED_SOURCE)
+            assert (saved["high"], saved["volume"]) == pytest.approx((74188.0, volume * scale))
+            if inverse:
+                assert not klines_repo.query_klines(symbol, "5m", exchange="gate", market_type=market)
             assert await project(preview) == []
-            assert await project({**VENUE_BAR, "w": True}) == []
+            assert await project({**venue_bar, "w": True}) == []
         finally:
             await manager.aggregator_bridge.delivery.stop()
             await manager.event_bus.close()
@@ -97,15 +116,67 @@ def test_gate_linear_single_bucket_rest_filters_outside_rows_and_freezes_finalit
         monkeypatch.setattr(exchange, "publicFuturesGetSettleCandlesticks", fetch)
         req = TransportRequest(DESCRIPTOR, limit=1, start_ms=OPENED, end_ms=OPENED, history=True)
         try:
-            [payload] = await fetch_linear_candles(exchange, SYMBOL, req, limit=1, now_ms=OPENED + WIDTH)
+            [payload] = await fetch_perpetual_candles(exchange, SYMBOL, req, limit=1, now_ms=OPENED + WIDTH)
             assert calls == [{"contract": "BTC_USDT", "settle": "usdt", "interval": "5m",
                               "from": OPENED // 1000, "to": OPENED // 1000 + 1}]
             assert payload["value"] == [OPENED, 74161.1, 74188, 73948.4, 73985.1, 368.3966]
             assert payload["gate_rest_close_verified"] is True
-            [forming] = await fetch_linear_candles(exchange, SYMBOL, req, limit=1, now_ms=OPENED + WIDTH - 1)
+            [forming] = await fetch_perpetual_candles(exchange, SYMBOL, req, limit=1, now_ms=OPENED + WIDTH - 1)
             assert forming["is_closed"] is False
-            assert await fetch_linear_candles(exchange, SYMBOL, req, limit=1, now_ms=OPENED) == []
+            assert await fetch_perpetual_candles(exchange, SYMBOL, req, limit=1, now_ms=OPENED) == []
             assert len(calls) == 2
+        finally:
+            await exchange.close()
+
+    asyncio.run(exercise())
+
+
+def test_gate_inverse_history_requires_explicit_contract_volume(monkeypatch):
+    from ccxt.async_support import gate
+    from app.data_engine.series_identity import KlineSeriesIdentity
+    from app.exchanges.history_identity import supports_history_identity
+
+    route_params = dict(exchange="gate", market_type="swap.inverse", interval="5m")
+    resolver = IntervalResolver()
+    route = resolver.resolve(**route_params, purpose="history")
+    route.require_series_identity(GATE_INVERSE_CONTRACTS)
+    base_asset = KlineSeriesIdentity.for_exchange("gate")
+    with pytest.raises(IntervalResolutionError, match="contract_count"):
+        route.require_series_identity(base_asset)
+    with pytest.raises(IntervalResolutionError):
+        resolver.resolve(**(route_params | {"interval": "10m"}), purpose="history")
+    assert not supports_history_identity(**route_params, identity=base_asset)
+
+    async def exercise():
+        exchange = gate()
+        monkeypatch.setattr(exchange, "market", lambda _symbol: {
+            "id": "BTC_USD", "settleId": "btc", "swap": True, "inverse": True,
+            "contractSize": 1, "info": {"quanto_multiplier": "0"},
+        })
+        calls = []
+
+        async def fetch(params):
+            calls.append(params)
+            return [{**VENUE_BAR, "v": 8250}]
+
+        monkeypatch.setattr(exchange, "publicFuturesGetSettleCandlesticks", fetch)
+        descriptor = replace(DESCRIPTOR, market_type="swap.inverse", symbol="BTC/USD:BTC")
+        request = TransportRequest(descriptor, limit=1, start_ms=OPENED, end_ms=OPENED, history=True)
+        try:
+            with pytest.raises(ValueError, match="contract_count"):
+                await fetch_perpetual_candles(exchange, descriptor.symbol, request, limit=1, now_ms=OPENED + WIDTH)
+            assert not calls
+            descriptor.series_identity = GATE_INVERSE_CONTRACTS
+            [payload] = await fetch_perpetual_candles(
+                exchange, descriptor.symbol, request, limit=1, now_ms=OPENED + WIDTH,
+            )
+            event = CcxtUnifiedNormalizer(descriptor).parse(RawMessage(
+                payload=payload, source=DataSource.HTTP_BACKFILL, stream_type=StreamType.KLINE,
+                received_at_ms=OPENED + WIDTH,
+            ))
+            assert calls[0]["settle"] == "btc" and calls[0]["contract"] == "BTC_USD"
+            assert event.data["volume"] == 8250 and event.data["is_closed"]
+            assert event.data["series_identity"] == GATE_INVERSE_CONTRACTS.to_dict()
         finally:
             await exchange.close()
 

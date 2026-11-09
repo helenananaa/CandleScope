@@ -10,8 +10,8 @@ from typing import Any
 
 import ccxt
 
-from app.data_engine.bar_basis import is_gate_linear_5m
-from app.data_engine.kline_quality import GATE_WS_CONFIRMED_SOURCE
+from app.data_engine.bar_basis import GATE_INVERSE_CONTRACTS, is_gate_inverse_5m, is_gate_linear_5m
+from app.data_engine.kline_quality import GATE_INVERSE_WS_CONFIRMED_SOURCE, GATE_WS_CONFIRMED_SOURCE
 from app.data_engine.ingestion.models import (
     DataSource,
     MarketEvent,
@@ -122,8 +122,9 @@ class CcxtUnifiedProjector:
         # rows are sufficient to publish the latest forming bar and the one
         # closure transition immediately before it.
         rows = rows[-2:]
-        if is_gate_linear_5m(self.exchange_id, self.market_type, self.descriptor.interval):
-            return self._project_gate_linear_klines(rows)
+        if (is_gate_linear_5m(self.exchange_id, self.market_type, self.descriptor.interval)
+                or is_gate_inverse_5m(self.exchange_id, self.market_type, self.descriptor.interval)):
+            return self._project_gate_klines(rows)
         if self.exchange_id == "bybit":
             return self._project_bybit_klines(rows)
         newest_open = int(rows[-1][0])
@@ -159,7 +160,7 @@ class CcxtUnifiedProjector:
             self._kline_fingerprints.pop(open_time, None)
         return payloads
 
-    def _project_gate_linear_klines(self, rows: list[list[Any]]) -> list[dict[str, Any]]:
+    def _project_gate_klines(self, rows: list[list[Any]]) -> list[dict[str, Any]]:
         payloads = []
         for row in rows:
             # The Pro path appends the venue proof after converting volume.
@@ -423,10 +424,16 @@ class CcxtUnifiedNormalizer:
             gate_linear = is_gate_linear_5m(
                 self._descriptor.exchange, self._descriptor.market_type, self._descriptor.interval,
             )
+            gate_inverse = is_gate_inverse_5m(
+                self._descriptor.exchange, self._descriptor.market_type, self._descriptor.interval,
+            )
+            if gate_inverse and self._descriptor.series_identity != GATE_INVERSE_CONTRACTS:
+                return None
+            gate_perpetual = gate_linear or gate_inverse
             gate_source = ""
-            if gate_linear and payload.get("is_closed") is True:
+            if gate_perpetual and payload.get("is_closed") is True:
                 if msg.source == DataSource.WEBSOCKET and payload.get("gate_close_confirmed") is True:
-                    gate_source = GATE_WS_CONFIRMED_SOURCE
+                    gate_source = GATE_INVERSE_WS_CONFIRMED_SOURCE if gate_inverse else GATE_WS_CONFIRMED_SOURCE
                 if (msg.source in {DataSource.HTTP, DataSource.HTTP_BACKFILL}
                         and payload.get("gate_rest_close_verified") is True):
                     gate_source = "backfill"
@@ -439,7 +446,7 @@ class CcxtUnifiedNormalizer:
                 and payload.get("is_closed") is True
                 and payload.get("source_close_time_ms") == end_time - 1
             )
-            if gate_linear:
+            if gate_perpetual:
                 is_closed = bool(gate_source)
             elif bybit_live:
                 is_closed = bybit_close_confirmed
@@ -466,6 +473,8 @@ class CcxtUnifiedNormalizer:
                 "trade_coverage_verified": payload.get("trade_coverage_verified") is True,
                 "trade_candle_source": payload.get("trade_candle_source") is True,
             }
+            if gate_inverse:
+                data["series_identity"] = GATE_INVERSE_CONTRACTS.to_dict()
         except (TypeError, ValueError):
             return None
         return self._event(

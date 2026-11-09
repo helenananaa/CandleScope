@@ -34,7 +34,7 @@ from dataclasses import replace
 from typing import Callable, Awaitable, Any
 
 from app.data_engine.market_data.kline_metrics import declared_enhanced_fields
-from app.data_engine.series_identity import identity_from_metadata
+from app.data_engine.series_identity import identity_from_metadata, resolve_kline_series_identity
 from app.exchanges import (
     HistoricalRequest,
     RateLimitDeferred,
@@ -369,6 +369,7 @@ class HistoricalFetcher:
             interval=task.interval,
             exchange=task.exchange,
             market_type=task.market_type,
+            series_identity=identity_from_metadata(task.exchange, task.metadata),
         )
 
         # Create a normalizer for parsing raw REST responses
@@ -975,6 +976,10 @@ class HistoricalFetcher:
         # Skip unclosed bars
         if not data.get("is_closed", True):
             return None
+        task_identity = identity_from_metadata(task.exchange, task.metadata)
+        event_identity = identity_from_metadata(task.exchange, data)
+        if event_identity is not None and event_identity != resolve_kline_series_identity(task.exchange, task_identity):
+            return None
 
         try:
             enhanced_fields = declared_enhanced_fields(
@@ -1004,10 +1009,7 @@ class HistoricalFetcher:
                 source="trade_history_verified" if data.get("trade_coverage_verified") is True else "backfill",
                 source_ref=dict(data["source_ref"]) if data.get("source_ref") else None,
                 enhanced_fields=enhanced_fields,
-                series_identity=identity_from_metadata(
-                    task.exchange,
-                    task.metadata,
-                ),
+                series_identity=task_identity,
             )
         except (KeyError, ValueError, TypeError) as exc:
             logger.warning("Failed to convert event to bar: %s", exc)

@@ -1036,12 +1036,14 @@ export function useMarketDataRuntime({
     }) === true
   ), [exchange, marketType, seriesIdentity, symbol, workspaceResources]);
 
+  const identityStreamReady = webSocketReady && (legacySeries || workspaceResources?.batchStreamEnabled === true);
   useKlineStreamRuntime({
-    enabled: webSocketReady,
-    webSocketEnabled: webSocketReady,
+    enabled: identityStreamReady,
+    webSocketEnabled: identityStreamReady,
     symbol,
     exchange,
     marketType,
+    seriesIdentity,
     nativeIntervalValues,
     tradeCandlesAvailable,
     trackedIntervals,

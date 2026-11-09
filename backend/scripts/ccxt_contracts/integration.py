@@ -26,7 +26,7 @@ def main() -> int:
         "test_interval_resolution.py", "test_interval_admission_contract.py",
         "test_oi_local_history.py",
         "test_data_engine_phase1_boundaries.py",
-        "test_kline_series_identity.py", "test_kline_source_journal.py",
+        "test_kline_series_identity.py", "test_kline_source_journal.py", "test_kline_batch*.py",
         "test_okx_utc_protocol.py", "test_plugin_provider_v2.py", "test_proxy_pool*.py",
         "test_public_admission.py", "test_public_transport_loopback.py", "test_source_revision_pipeline.py",
         "test_transport_http_rate_limit_metadata.py", "test_pyne_removal.py",

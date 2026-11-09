@@ -64,6 +64,7 @@ export function MarketDataWorkspaceProvider({
     });
     return {
       brokerEnabled,
+      batchStreamEnabled,
       dataManager,
       indicatorStreamCoordinator,
       indicatorDataManager,

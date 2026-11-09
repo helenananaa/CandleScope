@@ -78,6 +78,7 @@ class ReverseTimePaginationPolicy:
     @staticmethod
     def _descriptor(task) -> StreamDescriptor:
         from app.data_engine.ingestion.models import StreamDescriptor, StreamType
+        from app.data_engine.series_identity import identity_from_metadata
 
         return StreamDescriptor(
             symbol=task.symbol,
@@ -85,6 +86,7 @@ class ReverseTimePaginationPolicy:
             interval=task.interval,
             exchange=task.exchange,
             market_type=task.market_type,
+            series_identity=identity_from_metadata(task.exchange, task.metadata),
         )
 
 

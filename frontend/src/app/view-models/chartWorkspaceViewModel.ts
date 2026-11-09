@@ -112,6 +112,7 @@ export function buildChartWorkspaceViewModel({
       advancedMarketData: advancedMarketView,
       chartProps: {
         seriesStore: marketView.seriesStore,
+        contractVolume: sessionView.volumeSemantics === "contract_count",
         symbol,
         drawingKeyBase: chartStorageKeyBase,
         interval,

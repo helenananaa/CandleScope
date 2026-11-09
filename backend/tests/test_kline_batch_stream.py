@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from app.api.v1.stream import router as stream_router
 from app.core import config
+from app.data_engine.bar_basis import GATE_INVERSE_CONTRACTS
 from app.data_engine.data_manager.models import (
     BarData,
     DataEvent,
@@ -65,7 +66,8 @@ class _BatchDataManager:
     async def release_stream(self, symbol: str, interval: str, **kwargs) -> None:
         self.release_calls.append({"symbol": symbol, "interval": interval, **kwargs})
 
-    def subscribe(self, *, callback, symbol, interval, exchange, market_type, event_types, on_recovery=None):
+    def subscribe(self, *, callback, symbol, interval, exchange, market_type, event_types,
+                  on_recovery=None, series_identity=None):
         handle = object()
         self.subscribe_calls.append({
             "callback": callback,
@@ -75,17 +77,19 @@ class _BatchDataManager:
             "market_type": market_type,
             "event_types": event_types,
             "handle": handle,
+            **({"series_identity": series_identity} if series_identity else {}),
         })
         if self.emit:
             async def _emit() -> None:
                 await asyncio.sleep(0)
                 await callback(DataEvent(
                     event_type=DataEventType.BAR_AMENDED,
-                    key=SeriesKey(
+                    key=SeriesKey.create(
                         symbol,
                         interval,
                         exchange=exchange,
                         market_type=market_type,
+                        identity=series_identity,
                     ),
                     bar=BarData(
                         time=1_700_000_000,
@@ -114,6 +118,27 @@ def _client(dm: _BatchDataManager) -> TestClient:
     app.include_router(stream_router, prefix="/api/v1")
     app.state.data_manager = dm
     return TestClient(app)
+
+
+def test_batch_stream_preserves_contract_volume_identity(monkeypatch):
+    monkeypatch.setattr(config, "KLINE_BATCH_STREAM_ENABLED", True)
+    dm = _BatchDataManager(emit=True)
+    item = dict(clientId="gate", exchange="gate", market_type="swap.inverse",
+                symbol="BTC/USD:BTC", intervals=["5m"], **GATE_INVERSE_CONTRACTS.to_dict())
+    with _client(dm).websocket_connect("/api/v1/stream/klines_batch") as ws:
+        assert ws.receive_json()["type"] == "connected"
+        ws.send_json(dict(action="subscribe", items=[item]))
+        messages = [ws.receive_json(), ws.receive_json()]
+        by_type = {message["type"]: message for message in messages}
+        assert by_type["subscription_ack"]["ok"]
+        assert by_type["subscription_ack"]["volume_semantics"] == "contract_count"
+        assert by_type["kline"]["volume_semantics"] == "contract_count"
+        assert by_type["kline"]["data"]["volume"] == 10
+        ws.send_json(dict(action="update", items=[{**item, "intervals": ["10m"]}]))
+        failure = ws.receive_json()
+        assert failure["code"] == "series_identity_unsupported"
+    for calls in (dm.ensure_calls, dm.subscribe_calls, dm.release_calls):
+        assert [call["series_identity"] for call in calls] == [GATE_INVERSE_CONTRACTS]
 
 
 def test_cancelled_asgi_scope_drains_all_streams_before_unregistering() -> None:

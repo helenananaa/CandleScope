@@ -16,7 +16,7 @@ import ccxt
 import ccxt.async_support as ccxt_async
 import ccxt.pro as ccxtpro
 
-from app.data_engine.bar_basis import is_gate_linear_5m
+from app.data_engine.bar_basis import GATE_INVERSE_CONTRACTS, is_gate_inverse_5m, is_gate_linear_5m
 from app.data_engine.ingestion.config import IngestionConfig
 from app.data_engine.ingestion.models import (
     StreamDescriptor,
@@ -773,11 +773,12 @@ class CcxtUnifiedProfile:
     ) -> Any:
         if descriptor.stream_type == StreamType.KLINE:
             value = await exchange.watch_ohlcv(ccxt_symbol, descriptor.interval)
-            if is_gate_linear_5m(self.exchange_id, descriptor.market_type, descriptor.interval):
-                from .gate_candles import linear_candle_row, linear_contract_size
-                size = linear_contract_size(exchange.market(ccxt_symbol))
+            if (is_gate_linear_5m(self.exchange_id, descriptor.market_type, descriptor.interval)
+                    or is_gate_inverse_5m(self.exchange_id, descriptor.market_type, descriptor.interval)):
+                from .gate_candles import candle_row, perpetual_volume_scale
+                scale = perpetual_volume_scale(exchange.market(ccxt_symbol), descriptor)
                 return [
-                    [*linear_candle_row(row, row[5], size), len(row) > 6 and row[6] is True]
+                    [*candle_row(row, row[5], scale), len(row) > 6 and row[6] is True]
                     for row in value
                 ]
             # The pinned Upbit native seconds channel returns one OHLCV row.
@@ -960,6 +961,8 @@ async def load_ccxt_symbols(
                     listed_at_ms=_timestamp(market.get("created")),
                     expiry_at_ms=_timestamp(market.get("expiry")),
                     price_tick_size=_price_tick_size(exchange, market),
+                    **({"volume_semantics": GATE_INVERSE_CONTRACTS.volume_semantics}
+                       if entry.exchange_id == "gate" and selected == "swap.inverse" else {}),
                     **ccxt_contract_rules(exchange, market, tick_mode=ccxt.TICK_SIZE,
                                           decimal_mode=ccxt.DECIMAL_PLACES, significant_mode=ccxt.SIGNIFICANT_DIGITS),
                 )
