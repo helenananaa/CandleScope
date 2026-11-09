@@ -1508,6 +1508,39 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   contain: strict;
 }
 
+.tf-history {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  font-size: var(--font-size-xs);
+}
+
+.tf-history-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 4px 8px;
+}
+
+.tf-history-status {
+  padding: 2px 8px 5px;
+  color: var(--text-muted);
+}
+
+.tf-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.tf-history-table th,
+.tf-history-table td {
+  padding: 3px 5px;
+  border-bottom: 1px solid var(--border-color);
+  text-align: start;
+}
+
 .tf-summary {
   display: grid;
   flex: 0 0 auto;

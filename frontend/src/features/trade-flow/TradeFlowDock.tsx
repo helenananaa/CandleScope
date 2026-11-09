@@ -5,6 +5,7 @@ import { getDateTimeLocale, t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { isTradeFlowQuiet, latestTradeTime } from "./tradeFlowFreshness.js";
 import { buildTradeFlowProfile } from "./tradeFlowProfile.js";
+import { TradeFlowHistory } from "./TradeFlowHistory.js";
 import {
   TRADE_FLOW_BUBBLE_OPTIONS,
   TRADE_FLOW_NOTIONAL_OPTIONS,
@@ -296,6 +297,9 @@ function TradeFlowDock({
 }: TradeFlowDockProps) {
   useLocale();
   const preferences = runtime.view.preferences;
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const historyAvailable = mode === "profile" && runtime.view.supported;
+  const identity = runtime.view.identity;
   return (
     <section
       className="order-book-dock trade-flow-dock"
@@ -333,40 +337,49 @@ function TradeFlowDock({
         </span>
         <TradeFlowStatus store={runtime.view.store} />
       </header>
+      {historyAvailable && <div className="tf-history-actions">
+        <Button size="sm" aria-expanded={historyOpen} onClick={() => setHistoryOpen(!historyOpen)}>
+          {t(historyOpen ? "trade.history.liveProfile" : "trade.history.title")}
+        </Button>
+      </div>}
 
-      <>
-        <div className="tf-controls">
-          <div className="tf-side-switch" role="group" aria-label={t("trade.sideFilter")}>
-            {(["all", "buy", "sell"] as const).map((side) => (
-              <button
-                key={side}
-                type="button"
-                className={preferences.sideFilter === side ? "active" : ""}
-                onClick={() => runtime.actions.setSideFilter(side)}
-              >{side === "all" ? t("trade.all") : side === "buy" ? t("trade.buy") : t("trade.sell")}</button>
-            ))}
-          </div>
-          <label title={t("trade.filterTitle")}>
-            <span>{t("trade.filter")}</span>
-            <select value={preferences.minNotional} onChange={(event) => runtime.actions.setMinNotional(Number(event.target.value))}>
-              {TRADE_FLOW_NOTIONAL_OPTIONS.map((value) => <option key={value} value={value}>{value ? `≥ ${formatNotional(value)}` : t("trade.all")}</option>)}
-            </select>
-          </label>
-          <label title={t("trade.bubbleTitle")}>
-            <span>{t("trade.bubbles")}</span>
-            <select value={preferences.largeTradeNotional} onChange={(event) => runtime.actions.setLargeTradeNotional(Number(event.target.value))}>
-              {TRADE_FLOW_BUBBLE_OPTIONS.map((value) => (
-                <option key={value} value={value}>
-                  {value ? `≥ ${formatNotional(value)}` : t("trade.off")}
-                </option>
+      {historyAvailable && historyOpen ? (
+        <TradeFlowHistory key={`${identity.exchange}/${identity.marketType}/${identity.symbol}`} identity={identity} />
+      ) : (
+        <>
+          <div className="tf-controls">
+            <div className="tf-side-switch" role="group" aria-label={t("trade.sideFilter")}>
+              {(["all", "buy", "sell"] as const).map((side) => (
+                <button
+                  key={side}
+                  type="button"
+                  className={preferences.sideFilter === side ? "active" : ""}
+                  onClick={() => runtime.actions.setSideFilter(side)}
+                >{side === "all" ? t("trade.all") : side === "buy" ? t("trade.buy") : t("trade.sell")}</button>
               ))}
-            </select>
-          </label>
-        </div>
-        {mode === "profile"
-          ? <TradeFlowProfileBody runtime={runtime} />
-          : <TradeFlowTape runtime={runtime} />}
-      </>
+            </div>
+            <label title={t("trade.filterTitle")}>
+              <span>{t("trade.filter")}</span>
+              <select value={preferences.minNotional} onChange={(event) => runtime.actions.setMinNotional(Number(event.target.value))}>
+                {TRADE_FLOW_NOTIONAL_OPTIONS.map((value) => <option key={value} value={value}>{value ? `≥ ${formatNotional(value)}` : t("trade.all")}</option>)}
+              </select>
+            </label>
+            <label title={t("trade.bubbleTitle")}>
+              <span>{t("trade.bubbles")}</span>
+              <select value={preferences.largeTradeNotional} onChange={(event) => runtime.actions.setLargeTradeNotional(Number(event.target.value))}>
+                {TRADE_FLOW_BUBBLE_OPTIONS.map((value) => (
+                  <option key={value} value={value}>
+                    {value ? `≥ ${formatNotional(value)}` : t("trade.off")}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {mode === "profile"
+            ? <TradeFlowProfileBody runtime={runtime} />
+            : <TradeFlowTape runtime={runtime} />}
+        </>
+      )}
     </section>
   );
 }
