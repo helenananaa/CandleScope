@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from datetime import datetime, timezone
 from typing import Any
+from app.data_engine.bar_basis import is_gate_linear_5m
 from app.data_engine.ingestion.config import IngestionConfig
 from app.data_engine.ingestion.models import DataSource, RawMessage, StreamType, TransportRequest
 from .generic import _GENERIC_STREAM_METHODS, _rest_method_for, resolve_market_selection, _timestamp
@@ -135,6 +136,12 @@ async def fetch_unified_history(
                     cursor = opened + 1000
                 rows.append({"native_second_page": "upbit.spot", "start_ms": page_start,
                              "end_ms": page_end, "empty_ranges": empty_ranges})
+        elif descriptor.stream_type == StreamType.KLINE and is_gate_linear_5m(
+            context.entry.exchange_id, descriptor.market_type, descriptor.interval,
+        ):
+            from .gate_candles import fetch_linear_candles
+            limit = min(max(1, int(req.limit or 1)), context.entry.history_limit)
+            rows = await fetch_linear_candles(exchange, symbol, req, limit=limit, now_ms=int(time.time() * 1000))
         elif descriptor.stream_type == StreamType.KLINE:
             limit = min(max(1, int(req.limit or 1)), context.entry.history_limit)
             values = await exchange.fetch_ohlcv(

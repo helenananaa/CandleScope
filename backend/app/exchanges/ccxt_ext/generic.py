@@ -16,6 +16,7 @@ import ccxt
 import ccxt.async_support as ccxt_async
 import ccxt.pro as ccxtpro
 
+from app.data_engine.bar_basis import is_gate_linear_5m
 from app.data_engine.ingestion.config import IngestionConfig
 from app.data_engine.ingestion.models import (
     StreamDescriptor,
@@ -108,6 +109,9 @@ def _owned_exchange_class(exchange_class: type, *, windows: bool) -> type:
     if exchange_class is ccxtpro.okx:
         from .okx import OkxWebSocketProtocolMixin
         protocol_mixins = (OkxWebSocketProtocolMixin,)
+    if exchange_class is ccxtpro.gate:
+        from .gate_candles import GateKlineProtocolMixin
+        protocol_mixins = (GateKlineProtocolMixin,)
     return type(
         f"CandleScopeOwned{exchange_class.__name__}",
         (*protocol_mixins, RestSourceCaptureMixin, PublicCcxtAdmissionMixin, mixin, exchange_class),
@@ -769,6 +773,13 @@ class CcxtUnifiedProfile:
     ) -> Any:
         if descriptor.stream_type == StreamType.KLINE:
             value = await exchange.watch_ohlcv(ccxt_symbol, descriptor.interval)
+            if is_gate_linear_5m(self.exchange_id, descriptor.market_type, descriptor.interval):
+                from .gate_candles import linear_candle_row, linear_contract_size
+                size = linear_contract_size(exchange.market(ccxt_symbol))
+                return [
+                    [*linear_candle_row(row, row[5], size), len(row) > 6 and row[6] is True]
+                    for row in value
+                ]
             # The pinned Upbit native seconds channel returns one OHLCV row.
             return [value] if self.exchange_id == "upbit" and descriptor.interval == "1s" else value
         if descriptor.stream_type == StreamType.TRADE:

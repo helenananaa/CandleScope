@@ -145,7 +145,8 @@ def init_revision_storage(conn):
             DROP TRIGGER IF EXISTS kline_dependents_{operation};
             CREATE TRIGGER IF NOT EXISTS kline_dependents_{operation}
             AFTER {operation.upper()} ON klines
-            WHEN {mutation_condition}(SELECT mode FROM kline_mutation_context WHERE singleton=1)<>'retention'
+            WHEN {mutation_condition}(SELECT mode FROM kline_mutation_context WHERE singleton=1)
+                NOT IN ('retention', 'provenance_migration')
                 AND NOT EXISTS(SELECT 1 FROM kline_derived_series s WHERE {source_derived_predicate})
                 AND EXISTS(SELECT 1 FROM kline_derived_series d WHERE {dependent_family} AND d.interval<>{alias}.interval)
             BEGIN

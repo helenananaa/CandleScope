@@ -548,6 +548,7 @@ class EventRouter:
                 ),
                 sequence=sequence,
                 extra={**({"source_ref": dict(data["source_ref"])} if data.get("source_ref") else {}),
+                       "gate_close_source": data.get("gate_close_source") if exchange == "gate" else None,
                        "trade_coverage_verified": data.get("trade_coverage_verified") is True},
             )
         except (KeyError, ValueError, TypeError) as exc:

@@ -10,6 +10,8 @@ from typing import Any
 
 import ccxt
 
+from app.data_engine.bar_basis import is_gate_linear_5m
+from app.data_engine.kline_quality import GATE_WS_CONFIRMED_SOURCE
 from app.data_engine.ingestion.models import (
     DataSource,
     MarketEvent,
@@ -120,6 +122,8 @@ class CcxtUnifiedProjector:
         # rows are sufficient to publish the latest forming bar and the one
         # closure transition immediately before it.
         rows = rows[-2:]
+        if is_gate_linear_5m(self.exchange_id, self.market_type, self.descriptor.interval):
+            return self._project_gate_linear_klines(rows)
         newest_open = int(rows[-1][0])
         payloads: list[dict[str, Any]] = []
 
@@ -151,6 +155,24 @@ class CcxtUnifiedProjector:
         while len(self._kline_rows) > _MAX_KLINE_REVISIONS:
             open_time, _row = self._kline_rows.popitem(last=False)
             self._kline_fingerprints.pop(open_time, None)
+        return payloads
+
+    def _project_gate_linear_klines(self, rows: list[list[Any]]) -> list[dict[str, Any]]:
+        payloads = []
+        for row in rows:
+            # The Pro path appends the venue proof after converting volume.
+            if len(row) != 7 or type(row[6]) is not bool:
+                continue
+            confirmed = row[6]
+            previous = self._kline_fingerprints.get(int(row[0]))
+            if not confirmed and previous and previous[1]:
+                continue
+            payload = self._kline_payload(row[:6], is_closed=confirmed)
+            payload["gate_close_confirmed"] = confirmed
+            if self._remember_kline(payload):
+                payloads.append(payload)
+        while len(self._kline_fingerprints) > _MAX_KLINE_REVISIONS:
+            self._kline_fingerprints.pop(next(iter(self._kline_fingerprints)))
         return payloads
 
     def _remember_kline(self, payload: dict[str, Any]) -> bool:
@@ -372,6 +394,16 @@ class CcxtUnifiedNormalizer:
             if spec is None or spec.floor_ms(open_time) != open_time:
                 return None
             end_time = spec.next_ms(open_time)
+            gate_linear = is_gate_linear_5m(
+                self._descriptor.exchange, self._descriptor.market_type, self._descriptor.interval,
+            )
+            gate_source = ""
+            if gate_linear and payload.get("is_closed") is True:
+                if msg.source == DataSource.WEBSOCKET and payload.get("gate_close_confirmed") is True:
+                    gate_source = GATE_WS_CONFIRMED_SOURCE
+                if (msg.source in {DataSource.HTTP, DataSource.HTTP_BACKFILL}
+                        and payload.get("gate_rest_close_verified") is True):
+                    gate_source = "backfill"
             data = {
                 "interval": self._descriptor.interval or "",
                 "open_time": open_time,
@@ -389,7 +421,8 @@ class CcxtUnifiedNormalizer:
                 "trades": 0,
                 "taker_buy_base": 0.0,
                 "taker_buy_quote": 0.0,
-                "is_closed": bool(
+                "gate_close_source": gate_source,
+                "is_closed": bool(gate_source) if gate_linear else bool(
                     payload.get(
                         "is_closed",
                         end_time <= msg.received_at_ms,

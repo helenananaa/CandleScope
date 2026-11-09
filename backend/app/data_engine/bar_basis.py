@@ -17,6 +17,10 @@ class BoundarySchedule(Protocol):
     def previous_ms(self, open_ms: int) -> int: ...
 
 
+def is_gate_linear_5m(provider: str, market_type: str, interval: str | None) -> bool:
+    return provider == "gate" and market_type == "swap.linear" and interval == "5m"
+
+
 @dataclass(frozen=True, slots=True)
 class BarBasis:
     spec: IntervalSpec
@@ -91,6 +95,10 @@ class NativeBarSpec:
             protocol = {"rest_parameters": {"interval": "1m"}, "ws_channel": "spot.candlesticks",
                         "ws_payload": ["1m", "{currency_pair}"],
                         "finality_evidence": "REST row[7]=true; unified WS successor observed"}
+        elif is_gate_linear_5m(self.provider, self.market_type, self.interval):
+            protocol = {"rest_parameters": {"interval": "5m"}, "ws_channel": "futures.candlesticks",
+                        "ws_payload": ["5m", "{contract}"], "finality_evidence": "WS w=true or elapsed REST candle",
+                        "volume": "contract count × linear contract size"}
         elif self.provider == "upbit" and self.interval == "1s":
             protocol = {"rest_endpoint": "/v1/candles/seconds", "ws_channel": "candle.1s",
                         "finality_evidence": "closed REST window; WS successor observed; absent seconds require bounded REST proof"}
@@ -182,6 +190,10 @@ def native_bar_spec(provider: str, market_type: str, interval: str, purpose: str
         return NativeBarSpec(provider, market_type, "kline", purpose, interval, interval,
                              "fixture_verified", "docs/architecture/GATE_SPOT_1M_BASIS.md",
                              protocol_version="gate/spot-minute/1")
+    if is_gate_linear_5m(provider, market_type, interval):
+        return NativeBarSpec(provider, market_type, "kline", purpose, interval, interval,
+                             "fixture_verified", "https://www.gate.com/docs/developers/futures/ws/en/#candlesticks-api",
+                             protocol_version="gate/linear-five-minute/1")
     if provider in {"gate", "upbit"} and market_type == "spot" and interval == "1s":
         # Only the explicitly documented Unix-second / UTC-second native
         # route is admitted. Other periods still require their own contract.

@@ -10,7 +10,7 @@ from typing import Any, Callable
 
 from app.core.config import KLINES_DB_PATH
 from app.core.executors import run_storage
-from app.data_engine.kline_quality import source_rank_sql
+from app.data_engine.kline_quality import GATE_LEGACY_VOLUME_SOURCE, source_rank_sql
 from app.exchanges.trade_candles import uses_trade_candles, supports_trade_candles
 from app.data_engine.history.calendar import (
     AlwaysOpenCalendar,
@@ -280,6 +280,35 @@ def _migrate_kline_series_identity(conn: sqlite3.Connection) -> None:
     logger.info("K-line semantic identity migration complete")
 
 
+def _migrate_gate_linear_volume(conn: sqlite3.Connection) -> None:
+    """Preserve pre-qualification values without presenting them as base volume."""
+    conn.execute("CREATE TABLE IF NOT EXISTS kline_quality_migrations (name TEXT PRIMARY KEY)")
+    applied = conn.execute(
+        "INSERT OR IGNORE INTO kline_quality_migrations VALUES ('gate_linear_base_volume_v1')"
+    )
+    if not applied.rowcount:
+        return
+
+    previous_mode = conn.execute("SELECT mode FROM kline_mutation_context WHERE singleton=1").fetchone()[0]
+    conn.execute("UPDATE kline_mutation_context SET mode='provenance_migration' WHERE singleton=1")
+    try:
+        identity = KlineSeriesIdentity.for_exchange("gate")
+        conn.execute(
+            f"""UPDATE klines SET source=? WHERE exchange='gate' AND market_type='swap.linear'
+                AND {_SERIES_IDENTITY_PREDICATE_SQL}""",
+            (GATE_LEGACY_VOLUME_SOURCE, *identity.storage_values),
+        )
+    finally:
+        conn.execute("UPDATE kline_mutation_context SET mode=? WHERE singleton=1", (previous_mode,))
+
+    conn.execute(
+        """UPDATE bar_delivery SET phase='rejected', recovery_required=1
+           WHERE phase IN ('pending','committed')
+             AND json_extract(payload, '$.exchange')='gate'
+             AND json_extract(payload, '$.market_type')='swap.linear'"""
+    )
+
+
 def init_klines_storage() -> None:
     Path(KLINES_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     with _connect() as conn:
@@ -356,6 +385,7 @@ def init_klines_storage() -> None:
         from .bar_delivery import init_bar_delivery_storage
         init_bar_delivery_storage(conn)
         init_revision_storage(conn)
+        _migrate_gate_linear_volume(conn)
         from .native_empty_seconds import init_schema as init_native_empty_schema
         init_native_empty_schema(conn)
         from .trade_empty_buckets import init_schema as init_trade_empty_schema

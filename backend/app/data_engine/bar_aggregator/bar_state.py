@@ -145,7 +145,9 @@ class StandardOHLCVMerge:
             state.tick_count += 1
             state.last_input_at_ms = bar_input.open_time_ms
 
-        if bar_input.extra.get("source_ref") and merge_mode == MergeMode.SNAPSHOT:
+        if merge_mode == MergeMode.SNAPSHOT and (
+            bar_input.extra.get("source_ref") or bar_input.extra.get("gate_close_source")
+        ):
             # This is a selected complete native snapshot, including corrected
             # extrema. Do not union old highs/lows or round quantities to 8 dp.
             for name in (
@@ -743,6 +745,9 @@ class BarStateEngine:
             state.requires_authoritative_close = True
         if merge_mode == MergeMode.SNAPSHOT:
             state.quality_source = "trade_history_verified" if bar_input.extra.get("trade_coverage_verified") is True else ""
+            gate_source = bar_input.extra.get("gate_close_source")
+            if bar_input.is_closed and gate_source:
+                state.quality_source = gate_source
 
     # ── Public: State Queries ────────────────────────────────
 
