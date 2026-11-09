@@ -10,7 +10,7 @@ export class PreparedReplayDeletedError extends Error {
 }
 
 export class PreparationApiError extends Error {
-  constructor(readonly code: string, message: string, readonly status: number) { super(message); }
+  constructor(readonly code: string, message: string, readonly status: number, readonly retryAtMs?: number) { super(message); }
 }
 
 export interface PreparationJob {
@@ -24,7 +24,7 @@ export interface PreparationJob {
   waiting?: { reason: "RATE_LIMIT"; retry_at_ms: number } | null;
   request: { consumer: string; progressive?: boolean; requirements: Array<{ symbol: string }>; intent: Record<string, unknown> };
   result: { run?: TrainingRunMutationResponse["run"]; strategy_run?: BacktestRunRecord; native_run?: NativeRun; inputs?: unknown[]; resolution?: ChartContextResolution } | null;
-  error: { code: string; message: string; retryable: boolean } | null;
+  error: { code: string; message: string; retryable: boolean; retry_at_ms?: number } | null;
 }
 
 export interface PreparationCapabilities {
@@ -65,7 +65,9 @@ export async function waitForPreparation(
     onProgress(job);
     if (job.state === "READY") return job;
     if (["FAILED", "CANCELLED", "BLOCKED_STORAGE"].includes(job.state)) {
-      throw new PreparationApiError(job.error?.code ?? `DATA_PREPARATION_${job.state}`, job.error?.message ?? job.state, 200);
+      throw new PreparationApiError(
+        job.error?.code ?? `DATA_PREPARATION_${job.state}`, job.error?.message ?? job.state, 200, job.error?.retry_at_ms,
+      );
     }
     if (acceptReplayPrefix && job.state === "RUNNING" && job.request.progressive
       && job.result?.run?.adapter_session_id) return job;

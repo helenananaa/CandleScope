@@ -482,9 +482,10 @@ async def _prepare_trade_flow_history(request: Request, payload: TradeFlowHistor
     past_days = {}
     unavailable = []
 
-    def add_unavailable(ranges, reason):
+    def add_unavailable(ranges, reason, *, retry_at_ms=None):
+        timing = {"retry_at_ms": retry_at_ms} if retry_at_ms is not None else {}
         unavailable.extend(
-            {"start_ms": first, "end_ms": last, "reason": reason}
+            {"start_ms": first, "end_ms": last, "reason": reason, **timing}
             for first, last in ranges
         )
 
@@ -503,7 +504,7 @@ async def _prepare_trade_flow_history(request: Request, payload: TradeFlowHistor
         if day < today:
             past_days[day] = ranges
         else:
-            add_unavailable(ranges, "trade_day_unpublished")
+            add_unavailable(ranges, "trade_day_unpublished", retry_at_ms=day + DAY_MS)
     if not past_days:
         return result(None, unavailable)
 
@@ -523,6 +524,10 @@ async def _prepare_trade_flow_history(request: Request, payload: TradeFlowHistor
             # The verified inventory and the bounded minute projection prove
             # different things. Never re-download a day solely to reproject it.
             add_unavailable(ranges, projection_unverified)
+            continue
+        retry_at = await instance.storage(instance.repository.trade_day_retry_at, **identity, day_ms=day)
+        if retry_at is not None:
+            add_unavailable(ranges, "trade_day_archive_unavailable", retry_at_ms=retry_at)
         else:
             missing_days.append(day)
     if not missing_days:

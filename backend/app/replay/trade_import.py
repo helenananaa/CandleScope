@@ -18,6 +18,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import BinaryIO, Callable
+from urllib.error import HTTPError
 from urllib.parse import quote, urlencode, urlparse
 from uuid import uuid4
 from xml.etree import ElementTree
@@ -58,6 +59,11 @@ class OfficialTradeHistoryEmpty(ReplayTradeImportError):
 
 class TradeArchiveAcquisitionBusy(ReplayTradeImportError):
     """The shared day acquisition could not be opened within its wait budget."""
+
+
+def official_trade_object_missing(error: BaseException) -> bool:
+    cause = error.__cause__
+    return isinstance(error, ReplayTradeImportError) and isinstance(cause, HTTPError) and cause.code in {404, 410}
 
 
 @contextmanager
@@ -558,17 +564,18 @@ def import_official_date_range(
                     before_archive_import=before_archive_import,
                 )
             except BaseException as exc:
-                _quarantine_downloads(
-                    archive_dir,
-                    files=(zip_path, checksum_path),
-                    reason=str(exc),
-                    identity={
-                        "exchange": exchange,
-                        "market_type": market_type,
-                        "symbol": symbol,
-                        "date": current.isoformat(),
-                    },
-                )
+                if not official_trade_object_missing(exc):
+                    _quarantine_downloads(
+                        archive_dir,
+                        files=(zip_path, checksum_path),
+                        reason=str(exc),
+                        identity={
+                            "exchange": exchange,
+                            "market_type": market_type,
+                            "symbol": symbol,
+                            "date": current.isoformat(),
+                        },
+                    )
                 raise
             results.append(
                 {

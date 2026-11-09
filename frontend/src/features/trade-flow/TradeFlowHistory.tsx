@@ -32,6 +32,7 @@ function TradeHistoryHour({ identity, startMs, canDownload }: {
   const [job, setJob] = useState<PreparationJob | null>(null);
   const [notice, setNotice] = useState<MessageKey | null>(null);
   const [archiveOutcome, setArchiveOutcome] = useState<MessageKey | null>(null);
+  const [archiveRetryAt, setArchiveRetryAt] = useState<number | undefined>(undefined);
   const observer = useRef<AbortController | null>(null);
   const submissionKey = useRef<string | null>(null);
 
@@ -45,6 +46,7 @@ function TradeHistoryHour({ identity, startMs, canDownload }: {
     setJob(null);
     try {
       if (download) {
+        setArchiveRetryAt(undefined);
         submissionKey.current ??= crypto.randomUUID();
         const outcome = await fillTradeHistory(identity, startMs, submissionKey.current, (progress) => {
           if (!signal.aborted) setJob(progress);
@@ -65,6 +67,7 @@ function TradeHistoryHour({ identity, startMs, canDownload }: {
         const message = archiveMessage(error);
         if (message === "trade.history.unavailable" || message === "trade.history.unpublished") {
           setArchiveOutcome(message);
+          setArchiveRetryAt(error instanceof PreparationApiError ? error.retryAtMs : undefined);
         } else {
           setNotice(message);
         }
@@ -81,6 +84,15 @@ function TradeHistoryHour({ identity, startMs, canDownload }: {
       observer.current = null;
     };
   }, [load]);
+
+  useEffect(() => {
+    if (archiveRetryAt === undefined) return;
+    const timer = setTimeout(() => {
+      setArchiveOutcome(null);
+      setArchiveRetryAt(undefined);
+    }, Math.max(0, archiveRetryAt - Date.now()));
+    return () => clearTimeout(timer);
+  }, [archiveRetryAt]);
 
   const rows = page?.data ?? [];
   const verified = rows.filter((row) => row.is_complete && row.is_final).length;
@@ -102,6 +114,9 @@ function TradeHistoryHour({ identity, startMs, canDownload }: {
           : t("trade.history.preparing", { done: job?.completed ?? 0, total: job?.total ?? 1 })}</div>}
         {notice && <div>{t(notice)}</div>}
         {archiveOutcome && <div>{t(archiveOutcome)}</div>}
+        {archiveRetryAt !== undefined && <div>{t("trade.history.retryAfter", {
+          time: new Date(archiveRetryAt).toISOString(),
+        })}</div>}
         {page && <div>{t("trade.history.rows", {
           count: rows.length, verified, quiet: page.coverage?.verified_empty_minutes ?? 0,
         })}</div>}

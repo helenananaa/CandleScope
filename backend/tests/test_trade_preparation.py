@@ -445,6 +445,7 @@ async def test_trade_flow_history_preparation_reuses_the_official_day(tmp_path, 
             assert unpublished.status_code == 202 and unpublished.json()["job"] is None
             assert unpublished.json()["unavailable_ranges"] == [{
                 "start_ms": today + 60_000, "end_ms": today + 60_000, "reason": "trade_day_unpublished",
+                "retry_at_ms": today + 86_400_000,
             }]
             first = await client.post(path, json=request)
             second = await client.post(path, json={**request, "idempotency_key": "trade-second"})
@@ -493,19 +494,132 @@ async def test_trade_flow_history_preparation_reuses_the_official_day(tmp_path, 
         await prep.shutdown()
 
 
+@pytest.mark.parametrize("missing_zip", [False, True])
 @async_test
-async def test_official_trade_day_404_stops_automatic_retries(tmp_path):
+async def test_official_trade_day_404_stops_automatic_retries(tmp_path, missing_zip):
     from urllib.error import HTTPError
     adapter, archive, _ = adapter_and_network(tmp_path)
     calls = []
 
     def unavailable(url, **kwargs):
         calls.append(url)
+        if missing_zip and url.endswith(".CHECKSUM"):
+            body, filename = _zip_bytes(_rows())
+            return io.BytesIO(f"{hashlib.sha256(body).hexdigest()}  {filename}\n".encode())
         raise HTTPError(url, 404, "Not Found", {}, None)
 
     adapter.trades.importer = partial(import_official_date_range, opener=unavailable)
     with pytest.raises(PreparationError) as failure:
         await adapter.acquire(requirement(), "unavailable-day")
     assert failure.value.code == "TRADE_DAY_UNAVAILABLE" and not failure.value.retryable
-    assert len(calls) == 1 and calls[0].endswith(".CHECKSUM")
+    assert len(calls) == (2 if missing_zip else 1) and calls[0].endswith(".CHECKSUM")
+    assert not (archive.root / "_quarantine").exists()
     assert archive.list_verified_windows(exchange="binance", market_type="futures", symbol="BTCUSDT") == ()
+
+
+@async_test
+async def test_trade_day_unavailable_is_shared_and_rechecked_after_expiry(tmp_path, monkeypatch):
+    from urllib.error import HTTPError
+
+    import httpx
+    from fastapi import FastAPI
+
+    from app.api.v1.data_preparation import router
+    from app.core import config
+    from app.data_engine.market_data.trade_flow_service import TradeFlowService
+    from app.data_engine.storage.trade_flow_store import SQLiteTradeFlowRollupStore
+    from app.data_preparation.trade_adapter import DAY_MS
+
+    adapter, archive, _ = adapter_and_network(tmp_path)
+    body, filename = _zip_bytes(_rows())
+    checksum = f"{hashlib.sha256(body).hexdigest()}  {filename}\n".encode()
+    calls = []
+    present = False
+    now = START_MS + 2 * DAY_MS
+    monkeypatch.setattr(PreparationRepository, "now", staticmethod(lambda: now))
+    monkeypatch.setattr(config, "REPLAY_AGG_TRADE_ARCHIVE_DIR", archive.root)
+
+    def opener(url, **_kwargs):
+        calls.append(url)
+        if not present:
+            raise HTTPError(url, 404, "Not Found", {}, None)
+        return io.BytesIO(checksum if url.endswith(".CHECKSUM") else body)
+
+    adapter.trades.importer = partial(import_official_date_range, opener=opener)
+    path = tmp_path / "jobs.db"
+    prep = PreparationService(PreparationRepository(path), adapter, workers=2)
+    store = SQLiteTradeFlowRollupStore(tmp_path / "rollups.db")
+    trades = TradeFlowService(object(), rollup_store=store, verified_archive_root=archive.root)
+    app = FastAPI()
+    app.state.data_preparation_service = prep
+    app.state.data_manager = SimpleNamespace(trade_flow_ready=True, read_trade_flow_history=trades.read_history)
+    app.include_router(router, prefix="/api/v1")
+    route = "/api/v1/data-preparations"
+    retry_at = now + 15 * 60_000
+
+    async def submit(client, key, start=START_MS):
+        response = await client.post(route + "/trade-flow-history", json={
+            "symbol": "btcusdt", "start_ms": start, "end_ms": start, "idempotency_key": key,
+        })
+        assert response.status_code == 202, response.text
+        return response.json()
+
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            first = (await submit(client, "first-attempt"))["job"]
+            second = (await submit(client, "second-attempt", START_MS + 60_000))["job"]
+            assert first["id"] != second["id"]
+            await prep.start()
+            failed = await asyncio.gather(*(terminal(prep, item["id"]) for item in (first, second)))
+            assert all(item["state"] == "FAILED" and item["error"] == {
+                "code": "TRADE_DAY_UNAVAILABLE", "message": "The official trade package is unavailable for this UTC day",
+                "retryable": False, "retry_at_ms": retry_at,
+            } for item in failed)
+            assert len(calls) == 1 and calls[0].endswith(".CHECKSUM")
+            assert not (archive.root / "_quarantine").exists()
+            assert prep.repository.cache_inventory()["publication_reserved_bytes"] == 0
+            await prep.shutdown()
+
+            prep = PreparationService(PreparationRepository(path), adapter, workers=1)
+            app.state.data_preparation_service = prep
+            await prep.start()
+            cached = await submit(client, "after-restart", START_MS + 120_000)
+            assert cached["status"] == "unavailable" and cached["job"] is None
+            assert cached["unavailable_ranges"] == [{
+                "start_ms": START_MS + 120_000, "end_ms": START_MS + 120_000,
+                "reason": "trade_day_archive_unavailable", "retry_at_ms": retry_at,
+            }]
+            held = (await client.post(f"{route}/{first['id']}/retry")).json()
+            assert held["state"] == "FAILED" and held["revision"] == failed[0]["revision"]
+            assert len(calls) == 1
+
+            now = retry_at
+            present = True
+            resumed = (await client.post(f"{route}/{first['id']}/retry")).json()
+            assert resumed["id"] == first["id"]
+            ready = await terminal(prep, first["id"])
+            assert ready["state"] == "READY", ready["error"]
+            assert len(calls) == 3 and calls[1].endswith(".CHECKSUM") and calls[2].endswith(".zip")
+            local = await submit(client, "now-local")
+            assert local["status"] == "local" and local["job"] is None
+    finally:
+        await prep.shutdown()
+
+
+@async_test
+async def test_temporary_provider_failure_does_not_create_a_day_cooldown(tmp_path):
+    from urllib.error import HTTPError
+
+    adapter, _archive, _calls = adapter_and_network(tmp_path)
+    repository = PreparationRepository(tmp_path / "jobs.db")
+    adapter.publication_repository = repository
+
+    def unavailable(url, **_kwargs):
+        raise HTTPError(url, 503, "Service Unavailable", {}, None)
+
+    adapter.trades.importer = partial(import_official_date_range, opener=unavailable)
+    with pytest.raises(PreparationError) as failure:
+        await adapter.acquire(requirement(), "transient-error")
+    assert failure.value.code == "TRADE_IMPORT_FAILED" and failure.value.retryable
+    assert failure.value.retry_at_ms is None
+    assert repository.trade_day_retry_at("binance", "futures", "BTCUSDT", START_MS) is None

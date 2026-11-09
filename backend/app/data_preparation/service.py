@@ -378,6 +378,8 @@ class PreparationService:
             logger.debug("Preparation deferred by executor capacity: %s", job_id)
         except PreparationError as exc:
             error = {"code": exc.code, "message": str(exc), "retryable": exc.retryable}
+            if exc.retry_at_ms is not None:
+                error["retry_at_ms"] = exc.retry_at_ms
             if exc.retryable and (await self._storage(self.repository.get, job_id))["attempts"] < 3:
                 await self._storage(self.repository.defer, job_id, error)
                 return

@@ -70,3 +70,33 @@ test("a retained archive without verified minute coverage requests a local readb
   assert.equal(result, "readback");
   assert.equal(fetch.mock.callCount(), 1);
 });
+
+test("a recently missing official object preserves its retry time and schedules no requests", async (context) => {
+  const retryAt = Date.now() + 15 * 60_000;
+  const fetch = context.mock.method(globalThis, "fetch", async () => Response.json({
+    status: "unavailable", job: null,
+    unavailable_ranges: [{ reason: "trade_day_archive_unavailable", retry_at_ms: retryAt }],
+  }));
+  await assert.rejects(fillTradeHistory(identity, start, "cooldown", () => assert.fail("No job expected"),
+    new AbortController().signal), { code: "TRADE_DAY_UNAVAILABLE", retryAtMs: retryAt });
+  assert.equal(fetch.mock.callCount(), 1);
+});
+
+test("an expired archive cooldown resumes the same job only on explicit submit", async (context) => {
+  let retryAt = Date.now() + 15 * 60_000;
+  const fetch = context.mock.method(globalThis, "fetch", async (input: string) => {
+    if (input.endsWith("/trade-flow-history")) return Response.json({ status: "preparation", job: {
+      id: "archive-job", state: "FAILED", cancel_requested: false,
+      error: { code: "TRADE_DAY_UNAVAILABLE", retryable: false, retry_at_ms: retryAt },
+    } });
+    assert.ok(input.endsWith("/archive-job/retry"));
+    return Response.json({ id: "archive-job", state: "READY" });
+  });
+  const signal = new AbortController().signal;
+  await assert.rejects(fillTradeHistory(identity, start, "same-key", () => {}, signal),
+    { code: "TRADE_DAY_UNAVAILABLE", retryAtMs: retryAt });
+  assert.equal(fetch.mock.callCount(), 1);
+  retryAt = Date.now() - 1;
+  assert.equal(await fillTradeHistory(identity, start, "same-key", () => {}, signal), "readback");
+  assert.equal(fetch.mock.callCount(), 3);
+});

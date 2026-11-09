@@ -1,5 +1,5 @@
 import { API_BASE } from "../../services/apiConfig.js";
-import { preparationRequest, waitForPreparation } from "../data-preparation/api.js";
+import { PreparationApiError, preparationRequest, waitForPreparation } from "../data-preparation/api.js";
 import type { PreparationJob } from "../data-preparation/api.js";
 import type { TradeFlowIdentity } from "./tradeFlowTypes.js";
 
@@ -24,6 +24,7 @@ export interface TradeHistoryPage {
 interface TradeHistoryPreparation {
   status: "preparation" | "unavailable" | "local" | "projection_unverified";
   job: PreparationJob | null;
+  unavailable_ranges?: Array<{ reason: string; retry_at_ms?: number }>;
 }
 
 export function supportsTradeHistoryArchive(identity: TradeFlowIdentity): boolean {
@@ -59,9 +60,15 @@ export async function fillTradeHistory(
     method: "POST", signal, headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...scope(identity, startMs), idempotency_key: idempotencyKey }),
   });
-  if (initial.status === "unavailable") return "unavailable";
+  if (initial.status === "unavailable") {
+    const day = initial.unavailable_ranges?.find((range) => range.reason === "trade_day_archive_unavailable");
+    if (day) throw new PreparationApiError("TRADE_DAY_UNAVAILABLE", "Official archive day unavailable", 202, day.retry_at_ms);
+    return "unavailable";
+  }
   let job = initial.job;
-  if (job?.state === "FAILED" && job.error?.retryable && !job.cancel_requested) {
+  const dayRetryAt = job?.error?.code === "TRADE_DAY_UNAVAILABLE" ? job.error.retry_at_ms : undefined;
+  if (job?.state === "FAILED" && !job.cancel_requested
+    && (job.error?.retryable || (dayRetryAt !== undefined && dayRetryAt <= Date.now()))) {
     job = await preparationRequest<PreparationJob>(`/${job.id}/retry`, { method: "POST", signal });
   }
   if (job) await waitForPreparation(job, onProgress, signal);
