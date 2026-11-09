@@ -4024,7 +4024,30 @@ test("new availability revision wakes an unproven exhausted repair", async () =>
   feed.trackPendingResultRepair(SERIES, { data: [], start_ms: 60_000, end_ms: 120_000,
     history_state: "exhausted", retryable: false, complete: false });
   assert.ok([...feed.pendingGapRepairs.values()][0]!.terminalReason);
+  assert.equal(feed.getTerminalHistoryGaps().length, 1);
   await feed.getHistory(SERIES);
   const pending = [...feed.pendingGapRepairs.values()][0]!;
   assert.equal(pending.terminalReason, undefined); assert.ok(pending.nextPollAt <= Date.now());
+  assert.deepEqual(feed.getTerminalHistoryGaps(), []);
+});
+
+test("declared terminal history reports each missing range and resets with the chart epoch", () => {
+  const feed = new SeriesDataFeed({ getActiveSeries: () => SERIES });
+  const snapshots: ReturnType<typeof feed.getTerminalHistoryGaps>[] = [];
+  const stop = feed.subscribeTerminalHistoryGaps(() => snapshots.push(feed.getTerminalHistoryGaps()));
+  const result = {
+    data: rows([60, 180, 300]), start_ms: 60_000, end_ms: 300_000,
+    missing_ranges: [{ start_ms: 120_000, end_ms: 120_000 }, { start_ms: 240_000, end_ms: 240_000 }],
+    history_state: "exhausted" as const, retryable: false, complete: false, terminal_reason: "source_unavailable",
+  };
+  feed.trackTerminalHistoryGaps(SERIES, result);
+  const published = feed.getTerminalHistoryGaps();
+  assert.deepEqual(published.map(gap => gap.range), [{ start: 120, end: 120 }, { start: 240, end: 240 }]);
+  feed.trackTerminalHistoryGaps(SERIES, result);
+  assert.equal(feed.getTerminalHistoryGaps(), published);
+  assert.equal(feed.pendingRepairCount(SERIES), 0);
+  feed.beginEpoch(SERIES);
+  assert.deepEqual(feed.getTerminalHistoryGaps(), []);
+  assert.ok(snapshots.length >= 2);
+  stop();
 });

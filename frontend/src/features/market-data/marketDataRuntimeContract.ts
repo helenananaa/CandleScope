@@ -1,6 +1,6 @@
 import type { KlineSeriesIdentityInput } from "./klineSeriesIdentity.js";
 import type { CacheDiagnosticsEntry } from "../cache-gc/cacheGcTypes.js";
-import type { IndicatorRangeEvent, CrosshairData } from "./klineContracts.js";
+import type { IndicatorRangeEvent, CrosshairData, TerminalHistoryGap } from "./klineContracts.js";
 import type { KlineBar } from "./marketDataTypes.js";
 import type { ChartDataCommitMeta } from "./useChartDataRuntime.js";
 import type { SeriesWindowView } from "./window/seriesWindowView.js";
@@ -71,6 +71,7 @@ export interface MarketDataRuntimeContract {
     loadingMoreRight?: boolean;
     initialHistoryPending: boolean;
     historyPreparing?: boolean;
+    historyGap?: TerminalHistoryGap;
     activeChartReady: boolean;
     canLoadMoreLeft: boolean;
     canLoadMoreRight?: boolean;

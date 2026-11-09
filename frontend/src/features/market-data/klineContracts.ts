@@ -8,6 +8,7 @@ import type {
   EpochSeconds,
   KlineBar,
   MarketSeries,
+  SeriesKey,
   TimeRangeMs,
   TimeRangeSec,
 } from "./marketDataTypes.js";
@@ -108,6 +109,12 @@ export interface KlineFetchResult extends Record<string, unknown> {
   excluded_ranges?: HistoryExcludedRange[];
   missing_ranges?: HistoryMissingRange[];
   verified_contiguous?: boolean;
+}
+
+export interface TerminalHistoryGap {
+  seriesKey: SeriesKey;
+  range: TimeRangeSec;
+  reason: string;
 }
 
 export interface BeforePageAvailability {
