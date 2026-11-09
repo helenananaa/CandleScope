@@ -159,13 +159,19 @@ class CcxtUnifiedProjector:
         payloads = []
         for row in rows:
             evidence = row[6] if len(row) > 6 else None
-            if not isinstance(evidence, dict) or type(evidence.get("confirm")) is not bool:
+            confirm = evidence.get("confirm") if isinstance(evidence, dict) else None
+            if confirm is not None and type(confirm) is not bool:
                 continue
-            end = _positive_int(evidence.get("end"))
-            if end is None:
+            # A forming update cannot replace an already confirmed close.
+            previous = self._kline_fingerprints.get(int(row[0]))
+            if confirm is not True and previous and previous[1]:
                 continue
-            payload = self._kline_payload(row[:6], is_closed=evidence["confirm"])
-            payload["source_close_time_ms"] = end
+            payload = self._kline_payload(row, is_closed=confirm is True)
+            if confirm is not None:
+                end = _positive_int(evidence.get("end"))
+                if end is None:
+                    continue
+                payload["source_close_time_ms"] = end
             if self._remember_kline(payload):
                 payloads.append(payload)
         while len(self._kline_fingerprints) > _MAX_KLINE_REVISIONS:

@@ -396,8 +396,13 @@ def test_bybit_live_close_preserves_venue_confirmation_and_final_volume(tmp_path
             [saved] = klines_repo.query_klines("BTCUSDT", "5m", exchange="bybit", market_type="swap.linear")
             assert saved["source"] == "bybit_ws_confirmed"
             assert saved["high"] == 74854.3 and saved["volume"] == 183.532
+            assert project(preview) == ()
+            assert project({**preview, "confirm": None}) == ()
             assert project(confirmed) == ()
             assert project({**successor, "confirm": "true"}) == ()
+            [unconfirmed] = project({**successor, "confirm": None, "volume": "183.415"})
+            assert unconfirmed.payload["is_closed"] is False
+            assert "source_close_time_ms" not in unconfirmed.payload
         finally:
             await exchange.close()
 
