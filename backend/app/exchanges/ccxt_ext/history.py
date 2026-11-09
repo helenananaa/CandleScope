@@ -8,7 +8,7 @@ from app.data_engine.ingestion.config import IngestionConfig
 from app.data_engine.ingestion.models import DataSource, RawMessage, StreamType, TransportRequest
 from app.exchanges.okx_intervals import OKX_FUNDING_HISTORY_LIMIT, OKX_OI_HISTORY_LIMIT
 from .generic import _GENERIC_STREAM_METHODS, _rest_method_for, resolve_market_selection, _timestamp
-from .catalog import market_selection_parts
+from .catalog import BYBIT_METRIC_HISTORY_LIMIT, market_selection_parts
 from .unified import make_unified_payload
 
 async def fetch_unified_history(
@@ -214,6 +214,11 @@ async def fetch_unified_history(
                     request_limit = limit
                     if req.end_ms is not None:
                         options["params"] = {"after": req.end_ms + 1}
+                elif context.entry.exchange_id == "bybit":
+                    limit = min(limit, BYBIT_METRIC_HISTORY_LIMIT)
+                    request_limit = limit
+                    if req.end_ms is not None:
+                        options["params"] = {"until": req.end_ms}
                 values = await exchange.fetch_funding_rate_history(
                     symbol, since=req.start_ms, limit=limit, **options,
                 )
@@ -238,8 +243,14 @@ async def fetch_unified_history(
                     request_limit = min(max(1, int(req.limit or 1)), OKX_OI_HISTORY_LIMIT)
                     values = await fetch_okx_contract_oi(exchange, symbol, req, limit=request_limit)
                 else:
+                    limit = max(1, int(req.limit or 1))
                     options = {}
-                    if context.entry.exchange_id == "gate":
+                    if context.entry.exchange_id == "bybit":
+                        limit = min(limit, BYBIT_METRIC_HISTORY_LIMIT)
+                        request_limit = limit
+                        if req.end_ms is not None:
+                            options["params"] = {"until": req.end_ms}
+                    elif context.entry.exchange_id == "gate":
                         # Keep CCXT's unified since filter in milliseconds.
                         # Gate's contract statistics query takes Unix seconds.
                         params = {}
@@ -255,7 +266,7 @@ async def fetch_unified_history(
                         symbol,
                         timeframe=descriptor.interval,
                         since=req.start_ms,
-                        limit=max(1, int(req.limit or 1)),
+                        limit=limit,
                         **options,
                     )
             else:

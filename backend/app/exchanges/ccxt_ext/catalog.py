@@ -35,6 +35,10 @@ from .binance_usdm import SUPPORTED_CCXT_VERSION
 from app.exchanges.trade_candles import supports_trade_candles, trade_candle_profile
 
 
+BYBIT_METRIC_HISTORY_LIMIT = 200
+BYBIT_OI_HISTORY_PERIODS = ("5m", "15m", "30m", "1h", "4h", "1d")
+
+
 _PUBLIC_METHODS = (
     "fetchOHLCV",
     "fetchTrades",
@@ -479,7 +483,10 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
                         empty_page_semantics=HistoryEmptyPageSemantics.INCONCLUSIVE,
                         calendar_id=CRYPTO_24X7_CALENDAR_ID,
                         timezone="UTC",
-                        max_page_size=OKX_FUNDING_HISTORY_LIMIT if entry.exchange_id == "okx" else entry.history_limit,
+                        max_page_size={
+                            "okx": OKX_FUNDING_HISTORY_LIMIT,
+                            "bybit": BYBIT_METRIC_HISTORY_LIMIT,
+                        }.get(entry.exchange_id, entry.history_limit),
                     )
                     if fetch_funding_history
                     else None
@@ -489,6 +496,10 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
 
     fetch_open_interest = entry.supports("fetchOpenInterest")
     fetch_open_interest_history = entry.supports("fetchOpenInterestHistory")
+    oi_history_periods = {
+        "okx": OKX_OI_HISTORY_PERIODS,
+        "bybit": BYBIT_OI_HISTORY_PERIODS,
+    }.get(entry.exchange_id)
     if metric_market_types and (
         fetch_open_interest or fetch_open_interest_history
     ):
@@ -510,8 +521,8 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
                 snapshot=True,
                 available_fields=("open_interest", "open_interest_value"),
                 connection_model="polling_only",
-                params=({"period": OKX_OI_HISTORY_PERIODS}
-                        if entry.exchange_id == "okx" and fetch_open_interest_history else {}),
+                params=({"period": oi_history_periods}
+                        if fetch_open_interest_history and oi_history_periods else {}),
                 known_limitations=(
                     "Pinned CCXT exposes open interest through REST for this exchange",
                 ),
@@ -521,7 +532,10 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
                         empty_page_semantics=HistoryEmptyPageSemantics.INCONCLUSIVE,
                         calendar_id=CRYPTO_24X7_CALENDAR_ID,
                         timezone="UTC",
-                        max_page_size=OKX_OI_HISTORY_LIMIT if entry.exchange_id == "okx" else entry.history_limit,
+                        max_page_size={
+                            "okx": OKX_OI_HISTORY_LIMIT,
+                            "bybit": BYBIT_METRIC_HISTORY_LIMIT,
+                        }.get(entry.exchange_id, entry.history_limit),
                     )
                     if fetch_open_interest_history
                     else None

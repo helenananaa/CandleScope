@@ -1752,3 +1752,75 @@ def test_okx_metric_history_preserves_contract_identity_bounds_and_realized_rate
     ]
     assert [(e.event_time_ms, e.data["funding_rate"]) for e in funding_events] == [(first, -0.0001)]
     assert plugin.capabilities().channel_capability(MarketChannel.OPEN_INTEREST, "futures").history_policy.max_page_size == 100
+
+
+@pytest.mark.parametrize(("category", "instrument", "symbol"), [
+    ("linear", "BTCUSDT", "BTC/USDT:USDT"),
+    ("inverse", "BTCUSD", "BTC/USD:BTC"),
+])
+def test_bybit_metric_history_sends_exact_window_and_endpoint_limit(monkeypatch, category, instrument, symbol):
+    from ccxt.async_support import bybit
+
+    exchange = bybit()
+    market = {
+        "id": instrument, "symbol": symbol, "baseId": "BTC", "spot": False, "option": False,
+        "type": "swap", "swap": True, "contract": True, "linear": category == "linear",
+        "inverse": category == "inverse", "info": {},
+    }
+    exchange.markets = {symbol: market}
+    exchange.markets_by_id = {instrument: [market]}
+    start, end = 1_794_219_600_000, 1_794_222_000_000
+    calls = []
+
+    async def load_markets():
+        return exchange.markets
+
+    async def fetch_oi(params):
+        calls.append(("oi", params))
+        return {"retCode": 0, "result": {"symbol": instrument, "category": category, "list": [
+            {"timestamp": str(end), "openInterest": "12.5"},
+        ]}}
+
+    async def fetch_funding(params):
+        calls.append(("funding", params))
+        return {"retCode": 0, "result": {"category": category, "list": [
+            {"symbol": instrument, "fundingRateTimestamp": str(end), "fundingRate": "-0.0001"},
+        ]}}
+
+    monkeypatch.setattr(exchange, "load_markets", load_markets)
+    monkeypatch.setattr(exchange, "publicGetV5MarketOpenInterest", fetch_oi)
+    monkeypatch.setattr(exchange, "publicGetV5MarketFundingHistory", fetch_funding)
+    monkeypatch.setattr(
+        "app.exchanges.ccxt_ext.generic._create_exchange", lambda *_args, **_kwargs: exchange,
+    )
+    bootstrap_default_adapters()
+    plugin = get_exchange_registry().get_plugin("bybit")
+    config = IngestionConfig(proxy_mode="none")
+    market_type = f"swap.{category}"
+    oi = StreamDescriptor(instrument, StreamType.OPEN_INTEREST, interval="5m", exchange="bybit", market_type=market_type)
+    funding = StreamDescriptor(instrument, StreamType.FUNDING_RATE, exchange="bybit", market_type=market_type)
+
+    async def run():
+        try:
+            output = []
+            for descriptor in (oi, funding):
+                rows = await plugin.fetch_history_with_config(
+                    TransportRequest(descriptor, limit=1000, start_ms=start, end_ms=end, history=True), config,
+                )
+                assert len(rows) == 1
+                output.append((rows[0], plugin.normalizer(config, descriptor).parse(rows[0])))
+            return output
+        finally:
+            await plugin.close_history_transport(config)
+
+    (oi_raw, oi_event), (funding_raw, funding_event) = asyncio.run(run())
+    bounds = dict(symbol=instrument, category=category, startTime=start, endTime=end, limit=200)
+    assert calls == [("oi", {**bounds, "intervalTime": "5min"}), ("funding", bounds)]
+    assert oi_raw.request_limit == funding_raw.request_limit == 200
+    assert oi_event.event_time_ms == funding_event.event_time_ms == end
+    assert oi_event.data["open_interest"] == 12.5
+    assert oi_event.data.get("open_interest_value") == (12.5 if category == "inverse" else None)
+    assert funding_event.data["funding_rate"] == -0.0001
+    capabilities = plugin.capabilities()
+    assert capabilities.channel_capability(MarketChannel.OPEN_INTEREST, market_type).history_policy.max_page_size == 200
+    assert capabilities.channel_capability(MarketChannel.FUNDING_RATE, market_type).history_policy.max_page_size == 200
