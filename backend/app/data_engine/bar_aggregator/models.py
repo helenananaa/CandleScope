@@ -258,6 +258,31 @@ class BarState:
     # the mutable accumulator above remains private to the live builder.
     _history_prefix: Any = field(default=None, repr=False, compare=False)
 
+    def with_accepted_forming_components(
+        self, components: list[BarInput], source_interval: str,
+    ) -> list[BarInput]:
+        """Keep admitted forming inputs across a legacy warm-start rebuild."""
+        staged = {component.input_key: component for component in components}
+        for key, snapshot in self.source_snapshots.items():
+            replacement = staged.get(key)
+            if (snapshot["is_closed"] or snapshot.get("warm_start_seed")
+                    or (replacement is not None and replacement.is_closed)):
+                continue
+            live = BarInput(
+                symbol=self.symbol, exchange=self.exchange, market_type=self.market_type,
+                series_identity=self.identity, source_interval=source_interval,
+                source=BarInputSource.REALTIME, is_closed=False,
+                extra={"warm_start_acquisition_floor": self.acquisition_revision},
+                **{name: snapshot[name] for name in (
+                    "open_time_ms", "close_time_ms", "open", "high", "low", "close",
+                    "volume", "quote_volume", "trades", "taker_buy_base", "taker_buy_quote",
+                    "enhanced_fields", "sequence",
+                )},
+            )
+            if live.input_key == key:
+                staged[key] = live
+        return sorted(staged.values(), key=lambda component: component.open_time_ms)
+
     def matches_source_components(self, components: list[BarInput]) -> bool:
         """Compare accepted leaves rather than an aggregate of their values."""
         if self._history_prefix is not None:

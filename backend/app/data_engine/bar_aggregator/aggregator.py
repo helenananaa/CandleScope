@@ -1008,6 +1008,13 @@ class BarAggregator:
 
         if state.acquisition_revision is None:
             state.acquisition_revision = acquisition_revision
+        warm_floor = bar_input.extra.get("warm_start_acquisition_floor")
+        if warm_floor is not None:
+            # A replayed forming input keeps its original delete fence.
+            state.acquisition_revision = (
+                warm_floor if state.acquisition_revision is None
+                else min(warm_floor, state.acquisition_revision)
+            )
 
         # Drain eviction buffers — emit events for bars that were
         # force-closed or expired during apply() due to limit enforcement.

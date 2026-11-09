@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 import time as py_time
 from unittest.mock import patch
 
@@ -12,8 +13,11 @@ from app.data_engine.bar_aggregator import (
     BarEvent,
     BarEventType,
     BarFinality,
+    BarInput,
+    BarInputSource,
     BarState,
 )
+from app.data_engine.bar_aggregator.models import MergeMode
 from app.data_engine.data_manager.aggregator_bridge import AggregatorBridge
 from app.data_engine.data_manager.cache import BarCache
 from app.data_engine.data_manager.event_bus import DataEventBus
@@ -373,6 +377,55 @@ def test_warm_start_replaces_changed_components_even_when_target_totals_match():
         assert {item["open_time_ms"]: item["volume"] for item in state.source_snapshots.values()} == {
             bucket_start: 95, bucket_start + base_ms: 115,
         }
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("staged_tail", ["missing", "stale"])
+def test_warm_start_keeps_an_accepted_forming_tail_while_rebuilding_history(staged_tail):
+    async def run():
+        width = 15 * 60_000
+        start = 3 * width
+        tail_start = start + width
+        aggregator = BarAggregator(BarAggregatorConfig(update_throttle_ms=0))
+        aggregator.add_target("BTC-USDT", "45m", exchange="okx", market_type="spot")
+        revision = 10
+        aggregator.acquisition_revision_provider = lambda: revision
+        storage = _Storage([{**_row(start, width, close=10), "source": "backfill"}])
+        if staged_tail == "stale":
+            storage.rows.append({**_row(tail_start, width, close=20), "is_closed": False})
+        service = _service(cache=BarCache(), aggregator=aggregator, storage=storage,
+                           triggers=[], base_interval="15m")
+        tail = BarInput(symbol="BTC-USDT", exchange="okx", source_interval="15m",
+                        open_time_ms=tail_start, close_time_ms=tail_start + width - 1,
+                        open=20, high=28, low=18, close=25, volume=350,
+                        quote_volume=7500, trades=30, taker_buy_base=30, taker_buy_quote=50,
+                        enhanced_fields=frozenset({"quote_volume", "trades", "taker_buy_base", "taker_buy_quote"}),
+                        sequence=42, source=BarInputSource.REALTIME, is_closed=False,
+                        merge_mode=MergeMode.COMPONENT)
+        with patch("app.data_engine.data_manager.warm_start.time.time", return_value=(tail_start + 1000) / 1000):
+            if staged_tail == "stale":
+                await service.seed_if_needed("BTC-USDT", "45m", exchange="okx", market_type="spot", had_stream=True)
+            await aggregator.ingest_bar_input("okx", "spot", "BTC-USDT", "45m", tail)
+            revision = 11
+            await service.seed_if_needed("BTC-USDT", "45m", exchange="okx", market_type="spot", had_stream=True)
+        state = aggregator.get_bucket_state("BTC-USDT", "45m", start, exchange="okx")
+        assert state is not None and state.volume == 450 and state.close == 25
+        assert state.acquisition_revision == 10
+        assert state.source_snapshots[tail.input_key]["sequence"] == 42
+        assert state.finality != BarFinality.AUTHORITATIVE
+        with patch("app.data_engine.data_manager.warm_start.time.time", return_value=(tail_start + 2000) / 1000):
+            await aggregator.ingest_bar_input("okx", "spot", "BTC-USDT", "45m", replace(tail, volume=370, sequence=43))
+            await aggregator.ingest_bar_input("okx", "spot", "BTC-USDT", "45m", replace(tail, volume=500, sequence=41))
+        state = aggregator.get_bucket_state("BTC-USDT", "45m", start, exchange="okx")
+        assert state is not None and state.volume == 470
+
+        storage.rows = [storage.rows[0], {**_row(tail_start, width, close=20), "source": "backfill"}]
+        with patch("app.data_engine.data_manager.warm_start.time.time", return_value=(tail_start + width + 1) / 1000):
+            await service.seed_if_needed("BTC-USDT", "45m", exchange="okx", market_type="spot", had_stream=True)
+        state = aggregator.get_bucket_state("BTC-USDT", "45m", start, exchange="okx")
+        assert state is not None and state.volume == 300 and state.close == 21
+        assert state.source_snapshots[tail.input_key]["is_closed"]
 
     asyncio.run(run())
 

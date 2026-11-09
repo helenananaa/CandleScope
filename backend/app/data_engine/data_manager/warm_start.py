@@ -371,10 +371,13 @@ class AggregatorWarmStartService:
                     row,
                     explicit_fields=explicit_fields,
                 ),
-                sequence=open_time_ms,
+                sequence=open_time_ms if is_closed else None,
+                extra={"warm_start_seed": True},
                 series_identity=series_identity,
             ))
 
+        if current_state is not None:
+            components = current_state.with_accepted_forming_components(components, base_interval)
         if current_state is not None and current_state.matches_source_components(components):
             await self._cache.apply_protected(
                 self._cache.upsert,

@@ -283,6 +283,8 @@ class ComponentSnapshotOHLCVMerge:
             # silently treating every update as equally fresh.
             "sequence": bar_input.sequence,
         }
+        if bar_input.extra.get("warm_start_seed"):
+            snapshot["warm_start_seed"] = True
         snapshot["aggregation_values"] = snapshot_aggregation_values(snapshot)
         return ReadonlyFields(snapshot)
 
