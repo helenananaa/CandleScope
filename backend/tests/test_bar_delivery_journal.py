@@ -104,6 +104,8 @@ def test_derived_close_requires_complete_disjoint_footprints(journal, interferen
     derived["storage_row"].update(open_time=240_000, close_time=359_999)
     derived["bar"]["time"] = 240
     journal.enqueue("derived-close", derived)
+    sibling = {**derived, "interval": "4m", "storage_row": {**derived["storage_row"], "close_time": 479_999}}
+    journal.enqueue("sibling-close", sibling)
 
     if interference == "overlap":
         # An overlapping source write remains relevant even when the last
@@ -127,6 +129,7 @@ def test_derived_close_requires_complete_disjoint_footprints(journal, interferen
     retry = reopened.commit("derived-close")
     assert retry["phase"] == "published"
     assert retry["committed_revision"] == result["committed_revision"]
+    assert reopened.commit("sibling-close")["phase"] == "committed"
 
 
 @pytest.mark.parametrize("mutation", ["repair", "delete"])

@@ -18,17 +18,32 @@ def _json(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
-def _disjoint_changes(change, receipts, observed_revision, start, end):
+def _has_predecessor(conn, sequence, revision):
+    return conn.execute(
+        "SELECT 1 FROM bar_delivery WHERE sequence<? AND committed_revision=?",
+        (sequence, revision),
+    ).fetchone() is not None
+
+
+def _changes_allow_delivery(conn, change, receipts, observed_revision, sequence, start, end):
     # Fully contained source components are selected by their open times.
     identity = tuple(change[name] for name in IDENTITY_COLUMNS)
     series = [row for row in receipts if tuple(row[name] for name in IDENTITY_COLUMNS) == identity]
-    return (
-        bool(series) and series[-1]["revision"] == change["revision"]
-        and series[0]["previous_revision"] <= observed_revision
-        and all(left["revision"] == right["previous_revision"] for left, right in zip(series, series[1:]))
-        and all(row["start_ms"] <= row["end_ms"] and
-                (row["end_ms"] < start or row["start_ms"] > end) for row in series)
-    )
+    if (not series or series[-1]["revision"] != change["revision"]
+            or series[0]["previous_revision"] > observed_revision
+            or any(left["revision"] != right["previous_revision"] for left, right in zip(series, series[1:]))):
+        return False
+    for row in series:
+        if row["start_ms"] > row["end_ms"]:
+            return False
+        if row["end_ms"] < start or row["start_ms"] > end:
+            continue
+        # A sibling close already committed by this journal can overlap.
+        # The footprints do not identify deletes individually, so keep the
+        # coalesced deletion fence for every overlapping older receipt.
+        if row["revision"] <= change["delete_revision"] or not _has_predecessor(conn, sequence, row["revision"]):
+            return False
+    return True
 
 
 def init_bar_delivery_storage(conn):
@@ -165,13 +180,12 @@ class BarDeliveryJournal:
                         end < change["start_ms"] or start > change["end_ms"]
                     ):
                         continue
-                predecessor = conn.execute("SELECT 1 FROM bar_delivery WHERE sequence<? AND committed_revision=?",
-                                           (record["sequence"], change["revision"])).fetchone()
-                if change["delete_revision"] > observed_revision or predecessor is None:
+                sequence = record["sequence"]
+                if change["delete_revision"] > observed_revision or not _has_predecessor(conn, sequence, change["revision"]):
                     if derived and valid_window:
                         if receipts is None:
                             receipts = block_change_receipts(conn, observed_revision, current_revision(conn))
-                        if _disjoint_changes(change, receipts, observed_revision, start, end):
+                        if _changes_allow_delivery(conn, change, receipts, observed_revision, sequence, start, end):
                             continue
                     conn.execute("UPDATE bar_delivery SET phase='rejected',recovery_required=1 WHERE event_id=?", (event_id,))
                     record["phase"] = "rejected"
