@@ -83,13 +83,15 @@ export class MarketHealthState {
   }
   invalidate(): void { this.continuous = false; this.baseline = null; }
 
-  snapshot(version: MarketStreamVersion | null, fence: HealthReadFence): boolean {
+  snapshot(version: MarketStreamVersion | null, fence: HealthReadFence, historyRead: boolean): boolean {
     if (fence.invalidation !== this.invalidation) return false;
     if (!version || version.stable !== true) {
-      this.invalidate();
-      // A freshly read legacy server after reconnect may render through the
-      // old request fence. Do not mix unversioned ticks into a bound v1 stream.
-      if (this.lastEvent === null) this.version = null;
+      if (historyRead) {
+        this.invalidate();
+        // A fresh legacy history read after reconnect can rebind an idle
+        // entry. A tail-only read leaves any current stream binding in place.
+        if (this.lastEvent === null) this.version = null;
+      }
       return true;
     }
     if (this.requiresReconnect || this.retired.has(this.incarnation(version))) return false;
@@ -99,10 +101,15 @@ export class MarketHealthState {
       && (!sameStream(fence.version, this.version) || fence.connection !== this.connection)) return false;
     if (this.version && sameStream(this.version, version) && version.sequence < this.version.sequence
       && version.barrier !== this.version.barrier) return false;
-    const linked = sameStream(this.lastEvent, version)
-      && (this.lastEvent!.sequence <= version.sequence || this.lastEvent!.barrier === version.barrier);
-    this.baseline = version.stable === true && this.subscribed && fence.connection === this.connection ? version : null;
-    this.continuous = this.baseline !== null && linked;
+    if (historyRead) {
+      // A snapshot ahead of the last event may have crossed a missed
+      // critical fact outside its returned range. Wait for a linked event.
+      const linked = sameStream(this.lastEvent, version) && this.lastEvent!.barrier === version.barrier;
+      this.baseline = this.subscribed && fence.connection === this.connection ? version : null;
+      this.continuous = this.baseline !== null && linked;
+    } else if (this.version && (!sameStream(this.version, version) || version.barrier !== this.version.barrier)) {
+      this.invalidate();
+    }
     if ((!sameStream(this.version, version) || version.sequence >= this.version!.sequence) && !this.adopt(version)) return false;
     return true;
   }

@@ -31,6 +31,67 @@ function healthy(cache = new SharedMarketCache({ now: () => now })) {
   return cache;
 }
 
+test("a history snapshot across an unseen critical barrier waits for a matching stream event", () => {
+  const cache = healthy();
+  read(cache, wire(4, 3));
+  const pending = cache.planHistory(series, 2);
+  assert.equal(pending.health.historyCovered, true);
+  assert.equal(pending.health.continuous, false);
+  assert.notEqual(pending.action, "reuse");
+  cache.admitRealtime(series, row(180, false, 23), "bar.updated", wire(5, 3), 120_000);
+  assert.equal(cache.planHistory(series, 2).action, "reuse");
+});
+
+test("a latest observation preserves existing history evidence and cannot replace versioned rows with legacy data", () => {
+  const cache = healthy();
+  const token = cache.beginRead(series);
+  try {
+    const legacy = cache.admitResponse(token, { endpoint: "latest", data: [row(120, true, 29)] });
+    assert.equal(legacy.data?.[0]?.close, 10);
+    cache.admitResponse(token, { endpoint: "latest", data: [row(180, false, 20)], stream_version: wire(2) });
+    assert.equal(cache.read(series).rows.at(-1)?.close, 20);
+    assert.equal(cache.planHistory(series, 2).action, "reuse");
+  } finally {
+    token.release();
+  }
+});
+
+test("latest observations cannot establish a history link or hide a critical barrier or a known tail gap", () => {
+  const cache = healthy();
+  const token = cache.beginRead(series);
+  try {
+    cache.admitResponse(token, { endpoint: "latest", data: [row(180, false, 23)], stream_version: wire(4, 3) });
+    assert.equal(cache.planHistory(series, 2).health.historyCovered, false);
+    assert.equal(cache.planHistory(series, 2).health.continuous, false);
+    cache.admitRealtime(series, row(180, false, 24), "bar.updated", wire(5, 3), 120_000);
+    assert.equal(cache.planHistory(series, 2).health.continuous, false);
+    read(cache, wire(5, 3));
+    assert.equal(cache.planHistory(series, 2).action, "reuse");
+    cache.admitResponse(token, { endpoint: "latest", data: [], has_tail_gap: true, stream_version: wire(5, 3) });
+    assert.equal(cache.planHistory(series, 2).health.continuous, false);
+  } finally {
+    token.release();
+  }
+});
+
+test("a versioned latest gap revokes affected coverage without touching a disjoint input", () => {
+  const cache = healthy();
+  read(cache, wire(1), [row(0), row(60), row(120)]);
+  const retained = cache.captureVersion(series, { to: 60 });
+  const affected = cache.captureVersion(series, { from: 120, to: 120 });
+  const token = cache.beginRead(series);
+  try {
+    cache.admitResponse(token, { endpoint: "latest", data: [], stream_version: wire(2),
+      storage_revision: 1, has_tail_gap: true,
+      missing_ranges: [{ interval: "1m", start_ms: 120_000, end_ms: 120_000 }] });
+    assert.equal(affected.isCurrent(), false);
+    assert.equal(retained.isCurrent(), true);
+    assert.equal(cache.planHistory(series, 2).action, "load");
+  } finally {
+    token.release();
+  }
+});
+
 test("a subscription/ACK and a legacy or unstable snapshot never prove health", () => {
   for (const version of [undefined, wire(1), wire(1, 1, { stable: false })]) {
     const cache = new SharedMarketCache({ now: () => now }); cache.connect(series); read(cache, version);

@@ -215,6 +215,18 @@ export async function checkMarketHealth() {
     emit(eth.symbol, { ...forming, close: 24 }, "bar.updated");
     assert(manager.cache.planHistory(eth, 500).action === "reuse", "new-generation tail did not restore healthy reuse");
     checks.push("a generation rollover requires a current tail event even after a linked historical amendment");
+    await manager.fetchLatestKlines(eth.symbol, eth.interval, 2, eth.marketType, eth.exchange, "browser-tail", {});
+    assert(manager.cache.planHistory(eth, 500).action === "reuse", "ordinary tail polling revoked verified health");
+    const current = revisions.get(eth.symbol)!;
+    revisions.set(eth.symbol, { sequence: current.sequence + 1, barrier: current.barrier + 1 });
+    await manager.fetchKlinesHistory(eth.symbol, eth.interval, null, eth.marketType, eth.exchange,
+      { countBack: 500, maxWaitMs: 0, clientContext: { cacheMode: "network-only" } });
+    const cutover = manager.cache.planHistory(eth, 500);
+    assert(cutover.health.historyCovered && !cutover.health.continuous && cutover.action !== "reuse",
+      "snapshot crossed an unseen critical barrier using an old stream event");
+    emit(eth.symbol, { ...forming, close: 25 }, "bar.updated");
+    assert(manager.cache.planHistory(eth, 500).action === "reuse", "fresh matching event did not restore the link");
+    checks.push("tail polling preserves health and an unseen HTTP barrier requires a new matching event");
     flushSync(() => root.unmount());
     manager.closeAll(); gate.dispose();
     assert(physical.every(stream => stream.closed), "owned streams leaked");

@@ -144,6 +144,7 @@ export class SharedMarketCache {
     if (!state || this.entries.get(token.key) !== state.entry) throw new Error("Market read expired");
     const { entry } = state;
     const endpoint = response.endpoint ?? "history";
+    const historyRead = endpoint !== "latest" && endpoint !== "seed";
     const serverVersion = parseMarketVersion(response.stream_version, entry.series);
     if (response.stream_version != null && !serverVersion) throw new Error("Invalid market snapshot version scope");
     const revision = response.storage_revision;
@@ -164,7 +165,7 @@ export class SharedMarketCache {
       if (issue) throw new TypeError(`Invalid market row ${issue.field}: ${issue.reason}`);
     }
     const previousVersion = entry.health.version;
-    if (!entry.health.snapshot(serverVersion, state.health)) throw new Error("Obsolete market snapshot; fresh read required");
+    if (!entry.health.snapshot(serverVersion, state.health, historyRead)) throw new Error("Obsolete market snapshot; fresh read required");
     if (serverVersion && revision !== undefined) entry.storageVersion = { epoch: serverVersion.epoch, revision };
     if (previousVersion && (!entry.health.version || (serverVersion && !sameStream(previousVersion, serverVersion)))) {
       entry.proofs = []; entry.serverRowVersions.clear(); entry.expectedClosedTime = null; entry.inputInvalidation += 1;
@@ -176,7 +177,7 @@ export class SharedMarketCache {
     }
     // An empty read can still disprove a previously verified range. Only
     // consume target-period gaps; component ranges need server projection.
-    if (serverVersion && revision !== undefined && endpoint !== "latest" && endpoint !== "seed") {
+    if (serverVersion && revision !== undefined) {
       const gaps = response.missing_ranges ?? [];
       if (gaps.length > 128) {
         entry.proofs = [];
@@ -193,7 +194,10 @@ export class SharedMarketCache {
     const inputQuality = assessKlineQuality(response, endpoint);
     const trustedFinal = hasFinalityEvidence(response);
     const rows = incoming.map(row => {
-      if (serverVersion && (entry.serverRowVersions.get(row.time) ?? -1) > serverVersion.sequence) return entry.rows.get(row.time)!;
+      const retainedSequence = entry.serverRowVersions.get(row.time);
+      if (retainedSequence !== undefined && (serverVersion ? retainedSequence > serverVersion.sequence : !historyRead)) {
+        return entry.rows.get(row.time)!;
+      }
       const mutation = entry.mutations.get(row.time);
       const decision = serverVersion ? "http" : chooseHttpRow(row, mutation, state.version, trustedFinal);
       let accepted = decision === "realtime" && mutation ? mutation.row : row;
@@ -211,7 +215,7 @@ export class SharedMarketCache {
       const from = Math.min(...times), to = Math.max(...times);
       // Latest is a tail observation, not a history claim. A contradictory
       // history response invalidates overlapping proof even if OHLCV is equal.
-      if (endpoint !== "latest" && endpoint !== "seed") {
+      if (historyRead) {
         const overlapping = entry.proofs.filter(proof => proof.to >= from && proof.from <= to);
         entry.proofs = entry.proofs.filter(proof => proof.to < from || proof.from > to);
         if (inputQuality.complete && quality.complete) {
@@ -225,7 +229,7 @@ export class SharedMarketCache {
         entry.proofs = entry.proofs.slice(-128);
       }
     }
-    if (!inputQuality.complete) entry.health.invalidate();
+    if ((historyRead && !inputQuality.complete) || (serverVersion && response.has_tail_gap === true)) entry.health.invalidate();
     this.finish(entry, changed, "http");
     return { ...result, quality, cacheRevision: entry.version };
   }
