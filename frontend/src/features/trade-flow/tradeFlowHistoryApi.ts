@@ -22,7 +22,7 @@ export interface TradeHistoryPage {
 }
 
 interface TradeHistoryPreparation {
-  status: "preparation" | "unavailable" | "local";
+  status: "preparation" | "unavailable" | "local" | "projection_unverified";
   job: PreparationJob | null;
 }
 

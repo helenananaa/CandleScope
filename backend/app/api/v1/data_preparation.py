@@ -1,4 +1,5 @@
 """Preparation tasks are durable; disconnecting an HTTP observer never cancels one."""
+from datetime import datetime, timezone
 from typing import Literal
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -427,6 +428,7 @@ async def _prepare_trade_flow_history(request: Request, payload: TradeFlowHistor
     from app.core.config import REPLAY_AGG_TRADE_ARCHIVE_DIR
     from app.core.executors import run_archive
     from app.data_engine.market_data.models import MarketChannel, MarketStreamKey
+    from app.data_engine.market_data.trade_flow import BUCKET_INTERVAL_MS
     from app.data_preparation.models import fingerprint
     from app.data_preparation.trade_adapter import DAY_MS
 
@@ -435,13 +437,21 @@ async def _prepare_trade_flow_history(request: Request, payload: TradeFlowHistor
     scope = payload.model_dump(exclude={"idempotency_key"})
     scope["symbol"] = payload.symbol.upper()
     key = "trade-flow-history-" + fingerprint(payload.idempotency_key)
+    projection_unverified = "trade_archive_projection_unverified"
 
     def result(job, unavailable):
+        status = "local"
+        if job is not None:
+            status = "preparation"
+        elif any(item["reason"] == projection_unverified for item in unavailable):
+            status = "projection_unverified"
+        elif unavailable:
+            status = "unavailable"
         return {
             "mode": "fill_missing",
-            "status": "preparation" if job is not None else "unavailable" if unavailable else "local",
+            "status": status,
             "requested_range": {"start_ms": start, "end_ms": end},
-            "unavailable_ranges": unavailable,
+            "unavailable_ranges": sorted(unavailable, key=lambda item: item["start_ms"]),
             "job": job,
         }
 
@@ -463,22 +473,37 @@ async def _prepare_trade_flow_history(request: Request, payload: TradeFlowHistor
         identity["exchange"], identity["market_type"], identity["symbol"], MarketChannel.AGG_TRADE,
     )
     history = await dm.read_trade_flow_history(
-        stream_key, start_ms=start, end_ms=end, limit=(end - start) // 60_000 + 1,
+        stream_key, start_ms=start, end_ms=end, limit=(end - start) // BUCKET_INTERVAL_MS + 1,
     )
     complete = history.verified_empty_opens.union(
         row["bucket_start_ms"] for row in history.rows if row["is_complete"] and row["is_final"]
     )
     today = instance.repository.now() // DAY_MS * DAY_MS
-    past_days = set()
+    past_days = {}
     unavailable = []
+
+    def add_unavailable(ranges, reason):
+        unavailable.extend(
+            {"start_ms": first, "end_ms": last, "reason": reason}
+            for first, last in ranges
+        )
+
     for day in range(start // DAY_MS * DAY_MS, end + 1, DAY_MS):
-        first, last = max(day, start), min(day + DAY_MS - 60_000, end)
-        if all(opened in complete for opened in range(first, last + 1, 60_000)):
+        first, last = max(day, start), min(day + DAY_MS - BUCKET_INTERVAL_MS, end)
+        ranges = []
+        for opened in range(first, last + 1, BUCKET_INTERVAL_MS):
+            if opened in complete:
+                continue
+            if ranges and ranges[-1][1] + BUCKET_INTERVAL_MS == opened:
+                ranges[-1] = (ranges[-1][0], opened)
+            else:
+                ranges.append((opened, opened))
+        if not ranges:
             continue
         if day < today:
-            past_days.add(day)
+            past_days[day] = ranges
         else:
-            unavailable.append({"start_ms": first, "end_ms": last, "reason": "trade_day_unpublished"})
+            add_unavailable(ranges, "trade_day_unpublished")
     if not past_days:
         return result(None, unavailable)
 
@@ -486,11 +511,20 @@ async def _prepare_trade_flow_history(request: Request, payload: TradeFlowHistor
     archive = trades.archive
     if not trades.can_import_official or archive.root.resolve() != REPLAY_AGG_TRADE_ARCHIVE_DIR.resolve():
         raise PreparationError("TRADE_ARCHIVE_UNAVAILABLE", "TradeFlow preparation requires the configured writable replay archive")
-    windows = await run_archive(archive.list_verified_windows, **identity)
-    missing_days = sorted(
-        day for day in past_days
-        if not any(window.start_time_ms <= day and window.end_time_ms >= day + DAY_MS - 1 for window in windows)
-    )
+    missing_days = []
+    for day, ranges in past_days.items():
+        date = datetime.fromtimestamp(day // 1000, timezone.utc).date().isoformat()
+        try:
+            committed = await run_archive(archive.has_verified_day, **identity, day=date)
+        except (OSError, RuntimeError, ValueError):
+            add_unavailable(ranges, projection_unverified)
+            continue
+        if committed:
+            # The verified inventory and the bounded minute projection prove
+            # different things. Never re-download a day solely to reproject it.
+            add_unavailable(ranges, projection_unverified)
+        else:
+            missing_days.append(day)
     if not missing_days:
         return result(None, unavailable)
 

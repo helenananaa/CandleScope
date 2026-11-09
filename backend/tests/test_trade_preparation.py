@@ -440,9 +440,12 @@ async def test_trade_flow_history_preparation_reuses_the_official_day(tmp_path, 
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             before_fetch = await client.get("/api/v1/trade-flow/history", params={"start_ms": START_MS, "end_ms": START_MS})
             assert before_fetch.json()["data"] == [] and not calls
-            unpublished = await client.post(path, json={**request, "start_ms": today, "end_ms": today})
+            await store.upsert_rollups([_rollup(today, revision=1, is_complete=True, is_final=True)])
+            unpublished = await client.post(path, json={**request, "start_ms": today, "end_ms": today + 60_000})
             assert unpublished.status_code == 202 and unpublished.json()["job"] is None
-            assert unpublished.json()["unavailable_ranges"][0]["reason"] == "trade_day_unpublished"
+            assert unpublished.json()["unavailable_ranges"] == [{
+                "start_ms": today + 60_000, "end_ms": today + 60_000, "reason": "trade_day_unpublished",
+            }]
             first = await client.post(path, json=request)
             second = await client.post(path, json={**request, "idempotency_key": "trade-second"})
             assert first.status_code == second.status_code == 202, (first.text, second.text)
@@ -475,6 +478,17 @@ async def test_trade_flow_history_preparation_reuses_the_official_day(tmp_path, 
             assert quiet_page["coverage"]["verified_empty_minutes"] == 1
             no_job = await client.post(path, json={**request, **quiet, "idempotency_key": "verified-quiet"})
             assert no_job.json()["status"] == "local" and no_job.json()["job"] is None and len(calls) == 2
+
+            # The retained archive can be present and intact while a bounded
+            # projection cannot establish minute coverage.
+            from app.data_engine.market_data import trade_flow_service
+            monkeypatch.setattr(trade_flow_service, "_MAX_ARCHIVE_HISTORY_TRADES_PER_DAY", 1)
+            retained = await client.post(path, json={**request, "idempotency_key": "retained-unprojected"})
+            assert retained.status_code == 202 and retained.json()["status"] == "projection_unverified"
+            assert retained.json()["job"] is None and len(calls) == 2
+            assert retained.json()["unavailable_ranges"] == [{
+                "start_ms": START_MS, "end_ms": START_MS, "reason": "trade_archive_projection_unverified",
+            }]
     finally:
         await prep.shutdown()
 

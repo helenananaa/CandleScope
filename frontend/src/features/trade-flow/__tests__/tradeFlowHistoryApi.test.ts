@@ -59,3 +59,14 @@ test("an unpublished archive day schedules no polling or retry", async (context)
   assert.equal(supportsTradeHistoryArchive({ ...identity, marketType: "spot" }), false);
   assert.equal(supportsTradeHistoryArchive({ ...identity, exchange: "okx" }), false);
 });
+
+test("a retained archive without verified minute coverage requests a local readback", async (context) => {
+  const fetch = context.mock.method(globalThis, "fetch", async () => Response.json({
+    status: "projection_unverified", job: null,
+    unavailable_ranges: [{ reason: "trade_archive_projection_unverified" }],
+  }));
+  const result = await fillTradeHistory(identity, start, "retained-check", () => assert.fail("No job expected"),
+    new AbortController().signal);
+  assert.equal(result, "readback");
+  assert.equal(fetch.mock.callCount(), 1);
+});
