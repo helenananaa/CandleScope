@@ -267,6 +267,7 @@ export function useKlineStreamRuntime({
     let pendingRepairPollingInFlight = false;
     let reconnectDelay = WS_RECONNECT_BASE_DELAY;
     let reconnectAttempts = 0;
+    let needsReconnectHistory = false;
     let acknowledgementState = createKlineStreamAcknowledgementState();
 
     const stopPing = () => {
@@ -391,12 +392,14 @@ export function useKlineStreamRuntime({
     };
     reconcileTrackedIntervalsRef.current = reconcileTrackedIntervals;
 
-    const scheduleReconnect = () => {
-      if (reconnectTimer) {
-        clearTimeout(reconnectTimer);
-        reconnectTimer = null;
-      }
+    const clearReconnectTimer = () => {
+      if (reconnectTimer === null) return;
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    };
 
+    const scheduleReconnect = () => {
+      clearReconnectTimer();
       reconnectAttempts += 1;
       if (reconnectAttempts > WS_MAX_RECONNECT_ATTEMPTS) {
         console.warn(`WS: exceeded ${WS_MAX_RECONNECT_ATTEMPTS} reconnect attempts, staying on polling fallback`);
@@ -433,7 +436,9 @@ export function useKlineStreamRuntime({
               markPerfOnce("ws.kline.open", { symbol, marketType, exchange });
               acknowledgementState = createKlineStreamAcknowledgementState();
 
-              const isReconnection = reconnectAttempts > 0;
+              const isReconnection = needsReconnectHistory || reconnectAttempts > 0;
+              needsReconnectHistory = false;
+              clearReconnectTimer();
               reconnectDelay = WS_RECONNECT_BASE_DELAY;
               reconnectAttempts = 0;
 
@@ -587,8 +592,9 @@ export function useKlineStreamRuntime({
               if (!active) return;
               startPolling();
             },
-            onClose: () => {
+            onClose: (_event, controller) => {
               if (!active) return;
+              needsReconnectHistory = true;
               for (const interval of trackedIntervalsRef.current) {
                 const series = { exchange, marketType, symbol, interval };
                 consumerRecovery.capture(seriesDataFeed, series, getCacheRows(series));
@@ -597,7 +603,8 @@ export function useKlineStreamRuntime({
               acknowledgementState = createKlineStreamAcknowledgementState();
               stopPing();
               startPolling();
-              scheduleReconnect();
+              if (controller.reconnects) setTransportStatus("reconnecting");
+              else scheduleReconnect();
             },
           },
         );
@@ -691,10 +698,7 @@ export function useKlineStreamRuntime({
       stopObservingVisibility();
       consumerRecovery.close();
       if (initialFallbackTimer) clearTimeout(initialFallbackTimer);
-      if (reconnectTimer) {
-        clearTimeout(reconnectTimer);
-        reconnectTimer = null;
-      }
+      clearReconnectTimer();
       stopPing();
       stopPolling();
       if (pendingRepairInterval) clearInterval(pendingRepairInterval);

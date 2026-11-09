@@ -8,9 +8,11 @@ import { bindSharedWindow } from "../../features/market-data/manager/sharedWindo
 import { ForegroundPreloadGate } from "../../features/market-data/foregroundPreloadGate.js";
 import { SeriesDataFeed } from "../../features/market-data/feed/seriesDataFeed.js";
 import { SeriesWindowStore } from "../../features/market-data/window/seriesWindowStore.js";
+import { BatchKlineStreamCoordinator } from "../../features/market-data/feed/batchKlineStreamCoordinator.js";
+import { useKlineStreamRuntime } from "../../features/market-data/useKlineStreamRuntime.js";
 import { useChartInitialLoad } from "../../features/market-data/useChartInitialLoad.js";
 import StatusBar from "../../app/StatusBar.js";
-import type { KlineApi, KlineFetchResult, KlineStreamController, KlineStreamOptions, PendingInitialSeries } from "../../features/market-data/klineContracts.js";
+import type { KlineApi, KlineFetchResult, KlineStreamController, KlineStreamOptions, KlineStreamSocket, PendingInitialSeries } from "../../features/market-data/klineContracts.js";
 import type { EpochSeconds, KlineBar, MarketSeries } from "../../features/market-data/marketDataTypes.js";
 
 function assert(value: unknown, message: string): asserts value { if (!value) throw new Error(message); }
@@ -28,6 +30,63 @@ class BrowserCell {
   select(symbol: string) { this.symbol = symbol; }
   settle(symbol: string) { this.loaded = symbol; }
   published(count: number) { this.rendered = count; }
+}
+
+class ControlledBatchSocket implements KlineStreamSocket {
+  readyState = 0;
+  onopen: KlineStreamSocket["onopen"] = null;
+  onmessage: KlineStreamSocket["onmessage"] = null;
+  onerror: KlineStreamSocket["onerror"] = null;
+  onclose: KlineStreamSocket["onclose"] = null;
+  readonly sent: string[] = [];
+
+  send(payload: string) { this.sent.push(payload); }
+  close() { this.readyState = 3; }
+  open() { this.readyState = 1; this.onopen?.(new Event("open")); }
+  disconnect() { this.close(); this.onclose?.(new CloseEvent("close")); }
+}
+
+async function checkChartBatchReconnect(host: HTMLElement, api: KlineApi) {
+  const sockets: ControlledBatchSocket[] = [];
+  const streams = new BatchKlineStreamCoordinator({ url: "ws://controlled-reconnect", socketFactory: () => {
+    const socket = new ControlledBatchSocket();
+    sockets.push(socket);
+    return socket;
+  } });
+  const manager = new MarketDataManager({ api, streams });
+  const series = instrument("BTCUSDT");
+  const feed = new SeriesDataFeed({ api: manager, streamFactory: manager.subscribe, getActiveSeries: () => series });
+  const root = createRoot(host);
+  const noOp = () => undefined;
+
+  function Probe() {
+    const interval = useRef(series.interval);
+    useKlineStreamRuntime({
+      enabled: true, webSocketEnabled: true, symbol: series.symbol, exchange: series.exchange,
+      marketType: series.marketType, nativeIntervalValues: [series.interval], trackedIntervals: [series.interval],
+      intervalRef: interval, seriesDataFeed: feed, commitPatchedChartData: noOp, patchCacheTick: noOp,
+      getCacheRows: () => [], updateLastPrice: noOp, updateRealtimePrice: noOp,
+      handleBackfillCompleted: () => false, setWsStatus: noOp,
+    });
+    return null;
+  }
+
+  try {
+    flushSync(() => root.render(<Probe />));
+    assert(sockets.length === 1, "initial chart socket was not created");
+    sockets[0]!.open();
+    sockets[0]!.disconnect();
+    await until(() => sockets.length >= 2, "the broker did not reconnect the chart");
+    sockets[1]!.open();
+    await new Promise(resolve => setTimeout(resolve, 2_250));
+    assert(Number(sockets.length) === 2, "the chart replaced the broker's recovered socket");
+    assert(sockets[1]!.readyState === 1, "the recovered socket closed unexpectedly");
+    assert(sockets[1]!.sent.filter(payload => JSON.parse(payload).action === "subscribe").length === 1,
+      "recovered physical socket subscribed more than once");
+  } finally {
+    flushSync(() => root.unmount());
+    manager.closeAll();
+  }
 }
 
 /** Actual initial-load hook, Feed, shared manager, private stores and candle
@@ -309,6 +368,8 @@ export async function checkMarketHealth() {
     flushSync(() => root.unmount());
     manager.closeAll(); gate.dispose();
     assert(physical.every(stream => stream.closed), "owned streams leaked");
+    await checkChartBatchReconnect(host, api);
+    checks.push("the chart keeps the broker-recovered physical socket and sends one subscription");
     return { passed: true, checks, requests: calls, physicalStreamsCreated: sockets,
       scope: "Production-minified Chromium fixture with real React, initial-load hook and candle renderer; controlled market transport, not installed release acceptance" };
   } finally { if (host.hasChildNodes()) flushSync(() => root.unmount()); host.remove(); manager.closeAll(); gate.dispose(); }
