@@ -385,7 +385,8 @@ class BarAggregator:
         epoch = self._target_epochs.get(key)
         return (key, epoch) if epoch is not None else None
 
-    def adopt_history_prefix(self, prefix, token, *, acquisition_revision=None, refresh=False):
+    def adopt_history_prefix(self, prefix, token, *, acquisition_revision=None, refresh=False,
+                             replace_provisional=False):
         """Loop-owned, synchronous last step after the durable read fence.
 
         No await separates the target-generation check and builder adoption.
@@ -405,7 +406,9 @@ class BarAggregator:
         pipeline = self._pipelines[self._pipeline_key(interval, exchange, identity)]
         previous = pipeline.bar_state.get_state(exchange, market_type, symbol, prefix.start_ms)
         overlay_floor = previous.acquisition_revision if previous is not None else None
-        state = pipeline.bar_state.adopt_history_prefix(prefix, refresh=refresh)
+        state = pipeline.bar_state.adopt_history_prefix(
+            prefix, refresh=refresh, replace_provisional=replace_provisional,
+        )
         state.acquisition_revision = (prefix.acquisition_revision if acquisition_revision is None
                                       else min(acquisition_revision, prefix.acquisition_revision))
         if state.source_snapshots:

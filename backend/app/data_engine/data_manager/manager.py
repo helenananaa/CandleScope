@@ -456,8 +456,12 @@ class DataManager(DataManagerCore):
         from app.core.config import HISTORY_PREFIX_ENABLED
         from app.data_engine.bar_aggregator.history_prefix_runtime import HistoryPrefixRuntime
         from .history_prefix import HistoryPrefixReader
-        self.history_prefix_runtime = (HistoryPrefixRuntime(HistoryPrefixReader(self.query_engine), self.bar_aggregator,
-                                      self.aggregator_bridge._require_recovery) if HISTORY_PREFIX_ENABLED else None)
+        self.history_prefix_runtime = (
+            HistoryPrefixRuntime(
+                HistoryPrefixReader(self.query_engine), self.bar_aggregator,
+                self.aggregator_bridge._require_recovery, flush_delivery=self.aggregator_bridge.delivery.flush,
+            ) if HISTORY_PREFIX_ENABLED else None
+        )
         self.bar_aggregator.history_prefix_runtime = self.history_prefix_runtime
         self.warm_start.history_prefix_runtime = self.history_prefix_runtime
 

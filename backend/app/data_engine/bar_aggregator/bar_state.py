@@ -577,14 +577,16 @@ class BarStateEngine:
 
     # ── Public: Core Operation ───────────────────────────────
 
-    def adopt_history_prefix(self, prefix, *, refresh=False) -> BarState:
+    def adopt_history_prefix(self, prefix, *, refresh=False, replace_provisional=False) -> BarState:
         """Install a qualified prefix while retaining the current live overlay."""
         source = prefix.summary.target
         key = (source.exchange, source.market_type, source.symbol, prefix.start_ms)
         was_closed = key in self._closed
-        if ((was_closed and not refresh) or self._merge_strategy_overridden):
-            raise ValueError('history initialization requires an ordinary forming target')
         state = self._active.get(key) or self._closed.get(key)
+        replacing = (replace_provisional and was_closed and state.finality == BarFinality.PROVISIONAL
+                     and prefix.complete and prefix.through_ms == state.bucket_end_ms)
+        if (was_closed and not (refresh or replacing)) or self._merge_strategy_overridden:
+            raise ValueError('history initialization requires a forming or recoverable target')
         if refresh and (state is None or state._history_prefix is None):
             raise ValueError('history refresh requires an existing compact prefix')
         if state is None:
@@ -593,7 +595,7 @@ class BarStateEngine:
                              exchange=source.exchange, market_type=source.market_type,
                              series_identity=source.identity)
         self._component_merge_strategy.adopt_history_prefix(state, prefix)
-        if was_closed and has_complete_closed_component_coverage(state):
+        if was_closed and not replacing and has_complete_closed_component_coverage(state):
             state.finality = BarFinality.AUTHORITATIVE
             state.close_reason = 'history_prefix_refresh'
             self._closed.move_to_end(key)

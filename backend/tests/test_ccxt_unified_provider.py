@@ -1624,7 +1624,7 @@ def test_global_registry_contains_every_pinned_id() -> None:
     assert "twelvedata" in ids
 
 
-@pytest.mark.parametrize("repair", ["complete", "incomplete", "target_deleted", "source_changed"])
+@pytest.mark.parametrize("repair", ["complete", "incomplete", "target_deleted", "source_changed", "successor_first", "dispatcher_busy"])
 def test_bybit_mid_bucket_repair_joins_the_live_close(tmp_path, monkeypatch, repair):
     from app.data_engine.bar_aggregator import aggregator as aggregator_module
     from app.data_engine.data_manager.manager import DataManager
@@ -1675,15 +1675,24 @@ def test_bybit_mid_bucket_repair_joins_the_live_close(tmp_path, monkeypatch, rep
                     if repair == "target_deleted":
                         storage.delete_bars(interval="20m", start_ms=start, end_ms=start, **key)
                     now = boundary
-                values = {**final, "interval": "5m", "is_closed": closed, "bybit_close_confirmed": closed,
-                          "quote_volume": 0}
-                await manager.bar_aggregator.on_market_event(MarketEvent(
-                    StreamType.KLINE, key["symbol"], key["exchange"], final["open_time"], now,
-                    DataSource.PLUGIN, data=values, market_type=key["market_type"],
-                ))
+                async def feed(bar, is_closed):
+                    values = {**bar, "interval": "5m", "is_closed": is_closed,
+                              "bybit_close_confirmed": is_closed, "quote_volume": 0}
+                    await manager.bar_aggregator.on_market_event(MarketEvent(
+                        StreamType.KLINE, key["symbol"], key["exchange"], bar["open_time"], now,
+                        DataSource.PLUGIN, data=values, market_type=key["market_type"],
+                    ))
+
+                if closed and repair == "successor_first":
+                    await feed(row(boundary, 5), False)
+                if closed and repair == "dispatcher_busy":
+                    delivery = manager.aggregator_bridge.delivery
+                    await delivery._dispatcher.acquire()
+                    asyncio.get_running_loop().call_later(.3, delivery._dispatcher.release)
+                await feed(final, closed)
             await manager.aggregator_bridge.delivery.flush()
             rows = klines_repo.query_klines(interval="20m", **key)
-            if repair == "complete":
+            if repair in {"complete", "successor_first", "dispatcher_busy"}:
                 [saved] = rows
                 assert (saved["open_time"], saved["open"], saved["close"], saved["volume"]) == (start, 1, 4, 10)
                 assert saved["source"] == "data_manager_composite_closed"

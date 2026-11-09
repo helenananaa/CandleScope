@@ -20,7 +20,7 @@ from app.core.bounded_executor import ExecutorBusyError
 from app.core.executors import run_storage
 from app.data_engine.aggregation.blocks import BlockRevisionChanged, BlockUnavailable
 from app.data_engine.bar_aggregator.bar_state import has_complete_closed_component_coverage
-from app.data_engine.bar_aggregator.models import BarStatus
+from app.data_engine.bar_aggregator.models import BarFinality, BarStatus
 from app.data_engine.bar_delivery_errors import BarDeliveryUnavailable
 from app.data_engine.interval_policy import IntervalAlignment, parse_interval_spec
 from app.data_engine.memory_budget import MemoryBudgetExceeded
@@ -43,10 +43,11 @@ class HistoryPrefixRuntime:
     # prefixes. Small histories keep the lower-cost existing component path.
     MIN_ROWS = 2048
 
-    def __init__(self, reader, aggregator, require_recovery):
+    def __init__(self, reader, aggregator, require_recovery, *, flush_delivery=None):
         self.aggregator = aggregator
         self.reader = reader
         self.require_recovery = require_recovery
+        self.flush_delivery = flush_delivery
         self.targets = {}
         self.tasks = set()
         self.seeding = set()
@@ -109,7 +110,7 @@ class HistoryPrefixRuntime:
         if cancelled:
             raise asyncio.CancelledError
 
-    def _adopt(self, slot, prefix, *, refresh=False):
+    def _adopt(self, slot, prefix, *, refresh=False, replace_provisional=False):
         if not self._current(slot):
             raise BlockRevisionChanged('history target detached before adoption')
         result = None
@@ -117,7 +118,9 @@ class HistoryPrefixRuntime:
         with self.reader.memory_budget.reserve('realtime-state', allowance) as lease:
             def commit():
                 nonlocal result
-                result = self.aggregator.adopt_history_prefix(prefix, slot.token, refresh=refresh)
+                result = self.aggregator.adopt_history_prefix(
+                    prefix, slot.token, refresh=refresh, replace_provisional=replace_provisional,
+                )
             lease.retain(allowance, commit)
         self.metrics['adoptions'] += 1
         self.metrics['adopted_pages'] += prefix.pages
@@ -212,10 +215,10 @@ class HistoryPrefixRuntime:
 
     async def complete_repaired_bucket(self, pipeline, state, incoming):
         """Replace a missed Bybit prefix only with the entire canonical close."""
-        if (state.status != BarStatus.FORMING or state._history_prefix is not None
+        if (state.finality != BarFinality.PROVISIONAL or state._history_prefix is not None
                 or type(state.acquisition_revision) is not int or incoming.source_interval != "5m"
                 or incoming.close_time_ms + 1 != state.bucket_end_ms
-                or has_complete_closed_component_coverage(state)):
+                or (state.status == BarStatus.FORMING and has_complete_closed_component_coverage(state))):
             return state
         target = parse_interval_spec(state.interval)
         if (target is None or target.alignment is not IntervalAlignment.FIXED_EPOCH
@@ -231,32 +234,38 @@ class HistoryPrefixRuntime:
                 or len(self.targets) >= self.MAX_TARGETS):
             return state
         key = (state.exchange, state.market_type, state.symbol, state.bucket_start_ms)
+        def still_current():
+            return (not self.closing and self.aggregator.history_target_token(source, state.interval) == token
+                    and pipeline.bar_state.get_state(*key) is state and state.finality == BarFinality.PROVISIONAL)
+
         try:
-            async with self._task(), self.reader.stage(source, state.bucket_start_ms, state.bucket_end_ms) as prefix:
-                if (self.closing or self.aggregator.history_target_token(source, state.interval) != token
-                        or pipeline.bar_state.get_state(*key) is not state or state.status != BarStatus.FORMING):
-                    return None
-                if token[0] in self.targets or len(self.targets) >= self.MAX_TARGETS:
-                    return state
-                slot = _Target(source, token)
-                floor = state.acquisition_revision
-                with self.reader.memory_budget.reserve("realtime-state", 1024) as lease:
-                    lease.retain(1024, lambda: self.targets.__setitem__(token[0], slot))
-                try:
-                    self._adopt(slot, prefix)
-                except BaseException:
-                    self.detach(token[0])
-                    raise
-                adopted = pipeline.bar_state.get_state(*key)
-                adopted.canonical_recovery_delete_floor = floor
-                return adopted
+            async with self._task():
+                if self.flush_delivery is not None:
+                    # The native receipt is enqueued first but another flush
+                    # can still own the dispatcher when the derived input arrives.
+                    async with asyncio.timeout(1.5):
+                        await self.flush_delivery()
+                async with self.reader.stage(source, state.bucket_start_ms, state.bucket_end_ms) as prefix:
+                    if not still_current():
+                        return None
+                    if token[0] in self.targets or len(self.targets) >= self.MAX_TARGETS:
+                        return state
+                    slot = _Target(source, token)
+                    floor = state.acquisition_revision
+                    with self.reader.memory_budget.reserve("realtime-state", 1024) as lease:
+                        lease.retain(1024, lambda: self.targets.__setitem__(token[0], slot))
+                    try:
+                        self._adopt(slot, prefix, replace_provisional=state.status == BarStatus.CLOSED)
+                    except BaseException:
+                        self.detach(token[0])
+                        raise
+                    adopted = pipeline.bar_state.get_state(*key)
+                    adopted.canonical_recovery_delete_floor = floor
+                    return adopted
         except (ValueError, BlockUnavailable, BlockRevisionChanged, MemoryBudgetExceeded,
-                BarDeliveryUnavailable, ExecutorBusyError):
+                BarDeliveryUnavailable, ExecutorBusyError, TimeoutError):
             # Incomplete or stale storage cannot turn a preview into a close.
-            if (self.aggregator.history_target_token(source, state.interval) != token
-                    or pipeline.bar_state.get_state(*key) is not state or state.status != BarStatus.FORMING):
-                return None
-            return state
+            return state if still_current() else None
 
     @asynccontextmanager
     async def forming_input_scope(self, event):
