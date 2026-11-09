@@ -35,6 +35,7 @@ def main() -> int:
         "test_*subscription_continuity.py", "test_recovery_*.py", "test_consumer_recovery.py",
         "test_custom_history_streaming.py", "test_materialized_history_probe.py",
         "test_history_revision_admission.py", "test_aggregation_core.py",
+        "test_trade_preparation.py", "test_replay_trade_import.py", "test_trade_flow_api.py",
         "test_shared_aggregation_blocks.py", "test_shared_blocks_integration.py",
         "test_history_block_reader.py",
         "test_component_incremental.py",
