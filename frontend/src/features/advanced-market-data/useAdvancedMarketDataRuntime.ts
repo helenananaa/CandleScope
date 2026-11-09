@@ -12,7 +12,7 @@ import { useLocale } from "../../i18n/useLocale.js";
 import type { ChartSessionRuntime } from "../chart-session/chartSessionTypes.js";
 import type { ChartDataCommitMeta } from "../market-data/useChartDataRuntime.js";
 import type { SeriesWindowView } from "../market-data/window/seriesWindowView.js";
-import { canonicalizeIntervalValue } from "../../utils/intervals.js";
+import { canonicalizeIntervalValue, parseIntervalSeconds } from "../../utils/intervals.js";
 import { buildSeriesWindowKey } from "../market-data/window/seriesWindowKey.js";
 import {
   fetchAdvancedMarketHistory,
@@ -26,6 +26,8 @@ import {
   coverageRangesForHistoryPage,
   mergeHistoryCoverage,
   nextUncoveredHistoryRange,
+  OpenInterestHistoryRetryBudget,
+  openInterestSampleCells,
   type MarketHistoryRange,
 } from "./marketHistoryCoverage.js";
 import { MarketStreamController } from "./marketStreamController.js";
@@ -360,6 +362,7 @@ export function useAdvancedMarketDataRuntime({
   const historyRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const historyContinuationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const historyGapBudgetRef = useRef(new HistoryGapRetryBudget());
+  const oiHistoryRetryBudgetRef = useRef(new OpenInterestHistoryRetryBudget());
   const historyRefreshRef = useRef<boolean | MarketStateMetricChannel>(false);
   const coverageExpiryRef = useRef(new Map<string, number>());
   const streamRef = useRef<MarketStreamController | null>(null);
@@ -409,6 +412,7 @@ export function useAdvancedMarketDataRuntime({
     inFlightRef.current = new Set();
     inFlightCoverageRef.current = new Map();
     historyGapBudgetRef.current.clear();
+    oiHistoryRetryBudgetRef.current.clear();
     clearHistoryRetryTimer();
     clearHistoryContinuationTimer();
     if (clearCoverage) {
@@ -420,6 +424,7 @@ export function useAdvancedMarketDataRuntime({
   const scheduleHistoryRetry = useCallback((
     expectedHistoryContextKey: string,
     expectedHistoryGeneration: number,
+    delayMs = HISTORY_RETRY_DELAY_MS,
   ) => {
     if (disposedRef.current
       || historyGenerationRef.current !== expectedHistoryGeneration
@@ -431,7 +436,7 @@ export function useAdvancedMarketDataRuntime({
         || historyGenerationRef.current !== expectedHistoryGeneration
         || activeRef.current.historyContextKey !== expectedHistoryContextKey) return;
       setHistoryRetryToken((value) => value + 1);
-    }, HISTORY_RETRY_DELAY_MS);
+    }, delayMs);
   }, []);
 
   const scheduleHistoryContinuation = useCallback((
@@ -510,7 +515,20 @@ export function useAdvancedMarketDataRuntime({
     }
     let scheduled = false;
     for (const descriptor of requests) {
-      const forceRefresh = refresh === true || refresh === descriptor.channel;
+      const nativeOi = descriptor.channel === "open_interest"
+        && context.identity.exchange === "binance" && context.identity.marketType === "futures";
+      const forceRefresh = nativeOi && (refresh === true || refresh === descriptor.channel);
+      const stepMs = nativeOi ? (parseIntervalSeconds(oiPeriod) ?? 0) * 1000 : 0;
+      const oiBudget = oiHistoryRetryBudgetRef.current;
+      const deferredRanges = (range: MarketHistoryRange) => {
+        if (!stepMs) return [];
+        const nowMs = Date.now();
+        const { ranges, retryAt } = oiBudget.deferred(range, stepMs, nowMs);
+        if (retryAt !== null) {
+          scheduleHistoryRetry(expectedHistoryContextKey, expectedHistoryGeneration, retryAt - nowMs);
+        }
+        return ranges;
+      };
       const coverageKey = [
         context.identityKey,
         descriptor.channel,
@@ -521,6 +539,7 @@ export function useAdvancedMarketDataRuntime({
         [
           ...(coverage.get(coverageKey) || []),
           ...(inFlightCoverage.get(coverageKey) || []),
+          ...deferredRanges(requested),
         ],
         requested,
       );
@@ -532,10 +551,12 @@ export function useAdvancedMarketDataRuntime({
       ].join(":");
       if (inFlight.has(requestKey)) continue;
       scheduled = true;
+      const sampleCells = stepMs ? openInterestSampleCells(requestRange, stepMs) : null;
+      const inFlightRange = sampleCells ? { ...requestRange, endMs: sampleCells.endMs } : requestRange;
       inFlight.add(requestKey);
       inFlightCoverage.set(coverageKey, [
         ...(inFlightCoverage.get(coverageKey) || []),
-        requestRange,
+        inFlightRange,
       ]);
       const clearHistoryError = () => setHistoryErrorState((current) => {
         if (disposedRef.current
@@ -576,17 +597,23 @@ export function useAdvancedMarketDataRuntime({
         });
       };
       let lastGapKey: string | null = null;
+      let lastPageRange: MarketHistoryRange | null = null;
+      const failOiRange = (range: MarketHistoryRange): boolean => (
+        oiBudget.fail(range, stepMs, Date.now(), HISTORY_RETRY_DELAY_MS)
+      );
+      const nextPage = () => nextUncoveredHistoryRange(
+        [...(coverage.get(coverageKey) || []), ...deferredRanges(requestRange)],
+        requestRange,
+      );
       void (async () => {
         try {
           for (let page = 0; page < MAX_HISTORY_PAGES_PER_LOAD; page += 1) {
             if (!isCurrentRequest()) return;
-            const pageRange = nextUncoveredHistoryRange(
-              coverage.get(coverageKey) || [],
-              requestRange,
-            );
+            const pageRange = nextPage();
             if (!pageRange) return;
             const gapKey = `${coverageKey}:${pageRange.startMs}:${pageRange.endMs}`;
             lastGapKey = gapKey;
+            lastPageRange = pageRange;
             if (historyGapBudgetRef.current.blocked(gapKey)) return;
             const payload = await fetchAdvancedMarketHistory(
               context.identity,
@@ -598,9 +625,7 @@ export function useAdvancedMarketDataRuntime({
                 endMs: pageRange.endMs,
                 limit: descriptor.limit,
                 signal: controller.signal,
-                ...(forceRefresh && descriptor.channel === "open_interest"
-                  && context.identity.exchange === "binance" && context.identity.marketType === "futures"
-                  ? { mode: "refresh" as const } : {}),
+                ...(forceRefresh ? { mode: "refresh" as const } : {}),
               },
             );
             if (!isCurrentRequest()) return;
@@ -628,6 +653,7 @@ export function useAdvancedMarketDataRuntime({
                 mergeHistoryCoverage(coverage.get(coverageKey) || [], range),
               );
             }
+            if (stepMs) oiBudget.accept(payload.coverage.ranges || []);
             if (payload.fallback === true || payload.retryable === true || covered.length === 0) {
               const explicit = payload.coverage.ranges !== undefined;
               const refreshFallback = explicit && forceRefresh && payload.fallback === true
@@ -639,7 +665,17 @@ export function useAdvancedMarketDataRuntime({
                 ));
                 return;
               }
-              const retryAllowed = !explicit || historyGapBudgetRef.current.fail(gapKey);
+              let retryAllowed;
+              if (stepMs && explicit) {
+                retryAllowed = false;
+                for (const gap of payload.coverage.missing_ranges || []) {
+                  const startMs = Math.max(pageRange.startMs, gap.start_ms);
+                  const endMs = Math.min(pageRange.endMs, gap.end_ms);
+                  if (startMs <= endMs && failOiRange({ startMs, endMs })) retryAllowed = true;
+                }
+              } else {
+                retryAllowed = !explicit || historyGapBudgetRef.current.fail(gapKey);
+              }
               if (explicit) {
                 const message = locale === "zh-CN"
                     ? (retryAllowed ? "部分历史尚未取得，正在重试。" : "部分历史尚未取得，请点击重试。")
@@ -671,7 +707,7 @@ export function useAdvancedMarketDataRuntime({
               clearHistoryError();
             }
           }
-          if (nextUncoveredHistoryRange(coverage.get(coverageKey) || [], requestRange)) {
+          if (nextPage()) {
             scheduleHistoryContinuation(expectedHistoryContextKey, expectedHistoryGeneration);
           }
         } catch (error: unknown) {
@@ -690,19 +726,30 @@ export function useAdvancedMarketDataRuntime({
               },
             };
           });
-          const nativeOi = descriptor.channel === "open_interest"
-            && context.identity.exchange === "binance" && context.identity.marketType === "futures";
-          if (!nativeOi || lastGapKey === null || historyGapBudgetRef.current.fail(lastGapKey)) {
+          const retryAllowed = stepMs && lastPageRange && openInterestSampleCells(lastPageRange, stepMs)
+            ? failOiRange(lastPageRange)
+            : lastGapKey === null || historyGapBudgetRef.current.fail(lastGapKey);
+          if (!nativeOi || retryAllowed) {
             scheduleHistoryRetry(expectedHistoryContextKey, expectedHistoryGeneration);
           }
         } finally {
           inFlight.delete(requestKey);
           const remainingRanges = (inFlightCoverage.get(coverageKey) || []).filter(
-            (range) => range.startMs !== requestRange.startMs || range.endMs !== requestRange.endMs,
+            (range) => range !== inFlightRange,
           );
           if (remainingRanges.length > 0) inFlightCoverage.set(coverageKey, remainingRanges);
           else inFlightCoverage.delete(coverageKey);
           controllers.delete(controller);
+          if (stepMs && requestRange.endMs < requested.endMs && isCurrentRequest()) {
+            const nextRange = nextUncoveredHistoryRange([
+              ...(coverage.get(coverageKey) || []),
+              ...remainingRanges,
+              ...deferredRanges(requested),
+            ], requested);
+            if (nextRange && nextRange.startMs > requestRange.endMs) {
+              scheduleHistoryContinuation(expectedHistoryContextKey, expectedHistoryGeneration);
+            }
+          }
         }
       })();
     }

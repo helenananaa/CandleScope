@@ -19,6 +19,75 @@ export class HistoryGapRetryBudget {
   clear(): void { this.failures.clear(); }
 }
 
+// Binance USD-M retains 30 days and the smallest native OI period is 5m.
+const MAX_OI_RETRY_CELLS = 30 * 24 * 12;
+
+export function openInterestSampleCells(
+  range: MarketHistoryRange,
+  stepMs: number,
+): MarketHistoryRange | null {
+  const startMs = Math.ceil(range.startMs / stepMs) * stepMs;
+  const endMs = (Math.floor(range.endMs / stepMs) + 1) * stepMs - 1;
+  return startMs <= range.endMs ? { startMs, endMs } : null;
+}
+
+/** Holds only acquisition attempts. These ranges never become local coverage. */
+export class OpenInterestHistoryRetryBudget {
+  private readonly attempts = new Map<number, { failures: number; retryAt: number }>();
+
+  deferred(
+    requested: MarketHistoryRange,
+    stepMs: number,
+    nowMs: number,
+  ): { ranges: MarketHistoryRange[]; retryAt: number | null } {
+    const ranges: MarketHistoryRange[] = [];
+    let retryAt: number | null = null;
+    for (const [startMs, attempt] of this.attempts) {
+      const endMs = startMs + stepMs - 1;
+      if (endMs < requested.startMs || startMs > requested.endMs) continue;
+      if (attempt.failures >= 3 || attempt.retryAt > nowMs) {
+        ranges.push({ startMs, endMs });
+      }
+      if (attempt.failures < 3 && attempt.retryAt > nowMs) {
+        retryAt = Math.min(retryAt ?? attempt.retryAt, attempt.retryAt);
+      }
+    }
+    return { ranges, retryAt };
+  }
+
+  accept(ranges: readonly { start_ms: number; end_ms: number }[]): void {
+    for (const sample of this.attempts.keys()) {
+      if (ranges.some((range) => range.start_ms <= sample && sample <= range.end_ms)) {
+        this.attempts.delete(sample);
+      }
+    }
+  }
+
+  fail(
+    range: MarketHistoryRange,
+    stepMs: number,
+    nowMs: number,
+    retryDelayMs: number,
+  ): boolean {
+    const cells = openInterestSampleCells(range, stepMs);
+    if (!cells) return false;
+    let retryAllowed = false;
+    const first = Math.max(cells.startMs, cells.endMs + 1 - MAX_OI_RETRY_CELLS * stepMs);
+    for (let sample = first; sample <= cells.endMs; sample += stepMs) {
+      const previous = this.attempts.get(sample);
+      const failures = Math.min(3, (previous?.failures || 0) + 1);
+      this.attempts.set(sample, { failures, retryAt: nowMs + retryDelayMs });
+      retryAllowed ||= failures < 3;
+    }
+    while (this.attempts.size > MAX_OI_RETRY_CELLS) {
+      this.attempts.delete(this.attempts.keys().next().value!);
+    }
+    return retryAllowed;
+  }
+
+  clear(): void { this.attempts.clear(); }
+}
+
 function normalizedRange(range: MarketHistoryRange): MarketHistoryRange {
   const startMs = Math.max(0, Math.floor(Math.min(range.startMs, range.endMs)));
   const endMs = Math.max(startMs, Math.ceil(Math.max(range.startMs, range.endMs)));
