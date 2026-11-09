@@ -38,10 +38,13 @@ def _changes_allow_delivery(conn, change, receipts, observed_revision, sequence,
             return False
         if row["end_ms"] < start or row["start_ms"] > end:
             continue
-        # A sibling close already committed by this journal can overlap.
-        # The footprints do not identify deletes individually, so keep the
-        # coalesced deletion fence for every overlapping older receipt.
-        if row["revision"] <= change["delete_revision"] or not _has_predecessor(conn, sequence, row["revision"]):
+        # The footprint can overlap only when an earlier delivery actually
+        # wrote that revision. Its transaction's head can instead belong to a
+        # dependent deletion, or remain unchanged after a no-op upsert.
+        if conn.execute(
+            "SELECT 1 FROM bar_delivery WHERE sequence<? AND written_revision=? AND phase IN ('committed','published')",
+            (sequence, row["revision"]),
+        ).fetchone() is None:
             return False
     return True
 
@@ -67,6 +70,7 @@ def init_bar_delivery_storage(conn):
 
     for table, column in (("bar_delivery", "observed_revision"),
                           ("bar_delivery", "committed_revision"),
+                          ("bar_delivery", "written_revision"),
                           ("bar_delivery", "recovery_required"),
                           ("bar_delivery_watches", "observed_revision")):
         if column not in {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}:
@@ -192,15 +196,23 @@ class BarDeliveryJournal:
                     record["recovery_required"] = 1
                     return self._canonical(conn, record)
             if derived:
-                register_derived(conn, series_values(payload["symbol"], payload["interval"],
-                    payload["exchange"], payload["market_type"], identity))
+                register_derived(conn, values)
+            before_write = current_revision(conn)
             affected = self._write(payload["symbol"], payload["interval"], [payload["storage_row"]],
                                    payload["bar"]["source"], exchange=payload["exchange"],
                                    market_type=payload["market_type"], series_identity=identity, _connection=conn)
             record["phase"] = "committed" if affected else "rejected"
             record["committed_revision"] = current_revision(conn)
-            conn.execute("UPDATE bar_delivery SET phase=?,committed_revision=? WHERE event_id=?",
-                         (record["phase"], record["committed_revision"], event_id))
+            # Preserve the transaction head for publication and separately
+            # attribute the exact revision advanced by this target write.
+            written_revision = 0
+            if affected and record["committed_revision"] > before_write:
+                written = series_change(conn, values)
+                if written is not None and written["revision"] > before_write:
+                    written_revision = written["revision"]
+            record["written_revision"] = written_revision
+            conn.execute("UPDATE bar_delivery SET phase=?,committed_revision=?,written_revision=? WHERE event_id=?",
+                         (record["phase"], record["committed_revision"], written_revision, event_id))
             self._prune(conn)
             return self._canonical(conn, record)
 

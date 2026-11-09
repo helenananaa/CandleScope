@@ -132,6 +132,36 @@ def test_derived_close_requires_complete_disjoint_footprints(journal, interferen
     assert reopened.commit("sibling-close")["phase"] == "committed"
 
 
+@pytest.mark.parametrize("delete_open", [0, 240_000])
+def test_prior_sibling_proof_survives_only_a_disjoint_later_deletion(journal, delete_open):
+    source = payload()["storage_row"]
+    klines_repo.upsert_klines("BTCUSDT", "1m", [source], source="backfill")
+    klines_repo.upsert_klines("BTCUSDT", "2m", [{**source, "open_time": 0}], source="backfill_aggregated")
+    with klines_repo._connect() as conn:
+        acquired = klines_repo.current_revision(conn)
+    sibling = payload()
+    sibling.update(interval="2m", derived=True)
+    sibling["storage_row"].update(open_time=240_000, close_time=359_999)
+    sibling["bar"]["time"] = 240
+    journal.enqueue("earlier-sibling", sibling)
+    first = journal.commit("earlier-sibling")
+    assert first["phase"] == "committed" and first["written_revision"] > acquired
+    journal.acknowledge("earlier-sibling")
+    journal.enqueue("same-row", sibling)
+    replay = journal.commit("same-row")
+    assert replay["phase"] == "committed" and replay["written_revision"] == 0
+    journal.acknowledge("same-row")
+
+    klines_repo.KlinesRepoAdapter().delete_bars(
+        "BTCUSDT", "2m", start_ms=delete_open, end_ms=delete_open + 119_999,
+    )
+    later = {**sibling, "interval": "4m", "acquisition_revision": acquired,
+             "storage_row": {**sibling["storage_row"], "close_time": 479_999}}
+    journal.enqueue("later-close", later)
+    result = journal.commit("later-close")
+    assert result["phase"] == ("rejected" if delete_open else "committed")
+
+
 @pytest.mark.parametrize("mutation", ["repair", "delete"])
 @pytest.mark.parametrize("other_open", [0, 120_000])
 def test_disjoint_history_change_does_not_reject_a_fresh_native_close(journal, mutation, other_open):
