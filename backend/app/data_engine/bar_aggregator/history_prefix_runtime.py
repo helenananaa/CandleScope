@@ -245,6 +245,15 @@ class HistoryPrefixRuntime:
                     # can still own the dispatcher when the derived input arrives.
                     async with asyncio.timeout(1.5):
                         await self.flush_delivery()
+                # An exchange confirmation can arrive slightly ahead of the
+                # local clock. The canonical reader still requires elapsed slots.
+                remaining = state.bucket_end_ms / 1000 - time.time()
+                if remaining > 2:
+                    return state if still_current() else None
+                if remaining > 0:
+                    await asyncio.sleep(remaining + .002)
+                if not still_current():
+                    return None
                 async with self.reader.stage(source, state.bucket_start_ms, state.bucket_end_ms) as prefix:
                     if not still_current():
                         return None

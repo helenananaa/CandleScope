@@ -1624,7 +1624,7 @@ def test_global_registry_contains_every_pinned_id() -> None:
     assert "twelvedata" in ids
 
 
-@pytest.mark.parametrize("repair", ["complete", "incomplete", "target_deleted", "source_changed", "successor_first", "dispatcher_busy"])
+@pytest.mark.parametrize("repair", ["complete", "incomplete", "target_deleted", "source_changed", "successor_first", "dispatcher_busy", "clock_skew"])
 def test_bybit_mid_bucket_repair_joins_the_live_close(tmp_path, monkeypatch, repair):
     from app.data_engine.bar_aggregator import aggregator as aggregator_module
     from app.data_engine.data_manager.manager import DataManager
@@ -1689,10 +1689,19 @@ def test_bybit_mid_bucket_repair_joins_the_live_close(tmp_path, monkeypatch, rep
                     delivery = manager.aggregator_bridge.delivery
                     await delivery._dispatcher.acquire()
                     asyncio.get_running_loop().call_later(.3, delivery._dispatcher.release)
+                if closed and repair == "clock_skew":
+                    from app.data_engine.bar_aggregator import history_prefix_runtime
+                    from app.data_engine.data_manager import history_blocks
+
+                    clock = [boundary - 60]
+                    fake_time = SimpleNamespace(time=lambda: clock[0] / 1000)
+                    monkeypatch.setattr(history_prefix_runtime, "time", fake_time)
+                    monkeypatch.setattr(history_blocks, "time", fake_time)
+                    asyncio.get_running_loop().call_later(.03, clock.__setitem__, 0, boundary)
                 await feed(final, closed)
             await manager.aggregator_bridge.delivery.flush()
             rows = klines_repo.query_klines(interval="20m", **key)
-            if repair in {"complete", "successor_first", "dispatcher_busy"}:
+            if repair in {"complete", "successor_first", "dispatcher_busy", "clock_skew"}:
                 [saved] = rows
                 assert (saved["open_time"], saved["open"], saved["close"], saved["volume"]) == (start, 1, 4, 10)
                 assert saved["source"] == "data_manager_composite_closed"
