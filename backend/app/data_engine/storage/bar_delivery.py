@@ -10,6 +10,7 @@ import time
 from contextlib import closing
 
 from app.data_engine.bar_delivery_errors import BarDeliveryUnavailable
+from app.data_engine.interval_policy import IntervalAlignment, parse_interval_spec
 from app.data_engine.series_identity import KlineSeriesIdentity
 from .revisions import (
     IDENTITY_COLUMNS,
@@ -31,6 +32,12 @@ def _has_predecessor(conn, sequence, revision):
         "SELECT 1 FROM bar_delivery WHERE sequence<? AND committed_revision=?",
         (sequence, revision),
     ).fetchone() is not None
+
+
+def _is_exact_fixed_bucket(interval, start, end):
+    spec = parse_interval_spec(interval)
+    return (spec is not None and spec.alignment is IntervalAlignment.FIXED_EPOCH
+            and spec.floor_ms(start) == start and spec.next_ms(start) == end + 1)
 
 
 def _changes_allow_delivery(conn, change, receipts, observed_revision, sequence, start, end):
@@ -194,7 +201,9 @@ class BarDeliveryJournal:
                         continue
                 sequence = record["sequence"]
                 if change["delete_revision"] > observed_revision or not _has_predecessor(conn, sequence, change["revision"]):
-                    if derived and valid_window:
+                    # Older receipts may carry an incomplete interval, and
+                    # session bounds require a calendar unavailable here.
+                    if derived and valid_window and _is_exact_fixed_bucket(payload["interval"], start, end):
                         if receipts is None:
                             receipts = block_change_receipts(conn, observed_revision, current_revision(conn))
                         if _changes_allow_delivery(conn, change, receipts, observed_revision, sequence, start, end):
