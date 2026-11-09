@@ -199,15 +199,30 @@ def _serialize_kline_event(event) -> dict[str, Any]:
     return {
         "type": "kline",
         "event_type": event.event_type.value,
-        "stream_version": event.detail.get("stream_version"),
-        "affected_range": event.detail.get("affected_range"),
-        "previous_open_ms": event.detail.get("previous_open_ms"),
         "exchange": event.key.exchange,
         "symbol": event.key.symbol,
         "interval": event.key.interval,
         "market_type": event.key.market_type,
         "data": data,
+        **{name: event.detail[name] for name in (
+            "stream_version", "affected_range", "previous_open_ms",
+        ) if name in event.detail},
     }
+
+
+def _serialize_backfill_completed(event) -> dict[str, Any]:
+    detail = event.detail or {}
+    payload = {
+        "type": "backfill_completed",
+        "exchange": event.key.exchange,
+        "symbol": event.key.symbol,
+        "interval": event.key.interval,
+        "market_type": event.key.market_type,
+        "detail": detail,
+    }
+    if "stream_version" in detail:
+        payload["stream_version"] = detail["stream_version"]
+    return payload
 
 
 async def stream_single_kline(
@@ -359,15 +374,7 @@ async def stream_multi_kline(
         try:
             if event.event_type == DataEventType.BACKFILL_COMPLETED:
                 queued = await event_queue.put(
-                    {
-                        "type": "backfill_completed",
-                        "exchange": event.key.exchange,
-                        "symbol": event.key.symbol,
-                        "interval": event.key.interval,
-                        "market_type": event.key.market_type,
-                        "detail": event.detail or {},
-                        "stream_version": event.detail.get("stream_version"),
-                    },
+                    _serialize_backfill_completed(event),
                     key=event_key,
                     timeout=1.0,
                 )
@@ -645,15 +652,7 @@ async def forward_events_to_ws(
                     if not should_forward_browser_event(event):
                         continue
                     try:
-                        await send_json_with_timeout(websocket, {
-                            "type": "backfill_completed",
-                            "exchange": event.key.exchange,
-                            "symbol": event.key.symbol,
-                            "interval": event.key.interval,
-                            "market_type": event.key.market_type,
-                            "detail": event.detail or {},
-                        "stream_version": event.detail.get("stream_version"),
-                        })
+                        await send_json_with_timeout(websocket, _serialize_backfill_completed(event))
                     except Exception:
                         return
                     continue

@@ -17,6 +17,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from app.api.v1.stream_klines import (
     _KlineWsOutbox,
     _require_active_stream_info,
+    _serialize_backfill_completed,
     _serialize_kline_event,
     _subscription_failure,
     should_forward_browser_event,
@@ -702,17 +703,8 @@ class KlineBatchConnection:
                 event.key.interval,
             )
             if event.event_type == DataEventType.BACKFILL_COMPLETED:
-                payload = {
-                    "type": "backfill_completed",
-                    "protocol": KLINE_BATCH_PROTOCOL,
-                    "client_id": client_id,
-                    "exchange": event.key.exchange,
-                    "market_type": event.key.market_type,
-                    "symbol": event.key.symbol,
-                    "interval": event.key.interval,
-                    "detail": event.detail or {},
-                    "stream_version": event.detail.get("stream_version"),
-                }
+                payload = _serialize_backfill_completed(event)
+                payload.update(protocol=KLINE_BATCH_PROTOCOL, client_id=client_id)
                 queued = await self.outbox.put(payload, key=key, timeout=1.0)
             else:
                 payload = _serialize_kline_event(event)
