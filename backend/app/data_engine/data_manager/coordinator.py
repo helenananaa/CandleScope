@@ -151,7 +151,7 @@ class StreamCoordinator:
       * ``ensure_stream()`` — start a pipeline if not running.
       * ``stop_stream()`` — gracefully shut down a pipeline.
       * ``prewarm()`` — bulk-load historical data into cache.
-      * ``reap_idle()`` — stop streams with no subscribers.
+      * ``reap_idle()`` — stop streams with no subscribers or leases.
       * Route ingestion data through BarAggregator (not direct to cache).
 
     The coordinator is **exchange-agnostic** — it uses pluggable
@@ -167,11 +167,14 @@ class StreamCoordinator:
         cache: BarCache | None = None,
         event_bus: DataEventBus | None = None,
         interval_resolver: IntervalResolver | None = None,
+        *,
+        has_stream_lease: Callable[[SeriesKey], bool] | None = None,
     ) -> None:
         self._cfg = config or CoordinatorConfig()
         self._cache = cache
         self._bus = event_bus
         self._interval_resolver = interval_resolver or IntervalResolver()
+        self._has_stream_lease = has_stream_lease
 
         # Active streams: SeriesKey → _StreamEntry
         self._streams: dict[SeriesKey, _StreamEntry] = {}
@@ -488,12 +491,14 @@ class StreamCoordinator:
         reaped: list[str] = []
 
         for key, entry in list(self._streams.items()):
-            # Check if stream has subscribers
-            sub_count = 0
-            if self._bus:
-                sub_count = self._bus.get_direct_subscriber_count(key)
+            if self._streams.get(key) is not entry:
+                continue
+            # Derived consumers lease their physical prerequisite without
+            # subscribing directly to its events.
+            has_lease = self._has_stream_lease is not None and self._has_stream_lease(key)
+            has_subscribers = self._bus is not None and self._bus.get_direct_subscriber_count(key) > 0
 
-            if sub_count > 0:
+            if has_lease or has_subscribers:
                 entry.touch()
                 continue
 

@@ -319,6 +319,7 @@ class DataManager(DataManagerCore):
             cache=self.cache,
             event_bus=self.event_bus,
             interval_resolver=self.interval_resolver,
+            has_stream_lease=lambda key: key in self._stream_leases,
         )
         self.query_engine = QueryEngine(
             cache=self.cache,
