@@ -214,6 +214,19 @@ export async function checkMarketHealth() {
     emit(eth.symbol, { ...forming, close: 23 }, "bar.updated");
     assert(manager.cache.planHistory(eth, 500).action === "reuse", "verified reconnect did not restore healthy reuse");
     checks.push("after reconnect only a stable read linked to a real stream event restores healthy reuse");
+    const retainedTail = manager.cache.read(eth).rows.at(-1);
+    stream.options.onControlMessage?.({ type: "error", active_intervals: [],
+      failed: [{ interval: "1m", code: "interval_unavailable" }] }, stream.controller);
+    emit(eth.symbol, { ...forming, close: 29 }, "bar.updated");
+    assert(manager.cache.read(eth).rows.at(-1) === retainedTail, "a queued bar entered an inactive interval");
+    assert(!manager.cache.planHistory(eth, 500).health.subscribed, "the queued bar reopened the subscription");
+    stream.options.onControlMessage?.({ type: "subscribed", active_intervals: ["1m"] }, stream.controller);
+    assert(manager.cache.planHistory(eth, 500).action !== "reuse", "re-ACK restored coverage without verification");
+    await manager.fetchKlinesHistory(eth.symbol, eth.interval, null, eth.marketType, eth.exchange,
+      { countBack: 500, maxWaitMs: 0, clientContext: { cacheMode: "network-only" } });
+    emit(eth.symbol, { ...forming, close: 23 }, "bar.updated");
+    assert(manager.cache.planHistory(eth, 500).action === "reuse", "acknowledged interval did not regain verified reuse");
+    checks.push("a failed interval rejects queued frames until re-acknowledgement and a verified cutover");
     generations.set(eth.symbol, 2);
     revisions.set(eth.symbol, { sequence: 0, barrier: 0 });
     await manager.fetchKlinesHistory(eth.symbol, eth.interval, null, eth.marketType, eth.exchange,

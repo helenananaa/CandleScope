@@ -405,10 +405,9 @@ export class SharedMarketCache {
     if (entry) this.remove(entry);
   }
 
-  disconnectSeries(series: MarketSeries): void {
+  disconnectSeries(series: MarketSeries, revokeReads = false): void {
     const entry = this.entries.get(String(buildSeriesWindowKey(series)));
-    if (!entry) return;
-    entry.health.disconnect(false); entry.proofs = []; entry.inputInvalidation += 1;
+    if (entry) this.disconnectEntry(entry, revokeReads);
   }
 
   markDisconnected(instrument: Pick<MarketSeries, "exchange" | "marketType" | "symbol">, revokeReads = true): void {
@@ -416,12 +415,16 @@ export class SharedMarketCache {
       if (entry.series.exchange.toLowerCase() !== instrument.exchange.toLowerCase()
         || entry.series.marketType.toLowerCase() !== instrument.marketType.toLowerCase()
         || entry.series.symbol.toUpperCase() !== instrument.symbol.toUpperCase()) continue;
-      entry.proofs = [];
-      entry.health.disconnect(revokeReads);
-      entry.inputInvalidation += 1;
-      entry.metaRevision = ++this.metadataRevision;
-      entry.commitRevision = ++this.revision;
+      this.disconnectEntry(entry, revokeReads);
     }
+  }
+
+  private disconnectEntry(entry: Entry, revokeReads: boolean): void {
+    entry.proofs = [];
+    entry.health.disconnect(revokeReads);
+    entry.inputInvalidation += 1;
+    entry.metaRevision = ++this.metadataRevision;
+    entry.commitRevision = ++this.revision;
   }
 
   clear(): void {
