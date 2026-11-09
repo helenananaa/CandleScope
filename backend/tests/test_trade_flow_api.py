@@ -343,6 +343,11 @@ def test_bounded_history_rebuilds_only_from_verified_archive_objects(tmp_path, m
         assert final["complete"] and final["terminal_reason"] is None
         whole = client.get("/api/v1/trade-flow/history", params={**params, "limit": 10}).json()
         assert whole["count"] == 3 and whole["complete"] and not whole["coverage"]["observed_only"]
+        assert page["data"] + final["data"] == whole["data"]
+        isolated = client.get("/api/v1/trade-flow/history", params={
+            "start_ms": first, "end_ms": first,
+        }).json()
+        assert isolated["data"] == [rebuilt]
         quiet = client.get("/api/v1/trade-flow/history", params={
             "start_ms": first + 60_000, "end_ms": first + 60_000,
         }).json()

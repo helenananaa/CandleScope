@@ -2034,9 +2034,13 @@ def _read_verified_archive_rollups(
         quiet.update(wanted.difference(bucket.bucket_start_ms for bucket in buckets))
         if ref is None:
             continue
+        # The replay reference binds the requested slice. A finalized minute
+        # instead belongs to the immutable verified day, independent of how it
+        # was paged or whether this temporary engine observed the next minute.
+        day_epoch = f"sha256:{ref.objects[0].source_checksum_sha256}"
         result.extend({
-            **_rollup_row(replace(bucket, is_final=True), source="verified_archive"),
-            "archive_data_epoch": ref.data_epoch,
+            **_rollup_row(replace(bucket, is_final=True, revision=1), source="verified_archive"),
+            "archive_data_epoch": day_epoch,
             "revision_domain": "archive_data_epoch",
         } for bucket in buckets if bucket.bucket_start_ms in wanted)
     return TradeHistoryRead(result, frozenset(quiet))

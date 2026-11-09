@@ -2615,12 +2615,16 @@ class ParquetRawAggTradeArchive:
         repair_ids: tuple[int, int] | None = None,
     ) -> None:
         objects = receipt.get("objects")
-        if not isinstance(objects, list):
+        metadata = receipt.get("metadata")
+        if not isinstance(objects, list) or not isinstance(metadata, Mapping):
             raise RuntimeError("verified raw aggTrade receipt objects are invalid")
         for raw in objects:
             if not isinstance(raw, Mapping):
                 raise RuntimeError("verified raw aggTrade receipt object is invalid")
             item = RawAggTradeObjectManifest.from_dict(raw)
+            if (item.source_quality != "binance_public_checksum"
+                    or item.source_checksum_sha256 != metadata["source_checksum_sha256"]):
+                raise RuntimeError("verified raw aggTrade object does not match the day source")
             if repair_ids is not None and not _overlaps_ids(item, repair_ids):
                 continue
             path = self._resolve_object_path(item.object_id)
