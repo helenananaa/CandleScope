@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import io
+import sys
 from dataclasses import dataclass
 from functools import wraps
 
@@ -1164,6 +1165,83 @@ async def test_repair_consumes_committed_official_days_without_download(
         assert diagnostics["repair_archive_reads_rejected"] == rejected
         assert diagnostics["repair_archive_id_conflicts"] == int(case == "conflict")
     finally:
+        await service.shutdown()
+
+
+@pytest.mark.parametrize("outcome", ["commit", "abort", "timeout", "already-filled"])
+@_async_test
+async def test_live_repair_observes_a_separate_official_day_publisher(tmp_path, monkeypatch, outcome):
+    pytest.importorskip("pyarrow")
+    verified_root = tmp_path / "verified"
+    start = OFFICIAL_START + 100
+    body, filename = _zip_bytes([
+        [str(i), str(100 + i), "1", str(i * 2), str(i * 2 + 1), str(start + i), "false"]
+        for i in range(2, 7)
+    ])
+    archive_file = tmp_path / filename
+    archive_file.write_bytes(body)
+    publisher_script = """
+import hashlib
+import io
+import sys
+from datetime import date
+from pathlib import Path
+import pyarrow.parquet
+from app.data_engine.storage.raw_trade_archive import ParquetRawAggTradeArchive
+from app.replay.trade_import import import_official_date_range, trade_archive_day_acquisition
+
+root, source, day = Path(sys.argv[1]), Path(sys.argv[2]), date.fromisoformat(sys.argv[3])
+identity = dict(exchange="binance", market_type="futures", symbol="BTCUSDT")
+with trade_archive_day_acquisition(ParquetRawAggTradeArchive(root), day=day, **identity) as owns:
+    assert owns
+    print("locked", flush=True)
+    if sys.stdin.readline().strip() == "commit":
+        body = source.read_bytes()
+        checksum = f"{hashlib.sha256(body).hexdigest()}  {source.name}\\n".encode()
+        import_official_date_range(
+            archive_dir=root, start=day, end=day, require_checksum=True, **identity,
+            opener=lambda url, **_: io.BytesIO(checksum if url.endswith(".CHECKSUM") else body),
+        )
+"""
+    publisher = await asyncio.create_subprocess_exec(
+        sys.executable, "-c", publisher_script, str(verified_root), str(archive_file),
+        OFFICIAL_DAY.isoformat(), stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+    )
+    monkeypatch.setattr(
+        "app.data_engine.market_data.trade_flow_service._VERIFIED_REPAIR_WAIT_SECONDS",
+        0.2 if outcome == "timeout" else 3.0,
+    )
+    factory = _Factory()
+    factory.repair_rows = {i: _event(i, trade_time_ms=start + i, source=DataSource.HTTP_BACKFILL)
+                           for i in range(2, 7)}
+    service = _service(factory, tmp_path, verified_archive_root=verified_root)
+    try:
+        assert await asyncio.wait_for(publisher.stdout.readline(), timeout=15) == b"locked\n"
+        await service.ensure_stream(_key(), consumer_id="in-flight-official")
+        await factory.emit(_event(1, trade_time_ms=start + 1))
+        await factory.emit(_event(7, trade_time_ms=start + 7))
+        await _wait_until(lambda: service.diagnostics()["repair_verified_acquisition_waits"] == 1)
+        assert not factory.fetch_calls
+        if outcome in {"commit", "abort"}:
+            publisher.stdin.write(f"{outcome}\n".encode())
+            await publisher.stdin.drain()
+            assert await asyncio.wait_for(publisher.wait(), timeout=10) == 0
+        elif outcome == "already-filled":
+            for i in range(2, 7):
+                await service._adopt_repair_trade(
+                    IDENTITY, NormalizedAggTrade.from_market_event(factory.repair_rows[i]),
+                )
+        await _wait_until(lambda: service.diagnostics()["repairs_succeeded"] == 1, timeout=5)
+        assert service.engine.gap_snapshot(IDENTITY) == ()
+        calls = [(args["from_id"], args["limit"]) for _, args in factory.fetch_calls]
+        assert calls == ([(2, 5)] if outcome in {"abort", "timeout"} else [])
+        diagnostics = service.diagnostics()
+        assert diagnostics["repair_rows_reused_from_verified_archive"] == (5 if outcome == "commit" else 0)
+        assert diagnostics["repair_verified_acquisition_wait_expired"] == int(outcome == "timeout")
+    finally:
+        if publisher.returncode is None:
+            publisher.terminate()
+            await publisher.wait()
         await service.shutdown()
 
 

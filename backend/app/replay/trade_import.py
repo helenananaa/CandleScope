@@ -69,11 +69,8 @@ def trade_archive_day_acquisition(
     from .history_archive import ReplayHistoryArchiveError, _archive_mutation_lock
 
     day_text = day.isoformat()
-    identity = (exchange.strip().lower(), market_type.strip().lower(), symbol.strip().upper(), day_text)
-    # Stable lock inodes must survive waiters. Bound their number without
-    # deleting active locks. A collision only serializes independent days.
-    slot = hashlib.blake2b("\0".join(identity).encode(), digest_size=1).hexdigest()
-    lock_path = archive.root / ".trade-day-locks" / slot
+    identity = (exchange.strip().lower(), market_type.strip().lower(), symbol.strip().upper())
+    lock_path = archive.verified_day_acquisition_lock_path(identity, day_text)
     with ExitStack() as stack:
         try:
             stack.enter_context(_archive_mutation_lock(lock_path, timeout_seconds=180))

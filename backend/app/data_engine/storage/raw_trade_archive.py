@@ -9,6 +9,7 @@ batches, and sends all Parquet I/O to the shared storage executor.
 from __future__ import annotations
 
 import asyncio
+import errno
 import hashlib
 import json
 import os
@@ -1190,6 +1191,40 @@ class ParquetRawAggTradeArchive:
             if not allow_repair:
                 raise
             return False
+
+    def verified_day_acquisition_lock_path(self, identity: tuple[str, str, str], day: str) -> Path:
+        """Use stable, bounded lock slots shared by the day publishers and readers."""
+        slot = hashlib.blake2b("\0".join((*identity, day)).encode(), digest_size=1).hexdigest()
+        return self.root / ".trade-day-locks" / slot
+
+    def verified_day_acquisition_pending(
+        self, identity: tuple[str, str, str], time_bounds: tuple[int, int],
+    ) -> bool:
+        """Observe an existing publisher lock without creating files or waiting on it."""
+        first, last = (bound // 86_400_000 for bound in time_bounds)
+        for day in range(first, last + 1):
+            day_text = datetime.fromtimestamp(day * 86_400, tz=timezone.utc).date().isoformat()
+            path = self.verified_day_acquisition_lock_path(identity, day_text)
+            try:
+                handle = path.open("rb")
+            except FileNotFoundError:
+                continue
+            with handle:
+                try:
+                    if os.name == "nt":
+                        import msvcrt
+
+                        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                    else:
+                        import fcntl
+
+                        fcntl.flock(handle.fileno(), fcntl.LOCK_SH | fcntl.LOCK_NB)
+                except OSError as exc:
+                    if exc.errno in {errno.EACCES, errno.EAGAIN, errno.EWOULDBLOCK}:
+                        return True
+                    raise
+        return False
 
     def list_verified_windows(
         self,

@@ -61,6 +61,8 @@ logger = logging.getLogger("data_engine.market_data.trade_flow")
 
 _UTC_DAY_MS = 86_400_000
 _MAX_ARCHIVE_HISTORY_TRADES_PER_DAY = 50_000
+_VERIFIED_REPAIR_WAIT_SECONDS = 0.75
+_VERIFIED_REPAIR_POLL_SECONDS = 0.05
 
 
 class _IngestionFactory(Protocol):
@@ -282,6 +284,8 @@ class TradeFlowService:
             "repair_rows_fetched": 0,
             "repair_rows_reused_from_archive": 0,
             "repair_rows_reused_from_verified_archive": 0,
+            "repair_verified_acquisition_waits": 0,
+            "repair_verified_acquisition_wait_expired": 0,
             "repair_archive_id_conflicts": 0,
             "repair_archive_reads_rejected": 0,
             "archive_bootstraps_queued": 0,
@@ -1592,14 +1596,18 @@ class TradeFlowService:
             min(gap.left_trade_time_ms, gap.right_trade_time_ms),
             max(gap.left_trade_time_ms, gap.right_trade_time_ms),
         )
+        archive_deadline = asyncio.get_running_loop().time() + _VERIFIED_REPAIR_WAIT_SECONDS
         for start_id, end_id in open_ranges:
             for first in range(start_id, end_id + 1, self._repair_page_size):
                 last = min(first + self._repair_page_size - 1, end_id)
+                page_gap = replace(gap, start_id=first, end_id=last)
                 observed = await self._read_archive_id_page(identity, first, last, time_bounds=time_bounds)
                 local = observed or {}
                 verified_ids = set()
                 if observed is not None:
-                    verified = await self._read_verified_archive_id_page(identity, first, last, time_bounds)
+                    verified = await self._read_verified_archive_id_page(
+                        identity, page_gap, time_bounds, archive_deadline,
+                    )
                     for trade_id, trade in verified.items():
                         prior = local.get(trade_id)
                         if prior is not None and replace(
@@ -1610,19 +1618,23 @@ class TradeFlowService:
                             continue
                         local[trade_id] = trade
                         verified_ids.add(trade_id)
-                for archived, run in groupby(range(first, last + 1), key=local.__contains__):
-                    ids = list(run)
-                    trades = (
-                        [local[trade_id] for trade_id in ids]
-                        if archived else await self._fetch_repair_run(identity, ids)
-                    )
-                    for trade in trades:
-                        await self._adopt_repair_trade(identity, trade)
-                    if archived:
-                        self._metrics["repair_rows_reused_from_archive"] += len(trades)
-                        self._metrics["repair_rows_reused_from_verified_archive"] += len(
-                            verified_ids.intersection(ids),
+                pending = _open_gap_intersections(
+                    self.engine.gap_snapshot(identity), page_gap,
+                )
+                for pending_first, pending_last in pending:
+                    for archived, run in groupby(range(pending_first, pending_last + 1), key=local.__contains__):
+                        ids = list(run)
+                        trades = (
+                            [local[trade_id] for trade_id in ids]
+                            if archived else await self._fetch_repair_run(identity, ids)
                         )
+                        for trade in trades:
+                            await self._adopt_repair_trade(identity, trade)
+                        if archived:
+                            self._metrics["repair_rows_reused_from_archive"] += len(trades)
+                            self._metrics["repair_rows_reused_from_verified_archive"] += len(
+                                verified_ids.intersection(ids),
+                            )
 
         if _range_is_open(self.engine.gap_snapshot(identity), gap):
             raise _RepairError("engine still reports the repaired ID range incomplete")
@@ -1654,15 +1666,32 @@ class TradeFlowService:
             return None
 
     async def _read_verified_archive_id_page(
-        self, identity: StreamIdentity, first: int, last: int, time_bounds: tuple[int, int],
+        self, identity: StreamIdentity, gap: TradeFlowGap, time_bounds: tuple[int, int],
+        deadline: float,
     ) -> dict[int, NormalizedAggTrade]:
         root = self._verified_archive_root
         if (root is None or identity[:2] != ("binance", "futures")
                 or time_bounds[1] // _UTC_DAY_MS - time_bounds[0] // _UTC_DAY_MS > 1):
             return {}
+        first, last = gap.start_id, gap.end_id
         try:
-            page = await run_archive(_read_verified_repair_page, root, identity, first, last, time_bounds)
-            return _validated_repair_archive_page(page, identity, first, last, time_bounds)
+            clock = asyncio.get_running_loop().time
+            waited = False
+            while _range_is_open(self.engine.gap_snapshot(identity), gap):
+                defer_if_busy = clock() < deadline
+                page = await run_archive(
+                    _read_verified_repair_page, root, identity, first, last, time_bounds,
+                    defer_if_busy=defer_if_busy,
+                )
+                if page is not None:
+                    if waited and not defer_if_busy:
+                        self._metrics["repair_verified_acquisition_wait_expired"] += 1
+                    return _validated_repair_archive_page(page, identity, first, last, time_bounds)
+                if not waited:
+                    self._metrics["repair_verified_acquisition_waits"] += 1
+                    waited = True
+                await asyncio.sleep(max(0, min(_VERIFIED_REPAIR_POLL_SECONDS, deadline - clock())))
+            return {}
         except (KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
             self._metrics["repair_archive_reads_rejected"] += 1
             logger.warning("Could not reuse verified aggTrade archive for %s %s-%s: %s", identity, first, last, exc)
@@ -1926,10 +1955,14 @@ def _is_complete_rollup(row: dict[str, Any]) -> bool:
 
 def _read_verified_repair_page(
     root: Path, identity: StreamIdentity, first: int, last: int, time_bounds: tuple[int, int],
-) -> RawAggTradePage:
+    *, defer_if_busy: bool,
+) -> RawAggTradePage | None:
     if not root.is_dir():
         return RawAggTradePage((), None, True, None)
-    return ParquetRawAggTradeArchive(root, read_only=True).read_verified_repair_page(
+    archive = ParquetRawAggTradeArchive(root, read_only=True)
+    if defer_if_busy and archive.verified_day_acquisition_pending(identity, time_bounds):
+        return None
+    return archive.read_verified_repair_page(
         exchange=identity[0], market_type=identity[1], symbol=identity[2],
         start_agg_trade_id=first, end_agg_trade_id=last, time_bounds=time_bounds,
     )
