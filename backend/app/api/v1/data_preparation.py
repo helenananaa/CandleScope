@@ -438,11 +438,14 @@ async def _prepare_trade_flow_history(request: Request, payload: TradeFlowHistor
     scope["symbol"] = payload.symbol.upper()
     key = "trade-flow-history-" + fingerprint(payload.idempotency_key)
     projection_unverified = "trade_archive_projection_unverified"
+    integrity_unverified = "trade_archive_integrity_unverified"
 
     def result(job, unavailable):
         status = "local"
         if job is not None:
             status = "preparation"
+        elif any(item["reason"] == integrity_unverified for item in unavailable):
+            status = "integrity_unverified"
         elif any(item["reason"] == projection_unverified for item in unavailable):
             status = "projection_unverified"
         elif unavailable:
@@ -518,7 +521,7 @@ async def _prepare_trade_flow_history(request: Request, payload: TradeFlowHistor
         try:
             committed = await run_archive(archive.has_verified_day, **identity, day=date)
         except (OSError, RuntimeError, ValueError):
-            add_unavailable(ranges, projection_unverified)
+            add_unavailable(ranges, integrity_unverified)
             continue
         if committed:
             # The verified inventory and the bounded minute projection prove

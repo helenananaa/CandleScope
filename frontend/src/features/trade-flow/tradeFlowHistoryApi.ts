@@ -22,7 +22,7 @@ export interface TradeHistoryPage {
 }
 
 interface TradeHistoryPreparation {
-  status: "preparation" | "unavailable" | "local" | "projection_unverified";
+  status: "preparation" | "unavailable" | "local" | "projection_unverified" | "integrity_unverified";
   job: PreparationJob | null;
   unavailable_ranges?: Array<{ reason: string; retry_at_ms?: number }>;
 }
@@ -55,7 +55,7 @@ export async function fillTradeHistory(
   idempotencyKey: string,
   onProgress: (job: PreparationJob) => void,
   signal: AbortSignal,
-): Promise<"unavailable" | "readback"> {
+): Promise<"unavailable" | "readback" | "integrity_unverified"> {
   const initial = await preparationRequest<TradeHistoryPreparation>("/trade-flow-history", {
     method: "POST", signal, headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...scope(identity, startMs), idempotency_key: idempotencyKey }),
@@ -72,5 +72,8 @@ export async function fillTradeHistory(
     job = await preparationRequest<PreparationJob>(`/${job.id}/retry`, { method: "POST", signal });
   }
   if (job) await waitForPreparation(job, onProgress, signal);
-  return "readback";
+  const integrityUnverified = initial.status === "integrity_unverified" || initial.unavailable_ranges?.some(
+    (range) => range.reason === "trade_archive_integrity_unverified",
+  );
+  return integrityUnverified ? "integrity_unverified" : "readback";
 }

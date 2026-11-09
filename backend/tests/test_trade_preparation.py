@@ -480,6 +480,32 @@ async def test_trade_flow_history_preparation_reuses_the_official_day(tmp_path, 
             no_job = await client.post(path, json={**request, **quiet, "idempotency_key": "verified-quiet"})
             assert no_job.json()["status"] == "local" and no_job.json()["job"] is None and len(calls) == 2
 
+            identity = {"exchange": "binance", "market_type": "futures", "symbol": "BTCUSDT"}
+            ref = archive.freeze_dataset(**identity, start_time_ms=START_MS, end_time_ms=START_MS + 59_999)
+            obj = archive.root / ref.objects[0].object_id
+            parked = obj.with_suffix(".parked")
+            obj.rename(parked)
+            try:
+                missing = await client.post(path, json={**request, "idempotency_key": "missing-object"})
+                assert missing.status_code == 202
+                assert missing.json()["status"] == "integrity_unverified" and missing.json()["job"] is None
+                assert missing.json()["unavailable_ranges"] == [{
+                    "start_ms": START_MS, "end_ms": START_MS, "reason": "trade_archive_integrity_unverified",
+                }]
+                missing_page = (await client.get(
+                    "/api/v1/trade-flow/history", params={"start_ms": START_MS, "end_ms": START_MS},
+                )).json()
+                assert not missing_page["complete"] and missing_page["data"] == []
+                with pytest.raises(RuntimeError, match="dataset object is missing"):
+                    archive.validate_dataset(ref)
+                assert len(calls) == 2 and not obj.exists()
+            finally:
+                parked.rename(obj)
+            archive.validate_dataset(ref)
+            restored = await client.post(path, json={**request, "idempotency_key": "restored-object"})
+            assert restored.json()["status"] == "local" and restored.json()["job"] is None
+            assert len(calls) == 2
+
             # The retained archive can be present and intact while a bounded
             # projection cannot establish minute coverage.
             from app.data_engine.market_data import trade_flow_service

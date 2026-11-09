@@ -56,7 +56,11 @@ function TradeHistoryHour({ identity, startMs, canDownload }: {
           setArchiveOutcome("trade.history.unpublished");
           return;
         }
-        setArchiveOutcome("trade.history.archiveChecked");
+        if (outcome === "integrity_unverified") {
+          setNotice("trade.history.archiveIntegrityUnverified");
+        } else {
+          setArchiveOutcome("trade.history.archiveChecked");
+        }
         setBusy("reading");
         setJob(null);
       }

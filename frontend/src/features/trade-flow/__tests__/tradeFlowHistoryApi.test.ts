@@ -71,6 +71,17 @@ test("a retained archive without verified minute coverage requests a local readb
   assert.equal(fetch.mock.callCount(), 1);
 });
 
+test("an unverifiable local archive is distinct from an unpublished archive", async (context) => {
+  const fetch = context.mock.method(globalThis, "fetch", async () => Response.json({
+    status: "integrity_unverified", job: null,
+    unavailable_ranges: [{ reason: "trade_archive_integrity_unverified" }],
+  }, { status: 202 }));
+  const result = await fillTradeHistory(identity, start, "integrity-check", () => assert.fail("No job expected"),
+    new AbortController().signal);
+  assert.equal(result, "integrity_unverified");
+  assert.equal(fetch.mock.callCount(), 1);
+});
+
 test("a recently missing official object preserves its retry time and schedules no requests", async (context) => {
   const retryAt = Date.now() + 15 * 60_000;
   const fetch = context.mock.method(globalThis, "fetch", async () => Response.json({
