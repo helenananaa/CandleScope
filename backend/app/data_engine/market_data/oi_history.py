@@ -1,4 +1,4 @@
-"""Inclusive acquisition ranges and native Binance OI sampling evidence."""
+"""Inclusive acquisition ranges for qualified open-interest sample grids."""
 
 
 def merge_ranges(ranges):

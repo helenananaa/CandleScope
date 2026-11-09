@@ -167,6 +167,7 @@ def test_gate_open_interest_uses_second_bounds_with_pinned_ccxt(monkeypatch: Any
             {"time": start_s - 300, "open_interest": "10", "open_interest_usd": "20"},
             {"time": start_s, "open_interest": "11", "open_interest_usd": "22"},
             {"time": end_s, "open_interest": "12", "open_interest_usd": "24"},
+            {"time": end_s + 300, "open_interest": "13", "open_interest_usd": "26"},
         ]
 
     monkeypatch.setattr(exchange, "load_markets", load_markets)
@@ -205,7 +206,7 @@ def test_gate_open_interest_uses_second_bounds_with_pinned_ccxt(monkeypatch: Any
     rows = asyncio.run(run())
     assert calls == [{
         "contract": "BTC_USDT", "settle": "usdt", "interval": "5m",
-        "limit": 30, "from": start_s, "to": end_s,
+        "limit": 8, "from": start_s, "to": end_s,
     }]
     normalizer = plugin.normalizer(config, descriptor)
     parsed = [normalizer.parse(row) for row in rows]

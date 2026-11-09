@@ -87,6 +87,48 @@ async def test_complete_grid_reuses_persisted_receipt_after_restart(tmp_path, mo
     await service.shutdown()
 
 
+@pytest.mark.parametrize(("market_type", "symbol"), [
+    ("swap.linear", "BTC/USDT:USDT"),
+    ("swap.inverse", "BTC/USD:BTC"),
+])
+@async_test
+async def test_gate_five_minute_history_retries_only_the_unproven_sample(tmp_path, monkeypatch, market_type, symbol):
+    repo, transport, service = make_service(tmp_path, monkeypatch)
+    key = MarketStreamKey.build("gate", market_type, symbol, MarketChannel.OPEN_INTEREST)
+    bounds = dict(period="5m", start_ms=START, end_ms=START + 5 * STEP)
+    missing = START + 2 * STEP
+    transport.points.remove(missing)
+    repo.upsert_open_interest([dict(
+        exchange="gate", market_type=market_type, symbol=symbol, period="5m",
+        event_time_ms=missing, open_interest=100, is_final=True, received_at_ms=NOW,
+        source="http_backfill",
+    )])
+    first = await service.history_page(key, mode="fill_missing", **bounds)
+    assert first.coverage_basis == "gate_oi_sample_grid_v1"
+    assert not first.complete and first.retryable
+    assert first.missing_ranges == ({"start_ms": missing, "end_ms": missing + STEP - 1},)
+    assert len(transport.calls) == 1
+
+    await service.shutdown()
+    service = MarketDataService(transport, metrics_repository=MarketMetricsRepository(repo.db_path))
+    local = await service.history_page(key, mode="local_only", **bounds)
+    assert local.covered_ranges == first.covered_ranges and local.missing_ranges == first.missing_ranges
+    assert len(transport.calls) == 1
+
+    transport.points.append(missing)
+    filled = await service.history_page(key, mode="fill_missing", **bounds)
+    assert filled.complete and filled.missing_ranges == ()
+    assert len(transport.calls) == 2
+    assert (transport.calls[-1]["start_ms"], transport.calls[-1]["end_ms"]) == (missing, missing + STEP - 1)
+    assert next(event.data["open_interest"] for event in filled.events if event.event_time_ms == missing) == 200
+    assert (await service.history_page(key, mode="fill_missing", **bounds)).complete
+    assert len(transport.calls) == 2
+
+    unqualified = await service.history_page(key, mode="local_only", **(bounds | {"period": "15m"}))
+    assert unqualified.coverage_basis == "observations_only" and not unqualified.covered_ranges
+    await service.shutdown()
+
+
 @async_test
 async def test_verified_local_samples_survive_a_fetch_availability_revision_change(tmp_path, monkeypatch):
     repo, transport, service = make_service(tmp_path, monkeypatch)

@@ -70,6 +70,11 @@ _HISTORY_STREAM_TYPES = {
 }
 _DEFAULT_OPEN_INTEREST_STORAGE_PERIOD = "5m"
 _BINANCE_OI_COVERAGE_REVISION = "binance-oi-grid-v2"
+_GATE_OI_COVERAGE_REVISION = "gate-oi-grid-v1"
+_OI_COVERAGE_BASES = {
+    _BINANCE_OI_COVERAGE_REVISION: "native_binance_oi_sample_grid_v2",
+    _GATE_OI_COVERAGE_REVISION: "gate_oi_sample_grid_v1",
+}
 _DEFAULT_OPEN_INTEREST_STORAGE_BUCKET_MS = 5 * 60 * 1000
 _HISTORY_RETENTION_SAFETY_MS = 60 * 1000
 _PREMIUM_INDEX_INTERVAL = "1m"
@@ -529,21 +534,23 @@ class MarketDataService:
                 event_key, start_ms=start_ms, end_ms=end_ms, limit=limit,
                 mode=mode or "fill_missing", plan=refresh_plan,
             )
-        native_oi = (
-            key.channel == MarketChannel.OPEN_INTEREST
-            and native_bounded
-        )
-        if native_oi:
-            assert start_ms is not None and end_ms is not None
-            step_ms = parse_interval_ms(period or "")
-            assert step_ms is not None
-            return await self._shared_oi_history(
-                event_key, descriptor, period=period or "", step_ms=step_ms,
-                start_ms=start_ms, end_ms=end_ms, limit=limit,
-                mode=mode or "fill_missing", plan=refresh_plan,
-            )
+        if (key.channel == MarketChannel.OPEN_INTEREST and period is not None
+                and start_ms is not None and end_ms is not None and self._metrics_repository is not None):
+            revision = None
+            if native_bounded:
+                revision = _BINANCE_OI_COVERAGE_REVISION
+            elif key.exchange == "gate" and key.market_type in {"swap.linear", "swap.inverse"} and period == "5m":
+                revision = _GATE_OI_COVERAGE_REVISION
+            if revision is not None:
+                step_ms = parse_interval_ms(period)
+                assert step_ms is not None
+                return await self._shared_oi_history(
+                    event_key, descriptor, period=period, step_ms=step_ms,
+                    start_ms=start_ms, end_ms=end_ms, limit=limit,
+                    mode=mode or "fill_missing", plan=refresh_plan, revision=revision,
+                )
         if mode == "fill_missing" and not hybrid_funding:
-            raise ValueError("fill_missing requires bounded native Binance futures funding or OI history")
+            raise ValueError("fill_missing requires bounded history with a verified funding or OI policy")
         capability = capabilities.channel_capability(key.channel, key.market_type)
         policy = capability.history_policy if capability else None
         if policy and policy.empty_page_semantics is HistoryEmptyPageSemantics.INCONCLUSIVE:
@@ -818,7 +825,7 @@ class MarketDataService:
         )
 
     async def _shared_oi_history(
-        self, key, descriptor, *, period, step_ms, start_ms, end_ms, limit, mode, plan,
+        self, key, descriptor, *, period, step_ms, start_ms, end_ms, limit, mode, plan, revision,
     ) -> MarketHistoryPage:
         identity = (key.exchange, key.market_type, key.symbol, period)
         request_id = (identity, start_ms, end_ms, limit, mode, plan.availability_revision)
@@ -830,7 +837,7 @@ class MarketDataService:
             self._ensure_open()
             task = asyncio.create_task(self._oi_history_page(
                 key, descriptor, identity=identity, period=period, step_ms=step_ms,
-                start_ms=start_ms, end_ms=end_ms, limit=limit, mode=mode, plan=plan,
+                start_ms=start_ms, end_ms=end_ms, limit=limit, mode=mode, plan=plan, revision=revision,
             ), name="market-oi-history")
             self._history_tasks[request_id] = task
             self._history_jobs.add(task)
@@ -859,9 +866,9 @@ class MarketDataService:
 
     async def _oi_history_page(
         self, key, descriptor, *, identity, period, step_ms,
-        start_ms, end_ms, limit, mode, plan,
+        start_ms, end_ms, limit, mode, plan, revision,
     ) -> MarketHistoryPage:
-        # Binance USD-M OI is period-sampled. Off-grid observations can be
+        # Qualified OI sources are period-sampled. Off-grid observations can be
         # retained, but only committed on-grid samples prove expected coverage.
         async with self._history_identity_locks.hold(identity):
             self._ensure_open()
@@ -872,7 +879,6 @@ class MarketDataService:
             window_start = max(start_ms, end_ms - 86_400_000 + 1)
             # The fetch boundary is a separate contract. A change in its
             # availability revision cannot unprove an acquired local sample.
-            revision = _BINANCE_OI_COVERAGE_REVISION
             common = dict(exchange=key.exchange, market_type=key.market_type,
                           symbol=key.symbol, period=period)
 
@@ -990,7 +996,7 @@ class MarketDataService:
                 terminal_reason=plan.terminal_reason,
                 earliest_available_ms=plan.earliest_available_ms,
                 availability_revision=plan.availability_revision, query_mode=mode,
-                coverage_basis="native_binance_oi_sample_grid_v2",
+                coverage_basis=_OI_COVERAGE_BASES[revision],
                 revalidate_after_ms=revalidate_after_ms,
             )
 

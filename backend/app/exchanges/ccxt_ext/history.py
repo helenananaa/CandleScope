@@ -260,6 +260,12 @@ async def fetch_unified_history(
                             params["to"] = req.end_ms // 1000
                         if "from" in params and "to" in params and params["from"] > params["to"]:
                             return []
+                        if descriptor.interval == "5m" and "from" in params and "to" in params:
+                            # Gate may return an extra earlier sample. Bound
+                            # the physical page to this range's 5m grid.
+                            count = params["to"] // 300 - (params["from"] + 299) // 300 + 1
+                            limit = min(limit, max(1, count))
+                            request_limit = limit
                         if params:
                             options["params"] = params
                     values = await exchange.fetch_open_interest_history(
@@ -269,6 +275,11 @@ async def fetch_unified_history(
                         limit=limit,
                         **options,
                     )
+                    if context.entry.exchange_id == "gate" and req.end_ms is not None:
+                        values = [
+                            value for value in values
+                            if (stamp := value.get("timestamp")) is not None and stamp <= req.end_ms
+                        ]
             else:
                 values = [await exchange.fetch_open_interest(symbol)]
             rows = [
