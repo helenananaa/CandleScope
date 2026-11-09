@@ -134,7 +134,12 @@ class AggregatorBridge:
                 payload['history_prefix_revisions'] = [
                     [revision.series.interval, revision.version]
                     for revision in bar_state._history_prefix.summary.revisions]
-            if bar_state.acquisition_revision is not None:
+            if bar_state.canonical_recovery_delete_floor is not None:
+                # Older writers still see the original permission floor and
+                # reject a recovered close they cannot verify.
+                payload["acquisition_revision"] = bar_state.canonical_recovery_delete_floor
+                payload["canonical_recovery_revision"] = bar_state.acquisition_revision
+            elif bar_state.acquisition_revision is not None:
                 payload["acquisition_revision"] = bar_state.acquisition_revision
             return await self.delivery.submit(event.delivery_id, payload, key)
 

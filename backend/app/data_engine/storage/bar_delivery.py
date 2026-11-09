@@ -12,7 +12,10 @@ from contextlib import closing
 from app.data_engine.bar_delivery_errors import BarDeliveryUnavailable
 from app.data_engine.interval_policy import IntervalAlignment, parse_interval_spec
 from app.data_engine.series_identity import KlineSeriesIdentity
+from .derived_history_fence import check_deletions
 from .revisions import (
+    Acquisition,
+    StaleAcquisition,
     IDENTITY_COLUMNS,
     block_change_receipts,
     current_revision,
@@ -162,6 +165,22 @@ class BarDeliveryJournal:
             prefix_revisions = payload.get('history_prefix_revisions', ())
             if len(prefix_revisions) > 32:
                 raise ValueError('history prefix requires bounded source revisions')
+            observed_revision = record["observed_revision"]
+            recovery_revision = payload.get("canonical_recovery_revision")
+            if recovery_revision is not None:
+                try:
+                    if (len(prefix_revisions) != 1 or type(recovery_revision) is not int
+                            or not observed_revision <= recovery_revision <= current_revision(conn)):
+                        raise StaleAcquisition("invalid canonical recovery revision")
+                    check_deletions(conn, Acquisition(observed_revision), values, *(
+                        series_values(payload["symbol"], interval, payload["exchange"], payload["market_type"], identity)
+                        for interval, _ in prefix_revisions
+                    ))
+                except StaleAcquisition:
+                    conn.execute("UPDATE bar_delivery SET phase='rejected',recovery_required=1 WHERE event_id=?", (event_id,))
+                    record["phase"], record["recovery_required"] = "rejected", 1
+                    return self._canonical(conn, record)
+                observed_revision = recovery_revision
             for source_interval, acquired_revision in prefix_revisions:
                 source_values = series_values(payload['symbol'], source_interval,
                     payload['exchange'], payload['market_type'], identity)
@@ -181,7 +200,6 @@ class BarDeliveryJournal:
             else:
                 change = series_change(conn, values)
                 changes = [change] if change is not None else []
-            observed_revision = record["observed_revision"]
             start = payload["storage_row"]["open_time"]
             end = payload["storage_row"].get("close_time")
             valid_window = end is not None and end >= start

@@ -1036,6 +1036,14 @@ class BarAggregator:
                 await self._publisher.emit_amended(state)
         check_target()
 
+        runtime = self.history_prefix_runtime
+        if (emit_events and runtime is not None and bar_input.merge_mode == MergeMode.COMPONENT
+                and bar_input.extra.get("bybit_close_confirmed") is True):
+            state = await runtime.complete_repaired_bucket(pipeline, state, bar_input)
+            if state is None:
+                return
+            check_target()
+
         # L4: Check if this bar should be finalized
         is_backfill = bar_input.source == BarInputSource.BACKFILL
         trigger = FinalizeTrigger(

@@ -210,6 +210,54 @@ class HistoryPrefixRuntime:
         finally:
             self.seeding.discard(key)
 
+    async def complete_repaired_bucket(self, pipeline, state, incoming):
+        """Replace a missed Bybit prefix only with the entire canonical close."""
+        if (state.status != BarStatus.FORMING or state._history_prefix is not None
+                or type(state.acquisition_revision) is not int or incoming.source_interval != "5m"
+                or incoming.close_time_ms + 1 != state.bucket_end_ms
+                or has_complete_closed_component_coverage(state)):
+            return state
+        target = parse_interval_spec(state.interval)
+        if (target is None or target.alignment is not IntervalAlignment.FIXED_EPOCH
+                or target.phase_ms != 0 or not 300_000 < target.nominal_ms <= 64 * 300_000):
+            return state
+
+        from app.data_engine.data_manager.models import SeriesKey
+
+        source = SeriesKey.create(state.symbol, incoming.source_interval, exchange=state.exchange,
+                                  market_type=state.market_type, identity=state.identity)
+        token = self.aggregator.history_target_token(source, state.interval)
+        if (self.closing or token is None or token[0] in self.targets
+                or len(self.targets) >= self.MAX_TARGETS):
+            return state
+        key = (state.exchange, state.market_type, state.symbol, state.bucket_start_ms)
+        try:
+            async with self._task(), self.reader.stage(source, state.bucket_start_ms, state.bucket_end_ms) as prefix:
+                if (self.closing or self.aggregator.history_target_token(source, state.interval) != token
+                        or pipeline.bar_state.get_state(*key) is not state or state.status != BarStatus.FORMING):
+                    return None
+                if token[0] in self.targets or len(self.targets) >= self.MAX_TARGETS:
+                    return state
+                slot = _Target(source, token)
+                floor = state.acquisition_revision
+                with self.reader.memory_budget.reserve("realtime-state", 1024) as lease:
+                    lease.retain(1024, lambda: self.targets.__setitem__(token[0], slot))
+                try:
+                    self._adopt(slot, prefix)
+                except BaseException:
+                    self.detach(token[0])
+                    raise
+                adopted = pipeline.bar_state.get_state(*key)
+                adopted.canonical_recovery_delete_floor = floor
+                return adopted
+        except (ValueError, BlockUnavailable, BlockRevisionChanged, MemoryBudgetExceeded,
+                BarDeliveryUnavailable, ExecutorBusyError):
+            # Incomplete or stale storage cannot turn a preview into a close.
+            if (self.aggregator.history_target_token(source, state.interval) != token
+                    or pipeline.bar_state.get_state(*key) is not state or state.status != BarStatus.FORMING):
+                return None
+            return state
+
     @asynccontextmanager
     async def forming_input_scope(self, event):
         kind = getattr(event, "event_type", None)

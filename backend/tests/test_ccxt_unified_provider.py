@@ -1622,3 +1622,74 @@ def test_global_registry_contains_every_pinned_id() -> None:
     assert {"bybit", "kraken", "bitget", "gate"}.issubset(ids)
     assert len(ids) == 106
     assert "twelvedata" in ids
+
+
+@pytest.mark.parametrize("repair", ["complete", "incomplete", "target_deleted", "source_changed"])
+def test_bybit_mid_bucket_repair_joins_the_live_close(tmp_path, monkeypatch, repair):
+    from app.data_engine.bar_aggregator import aggregator as aggregator_module
+    from app.data_engine.data_manager.manager import DataManager
+    from app.data_engine.data_manager.models import BarData
+    from app.data_engine.ingestion.models import MarketEvent
+    from app.data_engine.storage import klines_repo
+
+    key = dict(exchange="bybit", market_type="swap.linear", symbol="BTCUSDT")
+    start, step = 1_794_138_000_000, 300_000
+    boundary = start + 4 * step
+    now = boundary - 1000
+    monkeypatch.setattr(aggregator_module, "time", SimpleNamespace(time=lambda: now / 1000))
+    monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", tmp_path / "cold-repair.sqlite")
+    klines_repo.init_klines_storage()
+
+    def row(opened, price):
+        return dict(open_time=opened, close_time=opened + step - 1, open=price, high=price + 1,
+                    low=price - 1, close=price, volume=price, quote_volume=None, trades=None,
+                    taker_buy_base=None, taker_buy_quote=None)
+
+    async def run():
+        nonlocal now
+        manager = DataManager()
+        storage = klines_repo.KlinesRepoAdapter()
+        manager.set_storage(storage)
+        manager._started = True
+        try:
+            for interval in ("5m", "20m"):
+                manager.bar_aggregator.add_target(interval=interval, **key)
+            final = row(boundary - step, 4)
+            if repair == "source_changed":
+                publisher = manager.bar_aggregator.publisher
+                original_emit = publisher.emit_closed
+
+                async def amend_before_commit(bar):
+                    if bar.interval == "20m":
+                        klines_repo.upsert_klines(interval="5m", rows=[row(start, 7)], source="backfill", **key)
+                    return await original_emit(bar)
+
+                monkeypatch.setattr(publisher, "emit_closed", amend_before_commit)
+            for closed in (False, True):
+                if closed:
+                    repaired = [row(start + i * step, i + 1) for i in range(2 if repair == "incomplete" else 3)]
+                    klines_repo.upsert_klines(interval="5m", rows=repaired, source="backfill", **key)
+                    await manager.on_bars_backfilled(interval="5m",
+                        bars=[BarData.from_storage_row({**bar, "source": "backfill"}) for bar in repaired],
+                        **key)
+                    if repair == "target_deleted":
+                        storage.delete_bars(interval="20m", start_ms=start, end_ms=start, **key)
+                    now = boundary
+                values = {**final, "interval": "5m", "is_closed": closed, "bybit_close_confirmed": closed,
+                          "quote_volume": 0}
+                await manager.bar_aggregator.on_market_event(MarketEvent(
+                    StreamType.KLINE, key["symbol"], key["exchange"], final["open_time"], now,
+                    DataSource.PLUGIN, data=values, market_type=key["market_type"],
+                ))
+            await manager.aggregator_bridge.delivery.flush()
+            rows = klines_repo.query_klines(interval="20m", **key)
+            if repair == "complete":
+                [saved] = rows
+                assert (saved["open_time"], saved["open"], saved["close"], saved["volume"]) == (start, 1, 4, 10)
+                assert saved["source"] == "data_manager_composite_closed"
+            else:
+                assert rows == []
+        finally:
+            await manager.shutdown()
+
+    asyncio.run(run())
