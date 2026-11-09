@@ -214,11 +214,25 @@ async def fetch_unified_history(
             if (
                 req.history or req.start_ms is not None or req.end_ms is not None
             ) and context.entry.supports("fetchOpenInterestHistory"):
+                options = {}
+                if context.entry.exchange_id == "gate":
+                    # Keep CCXT's unified since filter in milliseconds.
+                    # Gate's contract statistics query takes Unix seconds.
+                    params = {}
+                    if req.start_ms is not None:
+                        params["from"] = (req.start_ms + 999) // 1000
+                    if req.end_ms is not None:
+                        params["to"] = req.end_ms // 1000
+                    if "from" in params and "to" in params and params["from"] > params["to"]:
+                        return []
+                    if params:
+                        options["params"] = params
                 values = await exchange.fetch_open_interest_history(
                     symbol,
                     timeframe=descriptor.interval,
                     since=req.start_ms,
                     limit=max(1, int(req.limit or 1)),
+                    **options,
                 )
             else:
                 values = [await exchange.fetch_open_interest(symbol)]

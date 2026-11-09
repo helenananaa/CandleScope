@@ -434,11 +434,18 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
                 )
             )
 
+    metric_market_types = contract_market_types
+    if entry.exchange_id == "gate":
+        # The pinned OI and funding methods reject delivery contracts.
+        metric_market_types = tuple(
+            market_type for market_type in contract_market_types
+            if market_selection_parts(market_type)[0] == "swap"
+        )
     fetch_funding = entry.supports("fetchFundingRate")
     fetch_funding_history = entry.supports("fetchFundingRateHistory")
     watch_funding = entry.supports("watchFundingRate") and entry.pro
     funding_realtime = watch_funding or fetch_funding
-    if contract_market_types and (funding_realtime or fetch_funding_history):
+    if metric_market_types and (funding_realtime or fetch_funding_history):
         transports: list[TransportMode] = []
         if watch_funding:
             transports.append(TransportMode.PLUGIN_STREAM)
@@ -447,7 +454,7 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
         channels.append(
             MarketChannelCapability(
                 channel=MarketChannel.FUNDING_RATE,
-                market_types=contract_market_types,
+                market_types=metric_market_types,
                 realtime=funding_realtime,
                 history=fetch_funding_history,
                 realtime_transports=tuple(transports),
@@ -481,13 +488,13 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
 
     fetch_open_interest = entry.supports("fetchOpenInterest")
     fetch_open_interest_history = entry.supports("fetchOpenInterestHistory")
-    if contract_market_types and (
+    if metric_market_types and (
         fetch_open_interest or fetch_open_interest_history
     ):
         channels.append(
             MarketChannelCapability(
                 channel=MarketChannel.OPEN_INTEREST,
-                market_types=contract_market_types,
+                market_types=metric_market_types,
                 realtime=fetch_open_interest,
                 history=fetch_open_interest_history,
                 realtime_transports=(

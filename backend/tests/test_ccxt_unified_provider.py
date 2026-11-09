@@ -135,6 +135,85 @@ def test_catalog_routes_market_families_and_capabilities_fail_closed() -> None:
     assert capabilities.channel_capability(MarketChannel.FULL_DEPTH, "spot") is None
 
 
+def test_gate_metric_history_is_advertised_for_perpetuals_only() -> None:
+    caps = CcxtUnifiedPlugin(get_ccxt_catalog_entry("gate")).capabilities()
+    for channel in (MarketChannel.OPEN_INTEREST, MarketChannel.FUNDING_RATE):
+        for swap in ("swap.linear", "swap.inverse"):
+            capability = caps.channel_capability(channel, swap)
+            assert capability is not None and capability.history
+        for delivery in ("future.linear", "future.inverse"):
+            assert caps.channel_capability(channel, delivery) is None
+
+
+def test_gate_open_interest_uses_second_bounds_with_pinned_ccxt(monkeypatch: Any) -> None:
+    from ccxt.async_support import gate
+
+    start_s, end_s = 1_794_200_700, 1_794_202_800
+    symbol = "BTC/USDT:USDT"
+    exchange = gate()
+    market = {
+        "id": "BTC_USDT", "symbol": symbol, "swap": True, "linear": True,
+        "settleId": "usdt",
+    }
+    exchange.markets = {symbol: market}
+    calls = []
+
+    async def load_markets():
+        return exchange.markets
+
+    async def fetch_stats(params):
+        calls.append(params)
+        return [
+            {"time": start_s - 300, "open_interest": "10", "open_interest_usd": "20"},
+            {"time": start_s, "open_interest": "11", "open_interest_usd": "22"},
+            {"time": end_s, "open_interest": "12", "open_interest_usd": "24"},
+        ]
+
+    monkeypatch.setattr(exchange, "load_markets", load_markets)
+    monkeypatch.setattr(exchange, "publicFuturesGetSettleContractStats", fetch_stats)
+    monkeypatch.setattr(
+        "app.exchanges.ccxt_ext.generic._create_exchange", lambda *_args, **_kwargs: exchange,
+    )
+    config = IngestionConfig(proxy_mode="none")
+    plugin = CcxtUnifiedPlugin(get_ccxt_catalog_entry("gate"))
+    descriptor = StreamDescriptor(
+        "BTC_USDT", StreamType.OPEN_INTEREST, interval="5m", exchange="gate",
+        market_type="swap.linear",
+    )
+
+    async def run():
+        try:
+            rows = await plugin.fetch_history_with_config(
+                TransportRequest(
+                    descriptor, limit=30, start_ms=start_s * 1000 - 1,
+                    end_ms=end_s * 1000 + 999, history=True,
+                ),
+                config,
+            )
+            empty = await plugin.fetch_history_with_config(
+                TransportRequest(
+                    descriptor, limit=30, start_ms=start_s * 1000 + 1,
+                    end_ms=start_s * 1000 + 999, history=True,
+                ),
+                config,
+            )
+            assert empty == []
+            return rows
+        finally:
+            await plugin.close_history_transport(config)
+
+    rows = asyncio.run(run())
+    assert calls == [{
+        "contract": "BTC_USDT", "settle": "usdt", "interval": "5m",
+        "limit": 30, "from": start_s, "to": end_s,
+    }]
+    normalizer = plugin.normalizer(config, descriptor)
+    parsed = [normalizer.parse(row) for row in rows]
+    assert [event.event_time_ms for event in parsed] == [start_s * 1000, end_s * 1000]
+    assert [event.data["open_interest"] for event in parsed] == [11, 12]
+    assert [event.data["open_interest_value"] for event in parsed] == [22, 24]
+
+
 def test_generic_provider_flag_controls_websocket_routing() -> None:
     descriptor = _descriptor(StreamType.TRADE)
 
