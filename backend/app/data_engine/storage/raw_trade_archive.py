@@ -2131,7 +2131,6 @@ class ParquetRawAggTradeArchive:
         reject_id_conflicts: bool = False,
     ) -> RawAggTradePage:
         page_limit = max(1, min(int(limit), 1_000_000))
-        bounded_limit = page_limit + 1
         if after is not None and not isinstance(after, RawAggTradeCursor):
             raise TypeError("after must be RawAggTradeCursor or None")
         bounds = self._normalize_scan_bounds(
@@ -2188,6 +2187,41 @@ class ParquetRawAggTradeArchive:
                 )
             ]
             data_epoch = dataset_ref.data_epoch
+        return self._scan_manifests(
+            manifests, bounds, after, page_limit,
+            filter_arrow=dataset_ref is not None,
+            reject_id_conflicts=dataset_ref is not None or reject_id_conflicts,
+            data_epoch=data_epoch,
+        )
+
+    def read_verified_repair_page(
+        self, *, exchange: str, market_type: str, symbol: str,
+        start_agg_trade_id: int, end_agg_trade_id: int, time_bounds: tuple[int, int],
+    ) -> RawAggTradePage:
+        """Read bounded repair candidates from committed, checksum-verified days."""
+        start_ms, end_ms, first, last = self._normalize_scan_bounds(
+            start_time_ms=time_bounds[0], end_time_ms=time_bounds[1],
+            start_agg_trade_id=start_agg_trade_id, end_agg_trade_id=end_agg_trade_id,
+        )
+        assert start_ms is not None and end_ms is not None and first is not None and last is not None
+        if last - first >= 1000 or end_ms // 86_400_000 - start_ms // 86_400_000 > 1:
+            raise ValueError("verified repair requires at most 1,000 IDs across two UTC days")
+        manifests = self._discover_verified_manifests(
+            exchange=_identity(exchange, "exchange", lower=True),
+            market_type=_identity(market_type, "market type", lower=True),
+            symbol=_identity(symbol, "symbol", upper=True),
+            start_time_ms=start_ms, end_time_ms=end_ms, repair_ids=(first, last),
+        )
+        # Use time to select days only. A matching ID outside the bracket must
+        # reach the repair owner so it can reject it instead of hiding it.
+        return self._scan_manifests(
+            manifests, (None, None, first, last), None, last - first + 1,
+            filter_arrow=True, reject_id_conflicts=True, data_epoch=None,
+        )
+
+    def _scan_manifests(self, manifests, bounds, after, page_limit, *,
+                        filter_arrow, reject_id_conflicts, data_epoch):
+        bounded_limit = page_limit + 1
         if len(manifests) > self.max_scan_files:
             self._record_scan_limit_rejection()
             raise RawAggTradeScanLimitError(
@@ -2196,7 +2230,7 @@ class ParquetRawAggTradeArchive:
             )
         estimated_physical_rows = sum(item.row_count for item in manifests)
         if (
-            dataset_ref is None
+            data_epoch is None
             and estimated_physical_rows > self.max_physical_scan_rows
         ):
             self._record_scan_limit_rejection()
@@ -2236,7 +2270,7 @@ class ParquetRawAggTradeArchive:
                         "time/ID bounds",
                     )
                 cutoff = _row_cutoff(deduplicated, bounded_limit)
-                if dataset_ref is not None:
+                if filter_arrow:
                     # A revealed tape page can contain only a handful of IDs
                     # in a multi-million-row day. Filter in Arrow before Python
                     # conversion so these UI reads cannot monopolize the actor.
@@ -2275,7 +2309,7 @@ class ParquetRawAggTradeArchive:
                     if not _row_matches_bounds(row, bounds):
                         continue
                     current = deduplicated.get(row["agg_trade_id"])
-                    if current is not None and (dataset_ref is not None or reject_id_conflicts):
+                    if current is not None and reject_id_conflicts:
                         if _immutable_trade_payload(current) != _immutable_trade_payload(row):
                             raise RuntimeError(
                                 "raw aggTrade read contains conflicting "
@@ -2542,6 +2576,8 @@ class ParquetRawAggTradeArchive:
         self,
         partition: Path,
         receipt: Mapping[str, object],
+        *,
+        repair_ids: tuple[int, int] | None = None,
     ) -> None:
         objects = receipt.get("objects")
         if not isinstance(objects, list):
@@ -2550,6 +2586,8 @@ class ParquetRawAggTradeArchive:
             if not isinstance(raw, Mapping):
                 raise RuntimeError("verified raw aggTrade receipt object is invalid")
             item = RawAggTradeObjectManifest.from_dict(raw)
+            if repair_ids is not None and not _overlaps_ids(item, repair_ids):
+                continue
             path = self._resolve_object_path(item.object_id)
             if path.parent.resolve() != partition.resolve():
                 raise RuntimeError("verified raw aggTrade receipt object escaped partition")
@@ -2613,6 +2651,7 @@ class ParquetRawAggTradeArchive:
         symbol: str,
         start_time_ms: int,
         end_time_ms: int,
+        repair_ids: tuple[int, int] | None = None,
     ) -> list[_FileManifest]:
         identity_root = (
             self.root
@@ -2630,6 +2669,8 @@ class ParquetRawAggTradeArchive:
                     "checksum-verified raw aggTrade partition is quarantined"
                 )
             if not receipt_path.is_file():
+                if repair_ids is not None:
+                    continue
                 raise RuntimeError(
                     "checksum-verified raw aggTrade daily coverage is missing"
                 )
@@ -2643,15 +2684,16 @@ class ParquetRawAggTradeArchive:
                 metadata.get("date"),
             ) != (exchange, market_type, symbol, date):
                 raise RuntimeError("verified raw aggTrade receipt identity changed")
-            self._validate_verified_receipt_objects(partition, receipt)
+            self._validate_verified_receipt_objects(partition, receipt, repair_ids=repair_ids)
             objects = receipt["objects"]
             assert isinstance(objects, list)
             for raw in objects:
                 assert isinstance(raw, Mapping)
                 item = RawAggTradeObjectManifest.from_dict(raw)
-                if item.max_trade_time_ms < start_time_ms:
-                    continue
-                if item.min_trade_time_ms > end_time_ms:
+                if repair_ids is not None:
+                    if not _overlaps_ids(item, repair_ids):
+                        continue
+                elif item.max_trade_time_ms < start_time_ms or item.min_trade_time_ms > end_time_ms:
                     continue
                 manifests.append(
                     self._file_manifest_from_object(item)
@@ -3753,6 +3795,10 @@ def _immutable_trade_payload(row: Mapping[str, object]) -> tuple[object, ...]:
         for field_name in RAW_AGG_TRADE_COLUMNS
         if field_name not in {"event_time_ms", "received_at_ms", "source"}
     )
+
+
+def _overlaps_ids(item: RawAggTradeObjectManifest, ids: tuple[int, int]) -> bool:
+    return item.min_agg_trade_id <= ids[1] and item.max_agg_trade_id >= ids[0]
 
 
 __all__ = [

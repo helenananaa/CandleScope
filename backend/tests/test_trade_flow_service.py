@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import io
 from dataclasses import dataclass
 from functools import wraps
 
@@ -18,6 +20,8 @@ from app.data_engine.storage.raw_trade_archive import (
 )
 from app.data_engine.storage.trade_flow_store import SQLiteTradeFlowRollupStore
 from app.data_engine.storage.trade_flow_writer import TradeFlowRollupWriter
+from app.replay.trade_import import import_official_date_range
+from tests.test_replay_trade_import import DAY as OFFICIAL_DAY, START_MS as OFFICIAL_START, _zip_bytes
 
 
 MINUTE = 60_000
@@ -1095,6 +1099,72 @@ async def test_repair_reuses_local_parquet_and_only_fetches_unproved_id_runs(
     assert diagnostics["repair_rows_reused_from_archive"] == reused
     assert diagnostics["repair_archive_reads_rejected"] == int(conflict)
     assert diagnostics["archive_writer"]["rows_archived"] == 7 - reused
+
+
+@pytest.mark.parametrize(
+    ("case", "calls", "verified_count", "rejected"),
+    [
+        ("verified-only", [], 5, 0),
+        ("partial", [(5, 1)], 3, 0),
+        ("conflict", [(4, 1)], 4, 0),
+        ("midnight", [(5, 2)], 3, 0),
+        ("corrupt", [(2, 5)], 0, 1),
+        ("orphan", [(2, 5)], 0, 0),
+        ("wrong-time", [(2, 5)], 0, 1),
+    ],
+)
+@_async_test
+async def test_repair_consumes_committed_official_days_without_download(
+    tmp_path, case, calls, verified_count, rejected,
+):
+    pytest.importorskip("pyarrow")
+    verified_root = tmp_path / "verified"
+    start = OFFICIAL_START + (86_400_000 - 5 if case == "midnight" else 100)
+    official_ids = range(2, 5) if case in {"partial", "midnight"} else range(2, 7)
+    rows = [[str(i), str(100 + i), "1", str(i * 2), str(i * 2 + 1),
+             str(start + i + (10 if case == "wrong-time" else 0)), "false"]
+            for i in official_ids]
+    body, filename = _zip_bytes(rows)
+    checksum = f"{hashlib.sha256(body).hexdigest()}  {filename}\n".encode()
+    import_official_date_range(
+        archive_dir=verified_root, exchange="binance", market_type="futures",
+        symbol="BTCUSDT", start=OFFICIAL_DAY, end=OFFICIAL_DAY, require_checksum=True,
+        max_rows_per_file=2, opener=lambda url, **_: io.BytesIO(checksum if url.endswith(".CHECKSUM") else body),
+    )
+    if case == "corrupt":
+        next(verified_root.rglob("*.parquet")).write_bytes(b"damaged")
+    elif case == "orphan":
+        next(verified_root.rglob("_verified_import.json")).unlink()
+
+    observed = None
+    if case in {"partial", "conflict"}:
+        observed = ParquetRawAggTradeArchive(tmp_path / "observed")
+        i = 6 if case == "partial" else 4
+        observed.append([NormalizedAggTrade.from_market_event(
+            _event(i, trade_time_ms=start + i, buyer_maker=case == "conflict"),
+        ).to_dict()])
+    factory = _Factory()
+    factory.repair_rows = {i: _event(i, trade_time_ms=start + i, source=DataSource.HTTP_BACKFILL)
+                           for i in range(2, 7)}
+    service = TradeFlowService(
+        factory, engine=TradeFlowEngine(initial_bucket_complete=True),
+        rollup_store=SQLiteTradeFlowRollupStore(tmp_path / "flow.sqlite"),
+        raw_archive=observed, verified_archive_root=verified_root,
+    )
+    try:
+        await service.ensure_stream(_key(), consumer_id="verified-repair")
+        await factory.emit(_event(1, trade_time_ms=start + 1))
+        await factory.emit(_event(7, trade_time_ms=start + 7))
+        await _wait_until(lambda: service.diagnostics()["repairs_succeeded"] == 1)
+        assert service.engine.gap_snapshot(IDENTITY) == ()
+        assert sum(bucket.agg_trade_count for bucket in service.engine.bucket_snapshot(IDENTITY)) == 7
+        assert [(args["from_id"], args["limit"]) for _, args in factory.fetch_calls] == calls
+        diagnostics = service.diagnostics()
+        assert diagnostics["repair_rows_reused_from_verified_archive"] == verified_count
+        assert diagnostics["repair_archive_reads_rejected"] == rejected
+        assert diagnostics["repair_archive_id_conflicts"] == int(case == "conflict")
+    finally:
+        await service.shutdown()
 
 
 @pytest.mark.parametrize(
