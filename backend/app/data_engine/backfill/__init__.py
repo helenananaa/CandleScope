@@ -47,7 +47,7 @@ Usage::
 from __future__ import annotations
 
 from app.data_engine.storage.revisions import (fenced_acquisition, prepare_native_history_views,
-                                               prepare_derived_targets)
+                                               prepare_derived_targets, prepare_warmup_view)
 from app.data_engine.memory_budget import budgeted_work, reserve_work
 
 import logging
@@ -365,6 +365,7 @@ class BackfillEngine:
             await prepare_native_history_views(self._storage, plan.tasks)
             await prepare_derived_targets(self._storage, plan)
             if plan.derived_source_windows:
+                prepare_warmup_view(plan.derived_source_windows)
                 fetch_results = await self.fetcher.fetch(plan.tasks, on_deferred=self._commit_warmup_progress)
             else:
                 fetch_results = await self.fetcher.fetch(plan.tasks)

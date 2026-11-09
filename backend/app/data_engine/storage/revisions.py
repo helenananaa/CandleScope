@@ -11,10 +11,14 @@ from contextlib import contextmanager, closing
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from functools import wraps
+from typing import TYPE_CHECKING
 import threading
 import sqlite3
 
 from app.data_engine.series_identity import KlineSeriesIdentity
+
+if TYPE_CHECKING:
+    from .warmup_revision_fence import WarmupView
 
 IDENTITY_COLUMNS = ("exchange", "market_type", "symbol", "interval",
                     "provider_id", "venue", "asset_class", "series_variant",
@@ -453,6 +457,7 @@ class Acquisition:
     accepted: dict[tuple, int] = field(default_factory=dict)
     native_history_views: list = field(default_factory=list, repr=False)
     derived_target_views: list = field(default_factory=list, repr=False)
+    warmup_view: WarmupView | None = field(default=None, repr=False)
     lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
 
     def check(self, conn, values):
@@ -517,16 +522,20 @@ def guarded_write(conn, values, *, commit=True, native_rows=None, source=None, n
             view = matching_empty_view(scope, values, native_empty_ranges)
         computation = matching_computation(scope, values, native_rows, source) if commit else None
         targets = affected_targets(scope, values, native_rows) if view is not None else ()
+        warmup = scope.warmup_view
+        warmup_head = (warmup.check_write(conn, scope, values, native_rows, source)
+                       if commit and warmup is not None and view is None and computation is None else None)
         if computation is not None:
             computation.check(conn, scope)
             targets = (computation.target,)
         elif view is None:
-            scope.check(conn, values)
+            if warmup_head is None:
+                scope.check(conn, values)
         else:
             view.check(conn, scope)
             for target in targets:
                 target.check(conn, scope)
-        before = versions() if view is not None or computation is not None else None
+        before = versions() if view is not None or computation is not None or warmup_head is not None else None
         yield
         accepted = versions()
         # A native range view does not consume other intervals as input.
@@ -538,8 +547,11 @@ def guarded_write(conn, values, *, commit=True, native_rows=None, source=None, n
         target_digests = [(target, fingerprint(conn, target.key, target.start, target.end))
                           for target in targets]
         if commit:
+            after = current_revision(conn) if warmup_head is not None else None
             conn.commit()
             scope.accepted.update(accepted)
+            if warmup_head is not None:
+                warmup.accept(warmup_head, after)
             if view is not None:
                 view.digest = digest
             for target, target_digest in target_digests:
@@ -600,6 +612,13 @@ def acquisition_delete_floor(default):
     if scope is None:
         return default
     return scope.revision if scope.delete_revision is None else scope.delete_revision
+
+
+def prepare_warmup_view(windows):
+    scope = _acquisition.get()
+    if scope is not None and windows:
+        from .warmup_revision_fence import make_warmup_view
+        scope.warmup_view = make_warmup_view(windows)
 
 
 async def prepare_native_history_views(storage, tasks):

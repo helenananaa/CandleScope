@@ -369,3 +369,95 @@ def test_custom_tail_warmup_fetches_only_unqualified_components(tmp_path, monkey
             await engine.close()
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize("mutation", ["live_tail", "fetched_open", "local_input", "target", "delete", "legacy_receipt"])
+def test_custom_tail_warmup_uses_exact_committed_mutation_ranges(tmp_path, monkeypatch, mutation):
+    import sqlite3
+    from contextvars import Context
+
+    from app.data_engine.storage import klines_repo
+
+    db = tmp_path / "concurrent.sqlite"
+    monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", db)
+    klines_repo.init_klines_storage()
+
+    minute = 60_000
+    open_ms = 2 * minute
+    missing = open_ms + minute
+    transport = _FakeBinanceTransport(_make_binance_rows(16, minute))
+    storage = klines_repo.AsyncKlinesRepoAdapter()
+    engine = BackfillEngine(
+        BackfillConfig(history_archive_enabled=False, reconcile_enable_cache_push=False),
+        storage, transport, ingestion_config=IngestionConfig(),
+    )
+    demand = {"requester": "warm_start_custom_tail", "history_calendar_id": "crypto.24x7.utc"}
+
+    def row(at, width=minute, volume=2):
+        return {
+            "open_time": at, "close_time": at + width - 1,
+            "open": 100, "high": 110, "low": 90, "close": 105, "volume": volume,
+            "quote_volume": 210, "trades": 10, "taker_buy_base": 1, "taker_buy_quote": 105,
+        }
+
+    async def external_write(at, *, interval="1m", width=minute, volume=2, source="data_manager_exchange_closed"):
+        assert await asyncio.create_task(
+            storage.upsert_bars("BTCUSDT", interval, [row(at, width, volume)], source=source),
+            context=Context(),
+        ) == 1
+
+    actual_fetch = transport.http_fetch
+
+    async def interleaved_fetch(req):
+        result = await actual_fetch(req)
+        if mutation == "fetched_open":
+            await external_write(missing, volume=9, source="backfill")
+        elif mutation == "delete":
+            # Deleting a slot that is still empty must also fence its fetch.
+            assert klines_repo.delete_klines("BTCUSDT", "1m", missing, missing) == 0
+        elif mutation in {"live_tail", "legacy_receipt"}:
+            await external_write(10 * minute)
+            if mutation == "legacy_receipt":
+                # Emulate an older writer whose revision had no exact receipt.
+                with sqlite3.connect(db) as conn:
+                    conn.execute("DELETE FROM kline_block_changes WHERE revision=(SELECT MAX(revision) FROM kline_block_changes)")
+        return result
+
+    actual_write = engine.reconciler._write_custom_materialization
+
+    async def interleaved_materialization(**kwargs):
+        if mutation == "live_tail":
+            await external_write(11 * minute)
+        elif mutation == "local_input":
+            await external_write(open_ms, volume=9, source="backfill")
+        elif mutation == "target":
+            await external_write(open_ms, interval="2m", width=2 * minute, volume=9, source="backfill_aggregated")
+        return await actual_write(**kwargs)
+
+    async def no_rate_limit():
+        pass
+
+    async def run():
+        try:
+            await external_write(open_ms, source="backfill")
+            engine.fetcher.set_rate_limiter(no_rate_limit)
+            transport.http_fetch = interleaved_fetch
+            engine.reconciler._write_custom_materialization = interleaved_materialization
+            result = await engine.run("BTCUSDT", ["2m"], open_ms, open_ms, metadata=demand)
+            assert [(req.start_ms, req.end_ms) for req in transport.requests] == [(missing, missing)]
+            stored_source = await storage.query_time_range("BTCUSDT", "1m", missing, missing)
+            stored_target = await storage.query_time_range("BTCUSDT", "2m", open_ms, open_ms)
+            if mutation == "live_tail":
+                assert result.status is BackfillStatus.COMPLETED, result.errors
+                assert [r["volume"] for r in stored_source] == [1.5]
+                assert [r["volume"] for r in stored_target] == [3.5]
+                assert result.reconcile_result.bars_written == result.reconcile_result.custom_bars_written == 1
+            else:
+                assert result.status is BackfillStatus.PARTIAL, result.errors
+                expected_source = {"fetched_open": [9], "local_input": [1.5], "target": [1.5]}.get(mutation, [])
+                assert [r["volume"] for r in stored_source] == expected_source
+                assert [r["volume"] for r in stored_target] == ([9] if mutation == "target" else [])
+        finally:
+            await engine.close()
+
+    asyncio.run(run())
