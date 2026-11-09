@@ -9,8 +9,14 @@ from app.data_engine.bar_aggregator import BarAggregator
 from app.data_engine.bar_aggregator.models import MergeMode
 from app.data_engine.bar_aggregator.history_prefix_runtime import HistoryPrefixRuntime
 from tests.test_shared_blocks_integration import dm, write, read_rows, KEY, DAY
+from app.data_engine.data_manager.models import DataEventType
+from app.data_engine.ingestion.models import DataSource, MarketEvent, StreamType
+from app.data_engine.storage import klines_repo
 from tests.test_history_prefix_overlay import component, equal, state
 from app.data_engine.bar_aggregator.bar_state import ComponentSnapshotOHLCVMerge
+
+
+PRODUCTION_MIN_ROWS = HistoryPrefixRuntime.MIN_ROWS
 
 
 @pytest.fixture(autouse=True)
@@ -272,6 +278,79 @@ def test_large_new_bucket_and_partial_history_do_not_query_previous_full_bucket(
         assert current is not None and current._history_prefix is not None
         assert not current._history_prefix.complete
         assert calls and all(call.get('limit', 1000000) <= 257 for call in calls)
+    asyncio.run(check())
+
+
+def test_production_size_stream_warm_start_publishes_one_durable_close(dm, monkeypatch):
+    monkeypatch.setattr(HistoryPrefixRuntime, "MIN_ROWS", PRODUCTION_MIN_ROWS)
+    # A prime target width above the threshold resolves to the 1m source.
+    interval = "2053m"
+    step = 60_000
+    count = 2053
+    final_open = (count - 1) * step
+    clock = [final_open + 1_000]
+    monkeypatch.setattr("time.time", lambda: clock[0] / 1000)
+    assert count - 1 >= PRODUCTION_MIN_ROWS
+    values = dict(open=1.0, high=3.0, low=0.5, close=2.0, volume=2.0,
+                  quote_volume=4.0, trades=1, taker_buy_base=1.0, taker_buy_quote=2.0)
+    klines_repo.upsert_klines("BTCUSDT", "1m", [
+        dict(values, open_time=index * step, close_time=(index + 1) * step - 1)
+        for index in range(count - 1)
+    ], source="backfill", market_type="futures")
+
+    class CapturingIngestion:
+        async def start(self, *, interval, on_market_event, **_identity):
+            assert interval == "1m"
+            self.on_market_event = on_market_event
+            return self
+
+        async def stop(self):
+            pass
+
+    ingestion = CapturingIngestion()
+    dm.set_ingestion_factory(ingestion)
+    closed = []
+    published = asyncio.Event()
+
+    async def observe(event):
+        closed.append(event)
+        published.set()
+
+    async def check():
+        try:
+            await dm.start()
+            await dm.subscribe_async(
+                observe, symbol="BTCUSDT", interval=interval, market_type="futures",
+                event_types={DataEventType.BAR_CLOSED}, continuity="gap_aware",
+            )
+            await dm.ensure_stream("BTCUSDT", interval, market_type="futures")
+            prefix = dm.history_prefix_runtime.snapshot()["last_adoption"]
+            assert prefix["accepted_slots"] == count - 1 and prefix["pages"] > 1
+            assert prefix["complete"]
+            clock[0] = count * step
+            event = MarketEvent(
+                event_type=StreamType.KLINE, symbol="BTCUSDT", exchange="binance",
+                market_type="futures", event_time_ms=clock[0], received_at_ms=clock[0],
+                sequence=clock[0], source=DataSource.WEBSOCKET,
+                data=dict(values, interval="1m", open_time=final_open,
+                          close_time=clock[0] - 1, is_closed=True),
+            )
+            await ingestion.on_market_event(event)
+            await asyncio.wait_for(published.wait(), timeout=5)
+            await ingestion.on_market_event(event)
+            await asyncio.sleep(0)
+            assert len(closed) == 1
+            assert closed[0].bar.volume == 2 * count
+            assert closed[0].detail["storage_revision"] > 0
+            assert dm.bar_aggregator.get_bucket_state("BTCUSDT", interval, 0, market_type="futures") is None
+            persisted = dm.query_engine.storage.query_bars(
+                "BTCUSDT", interval, start_ms=0, end_ms=0, market_type="futures",
+            )
+            assert len(persisted) == 1 and persisted[0]["volume"] == 2 * count
+
+        finally:
+            await dm.shutdown()
+
     asyncio.run(check())
 
 
