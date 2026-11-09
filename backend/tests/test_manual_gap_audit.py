@@ -48,7 +48,7 @@ def _coordinator(storage, engine=None):
 
 def _maintenance(storage, active=()):
     return MaintenanceService(
-        storage_provider=lambda: storage, aggregator_config_snapshot=dict,
+        storage_provider=lambda: storage,
         cache_invalidator=lambda *args, **kwargs: None, bars_backfilled=_ignore,
         active_targets=lambda: active, seed_active_bar=_ignore,
     )

@@ -7,14 +7,14 @@ import time
 from collections.abc import Awaitable, Callable, Iterable
 from typing import Any, Protocol
 
-from app.core.executors import run_storage
-from app.data_engine.bar_aggregator import BarAggregator, BarAggregatorConfig
+from app.core.executors import run_preparation, run_storage
 from app.data_engine.interval_policy import (
-    compute_bucket_close_ms,
-    find_best_base_interval,
-    parse_custom_interval,
-    parse_interval_ms,
+    aggregate_kline_rows,
+    parse_interval_spec,
 )
+from app.data_engine.interval_resolution import IntervalResolutionError, IntervalResolver, IntervalRouteKind
+from app.data_engine.kline_quality import source_is_trusted_final
+from app.data_engine.storage.revisions import StaleAcquisition
 from app.data_engine.series_identity import KlineSeriesIdentity, identity_from_mapping
 
 from .backfill_contracts import RepairRequest, ScanReport
@@ -188,7 +188,6 @@ class MaintenanceService:
         self,
         *,
         storage_provider: Callable[[], Any | None],
-        aggregator_config_snapshot: Callable[[], dict],
         cache_invalidator: Callable[..., None],
         bars_backfilled: Callable[..., Awaitable[None]],
         active_targets: Callable[[], Iterable[tuple[str, str, str, str]]],
@@ -198,7 +197,6 @@ class MaintenanceService:
         storage_gc_replanner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     ) -> None:
         self._storage_provider = storage_provider
-        self._aggregator_config_snapshot = aggregator_config_snapshot
         self._cache_invalidator = cache_invalidator
         self._bars_backfilled = bars_backfilled
         self._active_targets = active_targets
@@ -227,7 +225,9 @@ class MaintenanceService:
         async with self._lock:
             started_at_ms = int(time.time() * 1000)
             now_ms = started_at_ms
-            aggregator_config = self._aggregator_config_snapshot()
+            revision_store = getattr(storage, "revision_store", None)
+            replace_bars = getattr(storage, "replace_bars", None)
+            resolver = IntervalResolver()
             series = await run_storage(
                 self._list_custom_series,
                 storage,
@@ -276,7 +276,6 @@ class MaintenanceService:
             for item in series:
                 symbol = str(item["symbol"]).upper()
                 interval = str(item["interval"])
-                custom_seconds = parse_custom_interval(interval)
                 result = {
                     "exchange": exchange,
                     "symbol": symbol,
@@ -293,184 +292,134 @@ class MaintenanceService:
                     "message": "",
                 }
 
-                if custom_seconds is None:
+                try:
+                    route = resolver.resolve(
+                        exchange=exchange, market_type=market_type, interval=interval, purpose="history",
+                    )
+                except IntervalResolutionError as exc:
+                    route = None
+                    result["message"] = str(exc)
+                identity = identity_from_mapping(exchange, item)
+                if (route is None or route.kind is not IntervalRouteKind.DERIVED
+                        or not identity.is_legacy_default_for(exchange)
+                        or revision_store is None or not callable(replace_bars)):
                     result["status"] = "failed"
-                    result["message"] = "无法解析该自定义周期"
+                    result["message"] = result["message"] or "该序列缺少可安全重建的派生来源或原子存储能力"
                     failed_series += 1
                     results.append(result)
                     continue
 
-                custom_ms = custom_seconds * 1000
                 earliest_open = int(item["earliest_open_time"])
                 latest_open = int(item["latest_open_time"])
-                existing_rows = await run_storage(
-                    storage.query_bars,
-                    symbol=symbol,
-                    interval=interval,
-                    start_ms=earliest_open,
-                    end_ms=latest_open,
-                    order="ASC",
-                    exchange=exchange,
-                    market_type=market_type,
-                )
-                existing_rows = [_normalize_storage_row(row) for row in existing_rows]
-                closed_existing = [
-                    row for row in existing_rows
-                    if _is_closed_bucket(int(row["open_time"]), custom_ms, now_ms, interval=interval)
-                ]
-                stale_existing = [
-                    row for row in existing_rows
-                    if not _is_closed_bucket(int(row["open_time"]), custom_ms, now_ms, interval=interval)
-                ]
-                result["stale_rows_removed"] = len(stale_existing)
-
-                if not closed_existing:
-                    if stale_existing:
-                        deleted = await run_storage(
-                            storage.delete_bars,
-                            symbol=symbol,
-                            interval=interval,
-                            start_ms=int(stale_existing[0]["open_time"]),
-                            end_ms=int(stale_existing[-1]["open_time"]),
-                            exchange=exchange,
-                            market_type=market_type,
-                        )
-                        total_deleted_rows += deleted
-                        total_stale_rows_removed += len(stale_existing)
-                        repaired_series += 1
-                        result["deleted_rows"] = deleted
-                        result["status"] = "repaired"
-                        result["message"] = "仅发现未封口尾部数据，已删除脏尾巴"
-                        await self._warm_repaired_series(
-                            storage,
-                            symbol,
-                            interval,
-                            exchange=exchange,
-                            market_type=market_type,
-                        )
-                    else:
-                        unchanged_series += 1
-                        result["message"] = "没有可修复的数据"
-                    results.append(result)
-                    continue
-
-                repair_start_open = int(closed_existing[0]["open_time"])
-                repair_end_open = int(closed_existing[-1]["open_time"])
-                repair_end_close = compute_bucket_close_ms(
-                    repair_end_open,
-                    custom_ms,
-                    interval=interval,
-                )
-                base_interval, _ = find_best_base_interval(custom_seconds, interval=interval)
+                target = route.spec
+                base_interval = route.source_interval
                 result["base_interval"] = base_interval
-
-                base_ok, gap_runs, base_errors = await self._ensure_base_series_complete(
-                    backfill_coordinator,
-                    storage,
-                    symbol,
-                    base_interval,
-                    repair_start_open,
-                    repair_end_close,
-                    metadata={
-                        "origin": "settings_storage_repair",
-                        "target_interval": interval,
-                        "phase": "base_repair",
-                    },
-                    exchange=exchange,
-                    market_type=market_type,
+                # Capture before reading so a concurrent source or target
+                # mutation cannot be mistaken for the view we rebuilt.
+                repair_revision = await run_storage(revision_store.head)
+                existing_rows = await run_storage(
+                    storage.query_bars, symbol=symbol, interval=interval,
+                    start_ms=earliest_open, end_ms=latest_open, order="ASC",
+                    exchange=exchange, market_type=market_type,
                 )
-                base_backfill_runs += gap_runs
-                result["base_backfill_runs"] = gap_runs
-
-                if not base_ok:
-                    result["status"] = "failed"
-                    result["message"] = "基础周期存在缺口，自动回补后仍未完全修复"
-                    if base_errors:
-                        result["errors"] = base_errors
-                    failed_series += 1
-                    results.append(result)
-                    continue
-
-                revision_store = getattr(storage, "revision_store", None)
-                repair_revision = await run_storage(revision_store.head) if revision_store is not None else None
-                base_rows = await run_storage(
-                    storage.query_bars,
-                    symbol=symbol,
-                    interval=base_interval,
-                    start_ms=repair_start_open,
-                    end_ms=repair_end_close,
-                    order="ASC",
-                    exchange=exchange,
-                    market_type=market_type,
-                )
-                if not base_rows:
-                    result["status"] = "failed"
-                    result["message"] = "基础周期数据为空，无法重建"
-                    failed_series += 1
-                    results.append(result)
-                    continue
-
-                rebuilt_rows = await _aggregate_custom_rows(
-                    symbol=symbol,
-                    custom_interval=interval,
-                    base_interval=base_interval,
-                    base_rows=base_rows,
-                    aggregator_config=aggregator_config,
-                    exchange=exchange,
-                    market_type=market_type,
-                )
-                rebuilt_rows = [
-                    row for row in rebuilt_rows
-                    if repair_start_open <= int(row["open_time"]) <= repair_end_open
-                    and _is_closed_bucket(int(row["open_time"]), custom_ms, now_ms, interval=interval)
+                closed_existing = [
+                    row for row in existing_rows if target.next_ms(int(row["open_time"])) <= now_ms
                 ]
+                stale_existing = len(existing_rows) - len(closed_existing)
+                rebuilt_rows = []
 
-                if not rebuilt_rows and closed_existing:
-                    result["status"] = "failed"
-                    result["message"] = "重建结果为空，已中止回写以避免误删原有数据"
-                    failed_series += 1
-                    results.append(result)
-                    continue
+                if closed_existing:
+                    repair_start_open = int(closed_existing[0]["open_time"])
+                    repair_end_open = int(closed_existing[-1]["open_time"])
+                    repair_end_close = target.next_ms(repair_end_open) - 1
+                    base_ok, gap_runs, base_errors = await self._ensure_base_series_complete(
+                        backfill_coordinator, storage, symbol, base_interval,
+                        repair_start_open, repair_end_close,
+                        metadata={
+                            "origin": "settings_storage_repair",
+                            "target_interval": interval,
+                            "phase": "base_repair",
+                            "requires_trusted_finality": True,
+                        },
+                        exchange=exchange, market_type=market_type,
+                    )
+                    base_backfill_runs += gap_runs
+                    result["base_backfill_runs"] = gap_runs
+                    if not base_ok:
+                        result["status"] = "failed"
+                        result["message"] = "基础周期仍缺少可信的已收盘数据，已中止重建"
+                        if base_errors:
+                            result["errors"] = base_errors
+                        failed_series += 1
+                        results.append(result)
+                        continue
+
+                    # Our own backfill may have committed and invalidated
+                    # materializations. Take a fresh view after that repair.
+                    if gap_runs:
+                        repair_revision = await run_storage(revision_store.head)
+                        existing_rows = await run_storage(
+                            storage.query_bars, symbol=symbol, interval=interval,
+                            start_ms=earliest_open, end_ms=latest_open, order="ASC",
+                            exchange=exchange, market_type=market_type,
+                        )
+                        closed_existing = [
+                            row for row in existing_rows if target.next_ms(int(row["open_time"])) <= now_ms
+                        ]
+                        stale_existing = len(existing_rows) - len(closed_existing)
+
+                    base_rows = await run_storage(
+                        storage.query_bars, symbol=symbol, interval=base_interval,
+                        start_ms=repair_start_open, end_ms=repair_end_close, order="ASC",
+                        exchange=exchange, market_type=market_type,
+                    )
+                    rebuilt_rows = await run_preparation(
+                        _aggregate_custom_rows, base_rows,
+                        target_interval=interval, source_interval=base_interval, now_ms=now_ms,
+                    )
+                    expected_open = repair_start_open
+                    for row in rebuilt_rows:
+                        if row["open_time"] != expected_open:
+                            break
+                        expected_open = target.next_ms(expected_open)
+                    if expected_open != repair_end_close + 1 or any(
+                        not repair_start_open <= int(row["open_time"]) <= repair_end_open
+                        for row in closed_existing
+                    ):
+                        result["status"] = "failed"
+                        result["message"] = "重建范围不完整，已中止回写以保留原有数据"
+                        failed_series += 1
+                        results.append(result)
+                        continue
 
                 difference_rows = _count_row_differences(closed_existing, rebuilt_rows)
                 result["difference_rows"] = difference_rows
-
                 if difference_rows == 0 and not stale_existing:
                     unchanged_series += 1
                     result["message"] = "检查通过，库内容已正确"
                     results.append(result)
                     continue
 
-                atomic_replace = getattr(storage, "replace_bars", None)
-                if callable(atomic_replace) and repair_revision is not None:
-                    outcome = await run_storage(atomic_replace, symbol, interval, rebuilt_rows,
+                try:
+                    outcome = await _run_storage_batch(
+                        replace_bars, symbol, interval, rebuilt_rows,
                         start_ms=earliest_open, end_ms=latest_open, expected_revision=repair_revision,
-                        source="settings_manual_repair", exchange=exchange, market_type=market_type)
-                    deleted, written = outcome["deleted"], outcome["written"]
-                else:
-                    deleted = await run_storage(
-                        storage.delete_bars,
-                        symbol=symbol,
-                        interval=interval,
-                        start_ms=earliest_open,
-                        end_ms=latest_open,
-                        exchange=exchange,
-                        market_type=market_type,
+                        source="repair_derived_verified", exchange=exchange, market_type=market_type,
+                        _on_completed=lambda _: self._cache_invalidator(
+                            symbol, interval, exchange=exchange, market_type=market_type,
+                        ),
                     )
-                    written = 0
-                    if rebuilt_rows:
-                        written = await run_storage(
-                            storage.upsert_bars,
-                            symbol=symbol,
-                            interval=interval,
-                            rows=rebuilt_rows,
-                            source="settings_manual_repair",
-                            exchange=exchange,
-                            market_type=market_type,
-                        )
+                except StaleAcquisition:
+                    result["status"] = "failed"
+                    result["message"] = "重建期间行情已更新，已中止回写"
+                    failed_series += 1
+                    results.append(result)
+                    continue
+                deleted, written = outcome["deleted"], outcome["written"]
+                result["stale_rows_removed"] = stale_existing
                 total_deleted_rows += deleted
                 total_written_rows += written
-                total_stale_rows_removed += len(stale_existing)
+                total_stale_rows_removed += stale_existing
                 repaired_series += 1
 
                 result["deleted_rows"] = deleted
@@ -1410,26 +1359,32 @@ class MaintenanceService:
 
 
 def _normalize_storage_row(row: dict) -> dict:
-    normalized: dict[str, int | float] = {}
+    normalized: dict[str, int | float | None] = {}
     for field in _STORAGE_ROW_INT_FIELDS:
-        normalized[field] = int(row.get(field, 0) or 0)
+        value = row.get(field)
+        normalized[field] = int(value) if value is not None else None
     for field in _STORAGE_ROW_FLOAT_FIELDS:
-        normalized[field] = float(row.get(field, 0) or 0.0)
+        value = row.get(field)
+        normalized[field] = float(value) if value is not None else None
     return normalized
 
 
 def _rows_match(left: dict, right: dict, tol: float = 1e-8) -> bool:
     for field in _STORAGE_ROW_INT_FIELDS:
-        if int(left.get(field, 0)) != int(right.get(field, 0)):
+        if left.get(field) != right.get(field):
             return False
     for field in _STORAGE_ROW_FLOAT_FIELDS:
-        if abs(float(left.get(field, 0.0)) - float(right.get(field, 0.0))) > tol:
+        old, new = left.get(field), right.get(field)
+        if old != new and (old is None or new is None or abs(old - new) > tol):
             return False
     return True
 
 
 def _count_row_differences(existing_rows: list[dict], rebuilt_rows: list[dict]) -> int:
-    existing_map = {int(row["open_time"]): _normalize_storage_row(row) for row in existing_rows}
+    existing_map = {
+        int(row["open_time"]): _normalize_storage_row(row) for row in existing_rows
+        if source_is_trusted_final(row.get("source"))
+    }
     rebuilt_map = {int(row["open_time"]): _normalize_storage_row(row) for row in rebuilt_rows}
     differences = 0
 
@@ -1442,16 +1397,6 @@ def _count_row_differences(existing_rows: list[dict], rebuilt_rows: list[dict]) 
         if not _rows_match(left, right):
             differences += 1
     return differences
-
-
-def _is_closed_bucket(
-    open_time_ms: int,
-    interval_ms: int,
-    now_ms: int,
-    *,
-    interval: str | None = None,
-) -> bool:
-    return compute_bucket_close_ms(open_time_ms, interval_ms, interval=interval) < now_ms
 
 
 def _status_value(status: Any) -> str:
@@ -1487,7 +1432,9 @@ async def _find_storage_gap_ranges(
     exchange: str = "binance",
     market_type: str = "spot",
 ) -> list[tuple[int, int]]:
-    interval_ms = parse_interval_ms(interval) or 60_000
+    spec = parse_interval_spec(interval)
+    if spec is None:
+        raise ValueError(f"Invalid repair source interval: {interval}")
     rows = await run_storage(
         storage.query_bars,
         symbol=symbol,
@@ -1498,7 +1445,10 @@ async def _find_storage_gap_ranges(
         exchange=exchange,
         market_type=market_type,
     )
-    times = sorted({int(row["open_time"]) for row in rows})
+    times = sorted({
+        int(row["open_time"]) for row in rows
+        if source_is_trusted_final(row.get("source"))
+    })
     if not times:
         return [(start_ms, end_ms)]
 
@@ -1511,31 +1461,18 @@ async def _find_storage_gap_ranges(
             break
         if open_time > expected:
             gaps.append((expected, min(open_time - 1, end_ms)))
-        expected = open_time + interval_ms
+        expected = spec.next_ms(open_time)
 
     if expected <= end_ms:
         gaps.append((expected, end_ms))
     return gaps
 
 
-async def _aggregate_custom_rows(
-    symbol: str,
-    custom_interval: str,
-    base_interval: str,
-    base_rows: list[dict],
-    aggregator_config: dict,
-    exchange: str = "binance",
-    market_type: str = "spot",
+
+def _aggregate_custom_rows(
+    rows: list[dict], *, target_interval: str, source_interval: str, now_ms: int,
 ) -> list[dict]:
-    symbol = symbol.upper()
-    agg = BarAggregator(BarAggregatorConfig(**aggregator_config))
-    states = await agg.aggregate_batch(
-        symbol,
-        custom_interval,
-        base_interval,
-        base_rows,
-        exchange=exchange,
-        market_type=market_type,
-        require_authoritative=True,
+    return aggregate_kline_rows(
+        [row for row in rows if source_is_trusted_final(row.get("source"))],
+        target_interval=target_interval, source_interval=source_interval, now_ms=now_ms,
     )
-    return [_normalize_storage_row(state.to_storage_dict()) for state in states]

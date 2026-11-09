@@ -132,19 +132,15 @@ async def _aggregate_with_bar_aggregator(
     return _state_rows(states)
 
 
-async def _aggregate_with_maintenance(
+def _aggregate_with_maintenance(
     target_interval: str,
     source_interval: str,
     rows: list[dict],
 ) -> list[dict]:
-    return await _aggregate_custom_rows(
-        symbol="BTC-USDT",
-        custom_interval=target_interval,
-        base_interval=source_interval,
-        base_rows=rows,
-        aggregator_config=BarAggregatorConfig().snapshot(),
-        exchange="okx",
-        market_type="spot",
+    return _aggregate_custom_rows(
+        [{**row, "source": "backfill"} for row in rows],
+        target_interval=target_interval, source_interval=source_interval,
+        now_ms=max(row["close_time"] for row in rows) + 1,
     )
 
 
@@ -389,7 +385,7 @@ def test_custom_interval_paths_match_for_45m_91m_and_2m() -> None:
     async def _run_case(target_interval: str, source_interval: str, rows: list[dict]) -> None:
         via_agg = await _aggregate_with_bar_aggregator(target_interval, source_interval, rows)
         via_query = await _aggregate_with_query(target_interval, source_interval, rows)
-        via_maintenance = await _aggregate_with_maintenance(target_interval, source_interval, rows)
+        via_maintenance = _aggregate_with_maintenance(target_interval, source_interval, rows)
         via_backfill = _aggregate_with_backfill_fallback(target_interval, rows)
 
         expected = [_as_ohlcv(row) for row in via_agg]

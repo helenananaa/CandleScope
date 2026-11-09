@@ -478,7 +478,6 @@ class DataManager(DataManagerCore):
         self.coordinator.set_gap_handler(self._handle_ingestion_gap)
         self.maintenance = MaintenanceService(
             storage_provider=lambda: self.query_engine.storage,
-            aggregator_config_snapshot=lambda: self.bar_aggregator.config.snapshot(),
             cache_invalidator=self.cache_invalidate,
             bars_backfilled=self.on_bars_backfilled,
             active_targets=self.bar_aggregator.get_targets,
