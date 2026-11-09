@@ -1027,6 +1027,12 @@ def _resolve_history_calendar(
         return None, False
 
 
+def _snapshot_is_stable(result: Any) -> bool:
+    """A versioned read racing publication cannot certify a snapshot."""
+    version = (getattr(result, "metadata", None) or {}).get("stream_version")
+    return version is None or version.get("stable") is True
+
+
 def _history_contract_payload(
     result: Any,
     *,
@@ -1050,6 +1056,9 @@ def _history_contract_payload(
         "all_rows_final": all_rows_final,
         "stream_version": metadata.get("stream_version"),
     }
+    revision = metadata.get("storage_revision")
+    if type(revision) is int and revision >= 0:
+        payload["storage_revision"] = revision
     observed_missing = (
         list(getattr(result, "missing_ranges", ()) or ())
         if missing_ranges is None
@@ -1060,7 +1069,8 @@ def _history_contract_payload(
     # terminal edge may stop pagination farther left, but it cannot mark a
     # repairable hole inside the returned fetchable window as complete.
     if (
-        verified_contiguous is False
+        not _snapshot_is_stable(result)
+        or verified_contiguous is False
         or bool(observed_missing)
         or not all_rows_final
     ):
@@ -1089,7 +1099,8 @@ def _all_rows_final(result: Any) -> bool:
 def _history_page_finality_ready(result: Any) -> bool:
     """Require proven final rows and no remaining repair work."""
     return bool(
-        _all_rows_final(result)
+        _snapshot_is_stable(result)
+        and _all_rows_final(result)
         and not getattr(result, "missing_ranges", None)
         and not getattr(result, "has_tail_gap", False)
         and getattr(result, "history_state", "pending") != "pending"
@@ -1113,7 +1124,7 @@ def _returned_history_page_ready(
     history contract, so the client can render useful candles immediately and
     continue paging/retrying while the parent repair advances chunk by chunk.
     """
-    if not getattr(result, "bars", None) or not _all_rows_final(result):
+    if not _snapshot_is_stable(result) or not getattr(result, "bars", None) or not _all_rows_final(result):
         return False
     data = _bars_to_dicts(result.bars)
     metadata = dict(getattr(result, "metadata", None) or {})
@@ -2466,7 +2477,7 @@ async def get_klines_history(
                         market_type=market_type,
                     )["is_custom"]
                 ),
-                ready=lambda candidate: (
+                ready=lambda candidate: _snapshot_is_stable(candidate) and (
                     (
                         initially_empty
                         and _returned_history_page_ready(
@@ -2516,6 +2527,7 @@ async def get_klines_history(
         not materialized_only
         and bool(data)
         and bool(verification["verified_contiguous"])
+        and _snapshot_is_stable(result)
         and _all_rows_final(result)
         and not identity_kwargs
         and not await _request_disconnected(request)
@@ -2714,6 +2726,8 @@ async def get_klines_range(
         ge=0,
         description="Monotonic generation within request_scope",
     ),
+    min_revision: int | None = Query(None, ge=0),
+    min_revision_epoch: str | None = Query(None, min_length=1, max_length=128),
     series_identity_query: KlineSeriesIdentityQuery = Depends(),
 ):
     """Get K-lines for an exact time range with continuity verification."""
@@ -2723,6 +2737,12 @@ async def get_klines_range(
     repair_mode = (repair or "async").strip().lower()
     if repair_mode not in {"none", "async", "wait"}:
         raise HTTPException(status_code=400, detail="repair must be one of: none, async, wait")
+
+    if (min_revision is None) != (min_revision_epoch is None):
+        raise HTTPException(status_code=400, detail="min_revision and min_revision_epoch must be paired")
+    if min_revision is not None:
+        # A correction readback verifies committed storage without starting repair work.
+        repair_mode = "none"
 
     exchange = _validate_exchange(exchange)
     market_type = _validate_market_type(market_type)
@@ -2794,12 +2814,12 @@ async def get_klines_range(
             "fetched": 0,
             "has_tail_gap": False,
             "backfill_triggered": False,
-            "verified_contiguous": True,
-            "renderable": True,
+            "verified_contiguous": min_revision is None,
+            "renderable": min_revision is None,
             "missing_ranges": [],
-            "history_state": "ready",
-            "complete": True,
-            "retryable": False,
+            "history_state": "ready" if min_revision is None else "pending",
+            "complete": min_revision is None,
+            "retryable": min_revision is not None,
             "terminal_reason": None,
             "earliest_available_ms": None,
             "next_before_ms": None,
@@ -2834,6 +2854,7 @@ async def get_klines_range(
                 market_type=market_type,
                 **identity_kwargs,
                 auto_backfill=auto_backfill,
+                **({"min_revision": min_revision} if min_revision is not None else {}),
                 backfill_reason="visible_range_gap",
                 backfill_requester="klines_range",
                 **(
@@ -2860,6 +2881,26 @@ async def get_klines_range(
             return candidate_data, candidate_verification
 
         result = await _run_range_query(repair_mode != "none")
+        if min_revision is not None:
+            metadata = result.metadata or {}
+            revision = metadata.get("storage_revision")
+            version = metadata.get("stream_version") or {}
+            if (
+                type(revision) is not int
+                or revision < min_revision
+                or version.get("epoch") != min_revision_epoch
+                or version.get("stable") is not True
+            ):
+                return ORJSONResponse({
+                    **_history_contract_payload(result, verified_contiguous=False, missing_ranges=[]),
+                    "all_rows_final": False,
+                    "verified_contiguous": False,
+                    "renderable": False,
+                    "truncated": False,
+                    "missing_ranges": [],
+                    "count": 0,
+                    "data": [],
+                })
         backfill_triggered = bool(result.backfill_triggered)
         data, verification = _verify_range_result(result)
         reported_missing = [item.to_dict() for item in result.missing_ranges]
@@ -2922,7 +2963,8 @@ async def get_klines_range(
                     )["is_custom"]
                 ),
                 ready=lambda candidate: (
-                    _verify_range_result(candidate)[1]["verified_contiguous"]
+                    _snapshot_is_stable(candidate)
+                    and _verify_range_result(candidate)[1]["verified_contiguous"]
                     and _all_rows_final(candidate)
                 ),
                 demand_scope=request_scope,
@@ -2949,7 +2991,7 @@ async def get_klines_range(
     )
     verified = verification["verified_contiguous"]
     all_rows_final = _all_rows_final(result)
-    renderable = (verified and all_rows_final) or not strict
+    renderable = (verified and all_rows_final and _snapshot_is_stable(result)) or not strict
     rendered_data = data if renderable else []
     payload = {
         "exchange": exchange,
