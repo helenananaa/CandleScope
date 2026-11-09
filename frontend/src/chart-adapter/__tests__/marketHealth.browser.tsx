@@ -25,7 +25,6 @@ class BrowserCell {
   symbol = "BTCUSDT";
   loaded = "";
   rendered = 0;
-  feed!: SeriesDataFeed;
   select(symbol: string) { this.symbol = symbol; }
   settle(symbol: string) { this.loaded = symbol; }
   published(count: number) { this.rendered = count; }
@@ -91,6 +90,7 @@ export async function checkMarketHealth() {
       event_type: type, stream_version: wire(symbol), previous_open_ms: (row.time - 60) * 1000 } }, stream.controller);
   };
   const cells = new Map<string, BrowserCell>();
+  const cellFeeds = new Map<string, SeriesDataFeed>();
   function Cell({ id }: { id: string }) {
     const [symbol, setSymbol] = useState("BTCUSDT"), [status, setStatus] = useState("loading"), [source, setSource] = useState<string | null>(null);
     const canvas = useRef<HTMLDivElement>(null), pending = useRef<PendingInitialSeries | null>(null);
@@ -100,12 +100,12 @@ export async function checkMarketHealth() {
       const merge = (_symbol: string, _interval: string, rows: KlineBar[]) => { model.store.applyRange(rows); };
       const feed = new SeriesDataFeed({ api: manager, streamFactory: manager.subscribe, getActiveSeries: () => instrument(model.symbol),
         commitMergedChartData: merge, commitPatchedChartData: merge });
-      model.feed = feed;
       const noop = () => undefined;
       return { feed, merge, noop, get: (sym: string) => model.loaded === sym ? model.store.snapshot() : [],
         replace: (_symbol: string, _interval: string, rows: KlineBar[]) => { model.store.replace(rows); },
         resolve: (sym: string) => resolveSharedInitialRows(instrument(sym), model.loaded === sym ? model.store.snapshot() : [], manager.cache, 500) };
     }, [model]);
+    useLayoutEffect(() => { cellFeeds.set(id, bindings.feed); }, [id, bindings.feed]);
     const gaps = useSyncExternalStore(bindings.feed.subscribeTerminalHistoryGaps, bindings.feed.getTerminalHistoryGaps);
     const historyGap = gaps.find(gap => gap.seriesKey === bindings.feed.seriesKey(instrument(symbol)));
     const load = useChartInitialLoad({ enabled: true, sharedCacheOwnsHealth: true, exchange: "binance", marketType: "spot",
@@ -140,7 +140,7 @@ export async function checkMarketHealth() {
         commit: rows => { model.store.applyRange(rows); } });
       void loadRef.current(symbol, "1m").then(() => { model.settle(symbol); });
       return () => { stream.close(); release(); };
-    }, [symbol, model]);
+    }, [symbol, model, bindings.feed]);
     return <section><h2>{id}: {symbol}</h2><button data-switch={id} onClick={() => setSymbol("ETHUSDT")}>ETHUSDT</button>
       <button data-return={id} onClick={() => setSymbol("BTCUSDT")}>BTCUSDT</button>
       <StatusBar status={{ connectionStatus: status, dataSource: source || "", exchangeLabel: "Binance",
@@ -238,6 +238,7 @@ export async function checkMarketHealth() {
     assert(manager.cache.planHistory(eth, 500).action === "reuse", "fresh matching event did not restore the link");
     checks.push("tail polling preserves health and an unseen HTTP barrier requires a new matching event");
     const active = cells.get("A")!;
+    const feed = cellFeeds.get("A")!;
     const missing = corpus.get(eth.symbol)![70]!;
     active.store.replace(active.store.snapshot().filter(row => row.time !== missing.time));
     const gapResult = { ...result(eth.symbol), data: [], history_state: "exhausted" as const,
@@ -246,21 +247,21 @@ export async function checkMarketHealth() {
       complete: false, verified_contiguous: false, all_rows_final: false };
     nextRange = gapResult;
     const beforeGap = calls.length;
-    active.feed.gapPlannerNextAllowedAt.delete(active.feed.seriesKey(eth));
-    const repair = await active.feed.repairVisibleGaps(eth, active.store.snapshot(), { time: { from: missing.time - 120, to: missing.time + 120 } }, { throttleMs: 0 });
-    assert(active.feed.getTerminalHistoryGaps().length === 1, JSON.stringify({ repair, calls: calls.slice(beforeGap), pending: [...active.feed.pendingGapRepairs.values()] }));
+    feed.gapPlannerNextAllowedAt.delete(feed.seriesKey(eth));
+    const repair = await feed.repairVisibleGaps(eth, active.store.snapshot(), { time: { from: missing.time - 120, to: missing.time + 120 } }, { throttleMs: 0 });
+    assert(feed.getTerminalHistoryGaps().length === 1, JSON.stringify({ repair, calls: calls.slice(beforeGap), pending: [...feed.pendingGapRepairs.values()] }));
     const terminal = () => host.querySelector('[data-history-gap="terminal"]');
     await until(() => terminal()?.getAttribute("title")?.includes("source_unavailable") === true,
       "terminal verdict did not reach the chart status bar");
     assert(host.querySelectorAll('[data-history-gap="terminal"]').length === 1, "sibling chart inherited the terminal gap");
     assert(active.rendered === 500, "terminal gap replaced the remaining candles");
-    await active.feed.repairVisibleGaps(eth, active.store.snapshot(), null, { throttleMs: 0 });
+    await feed.repairVisibleGaps(eth, active.store.snapshot(), null, { throttleMs: 0 });
     assert(calls.length === beforeGap + 1, "terminal range was requested again");
     stream.options.onControlMessage?.({ type: "subscribed", active_intervals: ["1m"] }, stream.controller);
     assert(terminal(), "reconnect ACK hid an unresolved terminal gap");
-    await active.feed.getRange(eth, { start: missing.time, end: missing.time, strict: true });
+    await feed.getRange(eth, { start: missing.time, end: missing.time, strict: true });
     await until(() => !terminal() && active.rendered === 501, "verified readback did not remove the terminal gap");
-    flushSync(() => active.feed.trackTerminalHistoryGaps(eth, gapResult));
+    flushSync(() => feed.trackTerminalHistoryGaps(eth, gapResult));
     assert(terminal(), "declared terminal history did not project to the chart");
     flushSync(() => host.querySelector<HTMLButtonElement>('[data-return="A"]')!.click());
     await until(() => !terminal() && active.loaded === "BTCUSDT", "market switch retained the previous series' terminal gap");
