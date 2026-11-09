@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
+import subprocess
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -8,6 +11,13 @@ import pytest
 from app.data_engine.data_manager import DataManager
 from app.data_engine.market_data.models import MarketChannel, MarketStreamKey
 from app.data_engine.market_data.trade_flow import TradeHistoryRead
+
+
+def test_trade_archive_importer_can_load_before_market_services() -> None:
+    subprocess.run(
+        [sys.executable, "-c", "from app.replay.trade_import import import_official_date_range"],
+        cwd=Path(__file__).resolve().parents[1], check=True,
+    )
 
 
 class _TradeFlowService:
