@@ -501,8 +501,11 @@ class BackfillEngine:
         for task in plan.tasks:
             source = parse_interval_spec(task.interval)
             identity = identity_from_metadata(task.exchange, metadata)
+            qualified_source = task.exchange in {"binance", "okx"} or (
+                task.exchange == "bybit" and task.market_type == "swap.linear" and task.interval == "5m"
+            )
             if (task.metadata.get("custom_interval") != target.canonical
-                    or task.exchange not in {"binance", "okx"}
+                    or not qualified_source
                     or (identity is not None and not identity.is_legacy_default_for(task.exchange))
                     or source is None or source.alignment is not IntervalAlignment.FIXED_EPOCH
                     or source.phase_ms or source.nominal_ms < 60_000):

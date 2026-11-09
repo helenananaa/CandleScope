@@ -137,11 +137,17 @@ async def fetch_unified_history(
                              "end_ms": page_end, "empty_ranges": empty_ranges})
         elif descriptor.stream_type == StreamType.KLINE:
             limit = min(max(1, int(req.limit or 1)), context.entry.history_limit)
+            options = {}
+            if context.entry.exchange_id == "bybit" and req.end_ms is not None:
+                # The reverse-page cursor and the single-slot repair both
+                # depend on the inclusive upper bound reaching the venue.
+                options["params"] = {"end": req.end_ms}
             values = await exchange.fetch_ohlcv(
                 symbol,
                 timeframe=descriptor.interval,
                 since=req.start_ms,
                 limit=limit,
+                **options,
             )
             from app.data_engine.interval_policy import parse_interval_spec
             spec = parse_interval_spec(descriptor.interval)

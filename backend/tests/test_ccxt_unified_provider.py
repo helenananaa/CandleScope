@@ -800,6 +800,7 @@ class _CountingRestExchange(_UnifiedFakeExchange):
         timeframe: str,
         since: int | None,
         limit: int,
+        params: dict[str, Any] | None = None,
     ) -> list[list[Any]]:
         assert (symbol, timeframe, since, limit) == (
             "BTC/USDT",
@@ -807,6 +808,7 @@ class _CountingRestExchange(_UnifiedFakeExchange):
             1_700_000_000_000,
             2,
         )
+        assert params == {"end": 1_700_000_060_000}
         return [[1_700_000_000_000, 10, 12, 9, 11, 3]]
 
     async def fetch_ticker(self, symbol: str) -> dict[str, Any]:
@@ -1711,3 +1713,68 @@ def test_bybit_mid_bucket_repair_joins_the_live_close(tmp_path, monkeypatch, rep
             await manager.shutdown()
 
     asyncio.run(run())
+
+
+def test_bybit_linear_tail_warmup_reuses_committed_components(tmp_path, monkeypatch):
+    from app.data_engine.backfill import BackfillConfig, BackfillEngine, BackfillStatus
+    from app.data_engine.storage import klines_repo
+    from app.exchanges.ccxt_ext.unified import make_unified_payload
+
+    monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", tmp_path / "bybit-warmup.db")
+    klines_repo.init_klines_storage()
+    market = {"exchange": "bybit", "market_type": "swap.linear"}
+    symbol = "BTC/USDT:USDT"
+    step = 300_000
+    start = 1_700_000_400_000
+    storage = klines_repo.AsyncKlinesRepoAdapter()
+
+    def bar(index, volume=2):
+        opened = start + index * step
+        return {"open_time": opened, "close_time": opened + step - 1,
+                "open": 100, "high": 110, "low": 90, "close": 105, "volume": volume,
+                "quote_volume": None, "trades": None, "taker_buy_base": None, "taker_buy_quote": None}
+
+    class Transport:
+        def __init__(self):
+            self.requests = []
+
+        async def http_fetch(self, request):
+            self.requests.append(request)
+            return [
+                RawMessage(make_unified_payload("kline", [row["open_time"], 100, 110, 90, 105, 3], is_closed=True),
+                           DataSource.HTTP, StreamType.KLINE, row["close_time"])
+                for row in (bar(index) for index in range(4))
+                if request.start_ms <= row["open_time"] <= request.end_ms
+            ]
+
+    transport = Transport()
+    engine = BackfillEngine(
+        BackfillConfig(history_archive_enabled=False, fetch_rate_limit_delay=0, reconcile_enable_cache_push=False),
+        storage, transport, ingestion_config=IngestionConfig(proxy_mode="none"),
+    )
+
+    async def no_rate_limit():
+        pass
+
+    engine.fetcher.set_rate_limiter(no_rate_limit)
+
+    async def exercise():
+        try:
+            await storage.upsert_bars(symbol, "5m", [bar(0), bar(2)], source="bybit_ws_confirmed", **market)
+            await storage.upsert_bars(symbol, "5m", [bar(3, 999)], source="manual", **market)
+            report = await engine.run(
+                symbol, ["10m"], start, start + 2 * step, **market,
+                metadata={"requester": "warm_start_custom_tail", "history_calendar_id": "crypto.24x7.utc"},
+            )
+            assert report.status is BackfillStatus.COMPLETED
+            assert [(request.start_ms, request.end_ms) for request in transport.requests] == [
+                (start + step, start + step), (start + 3 * step, start + 3 * step),
+            ]
+            targets = await storage.query_time_range(symbol, "10m", start, start + 2 * step, **market)
+            assert [(row["open_time"], row["volume"], row["source"]) for row in targets] == [
+                (start, 5, "backfill_aggregated"), (start + 2 * step, 5, "backfill_aggregated"),
+            ]
+        finally:
+            await engine.close()
+
+    asyncio.run(exercise())
