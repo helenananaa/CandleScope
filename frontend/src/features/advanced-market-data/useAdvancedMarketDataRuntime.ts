@@ -326,6 +326,7 @@ export function useAdvancedMarketDataRuntime({
     historyContextKey,
     errors: {},
   }));
+  const [oiRefreshFallbackContextKey, setOiRefreshFallbackContextKey] = useState<string | null>(null);
   const connectionStatus: AdvancedMarketConnectionStatus = !streamEnabled
     ? "disabled"
     : connectionState.identityKey !== identityKey || connectionState.status === "disabled"
@@ -631,12 +632,16 @@ export function useAdvancedMarketDataRuntime({
               const explicit = payload.coverage.ranges !== undefined;
               const refreshFallback = explicit && forceRefresh && payload.fallback === true
                 && !nextUncoveredHistoryRange(coverage.get(coverageKey) || [], pageRange);
-              const retryAllowed = !refreshFallback && (!explicit || historyGapBudgetRef.current.fail(gapKey));
+              if (refreshFallback) {
+                // Background gap fills must not overwrite the explicit refresh result.
+                setOiRefreshFallbackContextKey((current) => (
+                  isCurrentRequest() ? expectedHistoryContextKey : current
+                ));
+                return;
+              }
+              const retryAllowed = !explicit || historyGapBudgetRef.current.fail(gapKey);
               if (explicit) {
-                const message = refreshFallback
-                  ? (locale === "zh-CN" ? "刷新未完成，正在展示本地历史。"
-                    : "Refresh incomplete. Showing local history.")
-                  : locale === "zh-CN"
+                const message = locale === "zh-CN"
                     ? (retryAllowed ? "部分历史尚未取得，正在重试。" : "部分历史尚未取得，请点击重试。")
                     : (retryAllowed ? "Some history is missing; retrying." : "Some history is missing. Select Retry to try again.");
                 setHistoryErrorState((current) => !isCurrentRequest() ? current : ({
@@ -714,6 +719,7 @@ export function useAdvancedMarketDataRuntime({
   const retry = useCallback(() => {
     invalidateHistoryRequests(true);
     historyRefreshRef.current = true;
+    setOiRefreshFallbackContextKey(null);
     setConnectionState({
       identityKey,
       status: streamEnabled ? "connecting" : "disabled",
@@ -733,12 +739,14 @@ export function useAdvancedMarketDataRuntime({
     coverageRef.current.delete(coverageKey);
     coverageExpiryRef.current.delete(coverageKey);
     historyRefreshRef.current = "open_interest";
+    setOiRefreshFallbackContextKey(null);
     setHistoryRetryToken((value) => value + 1);
   }, [invalidateHistoryRequests]);
 
   useEffect(() => {
     const identityChanged = coverageIdentityRef.current !== identityKey;
     coverageIdentityRef.current = identityKey;
+    setOiRefreshFallbackContextKey(null);
     invalidateHistoryRequests(identityChanged);
     if (!disposedRef.current) {
       setHistoryErrorState({ historyContextKey, errors: {} });
@@ -863,9 +871,14 @@ export function useAdvancedMarketDataRuntime({
       const stateCapability = isMarketStateMetricChannel(item.channel)
         ? capabilitySnapshot.channels[item.channel]
         : null;
+      const oiRefreshFallback = item.channel === "open_interest"
+        && oiRefreshFallbackContextKey === historyContextKey
+        ? (locale === "zh-CN" ? "刷新未完成，正在展示本地历史。"
+          : "Refresh incomplete. Showing local history.")
+        : null;
       const studyError = isLiquidation
         ? liquidations.view.historyError || liquidations.view.error
-        : (stateCapability?.history ? historyErrors[item.channel] : null)
+        : (stateCapability?.history ? oiRefreshFallback || historyErrors[item.channel] : null)
           || (stateCapability?.realtime ? streamError : null)
           || null;
       const error = item.visible ? studyError : null;
@@ -894,7 +907,9 @@ export function useAdvancedMarketDataRuntime({
   ), [
     connectionStatus,
     capabilitySnapshot,
+    historyContextKey,
     historyErrors,
+    oiRefreshFallbackContextKey,
     liquidations.view.connectionStatus,
     liquidations.view.error,
     liquidations.view.historyError,
