@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import gc
+from types import SimpleNamespace
 from typing import Any
 
 import aiohttp
@@ -334,7 +335,8 @@ def test_unified_kline_projection_emits_one_closure_transition() -> None:
     assert event.data["open_time"] == first_open
 
 
-def test_bybit_live_close_preserves_venue_confirmation_and_final_volume(tmp_path, monkeypatch) -> None:
+@pytest.mark.parametrize("preview_high", ["74854.2", "74854.4"])
+def test_bybit_live_close_preserves_venue_confirmation_and_final_volume(tmp_path, monkeypatch, preview_high) -> None:
     async def run():
         descriptor = StreamDescriptor("BTCUSDT", StreamType.KLINE, interval="5m",
                                       exchange="bybit", market_type="swap.linear")
@@ -348,7 +350,7 @@ def test_bybit_live_close_preserves_venue_confirmation_and_final_volume(tmp_path
         confirmed = {"start": opened, "end": opened + 299_999, "confirm": True,
                      "open": "74826.6", "high": "74854.3", "low": "74758.7",
                      "close": "74766.1", "volume": "183.532"}
-        preview = {**confirmed, "confirm": False, "high": "74854.4", "volume": "183.414"}
+        preview = {**confirmed, "confirm": False, "high": preview_high, "volume": "183.414"}
         successor = {**preview, "start": opened + 300_000, "end": opened + 599_999}
 
         def project(candle):
@@ -375,9 +377,12 @@ def test_bybit_live_close_preserves_venue_confirmation_and_final_volume(tmp_path
                 received_at_ms=opened + 300_000,
             )).data["is_closed"]
 
+            from app.data_engine.bar_aggregator import aggregator as aggregator_module
             from app.data_engine.data_manager.manager import DataManager
             from app.data_engine.storage import klines_repo
 
+            now_ms = opened + 299_000
+            monkeypatch.setattr(aggregator_module, "time", SimpleNamespace(time=lambda: now_ms / 1000))
             monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", tmp_path / "live.sqlite")
             klines_repo.init_klines_storage()
             manager = DataManager()
@@ -385,14 +390,14 @@ def test_bybit_live_close_preserves_venue_confirmation_and_final_volume(tmp_path
             manager._started = True  # Enable the production bridge without opening exchange sockets.
             agg = manager.bar_aggregator
             agg.add_target("BTCUSDT", "5m", exchange="bybit", market_type="swap.linear")
+            agg.add_target("BTCUSDT", "10m", exchange="bybit", market_type="swap.linear")
             preview_event = normalizer.parse(RawMessage(
                 payload=preview_events[0].payload, source=DataSource.WEBSOCKET,
                 stream_type=StreamType.KLINE, received_at_ms=opened + 299_000,
             ))
             await agg.on_market_event(preview_event)
+            now_ms = opened + 300_000
             await agg.on_market_event(event)
-            await manager.aggregator_bridge.delivery.stop()
-            await manager.event_bus.close()
             [saved] = klines_repo.query_klines("BTCUSDT", "5m", exchange="bybit", market_type="swap.linear")
             assert saved["source"] == "bybit_ws_confirmed"
             assert saved["high"] == 74854.3 and saved["volume"] == 183.532
@@ -403,6 +408,21 @@ def test_bybit_live_close_preserves_venue_confirmation_and_final_volume(tmp_path
             [unconfirmed] = project({**successor, "confirm": None, "volume": "183.415"})
             assert unconfirmed.payload["is_closed"] is False
             assert "source_close_time_ms" not in unconfirmed.payload
+
+            [final_leaf] = project({**successor, "confirm": True, "open": "74766.1",
+                                    "high": "74780.0", "volume": "20.005"})
+            final_event = normalizer.parse(RawMessage(
+                payload=final_leaf.payload, source=DataSource.WEBSOCKET,
+                stream_type=StreamType.KLINE, received_at_ms=opened + 600_000,
+            ))
+            now_ms = opened + 600_000
+            await agg.on_market_event(final_event)
+            await manager.aggregator_bridge.delivery.stop()
+            await manager.event_bus.close()
+            [derived] = klines_repo.query_klines("BTCUSDT", "10m", exchange="bybit", market_type="swap.linear")
+            assert derived["source"] == "data_manager_composite_closed"
+            assert derived["open_time"] == opened and derived["volume"] == pytest.approx(203.537)
+            assert derived["high"] == 74854.3
         finally:
             await exchange.close()
 

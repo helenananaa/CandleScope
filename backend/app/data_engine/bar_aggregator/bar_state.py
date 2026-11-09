@@ -353,9 +353,16 @@ class ComponentSnapshotOHLCVMerge:
         candidate: dict,
         *,
         allow_authoritative_correction: bool = False,
+        allow_confirmed_close: bool = False,
     ) -> bool:
         if candidate == existing:
             return False
+
+        if (allow_confirmed_close and not existing["is_closed"] and candidate["is_closed"]
+                and candidate["close_time_ms"] == existing["close_time_ms"]):
+            # An explicit venue close replaces its own forming snapshot even
+            # when an extremum or quantity decreases.
+            return True
 
         source_ref = candidate.get("source_ref")
         previous_ref = existing.get("source_ref")
@@ -416,6 +423,7 @@ class ComponentSnapshotOHLCVMerge:
                 bar_input.source in {BarInputSource.BACKFILL, BarInputSource.CORRECTION}
                 and bar_input.is_closed
             ),
+            allow_confirmed_close=bar_input.extra.get("bybit_close_confirmed") is True,
         ):
             logger.debug(
                 "Ignored non-monotonic or stale component snapshot %s "
