@@ -330,6 +330,30 @@ def test_lru_repeated_revisions_never_accumulate_tombstones_or_retired_values():
     assert_idle(m, empty=True)
 
 
+def test_unchanged_revision_checks_skip_retained_entry_keys():
+    class TrackedKeys(set):
+        scans = 0
+
+        def __iter__(self):
+            self.scans += 1
+            return super().__iter__()
+
+    m = manager()
+    consume(m, key(0))
+    consume(m, key(1))
+    versions = m._dependencies[(SOURCE, m.source.domain)]
+    tracked = TrackedKeys(versions[1])
+    versions[1] = tracked
+    with m.view((SOURCE,)) as view:
+        with m.acquire(key(0), view) as value:
+            assert value.summary.values.volume == 6
+    assert tracked.scans == 0
+    m.source.amend()
+    m.poll()
+    assert tracked.scans == 1
+    assert_idle(m, empty=True)
+
+
 def test_work_to_retained_transfer_is_atomic_against_other_budget_owners():
     budget = MemoryBudget(100)
     used = {"a": 0, "b": 0}

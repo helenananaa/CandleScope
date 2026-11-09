@@ -265,27 +265,38 @@ class SharedBlockManager:
         entry.valid = False
         for dep in entry.block.summary.revisions:
             index_key = (dep.series, dep.domain)
-            indexed = self._dependencies.get(index_key)
-            if indexed is not None:
-                indexed.discard(key)
-                if not indexed:
-                    del self._dependencies[index_key]
+            by_version = self._dependencies[index_key]
+            indexed = by_version[dep.version]
+            indexed.remove(key)
+            if not indexed:
+                del by_version[dep.version]
+            if not by_version:
+                del self._dependencies[index_key]
         if entry.pins:
             self._retired.add(entry)
         else:
             self._bytes -= entry.size
 
     def _make_room(self, extra, slots=0, exclude=None):
-        if self._bytes + extra <= self.max_bytes and len(self._entries) + len(self._retired) + slots <= self.max_entries:
+        bytes_needed = self._bytes + extra - self.max_bytes
+        slots_needed = len(self._entries) + len(self._retired) + slots - self.max_entries
+        if bytes_needed <= 0 and slots_needed <= 0:
             return
-        for key, entry in tuple(self._entries.items()):
-            if self._bytes + extra <= self.max_bytes and len(self._entries) + len(self._retired) + slots <= self.max_entries:
-                break
+        # Keep only the LRU victims. A saturated cache usually needs a single
+        # eviction, so copying every retained entry would dominate small builds.
+        victims = []
+        for key, entry in self._entries.items():
             if not entry.pins and key != exclude:
-                self._drop(key, entry)
-                self._metrics["evictions"] += 1
+                victims.append((key, entry))
+                bytes_needed -= entry.size
+                slots_needed -= 1
+                if bytes_needed <= 0 and slots_needed <= 0:
+                    break
+        for key, entry in victims:
+            self._drop(key, entry)
+            self._metrics["evictions"] += 1
         self._publish_usage()
-        if self._bytes + extra > self.max_bytes or len(self._entries) + len(self._retired) + slots > self.max_entries:
+        if bytes_needed > 0 or slots_needed > 0:
             raise MemoryBudgetExceeded("block capacity is held by active consumers")
 
     def _invalidate(self, series, domain, *, except_version=None, start_ms=None, end_ms=None):
@@ -295,11 +306,16 @@ class SharedBlockManager:
         def overlaps(key):
             return ((start_ms is None or key.end_ms > start_ms)
                     and (end_ms is None or key.start_ms < end_ms))
-        for key in tuple(self._dependencies.get((series, domain), ())):
-            entry = self._entries[key]
-            if affected(entry.block.summary.revisions) and overlaps(key[0]):
-                self._drop(key, entry)
-                self._metrics["invalidations"] += 1
+        # View acquisition and publication recheck unchanged revisions on
+        # every page. Only visit entries in older revision buckets.
+        by_version = self._dependencies.get((series, domain), {})
+        for version, keys in tuple(by_version.items()):
+            if version == except_version:
+                continue
+            for key in tuple(keys):
+                if overlaps(key[0]):
+                    self._drop(key, self._entries[key])
+                    self._metrics["invalidations"] += 1
         for (key, deps), flight in self._flights.items():
             if affected(deps) and overlaps(key):
                 flight.invalid = True
@@ -422,7 +438,9 @@ class SharedBlockManager:
                         or summary.coverage.ranges[0][0] < key.start_ms
                         or summary.coverage.ranges[-1][1] > key.end_ms):
                     raise ValueError("block result violates its identity, bounds or dependency contract")
-                size = retained_size((cache_key, summary))[0] + 1024 + 256 * len(view.revisions)
+                # Include the dependency set and its version bucket, even
+                # when this block is the only member of that bucket.
+                size = retained_size((cache_key, summary))[0] + 1024 + 512 * len(view.revisions)
                 if size > work_bytes:
                     raise MemoryBudgetExceeded("block result exceeds declared build allowance")
                 with self._lock:
@@ -436,7 +454,8 @@ class SharedBlockManager:
                     def commit():
                         self._entries[cache_key] = entry
                         for dep in view.revisions:
-                            self._dependencies.setdefault((dep.series, dep.domain), set()).add(cache_key)
+                            versions = self._dependencies.setdefault((dep.series, dep.domain), {})
+                            versions.setdefault(dep.version, set()).add(cache_key)
                         self._bytes += cost
                         self._publish_usage()
                     admission.retain(cost, commit)
