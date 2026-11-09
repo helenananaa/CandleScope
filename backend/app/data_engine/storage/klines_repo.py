@@ -10,7 +10,7 @@ from typing import Any, Callable
 
 from app.core.config import KLINES_DB_PATH
 from app.core.executors import run_storage
-from app.data_engine.kline_quality import source_rank_sql
+from app.data_engine.kline_quality import BYBIT_LEGACY_FINAL_SOURCE, source_rank_sql
 from app.exchanges.trade_candles import uses_trade_candles, supports_trade_candles
 from app.data_engine.history.calendar import (
     AlwaysOpenCalendar,
@@ -28,7 +28,7 @@ from app.data_engine.series_identity import (
     resolve_kline_series_identity,
 )
 
-from .revisions import (RevisionStore, guarded_write, init_revision_storage,
+from .revisions import (IDENTITY_COLUMNS, RevisionStore, guarded_write, init_revision_storage,
                         mark_deleted, series_values, register_derived, current_revision, mutation_mode)
 from .sqlite_runtime import SQLiteConnectionPolicy, open_sqlite
 
@@ -280,6 +280,43 @@ def _migrate_kline_series_identity(conn: sqlite3.Connection) -> None:
     logger.info("K-line semantic identity migration complete")
 
 
+def _migrate_bybit_legacy_finality(conn: sqlite3.Connection) -> None:
+    """Keep legacy values while revoking finality that predates venue proof."""
+    conn.execute("CREATE TABLE IF NOT EXISTS kline_quality_migrations (name TEXT PRIMARY KEY)")
+    applied = conn.execute(
+        "INSERT OR IGNORE INTO kline_quality_migrations VALUES ('bybit_venue_finality_v1')"
+    )
+    if not applied.rowcount:
+        return
+
+    # Legacy aggregates may include an early Bybit close. A native REST
+    # amendment is independent, while a derived amendment may reuse siblings.
+    legacy_sources = ("data_manager_exchange_closed", "data_manager_composite_closed", "backfill_aggregated")
+    placeholders = ", ".join("?" for _ in legacy_sources)
+    derived_identity = " AND ".join(f"d.{name}=klines.{name}" for name in IDENTITY_COLUMNS)
+    with mutation_mode(conn, "provenance_migration"):
+        conn.execute(
+            f"""UPDATE klines SET source=? WHERE exchange='bybit'
+                AND (source IN ({placeholders}) OR
+                    (source='data_manager_amended' AND EXISTS (
+                        SELECT 1 FROM kline_derived_series d WHERE {derived_identity})))""",
+            (BYBIT_LEGACY_FINAL_SOURCE, *legacy_sources),
+        )
+
+    # A restart can replay a close that never reached storage or publication.
+    # Retain the journal payload and let its normal consumer recovery path
+    # invalidate any affected subscription instead of publishing that close.
+    conn.execute(
+        f"""UPDATE bar_delivery SET phase='rejected', recovery_required=1
+            WHERE phase IN ('pending','committed')
+              AND json_extract(payload, '$.exchange')='bybit'
+              AND (json_extract(payload, '$.bar.source') IN ({placeholders}) OR
+                   (json_extract(payload, '$.bar.source')='data_manager_amended'
+                    AND json_extract(payload, '$.derived')=1))""",
+        legacy_sources,
+    )
+
+
 def init_klines_storage() -> None:
     Path(KLINES_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     with _connect() as conn:
@@ -356,6 +393,7 @@ def init_klines_storage() -> None:
         from .bar_delivery import init_bar_delivery_storage
         init_bar_delivery_storage(conn)
         init_revision_storage(conn)
+        _migrate_bybit_legacy_finality(conn)
         from .native_empty_seconds import init_schema as init_native_empty_schema
         init_native_empty_schema(conn)
         from .trade_empty_buckets import init_schema as init_trade_empty_schema

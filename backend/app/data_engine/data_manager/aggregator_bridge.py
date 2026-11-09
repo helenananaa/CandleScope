@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
+from app.data_engine.kline_quality import BYBIT_WS_CONFIRMED_SOURCE
 from app.core.executors import run_storage
 from app.data_engine.bar_delivery_errors import BarDeliveryUnavailable
 
@@ -243,6 +244,8 @@ class AggregatorBridge:
             return "trade_history_verified"
         if event_type == DataEventType.BAR_AMENDED:
             return "data_manager_amended"
+        if bar_state.exchange == "bybit" and bar_state.close_reason == "source_close":
+            return BYBIT_WS_CONFIRMED_SOURCE if bar_state.quality_source == BYBIT_WS_CONFIRMED_SOURCE else None
         return {
             "source_close": "data_manager_exchange_closed",
             "composite_close": "data_manager_composite_closed",

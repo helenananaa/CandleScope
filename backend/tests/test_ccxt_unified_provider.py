@@ -334,7 +334,7 @@ def test_unified_kline_projection_emits_one_closure_transition() -> None:
     assert event.data["open_time"] == first_open
 
 
-def test_bybit_live_close_preserves_venue_confirmation_and_final_volume() -> None:
+def test_bybit_live_close_preserves_venue_confirmation_and_final_volume(tmp_path, monkeypatch) -> None:
     async def run():
         descriptor = StreamDescriptor("BTCUSDT", StreamType.KLINE, interval="5m",
                                       exchange="bybit", market_type="swap.linear")
@@ -348,7 +348,7 @@ def test_bybit_live_close_preserves_venue_confirmation_and_final_volume() -> Non
         confirmed = {"start": opened, "end": opened + 299_999, "confirm": True,
                      "open": "74826.6", "high": "74854.3", "low": "74758.7",
                      "close": "74766.1", "volume": "183.532"}
-        preview = {**confirmed, "confirm": False, "volume": "183.414"}
+        preview = {**confirmed, "confirm": False, "high": "74854.4", "volume": "183.414"}
         successor = {**preview, "start": opened + 300_000, "end": opened + 599_999}
 
         def project(candle):
@@ -367,6 +367,35 @@ def test_bybit_live_close_preserves_venue_confirmation_and_final_volume() -> Non
                 stream_type=StreamType.KLINE, received_at_ms=opened + 300_000))
             assert event is not None
             assert event.data["is_closed"] is True and event.data["volume"] == 183.532
+            assert event.data["bybit_close_confirmed"] is True
+            unproved = dict(close_events[0].payload)
+            del unproved["source_close_time_ms"]
+            assert not normalizer.parse(RawMessage(
+                payload=unproved, source=DataSource.WEBSOCKET, stream_type=StreamType.KLINE,
+                received_at_ms=opened + 300_000,
+            )).data["is_closed"]
+
+            from app.data_engine.data_manager.manager import DataManager
+            from app.data_engine.storage import klines_repo
+
+            monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", tmp_path / "live.sqlite")
+            klines_repo.init_klines_storage()
+            manager = DataManager()
+            manager.set_storage(klines_repo.KlinesRepoAdapter())
+            manager._started = True  # Enable the production bridge without opening exchange sockets.
+            agg = manager.bar_aggregator
+            agg.add_target("BTCUSDT", "5m", exchange="bybit", market_type="swap.linear")
+            preview_event = normalizer.parse(RawMessage(
+                payload=preview_events[0].payload, source=DataSource.WEBSOCKET,
+                stream_type=StreamType.KLINE, received_at_ms=opened + 299_000,
+            ))
+            await agg.on_market_event(preview_event)
+            await agg.on_market_event(event)
+            await manager.aggregator_bridge.delivery.stop()
+            await manager.event_bus.close()
+            [saved] = klines_repo.query_klines("BTCUSDT", "5m", exchange="bybit", market_type="swap.linear")
+            assert saved["source"] == "bybit_ws_confirmed"
+            assert saved["high"] == 74854.3 and saved["volume"] == 183.532
             assert project(confirmed) == ()
             assert project({**successor, "confirm": "true"}) == ()
         finally:

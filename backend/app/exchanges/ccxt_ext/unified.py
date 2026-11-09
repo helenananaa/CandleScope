@@ -394,6 +394,13 @@ class CcxtUnifiedNormalizer:
             end_time = spec.next_ms(open_time)
             if "source_close_time_ms" in payload and payload["source_close_time_ms"] != end_time - 1:
                 return None
+            is_closed = bool(payload.get("is_closed", end_time <= msg.received_at_ms))
+            bybit_live = self._descriptor.exchange == "bybit" and msg.source == DataSource.WEBSOCKET
+            bybit_close_confirmed = (
+                bybit_live
+                and payload.get("is_closed") is True
+                and payload.get("source_close_time_ms") == end_time - 1
+            )
             data = {
                 "interval": self._descriptor.interval or "",
                 "open_time": open_time,
@@ -411,12 +418,8 @@ class CcxtUnifiedNormalizer:
                 "trades": 0,
                 "taker_buy_base": 0.0,
                 "taker_buy_quote": 0.0,
-                "is_closed": bool(
-                    payload.get(
-                        "is_closed",
-                        end_time <= msg.received_at_ms,
-                    )
-                ),
+                "is_closed": bybit_close_confirmed if bybit_live else is_closed,
+                "bybit_close_confirmed": bybit_close_confirmed,
                 "trade_coverage_verified": payload.get("trade_coverage_verified") is True,
                 "trade_candle_source": payload.get("trade_candle_source") is True,
             }
