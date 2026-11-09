@@ -1168,7 +1168,7 @@ async def test_repair_consumes_committed_official_days_without_download(
         await service.shutdown()
 
 
-@pytest.mark.parametrize("outcome", ["commit", "abort", "timeout", "already-filled"])
+@pytest.mark.parametrize("outcome", ["commit", "abort", "timeout", "already-filled", "local-filled"])
 @_async_test
 async def test_live_repair_observes_a_separate_official_day_publisher(tmp_path, monkeypatch, outcome):
     pytest.importorskip("pyarrow")
@@ -1214,13 +1214,26 @@ with trade_archive_day_acquisition(ParquetRawAggTradeArchive(root), day=day, **i
     factory = _Factory()
     factory.repair_rows = {i: _event(i, trade_time_ms=start + i, source=DataSource.HTTP_BACKFILL)
                            for i in range(2, 7)}
-    service = _service(factory, tmp_path, verified_archive_root=verified_root)
+    if outcome == "local-filled":
+        observed = ParquetRawAggTradeArchive(tmp_path / "observed")
+        observed.append([
+            NormalizedAggTrade.from_market_event(_event(i, trade_time_ms=start + i)).to_dict()
+            for i in range(2, 7)
+        ])
+        service = TradeFlowService(
+            factory, engine=TradeFlowEngine(initial_bucket_complete=True),
+            rollup_store=SQLiteTradeFlowRollupStore(tmp_path / "flow.sqlite"),
+            raw_archive=observed, verified_archive_root=verified_root,
+        )
+    else:
+        service = _service(factory, tmp_path, verified_archive_root=verified_root)
     try:
         assert await asyncio.wait_for(publisher.stdout.readline(), timeout=15) == b"locked\n"
         await service.ensure_stream(_key(), consumer_id="in-flight-official")
         await factory.emit(_event(1, trade_time_ms=start + 1))
         await factory.emit(_event(7, trade_time_ms=start + 7))
-        await _wait_until(lambda: service.diagnostics()["repair_verified_acquisition_waits"] == 1)
+        if outcome != "local-filled":
+            await _wait_until(lambda: service.diagnostics()["repair_verified_acquisition_waits"] == 1)
         assert not factory.fetch_calls
         if outcome in {"commit", "abort"}:
             publisher.stdin.write(f"{outcome}\n".encode())
@@ -1236,6 +1249,10 @@ with trade_archive_day_acquisition(ParquetRawAggTradeArchive(root), day=day, **i
         calls = [(args["from_id"], args["limit"]) for _, args in factory.fetch_calls]
         assert calls == ([(2, 5)] if outcome in {"abort", "timeout"} else [])
         diagnostics = service.diagnostics()
+        if outcome == "local-filled":
+            assert publisher.returncode is None
+            assert diagnostics["repair_verified_acquisition_waits"] == 0
+            assert diagnostics["repair_rows_reused_from_archive"] == 5
         assert diagnostics["repair_rows_reused_from_verified_archive"] == (5 if outcome == "commit" else 0)
         assert diagnostics["repair_verified_acquisition_wait_expired"] == int(outcome == "timeout")
     finally:

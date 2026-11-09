@@ -1596,7 +1596,8 @@ class TradeFlowService:
             min(gap.left_trade_time_ms, gap.right_trade_time_ms),
             max(gap.left_trade_time_ms, gap.right_trade_time_ms),
         )
-        archive_deadline = asyncio.get_running_loop().time() + _VERIFIED_REPAIR_WAIT_SECONDS
+        clock = asyncio.get_running_loop().time
+        archive_deadline = clock() + _VERIFIED_REPAIR_WAIT_SECONDS
         for start_id, end_id in open_ranges:
             for first in range(start_id, end_id + 1, self._repair_page_size):
                 last = min(first + self._repair_page_size - 1, end_id)
@@ -1605,8 +1606,11 @@ class TradeFlowService:
                 local = observed or {}
                 verified_ids = set()
                 if observed is not None:
+                    # Check already-published evidence for conflicts. A full
+                    # local page does not depend on an in-flight publisher.
+                    deadline = clock() if len(local) == last - first + 1 else archive_deadline
                     verified = await self._read_verified_archive_id_page(
-                        identity, page_gap, time_bounds, archive_deadline,
+                        identity, page_gap, time_bounds, deadline,
                     )
                     for trade_id, trade in verified.items():
                         prior = local.get(trade_id)
