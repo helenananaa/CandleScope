@@ -1,4 +1,6 @@
 export const tradeHistoryEnglish = {
+  "liq.history.localSamples": "Sampled local history · gaps cannot be backfilled",
+  "orderBook.history.liveOnly": "Current book only · historical reconstruction unavailable",
   "trade.history.title": "Trade history",
   "trade.history.liveProfile": "Back to live profile",
   "trade.history.date": "UTC date",
@@ -26,6 +28,8 @@ export const tradeHistoryEnglish = {
 } as const;
 
 export const tradeHistoryChinese = {
+  "liq.history.localSamples": "本地抽样历史 · 缺失无法补齐",
+  "orderBook.history.liveOnly": "仅当前盘口 · 无法重建历史盘口",
   "trade.history.title": "历史成交",
   "trade.history.liveProfile": "返回实时成交分布",
   "trade.history.date": "UTC 日期",
@@ -53,6 +57,8 @@ export const tradeHistoryChinese = {
 } satisfies Record<keyof typeof tradeHistoryEnglish, string>;
 
 export const tradeHistoryTraditional = {
+  "liq.history.localSamples": "本機抽樣歷史 · 缺漏無法補齊",
+  "orderBook.history.liveOnly": "僅顯示目前委託簿 · 無法重建歷史委託簿",
   "trade.history.title": "歷史成交",
   "trade.history.liveProfile": "返回即時成交分佈",
   "trade.history.date": "UTC 日期",
@@ -80,6 +86,8 @@ export const tradeHistoryTraditional = {
 } satisfies Record<keyof typeof tradeHistoryEnglish, string>;
 
 export const tradeHistoryJapanese = {
+  "liq.history.localSamples": "ローカルのサンプル履歴 · 欠損の補完不可",
+  "orderBook.history.liveOnly": "現在の板情報のみ · 過去の板は再構築不可",
   "trade.history.title": "約定履歴",
   "trade.history.liveProfile": "リアルタイムの出来高分布に戻る",
   "trade.history.date": "日付（UTC）",
@@ -107,6 +115,8 @@ export const tradeHistoryJapanese = {
 } satisfies Record<keyof typeof tradeHistoryEnglish, string>;
 
 export const tradeHistoryKorean = {
+  "liq.history.localSamples": "로컬 표본 기록 · 누락 구간 복구 불가",
+  "orderBook.history.liveOnly": "현재 호가창만 제공 · 과거 호가창 재구성 불가",
   "trade.history.title": "체결 내역",
   "trade.history.liveProfile": "실시간 거래량 분포로 돌아가기",
   "trade.history.date": "날짜(UTC)",
@@ -134,6 +144,8 @@ export const tradeHistoryKorean = {
 } satisfies Record<keyof typeof tradeHistoryEnglish, string>;
 
 export const tradeHistoryBrazilian = {
+  "liq.history.localSamples": "Histórico local por amostragem · lacunas sem reposição",
+  "orderBook.history.liveOnly": "Apenas livro atual · reconstrução histórica indisponível",
   "trade.history.title": "Histórico de negócios",
   "trade.history.liveProfile": "Voltar ao perfil de volume em tempo real",
   "trade.history.date": "Data em UTC",

@@ -1,4 +1,5 @@
 import type { MarketHistoryRange } from "../advanced-market-data/marketHistoryCoverage.js";
+import { ApiPayloadError } from "../../services/apiPayloadParsers.js";
 import { fetchLiquidationHistory } from "./liquidationApi.js";
 import type { LiquidationHistoryPayload, LiquidationIdentity, LiquidationPositionSide } from "./liquidationTypes.js";
 
@@ -26,7 +27,7 @@ export async function loadLiquidationHistoryPages({
       || payload.key.symbol !== identity.symbol.toUpperCase()
       || payload.key.params.period !== "1m"
       || payload.key.params.position_side !== side) {
-      throw new Error(`Liquidation ${side} history identity did not match the request`);
+      throw new ApiPayloadError("liquidations.history.key", `${side} history identity did not match the request`);
     }
     if (!payload.hasMore) {
       onPage(payload, { startMs: cursor, endMs: range.endMs });
@@ -40,7 +41,7 @@ export async function loadLiquidationHistoryPages({
       : payload.nextStartMs;
     if (!tail || tail.bucketStartMs < cursor || next == null
       || next <= tail.bucketStartMs || next > range.endMs) {
-      throw new Error(`Liquidation ${side} history did not advance its cursor`);
+      throw new ApiPayloadError("liquidations.history.next_cursor", `${side} history did not advance its cursor`);
     }
     onPage(payload, { startMs: cursor, endMs: next - 1 });
     cursor = next;

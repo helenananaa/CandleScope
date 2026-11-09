@@ -26,6 +26,7 @@ test("dock renders stream failure detail and retry instead of generic support te
   for (const status of ["stale", "reconnecting", "error"] as const) {
     store.publishStatus(status, { message: "检测到序列缺口，正在重新同步" });
     const html = renderToStaticMarkup(<OrderBookDock runtime={runtime} height={300} />);
+    assert.ok(html.includes(t("orderBook.history.liveOnly")));
     assert.match(html, /title="检测到序列缺口，正在重新同步"/);
     assert.match(html, /<div class="ui-empty-description">检测到序列缺口，正在重新同步<\/div>/);
     assert.match(html, /<button type="button" class="ui-btn ui-btn-sm">/);

@@ -17,7 +17,9 @@ import type {
 import { getLiquidationStreamUrl } from "./liquidationApi.js";
 import { loadLiquidationHistoryPages } from "./liquidationHistoryLoader.js";
 import {
+  LIQUIDATION_HISTORY_RETRY_DELAY_MS,
   LiquidationHistoryRequestCoordinator,
+  LiquidationHistoryRetryBudget,
   liquidationHistoryRangeForCandles,
   normalizeLiquidationHistoryRange,
   subtractLiquidationHistoryCoverage,
@@ -57,7 +59,6 @@ interface ActiveContext {
 }
 
 const LIQUIDATION_SIDES: readonly LiquidationPositionSide[] = ["long", "short"];
-const HISTORY_RETRY_DELAY_MS = 30_000;
 const MINUTE_MS = 60_000;
 const LIVE_HISTORY_RECONCILE_MS = 60_000;
 const LIVE_HISTORY_RECONCILE_WINDOW_MS = 5 * MINUTE_MS;
@@ -98,7 +99,10 @@ export function useLiquidationRuntime({
     enabled ? "connecting" : "disabled",
   );
   const [error, setError] = useState<string | null>(null);
-  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyErrors, setHistoryErrors] = useState<Record<LiquidationPositionSide, string | null>>({
+    long: null,
+    short: null,
+  });
   const [quality, setQuality] = useState<LiquidationQualityMetadata | null>(null);
   const disposedRef = useRef(false);
   const generationRef = useRef(0);
@@ -110,6 +114,10 @@ export function useLiquidationRuntime({
     seriesReady,
   });
   const requestCoordinatorRef = useRef(new LiquidationHistoryRequestCoordinator());
+  const retryBudgetsRef = useRef({
+    long: new LiquidationHistoryRetryBudget(),
+    short: new LiquidationHistoryRetryBudget(),
+  });
   const abortControllersRef = useRef(new Set<AbortController>());
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const automaticRangeRef = useRef<MarketHistoryRange | null>(null);
@@ -132,27 +140,34 @@ export function useLiquidationRuntime({
     for (const controller of abortControllersRef.current) controller.abort();
     abortControllersRef.current = new Set();
     requestCoordinatorRef.current.clear();
+  }, []);
+
+  const resetHistoryFailures = useCallback(() => {
     clearRetryTimer();
+    retryBudgetsRef.current = {
+      long: new LiquidationHistoryRetryBudget(),
+      short: new LiquidationHistoryRetryBudget(),
+    };
+    setHistoryErrors({ long: null, short: null });
   }, [clearRetryTimer]);
 
-  const scheduleHistoryRetry = useCallback((expectedGeneration: number) => {
-    if (disposedRef.current
-      || generationRef.current !== expectedGeneration
-      || retryTimerRef.current !== null) return;
+  const scheduleHistoryRetry = useCallback(() => {
+    clearRetryTimer();
     retryTimerRef.current = setTimeout(() => {
       retryTimerRef.current = null;
-      if (disposedRef.current || generationRef.current !== expectedGeneration) return;
+      if (disposedRef.current) return;
       setHistoryToken((value) => value + 1);
-    }, HISTORY_RETRY_DELAY_MS);
-  }, []);
+    }, LIQUIDATION_HISTORY_RETRY_DELAY_MS);
+  }, [clearRetryTimer]);
 
   useLayoutEffect(() => {
     disposedRef.current = false;
     return () => {
       disposedRef.current = true;
       invalidateHistory();
+      clearRetryTimer();
     };
-  }, [invalidateHistory]);
+  }, [clearRetryTimer, invalidateHistory]);
 
   const loadHistory = useCallback((rawRange: MarketHistoryRange): boolean => {
     const context = activeRef.current;
@@ -162,6 +177,8 @@ export function useLiquidationRuntime({
     const expectedGeneration = generationRef.current;
     let scheduled = false;
     for (const side of LIQUIDATION_SIDES) {
+      const budget = retryBudgetsRef.current[side];
+      if (!budget.canRequest(Date.now())) continue;
       const claims = requestCoordinatorRef.current.claim(
         side,
         requested,
@@ -184,7 +201,6 @@ export function useLiquidationRuntime({
         };
         void (async () => {
           try {
-            setHistoryError(null);
             await loadLiquidationHistoryPages({
               identity: context.identity,
               side,
@@ -196,11 +212,15 @@ export function useLiquidationRuntime({
                 setQuality(payload.quality);
               },
             });
+            if (isCurrent() && budget.succeeded(Date.now())) {
+              setHistoryErrors((previous) => previous[side] ? { ...previous, [side]: null } : previous);
+            }
           } catch (caught: unknown) {
             if (isAbortError(caught) || !isCurrent()) return;
             console.warn(`Liquidation ${side} history failed:`, caught);
-            setHistoryError(caught instanceof Error ? describeError(caught, caught.message) : String(caught));
-            scheduleHistoryRetry(expectedGeneration);
+            const message = caught instanceof Error ? describeError(caught, caught.message) : String(caught);
+            setHistoryErrors((previous) => ({ ...previous, [side]: message }));
+            if (budget.failed(caught, Date.now())) scheduleHistoryRetry();
           } finally {
             requestCoordinatorRef.current.release(claim);
             abortControllersRef.current.delete(controller);
@@ -220,21 +240,24 @@ export function useLiquidationRuntime({
     if (clearUnconfirmed) liquidationStore.clearUnconfirmed(identity);
     liquidationStore.invalidateHistoryScans(identity);
     invalidateHistory();
-    setHistoryError(null);
     setHistoryToken((value) => value + 1);
   }, [identity, invalidateHistory]);
 
   const retry = useCallback(() => {
+    resetHistoryFailures();
     reloadHistory(true);
     setError(null);
     setConnectionStatus(enabled ? "connecting" : "disabled");
     setStreamToken((value) => value + 1);
-  }, [enabled, reloadHistory]);
+  }, [enabled, reloadHistory, resetHistoryFailures]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    resetHistoryFailures();
+  }, [enabled, identityKey, resetHistoryFailures]);
+
+  useLayoutEffect(() => {
     invalidateHistory();
     automaticRangeRef.current = null;
-    setHistoryError(null);
     setQuality(null);
   }, [enabled, identityKey, interval, invalidateHistory]);
 
@@ -243,6 +266,7 @@ export function useLiquidationRuntime({
     const reconcileTail = () => {
       const cutoffMs = Math.max(0, Date.now() - LIVE_HISTORY_RECONCILE_WINDOW_MS);
       const range = { startMs: cutoffMs, endMs: Date.now() };
+      if (LIQUIDATION_SIDES.every((side) => !retryBudgetsRef.current[side].canRequest(Date.now()))) return;
       liquidationStore.invalidateHistoryScans(identity, range);
       loadHistory(range);
     };
@@ -322,6 +346,7 @@ export function useLiquidationRuntime({
     dataMeta.lastTime,
     enabled,
     historyToken,
+    identityKey,
     interval,
     loadHistory,
     seriesReady,
@@ -333,9 +358,9 @@ export function useLiquidationRuntime({
     identityKey,
     connectionStatus: enabled ? connectionStatus : "disabled",
     error: enabled ? error : null,
-    historyError: enabled ? historyError : null,
+    historyError: enabled ? historyErrors.long ?? historyErrors.short ?? null : null,
     quality,
-  }), [connectionStatus, enabled, error, historyError, identityKey, quality, visible]);
+  }), [connectionStatus, enabled, error, historyErrors, identityKey, quality, visible]);
 
   return useMemo(() => ({ view, ensureVisibleRange, retry }), [ensureVisibleRange, retry, view]);
 }

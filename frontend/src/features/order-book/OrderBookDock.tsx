@@ -472,6 +472,7 @@ function OrderBookDock({ runtime, height, onRequestClose }: OrderBookDockProps) 
             {activeGrouping === "auto" && autoFrozen && <span>{t("orderBook.autoFrozen")}</span>}
           </div>
 
+          <div className="ob-history-note">{t("orderBook.history.liveOnly")}</div>
           <div className="ob-column-header">
             <span>
               {t("orderBook.price")}{presentation?.priceStep ? ` · ${formatPrice(presentation.priceStep)}` : ""}
