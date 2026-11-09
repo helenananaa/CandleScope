@@ -54,7 +54,7 @@ import logging
 import time
 from dataclasses import replace
 from itertools import groupby
-from typing import Any
+from typing import Any, Iterator
 
 from app.exchanges.symbols import normalize_symbol
 from app.exchanges.rate_limits import RateLimitDeferred
@@ -87,6 +87,8 @@ from .reconciler import Reconciler
 from .publisher import RepairPublisher
 
 logger = logging.getLogger("backfill.Engine")
+
+_BYBIT_WARMUP_SOURCE = ("bybit", "swap.linear", "5m")
 
 __all__ = [
     # Engine
@@ -292,6 +294,7 @@ class BackfillEngine:
                     exchange=exchange,
                     market_type=market_type,
                 )
+                gaps = await self._reuse_native_seed_components(gaps, metadata)
                 metadata["repair_mode"] = "authoritative_refresh"
                 logger.info(
                     "Forcing authoritative refresh for %s intervals=%s range=[%s,%s]",
@@ -502,7 +505,7 @@ class BackfillEngine:
             source = parse_interval_spec(task.interval)
             identity = identity_from_metadata(task.exchange, metadata)
             qualified_source = task.exchange in {"binance", "okx"} or (
-                task.exchange == "bybit" and task.market_type == "swap.linear" and task.interval == "5m"
+                (task.exchange, task.market_type, task.interval) == _BYBIT_WARMUP_SOURCE
             )
             if (task.metadata.get("custom_interval") != target.canonical
                     or not qualified_source
@@ -517,23 +520,28 @@ class BackfillEngine:
                 task.symbol, task.interval, task.start_ms, task.end_ms,
                 exchange=task.exchange, market_type=task.market_type,
             )
-            trusted = {
-                int(row["open_time"]) for row in rows
-                if self._is_reusable_warmup_component(row, step, now_ms)
-            }
             plan.derived_source_windows.append(task)
-            for local, slots in groupby(range(task.start_ms, task.end_ms + 1, step), trusted.__contains__):
-                if local:
-                    continue
-                missing = list(slots)
-                tasks.append(replace(
-                    task, start_ms=missing[0], end_ms=missing[-1], estimated_bars=len(missing),
-                ))
+            for first, last, count in self._unqualified_warmup_ranges(
+                rows, task.start_ms, task.end_ms, step, now_ms,
+            ):
+                tasks.append(replace(task, start_ms=first, end_ms=last, estimated_bars=count))
 
         if plan.derived_source_windows:
             plan.tasks = tasks
             plan.estimated_requests = len(tasks)
             plan.estimated_bars = sum(task.estimated_bars for task in tasks)
+
+    def _unqualified_warmup_ranges(
+        self, rows: list[dict], start_ms: int, end_ms: int, step: int, now_ms: int,
+    ) -> Iterator[tuple[int, int, int]]:
+        trusted = {
+            int(row["open_time"]) for row in rows
+            if self._is_reusable_warmup_component(row, step, now_ms)
+        }
+        for local, slots in groupby(range(start_ms, end_ms + 1, step), trusted.__contains__):
+            if not local:
+                missing = list(slots)
+                yield missing[0], missing[-1], len(missing)
 
     @staticmethod
     def _is_reusable_warmup_component(row: dict, step: int, now_ms: int) -> bool:
@@ -551,6 +559,38 @@ class BackfillEngine:
         # rows under the current write fence. Retry recomputes the remaining
         # holes and only publishes derived results after normal reconciliation.
         await self.reconciler.reconcile(results, BackfillPlan(gaps=[]))
+
+    async def _reuse_native_seed_components(self, gaps: list[GapInfo], metadata: dict[str, Any]) -> list[GapInfo]:
+        if (self._storage is None or len(gaps) != 1
+                or metadata.get("requester") != "warm_start_custom_seed"
+                or metadata.get("history_calendar_id") != "crypto.24x7.utc"):
+            return gaps
+        gap = gaps[0]
+        if (gap.exchange, gap.market_type, gap.interval) != _BYBIT_WARMUP_SOURCE:
+            return gaps
+        identity = identity_from_metadata(gap.exchange, metadata)
+        if identity is not None and not identity.is_legacy_default_for(gap.exchange):
+            return gaps
+
+        # Re-read at dispatch: a live close or another repair may have
+        # committed canonical input since the current bucket was seeded.
+        spec = parse_interval_spec(gap.interval)
+        assert spec is not None
+        step = spec.nominal_ms
+        now_ms = int(time.time() * 1000)
+        first = spec.floor_ms(gap.start_ms)
+        if first < gap.start_ms:
+            first = spec.next_ms(first)
+        last = min(gap.end_ms, spec.floor_ms(now_ms) - step)
+        if first > last:
+            return []
+        rows = await self._storage.query_time_range(
+            gap.symbol, gap.interval, first, last, exchange=gap.exchange, market_type=gap.market_type,
+        )
+        return [
+            replace(gap, start_ms=start, end_ms=end, missing_bars=count)
+            for start, end, count in self._unqualified_warmup_ranges(rows, first, last, step, now_ms)
+        ]
 
     def _trusted_finality_refresh_gaps(
         self,

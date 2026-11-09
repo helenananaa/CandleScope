@@ -1715,7 +1715,8 @@ def test_bybit_mid_bucket_repair_joins_the_live_close(tmp_path, monkeypatch, rep
     asyncio.run(run())
 
 
-def test_bybit_linear_tail_warmup_reuses_committed_components(tmp_path, monkeypatch):
+@pytest.mark.parametrize("requester", ["warm_start_custom_tail", "warm_start_custom_seed", "explicit_refresh"])
+def test_bybit_linear_warmup_reuses_committed_components(tmp_path, monkeypatch, requester):
     from app.data_engine.backfill import BackfillConfig, BackfillEngine, BackfillStatus
     from app.data_engine.storage import klines_repo
     from app.exchanges.ccxt_ext.unified import make_unified_payload
@@ -1762,18 +1763,30 @@ def test_bybit_linear_tail_warmup_reuses_committed_components(tmp_path, monkeypa
         try:
             await storage.upsert_bars(symbol, "5m", [bar(0), bar(2)], source="bybit_ws_confirmed", **market)
             await storage.upsert_bars(symbol, "5m", [bar(3, 999)], source="manual", **market)
-            report = await engine.run(
-                symbol, ["10m"], start, start + 2 * step, **market,
-                metadata={"requester": "warm_start_custom_tail", "history_calendar_id": "crypto.24x7.utc"},
-            )
+            derived = requester == "warm_start_custom_tail"
+            interval = "10m" if derived else "5m"
+            end = start + (2 if derived else 3) * step
+            metadata = {"requester": requester, "history_calendar_id": "crypto.24x7.utc",
+                        "requires_trusted_finality": not derived}
+            report = await engine.run(symbol, [interval], start, end, **market, metadata=metadata)
             assert report.status is BackfillStatus.COMPLETED
-            assert [(request.start_ms, request.end_ms) for request in transport.requests] == [
-                (start + step, start + step), (start + 3 * step, start + 3 * step),
-            ]
-            targets = await storage.query_time_range(symbol, "10m", start, start + 2 * step, **market)
-            assert [(row["open_time"], row["volume"], row["source"]) for row in targets] == [
-                (start, 5, "backfill_aggregated"), (start + 2 * step, 5, "backfill_aggregated"),
-            ]
+            expected_requests = [(start + step, start + step), (start + 3 * step, start + 3 * step)]
+            if requester == "explicit_refresh":
+                expected_requests = [(start, end)]
+            assert [(request.start_ms, request.end_ms) for request in transport.requests] == expected_requests
+            targets = await storage.query_time_range(symbol, interval, start, end, **market)
+            if derived:
+                assert [(row["open_time"], row["volume"], row["source"]) for row in targets] == [
+                    (start, 5, "backfill_aggregated"), (start + 2 * step, 5, "backfill_aggregated"),
+                ]
+            else:
+                expected_volume = [3, 3, 3, 3] if requester == "explicit_refresh" else [2, 3, 2, 3]
+                assert [row["volume"] for row in targets] == expected_volume
+            if requester == "warm_start_custom_seed":
+                # A queued repeat observes the just-committed inputs at dispatch.
+                repeat = await engine.run(symbol, [interval], start, end, **market, metadata=metadata)
+                assert repeat.status is BackfillStatus.COMPLETED
+                assert len(transport.requests) == 2
         finally:
             await engine.close()
 
