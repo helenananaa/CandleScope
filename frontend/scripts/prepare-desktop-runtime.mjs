@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { prepareDesktopRuntime } from "./desktop-runtime-cache.mjs";
 
 const frontend = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -32,20 +33,36 @@ const destination = await prepareDesktopRuntime(cache, async staging => {
   const python = path.join(staging, "python", ...(process.platform === "win32" ? ["python.exe"] : ["bin", "python3"]));
   // Install wheels into a relocatable directory; never copy an editable project venv.
   // Desktop ships local replay/archive import, so include its pinned Parquet dependencies.
+  const ccxtWheel = process.env.CANDLESCOPE_CCXT_WHEEL;
+  const lockPath = path.join(repo, "backend", "ccxt-fork.lock.json");
   const requirements = (await Promise.all(["requirements.txt", "requirements-parquet.txt"]
     .map((file) => fs.readFile(path.join(repo, "backend", file), "utf8"))))
     .flatMap((contents) => contents.split(/\r?\n/))
-    .filter((line) => !/^\s*-(?:e|r)\s/.test(line)).join("\n");
+    .filter((line) => !/^\s*-(?:e|r)\s/.test(line));
+  const localWheels = [];
+  if (ccxtWheel) {
+    const localWheel = path.resolve(ccxtWheel);
+    const { wheel_url, wheel_sha256 } = JSON.parse(await fs.readFile(lockPath, "utf8"));
+    const pin = `ccxt @ ${wheel_url}#sha256=${wheel_sha256}`;
+    const index = requirements.indexOf(pin);
+    const actual = createHash("sha256").update(await fs.readFile(localWheel)).digest("hex");
+    if (index < 0 || actual !== wheel_sha256) {
+      throw new Error("Local CCXT wheel differs from the release lock");
+    }
+    requirements.splice(index, 1);
+    localWheels.push(localWheel);
+  }
   const requirementsPath = path.join(staging, "requirements.txt");
-  await fs.writeFile(requirementsPath, requirements);
+  await fs.writeFile(requirementsPath, requirements.join("\n"));
   const site = path.join(staging, "site-packages");
   run(uv, ["pip", "install", "--python", python, "--target", site, "-r", requirementsPath,
+    ...localWheels,
     path.join(repo, "packages", "candlescope-plugin-sdk"), path.join(repo, "packages", "candlescope-backtest-sdk")]);
   run(python, ["-c", "import fastapi, uvicorn, numpy, pandas, orjson, ccxt, exchange_calendars, pyarrow.parquet, candlescope_plugin_sdk, candlescope_backtest_sdk"], {
     env: { ...process.env, PYTHONPATH: site, PYTHONNOUSERSITE: "1" },
   });
   run(python, [path.join(repo, "backend", "scripts", "verify_ccxt_runtime.py"),
-    "--lock", path.join(repo, "backend", "ccxt-fork.lock.json"),
+    "--lock", lockPath,
     "--output", path.join(staging, "ccxt-receipt.json")], {
     env: { ...process.env, PYTHONPATH: site, PYTHONNOUSERSITE: "1" },
   });

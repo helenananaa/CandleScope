@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import nullcontext
 import logging
 import time
 import uuid
@@ -18,9 +19,11 @@ logger = logging.getLogger("data_manager.bar_delivery")
 class DurableBarDelivery:
     def __init__(self, storage_provider, publish, *, retry_delay=0.1, max_submissions=64,
                  recovery_lookback_bars=500, require_recovery=None,
-                 acknowledgement_batch_size=None, acknowledgement_delay=0.05):
+                 acknowledgement_batch_size=None, acknowledgement_delay=0.05,
+                 publication_scope=None):
         self._storage_provider, self._publish = storage_provider, publish
         self._require_recovery = require_recovery
+        self._publication_scope = publication_scope or nullcontext
         self.retry_delay = retry_delay
         self.owner = uuid.uuid4().hex
         self.recover_source = None
@@ -213,25 +216,26 @@ class DurableBarDelivery:
                     acknowledgement_started = None
 
                 for pending in records:
-                    record = await self._retry(journal.commit, pending["event_id"])
-                    if record["phase"] == "rejected":
-                        if record.get("recovery_required"):
-                            self._invalidate(record)
-                            acknowledgements.append((record['event_id'], False))
+                    with self._publication_scope(self._key(pending)):
+                        record = await self._retry(journal.commit, pending["event_id"])
+                        if record["phase"] == "rejected":
+                            if record.get("recovery_required"):
+                                self._invalidate(record)
+                                acknowledgements.append((record['event_id'], False))
+                            else:
+                                self._rejected += 1
+                                self._pending -= 1
+                        elif record["phase"] == "committed":
+                            # A later authoritative repair may already have replaced
+                            # this row while publication was interrupted. Publish a
+                            # current correction, never roll a cold cache backward.
+                            if record["canonical_row"] is not None:
+                                await self._publish(self._event(record))
+                            else:
+                                self._invalidate(record)
+                            acknowledgements.append((record['event_id'], True))
                         else:
-                            self._rejected += 1
                             self._pending -= 1
-                    elif record["phase"] == "committed":
-                        # A later authoritative repair may already have replaced
-                        # this row while publication was interrupted. Publish a
-                        # current correction, never roll a cold cache backward.
-                        if record["canonical_row"] is not None:
-                            await self._publish(self._event(record))
-                        else:
-                            self._invalidate(record)
-                        acknowledgements.append((record['event_id'], True))
-                    else:
-                        self._pending -= 1
                     if acknowledgements:
                         acknowledgement_started = acknowledgement_started or time.monotonic()
                         if (len(acknowledgements) >= self.acknowledgement_batch_size

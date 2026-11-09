@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
+from app.data_engine.kline_quality import BYBIT_WS_CONFIRMED_SOURCE
 from app.core.executors import run_storage
 from app.data_engine.bar_basis import is_gate_linear_5m
 from app.data_engine.kline_quality import GATE_WS_CONFIRMED_SOURCE
@@ -42,7 +43,8 @@ class AggregatorBridge:
         self._is_started = is_started
         self.delivery = DurableBarDelivery(storage_provider, self._publish,
                                            require_recovery=self._require_recovery,
-                                           recovery_lookback_bars=recovery_lookback_bars)
+                                           recovery_lookback_bars=recovery_lookback_bars,
+                                           publication_scope=event_bus.stream_versions.durable_publication)
 
     async def read_source_components(self, series: str, start_ms: int, end_ms: int) -> list[dict]:
         reader = getattr(self._storage_provider(), "read_source_components", None)
@@ -145,6 +147,9 @@ class AggregatorBridge:
         return "accepted"
 
     def _require_recovery(self, key: SeriesKey) -> None:
+        # A canonical change without a publishable bar invalidates the old
+        # HTTP/stream cutover just as it invalidates active subscribers.
+        self._event_bus.stream_versions.invalidate(key)
         self._event_bus.require_recovery(key, "source_revision_superseded", event_types={
             DataEventType.BAR_CREATED, DataEventType.BAR_UPDATED,
             DataEventType.BAR_CLOSED, DataEventType.BAR_AMENDED,
@@ -245,6 +250,8 @@ class AggregatorBridge:
             return bar_state.quality_source if bar_state.quality_source in {GATE_WS_CONFIRMED_SOURCE, "backfill"} else None
         if event_type == DataEventType.BAR_AMENDED:
             return "data_manager_amended"
+        if bar_state.exchange == "bybit" and bar_state.close_reason == "source_close":
+            return BYBIT_WS_CONFIRMED_SOURCE if bar_state.quality_source == BYBIT_WS_CONFIRMED_SOURCE else None
         return {
             "source_close": "data_manager_exchange_closed",
             "composite_close": "data_manager_composite_closed",

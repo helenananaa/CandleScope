@@ -1,4 +1,5 @@
 export const historyStudyEnglish = {
+  "status.historyGap": "Historical gap could not be filled",
   "study.modeLink": "Study replay mode",
   "study.modeLinkDesc": "Off by default. Enter or leave study mode together. Each chart resumes its own last saved input; prepare a study first on charts without one. Time stays independent unless cursor linking is also enabled.",
   "study.modeLinkFailed": "{count} chart(s) have not confirmed study mode. Prepare their saved study, close note editors and check the window connection, then retry.",
@@ -70,6 +71,7 @@ export const historyStudyEnglish = {
 } as const;
 
 export const historyStudyChinese: Record<keyof typeof historyStudyEnglish, string> = {
+  "status.historyGap": "历史缺口暂无法补齐",
   "study.modeLink": "研究回放模式",
   "study.modeLinkDesc": "默认关闭。同步进入或退出研究模式，各图恢复自己上次保存的输入；尚无研究的图须先自行创建。仅当游标联动也开启时，才同步回放时刻。",
   "study.modeLinkFailed": "{count} 张图尚未确认研究模式。请先准备其已保存的研究、关闭笔记编辑并检查窗口连接，然后重试。",
@@ -119,6 +121,7 @@ export const historyStudyChinese: Record<keyof typeof historyStudyEnglish, strin
 };
 
 export const historyStudyTraditional: Record<keyof typeof historyStudyEnglish, string> = {
+  "status.historyGap": "歷史缺口暫無法補齊",
   "study.modeLink": "研究回放模式",
   "study.modeLinkDesc": "預設關閉。同步進入或離開研究模式，各圖恢復自己上次儲存的輸入；尚無研究的圖須先自行建立。只有同時開啟游標聯動，才同步回放時刻。",
   "study.modeLinkFailed": "{count} 張圖尚未確認研究模式。請先準備其已儲存的研究、關閉筆記編輯並檢查視窗連線，然後重試。",
@@ -168,6 +171,7 @@ export const historyStudyTraditional: Record<keyof typeof historyStudyEnglish, s
 };
 
 export const historyStudyJapanese: Record<keyof typeof historyStudyEnglish, string> = {
+  "status.historyGap": "過去データの欠損を補完できません",
   "study.modeLink": "研究リプレイのモード",
   "study.modeLinkDesc": "既定ではオフです。研究モードへの切り替えを同期します。各チャートは自身の最後の保存入力を再開するため、未保存の場合は先に研究を作成してください。時刻はカーソル同期も有効な場合だけ同期します。",
   "study.modeLinkFailed": "{count} 個のチャートで研究モードを確認できませんでした。研究を保存し、ノート編集を閉じ、ウィンドウ接続を確認して再試行してください。",
@@ -217,6 +221,7 @@ export const historyStudyJapanese: Record<keyof typeof historyStudyEnglish, stri
 };
 
 export const historyStudyKorean: Record<keyof typeof historyStudyEnglish, string> = {
+  "status.historyGap": "과거 데이터의 누락 구간을 복구할 수 없음",
   "study.modeLink": "연구 재생 모드",
   "study.modeLinkDesc": "기본적으로 꺼져 있습니다. 연구 모드 진입과 종료를 함께 전환합니다. 각 차트는 자신의 마지막 저장 입력을 사용하므로 저장된 연구가 없으면 먼저 만들어야 합니다. 커서 동기화도 켜야 재생 시각이 동기화됩니다.",
   "study.modeLinkFailed": "차트 {count}개의 연구 모드를 확인하지 못했습니다. 저장된 연구를 준비하고 노트 편집을 닫은 뒤 창 연결을 확인하여 다시 시도하세요.",
@@ -266,6 +271,7 @@ export const historyStudyKorean: Record<keyof typeof historyStudyEnglish, string
 };
 
 export const historyStudyBrazilian: Record<keyof typeof historyStudyEnglish, string> = {
+  "status.historyGap": "Não foi possível preencher a lacuna no histórico",
   "study.modeLink": "Modo de estudo",
   "study.modeLinkDesc": "Desativado por padrão. Sincroniza a entrada e a saída do modo de estudo. Cada gráfico retoma sua própria entrada salva; prepare primeiro um estudo nos gráficos que ainda não têm um. O horário só é sincronizado quando a sincronização do cursor também está ativada.",
   "study.modeLinkFailed": "Não foi possível confirmar o modo de estudo em {count} gráficos. Prepare o estudo salvo, feche a edição de anotações e verifique a conexão da janela; depois tente novamente.",

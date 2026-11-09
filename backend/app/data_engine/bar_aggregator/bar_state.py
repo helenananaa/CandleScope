@@ -20,6 +20,7 @@ Usage::
 """
 from __future__ import annotations
 
+from app.data_engine.kline_quality import BYBIT_WS_CONFIRMED_SOURCE
 from app.data_engine.readonly import ReadonlyFields
 from app.data_engine.aggregation.adapters import (
     snapshot_aggregation_values, snapshot_coverage, snapshot_field_summary,
@@ -146,10 +147,12 @@ class StandardOHLCVMerge:
             state.last_input_at_ms = bar_input.open_time_ms
 
         if merge_mode == MergeMode.SNAPSHOT and (
-            bar_input.extra.get("source_ref") or bar_input.extra.get("gate_close_source")
+            bar_input.extra.get("source_ref")
+            or bar_input.extra.get("gate_close_source")
+            or bar_input.extra.get("bybit_close_confirmed") is True
         ):
-            # This is a selected complete native snapshot, including corrected
-            # extrema. Do not union old highs/lows or round quantities to 8 dp.
+            # A confirmed native snapshot supplies its complete final extrema
+            # and quantities, including any correction to a forming snapshot.
             for name in (
                 "open", "high", "low", "close", "volume", "quote_volume", "trades",
                 "taker_buy_base", "taker_buy_quote",
@@ -744,7 +747,11 @@ class BarStateEngine:
         if merge_mode in (MergeMode.SNAPSHOT, MergeMode.PRICE_ONLY):
             state.requires_authoritative_close = True
         if merge_mode == MergeMode.SNAPSHOT:
-            state.quality_source = "trade_history_verified" if bar_input.extra.get("trade_coverage_verified") is True else ""
+            state.quality_source = ""
+            if bar_input.extra.get("trade_coverage_verified") is True:
+                state.quality_source = "trade_history_verified"
+            elif bar_input.is_closed and bar_input.extra.get("bybit_close_confirmed") is True:
+                state.quality_source = BYBIT_WS_CONFIRMED_SOURCE
             gate_source = bar_input.extra.get("gate_close_source")
             if bar_input.is_closed and gate_source:
                 state.quality_source = gate_source

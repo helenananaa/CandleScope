@@ -1086,7 +1086,18 @@ def _create_exchange(
             lifecycle_sink=lifecycle_sink,
             fork_kline_enabled=True,
         ), config, market_type)
-    return bind_public_client(exchange_class(values), config, market_type)
+    exchange = exchange_class(values)
+    if websocket and entry.exchange_id == "bybit":
+        parse_ws_ohlcv = exchange.parse_ws_ohlcv
+
+        def parse_confirmed_ws_ohlcv(candle, market=None):
+            row = parse_ws_ohlcv(candle, market)
+            # The pinned unified parser drops Bybit's explicit close
+            # evidence. Keep it with the same CCXT cache row and socket.
+            return [*row, {"confirm": candle.get("confirm"), "end": candle.get("end")}]
+
+        exchange.parse_ws_ohlcv = parse_confirmed_ws_ohlcv
+    return bind_public_client(exchange, config, market_type)
 
 
 def _product_type(market_type: str) -> str:
