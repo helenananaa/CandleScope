@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import io
+import multiprocessing
 import threading
 from functools import partial
 from types import SimpleNamespace
@@ -15,7 +16,7 @@ from app.data_preparation.service import PreparationService
 from app.data_preparation.storage_inventory import reconcile
 from app.replay.trade_import import import_official_date_range, ReplayTradeImportError
 from tests.test_data_preparation import async_test, terminal
-from tests.test_replay_trade_import import _rows, _zip_bytes, START_MS
+from tests.test_replay_trade_import import _rows, _zip_bytes, DAY, START_MS
 
 
 def adapter_and_network(tmp_path, *, corrupt=False, max_rows_per_file=100_000, rows=None):
@@ -38,6 +39,96 @@ def adapter_and_network(tmp_path, *, corrupt=False, max_rows_per_file=100_000, r
 def requirement(start=START_MS, end=START_MS + 60_000):
     return Requirement(exchange="binance", market_type="futures", symbol="BTCUSDT",
                        role="TRADES", start_ms=start, end_ms=end)
+
+
+def _acquire_trade_day_in_process(root, kind, owner, acquiring, downloading, release, reports):
+    from app.replay import history_archive
+    from app.replay.remote_trade_archive import RemoteRawAggTradeArchive
+
+    lock = history_archive._archive_mutation_lock
+
+    def observe_lock(*args, **kwargs):
+        acquiring.set()
+        return lock(*args, **kwargs)
+
+    history_archive._archive_mutation_lock = observe_lock
+    body, filename = _zip_bytes(_rows())
+    checksum = f"{hashlib.sha256(body).hexdigest()}  {filename}\n".encode()
+    calls = []
+
+    def opener(url, **_kwargs):
+        assert owner, f"{kind} duplicated the day download: {url}"
+        if not calls:
+            downloading.set()
+            assert release.wait(15)
+        calls.append(url)
+        return io.BytesIO(checksum if url.endswith(".CHECKSUM") else body)
+
+    archive = RemoteRawAggTradeArchive(root / "trades", root / "origin", official_opener=opener)
+    selected = requirement()
+    if kind == "prepare":
+        adapter = BarPreparationAdapter(root / "cache", coordinator=None,
+            replay_service=SimpleNamespace(raw_trade_archive=archive))
+        adapter.trades.importer = partial(import_official_date_range, opener=opener)
+        repository = PreparationRepository(root / "jobs.db")
+        adapter.publication_repository = repository
+        receipt, _ = asyncio.run(adapter.acquire(selected, "cross-process"))
+        dataset = receipt["dataset"]
+        assert repository.cache_inventory()["publication_reserved_bytes"] == 0
+    else:
+        dataset = archive.freeze_dataset(
+            exchange=selected.exchange, market_type=selected.market_type, symbol=selected.symbol,
+            start_time_ms=selected.start_ms, end_time_ms=selected.end_ms - 1,
+        ).to_dict()
+    reports.put((kind, dataset, calls))
+
+
+@pytest.mark.parametrize("first", ["prepare", "replay"])
+def test_preparation_and_replay_share_one_official_download_across_processes(tmp_path, first):
+    from datetime import timedelta
+    from app.replay.remote_trade_archive import publish_remote_agg_trade_index, sync_official_agg_trade_availability
+
+    origin = tmp_path / "origin"
+    prefix = f"data/futures/um/daily/aggTrades/BTCUSDT/BTCUSDT-aggTrades-{DAY}.zip"
+    listing = (
+        f"<ListBucketResult><Contents><Key>{prefix}</Key></Contents>"
+        f"<Contents><Key>{prefix}.CHECKSUM</Key></Contents><IsTruncated>false</IsTruncated></ListBucketResult>"
+    ).encode()
+    sync_official_agg_trade_availability(
+        origin, exchange="binance", market_type="futures", symbol="BTCUSDT",
+        as_of_date=DAY + timedelta(days=1), opener=lambda *_a, **_k: io.BytesIO(listing),
+    )
+    publish_remote_agg_trade_index(origin)
+    ctx = multiprocessing.get_context("spawn")
+    started, waiting, downloading, release = (ctx.Event() for _ in range(4))
+    reports = ctx.Queue()
+    second = "replay" if first == "prepare" else "prepare"
+    leader = ctx.Process(target=_acquire_trade_day_in_process,
+        args=(tmp_path, first, True, started, downloading, release, reports))
+    follower = ctx.Process(target=_acquire_trade_day_in_process,
+        args=(tmp_path, second, False, waiting, downloading, release, reports))
+    leader.start()
+    try:
+        assert downloading.wait(15)
+        follower.start()
+        assert waiting.wait(15)
+        release.set()
+        results = {kind: (dataset, calls) for kind, dataset, calls in
+                   (reports.get(timeout=20), reports.get(timeout=20))}
+        assert results[first][0] == results[second][0]
+        assert results[first][0]["row_count"] == 4
+        assert len(results[first][1]) == 2 and results[first][1][0].endswith(".CHECKSUM")
+        assert results[second][1] == []
+    finally:
+        release.set()
+        for process in (leader, follower):
+            if process.pid is not None:
+                process.join(10)
+                if process.is_alive():
+                    process.terminate()
+                    process.join(5)
+        reports.close()
+    assert leader.exitcode == follower.exitcode == 0
 
 
 @async_test

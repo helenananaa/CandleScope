@@ -10,7 +10,10 @@ import zipfile
 from weakref import WeakValueDictionary
 
 from app.data_engine.storage.raw_trade_archive import RawAggTradeDatasetRef, ParquetRawAggTradeArchive
-from app.replay.trade_import import import_official_date_range, ReplayTradeImportError
+from app.replay.trade_import import (
+    import_official_date_range, ReplayTradeImportError, TradeArchiveAcquisitionBusy,
+    trade_archive_day_acquisition,
+)
 
 from .models import PreparationError
 
@@ -92,6 +95,17 @@ class TradePreparationAdapter:
                 raise PreparationError("STORAGE_BUDGET", "Official trade package exceeds the remaining download allowance") from exc
             raise
 
+    def _acquire_day(self, requirement, date, repository):
+        self.archive.root.mkdir(parents=True, exist_ok=True)
+        with trade_archive_day_acquisition(
+            self.archive, exchange=requirement.exchange, market_type=requirement.market_type,
+            symbol=requirement.symbol, day=date,
+        ) as missing:
+            if missing:
+                if shutil.disk_usage(self.archive.root).free < 1024**3:
+                    raise PreparationError("STORAGE_BUDGET", "Trade import requires 1 GiB of free working space")
+                self._import_day(requirement, date, repository)
+
     async def acquire(self, requirement, storage_call, *, repository=None):
         # Orchestrator fragments never cross UTC days. Different partial requests
         # in the same day share the official day package, even when disjoint.
@@ -100,12 +114,11 @@ class TradePreparationAdapter:
         lock = self._days.setdefault(key, asyncio.Lock())
         async with lock:
             if not await storage_call(self._covered, requirement):
-                self.archive.root.mkdir(parents=True, exist_ok=True)
-                if shutil.disk_usage(self.archive.root).free < 1024**3:
-                    raise PreparationError("STORAGE_BUDGET", "Trade import requires 1 GiB of free working space")
                 date = datetime.fromtimestamp(day * DAY_MS / 1000, timezone.utc).date()
                 try:
-                    await storage_call(self._import_day, requirement, date, repository)
+                    await storage_call(self._acquire_day, requirement, date, repository)
+                except TradeArchiveAcquisitionBusy as exc:
+                    raise PreparationError("TRADE_ACQUISITION_BUSY", str(exc), retryable=True) from exc
                 except ReplayTradeImportError as exc:
                     if isinstance(exc.__cause__, HTTPError) and exc.__cause__.code in {404, 410}:
                         raise PreparationError("TRADE_DAY_UNAVAILABLE", "The official trade package is unavailable for this UTC day") from exc

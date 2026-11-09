@@ -13,6 +13,7 @@ import time
 import urllib.request
 import zipfile
 from collections.abc import Iterator
+from contextlib import ExitStack, contextmanager
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -53,6 +54,35 @@ class ReplayTradeImportError(RuntimeError):
 
 class OfficialTradeHistoryEmpty(ReplayTradeImportError):
     """The official prefix has no published complete daily archives yet."""
+
+
+class TradeArchiveAcquisitionBusy(ReplayTradeImportError):
+    """The shared day acquisition could not be opened within its wait budget."""
+
+
+@contextmanager
+def trade_archive_day_acquisition(
+    archive: ParquetRawAggTradeArchive, *,
+    exchange: str, market_type: str, symbol: str, day: date, allow_repair: bool = False,
+) -> Iterator[bool]:
+    """Yield whether this caller owns missing-day work for a shared local root."""
+    from .history_archive import ReplayHistoryArchiveError, _archive_mutation_lock
+
+    day_text = day.isoformat()
+    identity = (exchange.strip().lower(), market_type.strip().lower(), symbol.strip().upper(), day_text)
+    # Stable lock inodes must survive waiters. Bound their number without
+    # deleting active locks. A collision only serializes independent days.
+    slot = hashlib.blake2b("\0".join(identity).encode(), digest_size=1).hexdigest()
+    lock_path = archive.root / ".trade-day-locks" / slot
+    with ExitStack() as stack:
+        try:
+            stack.enter_context(_archive_mutation_lock(lock_path, timeout_seconds=180))
+        except (OSError, ReplayHistoryArchiveError) as exc:
+            raise TradeArchiveAcquisitionBusy("Unable to acquire the verified trade day") from exc
+        yield not archive.has_verified_day(
+            exchange=identity[0], market_type=identity[1], symbol=identity[2], day=day_text,
+            allow_repair=allow_repair,
+        )
 
 
 def official_agg_trade_urls(

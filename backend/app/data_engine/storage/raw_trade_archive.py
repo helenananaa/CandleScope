@@ -1166,6 +1166,31 @@ class ParquetRawAggTradeArchive:
             }
         return [identities[key] for key in sorted(identities)]
 
+    def has_verified_day(self, *, exchange: str, market_type: str, symbol: str, day: str,
+                         allow_repair: bool = False) -> bool:
+        """Check one committed partition and its objects without scanning other days."""
+        identity = (
+            _identity(exchange, "exchange", lower=True),
+            _identity(market_type, "market_type", lower=True),
+            _identity(symbol, "symbol", upper=True),
+        )
+        _validate_utc_date(day)
+        partition = self._partition_path((*identity, day))
+        if (partition / "_verified_import_conflict.json").exists():
+            raise RuntimeError("checksum-verified raw aggTrade partition is quarantined")
+        if not (partition / "_verified_import.json").is_file():
+            return False
+        start = int(datetime.fromisoformat(day).replace(tzinfo=timezone.utc).timestamp() * 1000)
+        try:
+            return bool(self._discover_verified_manifests(
+                exchange=identity[0], market_type=identity[1], symbol=identity[2],
+                start_time_ms=start, end_time_ms=start + 86_400_000 - 1,
+            ))
+        except (OSError, RuntimeError, ValueError):
+            if not allow_repair:
+                raise
+            return False
+
     def list_verified_windows(
         self,
         *,
