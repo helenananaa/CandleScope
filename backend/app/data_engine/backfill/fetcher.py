@@ -239,11 +239,15 @@ class HistoricalFetcher:
 
     # ── Public: Fetch ────────────────────────────────────────
 
-    async def fetch(self, tasks: list[BackfillTask]) -> list[FetchResult]:
+    async def fetch(
+        self, tasks: list[BackfillTask], *,
+        on_deferred: Callable[[list[FetchResult]], Awaitable[None]] | None = None,
+    ) -> list[FetchResult]:
         """Execute all fetch tasks, respecting concurrency limits.
 
         Args:
             tasks: Ordered list of ``BackfillTask`` from the Planner.
+            on_deferred: Optionally commit admitted results before yielding to quota.
 
         Returns:
             A list of ``FetchResult``, one per task, in the same order.
@@ -272,6 +276,11 @@ class HistoricalFetcher:
             result for result in raw_results if isinstance(result, RateLimitDeferred)
         ]
         if deferred:
+            if on_deferred is not None:
+                admitted = [result for result in raw_results if isinstance(result, FetchResult)
+                            and result.status in {BackfillStatus.COMPLETED, BackfillStatus.PARTIAL}]
+                if admitted:
+                    await on_deferred(admitted)
             # One scheduler chunk may contain several physical gap tasks.  A
             # parent retry must wait for the latest shared-bucket deadline so
             # it does not immediately re-enter and churn the queue again.

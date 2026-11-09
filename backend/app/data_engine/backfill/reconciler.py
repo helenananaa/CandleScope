@@ -46,6 +46,7 @@ from .config import BackfillConfig
 from .models import (
     BackfillPlan,
     BackfillStatus,
+    BackfillTask,
     CacheBackend,
     DeduplicationStrategy,
     FetchedBar,
@@ -262,11 +263,12 @@ class Reconciler:
                 and plan.custom_intervals
             ):
                 custom_started = time.monotonic()
-                for decomp in plan.decompositions:
+                decompositions = plan.decompositions[:1] if plan.derived_source_windows else plan.decompositions
+                for decomp in decompositions:
                     views = await prepare_derived_inputs(self._storage, decomp, grouped)
                     with computation_scope(views):
                         gen, wrt, failures, written_ranges = await self._generate_custom_bars(
-                            decomp, grouped,
+                            decomp, grouped, plan.derived_source_windows,
                         )
                     result.custom_bars_generated += gen
                     result.custom_bars_written += wrt
@@ -845,36 +847,47 @@ class Reconciler:
         self,
         decomp: IntervalDecomposition,
         grouped: dict[tuple[str, str, str, str], list[FetchedBar]],
+        source_windows: list[BackfillTask],
     ) -> tuple[int, int, list[dict[str, Any]], list[WrittenRange]]:
-        """Reduce the canonical winner for each fetched component window."""
+        """Reduce canonical source windows after any fetched rows have committed."""
         target = decomp.custom_interval
         component_intervals = {component.interval for component in decomp.components}
-        by_target: dict[tuple[str, str, str], list[list[FetchedBar]]] = {}
+        by_target: dict[tuple[str, str, str], list[tuple[str, int, int, KlineSeriesIdentity | None]]] = {}
+        local_sources = set()
+        for task in source_windows:
+            if task.metadata.get("custom_interval") == target:
+                key = (task.exchange, task.market_type, task.symbol)
+                local_sources.add((*key, task.interval))
+                by_target.setdefault(key, []).append((task.interval, task.start_ms, task.end_ms, None))
+
         for (exchange, market_type, symbol, interval), bars in grouped.items():
-            if interval not in component_intervals or not bars:
+            if interval not in component_intervals or not bars or (exchange, market_type, symbol, interval) in local_sources:
                 continue
             identity = bars[0].series_identity
             if identity is not None and not identity.is_legacy_default_for(exchange):
                 continue
-            by_target.setdefault((exchange, market_type, symbol), []).append(bars)
+            windows = by_target.setdefault((exchange, market_type, symbol), [])
+            # Keep distant fetched spans separate so they never load untouched history.
+            first = bars[0]
+            for previous, bar in pairwise(bars):
+                if bar.open_time != previous.close_time + 1:
+                    windows.append((interval, first.open_time, previous.open_time, identity))
+                    first = bar
+            windows.append((interval, first.open_time, bars[-1].open_time, identity))
 
         generated = written = 0
         failures: list[dict[str, Any]] = []
         written_ranges: list[WrittenRange] = []
-        for (exchange, market_type, symbol), inputs in by_target.items():
-            canonical_rows = []
-            for bars in inputs:
-                # Use contiguous fetched windows so distant repair spans
-                # never load untouched history between them.
-                first = bars[0]
-                for previous, bar in pairwise(bars):
-                    if bar.open_time != previous.close_time + 1:
-                        canonical_rows.extend(await self._read_component_window(first, previous))
-                        first = bar
-                canonical_rows.extend(await self._read_component_window(first, bars[-1]))
+        for (exchange, market_type, symbol), windows in by_target.items():
+            canonical_rows = {}
+            for interval, start_ms, end_ms, identity in windows:
+                rows = await self._read_component_window(
+                    symbol, interval, start_ms, end_ms, exchange, market_type, identity,
+                )
+                canonical_rows.update({(interval, row["open_time"]): row for row in rows})
 
             custom_bars = await run_preparation(
-                self._reduce_custom_rows, canonical_rows, symbol, target,
+                self._reduce_custom_rows, list(canonical_rows.values()), symbol, target,
                 exchange, market_type, int(time.time() * 1000),
             )
             generated += len(custom_bars)
@@ -888,16 +901,18 @@ class Reconciler:
 
         return generated, written, failures, written_ranges
 
-    async def _read_component_window(self, first: FetchedBar, last: FetchedBar) -> list[dict]:
+    async def _read_component_window(
+        self, symbol: str, interval: str, start_ms: int, end_ms: int,
+        exchange: str, market_type: str, identity: KlineSeriesIdentity | None,
+    ) -> list[dict]:
         rows = await self._storage.query_time_range(
-            first.symbol, first.interval, first.open_time, last.open_time,
-            exchange=first.exchange, market_type=first.market_type,
-            **_identity_kwargs(first.series_identity),
+            symbol, interval, start_ms, end_ms, exchange=exchange, market_type=market_type,
+            **_identity_kwargs(identity),
         )
         self._metrics.inc("custom_canonical_input_reads")
         self._metrics.inc("custom_canonical_input_rows", len(rows))
         return [
-            row if row.get("interval") == first.interval else {**row, "interval": first.interval}
+            row if row.get("interval") == interval else {**row, "interval": interval}
             for row in rows if source_is_trusted_final(row.get("source"))
         ]
 

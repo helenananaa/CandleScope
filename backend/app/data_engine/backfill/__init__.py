@@ -52,6 +52,8 @@ from app.data_engine.memory_budget import budgeted_work, reserve_work
 
 import logging
 import time
+from dataclasses import replace
+from itertools import groupby
 from typing import Any
 
 from app.exchanges.symbols import normalize_symbol
@@ -60,8 +62,10 @@ from app.exchanges.rate_limits import RateLimitDeferred
 from ..ingestion.config import IngestionConfig
 from ..ingestion.metrics import LayerMetrics
 from ..ingestion.transport import TransportLayer
-from ..interval_policy import parse_interval_spec
-from ..kline_quality import repair_requires_trusted_finality
+from ..aggregation.semantics import valid_ohlcv
+from ..interval_policy import IntervalAlignment, parse_interval_spec, row_is_closed
+from ..kline_quality import repair_requires_trusted_finality, source_is_trusted_final
+from ..series_identity import identity_from_metadata
 
 from .config import BackfillConfig
 from .models import (
@@ -354,10 +358,16 @@ class BackfillEngine:
                 # so archive routing can still decide from the complete user
                 # demand (not from a single ~1000-source-row chunk).
                 task.metadata = {**metadata, **task.metadata}
+            if (self._cfg.reconcile_generate_custom and len(intervals or ()) == 1
+                    and metadata.get("requester") == "warm_start_custom_tail"):
+                await self._reuse_warmup_components(plan, metadata)
             status = BackfillStatus.FETCHING
             await prepare_native_history_views(self._storage, plan.tasks)
             await prepare_derived_targets(self._storage, plan)
-            fetch_results = await self.fetcher.fetch(plan.tasks)
+            if plan.derived_source_windows:
+                fetch_results = await self.fetcher.fetch(plan.tasks, on_deferred=self._commit_warmup_progress)
+            else:
+                fetch_results = await self.fetcher.fetch(plan.tasks)
 
             fetch_error_summaries: list[str] = []
             for result in fetch_results:
@@ -390,7 +400,7 @@ class BackfillEngine:
             all_failed = all(
                 fr.status == BackfillStatus.FAILED for fr in fetch_results
             )
-            if all_failed:
+            if all_failed and not plan.derived_source_windows:
                 status = BackfillStatus.FAILED
                 errors.append("All fetch tasks failed")
                 errors.extend(fetch_error_summaries)
@@ -430,7 +440,9 @@ class BackfillEngine:
                 any_failed = any(
                     fr.status == BackfillStatus.FAILED for fr in fetch_results
                 )
-                if any_failed or reconcile_result.errors:
+                if all_failed and fetch_results and not reconcile_result.custom_bars_written:
+                    status = BackfillStatus.FAILED
+                elif any_failed or reconcile_result.errors:
                     status = BackfillStatus.PARTIAL
                 else:
                     status = BackfillStatus.COMPLETED
@@ -471,6 +483,70 @@ class BackfillEngine:
             symbol, status.value, report.elapsed_ms,
         )
         return report
+
+    async def _reuse_warmup_components(self, plan: BackfillPlan, metadata: dict[str, Any]) -> None:
+        """Keep complete target inputs for reconciliation, fetching only unqualified source slots."""
+        if (self._storage is None or repair_requires_trusted_finality(metadata)
+                or metadata.get("history_calendar_id") != "crypto.24x7.utc"
+                or len(plan.custom_intervals) != 1 or self._cfg.alignment_epoch_ms != 0):
+            return
+
+        target = parse_interval_spec(plan.custom_intervals[0])
+        if target is None or target.alignment is not IntervalAlignment.FIXED_EPOCH or target.phase_ms:
+            return
+
+        tasks = []
+        now_ms = int(time.time() * 1000)
+        for task in plan.tasks:
+            source = parse_interval_spec(task.interval)
+            identity = identity_from_metadata(task.exchange, metadata)
+            if (task.metadata.get("custom_interval") != target.canonical
+                    or task.exchange not in {"binance", "okx"}
+                    or (identity is not None and not identity.is_legacy_default_for(task.exchange))
+                    or source is None or source.alignment is not IntervalAlignment.FIXED_EPOCH
+                    or source.phase_ms or source.nominal_ms < 60_000):
+                tasks.append(task)
+                continue
+
+            step = source.nominal_ms
+            rows = await self._storage.query_time_range(
+                task.symbol, task.interval, task.start_ms, task.end_ms,
+                exchange=task.exchange, market_type=task.market_type,
+            )
+            trusted = {
+                int(row["open_time"]) for row in rows
+                if self._is_reusable_warmup_component(row, step, now_ms)
+            }
+            plan.derived_source_windows.append(task)
+            for local, slots in groupby(range(task.start_ms, task.end_ms + 1, step), trusted.__contains__):
+                if local:
+                    continue
+                missing = list(slots)
+                tasks.append(replace(
+                    task, start_ms=missing[0], end_ms=missing[-1], estimated_bars=len(missing),
+                ))
+
+        if plan.derived_source_windows:
+            plan.tasks = tasks
+            plan.estimated_requests = len(tasks)
+            plan.estimated_bars = sum(task.estimated_bars for task in tasks)
+
+    @staticmethod
+    def _is_reusable_warmup_component(row: dict, step: int, now_ms: int) -> bool:
+        if not source_is_trusted_final(row.get("source")) or not row_is_closed(row):
+            return False
+        try:
+            close_ms = int(row["close_time"])
+            values = tuple(float(row[field]) for field in ("open", "high", "low", "close", "volume"))
+            return close_ms == int(row["open_time"]) + step - 1 and close_ms < now_ms and valid_ohlcv(values)
+        except (KeyError, OverflowError, TypeError, ValueError):
+            return False
+
+    async def _commit_warmup_progress(self, results: list[FetchResult]) -> None:
+        # If another missing run hit shared quota, preserve admitted source
+        # rows under the current write fence. Retry recomputes the remaining
+        # holes and only publishes derived results after normal reconciliation.
+        await self.reconciler.reconcile(results, BackfillPlan(gaps=[]))
 
     def _trusted_finality_refresh_gaps(
         self,
