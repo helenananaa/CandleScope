@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from enum import Enum
-from math import fsum
+from math import fsum, isfinite
 
 
 class ClosePolicy(str, Enum):
@@ -179,6 +179,10 @@ class FieldSummary:
                 if enhanced_complete and value is not None else None
             )
         return fields
+
+def valid_ohlcv(values: tuple[float, float, float, float, float]) -> bool:
+    return all(isfinite(value) for value in values) and values[4] >= 0
+
 
 def summarize_fields(rows: Sequence[tuple]) -> FieldSummary:
     """Reduce normalized (O,H,L,C,V,quote,trades,taker_base,taker_quote) rows."""

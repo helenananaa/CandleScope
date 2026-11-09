@@ -652,10 +652,10 @@ def aggregate_kline_rows(
             rebuilt.append({
                 "open_time": bucket_open_ms,
                 "close_time": bucket_end_ms - 1,
-                **chart_field_summary(rows).project(),
+                **chart_field_summary(rows, validate_ohlcv=True).project(),
                 "is_closed": True,
             })
-        except (KeyError, TypeError, ValueError):
+        except (KeyError, OverflowError, TypeError, ValueError):
             # A malformed component must not produce a plausible-looking
             # reconstructed candle.
             continue

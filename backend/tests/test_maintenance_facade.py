@@ -162,6 +162,12 @@ def test_settings_repair_requires_complete_trusted_base_before_atomic_replace(tm
         assert result["failed_series"] == 1
         assert [item["volume"] for item in read_target()] == [9, 11]
 
+        storage.upsert_bars("BTCUSDT", "1m", [row(180_000, 60_000, -1)], "backfill")
+        seed_target()
+        result = await repair()
+        assert result["failed_series"] == 1
+        assert [item["volume"] for item in read_target()] == [9, 11]
+
         storage.upsert_bars("BTCUSDT", "1m", [row(180_000, 60_000, 2)], "backfill")
         seed_target()
         replace_bars = storage.replace_bars
