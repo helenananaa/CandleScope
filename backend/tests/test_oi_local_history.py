@@ -1,5 +1,6 @@
 """Exercise the actual service/repository boundary, with counted transport."""
 import asyncio
+from dataclasses import replace
 from functools import wraps
 
 import pytest
@@ -83,6 +84,27 @@ async def test_complete_grid_reuses_persisted_receipt_after_restart(tmp_path, mo
     page = await query(service)
     assert page.complete and [e.event_time_ms for e in page.events] == transport.points
     assert len(transport.calls) == 1
+    await service.shutdown()
+
+
+@async_test
+async def test_verified_local_samples_survive_a_fetch_availability_revision_change(tmp_path, monkeypatch):
+    repo, transport, service = make_service(tmp_path, monkeypatch)
+    original = service._history_refresh_plan
+    monkeypatch.setattr(service, "_history_refresh_plan", lambda *args, **kwargs:
+        replace(original(*args, **kwargs), availability_revision="before"))
+    first = await query(service)
+    assert first.complete and first.availability_revision == "before"
+    await service.shutdown()
+
+    service = MarketDataService(transport, metrics_repository=MarketMetricsRepository(repo.db_path))
+    original = service._history_refresh_plan
+    monkeypatch.setattr(service, "_history_refresh_plan", lambda *args, **kwargs:
+        replace(original(*args, **kwargs), availability_revision="after"))
+    local = await query(service, mode="local_only")
+    assert local.complete and local.availability_revision == "after"
+    assert local.covered_ranges == first.covered_ranges and len(transport.calls) == 1
+    assert (await query(service)).complete and len(transport.calls) == 1
     await service.shutdown()
 
 

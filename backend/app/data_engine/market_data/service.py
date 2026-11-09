@@ -67,6 +67,7 @@ _HISTORY_STREAM_TYPES = {
     MarketChannel.LIQUIDATION: StreamType.LIQUIDATION,
 }
 _DEFAULT_OPEN_INTEREST_STORAGE_PERIOD = "5m"
+_BINANCE_OI_COVERAGE_REVISION = "binance-oi-grid-v2"
 _DEFAULT_OPEN_INTEREST_STORAGE_BUCKET_MS = 5 * 60 * 1000
 _HISTORY_RETENTION_SAFETY_MS = 60 * 1000
 _PREMIUM_INDEX_INTERVAL = "1m"
@@ -790,7 +791,9 @@ class MarketDataService:
             now_ms = int(time.time() * 1000)
             page_limit = min(500, plan.max_page_size or 500)
             window_start = max(start_ms, end_ms - 86_400_000 + 1)
-            revision = "binance-oi-grid-v2:" + (plan.availability_revision or "static")
+            # The fetch boundary is a separate contract. A change in its
+            # availability revision cannot unprove an acquired local sample.
+            revision = _BINANCE_OI_COVERAGE_REVISION
             common = dict(exchange=key.exchange, market_type=key.market_type,
                           symbol=key.symbol, period=period)
 
