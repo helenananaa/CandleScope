@@ -53,6 +53,24 @@ jobs:
         run: node -e 'if (process.platform !== "darwin" || process.arch !== process.env.EXPECTED_ARCH) throw Error("Wrong native runner architecture")'
       - name: Install locked frontend dependencies
         run: npm ci --ignore-scripts
+      - name: Install and verify locked Electron distribution
+        timeout-minutes: 8
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          # Electron's npm installer verifies the ZIP against checksums shipped in the locked package.
+          attempt=1
+          until node node_modules/electron/install.js; do
+            if (( attempt == 3 )); then exit 1; fi
+            sleep "$((5 * attempt))"
+            attempt=$((attempt + 1))
+          done
+          version=$(node -p 'require("./package-lock.json").packages["node_modules/electron"].version')
+          ELECTRON_RUN_AS_NODE=1 "$(node -p 'require("electron")')" -e '
+            if (process.arch !== process.env.EXPECTED_ARCH || process.versions.electron !== process.argv[1]) {
+              throw new Error("Installed Electron does not match the locked version and runner architecture");
+            }
+          ' "$version"
       - name: Check frontend and desktop host
         env:
           NODE_OPTIONS: --max-old-space-size=4096
