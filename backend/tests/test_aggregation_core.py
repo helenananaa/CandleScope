@@ -352,6 +352,38 @@ def test_calendar_source_closed_rebuild_uses_actual_month_ends():
     assert queried[0].volume == summary.values.volume == rebuilt[0]["volume"]
 
 
+@pytest.mark.parametrize(("start", "count", "closed"), [
+    ("2024-03-10T05:00+00:00", 23, True),
+    ("2024-11-03T04:00+00:00", 24, False),
+    ("2024-11-03T04:00+00:00", 25, True),
+])
+def test_history_fallback_obeys_zoned_target_day_length(start, count, closed):
+    from app.data_engine.data_manager.cache import BarCache
+    from app.data_engine.data_manager.config import QueryConfig
+
+    service = CustomIntervalQueryService(cache=BarCache(), config=QueryConfig(), base_query=lambda: None)
+    opened = int(datetime.fromisoformat(start).timestamp())
+    bars = [replace(bar(index), time=opened + index * 3600) for index in range(count)]
+    target = "1d~c1~America/New_York"
+    queried, = service.aggregate_custom_bars(bars, "BTC-USDT", target, "1h", exchange="okx")
+    summary = summarize(accepted(bars, series=replace(SOURCE, interval="1h")),
+                        target=replace(TARGET, interval=target))
+    end_ms = parse_interval_spec(target).next_ms(opened * 1000)
+    assert queried.time == opened
+    assert queried.is_closed is summary.evaluate(opened * 1000, end_ms).closed is closed
+    assert queried.quote_volume == (summary.values.project()["quote_volume"] if closed else None)
+
+
+def test_fixed_history_target_does_not_treat_zoned_source_as_nominal_width():
+    opened = int(datetime.fromisoformat("2024-11-03T04:00+00:00").timestamp())
+    queried, = CustomIntervalQueryService._aggregate_read_only(
+        [replace(bar(0), time=opened)], "1d~a1~14400000", 86400,
+        source_interval="1d~c1~America/New_York", calendar=AlwaysOpenCalendar(),
+    )
+    assert queried.time == opened
+    assert not queried.is_closed and queried.quote_volume is None
+
+
 def test_sparse_closed_rebuild_only_steps_over_present_source_prefix(monkeypatch):
     target_ms = 10007 * 60_000
     calls = []
