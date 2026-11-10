@@ -81,8 +81,11 @@ async function checkChartBatchReconnect(host: HTMLElement, api: KlineApi) {
     await new Promise(resolve => setTimeout(resolve, 2_250));
     assert(Number(sockets.length) === 2, "the chart replaced the broker's recovered socket");
     assert(sockets[1]!.readyState === 1, "the recovered socket closed unexpectedly");
-    assert(sockets[1]!.sent.filter(payload => JSON.parse(payload).action === "subscribe").length === 1,
-      "recovered physical socket subscribed more than once");
+    const subscriptions = sockets[1]!.sent.filter(payload => {
+      const message: unknown = JSON.parse(payload);
+      return typeof message === "object" && message !== null && "action" in message && message.action === "subscribe";
+    });
+    assert(subscriptions.length === 1, "recovered physical socket subscribed more than once");
   } finally {
     flushSync(() => root.unmount());
     manager.closeAll();
