@@ -487,3 +487,91 @@ def test_gap_ledger_backlog_age_uses_first_seen_not_recent_recheck(
     assert health["age_buckets"]["lt_5m"] == 0
     assert health["last_checked_age_buckets"]["lt_5m"] == 1
     assert health["oldest_open_at"] == 0
+
+
+def test_equal_ranges_keep_separate_identity_tickets_and_checkpoints(tmp_path) -> None:
+    from dataclasses import replace
+
+    from app.data_engine.bar_basis import GATE_INVERSE_CONTRACTS
+    from app.data_engine.series_identity import KlineSeriesIdentity
+
+    ledger = GapLedger(tmp_path / "klines.sqlite")
+    legacy = RepairRequest(
+        exchange="gate", market_type="swap.inverse", symbol="BTC/USD:BTC",
+        interval="5m", start_ms=0, end_ms=300_000, request_id="legacy",
+    )
+    inverse = replace(legacy, request_id="inverse", metadata={
+        "series_identity": GATE_INVERSE_CONTRACTS.to_dict(),
+    })
+    quote = replace(legacy, request_id="quote", metadata={
+        "series_identity": KlineSeriesIdentity.for_exchange("gate", volume_semantics="quote_asset").to_dict(),
+    })
+    ledger.upsert_detected_many([legacy, inverse, quote])
+    for request in (legacy, inverse, quote):
+        ledger.mark_resolved(request, status="failed", error=request.request_id)
+
+    reopened = GapLedger(tmp_path / "klines.sqlite")
+    rows = {row["repair_ticket"]: row for row in reopened.list_open()}
+    assert set(rows) == {"legacy", "inverse", "quote"}
+    assert len({row["id"] for row in rows.values()}) == 3
+    inverse_row = rows["inverse"]
+    assert reopened.checkpoint_reconciliation_row(
+        inverse_row["id"], cursor_ms=300_000, scanned_bars=1,
+        next_retry_at=1, row_snapshot=inverse_row,
+    )
+    assert "reconciliation_checkpoint" in reopened.get_status(inverse)["metadata_json"]
+    assert "reconciliation_checkpoint" not in reopened.get_status(legacy)["metadata_json"]
+    assert "reconciliation_checkpoint" not in reopened.get_status(quote)["metadata_json"]
+
+    assert reopened.finalize_parent(
+        inverse, status="filled", coverage_start_ms=0, coverage_end_ms=599_999,
+    )
+    assert reopened.get_status(inverse)["status"] == "filled"
+    assert reopened.get_status(legacy)["last_error"] == "legacy"
+    assert reopened.get_status(quote)["last_error"] == "quote"
+    assert reopened.health_summary()["open_total"] == 2
+
+
+def test_legacy_writer_can_update_same_database_through_rollback(tmp_path) -> None:
+    import json
+    import sqlite3
+    from dataclasses import replace
+
+    from app.data_engine.bar_basis import GATE_INVERSE_CONTRACTS
+
+    db = tmp_path / "klines.sqlite"
+    ledger = GapLedger(db)
+    legacy = RepairRequest(
+        exchange="gate", market_type="swap.inverse", symbol="BTC/USD:BTC",
+        interval="5m", start_ms=0, end_ms=300_000, request_id="legacy",
+    )
+    inverse = replace(legacy, request_id="inverse", metadata={
+        "series_identity": GATE_INVERSE_CONTRACTS.to_dict(),
+    })
+    # This is the old writer's unique conflict target. Simulate the old
+    # release writing both before upgrade and after a rollback.
+    def old_write(request, state):
+        with sqlite3.connect(db) as conn:
+            conn.execute("""
+                INSERT INTO kline_gap_ledger (
+                    exchange, market_type, symbol, interval, start_ms, end_ms,
+                    expected_count, missing_count, status, reason, repair_ticket,
+                    first_seen_at, last_seen_at, metadata_json
+                ) VALUES (?, ?, ?, ?, ?, ?, 2, 2, ?, 'legacy-writer', ?, 1, 1, ?)
+                ON CONFLICT(exchange, market_type, symbol, interval, start_ms, end_ms)
+                DO UPDATE SET status = excluded.status
+            """, (
+                request.exchange, request.market_type, request.symbol, request.interval,
+                request.start_ms, request.end_ms, state, request.request_id, json.dumps(request.metadata),
+            ))
+
+    old_write(inverse, "failed")
+    upgraded = GapLedger(db)
+    assert upgraded.get_status(inverse)["status"] == "failed"
+    assert upgraded.get_status(legacy) is None
+    old_write(legacy, "queued")
+    old_write(legacy, "retry_wait")
+    again = GapLedger(db)
+    assert again.get_status(legacy)["status"] == "retry_wait"
+    assert again.get_status(inverse)["status"] == "failed"
+    assert len(again.list_open()) == 2
