@@ -17,6 +17,7 @@ import {
 
 import type { MainSeriesCrosshairValue } from "../../chart-adapter/chartAdapterTypes.js";
 const PreparationJobsPanel = lazy(() => import("../data-preparation/PreparationJobsPanel.js"));
+import { ResearchBatchResults, ResearchBatchSources } from "./ResearchBatchPanel.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { ResearchDataDrawer } from "../research-data/ResearchDataDrawer.js";
@@ -382,6 +383,8 @@ export default function StrategyResearchApp({
     restoreRunId: state.result.runId,
     onRunId: handleRunId,
   });
+  const batchState = useSyncExternalStore(researchRun.batch.subscribe, researchRun.batch.snapshot, researchRun.batch.snapshot);
+  const [batchError, setBatchError] = useState(false);
   const [advancedError, setAdvancedError] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [accountsOpen, setAccountsOpen] = useState(false);
@@ -477,6 +480,19 @@ export default function StrategyResearchApp({
         onDraftId={handleDraftId}
         onDraftRevision={handleDraftRevision}
         onRun={researchRun.onRun}
+        batchControls={(request) => <ResearchBatchSources datasets={libraryDatasets}>{selected => <>
+          <button type="button" className="research-primary" disabled={!request || selected.length < 2 || batchState.storageFailed}
+            onClick={() => {
+              if (!request) return;
+              setBatchError(false);
+              void researchRun.batch.submit(request, selected).catch(() => setBatchError(true));
+            }}>{t("researchBatch.run")}</button>
+          {batchState.jobs.length > 0 && <button type="button" onClick={() => setHistoryOpen(true)}>
+            {t("researchBatch.jobs")} · {batchState.jobs.length}
+          </button>}
+          {batchState.storageFailed ? <p role="alert">{t("researchBatch.storage")}</p>
+            : batchError && <p role="alert">{t("researchBatch.submitFailed")}</p>}
+        </>}</ResearchBatchSources>}
         onConfirmNeedsData={researchRun.onConfirmNeedsData}
         onOpenAdvanced={openAdvanced}
         configuration={state.script.configuration}
@@ -558,6 +574,17 @@ export default function StrategyResearchApp({
       {historyOpen && <aside className="research-data-drawer" role="dialog" aria-label={t("ux.history")}>
         <header><strong>{t("ux.history")}</strong><button type="button" onClick={() => setHistoryOpen(false)}>{t("backtest.close")}</button></header>
         <Suspense fallback={<p>{t("research.loading")}</p>}><StrategyRunHistory draftId={state.script.draftId} currentRunId={researchRun.result?.run.run_id ?? null} onOpen={(runId) => { dispatch({ type: "result/viewHistory", runId }); setHistoryOpen(false); }} /></Suspense>
+        <ResearchBatchResults jobs={batchState.jobs} storageFailed={batchState.storageFailed}
+          onResume={id => researchRun.batch.resume(id)}
+          onOpen={job => {
+            if (libraryDatasets.some(dataset => dataset.dataset_id === job.datasetId && dataset.data_epoch === job.dataEpoch)) {
+              setLibrarySelectedId(job.datasetId);
+              onSelectDataset(job.datasetId);
+            }
+            if (job.runId) dispatch({ type: "result/viewHistory", runId: job.runId });
+            setNativeMode(false);
+            setHistoryOpen(false);
+          }} />
         <Suspense fallback={null}><PreparationJobsPanel /></Suspense>
       </aside>}
       {intent.kind === "handoff" && !handoff && <p role="alert">{t("ux.handoffMissing")}</p>}
