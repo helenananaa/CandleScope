@@ -35,7 +35,9 @@ test("batch frames cannot cross the contract-volume identity boundary", () => {
   const ticks: unknown[] = [];
   coordinator.subscribe(series, { intervals: ["5m"], onKline: ({ tick }) => ticks.push(tick.volume) });
   socket.open();
-  const [item] = JSON.parse(socket.sent[0]!).items;
+  const message = JSON.parse(socket.sent[0]!) as { items: Array<{ volume_semantics: string; clientId: string }> };
+  const item = message.items[0];
+  assert.ok(item);
   assert.equal(item.volume_semantics, "contract_count");
   const event = { type: "kline", exchange: "gate", market_type: "swap.inverse", symbol: series.symbol,
     interval: "5m", client_id: item.clientId, data: { time: 300, open: 1, high: 1, low: 1, close: 1, volume: 10 } };
