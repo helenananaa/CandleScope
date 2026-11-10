@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from urllib.parse import urlsplit
 
 import aiohttp
@@ -9,15 +10,16 @@ from aiohttp import web
 import pytest
 
 from app.data_engine.ingestion.config import IngestionConfig
-from app.data_engine.ingestion.models import StreamDescriptor, StreamType, TransportRequest
+from app.data_engine.ingestion.feed_control import FeedControlLayer
+from app.data_engine.ingestion.models import DataSource, FeedMode, RawMessage, StreamDescriptor, StreamType, TransportRequest
 from app.data_engine.ingestion.transport import TransportLayer
 from app.exchanges.catalog_worker import run_catalog_loader, shutdown_catalog_worker
 from app.exchanges.ccxt_ext import generic
 from app.exchanges.ccxt_ext.catalog import get_ccxt_catalog_entry
 from app.exchanges.ccxt_ext.profiles.binance_usdm import BinanceUsdmCcxtProfile
-from app.exchanges.public_admission import get_public_admission
+from app.exchanges.public_admission import PublicDemand, get_public_admission, public_demand
 from app.exchanges.public_ws import AdmittedWebSocket, connection_rules
-from app.exchanges.rate_limits import get_shared_rate_limit_manager
+from app.exchanges.rate_limits import RateLimitDeferred, RateLimitPolicy, get_shared_rate_limit_manager
 
 
 def point_at_loopback(exchange, origin):
@@ -80,6 +82,100 @@ def test_default_provider_counts_metadata_and_pages_once_with_exact_route(monkey
         finally:
             await transport.stop()
             await runner.cleanup()
+    asyncio.run(run())
+
+
+def test_bybit_body_quota_uses_exact_physical_bucket_and_resumes_polling():
+    async def run():
+        calls = []
+        reset_ms = 0
+
+        async def handle(request):
+            nonlocal reset_ms
+            assert request.path == "/v5/market/kline"
+            category = request.query["category"]
+            calls.append((category, time.time()))
+            if category == "inverse" and not reset_ms:
+                reset_ms = int(time.time() * 1000) + 900
+                return web.json_response(
+                    {"retCode": 10006, "retMsg": "Too many visits!", "result": {}},
+                    headers={"X-Bapi-Limit-Reset-Timestamp": str(reset_ms)},
+                )
+            return web.json_response({"retCode": 0, "result": {"list": [[0, "1", "2", "1", "2", "9", "4"]]}})
+
+        runner, origin = await serve(handle)
+        entry = get_ccxt_catalog_entry("bybit")
+        config = IngestionConfig(proxy_mode="none", proxy_egress_group="bybit-loopback")
+        policy = RateLimitPolicy(default_concurrency=1, default_delay_seconds=.01,
+                                 default_retry_429_backoff_seconds=.1)
+        drivers = {
+            category: generic._create_exchange(entry, config, market_type=market, websocket=False)
+            for category, market in [("inverse", "swap.inverse"), ("linear", "swap.linear")]
+        }
+        for driver in drivers.values():
+            point_at_loopback(driver, origin)
+            driver._candlescope_rate_limit_policy = policy
+
+        async def fetch(category):
+            return await drivers[category].public_get_v5_market_kline({
+                "category": category, "symbol": "BTCUSD" if category == "inverse" else "BTCUSDT",
+                "interval": "5", "limit": 1,
+            })
+
+        class PollTransport:
+            def __init__(self):
+                self.deferred = asyncio.Event()
+                self.error = None
+
+            async def http_fetch(self, _):
+                try:
+                    response = await fetch("inverse")
+                except RateLimitDeferred as exc:
+                    self.error = exc
+                    self.deferred.set()
+                    raise
+                return [RawMessage(response, DataSource.HTTP, StreamType.KLINE, int(time.time() * 1000))]
+
+        transport = PollTransport()
+        delivered = asyncio.Event()
+        async def on_data(_):
+            delivered.set()
+
+        descriptor = StreamDescriptor("BTC/USD:BTC", StreamType.KLINE, exchange="bybit",
+                                      market_type="swap.inverse", interval="5m", poll_interval_seconds=.01)
+        feed = FeedControlLayer(config, transport, descriptor)
+        feed._running = True
+        feed._mode = FeedMode.HTTP_POLL
+        feed.on_data(on_data)
+        poll = asyncio.create_task(feed._http_poll_loop())
+        try:
+            await asyncio.wait_for(transport.deferred.wait(), 2)
+            error = transport.error
+            bucket_key = "bybit:swap.inverse:legacy:egress=bybit-loopback"
+            assert (error.status_code, error.body_code, error.bucket_key, error.reason) == (
+                200, "10006", bucket_key, "cooldown",
+            )
+            assert error.retry_at_ms >= reset_ms - 2
+            bucket = get_shared_rate_limit_manager().snapshot()[bucket_key]
+            assert bucket["last_status_code"] == 200 and bucket["last_body_code"] == "10006"
+            assert bucket["last_headers"]["x-bapi-limit-reset-timestamp"] == str(reset_ms)
+            with public_demand(PublicDemand(defer=True)), pytest.raises(RateLimitDeferred) as blocked:
+                await fetch("inverse")
+            assert blocked.value.bucket_key == bucket_key
+            assert blocked.value.reason == "cooldown"
+            assert (await fetch("linear"))["retCode"] == 0
+            assert [category for category, _ in calls] == ["inverse", "linear"]
+            await asyncio.wait_for(delivered.wait(), 2)
+            assert [category for category, _ in calls] == ["inverse", "linear", "inverse"]
+            assert calls[-1][1] >= reset_ms / 1000 - .005
+            assert feed.snapshot()["metrics"]["counters"]["http_quota_deferrals"] == 1
+            assert get_public_admission().snapshot()["in_flight"] == 0
+        finally:
+            poll.cancel()
+            await asyncio.gather(poll, return_exceptions=True)
+            await asyncio.gather(*(driver.close() for driver in drivers.values()))
+            await runner.cleanup()
+
     asyncio.run(run())
 
 

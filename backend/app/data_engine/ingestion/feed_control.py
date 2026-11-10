@@ -20,6 +20,8 @@ import asyncio
 import logging
 from typing import Awaitable, Callable
 
+from app.exchanges.rate_limits import RateLimitDeferred
+
 from .config import IngestionConfig
 from .metrics import LayerMetrics
 from .models import (
@@ -327,6 +329,10 @@ class FeedControlLayer:
                         if self._on_data:
                             await self._on_data(msg)
 
+                except RateLimitDeferred as exc:
+                    self._metrics.inc("http_quota_deferrals")
+                    await asyncio.sleep(max(poll_interval, exc.retry_after_seconds))
+                    continue
                 except TransportError as exc:
                     self._metrics.inc("http_poll_errors")
                     logger.warning("HTTP poll failed (%s): %s", key, exc)
