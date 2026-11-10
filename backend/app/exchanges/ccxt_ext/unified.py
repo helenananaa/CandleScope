@@ -120,6 +120,8 @@ class CcxtUnifiedProjector:
         # rows are sufficient to publish the latest forming bar and the one
         # closure transition immediately before it.
         rows = rows[-2:]
+        if self.exchange_id == "bybit":
+            return self._project_bybit_klines(rows)
         newest_open = int(rows[-1][0])
         payloads: list[dict[str, Any]] = []
 
@@ -153,10 +155,34 @@ class CcxtUnifiedProjector:
             self._kline_fingerprints.pop(open_time, None)
         return payloads
 
+    def _project_bybit_klines(self, rows: list[list[Any]]) -> list[dict[str, Any]]:
+        payloads = []
+        for row in rows:
+            evidence = row[6] if len(row) > 6 else None
+            confirm = evidence.get("confirm") if isinstance(evidence, dict) else None
+            if confirm is not None and type(confirm) is not bool:
+                continue
+            # A forming update cannot replace an already confirmed close.
+            previous = self._kline_fingerprints.get(int(row[0]))
+            if confirm is not True and previous and previous[1]:
+                continue
+            payload = self._kline_payload(row, is_closed=confirm is True)
+            if confirm is not None:
+                end = _positive_int(evidence.get("end"))
+                if end is None:
+                    continue
+                payload["source_close_time_ms"] = end
+            if self._remember_kline(payload):
+                payloads.append(payload)
+        while len(self._kline_fingerprints) > _MAX_KLINE_REVISIONS:
+            self._kline_fingerprints.pop(next(iter(self._kline_fingerprints)))
+        return payloads
+
     def _remember_kline(self, payload: dict[str, Any]) -> bool:
         row = payload["value"]
         open_time = int(row[0])
-        fingerprint = (json.dumps(row, sort_keys=True, separators=(",", ":")), bool(payload["is_closed"]))
+        fingerprint = (json.dumps(row, sort_keys=True, separators=(",", ":")),
+                       bool(payload["is_closed"]), payload.get("source_close_time_ms"))
         if self._kline_fingerprints.get(open_time) == fingerprint:
             return False
         self._kline_fingerprints[open_time] = fingerprint
@@ -372,6 +398,15 @@ class CcxtUnifiedNormalizer:
             if spec is None or spec.floor_ms(open_time) != open_time:
                 return None
             end_time = spec.next_ms(open_time)
+            if "source_close_time_ms" in payload and payload["source_close_time_ms"] != end_time - 1:
+                return None
+            is_closed = bool(payload.get("is_closed", end_time <= msg.received_at_ms))
+            bybit_live = self._descriptor.exchange == "bybit" and msg.source == DataSource.WEBSOCKET
+            bybit_close_confirmed = (
+                bybit_live
+                and payload.get("is_closed") is True
+                and payload.get("source_close_time_ms") == end_time - 1
+            )
             data = {
                 "interval": self._descriptor.interval or "",
                 "open_time": open_time,
@@ -389,12 +424,8 @@ class CcxtUnifiedNormalizer:
                 "trades": 0,
                 "taker_buy_base": 0.0,
                 "taker_buy_quote": 0.0,
-                "is_closed": bool(
-                    payload.get(
-                        "is_closed",
-                        end_time <= msg.received_at_ms,
-                    )
-                ),
+                "is_closed": bybit_close_confirmed if bybit_live else is_closed,
+                "bybit_close_confirmed": bybit_close_confirmed,
                 "trade_coverage_verified": payload.get("trade_coverage_verified") is True,
                 "trade_candle_source": payload.get("trade_candle_source") is True,
             }

@@ -5,7 +5,7 @@ import { parseMarketVersion } from "../manager/marketHealth.js";
 import { MarketDataManager } from "../manager/marketDataManager.js";
 import { SeriesDataFeed } from "../feed/seriesDataFeed.js";
 import { ForegroundPreloadGate } from "../foregroundPreloadGate.js";
-import type { KlineApi, KlineFetchResult, KlineStreamController, KlineStreamOptions } from "../klineContracts.js";
+import type { KlineApi, KlineFetchResult, KlineRangeRequestOptions, KlineStreamController, KlineStreamOptions } from "../klineContracts.js";
 import type { KlineBar, MarketSeries, EpochSeconds } from "../marketDataTypes.js";
 
 const series: MarketSeries = { exchange: "binance", marketType: "spot", symbol: "ETHUSDT", interval: "1m" };
@@ -31,10 +31,128 @@ function healthy(cache = new SharedMarketCache({ now: () => now })) {
   return cache;
 }
 
+test("a history snapshot across an unseen critical barrier waits for a matching stream event", () => {
+  const cache = healthy();
+  read(cache, wire(4, 3));
+  const pending = cache.planHistory(series, 2);
+  assert.equal(pending.health.historyCovered, true);
+  assert.equal(pending.health.continuous, false);
+  assert.notEqual(pending.action, "reuse");
+  cache.admitRealtime(series, row(180, false, 23), "bar.updated", wire(5, 3), 120_000);
+  assert.equal(cache.planHistory(series, 2).action, "reuse");
+});
+
+test("a latest observation preserves existing history evidence and cannot replace versioned rows with legacy data", () => {
+  const cache = healthy();
+  const token = cache.beginRead(series);
+  try {
+    const legacy = cache.admitResponse(token, { endpoint: "latest", data: [row(120, true, 29)] });
+    assert.equal(legacy.data?.[0]?.close, 10);
+    cache.admitResponse(token, { endpoint: "latest", data: [row(180, false, 20)], stream_version: wire(2) });
+    assert.equal(cache.read(series).rows.at(-1)?.close, 20);
+    assert.equal(cache.planHistory(series, 2).action, "reuse");
+  } finally {
+    token.release();
+  }
+});
+
+test("latest observations cannot establish a history link or hide a critical barrier or a known tail gap", () => {
+  const cache = healthy();
+  const token = cache.beginRead(series);
+  try {
+    cache.admitResponse(token, { endpoint: "latest", data: [row(180, false, 23)], stream_version: wire(4, 3) });
+    assert.equal(cache.planHistory(series, 2).health.historyCovered, false);
+    assert.equal(cache.planHistory(series, 2).health.continuous, false);
+    cache.admitRealtime(series, row(180, false, 24), "bar.updated", wire(5, 3), 120_000);
+    assert.equal(cache.planHistory(series, 2).health.continuous, false);
+    read(cache, wire(5, 3));
+    assert.equal(cache.planHistory(series, 2).action, "reuse");
+    cache.admitResponse(token, { endpoint: "latest", data: [], has_tail_gap: true, stream_version: wire(5, 3) });
+    assert.equal(cache.planHistory(series, 2).health.continuous, false);
+  } finally {
+    token.release();
+  }
+});
+
+test("a versioned latest gap revokes affected coverage without touching a disjoint input", () => {
+  const cache = healthy();
+  read(cache, wire(1), [row(0), row(60), row(120)]);
+  const retained = cache.captureVersion(series, { to: 60 });
+  const affected = cache.captureVersion(series, { from: 120, to: 120 });
+  const token = cache.beginRead(series);
+  try {
+    cache.admitResponse(token, { endpoint: "latest", data: [], stream_version: wire(2),
+      storage_revision: 1, has_tail_gap: true,
+      missing_ranges: [{ interval: "1m", start_ms: 120_000, end_ms: 120_000 }] });
+    assert.equal(affected.isCurrent(), false);
+    assert.equal(retained.isCurrent(), true);
+    assert.equal(cache.planHistory(series, 2).action, "load");
+  } finally {
+    token.release();
+  }
+});
+
 test("a subscription/ACK and a legacy or unstable snapshot never prove health", () => {
   for (const version of [undefined, wire(1), wire(1, 1, { stable: false })]) {
     const cache = new SharedMarketCache({ now: () => now }); cache.connect(series); read(cache, version);
     assert.notEqual(cache.planHistory(series, 2).action, "reuse");
+  }
+});
+
+test("an unstable custom-period response cannot restore coverage revoked by backfill", () => {
+  const custom = { ...series, interval: "2m" };
+  const scope = { ...wire(0, 0).series, interval: custom.interval };
+  const version = (sequence: number, stable = true) => wire(sequence, sequence, { series: scope, stable });
+  const cache = new SharedMarketCache({ now: () => now });
+  const first = cache.beginRead(custom);
+  cache.admitResponse(first, proof(version(0), [row(120), row(240)]));
+  first.release();
+  assert.equal(cache.read(custom).complete, true);
+
+  const racing = cache.beginRead(custom);
+  cache.invalidateRange(custom, { from: 120, to: 120 }, version(1));
+  assert.equal(cache.read(custom, { from: 120, to: 120 }).complete, false);
+  const pending = cache.admitResponse(racing, proof(version(0, false), [row(120, true, 15), row(240)]));
+  racing.release();
+  assert.equal(pending.history_state, "pending");
+  assert.equal(pending.quality?.complete, false);
+  assert.deepEqual(pending.data, []);
+  assert.equal(cache.read(custom, { from: 120, to: 120 }).complete, false);
+  assert.equal(cache.read(custom).rows[0]?.close, 10);
+
+  const fresh = cache.beginRead(custom);
+  cache.admitResponse(fresh, proof(version(1), [row(120, true, 20), row(240)]));
+  fresh.release();
+  assert.equal(cache.read(custom).complete, true);
+  assert.equal(cache.read(custom).rows[0]?.close, 20);
+});
+
+test("a delayed stable response cannot undo a newer durable correction at the same stream cursor", () => {
+  const cache = healthy();
+  const older = cache.beginRead(series);
+  const newer = cache.beginRead(series);
+  try {
+    cache.admitResponse(newer, { ...proof(wire(1), [row(60), row(120, true, 25)]), storage_revision: 41 });
+    const pending = cache.admitResponse(older, { ...proof(wire(1)), storage_revision: 40 });
+    assert.equal(pending.retryable, true);
+    assert.equal(pending.quality?.complete, false);
+    assert.deepEqual(pending.data, []);
+    assert.equal(cache.read(series, { to: 120 }).rows.at(-1)?.close, 25);
+    assert.equal(cache.read(series, { to: 120 }).complete, true);
+  } finally {
+    older.release();
+    newer.release();
+  }
+
+  const restarted = cache.beginRead(series);
+  try {
+    const restored = cache.admitResponse(restarted, {
+      ...proof(wire(0, 0, { epoch: "server-restored" }), [row(60), row(120, true, 28)]), storage_revision: 3,
+    });
+    assert.equal(restored.quality?.complete, true);
+    assert.equal(cache.read(series, { to: 120 }).rows.at(-1)?.close, 28);
+  } finally {
+    restarted.release();
   }
 });
 
@@ -105,6 +223,31 @@ test("freshness expires independently of coverage; a historical amendment does n
   assert.equal(health.fresh, false); assert.equal(health.reason, "stale-tail");
 });
 
+test("a historical amendment in a new generation cannot reuse the retired stream's freshness", () => {
+  const cache = healthy();
+  const generation = (sequence: number, barrier = 1) => wire(sequence, barrier, { generation: 2 });
+  read(cache, generation(0, 0));
+  cache.admitRealtime(series, row(60, true, 20), "bar.amended", generation(1), 0);
+  read(cache, generation(1), [row(60, true, 20), row(120)]);
+  const health = cache.planHistory(series, 2).health;
+  assert.equal(health.continuous, true);
+  assert.equal(health.fresh, false);
+  cache.admitRealtime(series, row(180, false, 22), "bar.updated", generation(2), 120_000);
+  assert.equal(cache.planHistory(series, 2).action, "reuse");
+});
+
+test("a new generation announced by a history correction replaces retired row and tail versions", () => {
+  const cache = healthy();
+  read(cache, wire(5), [row(60), row(120, true, 15)]);
+  const version = wire(1, 1, { generation: 2 });
+  cache.invalidateRange(series, { from: 120, to: 120 }, version);
+  read(cache, version, [row(60), row(120, true, 25)]);
+  assert.equal(cache.read(series, { to: 120 }).rows.at(-1)?.close, 25);
+  const health = cache.planHistory(series, 2).health;
+  assert.equal(health.historyCovered, false);
+  assert.equal(health.fresh, false);
+});
+
 test("disconnect and epoch change fence in-flight reads and require a fresh stream/snapshot link", () => {
   const cache = healthy(), token = cache.beginRead(series);
   cache.markDisconnected(series); cache.connect(series);
@@ -158,6 +301,54 @@ test("targeted backfill preserves nonintersecting historical coverage", () => {
   cache.invalidateRange(series, { from: 60, to: 120 }, wire(2, 2));
   assert.equal(cache.read(series, { from: 180, to: 240 }).complete, true);
   assert.equal(cache.read(series, { from: 60, to: 120 }).complete, false);
+});
+
+test("a source gap holds stream health until canonical readback and a fresh non-replayed event", () => {
+  const cache = healthy();
+  const oldRead = cache.beginRead(series);
+  const affected = cache.captureVersion(series, { from: 60, to: 60 });
+  const disjoint = cache.captureVersion(series, { from: 120, to: 120 });
+  const range = { from: 60, to: 60 };
+  assert.ok(cache.invalidateRange(series, range, wire(2, 2), undefined, { id: "gap", resolved: false }));
+  try {
+    assert.throws(() => cache.admitResponse(oldRead, proof(wire(1))), /Obsolete market snapshot/);
+  } finally { oldRead.release(); }
+  assert.equal(affected.isCurrent(), false);
+  assert.equal(disjoint.isCurrent(), true);
+  read(cache, wire(2, 2), [row(120)]);
+  assert.equal(cache.planHistory(series, 1).health.historyCovered, true);
+  assert.equal(cache.planHistory(series, 1).health.continuous, false);
+  assert.equal(cache.read(series, range).complete, false);
+  read(cache, wire(5, 4), [row(120)]);
+  assert.ok(cache.invalidateRange(series, range, wire(3, 3), undefined, { id: "gap", resolved: true }));
+  read(cache, wire(5, 4), [row(60, true, 18), row(120)]);
+  cache.admitRealtime(series, row(180, false, 20), "bar.updated", wire(6, 4), 120_000, true);
+  assert.equal(cache.planHistory(series, 2).health.fresh, false);
+  cache.admitRealtime(series, row(180, false, 21), "bar.updated", wire(7, 4), 120_000);
+  assert.equal(cache.planHistory(series, 2).action, "reuse");
+  assert.equal(cache.read(series, range).rows[0]?.close, 18);
+});
+
+test("a stable empty read revokes the named gap without revoking unaffected historical proof", () => {
+  const cache = new SharedMarketCache({ now: () => now });
+  const first = cache.beginRead(series);
+  cache.admitResponse(first, { ...proof(wire(0, 0), [row(60), row(120), row(180)]), storage_revision: 40 });
+  first.release();
+  const missing = cache.captureVersion(series, { from: 120, to: 120 });
+  const unaffected = cache.captureVersion(series, { from: 60, to: 60 });
+  assert.equal(cache.read(series, { from: 120, to: 120 }).complete, true);
+
+  const second = cache.beginRead(series);
+  const gap = { ...proof(wire(0, 0), []), storage_revision: 41, endpoint: "range" as const,
+    complete: false, retryable: true, history_state: "pending" as const, verified_contiguous: false,
+    missing_ranges: [{ interval: series.interval, start_ms: 120_000, end_ms: 120_000 }] };
+  cache.admitResponse(second, gap);
+  second.release();
+  assert.equal(cache.read(series, { from: 120, to: 120 }).complete, false);
+  assert.equal(missing.isCurrent(), false);
+  assert.equal(cache.read(series, { from: 60, to: 60 }).complete, true);
+  assert.equal(cache.read(series, { from: 180, to: 180 }).complete, true);
+  assert.equal(unaffected.isCurrent(), true);
 });
 
 test("a snapshot crossing unseen critical events revokes proofs and input stamps outside its returned range", () => {
@@ -216,4 +407,72 @@ test("production Feed switching consumes a healthy warm series with no HTTP or p
   assert.equal(manager.cache.planHistory(series, 2).health.subscribed, false, "negative ACK revokes a previous lease's health");
   options.onControlMessage?.({ type: "subscribed", intervals: ["1m"], active_intervals: ["1m"] }, controller);
   assert.notEqual(manager.cache.planHistory(series, 2).action, "reuse", "a later ACK cannot establish data continuity");
+});
+
+test("a storage correction rejects older range snapshots before they reach cache or chart", async t => {
+  const requests: KlineRangeRequestOptions[] = [];
+  const replies = [
+    { ...proof(wire(2, 2), [row(60), row(120, true, 11)]), storage_revision: 40 },
+    { ...proof(wire(2, 2, { epoch: "retired" }), [row(60), row(120, true, 12)]), storage_revision: 42 },
+    { ...proof(wire(2, 2), [row(60), row(120, true, 21)]), storage_revision: 41 },
+    { ...proof(wire(3, 3), [row(60), row(120, true, 23)]), storage_revision: 42 },
+    { ...proof(wire(4, 4), [row(60), row(120, true, 24)]), storage_revision: 43 },
+  ];
+  const manager = new MarketDataManager({
+    api: {
+      getMultiStreamUrl: () => "ws://test",
+      fetchKlinesHistory: async () => { throw new Error("unexpected history"); },
+      fetchKlinesRange: async (_symbol, _interval, _start, _end, _market, _exchange, options) => {
+        requests.push(options);
+        const reply = replies.shift();
+        if (!reply) throw new Error("unexpected range");
+        return reply;
+      },
+      fetchKlinesBefore: async () => { throw new Error("unexpected before"); },
+      fetchLatestKlines: async () => { throw new Error("unexpected latest"); },
+    },
+    streams: { subscribe: () => { throw new Error("unexpected stream"); }, closeAll() {}, diagnostics: () => ({}) },
+  });
+  t.after(() => manager.closeAll());
+  const committed: number[] = [];
+  const feed = new SeriesDataFeed({ api: manager, getActiveSeries: () => series,
+    commitMergedChartData: (_symbol, _interval, data) => {
+      const close = data.at(-1)?.close;
+      assert.equal(typeof close, "number");
+      committed.push(close!);
+    } });
+  read(manager.cache, wire(1), [row(60), row(120)]);
+
+  const correct = (sequence: number, revision: number, ranged: boolean) => {
+    const version = wire(sequence, sequence);
+    manager.cache.invalidateRange(series, ranged ? { from: 120, to: 120 } : undefined, version, revision);
+    assert.equal(feed.handleBackfillCompleted({
+      type: "backfill_completed", interval: series.interval, stream_version: version,
+      detail: { reason: "storage_history_changed", storage_revision: revision,
+        ...(ranged ? { range_start_ms: 120_000, range_end_ms: 120_000 } : {}) },
+    }, { getCacheRows: () => [...manager.read(series).rows] }), true);
+  };
+  const idle = async () => {
+    for (let i = 0; i < 100 && feed.backfillReloadInFlight.size; i += 1) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    }
+    assert.equal(feed.backfillReloadInFlight.size, 0);
+  };
+
+  correct(2, 41, true);
+  await idle();
+  assert.deepEqual(requests.map(({ storageRevisionFloor }) => storageRevisionFloor),
+    Array.from({ length: 3 }, () => ({ epoch: "server-a", revision: 41 })));
+  assert.deepEqual(committed, [21]);
+  assert.equal(manager.read(series).rows.at(-1)?.close, 21);
+
+  correct(3, 42, true);
+  await idle();
+  assert.deepEqual(requests.at(-1)?.storageRevisionFloor, { epoch: "server-a", revision: 42 });
+  assert.deepEqual(committed, [21, 23]);
+
+  correct(4, 43, false);
+  await idle();
+  assert.deepEqual(requests.at(-1)?.storageRevisionFloor, { epoch: "server-a", revision: 43 });
+  assert.deepEqual(committed, [21, 23, 24]);
 });

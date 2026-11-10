@@ -4,6 +4,7 @@ import { t, tPlural, translateMarketType, translateWsStatus } from "../i18n/inde
 import { useLocale } from "../i18n/useLocale.js";
 import MarketStatusBar from "./MarketStatusBar.js";
 import { APP_VERSION } from "../shared/appVersion.js";
+import type { TerminalHistoryGap } from "../features/market-data/klineContracts.js";
 
 export type ConnectionStatus = "connected" | "loading" | "disconnected" | string;
 
@@ -19,6 +20,7 @@ export interface StatusBarModel {
   loadingMoreLeft: boolean;
   hasMoreLeft: boolean;
   historyPreparing?: boolean;
+  historyGap?: TerminalHistoryGap;
   indicatorComputing?: boolean;
   exchangeCatalogStatus: string;
   exchangeLimitations?: string[];
@@ -49,8 +51,19 @@ function localizedMarketLabel(label: string): string {
     : label;
 }
 
+function historyGapDetail(gap: TerminalHistoryGap): string {
+  const utc = (seconds: number) => {
+    const date = new Date(seconds * 1_000);
+    return Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 19).replace("T", " ") : String(seconds);
+  };
+  const start = utc(gap.range.start);
+  const end = utc(gap.range.end);
+  return `${t("status.historyGap")} · ${start === end ? start : `${start}–${end}`} UTC · ${gap.reason}`;
+}
+
 function StatusBar({ status, extensions }: StatusBarProps) {
   useLocale();
+  const historyGapLabel = status.historyGap ? historyGapDetail(status.historyGap) : null;
   const {
     connectionStatus: dataConnectionStatus,
     dataSource,
@@ -80,6 +93,12 @@ function StatusBar({ status, extensions }: StatusBarProps) {
         </span>
         <span data-live-bar-count={barCount}>{tPlural("status.barCount", barCount)}</span>
         {status.historyPreparing && <span role="status" data-history-preparing="true">{t("preparation.title")}</span>}
+        {historyGapLabel && (
+          <span role="status" data-history-gap="terminal" title={historyGapLabel}
+            aria-label={historyGapLabel} style={{ color: "var(--text-warning)" }}>
+            {t("status.historyGap")}
+          </span>
+        )}
         {status.indicatorComputing && <span role="status">{t("indicator.title")} {t("indicator.computing")}</span>}
         {loadingMoreLeft && <span style={{ color: "var(--text-accent)" }}>{t("status.loadingOlder")}</span>}
         {!hasMoreLeft && !loadingMoreLeft && <span style={{ color: "var(--text-muted)" }}>{t("status.noMoreHistory")}</span>}

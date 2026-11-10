@@ -26,6 +26,7 @@ export function buildStatusBarViewModel({
     loadingMoreLeft: marketStatus.loadingMoreLeft,
     hasMoreLeft: marketStatus.hasMoreLeft,
     historyPreparing: marketStatus.historyPreparing === true,
+    ...(marketStatus.historyGap ? { historyGap: marketStatus.historyGap } : {}),
     indicatorComputing,
     exchangeCatalogStatus: sessionStatus.exchangeCatalogStatus,
     exchangeLimitations: sessionStatus.exchangeLimitations,
