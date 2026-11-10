@@ -7,13 +7,15 @@ import {
   applyChartLinkSettingsPatch,
   applyLinkedIndicatorUpdate,
   applyLinkedSessionUpdate,
+  applyQuickReplayUpdate,
   assignCellLinkGroup,
   assignCellsLinkGroup,
   cloneChartLinkSettings,
   resolveChartLinkTargets,
   resolveChartLinkTargetsForChannel,
 } from "../chartWorkspaceLinkModel.js";
-import { createDefaultChartWorkspace } from "../chartWorkspaceStorage.js";
+import { createChartWorkspaceLayoutTree } from "../chartWorkspaceLayout.js";
+import { createDefaultChartWorkspace, normalizeChartWorkspace } from "../chartWorkspaceStorage.js";
 import {
   DEFAULT_CHART_LINK_GROUP_ID,
   DEFAULT_CHART_LINK_GROUP_SETTINGS,
@@ -207,4 +209,54 @@ test("mixed-market replay layouts link changed session channels without rebroadc
   assert.equal(applyLinkedSessionUpdate(document, "cell-3", ltc.session), document);
   const synchronized = applyLinkedSessionUpdate(document, "cell-3", ltc.session, true);
   assert.deepEqual(chartWorkspaceCell(synchronized, "cell-4").session, ltc.session);
+});
+
+
+test("quick replay mode links resume each target's own saved trade without moving its cursor", () => {
+  const document = createDefaultChartWorkspace();
+  document.windows["main-window"]!.layoutTree = createChartWorkspaceLayoutTree("split-vertical");
+  const own = { accountId: "a", tradeId: "trade-a", interval: "1m", cursorSec: 120 };
+  const peer = { accountId: "b", tradeId: "trade-b", readonlyVersion: "version-b", interval: "5m",
+    cursorSec: 180, step: "1m", active: false };
+  document.cells["cell-2"]!.quickReplay = peer;
+  document.cells["cell-3"]!.quickReplay = { ...peer, tradeId: "closed-layout" };
+
+  const isolated = applyQuickReplayUpdate(document, "cell-1", () => own, "mode");
+  assert.equal(isolated.cells["cell-2"]!.quickReplay, peer);
+  const policy = document.linkGroups[DEFAULT_CHART_LINK_GROUP_ID]!.peerPolicy;
+  policy.quickReplayMode = true;
+  const linked = applyQuickReplayUpdate(document, "cell-1", () => own, "mode");
+  assert.deepEqual(linked.cells["cell-2"]!.quickReplay, { ...peer, active: true });
+  assert.equal(linked.cells["cell-3"], document.cells["cell-3"]);
+  assert.equal(linked.cells["cell-4"]!.quickReplay, undefined);
+
+  const suspended = applyQuickReplayUpdate(linked, "cell-1", () => ({ ...own, active: false }), "local");
+  assert.equal(suspended.cells["cell-2"], linked.cells["cell-2"]);
+  const exited = applyQuickReplayUpdate(linked, "cell-1", () => ({ ...own, active: false }), "mode");
+  assert.deepEqual(exited.cells["cell-2"]!.quickReplay, peer);
+  const restored = normalizeChartWorkspace(JSON.parse(JSON.stringify(exited)));
+  assert.deepEqual(restored.cells["cell-2"]!.quickReplay, peer);
+  assert.equal(restored.linkGroups[DEFAULT_CHART_LINK_GROUP_ID]!.peerPolicy.quickReplayMode, true);
+});
+
+test("quick replay cursor links only apply to active targets on enabled paths", () => {
+  const document = hierarchicalWorkspace();
+  document.windows["main-window"]!.layoutTree = createChartWorkspaceLayoutTree("quad");
+  const saved = { accountId: "a", tradeId: "trade-a", interval: "1m", cursorSec: 180 };
+  document.cells["cell-1"]!.quickReplay = saved;
+  document.cells["cell-2"]!.quickReplay = { ...saved, accountId: "b", tradeId: "trade-b", interval: "5m", step: "5m" };
+  document.cells["cell-3"]!.quickReplay = { ...saved, tradeId: "dormant", active: false };
+  document.cells["cell-4"]!.quickReplay = { ...saved, tradeId: "child" };
+  document.linkGroups[DEFAULT_CHART_LINK_GROUP_ID]!.peerPolicy.quickReplayCursor = true;
+  const rewound = { ...saved, cursorSec: 60 };
+  const local = applyQuickReplayUpdate(document, "cell-1", () => rewound, "local");
+  assert.equal(local.cells["cell-2"], document.cells["cell-2"]);
+  const linked = applyQuickReplayUpdate(document, "cell-1", () => rewound, "cursor");
+  assert.deepEqual(linked.cells["cell-2"]!.quickReplay, { ...document.cells["cell-2"]!.quickReplay, cursorSec: 60 });
+  assert.equal(linked.cells["cell-3"], document.cells["cell-3"]);
+  assert.equal(linked.cells["cell-4"], document.cells["cell-4"]);
+  document.linkGroups["group-child"]!.receiveFromParent.quickReplayCursor = true;
+  const withChild = applyQuickReplayUpdate(document, "cell-1", () => rewound, "cursor");
+  assert.equal(withChild.cells["cell-4"]!.quickReplay!.cursorSec, 60);
+  assert.equal(applyQuickReplayUpdate(withChild, "cell-4", current => ({ ...current!, cursorSec: 60 }), "cursor"), withChild);
 });

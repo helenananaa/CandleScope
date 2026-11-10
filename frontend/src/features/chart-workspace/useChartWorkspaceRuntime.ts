@@ -1,4 +1,5 @@
 import type { ChartAccountOverlaySettings } from "./chartAccountOverlaySettings.js";
+import type { QuickReplayChange, UpdateChartQuickReplay } from "./chartQuickReplayState.js";
 import { pickCellChartSettings } from "./chartWorkspaceChartSettings.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import type { NativeStrategyCollection } from "../backtest/native/nativeStrategyCollection.js";
@@ -83,6 +84,7 @@ import {
   applyLinkedSessionUpdate,
   applyLinkedChartSettingsUpdate,
   applyLinkedAccountOverlayUpdate,
+  applyQuickReplayUpdate,
   assignCellLinkGroup,
   assignCellsLinkGroup,
   chartLinkGroupDepth,
@@ -179,6 +181,7 @@ export interface ChartWorkspaceRuntime {
     setLayoutRatio(splitId: string, ratio: number): void;
     updateCellSession(cellId: ChartCellId, session: ChartSession): void;
     updateCellChartSettings(cellId: ChartCellId, settings: ChartSettings | ChartCellChartSettings): void;
+    updateCellQuickReplay(workspaceId: ChartWorkspaceId, cellId: ChartCellId, update: UpdateChartQuickReplay, change: QuickReplayChange): void;
     updateCellAccountOverlay(cellId: ChartCellId, settings: ChartAccountOverlaySettings): void;
     updateCellPriceScale(cellId: ChartCellId, priceScale: ChartCellPriceScale): void;
     updateCellIndicators(cellId: ChartCellId, indicators: IndicatorDefinition[]): void;
@@ -462,10 +465,22 @@ export function useChartWorkspaceRuntime(
     }
     setPersistence((current) => ({ ...current, saveState: "saving", error: null }));
     if (saveTimerRef.current !== null) clearTimeout(saveTimerRef.current);
+    const workspace = activeWorkspace(library);
+    const lastSharedDocument = busSnapshotRef.current?.workspaces.find(item => item.id === workspace.id)?.document;
+    const peerReplayChanged = services.workspaceBus && services.windowId && lastSharedDocument
+      && Object.values(workspace.document.windows).some(window => window.id !== services.windowId
+        && visibleCellIds(window.layoutTree).some(cellId => {
+          const next = workspace.document.cells[cellId]?.quickReplay;
+          const previous = lastSharedDocument.cells[cellId]?.quickReplay;
+          return next !== undefined && ((next.active !== false) !== (previous !== undefined && previous.active !== false) || next.cursorSec !== previous?.cursorSec);
+        }));
+    // Cross-window targets receive the shared document through the bus. Keep
+    // this debounce below the fast replay tick so playback can reach them.
+    const delay = peerReplayChanged ? Math.min(120, services.autosaveDelayMs) : services.autosaveDelayMs;
     saveTimerRef.current = setTimeout(() => {
       saveTimerRef.current = null;
       void persistSnapshot(libraryRef.current);
-    }, services.autosaveDelayMs);
+    }, delay);
     return () => {
       if (saveTimerRef.current !== null) {
         clearTimeout(saveTimerRef.current);
@@ -498,10 +513,12 @@ export function useChartWorkspaceRuntime(
 
   const updateActiveDocument = useCallback((
     updater: (document: ChartWorkspaceDocument) => ChartWorkspaceDocument,
+    expectedWorkspaceId?: ChartWorkspaceId,
   ) => {
     const updatedAt = services.now();
     setLibrary((current) => {
       const workspace = activeWorkspace(current);
+      if (expectedWorkspaceId !== undefined && workspace.id !== expectedWorkspaceId) return current;
       const scopedDocument = services.windowId && workspace.document.windows[services.windowId]
         ? { ...workspace.document, activeWindowId: services.windowId }
         : workspace.document;
@@ -924,6 +941,10 @@ export function useChartWorkspaceRuntime(
     updateActiveDocument((current) => applyLinkedChartSettingsUpdate(current, cellId, chartSettings));
   }, [updateActiveDocument]);
 
+  const updateCellQuickReplay = useCallback((workspaceId: ChartWorkspaceId, cellId: ChartCellId, update: UpdateChartQuickReplay, change: QuickReplayChange) => {
+    updateActiveDocument(current => applyQuickReplayUpdate(current, cellId, update, change), workspaceId);
+  }, [updateActiveDocument]);
+
   const updateCellAccountOverlay = useCallback((cellId: ChartCellId, settings: ChartAccountOverlaySettings) => {
     updateActiveDocument(current => applyLinkedAccountOverlayUpdate(current, cellId, settings));
   }, [updateActiveDocument]);
@@ -1158,6 +1179,7 @@ export function useChartWorkspaceRuntime(
       setLayoutRatio,
       updateCellSession,
       updateCellChartSettings,
+      updateCellQuickReplay,
       updateCellAccountOverlay,
       updateCellPriceScale,
       updateCellIndicators,

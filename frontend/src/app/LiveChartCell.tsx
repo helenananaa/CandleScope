@@ -30,6 +30,8 @@ import React, {
 } from "react";
 import { createPortal } from "react-dom";
 import { captureChartPng } from "../features/trading-accounts/chartCapture.js";
+import { useChartQuickReplay } from "./useChartQuickReplay.js";
+import type { QuickReplayChange, UpdateChartQuickReplay } from "../features/chart-workspace/chartQuickReplayState.js";
 import type { QuickReplayRequest } from "../features/trading-accounts/tradingTypes.js";
 import { useTradingChartOverlay } from "../features/trading-accounts/useTradingChartOverlay.js";
 import type { TradingRailBinding } from "./RightMarketRail.js";
@@ -197,6 +199,7 @@ export interface LiveChartCellProps {
   onToggleMaximize(cellId: ChartCellId): void;
   onSessionChange(cellId: ChartCellId, session: ChartSession): void;
   onChartSettingsChange(cellId: ChartCellId, settings: ChartCellChartSettings): void;
+  onQuickReplayChange(workspaceId: ChartWorkspaceId, cellId: ChartCellId, update: UpdateChartQuickReplay, change: QuickReplayChange): void;
   onAccountOverlayChange(cellId: ChartCellId, settings: ChartAccountOverlaySettings): void;
   onPriceScaleChange(cellId: ChartCellId, value: ChartCellState["priceScale"]): void;
   onIndicatorsChange(cellId: ChartCellId, indicators: ChartCellState["indicators"]): void;
@@ -243,6 +246,7 @@ function LiveChartCell({
   onToggleMaximize,
   onSessionChange,
   onChartSettingsChange,
+  onQuickReplayChange,
   onAccountOverlayChange,
   onPriceScaleChange,
   onIndicatorsChange,
@@ -257,7 +261,10 @@ function LiveChartCell({
   recordMultiChartCellRender(cell.id);
   useLocale();
   const marketWorkspaceResources = useMarketDataWorkspaceResources();
-  const [quickReplay, setQuickReplay] = useState<QuickReplayRequest | null>(null);
+  const updateQuickReplay = useCallback((update: UpdateChartQuickReplay, change: QuickReplayChange) => onQuickReplayChange(workspaceId, cell.id, update, change),
+    [cell.id, onQuickReplayChange, workspaceId]);
+  const replay = useChartQuickReplay(cell.quickReplay, updateQuickReplay);
+  const { request: quickReplay, open: openSavedReplay, exit: exitQuickReplay, suspend: suspendQuickReplay } = replay;
   const studyOwner = historyStudyOwner(workspaceId, cell.id);
   const study = useHistoryStudy(studyOwner, marketWorkspaceResources?.dataManager ?? null);
   const moveStudyCursor = study.move;
@@ -321,7 +328,7 @@ function LiveChartCell({
     if (!linkCoordinator.studyClocks.canStartAutomatic(cell.id, workspaceId)) return Promise.resolve(false);
     return moveStudy(cursorMs, true, true);
   }, [cell.id, linkCoordinator, moveStudy, workspaceId]);
-  const liveControlsEnabled = !study.masked && !study.pending && !study.busy;
+  const liveControlsEnabled = !replay.key && !study.masked && !study.pending && !study.busy;
   const marketController = useMemo(() => marketWorkspaceResources ? new ChartMarketController({
     data: marketWorkspaceResources.dataFlow.forChart(`chart:${cell.id}`), owner: `chart:${cell.id}`,
   }) : null, [cell.id, marketWorkspaceResources]);
@@ -616,6 +623,18 @@ function LiveChartCell({
   );
   useLayoutEffect(() => {
     if (study.masked && study.playback) return; // The visible study reports its own prefix below.
+    if (cell.quickReplay && replay.key && !study.masked) {
+      const trade = quickReplay?.trade;
+      onControlObservation?.(cell.id, {
+        mode: "quick-replay",
+        session: trade ? { exchange: trade.exchange, marketType: trade.marketType, symbol: trade.symbol, interval: cell.quickReplay.interval } : cell.session,
+        quickReplay: { cursorSec: cell.quickReplay.cursorSec ?? null, step: cell.quickReplay.step ?? cell.quickReplay.interval },
+        indicatorSignature: "", marketReady: false, indicatorsReady: false, barCount: 0, loading: !quickReplay && !replay.error,
+        initialHistoryPending: false, loadingMoreLeft: false, paused: true, computing: false,
+        indicatorErrors: [], indicatorOutputPoints: [], error: replay.error,
+      });
+      return;
+    }
     if (study.pending || study.masked || study.busy) {
       onControlObservation?.(cell.id, { mode: "restoring-study", session: cell.session,
         indicatorSignature: "", marketReady: false, indicatorsReady: false, barCount: 0, loading: true,
@@ -646,7 +665,7 @@ function LiveChartCell({
     chartSession.view.interval, indicators.view.activeIndicators, indicators.status.computing,
     sourceMarketData.status.barCount, sourceMarketData.view.loading, sourceMarketData.status.initialHistoryPending,
     sourceMarketData.status.loadingMoreLeft, sourceMarketData.view.error, obscured, onControlObservation,
-    study.pending, study.masked, study.playback, study.busy, study.error, cell.session]);
+    study.pending, study.masked, study.playback, study.busy, study.error, cell.session, cell.quickReplay, quickReplay, replay.error, replay.key]);
   useEffect(() => () => onControlObservation?.(cell.id, null), [cell.id, onControlObservation]);
   const exportFlow = useExportRuntime({
     indicators: indicators.view.activeIndicators,
@@ -865,16 +884,17 @@ function LiveChartCell({
   const studyMaskedRef = useRef(study.masked);
   useLayoutEffect(() => {
     studyMaskedRef.current = study.masked;
-    if (study.masked) setQuickReplay(null);
-  }, [study.masked]);
+    // Initial study recovery masks the live chart before its mode is known.
+    // Only an acknowledged active study supersedes the saved trade replay.
+    if (study.active && replay.key) suspendQuickReplay();
+  }, [replay.key, study.active, study.masked, suspendQuickReplay]);
   const openTradeReplay = useCallback((request: QuickReplayRequest) => {
-    if (!studyMaskedRef.current) setQuickReplay(request);
-  }, []);
+    if (!studyMaskedRef.current) openSavedReplay(request);
+  }, [openSavedReplay]);
   const [studySetup, setStudySetup] = useState(false);
-  const timeNavigation = useChartTimeNavigation({ active, enabled: !obscured && quickReplay === null && !study.masked,
+  const timeNavigation = useChartTimeNavigation({ active, enabled: !obscured && !replay.key && !study.masked,
     cellId: cell.id, workspaceId, sessionKey: chartSession.view.sessionKey,
     marketData: sourceMarketData, surface: chartSurface.actions, links: linkCoordinator });
-  const exitQuickReplay = useCallback(() => setQuickReplay(null), []);
   const lastClose = sourceMarketData.view.lastPrice?.close;
   const tradingBinding = useMemo<TradingRailBinding>(() => ({
     context: {
@@ -1082,7 +1102,7 @@ function LiveChartCell({
           ))}
           <ChartAccountOverlayMenu cellId={cell.id} settings={cell.accountOverlay} error={tradingOverlay.error}
             onChange={settings => onAccountOverlayChange(cell.id, settings)} />
-          <span className="chart-cell-drawing-controls" ref={setDrawingControlsHost} hidden={quickReplay !== null || study.masked} />
+          <span className="chart-cell-drawing-controls" ref={setDrawingControlsHost} hidden={!!replay.key || study.masked} />
           <WorkspaceCellLayoutMenu
             cellId={cell.id}
             layoutCellIds={layoutCellIds}
@@ -1125,19 +1145,30 @@ function LiveChartCell({
             drawingInteractionReady={drawingInteractionReady}
             drawingControlsHost={drawingControlsHost}
             onDrawingInteractionReadyChange={setDrawingInteractionReady}
-            paused={obscured || quickReplay !== null || study.masked}
+            paused={obscured || !!replay.key || study.masked}
           />}
           {quickReplay && !study.masked && (
-            <Suspense fallback={null}>
+            <Suspense fallback={<div className="history-study-mask" role="status">{t("study.loading")}</div>}>
               <QuickReplayOverlay
-                key={`${quickReplay.accountId}:${quickReplay.trade.id}:${quickReplay.trade.readonlySource?.version ?? ""}:${quickReplay.interval}`}
+                key={replay.key}
                 request={quickReplay}
+                active={active && !obscured}
+                savedCursorSec={cell.quickReplay?.cursorSec}
+                savedStep={cell.quickReplay?.step}
+                onProgress={replay.save}
+                onCursorChange={replay.move}
+                accountOverlay={cell.accountOverlay}
                 style={quickReplayStyle}
                 indicatorDefinitions={cell.indicators}
                 onExit={exitQuickReplay}
               />
             </Suspense>
           )}
+          {replay.key && !quickReplay && !study.masked && <div className="history-study-mask" data-quick-replay-pending>
+            <p role={replay.error ? "alert" : "status"}>{replay.error ?? t("study.loading")}</p>
+            {replay.error && <button type="button" className="trading-button" onClick={replay.retry}>{t("trading.replay.retry")}</button>}
+            <button type="button" className="trading-button" onClick={exitQuickReplay}>{t("trading.replay.exit")}</button>
+          </div>}
           {study.masked && study.playback && marketWorkspaceResources && <Suspense fallback={<div className="history-study-mask">{t("study.loading")}</div>}>
             <HistoryStudyOverlay key={study.playback.input.id} playback={study.playback}
               cellId={cell.id} revision={study.view!.revision} onControlObservation={onControlObservation}
@@ -1205,7 +1236,7 @@ function LiveChartCell({
           extensionControls={(
             <>
               {workspaceControls}
-              {!study.active && <button type="button" className="ui-control" disabled={study.pending || study.busy || quickReplay !== null}
+              {!study.active && <button type="button" className="ui-control" disabled={study.pending || study.busy || !!replay.key}
                 onClick={() => { if (!study.view) study.retry(); else setStudySetup(true); }}>{t("study.title")}</button>}
               {timeNavigation.available && <button type="button" className="ui-control"
                 title={t("chartTime.shortcut")} onClick={() => timeNavigation.setOpen(true)}>{t("chartTime.title")}</button>}

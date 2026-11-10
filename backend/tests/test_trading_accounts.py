@@ -268,9 +268,75 @@ def test_journal_at_time_bounds_and_http_adapter_keep_account_and_instrument_sco
     assert result.status_code == 200
     assert result.json()["hasMore"]
     assert [note["body"] for note in result.json()["original"]] == ["note-2", "note-3"]
-    for patch in ({"limit": 0}, {"limit": 101}, {"cursorMs": -1}):
+    for patch in ({"limit": 0}, {"limit": 101}, {"cursorMs": -1}, {"noteSource": "latest"}, {"noteFilter": "state"}):
         assert client.get(f"/trading/accounts/{account['id']}/journal-at-time", params={**params, **patch}).status_code == 422
     assert client.get("/trading/accounts/not-an-account/journal-at-time", params=params).status_code == 404
+
+
+def test_journal_at_time_filters_before_limit_without_revealing_future_metadata(service):
+    account = service.create_account({"kind": "manual", "name": "Source"})
+    foreign = service.create_account({"kind": "manual", "name": "Foreign"})
+    clock = service.test_clock
+    instrument = {"exchange": "binance", "marketType": "spot", "symbol": "BTCUSDT"}
+    def quick(body, **extra):
+        return service.create_entry(account["id"], {**instrument, "kind": "quick", "body": body, **extra})
+
+    original = quick("original")
+    service.add_fill(account["id"], {**instrument, "side": "buy", "qty": "1", "price": "100"})
+    trade_id = service.list_trades(account["id"])["trades"][0]["id"]
+    clock.now += 10
+    service.add_snapshot(original["id"], {"state": {"interval": "1m"}})
+    clock.now += 10
+    attachment_time = clock.now
+    png = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"0" * 16).decode()
+    service.add_snapshot(original["id"], {"image": png})
+    service.link_entry(original["id"], trade_id)
+    clock.now += 10
+    quick("newer unlinked")
+    state_only = quick("newer state only")
+    service.add_snapshot(state_only["id"], {"state": {"interval": "5m"}})
+    service.save_entry(original["id"], {"body": "later text"})
+    foreign_note = service.create_entry(foreign["id"], {**instrument, "kind": "quick", "body": "foreign"})
+    service.add_snapshot(foreign_note["id"], {"image": png})
+    other_market = quick("other market", symbol="ETHUSDT")
+    service.add_snapshot(other_market["id"], {"image": png})
+    clock.now += 10
+    late_review = quick("review", marketTimeMs=attachment_time - 1, tradeId=trade_id)
+    service.add_snapshot(late_review["id"], {"image": png})
+
+    app = FastAPI()
+    app.include_router(trading_router)
+    app.state.trading_accounts = service
+    client = TestClient(app)
+    def read(cursor, source, attachment):
+        response = client.get(f"/trading/accounts/{account['id']}/journal-at-time", params={
+            "exchange": "BINANCE", "marketType": "SPOT", "symbol": "btcusdt",
+            "cursorMs": cursor, "limit": 1, "noteSource": source, "noteFilter": attachment,
+        })
+        assert response.status_code == 200
+        data = response.json()
+        assert {k: data[k] for k in ("exchange", "marketType", "symbol", "accountId", "cursorMs", "noteSource", "noteFilter")} == {
+            **instrument, "accountId": account["id"], "cursorMs": cursor, "noteSource": source, "noteFilter": attachment,
+        }
+        return data
+
+    for attachment in ("linked", "screenshots"):
+        assert read(attachment_time, "original", attachment)["original"] == []
+        assert read(attachment_time + 1, "original", attachment)["original"][0]["body"] == "original"
+        current = read(clock.now + 1, "original", attachment)
+        assert not current["hasMore"] and not current["reviews"]
+        assert [note["body"] for note in current["original"]] == ["later text"]
+        assert not {"tradeId", "snapshots", "tradeLinkedAtMs"}.intersection(current["original"][0])
+        assert read(attachment_time - 1, "review", attachment)["reviews"] == []
+        review = read(attachment_time, "review", attachment)
+        assert not review["original"] and not review["hasMore"]
+        assert review["reviews"][0]["id"] == late_review["id"]
+        assert review["reviews"][0]["savedAtMs"] > attachment_time
+
+    with service.store.transaction() as db:
+        db.execute("UPDATE journal_entries SET trade_linked_at_ms=NULL WHERE id=?", (original["id"],))
+    assert read(attachment_time + 1, "original", "linked")["original"] == []
+    assert read(clock.now + 1, "original", "linked")["original"][0]["id"] == original["id"]
 
 
 def test_journal_at_time_uses_one_committed_generation_for_entry_and_text(service, monkeypatch):
@@ -461,13 +527,16 @@ def test_manual_journal_plan_link_and_hindsight_flags(service):
     detail = service.trade_detail(account["id"], trade["id"])
     assert [item["id"] for item in detail["linkSuggestions"]] == [note["id"]]
 
-    service.link_entry(note["id"], trade["id"])
+    linked_at = clock.now
+    assert service.link_entry(note["id"], trade["id"])["tradeLinkedAtMs"] == linked_at
     clock.now += 10_000
+    assert service.link_entry(note["id"], trade["id"])["tradeLinkedAtMs"] == linked_at
     saved = service.save_entry(note["id"], {"fields": {
         "entryPrice": "100", "stopPrice": "90", "riskUsdt": "100",
         "entryBasis": "breakout", "errors": "moved stop",
     }})
     assert saved["revisionCount"] == 2
+    assert saved["tradeLinkedAtMs"] == linked_at
     assert saved["fieldTiming"]["errors"]["phase"] == "post"
     detail = service.trade_detail(account["id"], trade["id"])
     assert detail["plan"]["riskUsdt"] == "50"

@@ -83,6 +83,8 @@ const LINK_SETTING_OPTIONS: ReadonlyArray<{
   { key: "dateRange", labelKey: "workspace.link.dateRange", descriptionKey: "workspace.link.dateRangeDesc" },
   { key: "studyMode", labelKey: "study.modeLink", descriptionKey: "study.modeLinkDesc" },
   { key: "studyCursor", labelKey: "study.cursorLink", descriptionKey: "study.cursorLinkDesc" },
+  { key: "quickReplayMode", labelKey: "trading.replay.linkMode", descriptionKey: "trading.replay.linkModeDesc" },
+  { key: "quickReplayCursor", labelKey: "trading.replay.linkCursor", descriptionKey: "trading.replay.linkCursorDesc" },
   { key: "accountSource", labelKey: "trading.overlay.linkSource", descriptionKey: "trading.overlay.linkSourceDesc" },
   { key: "tradingOverlays", labelKey: "trading.overlay.linkTrades", descriptionKey: "trading.overlay.linkTradesDesc" },
   { key: "noteOverlays", labelKey: "trading.overlay.linkNotes", descriptionKey: "trading.overlay.linkNotesDesc" },

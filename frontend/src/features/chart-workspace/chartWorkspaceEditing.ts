@@ -99,8 +99,9 @@ function blankCell(
   existing: ChartCellState | undefined,
   id: ChartCellId,
 ): ChartCellState {
+  const { quickReplay: _quickReplay, ...cell } = cloneSerializable(existing ?? source);
   return {
-    ...cloneSerializable(existing ?? source),
+    ...cell,
     id,
     linkGroupId: null,
     session: cloneSerializable(source.session),

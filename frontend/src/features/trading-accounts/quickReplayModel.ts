@@ -222,6 +222,9 @@ export function journalAtCursor(entries: readonly JournalEntry[], cursorSec: num
       fields: historyUnavailable ? {} : revision.fields,
       body: historyUnavailable ? "" : revision.body,
       updatedAtMs: revision?.savedAtMs ?? entry.createdAtMs,
+      // The current link is only known to have existed since its recorded
+      // change time. Legacy rows expose a safe upper bound via the last edit.
+      tradeLinkedAtMs: entry.tradeId === null ? null : entry.tradeLinkedAtMs ?? entry.updatedAtMs,
       revisionCount: revision?.revision ?? 0,
       // These latest-only metadata are not historical facts.
       tags: [], fieldTiming: {}, revisions: [],

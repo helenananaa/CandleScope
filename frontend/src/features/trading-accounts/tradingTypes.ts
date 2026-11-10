@@ -127,6 +127,8 @@ export interface JournalEntry {
   symbol: string;
   kind: "note" | "quick";
   tradeId: string | null;
+  /** Start of the current trade association. Older entries may lack this timestamp. */
+  tradeLinkedAtMs?: number | null;
   createdAtMs: number;
   updatedAtMs: number;
   marketTimeMs: number | null;

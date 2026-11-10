@@ -1,3 +1,4 @@
+import { normalizeChartQuickReplay } from "./chartQuickReplayState.js";
 import { normalizeChartAccountOverlay } from "./chartAccountOverlaySettings.js";
 import { pickCellChartSettings } from "./chartWorkspaceChartSettings.js";
 import { normalizeNativeStrategies } from "../backtest/native/nativeStrategyCollection.js";
@@ -178,6 +179,8 @@ function normalizeLinkGroupSettings(value: unknown): ChartLinkGroupSettings {
     noteOverlays: source.noteOverlays === true,
     studyCursor: source.studyCursor === true,
     studyMode: source.studyMode === true,
+    quickReplayMode: source.quickReplayMode === true,
+    quickReplayCursor: source.quickReplayCursor === true,
     drawings: typeof source.drawings === "boolean" ? source.drawings : DEFAULT_CHART_LINK_GROUP_SETTINGS.drawings,
     indicators: {
       definitions: typeof indicatorSource.definitions === "boolean"
@@ -449,8 +452,10 @@ function normalizeCellState(
     && (typeof source.linkGroupId !== "string" || !linkGroups[source.linkGroupId])) {
     diagnostics.push({ code: "invalid-cell-link-group", path: `cells.${id}.linkGroupId` });
   }
+  const quickReplay = normalizeChartQuickReplay(source.quickReplay);
   return {
     id,
+    ...(quickReplay ? { quickReplay } : {}),
     linkGroupId: requestedLinkGroupId,
     drawingLayerSet: normalizeDrawingLayerSet(source.drawingLayerSet),
     session: normalizeSession(source.session, fallback.session),

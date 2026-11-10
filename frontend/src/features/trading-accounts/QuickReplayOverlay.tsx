@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ChartErrorBoundary } from "../../app/AppProviders.js";
+import { createPriceLineSource } from "../../chart-adapter/externalPriceLineSource.js";
 import { useChartSurfaceRuntime } from "../../chart-adapter/useChartSurfaceRuntime.js";
 import SingleChartPanes from "../../components/SingleChartPanes.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { normalizeMainChartType } from "../../shared/mainChartTypes.js";
 import { parseIntervalSeconds } from "../../utils/intervals.js";
+import { normalizeChartAccountOverlay, type ChartAccountOverlaySettings } from "../chart-workspace/chartAccountOverlaySettings.js";
 import type { IndicatorDefinition } from "../indicators/indicatorTypes.js";
 import { useProvidedBarsIndicatorRuntime } from "../indicators/useProvidedBarsIndicatorRuntime.js";
 import type { ChartDataCommitMeta } from "../market-data/useChartDataRuntime.js";
@@ -24,6 +26,7 @@ import {
   visibleBars,
   type ReplayBar,
 } from "./quickReplayModel.js";
+import { filterJournalNoteMarkers } from "./journalNoteMarkers.js";
 import { createReplayMarkerSource } from "./replayMarkerSource.js";
 import { tradingApi } from "./tradingApi.js";
 import { formatAmount, formatDateTime, formatPrice, formatQty, formatSigned, pnlTone, tokenColor } from "./tradingFormat.js";
@@ -51,14 +54,27 @@ export default function QuickReplayOverlay({
   request,
   style,
   indicatorDefinitions,
+  accountOverlay,
+  active = true,
+  savedCursorSec,
+  savedStep,
+  onProgress,
+  onCursorChange,
   onExit,
 }: {
   request: QuickReplayRequest;
   style: QuickReplayChartStyle;
   indicatorDefinitions: readonly IndicatorDefinition[];
+  accountOverlay?: ChartAccountOverlaySettings | undefined;
+  active?: boolean;
+  savedCursorSec?: number | undefined;
+  savedStep?: string | undefined;
+  onProgress?: (cursorSec: number, step: string) => void;
+  onCursorChange?: (cursorSec: number) => void;
   onExit(): void;
 }) {
-  useLocale();
+  const locale = useLocale();
+  const overlay = useMemo(() => normalizeChartAccountOverlay(accountOverlay), [accountOverlay]);
   const dataManager = useMarketDataWorkspaceResources()?.dataManager ?? null;
   const historyReader = useMemo(() => createManagedReplayHistoryReader(dataManager), [dataManager]);
   const { trade } = request;
@@ -72,9 +88,19 @@ export default function QuickReplayOverlay({
   const [reload, setReload] = useState(0);
   const [loadFailed, setLoadFailed] = useState(false);
   const [truncated, setTruncated] = useState(false);
-  const [step, setStep] = useState(request.interval);
-  const [cursor, setCursor] = useState(() => initialCursor(trade, intervalSec));
+  const [step, setStep] = useState(() => savedStep && stepSeconds(savedStep, intervalSec) <= intervalSec ? savedStep : request.interval);
+  const [localCursor, setLocalCursor] = useState(() => savedCursorSec ?? initialCursor(trade, intervalSec));
+  const desiredCursor = onCursorChange ? savedCursorSec ?? localCursor : localCursor;
+  useEffect(() => { onProgress?.(desiredCursor, step); }, [desiredCursor, onProgress, step]);
   const [playing, setPlaying] = useState<0 | 1 | 2>(0);
+  const authoredCursor = useRef<number | null>(null);
+  const previousCursor = useRef(desiredCursor);
+  useEffect(() => {
+    if (previousCursor.current === desiredCursor) return;
+    previousCursor.current = desiredCursor;
+    if (onCursorChange && authoredCursor.current !== desiredCursor) setPlaying(0);
+    authoredCursor.current = null;
+  }, [desiredCursor, onCursorChange]);
   const [showOutcome, setShowOutcome] = useState(false);
   const stepSec = Math.min(stepSeconds(step, intervalSec), intervalSec);
   const chartSurface = useChartSurfaceRuntime();
@@ -118,7 +144,10 @@ export default function QuickReplayOverlay({
         }
       })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    api.trade(request.accountId, trade.id).then(setDetail).catch(() => setDetail(null));
+    setDetail(null);
+    api.trade(request.accountId, trade.id, controller.signal)
+      .then(result => { if (!controller.signal.aborted) setDetail(result); })
+      .catch(() => { if (!controller.signal.aborted) setDetail(null); });
     return () => controller.abort();
   }, [api, historyReader, instrument, reload, request.accountId, request.interval, trade.id, window_.endSec, window_.startSec]);
 
@@ -140,9 +169,13 @@ export default function QuickReplayOverlay({
   const lastChartEnd = chartBars.length > 0 ? chartBars.at(-1)!.time + intervalSec : window_.startSec;
   const lastFineEnd = fineBars && fineBars.length > 0 ? fineBars.at(-1)!.time + stepSec : 0;
   const maxCursor = Math.max(lastChartEnd, lastFineEnd);
+  // An incoming absolute time can exceed this chart's own loaded input.
+  // Do not reveal notes past its frontier or advance a cut before its first bar.
+  const cursor = chartBars.length > 0 && onCursorChange ? Math.min(desiredCursor, maxCursor) : desiredCursor;
+  const timeOutsideHistory = chartBars.length > 0 && (desiredCursor > maxCursor || desiredCursor < chartBars[0]!.time);
   const entryCandleOpen = !loading && chartBars.length > 0
     && initialCursor(trade, intervalSec) + intervalSec > lastChartEnd;
-  const autoStepRef = useRef(false);
+  const autoStepRef = useRef(savedStep !== undefined);
   useEffect(() => {
     if (autoStepRef.current || !entryCandleOpen || intervalSec <= 60) return;
     autoStepRef.current = true;
@@ -222,18 +255,19 @@ export default function QuickReplayOverlay({
     down: style.downColor,
     note: tokenColor("--accent-purple", "violet"),
   }), [style.downColor, style.upColor]);
-  const entries = useMemo(() => detail?.entries ?? [], [detail]);
+  const priceLineSource = useMemo(() => createPriceLineSource(), []);
+  const entries = useMemo(() => detail?.entries.filter(entry => entry.accountId === request.accountId) ?? [], [detail, request.accountId]);
   const { notes, reviewNotes } = useMemo(() => journalAtCursor(entries, cursor), [cursor, entries]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     markerSource.update({
-      legs: trade.legs,
-      notes,
+      legs: overlay.trades ? trade.legs : [],
+      notes: overlay.notes ? filterJournalNoteMarkers([...notes, ...reviewNotes], overlay, cursor * 1000) : [],
       cursorSec: cursor,
       intervalSec,
       lastVisibleSec: lastVisible,
-      labels: { buy: t("trading.replay.buy"), sell: t("trading.replay.sell"), note: t("trading.replay.noteMarker") },
+      labels: { buy: t("trading.replay.buy"), sell: t("trading.replay.sell"), note: t("trading.replay.noteMarker"), reviewNote: t("trading.journal.reviewNote") },
     });
-  }, [cursor, notes, intervalSec, lastVisible, markerSource, trade.legs]);
+  }, [cursor, notes, reviewNotes, intervalSec, lastVisible, locale, markerSource, overlay, trade.legs]);
 
   const position = useMemo(() => {
     const atCursor = positionAt(trade, shown, cursor, intervalSec);
@@ -243,6 +277,23 @@ export default function QuickReplayOverlay({
     const fine = positionAt(trade, fineClosed, cursor, stepSec);
     return { ...atCursor, mfe: fine.mfe, mae: fine.mae };
   }, [cursor, fineBars, intervalSec, shown, stepSec, trade]);
+  const entryLineColor = tokenColor("--accent-blue", "royalblue");
+  useLayoutEffect(() => {
+    const price = position.avgEntry;
+    if (!overlay.positions || lastVisible === null || price === null || !Number.isFinite(price) || price <= 0) {
+      priceLineSource.setLines([]);
+      return;
+    }
+    // Only committed fills before the cursor establish an open position.
+    priceLineSource.setLines([{
+      id: `quick-replay:entry:${trade.id}`,
+      price,
+      color: entryLineColor,
+      title: t(trade.direction === "long" ? "trading.chart.long" : "trading.chart.short", { qty: formatQty(position.qty) }),
+      style: "solid",
+      width: 2,
+    }]);
+  }, [entryLineColor, lastVisible, locale, overlay.positions, position.avgEntry, position.qty, priceLineSource, trade.direction, trade.id]);
   const plan = detail?.plan && detail.plan.lockedAtMs < cursor * 1000 ? detail.plan : null;
   const risk = plan?.riskUsdt ? Number(plan.riskUsdt) : null;
   const toR = (value: number | null) => (value === null || !risk ? null : (value / risk).toFixed(2));
@@ -264,35 +315,41 @@ export default function QuickReplayOverlay({
 
   // ── controls ─────────────────────────────────────────────────
   const canNavigate = !loading && !loadFailed && chartBars.length > 0;
+  const seek = useCallback((next: number) => {
+    if (next === desiredCursor) return;
+    if (onCursorChange) {
+      authoredCursor.current = next;
+      onCursorChange(next);
+    } else setLocalCursor(next);
+  }, [desiredCursor, onCursorChange]);
   const move = useCallback((delta: number) => {
-    if (canNavigate) setCursor((value) => clamp(value + delta));
-  }, [canNavigate, clamp]);
+    if (canNavigate && (delta >= 0 || cursor > minCursor)) seek(clamp(cursor + delta));
+  }, [canNavigate, clamp, cursor, minCursor, seek]);
   const jumpNext = useCallback(() => {
     if (!canNavigate) return;
     const next = nextEventCursor(events, cursor, stepSec);
-    if (next !== null) setCursor(clamp(next));
-  }, [canNavigate, clamp, cursor, events, stepSec]);
+    if (next !== null) seek(clamp(next));
+  }, [canNavigate, clamp, cursor, events, seek, stepSec]);
   const jumpPrevious = useCallback(() => {
     if (!canNavigate) return;
     const previous = previousEventCursor(events, cursor, stepSec);
-    setCursor(clamp(previous ?? initialCursor(trade, intervalSec)));
-  }, [canNavigate, clamp, cursor, events, intervalSec, stepSec, trade]);
+    seek(clamp(previous ?? initialCursor(trade, intervalSec)));
+  }, [canNavigate, clamp, cursor, events, intervalSec, seek, stepSec, trade]);
   useEffect(() => {
     if (playing === 0 || !canNavigate) return undefined;
-    const timer = window.setInterval(() => {
-      setCursor((value) => {
-        const next = clamp(value + stepSec);
-        if (next === value) setPlaying(0);
-        return next;
-      });
+    const timer = window.setTimeout(() => {
+      const next = clamp(cursor + stepSec);
+      if (next === cursor) setPlaying(0);
+      else seek(next);
     }, PLAY_DELAY_MS[playing - 1]);
-    return () => window.clearInterval(timer);
-  }, [canNavigate, clamp, playing, stepSec]);
+    return () => window.clearTimeout(timer);
+  }, [canNavigate, clamp, cursor, playing, seek, stepSec]);
 
   useEffect(() => {
+    if (!active) return;
     const onKey = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (event.defaultPrevented || target?.closest('input, textarea, select, dialog, [role="dialog"]') || target?.isContentEditable) return;
       if (event.key === "Escape") { event.preventDefault(); onExit(); }
       else if (event.key === "ArrowRight" && event.shiftKey) { event.preventDefault(); jumpNext(); }
       else if (event.key === "ArrowLeft" && event.shiftKey) { event.preventDefault(); jumpPrevious(); }
@@ -305,7 +362,7 @@ export default function QuickReplayOverlay({
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [canNavigate, jumpNext, jumpPrevious, move, onExit, stepSec]);
+  }, [active, canNavigate, jumpNext, jumpPrevious, move, onExit, stepSec]);
 
   const stepOptions = useMemo(() => {
     const span = window_.endSec - Math.floor(trade.openedAtMs / 1000);
@@ -317,6 +374,7 @@ export default function QuickReplayOverlay({
   }, [intervalSec, request.interval, trade.openedAtMs, window_.endSec]);
 
   const [captureComment, setCaptureComment] = useState("");
+  const captureAnchor = useRef<number | null>(null);
   const saveReviewNote = async () => {
     const text = captureComment.trim();
     if (!text) return;
@@ -327,9 +385,10 @@ export default function QuickReplayOverlay({
         body: text,
         tradeId: trade.id,
         // Just inside the cut so the note is visible where it was written.
-        marketTimeMs: cursor * 1000 - 1,
+        marketTimeMs: (captureAnchor.current ?? cursor) * 1000 - 1,
       });
       setCaptureComment("");
+      captureAnchor.current = null;
       setDetail(await api.trade(request.accountId, trade.id));
     } catch (cause) {
       setError(tradingErrorMessage(cause));
@@ -337,12 +396,13 @@ export default function QuickReplayOverlay({
   };
 
   return (
-    <div className="quick-replay" role="region" aria-label={t("trading.replay.title")}>
+    <div className="quick-replay" data-replay-cursor-sec={cursor} data-replay-account={request.accountId} role="region" aria-label={t("trading.replay.title")}>
       <header className="quick-replay-banner">
         <span className="trading-badge" data-tone="warning">{t("trading.replay.badge")}</span>
         <strong>{trade.symbol}</strong>
         <span>{request.interval}</span>
         <span className="quick-replay-cursor">{t("trading.replay.cursor", { time: formatDateTime(cursor * 1000) })}</span>
+        {timeOutsideHistory && <span className="trading-help" role="status">{t("trading.replay.timeOutsideHistory")}</span>}
         <span className="quick-replay-spacer" />
         <span className="trading-help">{t("trading.replay.reconstructed")}</span>
         <button type="button" className="trading-button" onClick={onExit}>{t("trading.replay.exit")}</button>
@@ -370,6 +430,7 @@ export default function QuickReplayOverlay({
               canLoadMoreLeft={false}
               canRestoreLatestWindow={false}
               externalMarkerSource={markerSource}
+              externalPriceLineSource={priceLineSource}
               mainOverlayLines={indicators.view.mainOverlayLines}
               subPanes={indicators.view.subPanes}
               indicatorMarkers={indicators.view.markers}
@@ -443,7 +504,11 @@ export default function QuickReplayOverlay({
             className="trading-quick-input"
             value={captureComment}
             placeholder={t("trading.replay.notePlaceholder")}
-            onChange={(event) => setCaptureComment(event.target.value)}
+            onChange={(event) => {
+              const text = event.target.value;
+              captureAnchor.current = text.trim() ? captureAnchor.current ?? cursor : null;
+              setCaptureComment(text);
+            }}
             onKeyDown={(event) => { if (event.key === "Enter") void saveReviewNote(); }}
           />
           <p className="trading-help">{t("trading.replay.drawingsHidden")}</p>
