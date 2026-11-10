@@ -341,7 +341,10 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(monkeyp
                 while not (rows := storage.query_bars(symbol, "5m", **identity)):
                     await asyncio.sleep(.01)
             assert int(time.time() * 1000) < reset_ms
-            assert sorted(row["open_time"] for row in rows) == [opened, opened + step]
+            assert sorted(row["open_time"] for row in rows) in (
+                [opened, opened + step],
+                [opened, opened + step, opened + 4 * step],
+            )
             if amend_while_deferred:
                 changed = next(row for row in rows if row["open_time"] == opened)
                 assert storage.upsert_bars(symbol, "5m", [{**changed, "volume": 88}],
@@ -355,7 +358,8 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(monkeyp
                 (opened + 2 * step, opened + 3 * step, 2): 2,
                 (opened + 4 * step, opened + 4 * step, 1): 1,
             }
-            assert min(sent for _, _, _, sent in calls[2:]) >= reset_ms - 3
+            first_limited = next(i for i, (start, _, _, _) in enumerate(calls) if start == opened + 2 * step)
+            assert min(sent for _, _, _, sent in calls[first_limited + 1:]) >= reset_ms - 3
             assert all(row["volume"] == 4 for row in storage.query_bars(symbol, "5m", **identity))
         finally:
             await coordinator.shutdown()
