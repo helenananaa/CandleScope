@@ -25,6 +25,7 @@ _MAX_FAILED_RETRY_MS = 24 * 60 * 60 * 1000
 _MAX_REASON_PARTS = 8
 _MAX_REASON_LENGTH = 256
 _MAX_ERROR_LENGTH = 2_000
+_MAX_NATIVE_RECEIPTS = 1024
 NATIVE_PROGRESS_FIELD = "native_backfill_receipts"
 COMPLETED_NATIVE_CHUNKS_FIELD = "verified_native_chunks"
 _REMOVE_NATIVE_PROGRESS = (
@@ -64,6 +65,7 @@ def _connect(db_path: Path | str | None = None) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA synchronous=NORMAL;")
     conn.create_function("gap_series_scope", 2, _series_scope, deterministic=True)
+    conn.create_function("merge_native_receipts", 4, _merge_native_receipts, deterministic=True)
     return conn
 
 
@@ -108,6 +110,33 @@ def _metadata_object(value: Any) -> dict[str, Any]:
     except (TypeError, ValueError, json.JSONDecodeError):
         return {}
     return dict(decoded) if isinstance(decoded, dict) else {}
+
+
+def _merge_native_receipts(
+    metadata_json: str, incoming_json: str | None, completed_start: int | None, completed_end: int | None,
+) -> str:
+    """Update the legacy receipt array inside the ticket-guarded SQLite write."""
+    metadata = _metadata_object(metadata_json)
+    previous = metadata.pop(NATIVE_PROGRESS_FIELD, None)
+    incoming = json.loads(incoming_json) if incoming_json else []
+    by_range: dict[tuple[int, int], dict] = {}
+    for receipts in (previous, incoming):
+        if not isinstance(receipts, list):
+            continue
+        for receipt in receipts:
+            if not isinstance(receipt, dict):
+                continue
+            start, end = receipt.get("start_ms"), receipt.get("end_ms")
+            if type(start) is not int or type(end) is not int or start > end:
+                continue
+            if completed_start is not None and completed_start <= start <= end <= completed_end:
+                continue
+            key = (start, end)
+            by_range.pop(key, None)
+            by_range[key] = receipt
+    if by_range:
+        metadata[NATIVE_PROGRESS_FIELD] = list(by_range.values())[-_MAX_NATIVE_RECEIPTS:]
+    return json.dumps(metadata, sort_keys=True)
 
 
 def _series_scope(exchange: str, metadata: Any) -> str:
@@ -329,8 +358,7 @@ class GapLedger:
         self._update(
             request,
             require_repair_ticket=True,
-            metadata_patch=({NATIVE_PROGRESS_FIELD: native_progress or None}
-                            if native_progress is not None else None),
+            native_progress=native_progress,
             status="retry_wait",
             attempts=attempt,
             last_error=_bounded_error(error),
@@ -342,6 +370,7 @@ class GapLedger:
             request,
             require_repair_ticket=True,
             metadata_patch={COMPLETED_NATIVE_CHUNKS_FIELD: {str(slot): receipt}},
+            completed_native_range=(receipt["start_ms"], receipt["end_ms"]),
             last_checked_at=_now_ms(),
         )
 
@@ -1377,6 +1406,8 @@ class GapLedger:
         *,
         require_repair_ticket: bool = False,
         metadata_patch: dict | None = None,
+        native_progress: list[dict] | None = None,
+        completed_native_range: tuple[int, int] | None = None,
         **values: Any,
     ) -> None:
         if not values:
@@ -1400,12 +1431,21 @@ class GapLedger:
             else:
                 assignments.append(f"{key} = ?")
                 params.append(value)
+        metadata_expression = "metadata_json"
         if metadata_patch is not None:
+            metadata_expression = "json_patch(metadata_json, ?)"
+            params.append(json.dumps(metadata_patch, sort_keys=True))
+        if native_progress or completed_native_range is not None:
+            metadata_expression = f"merge_native_receipts({metadata_expression}, ?, ?, ?)"
+            params.extend((
+                json.dumps(native_progress) if native_progress else None,
+                *(completed_native_range or (None, None)),
+            ))
+        if metadata_expression != "metadata_json":
             assignments.append(
                 "metadata_json = CASE WHEN json_valid(metadata_json) "
-                "THEN json_patch(metadata_json, ?) ELSE metadata_json END"
+                f"THEN {metadata_expression} ELSE metadata_json END"
             )
-            params.append(json.dumps(metadata_patch, sort_keys=True))
         scope = _request_scope(request)
         params.extend([
             request.exchange,

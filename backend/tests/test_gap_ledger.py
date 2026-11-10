@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 
 from app.data_engine.data_manager.backfill_coordinator import RepairRequest
-from app.data_engine.storage.gap_ledger import GapLedger
+from app.data_engine.storage.gap_ledger import NATIVE_PROGRESS_FIELD, GapLedger
 
 
 def _request() -> RepairRequest:
@@ -38,6 +39,46 @@ def test_bybit_chunk_cannot_shorten_its_parent_cooldown(tmp_path, monkeypatch) -
     now = deadline + 1
     ledger.mark_started(first, attempt=1)
     assert ledger.get_status(parent)["next_retry_at"] is None
+
+
+def test_bybit_interrupted_chunks_merge_receipts_for_the_same_ticket(tmp_path) -> None:
+    ledger = GapLedger(tmp_path / "klines.sqlite")
+    first_receipt = {"start_ms": 0, "end_ms": 0, "digest": "a" * 64, "written": []}
+    second_receipt = {"start_ms": 60_000, "end_ms": 60_000, "digest": "b" * 64, "written": []}
+    parent = replace(_request(), exchange="bybit", market_type="swap.inverse",
+                     metadata={NATIVE_PROGRESS_FIELD: [first_receipt]})
+    first = replace(parent, end_ms=0, metadata={"ledger_range": {"start_ms": 0, "end_ms": 60_000}})
+    second = replace(first, start_ms=60_000, end_ms=60_000)
+    ledger.upsert_detected(parent)
+
+    def defer(request, receipts):
+        ledger.mark_retry_wait(request, attempt=1, error="cooldown",
+                               next_retry_at=9_999_999_999_999, native_progress=receipts)
+
+    def receipts_by_open():
+        metadata = json.loads(ledger.get_status(parent)["metadata_json"])
+        return {receipt["start_ms"]: receipt for receipt in metadata.get(NATIVE_PROGRESS_FIELD, [])}
+
+    defer(second, [second_receipt])
+    assert receipts_by_open() == {0: first_receipt, 60_000: second_receipt}
+    defer(second, [])
+    assert receipts_by_open() == {0: first_receipt, 60_000: second_receipt}
+
+    replacement = {**first_receipt, "digest": "c" * 64}
+    defer(first, [replacement])
+    assert receipts_by_open() == {0: replacement, 60_000: second_receipt}
+    ledger.mark_native_chunk_verified(first, 0, replacement)
+    assert receipts_by_open() == {60_000: second_receipt}
+
+    successor = replace(parent, request_id="successor", metadata={})
+    ledger.upsert_detected(successor)
+    defer(first, [first_receipt])
+    assert receipts_by_open() == {}
+
+    defer(replace(second, request_id=successor.request_id), [second_receipt])
+    assert receipts_by_open() == {60_000: second_receipt}
+    assert ledger.finalize_parent(successor, status="filled")
+    assert receipts_by_open() == {}
 
 
 def test_gap_ledger_preserves_missing_count_when_resolution_count_unknown(tmp_path) -> None:

@@ -30,6 +30,7 @@ Usage::
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 import logging
 import time
 from typing import Callable, Awaitable, Any
@@ -39,6 +40,7 @@ from app.data_engine.interval_policy import (
     compute_bucket_close_ms,
     compute_bucket_start_ms,
     parse_interval_ms,
+    parse_interval_spec,
 )
 from app.data_engine.kline_quality import source_rank
 from app.data_engine.storage.revisions import StaleAcquisition, prepare_derived_inputs
@@ -588,7 +590,7 @@ class Reconciler:
                         ),
                     )
                     if written_range is not None:
-                        written_ranges.append(written_range)
+                        written_ranges.extend(self._standard_written_ranges(written_range, batch))
                     if n > 0:
                         await self._fire_write_batch(symbol, interval, n)
                 except Exception as exc:
@@ -1044,6 +1046,29 @@ class Reconciler:
             written_ranges.extend(ranges)
 
         return generated, written, failures, written_ranges
+
+    @staticmethod
+    def _standard_written_ranges(written: WrittenRange, batch: list[FetchedBar]) -> list[WrittenRange]:
+        if (written.exchange != "bybit" or written.phase != "standard"
+                or written.bars_written != len(batch)):
+            return [written]
+        spec = parse_interval_spec(written.interval)
+        if spec is None:
+            return [written]
+        # A resumed batch may straddle already committed receipt ranges.
+        # Publish only actual writes, leaving intervening opens untouched.
+        opens = sorted(bar.open_time for bar in batch)
+        first = previous = opens[0]
+        count = 1
+        ranges = []
+        for opened in opens[1:]:
+            if opened != spec.next_ms(previous):
+                ranges.append(replace(written, start_ms=first, end_ms=previous, bars_written=count))
+                first, count = opened, 0
+            previous = opened
+            count += 1
+        ranges.append(replace(written, start_ms=first, end_ms=previous, bars_written=count))
+        return ranges
 
     @staticmethod
     def _written_range_from_batch(

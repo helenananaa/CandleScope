@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections import Counter
+from dataclasses import replace
 import time
 from urllib.parse import urlsplit
 
@@ -267,12 +268,14 @@ def test_bybit_backfill_uses_bounded_reverse_pages(monkeypatch, tmp_path, batch_
     asyncio.run(run())
 
 
-@pytest.mark.parametrize(("amend_while_deferred", "restart", "multi_chunk"), [
-    (False, False, False), (True, False, False), (False, True, False), (True, True, False),
-    (False, True, True), (True, True, True),
+@pytest.mark.parametrize(("amend_while_deferred", "restart", "multi_chunk", "two_deferred"), [
+    (False, False, False, False), (True, False, False, False),
+    (False, True, False, False), (True, True, False, False),
+    (False, True, True, False), (True, True, True, False),
+    (False, True, True, True),
 ])
 def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
-    monkeypatch, tmp_path, amend_while_deferred, restart, multi_chunk,
+    monkeypatch, tmp_path, amend_while_deferred, restart, multi_chunk, two_deferred,
 ):
     from app.data_engine.backfill import BackfillConfig, BackfillEngine
     from app.data_engine.data_manager.backfill_contracts import RepairRequest
@@ -290,8 +293,10 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
 
     opened, step = 1_794_138_000_000, 300_000
     bar_count = 12 if multi_chunk else 5
-    completed_opens = [opened + i * step for i in range(4, bar_count)] if multi_chunk else []
+    first_completed = 8 if two_deferred else 4
+    completed_opens = [opened + i * step for i in range(first_completed, bar_count)] if multi_chunk else []
     limited_open = opened + 2 * step
+    limited_opens = {limited_open, opened + 6 * step} if two_deferred else {limited_open}
     symbol, market_type = "BTC/USD:BTC", "swap.inverse"
     identity = dict(exchange="bybit", market_type=market_type)
     db_path = tmp_path / "sibling-cooldown.sqlite"
@@ -301,17 +306,17 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
     async def run():
         calls, events, adopted = [], [], []
         cooldown = asyncio.Event()
-        reset_ms = 0
+        resets = {}
 
         async def handle(request):
-            nonlocal reset_ms
             assert request.path == "/v5/market/kline"
             start, end, limit = (int(request.query[key]) for key in ("start", "end", "limit"))
             sent_ms = int(time.time() * 1000)
             calls.append((start, end, limit, sent_ms))
-            if start == limited_open and not reset_ms:
-                reset_ms = sent_ms + 1_500
-                cooldown.set()
+            if start in limited_opens and start not in resets:
+                reset_ms = resets[start] = sent_ms + (2_500 if two_deferred else 1_500)
+                if resets.keys() == limited_opens:
+                    cooldown.set()
                 return web.json_response({"retCode": 10006, "retMsg": "Too many visits!"},
                     headers={"X-Bapi-Limit-Reset-Timestamp": str(reset_ms)})
             rows = [[str(ts), "1", "2", "1", "2", "9", "4"]
@@ -320,8 +325,17 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
 
         runner, origin = await serve(handle)
         create = generic._create_exchange
-        policy = RateLimitPolicy(default_concurrency=1, default_delay_seconds=.01,
-                                 default_retry_429_backoff_seconds=.1)
+        class RoutedPolicy(RateLimitPolicy):
+            def rule_for(self, request):
+                rule = super().rule_for(request)
+                if two_deferred:
+                    # Model independent Bybit egress quotas per measured block.
+                    slot = (int(request.params["start"]) - opened) // (4 * step)
+                    return replace(rule, bucket_key=f"{rule.bucket_key}:{slot}")
+                return rule
+
+        policy = RoutedPolicy(default_concurrency=1, default_delay_seconds=.01,
+                              default_retry_429_backoff_seconds=.1)
         if multi_chunk:
             # Give the measured ranges enough local tokens to reach the
             # relay. The injected 10006 still uses physical admission.
@@ -410,6 +424,7 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
         joined = None
         try:
             await asyncio.wait_for(cooldown.wait(), 5)
+            reset_ms = max(resets.values())
             assert not demand.done()
             if multi_chunk:
                 assert sorted(adopted) == completed_opens
@@ -429,13 +444,18 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
             async with asyncio.timeout(1):
                 while True:
                     checkpoint, = ledger.list_open()
-                    if checkpoint["status"] == "retry_wait":
+                    if (checkpoint["status"] == "retry_wait"
+                            and checkpoint["next_retry_at"] >= reset_ms - 3):
                         break
                     await asyncio.sleep(.01)
             metadata = json.loads(checkpoint["metadata_json"])
             if multi_chunk:
-                assert set(metadata[COMPLETED_NATIVE_CHUNKS_FIELD]) == {"1", "2"}
+                assert set(metadata[COMPLETED_NATIVE_CHUNKS_FIELD]) == ({"2"} if two_deferred else {"1", "2"})
             assert metadata[NATIVE_PROGRESS_FIELD]
+            if two_deferred:
+                assert {item["start_ms"] for item in metadata[NATIVE_PROGRESS_FIELD]} == {
+                    opened, opened + 4 * step,
+                }
             retry_at = checkpoint["next_retry_at"]
             assert retry_at >= reset_ms - 3
             if amend_while_deferred:
@@ -488,13 +508,17 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
                     (opened, opened + step, 2): 1,
                     (opened + 2 * step, opened + 3 * step, 2): 2,
                     (opened + 4 * step, opened + 5 * step, 2): 2 if amend_while_deferred else 1,
-                    (opened + 6 * step, opened + 7 * step, 2): 2 if amend_while_deferred else 1,
+                    (opened + 6 * step, opened + 7 * step, 2): 2 if amend_while_deferred or two_deferred else 1,
                     (opened + 8 * step, opened + 9 * step, 2): 1,
                     (opened + 10 * step, opened + 11 * step, 2): 1,
                 }
             assert Counter((start, end, limit) for start, end, limit, _ in calls) == expected_calls
-            first_limited = next(i for i, (start, _, _, _) in enumerate(calls) if start == limited_open)
-            assert min(sent for _, _, _, sent in calls[first_limited + 1:]) >= reset_ms - 3
+            if two_deferred:
+                for start, reset in resets.items():
+                    assert [sent for lower, _, _, sent in calls if lower == start][-1] >= reset - 3
+            else:
+                first_limited = next(i for i, (start, _, _, _) in enumerate(calls) if start == limited_open)
+                assert min(sent for _, _, _, sent in calls[first_limited + 1:]) >= reset_ms - 3
             assert all(row["volume"] == 4 for row in storage.query_bars(symbol, "5m", **identity))
         finally:
             await coordinator.shutdown()
