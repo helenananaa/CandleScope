@@ -6,12 +6,15 @@ import zipfile
 from datetime import date
 from pathlib import Path
 
+import pytest
+
 from app.data_engine.storage.raw_trade_archive import (
     RawAggTradeSelectionWindow,
     VerifiedRawAggTradeBarWindow,
     VerifiedRawAggTradeWindow,
 )
 from app.replay.bars.trade_parity import trade_bar_parity_policy
+from app.replay.remote_history import ReplayHistoryOriginUnavailable
 from app.replay.remote_trade_archive import (
     RemoteRawAggTradeArchive,
     publish_remote_agg_trade_index,
@@ -25,6 +28,92 @@ from tests.fixtures.replay.trade_service_fakes import (
     TRADE_REPLAY_START_MS,
     verified_trade_archive,
 )
+
+
+@pytest.mark.parametrize("origin_state", ["window_removed", "unavailable"])
+def test_freeze_reuses_verified_day_after_catalog_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, origin_state: str,
+) -> None:
+    cache_root = tmp_path / "cache"
+    local = verified_trade_archive(cache_root)
+    request = {
+        "exchange": "binance", "market_type": "futures", "symbol": "BTCUSDT",
+        "start_time_ms": TRADE_REPLAY_START_MS,
+        "end_time_ms": TRADE_REPLAY_START_MS + INTERVAL_MS - 1,
+    }
+    expected = local.freeze_dataset(**request)
+    assert len(expected.objects) == 1
+    origin_root = tmp_path / "origin"
+    verified_trade_archive(origin_root)
+    publish_remote_agg_trade_index(origin_root)
+    remote = RemoteRawAggTradeArchive(cache_root, origin_root, refresh_seconds=0)
+    remote.cache.max_scan_files = 1  # Limit the requested slice, not the whole day.
+    identity = {name: request[name] for name in ("exchange", "market_type", "symbol")}
+    previous_epoch, _ = remote.selection_snapshot(**identity)
+
+    if origin_state == "window_removed":
+        for receipt in origin_root.rglob("_verified_import.json"):
+            receipt.unlink()
+        day = date(2026, 6, 2)
+        key = f"data/futures/um/daily/aggTrades/BTCUSDT/BTCUSDT-aggTrades-{day}.zip"
+        listing = (
+            "<ListBucketResult>"
+            f"<Contents><Key>{key}</Key></Contents>"
+            f"<Contents><Key>{key}.CHECKSUM</Key></Contents>"
+            "<IsTruncated>false</IsTruncated></ListBucketResult>"
+        ).encode()
+        sync_official_agg_trade_availability(
+            origin_root, exchange="binance", market_type="futures", symbol="BTCUSDT",
+            as_of_date=date(2026, 6, 3), opener=lambda *_args, **_kwargs: io.BytesIO(listing),
+        )
+        publish_remote_agg_trade_index(origin_root)
+    else:
+        def unavailable(*_args, **_kwargs):
+            raise ReplayHistoryOriginUnavailable("controlled outage")
+
+        monkeypatch.setattr(remote.origin, "read_json", unavailable)
+        (cache_root / "_remote_metadata" / "trade-index.json").unlink()
+
+    def unexpected_download(*_args, **_kwargs):
+        pytest.fail("a verified local day requires no download")
+
+    monkeypatch.setattr(remote, "_official_opener", unexpected_download)
+    refreshes = remote._metrics["remote_index_refreshes"]
+    assert remote.freeze_dataset(**request) == expected
+    assert remote._metrics["remote_index_refreshes"] == refreshes
+    # Selection checks receipt/sidecar metadata without hashing the data files.
+    from app.data_engine.storage import raw_trade_archive
+    hash_file = raw_trade_archive._file_sha256
+
+    def hash_sidecars(path: Path):
+        assert path.suffix != ".parquet"
+        return hash_file(path)
+
+    monkeypatch.setattr(raw_trade_archive, "_file_sha256", hash_sidecars)
+    epoch, windows = remote.selection_snapshot(**identity)
+    assert epoch != previous_epoch
+    day_count = 2 if origin_state == "window_removed" else 1
+    assert windows == (RawAggTradeSelectionWindow(
+        DAY_START_MS, DAY_START_MS + day_count * 86_400_000 - 1, day_count,
+    ),)
+    assert remote.list_verified_identities() == [identity]
+    assert remote.diagnostics()["verified_partitions_available"] is True
+    if origin_state == "unavailable":
+        offline_origin = tmp_path / "offline-origin"
+        offline_origin.mkdir()
+        restarted = RemoteRawAggTradeArchive(cache_root, offline_origin)
+        assert restarted.selection_snapshot(**identity) == (epoch, windows)
+    (cache_root / expected.objects[0].object_id).unlink()
+    after_removal, remaining = remote.selection_snapshot(**identity)
+    assert after_removal != epoch
+    if origin_state == "unavailable":
+        assert remaining == ()
+        assert remote.list_verified_identities() == []
+        assert remote.diagnostics()["state"] == "degraded"
+    else:
+        assert remaining == (RawAggTradeSelectionWindow(
+            DAY_START_MS + 86_400_000, DAY_START_MS + 2 * 86_400_000 - 1, 1,
+        ),)
 
 
 def test_remote_agg_trade_selection_uses_receipts_without_bar_parity_proofs(

@@ -1144,9 +1144,12 @@ class ParquetRawAggTradeArchive:
                 **self._stats,
             }
 
+    def _verified_receipt_paths(self) -> Iterable[Path]:
+        return self.root.glob("exchange=*/market_type=*/symbol=*/date=*/_verified_import.json")
+
     def list_verified_identities(self) -> list[dict[str, str]]:
         identities: dict[tuple[str, str, str], dict[str, str]] = {}
-        for receipt_path in sorted(self.root.rglob("_verified_import.json")):
+        for receipt_path in self._verified_receipt_paths():
             if (receipt_path.parent / "_verified_import_conflict.json").exists():
                 continue
             try:
@@ -1158,7 +1161,15 @@ class ParquetRawAggTradeArchive:
                     str(metadata["market_type"]),
                     str(metadata["symbol"]),
                 )
-            except (AssertionError, KeyError, RuntimeError, TypeError, ValueError):
+                if identity in identities:
+                    continue
+                identity_day = (*identity, str(metadata["date"]))
+                if self._partition_path(identity_day) != receipt_path.parent:
+                    continue
+                self._validate_verified_receipt_objects(
+                    receipt_path.parent, receipt, verify_parquet=False,
+                )
+            except (AssertionError, KeyError, OSError, RuntimeError, TypeError, ValueError):
                 continue
             identities[identity] = {
                 "exchange": identity[0],
@@ -1181,16 +1192,13 @@ class ParquetRawAggTradeArchive:
             raise RuntimeError("checksum-verified raw aggTrade partition is quarantined")
         if not (partition / "_verified_import.json").is_file():
             return False
-        start = int(datetime.fromisoformat(day).replace(tzinfo=timezone.utc).timestamp() * 1000)
         try:
-            return bool(self._discover_verified_manifests(
-                exchange=identity[0], market_type=identity[1], symbol=identity[2],
-                start_time_ms=start, end_time_ms=start + 86_400_000 - 1,
-            ))
+            self._verified_partition_receipt(partition, (*identity, day))
         except (OSError, RuntimeError, ValueError):
             if not allow_repair:
                 raise
             return False
+        return True
 
     def verified_day_acquisition_lock_path(self, identity: tuple[str, str, str], day: str) -> Path:
         """Use stable, bounded lock slots shared by the day publishers and readers."""
@@ -1233,14 +1241,20 @@ class ParquetRawAggTradeArchive:
         market_type: str,
         symbol: str,
     ) -> tuple[VerifiedRawAggTradeWindow, ...]:
-        """Read only receipt metadata and merge truly contiguous UTC days.
+        """Verify receipts and bodies, then merge truly contiguous UTC days.
 
         A verified daily receipt proves the full UTC partition, including quiet
         time before its first trade and after its last trade. Adjacent days are
         merged only when their aggregate-trade IDs are also contiguous, so a
         replay window can never cross an unresolved source gap.
         """
+        return self._verified_windows(
+            exchange=exchange, market_type=market_type, symbol=symbol, verify_parquet=True,
+        )
 
+    def _verified_windows(
+        self, *, exchange: str, market_type: str, symbol: str, verify_parquet: bool,
+    ) -> tuple[VerifiedRawAggTradeWindow, ...]:
         identity = (
             _identity(exchange, "exchange", lower=True),
             _identity(market_type, "market_type", lower=True),
@@ -1263,17 +1277,11 @@ class ParquetRawAggTradeArchive:
                     continue
                 date = date_component.removeprefix("date=")
                 _validate_utc_date(date)
-                receipt = self._read_verified_receipt(receipt_path)
+                receipt = self._verified_partition_receipt(
+                    partition, (*identity, date), verify_parquet=verify_parquet,
+                )
                 metadata = receipt["metadata"]
                 assert isinstance(metadata, Mapping)
-                if (
-                    metadata.get("exchange"),
-                    metadata.get("market_type"),
-                    metadata.get("symbol"),
-                    metadata.get("date"),
-                ) != (*identity, date):
-                    continue
-                self._validate_verified_receipt_objects(partition, receipt)
                 day_start = int(
                     datetime.strptime(date, "%Y-%m-%d")
                     .replace(tzinfo=timezone.utc)
@@ -1328,8 +1336,9 @@ class ParquetRawAggTradeArchive:
         exchange: str,
         market_type: str,
         symbol: str,
+        verify_parquet: bool = True,
     ) -> tuple[RawAggTradeSelectionWindow, ...]:
-        """Local archives can select only from their verified receipt coverage."""
+        """List committed candidates, optionally deferring body checks to freeze."""
 
         return tuple(
             RawAggTradeSelectionWindow(
@@ -1337,10 +1346,11 @@ class ParquetRawAggTradeArchive:
                 end_time_ms=item.end_time_ms,
                 partition_count=item.partition_count,
             )
-            for item in self.list_verified_windows(
+            for item in self._verified_windows(
                 exchange=exchange,
                 market_type=market_type,
                 symbol=symbol,
+                verify_parquet=verify_parquet,
             )
         )
 
@@ -1758,7 +1768,7 @@ class ParquetRawAggTradeArchive:
         try:
             return any(
                 not (receipt.parent / "_verified_import_conflict.json").exists()
-                for receipt in self.root.rglob("_verified_import.json")
+                for receipt in self._verified_receipt_paths()
                 if receipt.is_file()
             )
         except OSError:
@@ -2613,6 +2623,7 @@ class ParquetRawAggTradeArchive:
         receipt: Mapping[str, object],
         *,
         repair_ids: tuple[int, int] | None = None,
+        verify_parquet: bool = True,
     ) -> None:
         objects = receipt.get("objects")
         metadata = receipt.get("metadata")
@@ -2632,8 +2643,29 @@ class ParquetRawAggTradeArchive:
                 raise RuntimeError("verified raw aggTrade receipt object escaped partition")
             if not path.is_file() or not _manifest_path(path).is_file():
                 raise RuntimeError("verified raw aggTrade receipt object is missing")
-            if self._object_manifest(self._read_file_manifest(path)) != item:
+            manifest = self._read_file_manifest(path, allow_fallback=verify_parquet)
+            if self._object_manifest(manifest, verify_parquet=verify_parquet) != item:
                 raise RuntimeError("verified raw aggTrade receipt checksum changed")
+
+    def _verified_partition_receipt(
+        self,
+        partition: Path,
+        identity_day: tuple[str, str, str, str],
+        *,
+        repair_ids: tuple[int, int] | None = None,
+        verify_parquet: bool = True,
+    ) -> dict[str, object]:
+        receipt = self._read_verified_receipt(partition / "_verified_import.json")
+        metadata = receipt["metadata"]
+        assert isinstance(metadata, Mapping)
+        if (
+            metadata["exchange"], metadata["market_type"], metadata["symbol"], metadata["date"],
+        ) != identity_day:
+            raise RuntimeError("verified raw aggTrade receipt identity changed")
+        self._validate_verified_receipt_objects(
+            partition, receipt, repair_ids=repair_ids, verify_parquet=verify_parquet,
+        )
+        return receipt
 
     def _record_import_conflict(
         self,
@@ -2713,17 +2745,9 @@ class ParquetRawAggTradeArchive:
                 raise RuntimeError(
                     "checksum-verified raw aggTrade daily coverage is missing"
                 )
-            receipt = self._read_verified_receipt(receipt_path)
-            metadata = receipt["metadata"]
-            assert isinstance(metadata, Mapping)
-            if (
-                metadata.get("exchange"),
-                metadata.get("market_type"),
-                metadata.get("symbol"),
-                metadata.get("date"),
-            ) != (exchange, market_type, symbol, date):
-                raise RuntimeError("verified raw aggTrade receipt identity changed")
-            self._validate_verified_receipt_objects(partition, receipt, repair_ids=repair_ids)
+            receipt = self._verified_partition_receipt(
+                partition, (exchange, market_type, symbol, date), repair_ids=repair_ids,
+            )
             objects = receipt["objects"]
             assert isinstance(objects, list)
             for raw in objects:
@@ -2747,13 +2771,17 @@ class ParquetRawAggTradeArchive:
     def _object_manifest(
         self,
         manifest: _FileManifest,
+        *,
+        verify_parquet: bool = True,
     ) -> RawAggTradeObjectManifest:
         path = manifest.path.resolve()
         root = self.root.resolve()
         if not path.is_relative_to(root):
             raise RuntimeError("raw aggTrade object escaped archive root")
         sidecar = _manifest_path(path)
-        parquet_sha256 = _file_sha256(path)
+        parquet_sha256 = _file_sha256(path) if verify_parquet else manifest.parquet_sha256
+        if parquet_sha256 is None:
+            raise RuntimeError("verified raw aggTrade Parquet checksum is missing")
         if (
             manifest.parquet_sha256 is not None
             and manifest.parquet_sha256 != parquet_sha256
@@ -2996,11 +3024,11 @@ class ParquetRawAggTradeArchive:
         manifests.sort(key=lambda item: (item.first_order_key, item.path.name))
         return manifests
 
-    def _read_file_manifest(self, path: Path) -> _FileManifest:
+    def _read_file_manifest(self, path: Path, *, allow_fallback: bool = True) -> _FileManifest:
         sidecar = _manifest_path(path)
         try:
             payload = json.loads(sidecar.read_text(encoding="utf-8"))
-            if payload.get("file") != path.name:
+            if not isinstance(payload, dict) or payload.get("file") != path.name:
                 raise ValueError("manifest file identity mismatch")
             parquet_sha256 = payload.get("parquet_sha256")
             if parquet_sha256 is not None:
@@ -3049,6 +3077,8 @@ class ParquetRawAggTradeArchive:
                 source_checksum_sha256=source_checksum,
             )
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            if not allow_fallback:
+                raise
             with self._write_lock:
                 self._stats["manifest_fallbacks"] += 1
             parquet = self._pq.ParquetFile(path)

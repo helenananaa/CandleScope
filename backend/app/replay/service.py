@@ -577,8 +577,8 @@ class ReplayService:
         if source_kind is SourceKind.BAR:
             return snapshot.catalog_epoch, snapshot.entries
         if self._official_trade_catalog is not None:
-            # Selection is based on official availability, never on which
-            # daily bodies happened to be downloaded on this machine.
+            # Official availability and committed local days both contribute
+            # to the aggregate-trade selection catalog.
             snapshot = await asyncio.to_thread(
                 self._official_trade_catalog.build,
                 warmup_bars=snapshot.warmup_bars,
