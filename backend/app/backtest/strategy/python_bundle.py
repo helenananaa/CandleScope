@@ -5,6 +5,8 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import math
+import re
 import os
 import shutil
 import stat
@@ -198,6 +200,53 @@ def _diagnose_source(source: str, manifest: Mapping[str, Any]) -> list[dict[str,
             }
         )
     return diagnostics
+
+
+def editor_parameter_defaults(source: str) -> list[dict[str, Any]]:
+    """Inspect direct SDK lookups in Strategy.prepare without loading the script."""
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError, RecursionError):
+        return []
+    classes = [node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "Strategy"]
+    if len(classes) != 1:
+        return []
+    prepares = [node for node in classes[0].body if isinstance(node, ast.FunctionDef) and node.name == "prepare"]
+    if len(prepares) != 1:
+        return []
+    prepare = prepares[0]
+    args = [*prepare.args.posonlyargs, *prepare.args.args]
+    if len(args) != 2:
+        return []
+    context = args[1].arg
+    kinds = {bool: "boolean", int: "integer", float: "number", str: "string"}
+    defaults: dict[str, tuple[str, Any] | None] = {}
+    for statement in prepare.body:
+        if not isinstance(statement, (ast.Assign, ast.AnnAssign)) or statement.value is None:
+            continue
+        for node in ast.walk(statement.value):
+            match node:
+                case ast.Call(func=ast.Attribute(attr="get", value=ast.Attribute(
+                        attr="parameters", value=ast.Name(id=owner))),
+                        args=[ast.Constant(value=str() as name), fallback], keywords=[]) if owner == context:
+                    pass
+                case _:
+                    continue
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", name):
+                continue
+            try:
+                value = ast.literal_eval(fallback)
+            except (ValueError, TypeError, SyntaxError, RecursionError):
+                value = None
+            kind = kinds.get(type(value))
+            bounded = (kind is not None and (kind != "integer" or abs(value) <= 9_007_199_254_740_991)
+                       and (kind != "number" or math.isfinite(value)) and (kind != "string" or len(value) <= 256))
+            field = (kind, value) if bounded else None
+            if name in defaults and defaults[name] != field:
+                defaults[name] = None
+            elif name in defaults or len(defaults) < 64:
+                defaults[name] = field
+    return [{"name": name, "type": field[0], "default": field[1]} for name, field in defaults.items() if field]
 
 
 def editor_bundle_files(name, source_text, parameter_schema=None) -> dict[str, bytes]:

@@ -36,6 +36,7 @@ export function createContinuousApi(base: string): ContinuousApi {
   }));
   return {
     capabilities: (signal) => call("/capabilities", signal),
+    editorParameters: (source, signal) => call("/editor-parameters", signal, { source_text: source }),
     create: (key, body, signal) => call("/runs", signal, body, key),
     request: (key, signal) => call(`/requests/${encodeURIComponent(key)}`, signal),
     catalog: (signal) => call("/runs", signal),

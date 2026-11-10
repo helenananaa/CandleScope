@@ -50,7 +50,7 @@ def acquire(manager,host,count):
         payload={key:LocalDatasetService._decimal_text(LocalDatasetService._host_decimal(bar,key,index))
             for key in ["open","high","low","close","volume"]}
         stamp=int(bar.time)*1000
-        payload.update(open_time_ms=stamp,close_time_ms=stamp+STEP-1)
+        payload.update(open_time_ms=stamp,close_time_ms=stamp+STEP-1,is_closed=True)
         values.append(MarketEvent(index,stamp+STEP-1,"BARS",payload))
     return proof,tuple(values)
 
@@ -175,4 +175,26 @@ def test_asynchronous_or_late_source_callback_cannot_publish_after_return(storag
             apply(manager,host,proof,values,guard=lambda publish:pending.append(publish))
         assert host.closed and store.load("cs_guarded")["checkpoint"]==before["checkpoint"]
         with pytest.raises(BacktestError,match="owned exactly once"):pending[0]()
+    finally:cleanup(service,store,host)
+
+
+def test_guarded_market_host_requires_exact_closed_minute_before_provider_or_commit(storage,tmp_path,monkeypatch):
+    service,_,_,_,store,manager,host=setup_host(storage,tmp_path,monkeypatch)
+    try:
+        proof,values=acquire(manager,host,2)
+        event=values[0]
+        old=store.load("cs_guarded")
+        checkpoint=host.checkpoint()
+        missing_final={key:value for key,value in event.payload.items() if key!="is_closed"}
+        for forged in (
+            replace(event,payload=missing_final),
+            replace(event,payload={**event.payload,"is_closed":0}),
+            replace(event,payload={**event.payload,"open_time_ms":START+1}),
+            replace(event,event_time_ms=event.event_time_ms+1),
+        ):
+            with pytest.raises(BacktestError,match="LOOKAHEAD_VIOLATION"):
+                apply(manager,host,proof,(forged,values[1]))
+            assert store.load("cs_guarded")==old and host.checkpoint()==checkpoint
+        apply(manager,host,proof,values)
+        assert host.row["sequence"]==2
     finally:cleanup(service,store,host)

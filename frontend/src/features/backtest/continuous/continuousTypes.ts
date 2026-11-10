@@ -67,7 +67,13 @@ export interface ContinuousRepair {
 export interface ContinuousRepairConfirm {
   expected: CommittedIdentity; plan_id: string; resume_after: boolean; confirmed: true;
 }
+export type ContinuousParameterField = {
+  name: string;
+} & ({ type: "boolean"; default: boolean } | { type: "string"; default: string }
+  | { type: "integer" | "number"; default: number });
+
 export interface ContinuousApi {
+  editorParameters(source: string, signal: AbortSignal): Promise<{ fields: ContinuousParameterField[] }>;
   capabilities(signal: AbortSignal): Promise<ContinuousCapabilities>;
   create(key: string, body: ContinuousCreate, signal: AbortSignal): Promise<{ creation: ContinuousCreation }>;
   request(key: string, signal: AbortSignal): Promise<{ creation: ContinuousCreation }>;
