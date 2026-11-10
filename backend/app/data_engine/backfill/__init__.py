@@ -64,7 +64,12 @@ from ..ingestion.metrics import LayerMetrics
 from ..ingestion.transport import TransportLayer
 from ..aggregation.semantics import valid_ohlcv
 from ..interval_policy import IntervalAlignment, parse_interval_spec, row_is_closed
-from ..kline_quality import repair_requires_trusted_finality, reuses_bybit_gap_inputs, source_is_trusted_final
+from ..kline_quality import (
+    bybit_recovery_source_gap_id,
+    repair_requires_trusted_finality,
+    reuses_bybit_gap_inputs,
+    source_is_trusted_final,
+)
 from ..series_identity import identity_from_metadata
 
 from .config import BackfillConfig
@@ -269,6 +274,10 @@ class BackfillEngine:
         symbol = normalize_symbol(symbol, exchange=exchange, market_type=market_type)
         metadata = dict(metadata or {})
         bybit_gap = reuses_bybit_gap_inputs(exchange, market_type, metadata.get("requester"))
+        bybit_derived_gap = bybit_gap or (
+            metadata.get("requester") == "ledger_reconcile"
+            and bybit_recovery_source_gap_id(exchange, market_type, metadata.get("reason"), metadata) is not None
+        )
         self._metrics.inc("runs")
         self._metrics.mark("last_run_at")
 
@@ -363,8 +372,8 @@ class BackfillEngine:
                 # demand (not from a single ~1000-source-row chunk).
                 task.metadata = {**metadata, **task.metadata}
             if (self._cfg.reconcile_generate_custom and len(intervals or ()) == 1
-                    and (bybit_gap or metadata.get("requester") == "warm_start_custom_tail")):
-                await self._reuse_derived_components(plan, metadata, bybit_gap=bybit_gap)
+                    and (bybit_derived_gap or metadata.get("requester") == "warm_start_custom_tail")):
+                await self._reuse_derived_components(plan, metadata, bybit_gap=bybit_derived_gap)
             status = BackfillStatus.FETCHING
             await prepare_native_history_views(self._storage, plan.tasks)
             await prepare_derived_targets(self._storage, plan)

@@ -32,6 +32,7 @@ from app.data_engine.interval_policy import (
     parse_interval_ms,
 )
 from app.data_engine.kline_quality import (
+    bybit_recovery_source_gap_id,
     repair_requires_trusted_finality,
     source_is_trusted_final,
 )
@@ -3152,6 +3153,8 @@ class BackfillCoordinator:
         }
         raw_metadata = row.get("metadata_json")
         decoded_metadata = _decode_metadata_object(raw_metadata)
+        exchange = str(row.get("exchange") or "binance").strip().lower()
+        market_type = str(row.get("market_type") or "spot").strip().lower()
         if repair_requires_trusted_finality(
             decoded_metadata,
             reason=row.get("reason"),
@@ -3168,13 +3171,18 @@ class BackfillCoordinator:
             )
         except (TypeError, ValueError):
             pass
+        source_gap_id = bybit_recovery_source_gap_id(exchange, market_type, row.get("reason"), decoded_metadata)
+        revision = decoded_metadata.get("acquisition_revision")
+        if source_gap_id is not None and type(revision) is int and revision >= 0:
+            metadata["source_gap_id"] = source_gap_id
+            metadata["acquisition_revision"] = revision
         return RepairRequest(
             symbol=symbol,
             interval=interval,
             start_ms=int(row["start_ms"]),
             end_ms=int(row["end_ms"]),
-            exchange=str(row.get("exchange") or "binance").strip().lower(),
-            market_type=str(row.get("market_type") or "spot").strip().lower(),
+            exchange=exchange,
+            market_type=market_type,
             reason="ledger_reconcile",
             requester="ledger_reconcile",
             metadata=metadata,
