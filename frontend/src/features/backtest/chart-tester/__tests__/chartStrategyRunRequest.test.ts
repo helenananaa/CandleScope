@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { BacktestApiError, type ChartContextResolution, type StrategyRevisionRecord } from "../../backtestApi.js";
-import type { BacktestRunRecord } from "../../backtestTypes.js";
+import type { BacktestResultReplayFrame, BacktestRunRecord } from "../../backtestTypes.js";
 import { StrategyRunStreamError } from "../../backtestRunStream.js";
 import {
   buildChartStrategyRunBody,
@@ -515,6 +515,8 @@ test("fixed-history DataManager owns the actual research stream without Run poll
     async getReport() { throw new Error("Result loading is a separate operation"); },
     async getChart() { throw new Error("Result loading is a separate operation"); },
     async cancelRun() { throw new Error("Releasing a consumer must not cancel execution"); },
+    async listRuns() { throw new Error("Run history is a separate operation"); },
+    async compareRuns() { throw new Error("Run comparison is a separate operation"); },
     async streamRun(runId, signal, onUpdate) {
       calls.push("stream");
       assert.equal(runId, completed().run_id);
@@ -616,18 +618,110 @@ test("gapped imported windows are not READY and never create a Run", async () =>
   assert.equal(calls.includes("create"), false);
 });
 
+const preciseRequest = {
+  ...request,
+  attachment: {
+    ...request.attachment,
+    fidelityPreference: "PRECISE" as const,
+    rangeMode: "CUSTOM" as const,
+    customRange: { startMs: Date.UTC(2026, 9, 24, 23), endMs: Date.UTC(2026, 9, 25) },
+  },
+};
+
+test("precise research never launches an estimated snapshot", async () => {
+  const calls: string[] = [];
+  const api = apiWithResolutions([resolution()], calls);
+  api.prepareChartContext = async () => assert.fail("unexpected preparation of an estimated snapshot");
+  await assert.rejects(
+    runResearchBacktest({ api, request: preciseRequest, source: { kind: "CURRENT_CHART" } }),
+    /resolved snapshot lacks aggregate-trade fidelity/,
+  );
+  assert.deepEqual(calls, ["revision:PINE_ENGINE", "resolve"]);
+});
+
+test("precise research prepares and archives the trade snapshot without manual BAR materialization", async () => {
+  const calls: string[] = [];
+  const unresolved = resolution("NEEDS_DATA");
+  const api = apiWithResolutions([unresolved], calls);
+  api.prepareChartContext = async (context) => {
+    assert.equal(context.fidelity_preference, "PRECISE");
+    assert.equal(context.end_time_ms, preciseRequest.attachment.customRange.endMs - 1);
+    return {
+      ...resolution(),
+      request: context,
+      fidelity: { preference: "PRECISE", mode: "AGG_TRADE_EXECUTION", capabilities: ["AGG_TRADE_EXECUTION"] },
+      prepared_run: { ...completed(), fidelity_mode: "AGG_TRADE_EXECUTION", source_event_kind: "AGG_TRADE" },
+    };
+  };
+  const outcome = await runResearchBacktest({
+    api, request: preciseRequest, source: { kind: "CURRENT_CHART", materializeResolution: unresolved },
+  });
+  assert.equal(outcome.kind, "TERMINAL");
+  assert.equal(outcome.resolution.fidelity.mode, "AGG_TRADE_EXECUTION");
+  assert.equal(outcome.frozenContext?.capabilitySummary.fidelityCeiling, "TRADE_TAPE");
+  assert.deepEqual(calls, ["revision:PINE_ENGINE", "resolve"]);
+  const prepare = api.prepareChartContext;
+  const mismatchApi = apiWithResolutions([unresolved], []);
+  mismatchApi.prepareChartContext = async (context, signal, intent, key) => ({
+    ...await prepare(context, signal, intent, key),
+    prepared_run: completed(),
+  });
+  await assert.rejects(
+    runResearchBacktest({ api: mismatchApi, request: preciseRequest, source: { kind: "CURRENT_CHART" } }),
+    /run was not created with aggregate-trade fidelity/,
+  );
+});
+
+test("precise research surfaces missing verified coverage when automatic preparation is unavailable", async () => {
+  const api = apiWithResolutions([resolution("NEEDS_DATA")], []);
+  await assert.rejects(
+    runResearchBacktest({ api, request: preciseRequest, source: { kind: "CURRENT_CHART" } }),
+    /Verified aggregate-trade coverage is unavailable/,
+  );
+});
+
 test("imported precise fidelity is rejected as BAR_ONLY", async () => {
+  const calls: string[] = [];
   await assert.rejects(
     () => runResearchBacktest({
-      api: importedApi([]),
-      request: {
-        ...request,
-        attachment: { ...request.attachment, fidelityPreference: "PRECISE" },
-      },
+      api: importedApi(calls),
+      request: preciseRequest,
       source: importedSource,
     }),
     (error: unknown) => error instanceof Error && "code" in error && error.code === "FIDELITY_UNSUPPORTED",
   );
+  assert.deepEqual(calls, []);
+});
+
+test("user market trades bind the local spot snapshot and never use online preparation", async () => {
+  const calls: string[] = [];
+  const api = importedApi(calls);
+  const source = { ...importedSource, marketTradeInput: true };
+  const precise = { ...preciseRequest, session: { ...preciseRequest.session, marketType: "spot" } };
+  api.previewSnapshot = async (body) => {
+    calls.push("preview");
+    assert.equal(body.exchange, "local");
+    assert.equal(body.account_model, "SPOT_CASH_V1");
+    assert.equal(body.fidelity_mode, "AGG_TRADE_EXECUTION");
+    return { ...importedPreview(), fidelity_capabilities: ["AGG_TRADE_EXECUTION"],
+      quality: { source_quality: "user_market_trades" } };
+  };
+  api.createRun = async (body) => {
+    calls.push("create");
+    assert.equal(body.dataset_id, source.datasetId);
+    assert.equal(body.data_epoch, source.dataEpoch);
+    assert.equal(body.source_event_kind, "AGG_TRADE");
+    assert.equal(body.fidelity_mode, "AGG_TRADE_EXECUTION");
+    return { ...completed(), source_event_kind: "AGG_TRADE", fidelity_mode: "AGG_TRADE_EXECUTION" };
+  };
+  const run = await runResearchBacktest({ api, request: precise, source });
+  assert.equal(run.kind, "TERMINAL");
+  assert.equal(run.frozenContext?.sourceKind, "IMPORTED_DATASET");
+  assert.equal(run.frozenContext?.capabilitySummary.fidelityCeiling, "TRADE_TAPE");
+  assert.deepEqual(calls, ["revision:PINE_ENGINE", "preview", "smoke", "validate", "preview", "create"]);
+
+  await assert.rejects(runResearchBacktest({ api: importedApi([]), request: precise, source }),
+    /frozen snapshot lacks the requested user market trades/);
 });
 
 test("continuous handoff sends its profile to preparation and never falls back to the default executor", async () => {
@@ -647,4 +741,58 @@ test("continuous handoff sends its profile to preparation and never falls back t
   const fallback = apiWithResolutions([resolution()], []);
   fallback.prepareChartContext = async () => { throw new Error("Unexpected preparation"); };
   await assert.rejects(runChartStrategyBacktest({ api: fallback, request: chart }), /profile was not prepared/);
+});
+
+test("Strategy Manager rejects a replay response for a different cursor or result hash", async () => {
+  const cursor = { runId: "bt_replay", snapshotHash: "sha256:snapshot", reportHash: "sha256:report", cursor: 1, interval: "5m" };
+  const good = {
+    schema: "candlescope.user-trade-result-replay/1" as const, run_id: cursor.runId,
+    snapshot_hash: cursor.snapshotHash, report_hash: cursor.reportHash, interval: cursor.interval,
+    cursor: cursor.cursor, signal_interval: "1m", symbol: "ETH/USDC", quote_asset: "USDC",
+    total: 20, time_ms: 1000, source_sequence: 200, bars: [], fills: [], order_events: [],
+    order_trace_available: true, closed_bar_signals: [], signal_trace_available: true, fill_count: 0, cash: "10000", position: "0", equity: "10000",
+  };
+  let response: BacktestResultReplayFrame = good;
+  const api: StrategyDataApi = {
+    ...importedApi([]),
+    async getReport() { return assert.fail("unexpected report load"); },
+    async getChart() { return assert.fail("unexpected chart load"); },
+    async cancelRun() { return assert.fail("unexpected cancellation"); },
+    async listRuns() { return assert.fail("unexpected list"); },
+    async compareRuns() { return assert.fail("unexpected comparison"); },
+    async streamRun() { return assert.fail("unexpected stream"); },
+    async getResultReplay() { return response; },
+  };
+  const manager = new StrategyDataManager(api);
+  assert.deepEqual(await manager.loadResultReplay(cursor), good);
+  const note = { id: "n", revision: 1, cursor: 1, time_ms: 1000, body: "Current print", saved_at_ms: 4000 };
+  response = { ...good, notes: [note] };
+  assert.deepEqual(await manager.loadResultReplay(cursor), response);
+  response = { ...good, notes: [{ ...note, cursor: 2 }] };
+  await assert.rejects(manager.loadResultReplay(cursor), /requested boundary/);
+  response = { ...good, notes: [{ ...note, time_ms: 1001 }] };
+  await assert.rejects(manager.loadResultReplay(cursor), /requested boundary/);
+  response = { ...good, cursor: 2 };
+  await assert.rejects(manager.loadResultReplay(cursor), /requested boundary/);
+  response = { ...good, report_hash: "sha256:other" };
+  await assert.rejects(manager.loadResultReplay(cursor), /requested boundary/);
+  const linked = { ...cursor, comparisonInterval: "1m" };
+  const bar = { open_time_ms: 900, close_time_ms: 1000, open: "1", high: "2", low: "1", close: "2", volume: "1", closed: true };
+  response = { ...good, schema: "candlescope.local-bar-result-replay/1", comparison: { interval: "1m", bars: [bar] } };
+  assert.deepEqual(await manager.loadResultReplay(linked), response);
+  await assert.rejects(manager.loadResultReplay({ ...linked, comparisonInterval: "15m" }), /requested boundary/);
+  response = { ...response, comparison: { interval: "1m", bars: [{ ...bar, close_time_ms: 1001 }] } };
+  await assert.rejects(manager.loadResultReplay(linked), /requested boundary/);
+  const withMa = { ...linked, comparisonMaPeriod: 2 };
+  const ma = { period: 2, points: [{ open_time_ms: bar.open_time_ms, value: 1.5 }] };
+  response = { ...response, comparison: { interval: "1m", bars: [bar], ma } };
+  assert.deepEqual(await manager.loadResultReplay(withMa), response);
+  await assert.rejects(manager.loadResultReplay({ ...withMa, comparisonMaPeriod: 3 }), /requested boundary/);
+  response = { ...response, comparison: { interval: "1m", bars: [{ ...bar, closed: false }], ma } };
+  await assert.rejects(manager.loadResultReplay(withMa), /requested boundary/);
+  response = { ...response, comparison: { interval: "1m", bars: [bar], ma: {
+    ...ma, points: [{ open_time_ms: 1001, value: 99 }],
+  } } };
+  await assert.rejects(manager.loadResultReplay(withMa), /requested boundary/);
+  manager.dispose();
 });

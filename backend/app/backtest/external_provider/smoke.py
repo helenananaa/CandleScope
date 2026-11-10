@@ -49,6 +49,8 @@ def _run_smoke(runtime: BacktestRuntime, values: dict[str, Any]) -> dict[str, An
     control = runtime.service.external
     parsed = control.manifest(values["strategy_revision_id"])
     preview = verify_snapshot(runtime, values)
+    if preview["quality"].get("source_quality") == "user_market_trades":
+        raise BacktestError("FIDELITY_UNSUPPORTED", "External smoke does not support local market trade inputs yet")
     binding = control.validate_binding(values)
     output_mode = values["output_mode"]
     if output_mode not in parsed.output_modes:

@@ -2772,6 +2772,7 @@ export const ptBR = {
 
   "local.import": "Importar CSV",
   "local.localOnly": "Os dados permanecem nesta máquina",
+  "local.marketTradeCoverage": "Use um arquivo de negócios do mercado com números de sequência consecutivos. Declare a cobertura UTC. A importação permanece local.",
   "local.chooseFile": "Escolha um arquivo CSV",
   "local.baseAsset": "Ativo de quantidade (unidade do volume)",
   "local.quoteAsset": "Ativo de cotação do preço",
@@ -4907,6 +4908,7 @@ export const ptBR = {
   "research.data.noContext": "Esta entrada não tem identidade de conjunto congelada.",
   "research.data.available": "Conjuntos de dados locais disponíveis",
   "research.execution.precise": "A fidelidade da sequência de negócios e as premissas de execução permanecem explícitas e imutáveis por Run.",
+  "research.execution.preciseArchiveHint": "O download automático usa negócios agregados de futuros Binance USD-M. Selecione um intervalo em dias UTC já encerrados.",
   "research.execution.python": "Runtime Python e de modelos externos inicializam somente dentro desta aplicação de pesquisa.",
   "research.execution.general": "Os controles de execução permanecem no escopo da tarefa selecionada e nunca alteram um Run concluído.",
   "research.run.none": "Nenhum BacktestRun está selecionado.",

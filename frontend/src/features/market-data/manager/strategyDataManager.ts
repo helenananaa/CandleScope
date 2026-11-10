@@ -1,5 +1,5 @@
 import { defaultBacktestApi, type BacktestApiClient } from "../../backtest/backtestApi.js";
-import type { BacktestRunRecord } from "../../backtest/backtestTypes.js";
+import type { BacktestResultReplayCursor, BacktestResultReplayNoteDraft, BacktestRunRecord } from "../../backtest/backtestTypes.js";
 import { isBacktestTerminalState } from "../../backtest/backtestRunClient.js";
 import { StrategyRunStreamError, type StrategyRunUpdate } from "../../backtest/backtestRunStream.js";
 import { ChartStrategyResultCache } from "../../backtest/chart-tester/chartStrategyResultCache.js";
@@ -9,7 +9,7 @@ import type { ContinuousApi } from "../../backtest/continuous/continuousTypes.js
 import { ContinuousStrategyDataManager } from "./continuousStrategyDataManager.js";
 
 type ResearchRequest = Omit<Parameters<typeof runResearchBacktest>[0], "api" | "waitForTerminal" | "wait" | "pollIntervalMs">;
-export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "streamRun" | "getReport" | "getChart" | "cancelRun">;
+export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "streamRun" | "getReport" | "getChart" | "cancelRun" | "listRuns" | "compareRuns"> & Pick<BacktestApiClient, "getResultReplay" | "saveResultReplayNote">;
 
 /** Owns fixed-history operations and immutable results independently of live
  * chart stores. Releasing a consumer never cancels a durable shared run. */
@@ -89,12 +89,88 @@ export class StrategyDataManager {
     return this.operation(signal, (owned) => this.readResult(runId, owned));
   }
 
+  loadResultReplay(cursor: BacktestResultReplayCursor, signal?: AbortSignal) {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.getResultReplay) throw new StrategyRunStreamError("STRATEGY_STREAM_UNAVAILABLE", "Result replay is unavailable");
+      const frame = await this.api.getResultReplay(cursor, owned);
+      const invalidBars = (bars: typeof frame.bars) => !Array.isArray(bars)
+        || bars.some(bar => frame.time_ms === null || bar.open_time_ms > frame.time_ms
+          || (bar.closed && bar.close_time_ms !== undefined && bar.close_time_ms > frame.time_ms));
+      const invalidStudy = (study: typeof frame.ma, period: number | undefined, bars: typeof frame.bars) => {
+        if (period === undefined) return study !== undefined;
+        if (study?.period !== period || !Array.isArray(study.points) || study.points.length > bars.length) return true;
+        const closed = new Set(bars.filter(bar => bar.closed && bar.close_time_ms !== undefined).map(bar => bar.open_time_ms));
+        let previous = -Infinity;
+        return study.points.some(point => {
+          const invalid = !point || !closed.has(point.open_time_ms) || point.open_time_ms <= previous
+            || !Number.isFinite(point.value);
+          if (!invalid) previous = point.open_time_ms;
+          return invalid;
+        });
+      };
+      const notes = frame.notes;
+      const invalidNotes = notes !== undefined && (!Array.isArray(notes) || notes.length > 100
+        || new Set(notes.map(note => note?.id)).size !== notes.length
+        || notes.some(note => !note || typeof note.id !== "string" || !Number.isSafeInteger(note.revision)
+          || note.revision < 1 || note.revision > 20 || typeof note.body !== "string" || !note.body.trim()
+          || !Number.isSafeInteger(note.cursor) || note.cursor < 0 || note.cursor > frame.cursor
+          || (note.cursor === 0 ? note.time_ms !== null : (!Number.isSafeInteger(note.time_ms)
+            || frame.time_ms === null || note.time_ms === null || note.time_ms > frame.time_ms))));
+      if (invalidNotes || (frame.schema !== "candlescope.user-trade-result-replay/1" && frame.schema !== "candlescope.local-bar-result-replay/1")
+        || frame.run_id !== cursor.runId
+        || frame.snapshot_hash !== cursor.snapshotHash || frame.report_hash !== cursor.reportHash
+        || frame.cursor !== cursor.cursor || frame.interval !== cursor.interval
+        || !Number.isSafeInteger(frame.total) || frame.total < cursor.cursor
+        || (frame.display_intervals !== undefined && (!Array.isArray(frame.display_intervals)
+          || frame.display_intervals.some(interval => typeof interval !== "string")))
+        || frame.comparison?.interval !== cursor.comparisonInterval
+        || invalidBars(frame.bars) || (frame.comparison && invalidBars(frame.comparison.bars))
+        || invalidStudy(frame.ma, cursor.maPeriod, frame.bars)
+        || invalidStudy(frame.comparison?.ma, cursor.comparisonMaPeriod, frame.comparison?.bars ?? [])
+        || !Array.isArray(frame.fills) || !Array.isArray(frame.order_events)
+        || !Array.isArray(frame.closed_bar_signals)
+        || frame.closed_bar_signals.some(signal => signal.reveal_sequence > frame.cursor)
+        || frame.fills.some((fill) => fill.cursor > frame.cursor)
+        || frame.order_events.some((order) => order.reveal_sequence > frame.cursor)) {
+        throw new StrategyRunStreamError("DATA_SNAPSHOT_MISMATCH", "Result replay frame does not match the requested boundary");
+      }
+      return frame;
+    });
+  }
+
+  saveResultReplayNote(cursor: BacktestResultReplayCursor, note: BacktestResultReplayNoteDraft, signal?: AbortSignal) {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.saveResultReplayNote) throw new StrategyRunStreamError("STRATEGY_STREAM_UNAVAILABLE", "Result replay notes are unavailable");
+      const saved = await this.api.saveResultReplayNote(cursor, note, owned);
+      if (saved.revision !== note.expectedRevision + 1) {
+        throw new StrategyRunStreamError("RESULT_IDENTITY_MISMATCH", "Result replay note revision does not match the requested save");
+      }
+    });
+  }
+
   restoreRun(runId: string, signal?: AbortSignal) {
     return this.operation(signal, async (owned) => {
       const current = await this.api.getRun(runId, owned);
       const terminal = isBacktestTerminalState(current.state) && current.state !== "FAILED" ? current : await this.wait(runId, owned);
       this.requireCompleted(terminal);
       return this.readResult(runId, owned);
+    });
+  }
+
+  listRuns(signal?: AbortSignal) {
+    return this.operation(signal, (owned) => this.api.listRuns(owned));
+  }
+
+  compareRuns(leftRunId: string, rightRunId: string, signal?: AbortSignal) {
+    return this.operation(signal, async (owned) => {
+      if (!leftRunId || !rightRunId || leftRunId === rightRunId) {
+        throw new StrategyRunStreamError("COMPARISON_PAIR_INVALID", "Select two different runs");
+      }
+      const comparison = await this.api.compareRuns(leftRunId, rightRunId, owned);
+      if (comparison.schema !== "RUN_COMPARE_V3" || comparison.left.runId !== leftRunId || comparison.right.runId !== rightRunId) {
+        throw new StrategyRunStreamError("RESULT_IDENTITY_MISMATCH", "Comparison response does not match the selected runs");
+      }
+      return comparison;
     });
   }
 

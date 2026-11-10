@@ -2534,6 +2534,7 @@ export const en = {
 
   "local.import": "Import CSV",
   "local.localOnly": "Data stays on this machine",
+  "local.marketTradeCoverage": "Use a market-wide trade file with contiguous source sequence numbers. Declare the UTC coverage. This import stays local.",
   "local.chooseFile": "Choose a CSV file",
   "local.baseAsset": "Quantity asset (volume unit)",
   "local.quoteAsset": "Price quote asset",
@@ -4666,6 +4667,7 @@ export const en = {
   "research.data.noContext": "This entry has no frozen dataset identity.",
   "research.data.available": "Available local datasets",
   "research.execution.precise": "Trade-sequence fidelity and execution assumptions remain explicit and immutable per Run.",
+  "research.execution.preciseArchiveHint": "Automatic download uses Binance USD-M aggregate trades. Select a window within completed UTC days.",
   "research.execution.python": "Python and external-model runtimes initialize only inside this research application.",
   "research.execution.general": "Execution controls remain scoped to the selected task and never mutate a completed Run.",
   "research.run.none": "No BacktestRun is selected.",

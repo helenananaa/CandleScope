@@ -137,7 +137,7 @@ export function useStrategyResearchRun(input: {
   }, [configuration, input.draftContentRevision, input.draftId, input.source, session, tester]);
 
   const snapshot = tester.snapshot();
-  const barOnly = input.source?.kind === "IMPORTED_DATASET";
+  const barOnly = input.source?.kind === "IMPORTED_DATASET" && !input.imported?.market_trade_input;
   const sourceResult = result && researchResultMatchesSource(result, input.source, session) ? result : null;
   const inputStale = snapshot.status === "STALE" || (result !== null && sourceResult === null);
   const updatingResult = result !== null && ["RESOLVING", "QUEUED", "RUNNING"].includes(snapshot.status);
@@ -188,6 +188,9 @@ export function useStrategyResearchRun(input: {
           { next_step: "select imported library data" },
         );
       }
+      const marketTrades = imported?.market_trade_input;
+      const precise = request.attachment.fidelityPreference === "PRECISE" && marketTrades !== undefined;
+      const customRange = configuration.customRange;
       const researchSource = source.kind === "CURRENT_CHART" ? {
         kind: "CURRENT_CHART" as const,
         materializeResolution: materialize ?? null,
@@ -197,15 +200,18 @@ export function useStrategyResearchRun(input: {
         dataEpoch: imported!.data_epoch,
         interval: input.interval ?? source.interval,
         symbol: imported!.symbol,
-        startTimeMs: configuration.customRange?.startMs ?? imported!.first_open_ms,
-        endTimeMs: configuration.customRange?.endMs ?? imported!.last_open_ms + 1,
+        startTimeMs: customRange?.startMs ?? imported!.first_open_ms,
+        endTimeMs: precise
+          ? (customRange?.endMs ?? marketTrades.coverage_end_ms_exclusive) - 1
+          : customRange?.endMs ?? imported!.last_open_ms + 1,
+        marketTradeInput: marketTrades !== undefined,
         quality: qualitySummaryFromImportedManifest({
           rows: imported!.rows,
           excludedRangeCount: imported!.excluded_range_count,
           volumeAvailable: imported!.volume_available,
         }),
       };
-      if (researchSource.kind === "IMPORTED_DATASET" && imported && (researchSource.startTimeMs < imported.first_open_ms || researchSource.endTimeMs > imported.last_open_ms + 1)) {
+      if (researchSource.kind === "IMPORTED_DATASET" && imported && (researchSource.startTimeMs < imported.first_open_ms || researchSource.endTimeMs > (precise ? marketTrades.coverage_end_ms_exclusive - 1 : imported.last_open_ms + 1))) {
         throw new ChartStrategyRunError("DATA_COVERAGE_INCOMPLETE", "The selected dates exceed the imported data coverage", { next_step: "choose dates within the data coverage" });
       }
       const outcome = await dataManager.strategy.runResearch({
@@ -217,7 +223,8 @@ export function useStrategyResearchRun(input: {
           tester.dispatch({
             type: "REQUEST_STATUS",
             token,
-            status: resolution.status === "NEEDS_DATA" ? "NEEDS_DATA" : "RESOLVING",
+            status: resolution.status === "NEEDS_DATA" && !resolution.automatic_preparation_available
+              ? "NEEDS_DATA" : "RESOLVING",
           });
         },
         onRunUpdate(run) {
@@ -286,6 +293,7 @@ export function useStrategyResearchRun(input: {
   return {
     session,
     batch,
+    historyManager: dataManager.strategy,
     barOnly,
     runStatus: (restoringRun ? "RUNNING" : snapshot.status) as ChartStrategyTesterStatus,
     stale: inputStale || updatingResult,
