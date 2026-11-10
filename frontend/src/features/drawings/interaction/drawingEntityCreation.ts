@@ -10,9 +10,11 @@ import { normalizeSavedDrawingItemStrict } from "../drawingPersistence.js";
 import { normalizeFreehandStroke } from "../freehandStrokeModel.js";
 import type {
   AngleToolId,
+  ArrowToolId,
   AxisLineToolId,
   BasicLineToolId,
   BrushShape,
+  ChannelToolId,
   DrawingDataPoint,
   FibonacciLevel,
   FibonacciToolId,
@@ -24,6 +26,7 @@ import type {
   SavedRangeMeasureDrawing,
   SavedAngleDrawing,
   SavedAxisLineDrawing,
+  SavedChannelDrawing,
   SavedDrawing,
   SavedFibonacciDrawing,
   SavedFreehandDrawing,
@@ -43,11 +46,14 @@ export type CreatedSavedDrawing<TDrawing extends SavedDrawing = SavedDrawing> =
 export type TwoPointCreationTool =
   | RangeMeasureToolId
   | BasicLineToolId
+  | ArrowToolId
+  | ChannelToolId
   | AngleToolId
   | FibonacciToolId
   | ShapeToolId;
 
 export type SavedTwoPointDrawing =
+  | SavedChannelDrawing
   | SavedRangeMeasureDrawing
   | SavedLineDrawing
   | SavedAngleDrawing
@@ -134,7 +140,11 @@ function finalizedCreatedDrawing<TDrawing extends SavedDrawing>(
   return created as CreatedSavedDrawing<TDrawing>;
 }
 
-/** Build the terminal two-anchor data payload for lines, angles, fibs, and shapes. */
+/**
+ * Build the terminal anchor payload for lines, arrows, angles, fibs, shapes,
+ * rulers and channels. A channel takes a third anchor (the point its parallel
+ * line passes through); given only two, the parallel starts on the baseline.
+ */
 export function createTwoPointSavedDrawing({
   color,
   dataPoints,
@@ -144,9 +154,32 @@ export function createTwoPointSavedDrawing({
   lineWidth,
   tool,
 }: TwoPointSavedDrawingOptions): CreatedSavedDrawing<SavedTwoPointDrawing> | null {
-  if (!Array.isArray(dataPoints) || dataPoints.length !== 2) return null;
+  if (!Array.isArray(dataPoints)) return null;
+  const isChannel = tool === "channel-parallel";
+  if (dataPoints.length !== 2 && !(isChannel && dataPoints.length === 3)) return null;
   const points = (dataPoints as readonly DrawingDataPoint[])
     .map((point) => ({ ...point }));
+
+  if (isChannel) {
+    const [start, end] = points;
+    if (!start || !end) return null;
+    return finalizedCreatedDrawing("ch", {
+      type: "channel",
+      dataPoints: [start, end, points[2] ?? { ...end }],
+      color,
+      lineWidth,
+    });
+  }
+  if (tool === "line-arrow") {
+    return finalizedCreatedDrawing("ln", {
+      type: "line",
+      lineType: "line-segment",
+      arrowEnd: true,
+      dataPoints: points,
+      color,
+      lineWidth,
+    });
+  }
 
   if (tool === "measure-price" || tool === "measure-time" || tool === "measure-price-time") {
     return finalizedCreatedDrawing("measure", {

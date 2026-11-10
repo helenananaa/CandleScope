@@ -32,6 +32,10 @@ export type CanonicalBounds =
 
 export type CanonicalDrawingGeometry =
   | Readonly<{
+      kind: "channel";
+      dataPoints: readonly DrawingDataPoint[];
+    }>
+  | Readonly<{
       kind: "range-measure";
       measureType: RangeMeasureType;
       dataPoints: readonly DrawingDataPoint[];
@@ -71,6 +75,7 @@ export type CanonicalDrawingGeometry =
       kind: "shape";
       shapeType?: ShapeType;
       dataPoints?: readonly DrawingDataPoint[];
+      extendRight?: boolean;
     }>
   | Readonly<{
       kind: "freehand" | "highlighter";
@@ -80,9 +85,21 @@ export type CanonicalDrawingGeometry =
 
 export type DrawingStyle = Readonly<{ hidden?: boolean; locked?: boolean; visibleIntervals?: readonly string[] | null }> & (
   | Readonly<{
-      kind: "line" | "axis-line" | "angle-measure" | "range-measure";
+      kind: "axis-line" | "angle-measure" | "range-measure";
       color?: string;
       lineWidth?: number;
+    }>
+  | Readonly<{
+      kind: "line";
+      color?: string;
+      lineWidth?: number;
+      arrowEnd?: boolean;
+    }>
+  | Readonly<{
+      kind: "channel";
+      color?: string;
+      lineWidth?: number;
+      fillOpacity?: number;
     }>
   | Readonly<{
       kind: "text";
@@ -118,6 +135,9 @@ export type DrawingStyle = Readonly<{ hidden?: boolean; locked?: boolean; visibl
       fillColor?: string;
       fillOpacity?: number;
       lineStyle?: ShapeLineStyle;
+      midline?: boolean;
+      priceLabels?: boolean;
+      label?: string;
     }>
   | Readonly<{
       kind: "freehand";
@@ -239,6 +259,7 @@ function matchingKind(
 ): boolean {
   if (geometry.kind !== kind || style.kind !== kind) return false;
   const geometryKeys: Record<DrawingKind, readonly string[]> = {
+    channel: ["dataPoints", "kind"],
     "range-measure": ["dataPoints", "measureType", "kind"],
     "angle-measure": ["dataPoints", "kind"],
     "axis-line": ["axisLineType", "dataPoint", "kind"],
@@ -247,19 +268,23 @@ function matchingKind(
     highlighter: ["dataPoints", "kind", "stroke"],
     line: ["dataPoints", "kind", "lineType"],
     position: ["direction", "entryPrice", "kind", "slPrice", "timeRange", "tpPrice"],
-    shape: ["dataPoints", "kind", "shapeType"],
+    shape: ["dataPoints", "extendRight", "kind", "shapeType"],
     text: ["dataPoint", "kind"],
   };
   const styleKeys: Record<DrawingKind, readonly string[]> = {
+    channel: ["color", "fillOpacity", "kind", "lineWidth"],
     "range-measure": ["color", "kind", "lineWidth"],
     "angle-measure": ["color", "kind", "lineWidth"],
     "axis-line": ["color", "kind", "lineWidth"],
     fibonacci: ["color", "kind", "levels", "lineWidth"],
     freehand: ["color", "kind", "lineWidth"],
     highlighter: ["brushShape", "color", "compositeOperation", "kind", "lineWidth", "opacity"],
-    line: ["color", "kind", "lineWidth"],
+    line: ["arrowEnd", "color", "kind", "lineWidth"],
     position: ["infoPanelOffset", "kind", "positionSize"],
-    shape: ["color", "fillColor", "fillOpacity", "kind", "lineStyle", "lineWidth"],
+    shape: [
+      "color", "fillColor", "fillOpacity", "kind", "label", "lineStyle", "lineWidth", "midline",
+      "priceLabels",
+    ],
     text: [
       "align", "bgColor", "bold", "borderColor", "borderWidth", "color", "fontFamily",
       "fontSize", "italic", "kind", "padding", "text", "underline", "widthPx",

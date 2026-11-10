@@ -2,6 +2,7 @@ import {
   CHART_DRAWING_ANCHOR_MODES,
 } from "../chart-representation/chartTypeRegistry.js";
 import {
+  ARROW_TOOL_IDS,
   AXIS_LINE_TOOL_IDS,
   ANGLE_TOOL_IDS,
   BASIC_LINE_TOOL_IDS,
@@ -28,6 +29,8 @@ const SOURCE_LINEAGE_TOOL_IDS = new Set<string>([
   ...CURSOR_TOOL_IDS,
   "eraser",
   ...BASIC_LINE_TOOL_IDS,
+  // An arrow is an ordinary segment with a painted head.
+  ...ARROW_TOOL_IDS,
   ...AXIS_LINE_TOOL_IDS,
   ...ANGLE_TOOL_IDS,
   ...FIB_TOOL_IDS,
@@ -43,6 +46,7 @@ const HIT_TYPE_TOOL_IDS: Readonly<Record<DrawingHitType, DrawingToolId>> = Objec
   "axis-line": "line-horizontal",
   angle: "angle-measure",
   "range-measure": "measure-price-time",
+  channel: "channel-parallel",
   fibonacci: "fibonacci",
   shape: "shape-rectangle",
   text: "text",

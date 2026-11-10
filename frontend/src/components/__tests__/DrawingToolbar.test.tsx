@@ -110,3 +110,11 @@ test("source range variants keep their own toolbar identity and translated title
     assert.ok(buttonTag(html, `data-drawing-tool="${tool}"`).includes(label));
   }
 });
+
+test("arrow and parallel channel variants keep their own toolbar identity and translated title", () => {
+  for (const [tool, label] of [["line-arrow", "Arrow"], ["channel-parallel", "Parallel channel"]] as const) {
+    const html = renderInEnglish(<DrawingToolbar activeTool={tool} penColor="#f59e0b" penSize={2}
+      onClearAll={() => {}} onToggleDrawingsHidden={() => {}} onPositionSizeChange={() => {}} />);
+    assert.ok(buttonTag(html, `data-drawing-tool="${tool}"`).includes(label));
+  }
+});

@@ -22,6 +22,7 @@ import {
 import type { DrawingKind, SavedDrawing } from "../drawingTypes.js";
 
 const ID_PREFIX: Readonly<Record<DrawingKind, string>> = Object.freeze({
+  channel: "ch",
   "range-measure": "measure",
   line: "ln",
   "axis-line": "ax",
@@ -109,6 +110,15 @@ function createEntityFromSavedDrawing(item: SavedDrawing, id: string): DrawingEn
   let style: DrawingStyle;
 
   switch (item.type) {
+    case "channel":
+      geometry = { kind: "channel", dataPoints: item.dataPoints };
+      style = {
+        kind: "channel",
+        ...(item.color === undefined ? {} : { color: item.color }),
+        ...(item.lineWidth === undefined ? {} : { lineWidth: item.lineWidth }),
+        ...(item.fillOpacity === undefined ? {} : { fillOpacity: item.fillOpacity }),
+      };
+      break;
     case "range-measure":
       geometry = { kind: "range-measure", measureType: item.measureType, dataPoints: item.dataPoints };
       style = {
@@ -127,6 +137,7 @@ function createEntityFromSavedDrawing(item: SavedDrawing, id: string): DrawingEn
         kind: "line",
         ...(item.color === undefined ? {} : { color: item.color }),
         ...(item.lineWidth === undefined ? {} : { lineWidth: item.lineWidth }),
+        ...(item.arrowEnd === undefined ? {} : { arrowEnd: item.arrowEnd }),
       };
       break;
     case "axis-line":
@@ -207,6 +218,7 @@ function createEntityFromSavedDrawing(item: SavedDrawing, id: string): DrawingEn
         kind: "shape",
         ...(item.shapeType === undefined ? {} : { shapeType: item.shapeType }),
         ...(item.dataPoints === undefined ? {} : { dataPoints: item.dataPoints }),
+        ...(item.extendRight === undefined ? {} : { extendRight: item.extendRight }),
       };
       style = {
         kind: "shape",
@@ -215,6 +227,9 @@ function createEntityFromSavedDrawing(item: SavedDrawing, id: string): DrawingEn
         ...(item.fillColor === undefined ? {} : { fillColor: item.fillColor }),
         ...(item.fillOpacity === undefined ? {} : { fillOpacity: item.fillOpacity }),
         ...(item.lineStyle === undefined ? {} : { lineStyle: item.lineStyle }),
+        ...(item.midline === undefined ? {} : { midline: item.midline }),
+        ...(item.priceLabels === undefined ? {} : { priceLabels: item.priceLabels }),
+        ...(item.label === undefined ? {} : { label: item.label }),
       };
       break;
     case "freehand":
@@ -272,13 +287,17 @@ export function savedDrawingFromEntity(entity: DrawingEntity): SavedDrawing | nu
     copyDefinedFields(candidate, style, ["hidden", "locked", "visibleIntervals"]);
 
     switch (canonical.kind) {
+      case "channel":
+        copyDefinedFields(candidate, geometry, ["dataPoints"]);
+        copyDefinedFields(candidate, style, ["color", "lineWidth", "fillOpacity"]);
+        break;
       case "range-measure":
         copyDefinedFields(candidate, geometry, ["measureType", "dataPoints"]);
         copyDefinedFields(candidate, style, ["color", "lineWidth"]);
         break;
       case "line":
         copyDefinedFields(candidate, geometry, ["lineType", "dataPoints"]);
-        copyDefinedFields(candidate, style, ["color", "lineWidth"]);
+        copyDefinedFields(candidate, style, ["color", "lineWidth", "arrowEnd"]);
         break;
       case "axis-line":
         copyDefinedFields(candidate, geometry, ["axisLineType", "dataPoint"]);
@@ -321,13 +340,16 @@ export function savedDrawingFromEntity(entity: DrawingEntity): SavedDrawing | nu
         copyDefinedFields(candidate, style, ["positionSize", "infoPanelOffset"]);
         break;
       case "shape":
-        copyDefinedFields(candidate, geometry, ["shapeType", "dataPoints"]);
+        copyDefinedFields(candidate, geometry, ["shapeType", "dataPoints", "extendRight"]);
         copyDefinedFields(candidate, style, [
           "color",
           "lineWidth",
           "fillColor",
           "fillOpacity",
           "lineStyle",
+          "midline",
+          "priceLabels",
+          "label",
         ]);
         break;
       case "freehand":

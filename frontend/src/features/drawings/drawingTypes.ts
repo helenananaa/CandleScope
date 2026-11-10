@@ -25,6 +25,7 @@ export type DrawingToolId =
   | "line-segment"
   | "line-ray"
   | "line-infinite"
+  | "line-arrow"
   | "line-horizontal"
   | "line-vertical"
   | "line-cross"
@@ -32,6 +33,7 @@ export type DrawingToolId =
   | "measure-price"
   | "measure-time"
   | "measure-price-time"
+  | "channel-parallel"
   | "fibonacci"
   | "position-long"
   | "position-short"
@@ -45,6 +47,9 @@ export type PassiveCursorToolId = Extract<DrawingToolId, `cursor-${string}`>;
 export type BasicLineToolId = "line-segment" | "line-ray" | "line-infinite";
 export type AxisLineToolId = "line-horizontal" | "line-vertical" | "line-cross";
 export type AngleToolId = "angle-measure";
+/** A segment whose end carries an arrowhead; geometry stays an ordinary segment. */
+export type ArrowToolId = "line-arrow";
+export type ChannelToolId = "channel-parallel";
 export type RangeMeasureType = "price" | "time" | "price-time";
 export type RangeMeasureToolId = `measure-${RangeMeasureType}`;
 export type FibonacciToolId = "fibonacci";
@@ -53,6 +58,7 @@ export type ShapeToolId = "shape-rectangle" | "shape-ellipse";
 export type FreehandToolId = "pen" | "highlighter";
 
 export type DrawingKind =
+  | "channel"
   | "range-measure"
   | "line"
   | "axis-line"
@@ -65,6 +71,7 @@ export type DrawingKind =
   | "highlighter";
 
 export type DrawingHitType =
+  | "channel"
   | "range-measure"
   | "line"
   | "axis-line"
@@ -288,6 +295,8 @@ export interface SavedLineDrawing extends SavedDrawingBase<"line"> {
   dataPoints?: DrawingDataPoint[];
   color?: string;
   lineWidth?: number;
+  /** Paint an arrowhead at the second anchor. Only segments carry one. */
+  arrowEnd?: boolean;
 }
 
 export interface SavedAxisLineDrawing extends SavedDrawingBase<"axis-line"> {
@@ -295,6 +304,18 @@ export interface SavedAxisLineDrawing extends SavedDrawingBase<"axis-line"> {
   dataPoint?: DrawingDataPoint;
   color?: string;
   lineWidth?: number;
+}
+
+/**
+ * Parallel channel: anchors 0 and 1 define the baseline; anchor 2 is a point the
+ * parallel line passes through. The parallel offset is derived in screen space
+ * at paint time, so the lines stay visually parallel on linear and log scales.
+ */
+export interface SavedChannelDrawing extends SavedDrawingBase<"channel"> {
+  dataPoints: DrawingDataPoint[];
+  color?: string;
+  lineWidth?: number;
+  fillOpacity?: number;
 }
 
 export interface SavedAngleDrawing extends SavedDrawingBase<"angle-measure"> {
@@ -373,6 +394,14 @@ export interface SavedShapeDrawing extends SavedDrawingBase<"shape"> {
   fillColor?: string;
   fillOpacity?: number;
   lineStyle?: ShapeLineStyle;
+  /** Rectangle zone: extend the right edge to the pane edge (geometry). */
+  extendRight?: boolean;
+  /** Rectangle zone: dashed line at the mid price. */
+  midline?: boolean;
+  /** Rectangle zone: show top and bottom prices at the right edge. */
+  priceLabels?: boolean;
+  /** Rectangle zone: short name shown inside the top-left corner. */
+  label?: string;
 }
 
 export type SavedFreehandDrawing = SavedDrawingBase<"freehand"> & SavedFreehandPayload & {
@@ -389,6 +418,7 @@ export type SavedHighlighterDrawing = SavedDrawingBase<"highlighter"> & SavedFre
 };
 
 export type SavedDrawing =
+  | SavedChannelDrawing
   | SavedRangeMeasureDrawing
   | SavedLineDrawing
   | SavedAxisLineDrawing

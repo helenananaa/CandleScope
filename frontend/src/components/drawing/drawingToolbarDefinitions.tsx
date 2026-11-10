@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import type {
+  ArrowToolId,
   BasicLineToolId,
+  ChannelToolId,
   RangeMeasureToolId,
   FreehandToolId,
   PassiveCursorToolId,
@@ -17,6 +19,8 @@ export interface ToolbarVariant<TId extends string = string> {
 }
 
 export type LineToolbarToolId = BasicLineToolId
+  | ArrowToolId
+  | ChannelToolId
   | RangeMeasureToolId
   | "line-horizontal"
   | "line-vertical"
@@ -99,6 +103,22 @@ const SegmentIcon = (
     <line x1="5" y1="19" x2="19" y2="5" />
     <circle cx="5" cy="19" r="2" fill="currentColor" />
     <circle cx="19" cy="5" r="2" fill="currentColor" />
+  </svg>
+);
+
+const ArrowIcon = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="5" y1="19" x2="17" y2="7" />
+    <path d="M19 5l-2 7.5l-5.5-5.5z" fill="currentColor" />
+  </svg>
+);
+
+const ParallelChannelIcon = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 14l14-9v8L3 22z" fill="currentColor" stroke="none" opacity="0.18" />
+    <line x1="3" y1="14" x2="17" y2="5" />
+    <line x1="7" y1="19" x2="21" y2="10" />
+    <line x1="5" y1="16.5" x2="19" y2="7.5" strokeDasharray="2 2.5" opacity="0.6" />
   </svg>
 );
 
@@ -377,6 +397,7 @@ const LINE_VARIANTS: ToolbarVariant<LineToolbarToolId>[] = [
   { id: "line-segment", label: "Segment", icon: SegmentIcon },
   { id: "line-ray", label: "Ray", icon: RayIcon },
   { id: "line-infinite", label: "Infinite line", icon: InfiniteLineIcon },
+  { id: "line-arrow", label: "Arrow", icon: ArrowIcon },
   { id: "line-horizontal", label: "Horizontal line", icon: HorizontalLineIcon },
   { id: "line-vertical", label: "Vertical line", icon: VerticalLineIcon },
   { id: "line-cross", label: "Cross line", icon: CrossLineIcon },
@@ -385,6 +406,12 @@ const LINE_VARIANTS: ToolbarVariant<LineToolbarToolId>[] = [
     label: "Angle",
     description: "Visual angle on the current scale",
     icon: AngleMeasureIcon,
+  },
+  {
+    id: "channel-parallel",
+    label: "Parallel channel",
+    description: "Click the baseline start and end, then click to set the width",
+    icon: ParallelChannelIcon,
   },
   { id: "measure-price", label: "Price range", icon: VerticalLineIcon },
   { id: "measure-time", label: "Time range", icon: HorizontalLineIcon },

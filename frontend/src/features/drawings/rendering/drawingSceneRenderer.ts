@@ -9,6 +9,8 @@ import type {
 } from "./drawingDisplayList.js";
 import { drawAngleSceneEntity } from "./drawingSceneAnglePainter.js";
 import { drawRangeSceneEntity } from "./drawingSceneRangePainter.js";
+import { drawChannelSceneEntity } from "./drawingSceneChannelPainter.js";
+import { arrowHeadScreenGeometry } from "../geometry/drawingToolGeometry.js";
 import { drawFibonacciSceneEntity } from "./drawingSceneFibonacciPainter.js";
 import { drawTextSceneEntity } from "./drawingSceneTextPainter.js";
 import { drawPositionSceneEntity } from "./drawingScenePositionPainter.js";
@@ -66,6 +68,19 @@ function drawLine(
     }
   }
 
+  // Geometry is computed in CSS px so the head keeps its size at any DPR.
+  const arrowHead = spec.arrowEnd
+    ? arrowHeadScreenGeometry(
+        { x: ax / horizontalPixelRatio, y: ay / verticalPixelRatio },
+        { x: bx / horizontalPixelRatio, y: by / verticalPixelRatio },
+        spec.lineWidthCssPx,
+      )
+    : null;
+  if (arrowHead) {
+    x2 = arrowHead.shaftEnd.x * horizontalPixelRatio;
+    y2 = arrowHead.shaftEnd.y * verticalPixelRatio;
+  }
+
   context.save();
   context.lineCap = "round";
   context.lineJoin = "round";
@@ -76,6 +91,16 @@ function drawLine(
   context.lineTo(x2, y2);
   context.stroke();
 
+  if (arrowHead) {
+    context.fillStyle = spec.strokeColor;
+    context.beginPath();
+    context.moveTo(arrowHead.tip.x * horizontalPixelRatio, arrowHead.tip.y * verticalPixelRatio);
+    context.lineTo(arrowHead.left.x * horizontalPixelRatio, arrowHead.left.y * verticalPixelRatio);
+    context.lineTo(arrowHead.right.x * horizontalPixelRatio, arrowHead.right.y * verticalPixelRatio);
+    context.closePath();
+    context.fill();
+  }
+
   if (spec.drawEndpointDots && !spec.selected) {
     const dotRadius = Math.max(scaledWidth, 3 * minimumRatio);
     context.fillStyle = spec.strokeColor;
@@ -83,9 +108,11 @@ function drawLine(
     context.beginPath();
     context.arc(ax, ay, dotRadius, 0, Math.PI * 2);
     context.fill();
-    context.beginPath();
-    context.arc(bx, by, dotRadius, 0, Math.PI * 2);
-    context.fill();
+    if (!arrowHead) {
+      context.beginPath();
+      context.arc(bx, by, dotRadius, 0, Math.PI * 2);
+      context.fill();
+    }
     context.globalAlpha = 1;
   }
 
@@ -263,22 +290,71 @@ function drawShape(
   const height = Math.abs(secondY - firstY);
   if (width < 0.5 || height < 0.5) return;
   const minimumRatio = Math.min(horizontalPixelRatio, verticalPixelRatio);
+  // An extended zone paints to the pane edge; handles stay on its anchors.
+  const extensionIndex = spec.extensionPointOffset === null
+    ? null
+    : entity.pointOffset + spec.extensionPointOffset + 1;
+  const paintedRight = extensionIndex !== null && finitePoint(list.points, extensionIndex)
+    ? Math.max(left + width, Number(list.points[extensionIndex * 2]) * horizontalPixelRatio)
+    : left + width;
+  const paintedWidth = paintedRight - left;
 
   context.save();
   context.lineCap = "round";
   context.lineJoin = "round";
   if (spec.fillPaintColor !== null) {
     context.fillStyle = spec.fillPaintColor;
-    beginShapePath(context, spec.shapeType, left, top, width, height);
+    beginShapePath(context, spec.shapeType, left, top, paintedWidth, height);
     context.fill();
   }
   context.lineWidth = spec.lineWidthCssPx * minimumRatio;
   context.strokeStyle = spec.strokeColor;
   if (spec.lineStyle === "dashed") context.setLineDash(dashedScratch);
   else if (spec.lineStyle === "dotted") context.setLineDash(dottedScratch);
-  beginShapePath(context, spec.shapeType, left, top, width, height);
+  if (paintedWidth > width) {
+    // The open right side signals that the zone continues past the pane.
+    context.beginPath();
+    context.moveTo(paintedRight, top);
+    context.lineTo(left, top);
+    context.lineTo(left, top + height);
+    context.lineTo(paintedRight, top + height);
+  } else {
+    beginShapePath(context, spec.shapeType, left, top, width, height);
+  }
   context.stroke();
   context.setLineDash(emptyDashScratch);
+  if (spec.midline) {
+    const middleY = top + height / 2;
+    context.save();
+    context.globalAlpha = 0.75;
+    context.lineWidth = Math.max(1, (spec.lineWidthCssPx / 2)) * minimumRatio;
+    context.setLineDash(dashedScratch);
+    context.beginPath();
+    context.moveTo(left, middleY);
+    context.lineTo(paintedRight, middleY);
+    context.stroke();
+    context.restore();
+  }
+  if (spec.label || spec.topPriceText || spec.bottomPriceText) {
+    const fontPx = 11 * minimumRatio;
+    const inset = 4 * minimumRatio;
+    context.font = `${fontPx}px sans-serif`;
+    context.fillStyle = spec.strokeColor;
+    if (spec.label) {
+      context.textAlign = "left";
+      context.textBaseline = "top";
+      context.fillText(spec.label, left + inset * 1.5, top + inset, Math.max(0, paintedWidth - inset * 3));
+    }
+    context.textAlign = "right";
+    if (spec.topPriceText) {
+      context.textBaseline = "bottom";
+      context.fillText(spec.topPriceText, paintedRight - inset, top - inset / 2);
+    }
+    if (spec.bottomPriceText) {
+      context.textBaseline = "top";
+      context.fillText(spec.bottomPriceText, paintedRight - inset, top + height + inset / 2);
+    }
+  }
 
   if (spec.selected) {
     context.strokeStyle = "#3b82f6";
@@ -496,6 +572,8 @@ export class DrawingSceneRenderer implements PrimitivePaneRenderer {
               horizontalPixelRatio,
               verticalPixelRatio,
             );
+          } else if (op === "channel") {
+            drawChannelSceneEntity(scope.context, entity, plan, horizontalPixelRatio, verticalPixelRatio);
           } else if (op === "range-measure") {
             drawRangeSceneEntity(scope.context, entity, plan, horizontalPixelRatio, verticalPixelRatio);
           } else if (op === "angle") {

@@ -394,10 +394,27 @@ export function createDrawingEntityGeometryBounds(
         : explicitUnbounded(axisLineType, point);
       break;
     }
+    case "shape": {
+      const box = dataPointBounds(entity.geometry.dataPoints);
+      // An extended zone runs to the pane edge, so it is horizontally
+      // unbounded but keeps its exact price band for vertical culling.
+      bounds = entity.geometry.extendRight === true && entity.geometry.shapeType !== "ellipse"
+        ? Object.freeze({
+            kind: "unbounded" as const,
+            axis: "horizontal" as const,
+            horizontalDomain: null,
+            minHorizontal: null,
+            maxHorizontal: null,
+            minPrice: box.kind === "bounded" ? box.minPrice : null,
+            maxPrice: box.kind === "bounded" ? box.maxPrice : null,
+          })
+        : box;
+      break;
+    }
+    case "channel":
     case "range-measure":
     case "angle-measure":
     case "fibonacci":
-    case "shape":
       bounds = dataPointBounds(entity.geometry.dataPoints);
       break;
     case "text":

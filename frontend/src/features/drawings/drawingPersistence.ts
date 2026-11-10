@@ -1,4 +1,5 @@
 import { validDrawingIntervals } from "./drawingVisibility.js";
+import { MAX_SHAPE_LABEL_CHARS } from "./drawingModel.js";
 /**
  * drawingStorage.js — Persist chart drawings to localStorage.
  *
@@ -58,6 +59,7 @@ export const MAX_SAVED_FREEHAND_POINTS = 32_768;
 export const MAX_SAVED_FREEHAND_SPANS = 16_384;
 
 const SAVED_DRAWING_TYPES = new Set<DrawingKind>([
+  "channel",
   "range-measure",
   "line",
   "axis-line",
@@ -236,6 +238,19 @@ export function normalizeSavedDrawingItem(item: unknown): SavedDrawing | null {
   const base = savedBase(item);
   const style = savedStyle(item);
   switch (item.type) {
+    case "channel": {
+      const dataPoints = parseDrawingDataPoints(item.dataPoints);
+      if (!dataPoints || dataPoints.length !== 3
+        || dataPoints.some((point) => !Number.isFinite(point.time) || point.logical !== undefined)) return null;
+      const fillOpacity = optionalFiniteNumber(item, "fillOpacity", 0, 1);
+      return {
+        type: "channel",
+        ...base,
+        ...style,
+        dataPoints,
+        ...(fillOpacity === undefined ? {} : { fillOpacity }),
+      };
+    }
     case "range-measure": {
       const dataPoints = parseDrawingDataPoints(item.dataPoints);
       if (!dataPoints || dataPoints.length !== 2
@@ -251,12 +266,14 @@ export function normalizeSavedDrawingItem(item: unknown): SavedDrawing | null {
       const lineType = BASIC_LINE_TYPES.has(item.lineType as BasicLineToolId)
         ? item.lineType as BasicLineToolId
         : undefined;
+      const arrowEnd = optionalBoolean(item, "arrowEnd");
       return {
         type: "line",
         ...base,
         ...style,
         ...(lineType === undefined ? {} : { lineType }),
         ...(dataPoints === undefined ? {} : { dataPoints }),
+        ...(arrowEnd === undefined ? {} : { arrowEnd }),
       };
     }
     case "axis-line": {
@@ -389,6 +406,12 @@ export function normalizeSavedDrawingItem(item: unknown): SavedDrawing | null {
         : undefined;
       const fillColor = optionalString(item, "fillColor", 128);
       const fillOpacity = optionalFiniteNumber(item, "fillOpacity", 0, 1);
+      const extendRight = optionalBoolean(item, "extendRight");
+      const midline = optionalBoolean(item, "midline");
+      const priceLabels = optionalBoolean(item, "priceLabels");
+      const label = typeof item.label === "string" && item.label.length <= MAX_SHAPE_LABEL_CHARS
+        ? item.label
+        : undefined;
       return {
         type: "shape",
         ...base,
@@ -398,6 +421,10 @@ export function normalizeSavedDrawingItem(item: unknown): SavedDrawing | null {
         ...(fillColor === undefined ? {} : { fillColor }),
         ...(fillOpacity === undefined ? {} : { fillOpacity }),
         ...(lineStyle === undefined ? {} : { lineStyle }),
+        ...(extendRight === undefined ? {} : { extendRight }),
+        ...(midline === undefined ? {} : { midline }),
+        ...(priceLabels === undefined ? {} : { priceLabels }),
+        ...(label === undefined ? {} : { label }),
       };
     }
     default:
@@ -627,8 +654,9 @@ function serializePrimitiveFields(prim: PersistableDrawingPrimitive): UnknownRec
 }
 
 const STRICT_SAVED_FIELDS: Readonly<Record<DrawingKind, readonly string[]>> = Object.freeze({
+  channel: Object.freeze(["id", "dataPoints", "color", "lineWidth", "fillOpacity"]),
   "range-measure": Object.freeze(["id", "measureType", "dataPoints", "color", "lineWidth"]),
-  line: Object.freeze(["id", "lineType", "dataPoints", "color", "lineWidth"]),
+  line: Object.freeze(["id", "lineType", "dataPoints", "color", "lineWidth", "arrowEnd"]),
   "axis-line": Object.freeze(["id", "axisLineType", "dataPoint", "color", "lineWidth"]),
   "angle-measure": Object.freeze(["id", "dataPoints", "color", "lineWidth"]),
   text: Object.freeze([
@@ -642,7 +670,7 @@ const STRICT_SAVED_FIELDS: Readonly<Record<DrawingKind, readonly string[]>> = Ob
   ]),
   shape: Object.freeze([
     "id", "shapeType", "dataPoints", "color", "lineWidth", "fillColor", "fillOpacity",
-    "lineStyle",
+    "lineStyle", "extendRight", "midline", "priceLabels", "label",
   ]),
   freehand: Object.freeze(["id", "dataPoints", "stroke", "color", "lineWidth"]),
   highlighter: Object.freeze([

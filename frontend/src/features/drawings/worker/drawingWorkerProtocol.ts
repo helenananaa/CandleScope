@@ -556,6 +556,7 @@ function isDrawingKind(value: unknown): value is DrawingKind {
     || value === "axis-line"
     || value === "angle-measure"
     || value === "range-measure"
+    || value === "channel"
     || value === "text"
     || value === "fibonacci"
     || value === "position"

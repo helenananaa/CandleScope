@@ -12,6 +12,7 @@ import { ColorControl as CommitColorInput, WidthControl, LineStyleControl, Style
 import DrawingCoordinateInputs from "./DrawingCoordinateInputs.js";
 import DrawingStyleTemplates from "./DrawingStyleTemplates.js";
 import { coordinateDraft, parseCoordinateDraft, sameCoordinates, type CoordinateDraft, type DrawingCoordinate } from "./drawingProperties.js";
+import { MAX_SHAPE_LABEL_CHARS } from "./drawingModel.js";
 
 function CommitNumberInput({ value, min, max, step, onCommit }: {
   value: number;
@@ -101,6 +102,9 @@ function DrawingStyleEditor({ drawing: selected, onPatch: commitPatch, onSave, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openRequestRevision]);
   const isShape = drawing.type === "rectangle" || drawing.type === "ellipse" || drawing.type === "shape";
+  const isZone = drawing.type === "rectangle";
+  const isChannel = drawing.type === "channel";
+  const canToggleArrow = drawing.type === "line-segment" || drawing.type === "line-arrow";
   const isFib = drawing.type === "fibonacci";
   const isPosition = drawing.type === "position" || drawing.type === "position-long" || drawing.type === "position-short";
   const hasStroke = typeof drawing.color === "string" && typeof drawing.lineWidth === "number";
@@ -200,6 +204,32 @@ function DrawingStyleEditor({ drawing: selected, onPatch: commitPatch, onSave, o
         </label>
         <div className="drawing-property-row"><span>{t("drawing.settings.lineStyle")}</span><LineStyleControl value={drawing.lineStyle ?? "solid"} onCommit={(lineStyle) => onPatch({ lineStyle })} /></div>
       </>}
+      {isChannel && <label>{t("drawing.editor.opacity")}
+        <input type="range" min="0" max="100" step="1"
+          value={Math.round((drawing.fillOpacity ?? 0) * 100)}
+          onChange={(event) => onPatch({ fillOpacity: Number(event.target.value) / 100 })} />
+        <output>{Math.round((drawing.fillOpacity ?? 0) * 100)}%</output>
+      </label>}
+      {canToggleArrow && <label className="drawing-property-check">
+        <span>{t("drawing.settings.arrowEnd")}</span>
+        <input type="checkbox" checked={drawing.arrowEnd === true}
+          onChange={(event) => onPatch({ arrowEnd: event.target.checked })} />
+      </label>}
+      {isZone && <fieldset className="drawing-visibility-fields drawing-zone-fields">
+        <legend>{t("drawing.settings.zone")}</legend>
+        <label><input type="checkbox" checked={drawing.extendRight === true}
+          onChange={(event) => onPatch({ extendRight: event.target.checked })} />{t("drawing.settings.extendRight")}</label>
+        <label><input type="checkbox" checked={drawing.midline === true}
+          onChange={(event) => onPatch({ midline: event.target.checked })} />{t("drawing.settings.midline")}</label>
+        <label><input type="checkbox" checked={drawing.priceLabels === true}
+          onChange={(event) => onPatch({ priceLabels: event.target.checked })} />{t("drawing.settings.priceLabels")}</label>
+        <label className="drawing-zone-name">{t("drawing.settings.zoneName")}
+          <input type="text" maxLength={MAX_SHAPE_LABEL_CHARS} value={drawing.label ?? ""}
+            placeholder={t("drawing.settings.zoneNamePlaceholder")}
+            onChange={(event) => onPatch({ label: event.target.value })}
+            onKeyDown={(event) => event.stopPropagation()} />
+        </label>
+      </fieldset>}
       {drawing.type === "highlighter" && <label>{t("drawing.editor.opacity")}
         <input type="range" min="5" max="100" step="5"
           value={Math.round((drawing.opacity ?? 0.35) * 100)}

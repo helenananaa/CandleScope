@@ -43,6 +43,8 @@ import { drawingCommandsForLegacyPrimitive } from "./core/drawingDocumentRuntime
 import type { DrawingCommand } from "./core/drawingCommands.js";
 import type {
   AngleToolId,
+  ArrowToolId,
+  ChannelToolId,
   RangeMeasureToolId,
   AxisLineToolId,
   DrawingAnchor,
@@ -65,7 +67,26 @@ import type {
   BasicLineToolId,
 } from "./drawingTypes.js";
 
-type TwoPointCreationTool = RangeMeasureToolId | BasicLineToolId | AngleToolId | FibonacciToolId | ShapeToolId;
+type TwoPointCreationTool = RangeMeasureToolId
+  | BasicLineToolId
+  | ArrowToolId
+  | ChannelToolId
+  | AngleToolId
+  | FibonacciToolId
+  | ShapeToolId;
+type LegacyTwoPointTool = BasicLineToolId | AngleToolId | FibonacciToolId | ShapeToolId;
+
+/**
+ * Rulers, arrows and channels exist only on the document/overlay path; the
+ * rollback primitive renderer cannot draw them, so legacy creation declines.
+ */
+function isLegacyTwoPointTool(tool: TwoPointCreationTool): tool is LegacyTwoPointTool {
+  return tool !== "measure-price"
+    && tool !== "measure-time"
+    && tool !== "measure-price-time"
+    && tool !== "line-arrow"
+    && tool !== "channel-parallel";
+}
 type TwoPointDrawingPrimitive = LineDrawingPrimitive
   | AngleMeasurementPrimitive
   | FibonacciDrawingPrimitive
@@ -513,7 +534,8 @@ export function commitTwoPointDrawing({
   fibLevelsRef,
   fibInvertedRef,
 }: CommitTwoPointDrawingOptions): boolean {
-  if (tool === "measure-price" || tool === "measure-time" || tool === "measure-price-time") return false;
+  // Overlay-only tools: the rollback primitive renderer has no painter for them.
+  if (!isLegacyTwoPointTool(tool)) return false;
   const isShapeDrawingTool = SHAPE_TOOL_IDS.has(tool);
   const shapeType = shapeTypeFromTool(tool);
 
@@ -651,7 +673,7 @@ export function beginTwoPointDrawing({
   fibLevelsRef,
   fibInvertedRef,
 }: BeginTwoPointDrawingOptions): boolean {
-  if (tool === "measure-price" || tool === "measure-time" || tool === "measure-price-time") return false;
+  if (!isLegacyTwoPointTool(tool)) return false;
   consumePointerEvent(e);
   const isShapeDrawingTool = SHAPE_TOOL_IDS.has(tool);
   const shapeType = shapeTypeFromTool(tool);

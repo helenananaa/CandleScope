@@ -128,6 +128,7 @@ function lineEntity(lineType: "line-segment" | "line-ray" | "line-infinite"): Pr
       mainPointOffset: 0,
       anchorPointOffset: 2,
       drawEndpointDots: lineType === "line-segment",
+      arrowEnd: false,
     },
   };
 }
@@ -220,6 +221,11 @@ test("renderer consumes explicit ops in document order and uses native ellipse p
       lineStyle: "dashed",
       selected: false,
       boxPointOffset: 0,
+      extensionPointOffset: null,
+      midline: false,
+      label: null,
+      topPriceText: null,
+      bottomPriceText: null,
     },
   };
   const renderer = new DrawingSceneRenderer();
