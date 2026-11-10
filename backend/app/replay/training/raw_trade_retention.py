@@ -1,4 +1,4 @@
-"""Read-only retention preview for committed replay trade days."""
+"""Read-only retention preview and execution preflight for committed replay trade days."""
 
 from __future__ import annotations
 
@@ -8,13 +8,15 @@ import os
 import sqlite3
 import time
 from collections import Counter
-from contextlib import closing
+from contextlib import AbstractContextManager, closing
 from itertools import islice
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from app.core.executors import run_archive
 from app.data_engine.storage.raw_trade_archive import RawAggTradeDatasetRef
+from app.data_engine.storage.raw_trade_retention_lock import partition_lease
 from app.replay.errors import ReplayDomainError
 from app.replay.history_archive import _atomic_write_json
 from app.replay.storage.sqlite_store import ReplaySQLiteStore
@@ -81,13 +83,25 @@ def _register_store(directory: Path, database: Path, store_id: str) -> None:
                 os.close(descriptor)
 
 
+def _registry_lease(directory: Path, *, shared: bool) -> AbstractContextManager[None]:
+    return partition_lease(
+        directory.parent / ".trade-reference-store.lock", shared=shared, create=True,
+        timeout_seconds=5 if shared else 0,
+    )
+
+
+def _register_store_with_lease(directory: Path, database: Path, store_id: str) -> None:
+    with _registry_lease(directory, shared=True):
+        _register_store(directory, database, store_id)
+
+
 async def register_store(store: ReplaySQLiteStore, archive: object) -> None:
     directory = _registry(archive)
     if directory is None:
         return
     try:
         store_id = await store.run_extension_write(_ensure_store_identity)
-        await run_archive(_register_store, directory, store.path, store_id)
+        await run_archive(_register_store_with_lease, directory, store.path, store_id)
     except (OSError, ReplayDomainError, sqlite3.Error):
         # Legacy/read-only archives retain local playback; preview reports the
         # missing registration, and unmanaged data remains protected.
@@ -120,7 +134,9 @@ def _read_registration(path: Path) -> tuple[Path, str]:
     return database, store_id
 
 
-def _foreign_references(database: Path, store_id: str) -> tuple[dict[str, int], bool]:
+def _read_store_references(
+    database: Path, store_id: str | None, *, max_references: int, max_objects: int,
+) -> tuple[dict[str, int], bool, str | None]:
     if database.is_symlink() or not database.is_file():
         raise OSError("registered replay reference store is unavailable")
     with closing(sqlite3.connect(f"{database.as_uri()}?mode=ro", uri=True, timeout=0.1)) as connection:
@@ -130,9 +146,11 @@ def _foreign_references(database: Path, store_id: str) -> tuple[dict[str, int], 
         connection.execute("BEGIN")
         deadline = time.monotonic() + 0.25
         connection.set_progress_handler(lambda: int(time.monotonic() >= deadline), 1_000)
-        if _store_identity(connection) != store_id:
+        identity = _store_identity(connection)
+        if store_id is not None and identity != store_id:
             raise ValueError("registered replay reference store identity changed")
-        return _saved_partitions(connection, max_references=256, max_objects=4096)
+        saved, complete = _saved_partitions(connection, max_references=max_references, max_objects=max_objects)
+        return saved, complete, identity
 
 
 def _registered_references(
@@ -156,7 +174,9 @@ def _registered_references(
                     raise ValueError("registered local replay store identity changed")
                 present_local = True
                 continue
-            refs, foreign_complete = _foreign_references(registered, store_id)
+            refs, foreign_complete, _ = _read_store_references(
+                registered, store_id, max_references=256, max_objects=4096,
+            )
         except (OSError, OverflowError, sqlite3.Error, ValueError):
             unavailable += 1
             complete = False
@@ -250,12 +270,7 @@ async def preview(
         saved = dict(Counter(saved) + Counter(external))
         complete = complete and registered_complete
     for item in report["items"]:
-        reference_count = saved.get(item.pop("partition_key"), 0)
-        item["saved_reference_count"] = reference_count
-        if reference_count:
-            item["protection_reasons"].append("SAVED_REPLAY_REFERENCE")
-        if not complete:
-            item["protection_reasons"].append("SAVED_REFERENCE_SCAN_INCOMPLETE")
+        _annotate_references(item, saved, complete)
     return {
         **result,
         **report,
@@ -265,3 +280,55 @@ async def preview(
         "unavailable_reference_store_count": unavailable,
         "observed_bytes": sum(item["byte_size"] for item in report["items"]),
     }
+
+
+def _annotate_references(item: dict[str, Any], saved: dict[str, int], complete: bool) -> None:
+    reference_count = saved.get(item.pop("partition_key"), 0)
+    item["saved_reference_count"] = reference_count
+    if reference_count:
+        item["protection_reasons"].append("SAVED_REPLAY_REFERENCE")
+    if not complete:
+        item["protection_reasons"].append("SAVED_REFERENCE_SCAN_INCOMPLETE")
+
+
+async def recheck(
+    store: ReplaySQLiteStore, archive: object, *, day_id: str, limit: int,
+) -> dict[str, object]:
+    directory = _registry(archive)
+    guard = getattr(archive, "verified_retention_recheck", None)
+    result = {
+        "protocol": "replay.raw-trade-retention.recheck.v1",
+        "day_id": day_id,
+        "policy_state": "UNMANAGED",
+        "estimated_reclaim_bytes": 0,
+        "saved_reference_scan_complete": False,
+        "item": None,
+    }
+    if directory is None or not callable(guard):
+        return {**result, "status": "UNAVAILABLE"}
+
+    def inspect() -> dict[str, object]:
+        # The partition lease excludes session creation until this scan returns.
+        # Serialize registry publication as well, since an older profile can
+        # register pre-existing saved references without pinning the day.
+        with guard(day_id=day_id, limit=limit) as (status, item):
+            if item is None:
+                return {**result, "status": status}
+            try:
+                with _registry_lease(directory, shared=False):
+                    saved, complete, local_id = _read_store_references(
+                        store.path, None, max_references=_MAX_REFERENCES, max_objects=_MAX_REFERENCED_OBJECTS,
+                    )
+                    external, registered_complete, scanned, unavailable = _registered_references(
+                        directory, store.path, local_id,
+                    )
+            except (OSError, OverflowError, sqlite3.Error, ValueError):
+                return {**result, "status": "SAVED_REFERENCE_SCAN_UNAVAILABLE"}
+            complete = complete and registered_complete
+            _annotate_references(item, dict(Counter(saved) + Counter(external)), complete)
+            return {
+                **result, "status": status, "item": item, "saved_reference_scan_complete": complete,
+                "saved_reference_store_count": 1 + scanned, "unavailable_reference_store_count": unavailable,
+            }
+
+    return await run_archive(inspect)

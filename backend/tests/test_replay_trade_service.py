@@ -244,6 +244,88 @@ async def test_retention_preview_reads_saved_refs_across_profiles(tmp_path):
         await second.shutdown(step_timeout=1.0)
 
 
+async def test_retention_rechecks_stale_preview_against_other_profile(tmp_path: Path) -> None:
+    root = tmp_path / "archive"
+    verified_trade_archive(root)
+    receipt, = root.rglob("_verified_import.json")
+    originals = {path: path.read_bytes() for path in receipt.parent.iterdir() if path.is_file()}
+    first_db = tmp_path / "first" / "replay.db"
+    first = await _service(first_db, OfficialAggTradeArchive(root, defer_refresh=True), prefix="first")
+    second = await _service(
+        tmp_path / "second" / "replay.db",
+        OfficialAggTradeArchive(root, defer_refresh=True),
+        prefix="second",
+    )
+    app = FastAPI()
+    app.state.replay_service = second
+    app.include_router(router, prefix="/api/v1")
+    uri = "/api/v1/replay/runs/storage/raw-trades/recheck"
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            preview = await second.training.raw_trade_retention_preview(limit=1)
+            candidate, = preview["items"]
+            assert candidate["saved_reference_count"] == 0
+            day_id = candidate["day_id"]
+
+            async def inspect():
+                response = await client.get(uri, params={"day_id": day_id, "limit": 1})
+                assert response.status_code == 200
+                assert str(tmp_path) not in response.text
+                report = response.json()
+                assert report["estimated_reclaim_bytes"] == 0
+                return report
+
+            assert (await client.get(uri, params={"day_id": "not-a-receipt"})).status_code == 422
+            baseline = await inspect()
+            assert baseline["status"] == "RECHECKED"
+            assert baseline["saved_reference_scan_complete"]
+            assert baseline["item"]["protection_reasons"] == ["UNMANAGED_RETENTION_POLICY"]
+
+            config = trade_replay_config()
+            with trade_archive_day_acquisition(
+                second.raw_trade_archive.cache, exchange=config.exchange, market_type=config.market_type,
+                symbol=config.symbol, day=date(2026, 6, 1),
+            ):
+                assert (await inspect())["status"] == "DAY_ACQUISITION_IN_PROGRESS"
+
+            created = await first.create_session(config)
+            blocked = await inspect()
+            assert blocked["status"] == "PARTITION_RETENTION_LEASE"
+            assert blocked["item"] is None
+            await first.release_session_to_hub(str(created["session_id"]))
+            await first.shutdown(step_timeout=1.0)
+
+            saved = await inspect()
+            assert saved["status"] == "RECHECKED"
+            assert saved["saved_reference_scan_complete"]
+            assert saved["saved_reference_store_count"] == 2
+            assert saved["item"]["saved_reference_count"] == 1
+            assert saved["item"]["active_pin_count"] == 0
+            assert "SAVED_REPLAY_REFERENCE" in saved["item"]["protection_reasons"]
+
+            parked = first_db.with_suffix(".parked")
+            first_db.rename(parked)
+            try:
+                unavailable = await inspect()
+                assert not unavailable["saved_reference_scan_complete"]
+                assert unavailable["unavailable_reference_store_count"] == 1
+                assert "SAVED_REFERENCE_SCAN_INCOMPLETE" in unavailable["item"]["protection_reasons"]
+            finally:
+                parked.replace(first_db)
+
+            assert all(path.read_bytes() == body for path, body in originals.items())
+            try:
+                receipt.write_bytes(originals[receipt] + b"\n")
+                stale = await inspect()
+                assert stale["status"] == "STALE_OR_OUTSIDE_SCAN"
+                assert stale["item"] is None
+            finally:
+                receipt.write_bytes(originals[receipt])
+    finally:
+        await first.shutdown(step_timeout=1.0)
+        await second.shutdown(step_timeout=1.0)
+
+
 async def test_production_catalog_selects_a_local_day_before_official_discovery(
     tmp_path: Path,
 ) -> None:

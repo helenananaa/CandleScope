@@ -104,6 +104,7 @@ from .multitrack import (
 from .storage import TrainingRunStore
 from .storage_governance import ReplayStorageGovernance
 from .raw_trade_retention import preview as preview_raw_trade_retention
+from .raw_trade_retention import recheck as recheck_raw_trade_retention
 from .segments import (
     ReplaySegmentManager,
     resolve_history_policy,
@@ -802,6 +803,11 @@ class TrainingRunService:
     async def raw_trade_retention_preview(self, *, limit: int) -> dict[str, object]:
         return await preview_raw_trade_retention(
             self.replay_service.store, self.replay_service.raw_trade_archive, limit=limit,
+        )
+
+    async def raw_trade_retention_recheck(self, *, day_id: str, limit: int) -> dict[str, object]:
+        return await recheck_raw_trade_retention(
+            self.replay_service.store, self.replay_service.raw_trade_archive, day_id=day_id, limit=limit,
         )
 
     async def account_history_gc_plan(

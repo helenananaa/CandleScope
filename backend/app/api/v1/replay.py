@@ -478,6 +478,15 @@ async def replay_v2_raw_trade_retention_preview(
     return await _training_service(request).raw_trade_retention_preview(limit=limit)
 
 
+@router.get("/runs/storage/raw-trades/recheck")
+async def replay_v2_raw_trade_retention_recheck(
+    request: Request,
+    day_id: str = Query(pattern=r"^sha256:[0-9a-f]{64}$", min_length=71, max_length=71),
+    limit: int = Query(default=100, ge=1, le=200),
+) -> dict[str, object]:
+    return await _training_service(request).raw_trade_retention_recheck(day_id=day_id, limit=limit)
+
+
 @router.post("/runs/{run_id}/account-audit")
 async def audit_replay_v2_account(
     run_id: str,

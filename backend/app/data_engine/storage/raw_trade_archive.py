@@ -15,8 +15,8 @@ import json
 import os
 import time
 from collections import Counter
-from collections.abc import Iterable
-from contextlib import ExitStack
+from collections.abc import Iterable, Iterator
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from itertools import islice
@@ -32,6 +32,7 @@ from .raw_trade_retention_lock import ReadOnlyLeaseDirectory, partition_lease
 
 
 ARCHIVE_SCHEMA_VERSION = "1"
+_RETENTION_OBJECT_LIMIT = 4_096
 RAW_AGG_TRADE_COLUMNS = (
     "exchange",
     "market_type",
@@ -1184,6 +1185,44 @@ class ParquetRawAggTradeArchive:
         except BlockingIOError:
             return True
 
+    def _verified_retention_item(
+        self, receipt_path: Path, receipt: dict[str, object], *, observe_locks: bool = True,
+    ) -> dict[str, Any]:
+        partition = receipt_path.parent
+        metadata = receipt["metadata"]
+        objects = receipt["objects"]
+        assert isinstance(metadata, Mapping) and isinstance(objects, list)
+        identity = (str(metadata["exchange"]), str(metadata["market_type"]), str(metadata["symbol"]))
+        day = str(metadata["date"])
+        if self._partition_path((*identity, day)) != partition:
+            raise RuntimeError("verified receipt does not match its partition")
+        self._validate_verified_receipt_objects(partition, receipt, verify_parquet=False)
+        byte_size = receipt_path.stat().st_size
+        for item in objects:
+            path = self._resolve_object_path(str(item["object_id"]))
+            byte_size += path.stat().st_size + _manifest_path(path).stat().st_size
+        partition_key = partition.relative_to(self.root).as_posix()
+        reasons = ["UNMANAGED_RETENTION_POLICY"]
+        if (partition / "_verified_import_conflict.json").exists():
+            reasons.append("QUARANTINED_DAY")
+        lease_busy = False
+        if observe_locks:
+            lease_busy = self._retention_lease_busy(partition_key)
+            if lease_busy:
+                reasons.append("PARTITION_RETENTION_LEASE")
+            day_start = int(datetime.fromisoformat(day).replace(tzinfo=timezone.utc).timestamp() * 1000)
+            if self.verified_day_acquisition_pending(identity, (day_start, day_start)):
+                reasons.append("DAY_ACQUISITION_IN_PROGRESS")
+        return {
+            "partition_key": partition_key,
+            "day_id": "sha256:" + _file_sha256(receipt_path),
+            "identity": dict(zip(("exchange", "market_type", "symbol"), identity)),
+            "object_count": len(objects),
+            "byte_size": byte_size,
+            "retention_lease_busy": lease_busy,
+            "protection_reasons": reasons,
+        }
+
     def verified_retention_inventory(self, *, limit: int) -> dict[str, Any]:
         """Inspect committed day objects without refreshing access or opening their bodies."""
         with self._write_lock:
@@ -1191,56 +1230,78 @@ class ParquetRawAggTradeArchive:
         paths = list(islice(self._verified_receipt_paths(), limit + 1))
         items: list[dict[str, object]] = []
         unreadable = 0
-        objects_left = 4_096
+        objects_left = _RETENTION_OBJECT_LIMIT
         truncated = len(paths) > limit
         for receipt_path in sorted(paths[:limit]):
             try:
-                partition = receipt_path.parent
                 receipt = self._read_verified_receipt(receipt_path)
-                metadata = receipt["metadata"]
                 objects = receipt["objects"]
-                assert isinstance(metadata, Mapping) and isinstance(objects, list)
+                assert isinstance(objects, list)
                 if len(objects) > objects_left:
                     truncated = True
                     continue
                 objects_left -= len(objects)
-                identity = (str(metadata["exchange"]), str(metadata["market_type"]), str(metadata["symbol"]))
-                day = str(metadata["date"])
-                if self._partition_path((*identity, day)) != partition:
-                    raise RuntimeError("verified receipt does not match its partition")
-                self._validate_verified_receipt_objects(partition, receipt, verify_parquet=False)
-                byte_size = receipt_path.stat().st_size
-                for item in objects:
-                    path = self._resolve_object_path(str(item["object_id"]))
-                    byte_size += path.stat().st_size + _manifest_path(path).stat().st_size
-                partition_key = partition.relative_to(self.root).as_posix()
-                # Bind the opaque identifier to the receipt rather than exposing a date or locator.
-                day_id = "sha256:" + _file_sha256(receipt_path)
-                day_start = int(datetime.fromisoformat(day).replace(tzinfo=timezone.utc).timestamp() * 1000)
-                reasons = ["UNMANAGED_RETENTION_POLICY"]
-                if (partition / "_verified_import_conflict.json").exists():
-                    reasons.append("QUARANTINED_DAY")
-                if pins[partition_key]:
-                    reasons.append("ACTIVE_DATASET_PIN")
-                lease_busy = self._retention_lease_busy(partition_key)
-                if lease_busy:
-                    reasons.append("PARTITION_RETENTION_LEASE")
-                if self.verified_day_acquisition_pending(identity, (day_start, day_start)):
-                    reasons.append("DAY_ACQUISITION_IN_PROGRESS")
+                item = self._verified_retention_item(receipt_path, receipt)
             except (KeyError, OSError, OverflowError, RuntimeError, TypeError, ValueError):
                 unreadable += 1
                 continue
-            items.append({
-                "partition_key": partition_key,
-                "day_id": day_id,
-                "identity": dict(zip(("exchange", "market_type", "symbol"), identity)),
-                "object_count": len(objects),
-                "byte_size": byte_size,
-                "active_pin_count": pins[partition_key],
-                "retention_lease_busy": lease_busy,
-                "protection_reasons": reasons,
-            })
+            count = pins[item["partition_key"]]
+            if count:
+                item["protection_reasons"].insert(1, "ACTIVE_DATASET_PIN")
+            item["active_pin_count"] = count
+            items.append(item)
         return {"items": items, "unreadable_day_count": unreadable, "truncated": truncated}
+
+    @contextmanager
+    def verified_retention_recheck(
+        self, *, day_id: str, limit: int,
+    ) -> Iterator[tuple[str, dict[str, Any] | None]]:
+        """Revalidate a preview candidate while day publishers and partition readers are fenced."""
+        inventory = self.verified_retention_inventory(limit=limit)
+        selected = next((item for item in inventory["items"] if item["day_id"] == day_id), None)
+        if selected is None:
+            yield "STALE_OR_OUTSIDE_SCAN", None
+            return
+        partition_key = selected["partition_key"]
+        partition = self.root / partition_key
+        day = partition.name.removeprefix("date=")
+        identity = selected["identity"]
+        acquisition = self.verified_day_acquisition_lock_path(
+            (identity["exchange"], identity["market_type"], identity["symbol"]), day,
+        )
+        status = "DAY_ACQUISITION_IN_PROGRESS"
+        item = None
+        with ExitStack() as leases:
+            try:
+                leases.enter_context(partition_lease(acquisition, shared=False, create=True))
+                status = "PARTITION_RETENTION_LEASE"
+                leases.enter_context(partition_lease(
+                    self.retention_lease_path(partition_key), shared=False, create=True,
+                ))
+            except BlockingIOError:
+                pass
+            except OSError:
+                status = "LEASE_UNAVAILABLE"
+            else:
+                try:
+                    receipt_path = partition / "_verified_import.json"
+                    receipt = self._read_verified_receipt(receipt_path)
+                    objects = receipt["objects"]
+                    assert isinstance(objects, list)
+                    if len(objects) <= _RETENTION_OBJECT_LIMIT:
+                        item = self._verified_retention_item(receipt_path, receipt, observe_locks=False)
+                except (KeyError, OSError, OverflowError, RuntimeError, TypeError, ValueError):
+                    item = None
+                if item is not None and item["day_id"] == day_id:
+                    status = "RECHECKED"
+                    with self._write_lock:
+                        count = sum(partition_key in pin.partitions for pin in self._pins.values())
+                    item["active_pin_count"] = count
+                    if count:
+                        item["protection_reasons"].append("ACTIVE_DATASET_PIN")
+                else:
+                    status, item = "STALE_OR_OUTSIDE_SCAN", None
+            yield status, item
 
     def list_verified_identities(self) -> list[dict[str, str]]:
         identities: dict[tuple[str, str, str], dict[str, str]] = {}

@@ -8,6 +8,7 @@ import threading
 import time
 import urllib.request
 import uuid
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -1337,6 +1338,11 @@ class RemoteRawAggTradeArchive:
 
     def verified_retention_inventory(self, *, limit: int) -> dict[str, Any]:
         return self.cache.verified_retention_inventory(limit=limit)
+
+    def verified_retention_recheck(
+        self, *, day_id: str, limit: int,
+    ) -> AbstractContextManager[tuple[str, dict[str, Any] | None]]:
+        return self.cache.verified_retention_recheck(day_id=day_id, limit=limit)
 
     def scan_range(self, **kwargs: Any) -> list[dict[str, Any]]:
         return self.cache.scan_range(**kwargs)
