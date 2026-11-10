@@ -72,6 +72,7 @@ import "../features/plugins/pluginTrustUx.css";
 import WorkspaceCellLinkSelect from "../features/chart-workspace/WorkspaceCellLinkSelect.js";
 
 const ReplayLauncherDialog = lazy(loadReplayLauncherDialog);
+const ResearchReturnDialog = lazy(() => import("../features/strategy-research/ResearchReturnDialog.js"));
 
 const WorkspacePanel = lazy(loadWorkspacePanel);
 
@@ -540,6 +541,16 @@ function LiveWorkspaceApp() {
   const [bottomPanelHost, setBottomPanelHost] = useState<HTMLElement | null>(null);
   const [statusBarHost, setStatusBarHost] = useState<HTMLElement | null>(null);
   const [strategyPanelOpen, setStrategyPanelOpen] = useState(false);
+  const [researchReturnId, setResearchReturnId] = useState(() => new URLSearchParams(window.location.search).get("research-version"));
+  useEffect(() => window.candlescopeDesktop?.onResearchReturn?.(setResearchReturnId), []);
+  const closeResearchReturn = useCallback(() => {
+    setResearchReturnId(null);
+    const url = new URL(window.location.href); url.searchParams.delete("research-version");
+    window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+  }, []);
+  const appliedResearchReturn = useCallback((cellId: string) => {
+    workspace.actions.setActiveCell(cellId); setStrategyPanelOpen(true); closeResearchReturn();
+  }, [workspace.actions, closeResearchReturn]);
   const portalHosts = useMemo<WorkspacePortalHosts>(() => ({
     topBar: topBarHost,
     drawingToolbar: drawingToolbarHost,
@@ -687,6 +698,8 @@ function LiveWorkspaceApp() {
         statusBar={<div className="workspace-portal-host" ref={setStatusBarHost} />}
       />
       <AlertNotificationCenter onOpenAlerts={requestAlertPanelOpen} />
+      {researchReturnId && <Suspense fallback={null}><ResearchReturnDialog id={researchReturnId} workspace={workspace}
+        onClose={closeResearchReturn} onApplied={appliedResearchReturn} /></Suspense>}
       {featureSurfacesHost && workspacePanelLoaded && createPortal(
         <Suspense fallback={null}>
           <WorkspacePanel

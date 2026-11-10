@@ -1,0 +1,74 @@
+[
+  {
+    "pr": 252,
+    "branch": "codex/continuous-manager-20261104",
+    "base": "codex/continuous-result-projection-20261104",
+    "before": "287b990fd5382ea815c66e7f8dffd91c2d9899b9",
+    "source": "80e554cb05a5ca6a215aaefc87624a378200e0a7",
+    "frontendPackagesUnchanged": true
+  },
+  {
+    "pr": 253,
+    "branch": "codex/continuous-api-20261104",
+    "base": "codex/continuous-manager-20261104",
+    "before": "3e6b18db44ba09cb8aa2a78dd832e1ae5e95fa86",
+    "source": "c7b5d50d9b5ed65087e18bd31f710aac3fe3f5f9",
+    "frontendPackagesUnchanged": true
+  },
+  {
+    "pr": 254,
+    "branch": "codex/continuous-ui-20261104",
+    "base": "codex/continuous-api-20261104",
+    "before": "1d4f0124df45d8775e56a46f2b9d97bd6aa9e553",
+    "source": "d0bc7afac86beb3fb1c1863baea839d37bcd0504",
+    "frontendPackagesUnchanged": true
+  },
+  {
+    "pr": 255,
+    "branch": "codex/continuous-repair-20261104",
+    "base": "codex/continuous-ui-20261104",
+    "before": "9bae99a822a6bafb337ffc08b81b34f780bcf6a4",
+    "source": "151d4897cb39d3d094d94c740bf913446bcb5a08",
+    "frontendPackagesUnchanged": true
+  },
+  {
+    "pr": 256,
+    "branch": "codex/continuous-repair-worker-20261105",
+    "base": "codex/continuous-repair-20261104",
+    "before": "0af95b5b3a4f4a8d2a856365fe31871cdcbb75d6",
+    "source": "50e1481ec4e71cbd969e51965e6c6ac67f1bad2a",
+    "frontendPackagesUnchanged": true
+  },
+  {
+    "pr": 257,
+    "branch": "codex/continuous-repair-api-20261105",
+    "base": "codex/continuous-repair-worker-20261105",
+    "before": "1baef2f681888fa09a5c4b7cb6835ad6bd67d62d",
+    "source": "d159c590d985fa469d51f5ddc82943b559d0eb43",
+    "frontendPackagesUnchanged": true
+  },
+  {
+    "pr": 258,
+    "branch": "codex/continuous-repair-ui-20261105",
+    "base": "codex/continuous-repair-api-20261105",
+    "before": "ddfbbfb6d3b09c4a7d7f0e10d2769e4d88133a4e",
+    "source": "78a33525d26e166eac20a31c51006e455c8be9ea",
+    "frontendPackagesUnchanged": true
+  },
+  {
+    "pr": 259,
+    "branch": "codex/continuous-saved-reader-20261105",
+    "base": "codex/continuous-repair-ui-20261105",
+    "before": "4ea2afb4a3d7f3ea211fb058c2f77673a420fc39",
+    "source": "0e31fb685aaa8e4551eb4830f9f2d1cfda2da5c6",
+    "frontendPackagesUnchanged": true
+  },
+  {
+    "pr": 260,
+    "branch": "codex/research-draft-isolation-20261105",
+    "base": "codex/continuous-saved-reader-20261105",
+    "before": "34247f06d4bd25e05be0f40850d6b9a404dab759",
+    "source": "eba6edcda4a2727cea7d632659301c64a9d2766a",
+    "frontendPackagesUnchanged": true
+  }
+]

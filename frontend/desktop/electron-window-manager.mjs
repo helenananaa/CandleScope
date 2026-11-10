@@ -78,6 +78,10 @@ export class ElectronWindowManager {
       if (live.isMinimized()) live.restore();
       live.show();
       live.focus();
+      const researchReturnId = target.searchParams.get("research-version");
+      if (researchReturnId && /^[\w-]{8,80}$/.test(researchReturnId)) {
+        live.webContents.send(this.options.channels.researchReturn, researchReturnId);
+      }
       return { windowId: this.windowIdForContents(live.webContents) };
     }
     const id = `app-window-${this.nextAppWindow++}`;

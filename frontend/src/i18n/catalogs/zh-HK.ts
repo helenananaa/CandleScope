@@ -1,3 +1,4 @@
+import { continuousEnglish } from "./continuousMessages.js";
 import { replayNoteEnglish } from "./replayNoteMessages.js";
 import { historyStudyTraditional } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
@@ -7,6 +8,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const zhHK = {
+  ...continuousEnglish,
   ...replayNoteEnglish,
   ...historyStudyTraditional,
   "chartTime.title": "跳轉到日期",

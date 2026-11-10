@@ -1,0 +1,194 @@
+{
+  "base": "4fcb007aad4f0e485f8556cae1bc7361b5135f7a",
+  "combinedSHA256": "6fb5242e3d2238c5abbf6cd71b4896a989fa81340ce6f41a77a83698eb0df3f0",
+  "files": [
+    {
+      "path": "backend/tests/test_continuous_api.py",
+      "sha256": "14018c2a96c166f9dca7e2d2ed1d03d02e5a0f6f3fc28c15fd29ad09a51cd580"
+    },
+    {
+      "path": "frontend/src/features/backtest/chart-tester/ChartStrategyTesterPanel.tsx",
+      "sha256": "0308335af4e2a77c9dea165b22c55681c554a787eded35a0b2ef968366b0d3b2"
+    },
+    {
+      "path": "frontend/src/features/backtest/chart-tester/__tests__/ChartStrategyTesterPanel.test.tsx",
+      "sha256": "9259d72614148b39d2c4ae627735eb0d6359bdc3c4b55910298bb92e3aee102e"
+    },
+    {
+      "path": "frontend/src/features/backtest/chart-tester/chartStrategyPanelPreferences.ts",
+      "sha256": "6ecf13d48204b891bc9074fdc354234096e324749db2f4259f3c2373fa588b6a"
+    },
+    {
+      "path": "frontend/src/features/backtest/continuous/ContinuousStrategyPanel.tsx",
+      "sha256": "105f54ced67f28fe2ff10cbf829ecab03d73795ed18b55a7a7a872577c36757c"
+    },
+    {
+      "path": "frontend/src/features/backtest/continuous/continuousApi.test.ts",
+      "sha256": "b96ec86273d2a8027c88a04c76bf62eaa82af06421eab3096d4c52349ddb7402"
+    },
+    {
+      "path": "frontend/src/features/backtest/continuous/continuousApi.ts",
+      "sha256": "87bdc9cc055e9ea06c6aae8c8ca3b6583373de494620199f32e6ab821996ef3e"
+    },
+    {
+      "path": "frontend/src/features/backtest/continuous/continuousRunReference.test.ts",
+      "sha256": "9f3f5cc1bf70223730a343c7dd7f0a81f536e0fc6ecfdbc0b011fe15c0cd66f8"
+    },
+    {
+      "path": "frontend/src/features/backtest/continuous/continuousRunReference.ts",
+      "sha256": "b6f02c250619a91ab7fc6948f2454b196ba22ea7d564cd9ac49d42283b3d7098"
+    },
+    {
+      "path": "frontend/src/features/backtest/continuous/continuousStrategy.css",
+      "sha256": "12e9194304045d04f5dad1d8dd43402f021eb6462e17b41eaac06a8b5899a837"
+    },
+    {
+      "path": "frontend/src/features/backtest/continuous/continuousTypes.ts",
+      "sha256": "a09753487c7bcfdacc730bd230ddaf5a6045af7f49498263e0e0ce763bae551b"
+    },
+    {
+      "path": "frontend/src/features/backtest/continuous/continuousView.test.ts",
+      "sha256": "fafc34b6dcbafb38624cf0951c57c6dee31e42d8a11578207d2af253f174fd61"
+    },
+    {
+      "path": "frontend/src/features/backtest/continuous/continuousView.ts",
+      "sha256": "55bea9debd503130645c0e2b38617ffdcabff8753617626cca693340b267dbc1"
+    },
+    {
+      "path": "frontend/src/features/market-data/__tests__/continuousStrategyDataManager.test.ts",
+      "sha256": "81b04aece5ba3801d47c04a1c085a0bee504b49d79779a94f0d7ec87fe5f5578"
+    },
+    {
+      "path": "frontend/src/features/market-data/manager/continuousStrategyDataManager.ts",
+      "sha256": "81db7ba0d328db9cf9da8763253829c4faf03a69f1e8d85466b2197ac79a5f54"
+    },
+    {
+      "path": "frontend/src/features/market-data/manager/strategyDataManager.ts",
+      "sha256": "a5181ae33eba53620df8686fe914f98e40d0e5617a6fe1c7b81c7a83ac55f81c"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/ar.ts",
+      "sha256": "82a9987a6c957328d857f61207123ada7d01a982d5ac10f925673ba70b3420e9"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/continuousMessages.ts",
+      "sha256": "10c14cc47ec9f76ed9725df186fc18b19cbb5628cfe7f6d08057ed1bf92e514c"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/cs.ts",
+      "sha256": "fc72c0802eef5c7851bc8e046f193df2afbc6ae4459503fa1cff1303bb0f5b20"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/de.ts",
+      "sha256": "7f3eaf58a799cf324a5d577b28a17444529d93523105cd48ee989c025da0f365"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/en.ts",
+      "sha256": "72aec8030ff51ecc2598d6c58ae9b58af43ff0633c13ef5b692800d825ae576c"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/es.ts",
+      "sha256": "3ddc27ad7bf671eb434257e49fe62563c55c08e24a1970455af2a77d5ca20692"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/fr.ts",
+      "sha256": "7a0bc7c1253fe5b01ddee835cbf8093548b20b7cbfaa160c4fdb15767909cc06"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/he.ts",
+      "sha256": "ed970312bf2bf03b6daa69bd80832221abe12577e5efa630e987a8b0c6282909"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/hi.ts",
+      "sha256": "2dbd89f36392bd793bfc1edcec5db429e988c6b86e4bf944d69226423fb9d450"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/hu.ts",
+      "sha256": "d3a2dc711bbd4ee90409506ee6aac070da9c9a36855ea6bc8974071d487baea1"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/id.ts",
+      "sha256": "8f2738a5247ef382ec579c71590a19c9075193f8c624d444612dca6c0658ec7e"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/it.ts",
+      "sha256": "5d4d8c41bb23f8158f2c6b98e31a74557bca5d112789d47dd7ca4429c08b3b4c"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/ja.ts",
+      "sha256": "2226b042cfb1a1c0a2e01a42df3ffac0bfc6ee7ab5eb71fbc035bd3d8ffb2d29"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/ko.ts",
+      "sha256": "62976edd993a0ac0ae39e3384928ce684c2ffd30765d7d0d40071c1ade4dc734"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/ms.ts",
+      "sha256": "85c2f44050050d33e0982b7e7025040e274dbe0c42962da119c90aabf579030f"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/nl.ts",
+      "sha256": "a1d8bedb03347a9ec38f5720337209e4c22e1bc33f68679265c93a1fca06f0a4"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/pl.ts",
+      "sha256": "103be7d9b5f83c644efef9a7347c31570918d9a17b43ab4a51bfa429321dee36"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/pt-BR.ts",
+      "sha256": "0478bbe0207a910dadd00c63bf5ad90e1622cd85e70222a1ce54ea67a581b280"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/pt-PT.ts",
+      "sha256": "851cfb97a2e8446a2f62d2537907eb08bf46b37541bca9d7637d6e9f1db62e5c"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/ro.ts",
+      "sha256": "33bd05772f448f7f0a792a578d74cfac0819b527fcf6c2a6551ccb20113ef170"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/ru.ts",
+      "sha256": "1e9b65d531c57634c21cc5290a57a68f8c7ee3400b816c2019b8c2f53b97d9ca"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/sv.ts",
+      "sha256": "10b9789245d0309c5957f67e5902a5d7b8efad50fd9aed22a96faeb049907a62"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/th.ts",
+      "sha256": "3c5541e9989b91f2fed43d79b88084b7e16e8dc7d255d7ab5922c50f1354daea"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/tr.ts",
+      "sha256": "bc0cd60038617389a7f3ade8eb86d88ccba29949d198196315861b22f9a304ee"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/uk.ts",
+      "sha256": "b1d436d339426dc1049614e84c9fd6a299c55e4d75a7f0df8ceeef6cd15832ab"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/vi.ts",
+      "sha256": "2756ecde1f127adc1976005c2857030305e8ac9634ba66ad0b55887ee73ba63f"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/zh-CN.ts",
+      "sha256": "761c706f728e2d96cd3e538672f70abccabcab5c29f66abdf76c8bd0beb29412"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/zh-HK.ts",
+      "sha256": "18afe93dfa2246e2a9aa75270a0d4a13e02f06ed4584c18a75cc65fff6fb1731"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/zh-Hant.ts",
+      "sha256": "5600445b2703ea4b122727ccb82187576724e5652137b990cb5dcb3d48e881ba"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/zh-MO.ts",
+      "sha256": "29af1bff8c4a46a5da67165da282f223037b5b6b05b2f101e403014638f77100"
+    },
+    {
+      "path": "frontend/src/i18n/catalogs/zh-TW.ts",
+      "sha256": "1e78106e1c7e83596dbc1512387b24ddc9d304b4bc9877fa6c2ad76e8035a99f"
+    }
+  ]
+}

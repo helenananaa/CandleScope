@@ -14,6 +14,17 @@ export interface StrategyRunSettings {
   executionOverrides?: StrategyExecutionOverrides;
 }
 
+export interface StrategyInitializationSettings {
+  runId: string; versionHash: string; outputMode: "TARGET_POSITION"; warmupBars: number;
+}
+export function validStrategyInitialization(value: unknown): value is StrategyInitializationSettings {
+  if (!value || typeof value !== "object") return false;
+  const v = value as StrategyInitializationSettings;
+  return typeof v.runId === "string" && /^bt_[\w-]+$/.test(v.runId)
+    && typeof v.versionHash === "string" && /^sha256:[a-f0-9]{64}$/.test(v.versionHash)
+    && v.outputMode === "TARGET_POSITION" && Number.isSafeInteger(v.warmupBars) && v.warmupBars >= 0 && v.warmupBars <= 200000;
+}
+
 export const DEFAULT_STRATEGY_RUN_SETTINGS: StrategyRunSettings = { rangeMode: "ALL_AVAILABLE", customRange: null };
 
 export function validExecutionOverrides(value: unknown): value is StrategyExecutionOverrides {

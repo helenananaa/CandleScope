@@ -52,6 +52,7 @@ test("first open lists templates and recents on one screen, with no blank editor
   );
 
   assert.match(html, /data-chart-strategy-panel="true"/);
+  for (const key of ["continuous.history", "continuous.historyLive", "continuous.liveOnly"] as const) assert.ok(html.includes(t(key)));
   for (const template of CHART_STRATEGY_TEMPLATES) assert.ok(html.includes(t(template.nameKey)));
   assert.match(html, /chart-strategy-start-footer"><button/);
   assert.match(html, /href="\/backtest\.html"/);

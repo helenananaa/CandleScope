@@ -1,0 +1,241 @@
+{
+  "sourceCommit": "f1a789f3ace01633d5a7505d64b259bae0971d86",
+  "runs": {
+    "e": {
+      "driverCommit": "e6cc23be4cfe6e9275124901f6a514d429aafe7f",
+      "plan": {
+        "plan_id": "028cddd2754a1a64944c361db44b240eeffea6a8c2e77f03163693045b83f9cc",
+        "expected": {
+          "id": "cs_c584d07a11e94c31bb6345dba95eaede",
+          "generation": 4,
+          "revision": 8,
+          "checkpoint_revision": 6,
+          "sequence": 38,
+          "event_time_ms": 1794029459999,
+          "data_revision": "d4bf8cb7cfa246d4964e1059b6e34804"
+        },
+        "resume_after": false,
+        "from_ms": 1794027180000,
+        "through_ms": 1794030239999,
+        "anchor_sequence": 0,
+        "full_reinitialization": true,
+        "expanded_range_reason": "INITIAL_SNAPSHOT_REVISED",
+        "dirty_from_ms": 1794027900000,
+        "dirty_through_ms": 1794027959999,
+        "schema": "candlescope.continuous-repair-preview/1",
+        "original_from_ms": 1794027180000,
+        "expires_in_seconds": 300,
+        "recompute_bars": 51
+      },
+      "beforeRestart": 51,
+      "afterRestart": 51,
+      "phase": "PAUSED",
+      "throughMs": 1794030239999,
+      "fills": 35,
+      "equity": "4995.514915459552774285043214",
+      "positionQty": "0E-29",
+      "quitMs": [
+        2326,
+        2996
+      ],
+      "ownedPidRecords": 20,
+      "reference": {
+        "runId": "cs_c584d07a11e94c31bb6345dba95eaede",
+        "sequence": 51,
+        "throughMs": 1794030239999,
+        "financialStateEqual": true,
+        "providerStateEqual": true,
+        "comparedFillSourceRows": 35,
+        "normalizedMetadataOnly": [
+          "source_row",
+          "explicit null optional BAR metrics"
+        ],
+        "actualReadOnlySha256": "a693a31c94df74ca1488692c2e7a63cbe81a87a99e001638b51c14242ea5101e"
+      }
+    },
+    "f": {
+      "driverCommit": "346990fef9a19eb50d6e72bb261ecd144903dfcd",
+      "plan": {
+        "plan_id": "3d055bcf3846b6e13fc578e338f421d691e6866b09cf347147061a020dfc5371",
+        "expected": {
+          "id": "cs_c584d07a11e94c31bb6345dba95eaede",
+          "generation": 4,
+          "revision": 8,
+          "checkpoint_revision": 6,
+          "sequence": 38,
+          "event_time_ms": 1794029459999,
+          "data_revision": "d4bf8cb7cfa246d4964e1059b6e34804"
+        },
+        "resume_after": true,
+        "from_ms": 1794027180000,
+        "through_ms": 1794030359999,
+        "anchor_sequence": 0,
+        "full_reinitialization": true,
+        "expanded_range_reason": "INITIAL_SNAPSHOT_REVISED",
+        "dirty_from_ms": 1794027900000,
+        "dirty_through_ms": 1794027959999,
+        "schema": "candlescope.continuous-repair-preview/1",
+        "original_from_ms": 1794027180000,
+        "expires_in_seconds": 300,
+        "recompute_bars": 53
+      },
+      "beforeRestart": 53,
+      "afterRestart": 54,
+      "phase": "LIVE",
+      "throughMs": 1794030419999,
+      "fills": 35,
+      "equity": "4995.514915459552774285043214",
+      "positionQty": "0E-29",
+      "quitMs": [
+        2414,
+        2320
+      ],
+      "ownedPidRecords": 22,
+      "reference": {
+        "runId": "cs_c584d07a11e94c31bb6345dba95eaede",
+        "sequence": 54,
+        "throughMs": 1794030419999,
+        "financialStateEqual": true,
+        "providerStateEqual": true,
+        "comparedFillSourceRows": 35,
+        "normalizedMetadataOnly": [
+          "source_row",
+          "explicit null optional BAR metrics"
+        ],
+        "actualReadOnlySha256": "81eb28df78895bf0c6c5e498f8353e601e784084a66eac26466158ea7da6bf42"
+      }
+    }
+  },
+  "artifacts": {
+    "e-acceptance.json.gz": {
+      "sha256": "a2d951a91da457b639edb0a17f9143b211e5791b5dbd490cc4260f461506dcc7",
+      "originalSha256": "5aea20d8e519bf1b3179a7570923435b61807d2f49eafb9abb04f77ed4d5a726",
+      "originalBytes": 80203
+    },
+    "e-controlled-revision.json.gz": {
+      "sha256": "312ec405b03b026fc8d242afb0e6405ed240d90c55394eec35b65daeaf8d35b9",
+      "originalSha256": "c8df0f2e02a86d2876d0ae681aa8911a1ad544ede46923f5ef2cdaf4bc585fbd",
+      "originalBytes": 302
+    },
+    "e-input-owner-copy-rebind.json.gz": {
+      "sha256": "0e6fa256e6f949d582615dd1c8f130a749ea3bf7198fb2da615817d63eab8f1f",
+      "originalSha256": "f656e329af2e59f47c2096efdb3a16d4858fc2143a9fd3cd95462b246ca87686",
+      "originalBytes": 482
+    },
+    "e-protection.json.gz": {
+      "sha256": "f23c379c1eba37b80ff3260ab508f1e770bcbcd66c2c624c20910abd9bcd0986",
+      "originalSha256": "e21f4260306bd939fdec61fa66535c49b6c1a9cb802f004995da873542dd8e6e",
+      "originalBytes": 688671
+    },
+    "e-reference.json.gz": {
+      "sha256": "4b9082c4f02dee4db85e0068a92b4c126157af20eb2a6bfc02abe253875cd96b",
+      "originalSha256": "d20f32a2a8b6b1a4c54a6d2a9ed8864bbe3751aa6ed8d1d942542dd829a7b0f8",
+      "originalBytes": 352
+    },
+    "e-sidecar-exit-status.json.gz": {
+      "sha256": "415fcbb22398f434ba357e7503de312569e326a669ab6a683e3e11fe3f24d4f7",
+      "originalSha256": "3296f067741765dbc1e2a5ade36119e7ea0bcac3707ac2f246e9f6042e8320d9",
+      "originalBytes": 867
+    },
+    "e-traffic.json.gz": {
+      "sha256": "0224953aee92a2f38b8975c00b695592365620634c4d41f4bf8d355c719594d6",
+      "originalSha256": "7a9a41dfaf962ed92a0397a5ff70ae039fe77c8c652ddee1c35fcdf12d5c595d",
+      "originalBytes": 25347
+    },
+    "e-repair-preview.png": {
+      "sha256": "1bdd1e4c4e3cf63774083e6ff46054e58a1f544f434de1d317d4e2a36aba6e55",
+      "originalSha256": "1bdd1e4c4e3cf63774083e6ff46054e58a1f544f434de1d317d4e2a36aba6e55",
+      "originalBytes": 148842
+    },
+    "e-repaired-account-after-restart.png": {
+      "sha256": "9f928ab9eeb19044bea40f0d4993a75ded0c114f25d84076ce59d500e8fa0058",
+      "originalSha256": "9f928ab9eeb19044bea40f0d4993a75ded0c114f25d84076ce59d500e8fa0058",
+      "originalBytes": 189610
+    },
+    "f-acceptance.json.gz": {
+      "sha256": "f6d6c7c7699ba9221b29052e0f6b52b74aed788b8971e70a5ad17be472527119",
+      "originalSha256": "08a390731667649722afa4f578003cb97e19f1ef13fe2609bca1a978a9554323",
+      "originalBytes": 83176
+    },
+    "f-controlled-revision.json.gz": {
+      "sha256": "312ec405b03b026fc8d242afb0e6405ed240d90c55394eec35b65daeaf8d35b9",
+      "originalSha256": "c8df0f2e02a86d2876d0ae681aa8911a1ad544ede46923f5ef2cdaf4bc585fbd",
+      "originalBytes": 302
+    },
+    "f-input-owner-copy-rebind.json.gz": {
+      "sha256": "08000b9f0af37a5eb1d32c795c0f31351c8768157eeff127b404e778869b4a42",
+      "originalSha256": "1eda87e07444b5c02d7a3d26a1d6142927ea03c52614bf01e988e3e43a8ac83f",
+      "originalBytes": 482
+    },
+    "f-protection.json.gz": {
+      "sha256": "f23c379c1eba37b80ff3260ab508f1e770bcbcd66c2c624c20910abd9bcd0986",
+      "originalSha256": "e21f4260306bd939fdec61fa66535c49b6c1a9cb802f004995da873542dd8e6e",
+      "originalBytes": 688671
+    },
+    "f-reference.json.gz": {
+      "sha256": "9ced83fe2a857bde60a9afbe2f325bd73cda2857323ce71901ef003f53bd7916",
+      "originalSha256": "5b09bc29bb08f212551b7686d5bf3eb52d04d1f5a2d5efaebfe5283dd5ccee29",
+      "originalBytes": 352
+    },
+    "f-sidecar-exit-status.json.gz": {
+      "sha256": "fab408c0d49100b56f43c73978b63b61882c19e9edf34f711ef99833377379f7",
+      "originalSha256": "d4913c6e6261f00d93c09bd00f4b9999007461cee7c28a01c2441ce7b6f6952a",
+      "originalBytes": 867
+    },
+    "f-traffic.json.gz": {
+      "sha256": "5852c05397398b973b3d285982d475cd8a5917b8e1363847efbe86bc219bcea6",
+      "originalSha256": "180e02fd3de209f0260d3a4c7871ebce497ae6bb809a7833fef61446b5fde4ba",
+      "originalBytes": 49771
+    },
+    "f-repair-preview.png": {
+      "sha256": "38ee27c79a9039cfda25674d79499ba054ccb94ce015c24584c7f53f7a4d1257",
+      "originalSha256": "38ee27c79a9039cfda25674d79499ba054ccb94ce015c24584c7f53f7a4d1257",
+      "originalBytes": 144812
+    },
+    "f-repaired-account-after-restart.png": {
+      "sha256": "a85b7b6ccf58dccf128ac4e2eff2cc9ce203d7965c5108fb29cd8c7ccf698838",
+      "originalSha256": "a85b7b6ccf58dccf128ac4e2eff2cc9ce203d7965c5108fb29cd8c7ccf698838",
+      "originalBytes": 207944
+    },
+    "f-restart-closed-bar.json.gz": {
+      "sha256": "389d9bc61b734bc86ec7cfee795a533ca4e91e1701af4b556581aa5d424fa532",
+      "originalSha256": "41b5085823baa1af2974a3a4efbd76ddbb556d5cbd0cb554c6f8abd1c199167f",
+      "originalBytes": 1391
+    },
+    "source-package-manifest.json.gz": {
+      "sha256": "b264293b3ce750375301050688a162ae6ec3b1803bcdd855afecc8e666444cc9",
+      "originalSha256": "174f2bb22630697cd53743e6a12d299cd670a5c06922c37ed738000ea5acf7d4",
+      "originalBytes": 152785
+    },
+    "run_continuous_native_repair_20261107.py.gz": {
+      "sha256": "9b6688a26be61de43b601d6af6d5602a58c7763567cffdfb9882b573198b9155",
+      "originalSha256": "bcb5996cb91864cdb632ade2a08d3391900f50671f34df71d6f54642bad1c57e",
+      "originalBytes": 5199
+    },
+    "a-startup-failure-cleanup.json.gz": {
+      "sha256": "4a021e22c021524afa75537b19d638321b5c67966383c80a79cb70910387f48f",
+      "originalSha256": "ad84fd147b85e6a8eec62001a58e1e9e7b8c20dc4fbcd97d7a11550e03bab35b",
+      "originalBytes": 350
+    },
+    "b-acceptance.json.gz": {
+      "sha256": "b77e7ef58310b66294b5c953acb335932ac3edd70fd6ab3340f50af225fe9158",
+      "originalSha256": "18133a502ee7370edfa04a26c11879f8f7d8e3601caf02d8dc8e0c6a14e44020",
+      "originalBytes": 16742
+    },
+    "c-private-input-ownership-counterexample.json.gz": {
+      "sha256": "f49b9213f82e36d63aca119bff8658ad5b0af7b0ebc301ec67eaa214820462bb",
+      "originalSha256": "1557cc8e2d63e6484e259b5009e5b0d5ab73101b56bc3d56719a9ee75cc2b809",
+      "originalBytes": 122
+    },
+    "d-acceptance.json.gz": {
+      "sha256": "76340b03771df8f6e629b6aeca226f1bde0a12dab165d36a36f5d261475b091b",
+      "originalSha256": "02c23e8be083e76f35577b208e7886f172fbc64b5a93d5875a899bd3746aa7bb",
+      "originalBytes": 20284
+    },
+    "d-reference-metadata-difference.json.gz": {
+      "sha256": "d693544fe0dcd6611d729a4ec5cdd3f7bb2336a17a90e64d9ff3e1b20ee8f09a",
+      "originalSha256": "7c2560236eb9392d008bfddc0fe31d61bc62528ce43805cca45affd01d192311",
+      "originalBytes": 10657
+    }
+  }
+}
