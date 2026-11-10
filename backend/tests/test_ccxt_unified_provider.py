@@ -860,14 +860,17 @@ class _CountingRestExchange(_UnifiedFakeExchange):
         timeframe: str,
         since: int | None,
         limit: int,
+        *,
+        params: dict[str, int],
     ) -> list[list[Any]]:
-        assert (symbol, timeframe, since, limit) == (
+        assert (symbol, timeframe, since, limit, params) == (
             "BTC/USDT",
             "1m",
-            1_700_000_000_000,
+            1_700_000_040_000,
             2,
+            {"end": 1_700_000_100_000},
         )
-        return [[1_700_000_000_000, 10, 12, 9, 11, 3]]
+        return [[1_700_000_040_000, 10, 12, 9, 11, 3]]
 
     async def fetch_ticker(self, symbol: str) -> dict[str, Any]:
         assert symbol == "BTC/USDT"
@@ -898,8 +901,8 @@ def test_generic_rest_fetch_reuses_pooled_exchange_and_returns_unified_rows(
     request = TransportRequest(
         descriptor=_descriptor(StreamType.KLINE),
         limit=2,
-        start_ms=1_700_000_000_000,
-        end_ms=1_700_000_060_000,
+        start_ms=1_700_000_040_000,
+        end_ms=1_700_000_100_000,
     )
 
     async def run() -> list[RawMessage]:

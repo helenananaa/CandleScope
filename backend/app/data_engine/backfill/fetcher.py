@@ -411,6 +411,7 @@ class HistoricalFetcher:
             retry_count = 0
             success = False
             max_attempts = max_retries + 1
+            page_budget_deadline = None
 
             while retry_count < max_attempts:
                 try:
@@ -516,8 +517,18 @@ class HistoricalFetcher:
                     success = True
                     break
 
-                except RateLimitDeferred:
-                    raise
+                except RateLimitDeferred as exc:
+                    if task.exchange != "bybit" or not pages_fetched or exc.reason != "budget":
+                        raise
+                    # The next reverse page may follow a fast response before
+                    # the bucket refills. Preserve its cursor for short pacing
+                    # waits, while still yielding the worker for real cooldowns.
+                    now = time.monotonic()
+                    if page_budget_deadline is None:
+                        page_budget_deadline = now + 0.05
+                    if now + exc.retry_after_seconds > page_budget_deadline:
+                        raise
+                    await asyncio.sleep(exc.retry_after_seconds)
 
                 except TransportError as exc:
                     retry_count += 1

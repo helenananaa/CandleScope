@@ -2,6 +2,7 @@
 from __future__ import annotations
 import time
 from datetime import datetime, timezone
+from itertools import islice
 from typing import Any
 from app.data_engine.bar_basis import is_gate_inverse_5m, is_gate_linear_5m
 from app.data_engine.ingestion.config import IngestionConfig
@@ -147,11 +148,28 @@ async def fetch_unified_history(
             rows = await fetch_perpetual_candles(exchange, symbol, req, limit=limit, now_ms=int(time.time() * 1000))
         elif descriptor.stream_type == StreamType.KLINE:
             limit = min(max(1, int(req.limit or 1)), context.entry.history_limit)
+            start_ms = req.start_ms
+            options = {}
+            if context.entry.exchange_id == "bybit" and req.end_ms is not None:
+                # The reverse-page cursor and the single-slot repair both
+                # depend on the inclusive upper bound reaching the venue.
+                options["params"] = {"end": req.end_ms}
+                if start_ms is not None:
+                    from app.data_engine.history.calendar import AlwaysOpenCalendar
+
+                    # Bybit can round a lower bound down to the candle open.
+                    # Count only eligible opens and send an aligned lower bound.
+                    opens = AlwaysOpenCalendar().expected_opens(start_ms, req.end_ms, descriptor.interval)
+                    start_ms = next(opens, None)
+                    if start_ms is None:
+                        return []
+                    limit = 1 + sum(1 for _ in islice(opens, limit - 1))
             values = await exchange.fetch_ohlcv(
                 symbol,
                 timeframe=descriptor.interval,
-                since=req.start_ms,
+                since=start_ms,
                 limit=limit,
+                **options,
             )
             from app.data_engine.interval_policy import parse_interval_spec
             spec = parse_interval_spec(descriptor.interval)

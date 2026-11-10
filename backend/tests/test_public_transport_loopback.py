@@ -179,6 +179,87 @@ def test_bybit_body_quota_uses_exact_physical_bucket_and_resumes_polling():
     asyncio.run(run())
 
 
+@pytest.mark.parametrize(("batch_size", "first_offset", "last_offset", "pages"), [
+    (1000, 0, 0, [(0, 0, 1)]),
+    (2, 0, 1_200_000, [(0, 1_200_000, 2), (0, 899_999, 2), (0, 299_999, 1)]),
+    (1, 0, 300_000, [(0, 300_000, 1), (0, 299_999, 1)]),
+    (2, 1, 600_000, [(300_000, 600_000, 2)]),
+])
+def test_bybit_backfill_uses_bounded_reverse_pages(monkeypatch, tmp_path, batch_size, first_offset, last_offset, pages):
+    from app.data_engine.backfill import BackfillConfig
+    from app.data_engine.backfill.fetcher import HistoricalFetcher
+    from app.data_engine.backfill.models import BackfillStatus, BackfillTask
+    from app.data_engine.storage import klines_repo
+
+    opened, step = 1_794_138_000_000, 300_000
+    market_type, symbol = "swap.inverse", "BTC/USD:BTC"
+    monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", tmp_path / "bybit-pages.sqlite")
+    klines_repo.init_klines_storage()
+
+    async def run():
+        calls = []
+
+        async def handle(request):
+            assert request.path == "/v5/market/kline"
+            assert request.query["category"] == "inverse" and request.query["symbol"] == "BTCUSD"
+            lower = int(request.query["start"])
+            upper = int(request.query.get("end", opened + 4 * step))
+            limit = int(request.query["limit"])
+            calls.append((lower, upper, limit))
+            # The venue can round start down and selects newest rows first.
+            lower -= lower % step
+            rows = [
+                [str(t), "1", "2", "1", "2", "9", "4"]
+                for t in reversed(range(opened, opened + 5 * step, step))
+                if lower <= t <= upper
+            ][:limit]
+            return web.json_response({"retCode": 0, "result": {"category": "inverse", "symbol": "BTCUSD", "list": rows}})
+
+        runner, origin = await serve(handle)
+        original = generic._create_exchange
+
+        def create(*args, **kwargs):
+            exchange = original(*args, **kwargs)
+            point_at_loopback(exchange, origin)
+            exchange.set_markets([dict(
+                id="BTCUSD", symbol=symbol, base="BTC", quote="USD", settle="BTC",
+                baseId="BTC", quoteId="USD", settleId="BTC", type="swap", contract=True,
+                swap=True, linear=False, inverse=True, spot=False, active=True,
+            )])
+            return exchange
+
+        monkeypatch.setattr(generic, "_create_exchange", create)
+        config = IngestionConfig(proxy_mode="none")
+        transport = TransportLayer(config)
+        fetcher = HistoricalFetcher(BackfillConfig(history_archive_enabled=False, fetch_batch_size=batch_size),
+                                    transport, ingestion_config=config)
+        task = BackfillTask(symbol, "5m", opened + first_offset, opened + last_offset,
+                            exchange="bybit", market_type=market_type)
+        try:
+            async with asyncio.timeout(6):
+                while True:
+                    try:
+                        result = await fetcher._fetch_rest_task(task)
+                        break
+                    except RateLimitDeferred as exc:
+                        if exc.reason != "metadata_pending":
+                            raise
+                        await asyncio.sleep(exc.retry_after_seconds)
+            assert result.status is BackfillStatus.COMPLETED
+            assert [b.open_time for b in result.bars] == [
+                t for t in range(opened, opened + 5 * step, step) if task.start_ms <= t <= task.end_ms
+            ]
+            assert {b.volume for b in result.bars} == {4}
+            assert not result.source_complete
+            assert calls == [(opened + lo, opened + hi, limit) for lo, hi, limit in pages]
+        finally:
+            await fetcher.close()
+            await transport.stop()
+            await runner.cleanup()
+
+    asyncio.run(run())
+
+
 async def _catalog_http_loader(origin: str) -> list:
     exchange = generic._create_exchange(get_ccxt_catalog_entry("binance"),
         IngestionConfig(proxy_mode="none", proxy_egress_group="catalog-loopback"),
