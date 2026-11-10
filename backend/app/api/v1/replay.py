@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ipaddress
+from datetime import date
 
 from app.replay.request_contracts import (
     ReplayCanonicalIndicatorPayload,
@@ -31,6 +32,7 @@ from app.replay.request_contracts import (
     ReplayRawTradeRetentionPolicyPayload,
     ReplayRawTradeRetentionPlanPayload,
     ReplayRawTradeRetentionRunPayload,
+    ReplayRawTradeRetentionRecoverPayload,
 )
 
 from typing import Awaitable, Callable, Literal
@@ -540,6 +542,26 @@ async def execute_replay_v2_raw_trade_retention(
     request: Request, payload: ReplayRawTradeRetentionRunPayload,
 ) -> dict[str, object]:
     return await _training_service(request).execute_raw_trade_retention(**payload.model_dump(mode="json"))
+
+
+@router.get(
+    "/runs/storage/raw-trades/day",
+    dependencies=[Depends(_require_retention_operator), Depends(_training_service)],
+)
+async def inspect_replay_v2_raw_trade_retention(
+    request: Request, day: date, symbol: str = Query(pattern=r"^[A-Z0-9]{1,64}$"),
+) -> dict[str, object]:
+    return await _training_service(request).inspect_raw_trade_retention(symbol=symbol, day=day.isoformat())
+
+
+@router.post(
+    "/runs/storage/raw-trades/recover",
+    dependencies=[Depends(_require_retention_operator), Depends(_training_service), Depends(enforce_replay_request_limit)],
+)
+async def recover_replay_v2_raw_trade_retention(
+    request: Request, payload: ReplayRawTradeRetentionRecoverPayload,
+) -> dict[str, object]:
+    return await _training_service(request).recover_raw_trade_retention(**payload.model_dump(mode="json"))
 
 
 @router.post("/runs/{run_id}/account-audit")

@@ -1,5 +1,6 @@
 import { parseReplayNoteCaptureReceipt, parseReplayNoteCapturesResponse, parseReplayNoteImageResponse, sameReplayNoteContext,
   type ReplayNoteCaptureSave, type ReplayNoteCaptureReceipt, type ReplayNoteCapturesResponse, type ReplayNoteImageResponse } from "./replayNotes.js";
+import { parseRawTradeRetentionReply, type RawTradeDayKey } from "./rawTradeRetention.js";
 import { API_BASE } from "../../services/apiConfig.js";
 import { parseReplayNoteLinkOptions, type ReplayNoteLinkOptions, parseReplayNote, parseReplayNotesResponse, parseReplayNoteVersions, type ReplayNoteVersionsResponse, type ReplayNote, type ReplayNotesResponse, type ReplayNoteSave } from "./replayNotes.js";
 import { prepareReplay, preparationRequest, waitForPreparation, type PreparationCapabilities, type PreparationJob } from "../data-preparation/api.js";
@@ -376,6 +377,38 @@ export class ReplayV2ApiClient {
       method: "POST",
       body: JSON.stringify(payload),
       ...(signal ? { signal } : {}),
+    });
+  }
+
+  inspectRawTradeDay(symbol: string, day: string, signal: AbortSignal) {
+    const query = new URLSearchParams({ symbol, day });
+    return this.request(`/runs/storage/raw-trades/day?${query}`, parseRawTradeRetentionReply, { signal });
+  }
+
+  saveRawTradePolicy(payload: RawTradeDayKey & { expected_revision: number; retain_until_ms: number | null }, signal: AbortSignal) {
+    return this.rawTradeRetentionWrite("/policy", "PUT", payload, signal);
+  }
+
+  planRawTradeRetention(payload: RawTradeDayKey & { max_files: number; max_bytes: number }, signal: AbortSignal) {
+    return this.rawTradeRetentionWrite("/plan", "POST", payload, signal);
+  }
+
+  executeRawTradeRetention(payload: RawTradeDayKey & { plan_id: string; action: "RETIRE" | "RECLAIM" }, signal: AbortSignal) {
+    return this.rawTradeRetentionWrite("/run", "POST", payload, signal);
+  }
+
+  recoverRawTradeDay(
+    payload: RawTradeDayKey & (
+      { action: "RESTORE" } | { action: "REDOWNLOAD"; max_download_bytes: number; max_restore_bytes: number }
+    ),
+    signal: AbortSignal,
+  ) {
+    return this.rawTradeRetentionWrite("/recover", "POST", payload, signal);
+  }
+
+  private rawTradeRetentionWrite(path: string, method: "POST" | "PUT", payload: RawTradeDayKey, signal: AbortSignal) {
+    return this.request(`/runs/storage/raw-trades${path}`, parseRawTradeRetentionReply, {
+      method, body: JSON.stringify(payload), signal,
     });
   }
 

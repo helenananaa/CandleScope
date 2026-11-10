@@ -40,6 +40,12 @@ class ReplayRawTradeRetentionRunPayload(ReplayRawTradeRetentionDayPayload):
     action: Literal["RETIRE", "RECLAIM"]
 
 
+class ReplayRawTradeRetentionRecoverPayload(ReplayRawTradeRetentionDayPayload):
+    action: Literal["RESTORE", "REDOWNLOAD"]
+    max_download_bytes: int | None = Field(default=None, ge=1, le=2 * 1024**3)
+    max_restore_bytes: int | None = Field(default=None, ge=1, le=MAX_COUNTER)
+
+
 class ReplayCommandPayload(_StrictModel):
     model_config = ConfigDict(
         extra="forbid",

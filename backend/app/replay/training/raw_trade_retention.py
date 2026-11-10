@@ -9,7 +9,8 @@ import sqlite3
 import time
 from collections import Counter
 from collections.abc import Callable, Iterator
-from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
+from contextlib import AbstractContextManager, ExitStack, closing, contextmanager, nullcontext
+from datetime import date
 from itertools import islice
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,7 @@ from app.data_engine.storage.raw_trade_retention_lock import partition_lease
 from app.replay.errors import ReplayDomainError
 from app.replay.history_archive import _atomic_write_json
 from app.replay.storage.sqlite_store import ReplaySQLiteStore
+from app.replay.trade_import import redownload_official_day
 
 _MAX_REFERENCES = 2_000
 _MAX_REFERENCED_OBJECTS = 32_768
@@ -601,4 +603,61 @@ async def execute_managed_retention(
         cache.move_verified_retention_day, identity=identity, day=day, day_id=day_id,
         restore=False, authorize=authorize,
     )
+    return {"status": status}
+
+
+async def inspect_managed_day(
+    store: ReplaySQLiteStore, archive: object, *, symbol: str, day: str,
+) -> dict[str, object]:
+    """Inspect a day the operator already knows without listing historical dates."""
+    cache = _policy_archive(archive)
+    directory = _registry(archive)
+    if cache is None or directory is None:
+        return {"status": "UNAVAILABLE"}
+
+    def inspect() -> dict[str, object]:
+        with cache.retention_policy_candidate(
+            identity=("binance", "futures", symbol), day=day, day_id=None, inspect_pending=True,
+        ) as (status, item):
+            if item is None:
+                return {"status": status}
+            key = item.pop("partition_key")
+            try:
+                policy = _current_policy(cache, key, item["day_id"])
+            except (OSError, ValueError):
+                return {"status": "POLICY_UNAVAILABLE"}
+            try:
+                with _registry_lease(directory, shared=False):
+                    saved, complete, _, _ = _scan_reference_stores(directory, store.path)
+            except (OSError, OverflowError, sqlite3.Error, ValueError):
+                saved, complete = {}, False
+            return {"status": "READY", "item": item, "policy": policy,
+                    "saved_reference_count": saved.get(key, 0), "saved_reference_scan_complete": complete}
+
+    return await run_archive(inspect)
+
+
+async def recover_managed_day(
+    archive: object, *, symbol: str, day: str, day_id: str, action: str,
+    max_download_bytes: int | None, max_restore_bytes: int | None,
+) -> dict[str, object]:
+    cache = _policy_archive(archive)
+    if cache is None:
+        return {"status": "UNAVAILABLE"}
+    try:
+        if action == "RESTORE":
+            status = await run_archive(
+                cache.move_verified_retention_day, identity=("binance", "futures", symbol),
+                day=day, day_id=day_id, restore=True, authorize=lambda *_: nullcontext(True),
+            )
+        elif action == "REDOWNLOAD" and max_download_bytes is not None and max_restore_bytes is not None:
+            status = await run_archive(
+                redownload_official_day, archive_dir=cache.root, exchange="binance", market_type="futures",
+                symbol=symbol, day=date.fromisoformat(day), day_id=day_id,
+                max_download_bytes=max_download_bytes, max_restore_bytes=max_restore_bytes,
+            )
+        else:
+            return {"status": "RECOVERY_BUDGET_REQUIRED"}
+    except (OSError, RuntimeError, ValueError):
+        return {"status": "RECOVERY_FAILED"}
     return {"status": status}

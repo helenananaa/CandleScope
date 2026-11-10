@@ -1265,10 +1265,12 @@ class ParquetRawAggTradeArchive:
 
     @contextmanager
     def retention_policy_candidate(
-        self, *, identity: tuple[str, str, str], day: str, day_id: str,
+        self, *, identity: tuple[str, str, str], day: str, day_id: str | None,
+        inspect_pending: bool = False,
     ) -> Iterator[tuple[str, dict[str, Any] | None]]:
         """Bind an explicit policy request to one safe committed or retired receipt."""
-        day_id = _prefixed_sha256_digest(day_id, "verified day ID")
+        if day_id is not None:
+            day_id = _prefixed_sha256_digest(day_id, "verified day ID")
         partition = self._partition_path((*identity, day))
         retired = self._retired_partition(partition)
         with self._verified_retention_leases(identity, day, partition) as blocked:
@@ -1282,7 +1284,11 @@ class ParquetRawAggTradeArchive:
                 return
             source = retired if retired.exists() else partition
             receipt = source / "_verified_import.json"
-            if receipt.is_symlink() or not receipt.is_file() or "sha256:" + _file_sha256(receipt) != day_id:
+            if receipt.is_symlink() or not receipt.is_file():
+                yield "STALE_RECEIPT", None
+                return
+            actual_day_id = "sha256:" + _file_sha256(receipt)
+            if day_id is not None and day_id != actual_day_id:
                 yield "STALE_RECEIPT", None
                 return
             key = partition.relative_to(self.root).as_posix()
@@ -1292,14 +1298,17 @@ class ParquetRawAggTradeArchive:
             expected = self._retention_expected_files(partition, source, (*identity, day))
             marker = source / _RETENTION_RECLAIM_MARKER
             started = source == retired and marker.is_file() and not marker.is_symlink() and not marker.stat().st_size
+            stage = source / _RETENTION_REDOWNLOAD_STAGE
+            staged = inspect_pending and started and stage.is_dir() and not stage.is_symlink()
             files = None if expected is None else self._retention_present_files(
-                source, expected, reclaim_started=started,
+                source, expected, reclaim_started=started, redownload_staged=staged,
             )
             if files is None or (not started and files.keys() != expected.keys()):
                 yield "PARTITION_UNSAFE", None
                 return
             yield "READY", {
-                "partition_key": key, "state": "RETIRED" if source == retired else "COMMITTED",
+                "partition_key": key, "day_id": actual_day_id,
+                "state": "RETIRED" if source == retired else "COMMITTED", "reclaim_started": started,
                 "files": len(files), "logical_bytes": sum(file.stat().st_size for file in files.values()),
             }
 

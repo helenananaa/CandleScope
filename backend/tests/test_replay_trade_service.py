@@ -427,6 +427,14 @@ async def test_managed_retention_routes_fence_use_policy_expiry_and_references(t
                 assert response.status_code == 200, response.text
                 return response.json()
 
+            async def inspect_day():
+                response = await client.get(prefix + "/day", params={"symbol": day["symbol"], "day": day["day"]})
+                assert response.status_code == 200, response.text
+                return response.json()
+
+            assert (await inspect_day())["item"]["day_id"] == day["day_id"]
+            assert (await inspect_day())["policy"] is None
+
             async def policy(revision, retain_until):
                 return await submit("PUT", "/policy", expected_revision=revision, retain_until_ms=retain_until)
 
@@ -496,6 +504,12 @@ async def test_managed_retention_routes_fence_use_policy_expiry_and_references(t
             current = await plan()
             assert (await run(current))["status"] == "RETIRED"
             assert archive.verified_retention_inventory(limit=1)["items"] == []
+            assert (await inspect_day())["item"]["state"] == "RETIRED"
+            assert not (await inspect_day())["item"]["reclaim_started"]
+            assert (await submit("POST", "/recover", action="RESTORE"))["status"] == "RESTORED"
+            assert (await run(current))["status"] == "STALE_PLAN"
+            current = await plan()
+            assert (await run(current))["status"] == "RETIRED"
             reclaimed = await run(current, "RECLAIM")
             assert reclaimed["status"] == "RECLAIM_PENDING" and reclaimed["removed_files"] == 1
 
@@ -510,6 +524,9 @@ async def test_managed_retention_routes_fence_use_policy_expiry_and_references(t
                 assert reclaimed["removed_files"] == 1
             assert reclaimed["status"] == "RECLAIMED"
             assert (await run(current, "RECLAIM"))["removed_logical_bytes"] == 0
+            gone = (await inspect_day())["item"]
+            assert gone["reclaim_started"] and gone["files"] == 0
+            assert (await submit("POST", "/recover", action="REDOWNLOAD"))["status"] == "RECOVERY_BUDGET_REQUIRED"
     finally:
         await first.shutdown(step_timeout=1.0)
         await second.shutdown(step_timeout=1.0)

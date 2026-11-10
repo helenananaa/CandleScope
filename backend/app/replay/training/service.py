@@ -105,6 +105,8 @@ from .storage import TrainingRunStore
 from .storage_governance import ReplayStorageGovernance
 from .raw_trade_retention import (
     execute_managed_retention,
+    inspect_managed_day,
+    recover_managed_day,
     plan_managed_retention,
     set_managed_policy,
 )
@@ -837,6 +839,20 @@ class TrainingRunService:
         return await execute_managed_retention(
             self.replay_service.store, self.replay_service.raw_trade_archive,
             identity=("binance", "futures", symbol), day=day, day_id=day_id, plan_id=plan_id, action=action,
+        )
+
+    async def inspect_raw_trade_retention(self, *, symbol: str, day: str) -> dict[str, object]:
+        return await inspect_managed_day(
+            self.replay_service.store, self.replay_service.raw_trade_archive, symbol=symbol, day=day,
+        )
+
+    async def recover_raw_trade_retention(
+        self, *, symbol: str, day: str, day_id: str, action: str,
+        max_download_bytes: int | None, max_restore_bytes: int | None,
+    ) -> dict[str, object]:
+        return await recover_managed_day(
+            self.replay_service.raw_trade_archive, symbol=symbol, day=day, day_id=day_id, action=action,
+            max_download_bytes=max_download_bytes, max_restore_bytes=max_restore_bytes,
         )
 
     async def account_history_gc_plan(
