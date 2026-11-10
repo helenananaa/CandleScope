@@ -1071,9 +1071,36 @@ class RemoteRawAggTradeArchive:
         end_time_ms: int,
         page_rows: int = 50_000,
     ) -> RawAggTradeDatasetRef:
-        self._refresh()
-        identity = (str(exchange).lower(), str(market_type).lower(), str(symbol).upper())
+        identity = (
+            str(exchange).strip().lower(),
+            str(market_type).strip().lower(),
+            str(symbol).strip().upper(),
+        )
         requested_days = _utc_days(start_time_ms, end_time_ms)
+        missing_days = tuple(
+            day for day in requested_days
+            if not self.cache.has_verified_day(
+                exchange=identity[0], market_type=identity[1], symbol=identity[2],
+                day=day.isoformat(), allow_repair=True,
+            )
+        )
+        with self._lock:
+            self._metrics["official_cache_hits"] += len(requested_days) - len(missing_days)
+        if missing_days:
+            self._materialize_missing_days(identity, missing_days)
+        return self.cache.freeze_dataset(
+            exchange=exchange,
+            market_type=market_type,
+            symbol=symbol,
+            start_time_ms=start_time_ms,
+            end_time_ms=end_time_ms,
+            page_rows=page_rows,
+        )
+
+    def _materialize_missing_days(
+        self, identity: tuple[str, str, str], missing_days: tuple[date, ...],
+    ) -> None:
+        self._refresh()
         with self._lock:
             receipts_by_day = {
                 item.metadata.date: item
@@ -1099,27 +1126,13 @@ class RemoteRawAggTradeArchive:
                 availability is None
                 or not any(item.contains(day) for item in availability.ranges)
             )
-            for day in requested_days
+            for day in missing_days
         ):
             raise RuntimeError(
                 "remote aggTrade catalog does not continuously cover the selected range"
             )
-        cached_windows = self.cache.list_verified_windows(
-            exchange=identity[0],
-            market_type=identity[1],
-            symbol=identity[2],
-        )
         try:
-            for day in requested_days:
-                day_start_ms = _day_start_ms(day)
-                if any(
-                    item.start_time_ms <= day_start_ms
-                    and item.end_time_ms >= day_start_ms + _DAY_MS - 1
-                    for item in cached_windows
-                ):
-                    with self._lock:
-                        self._metrics["official_cache_hits"] += 1
-                    continue
+            for day in missing_days:
                 receipt = receipts_by_day.get(day.isoformat())
                 if receipt is not None:
                     self._materialize_receipt(receipt.path)
@@ -1134,14 +1147,6 @@ class RemoteRawAggTradeArchive:
             with self._lock:
                 self._metrics["materialization_failures"] += 1
             raise
-        return self.cache.freeze_dataset(
-            exchange=exchange,
-            market_type=market_type,
-            symbol=symbol,
-            start_time_ms=start_time_ms,
-            end_time_ms=end_time_ms,
-            page_rows=page_rows,
-        )
 
     def _materialize_official_day(
         self,

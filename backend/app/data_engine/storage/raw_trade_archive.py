@@ -1181,16 +1181,13 @@ class ParquetRawAggTradeArchive:
             raise RuntimeError("checksum-verified raw aggTrade partition is quarantined")
         if not (partition / "_verified_import.json").is_file():
             return False
-        start = int(datetime.fromisoformat(day).replace(tzinfo=timezone.utc).timestamp() * 1000)
         try:
-            return bool(self._discover_verified_manifests(
-                exchange=identity[0], market_type=identity[1], symbol=identity[2],
-                start_time_ms=start, end_time_ms=start + 86_400_000 - 1,
-            ))
+            self._verified_partition_receipt(partition, (*identity, day))
         except (OSError, RuntimeError, ValueError):
             if not allow_repair:
                 raise
             return False
+        return True
 
     def verified_day_acquisition_lock_path(self, identity: tuple[str, str, str], day: str) -> Path:
         """Use stable, bounded lock slots shared by the day publishers and readers."""
@@ -1263,17 +1260,9 @@ class ParquetRawAggTradeArchive:
                     continue
                 date = date_component.removeprefix("date=")
                 _validate_utc_date(date)
-                receipt = self._read_verified_receipt(receipt_path)
+                receipt = self._verified_partition_receipt(partition, (*identity, date))
                 metadata = receipt["metadata"]
                 assert isinstance(metadata, Mapping)
-                if (
-                    metadata.get("exchange"),
-                    metadata.get("market_type"),
-                    metadata.get("symbol"),
-                    metadata.get("date"),
-                ) != (*identity, date):
-                    continue
-                self._validate_verified_receipt_objects(partition, receipt)
                 day_start = int(
                     datetime.strptime(date, "%Y-%m-%d")
                     .replace(tzinfo=timezone.utc)
@@ -2635,6 +2624,23 @@ class ParquetRawAggTradeArchive:
             if self._object_manifest(self._read_file_manifest(path)) != item:
                 raise RuntimeError("verified raw aggTrade receipt checksum changed")
 
+    def _verified_partition_receipt(
+        self,
+        partition: Path,
+        identity_day: tuple[str, str, str, str],
+        *,
+        repair_ids: tuple[int, int] | None = None,
+    ) -> dict[str, object]:
+        receipt = self._read_verified_receipt(partition / "_verified_import.json")
+        metadata = receipt["metadata"]
+        assert isinstance(metadata, Mapping)
+        if (
+            metadata["exchange"], metadata["market_type"], metadata["symbol"], metadata["date"],
+        ) != identity_day:
+            raise RuntimeError("verified raw aggTrade receipt identity changed")
+        self._validate_verified_receipt_objects(partition, receipt, repair_ids=repair_ids)
+        return receipt
+
     def _record_import_conflict(
         self,
         conflict_path: Path,
@@ -2713,17 +2719,9 @@ class ParquetRawAggTradeArchive:
                 raise RuntimeError(
                     "checksum-verified raw aggTrade daily coverage is missing"
                 )
-            receipt = self._read_verified_receipt(receipt_path)
-            metadata = receipt["metadata"]
-            assert isinstance(metadata, Mapping)
-            if (
-                metadata.get("exchange"),
-                metadata.get("market_type"),
-                metadata.get("symbol"),
-                metadata.get("date"),
-            ) != (exchange, market_type, symbol, date):
-                raise RuntimeError("verified raw aggTrade receipt identity changed")
-            self._validate_verified_receipt_objects(partition, receipt, repair_ids=repair_ids)
+            receipt = self._verified_partition_receipt(
+                partition, (exchange, market_type, symbol, date), repair_ids=repair_ids,
+            )
             objects = receipt["objects"]
             assert isinstance(objects, list)
             for raw in objects:
