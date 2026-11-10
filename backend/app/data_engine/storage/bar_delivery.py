@@ -11,7 +11,7 @@ from contextlib import closing
 
 from app.data_engine.bar_delivery_errors import BarDeliveryUnavailable
 from app.data_engine.series_identity import KlineSeriesIdentity
-from .revisions import current_revision, series_change, series_values, register_derived, IDENTITY_COLUMNS
+from .revisions import current_revision, series_change, series_values, register_derived, IDENTITY_COLUMNS, mutation_mode
 
 
 def _json(value):
@@ -158,9 +158,10 @@ class BarDeliveryJournal:
             if payload.get("derived"):
                 register_derived(conn, series_values(payload["symbol"], payload["interval"],
                     payload["exchange"], payload["market_type"], identity))
-            affected = self._write(payload["symbol"], payload["interval"], [payload["storage_row"]],
-                                   payload["bar"]["source"], exchange=payload["exchange"],
-                                   market_type=payload["market_type"], series_identity=identity, _connection=conn)
+            with mutation_mode(conn, "bar_delivery"):
+                affected = self._write(payload["symbol"], payload["interval"], [payload["storage_row"]],
+                                       payload["bar"]["source"], exchange=payload["exchange"],
+                                       market_type=payload["market_type"], series_identity=identity, _connection=conn)
             record["phase"] = "committed" if affected else "rejected"
             record["committed_revision"] = current_revision(conn)
             conn.execute("UPDATE bar_delivery SET phase=?,committed_revision=? WHERE event_id=?",

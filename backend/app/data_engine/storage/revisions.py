@@ -41,6 +41,28 @@ def _execute_schema(conn, script):
         raise ValueError("incomplete revision schema statement")
 
 
+def _readback_receipt_sql(values, revision, start, end, *, condition="1"):
+    keys = ",".join(IDENTITY_COLUMNS)
+    return f"""
+        INSERT INTO kline_history_readback
+        SELECT {values}, {revision}, 0, {start}, {end} WHERE {condition}
+        ON CONFLICT({keys}) DO UPDATE SET
+            previous_revision=kline_history_readback.revision,
+            revision=excluded.revision, start_ms=excluded.start_ms, end_ms=excluded.end_ms;
+    """
+
+
+@contextmanager
+def mutation_mode(conn, mode):
+    """Tag writes already announced by their production owner."""
+    previous = conn.execute("SELECT mode FROM kline_mutation_context WHERE singleton=1").fetchone()[0]
+    conn.execute("UPDATE kline_mutation_context SET mode=? WHERE singleton=1", (mode,))
+    try:
+        yield
+    finally:
+        conn.execute("UPDATE kline_mutation_context SET mode=? WHERE singleton=1", (previous,))
+
+
 def init_revision_storage(conn):
     columns = ", ".join(f"{name} TEXT NOT NULL" for name in IDENTITY_COLUMNS)
     keys = ", ".join(IDENTITY_COLUMNS)
@@ -57,6 +79,10 @@ def init_revision_storage(conn):
             {columns}, revision INTEGER NOT NULL, delete_revision INTEGER NOT NULL,
             start_ms INTEGER NOT NULL, end_ms INTEGER NOT NULL, operation TEXT NOT NULL,
             PRIMARY KEY ({keys})
+        );
+        CREATE TABLE IF NOT EXISTS kline_history_readback (
+            {columns}, revision INTEGER NOT NULL, previous_revision INTEGER NOT NULL,
+            start_ms INTEGER, end_ms INTEGER, PRIMARY KEY ({keys})
         );
         CREATE TABLE IF NOT EXISTS kline_derived_series ({columns}, PRIMARY KEY ({keys}));
         CREATE INDEX IF NOT EXISTS idx_kline_changes_revision ON kline_series_changes(revision);
@@ -119,8 +145,14 @@ def init_revision_storage(conn):
         source_derived_predicate = " AND ".join(f"s.{name}={alias}.{name}" for name in IDENTITY_COLUMNS)
         derived_predicate = " AND ".join(f"d.{name}=klines.{name}" for name in IDENTITY_COLUMNS)
         family_predicate = " AND ".join(f"{name}={alias}.{name}" for name in IDENTITY_COLUMNS if name != "interval")
+        mode = "(SELECT mode FROM kline_mutation_context WHERE singleton=1)"
+        direct = f"{mode} NOT IN ('bar_delivery', 'derived_materialization')"
+        if operation == "delete":
+            direct = f"({direct}) OR (SELECT depth FROM kline_projection_invalidation WHERE singleton=1)>0"
+        readback = _readback_receipt_sql(values, revision, f"{alias}.open_time", f"{alias}.open_time",
+                                         condition=direct)
         _execute_schema(conn, f"""
-            {('DROP TRIGGER IF EXISTS kline_change_delete;' if operation == 'delete' else '')}
+            DROP TRIGGER IF EXISTS kline_change_{operation};
             CREATE TRIGGER IF NOT EXISTS kline_change_{operation}
             AFTER {operation.upper()} ON klines {condition} BEGIN
                 UPDATE kline_revision_clock SET revision=revision+1 WHERE singleton=1;
@@ -132,6 +164,7 @@ def init_revision_storage(conn):
                     delete_revision=MAX(delete_revision,excluded.delete_revision),
                     start_ms=MIN(start_ms,excluded.start_ms), end_ms=MAX(end_ms,excluded.end_ms),
                     operation=excluded.operation;
+                {readback}
                 {('INSERT INTO kline_delete_permissions SELECT ' + values + ',' + revision +
                   ' WHERE (SELECT depth FROM kline_projection_invalidation WHERE singleton=1)=0 '
                   'ON CONFLICT(' + keys + ') DO UPDATE SET revision=excluded.revision;' if operation == 'delete' else '')}
@@ -145,7 +178,8 @@ def init_revision_storage(conn):
             DROP TRIGGER IF EXISTS kline_dependents_{operation};
             CREATE TRIGGER IF NOT EXISTS kline_dependents_{operation}
             AFTER {operation.upper()} ON klines
-            WHEN {mutation_condition}(SELECT mode FROM kline_mutation_context WHERE singleton=1)<>'retention'
+            WHEN {mutation_condition}(SELECT mode FROM kline_mutation_context WHERE singleton=1)
+                NOT IN ('retention', 'provenance_migration')
                 AND NOT EXISTS(SELECT 1 FROM kline_derived_series s WHERE {source_derived_predicate})
                 AND EXISTS(SELECT 1 FROM kline_derived_series d WHERE {dependent_family} AND d.interval<>{alias}.interval)
             BEGIN
@@ -190,6 +224,7 @@ def init_empty_coverage_revision_triggers(conn, table: str, *, native: bool = Fa
         family = " AND ".join(f"d.{name}={value}" for name, value in zip(IDENTITY_COLUMNS, values) if name != "interval")
         selected_family = " AND ".join(f"{name}={value}" for name, value in zip(IDENTITY_COLUMNS, values) if name != "interval")
         match = " AND ".join(f"d.{name}=klines.{name}" for name in IDENTITY_COLUMNS)
+        readback = _readback_receipt_sql(",".join(values), head, f"{alias}.start_ms", f"{alias}.end_ms")
         conn.executescript(f"""
             {migration_start}
             CREATE TRIGGER IF NOT EXISTS {table}_change_{operation}
@@ -201,6 +236,7 @@ def init_empty_coverage_revision_triggers(conn, table: str, *, native: bool = Fa
                     delete_revision=MAX(delete_revision,excluded.delete_revision),
                     start_ms=MIN(start_ms,excluded.start_ms), end_ms=MAX(end_ms,excluded.end_ms),
                     operation=excluded.operation;
+                {readback}
                 UPDATE kline_projection_invalidation SET depth=depth+1 WHERE singleton=1;
                 DELETE FROM klines WHERE {selected_family} AND
                     EXISTS(SELECT 1 FROM kline_derived_series d WHERE {match} AND {family} AND d.interval<>{interval})
@@ -244,6 +280,8 @@ def mark_deleted(conn, values, start_ms=None, end_ms=None):
         end_ms=MAX(end_ms,excluded.end_ms), operation='delete'""",
         (*values, revision, revision, start_ms if start_ms is not None else 0,
          end_ms if end_ms is not None else 9223372036854775807, "delete"))
+    conn.execute(_readback_receipt_sql(",".join("?" for _ in values), "?", "?", "?"),
+                 (*values, revision, start_ms, end_ms))
 
 
 class RevisionStore:
@@ -259,8 +297,13 @@ class RevisionStore:
         with closing(self.connect()) as conn, conn:
             conn.execute("BEGIN")
             head = current_revision(conn)
-            rows = conn.execute("SELECT * FROM kline_series_changes WHERE revision>? ORDER BY revision LIMIT ?",
-                                (revision, limit + 1)).fetchall()
+            keys = ",".join(IDENTITY_COLUMNS)
+            rows = conn.execute(f"""
+                SELECT c.*, h.revision AS readback_revision, h.previous_revision AS readback_previous,
+                       h.start_ms AS readback_start_ms, h.end_ms AS readback_end_ms
+                FROM kline_series_changes c LEFT JOIN kline_history_readback h USING ({keys})
+                WHERE c.revision>? ORDER BY c.revision LIMIT ?
+                """, (revision, limit + 1)).fetchall()
             self.observed_revision = head
             return {"revision": head, "reset": len(rows) > limit or revision > head,
                     "changes": [dict(row) for row in rows[:limit]]}

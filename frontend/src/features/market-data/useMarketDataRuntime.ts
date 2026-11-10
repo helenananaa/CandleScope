@@ -1,6 +1,6 @@
 import { hasVerifiedCoverage } from "./quality/klineQualityPolicy.js";
 import { bindSharedWindow } from "./manager/sharedWindowBinding.js";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { t } from "../../i18n/index.js";
 import {
   canResolveIntervalFromNativeValues,
@@ -474,6 +474,12 @@ export function useMarketDataRuntime({
   }, [realtimePriceRef]);
 
   const seriesDataFeed = useMemo(() => new SeriesDataFeed(), []);
+  const terminalHistoryGaps = useSyncExternalStore(
+    seriesDataFeed.subscribeTerminalHistoryGaps,
+    seriesDataFeed.getTerminalHistoryGaps,
+    seriesDataFeed.getTerminalHistoryGaps,
+  );
+  const historyGap = terminalHistoryGaps.find((gap) => gap.seriesKey === seriesDataFeed.seriesKey(activeSeries));
   const canRequestChartSeries = useCallback((candidate: {
     exchange?: ExchangeId;
     marketType?: MarketType;
@@ -1357,6 +1363,7 @@ export function useMarketDataRuntime({
         && activeHistoryViewportCountBack > 0
         && (chartDataMeta.historyValidatedCountBack ?? 0) >= activeHistoryViewportCountBack
         && (chartDataMeta.historyValidatedCountBack ?? 0) < activeHistoryTargetCountBack,
+      ...(marketDataReady && historyGap ? { historyGap } : {}),
       canLoadMoreLeft: canRequestMoreLeftDuringRuntime({
         hasMoreLeft,
         loading,
