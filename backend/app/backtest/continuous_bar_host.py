@@ -14,6 +14,7 @@ from app.market_dataset.snapshot import MarketEvent
 from app.data_engine.storage.prefix_watches import PrefixReceipt, PrefixAcquisitionChanged
 from app.data_engine.storage.revisions import StaleAcquisition
 from .continuous_store import ContinuousStrategyStore
+from .continuous_source_identity import source_owner
 from .errors import BacktestError
 from .models import ENGINE_VERSION
 from .service import _build_bar_kernel, _new_host_planner, _planning_context, _strategy_execution_reporter, _strategy_observation_features, _assert_strategy_frame_inputs, _declared_feature_names
@@ -94,7 +95,7 @@ class ContinuousBarHost:
                 raise error("CONTINUOUS_SOURCE_UNAVAILABLE","Market input requires a durable DataManager prefix receipt")
             return None
         point = PrefixReceipt.from_dict(receipt.to_dict() if isinstance(receipt,PrefixReceipt) else dict(receipt))
-        if (point.owner != "strategy:"+run_id or tuple(definition.get("source_series",())) != point.series
+        if (point.owner != source_owner(run_id,definition) or tuple(definition.get("source_series",())) != point.series
                 or point.through_ms != event_time_ms or point.incarnation != data_revision):
             raise error("CONTINUOUS_INPUT_INVALID","The source prefix does not belong to this run, market and committed cursor")
         return point
@@ -117,7 +118,7 @@ class ContinuousBarHost:
         host = cls(run_id, definition, provider_factory)
         host.source_receipt = point
         try:
-            prepared = store.prepare_checkpoint(host.checkpoint(),event_time_ms=event_time_ms,data_revision=data_revision)
+            prepared = store.prepare_checkpoint(host.checkpoint(),event_time_ms=event_time_ms,data_revision=data_revision,run_id=run_id,initial=True)
             owner_thread = threading.get_ident()
             allowed, published = True, False
             def publish():
@@ -235,7 +236,7 @@ class ContinuousBarHost:
             try:
                 self.kernel.advance(batch, self._observe)
                 self._check_stopping()
-                prepared = self.store.prepare_checkpoint(self.checkpoint(point),event_time_ms=stamp,data_revision=data_revision)
+                prepared = self.store.prepare_checkpoint(self.checkpoint(point),event_time_ms=stamp,data_revision=data_revision,run_id=self.row["id"])
                 published = False
                 publication_allowed = True
                 owner_thread = threading.get_ident()

@@ -1,0 +1,27 @@
+{
+  "application_commit": "6d99286af8eb8d27110507fd905bc10796243d1f",
+  "base_pr": 251,
+  "base_head": "96ec47ad47c55818ba91ea65ac4d27fdd1804525",
+  "tests": {
+    "passed": 408,
+    "warnings": 5,
+    "skipped": 0
+  },
+  "access_scenarios": 16,
+  "actual_offline_fastapi_subprocess": true,
+  "live_app_bootstrap_helper_with_real_manager_and_fake_transport_only": true,
+  "default_owner_binding": true,
+  "controller_database": "continuous-strategy.sqlite3",
+  "request_limit": 8,
+  "view_workers": 2,
+  "shared_view_subscription_limit": 32,
+  "architecture": {
+    "existing_findings": 10,
+    "byte_equal_baseline": true
+  },
+  "public_http_ws_routes": false,
+  "frontend": false,
+  "native_product_acceptance": false,
+  "public_market_called": false,
+  "public_not_before_utc": "2026-11-04T15:42:40.340Z"
+}

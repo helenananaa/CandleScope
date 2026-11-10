@@ -1,0 +1,9 @@
+{
+  "observedAt": "2026-11-05T05:10:43.868537+00:00",
+  "operation": "Read-only Windows disk/process inventory; no application launched",
+  "tool": "windows_start_process",
+  "result": "UNAVAILABLE",
+  "httpStatus": 429,
+  "message": "MCP SSE probe returned429; Windows command did not execute",
+  "qualified": false
+}

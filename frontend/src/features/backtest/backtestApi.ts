@@ -1,5 +1,6 @@
 import { readStrategyRunStream, StrategyRunStreamError, type StrategyRunUpdate } from "./backtestRunStream.js";
 import { API_BASE } from "../../services/apiConfig.js";
+import type { ResearchSelectedVersion } from "../strategy-research/researchSelectedVersion.js";
 import { preparationRequest, waitForPreparation, type PreparationJob } from "../data-preparation/api.js";
 import type {
   BacktestReport,
@@ -210,6 +211,7 @@ export interface BacktestApiClient {
     signal?: AbortSignal,
   ): Promise<BacktestRunRecord>;
   getRun(runId: string, signal?: AbortSignal): Promise<BacktestRunRecord>;
+  getSelectedVersion?(runId: string, signal?: AbortSignal): Promise<ResearchSelectedVersion>;
   streamRun?(runId: string, signal?: AbortSignal, onUpdate?: (event: StrategyRunUpdate) => void): Promise<BacktestRunRecord>;
   getReport(runId: string, signal?: AbortSignal): Promise<BacktestReport>;
   getChart(runId: string, signal?: AbortSignal): Promise<BacktestChartData>;
@@ -466,6 +468,9 @@ export function createBacktestApi(base = `${API_BASE}/backtests`): BacktestApiCl
         `${base}/runs/${encodeURIComponent(runId)}`,
         requestOptions({}, signal),
       ));
+    },
+    async getSelectedVersion(runId, signal) {
+      return readJson(await fetch(`${base}/runs/${encodeURIComponent(runId)}/strategy-version`, requestOptions({}, signal)));
     },
     async getReport(runId, signal) {
       return readJson(

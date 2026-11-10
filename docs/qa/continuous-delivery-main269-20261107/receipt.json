@@ -1,0 +1,57 @@
+{
+  "source": "9895d3be3fade199c6249ef6ef630e457d78e4ab",
+  "base": "c337e7f31dbba1ca7a642b498e09c66dd6791692",
+  "main": "bc067c16f3daf8b235d7c1dd1292a0b37fb2a71d",
+  "command": [
+    "/Users/ryanliang/.codex/worktrees/issue-152-output-range-20261102/CandleScope/output/issue-152-output-range-20261102/main226-native-test-env/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "backend/tests/test_continuous_api.py",
+    "backend/tests/test_continuous_bar_host.py",
+    "backend/tests/test_continuous_bar_source.py",
+    "backend/tests/test_continuous_controller.py",
+    "backend/tests/test_continuous_creation_journal.py",
+    "backend/tests/test_continuous_definition.py",
+    "backend/tests/test_continuous_guarded_source.py",
+    "backend/tests/test_continuous_manager_lifecycle.py",
+    "backend/tests/test_continuous_provider.py",
+    "backend/tests/test_continuous_results.py",
+    "backend/tests/test_continuous_strategy_access.py",
+    "backend/tests/test_continuous_strategy_runtime.py",
+    "backend/tests/test_continuous_strategy_shutdown.py",
+    "backend/tests/test_continuous_strategy_store.py",
+    "--basetemp=/private/tmp/candlescope-continuous-layer-main269-20261107/output/pr253-main269/pytest",
+    "-q",
+    "-rs",
+    "backend/tests/test_replay_catalog_shutdown.py",
+    "backend/tests/test_kline_order_flow_metrics.py",
+    "backend/tests/test_replay_trade_bar_parity.py"
+  ],
+  "env": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPATH": "packages/candlescope-plugin-sdk/src:packages/candlescope-backtest-sdk/src:backend",
+    "DATA_DIR": "/private/tmp/candlescope-continuous-layer-main269-20261107/output/pr253-main269/data",
+    "CANDLE_DATA_DIR": "/private/tmp/candlescope-continuous-layer-main269-20261107/output/pr253-main269/data",
+    "NATIVE_TEST_PINE_PYTHON": "/Users/ryanliang/CandleScope/output/development-goal-20261104/continuous-stack-main266-20261106/pine/python"
+  },
+  "started": "2026-11-07T06:44:49.476895+00:00",
+  "architectureExitCode": 1,
+  "architectureOutputMatchesMain": true,
+  "pytestExitCode": 0,
+  "finished": "2026-11-07T06:45:23.168950+00:00",
+  "passed": 258,
+  "skipped": 0,
+  "warnings": 5,
+  "suites": 17,
+  "artifacts": {
+    "architecture.log.gz": {
+      "sha256": "92ca27a8c70d39c064dfa4a145274c6de9794ed8f8ce719803f1294a4e014ed3",
+      "originalSha256": "f355856f92f3e9c9c2aa68666ae36b9a5abfe82d36a3a6401c7dbf8d3c8f1c76"
+    },
+    "backend.log.gz": {
+      "sha256": "a922aa14a88ddf683e60736dac87e9eb65bb1633d2ae0366b48ed27facf2a85e",
+      "originalSha256": "9b8260cbd52a2ac5c7971ff725fc8bb09de5fd26ae7122d786d55f93fb9d8d01"
+    }
+  }
+}

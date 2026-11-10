@@ -1,0 +1,40 @@
+{
+  "application_commit": "b57c01c2353b76992f83fea6520433dc30100506",
+  "base_pr": 256,
+  "base_head": "54e08ecffb8eddc09c96019004b76a1c62f179a5",
+  "backend": {
+    "passed": 346,
+    "warnings": 5,
+    "log": "backend-final-second.log.gz"
+  },
+  "new_asgi_scenarios": 9,
+  "frontend": {
+    "regular": 4906,
+    "isolated_performance": 1,
+    "desktop": 130,
+    "full_check": "passed",
+    "focused": 26,
+    "log": "frontend-check.log.gz"
+  },
+  "backend_architecture": {
+    "existing_findings": 10,
+    "byte_identical_baseline": "docs/qa/continuous-repair-worker-20261105/architecture-final.log.gz"
+  },
+  "api": {
+    "preview": "POST /continuous/runs/{id}/repair/preview",
+    "confirm": "POST /continuous/runs/{id}/repairs",
+    "status": "GET /continuous/repairs/{key}",
+    "latest": "GET /continuous/runs/{id}/repairs/latest",
+    "cancel": "POST /continuous/repairs/{key}/cancel",
+    "stream": "Existing continuous.v1 account stream; optional repair metadata, no new event kind",
+    "financial_envelope_reserve_bytes": 32768
+  },
+  "pending": [
+    "User confirmation/range/progress interface",
+    "Real installed macOS repair flow",
+    "Native Windows product acceptance",
+    "Broader original strategy requirements"
+  ],
+  "windows_probe": "MCP connection-layer429; command never executed",
+  "public_cooldown_not_before_utc": "2026-11-05T07:59:57.081Z"
+}
