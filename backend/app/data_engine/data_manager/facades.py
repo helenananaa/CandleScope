@@ -45,6 +45,9 @@ class BarSourcePrefixFacade:
     def prepare(self, receipt, **kwargs):
         return self._require().prepare(receipt, **kwargs)
 
+    def fork_unchanged(self, receipt, owner: str, **kwargs):
+        return self._require().fork_unchanged(receipt, owner, **kwargs)
+
     def commit(self, proof, publish: Callable[[], Any], *, committed_through_ms=None):
         # Computation and provider snapshots belong before this short guard.
         # The callback only commits its already prepared financial checkpoint.

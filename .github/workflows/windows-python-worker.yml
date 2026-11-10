@@ -4,8 +4,12 @@ on:
   pull_request:
     paths:
       - "backend/app/backtest/strategy/**"
+      - "backend/app/backtest/continuous*.py"
+      - "backend/app/data_engine/storage/prefix_watches.py"
       - "backend/app/plugin_security_v2/**"
       - "backend/tests/test_python_strategy_runtime.py"
+      - "backend/tests/test_continuous*.py"
+      - "backend/tests/test_kline_prefix_watches.py"
       - "packages/candlescope-backtest-sdk/**"
       - "backend/requirements*.txt"
       - ".github/scripts/verify_windows_python_worker.py"
@@ -46,6 +50,18 @@ jobs:
           python -B -m pytest -q tests/test_python_strategy_runtime.py
           --junitxml=../output/windows-python-worker/junit.xml
           --basetemp="${{ runner.temp }}/python-worker-${{ github.run_id }}-${{ github.run_attempt }}"
+      - name: Check continuous profile repair and physical shutdown
+        working-directory: backend
+        env:
+          CANDLE_DATA_DIR: ${{ runner.temp }}/candlescope-continuous-data
+        run: >-
+          python -B -m pytest -q tests/test_continuous_controller.py
+          tests/test_continuous_provider.py tests/test_continuous_epochs.py
+          tests/test_continuous_repairs.py tests/test_continuous_source_identity.py
+          tests/test_continuous_repair_api.py
+          tests/test_kline_prefix_watches.py
+          --junitxml=../output/windows-python-worker/continuous-junit.xml
+          --basetemp="${{ runner.temp }}/continuous-worker-${{ github.run_id }}-${{ github.run_attempt }}"
       - name: Require executed Windows cases and record source identity
         if: always()
         run: >-

@@ -1,9 +1,11 @@
 import { replayNoteChinese } from "./replayNoteMessages.js";
+import { continuousChinese } from "./continuousMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyChinese } from "./historyStudyMessages.js";
 import { tradingAccountsZhCN } from "./tradingAccountsMessages.js";
 import { tradeHistoryChinese } from "./tradeHistoryMessages.js";
 export const zhCN = {
+  ...continuousChinese,
   ...tradeHistoryChinese,
   ...replayNoteChinese,
   ...historyStudyChinese,

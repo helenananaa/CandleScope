@@ -1,3 +1,4 @@
+import { continuousEnglish } from "./continuousMessages.js";
 import { tradeHistoryEnglish } from "./tradeHistoryMessages.js";
 import { replayNoteEnglish } from "./replayNoteMessages.js";
 import { historyStudyEnglish } from "./historyStudyMessages.js";
@@ -8,6 +9,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const uk = {
+  ...continuousEnglish,
   ...tradeHistoryEnglish,
   ...replayNoteEnglish,
   ...historyStudyEnglish,
