@@ -118,7 +118,8 @@ class ContinuousEpochs:
         columns="id,run_id,request_key,phase,target_revision,base_identity_json,progress_json,error_json,updated_at_ms"
         for name in ("plan_id","resume_after","from_ms","through_ms","anchor_sequence","full_reinitialization","expanded_range_reason"):
             columns+=",json_extract(plan_json,'$."+name+"') AS "+name
-        return columns+",json_extract(plan_json,'$.source.from_ms') AS original_from_ms"
+        return (columns+",json_extract(plan_json,'$.source.from_ms') AS original_from_ms"
+                ",json_type(plan_json,'$.auto_policy_version') IS NOT NULL AS automatic")
 
     @staticmethod
     def _summary(row):
@@ -126,7 +127,7 @@ class ContinuousEpochs:
         value=dict(row)
         for field in ("base_identity","progress","error"):
             wire=value.pop(field+"_json");value[field]=None if wire is None else json.loads(wire)
-        for field in ("resume_after","full_reinitialization"):value[field]=bool(value[field])
+        for field in ("resume_after","full_reinitialization","automatic"):value[field]=bool(value[field])
         return value
 
     def summary(self,request_key):
@@ -204,6 +205,8 @@ class ContinuousEpochs:
                 raise fail("FIDELITY_UNSUPPORTED","Repair requires its owned market source contract")
             if self.store.db.execute("SELECT 1 FROM continuous_epochs WHERE run_id=? AND phase IN ('REQUESTED','PREPARING','READY')",(run_id,)).fetchone():
                 raise fail("CONTINUOUS_NOT_READY","This account already has an accepted repair")
+            if "auto_policy_version" in plan:
+                self.store.auto_repair.claim(run_id,row["revision"],plan["auto_policy_version"])
             total,owned=self.store.db.execute("SELECT count(*),COALESCE(SUM(run_id=?),0) FROM continuous_epochs",(run_id,)).fetchone()
             if total>=64 or owned>=8:raise fail("BUDGET_EXCEEDED","Retained history repair capacity reached")
             latest=self.store.db.execute("SELECT MAX(revision) FROM checkpoints WHERE run_id=?",(run_id,)).fetchone()[0]
@@ -244,16 +247,22 @@ class ContinuousEpochs:
         return result
 
     def fail(self,epoch_id,*,code,message,cancelled=False):
-        from .continuous_store import _wire,fail
+        from .continuous_store import fail
         if type(cancelled) is not bool:raise fail("CONTINUOUS_INPUT_INVALID","Repair cancellation must be explicit")
         with self.store._transaction():
             saved=self.describe(epoch_id)
             if saved["phase"]=="COMMITTED":raise fail("CONTINUOUS_COMMIT_CONFLICT","Published repair cannot be discarded")
-            self.store.db.execute("UPDATE continuous_epochs SET phase=?,error_json=?,updated_at_ms=? WHERE id=?",
-                ("CANCELLED" if cancelled else "FAILED",_wire({"code":str(code)[:64],"message":str(message)[:256]},4096),int(time.time()*1000),epoch_id))
+            if saved["phase"] in {"FAILED", "CANCELLED"}:return saved
+            self._write_failure(epoch_id, code=code, message=message, cancelled=cancelled)
         result=self.describe(epoch_id)
         self._notify(result)
         return result
+
+    def _write_failure(self,epoch_id,*,code,message,cancelled):
+        from .continuous_store import _wire
+        self.store.db.execute("UPDATE continuous_epochs SET phase=?,error_json=?,updated_at_ms=? WHERE id=?",
+            ("CANCELLED" if cancelled else "FAILED",_wire({"code":str(code)[:64],"message":str(message)[:256]},4096),
+             int(time.time()*1000),epoch_id))
 
     def cleaned(self,epoch_id):
         """Durable receipt after physical stage/watch cleanup; safe to retry."""

@@ -234,3 +234,233 @@ def test_repair_views_do_not_decode_checkpoints_definitions_or_private_source_re
         with api.client.websocket_connect(f'{BASE}/runs/{run_id}/stream?protocol=continuous.v1') as ws:
             packet=ws.receive_json();assert packet['repair']['id']==record['id'] and packet['type']!='error'
     finally:store.db.set_authorizer(None)
+
+
+def test_processed_correction_marks_committed_results_while_catchup_is_busy(api, monkeypatch):
+    controller = api.gate.continuous
+    api.now[0] = START + 10 * STEP
+    run_id = create(api, payload(python=True))['run_id']
+    full_initial(api, run_id)
+    api.now[0] = START + 20 * STEP
+    api.client.portal.call(api.manager.event_bus.emit, DataEvent(DataEventType.BAR_CLOSED, KEY))
+    api.client.portal.call(wait_row, controller.store, run_id, lambda row: row['sequence'] == 20)
+    api.client.portal.call(until, lambda: not controller.jobs)
+    other_id = create(api, payload(history=False), key='request/other')['run_id']
+    _, _, values = full_initial(api, run_id)
+    full_initial(api, other_id)
+    api.client.portal.call(wait_row, controller.store, run_id, lambda row: row['phase'] == 'LIVE')
+    api.client.portal.call(wait_row, controller.store, other_id, lambda row: row['phase'] == 'LIVE')
+    before = controller.store.load(run_id)
+    identity = controller.store.results.identity(before['run'])
+    cutoff = START + 25 * STEP - 1
+    entered, release = Event(), Event()
+    prepare = controller.store.prepare_checkpoint
+
+    def block_checkpoint(checkpoint, *, event_time_ms, run_id=None, **kwargs):
+        if run_id == identity['id'] and event_time_ms == cutoff and not entered.is_set():
+            entered.set()
+            assert release.wait(10)
+        return prepare(checkpoint, event_time_ms=event_time_ms, run_id=run_id, **kwargs)
+
+    monkeypatch.setattr(controller.store, 'prepare_checkpoint', block_checkpoint)
+    cursor = quote(json.dumps(identity), safe='')
+    try:
+        with api.client.websocket_connect(f'{BASE}/runs/{run_id}/stream?protocol=continuous.v1&after={cursor}') as ws:
+            api.now[0] = cutoff + 1
+            api.client.portal.call(api.manager.event_bus.emit, DataEvent(DataEventType.BAR_CLOSED, KEY))
+            assert entered.wait(5)
+            changed = START + 12 * STEP
+            klines_repo.upsert_klines(KEY.symbol, KEY.interval, [_row(changed, 220)], source=SOURCE)
+            api.client.portal.call(api.manager.event_bus.emit, DataEvent(DataEventType.BAR_AMENDED, KEY))
+
+            async def wait_stale():
+                await asyncio.wait_for(wait_row(controller.store, run_id, lambda row: row['phase'] == 'REPAIR_REQUIRED'), 1)
+
+            api.client.portal.call(wait_stale)
+            assert not release.is_set()
+            while True:
+                stale = ws.receive_json()
+                assert stale['type'] != 'error', stale
+                if stale.get('complete') and stale.get('stale'):
+                    break
+            assert stale['identity']['sequence'] == identity['sequence']
+            assert stale['identity']['checkpoint_revision'] == identity['checkpoint_revision']
+            assert stale['items'] == []
+            assert controller.store.load(run_id)['checkpoint'] == before['checkpoint']
+            assert_values(controller, run_id, values)
+            assert not controller.store.epochs.pending()
+            other = api.client.portal.call(wait_row, controller.store, other_id, lambda row: row['event_time_ms'] == cutoff)
+            assert other['phase'] == 'LIVE'
+
+            release.set()
+            api.client.portal.call(until, lambda: run_id not in controller.runtime.actors)
+            response = api.client.post(f'{BASE}/runs/{run_id}/repair/preview',
+                                       json={'expected':stale['identity'],'resume_after':False})
+            assert response.status_code == 200, response.text
+            plan = response.json()['plan']
+            assert plan['anchor_sequence'] > 0
+            assert confirm(api, run_id, plan).status_code == 202
+            completed = complete(api)
+            assert completed['phase'] == 'COMMITTED'
+            replacement = []
+            while True:
+                packet = ws.receive_json()
+                assert packet['type'] != 'error', packet
+                if packet.get('type') == 'reset' or (packet.get('identity') and
+                        packet['identity']['data_revision'] != identity['data_revision']):
+                    replacement.append(packet)
+                    apply(packet, values)
+                    if packet.get('complete'):
+                        break
+            assert replacement[0]['type'] == 'reset'
+            assert not replacement[-1]['stale']
+            assert replacement[-1]['identity']['event_time_ms'] == cutoff
+            assert_values(controller, run_id, values)
+            outdated = api.client.post(f'{BASE}/runs/{run_id}/results/query',
+                                       json={'since_revision':0,'expected':stale['identity']})
+            assert outdated.status_code == 409
+            oracle = reference(controller, api.manager, before, api.tmp)
+            checkpoint = controller.store.load(run_id)['checkpoint']
+            assert checkpoint['engine'] == oracle['engine'] and checkpoint['provider'] == oracle['provider']
+            assert controller.store.summary(other_id) == other
+    finally:
+        release.set()
+
+
+def auto_setting(api, run_id, enabled, version, origin=ORIGIN):
+    return api.client.post(f'{BASE}/runs/{run_id}/repair/automatic',
+        json={'enabled':enabled,'expected_version':version}, headers={'Origin':origin})
+
+
+def ready_for_auto(api, key='request/test'):
+    api.now[0]=START+10*STEP
+    run_id=create(api,payload(python=True),key=key)['run_id']
+    full_initial(api,run_id)
+    controller=api.gate.continuous
+    api.client.portal.call(until,lambda:not controller.jobs)
+    api.now[0]=START+25*STEP
+    api.client.portal.call(api.manager.event_bus.emit,DataEvent(DataEventType.BAR_CLOSED,KEY))
+    api.client.portal.call(wait_row,controller.store,run_id,lambda row:row['phase']=='LIVE' and row['sequence']==25)
+    return run_id
+
+
+def change_auto_history(api):
+    klines_repo.upsert_klines(KEY.symbol,KEY.interval,[_row(START+12*STEP,220)],source=SOURCE)
+    api.client.portal.call(api.manager.event_bus.emit,DataEvent(DataEventType.BAR_AMENDED,KEY))
+
+
+def test_automatic_repair_is_authorized_before_revision_and_restores_without_a_view(api, monkeypatch):
+    from app.backtest.continuous_controller import ContinuousStrategyController
+
+    run_id=ready_for_auto(api)
+    other=create(api,payload(python=True),key='request/other')['run_id']
+    full_initial(api,other)
+    controller=api.gate.continuous
+    api.client.portal.call(until,lambda:not controller.jobs)
+    api.client.portal.call(wait_row,controller.store,other,lambda row:row['phase']=='LIVE')
+    before=controller.store.load(run_id)
+    before_other=controller.store.load(other)
+    path=controller.store.path
+    endpoint=f'{BASE}/runs/{run_id}/repair/automatic'
+    assert api.client.get(endpoint).json()['policy']=={'run_id':run_id,'enabled':False,'version':0}
+    assert auto_setting(api,run_id,True,0,origin='https://example.test').status_code==403
+    assert api.client.post(endpoint,json={'enabled':1,'expected_version':0},headers={'Origin':ORIGIN}).status_code==422
+    assert auto_setting(api,run_id,True,0).json()['policy']=={'run_id':run_id,'enabled':True,'version':1}
+    assert auto_setting(api,run_id,False,0).status_code==409
+
+    api.client.portal.call(controller.close)
+    assert not api.active
+    change_auto_history(api)
+    entered, release=Event(), Event()
+    publish=ContinuousRepairPublication.publish
+    def held(self,*args,**kwargs):
+        entered.set();assert release.wait(10)
+        return publish(self,*args,**kwargs)
+    monkeypatch.setattr(ContinuousRepairPublication,'publish',held)
+
+    async def reopen():
+        owner=await ContinuousStrategyController.open(path,api.manager,clock_ms=lambda:api.now[0])
+        api.gate.continuous=owner
+        await owner.restore()
+        return owner
+
+    controller=api.client.portal.call(reopen)
+    try:
+        assert entered.wait(10)
+        assert api.client.get(endpoint).json()['policy']=={'run_id':run_id,'enabled':True,'version':1}
+        status=api.client.get(f'{BASE}/runs/{run_id}').json()
+        assert status['run']['phase']=='REPAIR_REQUIRED' and status['repair']['phase']=='READY'
+        assert status['repair']['automatic'] and status['repair']['request_key'].startswith('auto-repair/')
+        assert status['repair']['anchor_sequence']==10
+        assert status['repair']['resume_after'] is True
+        assert controller.store.load(run_id)['checkpoint']==before['checkpoint']
+        release.set()
+        record=complete(api,status['repair']['request_key'])
+        assert record['phase']=='COMMITTED'
+        api.client.portal.call(wait_row,controller.store,run_id,lambda row:row['phase']=='LIVE')
+        corrected=reference(controller,api.manager,before,api.tmp)
+        current=controller.store.load(run_id)
+        assert current['checkpoint']['engine']==corrected['engine']
+        # Restart and epoch publication advance the worker fence independently
+        # of the strategy's calculated state.
+        provider=current['checkpoint']['provider']
+        assert provider['generation']>corrected['provider']['generation']
+        assert {**provider,'generation':corrected['provider']['generation']}==corrected['provider']
+        assert current['run']['id']==before['run']['id']
+        api.client.portal.call(wait_row,controller.store,other,lambda row:row['phase']=='REPAIR_REQUIRED')
+        assert controller.store.load(other)['checkpoint']==before_other['checkpoint']
+        assert controller.store.epochs.latest_summary(other) is None
+        assert auto_setting(api,other,True,0).status_code==503
+    finally:
+        release.set()
+
+
+def test_disabling_automatic_repair_before_publication_keeps_old_finances(api, monkeypatch):
+    run_id=ready_for_auto(api)
+    controller=api.gate.continuous
+    before=controller.store.load(run_id)
+    assert auto_setting(api,run_id,True,0).status_code==200
+    entered,release=Event(),Event()
+    publish=ContinuousRepairPublication.publish
+    def held(self,*args,**kwargs):
+        entered.set();assert release.wait(10)
+        return publish(self,*args,**kwargs)
+    monkeypatch.setattr(ContinuousRepairPublication,'publish',held)
+    try:
+        change_auto_history(api)
+        assert entered.wait(10)
+        record=controller.store.epochs.latest_summary(run_id)
+        assert record['phase']=='READY'
+        assert auto_setting(api,run_id,False,1).json()['policy']=={'run_id':run_id,'enabled':False,'version':2}
+        release.set()
+        result=complete(api,record['request_key'])
+        assert result['phase']=='CANCELLED'
+        assert result['error']['code']=='CONTINUOUS_AUTO_REPAIR_REVOKED'
+        assert controller.store.load(run_id)['run']['phase']=='REPAIR_REQUIRED'
+        assert controller.store.load(run_id)['checkpoint']==before['checkpoint']
+        assert controller.store.epochs.projection(run_id).key==run_id
+        assert not controller.store.auto_repair.candidates()
+    finally:
+        release.set()
+
+
+def test_automatic_preview_failure_is_visible_and_does_not_retry_the_revision(api, monkeypatch):
+    from app.backtest import continuous_auto_repair
+    from app.backtest.errors import BacktestError
+
+    run_id=ready_for_auto(api)
+    controller=api.gate.continuous
+    before=controller.store.load(run_id)
+    assert auto_setting(api,run_id,True,0).status_code==200
+    calls=[]
+    def fail_preview(*args,**kwargs):
+        calls.append(kwargs['expected'])
+        raise BacktestError('CONTINUOUS_SOURCE_GAP','Fixture source unavailable')
+    monkeypatch.setattr(continuous_auto_repair,'preview',fail_preview)
+    change_auto_history(api)
+    stopped=api.client.portal.call(wait_row,controller.store,run_id,lambda row:row['error'] and row['error']['code']=='CONTINUOUS_SOURCE_GAP')
+    assert stopped['phase']=='REPAIR_REQUIRED'
+    assert controller.store.load(run_id)['checkpoint']==before['checkpoint']
+    assert not controller.store.epochs.pending()
+    assert not controller.store.auto_repair.candidates()
+    assert len(calls)==1
