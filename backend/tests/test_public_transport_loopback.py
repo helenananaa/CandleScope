@@ -21,7 +21,12 @@ from app.exchanges.ccxt_ext.catalog import get_ccxt_catalog_entry
 from app.exchanges.ccxt_ext.profiles.binance_usdm import BinanceUsdmCcxtProfile
 from app.exchanges.public_admission import PublicDemand, get_public_admission, public_demand
 from app.exchanges.public_ws import AdmittedWebSocket, connection_rules
-from app.exchanges.rate_limits import RateLimitDeferred, RateLimitPolicy, get_shared_rate_limit_manager
+from app.exchanges.rate_limits import (
+    RateLimitDeferred,
+    RateLimitPolicy,
+    RateLimitRule,
+    get_shared_rate_limit_manager,
+)
 
 
 def point_at_loopback(exchange, origin):
@@ -317,6 +322,17 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
         create = generic._create_exchange
         policy = RateLimitPolicy(default_concurrency=1, default_delay_seconds=.01,
                                  default_retry_429_backoff_seconds=.1)
+        if multi_chunk:
+            # Give the measured ranges enough local tokens to reach the
+            # relay. The injected 10006 still uses physical admission.
+            policy.endpoint_rules = (RateLimitRule(
+                name="bybit_chunk_loopback",
+                bucket_key="bybit:chunk-loopback",
+                capacity=16,
+                refill_interval_seconds=.01,
+                max_concurrency=1,
+                cooldown_seconds=.1,
+            ),)
 
         def routed(*args, **kwargs):
             exchange = create(*args, **kwargs)
@@ -330,7 +346,10 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
             return exchange
 
         monkeypatch.setattr(generic, "_create_exchange", routed)
-        config = IngestionConfig(proxy_mode="none")
+        config = IngestionConfig(
+            proxy_mode="none",
+            proxy_egress_group=f"chunk-loopback-{urlsplit(origin).port}" if multi_chunk else None,
+        )
         storage = klines_repo.KlinesRepoAdapter()
 
         async def emit(event):
@@ -341,8 +360,13 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
 
         def make_runtime(*, rechunk=False):
             transport = TransportLayer(config)
-            engine = BackfillEngine(BackfillConfig(history_archive_enabled=False, fetch_batch_size=2),
-                                    klines_repo.AsyncKlinesRepoAdapter(), transport, ingestion_config=config)
+            backfill_config = BackfillConfig(history_archive_enabled=False, fetch_batch_size=2)
+            if multi_chunk:
+                backfill_config.fetch_concurrency = 1
+                backfill_config.fetch_global_concurrency = 1
+            engine = BackfillEngine(
+                backfill_config, klines_repo.AsyncKlinesRepoAdapter(), transport, ingestion_config=config,
+            )
             ledger = GapLedger(db_path)
             history = HistoryAvailabilityService(
                 calendars=get_history_calendar_registry(),
@@ -411,8 +435,7 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
             metadata = json.loads(checkpoint["metadata_json"])
             if multi_chunk:
                 assert set(metadata[COMPLETED_NATIVE_CHUNKS_FIELD]) == {"1", "2"}
-            else:
-                assert metadata[NATIVE_PROGRESS_FIELD]
+            assert metadata[NATIVE_PROGRESS_FIELD]
             retry_at = checkpoint["next_retry_at"]
             assert retry_at >= reset_ms - 3
             if amend_while_deferred:
