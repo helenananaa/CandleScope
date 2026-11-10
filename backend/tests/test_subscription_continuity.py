@@ -13,9 +13,10 @@ from app.data_engine.data_manager.config import DataManagerConfig, EventBusConfi
 from app.data_engine.data_manager.models import BarData, DataEvent, DataEventType, SeriesKey
 from app.data_engine.ingestion import StreamPipeline
 from app.data_engine.ingestion.config import IngestionConfig
-from app.data_engine.ingestion.models import StreamDescriptor, StreamType
+from app.data_engine.ingestion.models import DataSource, RawMessage, StreamDescriptor, StreamType
 from app.data_engine.interval_policy import parse_interval_spec
 from app.data_engine.storage import klines_repo
+from app.exchanges.ccxt_ext.unified import make_unified_payload
 from tests.test_recovery_delivery_integration import _until
 from tests.test_recovery_kline_consumers import _Factory, _history_repair, _committed_backfill, _close, T, IDENTITY
 
@@ -34,7 +35,7 @@ class Factory(_Factory):
         return self.pipeline
 
 
-async def manager(tmp_path, monkeypatch, config=None):
+async def manager(tmp_path, monkeypatch, config=None, *, identity=IDENTITY):
     monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", tmp_path / "bars.sqlite")
     klines_repo.init_klines_storage()
     store = klines_repo.KlinesRepoAdapter()
@@ -45,7 +46,7 @@ async def manager(tmp_path, monkeypatch, config=None):
     dm.set_ingestion_factory(factory)
     requests = []
     dm.set_backfill_trigger(lambda *args, **kwargs: requests.append((args, kwargs)))
-    await dm.ensure_stream(**IDENTITY)
+    await dm.ensure_stream(**identity)
     return dm, store, factory, requests
 
 
@@ -89,6 +90,79 @@ async def test_strict_and_gap_aware_share_repair_without_blocking_latest(tmp_pat
         assert any(event.event_type == DataEventType.BAR_AMENDED and event.bar.close == 150 for event in live)
         assert any(event.event_type == DataEventType.SOURCE_GAP_RESOLVED for event in live)
         assert errors == []
+    finally:
+        await _close(dm, factory)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(("market_type", "symbol"), [
+    ("swap.linear", "BTC/USDT:USDT"),
+    ("swap.inverse", "BTC/USD:BTC"),
+])
+@pytest.mark.parametrize("delayed_confirm", [True, False])
+async def test_bybit_http_poll_cannot_mask_a_missed_or_delayed_confirm(
+    tmp_path, monkeypatch, market_type, symbol, delayed_confirm,
+):
+    from app.data_engine.bar_aggregator import aggregator as aggregator_module
+
+    identity = dict(symbol=symbol, interval="5m", exchange="bybit", market_type=market_type)
+    opened, step = 1_794_138_000_000, 300_000
+    now = opened
+    monkeypatch.setattr(aggregator_module, "time", SimpleNamespace(time=lambda: now / 1000))
+    dm, store, factory, requests = await manager(tmp_path, monkeypatch, identity=identity)
+    target = {**identity, "interval": "10m"}
+    events, errors, _ = capture(dm, identity=identity)
+    derived, derived_errors, _ = capture(dm, identity=target)
+
+    async def feed(bar_open, price, source, received, *, closed):
+        nonlocal now
+        now = received
+        fields = {"is_closed": closed}
+        if source is DataSource.WEBSOCKET:
+            fields["source_close_time_ms"] = bar_open + step - 1
+        await factory.pipeline.normalize.ingest(RawMessage(
+            payload=make_unified_payload("kline", [bar_open, price, price, price, price, 10], **fields),
+            source=source, stream_type=StreamType.KLINE, received_at_ms=received,
+        ))
+
+    try:
+        await dm.ensure_stream(**target)
+        await feed(opened, 100, DataSource.WEBSOCKET, opened + step, closed=True)
+        await feed(opened + step, 101, DataSource.WEBSOCKET, opened + 2 * step - 1000, closed=False)
+        # A poll may label the elapsed slot closed based solely on wall time.
+        await feed(opened + step, 101, DataSource.HTTP, opened + 2 * step + 1000, closed=True)
+
+        if delayed_confirm:
+            await feed(opened + step, 102, DataSource.WEBSOCKET, opened + 2 * step + 2000, closed=True)
+        await feed(opened + 2 * step, 103, DataSource.HTTP, opened + 2 * step + 3000, closed=False)
+
+        if delayed_confirm:
+            await _until(lambda: len(closed(events)) == 2 and len(closed(derived)) == 1)
+            rows = store.query_bars(**identity, start_ms=opened + step, end_ms=opened + step)
+            assert [(bar["close"], bar["source"]) for bar in rows] == [(102, "bybit_ws_confirmed")]
+            rows = store.query_bars(**target, start_ms=opened, end_ms=opened)
+            assert [(bar["close"], bar["source"]) for bar in rows] == [(102, "data_manager_composite_closed")]
+            assert dm.source_gaps.pending() == []
+        else:
+            pending = {gap.key.interval: gap.expected for gap in dm.source_gaps.pending()}
+            assert pending == {"5m": {opened + step}, "10m": {opened}}
+            submitted = {args[1]: (args[2], args[3]) for args, kwargs in requests
+                         if kwargs.get("requester") == "ingestion_gap"}
+            assert submitted == {"5m": (opened + step, opened + step), "10m": (opened, opened)}
+            assert store.query_bars(**identity, start_ms=opened + step, end_ms=opened + step) == []
+            repaired = BarData(time=(opened + step) // 1000, open=102, high=102, low=102,
+                               close=102, volume=10, source="backfill_rest_verified", is_closed=True)
+            await _committed_backfill(dm, store, [repaired], **identity)
+            assert closed(derived) == []
+            derived_repair = BarData(time=opened // 1000, open=100, high=102, low=100, close=102,
+                                     volume=20, source="backfill_rest_verified", is_closed=True)
+            await _committed_backfill(dm, store, [derived_repair], **target)
+            await _until(lambda: len(closed(events)) == 2 and len(closed(derived)) == 1)
+            assert events[-1].bar.close == derived[-1].bar.close == 102
+            assert events[-1].detail["continuity_replayed"] is True
+            assert derived[-1].detail["continuity_replayed"] is True
+            assert dm.source_gaps.pending() == []
+        assert errors == derived_errors == []
     finally:
         await _close(dm, factory)
 

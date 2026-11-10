@@ -401,9 +401,14 @@ class CcxtUnifiedNormalizer:
             if "source_close_time_ms" in payload and payload["source_close_time_ms"] != end_time - 1:
                 return None
             is_closed = bool(payload.get("is_closed", end_time <= msg.received_at_ms))
-            bybit_live = self._descriptor.exchange == "bybit" and msg.source == DataSource.WEBSOCKET
+            bybit_live = self._descriptor.exchange == "bybit" and msg.source in {
+                DataSource.WEBSOCKET, DataSource.HTTP,
+            }
+            # A realtime REST poll has no venue close flag. Treat it as a
+            # preview so it cannot suppress a late confirmation or mask a gap.
             bybit_close_confirmed = (
                 bybit_live
+                and msg.source == DataSource.WEBSOCKET
                 and payload.get("is_closed") is True
                 and payload.get("source_close_time_ms") == end_time - 1
             )
