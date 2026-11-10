@@ -103,6 +103,11 @@ from .multitrack import (
 )
 from .storage import TrainingRunStore
 from .storage_governance import ReplayStorageGovernance
+from .raw_trade_retention import (
+    execute_managed_retention,
+    plan_managed_retention,
+    set_managed_policy,
+)
 from .raw_trade_retention import preview as preview_raw_trade_retention
 from .raw_trade_retention import recheck as recheck_raw_trade_retention
 from .segments import (
@@ -808,6 +813,30 @@ class TrainingRunService:
     async def raw_trade_retention_recheck(self, *, day_id: str, limit: int) -> dict[str, object]:
         return await recheck_raw_trade_retention(
             self.replay_service.store, self.replay_service.raw_trade_archive, day_id=day_id, limit=limit,
+        )
+
+    async def set_raw_trade_retention_policy(
+        self, *, symbol: str, day: str, day_id: str, expected_revision: int, retain_until_ms: int | None,
+    ) -> dict[str, object]:
+        return await set_managed_policy(
+            self.replay_service.raw_trade_archive, identity=("binance", "futures", symbol), day=day, day_id=day_id,
+            expected_revision=expected_revision, retain_until_ms=retain_until_ms,
+        )
+
+    async def plan_raw_trade_retention(
+        self, *, symbol: str, day: str, day_id: str, max_files: int, max_bytes: int,
+    ) -> dict[str, object]:
+        return await plan_managed_retention(
+            self.replay_service.store, self.replay_service.raw_trade_archive,
+            identity=("binance", "futures", symbol), day=day, day_id=day_id, max_files=max_files, max_bytes=max_bytes,
+        )
+
+    async def execute_raw_trade_retention(
+        self, *, symbol: str, day: str, day_id: str, plan_id: str, action: str,
+    ) -> dict[str, object]:
+        return await execute_managed_retention(
+            self.replay_service.store, self.replay_service.raw_trade_archive,
+            identity=("binance", "futures", symbol), day=day, day_id=day_id, plan_id=plan_id, action=action,
         )
 
     async def account_history_gc_plan(

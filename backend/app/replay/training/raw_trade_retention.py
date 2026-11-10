@@ -20,6 +20,7 @@ from app.data_engine.storage.raw_trade_archive import (
     ParquetRawAggTradeArchive,
     RawAggTradeDatasetRef,
     VerifiedTradeReclaimResult,
+    _sync_retention_directory,
 )
 from app.data_engine.storage.raw_trade_retention_lock import partition_lease
 from app.replay.errors import ReplayDomainError
@@ -260,7 +261,14 @@ async def preview(
         }
     # Sample active pins before reading saved references. A session that
     # publishes and releases its pin between these reads remains represented.
-    report = await run_archive(inventory, limit=limit)
+    def collect():
+        report = inventory(limit=limit)
+        cache = _policy_archive(archive)
+        for item in report["items"]:
+            _annotate_policy(cache, item)
+        return report
+
+    report = await run_archive(collect)
     saved, complete, local_id = await store.run_extension_read(
         lambda connection: (*_saved_partitions(connection), _store_identity(connection)),
     )
@@ -280,6 +288,7 @@ async def preview(
         **result,
         **report,
         "status": "PREVIEW",
+        "policy_state": _policy_state(report["items"]),
         "saved_reference_scan_complete": complete,
         "saved_reference_store_count": 1 + scanned,
         "unavailable_reference_store_count": unavailable,
@@ -336,13 +345,29 @@ async def recheck(
                     saved, complete, scanned, unavailable = _scan_reference_stores(directory, store.path)
             except (OSError, OverflowError, sqlite3.Error, ValueError):
                 return {**result, "status": "SAVED_REFERENCE_SCAN_UNAVAILABLE"}
+            _annotate_policy(_policy_archive(archive), item)
             _annotate_references(item, saved, complete)
             return {
-                **result, "status": status, "item": item, "saved_reference_scan_complete": complete,
+                **result, "status": status, "item": item, "policy_state": _policy_state([item]),
+                "saved_reference_scan_complete": complete,
                 "saved_reference_store_count": 1 + scanned, "unavailable_reference_store_count": unavailable,
             }
 
     return await run_archive(inspect)
+
+
+@contextmanager
+def _reference_free(
+    directory: Path, database: Path, partition: str,
+) -> Iterator[bool]:
+    with ExitStack() as leases:
+        try:
+            leases.enter_context(_registry_lease(directory, shared=False))
+            saved, complete, _, _ = _scan_reference_stores(directory, database)
+        except (OSError, OverflowError, sqlite3.Error, ValueError):
+            yield False
+            return
+        yield complete and not saved.get(partition)
 
 
 async def reclaim_retired_day(
@@ -357,22 +382,223 @@ async def reclaim_retired_day(
 
     @contextmanager
     def authorize(partition: str, receipt_id: str) -> Iterator[bool]:
-        with policy(partition, receipt_id) as approved, ExitStack() as leases:
+        with policy(partition, receipt_id) as approved:
             if not approved:
                 yield False
                 return
-            try:
-                leases.enter_context(_registry_lease(directory, shared=False))
-                saved, complete, _, _ = _scan_reference_stores(directory, store.path)
-            except (OSError, OverflowError, sqlite3.Error, ValueError):
-                yield False
-                return
-            # Hold the registry fence through unlink, so a dormant profile
-            # cannot register pre-existing references between scan and reclaim.
-            yield complete and not saved.get(partition)
+            with _reference_free(directory, store.path, partition) as free:
+                yield free
 
     return await run_archive(
         archive.reclaim_retired_verified_day,
         identity=identity, day=day, day_id=day_id, max_files=max_files,
         max_bytes=max_bytes, authorize=authorize,
     )
+
+
+_POLICY_SCHEMA = "replay.raw-trade-retention.policy.v1"
+_PLAN_SCHEMA = "replay.raw-trade-retention.plan.v1"
+_PLAN_TTL_MS = 300_000
+_MAX_PLAN_FILES = 8_192
+
+
+def _policy_archive(archive: object) -> ParquetRawAggTradeArchive | None:
+    cache = getattr(archive, "cache", archive)
+    return cache if isinstance(cache, ParquetRawAggTradeArchive) else None
+
+
+def _retention_record(path: Path, schema: str) -> dict[str, Any] | None:
+    if path.is_symlink() or path.parent.is_symlink():
+        raise ValueError("unsafe retention metadata path")
+    try:
+        with path.open("rb") as handle:
+            raw = handle.read(4097)
+    except FileNotFoundError:
+        return None
+    if len(raw) > 4096:
+        raise ValueError("retention record exceeds its metadata budget")
+    result = json.loads(raw)
+    if not isinstance(result, dict) or result.get("schema") != schema:
+        raise ValueError("invalid retention record")
+    return result
+
+
+def _persist_retention_record(path: Path, record: dict[str, Any]) -> None:
+    if path.is_symlink() or path.parent.is_symlink():
+        raise ValueError("unsafe retention metadata path")
+    _atomic_write_json(path, record)
+    _sync_retention_directory(path.parent)
+    _sync_retention_directory(path.parent.parent)
+
+
+def _current_policy(archive: ParquetRawAggTradeArchive, key: str, day_id: str) -> dict[str, Any] | None:
+    record = _retention_record(archive.retention_policy_path(key, plan=False), _POLICY_SCHEMA)
+    if record is None:
+        return None
+    if (set(record) != {"schema", "day_id", "revision", "retain_until_ms"}
+            or type(record["revision"]) is not int or record["revision"] < 1
+            or (record["retain_until_ms"] is not None and (
+                type(record["retain_until_ms"]) is not int or record["retain_until_ms"] < 0
+            ))):
+        raise ValueError("invalid retention policy")
+    return record if record["day_id"] == day_id else None
+
+
+def _annotate_policy(cache: ParquetRawAggTradeArchive | None, item: dict[str, Any]) -> None:
+    if cache is None:
+        return
+    reasons = item["protection_reasons"]
+    try:
+        policy = _current_policy(cache, item["partition_key"], item["day_id"])
+    except (OSError, ValueError):
+        reasons.append("RETENTION_POLICY_UNAVAILABLE")
+        return
+    if policy is None:
+        return
+    item["retention_policy"] = policy
+    reasons.remove("UNMANAGED_RETENTION_POLICY")
+    cutoff = policy["retain_until_ms"]
+    if cutoff is None or cutoff > _now_ms():
+        reasons.append("POLICY_RETAINS_DAY")
+
+
+def _policy_state(items: list[dict[str, Any]]) -> str:
+    managed = sum("retention_policy" in item for item in items)
+    if not managed:
+        return "UNMANAGED"
+    return "MANAGED" if managed == len(items) else "MIXED"
+
+
+def _now_ms() -> int:
+    return time.time_ns() // 1_000_000
+
+
+async def set_managed_policy(
+    archive: object, *, identity: tuple[str, str, str], day: str, day_id: str,
+    expected_revision: int, retain_until_ms: int | None,
+) -> dict[str, object]:
+    cache = _policy_archive(archive)
+    if cache is None:
+        return {"status": "UNAVAILABLE"}
+
+    def save() -> dict[str, object]:
+        with cache.retention_policy_candidate(identity=identity, day=day, day_id=day_id) as (status, item):
+            if item is None:
+                return {"status": status}
+            key = item["partition_key"]
+            try:
+                previous = _current_policy(cache, key, day_id)
+                revision = previous["revision"] if previous else 0
+                if expected_revision != revision:
+                    return {"status": "POLICY_CONFLICT", "policy": previous}
+                policy = {"schema": _POLICY_SCHEMA, "day_id": day_id, "revision": revision + 1,
+                          "retain_until_ms": retain_until_ms}
+                _persist_retention_record(cache.retention_policy_path(key, plan=False), policy)
+                cache.invalidate_retention_plan(key)
+            except (OSError, ValueError):
+                return {"status": "POLICY_UNAVAILABLE"}
+            return {"status": "POLICY_SAVED", "policy": policy}
+
+    return await run_archive(save)
+
+
+async def plan_managed_retention(
+    store: ReplaySQLiteStore, archive: object, *,
+    identity: tuple[str, str, str], day: str, day_id: str, max_files: int, max_bytes: int,
+) -> dict[str, object]:
+    cache = _policy_archive(archive)
+    directory = _registry(archive)
+    if cache is None or directory is None:
+        return {"status": "UNAVAILABLE"}
+
+    def plan() -> dict[str, object]:
+        with cache.retention_policy_candidate(identity=identity, day=day, day_id=day_id) as (status, item):
+            if item is None:
+                return {"status": status}
+            key = item["partition_key"]
+            try:
+                policy = _current_policy(cache, key, day_id)
+                if policy is None:
+                    return {"status": "UNMANAGED"}
+                now = _now_ms()
+                cutoff = policy["retain_until_ms"]
+                if cutoff is None or cutoff > now:
+                    return {"status": "POLICY_RETAINS_DAY", "policy": policy}
+                with _reference_free(directory, store.path, key) as free:
+                    if not free:
+                        return {"status": "SAVED_REFERENCES_PROTECTED"}
+                    record = {"schema": _PLAN_SCHEMA, "day_id": day_id, "plan_id": uuid4().hex,
+                              "revision": policy["revision"], "created_ms": now, "expires_ms": now + _PLAN_TTL_MS,
+                              "max_files": max_files, "max_bytes": max_bytes}
+                    _persist_retention_record(cache.retention_policy_path(key, plan=True), record)
+            except (OSError, ValueError):
+                return {"status": "POLICY_UNAVAILABLE"}
+            return {"status": "PLANNED", "plan": record,
+                    "candidate": {name: value for name, value in item.items() if name != "partition_key"}}
+
+    return await run_archive(plan)
+
+
+async def execute_managed_retention(
+    store: ReplaySQLiteStore, archive: object, *,
+    identity: tuple[str, str, str], day: str, day_id: str, plan_id: str, action: str,
+) -> dict[str, object]:
+    cache = _policy_archive(archive)
+    directory = _registry(archive)
+    if cache is None or directory is None:
+        return {"status": "UNAVAILABLE"}
+    # Budget lookup is provisional. Authorization repeats the read inside
+    # the archive's day and partition leases before any mutation.
+    key = cache.retention_partition_key(identity, day)
+    path = cache.retention_policy_path(key, plan=True)
+    try:
+        plan = await run_archive(_retention_record, path, _PLAN_SCHEMA)
+    except (OSError, ValueError):
+        return {"status": "POLICY_UNAVAILABLE"}
+    if plan is None or plan.get("plan_id") != plan_id or plan.get("day_id") != day_id:
+        return {"status": "STALE_PLAN"}
+    max_files, max_bytes = plan.get("max_files"), plan.get("max_bytes")
+    if type(max_files) is not int or not 1 <= max_files <= _MAX_PLAN_FILES or type(max_bytes) is not int or max_bytes < 1:
+        return {"status": "POLICY_UNAVAILABLE"}
+
+    @contextmanager
+    def policy(partition: str, receipt_id: str) -> Iterator[bool]:
+        try:
+            current = _current_policy(cache, partition, receipt_id)
+            now = _now_ms()
+            valid = (
+                partition == key and receipt_id == day_id and current is not None
+                and type(plan.get("revision")) is int and current["revision"] == plan["revision"]
+                and current["retain_until_ms"] is not None and current["retain_until_ms"] <= now
+                and type(plan.get("created_ms")) is int and type(plan.get("expires_ms")) is int
+                and plan["created_ms"] <= now < plan["expires_ms"]
+                and _retention_record(path, _PLAN_SCHEMA) == plan
+            )
+        except (OSError, ValueError):
+            valid = False
+        yield valid
+
+    if action == "RECLAIM":
+        result = await reclaim_retired_day(
+            store, cache, identity=identity, day=day, day_id=day_id,
+            max_files=max_files, max_bytes=max_bytes, policy=policy,
+        )
+        return {"status": result.status, "removed_files": result.removed_files,
+                "removed_logical_bytes": result.removed_logical_bytes, "remaining_files": result.remaining_files}
+    if action != "RETIRE":
+        raise ValueError("unsupported retention action")
+
+    @contextmanager
+    def authorize(partition: str, receipt_id: str) -> Iterator[bool]:
+        with policy(partition, receipt_id) as approved:
+            if not approved:
+                yield False
+                return
+            with _reference_free(directory, store.path, partition) as free:
+                yield free
+
+    status = await run_archive(
+        cache.move_verified_retention_day, identity=identity, day=day, day_id=day_id,
+        restore=False, authorize=authorize,
+    )
+    return {"status": status}

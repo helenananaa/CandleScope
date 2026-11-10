@@ -26,6 +26,9 @@ from app.replay.request_contracts import (
     ReplayHistoricalBookGcRunPayload,
     ReplayAccountHistoryGcPlanPayload,
     ReplayAccountHistoryGcRunPayload,
+    ReplayRawTradeRetentionPolicyPayload,
+    ReplayRawTradeRetentionPlanPayload,
+    ReplayRawTradeRetentionRunPayload,
 )
 
 from typing import Awaitable, Callable, Literal
@@ -485,6 +488,36 @@ async def replay_v2_raw_trade_retention_recheck(
     limit: int = Query(default=100, ge=1, le=200),
 ) -> dict[str, object]:
     return await _training_service(request).raw_trade_retention_recheck(day_id=day_id, limit=limit)
+
+
+@router.put(
+    "/runs/storage/raw-trades/policy",
+    dependencies=[Depends(_training_service), Depends(enforce_replay_request_limit)],
+)
+async def set_replay_v2_raw_trade_retention_policy(
+    request: Request, payload: ReplayRawTradeRetentionPolicyPayload,
+) -> dict[str, object]:
+    return await _training_service(request).set_raw_trade_retention_policy(**payload.model_dump(mode="json"))
+
+
+@router.post(
+    "/runs/storage/raw-trades/plan",
+    dependencies=[Depends(_training_service), Depends(enforce_replay_request_limit)],
+)
+async def plan_replay_v2_raw_trade_retention(
+    request: Request, payload: ReplayRawTradeRetentionPlanPayload,
+) -> dict[str, object]:
+    return await _training_service(request).plan_raw_trade_retention(**payload.model_dump(mode="json"))
+
+
+@router.post(
+    "/runs/storage/raw-trades/run",
+    dependencies=[Depends(_training_service), Depends(enforce_replay_request_limit)],
+)
+async def execute_replay_v2_raw_trade_retention(
+    request: Request, payload: ReplayRawTradeRetentionRunPayload,
+) -> dict[str, object]:
+    return await _training_service(request).execute_raw_trade_retention(**payload.model_dump(mode="json"))
 
 
 @router.post("/runs/{run_id}/account-audit")

@@ -400,6 +400,105 @@ async def test_reclaim_revalidates_saved_references_for_each_batch(tmp_path: Pat
         await second.shutdown(step_timeout=1.0)
 
 
+async def test_managed_retention_routes_fence_use_policy_expiry_and_references(tmp_path, monkeypatch):
+    from app.replay.training import raw_trade_retention
+
+    root = tmp_path / "archive"
+    archive = verified_trade_archive(root)
+    first_db = tmp_path / "first" / "replay.db"
+    first = await _service(first_db, OfficialAggTradeArchive(root, defer_refresh=True), prefix="first")
+    second_db = tmp_path / "second" / "replay.db"
+    second = await _service(second_db, OfficialAggTradeArchive(root, defer_refresh=True), prefix="second")
+    app = FastAPI()
+    app.state.replay_service = second
+    app.include_router(router, prefix="/api/v1")
+    prefix = "/api/v1/replay/runs/storage/raw-trades"
+    now = TRADE_NOW_MS
+    monkeypatch.setattr(raw_trade_retention, "_now_ms", lambda: now)
+
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            preview = (await client.get(prefix + "/preview", params={"limit": 1})).json()
+            candidate, = preview["items"]
+            day = {"symbol": "BTCUSDT", "day": "2026-06-01", "day_id": candidate["day_id"]}
+
+            async def submit(method, route, **payload):
+                response = await client.request(method, prefix + route, json={**day, **payload})
+                assert response.status_code == 200, response.text
+                return response.json()
+
+            async def policy(revision, retain_until):
+                return await submit("PUT", "/policy", expected_revision=revision, retain_until_ms=retain_until)
+
+            async def plan():
+                return await submit("POST", "/plan", max_files=1, max_bytes=100_000)
+
+            async def run(record, action="RETIRE"):
+                return await submit("POST", "/run", plan_id=record["plan"]["plan_id"], action=action)
+
+            assert (await plan())["status"] == "UNMANAGED"
+            assert (await policy(0, None))["policy"]["revision"] == 1
+            pinned = (await client.get(prefix + "/preview", params={"limit": 1})).json()
+            assert pinned["policy_state"] == "MANAGED"
+            assert pinned["items"][0]["retention_policy"]["revision"] == 1
+            assert pinned["items"][0]["protection_reasons"] == ["POLICY_RETAINS_DAY"]
+            assert (await policy(0, 0))["status"] == "POLICY_CONFLICT"
+            assert (await plan())["status"] == "POLICY_RETAINS_DAY"
+            assert (await policy(1, now + 1_000))["policy"]["revision"] == 2
+            assert (await plan())["status"] == "POLICY_RETAINS_DAY"
+            assert (await policy(2, 0))["policy"]["revision"] == 3
+
+            read_plan = await plan()
+            assert read_plan["status"] == "PLANNED"
+            assert read_plan["candidate"]["state"] == "COMMITTED"
+            archive.freeze_dataset(exchange="binance", market_type="futures", symbol="BTCUSDT",
+                                   start_time_ms=TRADE_REPLAY_START_MS, end_time_ms=TRADE_REPLAY_START_MS + 20_000)
+            assert (await run(read_plan))["status"] == "STALE_PLAN"
+
+            extended_plan = await plan()
+            assert (await policy(3, None))["policy"]["revision"] == 4
+            assert (await run(extended_plan))["status"] == "STALE_PLAN"
+            assert (await policy(4, 0))["policy"]["revision"] == 5
+            await second.shutdown(step_timeout=1.0)
+            second = await _service(second_db, OfficialAggTradeArchive(root, defer_refresh=True), prefix="second-restarted")
+            app.state.replay_service = second
+
+            saved_plan = await plan()
+            assert saved_plan["plan"]["revision"] == 5
+            created = await first.create_session(trade_replay_config())
+            session_id = str(created["session_id"])
+            await first.release_session_to_hub(session_id)
+            assert (await run(saved_plan))["status"] == "STALE_PLAN"
+            assert (await plan())["status"] == "SAVED_REFERENCES_PROTECTED"
+            await first.discard_session(session_id)
+            await first.shutdown(step_timeout=1.0)
+
+            expired = await plan()
+            now = expired["plan"]["expires_ms"]
+            assert (await run(expired))["status"] == "RETENTION_NOT_AUTHORIZED"
+            assert archive.verified_retention_inventory(limit=1)["items"]
+            current = await plan()
+            assert (await run(current))["status"] == "RETIRED"
+            assert archive.verified_retention_inventory(limit=1)["items"] == []
+            reclaimed = await run(current, "RECLAIM")
+            assert reclaimed["status"] == "RECLAIM_PENDING" and reclaimed["removed_files"] == 1
+
+            parked = first_db.with_suffix(".parked")
+            first_db.rename(parked)
+            try:
+                assert (await run(current, "RECLAIM"))["status"] == "RETENTION_NOT_AUTHORIZED"
+            finally:
+                parked.replace(first_db)
+            while reclaimed["remaining_files"]:
+                reclaimed = await run(current, "RECLAIM")
+                assert reclaimed["removed_files"] == 1
+            assert reclaimed["status"] == "RECLAIMED"
+            assert (await run(current, "RECLAIM"))["removed_logical_bytes"] == 0
+    finally:
+        await first.shutdown(step_timeout=1.0)
+        await second.shutdown(step_timeout=1.0)
+
+
 async def test_production_catalog_selects_a_local_day_before_official_discovery(
     tmp_path: Path,
 ) -> None:

@@ -1180,6 +1180,24 @@ class ParquetRawAggTradeArchive:
         key = hashlib.sha256(partition_key.encode("utf-8")).hexdigest()
         return self.root / ".trade-retention-locks" / key
 
+    def retention_partition_key(self, identity: tuple[str, str, str], day: str) -> str:
+        return self._partition_path((*identity, day)).relative_to(self.root).as_posix()
+
+    def retention_policy_path(self, partition_key: str, *, plan: bool) -> Path:
+        key = hashlib.sha256(partition_key.encode("utf-8")).hexdigest()
+        suffix = "plan" if plan else "policy"
+        return self.root / ".trade-retention-policies" / f"{key}.{suffix}.json"
+
+    def invalidate_retention_plan(self, partition_key: str) -> None:
+        plan = self.retention_policy_path(partition_key, plan=True)
+        if plan.parent.is_symlink():
+            raise OSError("unsafe retention plan directory")
+        try:
+            plan.unlink()
+        except FileNotFoundError:
+            return
+        _sync_retention_directory(plan.parent)
+
     def _enter_retention_lease(self, leases: ExitStack, partition_key: str, deadline: float) -> None:
         try:
             leases.enter_context(partition_lease(
@@ -1190,6 +1208,8 @@ class ParquetRawAggTradeArchive:
             # Legacy externally mounted read-only archives remain readable.
             if not self.read_only:
                 raise
+        else:
+            self.invalidate_retention_plan(partition_key)
 
     def _retention_lease_busy(self, partition_key: str) -> bool:
         try:
@@ -1243,6 +1263,46 @@ class ParquetRawAggTradeArchive:
             else:
                 yield None
 
+    @contextmanager
+    def retention_policy_candidate(
+        self, *, identity: tuple[str, str, str], day: str, day_id: str,
+    ) -> Iterator[tuple[str, dict[str, Any] | None]]:
+        """Bind an explicit policy request to one safe committed or retired receipt."""
+        day_id = _prefixed_sha256_digest(day_id, "verified day ID")
+        partition = self._partition_path((*identity, day))
+        retired = self._retired_partition(partition)
+        with self._verified_retention_leases(identity, day, partition) as blocked:
+            if blocked is not None:
+                yield blocked, None
+                return
+            if (partition.is_symlink() or retired.is_symlink()
+                    or not partition.parent.resolve().is_relative_to(self.root.resolve())
+                    or (partition.exists() and retired.exists())):
+                yield "PARTITION_UNSAFE", None
+                return
+            source = retired if retired.exists() else partition
+            receipt = source / "_verified_import.json"
+            if receipt.is_symlink() or not receipt.is_file() or "sha256:" + _file_sha256(receipt) != day_id:
+                yield "STALE_RECEIPT", None
+                return
+            key = partition.relative_to(self.root).as_posix()
+            if self._has_retention_pin(key):
+                yield "ACTIVE_DATASET_PIN", None
+                return
+            expected = self._retention_expected_files(partition, source, (*identity, day))
+            marker = source / _RETENTION_RECLAIM_MARKER
+            started = source == retired and marker.is_file() and not marker.is_symlink() and not marker.stat().st_size
+            files = None if expected is None else self._retention_present_files(
+                source, expected, reclaim_started=started,
+            )
+            if files is None or (not started and files.keys() != expected.keys()):
+                yield "PARTITION_UNSAFE", None
+                return
+            yield "READY", {
+                "partition_key": key, "state": "RETIRED" if source == retired else "COMMITTED",
+                "files": len(files), "logical_bytes": sum(file.stat().st_size for file in files.values()),
+            }
+
     def move_verified_retention_day(
         self, *, identity: tuple[str, str, str], day: str, day_id: str, restore: bool,
         authorize: Callable[[str, str], AbstractContextManager[bool]],
@@ -1267,8 +1327,11 @@ class ParquetRawAggTradeArchive:
                 existing = destination / "_verified_import.json"
                 if (existing.is_file() and not existing.is_symlink()
                         and "sha256:" + _file_sha256(existing) == day_id):
-                    _sync_retention_directory(destination.parent)
-                    return complete
+                    with authorize(partition.relative_to(self.root).as_posix(), day_id) as approved:
+                        if not approved:
+                            return "RETENTION_NOT_AUTHORIZED"
+                        _sync_retention_directory(destination.parent)
+                        return complete
                 return "STALE_RECEIPT"
             if destination.exists():
                 return "DESTINATION_OCCUPIED"
@@ -1296,6 +1359,8 @@ class ParquetRawAggTradeArchive:
                     for name, file in files.items() if restore or name.endswith(".manifest.json")
                 ):
                     return "PARTITION_UNSAFE"
+                if restore:
+                    self.invalidate_retention_plan(partition_key)
                 source.rename(destination)
                 _sync_retention_directory(destination.parent)
                 return complete
@@ -1423,6 +1488,7 @@ class ParquetRawAggTradeArchive:
         if started:
             marker.unlink()
         _sync_retention_directory(retired)
+        self.invalidate_retention_plan(partition.relative_to(self.root).as_posix())
         retired.rename(partition)
         _sync_retention_directory(partition.parent)
         return "RESTORED"
