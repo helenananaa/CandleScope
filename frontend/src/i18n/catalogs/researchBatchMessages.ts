@@ -35,6 +35,10 @@ export const researchBatchChinese: Record<keyof typeof researchBatchEnglish, str
 };
 
 export const researchBatchKorean: Record<keyof typeof researchBatchEnglish, string> = {
+  "researchBatch.compareFirst": "첫 번째 실행",
+  "researchBatch.compareSecond": "두 번째 실행",
+  "researchBatch.compareDelta": "차이",
+  "researchBatch.compareLoading": "저장된 실행을 비교하는 중…",
   "researchBatch.sources": "가져온 데이터 일괄 실행",
   "researchBatch.help": "데이터 세트를 2개에서 {max}개까지 선택하세요. 각 작업은 현재 전략과 설정을 사용하며 데이터 버전은 각각 고정됩니다.",
   "researchBatch.run": "선택한 데이터 세트 실행",
@@ -49,6 +53,10 @@ export const researchBatchKorean: Record<keyof typeof researchBatchEnglish, stri
 };
 
 export const researchBatchBrazilian: Record<keyof typeof researchBatchEnglish, string> = {
+  "researchBatch.compareFirst": "Primeira execução",
+  "researchBatch.compareSecond": "Segunda execução",
+  "researchBatch.compareDelta": "Diferença",
+  "researchBatch.compareLoading": "Comparando execuções salvas…",
   "researchBatch.sources": "Executar em lote com dados importados",
   "researchBatch.help": "Selecione de 2 a {max} conjuntos de dados. Cada tarefa usa a estratégia e as configurações atuais e uma versão fixa dos dados.",
   "researchBatch.run": "Executar nos conjuntos selecionados",

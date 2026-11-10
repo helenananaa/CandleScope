@@ -337,20 +337,24 @@ class LocalDatasetService:
             if staging.exists():
                 shutil.rmtree(staging)
 
+    def open_user_market_trade_revision(self, dataset_id: str, data_epoch: str) -> tuple[dict[str, Any], Path]:
+        from .user_market_trades import USER_TRADE_SOURCE
+
+        manifest, revision = self._validated_pinned_revision_dir(dataset_id, data_epoch)
+        if manifest.get("source") != USER_TRADE_SOURCE or not isinstance(manifest.get("market_trade_input"), dict):
+            raise LocalDatasetError("Dataset is not a user market-trade source", code="FIDELITY_UNSUPPORTED")
+        return manifest, revision / "bars.sqlite"
+
     def read_user_market_trades(
         self, dataset_id: str, data_epoch: str, *, start_ms: int, end_ms: int, max_rows: int,
         include_rows: bool,
     ) -> tuple[dict[str, Any], int, list[tuple[int, int, str, str, int]]]:
-        from .user_market_trades import USER_TRADE_SOURCE
-
-        manifest, revision = self._validated_pinned_revision_dir(dataset_id, data_epoch)
-        declaration = manifest.get("market_trade_input")
-        if manifest.get("source") != USER_TRADE_SOURCE or not isinstance(declaration, dict):
-            raise LocalDatasetError("Dataset is not a user market-trade source", code="FIDELITY_UNSUPPORTED")
+        manifest, database = self.open_user_market_trade_revision(dataset_id, data_epoch)
+        declaration = manifest["market_trade_input"]
         if not declaration.get("coverage_start_ms", end_ms + 1) <= start_ms <= end_ms < declaration.get("coverage_end_ms_exclusive", 0):
             raise LocalDatasetError("Selected window is outside the declared trade coverage", code="DATA_COVERAGE_INCOMPLETE")
         try:
-            connection = sqlite3.connect((revision / "bars.sqlite").as_uri() + "?mode=ro", uri=True)
+            connection = sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)
             try:
                 parameters = (start_ms, end_ms)
                 count, first, last = connection.execute(

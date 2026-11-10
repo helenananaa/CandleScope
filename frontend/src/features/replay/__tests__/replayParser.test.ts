@@ -80,6 +80,22 @@ test("aggregate-trade capability, snapshot, source event and batched bars cross 
   assert.ok("projection" in parsed.data && parsed.data.projection.bar_update?.action === "batch");
 });
 
+test("local replay accepts imported trade provenance and rejects an official label for it", () => {
+  const capability = enabledAggTradeCapabilities();
+  const localCapability = { ...capability, sources: { ...capability.sources, agg_trade: {
+    ...capability.sources.agg_trade, fidelity: "USER_MARKET_TRADE_COVERAGE",
+  } } };
+  assert.equal(parseReplayCapabilities(localCapability).sources.agg_trade.fidelity, "USER_MARKET_TRADE_COVERAGE");
+
+  const original = replayTradeSessionResponse();
+  const local = { ...original, data_fidelity: "USER_MARKET_TRADE_COVERAGE",
+    snapshot: { ...original.snapshot, config: { ...original.snapshot.config,
+      exchange: "local-" + "a".repeat(32), market_type: "local_bar",
+    } } };
+  assert.equal(parseReplaySessionResponse(local).data_fidelity, "USER_MARKET_TRADE_COVERAGE");
+  assert.throws(() => parseReplaySessionResponse({ ...local, data_fidelity: original.data_fidelity }), /fidelity disagrees/);
+});
+
 test("aggregate-trade blind payloads reject archive paths and unrevealed actual times", () => {
   const leakedPath = structuredClone(replayTradeDeltaEvent());
   Object.assign(leakedPath.data.source_event, {
