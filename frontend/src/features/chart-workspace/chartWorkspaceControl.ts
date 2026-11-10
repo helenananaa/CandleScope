@@ -4,12 +4,14 @@ import { configureChartWorkspaceCellsCandidate } from "./chartWorkspaceBulkUpdat
 import { chartWorkspaceWindow, commitChartWorkspaceDocument } from "./chartWorkspaceDocument.js";
 import { setChartWorkspaceDocumentLayout, type ChartWorkspaceEditOptions, type ChartWorkspaceEditResult } from "./chartWorkspaceEditing.js";
 import { chartWorkspaceTemplateCellCount, visibleCellIds } from "./chartWorkspaceLayout.js";
-import type { ChartWorkspaceDocument, ChartWorkspaceTemplateId } from "./chartWorkspaceTypes.js";
+import type { ChartStrategyAttachmentRecord, ChartWorkspaceDocument, ChartWorkspaceTemplateId } from "./chartWorkspaceTypes.js";
+import { updateChartWorkspaceCellStrategyAttachment } from "./chartWorkspaceDocument.js";
 
 export interface ControlChartConfiguration {
   cellId?: string;
   session: ChartSession;
   indicators: IndicatorDefinition[];
+  strategyAttachment?: ChartStrategyAttachmentRecord;
 }
 
 export interface ControlWorkspaceCommand {
@@ -57,7 +59,15 @@ export function applyControlWorkspaceCommand(
     if (!cellId || !ids.includes(cellId)) throw new Error("CELL_UNAVAILABLE");
     return { cellId, session: chart.session, indicators: chart.indicators };
   });
-  const configured = configureChartWorkspaceCellsCandidate(edit.document, configurations);
+  let configured = configureChartWorkspaceCellsCandidate(edit.document, configurations);
+  for (const [index, chart] of command.charts.entries()) {
+    if (chart.strategyAttachment) {
+      const cellId = configurations[index]!.cellId;
+      configured = updateChartWorkspaceCellStrategyAttachment(configured, cellId, chart.strategyAttachment);
+      configured = { ...configured, cells: { ...configured.cells,
+        [cellId]: { ...configured.cells[cellId]!, strategyTesterMode: "CANDLESCOPE" } } };
+    }
+  }
   const changed = edit.document !== scoped || configured !== edit.document;
   return {
     document: changed ? commitChartWorkspaceDocument(document, configured) : document,

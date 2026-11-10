@@ -73,6 +73,14 @@ class BacktestRepository:
         return dict(row) if row is not None else None
 
     @_locked
+    def get_run_strategy_reference(self, run_id: str) -> dict[str, Any] | None:
+        row = self.connection.execute(
+            "SELECT run_id,state,strategy_revision_id,config_json,config_hash "
+            "FROM backtest_runs WHERE run_id = ?", (run_id,),
+        ).fetchone()
+        return dict(row) if row is not None else None
+
+    @_locked
     def get_run_by_idempotency(self, key: str) -> dict[str, Any] | None:
         row = self.connection.execute(
             "SELECT * FROM backtest_runs WHERE idempotency_key = ?",

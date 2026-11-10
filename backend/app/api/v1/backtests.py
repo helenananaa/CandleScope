@@ -39,12 +39,14 @@ from app.backtest.runtime import BacktestRuntime
 from app.backtest.service import BacktestService
 from .native_backtests import router as native_router, external_router
 from .external_providers import router as external_provider_router
+from .continuous_strategies import router as continuous_router
 
 
 router = APIRouter(prefix="/backtests", tags=["backtests"])
 router.include_router(native_router)
 router.include_router(external_router)
 router.include_router(external_provider_router)
+router.include_router(continuous_router)
 
 
 def _service(request: Request) -> BacktestService:
@@ -418,6 +420,14 @@ def compare_run_pair(
 def get_run(request: Request, run_id: str) -> dict[str, Any]:
     try:
         return _service(request).get_run(run_id)
+    except BacktestError as exc:
+        return _error(exc)
+
+
+@router.get("/runs/{run_id}/strategy-version")
+def selected_run_strategy_version(request: Request, run_id: str) -> dict[str, Any]:
+    try:
+        return _service(request).selected_run_version(run_id)
     except BacktestError as exc:
         return _error(exc)
 

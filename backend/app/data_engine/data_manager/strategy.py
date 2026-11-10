@@ -118,6 +118,7 @@ class StrategyDataManager:
         self.runtime = runtime
         self.market_manager = market_manager
         self.continuous = None
+        self._continuous_access = None
         self._control_requests = 0
         self.max_subscriptions = max_subscriptions
         self.heartbeat_seconds = heartbeat_seconds
@@ -128,7 +129,9 @@ class StrategyDataManager:
         """Adopt one backend owner; observing/unmounting a view never adopts it."""
         if self._closed:
             raise BacktestError("STRATEGY_MANAGER_CLOSED","strategy manager is closed")
-        if self.market_manager is None or runtime.manager is not self.market_manager:
+        read_only=(self.market_manager is None and runtime.manager is None
+            and getattr(runtime,"execution_enabled",True) is False)
+        if not read_only and (self.market_manager is None or runtime.manager is not self.market_manager):
             raise BacktestError("CONTINUOUS_SOURCE_UNAVAILABLE","Continuous execution requires this profile's live DataManager")
         if runtime.store.path.parent.resolve() != self.service.settings.db_path.parent.resolve():
             raise BacktestError("CONTINUOUS_INPUT_INVALID","Continuous execution store belongs to another profile")
@@ -139,8 +142,20 @@ class StrategyDataManager:
 
     async def shutdown(self):
         self.close()
-        if self.continuous is not None:
+        if self._continuous_access is not None:
+            await self._continuous_access.shutdown()
+        elif self.continuous is not None:
             await self.continuous.close()
+
+    def continuous_access(self):
+        if self._closed:raise BacktestError("STRATEGY_MANAGER_CLOSED","strategy manager is closed")
+        if self._continuous_access is None:
+            from .continuous_strategy import ContinuousStrategyAccess
+            self._continuous_access=ContinuousStrategyAccess(self)
+        return self._continuous_access
+
+    async def start_continuous(self):
+        return await self.continuous_access().start()
 
     def control_plane(self) -> BacktestService:
         if self._closed:
@@ -151,7 +166,8 @@ class StrategyDataManager:
     async def subscribe_run(self, run_id: str) -> StrategyRunSubscription:
         if self._closed:
             raise BacktestError("STRATEGY_MANAGER_CLOSED", "strategy manager is closed")
-        if len(self._subscriptions) >= self.max_subscriptions:
+        continuous_count=0 if self._continuous_access is None else len(self._continuous_access.subscriptions)
+        if len(self._subscriptions)+continuous_count >= self.max_subscriptions:
             raise BacktestError("RUN_CAPACITY_EXCEEDED", "strategy subscription capacity reached")
         subscription = StrategyRunSubscription(self, run_id)
         self._subscriptions.add(subscription)
@@ -164,10 +180,13 @@ class StrategyDataManager:
             raise
 
     def diagnostics(self) -> dict[str, int | bool]:
-        return {"closed": self._closed, "control_requests": self._control_requests, "subscriptions": len(self._subscriptions),
-                "runs": len({subscription.run_id for subscription in self._subscriptions})}
+        continuous=() if self._continuous_access is None else tuple(self._continuous_access.subscriptions)
+        subscriptions=tuple(self._subscriptions)+continuous
+        return {"closed": self._closed, "control_requests": self._control_requests, "subscriptions": len(subscriptions),
+                "runs": len({subscription.run_id for subscription in subscriptions})}
 
     def close(self) -> None:
         self._closed = True
         for subscription in tuple(self._subscriptions):
             subscription.close()
+        if self._continuous_access is not None:self._continuous_access.close_views()
