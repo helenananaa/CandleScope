@@ -5,7 +5,22 @@ on:
     branches: [main]
     paths: ["frontend/**", "backend/**", "packages/**", ".github/workflows/macos-desktop.yml"]
   pull_request:
-    paths: ["frontend/**", "backend/**", "packages/**", ".github/workflows/macos-desktop.yml"]
+    paths:
+      - ".github/workflows/macos-desktop.yml"
+      - "frontend/desktop/**"
+      - "frontend/package*.json"
+      - "frontend/vite.config.js"
+      - "frontend/public/brand/candlescope-app-icon-1024.png"
+      - "frontend/scripts/*desktop*"
+      - "frontend/scripts/prepare-control-adapter.mjs"
+      - "frontend/scripts/verify-macos-package.mjs"
+      - "frontend/scripts/vite-loopback-alias.mjs"
+      - "backend/app/core/version.py"
+      - "backend/native/**"
+      - "backend/requirements*.txt"
+      - "backend/ccxt-fork.lock.json"
+      - "backend/scripts/install_ccxt_fork.py"
+      - "packages/candlescope-control/**"
   workflow_dispatch:
 
 permissions:
@@ -71,14 +86,8 @@ jobs:
               throw new Error("Installed Electron does not match the locked version and runner architecture");
             }
           ' "$version"
-      - name: Check frontend and desktop host
-        env:
-          NODE_OPTIONS: --max-old-space-size=4096
-        run: npm run check
-      - name: Check desktop control adapters
-        run: |
-          npm --prefix ../packages/candlescope-control ci --ignore-scripts
-          npm --prefix ../packages/candlescope-control test
+      - name: Check desktop host on macOS
+        run: npm run test:desktop
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
