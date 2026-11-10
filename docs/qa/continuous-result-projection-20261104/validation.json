@@ -1,0 +1,30 @@
+{
+  "application_commit": "e790c4f7a994e49b4a06079a7df1ecaadf8b9c72",
+  "base_pr": 250,
+  "base_head": "16b0e5dcec291c363ec8d4b74da36acf05fd42ef",
+  "schema": 3,
+  "final_tests": {
+    "passed": 319,
+    "warnings": 5,
+    "skipped": 0,
+    "log": "results-final.log.gz"
+  },
+  "results_scenarios": 28,
+  "architecture": {
+    "existing_findings": 10,
+    "byte_equal_baseline": true
+  },
+  "reader": {
+    "max_items": 200,
+    "max_response_bytes": 1048576,
+    "max_item_bytes": 262144,
+    "head_bytes": 32768,
+    "checkpoint_read_denied_test": true,
+    "read_transaction_snapshot_test": true,
+    "mixed_page_identities": "explicit conflict; refresh required"
+  },
+  "native_launched": false,
+  "public_api": false,
+  "default_app_owner_binding": false,
+  "public_cooldown_not_before_utc": "2026-11-04T15:42:40.340Z"
+}

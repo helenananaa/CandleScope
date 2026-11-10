@@ -98,6 +98,13 @@ with TestClient(app) as client:
     assert app.state.data_manager_core.strategy.service is app.state.backtest_service
     assert app.state.data_manager_core.strategy.diagnostics()["subscriptions"] == 0
     assert not hasattr(app.state, "plugin_runtime_host")
+    owner=app.state.data_manager_core.strategy.continuous
+    assert owner is not None and owner.manager is None
+    assert owner.runtime_mode=="LOCAL_OFFLINE" and not owner.execution_enabled
+    assert not owner.runtime.actors and not owner.jobs
+    assert app.state.continuous_strategy_status["available"]
+    assert not app.state.continuous_strategy_status["execution_enabled"]
+assert owner.resources_closed and owner.store.closed and owner.lease.handle.closed
 """
     environment = source_checkout_environment()
     environment.update(

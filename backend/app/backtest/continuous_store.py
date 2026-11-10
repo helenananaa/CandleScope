@@ -7,7 +7,7 @@ published generation commit together. A view subscription never owns execution.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import json
 from pathlib import Path
 import sqlite3
@@ -18,7 +18,7 @@ from collections.abc import Mapping
 from app.core.committed_updates import committed_updates_for
 from .errors import BacktestError
 
-SCHEMA = 2
+SCHEMA = 4
 PHASES = {"CATCHING_UP", "LIVE", "PAUSED", "REPAIR_REQUIRED", "FAILED", "CANCELLED"}
 MAX_DEFINITION_BYTES = 1024 * 1024
 MAX_CHECKPOINT_BYTES = 64 * 1024 * 1024
@@ -65,6 +65,8 @@ class PreparedCheckpoint:
     raw: bytes
     event_time_ms: int
     data_revision: str
+    result_patch: object = None
+    result_owner: tuple[str,bool] | None = None
 
 
 def _checkpoint(value, event_time_ms, data_revision):
@@ -119,7 +121,7 @@ class ContinuousStrategyStore:
             self.db.execute("PRAGMA synchronous=FULL")
             with self._transaction():
                 version = self.db.execute("PRAGMA user_version").fetchone()[0]
-                if version not in (0, 1, SCHEMA):
+                if version not in (0, 1, 2, 3, SCHEMA):
                     raise fail("CONTINUOUS_SCHEMA_UNSUPPORTED", "Continuous strategy schema is unsupported")
                 if version == 0:
                     if self.db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchone():
@@ -136,8 +138,16 @@ class ContinuousStrategyStore:
                         stored_bytes INTEGER NOT NULL, PRIMARY KEY(run_id,revision))""")
                 from .continuous_creation_journal import create_schema, ContinuousCreationJournal
                 if version < 2:create_schema(self.db)
+                from .continuous_results import create_schema as create_results_schema, ContinuousResults
+                if version < 3:create_results_schema(self.db)
+                from .continuous_epochs import create_schema as create_epoch_schema, ContinuousEpochs
+                if version < 4:create_epoch_schema(self.db)
                 self.db.execute(f"PRAGMA user_version={SCHEMA}")
             self.creations = ContinuousCreationJournal(self)
+            self.epochs = ContinuousEpochs(self)
+            self.results = ContinuousResults(self)
+            from .continuous_publication import ContinuousRepairPublication
+            self.repair_publication=ContinuousRepairPublication(self)
         except BaseException:
             self.db.close()
             self.closed = True
@@ -173,6 +183,26 @@ class ContinuousStrategyStore:
                 raise fail("CONTINUOUS_STORE_CLOSED", "Continuous strategy store is closed")
             return _summary(self._row(run_id))
 
+    def resume_cursor(self,run_id,identity):
+        """Validate an observed HTTP/WS point using metadata, never state wire."""
+        from .continuous_contracts import CommittedIdentity
+        from pydantic import ValidationError
+        try:identity=CommittedIdentity.model_validate(identity).model_dump()
+        except ValidationError:raise fail("CONTINUOUS_INPUT_INVALID","Invalid committed resume identity") from None
+        with self.lock:
+            current=self.summary(run_id)
+            if identity["id"]!=run_id:raise fail("CONTINUOUS_INPUT_INVALID","Cursor belongs to another account")
+            if any(identity[name]>current[name] for name in ("generation","revision","checkpoint_revision","sequence","event_time_ms")):
+                raise fail("CONTINUOUS_COMMIT_CONFLICT","Resume cursor is ahead of the committed account")
+            if (identity["generation"],identity["data_revision"])!=(current["generation"],current["data_revision"]):
+                return {"after":0,"reason":"RUN_GENERATION_CHANGED"}
+            point=self.db.execute("SELECT sequence,event_time_ms,data_revision FROM checkpoints WHERE run_id=? AND revision=?",
+                (run_id,identity["checkpoint_revision"])).fetchone()
+            if point is None:return {"after":0,"reason":"RESUME_CURSOR_EXPIRED"}
+            if tuple(point)!=(identity["sequence"],identity["event_time_ms"],identity["data_revision"]):
+                raise fail("CONTINUOUS_COMMIT_CONFLICT","Resume point does not match its committed checkpoint")
+            return {"after":identity["checkpoint_revision"],"reason":None}
+
     def load(self, run_id):
         with self.lock:
             if self.closed:
@@ -187,7 +217,7 @@ class ContinuousStrategyStore:
                     summary["sequence"],summary["event_time_ms"],summary["data_revision"]):
                 raise fail("CONTINUOUS_CHECKPOINT_CORRUPT", "Committed state and cursor do not agree")
             try:
-                return {"run": summary, "definition": json.loads(row["definition_json"]), "checkpoint": json.loads(row["wire"])}
+                return {"run": summary, "definition": self.epochs.definition(run_id,row["definition_json"]), "checkpoint": json.loads(row["wire"])}
             except (TypeError, ValueError) as error:
                 raise fail("CONTINUOUS_CHECKPOINT_CORRUPT", "Committed state is unavailable") from error
 
@@ -197,7 +227,7 @@ class ContinuousStrategyStore:
             if self.closed:
                 raise fail("CONTINUOUS_STORE_CLOSED", "Continuous strategy store is closed")
             row = self.db.execute("SELECT "+SUMMARY_COLUMNS+",definition_json FROM runs WHERE id=?",(run_id,)).fetchone()
-            return {"run":_summary(row),"definition":json.loads(row["definition_json"])}
+            return {"run":_summary(row),"definition":self.epochs.definition(run_id,row["definition_json"])}
 
     def list_summaries(self):
         with self.lock:
@@ -241,7 +271,8 @@ class ContinuousStrategyStore:
         _text(run_id, 128), _text(data_revision, 256), _counter(event_time_ms)
         if mode not in {"HISTORY_LIVE", "LIVE_ONLY"}:
             raise fail("CONTINUOUS_INPUT_INVALID", "Unsupported continuing strategy mode")
-        definition_json, state = _wire(definition, MAX_DEFINITION_BYTES), _checkpoint(checkpoint,event_time_ms,data_revision)
+        definition_json = _wire(definition, MAX_DEFINITION_BYTES)
+        state = self.prepare_checkpoint(checkpoint,event_time_ms=event_time_ms,data_revision=data_revision,run_id=run_id,initial=True)
         with self._transaction():
             creation_key = None if creation_request is None else self.creations.guard_creation(creation_request,
                 run_id=run_id,definition=definition,mode=mode,data_revision=data_revision,event_time_ms=event_time_ms)
@@ -279,16 +310,32 @@ class ContinuousStrategyStore:
         self.updates.notify(run_id)
         return self.summary(run_id)
 
-    @staticmethod
-    def prepare_checkpoint(checkpoint,*,event_time_ms,data_revision):
-        return _checkpoint(checkpoint,event_time_ms,data_revision)
+    def prepare_checkpoint(self,checkpoint,*,event_time_ms,data_revision,run_id=None,initial=False):
+        with self.lock:
+            if self.closed:raise fail("CONTINUOUS_STORE_CLOSED","Continuous strategy store is closed")
+        state=_checkpoint(checkpoint,event_time_ms,data_revision)
+        if run_id is None:return state
+        _text(run_id,128)
+        if state.result_owner is not None:
+            from .continuous_results import ResultPatch
+            patch=state.result_patch
+            if state.result_owner!=(run_id,initial) or (patch is not None and (
+                    not isinstance(patch,ResultPatch) or patch.run_id!=run_id or patch.initial!=initial)):
+                raise fail("CONTINUOUS_COMMIT_CONFLICT","Prepared result belongs to another execution or publication")
+            return state
+        # Recovery state is encoded once; the normal Host supplies the original
+        # mapping here before taking its source fence. Compatibility callers
+        # supplying only encoded state pay one decode during preparation.
+        value=checkpoint if isinstance(checkpoint,Mapping) else json.loads(state.raw)
+        patch=self.results.prepare(run_id,value["engine"],initial=initial)
+        return replace(state,result_patch=patch,result_owner=(run_id,initial))
 
     def commit(self, run_id, *, generation, revision, sequence, event_time_ms, data_revision, checkpoint,
                phase="CATCHING_UP", confirm_caught_up=False):
         _counter(sequence), _counter(event_time_ms), _text(data_revision, 256)
         if phase not in {"CATCHING_UP", "LIVE"}:
             raise fail("CONTINUOUS_INPUT_INVALID", "Invalid execution commit phase")
-        state = _checkpoint(checkpoint,event_time_ms,data_revision)
+        state = self.prepare_checkpoint(checkpoint,event_time_ms=event_time_ms,data_revision=data_revision,run_id=run_id)
         with self._transaction():
             row = self._expected(run_id, generation, revision)
             if row["phase"] not in {"CATCHING_UP", "LIVE"}:
@@ -338,6 +385,7 @@ class ContinuousStrategyStore:
     def _insert_checkpoint(self, run_id, revision, generation, sequence, event_time_ms, data_revision, state):
         self.db.execute("INSERT INTO checkpoints VALUES(?,?,?,?,?,?,?,?)",
                         (run_id, revision, generation, sequence, event_time_ms, data_revision, state.raw, len(state.raw)))
+        self.results.publish(run_id,revision,state.result_patch)
 
     def _retain(self, run_id, current):
         rows = self.db.execute("SELECT revision,stored_bytes FROM checkpoints WHERE run_id=? ORDER BY revision DESC", (run_id,)).fetchall()
@@ -357,6 +405,8 @@ class ContinuousStrategyStore:
 
     def _enforce_total_budget(self):
         total = self.db.execute("SELECT COALESCE(SUM(stored_bytes),0) FROM checkpoints").fetchone()[0]
+        total += self.db.execute("SELECT COALESCE(SUM(stored_bytes),0) FROM result_heads").fetchone()[0]
+        total += self.epochs.stored_bytes()
         if total > self.max_total_checkpoint_bytes:
             raise fail("BUDGET_EXCEEDED", "Continuous checkpoints reached the total disk budget; committed recovery points are retained")
 

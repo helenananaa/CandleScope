@@ -9,7 +9,7 @@ import pytest
 
 from app.backtest.continuous_runtime import ContinuousStrategyRuntime
 from app.backtest.errors import BacktestError
-from app.data_engine.data_manager.models import DataEvent,DataEventType
+from app.data_engine.data_manager.models import BarData,DataEvent,DataEventType
 from app.data_engine.storage import klines_repo
 from tests.test_kline_revision_contract import storage as storage
 from tests.test_continuous_bar_source import source_setup,create_frozen,START,STEP,END,KEY,SOURCE,_row
@@ -84,6 +84,51 @@ def test_backend_execution_survives_view_close_and_resumes_only_new_input(storag
             view.close();await runtime.shutdown();await manager.event_bus.close()
     try:asyncio.run(scenario())
     finally:source.close();store.close();service.shutdown()
+
+
+def test_early_source_close_wakes_again_at_local_boundary(storage, tmp_path, monkeypatch):
+    service, _, definition, factory, store, manager, source, receipt = source_setup(storage, tmp_path, monkeypatch)
+    create_frozen(source, receipt, definition, factory, store)
+    active, _ = leases(monkeypatch, manager)
+    now = [START + 20 * STEP]
+    runtime = ContinuousStrategyRuntime(store, manager, source.local_datasets, factory, clock_ms=lambda: now[0])
+
+    async def scenario():
+        try:
+            await runtime.start_existing("cs_source")
+            initial = await wait_row(store, "cs_source", lambda row: row["phase"] == "LIVE")
+            assert initial["sequence"] == 20
+            actor = runtime.actors["cs_source"]
+            stepped = asyncio.Event()
+            loop = asyncio.get_running_loop()
+            step = actor.step
+
+            def observe_step(*args):
+                result = step(*args)
+                loop.call_soon_threadsafe(stepped.set)
+                return result
+
+            monkeypatch.setattr(actor, "step", observe_step)
+            boundary = START + 21 * STEP
+            now[0] = boundary - 200
+            bar = BarData((boundary - STEP) // 1000, 100, 102, 99, 101, 100, source=SOURCE)
+            await manager.event_bus.emit(DataEvent(DataEventType.BAR_CLOSED, KEY, bar))
+            await asyncio.wait_for(stepped.wait(), 2)
+            assert store.summary("cs_source")["sequence"] == 20
+            now[0] = boundary
+            row = await asyncio.wait_for(wait_row(store, "cs_source", lambda r: r["sequence"] == 21), 2)
+            assert row["event_time_ms"] == boundary - 1
+        finally:
+            await runtime.shutdown()
+            await manager.event_bus.close()
+        assert not active and not runtime.actors
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        source.close()
+        store.close()
+        service.shutdown()
 
 
 def test_history_amendment_stops_actor_and_keeps_financial_recovery_point(storage,tmp_path,monkeypatch):

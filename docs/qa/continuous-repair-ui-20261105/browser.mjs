@@ -1,0 +1,98 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {createRequire} from 'node:module';
+const require=createRequire(process.env.CANDLESCOPE_PLAYWRIGHT_PACKAGE);
+const {chromium}=require('playwright-core');
+const root=path.resolve(process.env.CANDLESCOPE_REPAIR_QA_ROOT);
+await fs.mkdir(root);
+const backend='http://127.0.0.1:23181',frontend='http://127.0.0.1:23180/tests/fixtures/continuous-repair/entry.html';
+const receipt={scope:'Controlled synthetic canonical BARs; production component/Manager/API/SDK/account. No response substitution, public feed, installed app or Windows qualification.',steps:[],requests:[],errors:[]};
+const save=()=>fs.writeFile(root+'/receipt.json',JSON.stringify(receipt,null,2)+'\n');
+async function record(name,evidence){receipt.steps.push({name,at:new Date().toISOString(),evidence});await save();}
+async function api(route,body){const response=await fetch(backend+route,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});assert.ok(response.ok,await response.clone().text());return response.json();}
+let browser;
+try{
+ browser=await chromium.launch({channel:'chrome',headless:true});
+ const width=Number(process.env.CANDLESCOPE_REPAIR_QA_WIDTH||1140);
+ const context=await browser.newContext({viewport:{width,height:1050}}),page=await context.newPage();
+ receipt.viewport={width,height:1050};
+ page.on('pageerror',error=>receipt.errors.push(String(error.stack||error)));
+ page.on('request',request=>{
+  const url=new URL(request.url());
+  if(['http:','https:'].includes(url.protocol)&&!['127.0.0.1','localhost'].includes(url.hostname))receipt.errors.push('Unexpected external browser request: '+url.origin);
+  if(request.method()==='POST'&&url.pathname.includes('/continuous/'))receipt.requests.push({url:request.url(),headers:request.headers(),body:request.postDataJSON()});
+ });
+ const inspect=()=>page.evaluate(()=>window.continuousRepairQA.inspect());
+ const waitState=async(expression)=>page.waitForFunction(expression,null,{timeout:30000});
+ const ready=async()=>waitState(()=>window.continuousRepairQA.inspect()?.result?.identity.sequence>=25);
+ const preview=()=>page.getByRole('button',{name:'预览修复范围',exact:true}).click();
+ const consent=()=>page.getByRole('checkbox',{name:'我确认此范围，并授权使用本运行保存的代码和配置更新账户结果。',exact:true}).check();
+ const confirm=()=>page.getByRole('button',{name:'确认并修复',exact:true}).click();
+ const confirmations=()=>receipt.requests.filter(row=>/\/runs\/[^/]+\/repairs$/.test(new URL(row.url).pathname));
+ const savedIntent=()=>page.evaluate(()=>JSON.parse(localStorage.getItem('candlescope.continuous-repair-intents.v1')||'[]'));
+ await page.goto(frontend);await ready();
+ await api('/_qa/amend',{index:12});
+ await waitState(()=>window.continuousRepairQA.inspect()?.result?.run.phase==='REPAIR_REQUIRED');
+ const before=await api('/_qa/inspect');
+ await preview();await page.getByText('复用已有进度：10 根 K 线',{exact:false}).waitFor();
+ assert.equal(await page.getByRole('button',{name:'确认并修复',exact:true}).isDisabled(),true);
+ await page.getByRole('checkbox',{name:'修复后继续处理新闭合的 K 线',exact:true}).check();
+ assert.equal(await page.getByRole('button',{name:'确认并修复',exact:true}).count(),0);
+ await page.getByRole('checkbox',{name:'修复后继续处理新闭合的 K 线',exact:true}).uncheck();
+ await preview();await consent();await api('/_qa/hold',{publish:true});await confirm();
+ await waitState(()=>window.continuousRepairQA.inspect()?.repair?.phase==='READY');
+ const staged=await api('/_qa/inspect');assert.equal(staged.financial_sha256,before.financial_sha256);
+ await page.screenshot({path:root+'/cancel-ready.png',fullPage:true});
+ await page.getByRole('button',{name:'取消修复',exact:true}).click();
+ await waitState(()=>window.continuousRepairQA.inspect()?.repair?.phase==='CANCELLED'&&window.continuousRepairQA.inspect()?.repair?.progress?.resources_released);
+ const cancelled=await api('/_qa/inspect');assert.equal(cancelled.financial_sha256,before.financial_sha256);assert.equal(cancelled.epochs,1);
+ await record('preview-explicit-consent-resume-plan-binding-and-durable-cancel',{before,staged,cancelled,visible:await inspect()});
+
+ await api('/_qa/hold',{reservation:true});await preview();await consent();await confirm();
+ await page.waitForFunction(async()=>{const r=await fetch('http://127.0.0.1:23181/_qa/inspect');return (await r.json()).reservation_waiting;});
+ const pending=await savedIntent();assert.equal(pending.length,1);
+ await page.getByRole('button',{name:'关闭修复视图',exact:true}).click();
+ await page.reload();await ready();
+ await page.getByRole('button',{name:'查询保存的修复请求',exact:true}).waitFor();
+ assert.deepEqual(await savedIntent(),pending);
+ assert.equal((await api('/_qa/inspect')).epochs,1);
+ await page.getByRole('button',{name:'查询保存的修复请求',exact:true}).click();
+ await page.getByText('Unknown history repair request',{exact:false}).waitFor();
+ await page.getByRole('button',{name:'重发同一修复请求',exact:true}).click();
+ await page.waitForFunction(()=>document.querySelector('[data-continuous-repair] button')?.disabled);
+ await api('/_qa/hold',{});
+ await waitState(()=>{const s=window.continuousRepairQA.inspect();return s?.repair?.phase==='COMMITTED'&&s?.repair?.progress?.resources_released&&s.result?.run.phase==='PAUSED'&&!s.result.stale;});
+ const posts=confirmations();assert.equal(posts.length,3);
+ assert.deepEqual(posts[1].body,posts[2].body);assert.equal(posts[1].headers['idempotency-key'],posts[2].headers['idempotency-key']);
+ assert.equal(posts[1].headers['idempotency-key'],pending[0].requestKey);
+ assert.equal((await api('/_qa/inspect')).epochs,2);
+ const suffixProof=await api('/_qa/proof');assert.ok(suffixProof.financial_equal&&suffixProof.provider_state_equal);assert.equal(suffixProof.sequence,25);
+ const completed=await inspect();await page.reload();await ready();
+ await waitState(()=>window.continuousRepairQA.inspect()?.repair?.phase==='COMMITTED');
+ assert.equal(confirmations().length,3);assert.equal((await savedIntent()).length,0);
+ assert.deepEqual((await inspect()).result.identity,completed.result.identity);
+ await record('uncertain-post-persisted-reloaded-readback-and-same-key-retry',{pending,proof:suffixProof,completed});
+
+ await api('/_qa/new',{});await page.reload();await ready();await api('/_qa/amend',{index:5,close:230});
+ await waitState(()=>window.continuousRepairQA.inspect()?.result?.run.phase==='REPAIR_REQUIRED');
+ await page.getByRole('checkbox',{name:'修复后继续处理新闭合的 K 线',exact:true}).check();await preview();
+ await page.getByText('保存的初始输入也发生了修订，需要从原始起点重新构建。',{exact:true}).waitFor();
+ assert.equal(await page.getByRole('button',{name:'确认并修复',exact:true}).isDisabled(),true);
+ await page.screenshot({path:root+'/full-preview.png',fullPage:true});await consent();await confirm();
+ await waitState(()=>{const s=window.continuousRepairQA.inspect();return s?.repair?.phase==='COMMITTED'&&s?.result?.run.phase==='LIVE'&&!s.result.stale;});
+ await api('/_qa/append',{});await waitState(()=>window.continuousRepairQA.inspect()?.result?.identity.sequence===30);
+ const fullProof=await api('/_qa/proof');assert.ok(fullProof.financial_equal&&fullProof.provider_state_equal);assert.equal(fullProof.sequence,30);
+ await page.screenshot({path:root+'/full-live.png',fullPage:true});
+ await record('full-initial-input-disclosure-and-resume-new-bars',{proof:fullProof,visible:await inspect()});
+ await api('/_qa/amend',{index:0,close:240});await waitState(()=>window.continuousRepairQA.inspect()?.result?.run.phase==='REPAIR_REQUIRED');
+ const offlineBefore=await api('/_qa/inspect');await api('/_qa/offline',{});await page.reload();await ready();
+ await page.getByText('当前只读模式或连接不支持修复。',{exact:true}).waitFor();
+ await page.getByText('上次修复已完成，但来源历史再次发生修订，请重新预览当前范围。',{exact:true}).waitFor();
+ assert.equal(await page.getByRole('button',{name:'预览修复范围',exact:true}).isDisabled(),true);
+ assert.equal((await api('/_qa/inspect')).financial_sha256,offlineBefore.financial_sha256);
+ await page.screenshot({path:root+'/offline-readonly.png',fullPage:true});
+ await record('offline-readonly-and-revised-again',{visible:await inspect(),offlineBefore});
+ assert.deepEqual(receipt.errors,[]);receipt.passed=true;
+}catch(error){receipt.failure=String(error.stack||error);process.exitCode=1;}
+finally{if(browser)await browser.close();await save();console.log(JSON.stringify({passed:receipt.passed??false,failure:receipt.failure,steps:receipt.steps.length}));}
