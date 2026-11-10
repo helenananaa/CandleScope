@@ -417,7 +417,7 @@ async def test_managed_retention_routes_fence_use_policy_expiry_and_references(t
     monkeypatch.setattr(raw_trade_retention, "_now_ms", lambda: now)
 
     try:
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://127.0.0.1") as client:
             preview = (await client.get(prefix + "/preview", params={"limit": 1})).json()
             candidate, = preview["items"]
             day = {"symbol": "BTCUSDT", "day": "2026-06-01", "day_id": candidate["day_id"]}
@@ -436,6 +436,22 @@ async def test_managed_retention_routes_fence_use_policy_expiry_and_references(t
             async def run(record, action="RETIRE"):
                 return await submit("POST", "/run", plan_id=record["plan"]["plan_id"], action=action)
 
+            denied = await client.post(
+                prefix + "/plan", headers={"origin": "https://untrusted.invalid"},
+                json={**day, "max_files": 1, "max_bytes": 100_000},
+            )
+            assert denied.status_code == 403
+            denied = await client.post(
+                prefix + "/plan", headers={"host": "untrusted.invalid"},
+                json={**day, "max_files": 1, "max_bytes": 100_000},
+            )
+            assert denied.status_code == 403
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app, client=("192.0.2.10", 1111)),
+                base_url="http://127.0.0.1",
+            ) as remote:
+                denied = await remote.post(prefix + "/plan", json={**day, "max_files": 1, "max_bytes": 100_000})
+                assert denied.status_code == 403
             assert (await plan())["status"] == "UNMANAGED"
             assert (await policy(0, None))["policy"]["revision"] == 1
             pinned = (await client.get(prefix + "/preview", params={"limit": 1})).json()

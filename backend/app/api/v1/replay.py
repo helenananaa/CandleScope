@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ipaddress
+
 from app.replay.request_contracts import (
     ReplayCanonicalIndicatorPayload,
     ReplayCommandPayload,
@@ -39,6 +41,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.routing import APIRoute
 
 from app.core.config import REPLAY_SETTINGS
+from app.core.operator_origin import is_trusted_operator_origin, origin_from
 from app.data_engine.data_manager.replay import optional_replay_service_from_state
 from app.replay.constants import (
     REPLAY_PROTOCOL,
@@ -490,9 +493,28 @@ async def replay_v2_raw_trade_retention_recheck(
     return await _training_service(request).raw_trade_retention_recheck(day_id=day_id, limit=limit)
 
 
+def _is_loopback_address(host: str) -> bool:
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _require_retention_operator(request: Request) -> None:
+    peer = request.client.host if request.client else ""
+    host = request.url.hostname or ""
+    origin = origin_from(request.headers)
+    if (not _is_loopback_address(peer)
+            or (host != "localhost" and not _is_loopback_address(host))
+            or (origin is not None and not is_trusted_operator_origin(origin))):
+        raise TrainingRunError(
+            "RETENTION_OPERATOR_REQUIRED", "raw trade retention requires a local operator", status_code=403,
+        )
+
+
 @router.put(
     "/runs/storage/raw-trades/policy",
-    dependencies=[Depends(_training_service), Depends(enforce_replay_request_limit)],
+    dependencies=[Depends(_require_retention_operator), Depends(_training_service), Depends(enforce_replay_request_limit)],
 )
 async def set_replay_v2_raw_trade_retention_policy(
     request: Request, payload: ReplayRawTradeRetentionPolicyPayload,
@@ -502,7 +524,7 @@ async def set_replay_v2_raw_trade_retention_policy(
 
 @router.post(
     "/runs/storage/raw-trades/plan",
-    dependencies=[Depends(_training_service), Depends(enforce_replay_request_limit)],
+    dependencies=[Depends(_require_retention_operator), Depends(_training_service), Depends(enforce_replay_request_limit)],
 )
 async def plan_replay_v2_raw_trade_retention(
     request: Request, payload: ReplayRawTradeRetentionPlanPayload,
@@ -512,7 +534,7 @@ async def plan_replay_v2_raw_trade_retention(
 
 @router.post(
     "/runs/storage/raw-trades/run",
-    dependencies=[Depends(_training_service), Depends(enforce_replay_request_limit)],
+    dependencies=[Depends(_require_retention_operator), Depends(_training_service), Depends(enforce_replay_request_limit)],
 )
 async def execute_replay_v2_raw_trade_retention(
     request: Request, payload: ReplayRawTradeRetentionRunPayload,
