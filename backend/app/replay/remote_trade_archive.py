@@ -28,7 +28,7 @@ from app.data_engine.storage.raw_trade_archive import (
 )
 
 from .canonical import canonical_sha256
-from .history_archive import ReplayHistoryArchiveError, _atomic_write_json, _file_sha256
+from .history_archive import ReplayHistoryArchiveError, _archive_mutation_lock, _atomic_write_json, _file_sha256
 from .remote_history import ReplayHistoryOrigin, ReplayHistoryOriginUnavailable
 from .metadata_retention import detach_obsolete_generations, remove_retired_generations
 from .trade_import import (
@@ -554,18 +554,21 @@ class RemoteRawAggTradeArchive:
         availability: Mapping[str, Mapping[str, object]],
     ) -> None:
         metadata_root = self.root / "_remote_metadata"
-        for relative, payload in {
-            **compatibility,
-            **receipts,
-            **availability,
-        }.items():
-            _atomic_write_json(metadata_root / relative, payload)
-        _atomic_write_json(metadata_root / "trade-index.json", index.to_dict())
+        with _archive_mutation_lock(metadata_root / ".metadata.lock"):
+            for relative, payload in {
+                **compatibility,
+                **receipts,
+                **availability,
+            }.items():
+                _atomic_write_json(metadata_root / relative, payload)
+            _atomic_write_json(metadata_root / "trade-index.json", index.to_dict())
 
     def prune_metadata_cache(self) -> None:
         """Background-only cleanup of obsolete metadata, never trade objects."""
         metadata_root = self.root / "_remote_metadata"
-        with self._metadata_io_lock:
+        if not metadata_root.is_dir():
+            return
+        with self._metadata_io_lock, _archive_mutation_lock(metadata_root / ".metadata.lock"):
             try:
                 index = RemoteAggTradeIndex.from_dict(_read_json(metadata_root / "trade-index.json"))
             except (OSError, ReplayHistoryArchiveError):
@@ -589,19 +592,20 @@ class RemoteRawAggTradeArchive:
             raise ReplayHistoryOriginUnavailable(
                 "remote aggTrade metadata is unavailable and no cache exists"
             )
-        index = RemoteAggTradeIndex.from_dict(_read_json(index_path))
-        compatibility = {
-            item.path: self._read_bound_cached_json(metadata_root, item)
-            for item in index.compatibility_indexes
-        }
-        receipts = {
-            item.path: self._read_bound_cached_json(metadata_root, item)
-            for item in index.verified_receipts
-        }
-        availability = {
-            item.path: self._read_bound_cached_json(metadata_root, item)
-            for item in index.official_availability_indexes
-        }
+        with _archive_mutation_lock(metadata_root / ".metadata.lock"):
+            index = RemoteAggTradeIndex.from_dict(_read_json(index_path))
+            compatibility = {
+                item.path: self._read_bound_cached_json(metadata_root, item)
+                for item in index.compatibility_indexes
+            }
+            receipts = {
+                item.path: self._read_bound_cached_json(metadata_root, item)
+                for item in index.verified_receipts
+            }
+            availability = {
+                item.path: self._read_bound_cached_json(metadata_root, item)
+                for item in index.official_availability_indexes
+            }
         return index, compatibility, receipts, availability
 
     @staticmethod

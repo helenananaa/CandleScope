@@ -10,6 +10,7 @@ import threading
 import time
 import uuid
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from contextlib import ExitStack, contextmanager
 from dataclasses import replace
 from pathlib import Path
 
@@ -17,7 +18,7 @@ from app.core.async_cleanup import finish_cleanup
 
 from .catalog_transport import CatalogListingTransport, CatalogRefreshStopped
 from .canonical import canonical_sha256
-from .history_archive import ReplayHistoryArchiveError, _atomic_write_json
+from .history_archive import ReplayHistoryArchiveError, _archive_mutation_lock, _atomic_write_json
 from .metadata_retention import detach_obsolete_generations, remove_retired_generations
 from .remote_trade_archive import (
     RemoteAggTradeIndex,
@@ -45,9 +46,10 @@ class OfficialAggTradeArchive(RemoteRawAggTradeArchive):
         self.catalog_failed = 0
         if not defer_refresh and self.needs_catalog_refresh():
             self.refresh_official_catalog()
-        if not (self.catalog_root / "trade-index.json").exists():
-            empty = self._empty_index()
-            _atomic_write_json(self.catalog_root / "trade-index.json", empty.to_dict())
+        with _archive_mutation_lock(self.catalog_root / ".metadata.lock"):
+            if not (self.catalog_root / "trade-index.json").exists():
+                empty = self._empty_index()
+                _atomic_write_json(self.catalog_root / "trade-index.json", empty.to_dict())
         super().__init__(cache_root, self.catalog_root, **kwargs)
 
     @staticmethod
@@ -69,7 +71,7 @@ class OfficialAggTradeArchive(RemoteRawAggTradeArchive):
             return True
 
     def _load_origin_metadata(self):
-        with self._catalog_io_lock:
+        with self._catalog_io_lock, _archive_mutation_lock(self.catalog_root / ".metadata.lock"):
             payload = self.origin.read_json("trade-index.json", max_bytes=1024 * 1024)
             empty = self._empty_index()
             if payload == empty.to_dict():
@@ -88,7 +90,7 @@ class OfficialAggTradeArchive(RemoteRawAggTradeArchive):
             ),
         )
         index = replace(index, index_epoch=canonical_sha256(index.hash_payload()))
-        with self._catalog_io_lock:
+        with self._catalog_io_lock, _archive_mutation_lock(self.catalog_root / ".metadata.lock"):
             _atomic_write_json(self.catalog_root / "trade-index.json", index.to_dict())
         if hasattr(self, "_lock"):
             with self._lock:
@@ -97,16 +99,28 @@ class OfficialAggTradeArchive(RemoteRawAggTradeArchive):
     def prune_metadata_cache(self):
         # The catalog guard protects a writer's read/copy of the prior index;
         # the I/O lock protects readers loading all referenced JSON bodies.
+        with self._catalog_owner() as owned:
+            if owned:
+                self._prune_catalog()
+                super().prune_metadata_cache()
+
+    @contextmanager
+    def _catalog_owner(self):
+        """Keep the discovery stage reachable across runtimes sharing this root."""
         if not self._catalog_guard.acquire(blocking=False):
+            yield False
             return
-        try:
-            self._prune_catalog()
-            super().prune_metadata_cache()
-        finally:
-            self._catalog_guard.release()
+        with ExitStack() as stack:
+            stack.callback(self._catalog_guard.release)
+            try:
+                stack.enter_context(_archive_mutation_lock(self.catalog_root / ".discovery.lock", timeout_seconds=0))
+            except ReplayHistoryArchiveError:
+                yield False
+            else:
+                yield True
 
     def _prune_catalog(self):
-        with self._catalog_io_lock:
+        with self._catalog_io_lock, _archive_mutation_lock(self.catalog_root / ".metadata.lock"):
             try:
                 index = RemoteAggTradeIndex.from_dict(json.loads((self.catalog_root / "trade-index.json").read_text()))
             except (OSError, ValueError, ReplayHistoryArchiveError):
@@ -140,11 +154,14 @@ class OfficialAggTradeArchive(RemoteRawAggTradeArchive):
 
     def refresh_official_catalog(self, *, opener=None, stop_event=None):
         stop = stop_event or threading.Event()
-        io_kwargs = {} if opener is None else {"opener": opener}
         if stop.is_set():
             return
-        if not self._catalog_guard.acquire(blocking=False):
-            return
+        with self._catalog_owner() as owned:
+            if owned and not stop.is_set():
+                self._refresh_owned_catalog(opener, stop)
+
+    def _refresh_owned_catalog(self, opener, stop):
+        io_kwargs = {} if opener is None else {"opener": opener}
         self.catalog_refreshing = True
         retrying = self.catalog_failed > 0
         self.catalog_completed = self.catalog_failed = 0
@@ -256,7 +273,6 @@ class OfficialAggTradeArchive(RemoteRawAggTradeArchive):
             except OSError:
                 logger.warning("Could not retire obsolete catalog metadata", exc_info=True)
             self.catalog_refreshing = False
-            self._catalog_guard.release()
 
     def historical_instrument_metadata(self, exchange, market_type, symbol):
         identity = {"exchange": exchange, "market_type": market_type, "symbol": symbol}
