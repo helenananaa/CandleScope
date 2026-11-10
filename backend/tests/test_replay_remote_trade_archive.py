@@ -48,7 +48,8 @@ def test_freeze_reuses_verified_day_after_catalog_changes(
     publish_remote_agg_trade_index(origin_root)
     remote = RemoteRawAggTradeArchive(cache_root, origin_root, refresh_seconds=0)
     remote.cache.max_scan_files = 1  # Limit the requested slice, not the whole day.
-    assert remote.list_selection_windows(exchange="binance", market_type="futures", symbol="BTCUSDT")
+    identity = {name: request[name] for name in ("exchange", "market_type", "symbol")}
+    previous_epoch, _ = remote.selection_snapshot(**identity)
 
     if origin_state == "window_removed":
         for receipt in origin_root.rglob("_verified_import.json"):
@@ -80,6 +81,39 @@ def test_freeze_reuses_verified_day_after_catalog_changes(
     refreshes = remote._metrics["remote_index_refreshes"]
     assert remote.freeze_dataset(**request) == expected
     assert remote._metrics["remote_index_refreshes"] == refreshes
+    # Selection checks receipt/sidecar metadata without hashing the data files.
+    from app.data_engine.storage import raw_trade_archive
+    hash_file = raw_trade_archive._file_sha256
+
+    def hash_sidecars(path: Path):
+        assert path.suffix != ".parquet"
+        return hash_file(path)
+
+    monkeypatch.setattr(raw_trade_archive, "_file_sha256", hash_sidecars)
+    epoch, windows = remote.selection_snapshot(**identity)
+    assert epoch != previous_epoch
+    day_count = 2 if origin_state == "window_removed" else 1
+    assert windows == (RawAggTradeSelectionWindow(
+        DAY_START_MS, DAY_START_MS + day_count * 86_400_000 - 1, day_count,
+    ),)
+    assert remote.list_verified_identities() == [identity]
+    assert remote.diagnostics()["verified_partitions_available"] is True
+    if origin_state == "unavailable":
+        offline_origin = tmp_path / "offline-origin"
+        offline_origin.mkdir()
+        restarted = RemoteRawAggTradeArchive(cache_root, offline_origin)
+        assert restarted.selection_snapshot(**identity) == (epoch, windows)
+    (cache_root / expected.objects[0].object_id).unlink()
+    after_removal, remaining = remote.selection_snapshot(**identity)
+    assert after_removal != epoch
+    if origin_state == "unavailable":
+        assert remaining == ()
+        assert remote.list_verified_identities() == []
+        assert remote.diagnostics()["state"] == "degraded"
+    else:
+        assert remaining == (RawAggTradeSelectionWindow(
+            DAY_START_MS + 86_400_000, DAY_START_MS + 2 * 86_400_000 - 1, 1,
+        ),)
 
 
 def test_remote_agg_trade_selection_uses_receipts_without_bar_parity_proofs(

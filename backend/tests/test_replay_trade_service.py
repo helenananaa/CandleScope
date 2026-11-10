@@ -19,6 +19,7 @@ from app.replay.constants import (
 )
 from app.replay.errors import ReplayDomainError, ReplayErrorCode
 from app.replay.models import ReplayCommand
+from app.replay.official_trade_catalog import OfficialAggTradeArchive
 from app.replay.service import ReplayService, SYNTHETIC_TIME_ANCHOR_MS
 from app.replay.storage import ReplaySQLiteStore
 from app.replay.trade_compatibility import build_trade_bar_compatibility
@@ -71,6 +72,39 @@ async def _service(
     )
     await service.start()
     return service
+
+
+async def test_production_catalog_selects_a_local_day_before_official_discovery(
+    tmp_path: Path,
+) -> None:
+    settings = replay_settings(tmp_path / "replay.db")
+    verified_trade_archive(settings.replay_agg_trade_archive_dir)
+    archive = OfficialAggTradeArchive(settings.replay_agg_trade_archive_dir, defer_refresh=True)
+    service = ReplayService(
+        settings=settings,
+        store=ReplaySQLiteStore(settings.db_path, now_ms=lambda: TRADE_NOW_MS),
+        raw_trade_archive=archive,
+        now_ms=lambda: TRADE_NOW_MS,
+    )
+    await service.start()
+    try:
+        config = trade_replay_config()
+        assert service.capabilities()["sources"]["agg_trade"]["enabled"]
+        catalog = await service.catalog(
+            warmup_bars=config.warmup_bars, horizon_ms=config.horizon_ms,
+            quality_mode=config.quality_mode.value, blind_mode=False, source_kind="agg_trade",
+        )
+        assert [entry["identity"]["symbol"] for entry in catalog["entries"]] == ["BTCUSDT"]
+        selected = await service.select_training_window(
+            config, expected_catalog_epoch=str(catalog["catalog_epoch"]),
+        )
+        assert selected["selected_start_ms"] == TRADE_REPLAY_START_MS
+        assert selected["agg_trade_catalog_epoch"] == archive.selection_snapshot(
+            exchange=config.exchange, market_type=config.market_type, symbol=config.symbol,
+        )[0]
+        assert archive.diagnostics()["official_days_downloaded"] == 0
+    finally:
+        await service.shutdown(step_timeout=1.0)
 
 
 async def test_trade_service_uses_shared_actor_api_and_pin_lifecycle(
