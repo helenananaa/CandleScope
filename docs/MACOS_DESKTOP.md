@@ -42,9 +42,20 @@ The macOS command creates a DMG and ZIP and explicitly disables publishing.
 
 ## Verification
 
-Both Actions jobs run the complete frontend `npm run check`, including
-architecture, plugin contract, i18n, TypeScript, lint, frontend tests, desktop
-host tests and a production frontend build. They then package the app, extract
+The `Frontend checks` workflow runs `npm run check` and the desktop control
+adapter tests on Ubuntu. The `CCXT integration` workflow provides early backend
+checks on Ubuntu. PRs that change the desktop host, packaging, or native
+dependencies also trigger both macOS jobs automatically. Pushes to `main`
+still trigger native packaging for changes under `frontend/`, `backend/`, or
+`packages/`.
+
+For pre-merge package verification on other PRs, select **Run workflow** in
+**Actions → macOS desktop** and choose the PR branch after it contains the
+updated workflow. Confirm that both artifact names identify the PR head commit
+being reviewed. Run it again if the candidate commit changes.
+
+Both macOS jobs run the desktop host tests on their native architecture. They
+then package the app, run backend regression tests with the bundled Python, extract
 the final ZIP into a different path containing spaces, validate Electron/Python
 Mach-O architectures, reject symlinks outside the app, import the bundled
 Python dependencies, verify the app signature and DMG, and launch/restart the
