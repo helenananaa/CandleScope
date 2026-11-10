@@ -24,6 +24,7 @@ Usage::
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 import logging
 import time
 from itertools import pairwise
@@ -563,7 +564,7 @@ class Reconciler:
                         ),
                     )
                     if written_range is not None:
-                        written_ranges.append(written_range)
+                        written_ranges.extend(self._standard_written_ranges(written_range, batch))
                     if n > 0:
                         await self._fire_write_batch(symbol, interval, n)
                 except Exception as exc:
@@ -915,6 +916,29 @@ class Reconciler:
             row if row.get("interval") == interval else {**row, "interval": interval}
             for row in rows if source_is_trusted_final(row.get("source"))
         ]
+
+    @staticmethod
+    def _standard_written_ranges(written: WrittenRange, batch: list[FetchedBar]) -> list[WrittenRange]:
+        if (written.exchange != "bybit" or written.phase != "standard"
+                or written.bars_written != len(batch)):
+            return [written]
+        spec = parse_interval_spec(written.interval)
+        if spec is None:
+            return [written]
+        # A resumed batch may straddle already committed receipt ranges.
+        # Publish only actual writes, leaving intervening opens untouched.
+        opens = sorted(bar.open_time for bar in batch)
+        first = previous = opens[0]
+        count = 1
+        ranges = []
+        for opened in opens[1:]:
+            if opened != spec.next_ms(previous):
+                ranges.append(replace(written, start_ms=first, end_ms=previous, bars_written=count))
+                first, count = opened, 0
+            previous = opened
+            count += 1
+        ranges.append(replace(written, start_ms=first, end_ms=previous, bars_written=count))
+        return ranges
 
     @staticmethod
     def _written_range_from_batch(
