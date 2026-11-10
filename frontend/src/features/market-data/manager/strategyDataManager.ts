@@ -4,6 +4,9 @@ import { isBacktestTerminalState } from "../../backtest/backtestRunClient.js";
 import { StrategyRunStreamError, type StrategyRunUpdate } from "../../backtest/backtestRunStream.js";
 import { ChartStrategyResultCache } from "../../backtest/chart-tester/chartStrategyResultCache.js";
 import { runResearchBacktest, type ChartStrategyRunApi } from "../../backtest/chart-tester/chartStrategyRunRequest.js";
+import { defaultContinuousApi } from "../../backtest/continuous/continuousApi.js";
+import type { ContinuousApi } from "../../backtest/continuous/continuousTypes.js";
+import { ContinuousStrategyDataManager } from "./continuousStrategyDataManager.js";
 
 type ResearchRequest = Omit<Parameters<typeof runResearchBacktest>[0], "api" | "waitForTerminal" | "wait" | "pollIntervalMs">;
 export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "streamRun" | "getReport" | "getChart" | "cancelRun">;
@@ -18,7 +21,11 @@ export class StrategyDataManager {
   private streams = 0;
   private closed = false;
 
-  constructor(private readonly api: StrategyDataApi = defaultBacktestApi) {}
+  readonly continuous: ContinuousStrategyDataManager;
+
+  constructor(private readonly api: StrategyDataApi = defaultBacktestApi, continuousApi: ContinuousApi = defaultContinuousApi) {
+    this.continuous = new ContinuousStrategyDataManager(continuousApi, (signal, action) => this.operation(signal, action));
+  }
 
   private async operation<T>(signal: AbortSignal | undefined, action: (signal: AbortSignal) => Promise<T>): Promise<T> {
     if (this.closed) throw new StrategyRunStreamError("STRATEGY_MANAGER_CLOSED", "Strategy data manager is closed");
@@ -97,7 +104,7 @@ export class StrategyDataManager {
 
   diagnostics() {
     return { closed: this.closed, operations: this.operations.size, streams: this.streams,
-      results: this.results.diagnostics(), runs: [...this.updates].map(([runId, event]) => ({
+      continuous: this.continuous.diagnostics(), results: this.results.diagnostics(), runs: [...this.updates].map(([runId, event]) => ({
         runId, state: event.run.state, snapshotHash: event.run.snapshot_hash,
         configHash: event.run.config_hash, progress: event.progress,
       })) };
@@ -105,6 +112,7 @@ export class StrategyDataManager {
 
   dispose(): void {
     this.closed = true;
+    this.continuous.dispose();
     for (const operation of this.operations) operation.abort();
     this.results.clear();
     this.retainedResults.length = 0;

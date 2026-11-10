@@ -10,12 +10,61 @@ import time
 from contextlib import closing
 
 from app.data_engine.bar_delivery_errors import BarDeliveryUnavailable
+from app.data_engine.interval_policy import IntervalAlignment, parse_interval_spec
 from app.data_engine.series_identity import KlineSeriesIdentity
-from .revisions import current_revision, series_change, series_values, register_derived, IDENTITY_COLUMNS, mutation_mode
+from .derived_history_fence import check_deletions
+from .revisions import (
+    Acquisition,
+    StaleAcquisition,
+    IDENTITY_COLUMNS,
+    block_change_receipts,
+    current_revision,
+    mutation_mode,
+    register_derived,
+    series_change,
+    series_values,
+)
 
 
 def _json(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+
+def _has_predecessor(conn, sequence, revision):
+    return conn.execute(
+        "SELECT 1 FROM bar_delivery WHERE sequence<? AND committed_revision=?",
+        (sequence, revision),
+    ).fetchone() is not None
+
+
+def _is_exact_fixed_bucket(interval, start, end):
+    spec = parse_interval_spec(interval)
+    return (spec is not None and spec.alignment is IntervalAlignment.FIXED_EPOCH
+            and spec.floor_ms(start) == start and spec.next_ms(start) == end + 1)
+
+
+def _changes_allow_delivery(conn, change, receipts, observed_revision, sequence, start, end):
+    # Fully contained source components are selected by their open times.
+    identity = tuple(change[name] for name in IDENTITY_COLUMNS)
+    series = [row for row in receipts if tuple(row[name] for name in IDENTITY_COLUMNS) == identity]
+    if (not series or series[-1]["revision"] != change["revision"]
+            or series[0]["previous_revision"] > observed_revision
+            or any(left["revision"] != right["previous_revision"] for left, right in zip(series, series[1:]))):
+        return False
+    for row in series:
+        if row["start_ms"] > row["end_ms"]:
+            return False
+        if row["end_ms"] < start or row["start_ms"] > end:
+            continue
+        # The footprint can overlap only when an earlier delivery actually
+        # wrote that revision. Its transaction's head can instead belong to a
+        # dependent deletion, or remain unchanged after a no-op upsert.
+        if conn.execute(
+            "SELECT 1 FROM bar_delivery WHERE sequence<? AND written_revision=? AND phase IN ('committed','published')",
+            (sequence, row["revision"]),
+        ).fetchone() is None:
+            return False
+    return True
 
 
 def init_bar_delivery_storage(conn):
@@ -39,6 +88,7 @@ def init_bar_delivery_storage(conn):
 
     for table, column in (("bar_delivery", "observed_revision"),
                           ("bar_delivery", "committed_revision"),
+                          ("bar_delivery", "written_revision"),
                           ("bar_delivery", "recovery_required"),
                           ("bar_delivery_watches", "observed_revision")):
         if column not in {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}:
@@ -115,6 +165,22 @@ class BarDeliveryJournal:
             prefix_revisions = payload.get('history_prefix_revisions', ())
             if len(prefix_revisions) > 32:
                 raise ValueError('history prefix requires bounded source revisions')
+            observed_revision = record["observed_revision"]
+            recovery_revision = payload.get("canonical_recovery_revision")
+            if recovery_revision is not None:
+                try:
+                    if (len(prefix_revisions) != 1 or type(recovery_revision) is not int
+                            or not observed_revision <= recovery_revision <= current_revision(conn)):
+                        raise StaleAcquisition("invalid canonical recovery revision")
+                    check_deletions(conn, Acquisition(observed_revision), values, *(
+                        series_values(payload["symbol"], interval, payload["exchange"], payload["market_type"], identity)
+                        for interval, _ in prefix_revisions
+                    ))
+                except StaleAcquisition:
+                    conn.execute("UPDATE bar_delivery SET phase='rejected',recovery_required=1 WHERE event_id=?", (event_id,))
+                    record["phase"], record["recovery_required"] = "rejected", 1
+                    return self._canonical(conn, record)
+                observed_revision = recovery_revision
             for source_interval, acquired_revision in prefix_revisions:
                 source_values = series_values(payload['symbol'], source_interval,
                     payload['exchange'], payload['market_type'], identity)
@@ -124,7 +190,8 @@ class BarDeliveryJournal:
                     conn.execute("UPDATE bar_delivery SET phase='rejected',recovery_required=1 WHERE event_id=?", (event_id,))
                     record['phase'], record['recovery_required'] = 'rejected', 1
                     return self._canonical(conn, record)
-            if payload.get("derived"):
+            derived = payload.get("derived")
+            if derived:
                 # A target may not exist yet when its input is repaired/deleted.
                 # Check its semantic family, including those source revisions.
                 family = [(name, value) for name, value in zip(IDENTITY_COLUMNS, values) if name != "interval"]
@@ -133,39 +200,55 @@ class BarDeliveryJournal:
             else:
                 change = series_change(conn, values)
                 changes = [change] if change is not None else []
+            start = payload["storage_row"]["open_time"]
+            end = payload["storage_row"].get("close_time")
+            valid_window = end is not None and end >= start
+            receipts = None
             for change in changes:
-                if change["revision"] <= record["observed_revision"]:
+                if change["revision"] <= observed_revision:
                     continue
-                if not payload.get("derived"):
-                    start = payload["storage_row"]["open_time"]
-                    end = payload["storage_row"].get("close_time")
+                if not derived:
                     # The durable range encloses every mutation ever observed
                     # for this identity, including empty deletes. A disjoint
                     # native candle cannot depend on those changed rows. This
                     # lets an in-flight forming candle close after older gaps
                     # are repaired, without granting it a newer acquisition.
-                    if end is not None and end >= start and (
+                    if valid_window and (
                         end < change["start_ms"] or start > change["end_ms"]
                     ):
                         continue
-                predecessor = conn.execute("SELECT 1 FROM bar_delivery WHERE sequence<? AND committed_revision=?",
-                                           (record["sequence"], change["revision"])).fetchone()
-                if change["delete_revision"] > record["observed_revision"] or predecessor is None:
+                sequence = record["sequence"]
+                if change["delete_revision"] > observed_revision or not _has_predecessor(conn, sequence, change["revision"]):
+                    # Older receipts may carry an incomplete interval, and
+                    # session bounds require a calendar unavailable here.
+                    if derived and valid_window and _is_exact_fixed_bucket(payload["interval"], start, end):
+                        if receipts is None:
+                            receipts = block_change_receipts(conn, observed_revision, current_revision(conn))
+                        if _changes_allow_delivery(conn, change, receipts, observed_revision, sequence, start, end):
+                            continue
                     conn.execute("UPDATE bar_delivery SET phase='rejected',recovery_required=1 WHERE event_id=?", (event_id,))
                     record["phase"] = "rejected"
                     record["recovery_required"] = 1
                     return self._canonical(conn, record)
-            if payload.get("derived"):
-                register_derived(conn, series_values(payload["symbol"], payload["interval"],
-                    payload["exchange"], payload["market_type"], identity))
+            if derived:
+                register_derived(conn, values)
+            before_write = current_revision(conn)
             with mutation_mode(conn, "bar_delivery"):
                 affected = self._write(payload["symbol"], payload["interval"], [payload["storage_row"]],
                                        payload["bar"]["source"], exchange=payload["exchange"],
                                        market_type=payload["market_type"], series_identity=identity, _connection=conn)
             record["phase"] = "committed" if affected else "rejected"
             record["committed_revision"] = current_revision(conn)
-            conn.execute("UPDATE bar_delivery SET phase=?,committed_revision=? WHERE event_id=?",
-                         (record["phase"], record["committed_revision"], event_id))
+            # Preserve the transaction head for publication and separately
+            # attribute the exact revision advanced by this target write.
+            written_revision = 0
+            if affected and record["committed_revision"] > before_write:
+                written = series_change(conn, values)
+                if written is not None and written["revision"] > before_write:
+                    written_revision = written["revision"]
+            record["written_revision"] = written_revision
+            conn.execute("UPDATE bar_delivery SET phase=?,committed_revision=?,written_revision=? WHERE event_id=?",
+                         (record["phase"], record["committed_revision"], written_revision, event_id))
             self._prune(conn)
             return self._canonical(conn, record)
 

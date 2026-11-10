@@ -167,7 +167,7 @@ Planner 会把自定义周期拆成标准组件。例如：
 | `market` | 使用可用的市场开盘语义 |
 | `none` | 直接从缺口起点开始 |
 
-自定义周期写入复用 `BarAggregator.aggregate_batch()`，因此批量修复不会污染 live aggregator targets 或 active state。
+自定义周期修复在已获取的范围内读回权威组成行，使用 K130 纯聚合，并经现有物化租约和修订检查提交。
 
 ## 拉取和限流
 

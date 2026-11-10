@@ -87,6 +87,26 @@ UNKNOWN_SOURCE_QUALITY = SourceQuality(0, FinalityTrust.UNTRUSTED)
 TRUSTED_FINALITY_REPAIR_REASONS = frozenset({"query_untrusted_finality"})
 
 
+def reuses_bybit_gap_inputs(exchange: str, market_type: str, requester: object) -> bool:
+    """Live Bybit perpetual gap repair can reuse already authoritative inputs."""
+    return exchange == "bybit" and market_type in {"swap.linear", "swap.inverse"} and requester == "ingestion_gap"
+
+
+def bybit_recovery_source_gap_id(
+    exchange: str, market_type: str, reason: object, metadata: Mapping[str, Any],
+) -> str | None:
+    """Recover only a source-owned gap, preserving explicit refresh semantics."""
+    gap_id = metadata.get("source_gap_id")
+    revision = metadata.get("acquisition_revision")
+    if (reuses_bybit_gap_inputs(exchange, market_type, "ingestion_gap")
+            and reason in ("tail_gap", "ledger_recovery")
+            and metadata.get("requires_trusted_finality") is True
+            and type(revision) is int and revision >= 0
+            and isinstance(gap_id, str) and gap_id):
+        return gap_id
+    return None
+
+
 def normalize_kline_source(source: object) -> str:
     """Return the canonical storage/cache source identifier."""
 

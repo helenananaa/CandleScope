@@ -269,14 +269,14 @@ def test_bybit_backfill_uses_bounded_reverse_pages(monkeypatch, tmp_path, batch_
     asyncio.run(run())
 
 
-@pytest.mark.parametrize(("amend_while_deferred", "restart", "multi_chunk", "two_deferred"), [
-    (False, False, False, False), (True, False, False, False),
-    (False, True, False, False), (True, True, False, False),
-    (False, True, True, False), (True, True, True, False),
-    (False, True, True, True),
+@pytest.mark.parametrize(("amend_while_deferred", "restart", "multi_chunk", "two_deferred", "repeat_deferral"), [
+    (False, False, False, False, False), (True, False, False, False, False),
+    (False, True, False, False, False), (True, True, False, False, False),
+    (False, True, True, False, False), (True, True, True, False, False),
+    (False, True, True, True, False), (True, False, False, False, True),
 ])
 def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
-    monkeypatch, tmp_path, amend_while_deferred, restart, multi_chunk, two_deferred,
+    monkeypatch, tmp_path, amend_while_deferred, restart, multi_chunk, two_deferred, repeat_deferral,
 ):
     from app.data_engine.backfill import BackfillConfig, BackfillEngine
     from app.data_engine.data_manager.backfill_contracts import RepairRequest
@@ -309,8 +309,10 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
         recovery_rows = []
         cooldown = asyncio.Event()
         resets = {}
+        repeat_reset_ms = 0
 
         async def handle(request):
+            nonlocal repeat_reset_ms
             assert request.path == "/v5/market/kline"
             start, end, limit = (int(request.query[key]) for key in ("start", "end", "limit"))
             sent_ms = int(time.time() * 1000)
@@ -321,6 +323,10 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
                     cooldown.set()
                 return web.json_response({"retCode": 10006, "retMsg": "Too many visits!"},
                     headers={"X-Bapi-Limit-Reset-Timestamp": str(reset_ms)})
+            if repeat_deferral and start == opened and limited_open in resets and sent_ms >= resets[limited_open] and not repeat_reset_ms:
+                repeat_reset_ms = sent_ms + 1_500
+                return web.json_response({"retCode": 10006, "retMsg": "Too many visits!"},
+                    headers={"X-Bapi-Limit-Reset-Timestamp": str(repeat_reset_ms)})
             if two_deferred and start in resets:
                 recovery_rows.append(ledger.list_open())
             rows = [[str(ts), "1", "2", "1", "2", "9", "4"]
@@ -519,7 +525,7 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
             assert Counter(adopted) == expected_adoption
 
             expected_calls = {
-                (opened, opened + step, 2): 2 if amend_while_deferred else 1,
+                (opened, opened + step, 2): 1 + int(amend_while_deferred) + int(repeat_deferral),
                 (opened + 2 * step, opened + 3 * step, 2): 2,
                 (opened + 4 * step, opened + 4 * step, 1): 1,
             }
@@ -545,10 +551,212 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
             else:
                 first_limited = next(i for i, (start, _, _, _) in enumerate(calls) if start == limited_open)
                 assert min(sent for _, _, _, sent in calls[first_limited + 1:]) >= reset_ms - 3
+            if repeat_deferral:
+                assert repeat_reset_ms > reset_ms
+                assert [sent for start, _, _, sent in calls if start == opened][-1] >= repeat_reset_ms - 3
             assert all(row["volume"] == 4 for row in storage.query_bars(symbol, "5m", **identity))
         finally:
             await coordinator.shutdown()
             await asyncio.gather(*(t for t in (demand, joined) if t is not None), return_exceptions=True)
+            await engine.close()
+            await transport.stop()
+            await runner.cleanup()
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("source_change", ["unchanged", "amended", "deleted"])
+@pytest.mark.parametrize("market", ["swap.inverse", "swap.linear"])
+def test_bybit_derived_recovery_reuses_committed_components_after_restart(monkeypatch, tmp_path, source_change, market):
+    import sqlite3
+
+    from app.data_engine.backfill import BackfillConfig, BackfillEngine
+    from app.data_engine.data_manager.backfill_contracts import RepairRequest
+    from app.data_engine.data_manager.backfill_coordinator import BackfillCoordinator
+    from app.data_engine.history import (
+        ExchangeHistoryPolicyResolver,
+        HistoryAvailabilityService,
+        HistoryBoundaryRepository,
+        get_history_calendar_registry,
+    )
+    from app.data_engine.storage import klines_repo
+    from app.data_engine.storage.gap_ledger import GapLedger
+
+    opened, step = 1_794_138_000_000, 300_000
+    inverse = market == "swap.inverse"
+    symbol = "BTC/USD:BTC" if inverse else "BTC/USDT:USDT"
+    quote, settle = ("USD", "BTC") if inverse else ("USDT", "USDT")
+    identity = {"exchange": "bybit", "market_type": market}
+    db = tmp_path / "derived.sqlite"
+    monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", db)
+    klines_repo.init_klines_storage()
+
+    async def run():
+        pages = []
+        adopted = []
+        reset_ms = 0
+        deferred = asyncio.Event()
+
+        async def handle(http):
+            nonlocal reset_ms
+            assert http.path == "/v5/market/kline"
+            assert http.query["interval"] == "5"
+            start, end, limit = (int(http.query[key]) for key in ("start", "end", "limit"))
+            pages.append((start, end, limit))
+            if start == opened + 2 * step and not reset_ms:
+                reset_ms = int(time.time() * 1000) + 1_500
+                deferred.set()
+                return web.json_response({"retCode": 10006, "retMsg": "Too many visits!"},
+                    headers={"X-Bapi-Limit-Reset-Timestamp": str(reset_ms)})
+            rows = [[str(ts), "1", "2", "1", "2",
+                     "9" if inverse else str(4 + i), str(4 + i) if inverse else "9"]
+                    for i in reversed(range(-1, 4)) if start <= (ts := opened + i * step) <= end]
+            return web.json_response({"retCode": 0, "result": {"list": rows[:limit]}})
+
+        runner, origin = await serve(handle)
+        create = generic._create_exchange
+        policy = RateLimitPolicy(endpoint_rules=(RateLimitRule(
+            name="bybit_derived_loopback", bucket_key="bybit:derived-loopback",
+            capacity=16, refill_interval_seconds=.01, max_concurrency=1, cooldown_seconds=.1,
+        ),))
+
+        def routed(*args, **kwargs):
+            exchange = create(*args, **kwargs)
+            point_at_loopback(exchange, origin)
+            exchange._candlescope_rate_limit_policy = policy
+            exchange.set_markets([dict(
+                id=f"BTC{quote}", symbol=symbol, base="BTC", quote=quote, settle=settle,
+                baseId="BTC", quoteId=quote, settleId=settle, type="swap", contract=True,
+                swap=True, linear=not inverse, inverse=inverse, spot=False, active=True,
+            )])
+            return exchange
+
+        monkeypatch.setattr(generic, "_create_exchange", routed)
+        config = IngestionConfig(proxy_mode="none", proxy_egress_group=f"derived-{urlsplit(origin).port}")
+        storage = klines_repo.KlinesRepoAdapter()
+        history = HistoryAvailabilityService(
+            calendars=get_history_calendar_registry(), boundaries=HistoryBoundaryRepository(db),
+        )
+        history_policy = ExchangeHistoryPolicyResolver(history)
+
+        async def publish(_symbol, interval, bars, **_kwargs):
+            adopted.extend((interval, bar.time_ms) for bar in bars)
+
+        async def emit(_event):
+            pass
+
+        def runtime():
+            transport = TransportLayer(config)
+            engine = BackfillEngine(BackfillConfig(
+                history_archive_enabled=False, fetch_batch_size=2, fetch_concurrency=1, fetch_global_concurrency=1,
+            ), klines_repo.AsyncKlinesRepoAdapter(), transport, ingestion_config=config)
+            ledger = GapLedger(db)
+            coordinator = BackfillCoordinator(
+                storage=storage, bars_backfilled=publish, emit_event=emit, engine=engine, gap_ledger=ledger,
+                history_service=history, history_policy_resolver=lambda repair: history_policy.resolve(
+                    history_policy.series_key(
+                        exchange=repair.exchange, market_type=repair.market_type, symbol=repair.symbol,
+                        channel="kline", variant=repair.interval,
+                    )
+                ), loop=asyncio.get_running_loop(), max_retries=1, max_concurrency=1, chunk_bars=1000,
+            )
+            return transport, engine, ledger, coordinator
+
+        def request(interval, start, end):
+            return RepairRequest(symbol, interval, start, end, **identity, reason="tail_gap",
+                                 requester="ingestion_gap", metadata={
+                                     "requires_trusted_finality": True, "source_gap_id": "derived-gap",
+                                 })
+
+        transport, engine, ledger, coordinator = runtime()
+        demand = None
+        try:
+            warmup = await coordinator.request_and_wait(request("5m", opened - step, opened - step))
+            assert warmup.verified_contiguous
+            pages.clear()
+            adopted.clear()
+            if source_change == "unchanged":
+                # An existing desktop inventory makes the two missing target
+                # buckets discoverable by the ordinary background audit.
+                assert storage.upsert_bars(symbol, "10m", [
+                    {"open_time": start, "close_time": start + 2 * step - 1,
+                     "open": 1, "high": 2, "low": 1, "close": 2, "volume": 1,
+                     "quote_volume": None, "trades": None, "taker_buy_base": None, "taker_buy_quote": None}
+                    for start in (opened - 2 * step, opened + 4 * step)
+                ], source="backfill_aggregated", **identity) == 2
+            derived = request("10m", opened, opened + 2 * step)
+            demand = asyncio.create_task(coordinator.request_and_wait(derived))
+            await asyncio.wait_for(deferred.wait(), 5)
+            async with asyncio.timeout(1):
+                while True:
+                    parent, = ledger.list_open()
+                    if parent["status"] == "retry_wait":
+                        break
+                    await asyncio.sleep(.01)
+            assert parent["next_retry_at"] >= reset_ms - 3
+            assert not adopted and not storage.query_bars(
+                symbol, "10m", start_ms=opened, end_ms=opened + 2 * step, **identity,
+            )
+            committed = storage.query_bars(symbol, "5m", start_ms=opened, order="ASC", **identity)
+            assert [row["open_time"] for row in committed] == [opened, opened + step]
+
+            await coordinator.shutdown()
+            await demand
+            await engine.close()
+            await transport.stop()
+            if source_change == "amended":
+                assert storage.upsert_bars(
+                    symbol, "5m", [{**committed[0], "volume": 40}],
+                    source="data_manager_amended", **identity,
+                ) == 1
+            if source_change == "deleted":
+                assert storage.delete_bars(symbol, "5m", opened, opened + step, **identity) == 2
+            transport, engine, ledger, coordinator = runtime()
+            if source_change == "unchanged":
+                stale = int(time.time() * 1000) - 901_000
+                with sqlite3.connect(db) as conn:
+                    conn.execute("UPDATE kline_gap_ledger SET last_seen_at=?,last_checked_at=? WHERE id=?",
+                                 (stale, stale, parent["id"]))
+                early = await coordinator.startup_scan([], (), delay_seconds=0)
+                assert early.ledger_requeued == 0
+            else:
+                early = await coordinator.reconcile_gap_ledger(stale_after_ms=0)
+                assert early.requeued == 0
+            await asyncio.sleep(max(0, (parent["next_retry_at"] - time.time() * 1000) / 1000) + .025)
+            if source_change == "unchanged":
+                audit = await coordinator.audit_storage_series([("bybit", market, symbol, "10m")])
+                assert audit.queued == 0 and audit.ledger_requeued == 1, audit
+            else:
+                recovered = await coordinator.reconcile_gap_ledger(stale_after_ms=0)
+                assert recovered.requeued == 1, recovered
+            outcome = await asyncio.wait_for(coordinator.wait_for_request(f"ledger-reconcile-{parent['id']}"), 5)
+            final = ledger.get_status(derived)
+            initial_metadata = json.loads(parent["metadata_json"])
+            final_metadata = json.loads(final["metadata_json"])
+            assert final_metadata["source_gap_id"] == initial_metadata["source_gap_id"]
+            assert final_metadata["acquisition_revision"] == initial_metadata["acquisition_revision"]
+            if source_change == "deleted":
+                assert not outcome.verified_contiguous and final["status"] != "filled", outcome
+                assert not adopted and not storage.query_bars(symbol, "10m", **identity)
+                assert not storage.query_bars(symbol, "5m", start_ms=opened, end_ms=opened + step, **identity)
+                return
+            assert outcome.verified_contiguous and final["status"] == "filled", outcome
+            assert pages == [
+                (opened, opened + step, 2),
+                (opened + 2 * step, opened + 3 * step, 2),
+                (opened + 2 * step, opened + 3 * step, 2),
+            ]
+            rows = storage.query_bars(symbol, "10m", start_ms=opened, end_ms=opened + 2 * step,
+                                      order="ASC", **identity)
+            assert [(row["open_time"], row["volume"], row["source"]) for row in rows] == [
+                (opened, 45 if source_change == "amended" else 9, "backfill_aggregated"),
+                (opened + 2 * step, 13, "backfill_aggregated"),
+            ]
+            assert adopted == [("10m", opened), ("10m", opened + 2 * step)]
+        finally:
+            await coordinator.shutdown()
+            if demand is not None:
+                await asyncio.gather(demand, return_exceptions=True)
             await engine.close()
             await transport.stop()
             await runner.cleanup()

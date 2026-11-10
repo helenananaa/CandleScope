@@ -52,7 +52,7 @@ Important methods on `BarAggregator`:
 | `ingest_bar_input()` | Directly inject a normalized `BarInput` |
 | `seed_active_bar()` | Seed forming state from warm-start data |
 | `replay_components()` | Rebuild buckets from component bars |
-| `aggregate_batch()` | Stateless batch aggregation for backfill/custom storage repair |
+| `aggregate_batch()` | Isolated batch replay and diagnostics |
 | `get_bucket_state()` / `get_latest_bar()` | Inspect current in-memory state |
 | `get_active_bars()` / `get_recent_bars()` | Debug/diagnostic access |
 | `snapshot()` | JSON-serializable diagnostics |
@@ -84,7 +84,7 @@ Important methods on `BarAggregator`:
 
 Intervals are parsed through the shared interval policy. Fixed custom intervals such as `7m`, `45m`, `3h`, or `91m` use millisecond bucket math. Weekly intervals are Monday-aligned. Month-unit intervals such as `1M`, `2M`, and `3M` use calendar-aware monthly bucket calculators instead of assuming a fixed 30-day month.
 
-For backfill and storage repair, prefer `aggregate_batch()` when you need isolated batch results. Tests assert that `aggregate_batch()` does not register targets or leave active bars behind.
+Tests verify that isolated `aggregate_batch()` calls leave the live target registry and active states intact. Historical persistence uses the K130 storage-row reducer.
 
 ## Finalization
 

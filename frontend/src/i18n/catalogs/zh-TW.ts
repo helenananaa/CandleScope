@@ -1,3 +1,4 @@
+import { continuousEnglish } from "./continuousMessages.js";
 import { tradeHistoryTraditional } from "./tradeHistoryMessages.js";
 import { replayNoteTraditional } from "./replayNoteMessages.js";
 import { historyStudyTraditional } from "./historyStudyMessages.js";
@@ -8,6 +9,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const zhTW = {
+  ...continuousEnglish,
   ...tradeHistoryTraditional,
   ...replayNoteTraditional,
   ...historyStudyTraditional,

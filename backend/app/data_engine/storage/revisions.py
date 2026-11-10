@@ -2,8 +2,8 @@
 
 SQLite triggers cover *every* physical writer (including offline repair and
 another process). One watermark per semantic series replaces a per-row event
-log. Consumers must invalidate the whole reported series: ranges are a
-conservative envelope, not a replayable sequence of individual edits.
+log. Its ranges are conservative envelopes. B130 also consumes a bounded
+transactional suffix of exact footprints when it can prove continuity.
 """
 from __future__ import annotations
 
@@ -11,14 +11,19 @@ from contextlib import contextmanager, closing
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from functools import wraps
+from typing import TYPE_CHECKING
 import threading
 import sqlite3
 
 from app.data_engine.series_identity import KlineSeriesIdentity
 
+if TYPE_CHECKING:
+    from .warmup_revision_fence import WarmupView
+
 IDENTITY_COLUMNS = ("exchange", "market_type", "symbol", "interval",
                     "provider_id", "venue", "asset_class", "series_variant",
                     "price_adjustment", "session_variant", "volume_semantics")
+BLOCK_CHANGE_WINDOW = 1024
 
 
 REVISION_CHANGED_FIELDS = (*IDENTITY_COLUMNS, "open_time", "close_time", "open", "high", "low", "close", "volume",
@@ -39,6 +44,17 @@ def _execute_schema(conn, script):
             statement = ""
     if statement.strip():
         raise ValueError("incomplete revision schema statement")
+
+
+def _block_change_sql(values, predicate, revision, start_ms, end_ms):
+    return f"""
+        INSERT INTO kline_block_changes VALUES (
+            {revision}, {values},
+            COALESCE((SELECT revision FROM kline_series_changes WHERE {predicate}), 0),
+            {start_ms}, {end_ms}
+        );
+        DELETE FROM kline_block_changes WHERE revision<={revision}-{BLOCK_CHANGE_WINDOW};
+    """
 
 
 def _readback_receipt_sql(values, revision, start, end, *, condition="1"):
@@ -86,6 +102,10 @@ def init_revision_storage(conn):
         );
         CREATE TABLE IF NOT EXISTS kline_derived_series ({columns}, PRIMARY KEY ({keys}));
         CREATE INDEX IF NOT EXISTS idx_kline_changes_revision ON kline_series_changes(revision);
+        CREATE TABLE IF NOT EXISTS kline_block_changes (
+            revision INTEGER PRIMARY KEY, {columns}, previous_revision INTEGER NOT NULL,
+            start_ms INTEGER NOT NULL, end_ms INTEGER NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS kline_mutation_context (
             singleton INTEGER PRIMARY KEY CHECK(singleton=1), mode TEXT NOT NULL
         );
@@ -142,6 +162,10 @@ def init_revision_storage(conn):
         deletion = revision if operation == "delete" else "0"
         changed_fields = REVISION_CHANGED_FIELDS
         condition = "WHEN " + " OR ".join(f"NEW.{name} IS NOT OLD.{name}" for name in changed_fields) if operation == "update" else ""
+        watermark_predicate = " AND ".join(f"{name}={alias}.{name}" for name in IDENTITY_COLUMNS)
+        # Canonical blocks select candles by open, including inserts and replacements.
+        footprint = _block_change_sql(values, watermark_predicate, revision,
+                                      f"{alias}.open_time", f"{alias}.open_time")
         source_derived_predicate = " AND ".join(f"s.{name}={alias}.{name}" for name in IDENTITY_COLUMNS)
         derived_predicate = " AND ".join(f"d.{name}=klines.{name}" for name in IDENTITY_COLUMNS)
         family_predicate = " AND ".join(f"{name}={alias}.{name}" for name in IDENTITY_COLUMNS if name != "interval")
@@ -153,9 +177,10 @@ def init_revision_storage(conn):
                                          condition=direct)
         _execute_schema(conn, f"""
             DROP TRIGGER IF EXISTS kline_change_{operation};
-            CREATE TRIGGER IF NOT EXISTS kline_change_{operation}
+            CREATE TRIGGER kline_change_{operation}
             AFTER {operation.upper()} ON klines {condition} BEGIN
                 UPDATE kline_revision_clock SET revision=revision+1 WHERE singleton=1;
+                {footprint}
                 INSERT INTO kline_series_changes
                 VALUES ({values}, {revision}, {deletion}, {alias}.open_time,
                         COALESCE({alias}.close_time,{alias}.open_time), '{operation}')
@@ -224,12 +249,14 @@ def init_empty_coverage_revision_triggers(conn, table: str, *, native: bool = Fa
         family = " AND ".join(f"d.{name}={value}" for name, value in zip(IDENTITY_COLUMNS, values) if name != "interval")
         selected_family = " AND ".join(f"{name}={value}" for name, value in zip(IDENTITY_COLUMNS, values) if name != "interval")
         match = " AND ".join(f"d.{name}=klines.{name}" for name in IDENTITY_COLUMNS)
+        predicate = " AND ".join(f"{name}={value}" for name, value in zip(IDENTITY_COLUMNS, values))
         readback = _readback_receipt_sql(",".join(values), head, f"{alias}.start_ms", f"{alias}.end_ms")
         conn.executescript(f"""
             {migration_start}
             CREATE TRIGGER IF NOT EXISTS {table}_change_{operation}
             AFTER {operation.upper()} ON {table} BEGIN
                 UPDATE kline_revision_clock SET revision=revision+1 WHERE singleton=1;
+                {_block_change_sql(','.join(values), predicate, head, f'{alias}.start_ms', f'{alias}.end_ms')}
                 INSERT INTO kline_series_changes VALUES
                     ({','.join(values)}, {head}, {deletion}, {alias}.start_ms, {alias}.end_ms, 'empty_{operation}')
                 ON CONFLICT({keys}) DO UPDATE SET revision=excluded.revision,
@@ -255,6 +282,17 @@ def current_revision(conn):
     return int(conn.execute("SELECT revision FROM kline_revision_clock WHERE singleton=1").fetchone()[0])
 
 
+def block_change_receipts(conn, revision, head):
+    """Read the complete bounded footprint journal in the caller's transaction."""
+    if not 0 < head - revision <= BLOCK_CHANGE_WINDOW:
+        return ()
+    receipts = conn.execute(
+        "SELECT * FROM kline_block_changes WHERE revision>? AND revision<=? ORDER BY revision",
+        (revision, head),
+    ).fetchall()
+    return receipts if len(receipts) == head - revision else ()
+
+
 def series_values(symbol, interval, exchange, market_type, identity=None):
     identity = identity or KlineSeriesIdentity.for_exchange(exchange)
     return (exchange, market_type, symbol, interval, *identity.storage_values)
@@ -272,16 +310,55 @@ def mark_deleted(conn, values, start_ms=None, end_ms=None):
     conn.execute("UPDATE kline_revision_clock SET revision=revision+1 WHERE singleton=1")
     revision = current_revision(conn)
     keys = ",".join(IDENTITY_COLUMNS)
+    start = start_ms if start_ms is not None else 0
+    end = end_ms if end_ms is not None else 9223372036854775807
+    predicate = " AND ".join(f"{name}=?" for name in IDENTITY_COLUMNS)
+    conn.execute(f"""INSERT INTO kline_block_changes VALUES (
+        ?, {','.join('?' for _ in IDENTITY_COLUMNS)},
+        COALESCE((SELECT revision FROM kline_series_changes WHERE {predicate}), 0), ?, ?
+    )""", (revision, *values, *values, start, end))
+    conn.execute("DELETE FROM kline_block_changes WHERE revision<=?", (revision - BLOCK_CHANGE_WINDOW,))
     conn.execute(f"INSERT INTO kline_delete_permissions VALUES ({','.join('?' for _ in range(12))}) "
                  f"ON CONFLICT({keys}) DO UPDATE SET revision=excluded.revision", (*values, revision))
     conn.execute(f"""INSERT INTO kline_series_changes VALUES ({','.join('?' for _ in range(16))})
         ON CONFLICT({keys}) DO UPDATE SET revision=excluded.revision,
         delete_revision=excluded.delete_revision, start_ms=MIN(start_ms,excluded.start_ms),
         end_ms=MAX(end_ms,excluded.end_ms), operation='delete'""",
-        (*values, revision, revision, start_ms if start_ms is not None else 0,
-         end_ms if end_ms is not None else 9223372036854775807, "delete"))
+        (*values, revision, revision, start, end, "delete"))
     conn.execute(_readback_receipt_sql(",".join("?" for _ in values), "?", "?", "?"),
                  (*values, revision, start_ms, end_ms))
+
+
+class ScopedRevisionRead:
+    """One short-lived connection for sequential checks within a live input.
+
+    SQLite's data_version changes on commits from another connection. Check
+    it before reusing a result, with no read transaction held between checks.
+    """
+
+    def __init__(self, store):
+        self.store = store
+        self._connection = None
+        self._key = None
+        self._result = None
+
+    def read_versions(self, series):
+        if self._connection is None:
+            self._connection = self.store.connect()
+        conn = self._connection
+        version = conn.execute("PRAGMA data_version").fetchone()[0]
+        values = tuple(series)
+        key = (values, version)
+        if key != self._key:
+            self._result = self.store._read_versions(conn, values)
+            self._key = key
+        return self._result
+
+    def close(self):
+        if self._connection is not None:
+            conn, self._connection = self._connection, None
+            self._key = self._result = None
+            conn.close()
 
 
 class RevisionStore:
@@ -320,17 +397,41 @@ class RevisionStore:
         deletions. Unrelated series writes do not change a source's token.
         Consumers still fence their entire acquisition before publication.
         """
-        values = tuple(series)
+        with closing(self.connect()) as conn:
+            return self._read_versions(conn, tuple(series))
+
+    def scoped_version_reader(self):
+        return ScopedRevisionRead(self)
+
+    def _read_versions(self, conn, values):
         if len(values) > 32:
+            raise ValueError("at most 32 source dependencies per revision view")
+        with conn:
+            conn.execute("BEGIN")
+            head = current_revision(conn)
+            return head, self._versions(conn, values)
+
+    @staticmethod
+    def _versions(conn, series):
+        rows = (series_change(conn, key) for key in series)
+        return tuple(int(row["revision"]) if row is not None else 0 for row in rows)
+
+    def read_block_changes(self, revision, series, *, limit=4096):
+        """Read B130 versions and invalidation evidence from one snapshot."""
+        if len(series) > 32:
             raise ValueError("at most 32 source dependencies per revision view")
         with closing(self.connect()) as conn, conn:
             conn.execute("BEGIN")
             head = current_revision(conn)
-            versions = []
-            for key in values:
-                row = series_change(conn, key)
-                versions.append(int(row["revision"]) if row is not None else 0)
-            return head, tuple(versions)
+            versions = self._versions(conn, series)
+            changes = conn.execute(
+                "SELECT * FROM kline_series_changes WHERE revision>? ORDER BY revision LIMIT ?",
+                (revision, limit + 1),
+            ).fetchall()
+            reset = len(changes) > limit or revision > head
+            exact = () if reset else block_change_receipts(conn, revision, head)
+            self.observed_revision = head
+            return head, versions, changes[:limit], reset, exact
 
     def acquisition(self, *, owner=None, revision=None):
         with closing(self.connect()) as conn, conn:
@@ -356,6 +457,7 @@ class Acquisition:
     accepted: dict[tuple, int] = field(default_factory=dict)
     native_history_views: list = field(default_factory=list, repr=False)
     derived_target_views: list = field(default_factory=list, repr=False)
+    warmup_view: WarmupView | None = field(default=None, repr=False)
     lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
 
     def check(self, conn, values):
@@ -420,16 +522,20 @@ def guarded_write(conn, values, *, commit=True, native_rows=None, source=None, n
             view = matching_empty_view(scope, values, native_empty_ranges)
         computation = matching_computation(scope, values, native_rows, source) if commit else None
         targets = affected_targets(scope, values, native_rows) if view is not None else ()
+        warmup = scope.warmup_view
+        warmup_head = (warmup.check_write(conn, scope, values, native_rows, source)
+                       if commit and warmup is not None and view is None and computation is None else None)
         if computation is not None:
             computation.check(conn, scope)
             targets = (computation.target,)
         elif view is None:
-            scope.check(conn, values)
+            if warmup_head is None:
+                scope.check(conn, values)
         else:
             view.check(conn, scope)
             for target in targets:
                 target.check(conn, scope)
-        before = versions() if view is not None or computation is not None else None
+        before = versions() if view is not None or computation is not None or warmup_head is not None else None
         yield
         accepted = versions()
         # A native range view does not consume other intervals as input.
@@ -441,8 +547,11 @@ def guarded_write(conn, values, *, commit=True, native_rows=None, source=None, n
         target_digests = [(target, fingerprint(conn, target.key, target.start, target.end))
                           for target in targets]
         if commit:
+            after = current_revision(conn) if warmup_head is not None else None
             conn.commit()
             scope.accepted.update(accepted)
+            if warmup_head is not None:
+                warmup.accept(warmup_head, after)
             if view is not None:
                 view.digest = digest
             for target, target_digest in target_digests:
@@ -503,6 +612,13 @@ def acquisition_delete_floor(default):
     if scope is None:
         return default
     return scope.revision if scope.delete_revision is None else scope.delete_revision
+
+
+def prepare_warmup_view(windows):
+    scope = _acquisition.get()
+    if scope is not None and windows:
+        from .warmup_revision_fence import make_warmup_view
+        scope.warmup_view = make_warmup_view(windows)
 
 
 async def prepare_native_history_views(storage, tasks):

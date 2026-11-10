@@ -7,6 +7,7 @@ readers. This private controller is not yet a public API or default live owner.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import replace
 from functools import partial
@@ -26,6 +27,7 @@ from .continuous_inputs import ContinuousInputs, ProfileLease, reject_path_links
 from .continuous_provider import ContinuousProviderFactory
 from .continuous_runtime import ContinuousStrategyRuntime, WAKE_EVENTS
 from .continuous_store import ContinuousStrategyStore, _wire, MAX_DEFINITION_BYTES
+from .continuous_repairs import ContinuousRepairs
 from .errors import BacktestError
 
 
@@ -211,9 +213,11 @@ class _Preparation:
 
 
 class ContinuousStrategyController:
-    def __init__(self,store,manager,inputs,lease,*,clock_ms,max_active_runs=2,provider_factory=None):
+    def __init__(self,store,manager,inputs,lease,*,clock_ms,max_active_runs=2,provider_factory=None,repair_options=None):
         self.store,self.manager,self.inputs,self.lease=store,manager,inputs,lease
         self.clock_ms=clock_ms
+        self.runtime_mode=config.RUNTIME_MODE
+        self.execution_enabled=self.runtime_mode=="LIVE" and manager is not None
         self.loop=asyncio.get_running_loop()
         self.runtime=ContinuousStrategyRuntime(store,manager,inputs.datasets,
             provider_factory or ContinuousProviderFactory(),clock_ms=clock_ms,max_active_runs=max_active_runs)
@@ -224,9 +228,11 @@ class ContinuousStrategyController:
         self.resources_closed=False
         self.close_task=None
         self.restore_task=None
+        self.initial_waiters=set()
+        self.repairs=ContinuousRepairs(self,stage_options=repair_options)
 
     @classmethod
-    async def open(cls,path,manager,*,clock_ms,max_active_runs=2,input_options=None,store_options=None,provider_factory=None):
+    async def open(cls,path,manager,*,clock_ms,max_active_runs=2,input_options=None,store_options=None,provider_factory=None,repair_options=None):
         path=Path(path)
         if not path.is_absolute():
             raise BacktestError("CONTINUOUS_INPUT_OWNERSHIP","Use the absolute owned database path, without a database symlink")
@@ -251,7 +257,7 @@ class ContinuousStrategyController:
                 lease.close()
             await finish_cleanup(release())
             raise cancelled
-        try:return cls(store,manager,inputs,lease,clock_ms=clock_ms,max_active_runs=max_active_runs,provider_factory=provider_factory)
+        try:return cls(store,manager,inputs,lease,clock_ms=clock_ms,max_active_runs=max_active_runs,provider_factory=provider_factory,repair_options=repair_options)
         except BaseException:
             await run_storage(store.close)
             lease.close()
@@ -262,7 +268,8 @@ class ContinuousStrategyController:
 
     def _live(self):
         self._ready()
-        if config.RUNTIME_MODE!="LIVE":raise BacktestError("CONTINUOUS_NOT_READY","Market continuation requires the LIVE profile")
+        if config.RUNTIME_MODE!="LIVE" or not self.execution_enabled:
+            raise BacktestError("CONTINUOUS_NOT_READY","Market continuation requires the LIVE profile and its DataManager")
         if self.restore_task is not None and not self.restore_task.done():
             raise BacktestError("CONTINUOUS_NOT_READY","Profile restoration is in progress")
 
@@ -277,7 +284,7 @@ class ContinuousStrategyController:
             if existing.stopping:raise BacktestError("CONTINUOUS_NOT_READY","Creation is draining")
             return existing
         occupied=set(self.runtime.actors)|set(self.runtime.starts)
-        if self.jobs or len(occupied)>=self.runtime.max_active_runs:
+        if self.jobs or self.repairs.busy or len(occupied)>=self.runtime.max_active_runs:
             raise BacktestError("BUDGET_EXCEEDED","Continuous preparation or execution capacity reached")
         job=_Preparation(self,key,definition,mode,from_ms,cutoff_ms)
         self.jobs[key]=job
@@ -327,9 +334,21 @@ class ContinuousStrategyController:
                 raise
         return row
 
+    async def repair_preview(self,run_id,*,expected,resume_after):
+        return await self.repairs.preview(run_id,expected=expected,resume_after=resume_after)
+
+    async def repair(self,run_id,request_key,*,expected,plan_id,resume_after,confirmed):
+        return await self.repairs.confirm(run_id,request_key,expected=expected,plan_id=plan_id,
+            resume_after=resume_after,confirmed=confirmed)
+
+    async def cancel_repair(self,request_key,*,expected):
+        return await self.repairs.cancel(request_key,expected=expected)
+
     async def wait_initial(self,key):
         """Committed metadata only; result projections are a separate bounded read."""
+        if self.closed:raise BacktestError("CONTINUOUS_NOT_READY","Creation owner is closed")
         subscription=self.store.updates.subscribe("creation:"+key)
+        self.initial_waiters.add(subscription)
         try:
             while True:
                 subscription.clear_before_read()
@@ -338,8 +357,9 @@ class ContinuousStrategyController:
                 if creation["phase"] in {"FAILED","PAUSED","CANCELLED"}:return {"creation":creation,"run":None}
                 if self.closed:raise BacktestError("CONTINUOUS_NOT_READY","Creation owner is closed")
                 await subscription.wait()
-        finally:subscription.close()
+        finally:subscription.close();self.initial_waiters.discard(subscription)
         subscription=self.store.updates.subscribe(creation["run_id"])
+        self.initial_waiters.add(subscription)
         try:
             while True:
                 subscription.clear_before_read()
@@ -350,7 +370,7 @@ class ContinuousStrategyController:
                     return {"creation":creation,"run":row}
                 if self.closed:raise BacktestError("CONTINUOUS_NOT_READY","Creation owner is closed")
                 await subscription.wait()
-        finally:subscription.close()
+        finally:subscription.close();self.initial_waiters.discard(subscription)
 
     async def _drain_job(self,key):
         job=self.jobs.get(key)
@@ -360,15 +380,17 @@ class ContinuousStrategyController:
             if not job.cleaned:await job.cleanup()
             if self.jobs.get(key) is job:self.jobs.pop(key)
 
-    async def control(self,key,action,*,revision,refresh_input=False):
+    async def control(self,key,action,*,revision,refresh_input=False,expected=None):
         self._ready()
         if action not in {"pause","resume","retry","cancel"}:raise BacktestError("CONTINUOUS_INPUT_INVALID","Unknown creation control")
         if type(refresh_input) is not bool:raise BacktestError("CONTINUOUS_INPUT_INVALID","Input refresh must be explicit")
         if action in {"resume","retry"}:self._live()
+        if action in {"resume","retry"} and self.repairs.busy:
+            raise BacktestError("BUDGET_EXCEEDED","History repair owns preparation and its execution slot")
         if self.actions:raise BacktestError("CONTINUOUS_NOT_READY","Creation control is draining")
         if self.jobs and key not in self.jobs:
             raise BacktestError("BUDGET_EXCEEDED","Another initialization owns preparation and cleanup")
-        task=asyncio.create_task(self._control(key,action,revision,refresh_input))
+        task=asyncio.create_task(self._control(key,action,revision,refresh_input,expected))
         self.actions[key]=task
         def done(value):
             if self.actions.get(key) is value:self.actions.pop(key)
@@ -376,10 +398,32 @@ class ContinuousStrategyController:
         task.add_done_callback(done)
         return await asyncio.shield(task)
 
-    async def _control(self,key,action,revision,refresh_input):
+    async def _control(self,key,action,revision,refresh_input,expected=None):
         row=await run_storage(self.store.creations.describe,key)
         if type(revision) is not int or row["revision"]!=revision:
             raise BacktestError("CONTINUOUS_COMMIT_CONFLICT","Creation control is stale")
+        if expected is not None:
+            if row["phase"]!="COMMITTED":
+                raise BacktestError("CONTINUOUS_INPUT_INVALID","Preparation has no committed account identity")
+            # The action slot is already owned. A Manager precheck can become
+            # stale before admission; validate again before stopping an actor
+            # or starting a newer account generation.
+            current=await run_storage(self.store.summary,row["run_id"])
+            identity=self.store.results.identity(current)
+            if (not isinstance(expected,Mapping) or set(expected)!=set(identity)
+                    or any(type(expected[name]) is not type(value) for name,value in identity.items())):
+                raise BacktestError("CONTINUOUS_INPUT_INVALID","Account control requires its full committed identity")
+            if expected!=identity:
+                raise BacktestError("CONTINUOUS_COMMIT_CONFLICT","Account changed before control admission")
+        if (action in {"pause","cancel"} and self.repairs.job is not None
+                and self.repairs.job.run_id==row["run_id"]):
+            repair=self.repairs.job.record
+            if repair is None:
+                await asyncio.shield(self.repairs.job.reserved)
+                repair=self.repairs.job.record
+            cancelled=await self.repairs._cancel(repair["request_key"],repair["base_identity"])
+            if cancelled["phase"]=="COMMITTED":
+                raise BacktestError("CONTINUOUS_COMMIT_CONFLICT","Repair published before control; inspect the new account identity")
         if action in {"resume","retry"}:
             if row["phase"]=="COMMITTED":
                 if action=="retry" and refresh_input:raise BacktestError("CONTINUOUS_NOT_READY","Financial input repair requires separate authorization")
@@ -435,7 +479,7 @@ class ContinuousStrategyController:
 
     async def restore(self):
         self._live()
-        if self.jobs or self.actions or self.runtime.actors or self.runtime.starts:
+        if self.jobs or self.actions or self.repairs.busy or self.runtime.actors or self.runtime.starts:
             raise BacktestError("CONTINUOUS_NOT_READY","Restoration requires a newly opened owner")
         self.restore_task=asyncio.create_task(self._restore())
         self.restore_task.add_done_callback(lambda done:None if done.cancelled() else done.exception())
@@ -451,6 +495,9 @@ class ContinuousStrategyController:
                     await run_storage(self.store.creations.clear_cancelled_input,row["request_key"],revision=current["revision"])
         await run_storage(self.inputs.collect)
         result=await self.runtime.restore_active()
+        repairs=await self.repairs.restore()
+        result["repairing"]=repairs["repairing"]
+        result["not_admitted"].update(repairs["not_admitted"])
         result["preparing"]=[]
         for row in pending:
             if row["phase"] in {"REQUESTED","WATCHED","READY"}:
@@ -465,11 +512,17 @@ class ContinuousStrategyController:
 
     async def close(self):
         if self.resources_closed:return
-        self.closed=True
-        self.runtime._request_shutdown()
-        for job in tuple(self.jobs.values()):job.request_stop()
+        self.request_shutdown()
         if self.close_task is None or self.close_task.done():self.close_task=asyncio.create_task(self._close())
         await finish_cleanup(asyncio.shield(self.close_task))
+
+    def request_shutdown(self):
+        """Stop producers before their Manager drains outstanding view reads."""
+        self.closed=True
+        self.runtime._request_shutdown()
+        self.repairs.request_stop()
+        for job in tuple(self.jobs.values()):job.request_stop()
+        for subscription in tuple(self.initial_waiters):subscription.close()
 
     async def _close(self):
         # This owned task exists before the first await in close, including
@@ -480,6 +533,7 @@ class ContinuousStrategyController:
         if self.restore_task is not None:await asyncio.gather(self.restore_task,return_exceptions=True)
         await asyncio.gather(*tuple(self.actions.values()),return_exceptions=True)
         for key in tuple(self.jobs):await self._drain_job(key)
+        await self.repairs.close_job()
         await self.runtime.shutdown()
         self.executor.shutdown(wait=True)
         await run_storage(self.store.close)

@@ -234,9 +234,12 @@ def test_reconciler_materializes_91m_target_from_complete_1m_components() -> Non
             def __init__(self) -> None:
                 self.writes: dict[str, list[dict]] = {}
 
-            async def upsert_bars(self, symbol, interval, rows, **kwargs):
-                self.writes.setdefault(interval, []).extend(rows)
+            async def upsert_bars(self, symbol, interval, rows, *, source, **kwargs):
+                self.writes.setdefault(interval, []).extend({**row, "source": source} for row in rows)
                 return len(rows)
+
+            async def query_time_range(self, symbol, interval, start_ms, end_ms, **kwargs):
+                return [row for row in self.writes[interval] if start_ms <= row["open_time"] <= end_ms]
 
         storage = _Storage()
         reconciler = Reconciler(
@@ -292,12 +295,9 @@ def test_reconciler_never_returns_incomplete_91m_fallback_bucket() -> None:
         storage=object(),
     )
 
-    aggregated = reconciler._aggregate_to_custom(
-        bars,
-        "BTCUSDT",
-        "91m",
-        91 * minute_ms,
-        0,
+    aggregated = reconciler._reduce_custom_rows(
+        [{**bar.to_storage_dict(), "interval": bar.interval} for bar in bars],
+        "BTCUSDT", "91m", "binance", "spot", 91 * minute_ms,
     )
 
     assert aggregated == []
@@ -486,3 +486,50 @@ def test_backfill_engine_forces_fetch_for_contiguous_untrusted_rows() -> None:
         }
 
     asyncio.run(_run())
+
+
+def test_reconciler_reduces_canonical_winners_for_exact_mixed_components(tmp_path, monkeypatch) -> None:
+    from app.data_engine.storage import klines_repo
+
+    monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", tmp_path / "mixed.sqlite")
+    klines_repo.init_klines_storage()
+
+    def bar(at, interval, width, volume, *, source="backfill"):
+        return FetchedBar(
+            symbol="BTCUSDT", interval=interval, open_time=at, close_time=at + width - 1,
+            open=100, high=105, low=95, close=101, volume=volume, source=source,
+        )
+
+    async def run():
+        storage = klines_repo.AsyncKlinesRepoAdapter()
+        reconciler = Reconciler(BackfillConfig(reconcile_enable_cache_push=False), storage)
+        # The first bucket is exactly tiled by 3m + 1m. The second contains
+        # an overlapping 1m component and must not become authoritative.
+        groups = {
+            "3m": [bar(0, "3m", 180_000, 2), bar(720_000, "3m", 180_000, 4)],
+            "1m": [bar(180_000, "1m", 60_000, 3), bar(780_000, "1m", 60_000, 5),
+                   bar(900_000, "1m", 60_000, 6)],
+        }
+        winner = bar(0, "3m", 180_000, 17, source="backfill_rest_verified")
+        await storage.upsert_bars("BTCUSDT", "3m", [winner.to_storage_dict()], source=winner.source)
+        gap = GapInfo("BTCUSDT", "4m", GapType.INTERIOR, 0, 720_000, 2)
+        results = [
+            FetchResult(
+                task=BackfillTask("BTCUSDT", interval, bars[0].open_time, bars[-1].open_time, parent_gap=gap),
+                bars=bars, status=BackfillStatus.COMPLETED,
+            )
+            for interval, bars in groups.items()
+        ]
+        report = await reconciler.reconcile(results, BackfillPlan(
+            gaps=[gap], custom_intervals=["4m"], decompositions=[IntervalDecomposition(
+                custom_interval="4m", custom_duration_ms=240_000,
+                components=[IntervalComponent("3m", 1, 180_000), IntervalComponent("1m", 1, 60_000)],
+            )],
+        ))
+        assert not report.errors
+        assert report.custom_bars_generated == report.custom_bars_written == 1
+        [row] = await storage.query_time_range("BTCUSDT", "4m", 0, 720_000)
+        assert (row["open_time"], row["volume"], row["source"]) == (0, 20, "backfill_aggregated")
+        assert row["trades"] is None
+
+    asyncio.run(run())

@@ -177,7 +177,7 @@ Backfill paths are not the target of this deletion. They already have explicit e
 
 - `BarAggregator.on_backfill_bars()`;
 - `BarAggregator.aggregate_batch()`;
-- `BackfillReconciler.set_bar_aggregator()`;
+- `Reconciler.reconcile()` for canonical historical reduction;
 - `DataManager.on_bars_backfilled()`.
 
 Do not route historical repair through the realtime `IngestionFactory.start()` callback.

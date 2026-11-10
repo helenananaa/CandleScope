@@ -47,12 +47,14 @@ Usage::
 from __future__ import annotations
 
 from app.data_engine.storage.revisions import (fenced_acquisition, prepare_native_history_views,
-                                               prepare_derived_targets)
+                                               prepare_derived_targets, prepare_warmup_view)
 from app.data_engine.memory_budget import budgeted_work, reserve_work
 
 import logging
 import time
-from typing import Any
+from dataclasses import replace
+from itertools import groupby
+from typing import Any, Iterator
 
 from app.exchanges.symbols import normalize_symbol
 from app.exchanges.rate_limits import RateLimitDeferred
@@ -60,8 +62,15 @@ from app.exchanges.rate_limits import RateLimitDeferred
 from ..ingestion.config import IngestionConfig
 from ..ingestion.metrics import LayerMetrics
 from ..ingestion.transport import TransportLayer
-from ..interval_policy import parse_interval_spec
-from ..kline_quality import repair_requires_trusted_finality
+from ..aggregation.semantics import valid_ohlcv
+from ..interval_policy import IntervalAlignment, parse_interval_spec, row_is_closed
+from ..kline_quality import (
+    bybit_recovery_source_gap_id,
+    repair_requires_trusted_finality,
+    reuses_bybit_gap_inputs,
+    source_is_trusted_final,
+)
+from ..series_identity import identity_from_metadata
 
 from .config import BackfillConfig
 from .models import (
@@ -84,6 +93,8 @@ from .reconciler import Reconciler
 from .publisher import RepairPublisher
 
 logger = logging.getLogger("backfill.Engine")
+
+_BYBIT_WARMUP_SOURCE = ("bybit", "swap.linear", "5m")
 
 __all__ = [
     # Engine
@@ -265,6 +276,11 @@ class BackfillEngine:
         started_at_ms = int(time.time() * 1000)
         symbol = normalize_symbol(symbol, exchange=exchange, market_type=market_type)
         metadata = dict(metadata or {})
+        bybit_gap = reuses_bybit_gap_inputs(exchange, market_type, metadata.get("requester"))
+        bybit_derived_gap = bybit_gap or (
+            metadata.get("requester") == "ledger_reconcile"
+            and bybit_recovery_source_gap_id(exchange, market_type, metadata.get("reason"), metadata) is not None
+        )
         self._metrics.inc("runs")
         self._metrics.mark("last_run_at")
 
@@ -295,6 +311,9 @@ class BackfillEngine:
                     range_end_ms=range_end_ms,
                     exchange=exchange,
                     market_type=market_type,
+                )
+                gaps = await self._reuse_native_gap_inputs(
+                    gaps, metadata, bybit_gap=bybit_gap, native_progress=native_progress,
                 )
                 metadata["repair_mode"] = "authoritative_refresh"
                 logger.info(
@@ -365,10 +384,16 @@ class BackfillEngine:
                 # so archive routing can still decide from the complete user
                 # demand (not from a single ~1000-source-row chunk).
                 task.metadata = {**metadata, **task.metadata}
+            if (self._cfg.reconcile_generate_custom and len(intervals or ()) == 1
+                    and (bybit_derived_gap or metadata.get("requester") == "warm_start_custom_tail")):
+                await self._reuse_derived_components(plan, metadata, bybit_gap=bybit_derived_gap)
             status = BackfillStatus.FETCHING
             await prepare_native_history_views(self._storage, plan.tasks)
             await prepare_derived_targets(self._storage, plan)
-            if (exchange == "bybit" and not plan.decompositions
+            if plan.derived_source_windows:
+                prepare_warmup_view(plan.derived_source_windows)
+                fetch_results = await self.fetcher.fetch(plan.tasks, on_deferred=self._commit_warmup_progress)
+            elif (exchange == "bybit" and not plan.decompositions
                     and metadata.get("chunk_sequence") is not None
                     and callable(getattr(self._storage, "query_time_range", None))):
                 native_progress = native_progress or NativeBackfillProgress()
@@ -414,7 +439,7 @@ class BackfillEngine:
             all_failed = bool(fetch_results) and all(
                 fr.status == BackfillStatus.FAILED for fr in fetch_results
             )
-            if all_failed:
+            if all_failed and not plan.derived_source_windows:
                 status = BackfillStatus.FAILED
                 errors.append("All fetch tasks failed")
                 errors.extend(fetch_error_summaries)
@@ -456,7 +481,9 @@ class BackfillEngine:
                 any_failed = any(
                     fr.status == BackfillStatus.FAILED for fr in fetch_results
                 )
-                if any_failed or reconcile_result.errors:
+                if all_failed and fetch_results and not reconcile_result.custom_bars_written:
+                    status = BackfillStatus.FAILED
+                elif any_failed or reconcile_result.errors:
                     status = BackfillStatus.PARTIAL
                 else:
                     status = BackfillStatus.COMPLETED
@@ -496,6 +523,125 @@ class BackfillEngine:
             symbol, status.value, report.elapsed_ms,
         )
         return report
+
+    async def _reuse_derived_components(
+        self, plan: BackfillPlan, metadata: dict[str, Any], *, bybit_gap: bool,
+    ) -> None:
+        """Keep complete target inputs for reconciliation, fetching only unqualified source slots."""
+        if (self._storage is None or (not bybit_gap and repair_requires_trusted_finality(metadata))
+                or metadata.get("history_calendar_id") != "crypto.24x7.utc"
+                or len(plan.custom_intervals) != 1 or self._cfg.alignment_epoch_ms != 0):
+            return
+
+        target = parse_interval_spec(plan.custom_intervals[0])
+        if target is None or target.alignment is not IntervalAlignment.FIXED_EPOCH or target.phase_ms:
+            return
+
+        tasks = []
+        now_ms = int(time.time() * 1000)
+        for task in plan.tasks:
+            source = parse_interval_spec(task.interval)
+            identity = identity_from_metadata(task.exchange, metadata)
+            qualified_source = (
+                task.interval == "5m" if bybit_gap
+                else task.exchange in {"binance", "okx"}
+                or (task.exchange, task.market_type, task.interval) == _BYBIT_WARMUP_SOURCE
+            )
+            if (task.metadata.get("custom_interval") != target.canonical
+                    or not qualified_source
+                    or (identity is not None and not identity.is_legacy_default_for(task.exchange))
+                    or source is None or source.alignment is not IntervalAlignment.FIXED_EPOCH
+                    or source.phase_ms or source.nominal_ms < 60_000):
+                tasks.append(task)
+                continue
+
+            step = source.nominal_ms
+            rows = await self._storage.query_time_range(
+                task.symbol, task.interval, task.start_ms, task.end_ms,
+                exchange=task.exchange, market_type=task.market_type,
+            )
+            plan.derived_source_windows.append(task)
+            for first, last, count in self._unqualified_warmup_ranges(
+                rows, task.start_ms, task.end_ms, step, now_ms,
+            ):
+                tasks.append(replace(task, start_ms=first, end_ms=last, estimated_bars=count))
+
+        if plan.derived_source_windows:
+            plan.tasks = tasks
+            plan.estimated_requests = len(tasks)
+            plan.estimated_bars = sum(task.estimated_bars for task in tasks)
+
+    def _unqualified_warmup_ranges(
+        self, rows: list[dict], start_ms: int, end_ms: int, step: int, now_ms: int,
+    ) -> Iterator[tuple[int, int, int]]:
+        trusted = {
+            int(row["open_time"]) for row in rows
+            if self._is_reusable_warmup_component(row, step, now_ms)
+        }
+        for local, slots in groupby(range(start_ms, end_ms + 1, step), trusted.__contains__):
+            if not local:
+                missing = list(slots)
+                yield missing[0], missing[-1], len(missing)
+
+    @staticmethod
+    def _is_reusable_warmup_component(row: dict, step: int, now_ms: int) -> bool:
+        if not source_is_trusted_final(row.get("source")) or not row_is_closed(row):
+            return False
+        try:
+            close_ms = int(row["close_time"])
+            values = tuple(float(row[field]) for field in ("open", "high", "low", "close", "volume"))
+            return close_ms == int(row["open_time"]) + step - 1 and close_ms < now_ms and valid_ohlcv(values)
+        except (KeyError, OverflowError, TypeError, ValueError):
+            return False
+
+    async def _commit_warmup_progress(self, results: list[FetchResult]) -> None:
+        # If another missing run hit shared quota, preserve admitted source
+        # rows under the current write fence. Retry recomputes the remaining
+        # holes and only publishes derived results after normal reconciliation.
+        await self.reconciler.reconcile(results, BackfillPlan(gaps=[]))
+
+    async def _reuse_native_gap_inputs(
+        self, gaps: list[GapInfo], metadata: dict[str, Any], *, bybit_gap: bool,
+        native_progress: NativeBackfillProgress | None,
+    ) -> list[GapInfo]:
+        if (self._storage is None or len(gaps) != 1
+                or (not bybit_gap and metadata.get("requester") != "warm_start_custom_seed")
+                or metadata.get("history_calendar_id") != "crypto.24x7.utc"):
+            return gaps
+        gap = gaps[0]
+        if (gap.interval != "5m" if bybit_gap
+                else (gap.exchange, gap.market_type, gap.interval) != _BYBIT_WARMUP_SOURCE):
+            return gaps
+        identity = identity_from_metadata(gap.exchange, metadata)
+        if identity is not None and not identity.is_legacy_default_for(gap.exchange):
+            return gaps
+
+        # Re-read at dispatch: a live close or another repair may have
+        # committed canonical input since the current bucket was seeded.
+        spec = parse_interval_spec(gap.interval)
+        assert spec is not None
+        step = spec.nominal_ms
+        now_ms = int(time.time() * 1000)
+        first = spec.floor_ms(gap.start_ms)
+        if first < gap.start_ms:
+            first = spec.next_ms(first)
+        last = min(gap.end_ms, spec.floor_ms(now_ms) - step)
+        if first > last:
+            return []
+        rows = await self._storage.query_time_range(
+            gap.symbol, gap.interval, first, last, exchange=gap.exchange, market_type=gap.market_type,
+        )
+        if native_progress is not None:
+            invalidated_opens = {
+                opened
+                for lower, upper in native_progress.invalidated_ranges(gap.interval)
+                for opened in range(max(first, lower), min(last, upper) + 1, step)
+            }
+            rows = [row for row in rows if row["open_time"] not in invalidated_opens]
+        return [
+            replace(gap, start_ms=start, end_ms=end, missing_bars=count)
+            for start, end, count in self._unqualified_warmup_ranges(rows, first, last, step, now_ms)
+        ]
 
     def _trusted_finality_refresh_gaps(
         self,

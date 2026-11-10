@@ -1313,6 +1313,10 @@ class BacktestService:
             raise BacktestError("SCHEMA_UNKNOWN_FIELD", f"unknown run {run_id}")
         return self._connection_waiting(record)
 
+    def selected_run_version(self, run_id: str) -> dict[str, object]:
+        from .research_version import selected_run_version
+        return selected_run_version(self.repository, run_id)
+
     def list_runs(self) -> list[dict[str, object]]:
         return [self._connection_waiting(record) for record in self.repository.list_runs()]
 

@@ -52,7 +52,7 @@ await agg.stop()
 | `ingest_bar_input()` | 直接注入标准化 `BarInput` |
 | `seed_active_bar()` | 用 warm-start 数据预置 forming 状态 |
 | `replay_components()` | 用 component bars 重建 buckets |
-| `aggregate_batch()` | 给 backfill/custom storage repair 使用的无状态批量聚合 |
+| `aggregate_batch()` | 隔离的批量重放和诊断 |
 | `get_bucket_state()` / `get_latest_bar()` | 查看当前内存状态 |
 | `get_active_bars()` / `get_recent_bars()` | 调试和诊断 |
 | `snapshot()` | JSON 诊断快照 |
@@ -84,7 +84,7 @@ await agg.stop()
 
 周期解析走共享 interval policy。`7m`、`45m`、`3h`、`91m` 等固定自定义周期使用毫秒 bucket 计算。周周期按周一对齐。`1M`、`2M`、`3M` 等月周期使用日历感知的 monthly bucket calculator，不假设一个月固定 30 天。
 
-backfill 和 storage repair 需要隔离批量结果时，优先使用 `aggregate_batch()`。测试断言它不会注册 target，也不会留下 active bars。
+测试验证隔离的 `aggregate_batch()` 保持实时目标和活动状态。历史持久化使用 K130 存储行聚合。
 
 ## 收盘判断
 

@@ -4,6 +4,8 @@ import asyncio
 import pathlib
 import sys
 
+import pytest
+
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from app.data_engine.backfill import BackfillEngine
@@ -146,6 +148,10 @@ def test_91m_engine_fetches_page_bounded_components_and_persists_target() -> Non
                 if start_ms <= open_time <= end_ms
             }
 
+        async def query_time_range(self, symbol, interval, start_ms, end_ms, *, exchange, market_type):
+            series = self.rows.get((exchange, market_type, symbol, interval), {})
+            return [series[at] for at in sorted(series) if start_ms <= at <= end_ms]
+
         async def upsert_bars(
             self,
             symbol,
@@ -273,4 +279,185 @@ def test_server_clock_and_kline_pages_share_weight_without_legacy_deferral() -> 
         assert set(client._candlescope_rate_limit_manager.snapshot()) == {"binance:spot:request_weight:ip"}
 
     client = None
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("defer_second", [False, True])
+def test_custom_tail_warmup_fetches_only_unqualified_components(tmp_path, monkeypatch, defer_second):
+    """A new subscription can rebuild missing targets from both local and repaired input."""
+    from app.data_engine.storage import klines_repo
+    from app.exchanges.rate_limits import RateLimitAdmission, RateLimitDeferred
+
+    monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", tmp_path / "warmup.sqlite")
+    klines_repo.init_klines_storage()
+
+    minute = 60_000
+    rows = _make_binance_rows(10, minute)
+    transport = _FakeBinanceTransport(rows)
+    admitted_fetch = transport.http_fetch
+
+    async def limit_one_run(req):
+        if req.start_ms == 7 * minute:
+            raise RateLimitDeferred(RateLimitAdmission(
+                allowed=False, bucket_key="test", cost=1, reason="budget", retry_after_seconds=1,
+                retry_at_monotonic=None, retry_at_ms=None, rule_name="test",
+            ))
+        return await admitted_fetch(req)
+
+    async def no_rate_limit():
+        pass
+
+    storage = klines_repo.AsyncKlinesRepoAdapter()
+    config = BackfillConfig(
+        history_archive_enabled=False, fetch_rate_limit_delay=0, reconcile_enable_cache_push=False,
+    )
+    engine = BackfillEngine(config, storage, transport, ingestion_config=IngestionConfig())
+    engine.fetcher.set_rate_limiter(no_rate_limit)
+    demand = {"requester": "warm_start_custom_tail", "history_calendar_id": "crypto.24x7.utc"}
+
+    def storage_row(index):
+        return {
+            "open_time": index * minute, "close_time": (index + 1) * minute - 1,
+            "open": 100, "high": 110, "low": 90, "close": 105, "volume": 2,
+            "quote_volume": 210, "trades": 10, "taker_buy_base": 1, "taker_buy_quote": 105,
+        }
+
+    async def run():
+        try:
+            # Complete local targets surround both a missing source slot and
+            # a physically present but provisional slot.
+            trusted = [storage_row(i) for i in (0, 1, 2, 4, 5, 6, 8, 9)]
+            assert await storage.upsert_bars("BTCUSDT", "1m", trusted, source="backfill") == len(trusted)
+            assert await storage.upsert_bars("BTCUSDT", "1m", [storage_row(7)], source="manual") == 1
+
+            local = await engine.run("BTCUSDT", ["2m"], 0, 0, metadata=demand)
+            assert transport.requests == []
+            assert local.status is BackfillStatus.COMPLETED
+            assert local.reconcile_result.custom_bars_written == 1
+            # Keep a materialized target between the two gaps so the planner
+            # emits two decompositions for the same derived interval.
+            separated = await engine.run("BTCUSDT", ["2m"], 4 * minute, 4 * minute, metadata=demand)
+            assert separated.reconcile_result.custom_bars_written == 1
+            assert transport.requests == []
+
+            if defer_second:
+                transport.http_fetch = limit_one_run
+                with pytest.raises(RateLimitDeferred):
+                    await engine.run("BTCUSDT", ["2m"], 2 * minute, 8 * minute, metadata=demand)
+                [first] = await storage.query_time_range("BTCUSDT", "1m", 3 * minute, 3 * minute)
+                assert first["source"] == "backfill"
+                existing = await storage.query_time_range("BTCUSDT", "2m", 2 * minute, 8 * minute)
+                assert [row["open_time"] for row in existing] == [4 * minute]
+                transport.http_fetch = admitted_fetch
+
+            repaired = await engine.run("BTCUSDT", ["2m"], 2 * minute, 8 * minute, metadata=demand)
+            assert sorted((req.start_ms, req.end_ms) for req in transport.requests) == [
+                (3 * minute, 3 * minute), (7 * minute, 7 * minute),
+            ]
+            assert repaired.status is BackfillStatus.COMPLETED
+            assert repaired.reconcile_result.bars_written == (1 if defer_second else 2)
+            assert repaired.reconcile_result.custom_bars_written == 3
+            targets = await storage.query_time_range("BTCUSDT", "2m", 0, 8 * minute)
+            assert [(row["open_time"], row["volume"], row["source"]) for row in targets] == [
+                (0, 4, "backfill_aggregated"),
+                (2 * minute, 3.5, "backfill_aggregated"),
+                (4 * minute, 4, "backfill_aggregated"),
+                (6 * minute, 3.5, "backfill_aggregated"),
+                (8 * minute, 4, "backfill_aggregated"),
+            ]
+        finally:
+            await engine.close()
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("mutation", ["live_tail", "fetched_open", "local_input", "target", "delete", "legacy_receipt"])
+def test_custom_tail_warmup_uses_exact_committed_mutation_ranges(tmp_path, monkeypatch, mutation):
+    import sqlite3
+    from contextvars import Context
+
+    from app.data_engine.storage import klines_repo
+
+    db = tmp_path / "concurrent.sqlite"
+    monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", db)
+    klines_repo.init_klines_storage()
+
+    minute = 60_000
+    open_ms = 2 * minute
+    missing = open_ms + minute
+    transport = _FakeBinanceTransport(_make_binance_rows(16, minute))
+    storage = klines_repo.AsyncKlinesRepoAdapter()
+    engine = BackfillEngine(
+        BackfillConfig(history_archive_enabled=False, reconcile_enable_cache_push=False),
+        storage, transport, ingestion_config=IngestionConfig(),
+    )
+    demand = {"requester": "warm_start_custom_tail", "history_calendar_id": "crypto.24x7.utc"}
+
+    def row(at, width=minute, volume=2):
+        return {
+            "open_time": at, "close_time": at + width - 1,
+            "open": 100, "high": 110, "low": 90, "close": 105, "volume": volume,
+            "quote_volume": 210, "trades": 10, "taker_buy_base": 1, "taker_buy_quote": 105,
+        }
+
+    async def external_write(at, *, interval="1m", width=minute, volume=2, source="data_manager_exchange_closed"):
+        assert await asyncio.create_task(
+            storage.upsert_bars("BTCUSDT", interval, [row(at, width, volume)], source=source),
+            context=Context(),
+        ) == 1
+
+    actual_fetch = transport.http_fetch
+
+    async def interleaved_fetch(req):
+        result = await actual_fetch(req)
+        if mutation == "fetched_open":
+            await external_write(missing, volume=9, source="backfill")
+        elif mutation == "delete":
+            # Deleting a slot that is still empty must also fence its fetch.
+            assert klines_repo.delete_klines("BTCUSDT", "1m", missing, missing) == 0
+        elif mutation in {"live_tail", "legacy_receipt"}:
+            await external_write(10 * minute)
+            if mutation == "legacy_receipt":
+                # Emulate an older writer whose revision had no exact receipt.
+                with sqlite3.connect(db) as conn:
+                    conn.execute("DELETE FROM kline_block_changes WHERE revision=(SELECT MAX(revision) FROM kline_block_changes)")
+        return result
+
+    actual_write = engine.reconciler._write_custom_materialization
+
+    async def interleaved_materialization(**kwargs):
+        if mutation == "live_tail":
+            await external_write(11 * minute)
+        elif mutation == "local_input":
+            await external_write(open_ms, volume=9, source="backfill")
+        elif mutation == "target":
+            await external_write(open_ms, interval="2m", width=2 * minute, volume=9, source="backfill_aggregated")
+        return await actual_write(**kwargs)
+
+    async def no_rate_limit():
+        pass
+
+    async def run():
+        try:
+            await external_write(open_ms, source="backfill")
+            engine.fetcher.set_rate_limiter(no_rate_limit)
+            transport.http_fetch = interleaved_fetch
+            engine.reconciler._write_custom_materialization = interleaved_materialization
+            result = await engine.run("BTCUSDT", ["2m"], open_ms, open_ms, metadata=demand)
+            assert [(req.start_ms, req.end_ms) for req in transport.requests] == [(missing, missing)]
+            stored_source = await storage.query_time_range("BTCUSDT", "1m", missing, missing)
+            stored_target = await storage.query_time_range("BTCUSDT", "2m", open_ms, open_ms)
+            if mutation == "live_tail":
+                assert result.status is BackfillStatus.COMPLETED, result.errors
+                assert [r["volume"] for r in stored_source] == [1.5]
+                assert [r["volume"] for r in stored_target] == [3.5]
+                assert result.reconcile_result.bars_written == result.reconcile_result.custom_bars_written == 1
+            else:
+                assert result.status is BackfillStatus.PARTIAL, result.errors
+                expected_source = {"fetched_open": [9], "local_input": [1.5], "target": [1.5]}.get(mutation, [])
+                assert [r["volume"] for r in stored_source] == expected_source
+                assert [r["volume"] for r in stored_target] == ([9] if mutation == "target" else [])
+        finally:
+            await engine.close()
+
     asyncio.run(run())

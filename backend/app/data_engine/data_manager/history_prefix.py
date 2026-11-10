@@ -39,10 +39,15 @@ class HistoryPrefixReader:
     def qualify(self, source):
         return self.engine.history_blocks._qualify(source)
 
-    def validate_bound(self, prefix):
+    def scoped_version_reader(self):
+        store = getattr(self.engine.storage, "revision_store", None)
+        create = getattr(store, "scoped_version_reader", None)
+        return create() if callable(create) else None
+
+    def validate_bound(self, prefix, *, read_scope=None):
         engine = self.engine
         return self.validate(prefix, storage=engine.storage, manager=engine.shared_blocks,
-                             policy=engine.history_policy)
+                             policy=engine.history_policy, read_scope=read_scope)
 
     def _read_page(self, source, start, end, prefix, cursor, page_rows, cancel, require_complete):
         with self.engine.history_blocks.read(source, start, end, max_rows=page_rows,
@@ -57,7 +62,7 @@ class HistoryPrefixReader:
             raise BlockUnavailable("history prefix has unavailable coverage or fields")
         return summary, receipt
 
-    def validate(self, prefix, *, storage, manager, policy):
+    def validate(self, prefix, *, storage, manager, policy, read_scope=None):
         """Worker-side durable fence, also reusable immediately before adoption."""
         engine = self.engine
         adapter = manager.source
@@ -69,7 +74,8 @@ class HistoryPrefixReader:
         if (not callable(validator) or getattr(adapter, 'store', None) is not getattr(storage, 'revision_store', None)
                 or manager.snapshot()['closed']):
             raise BlockRevisionChanged('history prefix source is unavailable')
-        validator(prefix.summary.revisions, acquisition_revision=prefix.acquisition_revision)
+        options = {"read_scope": read_scope} if read_scope is not None else {}
+        validator(prefix.summary.revisions, acquisition_revision=prefix.acquisition_revision, **options)
         if (engine.storage is not storage or engine.shared_blocks is not manager
                 or engine.history_policy is not policy or manager.source is not adapter
                 or manager.snapshot()['closed']):

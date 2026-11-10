@@ -26,7 +26,7 @@ def write(t=200000, *, interval='1s', close=105, **kwargs):
         source='backfill_aggregated' if interval=='7s' else 'backfill', **kwargs)
 
 
-def run_repair(*, stage=None, mutate=lambda: None, batch=500, aggregator=False):
+def run_repair(*, stage=None, mutate=lambda: None, batch=500):
     fired = []
     def inject(where):
         if where == stage and not fired:
@@ -64,9 +64,6 @@ def run_repair(*, stage=None, mutate=lambda: None, batch=500, aggregator=False):
         engine.fetcher._rate_limit_admission = admission
         engine.fetcher._rate_limit = admission
         engine._detector = Detector()
-        if aggregator:
-            from app.data_engine.bar_aggregator import BarAggregator
-            engine.reconciler.set_bar_aggregator(BarAggregator())
         try:
             return await engine.run('BTCUSDT',['7s'],91000,98000)
         finally:
@@ -167,11 +164,11 @@ def test_custom_source_label_without_computation_view_remains_strict(store):
         write(91000,interval='7s')
 
 
-def test_live_aggregator_reduction_uses_same_dependency_permission(store):
-    report=run_repair(stage='commit',mutate=write,aggregator=True)
+def test_shared_reducer_preserves_dependency_permission(store):
+    report=run_repair(stage='commit',mutate=write)
     assert report.errors == []
     assert len(store.query_bars('BTCUSDT','7s'))==2
-    assert all(r.phase=='custom_via_aggregator' for r in report.written_ranges if r.interval=='7s')
+    assert all(r.phase=='custom' for r in report.written_ranges if r.interval=='7s')
 
 
 @pytest.mark.parametrize('field',['close','volume','trades','source'])

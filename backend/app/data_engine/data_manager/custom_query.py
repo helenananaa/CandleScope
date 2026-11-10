@@ -6,10 +6,10 @@ from copy import deepcopy
 import time
 import logging
 import threading
-from bisect import bisect_right
 from collections.abc import Callable
 from concurrent.futures import Future
 from dataclasses import dataclass, replace
+from itertools import islice
 from typing import Any
 
 from app.data_engine.interval_policy import (
@@ -113,6 +113,24 @@ def _bar_data_to_storage_rows(
     } for bar in bars]
 
 
+def _calendar_source_evidence(
+    calendar: Any, start_ms: int, end_ms: int, source_interval: str, actual_opens: list[int],
+) -> tuple[bool, bool, bool]:
+    # Read at most one extra open to distinguish a complete grid from a prefix.
+    expected_opens = list(islice(
+        calendar.expected_opens(start_ms, end_ms - 1, source_interval),
+        len(actual_opens) + 1,
+    ))
+    prefix = bool(actual_opens and actual_opens == expected_opens[:len(actual_opens)])
+    reaches_end = prefix and len(actual_opens) == len(expected_opens)
+    # A source may have the right open and still cross the target boundary.
+    within_bounds = prefix and all(
+        expected_bucket_end_ms(calendar, opened, source_interval) <= end_ms
+        for opened in actual_opens
+    )
+    return prefix, reaches_end, within_bounds
+
+
 def _aggregate_rows_to_interval(
     base_rows: list[dict],
     custom_interval_seconds: int,
@@ -126,63 +144,38 @@ def _aggregate_rows_to_interval(
     if not base_rows:
         return []
 
-    expected_bucket_starts: list[int] = []
-    if calendar is not None and interval is not None:
-        first_ms = min(int(row["time"]) for row in base_rows) * 1000
-        last_ms = max(int(row["time"]) for row in base_rows) * 1000
-        first_bucket_ms = containing_expected_open_ms(
-            calendar,
-            first_ms,
-            interval,
-        )
-        expected_bucket_starts = list(calendar.expected_opens(
-            first_bucket_ms if first_bucket_ms is not None else first_ms,
-            last_ms,
-            interval,
-        ))
-
     buckets: dict[int, list[dict]] = {}
-    for row in base_rows:
+    calendar_bound = calendar is not None and interval is not None
+    expected_start_ms = None
+    expected_end_ms = None
+    for row in sorted(base_rows, key=lambda row: row["time"]):
         ts = row["time"]
-        if expected_bucket_starts:
-            position = bisect_right(expected_bucket_starts, int(ts) * 1000) - 1
-            if position < 0:
-                continue
-            bucket_start = expected_bucket_starts[position] // 1000
-            if int(ts) * 1000 >= expected_bucket_end_ms(
-                calendar,
-                expected_bucket_starts[position],
-                interval,
-            ):
-                continue
+        if calendar_bound:
+            opened_ms = int(ts) * 1000
+            if expected_end_ms is None or opened_ms >= expected_end_ms:
+                # Resolve occupied buckets only. Expanding every target open
+                # between sparse inputs can scan years of empty sessions.
+                expected_start_ms = containing_expected_open_ms(calendar, opened_ms, interval)
+                if expected_start_ms is None:
+                    continue
+                expected_end_ms = expected_bucket_end_ms(calendar, expected_start_ms, interval)
+            bucket_start = expected_start_ms // 1000
         else:
-            bucket_start = compute_bucket_start(
-                ts,
-                custom_interval_seconds,
-                interval=interval,
-            )
+            bucket_start = compute_bucket_start(ts, custom_interval_seconds, interval=interval)
         buckets.setdefault(bucket_start, []).append(row)
 
     result: list[dict] = []
-    for bucket_start in sorted(buckets):
-        rows = sorted(buckets[bucket_start], key=lambda row: row["time"])
+    for bucket_start, rows in buckets.items():
         bucket_end = (
             expected_bucket_end_ms(calendar, bucket_start * 1000, interval) // 1000
-            if calendar is not None and interval is not None
+            if calendar_bound
             else bucket_start + custom_interval_seconds
         )
         if calendar is not None and source_interval is not None:
-            expected_source_opens = list(calendar.expected_opens(
-                bucket_start * 1000, bucket_end * 1000 - 1, source_interval,
-            ))
-            actual_source_opens = [int(row["time"]) * 1000 for row in rows]
-            prefix = bool(expected_source_opens and actual_source_opens
-                          == expected_source_opens[:len(actual_source_opens)])
-            reaches_end = prefix and len(actual_source_opens) == len(expected_source_opens)
-            # The calendar owns actual source closes (including a session's
-            # shortened last bar); never pretend calendar months are 30 days.
-            within_bounds = all(expected_bucket_end_ms(calendar, opened, source_interval)
-                                <= bucket_end * 1000 for opened in actual_source_opens)
+            prefix, reaches_end, within_bounds = _calendar_source_evidence(
+                calendar, bucket_start * 1000, bucket_end * 1000, source_interval,
+                [int(row["time"]) * 1000 for row in rows],
+            )
         else:
             prefix = bool(source_interval_seconds and source_interval_seconds > 0
                           and int(rows[0]["time"]) == bucket_start
@@ -203,17 +196,6 @@ def _aggregate_rows_to_interval(
             "is_closed": coverage.closed,
         })
     return result
-
-
-def _sum_optional_field(
-    rows: list[dict],
-    field: str,
-    *,
-    integer: bool = False,
-) -> float | int | None:
-    """Sum an additive field only when every component provides it."""
-    total = sum_additive((row.get(field) for row in rows), integer=integer)
-    return total if integer or total is None else round(total, 8)
 
 
 def _aggregate_fixed_bars_to_interval(
@@ -923,18 +905,14 @@ class CustomIntervalQueryService:
                 components = [row for row in (
                     base_result.bars if boundary_components is None else boundary_components
                 ) if earliest <= row.time_ms < end]
-                expected = list(source_calendar.expected_opens(earliest, end - 1, source_interval))
-                if not expected or [row.time_ms for row in components] != expected or not all(
-                    row.trusted_final for row in components
-                ):
+                _, reaches_end, within_bounds = _calendar_source_evidence(
+                    source_calendar, earliest, end, source_interval, [row.time_ms for row in components],
+                )
+                if not (reaches_end and within_bounds and all(row.trusted_final for row in components)):
                     continue
-                fields = [row.to_aggregation_dict() for row in components]
+                fields = chart_field_summary([row.to_aggregation_dict() for row in components]).project()
                 bars = list(bars)
-                bars[index] = replace(bar, is_closed=True,
-                    quote_volume=_sum_optional_field(fields, "quote_volume"),
-                    trades=_sum_optional_field(fields, "trades", integer=True),
-                    taker_buy_base=_sum_optional_field(fields, "taker_buy_base"),
-                    taker_buy_quote=_sum_optional_field(fields, "taker_buy_quote"))
+                bars[index] = replace(bar, is_closed=True, **fields)
         return [
             bar.with_source("backfill_aggregated")
             if bar.is_closed and not bar.trusted_final
@@ -2491,35 +2469,28 @@ class CustomIntervalQueryService:
         calendar: Any | None = None,
     ) -> list[BarData]:
         """Read-only aggregation used for partial buckets and fallback."""
-        source_interval_ms = parse_interval_ms(source_interval) if source_interval else None
-        source_interval_seconds = (
-            source_interval_ms // 1000
-            if source_interval_ms is not None
-            else None
-        )
-        interval_spec = parse_interval_spec(interval)
-        month_count = parse_monthly_count(interval)
+        source_spec = parse_interval_spec(source_interval) if source_interval else None
+        target_spec = parse_interval_spec(interval)
         if (
             (calendar is None or isinstance(calendar, AlwaysOpenCalendar))
-            and month_count is None
-            and interval_spec is not None
-            and interval_spec.alignment is IntervalAlignment.FIXED_EPOCH
+            and target_spec is not None
+            and target_spec.alignment is IntervalAlignment.FIXED_EPOCH
+            and (source_spec is None or source_spec.alignment is IntervalAlignment.FIXED_EPOCH)
         ):
             return _aggregate_fixed_bars_to_interval(
                 base_bars,
                 custom_seconds,
-                source_interval_seconds=source_interval_seconds,
-                phase_seconds=interval_spec.phase_ms // 1000,
+                source_interval_seconds=source_spec.nominal_ms // 1000 if source_spec else None,
+                phase_seconds=target_spec.phase_ms // 1000,
             )
-        # Calendar source components (especially 1M) do not have a fixed
-        # 30-day width. Use their actual opens and target end for completeness.
+        # A calendar target or source uses actual opens and ends, even when
+        # the market has no explicit session-calendar provider.
         aggregated = _aggregate_rows_to_interval(
             [bar.to_aggregation_dict() for bar in base_bars],
             custom_seconds,
             interval=interval,
-            source_interval=source_interval,
-            source_interval_seconds=source_interval_seconds,
-            calendar=(calendar or AlwaysOpenCalendar()) if month_count is not None else calendar,
+            source_interval=source_spec.canonical if source_spec else None,
+            calendar=calendar if calendar is not None else AlwaysOpenCalendar(),
         )
 
         return [BarData.from_dict(row) for row in aggregated]
