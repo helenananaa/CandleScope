@@ -149,3 +149,77 @@ def test_background_gap_audit_loop_awaits_async_series_listing() -> None:
         return coordinator.calls
 
     assert asyncio.run(scenario()) == [(series, tail_series)]
+
+
+@pytest.mark.asyncio
+async def test_gate_audit_repairs_contract_gap_despite_legacy_cooldown(tmp_path, monkeypatch) -> None:
+    from app.data_engine.bar_basis import GATE_INVERSE_CONTRACTS
+    from app.data_engine.data_manager.backfill_coordinator import BackfillCoordinator, RepairRequest
+    from app.data_engine.storage.gap_ledger import GapLedger
+
+    identity = GATE_INVERSE_CONTRACTS
+    route = ("gate", "swap.inverse", "BTC/USD:BTC", "5m")
+    legacy = RepairRequest(
+        exchange=route[0], market_type=route[1], symbol=route[2], interval=route[3],
+        start_ms=300_000, end_ms=900_000,
+    )
+    ledger = GapLedger(tmp_path / "klines.sqlite")
+    ledger.upsert_detected(legacy)
+    ledger.mark_resolved(legacy, status="failed", error="legacy volume unit")
+
+    class Storage:
+        def list_series(self, custom_only=False):
+            raise AssertionError("scoped inventory misses Gate")
+
+        def list_all_series(self, custom_only=False):
+            row = dict(zip(("exchange", "market_type", "symbol", "interval"), route))
+            return [row, {**row, **identity.to_dict()}]
+
+        def get_bounds(self, symbol, interval, *, exchange, market_type, series_identity):
+            assert series_identity == identity
+            return {"earliest_open_time": 300_000, "latest_open_time": 300_000}
+
+        def scan_gaps(self, *, series_identity, **kwargs):
+            assert series_identity == identity
+            return {"gaps": [{"start_ms": 600_000, "end_ms": 600_000}], "scanned_bars": 1}
+
+    storage = Storage()
+    dm = DataManager(DataManagerConfig())
+    dm.set_storage(storage)
+    dm.bar_aggregator.add_target(route[2], route[3], exchange=route[0], market_type=route[1],
+                                 series_identity=identity)
+
+    async def noop(*args, **kwargs):
+        pass
+
+    coordinator = BackfillCoordinator(
+        storage=storage, bars_backfilled=noop, emit_event=noop, gap_ledger=ledger,
+    )
+    assert await coordinator.refresh_suppressions() == 1
+    dm.set_backfill_suppression_lookup(coordinator.get_repair_suppression)
+    args = (route[2], route[3], 600_000, 600_000, route[0], route[1])
+    assert dm.get_backfill_suppression(*args)["ledger_status"] == "failed"
+    assert dm.get_backfill_suppression(*args, series_identity=identity) is None
+
+    requests = []
+    def submit(request):
+        requests.append(request)
+        return request.request_id
+
+    monkeypatch.setattr(coordinator, "request", submit)
+    async def skip_reconciliation(**kwargs):
+        from app.data_engine.data_manager.backfill_contracts import LedgerReconciliationReport
+        return LedgerReconciliationReport()
+    monkeypatch.setattr(coordinator, "reconcile_gap_ledger", skip_reconciliation)
+
+    assert route in dm.gap_audit_series()
+    assert (*route, identity) in dm.gap_audit_tail_series()
+    report = await coordinator.audit_storage_series(
+        [route, (*route, identity)], tail_series=[(*route, identity)], max_gaps=1,
+    )
+    assert report.queued == 1
+    assert requests[0].metadata["series_identity"] == identity.to_dict()
+    assert ledger.mark_covered_resolved(
+        requests[0], coverage_start_ms=300_000, coverage_end_ms=900_000,
+    ) == 0
+    assert ledger.get_status(legacy)["status"] == "failed"

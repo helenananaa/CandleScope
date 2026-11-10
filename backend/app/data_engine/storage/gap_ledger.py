@@ -13,6 +13,11 @@ from app.data_engine.interval_policy import (
     parse_interval_ms,
 )
 from app.data_engine.kline_quality import repair_requires_trusted_finality
+from app.data_engine.series_identity import (
+    KlineSeriesIdentity,
+    identity_from_metadata,
+    resolve_kline_series_identity,
+)
 
 
 _DEFAULT_STALE_AFTER_MS = 15 * 60 * 1000
@@ -29,6 +34,7 @@ def _connect(db_path: Path | str | None = None) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA synchronous=NORMAL;")
+    conn.create_function("gap_series_scope", 2, _series_scope, deterministic=True)
     return conn
 
 
@@ -73,6 +79,19 @@ def _metadata_object(value: Any) -> dict[str, Any]:
     except (TypeError, ValueError, json.JSONDecodeError):
         return {}
     return dict(decoded) if isinstance(decoded, dict) else {}
+
+
+def _series_scope(exchange: str, metadata: Any) -> str:
+    try:
+        identity = identity_from_metadata(exchange, _metadata_object(metadata))
+        return json.dumps(resolve_kline_series_identity(exchange, identity).storage_values)
+    except (TypeError, ValueError):
+        # Malformed legacy evidence cannot prove any current identity.
+        return "invalid"
+
+
+def _request_scope(request: Any) -> str:
+    return _series_scope(request.exchange, getattr(request, "metadata", None))
 
 
 def _request_range(request: Any) -> tuple[int, int]:
@@ -601,6 +620,7 @@ class GapLedger:
                       AND market_type = ?
                       AND symbol = ?
                       AND interval = ?
+                      AND gap_series_scope(exchange, metadata_json) = ?
                       AND start_ms >= ?
                       AND end_ms <= ?
                       AND status = ?
@@ -617,6 +637,7 @@ class GapLedger:
                         request.market_type,
                         request.symbol,
                         request.interval,
+                        _request_scope(request),
                         coverage_start_ms,
                         coverage_end_ms,
                         expected_status,
@@ -639,6 +660,7 @@ class GapLedger:
                       AND market_type = ?
                       AND symbol = ?
                       AND interval = ?
+                      AND gap_series_scope(exchange, metadata_json) = ?
                       AND start_ms >= ?
                       AND end_ms <= ?
                       AND status IN (
@@ -653,6 +675,7 @@ class GapLedger:
                         request.market_type,
                         request.symbol,
                         request.interval,
+                        _request_scope(request),
                         coverage_start_ms,
                         coverage_end_ms,
                     ),
@@ -680,6 +703,7 @@ class GapLedger:
                   AND market_type = ?
                   AND symbol = ?
                   AND interval = ?
+                  AND gap_series_scope(exchange, metadata_json) = ?
                   AND start_ms = ?
                   AND end_ms = ?
                 """,
@@ -688,6 +712,7 @@ class GapLedger:
                     request.market_type,
                     request.symbol,
                     request.interval,
+                    _request_scope(request),
                     int(request.start_ms),
                     int(request.end_ms),
                 ),
@@ -704,6 +729,7 @@ class GapLedger:
         start_ms: int,
         end_ms: int,
         now_ms: int | None = None,
+        series_identity: KlineSeriesIdentity | None = None,
     ) -> dict[str, Any] | None:
         """Return the most relevant unresolved row covering an exact gap.
 
@@ -723,6 +749,7 @@ class GapLedger:
                   AND market_type = ?
                   AND symbol = ?
                   AND interval = ?
+                  AND gap_series_scope(exchange, metadata_json) = ?
                   AND start_ms <= ?
                   AND end_ms >= ?
                   AND status NOT IN ('filled', 'superseded')
@@ -755,6 +782,7 @@ class GapLedger:
                     str(market_type or "spot").strip().lower(),
                     str(symbol or "").strip().upper(),
                     str(interval or "").strip(),
+                    json.dumps(resolve_kline_series_identity(exchange, series_identity).storage_values),
                     int(start_ms),
                     int(end_ms),
                     now,
@@ -799,6 +827,7 @@ class GapLedger:
         start_ms: int,
         end_ms: int,
         now_ms: int | None = None,
+        series_identity: KlineSeriesIdentity | None = None,
     ) -> dict[str, Any] | None:
         """Read one exact/covering terminal submission suppression."""
         now = int(_now_ms() if now_ms is None else now_ms)
@@ -811,6 +840,7 @@ class GapLedger:
                   AND market_type = ?
                   AND symbol = ?
                   AND interval = ?
+                  AND gap_series_scope(exchange, metadata_json) = ?
                   AND start_ms <= ?
                   AND end_ms >= ?
                   AND (
@@ -832,6 +862,7 @@ class GapLedger:
                     str(market_type or "spot").strip().lower(),
                     str(symbol or "").strip().upper(),
                     str(interval or "").strip(),
+                    json.dumps(resolve_kline_series_identity(exchange, series_identity).storage_values),
                     int(start_ms),
                     int(end_ms),
                     now,
@@ -1191,6 +1222,7 @@ class GapLedger:
                     resolved_at = ?,
                     next_retry_at = NULL
                 WHERE exchange = ? AND market_type = ? AND symbol = ? AND interval = ?
+                  AND gap_series_scope(exchange, metadata_json) = ?
                   AND reason = ? AND status = 'source_empty'
                   AND start_ms >= ? AND end_ms <= ?
                   AND NOT (start_ms = ? AND end_ms = ?)
@@ -1202,6 +1234,7 @@ class GapLedger:
                     request.market_type,
                     request.symbol,
                     request.interval,
+                    _request_scope(request),
                     reason,
                     start_ms,
                     end_ms,
@@ -1228,7 +1261,8 @@ class GapLedger:
                     id,
                     end_ms,
                     MAX(end_ms) OVER (
-                      PARTITION BY exchange, market_type, symbol, interval, reason, start_ms
+                      PARTITION BY exchange, market_type, symbol, interval,
+                                   gap_series_scope(exchange, metadata_json), reason, start_ms
                     ) AS widest_end
                   FROM kline_gap_ledger
                   WHERE status = 'source_empty'

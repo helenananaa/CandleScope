@@ -36,15 +36,20 @@ from app.data_engine.kline_quality import (
     source_is_trusted_final,
 )
 from app.data_engine.series_identity import (
+    KlineSeriesIdentity,
     identity_from_metadata,
+    identity_from_mapping,
 )
 from app.exchanges.models import (
     HistoryAvailabilityPolicy,
     HistoryEmptyPageSemantics,
 )
+from app.exchanges.history_identity import supports_history_identity
 from app.exchanges.rate_limits import RateLimitDeferred
 from .backfill_contracts import (
     BACKFILL_REASON_PRIORITIES,
+    RepairSeries,
+    repair_series_key,
     HistoryPolicyResolver,
     LedgerReconciliationReport,
     RepairOutcome,
@@ -178,8 +183,8 @@ class BackfillCoordinator:
         self._gap_ledger = gap_ledger
         self._history_service = history_service
         self._history_planner = BackfillHistoryPlanner(history_service, history_policy_resolver)
-        self._gap_audit_cursors: dict[tuple[str, str, str, str], int] = {}
-        self._gap_audit_tail_cursors: dict[tuple[str, str, str, str], int] = {}
+        self._gap_audit_cursors: dict[RepairSeries, int] = {}
+        self._gap_audit_tail_cursors: dict[RepairSeries, int] = {}
         self._gap_audit_series_rotation = 0
         self._gap_audit_lock = asyncio.Lock()
         self._ledger_pending_upserts: OrderedDict[str, RepairRequest] = OrderedDict()
@@ -188,7 +193,7 @@ class BackfillCoordinator:
         self._ledger_open_cache: list[dict[str, Any]] = []
         self._ledger_health_cache: dict[str, Any] = {}
         self._ledger_suppression_cache: dict[
-            tuple[str, str, str, str],
+            RepairSeries,
             tuple[dict[str, Any], ...],
         ] = {}
         self._ledger_last_compaction_at: float | None = None
@@ -479,7 +484,7 @@ class BackfillCoordinator:
             logger.exception("Gap ledger suppression refresh failed")
             return sum(len(rows) for rows in self._ledger_suppression_cache.values())
 
-        grouped: dict[tuple[str, str, str, str], list[dict[str, Any]]] = {}
+        grouped: dict[RepairSeries, list[dict[str, Any]]] = {}
         for raw in rows or ():
             if not isinstance(raw, dict):
                 continue
@@ -533,7 +538,8 @@ class BackfillCoordinator:
             calendar, calendar_resolved = self._calendar_for_reconciliation(
                 cache_request
             )
-            grouped.setdefault(key, []).append({
+            scope = repair_series_key(*key, identity_from_metadata(key[0], cache_request.metadata))
+            grouped.setdefault(scope, []).append({
                 "suppressed": True,
                 "source": "gap_ledger",
                 "ledger_id": raw.get("id"),
@@ -574,14 +580,11 @@ class BackfillCoordinator:
         end_ms: int,
         exchange: str = "binance",
         market_type: str = "spot",
+        *,
+        series_identity: KlineSeriesIdentity | None = None,
     ) -> dict[str, Any] | None:
         """Return an exact/covering current cooldown without SQLite I/O."""
-        key = (
-            str(exchange or "binance").strip().lower(),
-            str(market_type or "spot").strip().lower(),
-            str(symbol or "").strip().upper(),
-            str(interval or "").strip(),
-        )
+        key = repair_series_key(exchange, market_type, symbol, interval, series_identity)
         requested_start = int(start_ms)
         requested_end = int(end_ms)
         now_ms = int(time.time() * 1000)
@@ -603,6 +606,7 @@ class BackfillCoordinator:
                         end_ms=requested_end,
                         reason="suppression_lookup",
                         requester="suppression_lookup",
+                        metadata={"series_identity": key[4].to_dict()} if len(key) == 5 else {},
                     )
                     target = self._target_open_range_with_calendar(
                         request,
@@ -752,12 +756,12 @@ class BackfillCoordinator:
 
     async def audit_storage_series(
         self,
-        series: Iterable[tuple[str, str, str, str]],
+        series: Iterable[RepairSeries],
         *,
         scan_limit: int = 50_000,
         max_gaps: int = 100,
         repair: bool = True,
-        tail_series: Iterable[tuple[str, str, str, str]] | None = None,
+        tail_series: Iterable[RepairSeries] | None = None,
         detailed: bool = False,
         repair_wait_seconds: float = 0,
     ) -> ScanReport:
@@ -774,12 +778,12 @@ class BackfillCoordinator:
 
     async def _audit_storage_series(
         self,
-        series: Iterable[tuple[str, str, str, str]],
+        series: Iterable[RepairSeries],
         *,
         scan_limit: int,
         max_gaps: int,
         repair: bool,
-        tail_series: Iterable[tuple[str, str, str, str]] | None,
+        tail_series: Iterable[RepairSeries] | None,
         detailed: bool,
     ) -> ScanReport:
         """Scan exact series and optionally queue repairs.
@@ -796,35 +800,25 @@ class BackfillCoordinator:
             return report
 
         queued = 0
-        seen_series: set[tuple[str, str, str, str]] = set()
-        normalized_series: list[tuple[str, str, str, str]] = []
-        for raw_exchange, raw_market_type, raw_symbol, raw_interval in series:
-            exchange = str(raw_exchange or "binance").strip().lower()
-            market_type = str(raw_market_type or "spot").strip().lower()
-            symbol = str(raw_symbol or "").strip().upper()
-            interval = str(raw_interval or "").strip()
-            if not symbol or not interval:
+        normalized_series = []
+        seen_series: set[RepairSeries] = set()
+        for raw in series:
+            key = repair_series_key(*raw)
+            exchange, market_type, symbol, interval = key[:4]
+            if key in seen_series or not symbol or not interval:
                 continue
-            series_key = (exchange, market_type, symbol, interval)
-            if series_key in seen_series:
+            seen_series.add(key)
+            identity = key[4] if len(key) == 5 else KlineSeriesIdentity.for_exchange(exchange)
+            if not supports_history_identity(
+                exchange=exchange, market_type=market_type, interval=interval, identity=identity,
+            ):
+                if detailed:
+                    page = self._audit_error_page(key, "interior", "History identity is unsupported")
+                    page["status"] = "unsupported"
+                    report.pages.append(page)
                 continue
-            seen_series.add(series_key)
-            normalized_series.append(series_key)
-
-        normalized_tail_series: set[tuple[str, str, str, str]] = set()
-        for raw in tail_series or ():
-            try:
-                raw_exchange, raw_market_type, raw_symbol, raw_interval = raw
-            except (TypeError, ValueError):
-                continue
-            tail_key = (
-                str(raw_exchange or "binance").strip().lower(),
-                str(raw_market_type or "spot").strip().lower(),
-                str(raw_symbol or "").strip().upper(),
-                str(raw_interval or "").strip(),
-            )
-            if tail_key[2] and tail_key[3]:
-                normalized_tail_series.add(tail_key)
+            normalized_series.append(key)
+        normalized_tail_series = {repair_series_key(*raw) for raw in tail_series or ()}
 
         async def _queue_scan_gaps(
             scan: dict[str, Any],
@@ -834,10 +828,12 @@ class BackfillCoordinator:
             symbol: str,
             interval: str,
             lane: str,
+            identity_metadata: dict[str, Any],
         ) -> int | None:
             nonlocal queued
             page = self._audit_page(scan, exchange, market_type, symbol, interval, lane) if detailed else None
             if page is not None:
+                page.update(identity_metadata)
                 report.pages.append(page)
             priority = priority_for_reason(
                 "tail_gap" if lane == "tail" else "background_gap_audit"
@@ -861,6 +857,8 @@ class BackfillCoordinator:
                     priority=priority,
                     requester="background_audit",
                     metadata={
+                        **identity_metadata,
+                        **({"requires_trusted_finality": True} if identity_metadata else {}),
                         "origin": "background_gap_audit",
                         "audit_lane": lane,
                         "gap_type": gap.get("reason", "unknown"),
@@ -932,8 +930,11 @@ class BackfillCoordinator:
             start_index = 0
 
         processed_series = 0
-        for exchange, market_type, symbol, interval in normalized_series:
-            series_key = (exchange, market_type, symbol, interval)
+        for series_key in normalized_series:
+            exchange, market_type, symbol, interval = series_key[:4]
+            identity = series_key[4] if len(series_key) == 5 else None
+            scope = {"series_identity": identity} if identity is not None else {}
+            identity_metadata = {"series_identity": identity.to_dict()} if identity is not None else {}
             if self._shutdown:
                 if detailed:
                     report.errors.append("Audit stopped during shutdown")
@@ -955,6 +956,7 @@ class BackfillCoordinator:
                     market_type=market_type,
                     reason="background_gap_audit",
                     requester="background_audit",
+                    metadata=identity_metadata,
                 )
                 audit_calendar, calendar_resolved = (
                     self._calendar_for_reconciliation(calendar_request)
@@ -983,6 +985,7 @@ class BackfillCoordinator:
                                 interval,
                                 exchange=exchange,
                                 market_type=market_type,
+                                **scope,
                             )
                             latest_open_ms = (
                                 bounds.get("latest_open_time")
@@ -1060,6 +1063,7 @@ class BackfillCoordinator:
                                     exchange=exchange,
                                     market_type=market_type,
                                     limit=_TAIL_AUDIT_LOOKBACK_BARS,
+                                    **scope,
                                 )
                                 report.scanned += 1
                                 if not isinstance(tail_scan, dict):
@@ -1075,6 +1079,7 @@ class BackfillCoordinator:
                                     symbol=symbol,
                                     interval=interval,
                                     lane="tail",
+                                    identity_metadata=identity_metadata,
                                 )
                                 if first_unprocessed_tail_gap_ms is not None:
                                     self._gap_audit_tail_cursors[series_key] = (
@@ -1138,15 +1143,14 @@ class BackfillCoordinator:
                                 tail_exc,
                             )
 
-                cursor_ms = self._gap_audit_cursors.get(
-                    (exchange, market_type, symbol, interval)
-                )
+                cursor_ms = self._gap_audit_cursors.get(series_key)
                 scan_kwargs: dict[str, Any] = {
                     "symbol": symbol,
                     "interval": interval,
                     "exchange": exchange,
                     "market_type": market_type,
                     "limit": scan_limit,
+                    **scope,
                 }
                 if cursor_ms is not None:
                     scan_kwargs["start_ms"] = cursor_ms
@@ -1163,6 +1167,7 @@ class BackfillCoordinator:
                     symbol=symbol,
                     interval=interval,
                     lane="interior",
+                    identity_metadata=identity_metadata,
                 )
 
                 if first_unprocessed_gap_ms is not None:
@@ -1234,13 +1239,14 @@ class BackfillCoordinator:
 
     @staticmethod
     def _audit_error_page(
-        series_key: tuple[str, str, str, str], lane: str, error: object,
+        series_key: RepairSeries, lane: str, error: object,
     ) -> dict[str, Any]:
-        exchange, market_type, symbol, interval = series_key
+        exchange, market_type, symbol, interval = series_key[:4]
         return {
             "exchange": exchange, "market_type": market_type,
             "symbol": symbol, "interval": interval, "lane": lane,
             "status": "error", "error": str(error), "scanned_bars": 0,
+            **({"series_identity": series_key[4].to_dict()} if len(series_key) == 5 else {}),
         }
 
     @staticmethod
@@ -1319,6 +1325,8 @@ class BackfillCoordinator:
                     symbol=page["symbol"], interval=page["interval"],
                     exchange=page["exchange"], market_type=page["market_type"],
                     start_ms=start_ms, end_ms=end_ms, limit=50_000,
+                    **({"series_identity": identity_from_mapping(page["exchange"], page["series_identity"])}
+                       if "series_identity" in page else {}),
                 )
                 if not isinstance(verification, dict) or verification.get("error"):
                     raise ValueError(verification.get("error") if isinstance(verification, dict) else "Malformed verification result")
@@ -1484,6 +1492,17 @@ class BackfillCoordinator:
                         request=raw_request,
                         row_id=ledger_row_id,
                         reason="unsupported ledger interval",
+                    )
+                continue
+            identity = identity_from_metadata(request.exchange, request.metadata)
+            if not supports_history_identity(
+                exchange=request.exchange, market_type=request.market_type, interval=request.interval,
+                identity=identity or KlineSeriesIdentity.for_exchange(request.exchange),
+            ):
+                report.skipped += 1
+                if ledger_row_id is not None:
+                    await self._defer_ledger_reconciliation(
+                        request=request, row_id=ledger_row_id, reason="unsupported ledger identity",
                     )
                 continue
             range_key = (request.series_key, request.start_ms, request.end_ms)
@@ -2227,6 +2246,7 @@ class BackfillCoordinator:
             request.end_ms,
             request.exchange,
             request.market_type,
+            series_identity=identity_from_metadata(request.exchange, request.metadata),
         )
         if suppression is not None:
             future = self._future_for(request)
@@ -3329,6 +3349,7 @@ class BackfillCoordinator:
         get_status = getattr(self._gap_ledger, "get_status", None)
         if not callable(get_covering) and not callable(get_status):
             return False
+        identity = identity_from_metadata(request.exchange, request.metadata)
         try:
             if callable(get_covering):
                 status = await run_storage(
@@ -3340,6 +3361,7 @@ class BackfillCoordinator:
                     start_ms=request.start_ms,
                     end_ms=request.end_ms,
                     now_ms=now_ms,
+                    **({"series_identity": identity} if identity is not None else {}),
                 )
             else:
                 status = await run_storage(get_status, request)
