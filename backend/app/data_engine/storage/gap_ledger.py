@@ -66,6 +66,7 @@ def _connect(db_path: Path | str | None = None) -> sqlite3.Connection:
     conn.execute("PRAGMA synchronous=NORMAL;")
     conn.create_function("gap_series_scope", 2, _series_scope, deterministic=True)
     conn.create_function("merge_native_receipts", 4, _merge_native_receipts, deterministic=True)
+    conn.create_function("gap_has_native_receipts", 1, _has_native_receipts, deterministic=True)
     return conn
 
 
@@ -110,6 +111,17 @@ def _metadata_object(value: Any) -> dict[str, Any]:
     except (TypeError, ValueError, json.JSONDecodeError):
         return {}
     return dict(decoded) if isinstance(decoded, dict) else {}
+
+
+def _has_native_receipts(metadata_json: str) -> bool:
+    """Identify candidates for recovery ownership, before canonical readback."""
+    metadata = _metadata_object(metadata_json)
+    revision = metadata.get("acquisition_revision")
+    if type(revision) is not int or revision < 0:
+        return False
+    partial = metadata.get(NATIVE_PROGRESS_FIELD)
+    complete = metadata.get(COMPLETED_NATIVE_CHUNKS_FIELD)
+    return (isinstance(partial, list) and bool(partial)) or (isinstance(complete, dict) and bool(complete))
 
 
 def _merge_native_receipts(
@@ -833,7 +845,8 @@ class GapLedger:
         Scheduler parents are often wider than the individual gap rediscovered
         by a later audit.  Natural-key-only lookup lets that child bypass the
         parent's active lease or retry deadline, so covering state is the
-        durable unit used for suppression decisions.
+        durable unit used for suppression decisions. Receipt-bearing parents
+        keep recovery ownership after their deadlines.
         """
         now = int(_now_ms() if now_ms is None else now_ms)
         fresh_after = now - _DEFAULT_STALE_AFTER_MS
@@ -843,7 +856,10 @@ class GapLedger:
         with _connect(self._db_path) as conn:
             row = conn.execute(
                 f"""
-                SELECT {row_id} AS id, {_ROW_FIELDS}
+                SELECT {row_id} AS id, {_ROW_FIELDS},
+                       CASE WHEN exchange = 'bybit' AND status IN (
+                         'queued', 'repairing', 'verifying', 'partial', 'retry_wait'
+                       ) THEN gap_has_native_receipts(metadata_json) ELSE 0 END AS has_native_receipts
                 FROM {table}
                 WHERE exchange = ?
                   AND market_type = ?
@@ -870,7 +886,8 @@ class GapLedger:
                       AND next_retry_at > ?
                     )
                     THEN 1
-                    ELSE 2
+                    WHEN has_native_receipts THEN 2
+                    ELSE 3
                   END,
                   (end_ms - start_ms) ASC,
                   last_seen_at DESC,
