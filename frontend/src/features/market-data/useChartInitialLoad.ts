@@ -657,7 +657,7 @@ export function useChartInitialLoad({
           setConnectionStatus("connected");
           setLoading(false);
         };
-        const failPending = (reason: string) => {
+        const failPending = () => {
           if (
             controller.signal.aborted
             || !seriesDataFeed.isCurrent(series, initialEpoch)
@@ -665,9 +665,6 @@ export function useChartInitialLoad({
             || pendingInitialHistoryRef.current !== pendingInitial
           ) return;
           terminalFailed = true;
-          if (trackedInitialRepairRange) {
-            seriesDataFeed.clearPendingResultRepair(series, trackedInitialRepairRange);
-          }
           pendingInitialHistoryRef.current = null;
           ownedPendingInitial = null;
           setInitialHistoryPending(false);
@@ -678,8 +675,7 @@ export function useChartInitialLoad({
             pendingInitial,
             "initial-history-terminal",
           );
-          setError(new Error(`K-line history repair stopped: ${reason}`));
-          setConnectionStatus("disconnected");
+          setConnectionStatus("connected");
           setLoading(false);
         };
         let trackedRange = seriesDataFeed.trackPendingResultRepair(
@@ -689,7 +685,6 @@ export function useChartInitialLoad({
           failPending,
         );
         if (terminalFailed) {
-          seriesDataFeed.clearPendingResultRepair(series, trackedRange);
           trackedRange = null;
         } else if (
           previousTrackedRange
@@ -714,6 +709,9 @@ export function useChartInitialLoad({
         setInitialHistoryPending(false);
         seriesDataFeed.clearPendingResultRepair(series, trackedInitialRepairRange);
         trackedInitialRepairRange = null;
+        if (historyResult?.history_state === "exhausted") {
+          seriesDataFeed.trackTerminalHistoryGaps(series, historyResult);
+        }
       }
 
       const retryMode = initialRepairRetryMode({
@@ -750,7 +748,7 @@ export function useChartInitialLoad({
           symbol: sym,
           interval: intv,
         });
-        if (!repairPending) {
+        if (!repairPending || terminalFailed) {
           if (historyResult?.history_state === "exhausted") setHasMoreLeft(false);
           setConnectionStatus("connected");
           setLoading(false);
@@ -774,7 +772,7 @@ export function useChartInitialLoad({
       setError(null);
       setDataSource(historyResult.source || "unknown");
       setConnectionStatus(
-        historyResult.source === "mock" || repairPending ? "loading" : "connected",
+        historyResult.source === "mock" || (repairPending && !terminalFailed) ? "loading" : "connected",
       );
 
       if (!initialPaintReady) {

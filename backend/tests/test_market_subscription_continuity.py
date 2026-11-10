@@ -45,12 +45,14 @@ class KlineFactory:
         d = self.pipeline.descriptor
         from app.data_engine.interval_policy import parse_interval_ms
         closed_at = opened + parse_interval_ms(d.interval) - 1
+        data = {"open_time": opened, "close_time": closed_at, "interval": d.interval,
+                "is_closed": is_closed, "open": 100, "high": 100, "low": 100, "close": 100,
+                "volume": 1}
+        if d.exchange == "bybit":
+            data["bybit_close_confirmed"] = is_closed
         await self.pipeline.continuity.ingest(MarketEvent(
             StreamType.KLINE, d.symbol, d.exchange, closed_at, closed_at,
-            DataSource.WEBSOCKET,
-            data={"open_time": opened, "close_time": closed_at, "interval": d.interval,
-                  "is_closed": is_closed, "open": 100, "high": 100, "low": 100, "close": 100,
-                  "volume": 1}, market_type=d.market_type,
+            DataSource.WEBSOCKET, data=data, market_type=d.market_type,
         ))
 
 

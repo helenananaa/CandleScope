@@ -1,10 +1,12 @@
 import type {
-  KlineApi, KlineFetchResult, KlineHistoryBatchOutcome, KlineRequestOptions, KlineStreamFactory,
+  KlineApi, KlineFetchResult, KlineHistoryBatchOutcome, KlineRequestOptions, KlineStreamFactory, StorageRevisionFloor,
 } from "../klineContracts.js";
 import type { MarketSeries } from "../marketDataTypes.js";
+import type { IntervalString } from "../../../utils/intervals.js";
 import { SharedKlineRequestCoordinator } from "../feed/sharedKlineRequestCoordinator.js";
 import { SharedKlineStreamCoordinator } from "../feed/sharedKlineStreamCoordinator.js";
 import { SharedMarketCache, type MarketCacheOptions, type MarketReadToken } from "./sharedMarketCache.js";
+import { meetsStorageRevisionFloor } from "./marketHealth.js";
 import type { MarketRange } from "./sharedMarketCache.js";
 import { SeriesDataFeed } from "../feed/seriesDataFeed.js";
 import type { MarketDataService, MarketWarmOptions } from "../marketDataService.js";
@@ -20,6 +22,14 @@ interface StreamTransport {
   subscribe: KlineStreamFactory;
   closeAll(): void;
   diagnostics(): object;
+}
+
+function sourceGapNotice(detail: { gap_id?: unknown; range_start_ms?: unknown; range_end_ms?: unknown } | undefined) {
+  const { gap_id: id, range_start_ms: from, range_end_ms: to } = detail ?? {};
+  if (typeof id !== "string" || !id || id.length > 128
+    || typeof from !== "number" || !Number.isSafeInteger(from) || from < 0
+    || typeof to !== "number" || !Number.isSafeInteger(to) || to < from) return null;
+  return { id, range: { from: from / 1000, to: to / 1000 } };
 }
 export interface MarketDataManagerOptions {
   api: KlineApi;
@@ -67,7 +77,7 @@ export class MarketDataManager extends MarketDataManagerCore implements MarketDa
       getMultiStreamUrl: (...args) => api.getMultiStreamUrl(...args),
       fetchKlinesHistory: (...args) => this.acceptHttp(identity(args[0], args[1], args[3], args[4], args[5]), args[5], "history", () => api.fetchKlinesHistory(...args)),
       fetchKlinesBefore: (...args) => this.acceptHttp(identity(args[0], args[1], args[4], args[5], args[6]), args[6], "before", () => api.fetchKlinesBefore(...args)),
-      fetchKlinesRange: (...args) => this.acceptHttp(identity(args[0], args[1], args[4], args[5], args[6]), args[6], "range", () => api.fetchKlinesRange(...args)),
+      fetchKlinesRange: (...args) => this.acceptHttp(identity(args[0], args[1], args[4], args[5], args[6]), args[6], "range", () => api.fetchKlinesRange(...args), args[6].storageRevisionFloor),
       fetchLatestKlines: (...args) => this.acceptHttp(identity(args[0], args[1], args[3], args[4], args[6]), args[6], "latest", () => api.fetchLatestKlines(...args)),
     };
     if (api.fetchKlinesHistoryBatch) {
@@ -105,36 +115,77 @@ export class MarketDataManager extends MarketDataManagerCore implements MarketDa
         let active = true;
         let connected = true;
         let intervals = [...(streamOptions.intervals ?? [])];
-        const connect = () => { for (const interval of intervals) this.cache.connect({ ...series, interval }); };
+        let acknowledged: Set<IntervalString> | null = null;
+        const rejected = new Set<IntervalString>();
+        const admits = (interval: IntervalString) => intervals.includes(interval)
+          && (acknowledged?.has(interval) ?? !rejected.has(interval));
+        const connect = () => {
+          for (const interval of intervals) if (admits(interval)) this.cache.connect({ ...series, interval });
+        };
         const current = () => active && !this.closed;
         const controller = this.transport.subscribe(series, {
         ...streamOptions,
-        onOpen: controller => { if (current()) { connected = true; connect(); streamOptions.onOpen?.(controller); } },
+        onOpen: controller => {
+          if (!current()) return;
+          connected = true;
+          acknowledged = null;
+          rejected.clear();
+          connect();
+          streamOptions.onOpen?.(controller);
+        },
         onStreamStatus: (event, controller) => {
           if (!current()) return;
-          if (event.status !== "online" && event.status !== "connected") this.cache.markDisconnected(series);
+          if (event.status === "source_gap") {
+            const gap = sourceGapNotice(event.detail);
+            if (!connected || !event.interval || !admits(event.interval) || !gap
+              || !this.cache.invalidateRange({ ...series, interval: event.interval },
+                gap.range, event.stream_version, undefined, { id: gap.id, resolved: false })) return;
+          } else if (event.status !== "online" && event.status !== "connected") this.cache.markDisconnected(series);
           streamOptions.onStreamStatus?.(event, controller);
         },
         onControlMessage: (event, controller) => {
           if (!current() || !connected) return;
-          for (const failure of event.failed ?? []) this.cache.disconnectSeries({ ...series, interval: failure.interval });
-          if (event.type === "unsubscribed") for (const interval of event.intervals ?? event.requested_intervals ?? []) {
-            this.cache.disconnectSeries({ ...series, interval });
+          const previouslyAdmitted = new Set(intervals.filter(admits));
+          if (event.active_intervals) {
+            acknowledged = new Set(event.active_intervals);
+            rejected.clear();
+          } else {
+            if (event.type === "subscribed") for (const interval of event.intervals ?? event.requested_intervals ?? []) {
+              acknowledged?.add(interval);
+              rejected.delete(interval);
+            }
+            const removed = event.type === "unsubscribed" ? event.intervals ?? event.requested_intervals ?? [] : [];
+            for (const interval of [...removed, ...(event.failed ?? []).map(item => item.interval)]) {
+              if (!intervals.includes(interval)) continue;
+              acknowledged?.delete(interval);
+              rejected.add(interval);
+            }
           }
-          if (event.type === "subscribed" && event.active_intervals) for (const interval of intervals) {
-            if (!event.active_intervals.includes(interval)) this.cache.disconnectSeries({ ...series, interval });
+          for (const interval of intervals) {
+            if (admits(interval)) {
+              if (!previouslyAdmitted.has(interval)) this.cache.connect({ ...series, interval });
+            } else if (previouslyAdmitted.has(interval)) {
+              this.cache.disconnectSeries({ ...series, interval }, true);
+            }
           }
-          if (event.type === "error") this.cache.markDisconnected(series);
+          if (event.type === "error" && !event.active_intervals && !event.failed?.length) this.cache.markDisconnected(series);
           streamOptions.onControlMessage?.(event, controller);
         },
         onBackfillCompleted: (event, controller) => {
-          if (!current() || !connected) return false;
+          if (!current() || !connected || (event.interval && !admits(event.interval))) return false;
+          if (event.detail?.reason === "source_gap_resolved") {
+            const gap = sourceGapNotice(event.detail);
+            if (!event.interval || !gap || !this.cache.invalidateRange({ ...series, interval: event.interval },
+              gap.range, event.stream_version, undefined, { id: gap.id, resolved: true })) return false;
+            return streamOptions.onBackfillCompleted?.(event, controller) ?? false;
+          }
           // A new backend completion is not validated by an earlier cache proof.
           const from = event.detail?.range_start_ms ?? event.detail?.request_start_ms;
           const to = event.detail?.range_end_ms ?? event.detail?.request_end_ms;
           if (event.interval) this.cache.invalidateRange({ ...series, interval: event.interval },
             typeof from === "number" && typeof to === "number" && Number.isFinite(from) && Number.isFinite(to) && from <= to
-              ? { from: from / 1000, to: to / 1000 } : undefined, event.stream_version);
+              ? { from: from / 1000, to: to / 1000 } : undefined, event.stream_version,
+            event.detail?.reason === "storage_history_changed" ? event.detail.storage_revision : undefined);
           else this.cache.markDisconnected(series);
           if (event.interval) this.healthRecovery.request({ ...series, interval: event.interval });
           return streamOptions.onBackfillCompleted?.(event, controller) ?? false;
@@ -145,11 +196,11 @@ export class MarketDataManager extends MarketDataManagerCore implements MarketDa
           streamOptions.onParseError?.(error, event, controller);
         },
         onKline: (event, controller) => {
-          if (!current() || !connected) return;
+          if (!current() || !connected || !admits(event.interval)) return;
           this.cache.connect({ ...series, interval: event.interval });
           const accepted = this.cache.admitRealtime({ ...series, interval: event.interval }, event.tick,
             typeof event.message.event_type === "string" ? event.message.event_type : undefined,
-            event.message.stream_version, event.message.previous_open_ms);
+            event.message.stream_version, event.message.previous_open_ms, event.message.continuity_replayed === true);
           this.healthRecovery.request({ ...series, interval: event.interval });
           if (!accepted.accepted || !accepted.row) { this.rejectedRealtime += 1; return; }
           streamOptions.onKline?.({ ...event, tick: accepted.row, message: { ...event.message, data: accepted.row } }, controller);
@@ -173,6 +224,7 @@ export class MarketDataManager extends MarketDataManagerCore implements MarketDa
           updateIntervals: next => {
             if (!current()) return;
             for (const interval of intervals) if (!next.includes(interval)) this.cache.disconnectSeries({ ...series, interval });
+            for (const interval of rejected) if (!next.includes(interval)) rejected.delete(interval);
             intervals = [...next];
             if (controller.isOpen()) connect();
             controller.updateIntervals(next);
@@ -275,7 +327,7 @@ export class MarketDataManager extends MarketDataManagerCore implements MarketDa
     if (this.closed || options.signal?.aborted) throw aborted();
     // Repair/readback must reach the backend: an old local proof cannot verify
     // a new server correction or establish reconnect freshness.
-    if (options.clientContext?.cacheMode !== "network-only" && !options.strict
+    if (!options.storageRevisionFloor && options.clientContext?.cacheMode !== "network-only" && !options.strict
       && (options.repair === undefined || options.repair === "none")) {
       const snapshot = this.cache.read(identity(symbol, interval, marketType, exchange, options), { from: start, to: end });
       if (snapshot.complete) {
@@ -309,12 +361,15 @@ export class MarketDataManager extends MarketDataManagerCore implements MarketDa
     this.cache.clear();
   }
 
-  private async acceptHttp(series: MarketSeries, options: KlineRequestOptions, endpoint: NonNullable<KlineFetchResult["endpoint"]>, request: () => Promise<KlineFetchResult>): Promise<KlineFetchResult> {
+  private async acceptHttp(series: MarketSeries, options: KlineRequestOptions, endpoint: NonNullable<KlineFetchResult["endpoint"]>, request: () => Promise<KlineFetchResult>, floor?: StorageRevisionFloor): Promise<KlineFetchResult> {
     if (this.closed || options.signal?.aborted) throw aborted();
     const token = this.cache.beginRead(series);
     try {
       const response = await request();
       if (this.closed || options.signal?.aborted) throw aborted();
+      if (floor && !meetsStorageRevisionFloor(response, series, floor)) {
+        return { endpoint, data: [], history_state: "pending", complete: false, retryable: true };
+      }
       return this.cache.admitResponse(token, { ...response, endpoint });
     } finally { token.release(); }
   }

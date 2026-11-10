@@ -34,6 +34,8 @@ import {
   type KlineSeriesIdentityInput,
 } from "../features/market-data/klineSeriesIdentity.js";
 
+import type { StorageRevisionFloor } from "../features/market-data/klineContracts.js";
+
 const CLIENT_INSTANCE_ID = Math.random().toString(36).slice(2, 10);
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -71,6 +73,7 @@ export interface KlineBeforeOptions extends RequestSignalOptions {
 }
 
 export interface KlineRangeOptions extends RequestSignalOptions {
+  storageRevisionFloor?: StorageRevisionFloor;
   repair?: string;
   waitMs?: number;
   strict?: boolean;
@@ -359,6 +362,8 @@ export async function fetchKlinesRange(
     repair: options.repair || "async",
     wait_ms: options.waitMs ?? 0,
     strict: options.strict ?? false,
+    min_revision: options.storageRevisionFloor?.revision,
+    min_revision_epoch: options.storageRevisionFloor?.epoch,
     request_scope: options.demandScope,
     request_generation: options.demandGeneration,
     ...klineSeriesIdentityQuery(exchange, options.seriesIdentity),

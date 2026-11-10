@@ -493,10 +493,10 @@ export function useKlineStreamRuntime({
                   stopPolling();
                   setTransportStatus("live");
                 }
-                if (msg.status === "reconnecting") {
+                if (msg.status === "reconnecting" || msg.status === "source_gap") {
                   const canonical = canonicalizeIntervalValue(msg.interval || "");
                   if (canonical) delete acknowledgementState.lastObservedAt[canonical];
-                  startPolling();
+                  if (msg.status === "reconnecting") startPolling();
                   setTransportStatus("reconnecting");
                 }
               }
@@ -536,18 +536,19 @@ export function useKlineStreamRuntime({
               const held = latest?.time === tick.time ? latest
                 : latest && tick.time < latest.time ? heldRows.find((row) => row.time === tick.time) : undefined;
               const effect = assessRealtimeEffect(tick, message.event_type, held, latest?.time ?? null);
+              const fresh = message.continuity_replayed !== true;
               if (!effect.accepted) return;
               if (effect.requiresReadback && held) {
                 consumerRecovery.capture(seriesDataFeed, series, [held]);
               }
-              if (effect.updatesFreshness) {
+              if (fresh && effect.updatesFreshness) {
                 acknowledgementState = acknowledgeKlineStreamInterval(
                   acknowledgementState,
                   msgInterval,
                 );
               }
 
-              if (effect.updatesQuote && msgInterval === "1m" && tick.close != null) {
+              if (fresh && effect.updatesQuote && msgInterval === "1m" && tick.close != null) {
                 updateRealtimePrice(tick.close);
               }
 
@@ -569,7 +570,7 @@ export function useKlineStreamRuntime({
                   // patchCacheTick first would turn the commit into a NOOP.
                   markPerfOnce("ws.kline.firstTick", { symbol, marketType, exchange, interval: currentIntv });
                   commitPatchedChartData(symbol, currentIntv, [tick], { source: "kline-ws" });
-                  if (effect.updatesQuote) updateLastPrice(tick, currentIntv);
+                  if (fresh && effect.updatesQuote) updateLastPrice(tick, currentIntv);
                 } else {
                   patchCacheTick(symbol, msgInterval, tick, { marketType, exchange });
                 }

@@ -61,6 +61,7 @@ interface Entry {
   expectedClosedTime: number | null;
   historyDemand: number;
   serverRowVersions: Map<number, number>;
+  storageVersion?: { epoch: string; revision: number };
   invalidations: Array<Proof & { version: number }>;
 }
 interface ReadState { entry: Entry; version: number; health: HealthReadFence }
@@ -142,17 +143,30 @@ export class SharedMarketCache {
     const state = this.reads.get(token);
     if (!state || this.entries.get(token.key) !== state.entry) throw new Error("Market read expired");
     const { entry } = state;
+    const endpoint = response.endpoint ?? "history";
+    const historyRead = endpoint !== "latest" && endpoint !== "seed";
+    const serverVersion = parseMarketVersion(response.stream_version, entry.series);
+    if (response.stream_version != null && !serverVersion) throw new Error("Invalid market snapshot version scope");
+    const revision = response.storage_revision;
+    if (revision !== undefined && (!Number.isSafeInteger(revision) || revision < 0)) throw new Error("Invalid market storage revision");
+    const behindStorage = serverVersion && revision !== undefined && entry.storageVersion?.epoch === serverVersion.epoch
+      && revision < entry.storageVersion.revision;
+    if (serverVersion && (serverVersion.stable !== true || behindStorage)) {
+      // An unstable or superseded response cannot supply rows, coverage or pagination.
+      // Keep current evidence intact and let the requesting lane retry.
+      const pending: KlineFetchResult = { endpoint, stream_version: response.stream_version,
+        data: [], history_state: "pending", complete: false, retryable: true };
+      return { ...pending, quality: assessKlineQuality(pending, endpoint), cacheRevision: entry.version };
+    }
     const incoming = response.data ?? [];
     // Validate the entire batch before changing rows, fences or range evidence.
     for (const row of incoming) {
       const issue = validateKlineDomain(row);
       if (issue) throw new TypeError(`Invalid market row ${issue.field}: ${issue.reason}`);
     }
-    const parsedVersion = parseMarketVersion(response.stream_version, entry.series);
-    const serverVersion = parsedVersion?.stable === true ? parsedVersion : null;
-    if (response.stream_version != null && !parsedVersion) throw new Error("Invalid market snapshot version scope");
     const previousVersion = entry.health.version;
-    if (!entry.health.snapshot(serverVersion, state.health)) throw new Error("Obsolete market snapshot; fresh read required");
+    if (!entry.health.snapshot(serverVersion, state.health, historyRead)) throw new Error("Obsolete market snapshot; fresh read required");
+    if (serverVersion && revision !== undefined) entry.storageVersion = { epoch: serverVersion.epoch, revision };
     if (previousVersion && (!entry.health.version || (serverVersion && !sameStream(previousVersion, serverVersion)))) {
       entry.proofs = []; entry.serverRowVersions.clear(); entry.expectedClosedTime = null; entry.inputInvalidation += 1;
     } else if (previousVersion && serverVersion && serverVersion.barrier > previousVersion.barrier) {
@@ -161,11 +175,29 @@ export class SharedMarketCache {
       // or indicator inputs outside that range. Keep rows as provisional.
       entry.proofs = []; entry.inputInvalidation += 1;
     }
-    const endpoint = response.endpoint ?? "history";
+    // An empty read can still disprove a previously verified range. Only
+    // consume target-period gaps; component ranges need server projection.
+    if (serverVersion && revision !== undefined) {
+      const gaps = response.missing_ranges ?? [];
+      if (gaps.length > 128) {
+        entry.proofs = [];
+        entry.inputInvalidation += 1;
+      } else {
+        for (const gap of gaps) {
+          if (gap?.interval !== entry.series.interval || !Number.isSafeInteger(gap.start_ms)
+            || !Number.isSafeInteger(gap.end_ms) || gap.start_ms < 0 || gap.end_ms < gap.start_ms) continue;
+          const from = gap.start_ms / 1000, to = gap.end_ms / 1000;
+          if (entry.proofs.some(proof => proof.to >= from && proof.from <= to)) this.revokeRange(entry, { from, to });
+        }
+      }
+    }
     const inputQuality = assessKlineQuality(response, endpoint);
     const trustedFinal = hasFinalityEvidence(response);
     const rows = incoming.map(row => {
-      if (serverVersion && (entry.serverRowVersions.get(row.time) ?? -1) > serverVersion.sequence) return entry.rows.get(row.time)!;
+      const retainedSequence = entry.serverRowVersions.get(row.time);
+      if (retainedSequence !== undefined && (serverVersion ? retainedSequence > serverVersion.sequence : !historyRead)) {
+        return entry.rows.get(row.time)!;
+      }
       const mutation = entry.mutations.get(row.time);
       const decision = serverVersion ? "http" : chooseHttpRow(row, mutation, state.version, trustedFinal);
       let accepted = decision === "realtime" && mutation ? mutation.row : row;
@@ -183,7 +215,7 @@ export class SharedMarketCache {
       const from = Math.min(...times), to = Math.max(...times);
       // Latest is a tail observation, not a history claim. A contradictory
       // history response invalidates overlapping proof even if OHLCV is equal.
-      if (endpoint !== "latest" && endpoint !== "seed") {
+      if (historyRead) {
         const overlapping = entry.proofs.filter(proof => proof.to >= from && proof.from <= to);
         entry.proofs = entry.proofs.filter(proof => proof.to < from || proof.from > to);
         if (inputQuality.complete && quality.complete) {
@@ -197,14 +229,15 @@ export class SharedMarketCache {
         entry.proofs = entry.proofs.slice(-128);
       }
     }
-    if (!inputQuality.complete) entry.health.invalidate();
+    if ((historyRead && !inputQuality.complete) || (serverVersion && response.has_tail_gap === true)) entry.health.invalidate();
     this.finish(entry, changed, "http");
     return { ...result, quality, cacheRevision: entry.version };
   }
 
-  admitRealtime(series: MarketSeries, row: KlineBar, eventType?: string, wireVersion?: unknown, previousOpenMs?: unknown): { accepted: boolean; row?: KlineBar; changed?: boolean } {
+  admitRealtime(series: MarketSeries, row: KlineBar, eventType?: string, wireVersion?: unknown,
+    previousOpenMs?: unknown, replayed = false): { accepted: boolean; row?: KlineBar; changed?: boolean } {
     if (this.publishing) {
-      this.pendingRealtime.push(() => { this.admitRealtime(series, row, eventType, wireVersion, previousOpenMs); });
+      this.pendingRealtime.push(() => { this.admitRealtime(series, row, eventType, wireVersion, previousOpenMs, replayed); });
       return { accepted: false };
     }
     const issue = validateKlineDomain(row);
@@ -216,7 +249,8 @@ export class SharedMarketCache {
     if (!effect.accepted) return { accepted: false };
     const version = parseMarketVersion(wireVersion, series);
     if (wireVersion != null && !version) { entry.health.invalidate(); return { accepted: false }; }
-    const decision = entry.health.event(version, eventType !== "bar.updated", effect.updatesFreshness);
+    const updatesFreshness = effect.updatesFreshness && !replayed;
+    const decision = entry.health.event(version, eventType !== "bar.updated", updatesFreshness);
     if (!decision.accept) return { accepted: false };
     if (decision.reset || decision.gap) {
       entry.proofs = []; entry.inputInvalidation += 1;
@@ -227,7 +261,7 @@ export class SharedMarketCache {
     const changed = this.merge(entry, [incoming]);
     if (version) entry.serverRowVersions.set(row.time, version.sequence);
     const accepted = entry.rows.get(row.time)!;
-    if (version && effect.updatesFreshness && typeof previousOpenMs === "number" && Number.isSafeInteger(previousOpenMs)) {
+    if (version && updatesFreshness && typeof previousOpenMs === "number" && Number.isSafeInteger(previousOpenMs)) {
       const expected = row.is_closed === true ? Number(row.time) : previousOpenMs / 1000;
       entry.expectedClosedTime = Math.max(entry.expectedClosedTime ?? expected, expected);
     }
@@ -303,32 +337,37 @@ export class SharedMarketCache {
     catch (error) { if (!(error instanceof MarketCacheCapacityError)) throw error; }
   }
 
-  invalidateRange(series: MarketSeries, range?: { from: number; to: number }, wireVersion?: unknown): void {
+  invalidateRange(
+    series: MarketSeries, range?: { from: number; to: number }, wireVersion?: unknown, storageRevision?: unknown,
+    sourceGap?: { id: string; resolved: boolean },
+  ): boolean {
     const entry = this.entries.get(String(buildSeriesWindowKey(series)));
-    if (!entry) return;
+    if (!entry) return false;
     const version = parseMarketVersion(wireVersion, series);
+    if (sourceGap && wireVersion != null && !version) return false;
     if (version) {
       const decision = entry.health.event(version, true, false);
-      if (!decision.accept) return;
+      const current = entry.health.version;
+      // A disjoint HTTP response can advance the clock while the strict
+      // stream still holds the source notice. Apply its gap ID and range
+      // without rewinding the delivery clock.
+      const delayedSourceNotice = sourceGap && current?.epoch === version.epoch
+        && (version.generation < current.generation
+          || (version.generation === current.generation && version.sequence < current.sequence));
+      if (!decision.accept && !delayedSourceNotice) return false;
+      if (decision.accept && typeof storageRevision === "number" && Number.isSafeInteger(storageRevision) && storageRevision >= 0
+        && (entry.storageVersion?.epoch !== version.epoch || storageRevision > entry.storageVersion.revision)) {
+        entry.storageVersion = { epoch: version.epoch, revision: storageRevision };
+      }
+      if (decision.reset) { entry.serverRowVersions.clear(); entry.expectedClosedTime = null; }
       if (decision.reset || decision.gap) range = undefined;
     }
+    if (sourceGap) entry.health.sourceGap(sourceGap.id, sourceGap.resolved);
     entry.health.invalidate();
     if (!range) { entry.proofs = []; entry.inputInvalidation += 1; }
-    else {
-      const left = entry.times[lowerBound(entry.times, range.from) - 1];
-      const right = entry.times[lowerBound(entry.times, range.to + 1)];
-      entry.proofs = entry.proofs.flatMap(proof => {
-        if (proof.to < range.from || proof.from > range.to) return [proof];
-        const retained: Proof[] = [];
-        if (left !== undefined && left >= proof.from) retained.push({ from: proof.from, to: Math.min(left, proof.to) });
-        if (right !== undefined && right <= proof.to) retained.push({ from: Math.max(right, proof.from), to: proof.to });
-        return retained;
-      }).slice(-128);
-      entry.version = ++this.revision;
-      entry.invalidations.push({ ...range, version: entry.version });
-      if (entry.invalidations.length > 128) { entry.invalidations = []; entry.inputInvalidation += 1; }
-    }
+    else this.revokeRange(entry, range);
     this.finish(entry, [], "http");
+    return true;
   }
 
   captureVersion(series: MarketSeries, range: Pick<MarketRange, "from" | "to"> = {}): MarketInputVersion {
@@ -379,10 +418,9 @@ export class SharedMarketCache {
     if (entry) this.remove(entry);
   }
 
-  disconnectSeries(series: MarketSeries): void {
+  disconnectSeries(series: MarketSeries, revokeReads = false): void {
     const entry = this.entries.get(String(buildSeriesWindowKey(series)));
-    if (!entry) return;
-    entry.health.disconnect(false); entry.proofs = []; entry.inputInvalidation += 1;
+    if (entry) this.disconnectEntry(entry, revokeReads);
   }
 
   markDisconnected(instrument: Pick<MarketSeries, "exchange" | "marketType" | "symbol">, revokeReads = true): void {
@@ -390,12 +428,16 @@ export class SharedMarketCache {
       if (entry.series.exchange.toLowerCase() !== instrument.exchange.toLowerCase()
         || entry.series.marketType.toLowerCase() !== instrument.marketType.toLowerCase()
         || entry.series.symbol.toUpperCase() !== instrument.symbol.toUpperCase()) continue;
-      entry.proofs = [];
-      entry.health.disconnect(revokeReads);
-      entry.inputInvalidation += 1;
-      entry.metaRevision = ++this.metadataRevision;
-      entry.commitRevision = ++this.revision;
+      this.disconnectEntry(entry, revokeReads);
     }
+  }
+
+  private disconnectEntry(entry: Entry, revokeReads: boolean): void {
+    entry.proofs = [];
+    entry.health.disconnect(revokeReads);
+    entry.inputInvalidation += 1;
+    entry.metaRevision = ++this.metadataRevision;
+    entry.commitRevision = ++this.revision;
   }
 
   clear(): void {
@@ -426,6 +468,21 @@ export class SharedMarketCache {
       || entry.reads.size || entry.leases.size || this.listeners.get(key)?.size) return false;
     this.remove(entry);
     return true;
+  }
+
+  private revokeRange(entry: Entry, range: Proof): void {
+    const left = entry.times[lowerBound(entry.times, range.from) - 1];
+    const right = entry.times[lowerBound(entry.times, range.to + 1)];
+    entry.proofs = entry.proofs.flatMap(proof => {
+      if (proof.to < range.from || proof.from > range.to) return [proof];
+      const retained: Proof[] = [];
+      if (left !== undefined && left >= proof.from) retained.push({ from: proof.from, to: Math.min(left, proof.to) });
+      if (right !== undefined && right <= proof.to) retained.push({ from: Math.max(right, proof.from), to: proof.to });
+      return retained;
+    }).slice(-128);
+    entry.version = ++this.revision;
+    entry.invalidations.push({ ...range, version: entry.version });
+    if (entry.invalidations.length > 128) { entry.invalidations = []; entry.inputInvalidation += 1; }
   }
 
   private entry(series: MarketSeries): Entry {

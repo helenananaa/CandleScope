@@ -548,7 +548,8 @@ class EventRouter:
                 ),
                 sequence=sequence,
                 extra={**({"source_ref": dict(data["source_ref"])} if data.get("source_ref") else {}),
-                       "trade_coverage_verified": data.get("trade_coverage_verified") is True},
+                       "trade_coverage_verified": data.get("trade_coverage_verified") is True,
+                       "bybit_close_confirmed": exchange == "bybit" and data.get("bybit_close_confirmed") is True},
             )
         except (KeyError, ValueError, TypeError) as exc:
             logger.warning("Failed to convert kline event: %s", exc)

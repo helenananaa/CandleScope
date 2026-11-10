@@ -69,6 +69,43 @@ test("a reconnecting transport retains live leases and resumes admission without
   assert.equal(manager.read(series).rows.at(-1)!.time, 120);
 });
 
+test("an inactive interval cannot regain cache authority from queued frames on a live socket", async t => {
+  let finish!: (result: KlineFetchResult) => void;
+  const { manager, streams, tick } = setup({
+    fetchKlinesHistory: async () => new Promise(resolve => { finish = resolve; }),
+  }, undefined, true);
+  t.after(() => manager.closeAll());
+  const other = { ...series, interval: "2m" as const };
+  const received: string[] = [];
+  manager.subscribe(series, { intervals: ["1m", "2m"], onKline: e => received.push(e.interval) });
+  await turn();
+  const { options, controller } = streams[0]!;
+  const sendOther = () => options.onKline?.({ interval: "2m", tick: row(120),
+    message: { type: "kline", interval: "2m", data: row(120), event_type: "bar.closed" },
+  }, controller);
+  options.onControlMessage?.({ type: "subscribed", active_intervals: ["1m", "2m"] }, controller);
+  tick(row(60));
+  sendOther();
+  const siblingStamp = manager.cache.captureVersion(other, { from: 120, to: 120 });
+  const pending = manager.fetchKlinesHistory(series.symbol, series.interval, null,
+    series.marketType, series.exchange, { countBack: 2, intent: "viewport" });
+  await turn();
+  const obsolete = assert.rejects(pending, /Obsolete market snapshot/);
+  options.onControlMessage?.({ type: "error", active_intervals: ["2m"],
+    failed: [{ interval: "1m", code: "interval_unavailable" }] }, controller);
+  tick(row(120, 20));
+  finish(proof([row(60), row(120, 20)]));
+  assert.deepEqual(received, ["1m", "2m"]);
+  await obsolete;
+  assert.equal(manager.read(series).rows.at(-1)?.time, 60);
+  assert.equal(siblingStamp.isCurrent(), true, "a failed update retains the admitted sibling");
+  options.onControlMessage?.({ type: "subscribed", active_intervals: ["1m", "2m"] }, controller);
+  assert.equal(manager.cache.hasCurrentStream(series), false, "ACK alone does not prove continuity");
+  tick(row(120, 20));
+  assert.deepEqual(received, ["1m", "2m", "1m"]);
+  assert.equal(manager.read(series).rows.at(-1)?.close, 20);
+});
+
 test("promoted viewport warming is admitted once and reused by two foreground feeds across different window scopes", async t => {
   let calls = 0, finish!: (result: KlineFetchResult) => void, signal!: AbortSignal;
   const gate = new ForegroundPreloadGate({ quietDwellMs: 0 });
