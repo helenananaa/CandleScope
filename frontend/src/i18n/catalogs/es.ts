@@ -1,3 +1,4 @@
+import { continuousEnglish } from "./continuousMessages.js";
 import { tradeHistoryEnglish } from "./tradeHistoryMessages.js";
 import { replayNoteEnglish } from "./replayNoteMessages.js";
 import { historyStudyEnglish } from "./historyStudyMessages.js";
@@ -12,6 +13,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
  * libro de órdenes, tasa de financiación, prueba retrospectiva, reproducción.
  */
 export const es = {
+  ...continuousEnglish,
   ...tradeHistoryEnglish,
   ...replayNoteEnglish,
   ...historyStudyEnglish,

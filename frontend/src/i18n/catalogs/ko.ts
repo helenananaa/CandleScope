@@ -1,3 +1,4 @@
+import { continuousKorean } from "./continuousMessages.js";
 import { tradeHistoryKorean } from "./tradeHistoryMessages.js";
 import { replayNoteKorean } from "./replayNoteMessages.js";
 import { historyStudyKorean } from "./historyStudyMessages.js";
@@ -8,6 +9,7 @@ import { tradingAccountsKo } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
+  ...continuousKorean,
   ...tradeHistoryKorean,
   ...replayNoteKorean,
   ...historyStudyKorean,

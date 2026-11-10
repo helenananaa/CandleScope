@@ -1,3 +1,4 @@
+import { continuousJapanese } from "./continuousMessages.js";
 import { tradeHistoryJapanese } from "./tradeHistoryMessages.js";
 import { replayNoteJapanese } from "./replayNoteMessages.js";
 import { historyStudyJapanese } from "./historyStudyMessages.js";
@@ -9,6 +10,7 @@ import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsJa } from "./tradingAccountsMessages.js";
 
 export const ja = {
+  ...continuousJapanese,
   ...tradeHistoryJapanese,
   ...replayNoteJapanese,
   ...historyStudyJapanese,

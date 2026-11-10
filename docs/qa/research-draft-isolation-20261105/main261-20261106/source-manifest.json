@@ -1,0 +1,40 @@
+{
+  "pr": 260,
+  "source": "0e50ecb57a58758fbf36cd457e4eb36be9f9828d",
+  "base": "bec611d0ff85c536d4d7f397ea2ff298a5228e32",
+  "priorHead": "f84f6b1082ab53ab968fb3f5d3f7e06028880c2a",
+  "main": "0de39f37f2389b09a35fc91e3a6d8d5844137da8",
+  "branch": "codex/research-draft-isolation-20261105",
+  "backendAndPackagesByteIdenticalTo259": true,
+  "status": "frontend_checks",
+  "frontendPassed": 160,
+  "frontendSkipped": 0,
+  "commands": [
+    [
+      "npm",
+      "run",
+      "typecheck"
+    ],
+    [
+      "node",
+      "scripts/run-frontend-tests.mjs",
+      "src/features/strategy-research/**/*.test.{ts,tsx}",
+      "src/features/backtest/chart-tester/**/*.test.{ts,tsx}"
+    ]
+  ],
+  "files": {
+    "frontend/eslint.config.js": "6ba37da28c820aa36db180a29b3634386b4e6a6f4a3a89249641b7657fad5d3a",
+    "frontend/src/features/backtest/chart-tester/ChartStrategyTesterCellBridge.tsx": "21b0d31c52cbe2f06ed7d329ddc3434b95c4e735de451191da833f0440c44b2d",
+    "frontend/src/features/backtest/chart-tester/ChartStrategyTesterPanel.tsx": "6d3df68a547934d713fbffebf4acc05899541f6c3ef2ea3fb989b230650526b2",
+    "frontend/src/features/strategy-research/__tests__/strategyResearchHandoff.test.ts": "c27224b2441471cb342daf2c64dddbd36007f14fc6f1a632e018089bc557c4aa",
+    "frontend/src/features/strategy-research/__tests__/strategyResearchIsolation.test.ts": "2697f59c3073e0c3d059e026a717f8cfc050450e14b8b372b932d9479ce4f2ae",
+    "frontend/src/features/strategy-research/strategyResearchHandoff.ts": "e89894a46e6fe7dca46141d6f19ec6795502192868cfaad866acc7ade8f68a80",
+    "frontend/tests/fixtures/research-isolation/entry.html": "f63779ceb015e0812bb965322de4f9b1fd90f07e6936db69734c25137e216196",
+    "frontend/tests/fixtures/research-isolation/entry.tsx": "56ce62af3c5bc29f09204a00ecdf9cfac8eefe512771165dcaa4c51a5da58f53",
+    "frontend/tsconfig.node.json": "93ff28325585ca907a69f48b5ca76950049d5f4829d15a029af7830fbc3c79fe"
+  },
+  "backendEvidence": "docs/qa/continuous-saved-reader-20261105/main261-20261106",
+  "native": false,
+  "publicMarket": false,
+  "windowsQualified": false
+}
