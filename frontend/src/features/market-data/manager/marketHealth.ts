@@ -2,6 +2,8 @@ import { canonicalizeIntervalValue } from "../../../utils/intervals.js";
 import type { MarketSeries } from "../marketDataTypes.js";
 import { resolveKlineSeriesIdentity } from "../klineSeriesIdentity.js";
 
+import type { KlineFetchResult, StorageRevisionFloor } from "../klineContracts.js";
+
 export interface MarketStreamVersion {
   protocol: 1;
   epoch: string;
@@ -31,6 +33,15 @@ export function parseMarketVersion(value: unknown, series: MarketSeries): Market
     barrier: Number(v.barrier), observed_at_ms: Number(v.observed_at_ms), ...(v.stable === undefined ? {} : { stable: v.stable === true }) });
 }
 
+export function meetsStorageRevisionFloor(
+  response: KlineFetchResult, series: MarketSeries, floor: StorageRevisionFloor,
+): boolean {
+  const version = parseMarketVersion(response.stream_version, series);
+  const revision = response.storage_revision;
+  return version?.epoch === floor.epoch && version.stable === true
+    && typeof revision === "number" && Number.isSafeInteger(revision) && revision >= floor.revision;
+}
+
 export function sameStream(a: MarketStreamVersion | null, b: MarketStreamVersion | null): boolean {
   return Boolean(a && b && a.epoch === b.epoch && a.generation === b.generation);
 }
@@ -53,11 +64,13 @@ export class MarketHealthState {
   private subscribed = false;
   private continuous = false;
   private lastEvent: MarketStreamVersion | null = null;
-  private receivedAt = 0;
+  private receivedAt: number | null = null;
   private baseline: MarketStreamVersion | null = null;
   private freshObservedAt = 0;
   private readonly retired = new Set<string>();
   private requiresReconnect = false;
+  private readonly sourceGaps = new Set<string>();
+  private sourceGapsExhausted = false;
 
   constructor(private readonly now: () => number = Date.now, private readonly freshMs = 15_000) {}
 
@@ -67,18 +80,32 @@ export class MarketHealthState {
     this.subscribed = false; this.connection += 1;
     if (revokeReads) this.invalidation += 1;
     this.continuous = false;
-    this.lastEvent = null; this.receivedAt = 0; this.baseline = null;
+    this.lastEvent = null; this.receivedAt = null; this.baseline = null;
     this.retired.clear(); this.requiresReconnect = false;
+    this.sourceGaps.clear(); this.sourceGapsExhausted = false;
   }
   invalidate(): void { this.continuous = false; this.baseline = null; }
 
-  snapshot(version: MarketStreamVersion | null, fence: HealthReadFence): boolean {
+  sourceGap(id: string, resolved: boolean): void {
+    this.invalidation += 1;
+    if (resolved) {
+      this.sourceGaps.delete(id);
+    } else {
+      this.receivedAt = null;
+      if (this.sourceGaps.size < 256) this.sourceGaps.add(id);
+      else if (!this.sourceGaps.has(id)) this.sourceGapsExhausted = true;
+    }
+  }
+
+  snapshot(version: MarketStreamVersion | null, fence: HealthReadFence, historyRead: boolean): boolean {
     if (fence.invalidation !== this.invalidation) return false;
     if (!version || version.stable !== true) {
-      this.invalidate();
-      // A freshly read legacy server after reconnect may render through the
-      // old request fence. Do not mix unversioned ticks into a bound v1 stream.
-      if (this.lastEvent === null) this.version = null;
+      if (historyRead) {
+        this.invalidate();
+        // A fresh legacy history read after reconnect can rebind an idle
+        // entry. A tail-only read leaves any current stream binding in place.
+        if (this.lastEvent === null) this.version = null;
+      }
       return true;
     }
     if (this.requiresReconnect || this.retired.has(this.incarnation(version))) return false;
@@ -88,10 +115,15 @@ export class MarketHealthState {
       && (!sameStream(fence.version, this.version) || fence.connection !== this.connection)) return false;
     if (this.version && sameStream(this.version, version) && version.sequence < this.version.sequence
       && version.barrier !== this.version.barrier) return false;
-    const linked = sameStream(this.lastEvent, version)
-      && (this.lastEvent!.sequence <= version.sequence || this.lastEvent!.barrier === version.barrier);
-    this.baseline = version.stable === true && this.subscribed && fence.connection === this.connection ? version : null;
-    this.continuous = this.baseline !== null && linked;
+    if (historyRead) {
+      // A snapshot ahead of the last event may have crossed a missed
+      // critical fact outside its returned range. Wait for a linked event.
+      const linked = sameStream(this.lastEvent, version) && this.lastEvent!.barrier === version.barrier;
+      this.baseline = this.subscribed && fence.connection === this.connection ? version : null;
+      this.continuous = this.baseline !== null && linked;
+    } else if (this.version && (!sameStream(this.version, version) || version.barrier !== this.version.barrier)) {
+      this.invalidate();
+    }
     if ((!sameStream(this.version, version) || version.sequence >= this.version!.sequence) && !this.adopt(version)) return false;
     return true;
   }
@@ -131,6 +163,8 @@ export class MarketHealthState {
       // queued incarnation. A fresh physical connection resets this budget.
       if (this.retired.size >= 64) { this.requiresReconnect = true; this.invalidate(); return false; }
       this.retired.add(this.incarnation(this.version));
+      this.lastEvent = null;
+      this.receivedAt = null;
     }
     this.version = version;
     return true;
@@ -138,11 +172,13 @@ export class MarketHealthState {
 
   status(historyCovered: boolean): MarketHealth {
     const now = this.now();
-    const fresh = this.lastEvent !== null && now - this.receivedAt <= this.freshMs
+    const sourceReady = !this.sourceGaps.size && !this.sourceGapsExhausted;
+    const continuous = this.continuous && sourceReady;
+    const fresh = sourceReady && this.receivedAt !== null && now - this.receivedAt <= this.freshMs
       && now - this.freshObservedAt <= this.freshMs && this.freshObservedAt <= now + 5_000;
     const reason = !historyCovered ? "missing-history" : !this.subscribed ? "unsubscribed"
-      : !this.continuous ? "resync" : !fresh ? "stale-tail" : "healthy";
-    return { historyCovered, subscribed: this.subscribed, continuous: this.continuous, fresh,
+      : !continuous ? "resync" : !fresh ? "stale-tail" : "healthy";
+    return { historyCovered, subscribed: this.subscribed, continuous, fresh,
       healthy: reason === "healthy", reason };
   }
 }

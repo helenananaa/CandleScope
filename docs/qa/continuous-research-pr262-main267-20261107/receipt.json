@@ -1,0 +1,82 @@
+{
+  "source": "f1f82dab4ac21de393acc158fc4b619f9a0f9a9a",
+  "main": "b442555d582dc0bb473bad92ac5e699efdaa78d5",
+  "base": "7fee9aad02eaec973a631242547ba3e3573e61dd",
+  "frontendCommand": [
+    "node",
+    "scripts/run-frontend-tests.mjs",
+    "src/features/backtest/continuous/continuousApi.test.ts",
+    "src/features/backtest/continuous/continuousRepairView.test.ts",
+    "src/features/market-data/__tests__/continuousStrategyDataManager.test.ts",
+    "src/features/backtest/continuous/ContinuousRepairPanel.test.tsx",
+    "src/features/backtest/continuous/continuousRepairReference.test.ts",
+    "src/features/backtest/continuous/ContinuousAccountView.test.tsx",
+    "src/features/strategy-research/__tests__/strategyResearchHandoff.test.ts",
+    "src/features/strategy-research/__tests__/strategyResearchIsolation.test.ts",
+    "src/features/strategy-research/__tests__/researchSelectedVersion.test.ts"
+  ],
+  "frontendPassed": 43,
+  "artifacts": {
+    "frontend.log.gz": {
+      "sha256": "d4f11d5bdff59c9d6d4a0cd3dd612ef50c3fd842a0e5d6e5fae196f2cd72e5b5",
+      "originalSha256": "3c8dc8c1b5bc5165df461b96fbeb1fe794bfe30ba700b72aea0ba970e888a3fb"
+    },
+    "architecture.log.gz": {
+      "sha256": "2821c011ea1599274782b3a127db697454da970e1da989c56c4d812037393b16",
+      "originalSha256": "547c159b06d361e5d8e8f90f1388f08bb96897d557771347b9f19aee67e444fc"
+    },
+    "backend.log.gz": {
+      "sha256": "127afdd4ac1174851535af041aa0d877a2c75f7cdf8351085efd6a863e7a6eaa",
+      "originalSha256": "cf7f2782b1de4cf0e763ab63c45bc3552f484d1c26cee9786415a8485761ecae"
+    }
+  },
+  "backendChecks": {
+    "source": "f1f82dab4ac21de393acc158fc4b619f9a0f9a9a",
+    "base": "7fee9aad02eaec973a631242547ba3e3573e61dd",
+    "main": "b442555d582dc0bb473bad92ac5e699efdaa78d5",
+    "command": [
+      "/Users/ryanliang/.codex/worktrees/issue-152-output-range-20261102/CandleScope/output/issue-152-output-range-20261102/main226-native-test-env/bin/python",
+      "-B",
+      "-m",
+      "pytest",
+      "backend/tests/test_continuous_api.py",
+      "backend/tests/test_continuous_bar_host.py",
+      "backend/tests/test_continuous_bar_source.py",
+      "backend/tests/test_continuous_controller.py",
+      "backend/tests/test_continuous_creation_journal.py",
+      "backend/tests/test_continuous_definition.py",
+      "backend/tests/test_continuous_epochs.py",
+      "backend/tests/test_continuous_guarded_source.py",
+      "backend/tests/test_continuous_manager_lifecycle.py",
+      "backend/tests/test_continuous_provider.py",
+      "backend/tests/test_continuous_repair_api.py",
+      "backend/tests/test_continuous_repairs.py",
+      "backend/tests/test_continuous_results.py",
+      "backend/tests/test_continuous_source_identity.py",
+      "backend/tests/test_continuous_strategy_access.py",
+      "backend/tests/test_continuous_strategy_runtime.py",
+      "backend/tests/test_continuous_strategy_shutdown.py",
+      "backend/tests/test_continuous_strategy_store.py",
+      "backend/tests/test_research_selected_version.py",
+      "--basetemp=/private/tmp/candlescope-repair-api-main267-20261107/output/pr262-main267/pytest",
+      "-q",
+      "-rs",
+      "backend/tests/test_replay_catalog_shutdown.py",
+      "backend/tests/test_kline_order_flow_metrics.py",
+      "backend/tests/test_replay_trade_bar_parity.py"
+    ],
+    "env": {
+      "PYTHONDONTWRITEBYTECODE": "1",
+      "PYTHONPATH": "packages/candlescope-plugin-sdk/src:packages/candlescope-backtest-sdk/src:backend",
+      "DATA_DIR": "/private/tmp/candlescope-repair-api-main267-20261107/output/pr262-main267/data",
+      "CANDLE_DATA_DIR": "/private/tmp/candlescope-repair-api-main267-20261107/output/pr262-main267/data",
+      "NATIVE_TEST_PINE_PYTHON": "/Users/ryanliang/CandleScope/output/development-goal-20261104/continuous-stack-main266-20261106/pine/python"
+    },
+    "started": "2026-11-07T07:21:53.425497+00:00",
+    "architectureExitCode": 0,
+    "architecturePassed": true,
+    "pytestExitCode": 0,
+    "finished": "2026-11-07T07:22:42.627929+00:00"
+  },
+  "backendPassed": 309
+}

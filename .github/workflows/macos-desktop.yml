@@ -53,6 +53,24 @@ jobs:
         run: node -e 'if (process.platform !== "darwin" || process.arch !== process.env.EXPECTED_ARCH) throw Error("Wrong native runner architecture")'
       - name: Install locked frontend dependencies
         run: npm ci --ignore-scripts
+      - name: Install and verify locked Electron distribution
+        timeout-minutes: 8
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          # Electron's npm installer verifies the ZIP against checksums shipped in the locked package.
+          attempt=1
+          until node node_modules/electron/install.js; do
+            if (( attempt == 3 )); then exit 1; fi
+            sleep "$((5 * attempt))"
+            attempt=$((attempt + 1))
+          done
+          version=$(node -p 'require("./package-lock.json").packages["node_modules/electron"].version')
+          ELECTRON_RUN_AS_NODE=1 "$(node -p 'require("electron")')" -e '
+            if (process.arch !== process.env.EXPECTED_ARCH || process.versions.electron !== process.argv[1]) {
+              throw new Error("Installed Electron does not match the locked version and runner architecture");
+            }
+          ' "$version"
       - name: Check frontend and desktop host
         env:
           NODE_OPTIONS: --max-old-space-size=4096
@@ -61,11 +79,19 @@ jobs:
         run: |
           npm --prefix ../packages/candlescope-control ci --ignore-scripts
           npm --prefix ../packages/candlescope-control test
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build and verify immutable fork wheel
+        run: python ../backend/scripts/install_ccxt_fork.py --build-only
       - name: Package native macOS app, DMG and ZIP
         env:
           # Only the explicit ad-hoc identity is used; no certificate secrets.
           CSC_FOR_PULL_REQUEST: "true"
-        run: npm run desktop:package:mac -- --${{ matrix.arch }}
+        run: |
+          wheels=(../backend/.cache/ccxt-fork/*/ccxt-*.whl)
+          test "${#wheels[@]}" -eq 1
+          CANDLESCOPE_CCXT_WHEEL="${wheels[0]}" npm run desktop:package:mac -- --${{ matrix.arch }}
       - name: Regress replay inputs, indicators and financial boundaries with bundled Python
         working-directory: backend
         env:
@@ -105,11 +131,19 @@ jobs:
             tests/test_continuous_definition.py \
             tests/test_continuous_creation_journal.py \
             tests/test_continuous_controller.py \
+            tests/test_continuous_results.py \
+            tests/test_continuous_epochs.py \
+            tests/test_continuous_repairs.py \
+            tests/test_continuous_repair_api.py \
+            tests/test_continuous_source_identity.py \
             tests/test_continuous_guarded_source.py \
             tests/test_continuous_strategy_store.py \
             tests/test_continuous_strategy_shutdown.py \
             tests/test_continuous_strategy_runtime.py \
             tests/test_continuous_manager_lifecycle.py \
+            tests/test_continuous_strategy_access.py \
+            tests/test_continuous_api.py \
+            tests/test_strategy_data_manager.py \
             tests/test_application_shutdown_failures.py \
             tests/test_strategy_bar_continuation.py \
             tests/test_local_data_pinned_window.py \

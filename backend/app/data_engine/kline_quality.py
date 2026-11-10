@@ -33,7 +33,12 @@ class SourceQuality:
 # Higher ranks may replace lower ranks at the same open_time.  Equal ranks are
 # deliberately replaceable so a later revision from the same authority can
 # amend values without requiring another schema column.
+BYBIT_WS_CONFIRMED_SOURCE = "bybit_ws_confirmed"
+BYBIT_LEGACY_FINAL_SOURCE = "bybit_legacy_final_unverified"
+
 SOURCE_QUALITY: dict[str, SourceQuality] = {
+    BYBIT_WS_CONFIRMED_SOURCE: SourceQuality(50, FinalityTrust.TRUSTED_FINAL),
+    BYBIT_LEGACY_FINAL_SOURCE: SourceQuality(10, FinalityTrust.AMBIGUOUS),
     # Revision-selected source evidence; writes are fenced against the durable head.
     "source_snapshot_verified": SourceQuality(100, FinalityTrust.TRUSTED_FINAL),
     # Complete provider trade windows reduced deterministically into candles.

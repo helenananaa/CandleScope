@@ -5,7 +5,7 @@ from dataclasses import replace
 
 import pytest
 
-from app.api.v1.klines import _history_contract_payload
+from app.api.v1.klines import _history_contract_payload, _history_page_finality_ready
 from app.api.v1.stream_klines import _serialize_kline_event
 from app.data_engine.data_manager import DataManager
 from app.data_engine.data_manager.event_bus import DataEventBus
@@ -57,6 +57,23 @@ def test_snapshot_crossing_a_close_or_pending_publication_cannot_claim_stability
     assert clock.finish_snapshot(KEY, before, final_only=True)["stable"] is False
     current = clock.snapshot(KEY)
     assert clock.finish_snapshot(KEY, current)["stable"] is True
+
+
+def test_durable_publication_fence_survives_eviction_and_retires_failed_generation():
+    clock = StreamVersionClock(capacity=1)
+    before = clock.snapshot(KEY)
+    other = replace(KEY, symbol="BTCUSDT")
+    with pytest.raises(OSError, match="commit outcome unknown"):
+        with clock.durable_publication(KEY):
+            assert clock.snapshot(other)["stable"] is True
+            in_flight = clock.snapshot(KEY)
+            assert in_flight["generation"] > before["generation"]
+            assert in_flight["stable"] is False
+            raise OSError("commit outcome unknown")
+    after = clock.snapshot(KEY)
+    assert after["stable"] is True
+    assert after["generation"] > in_flight["generation"]
+    assert clock.finish_snapshot(KEY, before, final_only=True)["stable"] is False
 
 
 def test_closed_history_can_link_across_forming_updates_without_claiming_a_newer_snapshot():
@@ -130,6 +147,17 @@ def test_materialized_history_preserves_snapshot_clock_without_admitting_repairs
     version = _history_contract_payload(result)["stream_version"]
     assert version == {**before, "stable": stable}
     assert result.metadata["target_materialized_only"] is True
+
+
+def test_racing_http_history_cannot_claim_completion_from_valid_rows():
+    result = QueryResult(symbol=KEY.symbol, interval=KEY.interval, complete=True,
+                         metadata={"all_rows_final": True, "stream_version": {"stable": False}})
+    payload = _history_contract_payload(result, verified_contiguous=True)
+    assert payload["all_rows_final"] is True
+    assert payload["history_state"] == "pending"
+    assert payload["complete"] is False
+    assert payload["retryable"] is True
+    assert not _history_page_finality_ready(result)
 
 
 def test_backfill_range_is_versioned_even_when_delivery_is_internal():

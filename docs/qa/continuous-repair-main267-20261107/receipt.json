@@ -1,0 +1,188 @@
+{
+  "source": "e35d7065cf139e5a20e4bb0aa497ab1422391881",
+  "driver": "0e95e974c53da94d3a7c54caee8e9c02cede18da",
+  "main": "b442555d582dc0bb473bad92ac5e699efdaa78d5",
+  "fixture": "Cold isolated profile from the previously verified 188-bar LIVE run",
+  "runs": {
+    "paused": {
+      "phase": "PAUSED",
+      "coldSequence": [
+        196,
+        196
+      ],
+      "coldFills": [
+        134,
+        134
+      ],
+      "planBars": 196,
+      "normalExits": 2,
+      "ownedPidRecordsAbsent": 21,
+      "reference": {
+        "runId": "cs_70626184bb454cda94b968a947f36509",
+        "sequence": 196,
+        "throughMs": 1794038939999,
+        "financialStateEqual": true,
+        "providerStateEqual": true,
+        "comparedFillSourceRows": 134,
+        "normalizedMetadataOnly": [
+          "source_row",
+          "explicit null optional BAR metrics"
+        ],
+        "actualReadOnlySha256": "1f21b6410c19ce97dd6b939fb7406025243b80630bfcfe2644d45119f669de9a"
+      },
+      "correction": {
+        "scope": "single controlled REST source correction in a cold QA copy",
+        "runId": "cs_70626184bb454cda94b968a947f36509",
+        "openMs": 1794027900000,
+        "oldClose": 75923.0,
+        "newClose": 76074.85,
+        "storageRevisionBefore": 1764,
+        "storageRevisionAfter": 1765,
+        "sourceRevisionBefore": 1,
+        "sourceRevisionAfter": 2
+      },
+      "originalProfileUnchanged": true
+    },
+    "resumed": {
+      "phase": "LIVE",
+      "coldSequence": [
+        198,
+        199
+      ],
+      "coldFills": [
+        136,
+        137
+      ],
+      "planBars": 198,
+      "normalExits": 2,
+      "ownedPidRecordsAbsent": 22,
+      "reference": {
+        "runId": "cs_70626184bb454cda94b968a947f36509",
+        "sequence": 199,
+        "throughMs": 1794039119999,
+        "financialStateEqual": true,
+        "providerStateEqual": true,
+        "comparedFillSourceRows": 137,
+        "normalizedMetadataOnly": [
+          "source_row",
+          "explicit null optional BAR metrics"
+        ],
+        "actualReadOnlySha256": "df7e891d49e848ec25ddb57f7da3c3d255a0fb4cf56c2787c2f97456391a9464"
+      },
+      "correction": {
+        "scope": "single controlled REST source correction in a cold QA copy",
+        "runId": "cs_70626184bb454cda94b968a947f36509",
+        "openMs": 1794027900000,
+        "oldClose": 75923.0,
+        "newClose": 76074.85,
+        "storageRevisionBefore": 1764,
+        "storageRevisionAfter": 1765,
+        "sourceRevisionBefore": 1,
+        "sourceRevisionAfter": 2
+      },
+      "originalProfileUnchanged": true,
+      "liveCloseWitness": [
+        1794039060000,
+        1794039119999
+      ]
+    }
+  },
+  "packageVerification": {
+    "verifiedAt": "2026-11-07T08:13:38.488Z",
+    "sourceCommit": "e35d7065cf139e5a20e4bb0aa497ab1422391881",
+    "sourceFiles": 1078,
+    "builtFiles": 172,
+    "pluginAssets": 9,
+    "ciArtifactId": null,
+    "sdkArtifactFiles": null,
+    "sdkPreexistingPyc": null,
+    "pluginSources": {
+      "bundleSha256": "sha256:f9a075b9f5c2153ba3577f60d9cc5cd68469a030b06bb6b049f8481252d51912",
+      "pluginSourceFiles": 76,
+      "mismatches": [],
+      "engineUnchanged": true
+    },
+    "mismatches": [],
+    "strictSignature": true,
+    "signatureError": null
+  },
+  "preflightRetry": "First resume fixture reached loopback port preflight, but no app launched. Retried in a fresh copy after verifying the port had no listener.",
+  "artifacts": {
+    "run.py.gz": {
+      "sha256": "1dc3b11be5bc16e45822749d9f1e7068dd157387a1bdbafc3e48f52a02388ee6",
+      "originalSha256": "ccba208486abc278cf0702acdfedc0b935501888362db3f39a7ccda571d31de4"
+    },
+    "closed-bar.py.gz": {
+      "sha256": "0f47e258b54be5d1b39b4d540a9449006187fdab17e76a1694f5deb28aeb6e2f",
+      "originalSha256": "b4c3c2d8feb92e74ae83ace6b2dabad605afa77bf62200eab6c29104a12f21f1"
+    },
+    "reference.zsh.gz": {
+      "sha256": "e4e4cfbf830e51f0d93cc5d8aae52c7bba4e2918fce05928de46a07ae5f49710",
+      "originalSha256": "12cc228c9750157c2fa00822e1bafc12e9b00f32bdbb58ae9aa5efee95c41e51"
+    },
+    "package-verify.log.gz": {
+      "sha256": "875a8cba2a607f6bcf9e6e820e0fc39eee6c2f5bba2d08e73ac8f2f8fe12e944",
+      "originalSha256": "169ca40a50d7e585142603912b6a04af07d893338bc063f967e78ff5d75094f0"
+    },
+    "paused-acceptance.json.gz": {
+      "sha256": "9de6680e46593ce187c6e2c04d29d97d3fb88fad11f59b857e3fe2f74b2a4602",
+      "originalSha256": "40bc351e556c816b1b0f6df96554c1c6390a19a0b3e25fad3936695a20e69757"
+    },
+    "paused-controlled-revision.json.gz": {
+      "sha256": "f5869444f316e35555229fd9de067f06fb0efcd877cb4fac44aa811805b2112f",
+      "originalSha256": "272baeb19eb8713887f076d6fd994526ff9da799190d641cea7e90470c585a83"
+    },
+    "paused-input-owner-copy-rebind.json.gz": {
+      "sha256": "54f454786410d141098a7400ea3ad5a351c3c0d94495764ab306e1e2d7da9f0a",
+      "originalSha256": "ece7203b5a9db4383a7c8b59c6839b126031e7d8627b4a307041dbb64343e13c"
+    },
+    "paused-sidecar-exit-status.json.gz": {
+      "sha256": "19b02115e635a1a35b65dcae081f94fb4cd3b240b71c4115a093f8f0ada5bdeb",
+      "originalSha256": "0aebe47ff5b740518e7cc73fd3189684fa9b8bc7eec3f4fcc1f0d2f9381fd583"
+    },
+    "paused-reference.json.gz": {
+      "sha256": "19961adadedcd058fe09def5811e27b0dbb6b14f1e858ced0775f75146c4ed4a",
+      "originalSha256": "2fec91254d9f332f47e9ae33cbdf3311ead9ceca6f1cb8ce42fb565fe8cd025d"
+    },
+    "paused-protection.json.gz": {
+      "sha256": "2bd0ba3c93fbaa086fd11695a2044851759cdb2760ab1cee8664ef388780313b",
+      "originalSha256": "731370cdad153edc0d9acbca4748e651119389d47c5860f71051947fd114769a"
+    },
+    "paused-source-package-manifest.json.gz": {
+      "sha256": "a559fe04c259be6d273c6104e119c9ec97623ac5f46ec07319d0324747afbbbe",
+      "originalSha256": "c226ca95b7789701f1432aa5f05a9212b22a4f1a1505e94d4eb3cace4f239aa2"
+    },
+    "resumed-closed-bar.json.gz": {
+      "sha256": "8410a46e9ba32b66760696e947b613e4ac385bd0f2e7e8ee684efbe3033772ee",
+      "originalSha256": "82e9b675d5b8b2d0d0cf0efeddeac72f16eec717d293177785247e7f711458b7"
+    },
+    "resumed-retry-acceptance.json.gz": {
+      "sha256": "5835cea6c9c44c97286f7a703ea954950bec2207373d7f3e3a74fe41a328e01a",
+      "originalSha256": "9e5cb4533ba4ac3d00707124f3da102dfda2944585705c04b706ea00a61a62d5"
+    },
+    "resumed-retry-controlled-revision.json.gz": {
+      "sha256": "f5869444f316e35555229fd9de067f06fb0efcd877cb4fac44aa811805b2112f",
+      "originalSha256": "272baeb19eb8713887f076d6fd994526ff9da799190d641cea7e90470c585a83"
+    },
+    "resumed-retry-input-owner-copy-rebind.json.gz": {
+      "sha256": "05839f5279568fe73493145281cca6c6b4517f8cec3191fa8946c1e1290e329e",
+      "originalSha256": "83c9821afc5d30fbe70c85ae223fb921d8fc8301e7d34b0d757e550538079dca"
+    },
+    "resumed-retry-sidecar-exit-status.json.gz": {
+      "sha256": "0d82e7035e9aa1aa243f96d5f45504ac268538b490073993e8f6c9dd1e89bb48",
+      "originalSha256": "dbcb9d84d46c1fd5850684f4f4ee69a7b65d12f5bdf4268f034d7d3ef7b9b450"
+    },
+    "resumed-retry-reference.json.gz": {
+      "sha256": "f0b64b7f52f2f77754ea76f3640a734e7a16ee2b8e7b1cdd7792f38eb56cb415",
+      "originalSha256": "cdf35f8796318475bfb89d1a822ea6fa1cb89903b528e646a225248ab6cca2f5"
+    },
+    "resumed-retry-protection.json.gz": {
+      "sha256": "2bd0ba3c93fbaa086fd11695a2044851759cdb2760ab1cee8664ef388780313b",
+      "originalSha256": "731370cdad153edc0d9acbca4748e651119389d47c5860f71051947fd114769a"
+    },
+    "resumed-retry-source-package-manifest.json.gz": {
+      "sha256": "a559fe04c259be6d273c6104e119c9ec97623ac5f46ec07319d0324747afbbbe",
+      "originalSha256": "c226ca95b7789701f1432aa5f05a9212b22a4f1a1505e94d4eb3cace4f239aa2"
+    }
+  }
+}

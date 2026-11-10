@@ -1,0 +1,93 @@
+{
+  "checkedAt": "2026-11-05T05:50:00Z",
+  "reviewedHead": "e456132d0c147845e17b3e4302277c0b1d428d3d",
+  "base": "7fb09de67ab055620605bfa982acb48d8781af92",
+  "testedHeadTree": "e8f843783ac7ab873f360086185274aad4e73954",
+  "proposedMergeTree": "e8f843783ac7ab873f360086185274aad4e73954",
+  "macJobs": [
+    {
+      "name": "package (arm64)",
+      "conclusion": "success",
+      "head": "e456132d0c147845e17b3e4302277c0b1d428d3d"
+    },
+    {
+      "name": "package (x64)",
+      "conclusion": "success",
+      "head": "e456132d0c147845e17b3e4302277c0b1d428d3d"
+    }
+  ],
+  "api": [
+    {
+      "url": "https://github.com/helenananaa/CandleScope/pull/247",
+      "number": 247,
+      "state": "open",
+      "merged": false,
+      "mergeable": true,
+      "draft": false,
+      "body": "持续运行先持久化首次截止点、当前代码与初始化身份，重复请求复用同一run，旧准备任务不能覆盖重试。首Provider/账户/规划器检查点、游标和创建COMMITTED标记同SQLite事务提交或回滚，提交后请求移除重复代码定义。\n\n依赖#246当前de953542及#245/#248/#244。当前head e456132d，组合源码0965291e，本地创建意图/实际provider/固定历史财务smoke/持续执行退出、日历/Klines/Spot公共预算391通过、6条提示；原1秒CI门槛保持，新head CI后台运行，开发继续。\n\nschema1→2保留旧账务，创建与运行共享有限容量，来源metadata有字节上限。源修改阻止原创建，可明确刷新尚未建账户的初始化输入且保留首次截止；已COMMITTED不能经此入口重置。首账户已提交、actor尚未启动的恢复窗口与稍后暂停竞争已覆盖，自动恢复校验读取时的代次/修订。\n\n未接公开创建、默认应用绑定、HTTP/WS/三模式UI或修补；有限准备worker、provisional输入目录磁盘预算及回收由后续Controller完成，#157/#158/#165继续开放。原214项事务末尾故障回滚、Store重建/并发/容量/源修订/schema1保留及实际Runtime证据保留，与391重叠不相加。公共传输lease为受控替换，无公网请求；源码/进程证据不代替Native/Windows。docs/qa/continuous-creation-intents-20261104，合main前核对最终head。",
+      "title": "feat(strategy): persist atomic continuing creation intent",
+      "base": "main",
+      "base_sha": "7fb09de67ab055620605bfa982acb48d8781af92",
+      "head": "codex/continuous-creation-intents-20261104",
+      "head_sha": "e456132d0c147845e17b3e4302277c0b1d428d3d",
+      "head_repo_id": 1085694918,
+      "head_repo_full_name": "helenananaa/CandleScope",
+      "merge_commit_sha": "55ff2412c71d7624c9283e26fd2cdea4915ab8c8",
+      "user": {
+        "login": "helenananaa",
+        "name": "helenananaa",
+        "email": null,
+        "avatar_url": "https://avatars.githubusercontent.com/u/199698082?v=4",
+        "id": 199698082
+      },
+      "requested_reviewers": null,
+      "requested_team_reviewers": null,
+      "diff": null,
+      "comments": null,
+      "created_at": "2026-11-04T10:32:14Z",
+      "updated_at": "2026-11-05T05:49:52Z",
+      "closed_at": null,
+      "merged_at": null,
+      "commits": 3,
+      "changed_files": 16,
+      "additions": 479,
+      "deletions": 16,
+      "display_url": "https://github.com/helenananaa/CandleScope/pull/247",
+      "display_title": "feat(strategy): persist atomic continuing creation intent"
+    },
+    {
+      "workflow_runs": [
+        {
+          "id": 41820673790,
+          "name": "macOS desktop",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 788,
+          "jobs_url": "https://api.github.com/repos/helenananaa/CandleScope/actions/runs/41820673790/jobs",
+          "logs_url": "https://api.github.com/repos/helenananaa/CandleScope/actions/runs/41820673790/logs",
+          "workflow_id": 379743766
+        },
+        {
+          "id": 41820673702,
+          "name": "CCXT integration",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 321,
+          "jobs_url": "https://api.github.com/repos/helenananaa/CandleScope/actions/runs/41820673702/jobs",
+          "logs_url": "https://api.github.com/repos/helenananaa/CandleScope/actions/runs/41820673702/logs",
+          "workflow_id": 400267336
+        }
+      ]
+    },
+    {
+      "reviews": []
+    },
+    {
+      "review_threads": []
+    },
+    {
+      "statuses": []
+    }
+  ],
+  "reviewScope": "All runtime diff: schema migration, bounded creation journal, first financial transaction and source fence, pause/automatic-restore races, rollback and concurrent connection tests. No Native/Windows qualification inferred."
+}

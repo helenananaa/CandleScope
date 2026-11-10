@@ -34,7 +34,18 @@ This is a publication/snapshot protocol, **not** a storage commit revision, a
 source-priority ranking, or a durable replay cursor. Storage revision fences and
 external-writer invalidation remain the separate D126 contract. Multiple backend
 workers need sticky routing for healthy reuse; mismatched epochs fail closed.
-Unannounced out-of-process changes are not magically observed by this clock.
+
+SQLite revision triggers record a separate, coalesced history notice in the
+same transaction as a direct candle or coverage mutation. The normal revision
+observer adopts committed notices and emits versioned `BACKFILL_COMPLETED`
+events with reason `storage_history_changed`. `storage_revision` identifies
+the triggering storage revision for diagnostics. A subsequent ordinary close
+does not overwrite an unobserved history notice. Durable bar delivery publishes
+through its existing journal, and query-derived materialization does not publish
+a second notice for its own upsert. Deleting a dependent materialization still
+invalidates its proof. The revision observer polls by default every 50 ms. Once
+a correction has been adopted, snapshots for that series family remain unstable
+until the notice has entered the publication clock.
 
 ## Cutover and recovery
 
@@ -64,8 +75,16 @@ tail cannot invent missing bars. Automatic extension currently covers continuous
 crypto calendars; other session calendars conservatively fall back to reads.
 Backfill completion carries its affected range and version in the detail and
 envelope. Unknown ranges invalidate the full retained proof. Known ranges split
-coverage and invalidate intersecting indicator prefix/range stamps. Unrelated
-historical coverage survives. Historical amendments do not refresh tail age.
+coverage and invalidate intersecting indicator prefix/range stamps. Active
+chart feeds read back the affected window without waiting for another tick.
+Active derived intervals that use the changed realtime base also receive a
+notice, with bounds floored to target buckets on continuous crypto calendars.
+If the observer missed multiple corrections for a series or cannot map bounds
+safely, it requests a full-series readback. If the observer overruns its
+4,096-series bound or sees a revision rewind, the server retires the stream
+epoch and requires fresh subscription and snapshot. Unrelated historical
+coverage survives a bounded correction. Historical amendments do not refresh
+tail age.
 
 ## Cache decision and network execution
 

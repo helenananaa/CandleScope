@@ -46,6 +46,9 @@ class BarSourcePrefixFacade:
     def prepare(self, receipt, **kwargs):
         return self._require().prepare(receipt, **kwargs)
 
+    def fork_unchanged(self, receipt, owner: str, **kwargs):
+        return self._require().fork_unchanged(receipt, owner, **kwargs)
+
     def register_family(self, owner: str, series, **kwargs):
         values = (series.exchange,series.market_type,series.symbol,'*',*series.identity.storage_values)
         return self._require().register(owner,values,**kwargs)

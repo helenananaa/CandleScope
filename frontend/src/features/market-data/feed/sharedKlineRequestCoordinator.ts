@@ -244,6 +244,8 @@ export class SharedKlineRequestCoordinator implements KlineApi {
       options.repair ?? null,
       options.waitMs ?? null,
       options.strict ?? null,
+      options.storageRevisionFloor?.epoch ?? null,
+      options.storageRevisionFloor?.revision ?? null,
       options.demandScope ?? null,
       options.demandGeneration ?? null,
       ...readBoundary(options),

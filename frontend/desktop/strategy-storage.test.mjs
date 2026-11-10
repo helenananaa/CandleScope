@@ -27,3 +27,20 @@ test("profile state survives asset-port changes and queued writes finish before 
     assert.throws(() => restarted.setItem("candlescope-strategy-drafts-v1", "x".repeat(17 * 1024 * 1024)), /Invalid/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test("research handoffs survive a reload within a bounded desktop namespace", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "cs-research-return-"));
+  try {
+    const file = path.join(root, "strategy-storage.json");
+    const store = new DesktopStrategyStorage(file);
+    const key = index => "candlescope:research-return:request-" + index;
+    const writes = Array.from({length: 65}, (_, index) => store.setItem(key(index), JSON.stringify({index})));
+    await Promise.all(writes);
+    const restored = new DesktopStrategyStorage(file);
+    await restored.load();
+    assert.equal(restored.getItem(key(0)), null);
+    assert.equal(restored.getItem(key(64)), '{"index":64}');
+    assert.throws(() => restored.setItem("candlescope:research-return:../secrets", "{}"), /Invalid/);
+    assert.throws(() => restored.setItem(key(65), "x".repeat(2049)), /Invalid/);
+  } finally { await rm(root, {recursive: true, force: true}); }
+});

@@ -32,6 +32,7 @@ class StreamVersionClock:
         self._capacity = max(1, capacity)
         self._generation = 0
         self._entries: OrderedDict[SeriesKey, _Cursor] = OrderedDict()
+        self._mutations: dict[SeriesKey, int] = {}
         self._lock = threading.RLock()
 
     def _entry(self, key: SeriesKey) -> _Cursor:
@@ -54,19 +55,42 @@ class StreamVersionClock:
             self.epoch = uuid.uuid4().hex
             self._entries.clear()
 
+    @contextmanager
+    def durable_publication(self, key: SeriesKey):
+        # SQLite becomes readable before its event is accepted by the bus.
+        # Keep this fence separate from the evictable delivery cursor.
+        with self._lock:
+            self._mutations[key] = self._mutations.get(key, 0) + 1
+        try:
+            yield
+        except BaseException:
+            # The commit may have succeeded before publication failed. Force
+            # a new generation rather than certifying new rows under the old one.
+            self.invalidate(key)
+            raise
+        finally:
+            with self._lock:
+                remaining = self._mutations[key] - 1
+                if remaining:
+                    self._mutations[key] = remaining
+                else:
+                    del self._mutations[key]
+
     def snapshot(self, key: SeriesKey) -> dict:
         with self._lock:
             cursor = self._entry(key)
             return {"protocol": 1, "epoch": self.epoch,
                     "generation": cursor.generation, "sequence": cursor.sequence,
                     "barrier": cursor.barrier, "series": asdict(key),
-                    "observed_at_ms": cursor.observed_at_ms, "stable": cursor.pending == 0}
+                    "observed_at_ms": cursor.observed_at_ms,
+                    "stable": cursor.pending == 0 and key not in self._mutations}
 
     def begin(self, event: DataEvent) -> tuple[SeriesKey, _Cursor] | None:
         if event.event_type not in {
             DataEventType.BAR_CREATED, DataEventType.BAR_UPDATED,
             DataEventType.BAR_CLOSED, DataEventType.BAR_AMENDED,
             DataEventType.BACKFILL_COMPLETED,
+            DataEventType.SOURCE_GAP, DataEventType.SOURCE_GAP_RESOLVED,
         }:
             return None
         with self._lock:

@@ -94,6 +94,8 @@ import { StrategySwitcher, type StrategySwitcherItem } from "./StrategySwitcher.
 
 const StrategyScriptWorkspace = lazy(() => import("./StrategyScriptWorkspace.js"));
 const NativeStrategyPanel = lazy(() => import("../native/NativeStrategyPanel.js"));
+const ContinuousStrategyPanel = lazy(() => import("../continuous/ContinuousStrategyPanel.js"));
+import type { ContinuousMode } from "../continuous/continuousTypes.js";
 
 type PanelTab = ChartStrategyPanelTab;
 const PANEL_TABS: readonly PanelTab[] = ["overview", "trades", "script", "settings"];
@@ -209,7 +211,7 @@ export interface ChartStrategyTesterPanelProps {
   onClose(): void;
   onOpenAdvanced?(): void;
   onOpenBatchStudy?(): void;
-  onOpenWorkspace?(): void;
+  onOpenWorkspace?(draft: StrategyDraftRecord): void | Promise<void>;
 }
 
 const HOST_STRATEGY_ID = "__candlescope_host__";
@@ -307,6 +309,7 @@ export function CandleScopeStrategyTesterPanel({
 }: ChartStrategyTesterPanelProps) {
   const locale = useLocale();
   const [focusMode, setFocusMode] = useState(false);
+  const [runMode, setRunMode] = useState<ContinuousMode>(() => loadChartStrategyPanelPreferences(cellScope).runMode ?? "HISTORY");
   const [height, setHeight] = useState(() => loadChartStrategyPanelPreferences(cellScope).height);
   const [activeTab, setActiveTab] = useState<PanelTab>(() => (
     attachment ? loadChartStrategyPanelPreferences(cellScope).activeTab : "script"
@@ -337,8 +340,8 @@ export function CandleScopeStrategyTesterPanel({
 
   useEffect(() => () => resizeCleanupRef.current?.(), []);
   useEffect(() => {
-    saveChartStrategyPanelPreferences(cellScope, { height, activeTab });
-  }, [activeTab, cellScope, height]);
+    saveChartStrategyPanelPreferences(cellScope, { height, activeTab, runMode });
+  }, [activeTab, cellScope, height, runMode]);
   const resultCacheKey = result?.cacheKey ?? null;
   useEffect(() => {
     if (!resultCacheKey) return undefined;
@@ -525,6 +528,19 @@ export function CandleScopeStrategyTesterPanel({
     }).catch(() => undefined);
   }, [activeDraft, cursor, draftStore, source]);
 
+  const handoffOperation = useRef<Promise<void> | null>(null);
+  const openWorkspace = useCallback((): Promise<void> => {
+    if (handoffOperation.current) return handoffOperation.current;
+    if (!activeDraft || !onOpenWorkspace) return Promise.reject(new Error("DRAFT_UNAVAILABLE"));
+    const operation = draftStore.save({ id: activeDraft.id, displayName: activeDraft.displayName,
+      language: activeDraft.language, source, cursor }).then(onOpenWorkspace);
+    handoffOperation.current = operation;
+    void operation.catch(() => setSaveState("ERROR")).finally(() => {
+      if (handoffOperation.current === operation) handoffOperation.current = null;
+    });
+    return operation;
+  }, [activeDraft, cursor, draftStore, onOpenWorkspace, source]);
+
   const beginResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     const startY = event.clientY;
@@ -585,7 +601,7 @@ export function CandleScopeStrategyTesterPanel({
       command("resumeObserving", "Resume server-run observation.", empty, onResumeObserving),
       command("openAdvanced", "Open the existing advanced-research workflow.", empty, () => onOpenAdvanced?.(), { available: () => !!onOpenAdvanced }),
       command("openBatchStudy", "Open the existing batch study workflow.", empty, () => onOpenBatchStudy?.(), { available: () => !!onOpenBatchStudy }),
-      command("openWorkspace", "Open the existing strategy workspace.", empty, () => onOpenWorkspace?.(), { available: () => !!onOpenWorkspace && !!currentAttachment }),
+      command("openWorkspace", "Save the current code and open an independent research experiment.", empty, openWorkspace, { available: () => !!onOpenWorkspace && !!activeDraft && active }),
       command("close", "Close the host strategy panel.", empty, onClose),
     ] }));
   const runLabel = pendingDataMatchesSource
@@ -673,6 +689,10 @@ export function CandleScopeStrategyTesterPanel({
         onPointerDown={beginResize}
         onKeyDown={handleResizeKey}
       />
+      <label className="continuous-mode">{t("continuous.mode")}<select aria-label={t("continuous.mode")} value={runMode} onChange={(event) => setRunMode(event.target.value as ContinuousMode)}>
+        <option value="HISTORY">{t("continuous.history")}</option><option value="HISTORY_LIVE">{t("continuous.historyLive")}</option><option value="LIVE_ONLY">{t("continuous.liveOnly")}</option>
+      </select></label>
+      {runMode === "HISTORY" ? <>
       {currentAttachment && <StrategyDockSlot name="tabs">
         <div className="strategy-tabs" role="tablist" aria-label={t("chartTester.tabsAria")}>
           {PANEL_TABS.map((tab) => (
@@ -737,11 +757,8 @@ export function CandleScopeStrategyTesterPanel({
             <details className="strategy-dock-more">
               <summary aria-label={t("report.more")} title={t("report.more")}><Icon name="more" size={14} /></summary>
               <div role="menu">
-                {onOpenWorkspace && <button type="button" role="menuitem" onClick={() => {
-                  if (!activeDraft) return;
-                  void draftStore.save({ id: activeDraft.id, displayName: activeDraft.displayName, language: activeDraft.language, source, cursor })
-                    .then(onOpenWorkspace).catch(() => setSaveState("ERROR"));
-                }}>{t("ux.openWorkspace")}</button>}
+                {onOpenWorkspace && <button type="button" role="menuitem" disabled={!activeDraft || !active}
+                  onClick={() => { void openWorkspace().catch(() => undefined); }}>{t("ux.openWorkspace")}</button>}
                 {onOpenAdvanced && <button type="button" role="menuitem" onClick={onOpenAdvanced}>{t("chartTester.openAdvanced")}</button>}
                 <button type="button" role="menuitemcheckbox" aria-checked={focusMode}
                   onClick={() => setFocusMode((focused) => !focused)}>{t("chartTester.focusMode")}</button>
@@ -1018,6 +1035,21 @@ export function CandleScopeStrategyTesterPanel({
           onClose={onCloseExplanation}
         />
       )}
+      </> : <Suspense fallback={<p>{t("continuous.loading")}</p>}>
+        <ContinuousStrategyPanel key={JSON.stringify([cellScope, activeDraft?.id, session, runMode])}
+          scope={JSON.stringify([cellScope, activeDraft?.id])} session={session} mode={runMode} source={source}
+          language={activeDraft?.language ?? ""} parameters={currentAttachment?.parameters ?? {}} trusted={pythonTrustedConfirmed} active={active}
+          {...(currentAttachment?.initialization ? { initialization: currentAttachment.initialization,
+            ...(currentAttachment.executionOverrides ? { initialExecution: currentAttachment.executionOverrides } : {}),
+            ...(currentAttachment.customRange ? { initialFromMs: currentAttachment.customRange.startMs } : {}) } : {})}
+          editor={(initialize) => activeDraft ? <>
+            <StrategyLanguageControls language={activeDraft.language} confirmed={pythonTrustedConfirmed} onConfirm={(value) => setPythonApproval(value ? approvalKey : null)} onLanguage={(language) => {
+              setPythonApproval(null); void draftStore.save({ ...activeDraft, language, source, cursor }).then((record) => attachRecord(record, false));
+            }} />
+            <StrategyScriptWorkspace source={source} language={activeDraft.language} cursor={cursor} issues={visibleIssues} focusIssue={focusIssue}
+              focusOnMount={false} onSourceChange={(value) => { setSource(value); setRunReady(false); onSourceDirty(); }} onCursorChange={setCursor} onRun={initialize} />
+          </> : null} />
+      </Suspense>}
     </section>
   );
 }

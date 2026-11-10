@@ -3,8 +3,10 @@ from __future__ import annotations
 
 from functools import wraps
 from inspect import signature
+from itertools import islice
 from contextlib import nullcontext
 from collections import deque
+from dataclasses import dataclass
 import threading
 import time
 
@@ -15,6 +17,13 @@ from app.data_engine.memory_budget import MemoryBudgetExceeded, budgeted_query
 
 class RevisionUnavailable(RuntimeError):
     pass
+
+
+@dataclass(frozen=True, slots=True)
+class HistoryReadback:
+    key: SeriesKey
+    revision: int
+    bounds: tuple[int, int] | None
 
 
 class CacheRevisionConsumer:
@@ -35,6 +44,10 @@ class CacheRevisionConsumer:
         self._lock = threading.RLock()
         self._recent = deque(maxlen=4096)
         self._history_floor = 0
+        self.on_rewind = None
+        self.readbacks_enabled = False
+        self._readbacks: dict[SeriesKey, HistoryReadback] = {}
+        self._readback_reset: object | None = None
 
     def sync(self, *, force=False):
         with self._lock:
@@ -47,6 +60,10 @@ class CacheRevisionConsumer:
                     self.resets += 1
                     self._recent.clear()
                     self._history_floor = int(batch["revision"])
+                    if self.readbacks_enabled:
+                        self._reset_readbacks()
+                    if self._history_floor < self.revision and self.on_rewind is not None:
+                        self.on_rewind()
                 else:
                     for change in batch["changes"]:
                         key = SeriesKey(**{name: change[name] for name in (
@@ -55,6 +72,8 @@ class CacheRevisionConsumer:
                             "session_variant", "volume_semantics")})
                         self.cache.invalidate(key)
                         self.cache.invalidate_dependents(key)
+                        if self.readbacks_enabled and (change.get("readback_revision") or 0) > self.revision:
+                            self._queue_readback(key, change)
                         if len(self._recent) == self._recent.maxlen:
                             self._history_floor = max(self._history_floor, self._recent[0][0])
                         self._recent.append((int(change["revision"]), key))
@@ -65,6 +84,49 @@ class CacheRevisionConsumer:
             except Exception as exc:
                 self.failures += 1
                 raise RevisionUnavailable("durable cache revision is unavailable") from exc
+
+    def _reset_readbacks(self):
+        self._readbacks.clear()
+        self._readback_reset = object()
+
+    def _queue_readback(self, key, change):
+        if self._readback_reset is not None:
+            return
+        previous = self._readbacks.get(key)
+        if previous is None and len(self._readbacks) >= self._recent.maxlen:
+            self._reset_readbacks()
+            return
+        start, end = change["readback_start_ms"], change["readback_end_ms"]
+        # The database keeps the last exact mutation. If an observer skipped
+        # another mutation of this series, the safe range is the whole series.
+        bounds = ((start, end) if start is not None and end is not None
+                  and change["readback_previous"] <= self.revision else None)
+        if previous is not None:
+            if previous.revision == change["readback_revision"]:
+                return  # retry after a partially adopted batch
+            bounds = (
+                (min(bounds[0], previous.bounds[0]), max(bounds[1], previous.bounds[1]))
+                if bounds is not None and previous.bounds is not None else None
+            )
+        self._readbacks[key] = HistoryReadback(key, change["readback_revision"], bounds)
+
+    def readback_pending(self, key):
+        with self._lock:
+            if not self.readbacks_enabled:
+                return False
+            family = _family(key)
+            return self._readback_reset is not None or any(_family(other) == family for other in self._readbacks)
+
+    def pending_readbacks(self):
+        with self._lock:
+            return self._readback_reset, tuple(islice(self._readbacks.values(), 64))
+
+    def acknowledge_readback(self, receipt):
+        with self._lock:
+            if self._readback_reset is receipt:
+                self._readback_reset = None
+            elif isinstance(receipt, HistoryReadback) and self._readbacks.get(receipt.key) is receipt:
+                del self._readbacks[receipt.key]
 
     def conflicts(self, revision, key, accepted=None):
         accepted = accepted or {}
@@ -134,7 +196,10 @@ def revision_checked_query(function):
                 exchange=result.exchange, market_type=result.market_type,
                 **{name: getattr(result, name) for name in ("provider_id", "venue", "asset_class",
                     "series_variant", "price_adjustment", "session_variant", "volume_semantics")})
-            if consumer.conflicts(before, result_key, scope.accepted) and (result.metadata.get("derived_from") or not result.metadata.get("cache_read_retries")):
+            if after < before or (
+                consumer.conflicts(before, result_key, scope.accepted)
+                and (result.metadata.get("derived_from") or not result.metadata.get("cache_read_retries"))
+            ):
                 # Evict any derived/unversioned late load performed by the
                 # callback after the change was consumed by an inner query.
                 self._cache.invalidate(result_key)
