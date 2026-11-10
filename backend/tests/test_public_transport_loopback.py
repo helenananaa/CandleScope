@@ -262,11 +262,12 @@ def test_bybit_backfill_uses_bounded_reverse_pages(monkeypatch, tmp_path, batch_
     asyncio.run(run())
 
 
-@pytest.mark.parametrize(("amend_while_deferred", "restart"), [
-    (False, False), (True, False), (False, True), (True, True),
+@pytest.mark.parametrize(("amend_while_deferred", "restart", "multi_chunk"), [
+    (False, False, False), (True, False, False), (False, True, False), (True, True, False),
+    (False, True, True), (True, True, True),
 ])
 def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
-    monkeypatch, tmp_path, amend_while_deferred, restart,
+    monkeypatch, tmp_path, amend_while_deferred, restart, multi_chunk,
 ):
     from app.data_engine.backfill import BackfillConfig, BackfillEngine
     from app.data_engine.data_manager.backfill_contracts import RepairRequest
@@ -278,9 +279,14 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
         get_history_calendar_registry,
     )
     from app.data_engine.storage import klines_repo
-    from app.data_engine.storage.gap_ledger import GapLedger, NATIVE_PROGRESS_FIELD
+    from app.data_engine.storage.gap_ledger import (
+        COMPLETED_NATIVE_CHUNKS_FIELD, GapLedger, NATIVE_PROGRESS_FIELD,
+    )
 
     opened, step = 1_794_138_000_000, 300_000
+    bar_count = 12 if multi_chunk else 5
+    completed_opens = [opened + i * step for i in range(4, bar_count)] if multi_chunk else []
+    limited_open = opened + 2 * step
     symbol, market_type = "BTC/USD:BTC", "swap.inverse"
     identity = dict(exchange="bybit", market_type=market_type)
     db_path = tmp_path / "sibling-cooldown.sqlite"
@@ -298,13 +304,13 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
             start, end, limit = (int(request.query[key]) for key in ("start", "end", "limit"))
             sent_ms = int(time.time() * 1000)
             calls.append((start, end, limit, sent_ms))
-            if start == opened + 2 * step and not reset_ms:
+            if start == limited_open and not reset_ms:
                 reset_ms = sent_ms + 1_500
                 cooldown.set()
                 return web.json_response({"retCode": 10006, "retMsg": "Too many visits!"},
                     headers={"X-Bapi-Limit-Reset-Timestamp": str(reset_ms)})
             rows = [[str(ts), "1", "2", "1", "2", "9", "4"]
-                    for ts in reversed(range(opened, opened + 5 * step, step)) if start <= ts <= end]
+                    for ts in reversed(range(opened - step, opened + bar_count * step, step)) if start <= ts <= end]
             return web.json_response({"retCode": 0, "result": {"list": rows[:limit]}})
 
         runner, origin = await serve(handle)
@@ -333,7 +339,7 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
         async def bars_backfilled(_symbol, _interval, bars, **_kwargs):
             adopted.extend(bar.time_ms for bar in bars)
 
-        def make_runtime():
+        def make_runtime(*, rechunk=False):
             transport = TransportLayer(config)
             engine = BackfillEngine(BackfillConfig(history_archive_enabled=False, fetch_batch_size=2),
                                     klines_repo.AsyncKlinesRepoAdapter(), transport, ingestion_config=config)
@@ -350,16 +356,28 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
                     exchange=repair.exchange, market_type=repair.market_type, symbol=repair.symbol,
                     channel="kline", variant=repair.interval,
                 )),
-                loop=asyncio.get_running_loop(), max_concurrency=1)
+                loop=asyncio.get_running_loop(), max_concurrency=1, chunk_bars=4 if multi_chunk and not rechunk else 1000)
             return transport, engine, ledger, coordinator
 
         def make_request():
             return RepairRequest(
-                symbol, "5m", opened, opened + 4 * step, **identity,
-                reason="tail_gap", requester="ingestion_gap", metadata={"requires_trusted_finality": True},
+                symbol, "5m", opened, opened + (bar_count - 1) * step, **identity,
+                reason="tail_gap",
+                requester="ingestion_gap", metadata={"requires_trusted_finality": True},
             )
 
         transport, engine, ledger, coordinator = make_runtime()
+        if multi_chunk:
+            # Settle the venue's cold probe before testing newest-first chunk
+            # order. This earlier one-slot repair is outside the measured range.
+            warmup = await coordinator.request_and_wait(RepairRequest(
+                symbol, "5m", opened - step, opened - step, **identity,
+                reason="tail_gap", requester="ingestion_gap", metadata={"requires_trusted_finality": True},
+            ))
+            assert warmup.verified_contiguous
+            calls.clear()
+            events.clear()
+            adopted.clear()
 
         async def repair():
             return await coordinator.request_and_wait(make_request())
@@ -369,26 +387,37 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
         try:
             await asyncio.wait_for(cooldown.wait(), 5)
             assert not demand.done()
-            assert not events and not adopted
+            if multi_chunk:
+                assert sorted(adopted) == completed_opens
+            else:
+                assert not events and not adopted
             async with asyncio.timeout(1):
                 while not (rows := storage.query_bars(symbol, "5m", **identity)):
                     await asyncio.sleep(.01)
             assert int(time.time() * 1000) < reset_ms
-            assert sorted(row["open_time"] for row in rows) in (
-                [opened, opened + step],
-                [opened, opened + step, opened + 4 * step],
-            )
+            if multi_chunk:
+                assert set(completed_opens) <= {row["open_time"] for row in rows}
+            else:
+                assert sorted(row["open_time"] for row in rows) in (
+                    [opened, opened + step],
+                    [opened, opened + step, opened + 4 * step],
+                )
             async with asyncio.timeout(1):
                 while True:
                     checkpoint, = ledger.list_open()
                     if checkpoint["status"] == "retry_wait":
                         break
                     await asyncio.sleep(.01)
-            assert json.loads(checkpoint["metadata_json"])[NATIVE_PROGRESS_FIELD]
+            metadata = json.loads(checkpoint["metadata_json"])
+            if multi_chunk:
+                assert set(metadata[COMPLETED_NATIVE_CHUNKS_FIELD]) == {"1", "2"}
+            else:
+                assert metadata[NATIVE_PROGRESS_FIELD]
             retry_at = checkpoint["next_retry_at"]
             assert retry_at >= reset_ms - 3
             if amend_while_deferred:
-                changed = next(row for row in rows if row["open_time"] == opened)
+                changed_open = completed_opens[0] if multi_chunk else opened
+                changed = next(row for row in rows if row["open_time"] == changed_open)
                 assert storage.upsert_bars(symbol, "5m", [{**changed, "volume": 88}],
                                            source="backfill", **identity) == 1
             if restart:
@@ -396,7 +425,9 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
                 await demand
                 await engine.close()
                 await transport.stop()
-                transport, engine, ledger, coordinator = make_runtime()
+                transport, engine, ledger, coordinator = make_runtime(
+                    rechunk=multi_chunk and not amend_while_deferred,
+                )
 
                 call_count = len(calls)
                 assert int(time.time() * 1000) < retry_at
@@ -416,14 +447,30 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
             assert all(o.status == "completed" and o.verified_contiguous for o in outcomes)
             closed = ledger.get_status(make_request())
             assert closed["status"] == "filled"
-            assert NATIVE_PROGRESS_FIELD not in json.loads(closed["metadata_json"])
-            assert sorted(adopted) == [opened + i * step for i in range(5)]
-            assert Counter((start, end, limit) for start, end, limit, _ in calls) == {
+            closed_metadata = json.loads(closed["metadata_json"])
+            assert NATIVE_PROGRESS_FIELD not in closed_metadata
+            assert COMPLETED_NATIVE_CHUNKS_FIELD not in closed_metadata
+            expected_adoption = Counter(opened + i * step for i in range(bar_count))
+            if multi_chunk and amend_while_deferred:
+                expected_adoption.update(completed_opens[:4])
+            assert Counter(adopted) == expected_adoption
+
+            expected_calls = {
                 (opened, opened + step, 2): 2 if amend_while_deferred else 1,
                 (opened + 2 * step, opened + 3 * step, 2): 2,
                 (opened + 4 * step, opened + 4 * step, 1): 1,
             }
-            first_limited = next(i for i, (start, _, _, _) in enumerate(calls) if start == opened + 2 * step)
+            if multi_chunk:
+                expected_calls = {
+                    (opened, opened + step, 2): 1,
+                    (opened + 2 * step, opened + 3 * step, 2): 2,
+                    (opened + 4 * step, opened + 5 * step, 2): 2 if amend_while_deferred else 1,
+                    (opened + 6 * step, opened + 7 * step, 2): 2 if amend_while_deferred else 1,
+                    (opened + 8 * step, opened + 9 * step, 2): 1,
+                    (opened + 10 * step, opened + 11 * step, 2): 1,
+                }
+            assert Counter((start, end, limit) for start, end, limit, _ in calls) == expected_calls
+            first_limited = next(i for i, (start, _, _, _) in enumerate(calls) if start == limited_open)
             assert min(sent for _, _, _, sent in calls[first_limited + 1:]) >= reset_ms - 3
             assert all(row["volume"] == 4 for row in storage.query_bars(symbol, "5m", **identity))
         finally:

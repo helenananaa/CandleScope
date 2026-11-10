@@ -46,8 +46,10 @@ from app.exchanges.models import (
 )
 from app.exchanges.history_identity import supports_history_identity
 from app.exchanges.rate_limits import RateLimitDeferred
-from app.data_engine.backfill.native_progress import NativeBackfillDeferred, NativeBackfillProgress
-from app.data_engine.storage.gap_ledger import NATIVE_PROGRESS_FIELD
+from app.data_engine.backfill.native_progress import (
+    MAX_COMPLETED_CHUNKS, NativeBackfillDeferred, NativeBackfillProgress,
+)
+from app.data_engine.storage.gap_ledger import COMPLETED_NATIVE_CHUNKS_FIELD, NATIVE_PROGRESS_FIELD
 from .backfill_contracts import (
     BACKFILL_REASON_PRIORITIES,
     RepairSeries,
@@ -2515,6 +2517,8 @@ class BackfillCoordinator:
                         )
                     )
 
+                if verification.get("verified_contiguous") is True:
+                    await self._ledger_record_verified_native_chunk(request, verification.get("_rows", []))
                 return RepairOutcome(
                     request=request,
                     status=report.status,
@@ -3032,6 +3036,24 @@ class BackfillCoordinator:
         except Exception:
             logger.exception("Gap ledger retry update failed for %s", request.request_id)
 
+    async def _ledger_record_verified_native_chunk(self, request: RepairRequest, rows: list[dict]) -> None:
+        record = getattr(self._gap_ledger, "mark_native_chunk_verified", None)
+        if request.exchange != "bybit" or not callable(record):
+            return
+        plan = request.metadata.get("interval_work_plan") or {}
+        ledger_range = request.metadata.get("ledger_range")
+        slot = request.metadata.get("chunk_sequence")
+        if (plan.get("derived") is not False or type(slot) is not int or not 0 <= slot < MAX_COMPLETED_CHUNKS
+                or not isinstance(ledger_range, dict)
+                or (ledger_range.get("start_ms"), ledger_range.get("end_ms")) == (request.start_ms, request.end_ms)):
+            return
+        try:
+            receipt = NativeBackfillProgress.completed_receipt(request, rows)
+            if receipt is not None:
+                await run_storage(record, request, slot, receipt)
+        except Exception:
+            logger.exception("Gap ledger completed chunk update failed for %s", request.request_id)
+
     async def _ledger_mark_verifying(self, request: RepairRequest) -> None:
         if self._gap_ledger is None:
             return
@@ -3224,7 +3246,11 @@ class BackfillCoordinator:
         )
         revision = decoded_metadata.get("acquisition_revision")
         if type(revision) is int and revision >= 0:
-            progress = NativeBackfillProgress.from_ledger(request, decoded_metadata.get(NATIVE_PROGRESS_FIELD))
+            progress = NativeBackfillProgress.from_ledger(
+                request,
+                decoded_metadata.get(NATIVE_PROGRESS_FIELD),
+                decoded_metadata.get(COMPLETED_NATIVE_CHUNKS_FIELD),
+            )
             if progress is not None:
                 request._native_progress = progress
                 request.metadata["acquisition_revision"] = revision

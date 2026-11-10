@@ -15,6 +15,7 @@ from .models import BackfillTask, FetchResult, ReconcileResult, WrittenRange
 
 # A default 1,000-row native chunk can plan one task per row.
 _MAX_TASKS = 1024
+MAX_COMPLETED_CHUNKS = 1024
 _MAX_ROWS_PER_TASK = 1024
 _MAX_WRITES_PER_TASK = 16
 _FIELDS = (
@@ -44,6 +45,7 @@ class _Receipt:
     task: BackfillTask
     digest: bytes
     written: tuple[WrittenRange, ...]
+    completed_slot: int | None = None
 
 
 @dataclass(slots=True)
@@ -62,17 +64,60 @@ class NativeBackfillProgress:
             "digest": receipt.digest.hex(),
             "written": [[item.start_ms, item.end_ms, item.bars_written, item.source, item.phase]
                         for item in receipt.written],
-        } for receipt in self.receipts.values() if len(receipt.written) <= _MAX_WRITES_PER_TASK]
+        } for receipt in self.receipts.values()
+            if receipt.completed_slot is None and len(receipt.written) <= _MAX_WRITES_PER_TASK]
+
+    def completed_to_ledger(self) -> dict[str, dict]:
+        return {
+            str(receipt.completed_slot): {
+                "start_ms": receipt.task.start_ms,
+                "end_ms": receipt.task.end_ms,
+                "digest": receipt.digest.hex(),
+            }
+            for receipt in self.receipts.values() if receipt.completed_slot is not None
+        }
+
+    def _covered_by_completed(self, task: BackfillTask) -> bool:
+        return any(
+            receipt.completed_slot is not None
+            and receipt.task.interval == task.interval
+            and receipt.task.start_ms <= task.start_ms <= task.end_ms <= receipt.task.end_ms
+            for receipt in self.receipts.values()
+        )
+
+    def covers_task(self, task: BackfillTask) -> bool:
+        return task.task_key in self.receipts or self._covered_by_completed(task)
+
+    @staticmethod
+    def completed_receipt(request, rows: list[dict]) -> dict | None:
+        if not 0 < len(rows) <= _MAX_ROWS_PER_TASK:
+            return None
+        expected = list(islice(
+            AlwaysOpenCalendar().expected_opens(request.start_ms, request.end_ms, request.interval),
+            _MAX_ROWS_PER_TASK + 1,
+        ))
+        if expected != [row["open_time"] for row in rows] or not all(
+            row_is_closed(row) and source_is_trusted_final(row.get("source")) for row in rows
+        ):
+            return None
+        return {"start_ms": request.start_ms, "end_ms": request.end_ms, "digest": _digest(rows).hex()}
 
     @classmethod
-    def from_ledger(cls, request, payload: object) -> NativeBackfillProgress | None:
-        if request.exchange != "bybit" or not isinstance(payload, list) or len(payload) > _MAX_TASKS:
+    def from_ledger(cls, request, payload: object, completed: object = None) -> NativeBackfillProgress | None:
+        if request.exchange != "bybit":
             return None
+        entries = []
+        if isinstance(completed, dict) and len(completed) <= MAX_COMPLETED_CHUNKS:
+            entries.extend((int(slot), value) for slot, value in completed.items()
+                           if isinstance(slot, str) and slot.isascii() and slot.isdecimal() and len(slot) <= 4
+                           and 0 <= int(slot) < MAX_COMPLETED_CHUNKS)
+        if isinstance(payload, list) and len(payload) <= _MAX_TASKS:
+            entries.extend((None, value) for value in payload)
         identity = identity_from_metadata(request.exchange, request.metadata)
         metadata = {"series_identity": identity.to_dict()} if identity is not None else {}
         progress = cls()
         calendar = AlwaysOpenCalendar()
-        for entry in payload:
+        for completed_slot, entry in entries:
             if not isinstance(entry, dict):
                 continue
             start, end, digest = (entry.get(key) for key in ("start_ms", "end_ms", "digest"))
@@ -91,6 +136,9 @@ class NativeBackfillProgress:
                 continue
             task = BackfillTask(request.symbol, request.interval, start, end,
                                 exchange=request.exchange, market_type=request.market_type, metadata=metadata)
+            if completed_slot is not None:
+                progress.receipts[task.task_key] = _Receipt(task, fingerprint, (), completed_slot)
+                continue
             written = []
             raw_writes = entry.get("written")
             if not isinstance(raw_writes, list) or len(raw_writes) > _MAX_WRITES_PER_TASK:
@@ -108,7 +156,7 @@ class NativeBackfillProgress:
                                             count, request.exchange, request.market_type, source, phase))
             if len(written) != len(raw_writes):
                 continue
-            progress.receipts[task.task_key] = _Receipt(task, fingerprint, tuple(written))
+            progress.receipts.setdefault(task.task_key, _Receipt(task, fingerprint, tuple(written)))
         return progress if progress.receipts else None
 
     async def verify(self, storage, *, exchange: str, market_type: str, symbol: str,
@@ -168,6 +216,8 @@ class NativeBackfillProgress:
 
     def include_writes(self, result: ReconcileResult) -> None:
         for receipt in self.receipts.values():
+            if not receipt.written or self._covered_by_completed(receipt.task):
+                continue
             result.written_ranges.extend(receipt.written)
             result.bars_written += sum(item.bars_written for item in receipt.written)
 

@@ -26,9 +26,11 @@ _MAX_REASON_PARTS = 8
 _MAX_REASON_LENGTH = 256
 _MAX_ERROR_LENGTH = 2_000
 NATIVE_PROGRESS_FIELD = "native_backfill_receipts"
+COMPLETED_NATIVE_CHUNKS_FIELD = "verified_native_chunks"
 _REMOVE_NATIVE_PROGRESS = (
     "metadata_json = CASE WHEN json_valid(metadata_json) "
-    f"THEN json_remove(metadata_json, '$.{NATIVE_PROGRESS_FIELD}') ELSE metadata_json END"
+    f"THEN json_remove(metadata_json, '$.{NATIVE_PROGRESS_FIELD}', '$.{COMPLETED_NATIVE_CHUNKS_FIELD}') "
+    "ELSE metadata_json END"
 )
 
 
@@ -237,6 +239,7 @@ class GapLedger:
             progress = getattr(request, "_native_progress", None)
             if progress is not None:
                 metadata[NATIVE_PROGRESS_FIELD] = progress.to_ledger()
+                metadata[COMPLETED_NATIVE_CHUNKS_FIELD] = progress.completed_to_ledger()
             scope = _request_scope(request)
             grouped.setdefault(scope, []).append({
                 "exchange": request.exchange,
@@ -326,11 +329,20 @@ class GapLedger:
         self._update(
             request,
             require_repair_ticket=True,
-            native_progress=native_progress,
+            metadata_patch=({NATIVE_PROGRESS_FIELD: native_progress or None}
+                            if native_progress is not None else None),
             status="retry_wait",
             attempts=attempt,
             last_error=_bounded_error(error),
             next_retry_at=next_retry_at,
+        )
+
+    def mark_native_chunk_verified(self, request: Any, slot: int, receipt: dict) -> None:
+        self._update(
+            request,
+            require_repair_ticket=True,
+            metadata_patch={COMPLETED_NATIVE_CHUNKS_FIELD: {str(slot): receipt}},
+            last_checked_at=_now_ms(),
         )
 
     def mark_verifying(self, request: Any) -> None:
@@ -391,7 +403,12 @@ class GapLedger:
             missing_count = 0
         if missing_count is not None:
             values["missing_count"] = max(0, int(missing_count))
-        self._update(request, native_progress=[] if status in {"filled", "source_empty"} else None, **values)
+        self._update(
+            request,
+            metadata_patch=({NATIVE_PROGRESS_FIELD: None, COMPLETED_NATIVE_CHUNKS_FIELD: None}
+                            if status in {"filled", "source_empty"} else None),
+            **values,
+        )
         if status == "source_empty":
             self._supersede_contained_source_empty(request)
 
@@ -652,6 +669,7 @@ class GapLedger:
                 metadata = _metadata_object(expected_metadata_json)
                 metadata.pop("reconciliation_checkpoint", None)
                 metadata.pop(NATIVE_PROGRESS_FIELD, None)
+                metadata.pop(COMPLETED_NATIVE_CHUNKS_FIELD, None)
                 cursor = conn.execute(
                     f"""
                     UPDATE {table}
@@ -1358,23 +1376,36 @@ class GapLedger:
         request: Any,
         *,
         require_repair_ticket: bool = False,
-        native_progress: list[dict] | None = None,
+        metadata_patch: dict | None = None,
         **values: Any,
     ) -> None:
         if not values:
             return
+        start_ms, end_ms = _request_range(request)
+        preserve_parent_deadline = (
+            require_repair_ticket and request.exchange == "bybit"
+            and (start_ms, end_ms) != (request.start_ms, request.end_ms)
+        )
         assignments = []
         params: list[Any] = []
         for key, value in values.items():
-            assignments.append(f"{key} = ?")
-            params.append(value)
-        if native_progress is not None:
+            if key == "next_retry_at" and preserve_parent_deadline:
+                # A sibling can begin while another chunk waits for quota.
+                # Neither starting nor a shorter deferral renews that deadline.
+                assignments.append(
+                    "next_retry_at = CASE WHEN next_retry_at > MAX(?, COALESCE(?, 0)) "
+                    "THEN next_retry_at ELSE ? END"
+                )
+                params.extend((_now_ms(), value, value))
+            else:
+                assignments.append(f"{key} = ?")
+                params.append(value)
+        if metadata_patch is not None:
             assignments.append(
                 "metadata_json = CASE WHEN json_valid(metadata_json) "
                 "THEN json_patch(metadata_json, ?) ELSE metadata_json END"
             )
-            params.append(json.dumps({NATIVE_PROGRESS_FIELD: native_progress or None}, sort_keys=True))
-        start_ms, end_ms = _request_range(request)
+            params.append(json.dumps(metadata_patch, sort_keys=True))
         scope = _request_scope(request)
         params.extend([
             request.exchange,

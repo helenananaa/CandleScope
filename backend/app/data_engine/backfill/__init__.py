@@ -372,7 +372,7 @@ class BackfillEngine:
                     and metadata.get("chunk_sequence") is not None
                     and callable(getattr(self._storage, "query_time_range", None))):
                 native_progress = native_progress or NativeBackfillProgress()
-                pending = [task for task in plan.tasks if task.task_key not in native_progress.receipts]
+                pending = [task for task in plan.tasks if not native_progress.covers_task(task)]
                 try:
                     fetch_results = await self.fetcher.fetch(pending, keep_completed=True)
                 except FetchBatchDeferred as exc:
