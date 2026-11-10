@@ -567,6 +567,8 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
 
 @pytest.mark.parametrize("source_change", ["unchanged", "amended", "deleted"])
 def test_bybit_derived_recovery_reuses_committed_components_after_restart(monkeypatch, tmp_path, source_change):
+    import sqlite3
+
     from app.data_engine.backfill import BackfillConfig, BackfillEngine
     from app.data_engine.data_manager.backfill_contracts import RepairRequest
     from app.data_engine.data_manager.backfill_coordinator import BackfillCoordinator
@@ -669,6 +671,15 @@ def test_bybit_derived_recovery_reuses_committed_components_after_restart(monkey
             assert warmup.verified_contiguous
             pages.clear()
             adopted.clear()
+            if source_change == "unchanged":
+                # An existing desktop inventory makes the two missing target
+                # buckets discoverable by the ordinary background audit.
+                assert storage.upsert_bars(symbol, "10m", [
+                    {"open_time": start, "close_time": start + 2 * step - 1,
+                     "open": 1, "high": 2, "low": 1, "close": 2, "volume": 1,
+                     "quote_volume": None, "trades": None, "taker_buy_base": None, "taker_buy_quote": None}
+                    for start in (opened - 2 * step, opened + 4 * step)
+                ], source="backfill_aggregated", **identity) == 2
             derived = request("10m", opened, opened + 2 * step)
             demand = asyncio.create_task(coordinator.request_and_wait(derived))
             await asyncio.wait_for(deferred.wait(), 5)
@@ -679,7 +690,9 @@ def test_bybit_derived_recovery_reuses_committed_components_after_restart(monkey
                         break
                     await asyncio.sleep(.01)
             assert parent["next_retry_at"] >= reset_ms - 3
-            assert not adopted and not storage.query_bars(symbol, "10m", **identity)
+            assert not adopted and not storage.query_bars(
+                symbol, "10m", start_ms=opened, end_ms=opened + 2 * step, **identity,
+            )
             committed = storage.query_bars(symbol, "5m", start_ms=opened, order="ASC", **identity)
             assert [row["open_time"] for row in committed] == [opened, opened + step]
 
@@ -695,11 +708,23 @@ def test_bybit_derived_recovery_reuses_committed_components_after_restart(monkey
             if source_change == "deleted":
                 assert storage.delete_bars(symbol, "5m", opened, opened + step, **identity) == 2
             transport, engine, ledger, coordinator = runtime()
-            early = await coordinator.reconcile_gap_ledger(stale_after_ms=0)
-            assert early.requeued == 0
+            if source_change == "unchanged":
+                stale = int(time.time() * 1000) - 901_000
+                with sqlite3.connect(db) as conn:
+                    conn.execute("UPDATE kline_gap_ledger SET last_seen_at=?,last_checked_at=? WHERE id=?",
+                                 (stale, stale, parent["id"]))
+                early = await coordinator.startup_scan([], (), delay_seconds=0)
+                assert early.ledger_requeued == 0
+            else:
+                early = await coordinator.reconcile_gap_ledger(stale_after_ms=0)
+                assert early.requeued == 0
             await asyncio.sleep(max(0, (parent["next_retry_at"] - time.time() * 1000) / 1000) + .025)
-            recovered = await coordinator.reconcile_gap_ledger(stale_after_ms=0)
-            assert recovered.requeued == 1, recovered
+            if source_change == "unchanged":
+                audit = await coordinator.audit_storage_series([("bybit", market, symbol, "10m")])
+                assert audit.queued == 0 and audit.ledger_requeued == 1, audit
+            else:
+                recovered = await coordinator.reconcile_gap_ledger(stale_after_ms=0)
+                assert recovered.requeued == 1, recovered
             outcome = await asyncio.wait_for(coordinator.wait_for_request(f"ledger-reconcile-{parent['id']}"), 5)
             final = ledger.get_status(derived)
             initial_metadata = json.loads(parent["metadata_json"])
@@ -717,7 +742,8 @@ def test_bybit_derived_recovery_reuses_committed_components_after_restart(monkey
                 (opened + 2 * step, opened + 3 * step, 2),
                 (opened + 2 * step, opened + 3 * step, 2),
             ]
-            rows = storage.query_bars(symbol, "10m", order="ASC", **identity)
+            rows = storage.query_bars(symbol, "10m", start_ms=opened, end_ms=opened + 2 * step,
+                                      order="ASC", **identity)
             assert [(row["open_time"], row["volume"], row["source"]) for row in rows] == [
                 (opened, 45 if source_change == "amended" else 9, "backfill_aggregated"),
                 (opened + 2 * step, 13, "backfill_aggregated"),

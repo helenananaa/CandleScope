@@ -97,9 +97,11 @@ def bybit_recovery_source_gap_id(
 ) -> str | None:
     """Recover only a source-owned gap, preserving explicit refresh semantics."""
     gap_id = metadata.get("source_gap_id")
+    revision = metadata.get("acquisition_revision")
     if (reuses_bybit_gap_inputs(exchange, market_type, "ingestion_gap")
             and reason in ("tail_gap", "ledger_recovery")
             and metadata.get("requires_trusted_finality") is True
+            and type(revision) is int and revision >= 0
             and isinstance(gap_id, str) and gap_id):
         return gap_id
     return None

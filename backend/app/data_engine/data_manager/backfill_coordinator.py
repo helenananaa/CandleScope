@@ -3455,7 +3455,7 @@ class BackfillCoordinator:
             # Reconciliation at the end of the audit owns this range even
             # after the lease and cooldown expire. A fresh narrow audit job
             # would discard the wider parent's durable progress.
-            if status.get("has_native_receipts"):
+            if status.get("has_native_receipts") or status.get("has_bybit_source_gap"):
                 return True
             if retry_is_future:
                 return True
