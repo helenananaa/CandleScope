@@ -12,7 +12,7 @@ from app.data_engine.interval_policy import (
     compute_bucket_start_ms,
     parse_interval_ms,
 )
-from app.data_engine.kline_quality import repair_requires_trusted_finality
+from app.data_engine.kline_quality import bybit_recovery_source_gap_id, repair_requires_trusted_finality
 
 
 _DEFAULT_STALE_AFTER_MS = 15 * 60 * 1000
@@ -29,6 +29,7 @@ def _connect(db_path: Path | str | None = None) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA synchronous=NORMAL;")
+    conn.create_function("gap_has_bybit_source_gap", 4, _has_bybit_source_gap, deterministic=True)
     return conn
 
 
@@ -73,6 +74,10 @@ def _metadata_object(value: Any) -> dict[str, Any]:
     except (TypeError, ValueError, json.JSONDecodeError):
         return {}
     return dict(decoded) if isinstance(decoded, dict) else {}
+
+
+def _has_bybit_source_gap(exchange: str, market_type: str, reason: str, metadata_json: str) -> bool:
+    return bybit_recovery_source_gap_id(exchange, market_type, reason, _metadata_object(metadata_json)) is not None
 
 
 def _request_range(request: Any) -> tuple[int, int]:
@@ -710,14 +715,18 @@ class GapLedger:
         Scheduler parents are often wider than the individual gap rediscovered
         by a later audit.  Natural-key-only lookup lets that child bypass the
         parent's active lease or retry deadline, so covering state is the
-        durable unit used for suppression decisions.
+        durable unit used for suppression decisions. A source-owned Bybit
+        gap remains eligible for recovery with its original acquisition fence.
         """
         now = int(_now_ms() if now_ms is None else now_ms)
         fresh_after = now - _DEFAULT_STALE_AFTER_MS
         with _connect(self._db_path) as conn:
             row = conn.execute(
                 """
-                SELECT *
+                SELECT *, CASE WHEN exchange = 'bybit' AND status IN (
+                  'queued', 'repairing', 'verifying', 'partial', 'retry_wait'
+                ) THEN gap_has_bybit_source_gap(exchange, market_type, reason, metadata_json)
+                  ELSE 0 END AS has_bybit_source_gap
                 FROM kline_gap_ledger
                 WHERE exchange = ?
                   AND market_type = ?
@@ -743,7 +752,8 @@ class GapLedger:
                       AND next_retry_at > ?
                     )
                     THEN 1
-                    ELSE 2
+                    WHEN has_bybit_source_gap THEN 2
+                    ELSE 3
                   END,
                   (end_ms - start_ms) ASC,
                   last_seen_at DESC,

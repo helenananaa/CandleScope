@@ -3172,10 +3172,9 @@ class BackfillCoordinator:
         except (TypeError, ValueError):
             pass
         source_gap_id = bybit_recovery_source_gap_id(exchange, market_type, row.get("reason"), decoded_metadata)
-        revision = decoded_metadata.get("acquisition_revision")
-        if source_gap_id is not None and type(revision) is int and revision >= 0:
+        if source_gap_id is not None:
             metadata["source_gap_id"] = source_gap_id
-            metadata["acquisition_revision"] = revision
+            metadata["acquisition_revision"] = decoded_metadata["acquisition_revision"]
         return RepairRequest(
             symbol=symbol,
             interval=interval,
@@ -3376,6 +3375,10 @@ class BackfillCoordinator:
             "partial",
             "retry_wait",
         }:
+            # The due ledger task keeps the source gap and its delete fence.
+            # Let reconciliation resume it before the audit submits fresh work.
+            if status.get("has_bybit_source_gap"):
+                return True
             if retry_is_future:
                 return True
             last_activity = next(
