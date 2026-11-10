@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import zipfile
 from datetime import date
 from pathlib import Path
@@ -28,6 +29,111 @@ from tests.fixtures.replay.trade_service_fakes import (
     TRADE_REPLAY_START_MS,
     verified_trade_archive,
 )
+
+
+def test_retired_day_is_hidden_and_recoverable_after_interruption(tmp_path, monkeypatch):
+    from contextlib import nullcontext
+
+    from app.data_engine.storage import raw_trade_archive
+    from app.data_engine.storage.raw_trade_archive import VerifiedRawAggTradeDay, VerifiedTradeDayRetired
+    from app.replay.trade_import import import_official_date_range, trade_archive_day_acquisition
+
+    cache_root = tmp_path / "cache"
+    local = verified_trade_archive(cache_root)
+    origin_root = tmp_path / "origin"
+    verified_trade_archive(origin_root)
+    listing = "<ListBucketResult>"
+    for day_text in ("2026-05-31", "2026-06-01", "2026-06-02"):
+        key = f"data/futures/um/daily/aggTrades/BTCUSDT/BTCUSDT-aggTrades-{day_text}.zip"
+        listing += f"<Contents><Key>{key}</Key></Contents><Contents><Key>{key}.CHECKSUM</Key></Contents>"
+    listing += "<IsTruncated>false</IsTruncated></ListBucketResult>"
+    sync_official_agg_trade_availability(
+        origin_root, exchange="binance", market_type="futures", symbol="BTCUSDT",
+        as_of_date=date(2026, 6, 3), opener=lambda *_args, **_kwargs: io.BytesIO(listing.encode()),
+    )
+    publish_remote_agg_trade_index(origin_root)
+    remote = RemoteRawAggTradeArchive(cache_root, origin_root, refresh_seconds=0)
+    identity = {"exchange": "binance", "market_type": "futures", "symbol": "BTCUSDT"}
+    request = {**identity, "start_time_ms": TRADE_REPLAY_START_MS,
+               "end_time_ms": TRADE_REPLAY_START_MS + INTERVAL_MS - 1}
+    expected = local.freeze_dataset(**request)
+    before_epoch, before_windows = remote.selection_snapshot(**identity)
+    receipt, = cache_root.glob("exchange=*/market_type=*/symbol=*/date=*/_verified_import.json")
+    originals = {file.name: file.read_bytes() for file in receipt.parent.iterdir()}
+    day = date(2026, 6, 1)
+    day_id = "sha256:" + hashlib.sha256(originals[receipt.name]).hexdigest()
+
+    def move(*, restore=False, approved=True, receipt_id=day_id):
+        return local.move_verified_retention_day(
+            identity=tuple(identity.values()), day=day.isoformat(), day_id=receipt_id,
+            restore=restore, authorize=lambda _key, _receipt: nullcontext(approved),
+        )
+
+    assert move(receipt_id="sha256:" + "0" * 64) == "STALE_RECEIPT"
+    assert move(approved=False) == "RETENTION_NOT_AUTHORIZED"
+    with trade_archive_day_acquisition(local, **identity, day=day):
+        assert move() == "DAY_ACQUISITION_IN_PROGRESS"
+    pin = remote.pin_dataset(expected)
+    try:
+        assert move() == "PARTITION_RETENTION_LEASE"
+    finally:
+        remote.release_dataset(pin)
+
+    extra = receipt.parent / "unmanaged-file"
+    extra.write_text("keep")
+    assert move() == "PARTITION_UNSAFE"
+    assert extra.read_text() == "keep"
+    extra.unlink()
+
+    def interrupted(_path):
+        raise OSError("injected interruption after rename")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(raw_trade_archive, "_sync_retention_directory", interrupted)
+        with pytest.raises(OSError, match="after rename"):
+            move()
+    assert move() == "RETIRED"
+    assert not receipt.parent.exists()
+    assert remote.selection_snapshot(**identity) != (before_epoch, before_windows)
+    day_ms = 86_400_000
+    assert remote.list_selection_windows(**identity) == (
+        RawAggTradeSelectionWindow(DAY_START_MS - day_ms, DAY_START_MS - 1, 1),
+        RawAggTradeSelectionWindow(DAY_START_MS + day_ms, DAY_START_MS + 2 * day_ms - 1, 1),
+    )
+    assert local.scan_range(**request) == []
+    assert local.list_verified_windows(**identity) == ()
+
+    def unexpected_download(*_args, **_kwargs):
+        pytest.fail("retired day requested a network body")
+
+    monkeypatch.setattr(remote, "_official_opener", unexpected_download)
+    monkeypatch.setattr(remote, "_materialize_file", unexpected_download)
+    with pytest.raises(VerifiedTradeDayRetired):
+        remote.freeze_dataset(**request)
+    with pytest.raises(VerifiedTradeDayRetired):
+        remote._materialize_official_day(**identity, day=day)
+    with pytest.raises(VerifiedTradeDayRetired):
+        remote._materialize_receipt(receipt.relative_to(cache_root).as_posix())
+    metadata = VerifiedRawAggTradeDay(**json.loads(originals[receipt.name])["metadata"])
+    with pytest.raises(VerifiedTradeDayRetired):
+        local.import_verified_day(iter(()), metadata)
+    with pytest.raises(VerifiedTradeDayRetired):
+        import_official_date_range(
+            archive_dir=cache_root, **identity, start=day, end=day,
+            require_checksum=True, opener=unexpected_download,
+        )
+
+    assert move(restore=True, approved=False) == "RETENTION_NOT_AUTHORIZED"
+    retired = receipt.parent.with_name(".retired-" + receipt.parent.name)
+    body = next(retired.glob("*.parquet"))
+    body.write_bytes(originals[body.name] + b"corruption")
+    assert move(restore=True) == "PARTITION_UNSAFE"
+    body.write_bytes(originals[body.name])
+    assert move(restore=True) == "RESTORED"
+    assert move(restore=True) == "RESTORED"
+    assert remote.selection_snapshot(**identity) == (before_epoch, before_windows)
+    assert remote.freeze_dataset(**request) == expected
+    assert {file.name: file.read_bytes() for file in receipt.parent.iterdir()} == originals
 
 
 @pytest.mark.parametrize("origin_state", ["window_removed", "unavailable"])

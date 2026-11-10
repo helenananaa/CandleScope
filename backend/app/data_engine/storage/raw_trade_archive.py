@@ -15,10 +15,10 @@ import json
 import os
 import time
 from collections import Counter
-from collections.abc import Iterable, Iterator
-from contextlib import ExitStack, contextmanager
+from collections.abc import Callable, Iterable, Iterator
+from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from itertools import islice
 from pathlib import Path
 from threading import Lock
@@ -326,6 +326,10 @@ class RawAggTradePage:
     next_cursor: RawAggTradeCursor | None
     exhausted: bool
     data_epoch: str | None
+
+
+class VerifiedTradeDayRetired(RuntimeError):
+    """A deliberately detached official day needs an explicit restore."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -1185,6 +1189,125 @@ class ParquetRawAggTradeArchive:
         except BlockingIOError:
             return True
 
+    @staticmethod
+    def _retired_partition(partition: Path) -> Path:
+        # A single same-parent rename is both the visibility change and the
+        # recovery record. Ordinary scans only enumerate date=*.
+        return partition.with_name(f".retired-{partition.name}")
+
+    def require_day_not_retired(self, identity: tuple[str, str, str], day: str) -> None:
+        partition = self._partition_path((*identity, day))
+        retired = self._retired_partition(partition)
+        if retired.exists() or retired.is_symlink():
+            raise VerifiedTradeDayRetired("verified trade day was retired and requires explicit restore")
+
+    def retired_verified_days(self, identity: tuple[str, str, str]) -> tuple[date, ...]:
+        days = []
+        for entry in self._identity_path(identity).glob(".retired-date=????-??-??"):
+            try:
+                days.append(date.fromisoformat(entry.name.removeprefix(".retired-date=")))
+            except ValueError:
+                continue
+        return tuple(sorted(days))
+
+    @contextmanager
+    def _verified_retention_leases(
+        self, identity: tuple[str, str, str], day: str, partition: Path,
+    ) -> Iterator[str | None]:
+        blocked = "DAY_ACQUISITION_IN_PROGRESS"
+        with ExitStack() as leases:
+            try:
+                leases.enter_context(partition_lease(
+                    self.verified_day_acquisition_lock_path(identity, day), shared=False, create=True,
+                ))
+                blocked = "PARTITION_RETENTION_LEASE"
+                leases.enter_context(partition_lease(
+                    self.retention_lease_path(partition.relative_to(self.root).as_posix()),
+                    shared=False, create=True,
+                ))
+            except BlockingIOError:
+                yield blocked
+            except OSError:
+                yield "LEASE_UNAVAILABLE"
+            else:
+                yield None
+
+    def move_verified_retention_day(
+        self, *, identity: tuple[str, str, str], day: str, day_id: str, restore: bool,
+        authorize: Callable[[str, str], AbstractContextManager[bool]],
+    ) -> str:
+        """Detach or restore an exact partition under a caller-held policy/reference fence.
+
+        This reversible primitive preserves all bytes. The authorizer must
+        retain its policy and reference fence until the context exits.
+        """
+        day_id = _prefixed_sha256_digest(day_id, "verified day ID")
+        partition = self._partition_path((*identity, day))
+        retired = self._retired_partition(partition)
+        source, destination = (retired, partition) if restore else (partition, retired)
+        complete = "RESTORED" if restore else "RETIRED"
+        with self._verified_retention_leases(identity, day, partition) as blocked:
+            if blocked is not None:
+                return blocked
+            if (partition.is_symlink() or retired.is_symlink()
+                    or not partition.parent.resolve().is_relative_to(self.root.resolve())):
+                return "PARTITION_UNSAFE"
+            if not source.exists():
+                existing = destination / "_verified_import.json"
+                if (existing.is_file() and not existing.is_symlink()
+                        and "sha256:" + _file_sha256(existing) == day_id):
+                    _sync_retention_directory(destination.parent)
+                    return complete
+                return "STALE_RECEIPT"
+            if destination.exists():
+                return "DESTINATION_OCCUPIED"
+            receipt_path = source / "_verified_import.json"
+            if not receipt_path.is_file() or receipt_path.is_symlink():
+                return "STALE_RECEIPT"
+            if "sha256:" + _file_sha256(receipt_path) != day_id:
+                return "STALE_RECEIPT"
+            partition_key = partition.relative_to(self.root).as_posix()
+            with self._write_lock:
+                if any(partition_key in pin.partitions for pin in self._pins.values()):
+                    return "ACTIVE_DATASET_PIN"
+            with authorize(partition_key, day_id) as approved:
+                if not approved:
+                    return "RETENTION_NOT_AUTHORIZED"
+                receipt = self._read_verified_receipt(receipt_path)
+                metadata = receipt["metadata"]
+                assert isinstance(metadata, Mapping)
+                if tuple(metadata[name] for name in ("exchange", "market_type", "symbol", "date")) != (*identity, day):
+                    return "STALE_RECEIPT"
+                if not self._retention_move_files_match(partition, source, receipt, restore=restore):
+                    return "PARTITION_UNSAFE"
+                source.rename(destination)
+                _sync_retention_directory(destination.parent)
+                return complete
+
+    def _retention_move_files_match(
+        self, partition: Path, source: Path, receipt: Mapping[str, object], *, restore: bool,
+    ) -> bool:
+        objects = receipt["objects"]
+        assert isinstance(objects, list)
+        if len(objects) > _RETENTION_OBJECT_LIMIT:
+            return False
+        expected = {"_verified_import.json"}
+        for raw in objects:
+            item = RawAggTradeObjectManifest.from_dict(raw)
+            path = self.root / item.object_id
+            if path.parent != partition or not path.name.startswith("part-verified-") or path.suffix != ".parquet":
+                return False
+            data = source / path.name
+            manifest = _manifest_path(data)
+            for file in (data, manifest):
+                if not file.is_file() or file.is_symlink() or file.name in expected:
+                    return False
+                expected.add(file.name)
+            if (_file_sha256(manifest) != item.manifest_sha256
+                    or (restore and _file_sha256(data) != item.parquet_sha256)):
+                return False
+        return {entry.name for entry in islice(source.iterdir(), len(expected) + 1)} == expected
+
     def _verified_retention_item(
         self, receipt_path: Path, receipt: dict[str, object], *, observe_locks: bool = True,
     ) -> dict[str, Any]:
@@ -1266,42 +1389,31 @@ class ParquetRawAggTradeArchive:
         partition = self.root / partition_key
         day = partition.name.removeprefix("date=")
         identity = selected["identity"]
-        acquisition = self.verified_day_acquisition_lock_path(
-            (identity["exchange"], identity["market_type"], identity["symbol"]), day,
-        )
-        status = "DAY_ACQUISITION_IN_PROGRESS"
-        item = None
-        with ExitStack() as leases:
+        with self._verified_retention_leases(
+            (identity["exchange"], identity["market_type"], identity["symbol"]), day, partition,
+        ) as blocked:
+            if blocked is not None:
+                yield blocked, None
+                return
+            item = None
             try:
-                leases.enter_context(partition_lease(acquisition, shared=False, create=True))
-                status = "PARTITION_RETENTION_LEASE"
-                leases.enter_context(partition_lease(
-                    self.retention_lease_path(partition_key), shared=False, create=True,
-                ))
-            except BlockingIOError:
+                receipt_path = partition / "_verified_import.json"
+                receipt = self._read_verified_receipt(receipt_path)
+                objects = receipt["objects"]
+                assert isinstance(objects, list)
+                if len(objects) <= _RETENTION_OBJECT_LIMIT:
+                    item = self._verified_retention_item(receipt_path, receipt, observe_locks=False)
+            except (KeyError, OSError, OverflowError, RuntimeError, TypeError, ValueError):
                 pass
-            except OSError:
-                status = "LEASE_UNAVAILABLE"
-            else:
-                try:
-                    receipt_path = partition / "_verified_import.json"
-                    receipt = self._read_verified_receipt(receipt_path)
-                    objects = receipt["objects"]
-                    assert isinstance(objects, list)
-                    if len(objects) <= _RETENTION_OBJECT_LIMIT:
-                        item = self._verified_retention_item(receipt_path, receipt, observe_locks=False)
-                except (KeyError, OSError, OverflowError, RuntimeError, TypeError, ValueError):
-                    item = None
-                if item is not None and item["day_id"] == day_id:
-                    status = "RECHECKED"
-                    with self._write_lock:
-                        count = sum(partition_key in pin.partitions for pin in self._pins.values())
-                    item["active_pin_count"] = count
-                    if count:
-                        item["protection_reasons"].append("ACTIVE_DATASET_PIN")
-                else:
-                    status, item = "STALE_OR_OUTSIDE_SCAN", None
-            yield status, item
+            if item is None or item["day_id"] != day_id:
+                yield "STALE_OR_OUTSIDE_SCAN", None
+                return
+            with self._write_lock:
+                count = sum(partition_key in pin.partitions for pin in self._pins.values())
+            item["active_pin_count"] = count
+            if count:
+                item["protection_reasons"].append("ACTIVE_DATASET_PIN")
+            yield "RECHECKED", item
 
     def list_verified_identities(self) -> list[dict[str, str]]:
         identities: dict[tuple[str, str, str], dict[str, str]] = {}
@@ -1342,7 +1454,7 @@ class ParquetRawAggTradeArchive:
             _identity(market_type, "market_type", lower=True),
             _identity(symbol, "symbol", upper=True),
         )
-        _validate_utc_date(day)
+        self.require_day_not_retired(identity, day)
         partition = self._partition_path((*identity, day))
         if (partition / "_verified_import_conflict.json").exists():
             raise RuntimeError("checksum-verified raw aggTrade partition is quarantined")
@@ -1952,7 +2064,11 @@ class ParquetRawAggTradeArchive:
         conflict_path = partition / "_verified_import_conflict.json"
         checksum_prefix = metadata.source_checksum_sha256[:24]
         written: list[Path] = []
-        with self._write_lock:
+        with partition_lease(
+            self.retention_lease_path(partition.relative_to(self.root).as_posix()),
+            shared=True, create=True, timeout_seconds=1.0,
+        ), self._write_lock:
+            self.require_day_not_retired(key[:3], metadata.date)
             if conflict_path.exists():
                 raise RuntimeError(
                     "verified raw aggTrade partition is quarantined by an "
@@ -2724,16 +2840,19 @@ class ParquetRawAggTradeArchive:
             scanned_row_count=scanned_rows,
         )
 
-    def _partition_path(self, key: tuple[str, str, str, str]) -> Path:
-        exchange, market_type, symbol, date = key
-        _validate_utc_date(date)
+    def _identity_path(self, identity: tuple[str, str, str]) -> Path:
+        exchange, market_type, symbol = identity
         return (
             self.root
             / f"exchange={_partition_value(exchange)}"
             / f"market_type={_partition_value(market_type)}"
             / f"symbol={_partition_value(symbol)}"
-            / f"date={date}"
         )
+
+    def _partition_path(self, key: tuple[str, str, str, str]) -> Path:
+        exchange, market_type, symbol, day = key
+        _validate_utc_date(day)
+        return self._identity_path((exchange, market_type, symbol)) / f"date={day}"
 
     def _write_verified_chunk(
         self,
@@ -3998,6 +4117,15 @@ def _file_sha256(path: Path) -> str:
         while chunk := handle.read(1024 * 1024):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _sync_retention_directory(path: Path) -> None:
+    if os.name == "posix":
+        descriptor = os.open(path, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
 
 
 def _atomic_write_json(path: Path, payload: Mapping[str, object]) -> None:

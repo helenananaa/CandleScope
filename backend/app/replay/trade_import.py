@@ -522,8 +522,10 @@ def import_official_date_range(
         max_rows_per_file=max_rows_per_file,
     )
     results: list[dict[str, object]] = []
+    identity = ("binance", market_type.strip().lower(), symbol.strip().upper())
     current = start
     while current <= end:
+        archive.require_day_not_retired(identity, current.isoformat())
         source_url, checksum_url, filename = official_agg_trade_urls(
             market_type=market_type,
             symbol=symbol,

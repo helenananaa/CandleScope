@@ -67,8 +67,13 @@ def _await_child(process: subprocess.Popen, ready: Path) -> None:
 def test_retention_observes_independent_readers_and_releases_after_process_exit(tmp_path):
     root = tmp_path / "archive"
     archive = verified_trade_archive(root)
+    anchors = tuple((root / ".trade-retention-locks").iterdir())
+    assert len(anchors) == 1  # The day publisher now takes the partition lease.
     assert not archive.verified_retention_inventory(limit=1)["items"][0]["retention_lease_busy"]
-    assert not (root / ".trade-retention-locks").exists()  # Preview never creates an anchor.
+    assert tuple((root / ".trade-retention-locks").iterdir()) == anchors
+    empty = ParquetRawAggTradeArchive(tmp_path / "empty", read_only=True)
+    assert empty.verified_retention_inventory(limit=1)["items"] == []
+    assert not empty.root.exists()  # Preview never creates an anchor.
     dataset = _dataset(archive)
     reference = tmp_path / "reference.json"
     reference.write_text(json.dumps(dataset.to_dict()))
