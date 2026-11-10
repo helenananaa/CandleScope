@@ -10,6 +10,7 @@ from app.core.async_cleanup import finish_cleanup
 from app.data_engine.data_manager.models import DataEventType, SeriesKey
 from app.data_engine.series_identity import KlineSeriesIdentity
 from app.data_engine.storage.prefix_watches import PrefixReceipt
+from .continuous_auto_repair import WAKE
 from .continuous_bar_host import ContinuousBarHost, ContinuousExecutionStopping
 from .continuous_bar_source import ContinuousMarketBarSource
 from .continuous_runtime import WAKE_EVENTS
@@ -63,6 +64,8 @@ class RepairWorker:
         if self.record is None:
             self.record = self.owner.store.epochs.reserve(self.run_id, self.key,
                 expected=self.plan["expected"], plan=self.plan)
+        if self.record["phase"] not in {"REQUESTED", "PREPARING", "READY"}:
+            self.request_stop()
         description = self.owner.store.describe(self.run_id)
         self.definition = {**description["definition"], "source_owner": self.record["source_owner"]}
         series = self.definition["source_series"]
@@ -256,3 +259,4 @@ class RepairWorker:
             # Cleanup failure keeps this owner reachable for a physical retry.
             await finish_cleanup(self.cleanup())
             if self.repairs.job is self: self.repairs.job = None
+            self.owner.store.updates.notify(WAKE)
