@@ -78,6 +78,14 @@ ErrorCallback = Callable[[BackfillTask, str], Awaitable[None]]  # task, error_ms
 RateLimiter = Callable[[], Awaitable[None]]  # async sleep / token-bucket
 
 
+class FetchBatchDeferred(RateLimitDeferred):
+    """Quota control flow with completed siblings available to the caller."""
+
+    def __init__(self, deferred: RateLimitDeferred, completed: list[FetchResult]) -> None:
+        super().__init__(deferred.admission)
+        self.completed = completed
+
+
 class HistoricalFetcher:
     """Fetches historical bar data from the exchange REST API.
 
@@ -239,11 +247,12 @@ class HistoricalFetcher:
 
     # ── Public: Fetch ────────────────────────────────────────
 
-    async def fetch(self, tasks: list[BackfillTask]) -> list[FetchResult]:
+    async def fetch(self, tasks: list[BackfillTask], *, keep_completed: bool = False) -> list[FetchResult]:
         """Execute all fetch tasks, respecting concurrency limits.
 
         Args:
             tasks: Ordered list of ``BackfillTask`` from the Planner.
+            keep_completed: Attach successful siblings to a quota deferral.
 
         Returns:
             A list of ``FetchResult``, one per task, in the same order.
@@ -275,10 +284,13 @@ class HistoricalFetcher:
             # One scheduler chunk may contain several physical gap tasks.  A
             # parent retry must wait for the latest shared-bucket deadline so
             # it does not immediately re-enter and churn the queue again.
-            raise max(
-                deferred,
-                key=lambda exc: int(exc.retry_at_ms or 0),
-            )
+            latest = max(deferred, key=lambda exc: int(exc.retry_at_ms or 0))
+            if keep_completed:
+                completed = [item for item in raw_results if isinstance(item, FetchResult)
+                             and item.status == BackfillStatus.COMPLETED and not item.errors]
+                if completed:
+                    raise FetchBatchDeferred(latest, completed)
+            raise latest
 
         # Handle any unexpected exceptions returned by gather
         results: list[FetchResult] = []

@@ -8,10 +8,14 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.data_engine.kline_quality import repair_requires_trusted_finality
 from app.data_engine.series_identity import KlineSeriesIdentity, identity_from_metadata
+
+if TYPE_CHECKING:
+    from app.data_engine.backfill.native_progress import NativeBackfillProgress
+
 
 BACKFILL_REASON_PRIORITIES: dict[str, int] = {
     "initial_history": 10,
@@ -121,6 +125,7 @@ class RepairRequest:
     request_id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
     _retry_attempt: int = field(default=1, repr=False)
+    _native_progress: NativeBackfillProgress | None = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if self.priority is None:

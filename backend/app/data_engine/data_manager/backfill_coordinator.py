@@ -46,6 +46,7 @@ from app.exchanges.models import (
 )
 from app.exchanges.history_identity import supports_history_identity
 from app.exchanges.rate_limits import RateLimitDeferred
+from app.data_engine.backfill.native_progress import NativeBackfillDeferred
 from .backfill_contracts import (
     BACKFILL_REASON_PRIORITIES,
     RepairSeries,
@@ -2377,6 +2378,7 @@ class BackfillCoordinator:
 
     async def _run_with_retries(self, request: RepairRequest) -> RepairOutcome:
         next_attempt = request._retry_attempt
+        scheduled_request = request
         prepared = self._history_planner.prepare(request)
         close_delay = self._history_planner.source_second_close_delay(request, prepared.plan)
         if close_delay is not None:
@@ -2415,6 +2417,8 @@ class BackfillCoordinator:
                         "requester": request.requester,
                         "request_id": request.request_id,
                     },
+                    **({"native_progress": scheduled_request._native_progress}
+                       if scheduled_request._native_progress is not None else {}),
                 )
                 await self._notify_source_storage(request, report)
                 if self._is_failed(report.status) and attempt < self._max_retries:
@@ -2530,6 +2534,9 @@ class BackfillCoordinator:
             except RepairRetryDeferred:
                 raise
             except RateLimitDeferred as exc:
+                if isinstance(exc, NativeBackfillDeferred):
+                    scheduled_request._native_progress = exc.progress
+                    await self._notify_source_storage(request, exc)
                 await self._ledger_mark_retry_wait(
                     request,
                     attempt=attempt,
