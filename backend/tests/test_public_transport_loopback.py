@@ -271,6 +271,12 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
     from app.data_engine.backfill import BackfillConfig, BackfillEngine
     from app.data_engine.data_manager.backfill_contracts import RepairRequest
     from app.data_engine.data_manager.backfill_coordinator import BackfillCoordinator
+    from app.data_engine.history import (
+        ExchangeHistoryPolicyResolver,
+        HistoryAvailabilityService,
+        HistoryBoundaryRepository,
+        get_history_calendar_registry,
+    )
     from app.data_engine.storage import klines_repo
     from app.data_engine.storage.gap_ledger import GapLedger, NATIVE_PROGRESS_FIELD
 
@@ -332,8 +338,18 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
             engine = BackfillEngine(BackfillConfig(history_archive_enabled=False, fetch_batch_size=2),
                                     klines_repo.AsyncKlinesRepoAdapter(), transport, ingestion_config=config)
             ledger = GapLedger(db_path)
+            history = HistoryAvailabilityService(
+                calendars=get_history_calendar_registry(),
+                boundaries=HistoryBoundaryRepository(db_path),
+            )
+            policy = ExchangeHistoryPolicyResolver(history)
             coordinator = BackfillCoordinator(storage=storage, bars_backfilled=bars_backfilled,
                 emit_event=emit, engine=engine, gap_ledger=ledger,
+                history_service=history,
+                history_policy_resolver=lambda repair: policy.resolve(policy.series_key(
+                    exchange=repair.exchange, market_type=repair.market_type, symbol=repair.symbol,
+                    channel="kline", variant=repair.interval,
+                )),
                 loop=asyncio.get_running_loop(), max_concurrency=1)
             return transport, engine, ledger, coordinator
 
