@@ -10,7 +10,7 @@ from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response
 from pydantic import ValidationError
 
-from app.backtest.continuous_contracts import ContinuousCreate,ContinuousControl,CommittedIdentity,ResultQuery,EditorParameters,RepairPreview,RepairConfirm,RepairCancel
+from app.backtest.continuous_contracts import ContinuousCreate,ContinuousControl,CommittedIdentity,ResultQuery,EditorParameters,RepairPreview,RepairConfirm,RepairCancel,AutomaticRepairSetting
 from app.backtest.errors import BacktestError
 from app.backtest.strategy.protocol import StrategyProviderError
 from app.backtest.strategy.python_author_v1 import AUTHOR_CONTRACT
@@ -51,7 +51,7 @@ def _reply(value,status=200):
 def _error(failure):
     code=str(getattr(failure,"code","CONTINUOUS_INPUT_INVALID"))[:64]
     if code.endswith("NOT_FOUND"):status=404
-    elif code in {"CONTINUOUS_COMMIT_CONFLICT","CONTINUOUS_REPAIR_REQUIRED"}:status=409
+    elif code in {"CONTINUOUS_COMMIT_CONFLICT","CONTINUOUS_REPAIR_REQUIRED","CONTINUOUS_AUTO_REPAIR_REVOKED"}:status=409
     elif code in {"TRUSTED_ORIGIN_REQUIRED"}:status=403
     elif code in {"CONTINUOUS_NOT_READY","STRATEGY_MANAGER_CLOSED","EXECUTOR_BUSY"}:status=503
     elif code=="BUDGET_EXCEEDED":status=429
@@ -131,6 +131,7 @@ async def capabilities(request:Request):
             "python_editor_authorized":is_trusted_operator_origin(origin_from(request.headers)),
             "provider_schema":PROVIDER_SCHEMA,"python_author_contract":AUTHOR_CONTRACT,
             "repair_available":bool(controller.execution_enabled and callable(getattr(controller,"repair",None))),
+            "automatic_repair_available":bool(controller.execution_enabled and hasattr(controller,"repairs")),
             "requires_strategy_revision":False,"initial_result_transport":"HTTP",
             "limits":{"requests":MAX_REQUESTS,"subscriptions":access.owner.max_subscriptions,
                 "active_runs":controller.runtime.max_active_runs,"page_items":200,"message_bytes":MAX_BYTES}})
@@ -217,6 +218,25 @@ async def results(request:Request,run_id:str):
         payload=await _body(request,ResultQuery)
         return _reply(await _access(request).read(run_id,**payload.model_dump()))
     except WIRE_ERRORS as failure:return _error(failure)
+
+
+@router.get("/runs/{run_id}/repair/automatic")
+async def auto_repair(request: Request, run_id: str):
+    try:
+        return _reply({"policy": await _access(request).auto_repair(run_id)})
+    except WIRE_ERRORS as failure:
+        return _error(failure)
+
+
+@router.post("/runs/{run_id}/repair/automatic")
+async def set_auto_repair(request: Request, run_id: str):
+    try:
+        if not is_trusted_operator_origin(origin_from(request.headers)):
+            raise BacktestError("TRUSTED_ORIGIN_REQUIRED", "Automatic repair requires a trusted local application origin")
+        payload = await _body(request, AutomaticRepairSetting)
+        return _reply({"policy": await _access(request).set_auto_repair(run_id, **payload.model_dump())})
+    except WIRE_ERRORS as failure:
+        return _error(failure)
 
 
 @router.post("/runs/{run_id}/repair/preview")

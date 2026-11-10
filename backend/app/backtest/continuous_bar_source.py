@@ -39,13 +39,14 @@ class MarketBarBatch:
     revealed_through_ms: int
     caught_up: bool
 
-    def apply(self, host, manager):
+    def apply(self, host, manager, *, current_source_boundary: Callable[[], int] | None = None):
         if not self.events and host.row["phase"] == "LIVE":
             return host.row
         through = self.events[-1].event_time_ms if self.events else host.row["event_time_ms"]
         return host.apply_batch(self.events, data_revision=self.proof.incarnation,
             revealed_through_ms=self.revealed_through_ms, coverage_complete=True,
             caught_up=self.caught_up, source_receipt=replace(self.proof,through_ms=through),
+            current_source_boundary=current_source_boundary,
             commit_checkpoint=lambda publish:manager.bars.prefixes.commit(
                 self.proof,publish,committed_through_ms=through))
 

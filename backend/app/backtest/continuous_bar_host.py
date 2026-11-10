@@ -14,7 +14,7 @@ from app.market_dataset.snapshot import MarketEvent
 from app.data_engine.storage.prefix_watches import PrefixReceipt, PrefixAcquisitionChanged
 from app.data_engine.storage.revisions import StaleAcquisition
 from .continuous_store import ContinuousStrategyStore
-from .continuous_source_identity import source_owner
+from .continuous_source_identity import affects_protected_prefix, source_owner
 from .errors import BacktestError
 from .models import ENGINE_VERSION
 from .service import _build_bar_kernel, _new_host_planner, _planning_context, _strategy_execution_reporter, _strategy_observation_features, _assert_strategy_frame_inputs, _declared_feature_names
@@ -29,6 +29,10 @@ logger = logging.getLogger(__name__)
 
 class ContinuousExecutionStopping(Exception):
     """Owned shutdown discards only uncommitted work; it is not a run failure."""
+
+
+class _LiveEdgeMoved(Exception):
+    """Abort a source acknowledgement when an empty live confirmation expires."""
 
 
 def error(code, message):
@@ -186,7 +190,9 @@ class ContinuousBarHost:
         if self.input_control is not None:
             self.input_control()
 
-    def apply_batch(self, events: Iterable[MarketEvent], *, data_revision, revealed_through_ms, coverage_complete, caught_up=False, source_receipt=None, commit_checkpoint=None):
+    def apply_batch(self, events: Iterable[MarketEvent], *, data_revision, revealed_through_ms, coverage_complete,
+                    caught_up=False, source_receipt=None, commit_checkpoint=None,
+                    current_source_boundary: Callable[[], int] | None = None):
         with self.lock:
             self._check_stopping()
             if self.closed or self.store is None or self.row is None:
@@ -255,9 +261,14 @@ class ContinuousBarHost:
                     if not publication_allowed or published or self.closed or threading.get_ident() != owner_thread:
                         raise error("CONTINUOUS_COMMIT_CONFLICT","Checkpoint publication must be synchronous and owned exactly once")
                     self._check_stopping()
+                    # The bounded batch is still valid, but an advancing market
+                    # can move the live edge during provider execution/encoding.
+                    at_live_edge = caught_up and (current_source_boundary is None or current_source_boundary() == stamp)
+                    if not batch and not at_live_edge:
+                        raise _LiveEdgeMoved()
                     self.row = self.store.commit(self.row["id"], generation=self.row["generation"], revision=self.row["revision"],
                         sequence=sequence, event_time_ms=stamp, data_revision=data_revision, checkpoint=prepared,
-                        phase="LIVE" if caught_up else "CATCHING_UP",confirm_caught_up=not batch)
+                        phase="LIVE" if at_live_edge else "CATCHING_UP",confirm_caught_up=not batch)
                     published = True
                     return self.row
                 # Prepare/encode provider state before taking the source lock.
@@ -270,6 +281,10 @@ class ContinuousBarHost:
                         raise error("CONTINUOUS_INPUT_INVALID","Source commit cannot acknowledge asynchronous work")
                     if not published:
                         raise error("CONTINUOUS_INPUT_INVALID","Source guard did not commit its financial checkpoint")
+                except _LiveEdgeMoved:
+                    # Neither SQLite owns a new checkpoint for an empty
+                    # confirmation that lost its edge under the source fence.
+                    return self.row
                 finally:
                     publication_allowed = False
                 self.source_receipt = point
@@ -287,11 +302,7 @@ class ContinuousBarHost:
                 if isinstance(failure,ContinuousExecutionStopping):
                     pass  # Keep the last committed phase/account for restart.
                 elif isinstance(failure,PrefixAcquisitionChanged):
-                    old = self.source_receipt
-                    frozen = self.definition.get("initial_snapshot") or {}
-                    protected = max(old.through_ms,int(frozen.get("through_ms",old.through_ms))) if old is not None else -1
-                    if (old is not None and protected >= old.from_ms and failure.start_ms is not None and failure.end_ms is not None
-                            and failure.start_ms <= protected and failure.end_ms >= old.from_ms):
+                    if affects_protected_prefix(self.source_receipt, self.definition, failure.start_ms, failure.end_ms):
                         self._stop("REPAIR_REQUIRED","CONTINUOUS_HISTORY_REVISED","Processed input changed; committed result retained")
                     else:
                         self._defer("CONTINUOUS_SOURCE_RECHECK","New input changed during acquisition; retry from committed state")
@@ -301,6 +312,9 @@ class ContinuousBarHost:
                     self._defer("CONTINUOUS_SOURCE_GAP",str(failure))
                 elif not isinstance(failure,BacktestError) or failure.code != "CONTINUOUS_COMMIT_CONFLICT":
                     self._stop("FAILED",getattr(failure,"code","CONTINUOUS_EXECUTION_FAILED"),str(failure)[:1000])
+            except BacktestError as state_error:
+                if state_error.code != "CONTINUOUS_COMMIT_CONFLICT":
+                    logger.exception("Could not record continuing strategy failure; committed recovery point retained")
             except BaseException:
                 logger.exception("Could not record continuing strategy failure; committed recovery point retained")
             self._close_after_failure()
