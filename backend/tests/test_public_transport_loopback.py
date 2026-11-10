@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sqlite3
 from collections import Counter
 from dataclasses import replace
 import time
@@ -305,6 +306,7 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
 
     async def run():
         calls, events, adopted = [], [], []
+        recovery_rows = []
         cooldown = asyncio.Event()
         resets = {}
         repeat_reset_ms = 0
@@ -325,6 +327,8 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
                 repeat_reset_ms = sent_ms + 1_500
                 return web.json_response({"retCode": 10006, "retMsg": "Too many visits!"},
                     headers={"X-Bapi-Limit-Reset-Timestamp": str(repeat_reset_ms)})
+            if two_deferred and start in resets:
+                recovery_rows.append(ledger.list_open())
             rows = [[str(ts), "1", "2", "1", "2", "9", "4"]
                     for ts in reversed(range(opened - step, opened + bar_count * step, step)) if start <= ts <= end]
             return web.json_response({"retCode": 0, "result": {"list": rows[:limit]}})
@@ -480,12 +484,28 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
 
                 call_count = len(calls)
                 assert int(time.time() * 1000) < retry_at
-                early = await coordinator.reconcile_gap_ledger(stale_after_ms=0)
-                assert early.requeued == 0
+                if two_deferred:
+                    # Ordinary desktop scans at startup, then audits stored
+                    # series later. Age only the old process' ownership lease.
+                    stale = retry_at - 901_000
+                    with sqlite3.connect(db_path) as conn:
+                        conn.execute(
+                            "UPDATE kline_gap_ledger SET last_seen_at = ?, last_checked_at = ? WHERE id = ?",
+                            (stale, stale, checkpoint["id"]),
+                        )
+                    early = await coordinator.startup_scan([], (), delay_seconds=0)
+                    assert early.ledger_requeued == 0
+                else:
+                    early = await coordinator.reconcile_gap_ledger(stale_after_ms=0)
+                    assert early.requeued == 0
                 assert len(calls) == call_count
                 await asyncio.sleep(max(0, (retry_at - int(time.time() * 1000)) / 1000) + .025)
-                recovered = await coordinator.reconcile_gap_ledger(stale_after_ms=0)
-                assert recovered.requeued == 1, recovered
+                if two_deferred:
+                    audit = await coordinator.audit_storage_series([("bybit", market_type, symbol, "5m")])
+                    assert audit.queued == 0 and audit.ledger_requeued == 1, audit
+                else:
+                    recovered = await coordinator.reconcile_gap_ledger(stale_after_ms=0)
+                    assert recovered.requeued == 1, recovered
                 outcome = await asyncio.wait_for(
                     coordinator.wait_for_request(f"ledger-reconcile-{checkpoint['id']}"), 5,
                 )
@@ -522,6 +542,12 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
             if two_deferred:
                 for start, reset in resets.items():
                     assert [sent for lower, _, _, sent in calls if lower == start][-1] >= reset - 3
+                assert len(recovery_rows) == 2
+                for (recovering,) in recovery_rows:
+                    assert recovering["repair_ticket"] == f"ledger-reconcile-{checkpoint['id']}"
+                    metadata = json.loads(recovering["metadata_json"])
+                    assert len(metadata[NATIVE_PROGRESS_FIELD]) == 2
+                    assert set(metadata[COMPLETED_NATIVE_CHUNKS_FIELD]) == {"2"}
             else:
                 first_limited = next(i for i, (start, _, _, _) in enumerate(calls) if start == limited_open)
                 assert min(sent for _, _, _, sent in calls[first_limited + 1:]) >= reset_ms - 3

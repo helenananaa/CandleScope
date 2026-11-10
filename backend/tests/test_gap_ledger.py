@@ -81,6 +81,31 @@ def test_bybit_interrupted_chunks_merge_receipts_for_the_same_ticket(tmp_path) -
     assert receipts_by_open() == {}
 
 
+def test_covering_status_prefers_due_bybit_receipt_owner_over_stale_child(tmp_path, monkeypatch) -> None:
+    from app.data_engine.storage import gap_ledger
+
+    now = 1_800_000_000_000
+    monkeypatch.setattr(gap_ledger, "_now_ms", lambda: now)
+    ledger = GapLedger(tmp_path / "klines.sqlite")
+    parent = replace(_request(), exchange="bybit", market_type="swap.inverse",
+                     metadata={"acquisition_revision": 0})
+    child = replace(parent, start_ms=60_000, request_id="child", metadata={})
+    ledger.upsert_detected(parent)
+    ledger.mark_retry_wait(parent, attempt=1, error="cooldown", next_retry_at=now + 500,
+                           native_progress=[{"start_ms": 0, "end_ms": 0, "digest": "a" * 64, "written": []}])
+    ledger.upsert_detected(child)
+    now += 901_000
+    lookup = dict(exchange=parent.exchange, market_type=parent.market_type, symbol=parent.symbol,
+                  interval=parent.interval, start_ms=child.start_ms, end_ms=child.end_ms)
+    covering = ledger.get_covering_status(**lookup)
+    assert covering["repair_ticket"] == parent.request_id
+    assert covering["has_native_receipts"] == 1
+    assert ledger.finalize_parent(parent, status="filled")
+    covering = ledger.get_covering_status(**lookup)
+    assert covering["repair_ticket"] == child.request_id
+    assert covering["has_native_receipts"] == 0
+
+
 def test_gap_ledger_preserves_missing_count_when_resolution_count_unknown(tmp_path) -> None:
     ledger = GapLedger(tmp_path / "klines.sqlite")
     request = _request()

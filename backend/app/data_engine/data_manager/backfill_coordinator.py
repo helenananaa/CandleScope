@@ -3446,6 +3446,11 @@ class BackfillCoordinator:
             "partial",
             "retry_wait",
         }:
+            # Reconciliation at the end of the audit owns this range even
+            # after the lease and cooldown expire. A fresh narrow audit job
+            # would discard the wider parent's durable progress.
+            if status.get("has_native_receipts"):
+                return True
             if retry_is_future:
                 return True
             last_activity = next(
