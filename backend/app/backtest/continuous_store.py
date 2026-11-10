@@ -18,7 +18,7 @@ from collections.abc import Mapping
 from app.core.committed_updates import committed_updates_for
 from .errors import BacktestError
 
-SCHEMA = 4
+SCHEMA = 5
 PHASES = {"CATCHING_UP", "LIVE", "PAUSED", "REPAIR_REQUIRED", "FAILED", "CANCELLED"}
 MAX_DEFINITION_BYTES = 1024 * 1024
 MAX_CHECKPOINT_BYTES = 64 * 1024 * 1024
@@ -121,7 +121,7 @@ class ContinuousStrategyStore:
             self.db.execute("PRAGMA synchronous=FULL")
             with self._transaction():
                 version = self.db.execute("PRAGMA user_version").fetchone()[0]
-                if version not in (0, 1, 2, 3, SCHEMA):
+                if version not in (0, 1, 2, 3, 4, SCHEMA):
                     raise fail("CONTINUOUS_SCHEMA_UNSUPPORTED", "Continuous strategy schema is unsupported")
                 if version == 0:
                     if self.db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchone():
@@ -142,7 +142,10 @@ class ContinuousStrategyStore:
                 if version < 3:create_results_schema(self.db)
                 from .continuous_epochs import create_schema as create_epoch_schema, ContinuousEpochs
                 if version < 4:create_epoch_schema(self.db)
+                from .continuous_auto_repair import create_schema as create_auto_schema, AutoRepairPolicy
+                if version < 5:create_auto_schema(self.db)
                 self.db.execute(f"PRAGMA user_version={SCHEMA}")
+            self.auto_repair = AutoRepairPolicy(self)
             self.creations = ContinuousCreationJournal(self)
             self.epochs = ContinuousEpochs(self)
             self.results = ContinuousResults(self)
@@ -380,6 +383,9 @@ class ContinuousStrategyStore:
             self.db.execute("UPDATE runs SET revision=revision+1,phase=?,error_json=?,updated_at_ms=? WHERE id=?",
                             (phase, error_json, int(time.time()*1000), run_id))
         self.updates.notify(run_id)
+        if phase == "REPAIR_REQUIRED":
+            from .continuous_auto_repair import WAKE
+            self.updates.notify(WAKE)
         return self.summary(run_id)
 
     def _insert_checkpoint(self, run_id, revision, generation, sequence, event_time_ms, data_revision, state):
