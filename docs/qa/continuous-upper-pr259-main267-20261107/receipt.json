@@ -1,0 +1,64 @@
+{
+  "source": "f789b3552e2f2e968ee0de20687e5e4cbc1f179a",
+  "parent": "e89319b17eb80534cf53e5cc4ea770e2705cf3fa",
+  "main": "b442555d582dc0bb473bad92ac5e699efdaa78d5",
+  "command": [
+    "/Users/ryanliang/.codex/worktrees/issue-152-output-range-20261102/CandleScope/output/issue-152-output-range-20261102/main226-native-test-env/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "backend/tests/test_continuous_api.py",
+    "backend/tests/test_continuous_bar_host.py",
+    "backend/tests/test_continuous_bar_source.py",
+    "backend/tests/test_continuous_controller.py",
+    "backend/tests/test_continuous_creation_journal.py",
+    "backend/tests/test_continuous_definition.py",
+    "backend/tests/test_continuous_epochs.py",
+    "backend/tests/test_continuous_guarded_source.py",
+    "backend/tests/test_continuous_manager_lifecycle.py",
+    "backend/tests/test_continuous_provider.py",
+    "backend/tests/test_continuous_repair_api.py",
+    "backend/tests/test_continuous_repairs.py",
+    "backend/tests/test_continuous_results.py",
+    "backend/tests/test_continuous_source_identity.py",
+    "backend/tests/test_continuous_strategy_access.py",
+    "backend/tests/test_continuous_strategy_runtime.py",
+    "backend/tests/test_continuous_strategy_shutdown.py",
+    "backend/tests/test_continuous_strategy_store.py",
+    "--basetemp=/private/tmp/candlescope-upper.2lCCMq/output/continuous-upper/259/pytest",
+    "-q",
+    "-rs",
+    "backend/tests/test_replay_catalog_shutdown.py",
+    "backend/tests/test_kline_order_flow_metrics.py",
+    "backend/tests/test_replay_trade_bar_parity.py"
+  ],
+  "env": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPATH": "packages/candlescope-plugin-sdk/src:packages/candlescope-backtest-sdk/src:backend",
+    "DATA_DIR": "/private/tmp/candlescope-upper.2lCCMq/output/continuous-upper/259/data",
+    "CANDLE_DATA_DIR": "/private/tmp/candlescope-upper.2lCCMq/output/continuous-upper/259/data",
+    "NATIVE_TEST_PINE_PYTHON": "/Users/ryanliang/CandleScope/output/development-goal-20261104/continuous-stack-main266-20261106/pine/python"
+  },
+  "backendPassed": 300,
+  "architecturePassed": true,
+  "artifacts": {
+    "architecture.log.gz": {
+      "sha256": "2821c011ea1599274782b3a127db697454da970e1da989c56c4d812037393b16",
+      "originalSha256": "547c159b06d361e5d8e8f90f1388f08bb96897d557771347b9f19aee67e444fc"
+    },
+    "backend.log.gz": {
+      "sha256": "257ed4b911f93fccc4178db88621b4d8a31cd610e104a1816216736aec448b31",
+      "originalSha256": "4414e3f00519b5a6ff03685a156188aadb3eb2d045835fd732363fef36251db4"
+    },
+    "frontend.log.gz": {
+      "sha256": "644d2a4a52ca27e76bb43e4630a92f0321968f7f291a2e120d1e70127dc9ba3b",
+      "originalSha256": "64af605fce7313cb4e1aafe5867ed16845f775c843f94194555325237c5b011c"
+    }
+  },
+  "frontendPassed": 2,
+  "frontendCommand": [
+    "node",
+    "scripts/run-frontend-tests.mjs",
+    "src/features/backtest/continuous/ContinuousAccountView.test.tsx"
+  ]
+}

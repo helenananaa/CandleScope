@@ -5,7 +5,7 @@ import { normalizeNativeStrategies } from "../backtest/native/nativeStrategyColl
 import { getStrategyStorage } from "../../shared/strategyStorage.js";
 import { canonicalizeIntervalValue } from "../../utils/intervals.js";
 import { t } from "../../i18n/index.js";
-import { validExecutionOverrides } from "../../shared/strategyRunSettings.js";
+import { validExecutionOverrides, validStrategyInitialization } from "../../shared/strategyRunSettings.js";
 import type { ExchangeId, MarketType, SymbolCode } from "../../utils/symbolKey.js";
 import { loadInitialChartSession } from "../chart-session/chartSessionModel.js";
 import type { ChartSession } from "../chart-session/chartSessionTypes.js";
@@ -182,6 +182,7 @@ function normalizeLinkGroupSettings(value: unknown): ChartLinkGroupSettings {
     quickReplayMode: source.quickReplayMode === true,
     quickReplayCursor: source.quickReplayCursor === true,
     drawings: typeof source.drawings === "boolean" ? source.drawings : DEFAULT_CHART_LINK_GROUP_SETTINGS.drawings,
+    drawingVisibility: source.drawingVisibility === true,
     indicators: {
       definitions: typeof indicatorSource.definitions === "boolean"
         ? indicatorSource.definitions
@@ -224,6 +225,7 @@ function defaultCell(
     id,
     linkGroupId: DEFAULT_CHART_LINK_GROUP_ID,
     drawingLayerSet: "1",
+    drawingsHidden: false,
     session: { ...baseSession, interval: index === 0 ? baseSession.interval : interval },
     chartSettings: { ...chartSettings },
     accountOverlay: normalizeChartAccountOverlay(),
@@ -306,6 +308,7 @@ function normalizeAttachment(
     ? value.quickPresetId.trim()
     : "";
   const valid = strategyDraftId !== undefined
+    && (value.initialization === undefined || validStrategyInitialization(value.initialization))
     && (value.executionOverrides === undefined || validExecutionOverrides(value.executionOverrides))
     && strategyRevisionId !== undefined
     && displayName.length > 0
@@ -335,6 +338,7 @@ function normalizeAttachment(
     quickPresetId,
     autoRun: value.autoRun as boolean,
     ...(validExecutionOverrides(value.executionOverrides) ? { executionOverrides: { ...value.executionOverrides } } : {}),
+    ...(validStrategyInitialization(value.initialization) ? { initialization: { ...value.initialization } } : {}),
   };
 }
 
@@ -458,6 +462,7 @@ function normalizeCellState(
     ...(quickReplay ? { quickReplay } : {}),
     linkGroupId: requestedLinkGroupId,
     drawingLayerSet: normalizeDrawingLayerSet(source.drawingLayerSet),
+    drawingsHidden: source.drawingsHidden === true,
     session: normalizeSession(source.session, fallback.session),
     chartSettings: normalizeCellChartSettings(source.chartSettings),
     accountOverlay: normalizeChartAccountOverlay(source.accountOverlay),

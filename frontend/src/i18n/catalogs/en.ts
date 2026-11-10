@@ -1,4 +1,5 @@
 import { replayNoteEnglish } from "./replayNoteMessages.js";
+import { continuousEnglish } from "./continuousMessages.js";
 import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { workbenchEnglish } from "./workbenchEnglish.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
@@ -9,6 +10,7 @@ import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const en = {
+  ...continuousEnglish,
   ...replayNoteEnglish,
   ...historyStudyEnglish,
   "chartTime.title": "Go to date",
@@ -1087,6 +1089,8 @@ export const en = {
   "settings.appearance.cellThemeDescription": "Set this chart’s theme. Other charts change only when chart style linking is enabled.",
   "workspace.link.drawings": "Drawings",
   "workspace.link.drawingsDesc": "Share the drawing document for the same market and layer set",
+  "workspace.link.drawingVisibility": "Drawing visibility",
+  "workspace.link.drawingVisibilityDesc": "Sync whether drawings are shown in each chart.",
   "workspace.link.definitions": "Indicator list",
   "workspace.link.definitionsDesc": "Sync add, remove, and indicator type",
   "workspace.link.parameters": "Indicator params",

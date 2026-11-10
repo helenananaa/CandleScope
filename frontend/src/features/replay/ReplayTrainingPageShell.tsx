@@ -121,6 +121,8 @@ export interface ReplayTrainingPageShellProps {
     readonly links: ChartLinkCoordinator;
     readonly scope: string;
     readonly drawingScope: string;
+    readonly drawingsHidden: boolean;
+    readonly onDrawingsHiddenChange: (hidden: boolean) => void;
     readonly active: boolean;
     readonly priceScale: { readonly invertScale: boolean; readonly priceScaleMode: number };
     readonly onPriceScaleChange: (value: { invertScale: boolean; priceScaleMode: number }) => void;
@@ -201,7 +203,11 @@ export default function ReplayTrainingPageShell({
   });
   const { settings, setSettings, resolvedTheme } = chartSettingsRuntime;
   const [chartSettingsOpen, setChartSettingsOpen] = useState(false);
-  const drawings = useDrawingRuntime({ chartSurfaceActions, session: null });
+  const drawings = useDrawingRuntime({
+    chartSurfaceActions,
+    session: null,
+    ...(cell ? { visibility: { hidden: cell.drawingsHidden, setHidden: cell.onDrawingsHiddenChange } } : {}),
+  });
   const activeIntervalViewportTransfer = intervalViewportTransfer !== null
     && intervalsSemanticallyEquivalent(
       viewer.viewerState?.display_interval
@@ -1019,6 +1025,7 @@ export default function ReplayTrainingPageShell({
       seriesStore={displayedSeriesStore}
       symbol={displayedSymbol}
       drawingKeyBase={drawingScopeBase}
+      {...(cell ? { drawingsHidden: cell.drawingsHidden } : {})}
       drawingReadOnly={review !== null}
       drawingDocumentGeneration={review === null ? 0 : reviewDrawingGeneration}
       paneLayoutScope={cell?.scope ?? null}

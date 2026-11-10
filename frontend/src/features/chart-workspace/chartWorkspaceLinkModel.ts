@@ -23,6 +23,7 @@ export type ChartLinkChannel =
   | "timeAnchor"
   | "dateRange"
   | "drawings"
+  | "drawingVisibility"
   | "chartStyle"
   | "accountSource"
   | "tradingOverlays"
@@ -67,6 +68,7 @@ export function combineChartLinkSettings(
     timeAnchor: left.timeAnchor && right.timeAnchor,
     dateRange: left.dateRange && right.dateRange,
     drawings: left.drawings && right.drawings,
+    drawingVisibility: left.drawingVisibility === true && right.drawingVisibility === true,
     chartStyle: left.chartStyle === true && right.chartStyle === true,
     accountSource: left.accountSource === true && right.accountSource === true,
     tradingOverlays: left.tradingOverlays === true && right.tradingOverlays === true,
@@ -282,6 +284,19 @@ export function applyLinkedChartSettingsUpdate(
     const chartSettings = { ...cell.chartSettings, ...patch };
     for (const key of CELL_CHART_APPEARANCE_KEYS) if (chartSettings[key] === undefined) delete chartSettings[key];
     cells[target.cellId] = { ...cell, chartSettings };
+  }
+  return { ...document, cells };
+}
+
+export function applyLinkedDrawingVisibility(
+  document: ChartWorkspaceDocument, sourceCellId: ChartCellId, hidden: boolean,
+): ChartWorkspaceDocument {
+  const source = document.cells[sourceCellId];
+  if (!source || (source.drawingsHidden === true) === hidden) return document;
+  const cells = { ...document.cells, [sourceCellId]: { ...source, drawingsHidden: hidden } };
+  for (const { cellId } of resolveChartLinkTargetsForChannel(document, sourceCellId, "drawingVisibility")) {
+    const target = cells[cellId]!;
+    if ((target.drawingsHidden === true) !== hidden) cells[cellId] = { ...target, drawingsHidden: hidden };
   }
   return { ...document, cells };
 }

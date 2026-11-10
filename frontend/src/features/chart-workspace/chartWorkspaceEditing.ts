@@ -111,6 +111,7 @@ function blankCell(
     strategyTesterMode: "NATIVE",
     nativeStrategies: { activeId: "default", items: [{ id: "default", name: "", language: "pine", drafts: {}, runs: {} }] },
     drawingLayerSet: blankDrawingLayer(source, existing),
+    drawingsHidden: false,
     chartSettings: blankChartSettings(),
     accountOverlay: normalizeChartAccountOverlay(),
   };

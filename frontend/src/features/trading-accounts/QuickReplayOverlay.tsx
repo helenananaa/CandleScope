@@ -435,6 +435,7 @@ export default function QuickReplayOverlay({
           <ChartErrorBoundary>
             <SingleChartPanes
               ref={chartSurface.ref}
+              drawingsEnabled={false}
               seriesStore={store}
               symbol={trade.symbol}
               interval={request.interval}

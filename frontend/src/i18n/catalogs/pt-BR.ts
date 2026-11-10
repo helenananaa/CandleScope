@@ -1,3 +1,4 @@
+import { continuousPortuguese } from "./continuousMessages.js";
 import { replayNoteBrazilian } from "./replayNoteMessages.js";
 import { historyStudyBrazilian } from "./historyStudyMessages.js";
 import { workbenchEnglish } from "./workbenchEnglish.js";
@@ -7,6 +8,7 @@ import { tradingAccountsPtBR } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
+  ...continuousPortuguese,
   ...replayNoteBrazilian,
   ...historyStudyBrazilian,
   "chartTime.title": "Ir para data",
@@ -1325,6 +1327,8 @@ export const ptBR = {
   "settings.appearance.cellThemeDescription": "Defina o tema deste gráfico. Os demais só mudam quando a vinculação de estilos está ativada.",
   "workspace.link.drawings": "Desenhos",
   "workspace.link.drawingsDesc": "Compartilhar o documento de desenho do mesmo mercado e conjunto de camadas",
+  "workspace.link.drawingVisibility": "Visibilidade dos desenhos",
+  "workspace.link.drawingVisibilityDesc": "Sincroniza a exibição dos desenhos em cada gráfico.",
   "workspace.link.definitions": "Lista de indicadores",
   "workspace.link.definitionsDesc": "Sincronizar adição, remoção e tipo de indicador",
   "workspace.link.parameters": "Parâmetros do indicador",

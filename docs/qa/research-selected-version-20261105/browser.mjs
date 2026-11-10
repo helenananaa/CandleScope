@@ -1,0 +1,101 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { createRequire } from 'node:module';
+import { execFileSync } from 'node:child_process';
+const out = process.env.RESEARCH_RETURN_QA_OUT;
+assert.ok(out && !fs.existsSync(out), 'Use a fresh evidence directory'); fs.mkdirSync(out, { recursive: true });
+const { chromium } = createRequire(process.env.CANDLESCOPE_PLAYWRIGHT_PACKAGE)('playwright-core');
+const browser = await chromium.launch({ channel: 'chrome', headless: true });
+const context = await browser.newContext({ viewport: { width: 1440, height: 1100 } }), page = await context.newPage();
+const receipt = { scope: 'Production selected-version API, editor subprocess, Host account, chart workspace runtime, draft store, return controls, continuous panel, DataManager and HTTP/WS; deterministic SQLite BAR inputs and fixture stream leases. Not a packaged/native or public-market qualification.', steps: [], errors: [], creates: [] };
+const url = 'http://127.0.0.1:23183/tests/fixtures/research-return/entry.html';
+page.on('pageerror', e => receipt.errors.push(String(e.stack || e)));
+page.on('request', r => { if (r.method() === 'POST' && new URL(r.url()).pathname === '/api/v1/backtests/continuous/runs') receipt.creates.push({ body: r.postDataJSON(), key: r.headers()['idempotency-key'] }); });
+const inspect = () => page.evaluate(async () => { const q = window.researchReturnQA; return { selected: q.selected, workspace: q.workspace, status: q.status, original: await q.original(), draft: await q.draft() }; });
+async function audit() { const r = await fetch('http://127.0.0.1:23184/api/v1/qa/audit'); assert.equal(r.status, 200); return r.json(); }
+async function waitAudit(predicate) {
+  const deadline = Date.now() + 30000;
+  while (true) { const value = await audit(); if (predicate(value)) return value;
+    assert.ok(Date.now() < deadline, 'Committed backend condition did not arrive: ' + JSON.stringify(value));
+    await new Promise(resolve => setTimeout(resolve, 200)); }
+}
+try {
+  const existing = await audit(); receipt.existing = existing;
+  const existingIds = new Set(existing.runs.map(r => r.stored.run.id));
+  const currentRun = a => a.runs.find(r => !existingIds.has(r.stored.run.id));
+  await page.goto(url); await page.waitForFunction(() => window.researchReturnQA?.workspace.ready);
+  const before = await inspect(); receipt.before = before;
+  await page.getByRole('button', { name: '将当前选定版本挂回图表', exact: true }).click();
+  await page.waitForURL(u => u.pathname === '/' && u.searchParams.has('research-version'));
+  const pointer = new URL(page.url()).searchParams.get('research-version');
+  // The normal production route is asserted above. Continue in a composition
+  // fixture to isolate this flow from unrelated public chart transports.
+  await page.goto(url + '?research-version=' + encodeURIComponent(pointer));
+  await page.getByRole('dialog').waitFor();
+  await page.getByLabel('目标图表', { exact: true }).selectOption('cell-2');
+  await page.screenshot({ path: out + '/01-explicit-target.png', fullPage: true });
+  assert.equal(receipt.creates.length, 0);
+  await page.getByRole('button', { name: '创建独立图表草稿', exact: true }).click();
+  await page.getByRole('dialog').waitFor({ state: 'hidden' });
+  await page.locator('[data-chart-strategy-panel] .monaco-editor').waitFor();
+  const applied = await inspect(), selected = applied.selected.selected;
+  const target = applied.workspace.document.cells['cell-2'];
+  assert.equal(applied.workspace.activeCellId, 'cell-2');
+  assert.equal(target.session.symbol, 'BTCUSDT'); assert.equal(target.linkGroupId, null);
+  assert.notEqual(target.strategyAttachment.strategyDraftId, before.original.record.id);
+  assert.equal(applied.draft.record.source, applied.selected.source);
+  assert.equal(applied.original.record.source, before.original.record.source);
+  assert.deepEqual(target.strategyAttachment.parameters, selected.configuration.parameters);
+  assert.equal(target.strategyAttachment.autoRun, false);
+  assert.equal(target.strategyAttachment.initialization.runId, applied.selected.run_id);
+  assert.deepEqual(applied.workspace.document.cells['cell-1'], before.workspace.document.cells['cell-1']);
+  assert.equal(receipt.creates.length, 0); receipt.steps.push('Exact old selected code and parameters applied only to chosen independent chart draft; no execution or account transfer.');
+  await page.getByLabel('运行模式', { exact: true }).selectOption('HISTORY_LIVE');
+  const panel = page.locator('[data-continuous-strategy]'); await panel.waitFor();
+  assert.equal(await panel.getByLabel('初始余额', { exact: true }).inputValue(), '5000');
+  assert.equal(await panel.getByLabel('每次下单权益比例（%）', { exact: true }).inputValue(), '20');
+  assert.equal(await panel.getByLabel('成交费率（挂单/吃单，bps）', { exact: true }).inputValue(), '3.5');
+  assert.equal(await panel.getByLabel('策略输出', { exact: true }).inputValue(), 'TARGET_POSITION');
+  const start = panel.getByRole('button', { name: '初始化新运行', exact: true });
+  assert.equal(await page.getByTestId('strategy-python-confirm').isChecked(), false); assert.equal(await start.isDisabled(), true);
+  await page.getByTestId('strategy-python-confirm').check(); await start.waitFor();
+  await page.waitForFunction(() => [...document.querySelectorAll('button')].some(b => b.textContent === '初始化新运行' && !b.disabled));
+  await start.click();
+  const initial = await waitAudit(a => currentRun(a)?.stored.run.sequence === 20 && currentRun(a)?.stored.run.phase === 'LIVE'); receipt.initial = initial;
+  assert.equal(receipt.creates.length, 1);
+  const create = receipt.creates[0].body;
+  assert.equal(create.provider.source_text, selected.program.source_text);
+  assert.deepEqual(create.provider.parameters, selected.configuration.parameters);
+  assert.equal(create.execution.initial_balance, '5000'); assert.equal(create.execution.equity_percent, '20');
+  assert.equal(create.execution.taker_fee_bps, '3.5'); assert.equal(create.execution.maker_fee_bps, '3.5');
+  assert.equal(create.execution.execution_model_revision, 'EXECUTION_REALISM_V2');
+  assert.equal(create.from_ms, selected.configuration.start_time_ms); assert.equal(create.warmup_bars, 0);
+  assert.equal('checkpoint' in create, false); assert.equal('account' in create, false); assert.equal('strategy_revision_id' in create, false);
+  assert.equal(initial.research_unchanged, true); const id = currentRun(initial).stored.run.id;
+  assert.notEqual(id, applied.selected.run_id);
+  await page.waitForFunction(id => document.querySelector(`[data-continuous-account="${id}"] .continuous-account > div:nth-child(3) dd`)?.textContent === '20', id);
+  receipt.steps.push('Explicit fresh Python permission and initialize action create a new backend-owned run with original settings through the existing Host.');
+  await fetch('http://127.0.0.1:23184/api/v1/qa/advance', { method: 'POST' });
+  await waitAudit(a => currentRun(a)?.stored.run.sequence === 25);
+  await page.waitForFunction(id => document.querySelector(`[data-continuous-account="${id}"] .continuous-account > div:nth-child(3) dd`)?.textContent === '25', id);
+  await page.waitForFunction(() => window.researchReturnQA.status.saveState === 'saved');
+  await page.locator(`[data-continuous-account="${id}"] .continuous-account`).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: out + '/02-new-continuous-account.png', fullPage: true });
+  const continued = await audit(); receipt.continued = continued;
+  assert.equal(continued.research_unchanged, true); assert.equal(currentRun(continued).stored.run.id, id);
+  const account = currentRun(continued).stored.checkpoint.engine.account;
+  const equity = execFileSync('python3', ['-c', 'import json,sys;from decimal import Decimal as D;a=json.load(sys.stdin);print(D(a["quote_balance"])+D(a["position_qty"])*D(a["mark"]))'], { input: JSON.stringify(account), encoding: 'utf8' }).trim();
+  const rendered = await page.locator(`[data-continuous-account="${id}"] .continuous-account dd`).allTextContents();
+  assert.deepEqual(rendered, [equity, account.position_qty, '25']); receipt.renderedAccount = rendered;
+  for (const old of existing.runs) assert.deepEqual(continued.runs.find(r => r.stored.run.id === old.stored.run.id).description.definition, old.description.definition);
+  receipt.steps.push('New owned account continues from 20 to 25 committed BAR events; completed research run remains byte-for-byte unchanged.');
+  await page.reload(); await page.locator('[data-continuous-strategy]').waitFor();
+  await waitAudit(a => currentRun(a)?.stored.run.id === id && currentRun(a)?.stored.run.sequence === 25);
+  await page.waitForFunction(id => document.querySelector(`[data-continuous-account="${id}"] .continuous-account > div:nth-child(3) dd`)?.textContent === '25', id);
+  await page.locator(`[data-continuous-account="${id}"] .continuous-account`).scrollIntoViewIfNeeded();
+  assert.equal(await page.getByTestId('strategy-python-confirm').isChecked(), false);
+  assert.equal(receipt.creates.length, 1); receipt.steps.push('Renderer reload retains the independent draft and existing new-run reference, with permissions unconfirmed and no duplicate creation.');
+  await page.screenshot({ path: out + '/03-renderer-restored.png', fullPage: true });
+  assert.deepEqual(receipt.errors, []); receipt.passed = true;
+} catch (e) { receipt.failure = String(e.stack || e); process.exitCode = 1; await page.screenshot({ path: out + '/failure.png', fullPage: true }).catch(() => {}); }
+finally { await browser.close(); fs.writeFileSync(out + '/receipt.json', JSON.stringify(receipt, null, 2) + '\n'); console.log(JSON.stringify({ passed: receipt.passed ?? false, steps: receipt.steps.length, failure: receipt.failure })); }

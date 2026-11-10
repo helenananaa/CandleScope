@@ -63,6 +63,7 @@ function createRuntime(): ChartWorkspaceRuntime {
       updateLinkGroup: () => undefined,
       deleteLinkGroup: () => undefined,
       setCellDrawingLayerSet: () => undefined,
+      setCellDrawingsHidden: () => undefined,
       updateLinkGroupPolicy: () => undefined,
       setLayoutRatio: () => undefined,
       updateCellSession: () => undefined,

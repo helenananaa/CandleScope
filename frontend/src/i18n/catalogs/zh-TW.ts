@@ -1,3 +1,4 @@
+import { continuousEnglish } from "./continuousMessages.js";
 import { replayNoteTraditional } from "./replayNoteMessages.js";
 import { historyStudyTraditional } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
@@ -7,6 +8,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const zhTW = {
+  ...continuousEnglish,
   ...replayNoteTraditional,
   ...historyStudyTraditional,
   "chartTime.title": "跳轉到日期",
@@ -819,6 +821,8 @@ export const zhTW = {
   "settings.appearance.cellThemeDescription": "設定目前圖表的主題；僅在啟用圖表樣式連動時同步其他圖表。",
   "workspace.link.drawings": "繪圖",
   "workspace.link.drawingsDesc": "同市場、同圖層集共用繪圖文件",
+  "workspace.link.drawingVisibility": "繪圖可見性",
+  "workspace.link.drawingVisibilityDesc": "同步各圖表的繪圖顯示開關。",
   "workspace.link.definitions": "指標列表",
   "workspace.link.definitionsDesc": "同步新增、刪除與指標型別",
   "workspace.link.parameters": "指標引數",
