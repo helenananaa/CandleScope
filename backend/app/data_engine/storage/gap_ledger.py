@@ -25,6 +25,11 @@ _MAX_FAILED_RETRY_MS = 24 * 60 * 60 * 1000
 _MAX_REASON_PARTS = 8
 _MAX_REASON_LENGTH = 256
 _MAX_ERROR_LENGTH = 2_000
+NATIVE_PROGRESS_FIELD = "native_backfill_receipts"
+_REMOVE_NATIVE_PROGRESS = (
+    "metadata_json = CASE WHEN json_valid(metadata_json) "
+    f"THEN json_remove(metadata_json, '$.{NATIVE_PROGRESS_FIELD}') ELSE metadata_json END"
+)
 
 
 _LEGACY_TABLE = "kline_gap_ledger"
@@ -229,6 +234,9 @@ class GapLedger:
         for request in requests:
             start_ms, end_ms = _request_range(request)
             metadata = dict(request.metadata or {})
+            progress = getattr(request, "_native_progress", None)
+            if progress is not None:
+                metadata[NATIVE_PROGRESS_FIELD] = progress.to_ledger()
             scope = _request_scope(request)
             grouped.setdefault(scope, []).append({
                 "exchange": request.exchange,
@@ -258,7 +266,8 @@ class GapLedger:
                         last_error = 'superseded_by_merged_request',
                         last_checked_at = :now,
                         resolved_at = :now,
-                        next_retry_at = NULL
+                        next_retry_at = NULL,
+                        {_REMOVE_NATIVE_PROGRESS}
                     WHERE repair_ticket = :ticket
                       AND {scope_column} = :scope
                       AND NOT (
@@ -312,10 +321,12 @@ class GapLedger:
         attempt: int,
         error: str | None,
         next_retry_at: int,
+        native_progress: list[dict] | None = None,
     ) -> None:
         self._update(
             request,
             require_repair_ticket=True,
+            native_progress=native_progress,
             status="retry_wait",
             attempts=attempt,
             last_error=_bounded_error(error),
@@ -380,7 +391,7 @@ class GapLedger:
             missing_count = 0
         if missing_count is not None:
             values["missing_count"] = max(0, int(missing_count))
-        self._update(request, **values)
+        self._update(request, native_progress=[] if status in {"filled", "source_empty"} else None, **values)
         if status == "source_empty":
             self._supersede_contained_source_empty(request)
 
@@ -463,6 +474,9 @@ class GapLedger:
 
         scope = _request_scope(request)
         table, scope_column = _partition(scope)
+        clear_receipts = (
+            f", {_REMOVE_NATIVE_PROGRESS}" if normalized_status in {"filled", "source_empty"} else ""
+        )
         with _connect(self._db_path) as conn:
             cursor = conn.execute(
                 f"""
@@ -473,7 +487,7 @@ class GapLedger:
                     last_error = ?,
                     last_checked_at = ?,
                     resolved_at = ?,
-                    next_retry_at = ?
+                    next_retry_at = ?{clear_receipts}
                 WHERE exchange = ?
                   AND market_type = ?
                   AND symbol = ?
@@ -567,7 +581,8 @@ class GapLedger:
                             last_error = NULL,
                             last_checked_at = ?,
                             resolved_at = ?,
-                            next_retry_at = NULL
+                            next_retry_at = NULL,
+                            {_REMOVE_NATIVE_PROGRESS}
                         WHERE id IN ({placeholders})
                         """,
                         (now, now, *victim_ids),
@@ -636,6 +651,7 @@ class GapLedger:
                 expected_repair_ticket = row_snapshot.get("repair_ticket")
                 metadata = _metadata_object(expected_metadata_json)
                 metadata.pop("reconciliation_checkpoint", None)
+                metadata.pop(NATIVE_PROGRESS_FIELD, None)
                 cursor = conn.execute(
                     f"""
                     UPDATE {table}
@@ -686,7 +702,8 @@ class GapLedger:
                         last_error = NULL,
                         last_checked_at = ?,
                         resolved_at = ?,
-                        next_retry_at = NULL
+                        next_retry_at = NULL,
+                        {_REMOVE_NATIVE_PROGRESS}
                     WHERE exchange = ?
                       AND market_type = ?
                       AND symbol = ?
@@ -1341,6 +1358,7 @@ class GapLedger:
         request: Any,
         *,
         require_repair_ticket: bool = False,
+        native_progress: list[dict] | None = None,
         **values: Any,
     ) -> None:
         if not values:
@@ -1350,6 +1368,12 @@ class GapLedger:
         for key, value in values.items():
             assignments.append(f"{key} = ?")
             params.append(value)
+        if native_progress is not None:
+            assignments.append(
+                "metadata_json = CASE WHEN json_valid(metadata_json) "
+                "THEN json_patch(metadata_json, ?) ELSE metadata_json END"
+            )
+            params.append(json.dumps({NATIVE_PROGRESS_FIELD: native_progress or None}, sort_keys=True))
         start_ms, end_ms = _request_range(request)
         scope = _request_scope(request)
         params.extend([

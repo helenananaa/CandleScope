@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections import Counter
 import time
 from urllib.parse import urlsplit
@@ -261,17 +262,23 @@ def test_bybit_backfill_uses_bounded_reverse_pages(monkeypatch, tmp_path, batch_
     asyncio.run(run())
 
 
-@pytest.mark.parametrize("amend_while_deferred", [False, True])
-def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(monkeypatch, tmp_path, amend_while_deferred):
+@pytest.mark.parametrize(("amend_while_deferred", "restart"), [
+    (False, False), (True, False), (False, True), (True, True),
+])
+def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
+    monkeypatch, tmp_path, amend_while_deferred, restart,
+):
     from app.data_engine.backfill import BackfillConfig, BackfillEngine
     from app.data_engine.data_manager.backfill_contracts import RepairRequest
     from app.data_engine.data_manager.backfill_coordinator import BackfillCoordinator
     from app.data_engine.storage import klines_repo
+    from app.data_engine.storage.gap_ledger import GapLedger, NATIVE_PROGRESS_FIELD
 
     opened, step = 1_794_138_000_000, 300_000
     symbol, market_type = "BTC/USD:BTC", "swap.inverse"
     identity = dict(exchange="bybit", market_type=market_type)
-    monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", tmp_path / "sibling-cooldown.sqlite")
+    db_path = tmp_path / "sibling-cooldown.sqlite"
+    monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", db_path)
     klines_repo.init_klines_storage()
 
     async def run():
@@ -313,9 +320,6 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(monkeyp
         monkeypatch.setattr(generic, "_create_exchange", routed)
         config = IngestionConfig(proxy_mode="none")
         storage = klines_repo.KlinesRepoAdapter()
-        transport = TransportLayer(config)
-        engine = BackfillEngine(BackfillConfig(history_archive_enabled=False, fetch_batch_size=2),
-                                klines_repo.AsyncKlinesRepoAdapter(), transport, ingestion_config=config)
 
         async def emit(event):
             events.append(event)
@@ -323,13 +327,26 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(monkeyp
         async def bars_backfilled(_symbol, _interval, bars, **_kwargs):
             adopted.extend(bar.time_ms for bar in bars)
 
-        coordinator = BackfillCoordinator(storage=storage, bars_backfilled=bars_backfilled,
-            emit_event=emit, engine=engine, loop=asyncio.get_running_loop(), max_concurrency=1)
-        async def repair():
-            return await coordinator.request_and_wait(RepairRequest(
+        def make_runtime():
+            transport = TransportLayer(config)
+            engine = BackfillEngine(BackfillConfig(history_archive_enabled=False, fetch_batch_size=2),
+                                    klines_repo.AsyncKlinesRepoAdapter(), transport, ingestion_config=config)
+            ledger = GapLedger(db_path)
+            coordinator = BackfillCoordinator(storage=storage, bars_backfilled=bars_backfilled,
+                emit_event=emit, engine=engine, gap_ledger=ledger,
+                loop=asyncio.get_running_loop(), max_concurrency=1)
+            return transport, engine, ledger, coordinator
+
+        def make_request():
+            return RepairRequest(
                 symbol, "5m", opened, opened + 4 * step, **identity,
                 reason="tail_gap", requester="ingestion_gap", metadata={"requires_trusted_finality": True},
-            ))
+            )
+
+        transport, engine, ledger, coordinator = make_runtime()
+
+        async def repair():
+            return await coordinator.request_and_wait(make_request())
 
         demand = asyncio.create_task(repair())
         joined = None
@@ -345,13 +362,45 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(monkeyp
                 [opened, opened + step],
                 [opened, opened + step, opened + 4 * step],
             )
+            async with asyncio.timeout(1):
+                while True:
+                    checkpoint, = ledger.list_open()
+                    if checkpoint["status"] == "retry_wait":
+                        break
+                    await asyncio.sleep(.01)
+            assert json.loads(checkpoint["metadata_json"])[NATIVE_PROGRESS_FIELD]
+            retry_at = checkpoint["next_retry_at"]
+            assert retry_at >= reset_ms - 3
             if amend_while_deferred:
                 changed = next(row for row in rows if row["open_time"] == opened)
                 assert storage.upsert_bars(symbol, "5m", [{**changed, "volume": 88}],
                                            source="backfill", **identity) == 1
-            joined = asyncio.create_task(repair())
-            outcomes = await asyncio.wait_for(asyncio.gather(demand, joined), 5)
+            if restart:
+                await coordinator.shutdown()
+                await demand
+                await engine.close()
+                await transport.stop()
+                transport, engine, ledger, coordinator = make_runtime()
+
+                call_count = len(calls)
+                assert int(time.time() * 1000) < retry_at
+                early = await coordinator.reconcile_gap_ledger(stale_after_ms=0)
+                assert early.requeued == 0
+                assert len(calls) == call_count
+                await asyncio.sleep(max(0, (retry_at - int(time.time() * 1000)) / 1000) + .025)
+                recovered = await coordinator.reconcile_gap_ledger(stale_after_ms=0)
+                assert recovered.requeued == 1, recovered
+                outcome = await asyncio.wait_for(
+                    coordinator.wait_for_request(f"ledger-reconcile-{checkpoint['id']}"), 5,
+                )
+                outcomes = [outcome]
+            else:
+                joined = asyncio.create_task(repair())
+                outcomes = await asyncio.wait_for(asyncio.gather(demand, joined), 5)
             assert all(o.status == "completed" and o.verified_contiguous for o in outcomes)
+            closed = ledger.get_status(make_request())
+            assert closed["status"] == "filled"
+            assert NATIVE_PROGRESS_FIELD not in json.loads(closed["metadata_json"])
             assert sorted(adopted) == [opened + i * step for i in range(5)]
             assert Counter((start, end, limit) for start, end, limit, _ in calls) == {
                 (opened, opened + step, 2): 2 if amend_while_deferred else 1,

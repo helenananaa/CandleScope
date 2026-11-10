@@ -16,6 +16,7 @@ from .models import BackfillTask, FetchResult, ReconcileResult, WrittenRange
 # A default 1,000-row native chunk can plan one task per row.
 _MAX_TASKS = 1024
 _MAX_ROWS_PER_TASK = 1024
+_MAX_WRITES_PER_TASK = 16
 _FIELDS = (
     "open_time", "close_time", "open", "high", "low", "close", "volume",
     "quote_volume", "trades", "taker_buy_base", "taker_buy_quote", "source",
@@ -38,7 +39,7 @@ async def _read_rows(storage, task: BackfillTask) -> list[dict]:
     )
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class _Receipt:
     task: BackfillTask
     digest: bytes
@@ -48,6 +49,67 @@ class _Receipt:
 @dataclass(slots=True)
 class NativeBackfillProgress:
     receipts: dict[str, _Receipt] = field(default_factory=dict)
+
+    def subset(self, start_ms: int, end_ms: int) -> NativeBackfillProgress | None:
+        receipts = {key: value for key, value in self.receipts.items()
+                    if start_ms <= value.task.start_ms <= value.task.end_ms <= end_ms}
+        return NativeBackfillProgress(receipts) if receipts else None
+
+    def to_ledger(self) -> list[dict]:
+        return [{
+            "start_ms": receipt.task.start_ms,
+            "end_ms": receipt.task.end_ms,
+            "digest": receipt.digest.hex(),
+            "written": [[item.start_ms, item.end_ms, item.bars_written, item.source, item.phase]
+                        for item in receipt.written],
+        } for receipt in self.receipts.values() if len(receipt.written) <= _MAX_WRITES_PER_TASK]
+
+    @classmethod
+    def from_ledger(cls, request, payload: object) -> NativeBackfillProgress | None:
+        if request.exchange != "bybit" or not isinstance(payload, list) or len(payload) > _MAX_TASKS:
+            return None
+        identity = identity_from_metadata(request.exchange, request.metadata)
+        metadata = {"series_identity": identity.to_dict()} if identity is not None else {}
+        progress = cls()
+        calendar = AlwaysOpenCalendar()
+        for entry in payload:
+            if not isinstance(entry, dict):
+                continue
+            start, end, digest = (entry.get(key) for key in ("start_ms", "end_ms", "digest"))
+            if (type(start) is not int or type(end) is not int
+                    or not request.start_ms <= start <= end <= request.end_ms
+                    or not isinstance(digest, str) or len(digest) != 64):
+                continue
+            try:
+                fingerprint = bytes.fromhex(digest)
+                count = sum(1 for _ in islice(
+                    calendar.expected_opens(start, end, request.interval), _MAX_ROWS_PER_TASK + 1,
+                ))
+            except ValueError:
+                continue
+            if len(fingerprint) != 32 or not 0 < count <= _MAX_ROWS_PER_TASK:
+                continue
+            task = BackfillTask(request.symbol, request.interval, start, end,
+                                exchange=request.exchange, market_type=request.market_type, metadata=metadata)
+            written = []
+            raw_writes = entry.get("written")
+            if not isinstance(raw_writes, list) or len(raw_writes) > _MAX_WRITES_PER_TASK:
+                continue
+            for item in raw_writes:
+                if not isinstance(item, list) or len(item) != 5:
+                    break
+                lower, upper, count, source, phase = item
+                if (not all(type(x) is int for x in (lower, upper, count))
+                        or not (start <= lower <= upper <= end and 0 < count <= _MAX_ROWS_PER_TASK)
+                        or not (isinstance(source, str) and source_is_trusted_final(source))
+                        or phase not in ("standard", "archive_standard")):
+                    break
+                written.append(WrittenRange(request.symbol, request.interval, lower, upper,
+                                            count, request.exchange, request.market_type, source, phase))
+            if len(written) != len(raw_writes):
+                continue
+            progress.receipts[task.task_key] = _Receipt(task, fingerprint, tuple(written))
+        return progress if progress.receipts else None
 
     async def verify(self, storage, *, exchange: str, market_type: str, symbol: str,
                      start_ms: int | None, end_ms: int | None, metadata: dict) -> None:

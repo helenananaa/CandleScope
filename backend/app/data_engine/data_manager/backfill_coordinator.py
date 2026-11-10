@@ -46,7 +46,8 @@ from app.exchanges.models import (
 )
 from app.exchanges.history_identity import supports_history_identity
 from app.exchanges.rate_limits import RateLimitDeferred
-from app.data_engine.backfill.native_progress import NativeBackfillDeferred
+from app.data_engine.backfill.native_progress import NativeBackfillDeferred, NativeBackfillProgress
+from app.data_engine.storage.gap_ledger import NATIVE_PROGRESS_FIELD
 from .backfill_contracts import (
     BACKFILL_REASON_PRIORITIES,
     RepairSeries,
@@ -133,6 +134,7 @@ class GapLedgerLike(Protocol):
         attempt: int,
         error: str | None,
         next_retry_at: int,
+        native_progress: list[dict] | None = None,
     ) -> None:
         ...
 
@@ -1772,6 +1774,7 @@ class BackfillCoordinator:
                             "origin": "stale_ledger_recovery",
                         },
                         request_id=request.request_id,
+                        _native_progress=request._native_progress,
                     )
                     self.request(recovery)
                     report.requeued += 1
@@ -2534,9 +2537,9 @@ class BackfillCoordinator:
             except RepairRetryDeferred:
                 raise
             except RateLimitDeferred as exc:
-                if isinstance(exc, NativeBackfillDeferred):
-                    scheduled_request._native_progress = exc.progress
-                    await self._notify_source_storage(request, exc)
+                progress = exc.progress if isinstance(exc, NativeBackfillDeferred) else None
+                if progress is not None:
+                    scheduled_request._native_progress = progress
                 await self._ledger_mark_retry_wait(
                     request,
                     attempt=attempt,
@@ -2544,7 +2547,11 @@ class BackfillCoordinator:
                         f"rate_limit_deferred:{exc.bucket_key}:{exc.reason}"
                     ),
                     delay_seconds=exc.retry_after_seconds,
+                    retry_at_ms=exc.retry_at_ms,
+                    native_progress=progress,
                 )
+                if progress is not None:
+                    await self._notify_source_storage(request, exc)
                 raise
             except asyncio.CancelledError:
                 raise
@@ -3007,6 +3014,8 @@ class BackfillCoordinator:
         attempt: int,
         error: str | None,
         delay_seconds: float,
+        retry_at_ms: int | None = None,
+        native_progress: NativeBackfillProgress | None = None,
     ) -> None:
         if self._gap_ledger is None:
             return
@@ -3016,7 +3025,9 @@ class BackfillCoordinator:
                 request,
                 attempt=attempt,
                 error=error,
-                next_retry_at=int(time.time() * 1000 + delay_seconds * 1000),
+                next_retry_at=(retry_at_ms if retry_at_ms is not None
+                               else int(time.time() * 1000 + delay_seconds * 1000)),
+                **({"native_progress": native_progress.to_ledger()} if native_progress is not None else {}),
             )
         except Exception:
             logger.exception("Gap ledger retry update failed for %s", request.request_id)
@@ -3179,6 +3190,10 @@ class BackfillCoordinator:
         }
         raw_metadata = row.get("metadata_json")
         decoded_metadata = _decode_metadata_object(raw_metadata)
+        exchange = str(row.get("exchange") or "binance").strip().lower()
+        identity = identity_from_metadata(exchange, decoded_metadata)
+        if identity is not None:
+            metadata["series_identity"] = identity.to_dict()
         if repair_requires_trusted_finality(
             decoded_metadata,
             reason=row.get("reason"),
@@ -3195,18 +3210,25 @@ class BackfillCoordinator:
             )
         except (TypeError, ValueError):
             pass
-        return RepairRequest(
+        request = RepairRequest(
             symbol=symbol,
             interval=interval,
             start_ms=int(row["start_ms"]),
             end_ms=int(row["end_ms"]),
-            exchange=str(row.get("exchange") or "binance").strip().lower(),
+            exchange=exchange,
             market_type=str(row.get("market_type") or "spot").strip().lower(),
             reason="ledger_reconcile",
             requester="ledger_reconcile",
             metadata=metadata,
             request_id=f"ledger-reconcile-{ledger_id}",
         )
+        revision = decoded_metadata.get("acquisition_revision")
+        if type(revision) is int and revision >= 0:
+            progress = NativeBackfillProgress.from_ledger(request, decoded_metadata.get(NATIVE_PROGRESS_FIELD))
+            if progress is not None:
+                request._native_progress = progress
+                request.metadata["acquisition_revision"] = revision
+        return request
 
     @staticmethod
     def _reconciliation_snapshot(
@@ -3332,6 +3354,7 @@ class BackfillCoordinator:
             wait_policy=request.wait_policy,
             metadata=metadata,
             request_id=request.request_id,
+            _native_progress=request._native_progress,
         )
 
     def _request_range_is_fully_closed(
