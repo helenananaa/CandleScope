@@ -275,6 +275,7 @@ class StreamCoordinator:
             if isinstance(series_identity, dict)
             else resolve_kline_series_identity(route.exchange, series_identity)
         )
+        route.require_series_identity(identity)
         if route.kind is IntervalRouteKind.TRADE and not identity.is_legacy_default_for(route.exchange):
             raise ValueError("Trade candles require the default crypto series identity")
         key = SeriesKey.create(
@@ -853,6 +854,8 @@ class StreamCoordinator:
                         start_kwargs["on_gap"] = on_gap
                     if "gap_repair_owner" in start_signature.parameters:
                         start_kwargs["gap_repair_owner"] = "data_manager"
+                    if "series_identity" in start_signature.parameters and not key.identity.is_legacy_default_for(key.exchange):
+                        start_kwargs["series_identity"] = key.identity
                 except (TypeError, ValueError):
                     logger.debug("Could not inspect ingestion factory start signature")
 

@@ -19,6 +19,7 @@ from app.data_engine.interval_policy import (
     parse_interval_spec,
 )
 from app.data_engine.market_data.models import MarketChannel
+from app.data_engine.series_identity import KlineSeriesIdentity
 from app.exchanges import bootstrap_default_adapters, get_exchange_registry
 
 
@@ -86,6 +87,17 @@ class IntervalRoute:
     spec: IntervalSpec
     native_interval: str | None = None
     base_interval: str | None = None
+    required_identity: KlineSeriesIdentity | None = None
+
+    def require_series_identity(self, identity: KlineSeriesIdentity) -> None:
+        if self.required_identity is not None and identity != self.required_identity:
+            raise IntervalResolutionError(
+                IntervalResolutionErrorCode.SERIES_IDENTITY_UNSUPPORTED,
+                f"{self.exchange}/{self.market_type}/{self.canonical_interval} requires "
+                f"volume_semantics={self.required_identity.volume_semantics}",
+                exchange=self.exchange, market_type=self.market_type,
+                interval=self.canonical_interval, purpose=self.purpose,
+            )
 
     @property
     def source_interval(self) -> str:
@@ -159,6 +171,7 @@ class IntervalResolver:
         from app.data_engine.bar_basis import native_bar_spec
         declared = {}
         session_intervals = set()
+        identity_intervals = {}
         for value in native_intervals:
             lookup = getattr(capabilities, "bar_spec", None)
             contract = lookup(normalized_market, value, normalized_purpose.value) if callable(lookup) else native_bar_spec(normalized_exchange, normalized_market, value, normalized_purpose.value)
@@ -166,6 +179,8 @@ class IntervalResolver:
                 declared[value] = contract.basis_interval
                 if contract.calendar_id:
                     session_intervals.add(value)
+                if contract.required_identity is not None:
+                    identity_intervals[value] = contract.required_identity
         for native_interval, basis_interval in declared.items():
             if intervals_equivalent(requested_interval, basis_interval):
                 return IntervalRoute(
@@ -177,6 +192,7 @@ class IntervalResolver:
                     kind=IntervalRouteKind.NATIVE,
                     spec=spec,
                     native_interval=native_interval,
+                    required_identity=identity_intervals.get(native_interval),
                 )
 
         if any(intervals_equivalent(requested_interval, value) and value not in declared
@@ -194,7 +210,7 @@ class IntervalResolver:
             # A session bar's label alone does not prove it covers an entire
             # continuous target window. Keep native session bars available;
             # do not turn their gaps into a complete 24/7 derived candle.
-            if native_interval in session_intervals:
+            if native_interval in session_intervals or native_interval in identity_intervals:
                 continue
             native_spec = parse_interval_spec(basis_interval)
             if (

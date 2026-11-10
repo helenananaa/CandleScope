@@ -2,7 +2,9 @@ import { replayNoteChinese } from "./replayNoteMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyChinese } from "./historyStudyMessages.js";
 import { tradingAccountsZhCN } from "./tradingAccountsMessages.js";
+import { tradeHistoryChinese } from "./tradeHistoryMessages.js";
 export const zhCN = {
+  ...tradeHistoryChinese,
   ...replayNoteChinese,
   ...historyStudyChinese,
   "chartTime.title": "跳转到日期",

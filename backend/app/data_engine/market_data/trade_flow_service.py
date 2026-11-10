@@ -10,21 +10,28 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
+from itertools import groupby
+from pathlib import Path
 from typing import Any, Protocol
 
-from app.core.executors import run_storage
+from app.core.bounded_executor import ExecutorBusyError
+from app.core.executors import run_archive, run_storage
 from app.data_engine.ingestion.models import (
+    DataSource,
     MarketEvent,
     StreamDescriptor,
     StreamType,
 )
 from app.data_engine.storage.raw_trade_archive import (
     DisabledRawAggTradeArchive,
+    ParquetRawAggTradeArchive,
     RawAggTradeArchive,
     RawAggTradeArchiveWriter,
     RawAggTradeCoverage,
+    RawAggTradePage,
 )
 from app.data_engine.storage.trade_flow_store import (
     SQLiteTradeFlowRollupStore,
@@ -38,16 +45,24 @@ from app.data_engine.continuity_policy import ContinuityPolicy
 from .lifecycle import KeyedAsyncLockPool, drain_cancellation_safe_cleanup
 from .models import DeliveryClass, MarketChannel, MarketStreamKey, TransportMode
 from .trade_flow import (
+    BUCKET_INTERVAL_MS,
+    MAX_TRADE_HISTORY_PROOF_MINUTES,
     NormalizedAggTrade,
     StreamIdentity,
     TradeFlowBucket,
     TradeFlowEngine,
     TradeFlowGap,
+    TradeHistoryRead,
     TradeFlowIngestResult,
 )
 
 
 logger = logging.getLogger("data_engine.market_data.trade_flow")
+
+_UTC_DAY_MS = 86_400_000
+_MAX_ARCHIVE_HISTORY_TRADES_PER_DAY = 50_000
+_VERIFIED_REPAIR_WAIT_SECONDS = 0.75
+_VERIFIED_REPAIR_POLL_SECONDS = 0.05
 
 
 class _IngestionFactory(Protocol):
@@ -95,6 +110,7 @@ class _IngestCommand:
     event: MarketEvent | NormalizedAggTrade
     gap_fill: bool = False
     acknowledgement: asyncio.Future[TradeFlowIngestResult] | None = None
+    archive_prefix: tuple[NormalizedAggTrade, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,6 +118,11 @@ class _RepairRequest:
     identity: StreamIdentity
     gap: TradeFlowGap
     attempt: int = 1
+
+
+@dataclass(frozen=True, slots=True)
+class _BootstrapRequest:
+    anchor: NormalizedAggTrade
 
 
 class _RepairError(RuntimeError):
@@ -124,6 +145,7 @@ class TradeFlowService:
         rollup_store: TradeFlowRollupStore | None = None,
         rollup_writer: TradeFlowRollupWriter | None = None,
         raw_archive: RawAggTradeArchive | None = None,
+        verified_archive_root: Path | None = None,
         archive_writer: RawAggTradeArchiveWriter | None = None,
         command_queue_size: int = 8192,
         repair_queue_size: int = 64,
@@ -134,7 +156,7 @@ class TradeFlowService:
         flush_interval_seconds: float = 0.05,
         archive_forward_queue_size: int = 8192,
         archive_forward_batch_size: int = 1000,
-        max_query_limit: int = 5000,
+        max_query_limit: int = 5001,
         max_attach_recent: int = 2000,
         max_streams: int | None = None,
         # The shared ingestion session already gives the underlying WebSocket
@@ -145,6 +167,7 @@ class TradeFlowService:
         physical_idle_grace_seconds: float = 30.0,
     ) -> None:
         self._factory = ingestion_factory
+        self._verified_archive_root = verified_archive_root
         self.engine = engine or TradeFlowEngine()
         self.hub = hub or AppendBatchHub[NormalizedAggTrade]()
 
@@ -170,7 +193,7 @@ class TradeFlowService:
             maxsize=max(1, int(command_queue_size)),
         )
         self._repair_queue: asyncio.Queue[
-            _RepairRequest | None
+            _RepairRequest | _BootstrapRequest | None
         ] = asyncio.Queue(maxsize=max(1, int(repair_queue_size)))
         self._archive_queue: asyncio.Queue[NormalizedAggTrade | None] = asyncio.Queue(
             maxsize=max(1, int(archive_forward_queue_size)),
@@ -197,7 +220,7 @@ class TradeFlowService:
             1,
             min(int(archive_forward_batch_size), writer_batch_limit),
         )
-        self._max_query_limit = max(1, min(int(max_query_limit), 5000))
+        self._max_query_limit = max(1, min(int(max_query_limit), 5001))
         self._max_attach_recent = max(1, min(int(max_attach_recent), 20_000))
         self._physical_stop_timeout_seconds = max(
             0.01,
@@ -259,6 +282,15 @@ class TradeFlowService:
             "repair_budget_exceeded": 0,
             "repair_pages_fetched": 0,
             "repair_rows_fetched": 0,
+            "repair_rows_reused_from_archive": 0,
+            "repair_rows_reused_from_verified_archive": 0,
+            "repair_verified_acquisition_waits": 0,
+            "repair_verified_acquisition_wait_expired": 0,
+            "repair_archive_id_conflicts": 0,
+            "repair_archive_reads_rejected": 0,
+            "archive_bootstraps_queued": 0,
+            "archive_bootstraps_queue_full": 0,
+            "archive_bootstraps_applied": 0,
             "repair_trades_filled": 0,
             "rollup_offer_rejected": 0,
             "rollup_write_failures": 0,
@@ -506,7 +538,14 @@ class TradeFlowService:
         limit: int = 1000,
     ) -> list[dict[str, Any]]:
         """Return an ascending bounded 1m rollup range."""
+        result = await self.read_history(key, start_ms=start_ms, end_ms=end_ms, limit=limit)
+        return result.rows
 
+    async def read_history(
+        self, key: MarketStreamKey | StreamIdentity, *, start_ms: int | None = None,
+        end_ms: int | None = None, limit: int = 1000,
+    ) -> TradeHistoryRead:
+        """Return rows and separate evidence for checksum-verified quiet minutes."""
         self._ensure_readable()
         identity = self._validate_identity(key)
         start = _optional_non_negative_int(start_ms, "start_ms")
@@ -514,6 +553,44 @@ class TradeFlowService:
         if start is not None and end is not None and start > end:
             raise ValueError("start_ms cannot exceed end_ms")
         bounded = _bounded_limit(limit, self._max_query_limit)
+        local = await self._history_rows(identity, start, end, bounded)
+        verified_empty: frozenset[int] = frozenset()
+        root = self._verified_archive_root
+        if root is not None and start is not None and end is not None:
+            first = (start + BUCKET_INTERVAL_MS - 1) // BUCKET_INTERVAL_MS * BUCKET_INTERVAL_MS
+            last_closed = (int(time.time() * 1000) // BUCKET_INTERVAL_MS - 1) * BUCKET_INTERVAL_MS
+            last = min(end, last_closed)
+            if len(local) >= bounded:
+                last = min(last, local[bounded - 1]["bucket_open_ms"])
+            if first <= last and (last - first) // BUCKET_INTERVAL_MS < MAX_TRADE_HISTORY_PROOF_MINUTES:
+                complete = {row["bucket_open_ms"] for row in local if _is_complete_rollup(row)}
+                missing = [
+                    minute for minute in range(first, last + 1, BUCKET_INTERVAL_MS)
+                    if minute not in complete
+                ]
+                if missing:
+                    try:
+                        archive = await run_archive(_read_verified_archive_rollups, root, identity, missing)
+                    except ExecutorBusyError:
+                        archive = TradeHistoryRead([])
+                    if archive.rows or archive.verified_empty_opens:
+                        # Another task may have committed or received better local
+                        # evidence during the archive read. Prefer that evidence.
+                        local = await self._history_rows(identity, start, end, bounded)
+                        complete = {row["bucket_open_ms"] for row in local if _is_complete_rollup(row)}
+                        local = _merge_rollups(local, (
+                            row for row in archive.rows if row["bucket_open_ms"] not in complete
+                        ))
+                        # A retained observation disagrees with an empty
+                        # archive minute. Preserve it without an absence proof.
+                        verified_empty = archive.verified_empty_opens.difference(
+                            row["bucket_open_ms"] for row in local
+                        )
+        return TradeHistoryRead([_public_rollup_row(row) for row in local[:bounded]], verified_empty)
+
+    async def _history_rows(
+        self, identity: StreamIdentity, start: int | None, end: int | None, limit: int,
+    ) -> list[dict[str, Any]]:
         exchange, market_type, symbol = identity
         persisted = await self.rollup_store.query_rollups(
             exchange=exchange,
@@ -521,19 +598,15 @@ class TradeFlowService:
             symbol=symbol,
             start_ms=start,
             end_ms=end,
-            limit=bounded,
+            limit=limit,
         )
-        live = []
-        for bucket in self.engine.bucket_snapshot(identity):
-            if start is not None and bucket.bucket_start_ms < start:
-                continue
-            if end is not None and bucket.bucket_start_ms > end:
-                continue
-            live.append(_rollup_row(bucket, source="live"))
-        return [
-            _public_rollup_row(row)
-            for row in _merge_rollups(persisted, live)[:bounded]
+        live = [
+            _rollup_row(bucket, source="live")
+            for bucket in self.engine.bucket_snapshot(identity)
+            if (start is None or bucket.bucket_start_ms >= start)
+            and (end is None or bucket.bucket_start_ms <= end)
         ]
+        return _merge_rollups(persisted, live)
 
     def attach(
         self,
@@ -1286,6 +1359,12 @@ class TradeFlowService:
                     raise ValueError(
                         "aggregate trade identity does not match physical stream",
                     )
+                if command.archive_prefix is not None:
+                    buckets = self.engine.adopt_initial_archive_prefix(trade, command.archive_prefix)
+                    if buckets:
+                        await self._persist_buckets(buckets, source=DataSource.ARCHIVE.value)
+                        self._metrics["archive_bootstraps_applied"] += 1
+                    continue
                 result = (
                     self.engine.ingest_gap_fill(trade)
                     if command.gap_fill
@@ -1330,15 +1409,22 @@ class TradeFlowService:
             else:
                 self._mark_repair_degraded(request.identity)
 
-        await self._persist_rollups(result)
-        if self.raw_archive.enabled:
+        await self._persist_buckets(result.buckets, source=result.trade.source.value)
+        if self.raw_archive.enabled and result.trade.source is not DataSource.ARCHIVE:
+            if self.engine.is_initial_archive_anchor(result.trade):
+                # Optional history work shares the existing bounded repair lane.
+                # The serial ingest owner must never wait for its own consumer.
+                try:
+                    self._repair_queue.put_nowait(_BootstrapRequest(result.trade))
+                except asyncio.QueueFull:
+                    self._metrics["archive_bootstraps_queue_full"] += 1
+                else:
+                    self._metrics["archive_bootstraps_queued"] += 1
             await self._archive_queue.put(result.trade)
 
-    async def _persist_rollups(self, result: TradeFlowIngestResult) -> None:
-        assert result.trade is not None
-        source = result.trade.source.value
+    async def _persist_buckets(self, buckets: tuple[TradeFlowBucket, ...], *, source: str) -> None:
         final_rows: list[dict[str, Any]] = []
-        for bucket in result.buckets:
+        for bucket in buckets:
             row = _rollup_row(bucket, source=source)
             if bucket.is_final:
                 final_rows.append(row)
@@ -1419,8 +1505,14 @@ class TradeFlowService:
                 return
             self._repair_in_flight += 1
             try:
-                await self._repair_gap(request.identity, request.gap)
+                if isinstance(request, _BootstrapRequest):
+                    await self._bootstrap_from_archive(request.anchor)
+                else:
+                    await self._repair_gap(request.identity, request.gap)
             except Exception as exc:
+                if isinstance(request, _BootstrapRequest):
+                    logger.warning("Failed to plan local aggTrade bootstrap: %s", exc)
+                    continue
                 self._metrics["repairs_failed"] += 1
                 self._metrics["last_repair_error"] = str(exc)[:500]
                 logger.warning(
@@ -1460,6 +1552,26 @@ class TradeFlowService:
                 self._repair_in_flight -= 1
                 self._repair_queue.task_done()
 
+    async def _bootstrap_from_archive(self, anchor: NormalizedAggTrade) -> None:
+        if not self.engine.is_initial_archive_anchor(anchor) or anchor.agg_trade_id == 0:
+            return
+        last = anchor.agg_trade_id - 1
+        first = max(0, anchor.agg_trade_id - self._repair_page_size)
+        local = await self._read_archive_id_page(anchor.stream_identity, first, last) or {}
+        start = anchor.trade_time_ms // BUCKET_INTERVAL_MS * BUCKET_INTERVAL_MS
+        suffix = []
+        for trade_id in range(last, first - 1, -1):
+            trade = local.get(trade_id)
+            if trade is None:
+                return
+            suffix.append(trade)
+            if trade.trade_time_ms < start:
+                await self._command_queue.put(_IngestCommand(
+                    identity=anchor.stream_identity, event=anchor,
+                    archive_prefix=tuple(reversed(suffix)),
+                ))
+                return
+
     async def _repair_gap(
         self,
         identity: StreamIdentity,
@@ -1476,65 +1588,149 @@ class TradeFlowService:
                 f"({gap.missing_count} > {self._max_repair_trades_per_gap})",
             )
 
-        descriptor = _descriptor(identity)
         open_ranges = _open_gap_intersections(
             self.engine.gap_snapshot(identity),
             gap,
         )
+        time_bounds = (
+            min(gap.left_trade_time_ms, gap.right_trade_time_ms),
+            max(gap.left_trade_time_ms, gap.right_trade_time_ms),
+        )
+        clock = asyncio.get_running_loop().time
+        archive_deadline = clock() + _VERIFIED_REPAIR_WAIT_SECONDS
         for start_id, end_id in open_ranges:
-            cursor = start_id
-            while cursor <= end_id:
-                page_count = min(
-                    self._repair_page_size,
-                    end_id - cursor + 1,
+            for first in range(start_id, end_id + 1, self._repair_page_size):
+                last = min(first + self._repair_page_size - 1, end_id)
+                page_gap = replace(gap, start_id=first, end_id=last)
+                observed = await self._read_archive_id_page(identity, first, last, time_bounds=time_bounds)
+                local = observed or {}
+                verified_ids = set()
+                if observed is not None:
+                    # Check already-published evidence for conflicts. A full
+                    # local page does not depend on an in-flight publisher.
+                    deadline = clock() if len(local) == last - first + 1 else archive_deadline
+                    verified = await self._read_verified_archive_id_page(
+                        identity, page_gap, time_bounds, deadline,
+                    )
+                    for trade_id, trade in verified.items():
+                        prior = local.get(trade_id)
+                        if prior is not None and replace(
+                            trade, event_time_ms=prior.event_time_ms, received_at_ms=prior.received_at_ms,
+                        ) != prior:
+                            del local[trade_id]
+                            self._metrics["repair_archive_id_conflicts"] += 1
+                            continue
+                        local[trade_id] = trade
+                        verified_ids.add(trade_id)
+                pending = _open_gap_intersections(
+                    self.engine.gap_snapshot(identity), page_gap,
                 )
-                events = await self._factory.fetch_market(
-                    descriptor,
-                    from_id=cursor,
-                    limit=page_count,
-                    history=True,
-                )
-                self._metrics["repair_pages_fetched"] += 1
-                self._metrics["repair_rows_fetched"] += len(events)
-                trades = [
-                    NormalizedAggTrade.from_market_event(event)
-                    for event in events
-                ]
-                expected_ids = list(range(cursor, cursor + page_count))
-                actual_ids = [trade.agg_trade_id for trade in trades]
-                if actual_ids != expected_ids:
-                    raise _RepairError(
-                        "REST repair page is not the exact requested ID range "
-                        f"(expected {expected_ids[0]}-{expected_ids[-1]}, "
-                        f"got {actual_ids})",
-                    )
-                if any(trade.stream_identity != identity for trade in trades):
-                    raise _RepairError(
-                        "REST repair page contains a foreign identity",
-                    )
-
-                for trade in trades:
-                    acknowledgement = asyncio.get_running_loop().create_future()
-                    await self._command_queue.put(
-                        _IngestCommand(
-                            identity=identity,
-                            event=trade,
-                            gap_fill=True,
-                            acknowledgement=acknowledgement,
-                        ),
-                    )
-                    result = await asyncio.shield(acknowledgement)
-                    if not result.accepted:
-                        raise _RepairError(
-                            "engine rejected validated gap-fill trade "
-                            f"{trade.agg_trade_id}: {result.reason}",
+                for pending_first, pending_last in pending:
+                    for archived, run in groupby(range(pending_first, pending_last + 1), key=local.__contains__):
+                        ids = list(run)
+                        trades = (
+                            [local[trade_id] for trade_id in ids]
+                            if archived else await self._fetch_repair_run(identity, ids)
                         )
-                    self._metrics["repair_trades_filled"] += 1
-                cursor += page_count
+                        for trade in trades:
+                            await self._adopt_repair_trade(identity, trade)
+                        if archived:
+                            self._metrics["repair_rows_reused_from_archive"] += len(trades)
+                            self._metrics["repair_rows_reused_from_verified_archive"] += len(
+                                verified_ids.intersection(ids),
+                            )
 
         if _range_is_open(self.engine.gap_snapshot(identity), gap):
             raise _RepairError("engine still reports the repaired ID range incomplete")
         self._metrics["repairs_succeeded"] += 1
+
+    async def _read_archive_id_page(
+        self, identity: StreamIdentity, first: int, last: int, *,
+        time_bounds: tuple[int, int] | None = None,
+    ) -> dict[int, NormalizedAggTrade] | None:
+        if not self.raw_archive.enabled:
+            return {}
+        try:
+            page = await run_storage(
+                self.raw_archive.scan_page,
+                exchange=identity[0],
+                market_type=identity[1],
+                symbol=identity[2],
+                # Search by ID before validating time so conflicting copies
+                # in different date partitions cannot evade the check.
+                start_agg_trade_id=first,
+                end_agg_trade_id=last,
+                limit=last - first + 1,
+                reject_id_conflicts=True,
+            )
+            return _validated_repair_archive_page(page, identity, first, last, time_bounds)
+        except (KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
+            self._metrics["repair_archive_reads_rejected"] += 1
+            logger.warning("Could not reuse local aggTrade archive for %s %s-%s: %s", identity, first, last, exc)
+            return None
+
+    async def _read_verified_archive_id_page(
+        self, identity: StreamIdentity, gap: TradeFlowGap, time_bounds: tuple[int, int],
+        deadline: float,
+    ) -> dict[int, NormalizedAggTrade]:
+        root = self._verified_archive_root
+        if (root is None or identity[:2] != ("binance", "futures")
+                or time_bounds[1] // _UTC_DAY_MS - time_bounds[0] // _UTC_DAY_MS > 1):
+            return {}
+        first, last = gap.start_id, gap.end_id
+        try:
+            clock = asyncio.get_running_loop().time
+            waited = False
+            while _range_is_open(self.engine.gap_snapshot(identity), gap):
+                defer_if_busy = clock() < deadline
+                page = await run_archive(
+                    _read_verified_repair_page, root, identity, first, last, time_bounds,
+                    defer_if_busy=defer_if_busy,
+                )
+                if page is not None:
+                    if waited and not defer_if_busy:
+                        self._metrics["repair_verified_acquisition_wait_expired"] += 1
+                    return _validated_repair_archive_page(page, identity, first, last, time_bounds)
+                if not waited:
+                    self._metrics["repair_verified_acquisition_waits"] += 1
+                    waited = True
+                await asyncio.sleep(max(0, min(_VERIFIED_REPAIR_POLL_SECONDS, deadline - clock())))
+            return {}
+        except (KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
+            self._metrics["repair_archive_reads_rejected"] += 1
+            logger.warning("Could not reuse verified aggTrade archive for %s %s-%s: %s", identity, first, last, exc)
+            return {}
+
+    async def _fetch_repair_run(
+        self, identity: StreamIdentity, ids: list[int],
+    ) -> list[NormalizedAggTrade]:
+        events = await self._factory.fetch_market(
+            _descriptor(identity), from_id=ids[0], limit=len(ids), history=True,
+        )
+        self._metrics["repair_pages_fetched"] += 1
+        self._metrics["repair_rows_fetched"] += len(events)
+        trades = [NormalizedAggTrade.from_market_event(event) for event in events]
+        actual_ids = [trade.agg_trade_id for trade in trades]
+        if actual_ids != ids:
+            raise _RepairError(
+                "REST repair page is not the exact requested ID range "
+                f"(expected {ids[0]}-{ids[-1]}, got {actual_ids})",
+            )
+        if any(trade.stream_identity != identity for trade in trades):
+            raise _RepairError("REST repair page contains a foreign identity")
+        return trades
+
+    async def _adopt_repair_trade(self, identity: StreamIdentity, trade: NormalizedAggTrade) -> None:
+        acknowledgement = asyncio.get_running_loop().create_future()
+        await self._command_queue.put(_IngestCommand(
+            identity=identity, event=trade, gap_fill=True, acknowledgement=acknowledgement,
+        ))
+        result = await asyncio.shield(acknowledgement)
+        if not result.accepted:
+            raise _RepairError(
+                f"engine rejected validated gap-fill trade {trade.agg_trade_id}: {result.reason}",
+            )
+        self._metrics["repair_trades_filled"] += 1
 
     async def _run_flush(self) -> None:
         while not self._flush_stop.is_set():
@@ -1757,6 +1953,99 @@ def _rollup_row(bucket: TradeFlowBucket, *, source: str) -> dict[str, Any]:
     }
 
 
+def _is_complete_rollup(row: dict[str, Any]) -> bool:
+    return bool(row.get("is_final") and row.get("is_complete"))
+
+
+def _read_verified_repair_page(
+    root: Path, identity: StreamIdentity, first: int, last: int, time_bounds: tuple[int, int],
+    *, defer_if_busy: bool,
+) -> RawAggTradePage | None:
+    if not root.is_dir():
+        return RawAggTradePage((), None, True, None)
+    archive = ParquetRawAggTradeArchive(root, read_only=True)
+    if defer_if_busy and archive.verified_day_acquisition_pending(identity, time_bounds):
+        return None
+    return archive.read_verified_repair_page(
+        exchange=identity[0], market_type=identity[1], symbol=identity[2],
+        start_agg_trade_id=first, end_agg_trade_id=last, time_bounds=time_bounds,
+    )
+
+
+def _validated_repair_archive_page(
+    page: RawAggTradePage, identity: StreamIdentity, first: int, last: int,
+    time_bounds: tuple[int, int] | None,
+) -> dict[int, NormalizedAggTrade]:
+    if not page.exhausted:
+        raise _RepairError("archive read did not finish the ID window")
+    rows = {}
+    for row in page.rows:
+        trade = NormalizedAggTrade.from_archive_row(row)
+        trade_id = trade.agg_trade_id
+        if (
+            trade.stream_identity != identity
+            or not first <= trade_id <= last
+            or (time_bounds is not None and not time_bounds[0] <= trade.trade_time_ms <= time_bounds[1])
+            or trade_id in rows
+        ):
+            raise _RepairError("archive returned an invalid ID page")
+        rows[trade_id] = trade
+    return rows
+
+
+def _read_verified_archive_rollups(
+    root: Path, identity: StreamIdentity, missing: list[int],
+) -> TradeHistoryRead:
+    """Project verified daily objects without mutating either archive or SQLite."""
+    if not root.is_dir():
+        return TradeHistoryRead([])
+    try:
+        archive = ParquetRawAggTradeArchive(root, read_only=True)
+    except (OSError, RuntimeError, ValueError):
+        return TradeHistoryRead([])
+
+    exchange, market_type, symbol = identity
+    scope = {"exchange": exchange, "market_type": market_type, "symbol": symbol}
+    result = []
+    quiet = set()
+    for _, group in groupby(missing, key=lambda minute: minute // _UTC_DAY_MS):
+        minutes = list(group)
+        try:
+            ref, rows = archive.read_verified_daily_slice(
+                **scope,
+                start_time_ms=minutes[0],
+                end_time_ms=minutes[-1] + BUCKET_INTERVAL_MS - 1,
+                limit=_MAX_ARCHIVE_HISTORY_TRADES_PER_DAY,
+            )
+            engine = TradeFlowEngine(
+                raw_ring_size=1, max_buckets_per_stream=1440,
+                max_streams=1, initial_bucket_complete=True,
+            )
+            for raw in rows:
+                trade = NormalizedAggTrade.from_archive_row(raw)
+                if trade.stream_identity != identity or not engine.ingest(trade).accepted:
+                    raise ValueError("verified aggTrade archive row failed ordered admission")
+        except (AssertionError, KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
+            logger.debug("Verified local aggTrade history unavailable for %s at %s: %s", identity, minutes[0], exc)
+            continue
+
+        buckets = engine.bucket_snapshot(identity)
+        wanted = set(minutes)
+        quiet.update(wanted.difference(bucket.bucket_start_ms for bucket in buckets))
+        if ref is None:
+            continue
+        # The replay reference binds the requested slice. A finalized minute
+        # instead belongs to the immutable verified day, independent of how it
+        # was paged or whether this temporary engine observed the next minute.
+        day_epoch = f"sha256:{ref.objects[0].source_checksum_sha256}"
+        result.extend({
+            **_rollup_row(replace(bucket, is_final=True, revision=1), source="verified_archive"),
+            "archive_data_epoch": day_epoch,
+            "revision_domain": "archive_data_epoch",
+        } for bucket in buckets if bucket.bucket_start_ms in wanted)
+    return TradeHistoryRead(result, frozenset(quiet))
+
+
 def _merge_rollups(
     persisted: Iterable[dict[str, Any]],
     live: Iterable[dict[str, Any]],
@@ -1767,8 +2056,8 @@ def _merge_rollups(
     for row in live:
         key = int(row["bucket_open_ms"])
         current = by_start.get(key)
-        if current is not None and bool(current.get("is_final")) and not bool(
-            row.get("is_final"),
+        if current is not None and current.get("is_final") and (
+            not row.get("is_final") or (_is_complete_rollup(current) and not _is_complete_rollup(row))
         ):
             continue
         by_start[key] = dict(row)

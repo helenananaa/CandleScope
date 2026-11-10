@@ -111,6 +111,7 @@ class BackfillHistoryPlanner:
                 ],
             },
             request_id=request.request_id,
+            _native_progress=request._native_progress,
         )
         return PreparedHistoryRequest(
             request=prepared,

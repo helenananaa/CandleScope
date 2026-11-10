@@ -36,6 +36,7 @@ from .trade_import import (
     import_official_date_range,
     list_official_agg_trade_days,
     official_agg_trade_urls,
+    trade_archive_day_acquisition,
 )
 
 
@@ -409,7 +410,6 @@ class RemoteRawAggTradeArchive:
         # serialize refresh readers and cache publication/retirement, so a
         # cached index cannot lose files between reading its pointer and body.
         self._metadata_io_lock = threading.RLock()
-        self._partition_locks: dict[str, threading.Lock] = {}
         self._index: RemoteAggTradeIndex | None = None
         self._compatibility: tuple[_CompatibilityRecord, ...] = ()
         self._receipt_payloads: dict[str, Mapping[str, object]] = {}
@@ -1147,28 +1147,10 @@ class RemoteRawAggTradeArchive:
         symbol: str,
         day: date,
     ) -> None:
-        receipt_path = (
-            f"exchange={exchange}/market_type={market_type}/symbol={symbol}/"
-            f"date={day.isoformat()}/_verified_import.json"
-        )
-        with self._lock:
-            partition_lock = self._partition_locks.setdefault(
-                receipt_path,
-                threading.Lock(),
-            )
-        with partition_lock:
-            # A concurrent preparation may have finished while this caller was
-            # waiting.  Revalidate the immutable receipt before avoiding I/O.
-            day_start_ms = _day_start_ms(day)
-            if any(
-                item.start_time_ms <= day_start_ms
-                and item.end_time_ms >= day_start_ms + _DAY_MS - 1
-                for item in self.cache.list_verified_windows(
-                    exchange=exchange,
-                    market_type=market_type,
-                    symbol=symbol,
-                )
-            ):
+        with trade_archive_day_acquisition(
+            self.cache, exchange=exchange, market_type=market_type, symbol=symbol, day=day,
+        ) as missing:
+            if not missing:
                 with self._lock:
                     self._metrics["official_cache_hits"] += 1
                 return
@@ -1204,15 +1186,19 @@ class RemoteRawAggTradeArchive:
             payload = self._receipt_payloads.get(receipt_path)
             manifests = self._receipt_manifests.get(receipt_path)
             index = self._index
-            partition_lock = self._partition_locks.setdefault(
-                receipt_path,
-                threading.Lock(),
-            )
         if payload is None or manifests is None or index is None:
             raise ReplayHistoryArchiveError(
                 "remote aggTrade receipt is not indexed"
             )
-        with partition_lock:
+        metadata = payload["metadata"]
+        assert isinstance(metadata, Mapping)
+        with trade_archive_day_acquisition(
+            self.cache, exchange=str(metadata["exchange"]), market_type=str(metadata["market_type"]),
+            symbol=str(metadata["symbol"]), day=date.fromisoformat(str(metadata["date"])),
+            allow_repair=True,
+        ) as missing:
+            if not missing:
+                return
             for item in manifests:
                 if (Path(item.object_id).parent / "_verified_import.json").as_posix() != receipt_path:
                     raise ReplayHistoryArchiveError(

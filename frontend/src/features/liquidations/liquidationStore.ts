@@ -31,7 +31,8 @@ interface LiquidationEntry {
   quality: LiquidationQualityMetadata | null;
   revision: number;
   snapshot: LiquidationSnapshot;
-  coverage: Map<LiquidationPositionSide, MarketHistoryRange[]>;
+  // Local scans suppress duplicate reads. They do not prove source coverage.
+  scans: Map<LiquidationPositionSide, MarketHistoryRange[]>;
   leases: number;
 }
 
@@ -152,7 +153,7 @@ function createEntry(): LiquidationEntry {
     quality: null,
     revision: 0,
     snapshot: EMPTY_LIQUIDATION_SNAPSHOT,
-    coverage: new Map(),
+    scans: new Map(),
     leases: 0,
   };
 }
@@ -194,16 +195,16 @@ export class LiquidationStore {
     };
   }
 
-  historyCoverage(identity: LiquidationIdentity, side: LiquidationPositionSide): readonly MarketHistoryRange[] {
-    return this.entries.get(identityKey(identity))?.coverage.get(side) ?? [];
+  historyScans(identity: LiquidationIdentity, side: LiquidationPositionSide): readonly MarketHistoryRange[] {
+    return this.entries.get(identityKey(identity))?.scans.get(side) ?? [];
   }
 
-  invalidateHistoryCoverage(identity: LiquidationIdentity, range?: MarketHistoryRange): void {
+  invalidateHistoryScans(identity: LiquidationIdentity, range?: MarketHistoryRange): void {
     const entry = this.entries.get(identityKey(identity));
     if (!entry) return;
-    if (!range) entry.coverage.clear();
-    else for (const [side, coverage] of entry.coverage) {
-      entry.coverage.set(side, subtractLiquidationHistoryRanges(coverage, [range]));
+    if (!range) entry.scans.clear();
+    else for (const [side, coverage] of entry.scans) {
+      entry.scans.set(side, subtractLiquidationHistoryRanges(coverage, [range]));
     }
   }
 
@@ -216,15 +217,15 @@ export class LiquidationStore {
     identity: LiquidationIdentity,
     rollups: readonly LiquidationRollup[],
     quality: LiquidationQualityMetadata,
-    covered?: { side: LiquidationPositionSide; range: MarketHistoryRange },
+    scanned?: { side: LiquidationPositionSide; range: MarketHistoryRange },
   ): void {
     const key = identityKey(identity);
     const entry = this.entry(key);
     let changed = entry.quality !== quality;
     const changedRollups = new Map<string, LiquidationRollup>();
     entry.quality = quality;
-    if (covered) entry.coverage.set(covered.side, mergeHistoryCoverage(
-      entry.coverage.get(covered.side) ?? [], covered.range,
+    if (scanned) entry.scans.set(scanned.side, mergeHistoryCoverage(
+      entry.scans.get(scanned.side) ?? [], scanned.range,
     ));
     for (const rollup of rollups) {
       if (!rollupMatchesIdentity(rollup, key)) continue;
@@ -329,7 +330,7 @@ export class LiquidationStore {
     let changed = entry.liveEvents.size > 0;
     entry.liveEvents.clear();
     entry.sortedLiveEvents = Object.freeze([]);
-    entry.coverage.clear();
+    entry.scans.clear();
     for (const [key, row] of entry.rollups) {
       if (row.isFinal) continue;
       entry.rollups.delete(key);
@@ -373,7 +374,7 @@ export class LiquidationStore {
     }
     entry.sortedRollups = Object.freeze(entry.sortedRollups.filter((row) => !removed.has(rollupKey(row))));
     for (const [side, gaps] of missing) {
-      entry.coverage.set(side, subtractLiquidationHistoryRanges(entry.coverage.get(side) ?? [], gaps));
+      entry.scans.set(side, subtractLiquidationHistoryRanges(entry.scans.get(side) ?? [], gaps));
     }
   }
 

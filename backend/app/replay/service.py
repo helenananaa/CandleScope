@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Callable, Mapping, Sequence, TypeVar
 
 from app.core.config import ReplaySettings
+from app.core.executors import run_archive
 from app.data_engine.interval_policy import (
     compute_bucket_start_ms,
     parse_interval_ms,
@@ -4672,7 +4673,7 @@ class ReplayService:
         dataset: BarDatasetSnapshot,
     ) -> RawAggTradeDatasetRef:
         try:
-            reference = await asyncio.to_thread(
+            reference = await run_archive(
                 self._raw_trade_archive.freeze_dataset,
                 exchange=config.exchange,
                 market_type=config.market_type,

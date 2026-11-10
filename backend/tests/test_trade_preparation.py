@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import io
+import multiprocessing
 import threading
 from functools import partial
 from types import SimpleNamespace
@@ -15,7 +16,7 @@ from app.data_preparation.service import PreparationService
 from app.data_preparation.storage_inventory import reconcile
 from app.replay.trade_import import import_official_date_range, ReplayTradeImportError
 from tests.test_data_preparation import async_test, terminal
-from tests.test_replay_trade_import import _rows, _zip_bytes, START_MS
+from tests.test_replay_trade_import import _rows, _zip_bytes, DAY, START_MS
 
 
 def adapter_and_network(tmp_path, *, corrupt=False, max_rows_per_file=100_000, rows=None):
@@ -38,6 +39,96 @@ def adapter_and_network(tmp_path, *, corrupt=False, max_rows_per_file=100_000, r
 def requirement(start=START_MS, end=START_MS + 60_000):
     return Requirement(exchange="binance", market_type="futures", symbol="BTCUSDT",
                        role="TRADES", start_ms=start, end_ms=end)
+
+
+def _acquire_trade_day_in_process(root, kind, owner, acquiring, downloading, release, reports):
+    from app.replay import history_archive
+    from app.replay.remote_trade_archive import RemoteRawAggTradeArchive
+
+    lock = history_archive._archive_mutation_lock
+
+    def observe_lock(*args, **kwargs):
+        acquiring.set()
+        return lock(*args, **kwargs)
+
+    history_archive._archive_mutation_lock = observe_lock
+    body, filename = _zip_bytes(_rows())
+    checksum = f"{hashlib.sha256(body).hexdigest()}  {filename}\n".encode()
+    calls = []
+
+    def opener(url, **_kwargs):
+        assert owner, f"{kind} duplicated the day download: {url}"
+        if not calls:
+            downloading.set()
+            assert release.wait(15)
+        calls.append(url)
+        return io.BytesIO(checksum if url.endswith(".CHECKSUM") else body)
+
+    archive = RemoteRawAggTradeArchive(root / "trades", root / "origin", official_opener=opener)
+    selected = requirement()
+    if kind == "prepare":
+        adapter = BarPreparationAdapter(root / "cache", coordinator=None,
+            replay_service=SimpleNamespace(raw_trade_archive=archive))
+        adapter.trades.importer = partial(import_official_date_range, opener=opener)
+        repository = PreparationRepository(root / "jobs.db")
+        adapter.publication_repository = repository
+        receipt, _ = asyncio.run(adapter.acquire(selected, "cross-process"))
+        dataset = receipt["dataset"]
+        assert repository.cache_inventory()["publication_reserved_bytes"] == 0
+    else:
+        dataset = archive.freeze_dataset(
+            exchange=selected.exchange, market_type=selected.market_type, symbol=selected.symbol,
+            start_time_ms=selected.start_ms, end_time_ms=selected.end_ms - 1,
+        ).to_dict()
+    reports.put((kind, dataset, calls))
+
+
+@pytest.mark.parametrize("first", ["prepare", "replay"])
+def test_preparation_and_replay_share_one_official_download_across_processes(tmp_path, first):
+    from datetime import timedelta
+    from app.replay.remote_trade_archive import publish_remote_agg_trade_index, sync_official_agg_trade_availability
+
+    origin = tmp_path / "origin"
+    prefix = f"data/futures/um/daily/aggTrades/BTCUSDT/BTCUSDT-aggTrades-{DAY}.zip"
+    listing = (
+        f"<ListBucketResult><Contents><Key>{prefix}</Key></Contents>"
+        f"<Contents><Key>{prefix}.CHECKSUM</Key></Contents><IsTruncated>false</IsTruncated></ListBucketResult>"
+    ).encode()
+    sync_official_agg_trade_availability(
+        origin, exchange="binance", market_type="futures", symbol="BTCUSDT",
+        as_of_date=DAY + timedelta(days=1), opener=lambda *_a, **_k: io.BytesIO(listing),
+    )
+    publish_remote_agg_trade_index(origin)
+    ctx = multiprocessing.get_context("spawn")
+    started, waiting, downloading, release = (ctx.Event() for _ in range(4))
+    reports = ctx.Queue()
+    second = "replay" if first == "prepare" else "prepare"
+    leader = ctx.Process(target=_acquire_trade_day_in_process,
+        args=(tmp_path, first, True, started, downloading, release, reports))
+    follower = ctx.Process(target=_acquire_trade_day_in_process,
+        args=(tmp_path, second, False, waiting, downloading, release, reports))
+    leader.start()
+    try:
+        assert downloading.wait(15)
+        follower.start()
+        assert waiting.wait(15)
+        release.set()
+        results = {kind: (dataset, calls) for kind, dataset, calls in
+                   (reports.get(timeout=20), reports.get(timeout=20))}
+        assert results[first][0] == results[second][0]
+        assert results[first][0]["row_count"] == 4
+        assert len(results[first][1]) == 2 and results[first][1][0].endswith(".CHECKSUM")
+        assert results[second][1] == []
+    finally:
+        release.set()
+        for process in (leader, follower):
+            if process.pid is not None:
+                process.join(10)
+                if process.is_alive():
+                    process.terminate()
+                    process.join(5)
+        reports.close()
+    assert leader.exitcode == follower.exitcode == 0
 
 
 @async_test
@@ -308,3 +399,253 @@ async def test_desktop_official_wrapper_uses_local_verified_cache_for_cold_prepa
     repeated, _ = await adapter.acquire(requirement(), "warm-desktop")
     assert repeated == receipt
     assert len(calls) == 2
+
+
+@pytest.mark.parametrize("desktop_wrapper", [False, True])
+@async_test
+async def test_trade_flow_history_preparation_reuses_the_official_day(tmp_path, monkeypatch, desktop_wrapper):
+    import httpx
+    from fastapi import FastAPI
+    from app.core import config
+    from app.api.v1.data_preparation import router as preparation_router
+    from app.api.v1.trade_flow import router as trade_router
+    from app.data_engine.market_data.trade_flow_service import TradeFlowService
+    from app.data_engine.storage.trade_flow_store import SQLiteTradeFlowRollupStore
+    from tests.test_trade_flow_storage import _rollup
+
+    adapter, archive, calls = adapter_and_network(tmp_path)
+    if desktop_wrapper:
+        from app.replay.official_trade_catalog import OfficialAggTradeArchive
+        wrapper = OfficialAggTradeArchive(archive.root, defer_refresh=True)
+        desktop = BarPreparationAdapter(tmp_path / "desktop-cache", coordinator=None,
+            replay_service=SimpleNamespace(raw_trade_archive=wrapper))
+        desktop.trades.importer = adapter.trades.importer
+        adapter = desktop
+    monkeypatch.setattr(config, "REPLAY_AGG_TRADE_ARCHIVE_DIR", archive.root)
+    repo = PreparationRepository(tmp_path / "jobs.db")
+    prep = PreparationService(repo, adapter, workers=2 if desktop_wrapper else 1)
+    store = SQLiteTradeFlowRollupStore(tmp_path / "rollups.db")
+    before = START_MS - 60_000
+    await store.upsert_rollups([_rollup(before, revision=1, is_final=True)])
+    trades = TradeFlowService(object(), rollup_store=store, verified_archive_root=archive.root)
+    app = FastAPI()
+    app.state.data_preparation_service = prep
+    app.state.data_manager = SimpleNamespace(trade_flow_ready=True, read_trade_flow_history=trades.read_history)
+    app.include_router(preparation_router, prefix="/api/v1")
+    app.include_router(trade_router, prefix="/api/v1")
+    path = "/api/v1/data-preparations/trade-flow-history"
+    request = {"symbol": "btcusdt", "start_ms": before, "end_ms": START_MS, "idempotency_key": "trade-first"}
+    today = repo.now() // 86_400_000 * 86_400_000
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            before_fetch = await client.get("/api/v1/trade-flow/history", params={"start_ms": START_MS, "end_ms": START_MS})
+            assert before_fetch.json()["data"] == [] and not calls
+            await store.upsert_rollups([_rollup(today, revision=1, is_complete=True, is_final=True)])
+            unpublished = await client.post(path, json={**request, "start_ms": today, "end_ms": today + 60_000})
+            assert unpublished.status_code == 202 and unpublished.json()["job"] is None
+            assert unpublished.json()["unavailable_ranges"] == [{
+                "start_ms": today + 60_000, "end_ms": today + 60_000, "reason": "trade_day_unpublished",
+                "retry_at_ms": today + 86_400_000,
+            }]
+            first = await client.post(path, json=request)
+            second = await client.post(path, json={**request, "idempotency_key": "trade-second"})
+            assert first.status_code == second.status_code == 202, (first.text, second.text)
+            jobs = [first.json()["job"], second.json()["job"]]
+            assert jobs[0]["id"] != jobs[1]["id"]
+            for job in jobs:
+                (planned,) = job["request"]["requirements"]
+                assert planned["role"] == "TRADES" and planned["start_ms"] == START_MS
+                assert planned["end_ms"] == START_MS + 86_400_000
+            replay = await prep.submit(PreparationRequest(
+                idempotency_key="replay-shared-trades", consumer="REPLAY", requirements=[requirement()],
+            ))
+            await prep.start()
+            ready = await asyncio.gather(*(terminal(prep, job["id"]) for job in [*jobs, replay]))
+            assert all(job["state"] == "READY" for job in ready), ready
+            assert len(calls) == 2
+            repeated = await client.post(path, json=request)
+            assert repeated.json()["job"]["id"] == jobs[0]["id"]
+            conflict = await client.post(path, json={**request, "end_ms": START_MS + 60_000})
+            assert conflict.status_code == 409
+            warm = await client.post(path, json={**request, "idempotency_key": "trade-warm"})
+            assert warm.json()["status"] == "local" and warm.json()["job"] is None
+            after = await client.get("/api/v1/trade-flow/history", params={"start_ms": START_MS, "end_ms": START_MS})
+            page = after.json()
+            assert page["mode"] == "local_only" and page["data"][0]["source"] == "verified_archive"
+            assert page["data"][0]["agg_trade_count"] == 4 and len(calls) == 2
+            quiet = {"start_ms": START_MS + 3_600_000, "end_ms": START_MS + 3_600_000}
+            quiet_page = (await client.get("/api/v1/trade-flow/history", params=quiet)).json()
+            assert quiet_page["complete"] and quiet_page["data"] == []
+            assert quiet_page["coverage"]["verified_empty_minutes"] == 1
+            no_job = await client.post(path, json={**request, **quiet, "idempotency_key": "verified-quiet"})
+            assert no_job.json()["status"] == "local" and no_job.json()["job"] is None and len(calls) == 2
+
+            identity = {"exchange": "binance", "market_type": "futures", "symbol": "BTCUSDT"}
+            ref = archive.freeze_dataset(**identity, start_time_ms=START_MS, end_time_ms=START_MS + 59_999)
+            obj = archive.root / ref.objects[0].object_id
+            parked = obj.with_suffix(".parked")
+            obj.rename(parked)
+            try:
+                missing = await client.post(path, json={**request, "idempotency_key": "missing-object"})
+                assert missing.status_code == 202
+                assert missing.json()["status"] == "integrity_unverified" and missing.json()["job"] is None
+                assert missing.json()["unavailable_ranges"] == [{
+                    "start_ms": START_MS, "end_ms": START_MS, "reason": "trade_archive_integrity_unverified",
+                }]
+                missing_page = (await client.get(
+                    "/api/v1/trade-flow/history", params={"start_ms": START_MS, "end_ms": START_MS},
+                )).json()
+                assert not missing_page["complete"] and missing_page["data"] == []
+                with pytest.raises(RuntimeError, match="dataset object is missing"):
+                    archive.validate_dataset(ref)
+                assert len(calls) == 2 and not obj.exists()
+            finally:
+                parked.rename(obj)
+            archive.validate_dataset(ref)
+            restored = await client.post(path, json={**request, "idempotency_key": "restored-object"})
+            assert restored.json()["status"] == "local" and restored.json()["job"] is None
+            assert len(calls) == 2
+
+            # The retained archive can be present and intact while a bounded
+            # projection cannot establish minute coverage.
+            from app.data_engine.market_data import trade_flow_service
+            monkeypatch.setattr(trade_flow_service, "_MAX_ARCHIVE_HISTORY_TRADES_PER_DAY", 1)
+            retained = await client.post(path, json={**request, "idempotency_key": "retained-unprojected"})
+            assert retained.status_code == 202 and retained.json()["status"] == "projection_unverified"
+            assert retained.json()["job"] is None and len(calls) == 2
+            assert retained.json()["unavailable_ranges"] == [{
+                "start_ms": START_MS, "end_ms": START_MS, "reason": "trade_archive_projection_unverified",
+            }]
+    finally:
+        await prep.shutdown()
+
+
+@pytest.mark.parametrize("missing_zip", [False, True])
+@async_test
+async def test_official_trade_day_404_stops_automatic_retries(tmp_path, missing_zip):
+    from urllib.error import HTTPError
+    adapter, archive, _ = adapter_and_network(tmp_path)
+    calls = []
+
+    def unavailable(url, **kwargs):
+        calls.append(url)
+        if missing_zip and url.endswith(".CHECKSUM"):
+            body, filename = _zip_bytes(_rows())
+            return io.BytesIO(f"{hashlib.sha256(body).hexdigest()}  {filename}\n".encode())
+        raise HTTPError(url, 404, "Not Found", {}, None)
+
+    adapter.trades.importer = partial(import_official_date_range, opener=unavailable)
+    with pytest.raises(PreparationError) as failure:
+        await adapter.acquire(requirement(), "unavailable-day")
+    assert failure.value.code == "TRADE_DAY_UNAVAILABLE" and not failure.value.retryable
+    assert len(calls) == (2 if missing_zip else 1) and calls[0].endswith(".CHECKSUM")
+    assert not (archive.root / "_quarantine").exists()
+    assert archive.list_verified_windows(exchange="binance", market_type="futures", symbol="BTCUSDT") == ()
+
+
+@async_test
+async def test_trade_day_unavailable_is_shared_and_rechecked_after_expiry(tmp_path, monkeypatch):
+    from urllib.error import HTTPError
+
+    import httpx
+    from fastapi import FastAPI
+
+    from app.api.v1.data_preparation import router
+    from app.core import config
+    from app.data_engine.market_data.trade_flow_service import TradeFlowService
+    from app.data_engine.storage.trade_flow_store import SQLiteTradeFlowRollupStore
+    from app.data_preparation.trade_adapter import DAY_MS
+
+    adapter, archive, _ = adapter_and_network(tmp_path)
+    body, filename = _zip_bytes(_rows())
+    checksum = f"{hashlib.sha256(body).hexdigest()}  {filename}\n".encode()
+    calls = []
+    present = False
+    now = START_MS + 2 * DAY_MS
+    monkeypatch.setattr(PreparationRepository, "now", staticmethod(lambda: now))
+    monkeypatch.setattr(config, "REPLAY_AGG_TRADE_ARCHIVE_DIR", archive.root)
+
+    def opener(url, **_kwargs):
+        calls.append(url)
+        if not present:
+            raise HTTPError(url, 404, "Not Found", {}, None)
+        return io.BytesIO(checksum if url.endswith(".CHECKSUM") else body)
+
+    adapter.trades.importer = partial(import_official_date_range, opener=opener)
+    path = tmp_path / "jobs.db"
+    prep = PreparationService(PreparationRepository(path), adapter, workers=2)
+    store = SQLiteTradeFlowRollupStore(tmp_path / "rollups.db")
+    trades = TradeFlowService(object(), rollup_store=store, verified_archive_root=archive.root)
+    app = FastAPI()
+    app.state.data_preparation_service = prep
+    app.state.data_manager = SimpleNamespace(trade_flow_ready=True, read_trade_flow_history=trades.read_history)
+    app.include_router(router, prefix="/api/v1")
+    route = "/api/v1/data-preparations"
+    retry_at = now + 15 * 60_000
+
+    async def submit(client, key, start=START_MS):
+        response = await client.post(route + "/trade-flow-history", json={
+            "symbol": "btcusdt", "start_ms": start, "end_ms": start, "idempotency_key": key,
+        })
+        assert response.status_code == 202, response.text
+        return response.json()
+
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            first = (await submit(client, "first-attempt"))["job"]
+            second = (await submit(client, "second-attempt", START_MS + 60_000))["job"]
+            assert first["id"] != second["id"]
+            await prep.start()
+            failed = await asyncio.gather(*(terminal(prep, item["id"]) for item in (first, second)))
+            assert all(item["state"] == "FAILED" and item["error"] == {
+                "code": "TRADE_DAY_UNAVAILABLE", "message": "The official trade package is unavailable for this UTC day",
+                "retryable": False, "retry_at_ms": retry_at,
+            } for item in failed)
+            assert len(calls) == 1 and calls[0].endswith(".CHECKSUM")
+            assert not (archive.root / "_quarantine").exists()
+            assert prep.repository.cache_inventory()["publication_reserved_bytes"] == 0
+            await prep.shutdown()
+
+            prep = PreparationService(PreparationRepository(path), adapter, workers=1)
+            app.state.data_preparation_service = prep
+            await prep.start()
+            cached = await submit(client, "after-restart", START_MS + 120_000)
+            assert cached["status"] == "unavailable" and cached["job"] is None
+            assert cached["unavailable_ranges"] == [{
+                "start_ms": START_MS + 120_000, "end_ms": START_MS + 120_000,
+                "reason": "trade_day_archive_unavailable", "retry_at_ms": retry_at,
+            }]
+            held = (await client.post(f"{route}/{first['id']}/retry")).json()
+            assert held["state"] == "FAILED" and held["revision"] == failed[0]["revision"]
+            assert len(calls) == 1
+
+            now = retry_at
+            present = True
+            resumed = (await client.post(f"{route}/{first['id']}/retry")).json()
+            assert resumed["id"] == first["id"]
+            ready = await terminal(prep, first["id"])
+            assert ready["state"] == "READY", ready["error"]
+            assert len(calls) == 3 and calls[1].endswith(".CHECKSUM") and calls[2].endswith(".zip")
+            local = await submit(client, "now-local")
+            assert local["status"] == "local" and local["job"] is None
+    finally:
+        await prep.shutdown()
+
+
+@async_test
+async def test_temporary_provider_failure_does_not_create_a_day_cooldown(tmp_path):
+    from urllib.error import HTTPError
+
+    adapter, _archive, _calls = adapter_and_network(tmp_path)
+    repository = PreparationRepository(tmp_path / "jobs.db")
+    adapter.publication_repository = repository
+
+    def unavailable(url, **_kwargs):
+        raise HTTPError(url, 503, "Service Unavailable", {}, None)
+
+    adapter.trades.importer = partial(import_official_date_range, opener=unavailable)
+    with pytest.raises(PreparationError) as failure:
+        await adapter.acquire(requirement(), "transient-error")
+    assert failure.value.code == "TRADE_IMPORT_FAILED" and failure.value.retryable
+    assert failure.value.retry_at_ms is None
+    assert repository.trade_day_retry_at("binance", "futures", "BTCUSDT", START_MS) is None

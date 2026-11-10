@@ -22,6 +22,7 @@ import type {
   KlineStreamController,
   KlineStreamFactory,
   KlineStreamOptions,
+  KlineStreamSeries,
   MergeCacheData,
   PatchCacheTick,
   PendingBeforePage,
@@ -1071,7 +1072,7 @@ export class SeriesDataFeed {
   }
 
   subscribeBars(
-    series: Pick<MarketSeries, "exchange" | "marketType" | "symbol">,
+    series: KlineStreamSeries,
     options: KlineStreamOptions = {},
   ): KlineStreamController {
     if (!this.isSeriesRequestAllowed(series)) return disabledStreamController;

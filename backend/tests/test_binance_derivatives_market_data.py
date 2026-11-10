@@ -772,6 +772,24 @@ def test_shared_ws_registry_preserves_schema_v1_kline_fallback(monkeypatch) -> N
     assert registry.get_hub(descriptor) is not None
 
 
+@pytest.mark.parametrize("fields", [
+    {"symbol": "ETHUSDT"},
+    {"fundingTime": True},
+    {"fundingTime": None, "nextFundingTime": 120_000},
+    {"fundingRate": None},
+    {"fundingRate": "NaN"},
+    {"rateType": "Special"},
+])
+def test_binance_funding_history_rejects_rows_without_settlement_evidence(fields):
+    descriptor = _descriptor(StreamType.FUNDING_RATE)
+    payload = {"symbol": "BTCUSDT", "fundingTime": 60_000, "fundingRate": "0.0001", **fields}
+    with pytest.raises(RuntimeError, match="Binance funding settlement"):
+        BinanceNormalizer(IngestionConfig(), descriptor).parse(RawMessage(
+            payload=payload, source=DataSource.HTTP_BACKFILL, stream_type=descriptor.stream_type,
+            received_at_ms=120_000,
+        ))
+
+
 def test_binance_derivatives_normalizer_requires_channel_core_field() -> None:
     config = IngestionConfig()
     received_at = 1_700_000_000_010

@@ -1548,6 +1548,7 @@ def _submit_verification_repairs(
                     int(missing["end_ms"]),
                     str(missing["exchange"]),
                     str(missing["market_type"]),
+                    **({"series_identity": series_identity} if series_identity is not None else {}),
                 )
             except Exception:
                 suppression = None

@@ -6,11 +6,12 @@ import type {
   KlineStreamController,
   KlineStreamFactory,
   KlineStreamOptions,
+  KlineStreamSeries,
 } from "../klineContracts.js";
-import type { MarketSeries } from "../marketDataTypes.js";
+import { isLegacyKlineSeriesIdentity, klineSeriesIdentityKey } from "../klineSeriesIdentity.js";
 import { KlineStreamSubscription } from "./klineStreamSubscription.js";
 
-type StreamSeries = Pick<MarketSeries, "exchange" | "marketType" | "symbol">;
+type StreamSeries = KlineStreamSeries;
 
 type PhysicalStreamFactory = (
   series: StreamSeries,
@@ -70,6 +71,7 @@ function streamKey(series: StreamSeries): string {
     String(series.exchange || "").trim().toLowerCase(),
     String(series.marketType || "").trim().toLowerCase(),
     String(series.symbol || "").trim().toUpperCase(),
+    ...(isLegacyKlineSeriesIdentity(series.exchange, series) ? [] : [klineSeriesIdentityKey(series.exchange, series)]),
   ].join("|");
 }
 

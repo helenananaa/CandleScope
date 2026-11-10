@@ -41,6 +41,7 @@ from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Callable, Awaitable
 
 from app.exchanges import bootstrap_default_adapters, get_exchange_registry
+from app.data_engine.series_identity import KlineSeriesIdentity
 
 from .config import IngestionConfig
 from .session_types import HealthCallback
@@ -192,6 +193,7 @@ class ExchangeIngestionFactory:
         on_gap: Callable[[Any], Awaitable[None]] | None = None,
         *,
         gap_repair_owner: str = "inline",
+        series_identity: KlineSeriesIdentity | None = None,
     ) -> _IngestionHandle:
         """Start an ingestion stream for (symbol, interval).
 
@@ -214,6 +216,7 @@ class ExchangeIngestionFactory:
             interval=interval,
             exchange=exchange,
             market_type=market_type,
+            series_identity=series_identity,
         )
 
         return await self._start_descriptor(

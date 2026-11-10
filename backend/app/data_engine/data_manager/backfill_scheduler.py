@@ -958,6 +958,8 @@ class BackfillScheduler:
                         },
                     },
                     request_id=request.request_id,
+                    _native_progress=(request._native_progress.subset(start, chunk_end)
+                                      if request._native_progress is not None else None),
                 )
                 chunks.append(_FetchChunk(
                     chunk_id=f"{request.request_id}:{sequence}",

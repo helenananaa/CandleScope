@@ -31,10 +31,12 @@ from app.api.v1.stream_utils import (
 )
 from app.core import config
 from app.core.async_cleanup import finish_cleanup
+from app.data_engine.bar_basis import native_bar_spec
 from app.data_engine.data_manager import StreamCapacityError
 from app.data_engine.consumer_recovery import ConsumerRecoveryRequired
 from app.data_engine.data_manager.models import DataEventType
 from app.data_engine.interval_policy import parse_interval_spec
+from app.data_engine.series_identity import KlineSeriesIdentity, identity_from_mapping
 from app.exchanges import bootstrap_default_adapters, get_exchange_registry
 from app.exchanges.symbols import normalize_symbol
 
@@ -89,6 +91,7 @@ class _BatchSubscription:
     market_type: str
     symbol: str
     consumer_id: str
+    identity: KlineSeriesIdentity | None = None
     handles: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -96,8 +99,12 @@ class _BatchSubscription:
         return set(self.handles)
 
     @property
-    def series_key(self) -> tuple[str, str, str]:
-        return (self.exchange, self.market_type, self.symbol)
+    def series_key(self) -> tuple[str, ...]:
+        return (self.exchange, self.market_type, self.symbol, *(self.identity.storage_values if self.identity else ()))
+
+    @property
+    def identity_kwargs(self) -> dict[str, KlineSeriesIdentity]:
+        return {"series_identity": self.identity} if self.identity else {}
 
 
 class KlineBatchConnectionRegistry:
@@ -510,13 +517,25 @@ class KlineBatchConnection:
         intervals = self._normalize_intervals(raw_item.get("intervals"))
         if require_intervals and not intervals:
             raise _ItemError("intervals_required", "intervals must be a non-empty list")
+        try:
+            identity = identity_from_mapping(exchange, raw_item)
+        except ValueError as exc:
+            raise _ItemError("invalid_series_identity", str(exc)) from exc
+        if identity.is_legacy_default_for(exchange):
+            identity = None
+        if identity is not None and any(
+            native_bar_spec(exchange, market_type, interval, "realtime").required_identity != identity
+            for interval in intervals
+        ):
+            raise _ItemError("series_identity_unsupported", "Series identity is not admitted for this realtime interval")
         return {
             "client_id": client_id,
             "exchange": exchange,
             "market_type": market_type,
             "symbol": symbol,
             "intervals": intervals,
-            "series_key": (exchange, market_type, symbol),
+            "identity": identity,
+            "series_key": (exchange, market_type, symbol, *(identity.storage_values if identity else ())),
         }
 
     @staticmethod
@@ -554,6 +573,7 @@ class KlineBatchConnection:
             exchange=item["exchange"],
             market_type=item["market_type"],
             symbol=item["symbol"],
+            identity=item.get("identity"),
             consumer_id=f"ws:klines_batch:{self.connection_id}:{client_id}",
         )
 
@@ -587,9 +607,10 @@ class KlineBatchConnection:
                     focus_scope="websocket",
                     subscription_tier="batch",
                     consumer_id=subscription.consumer_id,
+                    **subscription.identity_kwargs,
                 )
                 _require_active_stream_info(info, interval)
-                callback = self._event_callback(subscription.client_id)
+                callback = self._event_callback(subscription)
                 handle = await self.dm.subscribe_async(
                     callback=callback,
                     on_recovery=self._require_resync,
@@ -598,6 +619,7 @@ class KlineBatchConnection:
                     exchange=subscription.exchange,
                     market_type=subscription.market_type,
                     event_types=_EVENT_TYPES,
+                    **subscription.identity_kwargs,
                 )
             except asyncio.CancelledError:
                 # ensure_stream may already own a lease while callback admission
@@ -685,9 +707,14 @@ class KlineBatchConnection:
         self._stopping.set()
         await close_for_resync(self.websocket)
 
-    def _event_callback(self, client_id: str) -> Callable[[Any], Any]:
+    def _event_callback(self, subscription: _BatchSubscription) -> Callable[[Any], Any]:
+        client_id = subscription.client_id
+        wire_identity = subscription.identity.to_dict() if subscription.identity else {}
+
         async def callback(event: Any) -> None:
             if self.closed or self._recovering or not should_forward_browser_event(event):
+                return
+            if subscription.identity is not None and event.key.identity != subscription.identity:
                 return
             key = (
                 client_id,
@@ -697,6 +724,7 @@ class KlineBatchConnection:
                 event.key.interval,
             )
             payload = _serialize_browser_kline_event(event)
+            payload.update(wire_identity)
             payload.update(protocol=KLINE_BATCH_PROTOCOL, client_id=client_id)
             if event.event_type == DataEventType.SOURCE_GAP and event.detail.get("state") == "failed":
                 # The strict worker requests resync as soon as this callback
@@ -761,6 +789,7 @@ class KlineBatchConnection:
                 focus_scope="websocket",
                 subscription_tier="batch",
                 consumer_id=subscription.consumer_id,
+                **subscription.identity_kwargs,
             )
         except Exception:
             pass
@@ -785,6 +814,7 @@ class KlineBatchConnection:
             "symbol": subscription.symbol,
             "active_intervals": sorted(subscription.intervals),
             "failed": failed,
+            **(subscription.identity.to_dict() if subscription.identity else {}),
         }
 
     def _record_interval_failures(

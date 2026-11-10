@@ -3,8 +3,11 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
+import pytest
+
 from app.data_engine.storage.raw_trade_archive import (
     ParquetRawAggTradeArchive,
+    RawAggTradeScanLimitError,
     VerifiedRawAggTradeDay,
 )
 from app.replay.trade_audit import audit_exact_trade_archive, exact_audit_passed
@@ -79,6 +82,12 @@ def test_audit_releases_verified_checksum_generation(tmp_path: Path) -> None:
             last_trade_time_ms=START_MS + 2,
         ),
     )
+
+    with pytest.raises(RawAggTradeScanLimitError, match="max_rows"):
+        archive.read_verified_range(
+            exchange="binance", market_type="futures", symbol="BTCUSDT",
+            start_time_ms=START_MS, end_time_ms=START_MS + 2, limit=2,
+        )
 
     report = audit_exact_trade_archive(
         archive,

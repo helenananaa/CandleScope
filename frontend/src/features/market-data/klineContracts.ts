@@ -286,8 +286,10 @@ export type PatchCacheTick = (
   meta: FeedCacheMeta,
 ) => void;
 
+export type KlineStreamSeries = Omit<MarketSeries, "interval">;
+
 export type KlineStreamFactory = (
-  series: Pick<MarketSeries, "exchange" | "marketType" | "symbol">,
+  series: KlineStreamSeries,
   options?: KlineStreamOptions,
 ) => KlineStreamController;
 

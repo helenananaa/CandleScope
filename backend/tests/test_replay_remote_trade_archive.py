@@ -87,6 +87,16 @@ def test_remote_agg_trade_selection_uses_receipts_without_bar_parity_proofs(
     assert diagnostics["materialized_objects"] == len(dataset_ref.objects) * 2
     assert diagnostics["materialization_failures"] == 0
 
+    # A mirrored partition remains recoverable if one local body is corrupt.
+    damaged = cache_root / frozen.objects[0].object_id
+    damaged.write_bytes(b"corrupt cached parquet")
+    repaired = remote.freeze_dataset(
+        exchange="binance", market_type="futures", symbol="BTCUSDT",
+        start_time_ms=TRADE_REPLAY_START_MS, end_time_ms=end_ms,
+    )
+    assert repaired == frozen
+    assert remote.diagnostics()["materialized_objects"] == diagnostics["materialized_objects"] + 1
+
 
 def test_remote_agg_trade_compatibility_is_independent_of_partial_body_cache(
     tmp_path: Path,

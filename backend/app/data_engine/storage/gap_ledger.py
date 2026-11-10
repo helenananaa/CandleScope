@@ -13,6 +13,11 @@ from app.data_engine.interval_policy import (
     parse_interval_ms,
 )
 from app.data_engine.kline_quality import repair_requires_trusted_finality
+from app.data_engine.series_identity import (
+    KlineSeriesIdentity,
+    identity_from_metadata,
+    resolve_kline_series_identity,
+)
 
 
 _DEFAULT_STALE_AFTER_MS = 15 * 60 * 1000
@@ -20,6 +25,33 @@ _MAX_FAILED_RETRY_MS = 24 * 60 * 60 * 1000
 _MAX_REASON_PARTS = 8
 _MAX_REASON_LENGTH = 256
 _MAX_ERROR_LENGTH = 2_000
+NATIVE_PROGRESS_FIELD = "native_backfill_receipts"
+_REMOVE_NATIVE_PROGRESS = (
+    "metadata_json = CASE WHEN json_valid(metadata_json) "
+    f"THEN json_remove(metadata_json, '$.{NATIVE_PROGRESS_FIELD}') ELSE metadata_json END"
+)
+
+
+_LEGACY_TABLE = "kline_gap_ledger"
+_SCOPED_TABLE = "kline_gap_ledger_scoped"
+_ALL_ROWS = "kline_gap_ledger_all"
+_RANGE_KEY = "exchange, market_type, symbol, interval, start_ms, end_ms"
+_ROW_FIELDS = (
+    _RANGE_KEY + ", expected_count, missing_count, status, priority, reason, repair_ticket, "
+    "attempts, last_error, first_seen_at, last_seen_at, last_checked_at, resolved_at, "
+    "next_retry_at, metadata_json"
+)
+
+
+def _partition(scope: str) -> tuple[str, str]:
+    if scope:
+        return _SCOPED_TABLE, "series_scope"
+    return _LEGACY_TABLE, "gap_series_scope(exchange, metadata_json)"
+
+
+def _row_table(row_id: int) -> str:
+    # The combined read view negates scoped ids so old row ids keep their meaning.
+    return _SCOPED_TABLE if row_id < 0 else _LEGACY_TABLE
 
 
 def _connect(db_path: Path | str | None = None) -> sqlite3.Connection:
@@ -29,6 +61,7 @@ def _connect(db_path: Path | str | None = None) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA synchronous=NORMAL;")
+    conn.create_function("gap_series_scope", 2, _series_scope, deterministic=True)
     return conn
 
 
@@ -75,6 +108,24 @@ def _metadata_object(value: Any) -> dict[str, Any]:
     return dict(decoded) if isinstance(decoded, dict) else {}
 
 
+def _series_scope(exchange: str, metadata: Any) -> str:
+    try:
+        identity = identity_from_metadata(exchange, _metadata_object(metadata))
+        return _identity_scope(exchange, identity)
+    except (TypeError, ValueError):
+        # Malformed legacy evidence cannot prove any current identity.
+        return "invalid"
+
+
+def _identity_scope(exchange: str, identity: KlineSeriesIdentity | None) -> str:
+    resolved = resolve_kline_series_identity(exchange, identity)
+    return "" if resolved.is_legacy_default_for(exchange) else json.dumps(resolved.storage_values)
+
+
+def _request_scope(request: Any) -> str:
+    return _identity_scope(request.exchange, identity_from_metadata(request.exchange, request.metadata))
+
+
 def _request_range(request: Any) -> tuple[int, int]:
     """Resolve the durable parent range carried by scheduler chunks."""
     metadata = dict(getattr(request, "metadata", {}) or {})
@@ -100,40 +151,72 @@ class GapLedger:
 
     def init_storage(self) -> None:
         with _connect(self._db_path) as conn:
-            conn.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS kline_gap_ledger (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    exchange TEXT NOT NULL,
-                    market_type TEXT NOT NULL,
-                    symbol TEXT NOT NULL,
-                    interval TEXT NOT NULL,
-                    start_ms INTEGER NOT NULL,
-                    end_ms INTEGER NOT NULL,
-                    expected_count INTEGER NOT NULL,
-                    missing_count INTEGER NOT NULL,
-                    status TEXT NOT NULL,
-                    priority INTEGER NOT NULL DEFAULT 100,
-                    reason TEXT NOT NULL,
-                    repair_ticket TEXT,
-                    attempts INTEGER NOT NULL DEFAULT 0,
-                    last_error TEXT,
-                    first_seen_at INTEGER NOT NULL,
-                    last_seen_at INTEGER NOT NULL,
-                    last_checked_at INTEGER,
-                    resolved_at INTEGER,
-                    next_retry_at INTEGER,
-                    metadata_json TEXT,
-                    UNIQUE(exchange, market_type, symbol, interval, start_ms, end_ms)
-                );
-
-                CREATE INDEX IF NOT EXISTS idx_gap_ledger_status_priority
-                ON kline_gap_ledger(status, priority, next_retry_at);
-
-                CREATE INDEX IF NOT EXISTS idx_gap_ledger_series
-                ON kline_gap_ledger(exchange, market_type, symbol, interval, start_ms, end_ms);
-                """
+            # Keep the old writer's conflict target intact during rollback.
+            # Schema creation and transfer share the same write transaction.
+            conn.execute("BEGIN IMMEDIATE")
+            for table, suffix in ((_LEGACY_TABLE, ""), (_SCOPED_TABLE, "_scoped")):
+                scope_column = "series_scope TEXT NOT NULL," if suffix else ""
+                scope_key = ", series_scope" if suffix else ""
+                conn.execute(f"""
+                    CREATE TABLE IF NOT EXISTS {table} (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        {scope_column}
+                        exchange TEXT NOT NULL,
+                        market_type TEXT NOT NULL,
+                        symbol TEXT NOT NULL,
+                        interval TEXT NOT NULL,
+                        start_ms INTEGER NOT NULL,
+                        end_ms INTEGER NOT NULL,
+                        expected_count INTEGER NOT NULL,
+                        missing_count INTEGER NOT NULL,
+                        status TEXT NOT NULL,
+                        priority INTEGER NOT NULL DEFAULT 100,
+                        reason TEXT NOT NULL,
+                        repair_ticket TEXT,
+                        attempts INTEGER NOT NULL DEFAULT 0,
+                        last_error TEXT,
+                        first_seen_at INTEGER NOT NULL,
+                        last_seen_at INTEGER NOT NULL,
+                        last_checked_at INTEGER,
+                        resolved_at INTEGER,
+                        next_retry_at INTEGER,
+                        metadata_json TEXT,
+                        UNIQUE({_RANGE_KEY}{scope_key})
+                    )
+                """)
+                conn.execute(f"""
+                    CREATE INDEX IF NOT EXISTS idx_gap_ledger_status_priority{suffix}
+                    ON {table}(status, priority, next_retry_at)
+                """)
+                conn.execute(f"""
+                    CREATE INDEX IF NOT EXISTS idx_gap_ledger_series{suffix}
+                    ON {table}(exchange, market_type, symbol, interval{scope_key}, start_ms, end_ms)
+                """)
+            conn.execute(f"""
+                CREATE VIEW IF NOT EXISTS {_ALL_ROWS} AS
+                SELECT id, {_ROW_FIELDS} FROM {_LEGACY_TABLE}
+                UNION ALL
+                SELECT -id, {_ROW_FIELDS} FROM {_SCOPED_TABLE}
+            """)
+            # Older revisions could persist an explicit identity in metadata.
+            # Transfer those rows on every open, including after a rollback.
+            assigned_fields = ", ".join(
+                f"{name} = excluded.{name}"
+                for name in _ROW_FIELDS.split(", ")[6:]
             )
+            conn.execute(f"""
+                INSERT INTO {_SCOPED_TABLE} ({_ROW_FIELDS}, series_scope)
+                SELECT {_ROW_FIELDS}, gap_series_scope(exchange, metadata_json)
+                FROM {_LEGACY_TABLE}
+                WHERE gap_series_scope(exchange, metadata_json) NOT IN ('', 'invalid')
+                ON CONFLICT({_RANGE_KEY}, series_scope) DO UPDATE SET {assigned_fields}
+                WHERE max(excluded.last_seen_at, COALESCE(excluded.last_checked_at, 0)) >
+                      max({_SCOPED_TABLE}.last_seen_at, COALESCE({_SCOPED_TABLE}.last_checked_at, 0))
+            """)
+            conn.execute(f"""
+                DELETE FROM {_LEGACY_TABLE}
+                WHERE gap_series_scope(exchange, metadata_json) NOT IN ('', 'invalid')
+            """)
 
     def upsert_detected(self, request: Any, *, status: str = "queued") -> None:
         self.upsert_detected_many([request], status=status)
@@ -147,113 +230,79 @@ class GapLedger:
         """Persist a scheduler batch in one SQLite transaction."""
         if not requests:
             return
-        rows: list[tuple[Any, ...]] = []
+        grouped: dict[str, list[dict[str, Any]]] = {}
         for request in requests:
-            now = _now_ms()
             start_ms, end_ms = _request_range(request)
-            expected = _estimate_count(start_ms, end_ms, request.interval)
-            metadata = dict(getattr(request, "metadata", {}) or {})
-            priority = int(
-                getattr(request, "priority", None)
-                or metadata.get("priority", 100)
-            )
-            rows.append((
-                request.exchange,
-                request.market_type,
-                request.symbol,
-                request.interval,
-                start_ms,
-                end_ms,
-                expected,
-                expected,
-                status,
-                priority,
-                _bounded_reason(request.reason),
-                request.request_id,
-                now,
-                now,
-                json.dumps(metadata, sort_keys=True),
-            ))
+            metadata = dict(request.metadata or {})
+            progress = getattr(request, "_native_progress", None)
+            if progress is not None:
+                metadata[NATIVE_PROGRESS_FIELD] = progress.to_ledger()
+            scope = _request_scope(request)
+            grouped.setdefault(scope, []).append({
+                "exchange": request.exchange,
+                "market_type": request.market_type,
+                "symbol": request.symbol,
+                "interval": request.interval,
+                "start_ms": start_ms,
+                "end_ms": end_ms,
+                "expected": _estimate_count(start_ms, end_ms, request.interval),
+                "status": status,
+                "priority": int(request.priority or metadata.get("priority", 100)),
+                "reason": _bounded_reason(request.reason),
+                "ticket": request.request_id,
+                "now": _now_ms(),
+                "metadata": json.dumps(metadata, sort_keys=True),
+                "scope": scope,
+            })
+
         with _connect(self._db_path) as conn:
-            # A pending scheduler request may be widened before its first
-            # chunk starts.  The request id remains stable, so retire the old
-            # natural key before inserting the replacement.  Otherwise each
-            # merge leaves a permanent queued zombie behind.
-            for row in rows:
-                (
-                    exchange,
-                    market_type,
-                    symbol,
-                    interval,
-                    start_ms,
-                    end_ms,
-                    _expected,
-                    _missing,
-                    _status,
-                    _priority,
-                    _reason,
-                    repair_ticket,
-                    _first_seen,
-                    last_seen,
-                    _metadata_json,
-                ) = row
-                conn.execute(
-                    """
-                    UPDATE kline_gap_ledger
+            for scope, rows in grouped.items():
+                table, scope_column = _partition(scope)
+                extra_column, extra_value = (", series_scope", ", :scope") if scope else ("", "")
+                # Widening an existing scheduler ticket retires its old range.
+                conn.executemany(f"""
+                    UPDATE {table}
                     SET status = 'superseded',
                         last_error = 'superseded_by_merged_request',
-                        last_checked_at = ?,
-                        resolved_at = ?,
-                        next_retry_at = NULL
-                    WHERE repair_ticket = ?
+                        last_checked_at = :now,
+                        resolved_at = :now,
+                        next_retry_at = NULL,
+                        {_REMOVE_NATIVE_PROGRESS}
+                    WHERE repair_ticket = :ticket
+                      AND {scope_column} = :scope
                       AND NOT (
-                        exchange = ? AND market_type = ? AND symbol = ?
-                        AND interval = ? AND start_ms = ? AND end_ms = ?
+                        exchange = :exchange AND market_type = :market_type AND symbol = :symbol
+                        AND interval = :interval AND start_ms = :start_ms AND end_ms = :end_ms
                       )
                       AND status IN (
-                        'queued', 'repairing', 'verifying', 'partial',
-                        'retry_wait', 'unavailable'
+                        'queued', 'repairing', 'verifying', 'partial', 'retry_wait', 'unavailable'
                       )
-                    """,
-                    (
-                        last_seen,
-                        last_seen,
-                        repair_ticket,
-                        exchange,
-                        market_type,
-                        symbol,
-                        interval,
-                        start_ms,
-                        end_ms,
-                    ),
-                )
-            conn.executemany(
-                """
-                INSERT INTO kline_gap_ledger (
-                    exchange, market_type, symbol, interval, start_ms, end_ms,
-                    expected_count, missing_count, status, priority, reason,
-                    repair_ticket, attempts, first_seen_at, last_seen_at,
-                    metadata_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
-                ON CONFLICT(exchange, market_type, symbol, interval, start_ms, end_ms)
-                DO UPDATE SET
-                    expected_count = excluded.expected_count,
-                    missing_count = excluded.missing_count,
-                    status = excluded.status,
-                    priority = excluded.priority,
-                    reason = excluded.reason,
-                    repair_ticket = excluded.repair_ticket,
-                    attempts = 0,
-                    last_error = NULL,
-                    last_seen_at = excluded.last_seen_at,
-                    last_checked_at = NULL,
-                    resolved_at = NULL,
-                    next_retry_at = NULL,
-                    metadata_json = excluded.metadata_json
-                """,
-                rows,
-            )
-            conn.commit()
+                """, rows)
+                conn.executemany(f"""
+                    INSERT INTO {table} (
+                        {_RANGE_KEY}, expected_count, missing_count, status, priority,
+                        reason, repair_ticket, attempts, first_seen_at, last_seen_at,
+                        metadata_json{extra_column}
+                    ) VALUES (
+                        :exchange, :market_type, :symbol, :interval, :start_ms, :end_ms,
+                        :expected, :expected, :status, :priority, :reason,
+                        :ticket, 0, :now, :now, :metadata{extra_value}
+                    )
+                    ON CONFLICT({_RANGE_KEY}{extra_column}) DO UPDATE SET
+                        expected_count = excluded.expected_count,
+                        missing_count = excluded.missing_count,
+                        status = excluded.status,
+                        priority = excluded.priority,
+                        reason = excluded.reason,
+                        repair_ticket = excluded.repair_ticket,
+                        attempts = 0,
+                        last_error = NULL,
+                        last_seen_at = excluded.last_seen_at,
+                        last_checked_at = NULL,
+                        resolved_at = NULL,
+                        next_retry_at = NULL,
+                        metadata_json = excluded.metadata_json
+                """, rows)
 
     def mark_started(self, request: Any, *, attempt: int) -> None:
         self._update(
@@ -272,10 +321,12 @@ class GapLedger:
         attempt: int,
         error: str | None,
         next_retry_at: int,
+        native_progress: list[dict] | None = None,
     ) -> None:
         self._update(
             request,
             require_repair_ticket=True,
+            native_progress=native_progress,
             status="retry_wait",
             attempts=attempt,
             last_error=_bounded_error(error),
@@ -340,7 +391,7 @@ class GapLedger:
             missing_count = 0
         if missing_count is not None:
             values["missing_count"] = max(0, int(missing_count))
-        self._update(request, **values)
+        self._update(request, native_progress=[] if status in {"filled", "source_empty"} else None, **values)
         if status == "source_empty":
             self._supersede_contained_source_empty(request)
 
@@ -421,21 +472,27 @@ class GapLedger:
             reason=getattr(request, "reason", None),
         )
 
+        scope = _request_scope(request)
+        table, scope_column = _partition(scope)
+        clear_receipts = (
+            f", {_REMOVE_NATIVE_PROGRESS}" if normalized_status in {"filled", "source_empty"} else ""
+        )
         with _connect(self._db_path) as conn:
             cursor = conn.execute(
-                """
-                UPDATE kline_gap_ledger
+                f"""
+                UPDATE {table}
                 SET status = ?,
                     missing_count = COALESCE(?, missing_count),
                     attempts = ?,
                     last_error = ?,
                     last_checked_at = ?,
                     resolved_at = ?,
-                    next_retry_at = ?
+                    next_retry_at = ?{clear_receipts}
                 WHERE exchange = ?
                   AND market_type = ?
                   AND symbol = ?
                   AND interval = ?
+                  AND {scope_column} = ?
                   AND start_ms = ?
                   AND end_ms = ?
                   AND repair_ticket IS ?
@@ -456,6 +513,7 @@ class GapLedger:
                     request.market_type,
                     request.symbol,
                     request.interval,
+                    scope,
                     start_ms,
                     end_ms,
                     request.request_id,
@@ -471,13 +529,14 @@ class GapLedger:
                 and coverage_end_ms is not None
             ):
                 candidates = conn.execute(
-                    """
+                    f"""
                     SELECT id, status, reason, repair_ticket, metadata_json
-                    FROM kline_gap_ledger
+                    FROM {table}
                     WHERE exchange = ?
                       AND market_type = ?
                       AND symbol = ?
                       AND interval = ?
+                      AND {scope_column} = ?
                       AND start_ms >= ?
                       AND end_ms <= ?
                       AND status IN (
@@ -490,6 +549,7 @@ class GapLedger:
                         request.market_type,
                         request.symbol,
                         request.interval,
+                        scope,
                         int(coverage_start_ms),
                         int(coverage_end_ms),
                     ),
@@ -515,13 +575,14 @@ class GapLedger:
                     placeholders = ", ".join("?" for _ in victim_ids)
                     conn.execute(
                         f"""
-                        UPDATE kline_gap_ledger
+                        UPDATE {table}
                         SET status = 'filled',
                             missing_count = 0,
                             last_error = NULL,
                             last_checked_at = ?,
                             resolved_at = ?,
-                            next_retry_at = NULL
+                            next_retry_at = NULL,
+                            {_REMOVE_NATIVE_PROGRESS}
                         WHERE id IN ({placeholders})
                         """,
                         (now, now, *victim_ids),
@@ -574,10 +635,14 @@ class GapLedger:
         coverage_end_ms = int(coverage_end_ms)
         if coverage_end_ms < coverage_start_ms:
             return 0
+        scope = _request_scope(request)
+        table, scope_column = _partition(scope)
         with _connect(self._db_path) as conn:
             if row_snapshot is not None:
                 try:
                     row_id = int(row_snapshot["id"])
+                    if _row_table(row_id) != table:
+                        return 0
                     expected_status = str(row_snapshot["status"])
                     expected_last_seen_at = int(row_snapshot["last_seen_at"])
                 except (KeyError, TypeError, ValueError):
@@ -586,9 +651,10 @@ class GapLedger:
                 expected_repair_ticket = row_snapshot.get("repair_ticket")
                 metadata = _metadata_object(expected_metadata_json)
                 metadata.pop("reconciliation_checkpoint", None)
+                metadata.pop(NATIVE_PROGRESS_FIELD, None)
                 cursor = conn.execute(
-                    """
-                    UPDATE kline_gap_ledger
+                    f"""
+                    UPDATE {table}
                     SET status = 'filled',
                         missing_count = 0,
                         last_error = NULL,
@@ -601,6 +667,7 @@ class GapLedger:
                       AND market_type = ?
                       AND symbol = ?
                       AND interval = ?
+                      AND {scope_column} = ?
                       AND start_ms >= ?
                       AND end_ms <= ?
                       AND status = ?
@@ -612,11 +679,12 @@ class GapLedger:
                         now,
                         now,
                         json.dumps(metadata, sort_keys=True),
-                        row_id,
+                        abs(row_id),
                         request.exchange,
                         request.market_type,
                         request.symbol,
                         request.interval,
+                        scope,
                         coverage_start_ms,
                         coverage_end_ms,
                         expected_status,
@@ -627,18 +695,20 @@ class GapLedger:
                 )
             else:
                 cursor = conn.execute(
-                    """
-                    UPDATE kline_gap_ledger
+                    f"""
+                    UPDATE {table}
                     SET status = 'filled',
                         missing_count = 0,
                         last_error = NULL,
                         last_checked_at = ?,
                         resolved_at = ?,
-                        next_retry_at = NULL
+                        next_retry_at = NULL,
+                        {_REMOVE_NATIVE_PROGRESS}
                     WHERE exchange = ?
                       AND market_type = ?
                       AND symbol = ?
                       AND interval = ?
+                      AND {scope_column} = ?
                       AND start_ms >= ?
                       AND end_ms <= ?
                       AND status IN (
@@ -653,6 +723,7 @@ class GapLedger:
                         request.market_type,
                         request.symbol,
                         request.interval,
+                        scope,
                         coverage_start_ms,
                         coverage_end_ms,
                     ),
@@ -661,9 +732,11 @@ class GapLedger:
         return int(cursor.rowcount or 0)
 
     def get_status(self, request: Any) -> dict[str, Any] | None:
+        scope = _request_scope(request)
+        table, scope_column = _partition(scope)
         with _connect(self._db_path) as conn:
             row = conn.execute(
-                """
+                f"""
                 SELECT
                     status,
                     reason,
@@ -675,11 +748,12 @@ class GapLedger:
                     resolved_at,
                     next_retry_at,
                     metadata_json
-                FROM kline_gap_ledger
+                FROM {table}
                 WHERE exchange = ?
                   AND market_type = ?
                   AND symbol = ?
                   AND interval = ?
+                  AND {scope_column} = ?
                   AND start_ms = ?
                   AND end_ms = ?
                 """,
@@ -688,6 +762,7 @@ class GapLedger:
                     request.market_type,
                     request.symbol,
                     request.interval,
+                    scope,
                     int(request.start_ms),
                     int(request.end_ms),
                 ),
@@ -704,6 +779,7 @@ class GapLedger:
         start_ms: int,
         end_ms: int,
         now_ms: int | None = None,
+        series_identity: KlineSeriesIdentity | None = None,
     ) -> dict[str, Any] | None:
         """Return the most relevant unresolved row covering an exact gap.
 
@@ -714,15 +790,19 @@ class GapLedger:
         """
         now = int(_now_ms() if now_ms is None else now_ms)
         fresh_after = now - _DEFAULT_STALE_AFTER_MS
+        scope = _identity_scope(exchange, series_identity)
+        table, scope_column = _partition(scope)
+        row_id = "-id" if scope else "id"
         with _connect(self._db_path) as conn:
             row = conn.execute(
-                """
-                SELECT *
-                FROM kline_gap_ledger
+                f"""
+                SELECT {row_id} AS id, {_ROW_FIELDS}
+                FROM {table}
                 WHERE exchange = ?
                   AND market_type = ?
                   AND symbol = ?
                   AND interval = ?
+                  AND {scope_column} = ?
                   AND start_ms <= ?
                   AND end_ms >= ?
                   AND status NOT IN ('filled', 'superseded')
@@ -755,6 +835,7 @@ class GapLedger:
                     str(market_type or "spot").strip().lower(),
                     str(symbol or "").strip().upper(),
                     str(interval or "").strip(),
+                    scope,
                     int(start_ms),
                     int(end_ms),
                     now,
@@ -770,9 +851,9 @@ class GapLedger:
         now = int(_now_ms() if now_ms is None else now_ms)
         with _connect(self._db_path) as conn:
             rows = conn.execute(
-                """
+                f"""
                 SELECT *
-                FROM kline_gap_ledger
+                FROM {_ALL_ROWS}
                 WHERE (
                     status = 'source_empty'
                     AND (next_retry_at IS NULL OR next_retry_at > ?)
@@ -799,18 +880,23 @@ class GapLedger:
         start_ms: int,
         end_ms: int,
         now_ms: int | None = None,
+        series_identity: KlineSeriesIdentity | None = None,
     ) -> dict[str, Any] | None:
         """Read one exact/covering terminal submission suppression."""
         now = int(_now_ms() if now_ms is None else now_ms)
+        scope = _identity_scope(exchange, series_identity)
+        table, scope_column = _partition(scope)
+        row_id = "-id" if scope else "id"
         with _connect(self._db_path) as conn:
             row = conn.execute(
-                """
-                SELECT *
-                FROM kline_gap_ledger
+                f"""
+                SELECT {row_id} AS id, {_ROW_FIELDS}
+                FROM {table}
                 WHERE exchange = ?
                   AND market_type = ?
                   AND symbol = ?
                   AND interval = ?
+                  AND {scope_column} = ?
                   AND start_ms <= ?
                   AND end_ms >= ?
                   AND (
@@ -832,6 +918,7 @@ class GapLedger:
                     str(market_type or "spot").strip().lower(),
                     str(symbol or "").strip().upper(),
                     str(interval or "").strip(),
+                    scope,
                     int(start_ms),
                     int(end_ms),
                     now,
@@ -843,9 +930,9 @@ class GapLedger:
     def list_open(self, *, limit: int = 100) -> list[dict[str, Any]]:
         with _connect(self._db_path) as conn:
             rows = conn.execute(
-                """
+                f"""
                 SELECT *
-                FROM kline_gap_ledger
+                FROM {_ALL_ROWS}
                 WHERE status NOT IN ('filled', 'source_empty', 'not_expected', 'superseded')
                 ORDER BY priority ASC, first_seen_at ASC
                 LIMIT ?
@@ -876,9 +963,9 @@ class GapLedger:
         due_before = int(due_before_ms if due_before_ms is not None else _now_ms())
         with _connect(self._db_path) as conn:
             rows = conn.execute(
-                """
+                f"""
                 SELECT *
-                FROM kline_gap_ledger
+                FROM {_ALL_ROWS}
                 WHERE (
                      status IN ('source_empty', 'failed', 'unavailable', 'not_expected')
                      AND (next_retry_at IS NULL OR next_retry_at <= ?)
@@ -941,14 +1028,15 @@ class GapLedger:
     ) -> bool:
         """Persist exact-scan progress so a large range resumes next pass."""
         now = _now_ms()
+        table = _row_table(row_id)
         with _connect(self._db_path) as conn:
             row = conn.execute(
-                """
+                f"""
                 SELECT status, last_seen_at, metadata_json, repair_ticket
-                FROM kline_gap_ledger
+                FROM {table}
                 WHERE id = ?
                 """,
-                (int(row_id),),
+                (abs(row_id),),
             ).fetchone()
             if row is None:
                 return False
@@ -981,8 +1069,8 @@ class GapLedger:
                 "updated_at": now,
             }
             cursor = conn.execute(
-                """
-                UPDATE kline_gap_ledger
+                f"""
+                UPDATE {table}
                 SET last_checked_at = ?,
                     next_retry_at = ?,
                     last_error = COALESCE(?, last_error),
@@ -998,7 +1086,7 @@ class GapLedger:
                     int(next_retry_at),
                     _bounded_error(error),
                     json.dumps(metadata, sort_keys=True),
-                    int(row_id),
+                    abs(row_id),
                     str(row["status"]),
                     int(row["last_seen_at"]),
                     original_metadata_json,
@@ -1015,14 +1103,15 @@ class GapLedger:
         row_snapshot: dict[str, Any] | None = None,
     ) -> bool:
         """Drop a stale scan cursor after resolution or a confirmed gap."""
+        table = _row_table(row_id)
         with _connect(self._db_path) as conn:
             row = conn.execute(
-                """
+                f"""
                 SELECT status, last_seen_at, metadata_json, repair_ticket
-                FROM kline_gap_ledger
+                FROM {table}
                 WHERE id = ?
                 """,
-                (int(row_id),),
+                (abs(row_id),),
             ).fetchone()
             if row is None:
                 return False
@@ -1040,8 +1129,8 @@ class GapLedger:
             if metadata.pop("reconciliation_checkpoint", None) is None:
                 return True
             cursor = conn.execute(
-                """
-                UPDATE kline_gap_ledger
+                f"""
+                UPDATE {table}
                 SET metadata_json = ?
                 WHERE id = ?
                   AND status = ?
@@ -1051,7 +1140,7 @@ class GapLedger:
                 """,
                 (
                     json.dumps(metadata, sort_keys=True),
-                    int(row_id),
+                    abs(row_id),
                     str(row["status"]),
                     int(row["last_seen_at"]),
                     original_metadata_json,
@@ -1072,6 +1161,7 @@ class GapLedger:
     ) -> bool:
         """Defer a malformed/corrupt candidate that cannot form a request."""
         now = _now_ms()
+        table = _row_table(row_id)
         with _connect(self._db_path) as conn:
             params: list[Any] = [
                 now,
@@ -1089,7 +1179,7 @@ class GapLedger:
                 metadata.pop("reconciliation_checkpoint", None)
                 metadata_assignment = ", metadata_json = ?"
                 params.append(json.dumps(metadata, sort_keys=True))
-            params.append(int(row_id))
+            params.append(abs(row_id))
             guards = ""
             if row_snapshot is not None:
                 try:
@@ -1110,7 +1200,7 @@ class GapLedger:
                 ])
             cursor = conn.execute(
                 f"""
-                UPDATE kline_gap_ledger
+                UPDATE {table}
                 SET last_checked_at = ?, next_retry_at = ?,
                     last_error = COALESCE(?, last_error)
                     {metadata_assignment}
@@ -1127,16 +1217,16 @@ class GapLedger:
         now = _now_ms()
         with _connect(self._db_path) as conn:
             status_rows = conn.execute(
-                """
+                f"""
                 SELECT status, COUNT(*) AS count
-                FROM kline_gap_ledger
+                FROM {_ALL_ROWS}
                 WHERE status NOT IN ('filled', 'source_empty', 'not_expected', 'superseded')
                 GROUP BY status
                 ORDER BY status
                 """
             ).fetchall()
             age_row = conn.execute(
-                """
+                f"""
                 SELECT
                   SUM(CASE WHEN ? - first_seen_at < 300000 THEN 1 ELSE 0 END) AS lt_5m,
                   SUM(CASE WHEN ? - first_seen_at BETWEEN 300000 AND 3599999 THEN 1 ELSE 0 END) AS from_5m_to_1h,
@@ -1147,13 +1237,13 @@ class GapLedger:
                   SUM(CASE WHEN last_checked_at IS NOT NULL AND ? - last_checked_at BETWEEN 300000 AND 3599999 THEN 1 ELSE 0 END) AS checked_5m_to_1h,
                   SUM(CASE WHEN last_checked_at IS NOT NULL AND ? - last_checked_at BETWEEN 3600000 AND 86399999 THEN 1 ELSE 0 END) AS checked_1h_to_1d,
                   SUM(CASE WHEN last_checked_at IS NOT NULL AND ? - last_checked_at >= 86400000 THEN 1 ELSE 0 END) AS checked_gte_1d
-                FROM kline_gap_ledger
+                FROM {_ALL_ROWS}
                 WHERE status NOT IN ('filled', 'source_empty', 'not_expected', 'superseded')
                 """,
                 (now, now, now, now, now, now, now, now),
             ).fetchone()
             source_empty_count = int(conn.execute(
-                "SELECT COUNT(*) FROM kline_gap_ledger WHERE status = 'source_empty'"
+                f"SELECT COUNT(*) FROM {_ALL_ROWS} WHERE status = 'source_empty'"
             ).fetchone()[0])
         by_status = {str(row["status"]): int(row["count"]) for row in status_rows}
         ages = {
@@ -1181,16 +1271,19 @@ class GapLedger:
         start_ms, end_ms = _request_range(request)
         now = _now_ms()
         reason = _bounded_reason(getattr(request, "reason", "unknown"))
+        scope = _request_scope(request)
+        table, scope_column = _partition(scope)
         with _connect(self._db_path) as conn:
             cursor = conn.execute(
-                """
-                UPDATE kline_gap_ledger
+                f"""
+                UPDATE {table}
                 SET status = 'superseded',
                     last_error = 'superseded_by_source_empty_range',
                     last_checked_at = ?,
                     resolved_at = ?,
                     next_retry_at = NULL
                 WHERE exchange = ? AND market_type = ? AND symbol = ? AND interval = ?
+                  AND {scope_column} = ?
                   AND reason = ? AND status = 'source_empty'
                   AND start_ms >= ? AND end_ms <= ?
                   AND NOT (start_ms = ? AND end_ms = ?)
@@ -1202,6 +1295,7 @@ class GapLedger:
                     request.market_type,
                     request.symbol,
                     request.interval,
+                    scope,
                     reason,
                     start_ms,
                     end_ms,
@@ -1220,38 +1314,43 @@ class GapLedger:
         market-data fact; it only removes redundant ledger cardinality.
         """
         now = _now_ms()
+        changed = 0
+        budget = max(1, int(limit))
         with _connect(self._db_path) as conn:
-            conn.execute(
-                """
-                WITH ranked AS (
-                  SELECT
-                    id,
-                    end_ms,
-                    MAX(end_ms) OVER (
-                      PARTITION BY exchange, market_type, symbol, interval, reason, start_ms
-                    ) AS widest_end
-                  FROM kline_gap_ledger
-                  WHERE status = 'source_empty'
-                ),
-                victims AS (
-                  SELECT id
-                  FROM ranked
-                  WHERE end_ms < widest_end
-                  ORDER BY id ASC
-                  LIMIT ?
+            for table, scope_column in ((_LEGACY_TABLE, "''"), (_SCOPED_TABLE, "series_scope")):
+                conn.execute(
+                    f"""
+                    WITH ranked AS (
+                      SELECT
+                        id,
+                        end_ms,
+                        MAX(end_ms) OVER (
+                          PARTITION BY exchange, market_type, symbol, interval,
+                                       {scope_column}, reason, start_ms
+                        ) AS widest_end
+                      FROM {table}
+                      WHERE status = 'source_empty'
+                    ),
+                    victims AS (
+                      SELECT id
+                      FROM ranked
+                      WHERE end_ms < widest_end
+                      ORDER BY id ASC
+                      LIMIT ?
+                    )
+                    UPDATE {table}
+                    SET status = 'superseded',
+                        last_error = 'superseded_by_source_empty_range',
+                        last_checked_at = ?,
+                        resolved_at = ?,
+                        next_retry_at = NULL
+                    WHERE id IN (SELECT id FROM victims)
+                    """,
+                    (budget - changed, now, now),
                 )
-                UPDATE kline_gap_ledger
-                SET status = 'superseded',
-                    last_error = 'superseded_by_source_empty_range',
-                    last_checked_at = ?,
-                    resolved_at = ?,
-                    next_retry_at = NULL
-                WHERE id IN (SELECT id FROM victims)
-                """,
-                (max(1, int(limit)), now, now),
-            )
-            changed = int(conn.execute("SELECT changes()").fetchone()[0])
-            conn.commit()
+                changed += int(conn.execute("SELECT changes()").fetchone()[0])
+                if changed >= budget:
+                    break
         return changed
 
     def _update(
@@ -1259,6 +1358,7 @@ class GapLedger:
         request: Any,
         *,
         require_repair_ticket: bool = False,
+        native_progress: list[dict] | None = None,
         **values: Any,
     ) -> None:
         if not values:
@@ -1268,12 +1368,20 @@ class GapLedger:
         for key, value in values.items():
             assignments.append(f"{key} = ?")
             params.append(value)
+        if native_progress is not None:
+            assignments.append(
+                "metadata_json = CASE WHEN json_valid(metadata_json) "
+                "THEN json_patch(metadata_json, ?) ELSE metadata_json END"
+            )
+            params.append(json.dumps({NATIVE_PROGRESS_FIELD: native_progress or None}, sort_keys=True))
         start_ms, end_ms = _request_range(request)
+        scope = _request_scope(request)
         params.extend([
             request.exchange,
             request.market_type,
             request.symbol,
             request.interval,
+            scope,
             start_ms,
             end_ms,
         ])
@@ -1281,15 +1389,17 @@ class GapLedger:
         if require_repair_ticket:
             ticket_clause = " AND repair_ticket IS ?"
             params.append(request.request_id)
+        table, scope_column = _partition(scope)
         with _connect(self._db_path) as conn:
             conn.execute(
                 f"""
-                UPDATE kline_gap_ledger
+                UPDATE {table}
                 SET {", ".join(assignments)}
                 WHERE exchange = ?
                   AND market_type = ?
                   AND symbol = ?
                   AND interval = ?
+                  AND {scope_column} = ?
                   AND start_ms = ?
                   AND end_ms = ?
                   {ticket_clause}

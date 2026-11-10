@@ -147,7 +147,9 @@ class StandardOHLCVMerge:
             state.last_input_at_ms = bar_input.open_time_ms
 
         if merge_mode == MergeMode.SNAPSHOT and (
-            bar_input.extra.get("source_ref") or bar_input.extra.get("bybit_close_confirmed") is True
+            bar_input.extra.get("source_ref")
+            or bar_input.extra.get("gate_close_source")
+            or bar_input.extra.get("bybit_close_confirmed") is True
         ):
             # A confirmed native snapshot supplies its complete final extrema
             # and quantities, including any correction to a forming snapshot.
@@ -762,6 +764,9 @@ class BarStateEngine:
                 state.quality_source = "trade_history_verified"
             elif bar_input.is_closed and bar_input.extra.get("bybit_close_confirmed") is True:
                 state.quality_source = BYBIT_WS_CONFIRMED_SOURCE
+            gate_source = bar_input.extra.get("gate_close_source")
+            if bar_input.is_closed and gate_source:
+                state.quality_source = gate_source
 
     # ── Public: State Queries ────────────────────────────────
 

@@ -13,6 +13,7 @@ from typing import Any
 
 from app.data_engine.ingestion.config import IngestionConfig
 from app.data_engine.ingestion.models import StreamType
+from app.exchanges.pagination import BybitHistoricalPaginationPolicy
 from app.exchanges.realtime import RealtimePolicy
 from app.exchanges.rate_limits import RateLimitPolicy
 
@@ -95,11 +96,12 @@ class CcxtProvider:
             contracts.normalizer_factory = lambda cfg, desc: CcxtPrimaryNormalizer(desc, native_factory(cfg, desc))
         else:
             delay = max(0.001, entry.rate_limit_ms / 1000.0)
+            pagination = BybitHistoricalPaginationPolicy if venue == "bybit" else CcxtHistoricalPaginationPolicy
             contracts = _VenueContractBundle(
                 generic, lambda cfg, desc: CcxtUnifiedNormalizer(desc), CcxtSymbolNormalizer(),
                 lambda cfg: RateLimitPolicy(default_concurrency=1, default_delay_seconds=delay,
                                              default_retry_429_backoff_seconds=max(5.0, delay * 10)),
-                lambda cfg: CcxtHistoricalPaginationPolicy(), RealtimePolicy(), StreamType.TICKER, None,
+                lambda cfg: pagination(), RealtimePolicy(), StreamType.TICKER, None,
             )
             adapter = CcxtUnifiedAdapter(entry, generic)
         context = _VenueContext(entry, contracts, adapter)

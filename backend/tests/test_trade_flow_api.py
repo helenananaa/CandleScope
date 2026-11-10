@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+from types import SimpleNamespace
+
 from dataclasses import dataclass
 
 from fastapi import FastAPI
@@ -8,7 +11,7 @@ from fastapi.testclient import TestClient
 from app.api.v1.trade_flow import router as trade_flow_router
 from app.data_engine.ingestion.models import DataSource
 from app.data_engine.market_data.models import MarketChannel, MarketStreamKey
-from app.data_engine.market_data.trade_flow import NormalizedAggTrade
+from app.data_engine.market_data.trade_flow import NormalizedAggTrade, TradeHistoryRead
 from app.data_engine.storage.raw_trade_archive import (
     RawAggTradeCoverage,
     RawAggTradeGap,
@@ -53,9 +56,9 @@ class _TradeFlowDataManager:
             )
         ]
 
-    async def trade_flow_history(self, key: MarketStreamKey, **kwargs) -> list[dict]:
+    async def read_trade_flow_history(self, key: MarketStreamKey, **kwargs) -> TradeHistoryRead:
         self.history_calls.append({"key": key, **kwargs})
-        return [
+        return TradeHistoryRead([
             {
                 "exchange": key.exchange,
                 "market_type": key.market_type,
@@ -68,7 +71,7 @@ class _TradeFlowDataManager:
                 "is_final": True,
                 "revision": 2,
             }
-        ]
+        ])
 
     async def trade_flow_archive_coverage(
         self,
@@ -160,8 +163,8 @@ def test_trade_flow_history_is_rollup_only_and_fail_closed() -> None:
 
 def test_empty_history_does_not_claim_complete() -> None:
     class _EmptyManager(_TradeFlowDataManager):
-        async def trade_flow_history(self, key, **kwargs):
-            return []
+        async def read_trade_flow_history(self, key, **kwargs):
+            return TradeHistoryRead([])
 
     response = _client(_EmptyManager()).get("/api/v1/trade-flow/history")
 
@@ -248,3 +251,149 @@ def test_trade_flow_http_rejects_unready_and_hides_internal_errors() -> None:
     assert failed.json()["detail"] == (
         "trade-flow recent is temporarily unavailable"
     )
+
+
+def test_real_rollup_history_only_pages_to_an_existing_local_row(tmp_path) -> None:
+    from app.data_engine.market_data.trade_flow_service import TradeFlowService
+    from app.data_engine.storage.raw_trade_archive import DisabledRawAggTradeArchive
+    from app.data_engine.storage.trade_flow_store import SQLiteTradeFlowRollupStore
+    from tests.test_trade_flow_storage import _rollup
+
+    first = 1_700_000_040_000
+    store = SQLiteTradeFlowRollupStore(tmp_path / "trades.sqlite")
+    asyncio.run(store.upsert_rollups([
+        _rollup(first + index * 120_000, revision=index + 1, is_final=True)
+        for index in range(5001)
+    ]))
+    service = TradeFlowService(object(), rollup_store=store, raw_archive=DisabledRawAggTradeArchive())
+    with _client(SimpleNamespace(trade_flow_ready=True, read_trade_flow_history=service.read_history)) as client:
+        last = first + 5000 * 120_000
+        params = {"start_ms": first, "end_ms": last, "limit": 5000}
+        response = client.get("/api/v1/trade-flow/history", params=params)
+        assert response.status_code == 200, response.text
+        page = response.json()
+        assert page["count"] == 5000 and page["has_more"] is True
+        assert page["next_cursor"] == {"start_ms": last}
+        assert page["coverage"]["all_rows_complete"] is True
+        assert page["coverage"]["observed_only"] is True
+        assert page["complete"] is page["retryable"] is False
+        assert page["terminal_reason"] == "unverified_continuity"
+        final = client.get("/api/v1/trade-flow/history", params={**params, **page["next_cursor"], "limit": 1}).json()
+        assert final["count"] == 1 and final["has_more"] is False and final["next_cursor"] is None
+
+
+def test_bounded_history_rebuilds_only_from_verified_archive_objects(tmp_path, monkeypatch) -> None:
+    from datetime import datetime, timezone
+
+    from app.core.bounded_executor import ExecutorBusyError
+    from app.data_engine.market_data import trade_flow_service
+    from app.data_engine.market_data.trade_flow_service import TradeFlowService
+    from app.data_engine.storage.raw_trade_archive import (
+        DisabledRawAggTradeArchive, ParquetRawAggTradeArchive, VerifiedRawAggTradeDay,
+    )
+    from app.data_engine.storage.trade_flow_store import SQLiteTradeFlowRollupStore
+    from tests.test_trade_flow_storage import _raw_trade, _rollup
+
+    first = 1_700_000_040_000
+    third, fourth = first + 120_000, first + 180_000
+    root = tmp_path / "replay-archive"
+    archive = ParquetRawAggTradeArchive(root)
+    archive_rows = [
+        {**_raw_trade(i, trade_time_ms=opened + offset), "source": "binance_public"}
+        for i, opened, offset in [
+            (10, first, 10), (11, first, 11), (12, third, 10), (13, fourth, 10),
+        ]
+    ]
+    # This trade is present in a best-effort file but outside the verified
+    # object set. It must never alter the verified rollups.
+    archive.append([_raw_trade(10, trade_time_ms=first + 10, price=900)])
+    day = datetime.fromtimestamp(first / 1000, tz=timezone.utc).date()
+    archive.import_verified_day(archive_rows, VerifiedRawAggTradeDay(
+        exchange="binance", market_type="futures", symbol="BTCUSDT",
+        date=day.isoformat(), source_url="https://data.binance.vision/example.zip",
+        source_file="example.zip", source_checksum_sha256="a" * 64,
+        row_count=len(archive_rows), first_agg_trade_id=10, last_agg_trade_id=13,
+        first_trade_time_ms=first + 10, last_trade_time_ms=fourth + 10,
+    ))
+
+    store = SQLiteTradeFlowRollupStore(tmp_path / "trades.sqlite")
+    asyncio.run(store.upsert_rollups([
+        _rollup(first, revision=1, is_complete=False, is_final=True, buy_base=9),
+        _rollup(third, revision=2, is_complete=True, is_final=True, buy_base=5),
+    ]))
+    service = TradeFlowService(
+        object(), rollup_store=store, raw_archive=DisabledRawAggTradeArchive(),
+        verified_archive_root=root,
+    )
+    with _client(SimpleNamespace(trade_flow_ready=True, read_trade_flow_history=service.read_history)) as client:
+        params = {"start_ms": first, "end_ms": fourth, "limit": 2}
+        response = client.get("/api/v1/trade-flow/history", params=params)
+        assert response.status_code == 200, response.text
+        page = response.json()
+        rebuilt, existing = page["data"]
+        assert rebuilt["bucket_start_ms"] == first
+        assert rebuilt["source"] == "verified_archive" and rebuilt["is_complete"] and rebuilt["is_final"]
+        assert rebuilt["archive_data_epoch"].startswith("sha256:")
+        assert rebuilt["agg_trade_count"] == 2 and rebuilt["max_trade_notional"] == 50.0
+        assert existing["bucket_start_ms"] == third and existing["buy_base_volume"] == 5.0
+        assert page["next_cursor"] == {"start_ms": fourth} and page["complete"] is False
+
+        final = client.get("/api/v1/trade-flow/history", params={**params, **page["next_cursor"]}).json()
+        assert final["data"][0]["bucket_start_ms"] == fourth and final["has_more"] is False
+        assert final["complete"] and final["terminal_reason"] is None
+        whole = client.get("/api/v1/trade-flow/history", params={**params, "limit": 10}).json()
+        assert whole["count"] == 3 and whole["complete"] and not whole["coverage"]["observed_only"]
+        assert page["data"] + final["data"] == whole["data"]
+        isolated = client.get("/api/v1/trade-flow/history", params={
+            "start_ms": first, "end_ms": first,
+        }).json()
+        assert isolated["data"] == [rebuilt]
+        quiet = client.get("/api/v1/trade-flow/history", params={
+            "start_ms": first + 60_000, "end_ms": first + 60_000,
+        }).json()
+        assert quiet["data"] == [] and quiet["complete"]
+        assert quiet["coverage"]["verified_empty_minutes"] == 1
+        assert quiet["coverage"]["verified_empty_ranges"] == [
+            {"start_ms": first + 60_000, "end_ms": first + 60_000},
+        ]
+        leading = client.get("/api/v1/trade-flow/history", params={
+            "start_ms": first - 120_000, "end_ms": first - 60_000,
+        }).json()
+        assert leading["data"] == [] and leading["complete"]
+        assert leading["coverage"]["verified_empty_ranges"] == [
+            {"start_ms": first - 120_000, "end_ms": first - 60_000},
+        ]
+        unknown = client.get("/api/v1/trade-flow/history", params={
+            "start_ms": first - 86_400_000, "end_ms": first - 86_400_000,
+        }).json()
+        assert unknown["data"] == [] and not unknown["complete"]
+        assert unknown["coverage"]["verified_empty_ranges"] == []
+
+        # The read never replaces SQLite, and a later corrupt verified object
+        # must leave the observed SQLite rows available without promotion.
+        stored = asyncio.run(store.query_rollups(
+            exchange="binance", market_type="futures", symbol="BTCUSDT", limit=10,
+        ))
+        assert len(stored) == 2 and not stored[0]["is_complete"] and stored[0]["buy_base_volume"] == 9
+        asyncio.run(store.upsert_rollups([
+            _rollup(first + 60_000, revision=1, is_complete=False, is_final=True, buy_base=1),
+        ]))
+        conflict = client.get("/api/v1/trade-flow/history", params={
+            "start_ms": first + 60_000, "end_ms": first + 60_000,
+        }).json()
+        assert conflict["count"] == 1 and not conflict["data"][0]["is_complete"]
+        assert not conflict["complete"] and conflict["coverage"]["verified_empty_ranges"] == []
+        with next(root.rglob("part-verified-*.parquet")).open("ab") as corrupt:
+            corrupt.write(b"changed")
+        fallback = client.get("/api/v1/trade-flow/history", params=params).json()
+        assert fallback["data"][0]["buy_base_volume"] == 9
+        assert fallback["data"][0]["is_complete"] is False
+        assert "archive_data_epoch" not in fallback["data"][0]
+        assert not fallback["complete"] and fallback["coverage"]["verified_empty_ranges"] == []
+
+        async def reject_archive(*args, **kwargs):
+            raise ExecutorBusyError("archive")
+
+        monkeypatch.setattr(trade_flow_service, "run_archive", reject_archive)
+        saturated = client.get("/api/v1/trade-flow/history", params=params)
+        assert saturated.status_code == 200 and saturated.json() == fallback

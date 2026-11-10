@@ -114,6 +114,7 @@ export interface IndicatorPanelMarketStudy {
   unsupportedReason?: string | null;
   status?: IndicatorPanelMarketStudyStatus;
   statusText?: string | null;
+  canRefreshHistory?: boolean;
   error?: string | null;
 }
 
@@ -165,6 +166,7 @@ export interface IndicatorPanelProps {
   onAddMarketStudy?: (studyId: string) => void;
   onRemoveMarketStudy?: (studyId: string) => void;
   onToggleMarketStudyVisibility?: (studyId: string) => void;
+  onRefreshMarketStudyHistory?: (id: string) => void;
   modeNotice?: {
     label: string;
     description: string;
@@ -317,6 +319,7 @@ export default function IndicatorPanel({
   onAddMarketStudy,
   onRemoveMarketStudy,
   onToggleMarketStudyVisibility,
+  onRefreshMarketStudyHistory,
   modeNotice = null,
   resolveIndicatorSupport,
 }: IndicatorPanelProps) {
@@ -1125,6 +1128,17 @@ export default function IndicatorPanel({
                                 </span>
                               )}
                               <div className="indicator-active-actions">
+                                {study.canRefreshHistory && study.supported && study.visible && onRefreshMarketStudyHistory && (
+                                  <button
+                                    type="button"
+                                    className="indicator-action-btn"
+                                    onClick={() => onRefreshMarketStudyHistory(study.id)}
+                                    title={t("alert.refreshHistory")}
+                                    aria-label={t("alert.refreshHistory")}
+                                  >
+                                    <Icon name="refresh" size={14} />
+                                  </button>
+                                )}
                                 <button
                                   className="indicator-action-btn indicator-remove-btn"
                                   onClick={() => onRemoveMarketStudy?.(study.id)}
