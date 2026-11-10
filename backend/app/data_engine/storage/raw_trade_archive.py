@@ -13,8 +13,10 @@ import errno
 import hashlib
 import json
 import os
+import time
 from collections import Counter
 from collections.abc import Iterable
+from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from itertools import islice
@@ -25,6 +27,8 @@ from urllib.parse import quote
 from uuid import uuid4
 
 from app.core.executors import run_storage
+
+from .raw_trade_retention_lock import ReadOnlyLeaseDirectory, partition_lease
 
 
 ARCHIVE_SCHEMA_VERSION = "1"
@@ -830,6 +834,13 @@ class RawAggTradeScanLimitError(RuntimeError):
     """The requested archive read cannot be completed inside safety limits."""
 
 
+@dataclass(frozen=True, slots=True)
+class _RawTradePin:
+    data_epoch: str
+    partitions: frozenset[str]
+    leases: ExitStack
+
+
 class ParquetRawAggTradeArchive:
     """PyArrow-backed partitioned immutable micro-batch archive.
 
@@ -878,7 +889,7 @@ class ParquetRawAggTradeArchive:
             ) from exc
         self._schema = _parquet_schema(self._pa)
         self._write_lock = Lock()
-        self._pins: dict[str, tuple[str, frozenset[str]]] = {}
+        self._pins: dict[str, _RawTradePin] = {}
         self._pin_counts: dict[str, int] = {}
         self._health_marker_path = self.root / "_archive_health.json"
         durability_error, health_marker_error = self._load_health_marker()
@@ -1149,10 +1160,23 @@ class ParquetRawAggTradeArchive:
     def _verified_receipt_paths(self) -> Iterable[Path]:
         return self.root.glob("exchange=*/market_type=*/symbol=*/date=*/_verified_import.json")
 
+    def retention_lease_path(self, partition_key: str) -> Path:
+        key = hashlib.sha256(partition_key.encode("utf-8")).hexdigest()
+        return self.root / ".trade-retention-locks" / key
+
+    def _retention_lease_active(self, partition_key: str) -> bool:
+        try:
+            with partition_lease(self.retention_lease_path(partition_key), shared=False, create=False):
+                return False
+        except FileNotFoundError:
+            return False
+        except BlockingIOError:
+            return True
+
     def verified_retention_inventory(self, *, limit: int) -> dict[str, Any]:
         """Inspect committed day objects without refreshing access or opening their bodies."""
         with self._write_lock:
-            pins = Counter(partition for _, partitions in self._pins.values() for partition in partitions)
+            pins = Counter(partition for pin in self._pins.values() for partition in pin.partitions)
         paths = list(islice(self._verified_receipt_paths(), limit + 1))
         items: list[dict[str, object]] = []
         unreadable = 0
@@ -1187,6 +1211,9 @@ class ParquetRawAggTradeArchive:
                     reasons.append("QUARANTINED_DAY")
                 if pins[partition_key]:
                     reasons.append("ACTIVE_DATASET_PIN")
+                shared_lease = self._retention_lease_active(partition_key)
+                if shared_lease:
+                    reasons.append("PARTITION_RETENTION_LEASE")
                 if self.verified_day_acquisition_pending(identity, (day_start, day_start)):
                     reasons.append("DAY_ACQUISITION_IN_PROGRESS")
             except (KeyError, OSError, OverflowError, RuntimeError, TypeError, ValueError):
@@ -1199,6 +1226,7 @@ class ParquetRawAggTradeArchive:
                 "object_count": len(objects),
                 "byte_size": byte_size,
                 "active_pin_count": pins[partition_key],
+                "shared_lease_active": shared_lease,
                 "protection_reasons": reasons,
             })
         return {"items": items, "unreadable_day_count": unreadable, "truncated": truncated}
@@ -2169,14 +2197,28 @@ class ParquetRawAggTradeArchive:
                 raise RuntimeError("raw aggTrade object manifest changed")
 
     def pin_dataset(self, dataset_ref: RawAggTradeDatasetRef) -> str:
-        self.validate_dataset(dataset_ref)
+        if not isinstance(dataset_ref, RawAggTradeDatasetRef):
+            raise TypeError("dataset_ref must be RawAggTradeDatasetRef")
         token = uuid4().hex
         partitions = frozenset(item.object_id.rsplit("/", 1)[0] for item in dataset_ref.objects)
-        with self._write_lock:
-            self._pins[token] = (dataset_ref.data_epoch, partitions)
-            self._pin_counts[dataset_ref.data_epoch] = (
-                self._pin_counts.get(dataset_ref.data_epoch, 0) + 1
-            )
+        deadline = time.monotonic() + 1.0
+        with ExitStack() as leases:
+            for partition in sorted(partitions):
+                try:
+                    leases.enter_context(partition_lease(
+                        self.retention_lease_path(partition), shared=True, create=True,
+                        timeout_seconds=max(0.0, deadline - time.monotonic()),
+                    ))
+                except ReadOnlyLeaseDirectory:
+                    # Legacy externally mounted read-only archives remain readable.
+                    if not self.read_only:
+                        raise
+            self.validate_dataset(dataset_ref)
+            with self._write_lock:
+                self._pins[token] = _RawTradePin(dataset_ref.data_epoch, partitions, leases.pop_all())
+                self._pin_counts[dataset_ref.data_epoch] = (
+                    self._pin_counts.get(dataset_ref.data_epoch, 0) + 1
+                )
         return token
 
     def release_dataset(self, pin_token: str) -> None:
@@ -2185,12 +2227,13 @@ class ParquetRawAggTradeArchive:
             pinned = self._pins.pop(token, None)
             if pinned is None:
                 return
-            data_epoch = pinned[0]
+            data_epoch = pinned.data_epoch
             remaining = self._pin_counts[data_epoch] - 1
             if remaining <= 0:
                 self._pin_counts.pop(data_epoch, None)
             else:
                 self._pin_counts[data_epoch] = remaining
+        pinned.leases.close()
 
     def scan_range(
         self,

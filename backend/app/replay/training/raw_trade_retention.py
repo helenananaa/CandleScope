@@ -66,7 +66,7 @@ async def preview(
     result = {
         "protocol": "replay.raw-trade-retention.preview.v1",
         "policy_state": "UNMANAGED",
-        "reference_scope": "CURRENT_REPLAY_STORE_AND_PROCESS",
+        "reference_scope": "CURRENT_REPLAY_STORE_AND_ARCHIVE_LEASES",
         "estimated_reclaim_bytes": 0,
         "limit": limit,
     }

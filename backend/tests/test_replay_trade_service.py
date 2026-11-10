@@ -135,13 +135,15 @@ async def test_raw_trade_retention_preview_reports_live_and_saved_protection(
                 _, protected = await inspect()
             assert protected["day_id"] == item["day_id"]
             assert protected["active_pin_count"] == protected["saved_reference_count"] == 1
+            assert protected["shared_lease_active"] is True
             assert set(protected["protection_reasons"]) == {
                 "UNMANAGED_RETENTION_POLICY", "SAVED_REPLAY_REFERENCE",
-                "ACTIVE_DATASET_PIN", "DAY_ACQUISITION_IN_PROGRESS",
+                "ACTIVE_DATASET_PIN", "DAY_ACQUISITION_IN_PROGRESS", "PARTITION_RETENTION_LEASE",
             }
             await service.release_session_to_hub(str(created["session_id"]))
             _, saved = await inspect()
             assert saved["active_pin_count"] == 0
+            assert saved["shared_lease_active"] is False
             assert saved["saved_reference_count"] == 1
             assert saved["protection_reasons"] == ["UNMANAGED_RETENTION_POLICY", "SAVED_REPLAY_REFERENCE"]
 
