@@ -233,12 +233,7 @@ export function useAdvancedMarketDataRuntime({
   }), [session.view.exchange, session.view.marketType, session.view.symbol]);
   const identityKey = useMemo(() => buildAdvancedMarketIdentityKey(identity), [identity]);
   const interval = session.view.interval;
-  const seriesKey = useMemo(() => String(buildSeriesWindowKey({
-    exchange: identity.exchange,
-    marketType: identity.marketType,
-    symbol: identity.symbol,
-    interval,
-  })), [identity, interval]);
+  const seriesKey = String(buildSeriesWindowKey(session.view));
   const capabilitySnapshot = useMemo(() => {
     void locale;
     return resolveAdvancedMarketCapabilities({
@@ -300,7 +295,7 @@ export function useAdvancedMarketDataRuntime({
   const streamEnabled = requestedChannels.length > 0;
   const enabled = streamEnabled || activeHistoryMetricChannels.length > 0;
   const historyContextKey = buildAdvancedMarketHistoryContextKey(
-    identityKey,
+    `${identityKey}|${seriesKey}`,
     interval,
     activeHistoryMetricChannels,
   );
