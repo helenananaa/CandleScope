@@ -290,7 +290,7 @@ export function applyLinkedAccountOverlayUpdate(
   if (sameChartAccountOverlay(previous, next)) return document;
   const cells = { ...document.cells, [sourceCellId]: { ...source, accountOverlay: next } };
   const channels = {
-    accountSource: ["accountId"], tradingOverlays: ["trades", "positions"], noteOverlays: ["notes"],
+    accountSource: ["accountId"], tradingOverlays: ["trades", "positions"], noteOverlays: ["notes", "noteSource", "noteFilter"],
   } as const;
   for (const channel of Object.keys(channels) as (keyof typeof channels)[]) {
     const keys = channels[channel].filter(key => previous[key] !== next[key]);
@@ -298,9 +298,9 @@ export function applyLinkedAccountOverlayUpdate(
     const patch = Object.fromEntries(keys.map(key => [key, next[key]]));
     for (const target of resolveChartLinkTargetsForChannel(document, sourceCellId, channel)) {
       const cell = cells[target.cellId]!;
-      cells[target.cellId] = { ...cell, accountOverlay: {
+      cells[target.cellId] = { ...cell, accountOverlay: normalizeChartAccountOverlay({
         ...normalizeChartAccountOverlay(cell.accountOverlay), ...patch,
-      } };
+      }) };
     }
   }
   return { ...document, cells };

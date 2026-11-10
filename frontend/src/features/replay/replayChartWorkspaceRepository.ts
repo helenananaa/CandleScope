@@ -1,3 +1,4 @@
+import { normalizeChartAccountOverlay } from "../chart-workspace/chartAccountOverlaySettings.js";
 import type { ChartSession } from "../chart-session/chartSessionTypes.js";
 import type { ReplayTrainingMarketTrack, ReplayViewerState } from "./replayV2Types.js";
 import { createDefaultChartWorkspaceRecord } from "../chart-workspace/chartWorkspaceLibrary.js";
@@ -35,7 +36,9 @@ export function seedReplayChartWorkspace(runId: string, seed: ReplayWorkspaceSee
     if (!window) return false;
     const cells = Object.fromEntries(visibleCellIds(window.layoutTree).map((id) => {
       const cell = seed.document.cells[id]!;
+      const overlay = normalizeChartAccountOverlay(cell.accountOverlay);
       return [id, { id:cell.id, session:cell.session, linkGroupId:cell.linkGroupId,
+        accountOverlay: { ...overlay, accountId: null },
         drawingLayerSet:cell.drawingLayerSet, chartSettings:cell.chartSettings,
         priceScale:cell.priceScale, indicators:cell.indicators.map((indicator) => ({
           ...indicator, error:null, renderHints:undefined,
