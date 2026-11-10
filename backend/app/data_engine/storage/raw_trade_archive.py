@@ -1164,6 +1164,17 @@ class ParquetRawAggTradeArchive:
         key = hashlib.sha256(partition_key.encode("utf-8")).hexdigest()
         return self.root / ".trade-retention-locks" / key
 
+    def _enter_retention_lease(self, leases: ExitStack, partition_key: str, deadline: float) -> None:
+        try:
+            leases.enter_context(partition_lease(
+                self.retention_lease_path(partition_key), shared=True, create=True,
+                timeout_seconds=max(0.0, deadline - time.monotonic()),
+            ))
+        except ReadOnlyLeaseDirectory:
+            # Legacy externally mounted read-only archives remain readable.
+            if not self.read_only:
+                raise
+
     def _retention_lease_busy(self, partition_key: str) -> bool:
         try:
             with partition_lease(self.retention_lease_path(partition_key), shared=False, create=False):
@@ -1773,16 +1784,16 @@ class ParquetRawAggTradeArchive:
             raise RuntimeError(
                 "aggregate-trade BAR compatibility source epoch changed"
             )
-        current_objects = tuple(
-            self._object_manifest(item)
-            for item in self._discover_verified_manifests(
+        with ExitStack() as leases:
+            manifests = self._discover_verified_manifests(
+                leases=leases,
                 exchange=identity[0],
                 market_type=identity[1],
                 symbol=identity[2],
                 start_time_ms=dataset_ref.start_time_ms,
                 end_time_ms=dataset_ref.end_time_ms,
             )
-        )
+            current_objects = tuple(self._object_manifest(item) for item in manifests)
         if current_objects != dataset_ref.objects:
             raise RuntimeError(
                 "aggregate-trade BAR compatibility source object changed"
@@ -2009,10 +2020,11 @@ class ParquetRawAggTradeArchive:
         end_time_ms: int,
         page_rows: int = 50_000,
     ) -> RawAggTradeDatasetRef:
-        ref = self._freeze_dataset(
-            exchange=exchange, market_type=market_type, symbol=symbol,
-            start_time_ms=start_time_ms, end_time_ms=end_time_ms, page_rows=page_rows,
-        )
+        with ExitStack() as leases:
+            ref = self._freeze_dataset(
+                leases=leases, exchange=exchange, market_type=market_type, symbol=symbol,
+                start_time_ms=start_time_ms, end_time_ms=end_time_ms, page_rows=page_rows,
+            )
         assert ref is not None
         return ref
 
@@ -2022,11 +2034,12 @@ class ParquetRawAggTradeArchive:
     ) -> tuple[RawAggTradeDatasetRef, list[dict[str, Any]]]:
         """Read a bounded exact range using the same proof as replay freezing."""
         rows: list[dict[str, Any]] = []
-        ref = self._freeze_dataset(
-            exchange=exchange, market_type=market_type, symbol=symbol,
-            start_time_ms=start_time_ms, end_time_ms=end_time_ms,
-            page_rows=limit, collected=rows, max_rows=limit,
-        )
+        with ExitStack() as leases:
+            ref = self._freeze_dataset(
+                leases=leases, exchange=exchange, market_type=market_type, symbol=symbol,
+                start_time_ms=start_time_ms, end_time_ms=end_time_ms,
+                page_rows=limit, collected=rows, max_rows=limit,
+            )
         assert ref is not None
         return ref, rows
 
@@ -2038,16 +2051,18 @@ class ParquetRawAggTradeArchive:
         if start_time_ms // 86_400_000 != end_time_ms // 86_400_000:
             raise ValueError("verified daily slice must stay inside one UTC day")
         rows: list[dict[str, Any]] = []
-        ref = self._freeze_dataset(
-            exchange=exchange, market_type=market_type, symbol=symbol,
-            start_time_ms=start_time_ms, end_time_ms=end_time_ms,
-            page_rows=limit, collected=rows, max_rows=limit, allow_empty=True,
-        )
+        with ExitStack() as leases:
+            ref = self._freeze_dataset(
+                leases=leases, exchange=exchange, market_type=market_type, symbol=symbol,
+                start_time_ms=start_time_ms, end_time_ms=end_time_ms,
+                page_rows=limit, collected=rows, max_rows=limit, allow_empty=True,
+            )
         return ref, rows
 
     def _freeze_dataset(
         self,
         *,
+        leases: ExitStack,
         exchange: str,
         market_type: str,
         symbol: str,
@@ -2079,6 +2094,7 @@ class ParquetRawAggTradeArchive:
             _identity(symbol, "symbol", upper=True),
         )
         manifests = self._discover_verified_manifests(
+            leases=leases,
             exchange=identity[0],
             market_type=identity[1],
             symbol=identity[2],
@@ -2204,15 +2220,7 @@ class ParquetRawAggTradeArchive:
         deadline = time.monotonic() + 1.0
         with ExitStack() as leases:
             for partition in sorted(partitions):
-                try:
-                    leases.enter_context(partition_lease(
-                        self.retention_lease_path(partition), shared=True, create=True,
-                        timeout_seconds=max(0.0, deadline - time.monotonic()),
-                    ))
-                except ReadOnlyLeaseDirectory:
-                    # Legacy externally mounted read-only archives remain readable.
-                    if not self.read_only:
-                        raise
+                self._enter_retention_lease(leases, partition, deadline)
             self.validate_dataset(dataset_ref)
             with self._write_lock:
                 self._pins[token] = _RawTradePin(dataset_ref.data_epoch, partitions, leases.pop_all())
@@ -2351,18 +2359,20 @@ class ParquetRawAggTradeArchive:
         assert start_ms is not None and end_ms is not None and first is not None and last is not None
         if last - first >= 1000 or end_ms // 86_400_000 - start_ms // 86_400_000 > 1:
             raise ValueError("verified repair requires at most 1,000 IDs across two UTC days")
-        manifests = self._discover_verified_manifests(
-            exchange=_identity(exchange, "exchange", lower=True),
-            market_type=_identity(market_type, "market type", lower=True),
-            symbol=_identity(symbol, "symbol", upper=True),
-            start_time_ms=start_ms, end_time_ms=end_ms, repair_ids=(first, last),
-        )
-        # Use time to select days only. A matching ID outside the bracket must
-        # reach the repair owner so it can reject it instead of hiding it.
-        return self._scan_manifests(
-            manifests, (None, None, first, last), None, last - first + 1,
-            filter_arrow=True, reject_id_conflicts=True, data_epoch=None,
-        )
+        with ExitStack() as leases:
+            manifests = self._discover_verified_manifests(
+                leases=leases,
+                exchange=_identity(exchange, "exchange", lower=True),
+                market_type=_identity(market_type, "market type", lower=True),
+                symbol=_identity(symbol, "symbol", upper=True),
+                start_time_ms=start_ms, end_time_ms=end_ms, repair_ids=(first, last),
+            )
+            # Use time to select days only. A matching ID outside the bracket must
+            # reach the repair owner so it can reject it instead of hiding it.
+            return self._scan_manifests(
+                manifests, (None, None, first, last), None, last - first + 1,
+                filter_arrow=True, reject_id_conflicts=True, data_epoch=None,
+            )
 
     def _scan_manifests(self, manifests, bounds, after, page_limit, *,
                         filter_arrow, reject_id_conflicts, data_epoch):
@@ -2817,6 +2827,7 @@ class ParquetRawAggTradeArchive:
     def _discover_verified_manifests(
         self,
         *,
+        leases: ExitStack,
         exchange: str,
         market_type: str,
         symbol: str,
@@ -2845,6 +2856,16 @@ class ParquetRawAggTradeArchive:
                 raise RuntimeError(
                     "checksum-verified raw aggTrade daily coverage is missing"
                 )
+            # Repair already has a bounded async retry budget in its owner.
+            deadline = time.monotonic() + (1.0 if repair_ids is None else 0.0)
+            self._enter_retention_lease(leases, partition.relative_to(self.root).as_posix(), deadline)
+            # Maintenance could have won the lease after the first observation.
+            if conflict_path.exists():
+                raise RuntimeError("checksum-verified raw aggTrade partition is quarantined")
+            if not receipt_path.is_file():
+                if repair_ids is not None:
+                    continue
+                raise RuntimeError("checksum-verified raw aggTrade daily coverage is missing")
             receipt = self._verified_partition_receipt(
                 partition, (exchange, market_type, symbol, date), repair_ids=repair_ids,
             )
@@ -2861,11 +2882,11 @@ class ParquetRawAggTradeArchive:
                 manifests.append(
                     self._file_manifest_from_object(item)
                 )
+            if len(manifests) > self.max_scan_files:
+                raise RawAggTradeScanLimitError(
+                    "exact raw aggTrade generation exceeds max_scan_files"
+                )
         manifests.sort(key=lambda item: (item.first_order_key, item.path.name))
-        if len(manifests) > self.max_scan_files:
-            raise RawAggTradeScanLimitError(
-                "exact raw aggTrade generation exceeds max_scan_files"
-            )
         return manifests
 
     def _object_manifest(

@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import io
 import sys
+from contextlib import ExitStack
 from dataclasses import dataclass
 from functools import wraps
 
@@ -19,6 +20,7 @@ from app.data_engine.storage.raw_trade_archive import (
     ParquetRawAggTradeArchive,
     RawAggTradeArchiveWriter,
 )
+from app.data_engine.storage.raw_trade_retention_lock import partition_lease
 from app.data_engine.storage.trade_flow_store import SQLiteTradeFlowRollupStore
 from app.data_engine.storage.trade_flow_writer import TradeFlowRollupWriter
 from app.replay.trade_import import import_official_date_range
@@ -1106,6 +1108,7 @@ async def test_repair_reuses_local_parquet_and_only_fetches_unproved_id_runs(
     ("case", "calls", "verified_count", "rejected"),
     [
         ("verified-only", [], 5, 0),
+        ("retention-busy", [], 5, 0),
         ("partial", [(5, 1)], 3, 0),
         ("conflict", [(4, 1)], 4, 0),
         ("midnight", [(5, 2)], 3, 0),
@@ -1116,7 +1119,7 @@ async def test_repair_reuses_local_parquet_and_only_fetches_unproved_id_runs(
 )
 @_async_test
 async def test_repair_consumes_committed_official_days_without_download(
-    tmp_path, case, calls, verified_count, rejected,
+    tmp_path, monkeypatch, case, calls, verified_count, rejected,
 ):
     pytest.importorskip("pyarrow")
     verified_root = tmp_path / "verified"
@@ -1153,9 +1156,22 @@ async def test_repair_consumes_committed_official_days_without_download(
         raw_archive=observed, verified_archive_root=verified_root,
     )
     try:
-        await service.ensure_stream(_key(), consumer_id="verified-repair")
-        await factory.emit(_event(1, trade_time_ms=start + 1))
-        await factory.emit(_event(7, trade_time_ms=start + 7))
+        with ExitStack() as locks:
+            if case == "retention-busy":
+                monkeypatch.setattr(
+                    "app.data_engine.market_data.trade_flow_service._VERIFIED_REPAIR_WAIT_SECONDS", 3.0,
+                )
+                partition = next(verified_root.rglob("_verified_import.json")).parent
+                path = ParquetRawAggTradeArchive(verified_root).retention_lease_path(
+                    partition.relative_to(verified_root).as_posix(),
+                )
+                locks.enter_context(partition_lease(path, shared=False, create=True))
+            await service.ensure_stream(_key(), consumer_id="verified-repair")
+            await factory.emit(_event(1, trade_time_ms=start + 1))
+            await factory.emit(_event(7, trade_time_ms=start + 7))
+            if case == "retention-busy":
+                await _wait_until(lambda: service.diagnostics()["repair_verified_acquisition_waits"] == 1)
+                assert not factory.fetch_calls
         await _wait_until(lambda: service.diagnostics()["repairs_succeeded"] == 1)
         assert service.engine.gap_snapshot(IDENTITY) == ()
         assert sum(bucket.agg_trade_count for bucket in service.engine.bucket_snapshot(IDENTITY)) == 7
