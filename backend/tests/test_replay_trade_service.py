@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from dataclasses import replace
 from datetime import date
 from pathlib import Path
@@ -154,9 +155,93 @@ async def test_raw_trade_retention_preview_reports_live_and_saved_protection(
             payload, incomplete = await inspect()
             assert not payload["saved_reference_scan_complete"]
             assert "SAVED_REFERENCE_SCAN_INCOMPLETE" in incomplete["protection_reasons"]
+            await service.store.run_extension_write(
+                lambda connection: connection.execute("DELETE FROM replay_dataset_ref"),
+            )
+            payload, _ = await inspect()
+            assert not payload["saved_reference_scan_complete"]
             assert all(p.read_bytes() == body for p, body in originals.items())
     finally:
         await service.shutdown(step_timeout=1.0)
+
+
+async def test_retention_preview_reads_saved_refs_across_profiles(tmp_path):
+    archive_root = tmp_path / "shared"
+    verified_trade_archive(archive_root)
+    first_db = tmp_path / "profile-first" / "replay.db"
+    second_db = tmp_path / "profile-second" / "replay.db"
+
+    def archive():
+        return OfficialAggTradeArchive(archive_root, defer_refresh=True)
+
+    first = await _service(first_db, archive(), prefix="first")
+    second = await _service(second_db, archive(), prefix="second")
+
+    async def inspect():
+        report = await second.training.raw_trade_retention_preview(limit=1)
+        assert report["estimated_reclaim_bytes"] == 0
+        assert str(first_db) not in json.dumps(report)
+        assert str(second_db) not in json.dumps(report)
+        return report, report["items"][0]
+
+    try:
+        created = await first.create_session(trade_replay_config())
+        session = str(created["session_id"])
+        live, item = await inspect()
+        assert live["saved_reference_store_count"] == 2
+        assert live["saved_reference_scan_complete"]
+        assert item["saved_reference_count"] == 1
+        assert item["active_pin_count"] == 0 and item["retention_lease_busy"]
+
+        await first.release_session_to_hub(session)
+        await first.shutdown(step_timeout=1.0)
+        dormant, item = await inspect()
+        assert dormant["saved_reference_scan_complete"]
+        assert item["saved_reference_count"] == 1 and not item["retention_lease_busy"]
+
+        parked = first_db.with_suffix(".parked")
+        first_db.rename(parked)
+        try:
+            missing, item = await inspect()
+            assert not missing["saved_reference_scan_complete"]
+            assert missing["unavailable_reference_store_count"] == 1
+            assert "SAVED_REFERENCE_SCAN_INCOMPLETE" in item["protection_reasons"]
+
+            replacement = ReplaySQLiteStore(first_db)
+            try:
+                replaced, _ = await inspect()
+                assert not replaced["saved_reference_scan_complete"]
+                assert replaced["unavailable_reference_store_count"] == 1
+            finally:
+                await replacement.close()
+        finally:
+            parked.replace(first_db)
+
+        # Emulate a pre-registration database which already has a saved replay.
+        registry = archive_root / ".replay-reference-stores"
+        for entry in registry.glob("*.json"):
+            if json.loads(entry.read_text())["database"] == str(first_db):
+                entry.unlink()
+                break
+        legacy = sqlite3.connect(first_db)
+        try:
+            legacy.execute("DROP TABLE replay_trade_reference_store")
+        finally:
+            legacy.close()
+        first = await _service(first_db, archive(), prefix="reopened")
+        enrolled, item = await inspect()
+        assert enrolled["saved_reference_scan_complete"]
+        assert item["saved_reference_count"] == 1
+        await first.discard_session(session)
+        after_delete, item = await inspect()
+        assert after_delete["saved_reference_scan_complete"]
+        assert after_delete["saved_reference_store_count"] == 2
+        assert item["saved_reference_count"] == 0
+        assert not item["retention_lease_busy"]
+        assert len(list(registry.glob("*.json"))) == 2
+    finally:
+        await first.shutdown(step_timeout=1.0)
+        await second.shutdown(step_timeout=1.0)
 
 
 async def test_production_catalog_selects_a_local_day_before_official_discovery(
