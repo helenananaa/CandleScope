@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from app.data_engine.data_manager.backfill_coordinator import RepairRequest
 from app.data_engine.storage.gap_ledger import GapLedger
 
@@ -14,6 +16,28 @@ def _request() -> RepairRequest:
         market_type="spot",
         request_id="gap",
     )
+
+
+def test_bybit_chunk_cannot_shorten_its_parent_cooldown(tmp_path, monkeypatch) -> None:
+    from app.data_engine.storage import gap_ledger
+
+    now = 1_800_000_000_000
+    monkeypatch.setattr(gap_ledger, "_now_ms", lambda: now)
+    ledger = GapLedger(tmp_path / "klines.sqlite")
+    parent = replace(_request(), exchange="bybit", market_type="swap.inverse")
+    first = replace(parent, end_ms=0, metadata={"ledger_range": {"start_ms": 0, "end_ms": 60_000}})
+    second = replace(first, start_ms=60_000, end_ms=60_000)
+    ledger.upsert_detected(parent)
+    deadline = now + 10_000
+    ledger.mark_retry_wait(first, attempt=1, error="cooldown", next_retry_at=deadline)
+    ledger.mark_started(second, attempt=1)
+    assert ledger.get_status(parent)["next_retry_at"] == deadline
+    assert ledger.list_reconcilable(stale_before_ms=now, due_before_ms=now) == []
+    ledger.mark_retry_wait(second, attempt=1, error="metadata", next_retry_at=now + 500)
+    assert ledger.get_status(parent)["next_retry_at"] == deadline
+    now = deadline + 1
+    ledger.mark_started(first, attempt=1)
+    assert ledger.get_status(parent)["next_retry_at"] is None
 
 
 def test_gap_ledger_preserves_missing_count_when_resolution_count_unknown(tmp_path) -> None:
