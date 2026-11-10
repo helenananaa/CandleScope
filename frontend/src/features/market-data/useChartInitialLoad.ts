@@ -611,10 +611,7 @@ export function useChartInitialLoad({
 
       if (repairPending && historyResult) {
         const pendingInitial = {
-          exchange: ex,
-          marketType: mt,
-          symbol: sym,
-          interval: intv,
+          ...series,
           countBack: initialViewportCountBack,
           ...(historyResult.indicatorWindowOwner
             ? { indicatorWindowOwner: historyResult.indicatorWindowOwner, indicatorWindowEpoch: historyResult.indicatorWindowEpoch }

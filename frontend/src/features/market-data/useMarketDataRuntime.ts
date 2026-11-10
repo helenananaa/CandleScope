@@ -509,12 +509,7 @@ export function useMarketDataRuntime({
       chartWorkSchedulerCellId: schedulerCellId || null,
       foregroundPreloadGate: backgroundPrefetchPriority,
       canRequestSeries: canRequestChartSeries,
-      getActiveSeries: () => ({
-        exchange,
-        marketType,
-        symbol,
-        interval,
-      }),
+      getActiveSeries: () => activeSeries,
       mergeCacheData,
       commitMergedChartData,
       commitPatchedChartData,
@@ -524,17 +519,14 @@ export function useMarketDataRuntime({
         : {}),
     });
   }, [
+    activeSeries,
     backgroundPrefetchPriority,
     commitMergedChartData,
     commitPatchedChartData,
     canRequestChartSeries,
-    exchange,
-    interval,
-    marketType,
     mergeCacheData,
     patchCacheTick,
     seriesDataFeed,
-    symbol,
     workspaceResources,
     schedulerCellId,
   ]);
