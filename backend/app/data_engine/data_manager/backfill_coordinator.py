@@ -32,6 +32,7 @@ from app.data_engine.interval_policy import (
     parse_interval_ms,
 )
 from app.data_engine.kline_quality import (
+    bybit_recovery_source_gap_id,
     repair_requires_trusted_finality,
     source_is_trusted_final,
 )
@@ -3213,6 +3214,7 @@ class BackfillCoordinator:
         raw_metadata = row.get("metadata_json")
         decoded_metadata = _decode_metadata_object(raw_metadata)
         exchange = str(row.get("exchange") or "binance").strip().lower()
+        market_type = str(row.get("market_type") or "spot").strip().lower()
         identity = identity_from_metadata(exchange, decoded_metadata)
         if identity is not None:
             metadata["series_identity"] = identity.to_dict()
@@ -3238,7 +3240,7 @@ class BackfillCoordinator:
             start_ms=int(row["start_ms"]),
             end_ms=int(row["end_ms"]),
             exchange=exchange,
-            market_type=str(row.get("market_type") or "spot").strip().lower(),
+            market_type=market_type,
             reason="ledger_reconcile",
             requester="ledger_reconcile",
             metadata=metadata,
@@ -3246,6 +3248,10 @@ class BackfillCoordinator:
         )
         revision = decoded_metadata.get("acquisition_revision")
         if type(revision) is int and revision >= 0:
+            source_gap_id = bybit_recovery_source_gap_id(exchange, market_type, row.get("reason"), decoded_metadata)
+            if source_gap_id is not None:
+                request.metadata["source_gap_id"] = source_gap_id
+                request.metadata["acquisition_revision"] = revision
             progress = NativeBackfillProgress.from_ledger(
                 request,
                 decoded_metadata.get(NATIVE_PROGRESS_FIELD),

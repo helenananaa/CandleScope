@@ -565,6 +565,175 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
     asyncio.run(run())
 
 
+@pytest.mark.parametrize("source_change", ["unchanged", "amended", "deleted"])
+def test_bybit_derived_recovery_reuses_committed_components_after_restart(monkeypatch, tmp_path, source_change):
+    from app.data_engine.backfill import BackfillConfig, BackfillEngine
+    from app.data_engine.data_manager.backfill_contracts import RepairRequest
+    from app.data_engine.data_manager.backfill_coordinator import BackfillCoordinator
+    from app.data_engine.history import (
+        ExchangeHistoryPolicyResolver,
+        HistoryAvailabilityService,
+        HistoryBoundaryRepository,
+        get_history_calendar_registry,
+    )
+    from app.data_engine.storage import klines_repo
+    from app.data_engine.storage.gap_ledger import GapLedger
+
+    opened, step = 1_794_138_000_000, 300_000
+    symbol, market = "BTC/USD:BTC", "swap.inverse"
+    identity = {"exchange": "bybit", "market_type": market}
+    db = tmp_path / "derived.sqlite"
+    monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", db)
+    klines_repo.init_klines_storage()
+
+    async def run():
+        pages = []
+        adopted = []
+        reset_ms = 0
+        deferred = asyncio.Event()
+
+        async def handle(http):
+            nonlocal reset_ms
+            assert http.path == "/v5/market/kline"
+            assert http.query["interval"] == "5"
+            start, end, limit = (int(http.query[key]) for key in ("start", "end", "limit"))
+            pages.append((start, end, limit))
+            if start == opened + 2 * step and not reset_ms:
+                reset_ms = int(time.time() * 1000) + 1_500
+                deferred.set()
+                return web.json_response({"retCode": 10006, "retMsg": "Too many visits!"},
+                    headers={"X-Bapi-Limit-Reset-Timestamp": str(reset_ms)})
+            rows = [[str(ts), "1", "2", "1", "2", "9", str(4 + i)]
+                    for i in reversed(range(-1, 4)) if start <= (ts := opened + i * step) <= end]
+            return web.json_response({"retCode": 0, "result": {"list": rows[:limit]}})
+
+        runner, origin = await serve(handle)
+        create = generic._create_exchange
+        policy = RateLimitPolicy(endpoint_rules=(RateLimitRule(
+            name="bybit_derived_loopback", bucket_key="bybit:derived-loopback",
+            capacity=16, refill_interval_seconds=.01, max_concurrency=1, cooldown_seconds=.1,
+        ),))
+
+        def routed(*args, **kwargs):
+            exchange = create(*args, **kwargs)
+            point_at_loopback(exchange, origin)
+            exchange._candlescope_rate_limit_policy = policy
+            exchange.set_markets([dict(
+                id="BTCUSD", symbol=symbol, base="BTC", quote="USD", settle="BTC",
+                baseId="BTC", quoteId="USD", settleId="BTC", type="swap", contract=True,
+                swap=True, linear=False, inverse=True, spot=False, active=True,
+            )])
+            return exchange
+
+        monkeypatch.setattr(generic, "_create_exchange", routed)
+        config = IngestionConfig(proxy_mode="none", proxy_egress_group=f"derived-{urlsplit(origin).port}")
+        storage = klines_repo.KlinesRepoAdapter()
+        history = HistoryAvailabilityService(
+            calendars=get_history_calendar_registry(), boundaries=HistoryBoundaryRepository(db),
+        )
+        history_policy = ExchangeHistoryPolicyResolver(history)
+
+        async def publish(_symbol, interval, bars, **_kwargs):
+            adopted.extend((interval, bar.time_ms) for bar in bars)
+
+        async def emit(_event):
+            pass
+
+        def runtime():
+            transport = TransportLayer(config)
+            engine = BackfillEngine(BackfillConfig(
+                history_archive_enabled=False, fetch_batch_size=2, fetch_concurrency=1, fetch_global_concurrency=1,
+            ), klines_repo.AsyncKlinesRepoAdapter(), transport, ingestion_config=config)
+            ledger = GapLedger(db)
+            coordinator = BackfillCoordinator(
+                storage=storage, bars_backfilled=publish, emit_event=emit, engine=engine, gap_ledger=ledger,
+                history_service=history, history_policy_resolver=lambda repair: history_policy.resolve(
+                    history_policy.series_key(
+                        exchange=repair.exchange, market_type=repair.market_type, symbol=repair.symbol,
+                        channel="kline", variant=repair.interval,
+                    )
+                ), loop=asyncio.get_running_loop(), max_retries=1, max_concurrency=1, chunk_bars=1000,
+            )
+            return transport, engine, ledger, coordinator
+
+        def request(interval, start, end):
+            return RepairRequest(symbol, interval, start, end, **identity, reason="tail_gap",
+                                 requester="ingestion_gap", metadata={
+                                     "requires_trusted_finality": True, "source_gap_id": "derived-gap",
+                                 })
+
+        transport, engine, ledger, coordinator = runtime()
+        demand = None
+        try:
+            warmup = await coordinator.request_and_wait(request("5m", opened - step, opened - step))
+            assert warmup.verified_contiguous
+            pages.clear()
+            adopted.clear()
+            derived = request("10m", opened, opened + 2 * step)
+            demand = asyncio.create_task(coordinator.request_and_wait(derived))
+            await asyncio.wait_for(deferred.wait(), 5)
+            async with asyncio.timeout(1):
+                while True:
+                    parent, = ledger.list_open()
+                    if parent["status"] == "retry_wait":
+                        break
+                    await asyncio.sleep(.01)
+            assert parent["next_retry_at"] >= reset_ms - 3
+            assert not adopted and not storage.query_bars(symbol, "10m", **identity)
+            committed = storage.query_bars(symbol, "5m", start_ms=opened, order="ASC", **identity)
+            assert [row["open_time"] for row in committed] == [opened, opened + step]
+
+            await coordinator.shutdown()
+            await demand
+            await engine.close()
+            await transport.stop()
+            if source_change == "amended":
+                assert storage.upsert_bars(
+                    symbol, "5m", [{**committed[0], "volume": 40}],
+                    source="data_manager_amended", **identity,
+                ) == 1
+            if source_change == "deleted":
+                assert storage.delete_bars(symbol, "5m", opened, opened + step, **identity) == 2
+            transport, engine, ledger, coordinator = runtime()
+            early = await coordinator.reconcile_gap_ledger(stale_after_ms=0)
+            assert early.requeued == 0
+            await asyncio.sleep(max(0, (parent["next_retry_at"] - time.time() * 1000) / 1000) + .025)
+            recovered = await coordinator.reconcile_gap_ledger(stale_after_ms=0)
+            assert recovered.requeued == 1, recovered
+            outcome = await asyncio.wait_for(coordinator.wait_for_request(f"ledger-reconcile-{parent['id']}"), 5)
+            final = ledger.get_status(derived)
+            initial_metadata = json.loads(parent["metadata_json"])
+            final_metadata = json.loads(final["metadata_json"])
+            assert final_metadata["source_gap_id"] == initial_metadata["source_gap_id"]
+            assert final_metadata["acquisition_revision"] == initial_metadata["acquisition_revision"]
+            if source_change == "deleted":
+                assert not outcome.verified_contiguous and final["status"] != "filled", outcome
+                assert not adopted and not storage.query_bars(symbol, "10m", **identity)
+                assert not storage.query_bars(symbol, "5m", start_ms=opened, end_ms=opened + step, **identity)
+                return
+            assert outcome.verified_contiguous and final["status"] == "filled", outcome
+            assert pages == [
+                (opened, opened + step, 2),
+                (opened + 2 * step, opened + 3 * step, 2),
+                (opened + 2 * step, opened + 3 * step, 2),
+            ]
+            rows = storage.query_bars(symbol, "10m", order="ASC", **identity)
+            assert [(row["open_time"], row["volume"], row["source"]) for row in rows] == [
+                (opened, 45 if source_change == "amended" else 9, "backfill_aggregated"),
+                (opened + 2 * step, 13, "backfill_aggregated"),
+            ]
+            assert adopted == [("10m", opened), ("10m", opened + 2 * step)]
+        finally:
+            await coordinator.shutdown()
+            if demand is not None:
+                await asyncio.gather(demand, return_exceptions=True)
+            await engine.close()
+            await transport.stop()
+            await runner.cleanup()
+
+    asyncio.run(run())
+
+
 async def _catalog_http_loader(origin: str) -> list:
     exchange = generic._create_exchange(get_ccxt_catalog_entry("binance"),
         IngestionConfig(proxy_mode="none", proxy_egress_group="catalog-loopback"),
