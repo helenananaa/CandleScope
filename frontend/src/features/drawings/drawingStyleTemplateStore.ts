@@ -12,7 +12,7 @@ export function styleFamily(type: string): StyleFamily | null {
   if (["rectangle", "ellipse", "shape"].includes(type)) return "shape";
   if (type === "fibonacci") return "fibonacci";
   if (type === "highlighter") return "highlighter";
-  return ["line", "line-segment", "line-ray", "line-infinite", "horizontal-line", "vertical-line", "cross-line", "angle-measure", "range-measure", "freehand"].includes(type) ? "stroke" : null;
+  return ["line", "line-segment", "line-ray", "line-infinite", "line-arrow", "channel", "horizontal-line", "vertical-line", "cross-line", "angle-measure", "range-measure", "freehand"].includes(type) ? "stroke" : null;
 }
 
 function record(value: unknown): value is Record<string, unknown> {

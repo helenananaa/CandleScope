@@ -1,3 +1,4 @@
+import { arrowHeadScreenGeometry } from "../geometry/drawingToolGeometry.js";
 import { accumulateDrawingPerfFrameWork } from "../performance/drawingPerfCounters.js";
 import type {
   AxisLineType,
@@ -76,6 +77,8 @@ export type DynamicOverlayDecoration =
       lineWidth: number;
       dashed?: boolean;
       extension?: BasicLineToolId;
+      /** Filled head at `to`; only meaningful for unextended segments. */
+      arrowEnd?: boolean;
       handles?: readonly ScreenPoint[];
       label?: Readonly<{
         anchor: ScreenPoint;
@@ -645,14 +648,27 @@ export function createDynamicOverlayController({
           item.extension,
           layout.rect,
         );
+        const head = item.arrowEnd && (!item.extension || item.extension === "line-segment")
+          ? arrowHeadScreenGeometry(from, to, item.lineWidth)
+          : null;
+        const shaftEnd = head?.shaftEnd ?? to;
         context.strokeStyle = item.color;
         context.lineWidth = item.lineWidth;
         context.setLineDash(item.dashed ? [6, 4] : []);
         context.beginPath();
         context.moveTo(from.x - layout.rect.x, from.y - layout.rect.y);
-        context.lineTo(to.x - layout.rect.x, to.y - layout.rect.y);
+        context.lineTo(shaftEnd.x - layout.rect.x, shaftEnd.y - layout.rect.y);
         context.stroke();
         context.setLineDash([]);
+        if (head) {
+          context.fillStyle = item.color;
+          context.beginPath();
+          context.moveTo(head.tip.x - layout.rect.x, head.tip.y - layout.rect.y);
+          context.lineTo(head.left.x - layout.rect.x, head.left.y - layout.rect.y);
+          context.lineTo(head.right.x - layout.rect.x, head.right.y - layout.rect.y);
+          context.closePath();
+          context.fill();
+        }
         if (item.label
           && finitePoint(item.label.anchor)
           && typeof item.label.text === "string"

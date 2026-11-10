@@ -25,7 +25,7 @@ function ObjectGroup({ api, label, interval, query, filter, close, readOnly }: {
     if (!drawing) return [];
     const typeName = drawing.type === "text" ? t("drawing.objects.text")
       : drawingName(drawing.type === "shape" ? drawing.shapeType ?? "rectangle"
-        : drawing.type === "line" ? drawing.lineType ?? "line"
+        : drawing.type === "line" ? (drawing.arrowEnd ? "line-arrow" : drawing.lineType ?? "line")
         : drawing.type === "axis-line" ? drawing.axisLineType ?? "horizontal-line" : drawing.type);
     const name = drawing.type === "text" ? drawing.text || typeName : typeName;
     const intervalHidden = !drawingVisibleAtInterval({ visibleIntervals: drawing.visibleIntervals ?? null }, interval);

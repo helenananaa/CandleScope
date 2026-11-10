@@ -54,8 +54,13 @@ import type {
 import {
   normalizeDrawingEntityForRender,
 } from "../rendering/drawingRenderDefaults.js";
+import {
+  arrowHeadLengthCssPx,
+  parallelChannelScreenGeometry,
+} from "../geometry/drawingToolGeometry.js";
 import type {
   AngleDrawingRenderEntity,
+  ChannelDrawingRenderEntity,
   RangeMeasureDrawingRenderEntity,
   AxisLineDrawingRenderEntity,
   DrawingRenderEntity,
@@ -72,6 +77,7 @@ import {
   drawingPositionCurrentPrice,
   drawingPositionLevelPresentation,
   drawingPositionPanelLines,
+  formatDrawingPositionPrice,
 } from "../drawingPositionPresentation.js";
 import { positionInfoPanelLeft } from "../positionInfoPanelLayout.js";
 
@@ -940,6 +946,66 @@ function projectLine(
       mainPointOffset: 0 as const,
       anchorPointOffset: 2 as const,
       drawEndpointDots: entity.geometry.lineType === "line-segment",
+      arrowEnd: entity.style.arrowEnd,
+    }),
+  });
+}
+
+function projectChannel(
+  entity: ChannelDrawingRenderEntity,
+  frame: DrawingFrameSnapshot,
+  adapter: DrawingSceneProjectionAdapter,
+  selected: boolean,
+): EntityProjection {
+  const [first, second, third] = entity.geometry.dataPoints;
+  if (entity.geometry.dataPoints.length !== 3 || !first || !second || !third) return null;
+  const projected = projectBatch(adapter, frame, [first, second, third], entity.geometry);
+  if (projected === PROJECTION_FAILED) return projected;
+  const channel = parallelChannelScreenGeometry(
+    screenPointAt(projected, 0),
+    screenPointAt(projected, 1),
+    screenPointAt(projected, 2),
+  );
+  if (!channel) return null;
+  const [start, end] = channel.baseline;
+  const [parallelStart, parallelEnd] = channel.parallel;
+  const [midStart, midEnd] = channel.midline;
+  const handle = channel.offsetHandle;
+  const values = new Float64Array([
+    start.x, start.y,
+    end.x, end.y,
+    parallelEnd.x, parallelEnd.y,
+    parallelStart.x, parallelStart.y,
+    midStart.x, midStart.y,
+    midEnd.x, midEnd.y,
+    handle.x, handle.y,
+  ]);
+  const handleTolerance = 7 + entity.style.lineWidth;
+  const lineTolerance = 8 + entity.style.lineWidth / 2;
+  return createProjectedEntity(entity, values, {
+    bbox: bboxFromValues([...values.subarray(0, 8)]),
+    handles: new Float64Array([start.x, start.y, end.x, end.y, handle.x, handle.y]),
+    handleNames: Object.freeze(["start", "end", "offset"]),
+    handleResults: Object.freeze([null, null, null]),
+    hitZones: Object.freeze([
+      Object.freeze({ kind: "point" as const, name: "start", pointOffset: 0, pointCount: 1, tolerance: handleTolerance, result: Object.freeze({ pointIndex: 0 }) }),
+      Object.freeze({ kind: "point" as const, name: "end", pointOffset: 1, pointCount: 1, tolerance: handleTolerance, result: Object.freeze({ pointIndex: 1 }) }),
+      Object.freeze({ kind: "point" as const, name: "offset", pointOffset: 6, pointCount: 1, tolerance: handleTolerance, result: Object.freeze({ pointIndex: 2 }) }),
+      Object.freeze({ kind: "polyline" as const, name: "baseline", pointOffset: 0, pointCount: 2, tolerance: lineTolerance, result: Object.freeze({ pointIndex: -1, zone: "body" }) }),
+      Object.freeze({ kind: "polyline" as const, name: "parallel", pointOffset: 2, pointCount: 2, tolerance: lineTolerance, result: Object.freeze({ pointIndex: -1, zone: "body" }) }),
+      Object.freeze({ kind: "polygon" as const, name: "body", pointOffset: 0, pointCount: 4, tolerance: 0, result: Object.freeze({ pointIndex: -1, zone: "body" }) }),
+    ]),
+    renderSpec: Object.freeze({
+      op: "channel" as const,
+      strokeColor: entity.style.color,
+      fillPaintColor: entity.style.fillOpacity > 0
+        ? legacyPaintAlpha(entity.style.color, entity.style.fillOpacity)
+        : null,
+      lineWidthCssPx: entity.style.lineWidth,
+      selected,
+      polygonPointOffset: 0 as const,
+      midlinePointOffset: 4 as const,
+      offsetHandlePointOffset: 6 as const,
     }),
   });
 }
@@ -1399,8 +1465,42 @@ function projectShape(
   }
   const tolerance = 8 + entity.style.lineWidth / 2;
   const handles = boxHandles(left, top, right, bottom);
+  // Zone extension is painted only; the anchors and box handles do not move,
+  // so resizing an extended zone never rewrites its right anchor to the pane edge.
+  const extended = entity.geometry.extendRight && right < frame.widthCssPx;
+  const extensionPointOffset = extended ? values.length / 2 : null;
+  if (extended) values.push(right, top, frame.widthCssPx, bottom);
+  const zoneText = entity.geometry.shapeType === "rectangle";
+  const [firstPoint, secondPoint] = entity.geometry.dataPoints;
+  const topPoint = a.y <= b.y ? firstPoint : secondPoint;
+  const bottomPoint = a.y <= b.y ? secondPoint : firstPoint;
+  const priceText = (point: typeof firstPoint): string | null => (
+    zoneText && entity.style.priceLabels && point && Number.isFinite(point.price)
+      ? formatDrawingPositionPrice(point.price)
+      : null
+  );
+  const hitZones: DrawingDisplayHitZone[] = [
+    Object.freeze({
+      kind: entity.geometry.shapeType === "ellipse" ? "ellipse" as const : "box" as const,
+      name: entity.geometry.shapeType,
+      pointOffset: 0,
+      pointCount: 2,
+      tolerance,
+      result: Object.freeze({ zone: "body", pointIndex: -1 }),
+    }),
+  ];
+  if (extensionPointOffset !== null) {
+    hitZones.push(Object.freeze({
+      kind: "box" as const,
+      name: "extension",
+      pointOffset: extensionPointOffset,
+      pointCount: 2,
+      tolerance,
+      result: Object.freeze({ zone: "body", pointIndex: -1 }),
+    }));
+  }
   return createProjectedEntity(entity, new Float64Array(values), {
-    bbox: Object.freeze([left, top, right, bottom]),
+    bbox: Object.freeze([left, top, extended ? frame.widthCssPx : right, bottom]),
     handles,
     handleNames: BOX_HANDLE_NAMES,
     handleTolerance: 7 + entity.style.lineWidth,
@@ -1409,16 +1509,7 @@ function projectShape(
       handle: name,
       pointIndex: -1,
     }))),
-    hitZones: Object.freeze([
-      Object.freeze({
-        kind: entity.geometry.shapeType === "ellipse" ? "ellipse" as const : "box" as const,
-        name: entity.geometry.shapeType,
-        pointOffset: 0,
-        pointCount: 2,
-        tolerance,
-        result: Object.freeze({ zone: "body", pointIndex: -1 }),
-      }),
-    ]),
+    hitZones: Object.freeze(hitZones),
     renderSpec: Object.freeze({
       op: "shape" as const,
       shapeType: entity.geometry.shapeType,
@@ -1430,6 +1521,11 @@ function projectShape(
       lineStyle: entity.style.lineStyle,
       selected,
       boxPointOffset: 0 as const,
+      extensionPointOffset,
+      midline: entity.style.midline,
+      label: zoneText && entity.style.label ? entity.style.label : null,
+      topPriceText: priceText(topPoint),
+      bottomPriceText: priceText(bottomPoint),
     }),
   });
 }
@@ -3542,6 +3638,7 @@ function projectEntity(
     );
     case "axis-line": return projectAxisLine(entity, frame, adapter, selected);
     case "range-measure": return projectRangeMeasure(entity, frame, adapter, selected);
+    case "channel": return projectChannel(entity, frame, adapter, selected);
     case "angle-measure": return projectAngle(entity, frame, adapter, selected);
     case "text": return projectText(entity, frame, adapter, selected);
     case "fibonacci": return projectFibonacci(entity, frame, adapter, selected);
@@ -3612,19 +3709,31 @@ function clipProjectedEntityToPane(
   const renderSpec = entity.renderSpec;
   let paintOutset = 0;
   if (renderSpec?.op === "line") {
-    paintOutset = linePaintOutsetCssPx(
-      renderSpec.lineWidthCssPx,
-      renderSpec.selected,
-      renderSpec.drawEndpointDots,
+    paintOutset = Math.max(
+      linePaintOutsetCssPx(
+        renderSpec.lineWidthCssPx,
+        renderSpec.selected,
+        renderSpec.drawEndpointDots,
+      ),
+      // The head's wings reach half its length beyond the shaft.
+      renderSpec.arrowEnd ? arrowHeadLengthCssPx(renderSpec.lineWidthCssPx) / 2 + 1 : 0,
     );
+  } else if (renderSpec?.op === "channel") {
+    paintOutset = renderSpec.selected
+      ? Math.max(renderSpec.lineWidthCssPx / 2, 12)
+      : renderSpec.lineWidthCssPx / 2;
   } else if (renderSpec?.op === "axis-line") {
     paintOutset = renderSpec.selected
       ? Math.max(renderSpec.lineWidthCssPx / 2 + 5, 12)
       : renderSpec.lineWidthCssPx / 2;
   } else if (renderSpec?.op === "shape") {
-    paintOutset = renderSpec.selected
-      ? Math.max(renderSpec.lineWidthCssPx / 2, 9)
-      : renderSpec.lineWidthCssPx / 2;
+    paintOutset = Math.max(
+      renderSpec.selected
+        ? Math.max(renderSpec.lineWidthCssPx / 2, 9)
+        : renderSpec.lineWidthCssPx / 2,
+      // Price labels sit outside the top and bottom edges.
+      renderSpec.topPriceText || renderSpec.bottomPriceText ? 16 : 0,
+    );
   } else if (renderSpec?.op === "angle") {
     // Selected angle rays paint a halo whose full width is lineWidth + 10px.
     // The 12px floor also covers endpoint handles, stroke, and shadow.

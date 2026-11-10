@@ -21,6 +21,7 @@ export const PHASE8_SCENE_DRAWING_KINDS = Object.freeze([
   "axis-line",
   "angle-measure",
   "range-measure",
+  "channel",
   "text",
   "fibonacci",
   "position",
@@ -49,6 +50,7 @@ export function isPhase8SceneDrawingKind(
   value: DrawingKind | string | null | undefined,
 ): value is Phase8SceneDrawingKind {
   return value === "line"
+    || value === "channel"
     || value === "axis-line"
     || value === "angle-measure"
     || value === "range-measure"

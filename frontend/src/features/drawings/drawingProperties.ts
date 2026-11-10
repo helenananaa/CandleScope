@@ -1,3 +1,4 @@
+import { MAX_SHAPE_LABEL_CHARS } from "./drawingModel.js";
 import type { DrawingDataPoint, SavedDrawing } from "./drawingTypes.js";
 import type { DrawingStylePatch } from "./drawingInteractionController.js";
 
@@ -26,7 +27,7 @@ export function parseCoordinateDraft(draft: readonly CoordinateDraft[], original
 export function drawingCoordinates(saved: SavedDrawing): readonly DrawingCoordinate[] | null {
   let points: readonly DrawingDataPoint[];
   if (saved.type === "axis-line") points = saved.dataPoint ? [saved.dataPoint] : [];
-  else if (saved.type === "line" || saved.type === "shape" || saved.type === "fibonacci" || saved.type === "angle-measure" || saved.type === "range-measure") points = saved.dataPoints ?? [];
+  else if (saved.type === "line" || saved.type === "shape" || saved.type === "fibonacci" || saved.type === "angle-measure" || saved.type === "range-measure" || saved.type === "channel") points = saved.dataPoints ?? [];
   else return null;
   if (!points.length || points.length > 3 || points.some((point) =>
     typeof point.time !== "number" || !Number.isFinite(point.time) || !Number.isFinite(point.price)
@@ -72,6 +73,22 @@ export function drawingPropertiesCandidate(
     if (typeof patch.fillColor === "string") candidate.fillColor = patch.fillColor;
     if (typeof patch.fillOpacity === "number") candidate.fillOpacity = patch.fillOpacity;
     if (patch.lineStyle) candidate.lineStyle = patch.lineStyle;
+    if ((saved.shapeType ?? "rectangle") === "rectangle") {
+      if (typeof patch.extendRight === "boolean") candidate.extendRight = patch.extendRight;
+      if (typeof patch.midline === "boolean") candidate.midline = patch.midline;
+      if (typeof patch.priceLabels === "boolean") candidate.priceLabels = patch.priceLabels;
+      if (typeof patch.label === "string") {
+        const label = patch.label.trim().slice(0, MAX_SHAPE_LABEL_CHARS);
+        if (label) candidate.label = label;
+        else delete candidate.label;
+      }
+    }
+  }
+  if (saved.type === "channel" && typeof patch.fillOpacity === "number") candidate.fillOpacity = patch.fillOpacity;
+  if (saved.type === "line" && typeof patch.arrowEnd === "boolean"
+    && (saved.lineType ?? "line-segment") === "line-segment") {
+    if (patch.arrowEnd) candidate.arrowEnd = true;
+    else delete candidate.arrowEnd;
   }
   if (saved.type === "fibonacci" && patch.levels) candidate.levels = patch.levels;
   if (saved.type === "position" && typeof patch.positionSize === "number") candidate.positionSize = patch.positionSize;
@@ -83,9 +100,18 @@ export function drawingPropertiesCandidate(
       || coordinates.some((point) => !Number.isFinite(point.price) || !formatCoordinateTime(point.time))) return null;
     if (candidate.type === "axis-line" && candidate.dataPoint && coordinates[0]) {
       candidate.dataPoint = { ...candidate.dataPoint, ...coordinates[0] };
-    } else if (candidate.type === "line" || candidate.type === "shape" || candidate.type === "fibonacci" || candidate.type === "angle-measure" || candidate.type === "range-measure") {
+    } else if (candidate.type === "line" || candidate.type === "shape" || candidate.type === "fibonacci" || candidate.type === "angle-measure" || candidate.type === "range-measure" || candidate.type === "channel") {
       candidate.dataPoints = (candidate.dataPoints ?? []).map((point, index) => ({ ...point, ...coordinates[index] }));
     } else return null;
   }
   return candidate;
+}
+
+/**
+ * Most properties are presentation, but a zone's right extension changes the
+ * shape's extent (and its culling bounds), so it must commit as geometry.
+ */
+export function drawingPatchChangesGeometry(saved: SavedDrawing, candidate: SavedDrawing): boolean {
+  return saved.type === "shape" && candidate.type === "shape"
+    && (saved.extendRight === true) !== (candidate.extendRight === true);
 }

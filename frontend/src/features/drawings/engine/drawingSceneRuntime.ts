@@ -534,6 +534,8 @@ function queryCandidates(
       && (node.entity.kind === "freehand" || node.entity.kind === "highlighter"))
     || node.entity.kind === "angle-measure"
     || node.entity.kind === "range-measure"
+    // The parallel line is derived in screen space and may leave the anchor box.
+    || node.entity.kind === "channel"
     || node.entity.kind === "fibonacci"
     || node.entity.kind === "text"
     || node.entity.kind === "position"));

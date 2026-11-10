@@ -355,3 +355,20 @@ test("unbounded axis constraints still cull on their finite dimension", () => {
     maxPrice: 55,
   }), true);
 });
+
+test("an extended rectangle zone is horizontally unbounded but keeps its price band", () => {
+  const zone = (extendRight: boolean, shapeType: "rectangle" | "ellipse" = "rectangle") => createDrawingEntityGeometryBounds(createDrawingEntity({
+    id: `zone-${shapeType}-${extendRight}`,
+    kind: "shape",
+    geometry: { kind: "shape", shapeType, extendRight, dataPoints: [{ time: 10, price: 90 }, { time: 20, price: 110 }] },
+    style: { kind: "shape" },
+  })).bounds;
+  const extended = zone(true);
+  assert.equal(extended.kind, "unbounded");
+  if (extended.kind === "unbounded") {
+    assert.equal(extended.axis, "horizontal");
+    assert.deepEqual([extended.minPrice, extended.maxPrice], [90, 110]);
+  }
+  assert.equal(zone(false).kind, "bounded");
+  assert.equal(zone(true, "ellipse").kind, "bounded", "ellipses never extend");
+});

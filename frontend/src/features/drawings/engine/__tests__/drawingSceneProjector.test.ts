@@ -3189,3 +3189,80 @@ test("ruler labels stay inside the visible pane after an interval change without
   const outside = project(document, createFrame({ width: 320 }), createAdapter({ projectX: time => time + 400 }));
   assert.equal(outside?.entities.length, 0, "off-screen rulers do not produce floating edge labels");
 });
+
+test("parallel channel projects a screen-parallel band with anchor, width and body hits", () => {
+  const entity = createDrawingEntity({
+    id: "channel", kind: "channel",
+    geometry: { kind: "channel", dataPoints: [{ time: 20, price: 100 }, { time: 120, price: 50 }, { time: 70, price: 45 }] },
+    style: { kind: "channel", color: "#22c55e", lineWidth: 2 },
+  });
+  const document = createDrawingDocument({ scopeKey: "channels", entities: [entity] });
+  const list = project(document, createFrame(), createAdapter(), undefined, "channel");
+  assert.ok(list);
+  const spec = list.entities[0]?.renderSpec;
+  assert.equal(spec?.op, "channel");
+  // start, end, parallel end, parallel start, midline x2, width handle.
+  assert.deepEqual(entityPoints(list, "channel"), [
+    20, 100, 120, 50, 120, 20, 20, 70, 20, 85, 120, 35, 70, 45,
+  ]);
+  assert.equal(hitTestDrawingScreenDisplayList(list, 20, 100)?.pointIndex, 0);
+  assert.equal(hitTestDrawingScreenDisplayList(list, 120, 50)?.pointIndex, 1);
+  assert.equal(hitTestDrawingScreenDisplayList(list, 70, 45)?.pointIndex, 2, "width handle sits mid-parallel");
+  assert.equal(hitTestDrawingScreenDisplayList(list, 70, 75)?.pointIndex, -1, "baseline body");
+  assert.equal(hitTestDrawingScreenDisplayList(list, 70, 60)?.zone, "body", "interior is selectable");
+  assert.equal(hitTestDrawingScreenDisplayList(list, 70, 120), null);
+  const gap = project(document, createFrame(), createAdapter({ gapTime: 70 }));
+  assert.equal(gap?.entities.length, 0, "an unresolved width anchor never fabricates a channel");
+});
+
+test("segment arrows request a head while rays ignore a stale arrow flag", () => {
+  const line = (id: string, lineType: "line-segment" | "line-ray") => createDrawingEntity({
+    id, kind: "line",
+    geometry: { kind: "line", lineType, dataPoints: [{ time: 20, price: 20 }, { time: 80, price: 80 }] },
+    style: { kind: "line", color: "#f00", lineWidth: 2, arrowEnd: true },
+  });
+  const document = createDrawingDocument({ scopeKey: "arrows", entities: [line("arrow", "line-segment"), line("ray", "line-ray")] });
+  const list = project(document, createFrame(), createAdapter());
+  assert.ok(list);
+  const specs = new Map(list.entities.map((entity) => [entity.id, entity.renderSpec]));
+  const arrow = specs.get("arrow");
+  const ray = specs.get("ray");
+  assert.ok(arrow?.op === "line" && ray?.op === "line");
+  assert.equal(arrow.arrowEnd, true);
+  assert.equal(ray.arrowEnd, false);
+});
+
+test("an extended zone paints and hits to the pane edge without moving its anchors or handles", () => {
+  const rectangle = (id: string, shapeType: "rectangle" | "ellipse", extendRight: boolean) => createDrawingEntity({
+    id, kind: "shape",
+    geometry: { kind: "shape", shapeType, extendRight, dataPoints: [{ time: 20, price: 40 }, { time: 80, price: 90 }] },
+    style: { kind: "shape", color: "#f59e0b", lineWidth: 1, midline: true, priceLabels: true, label: "Demand" },
+  });
+  const extended = project(createDrawingDocument({ scopeKey: "zones", entities: [rectangle("zone", "rectangle", true)] }), createFrame(), createAdapter(), undefined, "zone");
+  assert.ok(extended);
+  const zone = extended.entities[0];
+  assert.ok(zone?.renderSpec?.op === "shape");
+  assert.deepEqual(Array.from(extended.bboxes.slice(0, 4)), [20, 40, 200, 90]);
+  assert.equal(zone.renderSpec.extensionPointOffset, 7);
+  assert.equal(zone.renderSpec.midline, true);
+  assert.equal(zone.renderSpec.label, "Demand");
+  assert.equal(zone.renderSpec.topPriceText, "40.0000");
+  assert.equal(zone.renderSpec.bottomPriceText, "90.0000");
+  const rightHandle = zone.handleNames.indexOf("r");
+  assert.ok(rightHandle >= 0);
+  assert.equal(extended.handles[(zone.handleOffset + rightHandle) * 2], 80, "resize handle stays on the anchor");
+  assert.equal(hitTestDrawingScreenDisplayList(extended, 150, 60)?.zone, "body");
+
+  const plain = project(createDrawingDocument({ scopeKey: "zones", entities: [rectangle("zone", "rectangle", false)] }), createFrame(), createAdapter());
+  assert.ok(plain);
+  assert.equal(hitTestDrawingScreenDisplayList(plain, 150, 60), null);
+
+  const ellipse = project(createDrawingDocument({ scopeKey: "zones", entities: [rectangle("oval", "ellipse", true)] }), createFrame(), createAdapter());
+  const ellipseSpec = ellipse?.entities[0]?.renderSpec;
+  assert.ok(ellipseSpec?.op === "shape");
+  assert.deepEqual(
+    [ellipseSpec.extensionPointOffset, ellipseSpec.midline, ellipseSpec.label, ellipseSpec.topPriceText],
+    [null, false, null, null],
+    "zone options are rectangle-only",
+  );
+});
