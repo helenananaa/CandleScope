@@ -13,6 +13,7 @@ import type { ContinuousAction, ContinuousCapabilities, ContinuousCreate, Contin
 import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
 import ContinuousBarBoundary from "./ContinuousBarBoundary.js";
 import ContinuousParameterEditor from "./ContinuousParameterEditor.js";
+import ContinuousAutoRepairSetting from "./ContinuousAutoRepairSetting.js";
 import ContinuousRepairPanel from "./ContinuousRepairPanel.js";
 import ContinuousAccountView from "./ContinuousAccountView.js";
 import { continuousFillTimeMs, readContinuousAccountRows } from "./continuousAccountRows.js";
@@ -281,6 +282,10 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
     {reference?.runId && <p role="status">{t(connectionMessages[state.connection])} · {t("continuous.phase", { phase: phase ?? "…" })}</p>}
     {reference?.runId && !state.initialReady && <p role="status">{t("continuous.initializing")}</p>}
     {(view?.stale || phase === "REPAIR_REQUIRED") && <p role="alert">{t("continuous.stale")}</p>}
+    {manager && view && props.active && reference?.runId === view.identity.id
+      && caps?.automatic_repair_available && caps.python_editor_authorized
+      && <ContinuousAutoRepairSetting key={scope+":"+view.identity.id} manager={manager} runId={view.identity.id}
+        canEnable={["PAUSED", "LIVE", "CATCHING_UP"].includes(view.run.phase)} />}
     {manager && view && reference?.runId === view.identity.id && <ContinuousRepairPanel key={scope+":"+view.identity.id}
       manager={manager} view={view} repair={state.repair} active={props.active}
       available={!!caps?.execution_enabled && !!caps.repair_available && !!caps.python_editor_authorized} />}

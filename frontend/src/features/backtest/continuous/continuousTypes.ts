@@ -13,7 +13,7 @@ export interface ContinuousCreation {
 export interface ContinuousCapabilities {
   execution_enabled: boolean; runtime_mode: string; protocol: "continuous.v1";
   python_editor_authorized: boolean; python_author_contract: string;
-  repair_available: boolean; intervals: string[]; languages: string[];
+  repair_available: boolean; automatic_repair_available?: boolean; intervals: string[]; languages: string[];
 }
 export interface ContinuousCreate {
   mode: Exclude<ContinuousMode, "HISTORY">;
@@ -46,6 +46,15 @@ export type ContinuousAction = "pause" | "resume" | "retry" | "cancel";
 export interface ContinuousControl {
   action: ContinuousAction; revision: number; expected?: CommittedIdentity; refresh_input?: boolean;
 }
+export interface ContinuousAutoRepairPolicy {
+  run_id: string;
+  enabled: boolean;
+  version: number;
+}
+export interface ContinuousAutoRepairSetting {
+  enabled: boolean;
+  expected_version: number;
+}
 export interface ContinuousRepairPlan {
   plan_id: string; expected: CommittedIdentity; resume_after: boolean;
   from_ms: number; through_ms: number; original_from_ms: number;
@@ -56,7 +65,7 @@ export interface ContinuousRepairPlan {
 export interface ContinuousRepair {
   id: string; request_key: string; run_id: string;
   phase: "REQUESTED" | "PREPARING" | "READY" | "COMMITTED" | "FAILED" | "CANCELLED";
-  target_revision: number; base_identity: CommittedIdentity; plan_id: string;
+  automatic?: boolean; target_revision: number; base_identity: CommittedIdentity; plan_id: string;
   resume_after: boolean; from_ms: number; through_ms: number; original_from_ms: number;
   anchor_sequence: number; full_reinitialization: boolean; expanded_range_reason: string | null;
   progress: { state?: string; sequence?: number; event_time_ms?: number; through_ms?: number;
@@ -83,6 +92,8 @@ export interface ContinuousApi {
   page(id: string, body: { since_revision: number; expected: CommittedIdentity;
     change_cursor: ContinuousPage["next_cursor"] }, signal: AbortSignal): Promise<ContinuousPage>;
   control(key: string, body: ContinuousControl, signal: AbortSignal): Promise<{ creation: ContinuousCreation; run: ContinuousRun | null }>;
+  autoRepair(id: string, signal: AbortSignal): Promise<{ policy: ContinuousAutoRepairPolicy }>;
+  setAutoRepair(id: string, setting: ContinuousAutoRepairSetting, signal: AbortSignal): Promise<{ policy: ContinuousAutoRepairPolicy }>;
   repairPreview(id: string, body: { expected: CommittedIdentity; resume_after: boolean }, signal: AbortSignal): Promise<{ plan: ContinuousRepairPlan }>;
   repair(id: string, key: string, body: ContinuousRepairConfirm, signal: AbortSignal): Promise<{ repair: ContinuousRepair }>;
   repairStatus(key: string, signal: AbortSignal): Promise<{ repair: ContinuousRepair }>;
