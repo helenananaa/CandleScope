@@ -326,6 +326,80 @@ async def test_retention_rechecks_stale_preview_against_other_profile(tmp_path: 
         await second.shutdown(step_timeout=1.0)
 
 
+async def test_reclaim_revalidates_saved_references_for_each_batch(tmp_path: Path, monkeypatch) -> None:
+    from contextlib import nullcontext
+
+    from app.replay.training import raw_trade_retention
+
+    root = tmp_path / "archive"
+    archive = verified_trade_archive(root)
+    first_db = tmp_path / "first" / "replay.db"
+    first = await _service(first_db, OfficialAggTradeArchive(root, defer_refresh=True), prefix="first")
+    second = await _service(
+        tmp_path / "second" / "replay.db",
+        OfficialAggTradeArchive(root, defer_refresh=True),
+        prefix="second",
+    )
+    try:
+        report = await second.training.raw_trade_retention_preview(limit=1)
+        candidate, = report["items"]
+        assert candidate["saved_reference_count"] == 0
+        created = await first.create_session(trade_replay_config())
+        session_id = str(created["session_id"])
+        await first.release_session_to_hub(session_id)
+        operation = dict(identity=("binance", "futures", "BTCUSDT"),
+                         day="2026-06-01", day_id=candidate["day_id"])
+
+        def policy(_key, _receipt):
+            return nullcontext(True)
+
+        # Simulate an older operator moving a day after the preview. The
+        # reclaim owner must independently reject the new saved reference.
+        assert archive.move_verified_retention_day(**operation, authorize=policy, restore=False) == "RETIRED"
+        retired, = root.glob("exchange=*/market_type=*/symbol=*/.retired-date=*")
+        originals = {file.name: file.read_bytes() for file in retired.iterdir()}
+
+        async def reclaim():
+            return await raw_trade_retention.reclaim_retired_day(
+                second.store, archive, **operation, max_files=1,
+                max_bytes=sum(map(len, originals.values())), policy=policy,
+            )
+
+        assert (await reclaim()).status == "RETENTION_NOT_AUTHORIZED"
+        await first.discard_session(session_id)
+        await first.shutdown(step_timeout=1.0)
+        parked = first_db.with_suffix(".parked")
+        first_db.rename(parked)
+        try:
+            assert (await reclaim()).status == "RETENTION_NOT_AUTHORIZED"
+        finally:
+            parked.replace(first_db)
+        assert {file.name: file.read_bytes() for file in retired.iterdir()} == originals
+
+        original_unlink = Path.unlink
+
+        def check_fence(file, *args, **kwargs):
+            if file.parent == retired:
+                with pytest.raises(BlockingIOError):
+                    with raw_trade_retention._registry_lease(root / ".replay-reference-stores", shared=False):
+                        pytest.fail("registry publication overlapped reclaim")
+            return original_unlink(file, *args, **kwargs)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(Path, "unlink", check_fence)
+            result = await reclaim()
+        assert result.status == "RECLAIM_PENDING" and result.removed_files == 1
+        first_db.rename(parked)
+        try:
+            assert (await reclaim()).status == "RETENTION_NOT_AUTHORIZED"
+        finally:
+            parked.replace(first_db)
+        assert len(tuple(retired.iterdir())) == len(originals)  # One file removed and one marker added.
+    finally:
+        await first.shutdown(step_timeout=1.0)
+        await second.shutdown(step_timeout=1.0)
+
+
 async def test_production_catalog_selects_a_local_day_before_official_discovery(
     tmp_path: Path,
 ) -> None:

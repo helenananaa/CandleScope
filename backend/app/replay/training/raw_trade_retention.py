@@ -1,4 +1,4 @@
-"""Read-only retention preview and execution preflight for committed replay trade days."""
+"""Retention inventory and reference fences for verified replay trade days."""
 
 from __future__ import annotations
 
@@ -8,14 +8,19 @@ import os
 import sqlite3
 import time
 from collections import Counter
-from contextlib import AbstractContextManager, closing
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
 from itertools import islice
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from app.core.executors import run_archive
-from app.data_engine.storage.raw_trade_archive import RawAggTradeDatasetRef
+from app.data_engine.storage.raw_trade_archive import (
+    ParquetRawAggTradeArchive,
+    RawAggTradeDatasetRef,
+    VerifiedTradeReclaimResult,
+)
 from app.data_engine.storage.raw_trade_retention_lock import partition_lease
 from app.replay.errors import ReplayDomainError
 from app.replay.history_archive import _atomic_write_json
@@ -291,6 +296,18 @@ def _annotate_references(item: dict[str, Any], saved: dict[str, int], complete: 
         item["protection_reasons"].append("SAVED_REFERENCE_SCAN_INCOMPLETE")
 
 
+def _scan_reference_stores(
+    directory: Path, database: Path,
+) -> tuple[dict[str, int], bool, int, int]:
+    saved, complete, local_id = _read_store_references(
+        database, None, max_references=_MAX_REFERENCES, max_objects=_MAX_REFERENCED_OBJECTS,
+    )
+    external, registered_complete, scanned, unavailable = _registered_references(
+        directory, database, local_id,
+    )
+    return dict(Counter(saved) + Counter(external)), complete and registered_complete, scanned, unavailable
+
+
 async def recheck(
     store: ReplaySQLiteStore, archive: object, *, day_id: str, limit: int,
 ) -> dict[str, object]:
@@ -316,19 +333,46 @@ async def recheck(
                 return {**result, "status": status}
             try:
                 with _registry_lease(directory, shared=False):
-                    saved, complete, local_id = _read_store_references(
-                        store.path, None, max_references=_MAX_REFERENCES, max_objects=_MAX_REFERENCED_OBJECTS,
-                    )
-                    external, registered_complete, scanned, unavailable = _registered_references(
-                        directory, store.path, local_id,
-                    )
+                    saved, complete, scanned, unavailable = _scan_reference_stores(directory, store.path)
             except (OSError, OverflowError, sqlite3.Error, ValueError):
                 return {**result, "status": "SAVED_REFERENCE_SCAN_UNAVAILABLE"}
-            complete = complete and registered_complete
-            _annotate_references(item, dict(Counter(saved) + Counter(external)), complete)
+            _annotate_references(item, saved, complete)
             return {
                 **result, "status": status, "item": item, "saved_reference_scan_complete": complete,
                 "saved_reference_store_count": 1 + scanned, "unavailable_reference_store_count": unavailable,
             }
 
     return await run_archive(inspect)
+
+
+async def reclaim_retired_day(
+    store: ReplaySQLiteStore, archive: ParquetRawAggTradeArchive, *,
+    identity: tuple[str, str, str], day: str, day_id: str, max_files: int, max_bytes: int,
+    policy: Callable[[str, str], AbstractContextManager[bool]],
+) -> VerifiedTradeReclaimResult:
+    """Recheck policy and saved references inside the reclaim operation's leases."""
+    directory = _registry(archive)
+    if directory is None:
+        return VerifiedTradeReclaimResult("RETENTION_NOT_AUTHORIZED")
+
+    @contextmanager
+    def authorize(partition: str, receipt_id: str) -> Iterator[bool]:
+        with policy(partition, receipt_id) as approved, ExitStack() as leases:
+            if not approved:
+                yield False
+                return
+            try:
+                leases.enter_context(_registry_lease(directory, shared=False))
+                saved, complete, _, _ = _scan_reference_stores(directory, store.path)
+            except (OSError, OverflowError, sqlite3.Error, ValueError):
+                yield False
+                return
+            # Hold the registry fence through unlink, so a dormant profile
+            # cannot register pre-existing references between scan and reclaim.
+            yield complete and not saved.get(partition)
+
+    return await run_archive(
+        archive.reclaim_retired_verified_day,
+        identity=identity, day=day, day_id=day_id, max_files=max_files,
+        max_bytes=max_bytes, authorize=authorize,
+    )

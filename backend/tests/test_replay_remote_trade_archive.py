@@ -136,6 +136,80 @@ def test_retired_day_is_hidden_and_recoverable_after_interruption(tmp_path, monk
     assert {file.name: file.read_bytes() for file in receipt.parent.iterdir()} == originals
 
 
+def test_retired_day_reclaim_is_bounded_and_resumes_after_unlink(tmp_path, monkeypatch):
+    from contextlib import nullcontext
+
+    from app.data_engine.storage.raw_trade_archive import ParquetRawAggTradeArchive, VerifiedTradeDayRetired
+
+    root = tmp_path / "archive"
+    archive = verified_trade_archive(root)
+    receipt, = root.glob("exchange=*/market_type=*/symbol=*/date=*/_verified_import.json")
+    day_id = "sha256:" + hashlib.sha256(receipt.read_bytes()).hexdigest()
+    identity = ("binance", "futures", "BTCUSDT")
+
+    def authorize(_key, _day_id):
+        return nullcontext(True)
+
+    operation = dict(identity=identity, day="2026-06-01", day_id=day_id, authorize=authorize)
+    assert archive.move_verified_retention_day(**operation, restore=False) == "RETIRED"
+    retired = receipt.parent.with_name(".retired-" + receipt.parent.name)
+    data_files = sorted(path for path in retired.iterdir() if path.name != receipt.name)
+    size = {path: path.stat().st_size for path in data_files}
+    pending = archive.reclaim_retired_verified_day(**operation, max_files=1, max_bytes=1)
+    assert pending.status == "RECLAIM_PENDING"
+    assert (pending.removed_files, pending.removed_logical_bytes, pending.remaining_files) == (0, 0, len(size))
+    assert archive.move_verified_retention_day(**operation, restore=True) == "RESTORED"
+    assert archive.move_verified_retention_day(**operation, restore=False) == "RETIRED"
+
+    first = data_files[0]
+    original_unlink = Path.unlink
+
+    def interrupted(file, *args, **kwargs):
+        original_unlink(file, *args, **kwargs)
+        if file == first:
+            raise OSError("injected after first unlink")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "unlink", interrupted)
+        with pytest.raises(OSError, match="after first unlink"):
+            archive.reclaim_retired_verified_day(**operation, max_files=2, max_bytes=sum(size.values()))
+    assert not first.exists() and data_files[1].exists()
+
+    reopened = ParquetRawAggTradeArchive(root)
+    assert reopened.move_verified_retention_day(**operation, restore=True) == "RECLAIM_STARTED"
+    # A changed or unrelated object must not be reclaimed using the old receipt.
+    second = data_files[1]
+    original = second.read_bytes()
+    second.write_bytes(original + b"changed")
+    assert reopened.reclaim_retired_verified_day(
+        **operation, max_files=2, max_bytes=2 * sum(size.values()),
+    ).status == "PARTITION_UNSAFE"
+    assert second.exists()
+    second.write_bytes(original)
+    unrelated = retired / "keep-me"
+    unrelated.write_bytes(b"foreign")
+    assert reopened.reclaim_retired_verified_day(
+        **operation, max_files=2, max_bytes=sum(size.values()),
+    ).status == "PARTITION_UNSAFE"
+    assert unrelated.read_bytes() == b"foreign"
+    unrelated.unlink()
+
+    removed = size[first]
+    for file in data_files[1:]:
+        result = reopened.reclaim_retired_verified_day(**operation, max_files=1, max_bytes=size[file])
+        assert (result.removed_files, result.removed_logical_bytes) == (1, size[file])
+        removed += result.removed_logical_bytes
+    assert result.status == "RECLAIMED" and result.remaining_files == 0
+    assert removed == sum(size.values())
+    retry = reopened.reclaim_retired_verified_day(**operation, max_files=1, max_bytes=1)
+    assert retry.status == "RECLAIMED" and retry.removed_files == retry.removed_logical_bytes == 0
+    assert sorted(path.name for path in retired.iterdir()) == ["_reclaim_started", receipt.name]
+    assert "sha256:" + hashlib.sha256((retired / receipt.name).read_bytes()).hexdigest() == day_id
+    assert reopened.list_verified_windows(exchange=identity[0], market_type=identity[1], symbol=identity[2]) == ()
+    with pytest.raises(VerifiedTradeDayRetired):
+        reopened.require_day_not_retired(identity, operation["day"])
+
+
 @pytest.mark.parametrize("origin_state", ["window_removed", "unavailable"])
 def test_freeze_reuses_verified_day_after_catalog_changes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, origin_state: str,

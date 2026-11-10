@@ -33,6 +33,7 @@ from .raw_trade_retention_lock import ReadOnlyLeaseDirectory, partition_lease
 
 ARCHIVE_SCHEMA_VERSION = "1"
 _RETENTION_OBJECT_LIMIT = 4_096
+_RETENTION_RECLAIM_MARKER = "_reclaim_started"
 RAW_AGG_TRADE_COLUMNS = (
     "exchange",
     "market_type",
@@ -330,6 +331,14 @@ class RawAggTradePage:
 
 class VerifiedTradeDayRetired(RuntimeError):
     """A deliberately detached official day needs an explicit restore."""
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedTradeReclaimResult:
+    status: str
+    removed_files: int = 0
+    removed_logical_bytes: int = 0
+    remaining_files: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1267,46 +1276,147 @@ class ParquetRawAggTradeArchive:
             if "sha256:" + _file_sha256(receipt_path) != day_id:
                 return "STALE_RECEIPT"
             partition_key = partition.relative_to(self.root).as_posix()
-            with self._write_lock:
-                if any(partition_key in pin.partitions for pin in self._pins.values()):
-                    return "ACTIVE_DATASET_PIN"
+            if self._has_retention_pin(partition_key):
+                return "ACTIVE_DATASET_PIN"
             with authorize(partition_key, day_id) as approved:
                 if not approved:
                     return "RETENTION_NOT_AUTHORIZED"
-                receipt = self._read_verified_receipt(receipt_path)
-                metadata = receipt["metadata"]
-                assert isinstance(metadata, Mapping)
-                if tuple(metadata[name] for name in ("exchange", "market_type", "symbol", "date")) != (*identity, day):
-                    return "STALE_RECEIPT"
-                if not self._retention_move_files_match(partition, source, receipt, restore=restore):
+                if restore and os.path.lexists(source / _RETENTION_RECLAIM_MARKER):
+                    return "RECLAIM_STARTED"
+                expected = self._retention_expected_files(partition, source, (*identity, day))
+                if expected is None:
+                    return "PARTITION_UNSAFE"
+                files = self._retention_present_files(source, expected, reclaim_started=False)
+                if files is None or files.keys() != expected.keys():
+                    return "PARTITION_UNSAFE"
+                if any(
+                    _file_sha256(file) != expected[name]
+                    for name, file in files.items() if restore or name.endswith(".manifest.json")
+                ):
                     return "PARTITION_UNSAFE"
                 source.rename(destination)
                 _sync_retention_directory(destination.parent)
                 return complete
 
-    def _retention_move_files_match(
-        self, partition: Path, source: Path, receipt: Mapping[str, object], *, restore: bool,
-    ) -> bool:
-        objects = receipt["objects"]
-        assert isinstance(objects, list)
+    def reclaim_retired_verified_day(
+        self, *, identity: tuple[str, str, str], day: str, day_id: str,
+        max_files: int, max_bytes: int,
+        authorize: Callable[[str, str], AbstractContextManager[bool]],
+    ) -> VerifiedTradeReclaimResult:
+        """Remove a bounded batch of verified files, preserving the retired day and its receipt."""
+        if type(max_files) is not int or not 1 <= max_files <= 2 * _RETENTION_OBJECT_LIMIT:
+            raise ValueError("retention file budget is outside the supported range")
+        if type(max_bytes) is not int or max_bytes < 1:
+            raise ValueError("retention byte budget must be positive")
+        day_id = _prefixed_sha256_digest(day_id, "verified day ID")
+        partition = self._partition_path((*identity, day))
+        retired = self._retired_partition(partition)
+        with self._verified_retention_leases(identity, day, partition) as blocked:
+            if blocked is not None:
+                return VerifiedTradeReclaimResult(blocked)
+            if (partition.exists() or partition.is_symlink() or retired.is_symlink()
+                    or not partition.parent.resolve().is_relative_to(self.root.resolve())):
+                return VerifiedTradeReclaimResult("PARTITION_UNSAFE")
+            receipt = retired / "_verified_import.json"
+            if receipt.is_symlink() or not receipt.is_file() or "sha256:" + _file_sha256(receipt) != day_id:
+                return VerifiedTradeReclaimResult("STALE_RECEIPT")
+            partition_key = partition.relative_to(self.root).as_posix()
+            if self._has_retention_pin(partition_key):
+                return VerifiedTradeReclaimResult("ACTIVE_DATASET_PIN")
+            with authorize(partition_key, day_id) as approved:
+                if not approved:
+                    return VerifiedTradeReclaimResult("RETENTION_NOT_AUTHORIZED")
+                return self._reclaim_verified_files(partition, retired, (*identity, day), max_files, max_bytes)
+
+    def _has_retention_pin(self, partition_key: str) -> bool:
+        with self._write_lock:
+            return any(partition_key in pin.partitions for pin in self._pins.values())
+
+    def _retention_expected_files(
+        self, partition: Path, source: Path, identity_day: tuple[str, str, str, str],
+    ) -> dict[str, str] | None:
+        receipt = self._read_verified_receipt(source / "_verified_import.json")
+        metadata, objects = receipt["metadata"], receipt["objects"]
+        assert isinstance(metadata, Mapping) and isinstance(objects, list)
+        if tuple(metadata[key] for key in ("exchange", "market_type", "symbol", "date")) != identity_day:
+            return None
         if len(objects) > _RETENTION_OBJECT_LIMIT:
-            return False
-        expected = {"_verified_import.json"}
+            return None
+        expected: dict[str, str] = {}
         for raw in objects:
             item = RawAggTradeObjectManifest.from_dict(raw)
             path = self.root / item.object_id
-            if path.parent != partition or not path.name.startswith("part-verified-") or path.suffix != ".parquet":
-                return False
-            data = source / path.name
-            manifest = _manifest_path(data)
-            for file in (data, manifest):
-                if not file.is_file() or file.is_symlink() or file.name in expected:
-                    return False
-                expected.add(file.name)
-            if (_file_sha256(manifest) != item.manifest_sha256
-                    or (restore and _file_sha256(data) != item.parquet_sha256)):
-                return False
-        return {entry.name for entry in islice(source.iterdir(), len(expected) + 1)} == expected
+            if (path.parent != partition or not path.name.startswith("part-verified-")
+                    or path.suffix != ".parquet" or path.name in expected
+                    or item.source_quality != "binance_public_checksum"
+                    or item.source_checksum_sha256 != metadata["source_checksum_sha256"]):
+                return None
+            expected[path.name] = item.parquet_sha256
+            expected[_manifest_path(path).name] = item.manifest_sha256
+        return expected
+
+    @staticmethod
+    def _retention_present_files(
+        source: Path, expected: Mapping[str, str], *, reclaim_started: bool,
+    ) -> dict[str, Path] | None:
+        metadata = {"_verified_import.json"}
+        if reclaim_started:
+            metadata.add(_RETENTION_RECLAIM_MARKER)
+        files = {}
+        for entry in islice(source.iterdir(), len(expected) + len(metadata) + 1):
+            if entry.name in metadata:
+                continue
+            if entry.name not in expected or entry.is_symlink() or not entry.is_file():
+                return None
+            files[entry.name] = entry
+        return files
+
+    def _reclaim_verified_files(
+        self, partition: Path, retired: Path, identity_day: tuple[str, str, str, str],
+        max_files: int, max_bytes: int,
+    ) -> VerifiedTradeReclaimResult:
+        marker = retired / _RETENTION_RECLAIM_MARKER
+        started = os.path.lexists(marker)
+        if started and (marker.is_symlink() or not marker.is_file() or marker.stat().st_size):
+            return VerifiedTradeReclaimResult("PARTITION_UNSAFE")
+        expected = self._retention_expected_files(partition, retired, identity_day)
+        if expected is None:
+            return VerifiedTradeReclaimResult("PARTITION_UNSAFE")
+        files = self._retention_present_files(retired, expected, reclaim_started=started)
+        if files is None or (not started and files.keys() != expected.keys()):
+            return VerifiedTradeReclaimResult("PARTITION_UNSAFE")
+        if not files:
+            _sync_retention_directory(retired)
+            return VerifiedTradeReclaimResult("RECLAIMED", remaining_files=0)
+
+        selected: list[Path] = []
+        remaining_budget = max_bytes
+        for name in sorted(files)[:max_files]:
+            file = files[name]
+            size = file.stat().st_size
+            if size > remaining_budget:
+                break
+            if _file_sha256(file) != expected[name]:
+                return VerifiedTradeReclaimResult("PARTITION_UNSAFE")
+            selected.append(file)
+            remaining_budget -= size
+        if not selected:
+            return VerifiedTradeReclaimResult("RECLAIM_PENDING", remaining_files=len(files))
+
+        # The durable empty marker forbids restore before the first unlink.
+        # After interruption the receipt still describes exactly what may be removed.
+        if not started:
+            with marker.open("xb") as handle:
+                os.fsync(handle.fileno())
+        _sync_retention_directory(retired)
+        for file in selected:
+            file.unlink()
+        _sync_retention_directory(retired)
+        remaining = len(files) - len(selected)
+        return VerifiedTradeReclaimResult(
+            "RECLAIM_PENDING" if remaining else "RECLAIMED",
+            len(selected), max_bytes - remaining_budget, remaining,
+        )
 
     def _verified_retention_item(
         self, receipt_path: Path, receipt: dict[str, object], *, observe_locks: bool = True,
