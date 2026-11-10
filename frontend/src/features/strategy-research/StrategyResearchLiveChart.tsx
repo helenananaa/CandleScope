@@ -22,7 +22,7 @@ export default function StrategyResearchLiveChart({ session, result, focusReques
   const marketData = useMarketDataRuntime({ session: chartSession, realtimePriceRef: priceRef, enabled: result === null,
     backgroundPrefetchEnabled: false, intervalPrefetchEnabled: false, workspaceId: "strategy-research", windowId: "research-window", schedulerCellId: "research-live" });
   const live = useLiveReferenceMarketChartSource({ sourceId: "research-live", session, datasetKey: chartSession.view.datasetKey, marketData, paused: result !== null });
-  const frozen = useMemo(() => result ? createRunResultSource({ sourceId: `research-result:${result.run.run_id}`, session: { ...session, symbol: result.chart.symbol, interval: result.chart.interval },
+  const frozen = useMemo(() => result ? createRunResultSource({ sourceId: `research-result:${result.run.run_id}`, session,
     runId: result.run.run_id, configHash: result.run.config_hash, reportHash: result.reportHash, chartHash: result.chartHash, bars: result.chart.bars.map((bar) => ({ ...bar })) }) : null, [result, session]);
   useEffect(() => () => frozen?.dispose(), [frozen]);
   useEffect(() => { if (focusRequest) surface.ref.current?.setLinkedVisibleTimeAnchor(focusRequest.time); }, [focusRequest, surface.ref]);
@@ -30,7 +30,8 @@ export default function StrategyResearchLiveChart({ session, result, focusReques
   if (!source.marketData.status.activeChartReady || !source.marketData.view.seriesStore) {
     return <div className="local-chart-empty" role="status">{source.marketData.view.error ? String(source.marketData.view.error) : t("research.loading")}</div>;
   }
-  return <div className="strategy-research-imported-chart">
+  return <div className="strategy-research-imported-chart" role="region"
+    aria-label={t(frozen ? "research.source.frozen" : "research.source.currentChart")}>
     {source.marketData.view.error ? <p role="alert">{String(source.marketData.view.error)}</p> : <SingleChartPanes ref={surface.ref}
       symbol={source.session.symbol} interval={source.session.interval} datasetKey={source.datasetKey}
       seriesStore={source.marketData.view.seriesStore} loading={source.marketData.view.loading} dataMeta={source.marketData.view.meta}

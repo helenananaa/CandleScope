@@ -95,6 +95,7 @@ export interface ChartCellPriceScale {
 
 export interface ChartStrategyAttachmentRecord {
   initialization?: import("../../shared/strategyRunSettings.js").StrategyInitializationSettings;
+  pythonBarExecution?: import("../../shared/strategyRunSettings.js").PythonBarExecution;
   executionOverrides?: import("../../shared/strategyRunSettings.js").StrategyExecutionOverrides;
   schemaVersion: 1;
   strategyDraftId: string | null;

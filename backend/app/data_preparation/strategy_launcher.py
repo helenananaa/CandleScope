@@ -29,6 +29,12 @@ def launch(runtime, intent, resolution, job_id):
     context = resolution["request"]
     override = intent.get("execution_overrides") or {}
     output_modes = capabilities["output_modes"]
+    profile = intent.get("python_bar_execution")
+    if profile is not None:
+        row = runtime.service.repository.get_strategy_revision(intent["strategy_revision_id"])
+        if (row is None or row["language"] != "PYTHON_SOURCE" or resolution["fidelity"]["mode"] != "BAR_APPROX"
+                or profile["outputMode"] not in output_modes):
+            raise PreparationError("FIDELITY_UNSUPPORTED", "The selected revision cannot run the saved Python BAR profile")
     body = {
         "strategy_revision_id": intent["strategy_revision_id"],
         "dataset_id": resolution["dataset_id"], "data_epoch": resolution["data_epoch"],
@@ -40,7 +46,7 @@ def launch(runtime, intent, resolution, job_id):
         "symbol": context["symbol"], "interval": context["interval"],
         "parameters": intent["parameters"], "warmup_bars": intent.get("warmup_bars", 0),
         "pine_contexts": intent.get("pine_contexts", []),
-        "output_mode": intent.get("output_mode") or ("TARGET_POSITION" if "TARGET_POSITION" in output_modes else output_modes[0]),
+        "output_mode": profile["outputMode"] if profile else intent.get("output_mode") or ("TARGET_POSITION" if "TARGET_POSITION" in output_modes else output_modes[0]),
         "signal_trace_mode": "PAGED_V1", "account_model": account["account_model"],
         "contract_data_mode": account["contract_data_mode"],
         "initial_balance": override.get("initialBalance", account["initial_cash"]),
@@ -60,6 +66,9 @@ def launch(runtime, intent, resolution, job_id):
         "python_runtime_mode": intent.get("python_runtime_mode"),
         "python_trusted_confirmed": intent.get("python_trusted_confirmed", False),
     }
+    if profile is not None and profile["executionModel"] == "LEGACY":
+        body.pop("execution_model_revision")
+        body.pop("participation_rate")
     try:
         payload = RunCreateRequest.model_validate(body)
         normalized = payload.model_dump()

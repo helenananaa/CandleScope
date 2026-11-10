@@ -7,8 +7,10 @@ export interface BacktestMarkerLabels {
   rejection: string;
 }
 
+export type BacktestMarkerChart = Pick<BacktestChartData, "run_id" | "chart_hash" | "interval" | "fills" | "rejected_orders">;
+
 export function projectBacktestResultMarkers(
-  chart: BacktestChartData,
+  chart: BacktestMarkerChart,
   options: {
     hasTime(time: number): boolean;
     labels: BacktestMarkerLabels;
