@@ -71,7 +71,7 @@ def test_retention_observes_independent_readers_and_releases_after_process_exit(
     def day():
         return archive.verified_retention_inventory(limit=1)["items"][0]
 
-    assert not day()["shared_lease_active"]
+    assert not day()["retention_lease_busy"]
     assert not lock_path.exists()  # Preview never creates an anchor.
     for crash in (False, True):
         ready = tmp_path / f"ready-{crash}"
@@ -79,7 +79,7 @@ def test_retention_observes_independent_readers_and_releases_after_process_exit(
         try:
             _await_child(child, ready)
             assert day()["active_pin_count"] == 0
-            assert day()["shared_lease_active"]
+            assert day()["retention_lease_busy"]
             assert "PARTITION_RETENTION_LEASE" in day()["protection_reasons"]
             token = archive.pin_dataset(dataset)
             try:
@@ -89,7 +89,7 @@ def test_retention_observes_independent_readers_and_releases_after_process_exit(
                         pytest.fail("exclusive retention overlapped a reader")
             finally:
                 archive.release_dataset(token)
-            assert day()["active_pin_count"] == 0 and day()["shared_lease_active"]
+            assert day()["active_pin_count"] == 0 and day()["retention_lease_busy"]
             if crash:
                 child.kill()
             _, error = child.communicate(timeout=15)
@@ -98,9 +98,9 @@ def test_retention_observes_independent_readers_and_releases_after_process_exit(
             if child.poll() is None:
                 child.kill()
                 child.communicate(timeout=15)
-        assert not day()["shared_lease_active"]
+        assert not day()["retention_lease_busy"]
         with partition_lease(lock_path, shared=False, create=True):
-            assert day()["shared_lease_active"]
+            assert day()["retention_lease_busy"]
     assert lock_path.exists()
 
 
@@ -141,7 +141,7 @@ def test_legacy_read_only_archive_keeps_local_pin_without_creating_lock(tmp_path
     try:
         item = readonly.verified_retention_inventory(limit=1)["items"][0]
         assert item["active_pin_count"] == 1
-        assert item["shared_lease_active"] is False
+        assert item["retention_lease_busy"] is False
         assert "UNMANAGED_RETENTION_POLICY" in item["protection_reasons"]
     finally:
         readonly.release_dataset(token)

@@ -1164,7 +1164,7 @@ class ParquetRawAggTradeArchive:
         key = hashlib.sha256(partition_key.encode("utf-8")).hexdigest()
         return self.root / ".trade-retention-locks" / key
 
-    def _retention_lease_active(self, partition_key: str) -> bool:
+    def _retention_lease_busy(self, partition_key: str) -> bool:
         try:
             with partition_lease(self.retention_lease_path(partition_key), shared=False, create=False):
                 return False
@@ -1211,8 +1211,8 @@ class ParquetRawAggTradeArchive:
                     reasons.append("QUARANTINED_DAY")
                 if pins[partition_key]:
                     reasons.append("ACTIVE_DATASET_PIN")
-                shared_lease = self._retention_lease_active(partition_key)
-                if shared_lease:
+                lease_busy = self._retention_lease_busy(partition_key)
+                if lease_busy:
                     reasons.append("PARTITION_RETENTION_LEASE")
                 if self.verified_day_acquisition_pending(identity, (day_start, day_start)):
                     reasons.append("DAY_ACQUISITION_IN_PROGRESS")
@@ -1226,7 +1226,7 @@ class ParquetRawAggTradeArchive:
                 "object_count": len(objects),
                 "byte_size": byte_size,
                 "active_pin_count": pins[partition_key],
-                "shared_lease_active": shared_lease,
+                "retention_lease_busy": lease_busy,
                 "protection_reasons": reasons,
             })
         return {"items": items, "unreadable_day_count": unreadable, "truncated": truncated}
