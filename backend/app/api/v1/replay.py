@@ -471,6 +471,12 @@ async def list_replay_v2_account_history(request: Request) -> dict[str, object]:
 async def replay_v2_storage_inventory(request: Request) -> dict[str, object]:
     return await _training_service(request).storage_inventory()
 
+@router.get("/runs/storage/raw-trades/preview")
+async def replay_v2_raw_trade_retention_preview(
+    request: Request, limit: int = Query(default=100, ge=1, le=200),
+) -> dict[str, object]:
+    return await _training_service(request).raw_trade_retention_preview(limit=limit)
+
 
 @router.post("/runs/{run_id}/account-audit")
 async def audit_replay_v2_account(

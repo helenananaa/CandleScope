@@ -2,10 +2,15 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from datetime import date
 from pathlib import Path
 
+import httpx
 import pytest
+from fastapi import FastAPI
 
+from app.api.v1.replay import router
+from app.data_engine.storage import raw_trade_archive
 from app.data_engine.storage.raw_trade_archive import (
     ParquetRawAggTradeArchive,
     VerifiedRawAggTradeBarWindow,
@@ -23,6 +28,7 @@ from app.replay.official_trade_catalog import OfficialAggTradeArchive
 from app.replay.service import ReplayService, SYNTHETIC_TIME_ANCHOR_MS
 from app.replay.storage import ReplaySQLiteStore
 from app.replay.trade_compatibility import build_trade_bar_compatibility
+from app.replay.trade_import import trade_archive_day_acquisition
 from tests.fixtures.replay.fakes import FixtureIdentity
 from tests.fixtures.replay.service_fakes import SessionIdFactory, replay_settings
 from tests.fixtures.replay.trade_service_fakes import (
@@ -72,6 +78,83 @@ async def _service(
     )
     await service.start()
     return service
+
+
+async def test_raw_trade_retention_preview_reports_live_and_saved_protection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive_root = tmp_path / "archive"
+    verified_trade_archive(archive_root)
+    archive = OfficialAggTradeArchive(archive_root, defer_refresh=True)
+    service = await _service(tmp_path / "replay.db", archive, prefix="retention-preview")
+    app = FastAPI()
+    app.state.replay_service = service
+    app.include_router(router, prefix="/api/v1")
+    uri = "/api/v1/replay/runs/storage/raw-trades/preview"
+    originals = {
+        p: p.read_bytes() for p in archive_root.rglob("*")
+        if p.is_file() and (p.name == "_verified_import.json" or "part-verified-" in p.name)
+    }
+    hash_file = raw_trade_archive._file_sha256
+
+    def metadata_hash(path: Path):
+        assert path.suffix != ".parquet", "preview opened a trade body"
+        return hash_file(path)
+
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test",
+        ) as client:
+            assert (await client.get(uri, params={"limit": 201})).status_code == 422
+
+            async def inspect():
+                with monkeypatch.context() as patch:
+                    patch.setattr(raw_trade_archive, "_file_sha256", metadata_hash)
+                    response = await client.get(uri, params={"limit": 1})
+                assert response.status_code == 200
+                payload = response.json()
+                assert payload["estimated_reclaim_bytes"] == 0
+                assert payload["policy_state"] == "UNMANAGED"
+                assert payload["observed_bytes"] == sum(map(len, originals.values()))
+                assert not payload["truncated"]
+                assert "partition_key" not in response.text
+                assert str(archive_root) not in response.text
+                assert "2026-06-01" not in response.text
+                return payload, payload["items"][0]
+
+            _, item = await inspect()
+            assert item["protection_reasons"] == ["UNMANAGED_RETENTION_POLICY"]
+            assert item["saved_reference_count"] == item["active_pin_count"] == 0
+            config = trade_replay_config()
+            created = await service.create_session(config)
+            with trade_archive_day_acquisition(
+                archive.cache, exchange=config.exchange, market_type=config.market_type,
+                symbol=config.symbol, day=date(2026, 6, 1),
+            ) as missing:
+                assert not missing
+                _, protected = await inspect()
+            assert protected["day_id"] == item["day_id"]
+            assert protected["active_pin_count"] == protected["saved_reference_count"] == 1
+            assert set(protected["protection_reasons"]) == {
+                "UNMANAGED_RETENTION_POLICY", "SAVED_REPLAY_REFERENCE",
+                "ACTIVE_DATASET_PIN", "DAY_ACQUISITION_IN_PROGRESS",
+            }
+            await service.release_session_to_hub(str(created["session_id"]))
+            _, saved = await inspect()
+            assert saved["active_pin_count"] == 0
+            assert saved["saved_reference_count"] == 1
+            assert saved["protection_reasons"] == ["UNMANAGED_RETENTION_POLICY", "SAVED_REPLAY_REFERENCE"]
+
+            def break_reference(connection):
+                connection.execute("UPDATE replay_dataset_ref SET snapshot_ref_json='invalid'")
+
+            await service.store.run_extension_write(break_reference)
+            payload, incomplete = await inspect()
+            assert not payload["saved_reference_scan_complete"]
+            assert "SAVED_REFERENCE_SCAN_INCOMPLETE" in incomplete["protection_reasons"]
+            assert all(p.read_bytes() == body for p, body in originals.items())
+    finally:
+        await service.shutdown(step_timeout=1.0)
 
 
 async def test_production_catalog_selects_a_local_day_before_official_discovery(

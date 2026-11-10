@@ -1335,6 +1335,9 @@ class RemoteRawAggTradeArchive:
             )
         return result
 
+    def verified_retention_inventory(self, *, limit: int) -> dict[str, Any]:
+        return self.cache.verified_retention_inventory(limit=limit)
+
     def scan_range(self, **kwargs: Any) -> list[dict[str, Any]]:
         return self.cache.scan_range(**kwargs)
 

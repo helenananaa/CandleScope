@@ -13,9 +13,11 @@ import errno
 import hashlib
 import json
 import os
+from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from itertools import islice
 from pathlib import Path
 from threading import Lock
 from typing import Any, Mapping, Protocol, runtime_checkable
@@ -876,7 +878,7 @@ class ParquetRawAggTradeArchive:
             ) from exc
         self._schema = _parquet_schema(self._pa)
         self._write_lock = Lock()
-        self._pins: dict[str, tuple[str, str]] = {}
+        self._pins: dict[str, tuple[str, frozenset[str]]] = {}
         self._pin_counts: dict[str, int] = {}
         self._health_marker_path = self.root / "_archive_health.json"
         durability_error, health_marker_error = self._load_health_marker()
@@ -1146,6 +1148,60 @@ class ParquetRawAggTradeArchive:
 
     def _verified_receipt_paths(self) -> Iterable[Path]:
         return self.root.glob("exchange=*/market_type=*/symbol=*/date=*/_verified_import.json")
+
+    def verified_retention_inventory(self, *, limit: int) -> dict[str, Any]:
+        """Inspect committed day objects without refreshing access or opening their bodies."""
+        with self._write_lock:
+            pins = Counter(partition for _, partitions in self._pins.values() for partition in partitions)
+        paths = list(islice(self._verified_receipt_paths(), limit + 1))
+        items: list[dict[str, object]] = []
+        unreadable = 0
+        objects_left = 4_096
+        truncated = len(paths) > limit
+        for receipt_path in sorted(paths[:limit]):
+            try:
+                partition = receipt_path.parent
+                receipt = self._read_verified_receipt(receipt_path)
+                metadata = receipt["metadata"]
+                objects = receipt["objects"]
+                assert isinstance(metadata, Mapping) and isinstance(objects, list)
+                if len(objects) > objects_left:
+                    truncated = True
+                    continue
+                objects_left -= len(objects)
+                identity = (str(metadata["exchange"]), str(metadata["market_type"]), str(metadata["symbol"]))
+                day = str(metadata["date"])
+                if self._partition_path((*identity, day)) != partition:
+                    raise RuntimeError("verified receipt does not match its partition")
+                self._validate_verified_receipt_objects(partition, receipt, verify_parquet=False)
+                byte_size = receipt_path.stat().st_size
+                for item in objects:
+                    path = self._resolve_object_path(str(item["object_id"]))
+                    byte_size += path.stat().st_size + _manifest_path(path).stat().st_size
+                partition_key = partition.relative_to(self.root).as_posix()
+                # Bind the opaque identifier to the receipt rather than exposing a date or locator.
+                day_id = "sha256:" + _file_sha256(receipt_path)
+                day_start = int(datetime.fromisoformat(day).replace(tzinfo=timezone.utc).timestamp() * 1000)
+                reasons = ["UNMANAGED_RETENTION_POLICY"]
+                if (partition / "_verified_import_conflict.json").exists():
+                    reasons.append("QUARANTINED_DAY")
+                if pins[partition_key]:
+                    reasons.append("ACTIVE_DATASET_PIN")
+                if self.verified_day_acquisition_pending(identity, (day_start, day_start)):
+                    reasons.append("DAY_ACQUISITION_IN_PROGRESS")
+            except (KeyError, OSError, OverflowError, RuntimeError, TypeError, ValueError):
+                unreadable += 1
+                continue
+            items.append({
+                "partition_key": partition_key,
+                "day_id": day_id,
+                "identity": dict(zip(("exchange", "market_type", "symbol"), identity)),
+                "object_count": len(objects),
+                "byte_size": byte_size,
+                "active_pin_count": pins[partition_key],
+                "protection_reasons": reasons,
+            })
+        return {"items": items, "unreadable_day_count": unreadable, "truncated": truncated}
 
     def list_verified_identities(self) -> list[dict[str, str]]:
         identities: dict[tuple[str, str, str], dict[str, str]] = {}
@@ -2115,8 +2171,9 @@ class ParquetRawAggTradeArchive:
     def pin_dataset(self, dataset_ref: RawAggTradeDatasetRef) -> str:
         self.validate_dataset(dataset_ref)
         token = uuid4().hex
+        partitions = frozenset(item.object_id.rsplit("/", 1)[0] for item in dataset_ref.objects)
         with self._write_lock:
-            self._pins[token] = (dataset_ref.data_epoch, dataset_ref.symbol)
+            self._pins[token] = (dataset_ref.data_epoch, partitions)
             self._pin_counts[dataset_ref.data_epoch] = (
                 self._pin_counts.get(dataset_ref.data_epoch, 0) + 1
             )
