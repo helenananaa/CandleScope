@@ -566,7 +566,8 @@ def test_bybit_cooldown_commits_completed_siblings_and_resumes_exact_gap(
 
 
 @pytest.mark.parametrize("source_change", ["unchanged", "amended", "deleted"])
-def test_bybit_derived_recovery_reuses_committed_components_after_restart(monkeypatch, tmp_path, source_change):
+@pytest.mark.parametrize("market", ["swap.inverse", "swap.linear"])
+def test_bybit_derived_recovery_reuses_committed_components_after_restart(monkeypatch, tmp_path, source_change, market):
     import sqlite3
 
     from app.data_engine.backfill import BackfillConfig, BackfillEngine
@@ -582,7 +583,9 @@ def test_bybit_derived_recovery_reuses_committed_components_after_restart(monkey
     from app.data_engine.storage.gap_ledger import GapLedger
 
     opened, step = 1_794_138_000_000, 300_000
-    symbol, market = "BTC/USD:BTC", "swap.inverse"
+    inverse = market == "swap.inverse"
+    symbol = "BTC/USD:BTC" if inverse else "BTC/USDT:USDT"
+    quote, settle = ("USD", "BTC") if inverse else ("USDT", "USDT")
     identity = {"exchange": "bybit", "market_type": market}
     db = tmp_path / "derived.sqlite"
     monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", db)
@@ -605,7 +608,8 @@ def test_bybit_derived_recovery_reuses_committed_components_after_restart(monkey
                 deferred.set()
                 return web.json_response({"retCode": 10006, "retMsg": "Too many visits!"},
                     headers={"X-Bapi-Limit-Reset-Timestamp": str(reset_ms)})
-            rows = [[str(ts), "1", "2", "1", "2", "9", str(4 + i)]
+            rows = [[str(ts), "1", "2", "1", "2",
+                     "9" if inverse else str(4 + i), str(4 + i) if inverse else "9"]
                     for i in reversed(range(-1, 4)) if start <= (ts := opened + i * step) <= end]
             return web.json_response({"retCode": 0, "result": {"list": rows[:limit]}})
 
@@ -621,9 +625,9 @@ def test_bybit_derived_recovery_reuses_committed_components_after_restart(monkey
             point_at_loopback(exchange, origin)
             exchange._candlescope_rate_limit_policy = policy
             exchange.set_markets([dict(
-                id="BTCUSD", symbol=symbol, base="BTC", quote="USD", settle="BTC",
-                baseId="BTC", quoteId="USD", settleId="BTC", type="swap", contract=True,
-                swap=True, linear=False, inverse=True, spot=False, active=True,
+                id=f"BTC{quote}", symbol=symbol, base="BTC", quote=quote, settle=settle,
+                baseId="BTC", quoteId=quote, settleId=settle, type="swap", contract=True,
+                swap=True, linear=not inverse, inverse=inverse, spot=False, active=True,
             )])
             return exchange
 
