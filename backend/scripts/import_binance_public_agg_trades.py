@@ -12,7 +12,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.replay.trade_import import import_official_date_range  # noqa: E402
+from app.replay.trade_import import import_official_date_range, redownload_official_day  # noqa: E402
 
 
 def _date(value: str) -> date:
@@ -40,11 +40,29 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--archive-dir", required=True, type=Path)
     parser.add_argument("--require-checksum", action="store_true")
     parser.add_argument("--max-rows-per-file", type=int, default=100_000)
+    parser.add_argument("--redownload-day-id", help="Explicitly restore one retired day by its original receipt ID.")
+    parser.add_argument("--max-download-bytes", type=int, help="Combined checksum and ZIP transfer budget for redownload.")
+    parser.add_argument("--max-restore-bytes", type=int, help="Logical publication budget for restored data and manifests.")
     return parser
 
 
 def main() -> int:
-    args = build_parser().parse_args()
+    parser = build_parser()
+    args = parser.parse_args()
+    if args.redownload_day_id is not None:
+        if (args.start != args.end or not args.require_checksum
+                or not args.max_download_bytes or not args.max_restore_bytes
+                or args.max_download_bytes < 1 or args.max_restore_bytes < 1):
+            parser.error("redownload needs one date, --require-checksum, and both positive byte budgets")
+        status = redownload_official_day(
+            archive_dir=args.archive_dir, exchange=args.exchange, market_type=args.market_type, symbol=args.symbol,
+            day=args.start, day_id=args.redownload_day_id, max_download_bytes=args.max_download_bytes,
+            max_restore_bytes=args.max_restore_bytes,
+        )
+        print(json.dumps({"status": status, "day_id": args.redownload_day_id}, sort_keys=True))
+        return 0 if status == "RESTORED" else 1
+    if args.max_download_bytes is not None or args.max_restore_bytes is not None:
+        parser.error("byte budgets require --redownload-day-id")
     if args.max_rows_per_file < 1:
         raise SystemExit("--max-rows-per-file must be positive")
     report = import_official_date_range(

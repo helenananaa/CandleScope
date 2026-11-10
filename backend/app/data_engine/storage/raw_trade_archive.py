@@ -13,6 +13,7 @@ import errno
 import hashlib
 import json
 import os
+import shutil
 import time
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator
@@ -34,6 +35,7 @@ from .raw_trade_retention_lock import ReadOnlyLeaseDirectory, partition_lease
 ARCHIVE_SCHEMA_VERSION = "1"
 _RETENTION_OBJECT_LIMIT = 4_096
 _RETENTION_RECLAIM_MARKER = "_reclaim_started"
+_RETENTION_REDOWNLOAD_STAGE = "_redownload_stage"
 RAW_AGG_TRADE_COLUMNS = (
     "exchange",
     "market_type",
@@ -1328,6 +1330,123 @@ class ParquetRawAggTradeArchive:
                     return VerifiedTradeReclaimResult("RETENTION_NOT_AUTHORIZED")
                 return self._reclaim_verified_files(partition, retired, (*identity, day), max_files, max_bytes)
 
+    def redownload_reclaimed_verified_day(
+        self, *, identity: tuple[str, str, str], day: str, day_id: str, max_restore_bytes: int,
+        build: Callable[[Path, VerifiedRawAggTradeDay, int], None],
+    ) -> str:
+        """Publish an exact rebuilt day only through an explicit, receipt-bound request."""
+        if type(max_restore_bytes) is not int or max_restore_bytes < 1:
+            raise ValueError("restore byte budget must be positive")
+        day_id = _prefixed_sha256_digest(day_id, "verified day ID")
+        partition = self._partition_path((*identity, day))
+        retired = self._retired_partition(partition)
+        with self._verified_retention_leases(identity, day, partition) as blocked:
+            if blocked is not None:
+                return blocked
+            if (partition.is_symlink() or retired.is_symlink()
+                    or not partition.parent.resolve().is_relative_to(self.root.resolve())):
+                return "PARTITION_UNSAFE"
+            if not retired.exists():
+                existing = partition / "_verified_import.json"
+                if existing.is_symlink() or not existing.is_file() or "sha256:" + _file_sha256(existing) != day_id:
+                    return "STALE_RECEIPT"
+                self._verified_partition_receipt(partition, (*identity, day))
+                _sync_retention_directory(partition.parent)
+                return "RESTORED"
+            if partition.exists():
+                return "DESTINATION_OCCUPIED"
+            receipt = retired / "_verified_import.json"
+            if receipt.is_symlink() or not receipt.is_file() or "sha256:" + _file_sha256(receipt) != day_id:
+                return "STALE_RECEIPT"
+            if self._has_retention_pin(partition.relative_to(self.root).as_posix()):
+                return "ACTIVE_DATASET_PIN"
+            return self._redownload_verified_files(partition, retired, (*identity, day), max_restore_bytes, build)
+
+    def _redownload_verified_files(
+        self, partition: Path, retired: Path, identity_day: tuple[str, str, str, str],
+        max_restore_bytes: int, build: Callable[[Path, VerifiedRawAggTradeDay, int], None],
+    ) -> str:
+        marker = retired / _RETENTION_RECLAIM_MARKER
+        stage = retired / _RETENTION_REDOWNLOAD_STAGE
+        started = os.path.lexists(marker)
+        if started and (marker.is_symlink() or not marker.is_file() or marker.stat().st_size):
+            return "PARTITION_UNSAFE"
+        if stage.is_symlink() or (stage.exists() and (not started or not stage.is_dir())):
+            return "PARTITION_UNSAFE"
+        expected = self._retention_expected_files(partition, retired, identity_day)
+        if expected is None:
+            return "PARTITION_UNSAFE"
+        files = self._retention_present_files(
+            retired, expected, reclaim_started=started, redownload_staged=stage.exists(),
+        )
+        if files is None or any(_file_sha256(file) != expected[name] for name, file in files.items()):
+            return "PARTITION_UNSAFE"
+        missing = expected.keys() - files.keys()
+        if missing and not started:
+            return "PARTITION_UNSAFE"
+
+        rebuilt = {}
+        if missing:
+            original = self._read_verified_receipt(retired / "_verified_import.json")
+            staged_day = stage / partition.relative_to(self.root)
+            if not staged_day.resolve().is_relative_to(stage.resolve()):
+                return "PARTITION_UNSAFE"
+            rebuilt = self._redownload_staged_files(staged_day, original, expected, missing)
+            if rebuilt is None:
+                if stage.exists():
+                    shutil.rmtree(stage)
+                stage.mkdir()
+                try:
+                    metadata, objects = original["metadata"], original["objects"]
+                    assert isinstance(metadata, Mapping) and isinstance(objects, list)
+                    first_object = RawAggTradeObjectManifest.from_dict(objects[0])
+                    build(stage, VerifiedRawAggTradeDay(**metadata), first_object.row_count)
+                    rebuilt = self._redownload_staged_files(staged_day, original, expected, missing)
+                except Exception:
+                    shutil.rmtree(stage)
+                    raise
+                if rebuilt is None:
+                    shutil.rmtree(stage)
+                    return "REDOWNLOAD_RECEIPT_MISMATCH"
+        if sum(file.stat().st_size for file in (*files.values(), *rebuilt.values())) > max_restore_bytes:
+            if stage.exists():
+                shutil.rmtree(stage)
+            return "RESTORE_BUDGET_EXCEEDED"
+
+        for name, file in sorted(rebuilt.items()):
+            with file.open("r+b") as handle:
+                os.fsync(handle.fileno())
+            file.replace(retired / name)
+        _sync_retention_directory(retired)
+        if stage.exists():
+            shutil.rmtree(stage)
+        if started:
+            marker.unlink()
+        _sync_retention_directory(retired)
+        retired.rename(partition)
+        _sync_retention_directory(partition.parent)
+        return "RESTORED"
+
+    def _redownload_staged_files(
+        self, staged_day: Path, original: Mapping[str, object], expected: Mapping[str, str],
+        missing: set[str],
+    ) -> dict[str, Path] | None:
+        receipt = staged_day / "_verified_import.json"
+        if not receipt.is_file() or receipt.is_symlink():
+            return None
+        try:
+            if self._read_verified_receipt(receipt) != original:
+                return None
+        except (OSError, RuntimeError, ValueError):
+            return None
+        files = self._retention_present_files(staged_day, expected, reclaim_started=False)
+        if files is None or not missing <= files.keys():
+            return None
+        needed = {name: files[name] for name in missing}
+        if any(_file_sha256(file) != expected[name] for name, file in needed.items()):
+            return None
+        return needed
+
     def _has_retention_pin(self, partition_key: str) -> bool:
         with self._write_lock:
             return any(partition_key in pin.partitions for pin in self._pins.values())
@@ -1357,11 +1476,13 @@ class ParquetRawAggTradeArchive:
 
     @staticmethod
     def _retention_present_files(
-        source: Path, expected: Mapping[str, str], *, reclaim_started: bool,
+        source: Path, expected: Mapping[str, str], *, reclaim_started: bool, redownload_staged: bool = False,
     ) -> dict[str, Path] | None:
         metadata = {"_verified_import.json"}
         if reclaim_started:
             metadata.add(_RETENTION_RECLAIM_MARKER)
+        if redownload_staged:
+            metadata.add(_RETENTION_REDOWNLOAD_STAGE)
         files = {}
         for entry in islice(source.iterdir(), len(expected) + len(metadata) + 1):
             if entry.name in metadata:
