@@ -1,0 +1,45 @@
+name: Frontend checks
+
+on:
+  pull_request:
+    paths: ["frontend/**", "packages/**", "backend/app/core/version.py", ".github/workflows/frontend-checks.yml"]
+  push:
+    branches: [main]
+    paths: ["frontend/**", "packages/**", "backend/app/core/version.py", ".github/workflows/frontend-checks.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            packages/candlescope-control/package-lock.json
+      - name: Install locked frontend dependencies
+        run: npm ci --ignore-scripts
+      - name: Check frontend and desktop host
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: npm run check
+      - name: Check desktop control adapters
+        run: |
+          npm --prefix ../packages/candlescope-control ci --ignore-scripts
+          npm --prefix ../packages/candlescope-control test
