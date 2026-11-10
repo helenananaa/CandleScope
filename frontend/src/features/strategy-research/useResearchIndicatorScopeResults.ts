@@ -70,4 +70,3 @@ export function useResearchIndicatorScopeResults(scopes: readonly ScopedIndicato
     retry: () => { setCompleted(null); setRetry(value => value + 1); },
   };
 }
-
