@@ -7,6 +7,18 @@ const KEYS = new Set([
   "candlescope-chart-workspace-v8", "candlescope-chart-workspace-v7",
 ]);
 const MAX_VALUE_BYTES = 16 * 1024 * 1024;
+const RESEARCH_RETURN_KEY = /^candlescope:research-return:[\w-]{8,80}$/;
+const MAX_RESEARCH_RETURNS = 64;
+
+function valueLimit(key) {
+  if (KEYS.has(key)) return MAX_VALUE_BYTES;
+  return typeof key === "string" && RESEARCH_RETURN_KEY.test(key) ? 2048 : 0;
+}
+
+function pruneResearchReturns(values) {
+  const entries = Object.keys(values).filter((key) => RESEARCH_RETURN_KEY.test(key));
+  for (const key of entries.slice(0, Math.max(0, entries.length - MAX_RESEARCH_RETURNS))) delete values[key];
+}
 
 /** Profile-owned strategy state is independent of the loopback asset-server port. */
 export class DesktopStrategyStorage {
@@ -20,25 +32,29 @@ export class DesktopStrategyStorage {
       const data = JSON.parse(await readFile(this.filePath, "utf8"));
       if (data.schemaVersion === 1 && data.values && typeof data.values === "object") {
         for (const [key, value] of Object.entries(data.values)) {
-          if (KEYS.has(key) && typeof value === "string" && Buffer.byteLength(value) <= MAX_VALUE_BYTES) {
+          const limit = valueLimit(key);
+          if (limit && typeof value === "string" && Buffer.byteLength(value) <= limit) {
             this.values[key] = value;
           }
         }
+        pruneResearchReturns(this.values);
       }
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
     }
   }
   getItem(key) {
-    if (!KEYS.has(key)) throw new TypeError("Unsupported strategy storage key");
+    if (!valueLimit(key)) throw new TypeError("Unsupported strategy storage key");
     return this.values[key] ?? null;
   }
   setItem(key, value) {
-    if (!KEYS.has(key) || typeof value !== "string" || Buffer.byteLength(value) > MAX_VALUE_BYTES) {
+    const limit = valueLimit(key);
+    if (!limit || typeof value !== "string" || Buffer.byteLength(value) > limit) {
       throw new TypeError("Invalid strategy storage value");
     }
     // Update memory immediately so concurrent reads/updates cannot overwrite a pending change.
     this.values[key] = value;
+    pruneResearchReturns(this.values);
     const serialized = JSON.stringify({ schemaVersion: 1, values: this.values });
     const operation = this.writeQueue.catch(() => {}).then(async () => {
       await mkdir(dirname(this.filePath), { recursive: true });

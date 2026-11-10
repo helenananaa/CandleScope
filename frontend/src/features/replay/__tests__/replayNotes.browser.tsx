@@ -35,7 +35,8 @@ export async function checkReplayNotesBrowser() {
   let releaseHistory: (() => void) | null = null;
   const api = managedReplayRunApi(lease, new ReplayV2ApiClient({ basePath: new URL("/api/v1/replay", backend).href,
     fetcher: async (url, options) => {
-      const isCapture = options?.method === "POST" && String(url).endsWith("/note-captures");
+      const pathname = new URL(String(url), backend).pathname;
+      const isCapture = options?.method === "POST" && pathname.endsWith("/note-captures");
       if (isCapture) {
         const body = JSON.parse(String(options.body)) as { id: string; image: string };
         captureSubmissions.set(body.id, body.image);
@@ -46,7 +47,7 @@ export async function checkReplayNotesBrowser() {
         loseNextCaptureReply = false; assert(response.ok, "PNG was not committed before its reply was lost");
         await response.text(); throw new TypeError("QA loss after actual immutable PNG commit");
       }
-      if (loseNextNoteReply && options?.method === "POST" && String(url).endsWith("/notes")) {
+      if (loseNextNoteReply && options?.method === "POST" && pathname.endsWith("/notes")) {
         loseNextNoteReply = false;
         assert(response.ok, "Uncertain submission was not committed by the real backend");
         await response.text(); // Discard an actual committed response, keeping the product editor unchanged.
@@ -159,6 +160,9 @@ export async function checkReplayNotesBrowser() {
     await click("新增笔记"); await input("未来未保存草稿");
     await until(() => Object.keys(localStorage).some(key => key.startsWith("candlescope.replay-note-draft.v1:")));
     state = await call("/fixture/review-first", "POST"); render();
+    await until(() => button("新增复盘补记") && host.textContent?.includes("此时刻没有可见笔记。"));
+    assert(!host.textContent?.includes("事前计划，保存不改变运行"), "The event revealed a note saved after it");
+    state = await call("/fixture/review-marker", "POST"); render();
     await until(() => host.textContent?.includes("事前计划，保存不改变运行") && !host.querySelector("textarea"));
     for (const text of ["同一毫秒后一个事件修改的计划", "同一事件计划版本 25", "未来创建的笔记", "未来未保存草稿"])
       assert(!host.textContent?.includes(text), "Backward UI leaked future text: " + text);
@@ -242,7 +246,7 @@ export async function checkReplayNotesBrowser() {
     if (button("版本历史")?.getAttribute("aria-expanded") === "true") await click("版本历史");
     holdNextHistory = true; await click("版本历史");
     await until(() => releaseHistory);
-    state = await call("/fixture/review-first", "POST"); render();
+    state = await call("/fixture/review-marker", "POST"); render();
     await until(() => host.querySelectorAll("[data-note-version]").length === 1
       && !host.textContent?.includes("同一事件计划版本 25"));
     releaseHistory!(); await new Promise(resolve => setTimeout(resolve, 100));

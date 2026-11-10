@@ -98,7 +98,7 @@ function createManager(store, multiWindowEnabled = true) {
       getDisplayMatching: () => display,
     },
     store,
-    channels: { lifecycle: "lifecycle", placement: "placement", closeRequested: "close" },
+    channels: { lifecycle: "lifecycle", placement: "placement", closeRequested: "close", researchReturn: "research-return" },
     preloadPath: "preload.cjs",
     backendPort: 28081,
     appUrl: "http://127.0.0.1:15287/",
@@ -151,6 +151,19 @@ test("desktop authority rejects unknown windows, subframes and external navigati
   assert.deepEqual(await manager.openAppPage("/"), { windowId: "main-window" });
   assert.equal(manager.appWindows.size, 1);
   assert.equal(window.focused, true);
+});
+test("research handoff reaches the existing live chart without replacing its page", async () => {
+  const state = topology(0, ["main-window"]);
+  const manager = createManager(new MemoryStore(state));
+  await manager.restoreCached(state);
+  const live = manager.windows.get("main-window");
+  const currentUrl = live.url;
+  await manager.openAppPage("/?research-version=validated-id");
+  assert.equal(live.url, currentUrl);
+  assert.deepEqual(live.sent.at(-1), {channel: "research-return", payload: "validated-id"});
+  const sent = live.sent.length;
+  await manager.openAppPage("/?research-version=../../invalid");
+  assert.equal(live.sent.length, sent);
 });
 test("explicit control launch propagates to managed renderer preload", async () => {
   const state = topology(0, ["main-window"]);

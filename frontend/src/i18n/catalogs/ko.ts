@@ -1,3 +1,4 @@
+import { continuousKorean } from "./continuousMessages.js";
 import { replayNoteKorean } from "./replayNoteMessages.js";
 import { historyStudyKorean } from "./historyStudyMessages.js";
 import { workbenchEnglish } from "./workbenchEnglish.js";
@@ -7,6 +8,7 @@ import { tradingAccountsKo } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
+  ...continuousKorean,
   ...replayNoteKorean,
   ...historyStudyKorean,
   "chartTime.title": "날짜로 이동",

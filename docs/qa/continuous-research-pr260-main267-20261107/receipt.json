@@ -1,0 +1,25 @@
+{
+  "source": "8ed79196beecd668d5f06adf451b659bb4570000",
+  "main": "b442555d582dc0bb473bad92ac5e699efdaa78d5",
+  "base": "b26c132eec62f1589643282fad1a0d7970783543",
+  "frontendCommand": [
+    "node",
+    "scripts/run-frontend-tests.mjs",
+    "src/features/backtest/continuous/continuousApi.test.ts",
+    "src/features/backtest/continuous/continuousRepairView.test.ts",
+    "src/features/market-data/__tests__/continuousStrategyDataManager.test.ts",
+    "src/features/backtest/continuous/ContinuousRepairPanel.test.tsx",
+    "src/features/backtest/continuous/continuousRepairReference.test.ts",
+    "src/features/backtest/continuous/ContinuousAccountView.test.tsx",
+    "src/features/strategy-research/__tests__/strategyResearchHandoff.test.ts",
+    "src/features/strategy-research/__tests__/strategyResearchIsolation.test.ts"
+  ],
+  "frontendPassed": 29,
+  "artifacts": {
+    "frontend.log.gz": {
+      "sha256": "6f9bcb6e82d109067aa3ec147be94cd7feef051662d42a66408b642a01c962e0",
+      "originalSha256": "4f79e7bf1fcd88938138813ce56bdb48a9f3e02c3081dbde01bd3ee22c62851a"
+    }
+  },
+  "backendIdenticalToParent": true
+}

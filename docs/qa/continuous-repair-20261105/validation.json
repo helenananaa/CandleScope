@@ -1,0 +1,24 @@
+{
+  "application_commit": "d4cc90ddfb62df2948b0b882dff33bcb87a051e1",
+  "base_pr": 254,
+  "base_head": "a45adc38a23d02e133a13229cde3da4d98f29a4d",
+  "storage_schema": 4,
+  "regression": {
+    "passed": 316,
+    "warnings": 5,
+    "log": "epoch-final.log.gz"
+  },
+  "repair_scenarios": 10,
+  "backend_architecture": {
+    "existing_findings": 10,
+    "byte_equal_prior_baseline": true,
+    "baseline": "docs/qa/continuous-manager-20261104/manager-final-architecture.log.gz"
+  },
+  "frontend_architecture": "pass; frontend unchanged",
+  "limitations": [
+    "Private storage/publication/preview foundation only",
+    "No repair worker/API/UI, no repair startup restoration",
+    "No native/public/Windows qualification"
+  ],
+  "public_cooldown_not_before_utc": "2026-11-05T07:59:57.081Z"
+}
