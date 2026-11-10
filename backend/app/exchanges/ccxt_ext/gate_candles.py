@@ -1,10 +1,16 @@
 """Gate perpetual 5m candles on the pinned CCXT REST and Pro clients."""
 
+import asyncio
 from decimal import Decimal, InvalidOperation
 import math
+import time
+
+import ccxt
 
 from app.data_engine.ingestion.models import TransportRequest
 from app.data_engine.bar_basis import GATE_INVERSE_CONTRACTS
+from app.exchanges.public_admission import PublicDemand, TrafficClass, public_demand
+from app.exchanges.rate_limits import RateLimitDeferred
 
 from .unified import make_unified_payload
 
@@ -95,3 +101,35 @@ async def fetch_perpetual_candles(exchange, symbol: str, req: TransportRequest, 
                 is_closed=closed, gate_rest_close_verified=closed,
             )
     return [candles[opened] for opened in sorted(candles)]
+
+
+async def confirm_inverse_close(exchange, symbol: str, descriptor, opened: int) -> list | None:
+    """Read a single closed Gate candle using the admitted REST route.
+
+    Gate can send different w=true values on simultaneous BTC-settlement
+    sockets. The marker triggers verification and supplies no final OHLCV.
+    """
+    end = opened + _FIVE_MINUTES_MS
+    now = exchange.milliseconds()
+    if opened % _FIVE_MINUTES_MS or not now - 2 * _FIVE_MINUTES_MS < opened <= now:
+        return None
+    delay = max(0, end + 1000 - now)
+    if delay > 2000:
+        return None
+    if delay:
+        await asyncio.sleep(delay / 1000)
+    request = TransportRequest(descriptor, limit=1, start_ms=opened, end_ms=opened, history=True)
+    try:
+        with public_demand(PublicDemand(TrafficClass.REQUIRED, owner="gate_inverse_close",
+                                        purpose="verify_source_close", deadline=time.monotonic() + 7)):
+            async with asyncio.timeout(7):
+                rows = await fetch_perpetual_candles(
+                    exchange, symbol, request, limit=1, now_ms=exchange.milliseconds(),
+                )
+    except (ccxt.BaseError, OSError, RateLimitDeferred, TimeoutError, TypeError, ValueError):
+        # Continue displaying forming data. Existing history repair can verify
+        # the bucket if REST is temporarily unavailable.
+        return None
+    if len(rows) != 1 or rows[0].get("gate_rest_close_verified") is not True:
+        return None
+    return rows[0]["value"]

@@ -7,7 +7,7 @@ from collections.abc import Callable
 from app.data_engine.kline_quality import BYBIT_WS_CONFIRMED_SOURCE
 from app.core.executors import run_storage
 from app.data_engine.bar_basis import is_gate_inverse_5m, is_gate_linear_5m
-from app.data_engine.kline_quality import GATE_INVERSE_WS_CONFIRMED_SOURCE, GATE_WS_CONFIRMED_SOURCE
+from app.data_engine.kline_quality import GATE_INVERSE_REST_CONFIRMED_SOURCE, GATE_WS_CONFIRMED_SOURCE
 from app.data_engine.bar_delivery_errors import BarDeliveryUnavailable
 
 from ..bar_aggregator import BarEvent, BarEventType, BarFinality, BarState
@@ -251,7 +251,7 @@ class AggregatorBridge:
         if bar_state.close_reason == "source_close" and is_gate_inverse_5m(
             bar_state.exchange, bar_state.market_type, bar_state.interval,
         ):
-            return bar_state.quality_source if bar_state.quality_source in {GATE_INVERSE_WS_CONFIRMED_SOURCE, "backfill"} else None
+            return bar_state.quality_source if bar_state.quality_source in {GATE_INVERSE_REST_CONFIRMED_SOURCE, "backfill"} else None
         if event_type == DataEventType.BAR_AMENDED:
             return "data_manager_amended"
         if bar_state.exchange == "bybit" and bar_state.close_reason == "source_close":

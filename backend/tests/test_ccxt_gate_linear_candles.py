@@ -11,7 +11,8 @@ from app.data_engine.ingestion.config import IngestionConfig
 from app.data_engine.ingestion.models import DataSource, RawMessage, StreamDescriptor, StreamType, TransportRequest
 from app.data_engine.interval_resolution import IntervalResolutionError, IntervalResolver
 from app.data_engine.kline_quality import (
-    GATE_INVERSE_WS_CONFIRMED_SOURCE, GATE_LEGACY_VOLUME_SOURCE, GATE_WS_CONFIRMED_SOURCE, source_is_trusted_final,
+    GATE_INVERSE_REST_CONFIRMED_SOURCE, GATE_INVERSE_WS_CONFIRMED_SOURCE,
+    GATE_LEGACY_VOLUME_SOURCE, GATE_WS_CONFIRMED_SOURCE, source_is_trusted_final,
 )
 from app.data_engine.storage import klines_repo
 from app.exchanges.ccxt_ext.catalog import get_ccxt_catalog_entry
@@ -56,6 +57,14 @@ def test_gate_ws_only_finalizes_confirmed_native_snapshot(tmp_path, monkeypatch,
         profile = CcxtUnifiedProfile(get_ccxt_catalog_entry("gate"), market)
         exchange = profile.create_exchange(IngestionConfig(proxy_mode="none"), raw_event_sink=None, lifecycle_sink=None)
         monkeypatch.setattr(exchange, "market", lambda _symbol: contract)
+        monkeypatch.setattr(exchange, "milliseconds", lambda: OPENED + WIDTH + 1000)
+        calls = []
+
+        async def rest(params):
+            calls.append(params)
+            return [venue_bar]
+
+        monkeypatch.setattr(exchange, "publicFuturesGetSettleCandlesticks", rest)
         projector = CcxtUnifiedProjector(exchange_id="gate", market_type=market, descriptor=descriptor)
         normalizer = CcxtUnifiedNormalizer(descriptor)
 
@@ -83,16 +92,26 @@ def test_gate_ws_only_finalizes_confirmed_native_snapshot(tmp_path, monkeypatch,
             assert not successor.data["is_closed"]
             assert stored() == []
 
-            [final] = await project({**venue_bar, "w": True})
+            # A socket can mark a stale snapshot w=true. Inverse finality
+            # takes all OHLCV from the separately fetched exact REST bucket.
+            closing = {**venue_bar, "w": True}
+            if inverse:
+                closing.update({"h": "74161.1", "l": "74161.1", "c": "74161.1", "v": 2302})
+            [final] = await project(closing)
             assert final.data["is_closed"]
             await manager.aggregator_bridge.delivery.stop()
             [saved] = stored()
-            assert saved["source"] == (GATE_INVERSE_WS_CONFIRMED_SOURCE if inverse else GATE_WS_CONFIRMED_SOURCE)
+            assert saved["source"] == (GATE_INVERSE_REST_CONFIRMED_SOURCE if inverse else GATE_WS_CONFIRMED_SOURCE)
             assert (saved["high"], saved["volume"]) == pytest.approx((74188.0, volume * scale))
             if inverse:
                 assert not klines_repo.query_klines(symbol, "5m", exchange="gate", market_type=market)
             assert await project(preview) == []
             assert await project({**venue_bar, "w": True}) == []
+            assert len(calls) == (1 if inverse else 0)
+            assert not source_is_trusted_final(GATE_INVERSE_WS_CONFIRMED_SOURCE)
+            if inverse:
+                assert calls[0]["from"] == OPENED // 1000
+                assert calls[0]["to"] == OPENED // 1000 + 1
         finally:
             await manager.aggregator_bridge.delivery.stop()
             await manager.event_bus.close()
@@ -215,3 +234,36 @@ def test_gate_linear_upgrade_revokes_legacy_volume_and_pending_delivery(tmp_path
     klines_repo.init_klines_storage()
     [fresh] = klines_repo.query_klines(SYMBOL, "5m", exchange="gate", market_type=MARKET)
     assert fresh["volume"] == 368.3966 and fresh["source"] == "backfill"
+
+
+@pytest.mark.asyncio
+async def test_gate_inverse_socket_marker_without_rest_remains_forming(monkeypatch):
+    market = "swap.inverse"
+    symbol = "BTC/USD:BTC"
+    descriptor = replace(DESCRIPTOR, market_type=market, symbol=symbol, series_identity=GATE_INVERSE_CONTRACTS)
+    profile = CcxtUnifiedProfile(get_ccxt_catalog_entry("gate"), market)
+    exchange = profile.create_exchange(IngestionConfig(proxy_mode="none"), raw_event_sink=None, lifecycle_sink=None)
+    monkeypatch.setattr(exchange, "market", lambda _: {
+        "id": "BTC_USD", "settleId": "btc", "swap": True, "inverse": True,
+    })
+    monkeypatch.setattr(exchange, "milliseconds", lambda: OPENED + WIDTH + 1000)
+
+    async def watch(*_args):
+        return [exchange.parse_ohlcv({**VENUE_BAR, "n": "5m_BTC_USD", "v": 1395, "w": True})]
+
+    async def rest(_params):
+        # An adjacent candle is no proof of the requested candle.
+        return [{**VENUE_BAR, "t": (OPENED + WIDTH) // 1000}]
+
+    monkeypatch.setattr(exchange, "watch_ohlcv", watch)
+    monkeypatch.setattr(exchange, "publicFuturesGetSettleCandlesticks", rest)
+    try:
+        projector = CcxtUnifiedProjector(exchange_id="gate", market_type=market, descriptor=descriptor)
+        [raw] = projector.project(await profile.watch(exchange, descriptor, symbol))
+        event = CcxtUnifiedNormalizer(descriptor).parse(
+            RawMessage(raw.payload, DataSource.WEBSOCKET, StreamType.KLINE, OPENED + WIDTH + 1000),
+        )
+        assert event.data["is_closed"] is False
+        assert event.data["gate_close_source"] == ""
+    finally:
+        await exchange.close()

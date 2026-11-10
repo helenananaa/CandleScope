@@ -6,6 +6,7 @@ import asyncio
 import logging
 import sys
 import time
+from collections import OrderedDict
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
@@ -699,6 +700,10 @@ class CcxtUnifiedProfile:
     entry: CcxtCatalogEntry
     market_type: str
     selection: str = field(init=False)
+    _gate_close_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
+    _gate_close_rows: OrderedDict[tuple[str, int], list | None] = field(
+        default_factory=OrderedDict, init=False, repr=False,
+    )
 
     def __post_init__(self) -> None:
         self.market_type = str(self.market_type or "").strip().lower()
@@ -773,14 +778,30 @@ class CcxtUnifiedProfile:
     ) -> Any:
         if descriptor.stream_type == StreamType.KLINE:
             value = await exchange.watch_ohlcv(ccxt_symbol, descriptor.interval)
-            if (is_gate_linear_5m(self.exchange_id, descriptor.market_type, descriptor.interval)
-                    or is_gate_inverse_5m(self.exchange_id, descriptor.market_type, descriptor.interval)):
-                from .gate_candles import candle_row, perpetual_volume_scale
+            inverse = is_gate_inverse_5m(self.exchange_id, descriptor.market_type, descriptor.interval)
+            if inverse or is_gate_linear_5m(self.exchange_id, descriptor.market_type, descriptor.interval):
+                from .gate_candles import candle_row, confirm_inverse_close, perpetual_volume_scale
                 scale = perpetual_volume_scale(exchange.market(ccxt_symbol), descriptor)
-                return [
-                    [*candle_row(row, row[5], scale), len(row) > 6 and row[6] is True]
-                    for row in value
-                ]
+                rows = []
+                snapshots = [tuple(row) for row in value]
+                for row in snapshots:
+                    marked = len(row) > 6 and row[6] is True
+                    if inverse and marked:
+                        key = (ccxt_symbol, int(row[0]))
+                        async with self._gate_close_lock:
+                            if key not in self._gate_close_rows:
+                                self._gate_close_rows[key] = await confirm_inverse_close(
+                                    exchange, ccxt_symbol, descriptor, key[1],
+                                )
+                                if len(self._gate_close_rows) > 128:
+                                    self._gate_close_rows.popitem(last=False)
+                            proof = self._gate_close_rows[key]
+                        if proof is not None:
+                            rows.append([*proof, True, "gate_rest"])
+                            continue
+                        marked = False
+                    rows.append([*candle_row(row, row[5], scale), marked])
+                return rows
             # The pinned Upbit native seconds channel returns one OHLCV row.
             return [value] if self.exchange_id == "upbit" and descriptor.interval == "1s" else value
         if descriptor.stream_type == StreamType.TRADE:

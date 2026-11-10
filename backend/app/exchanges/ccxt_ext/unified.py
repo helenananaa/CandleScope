@@ -11,7 +11,7 @@ from typing import Any
 import ccxt
 
 from app.data_engine.bar_basis import GATE_INVERSE_CONTRACTS, is_gate_inverse_5m, is_gate_linear_5m
-from app.data_engine.kline_quality import GATE_INVERSE_WS_CONFIRMED_SOURCE, GATE_WS_CONFIRMED_SOURCE
+from app.data_engine.kline_quality import GATE_INVERSE_REST_CONFIRMED_SOURCE, GATE_WS_CONFIRMED_SOURCE
 from app.data_engine.ingestion.models import (
     DataSource,
     MarketEvent,
@@ -162,16 +162,18 @@ class CcxtUnifiedProjector:
 
     def _project_gate_klines(self, rows: list[list[Any]]) -> list[dict[str, Any]]:
         payloads = []
+        inverse = self.market_type == "swap.inverse"
         for row in rows:
-            # The Pro path appends the venue proof after converting volume.
-            if len(row) != 7 or type(row[6]) is not bool:
+            if len(row) not in (7, 8) or type(row[6]) is not bool:
                 continue
-            confirmed = row[6]
+            rest_confirmed = inverse and len(row) == 8 and row[7] == "gate_rest"
+            confirmed = row[6] and (not inverse or rest_confirmed)
             previous = self._kline_fingerprints.get(int(row[0]))
             if not confirmed and previous and previous[1]:
                 continue
             payload = self._kline_payload(row[:6], is_closed=confirmed)
-            payload["gate_close_confirmed"] = confirmed
+            payload["gate_close_confirmed"] = confirmed and not inverse
+            payload["gate_rest_close_verified"] = confirmed and rest_confirmed
             if self._remember_kline(payload):
                 payloads.append(payload)
         while len(self._kline_fingerprints) > _MAX_KLINE_REVISIONS:
@@ -432,8 +434,11 @@ class CcxtUnifiedNormalizer:
             gate_perpetual = gate_linear or gate_inverse
             gate_source = ""
             if gate_perpetual and payload.get("is_closed") is True:
-                if msg.source == DataSource.WEBSOCKET and payload.get("gate_close_confirmed") is True:
-                    gate_source = GATE_INVERSE_WS_CONFIRMED_SOURCE if gate_inverse else GATE_WS_CONFIRMED_SOURCE
+                if msg.source == DataSource.WEBSOCKET:
+                    if gate_inverse and payload.get("gate_rest_close_verified") is True:
+                        gate_source = GATE_INVERSE_REST_CONFIRMED_SOURCE
+                    elif gate_linear and payload.get("gate_close_confirmed") is True:
+                        gate_source = GATE_WS_CONFIRMED_SOURCE
                 if (msg.source in {DataSource.HTTP, DataSource.HTTP_BACKFILL}
                         and payload.get("gate_rest_close_verified") is True):
                     gate_source = "backfill"
