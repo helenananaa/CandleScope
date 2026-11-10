@@ -150,13 +150,68 @@ async def test_bybit_http_poll_cannot_mask_a_missed_or_delayed_confirm(
                          if kwargs.get("requester") == "ingestion_gap"}
             assert submitted == {"5m": (opened + step, opened + step), "10m": (opened, opened)}
             assert store.query_bars(**identity, start_ms=opened + step, end_ms=opened + step) == []
-            repaired = BarData(time=(opened + step) // 1000, open=102, high=102, low=102,
-                               close=102, volume=10, source="backfill_rest_verified", is_closed=True)
-            await _committed_backfill(dm, store, [repaired], **identity)
-            assert closed(derived) == []
-            derived_repair = BarData(time=opened // 1000, open=100, high=102, low=100, close=102,
-                                     volume=20, source="backfill_rest_verified", is_closed=True)
-            await _committed_backfill(dm, store, [derived_repair], **target)
+            from app.data_engine.backfill import BackfillConfig, BackfillEngine
+            from app.data_engine.data_manager.backfill_contracts import RepairRequest
+            from app.data_engine.history import (
+                ExchangeHistoryPolicyResolver, HistoryAvailabilityService, HistoryBoundaryRepository,
+                get_history_calendar_registry,
+            )
+            from app.data_engine.storage.gap_ledger import GapLedger
+
+            rest_calls = []
+
+            class Transport:
+                async def http_fetch(self, request):
+                    rest_calls.append((request.descriptor.interval, request.start_ms, request.end_ms))
+                    await asyncio.sleep(.05)
+                    return [
+                        RawMessage(make_unified_payload(
+                            "kline", [stamp, price, price, price, price, 10], is_closed=True,
+                        ), DataSource.HTTP, StreamType.KLINE, stamp + step, http_status=200)
+                        for stamp, price in [(opened, 100), (opened + step, 102)]
+                        if request.start_ms <= stamp <= request.end_ms
+                    ]
+
+            history = HistoryAvailabilityService(
+                calendars=get_history_calendar_registry(),
+                boundaries=HistoryBoundaryRepository(klines_repo.KLINES_DB_PATH),
+            )
+            policy = ExchangeHistoryPolicyResolver(history)
+            ledger = GapLedger(klines_repo.KLINES_DB_PATH)
+            engine = BackfillEngine(
+                BackfillConfig(history_archive_enabled=False, fetch_rate_limit_delay=0),
+                klines_repo.AsyncKlinesRepoAdapter(), Transport(),
+                ingestion_config=IngestionConfig(proxy_mode="none"),
+            )
+            async def no_rate_limit():
+                pass
+
+            engine.fetcher.set_rate_limiter(no_rate_limit)
+            coordinator = BackfillCoordinator(
+                storage=store, bars_backfilled=dm.on_bars_backfilled, emit_event=dm.emit_event,
+                source_available=dm.source_storage_available, engine=engine, gap_ledger=ledger,
+                history_service=history,
+                history_policy_resolver=lambda repair: policy.resolve(policy.series_key(
+                    exchange=repair.exchange, market_type=repair.market_type, symbol=repair.symbol,
+                    channel="kline", variant=repair.interval,
+                )),
+                loop=asyncio.get_running_loop(), max_concurrency=2,
+            )
+            # Exercise both possible orders while retaining independent target tickets.
+            repairs = [RepairRequest(
+                args[0], args[1], args[2], args[3], exchange=args[4], market_type=args[5], **kwargs,
+            ) for args, kwargs in requests if kwargs.get("requester") == "ingestion_gap"]
+            repairs.sort(key=lambda repair: repair.interval != ("5m" if market_type == "swap.inverse" else "10m"))
+            try:
+                results = await asyncio.wait_for(asyncio.gather(*(
+                    coordinator.request_and_wait(repair) for repair in repairs
+                )), 5)
+                assert all(result.status == "completed" and result.verified_contiguous for result in results)
+                assert rest_calls == [("5m", opened + step, opened + step)]
+                assert [ledger.get_status(repair)["status"] for repair in repairs] == ["filled", "filled"]
+            finally:
+                await coordinator.shutdown()
+                await engine.close()
             await _until(lambda: len(closed(events)) == 2 and len(closed(derived)) == 1)
             assert events[-1].bar.close == derived[-1].bar.close == 102
             assert events[-1].detail["continuity_replayed"] is True

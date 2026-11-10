@@ -64,7 +64,7 @@ from ..ingestion.metrics import LayerMetrics
 from ..ingestion.transport import TransportLayer
 from ..aggregation.semantics import valid_ohlcv
 from ..interval_policy import IntervalAlignment, parse_interval_spec, row_is_closed
-from ..kline_quality import repair_requires_trusted_finality, source_is_trusted_final
+from ..kline_quality import repair_requires_trusted_finality, reuses_bybit_gap_inputs, source_is_trusted_final
 from ..series_identity import identity_from_metadata
 
 from .config import BackfillConfig
@@ -268,6 +268,7 @@ class BackfillEngine:
         started_at_ms = int(time.time() * 1000)
         symbol = normalize_symbol(symbol, exchange=exchange, market_type=market_type)
         metadata = dict(metadata or {})
+        bybit_gap = reuses_bybit_gap_inputs(exchange, market_type, metadata.get("requester"))
         self._metrics.inc("runs")
         self._metrics.mark("last_run_at")
 
@@ -294,7 +295,7 @@ class BackfillEngine:
                     exchange=exchange,
                     market_type=market_type,
                 )
-                gaps = await self._reuse_native_seed_components(gaps, metadata)
+                gaps = await self._reuse_native_gap_inputs(gaps, metadata, bybit_gap=bybit_gap)
                 metadata["repair_mode"] = "authoritative_refresh"
                 logger.info(
                     "Forcing authoritative refresh for %s intervals=%s range=[%s,%s]",
@@ -362,8 +363,8 @@ class BackfillEngine:
                 # demand (not from a single ~1000-source-row chunk).
                 task.metadata = {**metadata, **task.metadata}
             if (self._cfg.reconcile_generate_custom and len(intervals or ()) == 1
-                    and metadata.get("requester") == "warm_start_custom_tail"):
-                await self._reuse_warmup_components(plan, metadata)
+                    and (bybit_gap or metadata.get("requester") == "warm_start_custom_tail")):
+                await self._reuse_derived_components(plan, metadata, bybit_gap=bybit_gap)
             status = BackfillStatus.FETCHING
             await prepare_native_history_views(self._storage, plan.tasks)
             await prepare_derived_targets(self._storage, plan)
@@ -488,9 +489,11 @@ class BackfillEngine:
         )
         return report
 
-    async def _reuse_warmup_components(self, plan: BackfillPlan, metadata: dict[str, Any]) -> None:
+    async def _reuse_derived_components(
+        self, plan: BackfillPlan, metadata: dict[str, Any], *, bybit_gap: bool,
+    ) -> None:
         """Keep complete target inputs for reconciliation, fetching only unqualified source slots."""
-        if (self._storage is None or repair_requires_trusted_finality(metadata)
+        if (self._storage is None or (not bybit_gap and repair_requires_trusted_finality(metadata))
                 or metadata.get("history_calendar_id") != "crypto.24x7.utc"
                 or len(plan.custom_intervals) != 1 or self._cfg.alignment_epoch_ms != 0):
             return
@@ -504,8 +507,10 @@ class BackfillEngine:
         for task in plan.tasks:
             source = parse_interval_spec(task.interval)
             identity = identity_from_metadata(task.exchange, metadata)
-            qualified_source = task.exchange in {"binance", "okx"} or (
-                (task.exchange, task.market_type, task.interval) == _BYBIT_WARMUP_SOURCE
+            qualified_source = (
+                task.interval == "5m" if bybit_gap
+                else task.exchange in {"binance", "okx"}
+                or (task.exchange, task.market_type, task.interval) == _BYBIT_WARMUP_SOURCE
             )
             if (task.metadata.get("custom_interval") != target.canonical
                     or not qualified_source
@@ -560,13 +565,16 @@ class BackfillEngine:
         # holes and only publishes derived results after normal reconciliation.
         await self.reconciler.reconcile(results, BackfillPlan(gaps=[]))
 
-    async def _reuse_native_seed_components(self, gaps: list[GapInfo], metadata: dict[str, Any]) -> list[GapInfo]:
+    async def _reuse_native_gap_inputs(
+        self, gaps: list[GapInfo], metadata: dict[str, Any], *, bybit_gap: bool,
+    ) -> list[GapInfo]:
         if (self._storage is None or len(gaps) != 1
-                or metadata.get("requester") != "warm_start_custom_seed"
+                or (not bybit_gap and metadata.get("requester") != "warm_start_custom_seed")
                 or metadata.get("history_calendar_id") != "crypto.24x7.utc"):
             return gaps
         gap = gaps[0]
-        if (gap.exchange, gap.market_type, gap.interval) != _BYBIT_WARMUP_SOURCE:
+        if (gap.interval != "5m" if bybit_gap
+                else (gap.exchange, gap.market_type, gap.interval) != _BYBIT_WARMUP_SOURCE):
             return gaps
         identity = identity_from_metadata(gap.exchange, metadata)
         if identity is not None and not identity.is_legacy_default_for(gap.exchange):
