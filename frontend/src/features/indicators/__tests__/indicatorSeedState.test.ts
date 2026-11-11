@@ -25,7 +25,7 @@ import {
   updatePartialSeedRanges,
   withPartialSeed,
 } from "../indicatorSeedState.js";
-import type { IndicatorLine, IndicatorPartialSeedRange } from "../indicatorTypes.js";
+import type { IndicatorDefinition, IndicatorLine, IndicatorPartialSeedRange } from "../indicatorTypes.js";
 
 const partial = { state: "partial", warmupBars: 5, seedBars: 2 } as const;
 const converged = { state: "converged", warmupBars: 5, seedBars: 5 } as const;
@@ -116,7 +116,7 @@ test("snapshots reset spans, range replacements replace them, seedless merges ke
   assert.deepEqual(updatePartialSeedRanges(existing, "replace-range", { start: 10, end: 30 }, converged, lines), []);
   assert.equal(updatePartialSeedRanges(existing, "replace-range", null, converged, lines), existing);
 
-  const indicator = { id: "ema" };
+  const indicator: IndicatorDefinition = { id: "ema" };
   assert.equal(withPartialSeed(indicator, []), indicator);
   const marked = withPartialSeed(indicator, existing);
   assert.equal(marked.partialSeed, existing);
