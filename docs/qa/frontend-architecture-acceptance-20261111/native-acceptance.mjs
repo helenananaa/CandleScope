@@ -2,12 +2,15 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import cp from 'node:child_process';
 import path from 'node:path';
+import os from 'node:os';
 import * as q from '../backend-batch1-20261101/driver.mjs';
 import {capture} from '../backend-batch1-20261101/value-probe.mjs';
+import {captureRendered} from './rendered-probe.mjs';
 
 const durationMs=Number(process.env.CS_ACCEPTANCE_SOAK_MS??1_800_000);
 assert.ok(durationMs>=1_800_000,'The acceptance soak must last at least 30 minutes');
 q.s.receipt={schema:'candlescope.frontend-architecture-native/1',sourceCommit:cp.execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),
+  machine:{platform:os.platform(),release:os.release(),arch:os.arch(),memoryBytes:os.totalmem(),logicalCpus:os.cpus().length,cpu:os.cpus()[0]?.model},
   platform:'macOS arm64',transport:'relocated current-source signed package, bundled backend/plugins, real public Binance and OKX',steps:[],errors:[],cold:[],warm:[],soak:[]};
 q.s.env.PYTHONDONTWRITEBYTECODE='1';
 let running=false;
@@ -23,8 +26,8 @@ async function command(groupId,command,args={}){
  const result=await q.until(async()=>{const r=await q.s.control.call('request.get',{requestId});return r.final?r:false;},60_000);
  assert.equal(result.state,'applied',JSON.stringify(result));return result;
 }
-async function health(input){
- return q.s.page.evaluate(input=>{
+async function health(input,countBack=500){
+ return q.s.page.evaluate(({input,countBack})=>{
   const el=document.querySelector('[data-chart-cell-id]');if(!el)return null;
   let root=el[Object.keys(el).find(k=>k.startsWith('__reactFiber$'))];while(root.return)root=root.return;
   let found;
@@ -32,10 +35,10 @@ async function health(input){
    if(v?.dataManager?.cache&&v.indicatorDataManager)found=v;
    visit(n.child);visit(n.sibling);}
   visit(root.stateNode.current);if(!found)return null;
-  const plan=found.dataManager.cache.planHistory(input,500);
+  const plan=found.dataManager.cache.planHistory(input,countBack);
   return {action:plan.action,health:plan.health,count:plan.snapshot.rows.length,version:plan.snapshot.version,
     diagnostics:found.dataManager.diagnostics(),indicators:found.indicatorDataManager.diagnostics()};
- },input);
+ },{input,countBack});
 }
 async function readyFor(input,count=2,timeout=180_000){
  let last;
@@ -50,6 +53,7 @@ async function begin(){
   ...(process.env.CS_ACCEPTANCE_APP?{executablePath:process.env.CS_ACCEPTANCE_APP}:{}),
   ...(process.env.CS_ACCEPTANCE_PROFILE?{profileRoot:process.env.CS_ACCEPTANCE_PROFILE}:{}),
  });running=true;
+ launch.versions=await q.s.app.evaluate(()=>process.versions);
  assert.equal(q.s.identity.packaged,true);
  await q.record('launch',launch);
  const visible=await q.until(async()=>{try{const charts=await capture(q);return charts.length&&charts.every(c=>c.bars.length>=1)?charts.map(summary):false;}catch{return false;}},180_000);
@@ -80,15 +84,24 @@ async function state(name,raw=false){
 async function values(name){
  let failure;
  return q.until(async()=>{try{
-  const charts=await capture(q),result=[];
+  const charts=await capture(q),displayed=await captureRendered(q),result=[];
+  assert.equal(displayed.length,charts.length,'actual chart series are not mounted');
   for(const chart of charts){
+   const rendered=displayed.find(c=>c.cellId===chart.cellId);assert.ok(rendered);
    const bars=chart.bars.filter(b=>b.is_closed),points=[];
    assert.ok(bars.length>=499);
    const view=(await q.query(chart.cellId)).snapshot.visibleRange;
    const range=view?.time??view;
    const visible=bars.filter(b=>Number(b.time)>=Number(range?.from??bars.at(-80).time)&&Number(b.time)<=Number(range?.to??bars.at(-1).time));
+   if(visible.length<20){
+    const target={from:bars.at(-80).time,to:bars.at(-1).time+2*(bars.at(-1).time-bars.at(-2).time)};
+    await q.execute(chart.cellId,'visibleTimeRange',target);
+    await q.record('oracle-viewport',{name,cellId:chart.cellId,before:range,target});return false;
+   }
    assert.ok(visible.length>=20,'numerical oracle requires a visible chart range');
-   for(const line of chart.lines){
+   const renderedBars=new Map(rendered.candles.map(b=>[Number(b.time),b]));
+   for(const bar of visible){const actual=renderedBars.get(bar.time);assert.ok(actual,'visible candle was not displayed');for(const key of ['open','high','low','close'])assert.equal(actual[key],bar[key]);}
+   for(const line of rendered.lines){
     const values=new Map(line.data.map(p=>[Number(p.time),p.value]));assert.equal(values.size,line.data.length);
     let checked=0;
     for(let i=19;i<bars.length;i++){
@@ -102,8 +115,8 @@ async function values(name){
     }
     assert.ok(checked>=20,`${line.id} has insufficient comparable points`);points.push({id:line.id,checked});
    }
-   assert.ok(chart.lines.length>=4,`${name} ${chart.cellId} lacks four runtime outputs: ${chart.lines.map(x=>x.id)}`);
-   result.push({cellId:chart.cellId,points});
+   assert.ok(rendered.lines.length>=4,`${name} ${chart.cellId} lacks four rendered runtime outputs: ${rendered.lines.map(x=>x.id)}`);
+   result.push({cellId:chart.cellId,visibleCandles:visible.length,oracle:'actual Lightweight Charts data()',points});
   }
   return result;
  }catch(error){failure=String(error);return false;}},180_000).catch(error=>{throw new Error(error.message+'; '+failure);});
@@ -116,6 +129,16 @@ const indicators=[
 ];
 try{
  await fs.mkdir(q.s.root,{recursive:true});
+ const inherited=process.env.CS_ACCEPTANCE_SWITCH_RECEIPT;
+ if(inherited){
+  const prior=JSON.parse(await fs.readFile(inherited,'utf8'));
+  assert.equal(prior.cold.length,10);assert.equal(prior.warm.length,10);
+  assert.ok(prior.warm.every(r=>r.targetReads.length===0&&r.newMarketSockets.length===0&&r.before.count>=1500));
+  q.s.receipt.cold=prior.cold;q.s.receipt.warm=prior.warm;
+  q.s.receipt.switchTrialProvenance={receipt:inherited,sourceCommit:prior.sourceCommit,
+   note:'Completed cold/hot subphases reused on the same installed package, machine and profile; the prior overall run failed its minimum visible-bars oracle setup.'};
+ }
+ if(!inherited){
  // Exclude the default workspace smoke from the finite cold matrix.
  await begin();
  await q.configure([{session:series('BTCUSDT'),indicators:[]}],'single');
@@ -132,24 +155,27 @@ try{
   const next=[series('BTCUSDT'),series('ETHUSDT'),series('BTCUSDT','5m'),series('ETHUSDT','5m')][(index+1)%4];
   await q.execute(snap.cells[0].cellId,'session',next);await readyFor(next,1);await end();
  }
+ }
  await begin();
  let configured=await q.configure([{session:series('BTCUSDT'),indicators:[]},{session:series('BTCUSDT'),indicators:[]}],'split-vertical');
  assert.equal(configured.result.state,'ready');await q.ready(2,180_000);
  await command('workspace','setLinkGroup',{cellIds:['cell-1','cell-2'],groupId:null});
  await state('initial-shared-two-chart',true);
+ if(!inherited){
  // A public full-tier consumer keeps ETH current while the sibling retains BTC.
  await command('watchlist','setTier',{symbolKey:'spot:ETHUSDT',tier:'full'});
  // Establish the chart's actual window demand once before measuring hot
  // switches; the watchlist's smaller preload alone is not equivalent proof.
  await q.execute('cell-1','session',series('ETHUSDT'));await readyFor(series('ETHUSDT'));
- await q.until(async()=>{const h=await health(series('ETHUSDT'));return h?.action==='reuse'?h:false;},180_000);
+ await q.until(async()=>{const h=await health(series('ETHUSDT'),1500);return h?.action==='reuse'?h:false;},180_000);
  await q.execute('cell-1','session',series('BTCUSDT'));await readyFor(series('BTCUSDT'));
+ await q.until(async()=>{const h=await health(series('BTCUSDT'),1500);return h?.action==='reuse'?h:false;},180_000);
  for(let index=0;index<10;index++){
   const input=series(index%2?'BTCUSDT':'ETHUSDT');
-  const before=await health(input),requests=q.s.traffic.requests.length,sockets=q.s.traffic.sockets.length,at=Date.now();assert.equal(before.action,'reuse');
+  const before=await health(input,1500),requests=q.s.traffic.requests.length,sockets=q.s.traffic.sockets.length,at=Date.now();assert.equal(before.action,'reuse');
   const sibling=await q.query('cell-2');
   await q.execute('cell-1','session',input);await readyFor(input);
-  const elapsedMs=Date.now()-at,after=await health(input);
+  const elapsedMs=Date.now()-at,after=await health(input,1500);
   const traffic=q.s.traffic.requests.slice(requests);
   const targetReads=traffic.filter(r=>{const u=new URL(r.url);return u.pathname.includes('/klines/')&&u.searchParams.get('symbol')===input.symbol&&u.searchParams.get('interval')===input.interval;});
   const newMarketSockets=q.s.traffic.sockets.slice(sockets).filter(r=>r.url.includes('/stream/klines'));
@@ -158,6 +184,7 @@ try{
   const bars=await capture(q);assert.equal(bars.find(c=>c.cellId==='cell-2').symbol,'BTCUSDT');
   q.s.receipt.warm.push({index,input,elapsedMs,before,after,requests:traffic,targetReads,newMarketSockets,sibling});await q.save();
   console.log('warm',index,input.symbol,elapsedMs);
+ }
  }
  await command('watchlist','setTier',{symbolKey:'spot:ETHUSDT',tier:'none'});
  await q.execute('cell-1','session',series('BTCUSDT'));await readyFor(series('BTCUSDT'));
@@ -174,6 +201,8 @@ try{
  assert.equal(trimmed,true,'deep navigation must exercise capacity trimming');
  const deep=await capture(q);assert.equal(deep.find(c=>c.cellId==='cell-1').bars.length,10_000);
  assert.equal(deep.find(c=>c.cellId==='cell-2').bars[0].time,siblingFirst);
+ const deepA=deep.find(c=>c.cellId==='cell-1');
+ await q.execute('cell-1','visibleTimeRange',{from:deepA.bars[100].time,to:deepA.bars[180].time});
  await state('deep-history-live-isolation',true);await q.screenshot('deep-history-live-isolation');
  await q.execute('cell-1','restoreLatestWindow',{});await readyFor(series('BTCUSDT'));
  await q.until(async()=>{const charts=await capture(q),a=charts.find(c=>c.cellId==='cell-1'),b=charts.find(c=>c.cellId==='cell-2');return a.bars.length<10_000&&a.bars.at(-1).time>=b.bars.at(-1).time-60;},120_000);await state('deep-history-back-to-live',true);
@@ -237,6 +266,7 @@ try{
  // Second supported source has its own receipt, no claimed Cartesian coverage.
  const okx=series('BTC-USDT','1m','okx');
  await q.execute((await q.inspect()).cells[0].cellId,'session',okx);await q.ready(2,180_000);await q.indicatorsReady(2,180_000);
+ await q.record('okx-tail-health',await q.until(async()=>{const h=await health(okx);return h?.action==='reuse'?h:false;},180_000));
  await q.record('okx-four-runtime-oracle',await values('okx'));await state('okx-source',true);await q.screenshot('okx-source');
  await end();assert.deepEqual(q.s.receipt.errors,[]);q.s.receipt.passed=true;
 }catch(error){
