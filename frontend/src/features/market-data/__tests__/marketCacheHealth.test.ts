@@ -522,3 +522,18 @@ test("stream recovery admits repair instead of repeatedly issuing read-only view
   } }, controller);
   assert.equal(manager.cache.planHistory(series, 3).action, "reuse");
 });
+
+test("a proven latest tail cannot silence recovery of invalidated demanded history", () => {
+  const cache = healthy();
+  // A missed historical correction invalidates the original two-row proof.
+  read(cache, wire(3, 2), [row(120)]);
+  cache.admitRealtime(series, row(180, false), "bar.updated", wire(4, 2), 120_000);
+  assert.equal(cache.hasCurrentStream(series), true, "tail continuity has recovered");
+  assert.equal(cache.read(series, { from: 120, to: 120 }).complete, true);
+  assert.equal(cache.planHistory(series, 2).health.historyCovered, false);
+  assert.equal(cache.verificationDemand(series), 2,
+    "the original history demand still needs its own complete range proof");
+  read(cache, wire(4, 2));
+  assert.equal(cache.planHistory(series, 2).action, "reuse");
+  assert.equal(cache.verificationDemand(series), 0);
+});
