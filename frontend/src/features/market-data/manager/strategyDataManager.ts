@@ -1,3 +1,4 @@
+import type { BacktestReplayChartOptions, BacktestReplayExtraSlot, BacktestResultReplayChart } from "../../backtest/backtestTypes.js";
 import type { PreparationJob } from "../../data-preparation/api.js";
 import { defaultBacktestApi, type BacktestApiClient, type ExternalProviderConnection, type StrategyRevisionRecord } from "../../backtest/backtestApi.js";
 import type { BacktestResultReplayCursor, BacktestResultReplayNoteDraft, BacktestRunRecord } from "../../backtest/backtestTypes.js";
@@ -174,7 +175,7 @@ export class StrategyDataManager {
       if (!this.api.getResultReplay) throw new StrategyRunStreamError("STRATEGY_STREAM_UNAVAILABLE", "Result replay is unavailable");
       const frame = await this.api.getResultReplay(cursor, owned);
       const invalidBars = (bars: typeof frame.bars) => !Array.isArray(bars)
-        || bars.some(bar => frame.time_ms === null || bar.open_time_ms > frame.time_ms
+        || bars.some(bar => !bar || frame.time_ms === null || bar.open_time_ms > frame.time_ms
           || (bar.closed && bar.close_time_ms !== undefined && bar.close_time_ms > frame.time_ms));
       const invalidStudy = (study: typeof frame.ma, period: number | undefined, bars: typeof frame.bars) => {
         if (period === undefined) return study !== undefined;
@@ -188,6 +189,22 @@ export class StrategyDataManager {
           return invalid;
         });
       };
+      const comparison = frame.comparison;
+      const invalidChart = (chart: BacktestResultReplayChart | null | undefined, requested: BacktestReplayChartOptions | undefined) => {
+        if (requested === undefined) return chart != null;
+        if (!chart || chart.interval !== requested.interval
+          || chart.dataset_id !== requested.dataset?.datasetId || chart.data_epoch !== requested.dataset?.dataEpoch
+          || invalidBars(chart.bars) || invalidStudy(chart.ma, requested.maPeriod, chart.bars)) return true;
+        return requested.dataset !== undefined && (typeof chart.symbol !== "string" || !chart.symbol
+          || !Array.isArray(chart.display_intervals) || !chart.display_intervals.includes(chart.interval)
+          || chart.display_intervals.some(interval => typeof interval !== "string")
+          || chart.bars.some(bar => !bar.closed || !Number.isSafeInteger(bar.close_time_ms)));
+      };
+      const expectedCharts = cursor.additionalCharts ?? {};
+      const extraCharts = frame.additional_charts;
+      const invalidExtras = (extraCharts !== undefined && (!extraCharts || typeof extraCharts !== "object" || Array.isArray(extraCharts)))
+        || Object.keys(extraCharts ?? {}).length !== Object.keys(expectedCharts).length
+        || Object.entries(expectedCharts).some(([slot, chart]) => invalidChart(extraCharts?.[slot as BacktestReplayExtraSlot], chart));
       const notes = frame.notes;
       const invalidNotes = notes !== undefined && (!Array.isArray(notes) || notes.length > 100
         || new Set(notes.map(note => note?.id)).size !== notes.length
@@ -203,10 +220,11 @@ export class StrategyDataManager {
         || !Number.isSafeInteger(frame.total) || frame.total < cursor.cursor
         || (frame.display_intervals !== undefined && (!Array.isArray(frame.display_intervals)
           || frame.display_intervals.some(interval => typeof interval !== "string")))
-        || frame.comparison?.interval !== cursor.comparisonInterval
-        || invalidBars(frame.bars) || (frame.comparison && invalidBars(frame.comparison.bars))
-        || invalidStudy(frame.ma, cursor.maPeriod, frame.bars)
-        || invalidStudy(frame.comparison?.ma, cursor.comparisonMaPeriod, frame.comparison?.bars ?? [])
+        || invalidChart(comparison, cursor.comparisonInterval ? { interval: cursor.comparisonInterval,
+          ...(cursor.comparisonDataset ? { dataset: cursor.comparisonDataset } : {}),
+          ...(cursor.comparisonMaPeriod === undefined ? {} : { maPeriod: cursor.comparisonMaPeriod }),
+        } : undefined)
+        || invalidExtras || invalidBars(frame.bars) || invalidStudy(frame.ma, cursor.maPeriod, frame.bars)
         || !Array.isArray(frame.fills) || !Array.isArray(frame.order_events)
         || !Array.isArray(frame.closed_bar_signals)
         || frame.closed_bar_signals.some(signal => signal.reveal_sequence > frame.cursor)

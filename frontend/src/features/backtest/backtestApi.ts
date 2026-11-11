@@ -522,9 +522,15 @@ export function createBacktestApi(base = `${API_BASE}/backtests`): BacktestApiCl
         snapshot_hash: cursor.snapshotHash, report_hash: cursor.reportHash,
         cursor: String(cursor.cursor), interval: cursor.interval,
         ...(cursor.comparisonInterval ? { comparison_interval: cursor.comparisonInterval } : {}),
+        ...(cursor.comparisonDataset ? {
+          comparison_dataset_id: cursor.comparisonDataset.datasetId,
+          comparison_data_epoch: cursor.comparisonDataset.dataEpoch,
+        } : {}),
         ...(cursor.maPeriod !== undefined ? { ma_period: String(cursor.maPeriod) } : {}),
         ...(cursor.comparisonMaPeriod !== undefined ? { comparison_ma_period: String(cursor.comparisonMaPeriod) } : {}),
       });
+      if (cursor.additionalCharts && Object.keys(cursor.additionalCharts).length)
+        query.set("additional_charts", JSON.stringify(cursor.additionalCharts));
       return readJson(await fetch(
         `${base}/runs/${encodeURIComponent(cursor.runId)}/result-replay?${query}`,
         requestOptions({}, signal),

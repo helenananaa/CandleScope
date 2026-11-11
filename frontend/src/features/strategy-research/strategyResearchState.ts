@@ -4,6 +4,8 @@ import { getStrategyStorage } from "../../shared/strategyStorage.js";
 import { validStrategyRunSettings, type StrategyRunSettings } from "../../shared/strategyRunSettings.js";
 import { parseResearchSourceRef, ResearchDataError } from "../research-data/researchDataSourceModel.js";
 
+import { readReplayDisplays, replayDisplayKey, type ReplayDisplay } from "./strategyResultReplayDisplay.js";
+
 export const STRATEGY_RESEARCH_WORKSPACE_KEY = "candlescope:strategy-research:v1";
 
 export type StrategyResearchStaleReason =
@@ -36,12 +38,14 @@ export type StrategyResearchState = {
   source: StrategyResearchSourceSlice;
   script: StrategyResearchScriptSlice;
   result: StrategyResearchResultSlice;
+  replayDisplays?: Record<string, ReplayDisplay>;
 };
 
 export type StrategyResearchAction =
   | { type: "result/viewHistory"; runId: string }
   | { type: "result/invalidate" }
   | { type: "result/replay"; replay: BacktestResultReplayCursor | null }
+  | { type: "result/replayDisplay"; key: string; display: ReplayDisplay }
   | { type: "script/configure"; configuration: StrategyRunSettings }
   | { type: "source/select"; source: ResearchSourceRefV1 }
   | { type: "source/clear" }
@@ -71,6 +75,9 @@ export function strategyResearchReducer(
       const { replay: _replay, ...result } = state.result;
       return { ...state, result };
     }
+    case "result/replayDisplay":
+      if (!state.result.replay || action.key !== replayDisplayKey(state.result.replay)) return state;
+      return { ...state, replayDisplays: { ...state.replayDisplays, [action.key]: action.display } };
     case "result/invalidate": return { ...state, result: { ...state.result, stale: true } };
     case "script/configure":
       return { ...state, script: { ...state.script, configuration: action.configuration }, result: state.result.runId ? { ...state.result, stale: true, staleReason: "RANGE_CHANGED" } : state.result };
@@ -89,6 +96,7 @@ export function strategyResearchReducer(
       };
     case "source/revisionChanged":
       return {
+        ...state,
         source: { ...state.source, source: action.source, previewFrozen: false },
         script: state.script,
         result: {
@@ -139,6 +147,7 @@ export function persistStrategyResearchWorkspace(state: StrategyResearchState): 
     stale: state.result.stale,
     runId: state.result.runId,
     replay: state.result.replay,
+    replayDisplays: state.replayDisplays,
   };
   try {
     void Promise.resolve(getStrategyStorage()?.setItem(STRATEGY_RESEARCH_WORKSPACE_KEY, JSON.stringify(payload))).catch(() => {});
@@ -156,13 +165,18 @@ function loadResultReplay(value: unknown, runId: unknown): BacktestResultReplayC
     || typeof replay.reportHash !== "string" || !hash.test(replay.reportHash)
     || typeof replay.cursor !== "number" || !Number.isSafeInteger(replay.cursor) || replay.cursor < 0
     || typeof replay.interval !== "string" || replay.interval.length < 2 || replay.interval.length > 64) return undefined;
-  const comparisonInterval = typeof replay.comparisonInterval === "string" && replay.comparisonInterval !== replay.interval
+  const dataset = replay.comparisonDataset;
+  const comparisonDataset = dataset && typeof dataset.datasetId === "string" && /^local-[0-9a-f]{32}$/.test(dataset.datasetId)
+    && typeof dataset.dataEpoch === "string" && hash.test(dataset.dataEpoch)
+    ? { datasetId: dataset.datasetId, dataEpoch: dataset.dataEpoch } : undefined;
+  const comparisonInterval = typeof replay.comparisonInterval === "string"
+    && (dataset === undefined ? replay.comparisonInterval !== replay.interval : comparisonDataset !== undefined)
     && replay.comparisonInterval.length >= 2 && replay.comparisonInterval.length <= 64 ? replay.comparisonInterval : undefined;
   const validPeriod = (period: number | undefined): period is number =>
     typeof period === "number" && Number.isInteger(period) && period >= 1 && period <= 500;
   return { runId: replay.runId, snapshotHash: replay.snapshotHash, reportHash: replay.reportHash,
     cursor: replay.cursor, interval: replay.interval,
-    ...(comparisonInterval ? { comparisonInterval } : {}),
+    ...(comparisonInterval ? { comparisonInterval, ...(comparisonDataset ? { comparisonDataset } : {}) } : {}),
     ...(validPeriod(replay.maPeriod) ? { maPeriod: replay.maPeriod } : {}),
     ...(comparisonInterval && validPeriod(replay.comparisonMaPeriod) ? { comparisonMaPeriod: replay.comparisonMaPeriod } : {}) };
 }
@@ -186,7 +200,9 @@ export function loadStrategyResearchWorkspace(): StrategyResearchState {
       }
     }
     const replay = loadResultReplay(record.replay, record.runId);
+    const replayDisplays = readReplayDisplays(record.replayDisplays);
     return {
+      ...(replayDisplays ? { replayDisplays } : {}),
       source: {
         source,
         previewFrozen: false,

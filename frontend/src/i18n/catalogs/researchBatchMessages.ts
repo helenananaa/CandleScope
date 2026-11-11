@@ -1,4 +1,9 @@
 export const researchBatchEnglish = {
+  "researchBatch.replayFillMarkers": "Fill markers",
+  "researchBatch.replayNoteMarkers": "Note markers",
+  "researchBatch.replayReferenceMarkers": "This reference chart shows market data. Run markers appear on charts using the run dataset.",
+  "researchBatch.replayComparisonSource": "Comparison chart source",
+  "researchBatch.replayRunSource": "Run dataset",
   "research.external.registerManifest": "Register manifest",
   "research.external.outputMode": "Output mode",
   "research.external.checkAndRun": "Check model and run",
@@ -43,6 +48,11 @@ export const researchBatchEnglish = {
 } as const;
 
 export const researchBatchChinese: Record<keyof typeof researchBatchEnglish, string> = {
+  "researchBatch.replayFillMarkers": "成交标记",
+  "researchBatch.replayNoteMarkers": "笔记标记",
+  "researchBatch.replayReferenceMarkers": "此对照图显示行情。运行标记显示在使用本次运行数据的图表上。",
+  "researchBatch.replayComparisonSource": "对照图数据来源",
+  "researchBatch.replayRunSource": "本次运行的数据集",
   "research.external.registerManifest": "注册模型清单",
   "research.external.outputMode": "输出模式",
   "research.external.checkAndRun": "检查模型并运行",
@@ -87,6 +97,11 @@ export const researchBatchChinese: Record<keyof typeof researchBatchEnglish, str
 };
 
 export const researchBatchKorean: Record<keyof typeof researchBatchEnglish, string> = {
+  "researchBatch.replayFillMarkers": "체결 마커",
+  "researchBatch.replayNoteMarkers": "노트 마커",
+  "researchBatch.replayReferenceMarkers": "이 비교 차트에는 시장 데이터가 표시됩니다. 실행 마커는 실행 데이터 세트를 사용하는 차트에 표시됩니다.",
+  "researchBatch.replayComparisonSource": "비교 차트 데이터 소스",
+  "researchBatch.replayRunSource": "실행 데이터 세트",
   "research.external.registerManifest": "매니페스트 등록",
   "research.external.outputMode": "출력 모드",
   "research.external.checkAndRun": "모델 확인 후 실행",
@@ -131,6 +146,11 @@ export const researchBatchKorean: Record<keyof typeof researchBatchEnglish, stri
 };
 
 export const researchBatchBrazilian: Record<keyof typeof researchBatchEnglish, string> = {
+  "researchBatch.replayFillMarkers": "Marcadores de execução",
+  "researchBatch.replayNoteMarkers": "Marcadores de notas",
+  "researchBatch.replayReferenceMarkers": "Este gráfico de referência mostra dados de mercado. Os marcadores aparecem nos gráficos que usam os dados da execução.",
+  "researchBatch.replayComparisonSource": "Fonte do gráfico de comparação",
+  "researchBatch.replayRunSource": "Conjunto de dados da execução",
   "research.external.registerManifest": "Registrar manifesto",
   "research.external.outputMode": "Modo de saída",
   "research.external.checkAndRun": "Verificar modelo e executar",

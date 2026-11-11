@@ -247,6 +247,19 @@ class RunCloneRequest(BaseModel):
     value: Any
 
 
+class ResultReplayChartDataset(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    datasetId: str = Field(pattern=r"^local-[0-9a-f]{32}$")
+    dataEpoch: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+
+
+class ResultReplayChartRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    interval: str = Field(min_length=2, max_length=64)
+    dataset: ResultReplayChartDataset | None = None
+    maPeriod: int | None = Field(default=None, strict=True, ge=1, le=500)
+
+
 class ResultReplayNoteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 

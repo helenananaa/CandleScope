@@ -545,6 +545,17 @@ export const STREAM_EVENTS = [
   "RESYNC_REQUIRED",
 ] as const;
 
+export const BACKTEST_REPLAY_EXTRA_SLOTS = ["extra1", "extra2"] as const;
+export type BacktestReplayExtraSlot = typeof BACKTEST_REPLAY_EXTRA_SLOTS[number];
+
+export interface BacktestReplayChartOptions {
+  interval: string;
+  dataset?: { datasetId: string; dataEpoch: string };
+  maPeriod?: number;
+}
+
+export type BacktestReplayExtraCharts = Partial<Record<BacktestReplayExtraSlot, BacktestReplayChartOptions>>;
+
 export interface BacktestResultReplayCursor {
   runId: string;
   snapshotHash: string;
@@ -552,8 +563,10 @@ export interface BacktestResultReplayCursor {
   cursor: number;
   interval: string;
   comparisonInterval?: string;
+  comparisonDataset?: { datasetId: string; dataEpoch: string };
   maPeriod?: number;
   comparisonMaPeriod?: number;
+  additionalCharts?: BacktestReplayExtraCharts;
 }
 
 export interface BacktestResultReplayBar {
@@ -587,6 +600,16 @@ export interface BacktestResultReplayNoteDraft {
   body: string;
 }
 
+export interface BacktestResultReplayChart {
+  interval: string;
+  bars: BacktestResultReplayBar[];
+  ma?: BacktestResultReplayMA;
+  dataset_id?: string;
+  data_epoch?: string;
+  symbol?: string;
+  display_intervals?: string[];
+}
+
 export interface BacktestResultReplayFrame {
   schema: "candlescope.user-trade-result-replay/1" | "candlescope.local-bar-result-replay/1";
   run_id: string;
@@ -603,7 +626,8 @@ export interface BacktestResultReplayFrame {
   bars: BacktestResultReplayBar[];
   display_intervals?: string[];
   ma?: BacktestResultReplayMA;
-  comparison?: { interval: string; bars: BacktestResultReplayBar[]; ma?: BacktestResultReplayMA } | null;
+  comparison?: BacktestResultReplayChart | null;
+  additional_charts?: Partial<Record<BacktestReplayExtraSlot, BacktestResultReplayChart>>;
   fills: Array<{
     cursor: number;
     event_time_ms: number;

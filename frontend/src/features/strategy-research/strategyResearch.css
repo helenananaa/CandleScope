@@ -382,6 +382,12 @@
   background: var(--bg-secondary);
 }
 
+.strategy-result-replay-candles[data-drawing-active] { cursor: crosshair; }
+.strategy-result-replay-drawings { color: var(--accent-blue); pointer-events: none; }
+.strategy-result-replay-drawings line { stroke: currentColor; stroke-width: 2; }
+.strategy-result-replay-drawings circle { fill: currentColor; }
+.strategy-result-replay-view-controls button[aria-pressed="true"] { border-color: var(--accent-blue); }
+
 .strategy-result-replay-charts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
@@ -390,6 +396,23 @@
 
 .strategy-result-replay-charts section {
   min-width: 0;
+}
+
+.strategy-result-replay-view-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  min-width: 0;
+  margin: 8px 0;
+  padding: 6px;
+  border: 1px solid var(--border-color);
+}
+
+.strategy-result-replay-view-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .strategy-result-replay-notes textarea {

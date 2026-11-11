@@ -18,6 +18,7 @@ from app.simulation.closing_tick import REASON as CLOSING_TICK
 from app.simulation.spot_cash_account import SpotCashAccount
 from app.simulation.trade_bar_builder import TradeBarBuilder
 
+from .request_contracts import ResultReplayChartRequest
 from .errors import BacktestError
 from .user_trade_input import open_user_trade_run_snapshot
 
@@ -106,6 +107,10 @@ def _display_chart(events, times, cursor, spec, *, trade, source_interval, ma_pe
         events, times, cursor, spec, trade=trade, source_interval=source_interval,
         limit=MAX_REVEALED_BARS + (ma_period - 1 if ma_period else 0),
     )
+    return _chart_from_bars(bars, ma_period)
+
+
+def _chart_from_bars(bars, ma_period):
     chart = {"bars": bars[-MAX_REVEALED_BARS:]}
     if ma_period is None:
         return chart
@@ -129,12 +134,49 @@ def _display_chart(events, times, cursor, spec, *, trade, source_interval, ma_pe
     return chart
 
 
+def _display_intervals(source_interval, alignment_offset_ms):
+    available = []
+    for candidate in dict.fromkeys((source_interval, *DISPLAY_INTERVALS)):
+        try:
+            resolve_local_resample_plan(source_interval, candidate, alignment_offset_ms=alignment_offset_ms)
+        except LocalResamplingError:
+            continue
+        available.append(candidate)
+    return available
+
+
+def _comparison_dataset_chart(runtime, dataset, interval, boundary, ma_period):
+    dataset_id, data_epoch = dataset
+    try:
+        manifest, rows = runtime.local_data.load_pinned_closed_bars(
+            dataset_id, data_epoch=data_epoch, interval=interval, through_ms=boundary,
+            limit=MAX_REVEALED_BARS + (ma_period - 1 if ma_period else 0),
+        )
+    except LocalResamplingError as exc:
+        raise BacktestError("SCHEMA_UNKNOWN_FIELD", str(exc)) from exc
+    except LocalDatasetError as exc:
+        raise BacktestError(exc.code, str(exc)) from exc
+    available = _display_intervals(manifest["interval"], int(manifest.get("alignment_offset_ms", 0)))
+    if interval not in available:
+        raise BacktestError("SCHEMA_UNKNOWN_FIELD", "Unsupported comparison dataset interval")
+    bars = [{
+        key: str(row[key]) for key in ("open", "high", "low", "close")
+    } | {
+        "volume": None if row["volume"] is None else str(row["volume"]),
+        "open_time_ms": row["open_time_ms"], "close_time_ms": row["close_time_ms"], "closed": True,
+    } for row in rows]
+    return {"interval": interval, "dataset_id": dataset_id, "data_epoch": data_epoch,
+            "symbol": manifest["symbol"], "display_intervals": available, **_chart_from_bars(bars, ma_period)}
+
+
 def project_result_replay(
     runtime, run_id: str, *, snapshot_hash: str, report_hash: str, cursor: int,
     interval: str, comparison_interval: str | None = None,
     ma_period: int | None = None, comparison_ma_period: int | None = None,
+    comparison_dataset: tuple[str, str] | None = None,
+    additional_charts: dict[str, ResultReplayChartRequest] | None = None,
 ) -> dict:
-    if comparison_ma_period is not None and comparison_interval is None:
+    if (comparison_ma_period is not None or comparison_dataset is not None) and comparison_interval is None:
         raise BacktestError("SCHEMA_UNKNOWN_FIELD", "Comparison study requires a comparison chart")
     record = runtime.service.get_run(run_id)
     config = json.loads(str(record["config_json"]))
@@ -163,13 +205,7 @@ def project_result_replay(
         if manifest.get("source") not in {"local_dataset", USER_TRADE_SOURCE}:
             raise BacktestError("FIDELITY_UNSUPPORTED", "This run does not use imported bars")
         source_interval = str(config.get("interval") or manifest["interval"])
-        available = []
-        for candidate in dict.fromkeys((source_interval, *DISPLAY_INTERVALS)):
-            try:
-                resolve_local_resample_plan(source_interval, candidate, alignment_offset_ms=int(manifest.get("alignment_offset_ms", 0)))
-            except LocalResamplingError:
-                continue
-            available.append(candidate)
+        available = _display_intervals(source_interval, int(manifest.get("alignment_offset_ms", 0)))
         from .runtime import _bar_execution_events
 
         snapshot = runtime.open_saved_bar_snapshot(record, config, source_interval)
@@ -184,7 +220,8 @@ def project_result_replay(
     spec = parse_interval_spec(interval)
     comparison_spec = parse_interval_spec(comparison_interval) if comparison_interval else None
     if spec is None or interval not in available or (comparison_interval and (
-            comparison_spec is None or comparison_interval not in available or comparison_interval == interval)):
+            comparison_spec is None or (comparison_dataset is None and
+                (comparison_interval not in available or comparison_interval == interval)))):
         raise BacktestError("SCHEMA_UNKNOWN_FIELD", "Unsupported result replay display interval")
     if not 0 <= cursor <= len(events):
         raise BacktestError("SCHEMA_UNKNOWN_FIELD", "Result replay cursor is outside the frozen input")
@@ -250,6 +287,24 @@ def project_result_replay(
                 raise BacktestError("DATA_SNAPSHOT_MISMATCH", "Saved signal has an invalid replay boundary")
             if reveal <= cursor:
                 visible_signals.append(signal)
+    def reference_chart(chart_interval, chart_spec, dataset, period):
+        if dataset is not None:
+            return _comparison_dataset_chart(runtime, dataset, chart_interval, last.event_time_ms if last else None, period)
+        return {"interval": chart_interval, **_display_chart(
+            events, times, cursor, chart_spec, trade=trade, source_interval=source_interval, ma_period=period,
+        )}
+
+    comparison = (
+        reference_chart(comparison_interval, comparison_spec, comparison_dataset, comparison_ma_period)
+        if comparison_interval and comparison_spec else None
+    )
+    extra = {}
+    for slot, chart in (additional_charts or {}).items():
+        chart_spec = parse_interval_spec(chart.interval)
+        if chart_spec is None or (chart.dataset is None and chart.interval not in available):
+            raise BacktestError("SCHEMA_UNKNOWN_FIELD", "Unsupported additional replay chart interval")
+        dataset = (chart.dataset.datasetId, chart.dataset.dataEpoch) if chart.dataset else None
+        extra[slot] = reference_chart(chart.interval, chart_spec, dataset, chart.maPeriod)
     return {
         "schema": "candlescope.user-trade-result-replay/1" if trade else "candlescope.local-bar-result-replay/1",
         "run_id": run_id, "snapshot_hash": snapshot_hash, "report_hash": report_hash,
@@ -258,10 +313,8 @@ def project_result_replay(
         "time_ms": last.event_time_ms if last else None,
         "source_sequence": last.payload.get("source_sequence", last.sequence) if last else None,
         **_display_chart(events, times, cursor, spec, trade=trade, source_interval=source_interval, ma_period=ma_period),
-        "comparison": {"interval": comparison_interval, **_display_chart(
-            events, times, cursor, comparison_spec, trade=trade, source_interval=source_interval,
-            ma_period=comparison_ma_period,
-        )} if comparison_spec else None,
+        "comparison": comparison,
+        **({"additional_charts": extra} if extra else {}),
         "fills": list(visible_fills), "fill_count": visible_fill_count,
         "order_events": list(visible_orders), "order_trace_available": order_trace_available,
         "closed_bar_signals": list(visible_signals), "signal_trace_available": signals is not None,
