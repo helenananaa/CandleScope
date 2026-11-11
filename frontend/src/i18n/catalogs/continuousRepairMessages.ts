@@ -1,4 +1,8 @@
 export const repairEnglish = {
+  "repair.autoRequest": "Automatic history repair",
+  "repair.auto": "Automatically repair future history revisions",
+  "repair.autoHint": "For this run, CandleScope may recalculate revised history, replace simulated trades and balances, and resume once caught up. Turn this off to cancel any pending automatic repair.",
+  "repair.autoReload": "Reload setting",
   "repair.updatingView": "Repair committed; waiting for the complete account view.", "repair.revisedAgain": "The earlier repair completed, but source history changed again. Preview the current range.",
   "repair.title": "Repair revised history", "repair.hint": "Recompute with this run’s saved code and settings. The stale account remains visible until the complete result is ready; cancelling keeps the old account.",
   "repair.preview": "Preview repair range", "repair.from": "Recompute from (UTC)", "repair.through": "Through (UTC)",
@@ -18,6 +22,10 @@ export const repairEnglish = {
   "repair.cleanup": "Some temporary repair data is retained for later cleanup. The account result remains available.",
 } as const;
 export const repairChinese: Record<keyof typeof repairEnglish, string> = {
+  "repair.autoRequest": "自动修补历史",
+  "repair.auto": "自动修补之后的历史修订",
+  "repair.autoHint": "开启后，本次运行可自动重算修订过的历史，替换模拟交易和账户余额，并在追赶后恢复运行。关闭会取消尚未提交的自动修补。",
+  "repair.autoReload": "重新加载设置",
   "repair.updatingView": "修复已提交，正在等待完整账户视图更新。", "repair.revisedAgain": "上次修复已完成，但来源历史再次发生修订，请重新预览当前范围。",
   "repair.title": "修复已修订的历史", "repair.hint": "使用本运行保存的代码和配置重算。完整结果准备好前，旧账户继续显示为过期；取消修复会保留旧账户。",
   "repair.preview": "预览修复范围", "repair.from": "重算起点（UTC）", "repair.through": "重算截止（UTC）",
@@ -37,6 +45,10 @@ export const repairChinese: Record<keyof typeof repairEnglish, string> = {
   "repair.cleanup": "部分临时修复资料仍保留，稍后再清理。账户结果仍可查看。",
 };
 export const repairJapanese: Record<keyof typeof repairEnglish, string> = {
+  "repair.autoRequest": "履歴の自動修復",
+  "repair.auto": "今後の履歴修正を自動で修復する",
+  "repair.autoHint": "この実行では修正された履歴を再計算し、模擬取引と残高を置き換えてから追いついた時点で再開します。オフにすると未確定の自動修復を取り消します。",
+  "repair.autoReload": "設定を再読み込み",
   "repair.updatingView": "修復を保存しました。完全な口座表示の更新を待っています。", "repair.revisedAgain": "前回の修復後に元履歴が再び修正されました。現在の範囲を確認してください。",
   "repair.title": "修正された履歴を修復", "repair.hint": "この実行に保存されたコードと設定で再計算します。完全な結果ができるまで古い口座を表示し、修復のキャンセルでも保持します。",
   "repair.preview": "修復範囲を確認", "repair.from": "再計算の開始（UTC）", "repair.through": "終了（UTC）",
@@ -56,6 +68,10 @@ export const repairJapanese: Record<keyof typeof repairEnglish, string> = {
   "repair.cleanup": "一部の一時データは後で削除するため保持されています。口座結果は表示できます。",
 };
 export const repairKorean: Record<keyof typeof repairEnglish, string> = {
+  "repair.autoRequest": "과거 데이터 자동 복구",
+  "repair.auto": "향후 과거 데이터 수정 자동 복구",
+  "repair.autoHint": "이 실행의 수정된 과거 데이터를 다시 계산해 모의 거래와 잔액을 교체하고 따라잡은 후 실행을 재개합니다. 끄면 아직 확정되지 않은 자동 복구가 취소됩니다.",
+  "repair.autoReload": "설정 다시 불러오기",
   "repair.updatingView": "복구가 저장되었으며 전체 계좌 화면의 업데이트를 기다리는 중입니다.", "repair.revisedAgain": "이전 복구 후 원본 이력이 다시 수정되었습니다. 현재 범위를 확인하세요.",
   "repair.title": "수정된 이력 복구", "repair.hint": "이 실행에 저장된 코드와 설정으로 다시 계산합니다. 전체 결과가 준비될 때까지 이전 계좌를 표시하며 취소해도 이전 계좌는 유지됩니다.",
   "repair.preview": "복구 범위 미리 보기", "repair.from": "재계산 시작(UTC)", "repair.through": "종료(UTC)",
@@ -75,6 +91,10 @@ export const repairKorean: Record<keyof typeof repairEnglish, string> = {
   "repair.cleanup": "일부 임시 복구 자료가 나중에 정리하도록 유지됩니다. 계좌 결과는 계속 볼 수 있습니다.",
 };
 export const repairPortuguese: Record<keyof typeof repairEnglish, string> = {
+  "repair.autoRequest": "Reparo automático do histórico",
+  "repair.auto": "Reparar automaticamente futuras revisões do histórico",
+  "repair.autoHint": "Nesta execução, o CandleScope pode recalcular o histórico revisado, substituir operações simuladas e saldos e retomar após alcançar os dados atuais. Desative para cancelar reparos automáticos pendentes.",
+  "repair.autoReload": "Recarregar configuração",
   "repair.updatingView": "Reparo salvo; aguardando a visualização completa da conta.", "repair.revisedAgain": "O reparo anterior terminou, mas a origem mudou novamente. Consulte o intervalo atual.",
   "repair.title": "Reparar histórico revisado", "repair.hint": "Recalcule com o código e as configurações salvos nesta execução. A conta anterior permanece visível até o resultado completo; cancelar preserva essa conta.",
   "repair.preview": "Ver intervalo de reparo", "repair.from": "Recalcular a partir de (UTC)", "repair.through": "Até (UTC)",

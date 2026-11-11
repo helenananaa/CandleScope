@@ -109,3 +109,8 @@ class RepairConfirm(RepairPreview):
 
 class RepairCancel(StrictInput):
     expected:CommittedIdentity
+
+
+class AutomaticRepairSetting(StrictInput):
+    enabled: bool
+    expected_version: int = Field(ge=0, le=MAX_COUNTER)

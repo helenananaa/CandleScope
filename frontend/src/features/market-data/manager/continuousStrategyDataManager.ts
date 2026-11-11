@@ -1,7 +1,7 @@
 import { StrategyRunStreamError } from "../../backtest/backtestRunStream.js";
 import { ContinuousViewReducer, type ContinuousView } from "../../backtest/continuous/continuousView.js";
 import { mergeRepair } from "../../backtest/continuous/continuousRepairView.js";
-import type { CommittedIdentity, ContinuousApi, ContinuousCapabilities, ContinuousControl, ContinuousCreate,
+import type { ContinuousAutoRepairSetting, CommittedIdentity, ContinuousApi, ContinuousCapabilities, ContinuousControl, ContinuousCreate,
   ContinuousCreation, ContinuousPage, ContinuousPacket, ContinuousRepair, ContinuousRepairConfirm, ResultKind } from "../../backtest/continuous/continuousTypes.js";
 
 export interface ContinuousObservation {
@@ -38,6 +38,12 @@ export class ContinuousStrategyDataManager {
   request(key: string, signal?: AbortSignal) { return this.operation(signal, (owned) => this.api.request(key, owned)); }
   status(id: string, signal?: AbortSignal) { return this.operation(signal, (owned) => this.api.status(id, owned)); }
   control(key: string, body: ContinuousControl, signal?: AbortSignal) { return this.operation(signal, (owned) => this.api.control(key, body, owned)); }
+  autoRepair(id: string, signal?: AbortSignal) {
+    return this.operation(signal, (owned) => this.api.autoRepair(id, owned));
+  }
+  setAutoRepair(id: string, setting: ContinuousAutoRepairSetting, signal?: AbortSignal) {
+    return this.operation(signal, (owned) => this.api.setAutoRepair(id, setting, owned));
+  }
   repairPreview(id: string, body: { expected: CommittedIdentity; resume_after: boolean }, signal?: AbortSignal) { return this.operation(signal, (owned) => this.api.repairPreview(id, body, owned)); }
   async repairStatus(key: string, signal?: AbortSignal) {
     const response = await this.operation(signal, (owned) => this.api.repairStatus(key, owned));
