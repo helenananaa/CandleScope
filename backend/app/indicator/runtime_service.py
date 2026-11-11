@@ -31,6 +31,7 @@ from candlescope_plugin_sdk import (
 from app.core.executors import run_indicator
 from app.plugin_runtime.errors import PluginHostError, PluginRequestError
 
+from .calculation_owner import CalculationOwnerError
 from .runtime_routes import (
     ROUTE_MODE_LEGACY,
     ROUTE_MODE_SHADOW,
@@ -62,6 +63,8 @@ class RuntimeHost(Protocol):
         runtime_id: str,
         request: ExecuteBatchRequest,
     ) -> ExecuteBatchResult: ...
+
+    async def release_stream(self, runtime_id: str, stream: str) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -317,6 +320,9 @@ class IndicatorRuntimeService:
         self.observe_result = None
         self.release_inputs = None
         self.stop_inputs = None
+        from .calculation_registry import CalculationRegistry
+        self.calculations = CalculationRegistry()
+        self._pine_snapshot_writers: set[str] = set()
         self.legacy_languages = legacy_languages
         self.max_pending_shadow_tasks = int(max_pending_shadow_tasks)
         self._start_lock = asyncio.Lock()
@@ -423,6 +429,9 @@ class IndicatorRuntimeService:
             self._started = True
 
     async def stop(self) -> None:
+        # Shared chart owners must physically drain before input dependencies
+        # or the registered sidecar host are released by application shutdown.
+        await self.calculations.stop()
         tasks = tuple(self._background_tasks)
         for task in tasks:
             task.cancel()
@@ -431,6 +440,21 @@ class IndicatorRuntimeService:
         self._background_tasks.clear()
         if self.stop_inputs is not None:
             await self.stop_inputs()
+
+    def claim_pine_snapshot_writer(self, session_id: str) -> Callable[[], None]:
+        """Preserve the reconnect identity while allowing one live writer."""
+        if session_id in self._pine_snapshot_writers:
+            raise CalculationOwnerError("INDICATOR_SNAPSHOT_WRITER_BUSY")
+        self._pine_snapshot_writers.add(session_id)
+        return lambda: self._pine_snapshot_writers.remove(session_id)
+
+    async def release_stream(self, runtime_id: str, stream: str) -> None:
+        """Release one drained owner, including its bounded conversion base."""
+        if self.host is None:
+            raise RuntimeError('Runtime plugin host is unavailable during stream release')
+        await self.host.release_stream(runtime_id, stream)
+        with _stream_bars_lock:
+            _stream_bars.pop(stream, None)
 
     async def drain_shadow(self) -> None:
         """Wait for current shadow comparisons; intended for gates and tests."""
@@ -560,6 +584,7 @@ class IndicatorRuntimeService:
         legacy: LegacyExecutor,
         adapt_sidecar: SidecarAdapter,
         adapt_failure: FailureAdapter = _default_failure_payload,
+        notify_result: bool = True,
     ) -> dict[str, Any]:
         await self.start()
         route = self.route_for(request.language)
@@ -576,6 +601,7 @@ class IndicatorRuntimeService:
                 adapt_sidecar=adapt_sidecar,
                 adapt_failure=adapt_failure,
                 record_failure=True,
+                notify_result=notify_result,
             )
 
         if not self._reserve_shadow():
@@ -607,6 +633,7 @@ class IndicatorRuntimeService:
                 adapt_sidecar=adapt_sidecar,
                 adapt_failure=adapt_failure,
                 record_failure=False,
+                notify_result=notify_result,
             ),
             name=(f"indicator-shadow:{route.runtime_id}:{request.transport}"),
         )
@@ -709,6 +736,7 @@ class IndicatorRuntimeService:
         adapt_sidecar: SidecarAdapter,
         adapt_failure: FailureAdapter,
         record_failure: bool,
+        notify_result: bool = True,
     ) -> dict[str, Any]:
         assert route.runtime_id is not None
         startup_failure = self._route_failures.get(route.language)
@@ -767,7 +795,7 @@ class IndicatorRuntimeService:
                     data = await run_storage(requested_data, sdk_request, requirements, self.pine_data_manager())
                     sdk_request = replace(sdk_request, options={**sdk_request.options, **data})
             result = await self.host.execute_batch(route.runtime_id, sdk_request)
-            if self.observe_result is not None:
+            if notify_result and self.observe_result is not None:
                 try:
                     await self.observe_result(request, result)
                 except Exception:
@@ -914,6 +942,7 @@ class IndicatorRuntimeService:
             "counts": counts,
             "pendingShadow": pending_shadow,
             "maxPendingShadow": self.max_pending_shadow_tasks,
+            "calculations": self.calculations.snapshot(),
             "recent": recent,
         }
 

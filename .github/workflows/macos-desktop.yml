@@ -160,6 +160,7 @@ jobs:
             tests/test_local_data_pinned_window.py \
             tests/test_pine_combined_host_inputs.py \
             tests/test_pine_host_completion.py \
+            tests/test_stream_script_patch_shape.py \
             tests/test_proxy_pool.py \
             tests/test_history_archive_*.py \
             tests/test_official_chart_archive.py \

@@ -1,0 +1,162 @@
+{
+  "source": "e8721dda79e52940a785ecf226ff3b5f558a121e",
+  "baseline": "7564501de4b95452c877691603176a7f3a1ba700",
+  "focusedPassed": 44,
+  "combinedPassed": 1102,
+  "combinedSkipped": 1,
+  "combinedSuites": 84,
+  "nativeSourceRebuildPassed": true,
+  "nativeRenderedResetNotice": true,
+  "nativeSavedDefinitionAndRestartObserved": true,
+  "nativeRestartBoundaryPassed": false,
+  "correction": {
+    "startedMs": 1794032104092,
+    "openMs": 1794031080000,
+    "oldClose": 76034,
+    "newClose": 76186.07,
+    "storageRevisionBefore": 1764,
+    "storageRevisionAfter": 1765,
+    "sourceRevisionBefore": 1,
+    "sourceRevisionAfter": 2
+  },
+  "restart": {
+    "targetOpen": 1794032160,
+    "lastIndicatorOpen": 1794032100,
+    "error": {
+      "at": 1794032160308,
+      "type": "error",
+      "clientId": "indicator-stream:99b3aaf7-5e14-419d-88db-2bfc07946113:2",
+      "error": "INDICATOR_CALCULATION_ORIGIN_REQUIRED"
+    },
+    "firstAfterRestart": {
+      "time": 1794031980,
+      "value": 1501
+    },
+    "lastAfterRestart": {
+      "time": 1794032040,
+      "value": 1513
+    },
+    "observationsAfterRestart": 13,
+    "marketSourceColumns": [
+      "openMs",
+      "source",
+      "observations",
+      "closed",
+      "lastReceivedMs"
+    ],
+    "marketSourceRows": [
+      [
+        1794032100000,
+        "websocket",
+        17,
+        1,
+        1794032160186
+      ],
+      [
+        1794032160000,
+        "websocket",
+        29,
+        1,
+        1794032219559
+      ],
+      [
+        1794032220000,
+        "websocket",
+        11,
+        0,
+        1794032241842
+      ]
+    ],
+    "ownedPidRecords": 20
+  },
+  "artifacts": {
+    "c-acceptance.json.gz": {
+      "sha256": "cc1564779c32f2338fdd069fc30d57818d3730a36c216b32500b771b905d48d2",
+      "originalSha256": "965dc81f71ca33af4ed6a19a8217f33ddd43838284c652c51f54deb4d72a7088"
+    },
+    "c-traffic.json.gz": {
+      "sha256": "977c37df1b88a841c298e3ff2eab276c08e8aea09c1bff2b2f55a84a1eae31f7",
+      "originalSha256": "46eb7b476c05f5311ea9d4c961e72fe0bc54e843e783a34a9a0e27b1c05e010e"
+    },
+    "c-restart-close-diagnostic.json.gz": {
+      "sha256": "7421b12ecd84cef4c43520c16daa2bbadce65a22812eaa8b162e393006e60694",
+      "originalSha256": "e74cee61506271b27bb4bdf32edd93b7baae03f53daa47b599f31e84dd723c90"
+    },
+    "c-source-package-manifest.json.gz": {
+      "sha256": "5ecbfad19b4462b44717c7a38646136fbb17c7ca2186c0b0b32c4b82071f8b40",
+      "originalSha256": "0cef63ca4de6d9dbbd1ed229efcb84dc1ce1c5491cdd664ca688d73db54f5051"
+    },
+    "c-sidecar-exit-status.json.gz": {
+      "sha256": "0acbc718cf0504ac1f3c44fb9f90a607e32ab3d16eec163e61d9837600702673",
+      "originalSha256": "8d8d30185b6590e4fd86d05e508e68a905a9fbaa65c6411d579fec91f14edc81"
+    },
+    "c-verified-before.json.gz": {
+      "sha256": "b36deeb4da4b711fd5a02dc577b7ac0ac5137996696176f4764fd1e727968617",
+      "originalSha256": "a0ff88f354bd16fb0258f8d2b99cf8450d774d982282cba5bf10920a2b8bb0fe"
+    },
+    "c-verified-after.json.gz": {
+      "sha256": "5821f8b045aaa03a25ebe5e1fe7dc135391db457f01bd7fd071e3f831a3589e2",
+      "originalSha256": "1f5a929a1e8aa103a33bc3035e623b4beb2aa2bdc209aa31c5d3e148c9a8a16b"
+    },
+    "c-projection-observations.json.gz": {
+      "sha256": "8a6d5ce213dc7f9feb1aa104ddad07af008f242a82df06648e0e8385e1333a31",
+      "originalSha256": "bf737f040cd2074b045109e5bf800d10c85367cd8221b8ebfdaa06c93a2e3c24"
+    },
+    "c-initial-projection-observations.json.gz": {
+      "sha256": "03b4249edd94f8bdd40a82d0cec5bf2ce5845c9bb3eb727c246b020dc7a7b3d8",
+      "originalSha256": "c1bb7872077a44bf78a7b2e7c57426d78e8463653450039355be4e6257708fc9"
+    },
+    "c-source-rebuild-notice.png": {
+      "sha256": "2d36d49e99a1350adf63faf17f0f902515da34e9c18e84094205ef879b6149f3",
+      "originalSha256": "2d36d49e99a1350adf63faf17f0f902515da34e9c18e84094205ef879b6149f3"
+    },
+    "c-restart-failure.png": {
+      "sha256": "a81d40f76c92a254556a5879af7ac471821516b6dc5c95a838372ed8bc2732aa",
+      "originalSha256": "a81d40f76c92a254556a5879af7ac471821516b6dc5c95a838372ed8bc2732aa"
+    },
+    "native-acceptance.json.gz": {
+      "sha256": "94431320aa015244e1b3be56e94f354496f048dfdb747bd206b4b0c0db312a7d",
+      "originalSha256": "96fc6ed6a778756cb264ea5f554ea492529a36bab0f5541607c4e9479d416192"
+    },
+    "native-b-acceptance.json.gz": {
+      "sha256": "c98f333041d9f81db896f7878521ca77fb1e14480adf038304f9bc9fb993e573",
+      "originalSha256": "fc1d56b7793dcaa47c820c2d9fb91694e638835290c69186f296961aefa26eed"
+    },
+    "before.log.gz": {
+      "sha256": "dec74452b7f1486999966b1b85d436a04c4c1e6214b07de0af3bf52da5f84196",
+      "originalSha256": "f8018ef27a9ff613e546c91059e0670f2eef78d3e86b6fbb41a1f81c7ec1052c"
+    },
+    "after.log.gz": {
+      "sha256": "421b84ded28b13d6a811dbafe50b8151eb331d94efa98ac8954dbe99ae12b4b5",
+      "originalSha256": "77f5c33b10e07c4415297ab7d4658424ed7da171d41b2d94903875a910858c77"
+    },
+    "verified.log.gz": {
+      "sha256": "69445d498baee619c3584e648487a8e1a9a9d7d26b203c7abd4011acac29015e",
+      "originalSha256": "c05d2971f70c9c9bc3c8638ac80df2bfdf780a129805db64be6bdeb1c410b42a"
+    },
+    "full.log.gz": {
+      "sha256": "c0e0436020c54b9e8a55d76ad9dbed61257b71769edee679a0d0996e0bacca2e",
+      "originalSha256": "97c342f0653fbf66a9eb2e9524fe46395c8dd76205249c8a934098464637756a"
+    },
+    "full-checks.json.gz": {
+      "sha256": "b508e37457a5b1c1bd86f36ab09c255ac4b8bb8e0aae0a04a2499b04166d7620",
+      "originalSha256": "e8753d67d19cc17a2582941b1e907f16bbdb23bef98837a954b1573e7371446a"
+    },
+    "amend-probe.json.gz": {
+      "sha256": "f3d9a20c2f4ad3e6b480927c47362e1841e98771b6d6add6a1bb5ce21ba2bb6f",
+      "originalSha256": "0a7c97e285c1d2360fbc42dae18439e36b6f908d39ecbd26ce9f18ffa08a3b44"
+    },
+    "fixture-test_real_bus_delivers_forming_updates_deletions_and_corrections.json.gz": {
+      "sha256": "d25b3fc3de981346994498c37d3668b94c0c789e7d25f559a44550fdd3bcb798",
+      "originalSha256": "cc35a6817214616616ae4bad0d37f7c56801ae3c6fec4fd9351c1640c994eb0e"
+    },
+    "fixture-test_http_reads_and_ws_share_one_real_calculation_and_correction_generation.json.gz": {
+      "sha256": "542a5e8927c1f342cd00e5eb8ddad55bcf968ed1087df3e835efab6ba0b336ce",
+      "originalSha256": "45a665ace8372f40c77f383c982eeec4257f9869db489c92b052898adac05cb1"
+    },
+    "fixture-real-event-bus-shutdown.json.gz": {
+      "sha256": "a5a80d30e5f3c94b00158b457b2fef284ff4177db423d049bf35b49d871ba40f",
+      "originalSha256": "743436661fe375379dcbe2dfd9d3687ac4aad8556bac8796b5b6c5d107913415"
+    }
+  }
+}

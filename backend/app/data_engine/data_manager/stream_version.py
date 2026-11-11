@@ -23,6 +23,7 @@ class _Cursor:
     barrier: int = 0
     pending: int = 0
     observed_at_ms: int = 0
+    corrections: int = 0
 
 
 class StreamVersionClock:
@@ -98,6 +99,11 @@ class StreamVersionClock:
             if event.event_type != DataEventType.BAR_UPDATED:
                 cursor.barrier += 1
             cursor.pending += 1
+            if event.event_type == DataEventType.BAR_AMENDED:
+                cursor.corrections += 1
+            # Backfill content is fenced by canonical SQLite writes, not the
+            # number of duplicate/chunk completion notifications. AMENDED also
+            # covers the explicitly supported cache-only manual input path.
             if event.bar is not None:
                 cursor.observed_at_ms = event.timestamp_ms
             version = self.snapshot(event.key)
@@ -137,3 +143,17 @@ class StreamVersionClock:
         same_barrier = all(before[name] == after[name] for name in ("epoch", "generation", "barrier"))
         stable = before["stable"] and after["stable"] and same_barrier and (final_only or before == after)
         return {**before, "stable": stable}
+
+    def correction_cursor(self, key: SeriesKey) -> tuple[str, int, int]:
+        """Internal correction fence; ordinary forming/appends do not reset it."""
+        with self._lock:
+            cursor = self._entry(key)
+            return self.epoch,cursor.generation,cursor.corrections
+
+    @contextmanager
+    def correction_guard(self, key: SeriesKey, expected):
+        with self._lock:
+            if self.correction_cursor(key) != expected:
+                from app.data_engine.storage.revisions import StaleAcquisition
+                raise StaleAcquisition('source correction delivery changed during acquisition')
+            yield

@@ -1,0 +1,72 @@
+{
+  "baseHead": "43f60d497ddf26c776a7e3423247cecea6cf3e59",
+  "artifacts": {
+    "evidence/command.json.gz": {
+      "sha256": "a0c303fd60da61606415b3a186075a56f181bd8edea970fde82b75d7fd57d9fe",
+      "rawSha256": "109c778a3709df9c0e5de85a1e0262ecd796dc36b28d2cf9193eb66c4025d87a"
+    },
+    "evidence/final-command.json.gz": {
+      "sha256": "7f8a71eb75a40bb328f7e19df01c3f5c50e0a1c3353d3205cbd38916448ba3ec",
+      "rawSha256": "b85fca5459d5daa94a3ce7e48e364c6225c5b782f51ee8f6c8640358fac5706e"
+    },
+    "evidence/initial-harness-missing-storage-fixture.log.gz": {
+      "sha256": "29667e9b24ceebb55eea57079e0987831f6877673205ebc2793de2f00c8b670e",
+      "rawSha256": "edd7f2c8555e75241adeabd2dec61f2f97ee1d8c97e02fc484635252beabf247"
+    },
+    "evidence/real-bus.log.gz": {
+      "sha256": "7b896d2a53c49bb48dd280993172c9f3b712c51cee4b1dde9a6d21ec07e9ee98",
+      "rawSha256": "0937b3f617834234b71ebe9dbc4429e8ddabb20092c94891ef4ee0cf98466d66"
+    },
+    "evidence/real-event-bus-shutdown.json.gz": {
+      "sha256": "182608c6ae24438dee2c6123790fd73acaddfa640133a0d341aec2cc596856e7",
+      "rawSha256": "d8364edceaa53456e7ea82d4625dd719c5ba95ff3399ea8562147bb888f4d035"
+    },
+    "evidence/test_real_bus_delivers_forming_updates_deletions_and_corrections.json.gz": {
+      "sha256": "ac2e0c21bda6c69568cf851d9737687258e8a6e065c7190476b9426b67caab85",
+      "rawSha256": "ca15e12d5ea55b9724f87aa845790bd89e0add55c0d988a43b00f4b6c07d86e0"
+    },
+    "evidence/diagnostic-diagnostic-manifest.json.gz": {
+      "sha256": "78aa35969fd4258a7fd40b67fa9d6e99079f1d59a48f38ac6263b7b2191e546f",
+      "rawSha256": "85080d63b659373cb32971fd7247967dde162f6b25ce913cc8e6029b5bd468bf"
+    },
+    "evidence/diagnostic-diagnostic-delta.diff.gz": {
+      "sha256": "beb8ec6e06671f0cc48e2d3a0f6129ccd6df7fc5b18a0e1742f44a6496e3adc8",
+      "rawSha256": "8547a26b40a814780341b15b3bce790db6d3baba9515e3ffa3aad6ce35c7cbb3"
+    },
+    "evidence/diagnostic-diagnostic.mjs.gz": {
+      "sha256": "2b39e4a45fa9c1a623d1be5db8e7f56eff73523e1e6f6ecbc0f373b54c80b810",
+      "rawSha256": "881e008e6f1a93448fb4806db69855fda56728d08ba464157793bb49513099e1"
+    },
+    "evidence/diagnostic-diagnostic.log.gz": {
+      "sha256": "f2270c8600f92fbdde746ede6a09b534b3b3da03904b4379fb0c9e140acc85f1",
+      "rawSha256": "39b2c5250dfe2c9c7cd0160b5c45fcf3130d57678f67060961650f47a508186c"
+    },
+    "evidence/diagnostic-acceptance.json.gz": {
+      "sha256": "6839f2edd79b8468c8b2f5ccd58ebceb64dca1426db67e9f7293dd16be7a84b9",
+      "rawSha256": "dd1f07df4a4deb3ef8bb101e440bd2ec5e9dfe7601a86f462d4f9b436983e166"
+    },
+    "evidence/diagnostic-sidecar-exit-status.json.gz": {
+      "sha256": "74d51ea0c3272993e8f0c1ae966b890ba5a42ce614963f3dff301761b837091a",
+      "rawSha256": "eccabd3950318bf2a38b8db81e4f5dac7c642553cbab87193bb84be7cb9f60cf"
+    },
+    "evidence/diagnostic-storage-health-latest.json.gz": {
+      "sha256": "8e6bd4a3ca3bd2b2ed636b5897092bc91f02c923281390e0c1c60f4d39863723",
+      "rawSha256": "a3f3f89e5600fe3ffafdff4e7fd14e3972a474b05c2bb83b773a89ad362e9d35"
+    },
+    "evidence/diagnostic-traffic.json.gz": {
+      "sha256": "8e361c63ff05b5f5a7f1762cede6dba7d0435870245289ff57696ba04ebc03ec",
+      "rawSha256": "85f307ffeb9716688ff10f4271cd950b372234e4fdf26d9ee972dff0e2846c4d"
+    },
+    "evidence/diagnostic-backend-sidecar.log.gz": {
+      "sha256": "f46183548af8006e7552eefa47059177033493e266f2808c0a6bfe1d28edb023",
+      "rawSha256": "d186cb1abe087a9ea2cfa395c1f56c8cfa89b7dac3b8f8228ff89c5cc18c792a"
+    },
+    "evidence/diagnostic-independent-summary.json.gz": {
+      "sha256": "f3a7f12818e45333d71e687ca7c833e8a4c05723be34c3e13e5397e71c252474",
+      "rawSha256": "25ebff693a8b02ac970907f20204c28e6afdd16d4fa9e41fa7270a63cb60ffd2"
+    }
+  },
+  "artifactsVerified": 16,
+  "diagnosticRoot": "/Users/ryanliang/CandleScope/output/development-goal-20261104/indicator-shutdown-diagnostic-20261106",
+  "nativeAcceptance": false
+}

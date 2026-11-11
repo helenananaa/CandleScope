@@ -252,6 +252,7 @@ export const ko = {
   "pine.host.alertHint": "활성 차트 구독이 필요합니다. 과거 데이터와 미리보기는 알림을 보내지 않습니다. 알림 화면에서 생성된 Pine 규칙의 채널과 일시 중지를 관리하세요.",
   "pine.host.recovered": "기록된 관측으로 Pine 상태를 복원했습니다. 연결이 끊긴 동안 누락된 틱은 재구성할 수 없습니다.",
   "pine.host.resetNotice": "입력이나 과거 데이터가 변경되어 Pine 상태를 다시 시작했습니다. 이전 봉 내부 상태가 지워졌습니다.",
+  "pine.host.runtimeResetNotice": "Pine 런타임이 확정된 과거 데이터에서 다시 계산했습니다. 이전 봉 내부 상태가 지워졌습니다.",
   "pine.host.alertFailed": "Pine 알림을 전달하지 못했습니다. 알림 서비스를 확인하세요.",
   "pine.host.title": "Pine 시장 입력",
   "pine.host.json": "실행 환경 입력 (JSON)",

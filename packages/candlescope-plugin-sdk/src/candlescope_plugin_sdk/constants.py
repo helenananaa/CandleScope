@@ -8,6 +8,7 @@ METHOD_HANDSHAKE = "handshake"
 METHOD_DESCRIBE = "describe"
 METHOD_ANALYZE = "analyze"
 METHOD_EXECUTE_BATCH = "executeBatch"
+METHOD_RELEASE_STREAM = "releaseStream"
 METHOD_SHUTDOWN = "shutdown"
 
 REQUIRED_METHODS = (
@@ -26,6 +27,7 @@ FEATURE_RENDER_STRUCTURED_OUTPUT_V1 = "render.structured-output/1"
 FEATURE_RENDER_NATIVE_SCENE_V1 = "render.native-scene/1"
 FEATURE_RENDER_OUTPUT_PATCH_V1 = "render.output-patch/1"
 FEATURE_BATCH_BARS_PATCH_V1 = "batch-execution.bars-patch/1"
+FEATURE_STREAM_RELEASE_V1 = "runtime.release-stream/1"
 
 KNOWN_FEATURES_V1 = (
     FEATURE_SOURCE_ANALYSIS_V1,
@@ -36,6 +38,7 @@ KNOWN_FEATURES_V1 = (
     FEATURE_RENDER_NATIVE_SCENE_V1,
     FEATURE_RENDER_OUTPUT_PATCH_V1,
     FEATURE_BATCH_BARS_PATCH_V1,
+    FEATURE_STREAM_RELEASE_V1,
 )
 
 # Bars bases a runtime keeps per session (least recently used dropped first).

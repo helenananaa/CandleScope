@@ -65,6 +65,7 @@ interface NativeDesktopBridge extends Partial<AiControlBridge> {
   readonly controlEnabled?: boolean;
   readonly controlWindowId?: string;
   readonly apiBase: string;
+  readonly pineChartTransport?: "calculation" | "snapshot";
   getPluginManagementSession?(): { apiBase: string; sessionToken: string; csrfToken: string } | null;
   getExtensionDiagnostics?(): Promise<import("../features/extensions/contracts.js").ExtensionDiagnostics>;
   downloadReplayPortfolio?(runId: string): Promise<{ started: true }>;

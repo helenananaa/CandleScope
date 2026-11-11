@@ -1,0 +1,17 @@
+{
+  "source": "bfcb36b7bc056da5ab4d47b38e4163f11b44f5ce",
+  "base": "f4c4638a45175995c1a9592eabbb80e49ad97337",
+  "files": {
+    "backend/app/indicator/calculation_owner.py": "f65826551a4f59e7496516b8499278ea54b52927c960b646f1000d8840259b9b",
+    "backend/app/indicator/pine_calculation.py": "2573c20eec1c6d02eee7012e8210f741f2954d0d0d720cba745b1b04eb21cef0",
+    "backend/app/indicator/runtime_service.py": "bb1b0e1314cfab1131fd8711df2f55d84a59a27b94c702e7e299da653e0d9497",
+    "backend/app/plugin_runtime/service.py": "d00305b68d10bb60eda5b8b48966893a287ec501cd6a81c5fcc5c2b9f67782eb",
+    "backend/app/plugin_runtime/supervisor.py": "e63f9a74c4c566b2981ad9afea4ad3ccccc066bcd127c6c1f2352ab1760b9144",
+    "backend/tests/test_indicator_calculation_owner.py": "2ae5e233bf269613f7822dd62ae7aae078ff7de02759da1fbe9f58a9bf4729d1",
+    "backend/tests/test_pine_calculation_runtime.py": "0a9d9c8f028aee21283b282f903a626da86da6f55077447597e88b45ec3f9f90",
+    "backend/tests/test_runtime_owned_output.py": "fcb76231803ae2d128b3c82d3c4ff9a9b494364819e03657fa50993cb41e4342"
+  },
+  "dirtyQaFilesUnchanged": 39,
+  "frontendAndPackageProductDiff": [],
+  "nativeQualified": false
+}

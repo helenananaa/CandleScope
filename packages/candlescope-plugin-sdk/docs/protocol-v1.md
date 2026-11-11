@@ -22,6 +22,7 @@ render.structured-output/1
 render.native-scene/1
 render.output-patch/1
 batch-execution.bars-patch/1
+runtime.release-stream/1
 ```
 
 A runtime declares all supported features and the subset it requires from the
@@ -112,6 +113,24 @@ sent. New values are validated like a full output; a patch that does not fit
 its base is a protocol violation. Runtimes answer with a full output whenever
 they are unsure (reset, recovery, unknown base). Hosts drop a stream's base
 when the process restarts or a request fails, which forces a full output.
+
+#### Explicit stream release
+
+`runtime.release-stream/1` is an optional negotiated capability. After draining
+work for an owned stream, a host may call `releaseStream` with exactly
+`{"stream":"<id>"}` (a nonblank string of 1 to 128 characters). The plugin
+idempotently releases that stream's mathematical state, output state and any
+durable session journal. Only after successful plugin completion does the SDK
+drop its bar patch base and acknowledge `{"stream":"<id>","released":true}`.
+The host then drops its matching output/bar bases under the execution lock.
+
+Failure keeps the application registry slot for retry. Repeating an ambiguous
+release is safe. This is neither execution nor an as-of/checkpoint read. A host
+may explicitly recover a stopped registered worker to clean its durable orphan;
+ordinary output reads never start a worker. Release affects only that owned id,
+never other consumers, saved scripts or archived user data. Older runtimes and
+hosts may continue their existing operations without this feature; chart owners
+that require durable cleanup must reject runtimes lacking it before admission.
 
 #### Bar patches
 

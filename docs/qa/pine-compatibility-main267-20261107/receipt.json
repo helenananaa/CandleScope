@@ -1,0 +1,43 @@
+{
+  "source": "b102f28015c01956dc91473246a7217998b21d9c",
+  "main": "b442555d582dc0bb473bad92ac5e699efdaa78d5",
+  "scope": "macOS arm64 controlled real ASGI HTTP/WS, DataManager and SQLite, real bus and Pine sidecar with core 0.3.3+cs.1",
+  "clientHandoff": {
+    "sameConfirmedCounterSeries": true,
+    "retiredReferenceCode": "INDICATOR_CALCULATION_NOT_FOUND",
+    "requestsOnStaleReference": 0,
+    "chartObservedValues": [
+      500,
+      501,
+      502
+    ],
+    "snapshotObservedValues": [
+      500,
+      501
+    ],
+    "compatibilityFrame": "indicator.snapshot",
+    "chartOwnerHoldersAfterSwitch": 0
+  },
+  "sameClientIdCounterexample": {
+    "expected": [
+      503,
+      501
+    ],
+    "observed": [
+      503,
+      504
+    ],
+    "sameClientId": true,
+    "sameInstrumentAndScript": true
+  },
+  "sha256": {
+    "pytest-first.log.gz": "8ea5cc52dad914121e970d550bc5d05162b4c510d4026aae0b543b973ef83c89",
+    "pytest-second.log.gz": "6fad2d4e31435d865dbfbaac09b623585bfe2626d7a5b808f55652d63e88ddc7",
+    "pytest-third.log.gz": "3a2cc9de6f715a6243a9b3935868d62fb067936e679636fd9bbf4db2cfec7005",
+    "pytest-collision.log.gz": "0e14017858170b86b20456184139ad7282dfb9fe30d753a6b79dc3391d4f68f0",
+    "handoff.json": "6ca03448fe6eabaa53569898e3dacb8b477ad2886799ba57616d7e0e2c2008a6",
+    "same-client-id.json": "2d7e6618679bd362c8835beb639496d7e7463828c71846ba97927d6cf2532bbc",
+    "test_pine_snapshot_handoff.py": "d8cc5f9d1033d5fa38177fd788c95eb795736a87bf5163b8c85dd339f059871e",
+    "test_pine_snapshot_collision.py": "5b5ecdb5b266853c80dd0386743bda694d80c39bb5989dd0c44117a5f8895f4a"
+  }
+}

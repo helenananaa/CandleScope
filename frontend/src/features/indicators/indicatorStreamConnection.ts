@@ -342,6 +342,12 @@ export class IndicatorStreamConnection {
     if (!pending && this.activeSubscriptions.get(clientId) === desired.signature) {
       return;
     }
+    // A reconnect can arrive while the server is still draining the old writer.
+    if (pending && this.subscriptionAckTimeoutMs > 0 && message.ok === false
+      && message.code === "INDICATOR_SNAPSHOT_WRITER_BUSY"
+      && pending.attempts < this.maxSubscriptionAttempts) {
+      return;
+    }
 
     this.pendingSubscriptions.delete(clientId);
     this.coldResumeRequired.delete(clientId);

@@ -1,0 +1,16 @@
+{
+  "sameConfirmedCounterSeries": true,
+  "retiredReferenceCode": "INDICATOR_CALCULATION_NOT_FOUND",
+  "requestsOnStaleReference": 0,
+  "chartObservedValues": [
+    500,
+    501,
+    502
+  ],
+  "snapshotObservedValues": [
+    500,
+    501
+  ],
+  "compatibilityFrame": "indicator.snapshot",
+  "chartOwnerHoldersAfterSwitch": 0
+}

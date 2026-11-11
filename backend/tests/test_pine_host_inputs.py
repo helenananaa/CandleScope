@@ -7,6 +7,27 @@ from app.indicator.pine_host_inputs import requested_data
 from candlescope_plugin_sdk import Bar, ExecuteBatchRequest, MarketContext
 
 
+@pytest.mark.anyio
+@pytest.mark.parametrize("options,params,expected", [
+    ({}, {}, "0"),
+    ({}, {"__pineSessionEpoch": "legacy-reset"}, "legacy-reset"),
+    ({"pineSessionEpoch": "owner-reset"}, {}, "owner-reset"),
+    ({"pineSessionEpoch": "owner-reset"}, {"__pineSessionEpoch": "legacy-reset"}, "owner-reset"),
+])
+async def test_host_preparation_preserves_owner_epoch_and_legacy_default(options, params, expected):
+    from app.indicator.pine_host import PineHostInputs
+    from app.indicator.runtime_service import IndicatorRuntimeRequest
+
+    inputs = PineHostInputs(lambda: None)
+    request = IndicatorRuntimeRequest(language="pine", source='//@version=6\nindicator("epoch")\nplot(close)',
+        exchange="binance", market_type="spot", symbol="BTCUSDT", interval="1m", bars=(), options=options, params=params)
+    prepared, failure = await inputs.prepare(request, None, "pine")
+    assert failure is None
+    assert prepared.options["pineSessionEpoch"] == expected
+    assert "__pineSessionEpoch" not in prepared.params
+    assert request.options == options and request.params == params
+
+
 @pytest.mark.parametrize("boundary,expected", [(179998,[0,60000]),(179999,[0,60000,120000])])
 def test_observed_indicator_requests_preserve_the_inclusive_confirmation_boundary(boundary,expected):
     bars=(Bar(time=120,open=1,high=1,low=1,close=1,volume=1,is_closed=False),)

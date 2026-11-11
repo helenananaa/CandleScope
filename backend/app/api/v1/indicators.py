@@ -35,6 +35,9 @@ from app.api.v1.indicator_range_batch import (
     IndicatorRangeBatchJob,
     compute_indicator_range_batch_async,
 )
+from app.api.v1.chart_calculation import ChartCalculation
+from app.indicator.calculation_contract import CalculationRangeRequest, projection_position, reference_for
+from app.indicator.calculation_owner import CalculationOwnerError
 from app.api.v1.klines import (
     _reject_stale_request_generation,
     _revoke_request_demand_owner,
@@ -254,6 +257,14 @@ class IndicatorRangeBatchRequest(BaseModel):
     """Same-series indicator range requests coalesced into one HTTP call."""
 
     requests: list[IndicatorRangeRequest] = Field(default_factory=list)
+
+
+class ChartCalculationOpenRequest(IndicatorRangeRequest):
+    model_config = {'extra':'forbid'}
+    schemaVersion: int = Field(strict=True, ge=1, le=1)
+    clientId: str = Field(strict=True, min_length=1, max_length=256)
+    start: int = Field(strict=True, gt=0)
+    end: int = Field(strict=True, gt=0)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1088,7 +1099,11 @@ def _batch_range_error_payload(
 ) -> dict[str, Any]:
     if isinstance(exc, ExecutorBusyError):
         return _executor_busy_payload(exc)
-    if isinstance(exc, IndicatorRuntimeUnavailableError):
+    if isinstance(exc, CalculationOwnerError):
+        payload = dict(exc.payload) if exc.payload is not None else build_error_payload(exc.code, str(exc))
+        if exc.detail is not None:
+            payload['detail'] = exc.detail
+    elif isinstance(exc, IndicatorRuntimeUnavailableError):
         payload = build_error_payload(
             exc.failure.public_code,
             str(exc),
@@ -1168,6 +1183,65 @@ def _batch_range_error_payload(
     if not isinstance(payload.get("detail"), dict):
         payload["detail"] = {"range": {"start": start_s, "end": end_s}}
     return payload
+
+
+@router.post('/calculations')
+async def open_chart_calculation(req: ChartCalculationOpenRequest, request: Request):
+    """Open a fixed-origin current chart projection, never a history cache hit."""
+    service = _resolve_indicator_runtime_service(request)
+    owner_id = None
+    try:
+        if config.PINE_CHART_TRANSPORT != "calculation":
+            raise CalculationOwnerError("INDICATOR_PINE_CHART_TRANSPORT_MISMATCH")
+        meta = _build_range_meta(req, trusted_origin=_trusted_origin(request))
+        if meta.get('kind') != 'script' or meta.get('language') != 'pine' or req.end < req.start:
+            raise CalculationOwnerError('INDICATOR_CALCULATION_BINDING_UNSUPPORTED')
+        from app.api.v1.indicator_range_batch import _validate_jobs
+        _validate_jobs([IndicatorRangeBatchJob(req.clientId, meta, req.start, req.end)])
+        dm, ranges = _require_data_manager(request), _resolve_indicator_range_service(request)
+        async def create(identity):
+            return ChartCalculation(identity,dm=dm,meta=meta,range_service=ranges)
+        owner_id = await service.calculations.open(create)
+        async with service.calculations.borrow(owner_id) as calculation:
+            await calculation.initialize(service,start=req.start,end=req.end)
+            payload = await calculation.view(
+                reference_for(calculation.owner),
+                client_id=req.clientId, start=calculation.owner.plan.start, end=req.end,complete=True)
+            payload['type'] = 'indicator.snapshot'
+            return payload
+    except Exception as exc:
+        if owner_id is not None: await service.calculations.retire(owner_id)
+        return _batch_range_error_payload(exc, start_s=req.start, end_s=req.end)
+
+
+@router.post('/calculations/{domain_id}/range')
+async def read_chart_calculation(domain_id: str, req: CalculationRangeRequest, request: Request):
+    service = _resolve_indicator_runtime_service(request)
+    current = None
+    try:
+        if config.PINE_CHART_TRANSPORT != "calculation":
+            raise CalculationOwnerError("INDICATOR_PINE_CHART_TRANSPORT_MISMATCH")
+        if domain_id != req.calculation.domainId:
+            raise CalculationOwnerError('INDICATOR_CALCULATION_CHANGED')
+        async with service.calculations.borrow(domain_id) as calculation:
+            current = calculation
+            return await calculation.view(req.calculation, client_id=req.clientId,
+                start=req.start, end=req.end, rebuild=req.rebuild,complete=req.complete)
+    except Exception as exc:
+        payload = _batch_range_error_payload(exc, start_s=req.start, end_s=req.end)
+        if current is not None: payload['calculation'] = projection_position(current.owner, current.owner.cursor)
+        return payload
+
+
+@router.delete('/calculations/{domain_id}')
+async def close_chart_calculation(domain_id: str, request: Request):
+    from app.indicator.calculation_contract import CalculationReference
+    try:
+        CalculationReference(schemaVersion=1, domainId=domain_id, generation=1, sequence=1)
+        await _resolve_indicator_runtime_service(request).calculations.retire(domain_id)
+        return {'ok':True, 'domainId':domain_id, 'state':'closed'}
+    except Exception as exc:
+        return build_error_payload(getattr(exc,'code','INDICATOR_CALCULATION_CLOSE_FAILED'), str(exc))
 
 
 @router.post("/range/batch")

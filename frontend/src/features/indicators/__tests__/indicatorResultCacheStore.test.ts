@@ -924,3 +924,18 @@ test("indicator cache capacity eviction skips active indicator leases", () => {
     release();
   }
 });
+
+
+test("opaque hosted script projections cannot hydrate another chart's cache",()=>{
+  resetIndicatorResultCache();registerBaseKline();
+  const script={id:"same",kind:"script",language:"pine",script:"varip int n=0\nn+=1\nplot(n)"};
+  const a={...baseContext,projectionOwner:"chart-a"},b={...baseContext,projectionOwner:"chart-b"};
+  assert.notEqual(buildIndicatorResultCacheKey(script,a),buildIndicatorResultCacheKey(script,b));
+  cacheIndicatorSnapshot(script,a,{lines:[{id:"counter",name:"counter",data:[{time:100,value:503}]}]});
+  cacheIndicatorSnapshot(script,b,{lines:[{id:"counter",name:"counter",data:[{time:100,value:500}]}]});
+  assert.equal(getCachedIndicatorResult(script,a)?.normalized.lines[0]?.data[0]?.value,503);
+  assert.equal(getCachedIndicatorResult(script,b)?.normalized.lines[0]?.data[0]?.value,500);
+  const builtin={id:"ma",kind:"builtin",engineName:"MA"};
+  assert.equal(buildIndicatorResultCacheKey(builtin,a),buildIndicatorResultCacheKey(builtin,b));
+  resetIndicatorResultCache();
+});

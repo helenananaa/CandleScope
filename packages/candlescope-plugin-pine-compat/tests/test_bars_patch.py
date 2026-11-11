@@ -19,7 +19,7 @@ from candlescope_plugin_sdk import (
     RuntimeDispatcher,
 )
 from candlescope_plugin_pine_compat import PineCompatRuntimePlugin
-from test_output_patch import CONTEXT, SCRIPTS, make_bar
+from test_output_patch import CONTEXT, SCRIPTS, make_bar, assert_same as assert_output_same
 
 
 def delta(base, bars):
@@ -96,8 +96,7 @@ class Host:
 
 
 def assert_same(patched, full, hosts):
-    assert patched == full
-    assert json.dumps(patched.to_wire()) == json.dumps(full.to_wire())
+    assert_output_same(patched, full)
     # The plugin saw the same request: the window rebuilt from the base is the full one.
     seen = [replace(host.seen[-1], output_stream=None, output_base=None, bars_stream=None) for host in hosts]
     assert seen[0] == seen[1]

@@ -7,6 +7,55 @@ from app.data_engine.data_manager.event_bus import DataEventBus, _SubscriberQueu
 from app.data_engine.data_manager.models import DataEvent, DataEventType, SeriesKey
 
 
+def test_execution_subscriber_preserves_each_pending_preview_and_close() -> None:
+    async def run():
+        bus = DataEventBus()
+        delivered = []
+        handle = bus.subscribe(lambda event: capture(event), preserve_updates=True)
+
+        async def capture(event):
+            delivered.append(event.detail['seq'])
+
+        try:
+            for seq in range(7):
+                await bus.emit(DataEvent(DataEventType.BAR_UPDATED if seq < 6 else DataEventType.BAR_CLOSED,
+                    SeriesKey('BTCUSDT', '1m'), detail={'seq': seq}))
+            for _ in range(30):
+                if len(delivered) == 7: break
+                await asyncio.sleep(0)
+            assert delivered == list(range(7))
+            assert bus.snapshot()['callback_lag'][handle.id]['coalesced'] == 0
+        finally:
+            await bus.close()
+    asyncio.run(run())
+
+
+def test_execution_subscriber_overflow_requires_recovery_without_evicting_previews() -> None:
+    async def run():
+        bus = DataEventBus(EventBusConfig(subscriber_queue_size=1))
+        recovered = asyncio.Event()
+        errors, delivered = [], []
+
+        async def capture(event):
+            delivered.append(event)
+
+        async def recovery(error):
+            errors.append(error)
+            recovered.set()
+
+        handle = bus.subscribe(capture, preserve_updates=True, on_recovery=recovery)
+        try:
+            await bus.emit(DataEvent(DataEventType.BAR_UPDATED, SeriesKey('BTCUSDT', '1m')))
+            await bus.emit(DataEvent(DataEventType.BAR_CLOSED, SeriesKey('BTCUSDT', '1m')))
+            await asyncio.wait_for(recovered.wait(), 1)
+            assert len(errors) == 1 and errors[0].reason == 'ordered_input_capacity_exhausted'
+            assert not delivered
+            assert bus.snapshot()['consumer_states'][handle.id]['state'] == 'recovery_required'
+        finally:
+            await bus.close()
+    asyncio.run(run())
+
+
 def test_event_bus_routes_only_wildcard_and_exact_topic_subscribers() -> None:
     async def _run() -> None:
         bus = DataEventBus()

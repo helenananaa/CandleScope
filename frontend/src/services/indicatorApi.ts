@@ -349,6 +349,35 @@ export async function computeIndicatorRange({
   return parseIndicatorPayloadEnvelope(payload, "indicator.range");
 }
 
+/** Owned chart projections are separate from standalone historical range batching. */
+export async function openIndicatorCalculation(input: IndicatorRangeRequest): Promise<IndicatorPayloadEnvelope> {
+  const { signal: _signal, reason: _reason, requestScope: _scope, requestGeneration: _generation, ...definition } = input;
+  void _signal; void _reason; void _scope; void _generation;
+  return parseIndicatorPayloadEnvelope(await request(`${API_BASE}/indicators/calculations`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...definition, schemaVersion: 1 }),
+  }), "calculation.open");
+}
+
+export async function readIndicatorCalculation(input: {
+  calculation: import("../features/indicators/indicatorTypes.js").IndicatorCalculationReference;
+  clientId: string; start: number; end: number; rebuild?: boolean;
+}): Promise<IndicatorPayloadEnvelope> {
+  return parseIndicatorPayloadEnvelope(await request(
+    `${API_BASE}/indicators/calculations/${input.calculation.domainId}/range`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...input, complete: true }),
+    }), "calculation.range");
+}
+
+export async function closeIndicatorCalculation(domainId: string): Promise<void> {
+  if (!/^[a-f0-9]{32}$/.test(domainId)) throw new TypeError("Invalid calculation domain");
+  const payload = await request(`${API_BASE}/indicators/calculations/${domainId}`, { method: "DELETE" });
+  if (!isIndicatorRecord(payload) || payload.ok !== true || payload.state !== "closed") {
+    throw new Error("Calculation cleanup failed");
+  }
+}
+
 /** Compute multiple same-series indicator ranges using one shared backend K-line query. */
 export async function computeIndicatorRangeBatch({
   requests = [],

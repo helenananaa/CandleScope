@@ -878,6 +878,27 @@ function parseIndicatorErrorDetail(
   return detail;
 }
 
+export function parseIndicatorCalculationPosition(value: unknown, path = "calculation"): import("./indicatorTypes.js").IndicatorCalculationPosition {
+  const record = expectIndicatorRecord(value, path);
+  const integer = (name: string, minimum: number) => {
+    const result = record[name];
+    if (typeof result !== "number" || !Number.isSafeInteger(result) || result < minimum) {
+      throw new IndicatorPayloadError(`${path}.${name}`, "expected a safe integer");
+    }
+    return result;
+  };
+  const domainId = expectIndicatorString(record.domainId, `${path}.domainId`);
+  if (record.schemaVersion !== 1 || !/^[a-f0-9]{32}$/.test(domainId) || record.view !== "current-projection") {
+    throw new IndicatorPayloadError(path, "invalid calculation identity or view");
+  }
+  const origin = integer("origin", 1), observedThrough = integer("observedThrough", origin);
+  const closedThrough = integer("closedThrough", 0);
+  if (closedThrough > observedThrough) throw new IndicatorPayloadError(path, "closed frontier exceeds observation");
+  return { schemaVersion: 1, domainId, generation: integer("generation", 1), sequence: integer("sequence", 1),
+    view: "current-projection", origin, observedThrough, closedThrough,
+    inputRevision: expectIndicatorNonEmptyString(record.inputRevision, `${path}.inputRevision`) };
+}
+
 export function parseIndicatorPayloadEnvelope(
   value: unknown,
   path = "indicator",
@@ -890,6 +911,8 @@ export function parseIndicatorPayloadEnvelope(
   const range = record.range;
   const revision = record.dataRevision ?? record.data_revision;
   const envelope: IndicatorPayloadEnvelope = {
+    ...(record.type === undefined ? {} : { type: expectIndicatorString(record.type, `${path}.type`) }),
+    ...(record.calculation === undefined ? {} : { calculation: parseIndicatorCalculationPosition(record.calculation, `${path}.calculation`) }),
     ...(record.meta !== undefined ? { meta: expectIndicatorRecord(record.meta, `${path}.meta`) } : {}),
     ok,
     ...(record.drawings === undefined ? {} : { drawings: parseOptionalArray(record.drawings, `${path}.drawings`, (value, path) => {

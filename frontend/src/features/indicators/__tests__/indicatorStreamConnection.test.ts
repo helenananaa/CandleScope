@@ -549,3 +549,39 @@ test("resync close forces a cold seed even if the owner supplies its old resume 
   assert.equal(cold.historyLimit, desired.message.historyLimit);
   controller.close();
 });
+
+test("a busy Pine snapshot writer retries the same subscription within the ack budget", () => {
+  for (const releasesWriter of [true, false]) {
+    const timers = createTimers();
+    const socket = new FakeSocket();
+    const received: IndicatorWsMessage[] = [];
+    const controller = new IndicatorStreamConnection({
+      url: "ws://example/indicators",
+      socketFactory: () => socket,
+      onMessage: message => received.push(message),
+      subscriptionAckTimeoutMs: 25,
+      maxSubscriptionAttempts: 2,
+      setTimer: timers.setTimer,
+      clearTimer: timers.clearTimer,
+    });
+    controller.setSubscriptions([subscription()]);
+    controller.start();
+    socket.open();
+    const busy = {
+      type: "indicator.subscribed", clientId: "vol", interval: "1d",
+      ok: false, code: "INDICATOR_SNAPSHOT_WRITER_BUSY",
+    };
+    socket.message(busy);
+    assert.equal(received.length, 0);
+    timers.run(timers.timers.findIndex(timer => timer.active && timer.delayMs === 25));
+    assert.equal(socket.sent.length, 2);
+    assert.equal(socket.sent[0], socket.sent[1]);
+    socket.message(releasesWriter ? { type: "indicator.subscribed", clientId: "vol", interval: "1d", ok: true } : busy);
+    assert.equal(received.length, 1);
+    const acknowledgement = received[0];
+    assert.ok(acknowledgement?.type === "indicator.subscribed");
+    assert.equal(acknowledgement.ok, releasesWriter);
+    assert.equal(timers.timers.some(timer => timer.active && timer.delayMs === 25), false);
+    controller.close();
+  }
+});

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from bisect import bisect_left, bisect_right
+from operator import attrgetter
 from typing import Any
 
 from candlescope_plugin_sdk import ExecuteBatchResult
@@ -410,13 +412,22 @@ def _flat_lines_from_render_collections(
     return lines
 
 
-def _flat_lines_from_render_series(result: ExecuteBatchResult) -> list[dict[str, Any]]:
+def _flat_lines_from_render_series(
+    result: ExecuteBatchResult, ordered_range: tuple[int, int] | None,
+) -> list[dict[str, Any]]:
     """Build the stable flat-series view from public RenderOutput.series."""
     if result.output is None:
         return []
     lines: list[dict[str, Any]] = []
     for item in result.output.series:
         style = dict(item.style)
+        points = item.points
+        if ordered_range is not None:
+            start, end = ordered_range
+            timestamp = attrgetter("time")
+            first = bisect_left(points, start, key=timestamp)
+            last = bisect_right(points, end, lo=first, key=timestamp)
+            points = points[first:last]
         line = {
             "id": item.id,
             "outputName": item.id,
@@ -428,7 +439,7 @@ def _flat_lines_from_render_series(result: ExecuteBatchResult) -> list[dict[str,
             # Render IR retains explicit nulls for aligned warmup/missing
             # values. The established flat chart protocol accepts only finite
             # numeric points; absent samples stay absent, never become zero.
-            "data": [point.to_wire() for point in item.points if point.value is not None],
+            "data": [point.to_wire() for point in points if point.value is not None],
             "color": style.get("color", "#f59e0b"),
             "lineWidth": style.get("lineWidth", 2),
             "lineStyle": style.get("lineStyle", 0),
@@ -489,11 +500,15 @@ def _structured_render_payload(result: ExecuteBatchResult) -> dict[str, Any] | N
     return structured
 
 
-def serialize_plugin_runtime_result(result: ExecuteBatchResult) -> dict[str, Any]:
+def serialize_plugin_runtime_result(
+    result: ExecuteBatchResult, *, ordered_range: tuple[int, int] | None = None,
+) -> dict[str, Any]:
     """Translate public Render IR into CandleScope's stable Indicator envelope.
 
     The adapter depends only on the SDK model. Runtime-specific packages never
-    import CandleScope serializers or transport modules.
+    import CandleScope serializers or transport modules. For a declared
+    ordered range patch, only its public points need wire conversion. The
+    patch builder slices the already-encoded structured fields.
     """
     if not result.ok or result.output is None:
         diagnostic = next(
@@ -517,7 +532,7 @@ def serialize_plugin_runtime_result(result: ExecuteBatchResult) -> dict[str, Any
         return payload
 
     structured = _structured_render_payload(result)
-    public_series = _flat_lines_from_render_series(result)
+    public_series = _flat_lines_from_render_series(result, ordered_range)
     structured_series = (
         _flat_lines_from_render_collections(structured)
         if structured is not None
@@ -529,10 +544,9 @@ def serialize_plugin_runtime_result(result: ExecuteBatchResult) -> dict[str, Any
         "ok": True,
         "error": None,
         "lines": lines,
-        "result": (
-            (structured or None) if structured is not None else result.output.to_wire()
-        ),
     }
+    if ordered_range is None:
+        payload["result"] = (structured or None) if structured is not None else result.output.to_wire()
     collections = structured or {}
     if (collections.get("objects") or {}).get("pineScenes") is not None:
         payload["drawings"] = collections["objects"]["pineScenes"]

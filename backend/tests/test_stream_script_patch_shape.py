@@ -8,9 +8,12 @@ replays it through the browser's parser, output reducer and result cache.
 from __future__ import annotations
 
 import copy
+from dataclasses import replace
 import json
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 from candlescope_plugin_sdk import (
     ExecuteBatchResult,
@@ -292,3 +295,109 @@ def test_builtin_patch_keeps_its_sliced_result_outputs() -> None:
     patch = payload_api._patch_from_snapshot(payload, reason="bar_update", start_s=20, end_s=20)
 
     assert patch["result"] == {"outputs": {"MA": {"data": [{"time": 20, "value": 2}]}}}
+
+
+def test_live_render_range_can_replace_points_before_the_current_bar() -> None:
+    bars = _bars(8)
+    start, end = bars[-4]["time"], bars[-2]["time"]
+    result = _pine_like_result(bars)
+    result = replace(result, meta={"outputUpdate": {
+        "schema": "render.update-range/1", "mode": "range",
+        "range": {"start": start, "end": end},
+    }})
+    message = payload_api._plugin_snapshot_or_patch_from_result(
+        "client", dict(META), bars, result, bar_time=bars[-1]["time"],
+    )
+    assert message["type"] == "indicator.replace_range"
+    assert message["range"] == {"start": start, "end": end}
+    assert [point["time"] for point in message["lines"][0]["data"]] == [bar["time"] for bar in bars[-4:-1]]
+    assert "result" not in message
+    assert message["drawings"] == result.output.collections.objects["pineScenes"]
+
+
+@pytest.mark.parametrize("update", [
+    None,
+    "unrecognized update",
+    {"schema": "render.update-range/1", "mode": "range"},
+    {"schema": "render.update-range/1", "mode": "snapshot"},
+    {"schema": "render.update-range/next", "mode": "range", "range": {"start": T0, "end": T0}},
+    {"schema": "render.update-range/1", "mode": "range", "range": {"start": True, "end": T0}},
+    {"schema": "render.update-range/1", "mode": "range", "range": {"start": T0 + 60, "end": T0}},
+])
+def test_full_or_unproven_render_update_preserves_the_complete_snapshot(update) -> None:
+    bars = _bars(8)
+    result = replace(_pine_like_result(bars), meta={"outputUpdate": update})
+    message = payload_api._plugin_snapshot_or_patch_from_result(
+        "client", dict(META), bars, result, bar_time=bars[-1]["time"],
+    )
+    assert message["type"] == "indicator.snapshot"
+    assert len(message["lines"][0]["data"]) == 8
+    assert message["result"]
+
+
+def test_complete_render_update_preserves_retained_time_coverage_before_slid_input() -> None:
+    retained = _bars(8)
+    full_range = {"start": retained[0]["time"], "end": retained[-1]["time"]}
+    result = replace(_pine_like_result(retained), meta={"outputUpdate": {
+        "schema": "render.update-range/1", "mode": "snapshot", "range": full_range,
+    }})
+    message = payload_api._plugin_snapshot_or_patch_from_result(
+        "client", dict(META), retained[-3:], result, bar_time=retained[-1]["time"],
+    )
+    assert message["range"] == full_range
+    assert len(message["lines"][0]["data"]) == 8
+
+
+@pytest.mark.parametrize("damage", ["older", "removed", "none"])
+def test_ordered_render_range_matches_existing_patch_without_serializing_history(monkeypatch, damage):
+    bars = _bars(2000)
+    result = _pine_like_result(bars)
+    first, last = bars[-4]["time"], bars[-2]["time"]
+    if damage == "removed":
+        first = last = bars[-1]["time"] + STEP
+    changed = None if damage == "none" else {"start": first, "end": last}
+    update = {"schema": "render.update-range/1", "mode": "range", "range": changed}
+    bar_time = bars[-1]["time"]
+
+    def payload(update):
+        return payload_api._plugin_snapshot_or_patch_from_result(
+            "client", dict(META), bars, replace(result, meta={"outputUpdate": update}),
+            bar_time=bar_time,
+        )
+
+    expected = payload(update)
+    calls = []
+    original = LinePoint.to_wire
+
+    def tracked(point):
+        calls.append(point.time)
+        return original(point)
+
+    monkeypatch.setattr(LinePoint, "to_wire", tracked)
+    actual = payload({**update, "timeOrder": "ascending"})
+    assert actual["meta"]["outputUpdate"].pop("timeOrder") == "ascending"
+    assert actual == expected
+    if damage == "none":
+        first = last = bar_time
+    assert set(calls) == {
+        point.time for line in result.output.series for point in line.points
+        if first <= point.time <= last and point.value is not None
+    }
+    assert len(calls) <= len(result.output.series) * 3
+
+
+def test_legacy_range_without_time_order_keeps_out_of_order_points():
+    bars = _bars(8)
+    times = [bars[index]["time"] for index in (4, 0, 3, 7, 1, 2, 5, 6)]
+    result = ExecuteBatchResult(ok=True, output=RenderOutput(series=(
+        LineSeries(id="unordered", title="unordered", points=tuple(LinePoint(time, 1) for time in times)),
+    )), meta={"outputUpdate": {
+        "schema": "render.update-range/1", "mode": "range",
+        "range": {"start": bars[0]["time"], "end": bars[4]["time"]},
+    }})
+    message = payload_api._plugin_snapshot_or_patch_from_result(
+        "client", dict(META), bars, result, bar_time=bars[-1]["time"],
+    )
+    assert [point["time"] for point in message["lines"][0]["data"]] == [
+        times[index] for index in (0, 1, 2, 4, 5)
+    ]

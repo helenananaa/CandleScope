@@ -1,0 +1,78 @@
+{
+  "source": "62a9c1f8da9834f06255717df86f78a05b54ad54",
+  "productSource": "5458d54d92aaac8f0aa1484bafbdf92b2d0c7c2f",
+  "root": "/Users/ryanliang/.codex/worktrees/issue-152-output-range-20261102/CandleScope/output/indicator-domain-native-20261106/native-ready",
+  "packageVerified": {
+    "verifiedAt": "2026-11-06T03:38:15.256Z",
+    "sourceCommit": "62a9c1f8da9834f06255717df86f78a05b54ad54",
+    "sourceFiles": 1071,
+    "builtFiles": 164,
+    "pluginAssets": 9,
+    "ciArtifactId": null,
+    "sdkArtifactFiles": null,
+    "sdkPreexistingPyc": null,
+    "pluginSources": {
+      "bundleSha256": "sha256:95037e6e4fe2b0dc09bc9eac9734c89301961daaabc6eb7a6e7a6d268f71fa4b",
+      "pluginSourceFiles": 76,
+      "mismatches": [],
+      "engineUnchanged": true
+    },
+    "mismatches": [],
+    "strictSignature": true,
+    "signatureError": null
+  },
+  "passed": false,
+  "reason": "Binance shared-IP418; original six-observation/parity/deletion/save/full-restart qualification interrupted. Partial output is not acceptance.",
+  "renderedSamples": 127,
+  "counterMin": 500,
+  "counterMax": 1501,
+  "coherentSamples": 127,
+  "independentOwnedPidsAbsent": [
+    7883,
+    7884,
+    7885,
+    7886,
+    7909,
+    7910,
+    7911,
+    7912,
+    7913,
+    7917
+  ],
+  "cooldown": {
+    "circuit": {
+      "key": "binance:ip",
+      "open": true,
+      "cooldown_remaining_seconds": 23690.839,
+      "last_status_code": 418,
+      "last_body_code": "-1003",
+      "last_headers": {
+        "x-mbx-used-weight-1m": "0",
+        "retry-after": "23691"
+      },
+      "opened_at_ms": 1793936277278,
+      "generation": 1,
+      "recovery_pending": true
+    },
+    "retry_not_before_ms": 1793959969286,
+    "retry_not_before_utc": "2026-11-06T10:12:49.286Z"
+  },
+  "distinctCounters": [
+    500,
+    1501
+  ],
+  "barCounts": [
+    500,
+    1501
+  ],
+  "distinctDomains": 2,
+  "bothParitiesObservedDuringWindowGrowth": true,
+  "sixDistinctLiveObservationsReached": false,
+  "installedRuntimeEnabled": true,
+  "installedWheelModuleFileCounts": {
+    "candlescope-plugin-pine-compat": 26,
+    "candlescope-plugin-sdk": 50,
+    "pine-compat-runtime": 2
+  },
+  "installedModulesMatchWheels": true
+}

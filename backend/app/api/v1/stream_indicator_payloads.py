@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import time
 import uuid
 from typing import Any
@@ -172,8 +173,9 @@ def _patch_from_snapshot(
     reason: str,
     start_s: int,
     end_s: int,
+    ordered_times: bool = False,
 ) -> dict[str, Any]:
-    patch = _filter_payload_to_range(payload, start_s, end_s)
+    patch = _filter_payload_to_range(payload, start_s, end_s, ordered_times=ordered_times)
     if patch.get("kind") == "script":
         # A script ``result`` is the structured Render IR with every
         # collection's full history. The browser's WS envelope never reads it;
@@ -332,6 +334,20 @@ def _query_indicator_compute_bars(
     return _closed_indicator_compute_bars(result, start_s, end_s, start_ms, end_ms)
 
 
+def _indicator_history_calendar(dm, meta: dict[str, Any]):
+    history_policy = getattr(dm, "history_policy", None)
+    if history_policy is None:
+        return None
+    try:
+        series = history_policy.series_key(
+            exchange=meta["exchange"], market_type=meta["market_type"],
+            symbol=meta["symbol"], channel="kline", variant=meta["interval"],
+        )
+        return history_policy.resolve(series).calendar
+    except Exception:
+        return None
+
+
 def _indicator_compute_query_bounds(
     dm, meta: dict[str, Any], start_s: int, end_s: int, *, warmup_bars: int,
 ) -> tuple[int, int, int, int]:
@@ -342,20 +358,7 @@ def _indicator_compute_query_bounds(
     start_ms = start_s * 1000
     end_ms = end_s * 1000
     compute_start_ms = max(0, start_ms - warmup_bars * interval_ms)
-    calendar = None
-    history_policy = getattr(dm, "history_policy", None)
-    if history_policy is not None:
-        try:
-            series = history_policy.series_key(
-                exchange=meta["exchange"],
-                market_type=meta["market_type"],
-                symbol=meta["symbol"],
-                channel="kline",
-                variant=meta["interval"],
-            )
-            calendar = history_policy.resolve(series).calendar
-        except Exception:
-            calendar = None
+    calendar = _indicator_history_calendar(dm, meta)
     if calendar is not None:
         start_bucket = compute_bucket_start_ms(
             start_ms,
@@ -398,25 +401,25 @@ def _query_indicator_compute_result(
     *,
     warmup_bars: int,
     auto_backfill: bool,
+    min_revision: int | None = None,
 ) -> tuple[Any, int, int]:
     start_ms, end_ms, compute_start_ms, needed = _indicator_compute_query_bounds(
         dm, meta, start_s, end_s, warmup_bars=warmup_bars,
     )
-    query_kwargs: dict[str, Any] = {
-        "start_ms": compute_start_ms,
-        "end_ms": end_ms,
-        "limit": needed + 5,
-        "exchange": meta["exchange"],
-        "market_type": meta["market_type"],
-        "auto_backfill": auto_backfill,
-        **identity_kwargs(meta),
-    }
-    result = dm.query(
-        meta["symbol"],
-        meta["interval"],
-        **query_kwargs,
+    result = _query_indicator_window(
+        dm, meta, compute_start_ms, end_ms, limit=needed+5,
+        auto_backfill=auto_backfill, min_revision=min_revision,
     )
     return result, start_ms, end_ms
+
+
+def _query_indicator_window(dm, meta, start_ms, end_ms, *, limit, auto_backfill, min_revision):
+    return dm.query(
+        meta["symbol"], meta["interval"], start_ms=start_ms, end_ms=end_ms, limit=limit,
+        exchange=meta["exchange"], market_type=meta["market_type"], auto_backfill=auto_backfill,
+        **identity_kwargs(meta),
+        **({"min_revision": min_revision} if min_revision is not None else {}),
+    )
 
 
 def _closed_indicator_compute_bars(
@@ -610,6 +613,16 @@ def _query_script_snapshot_bars(
     return list(resolved_bars)
 
 
+def _pine_snapshot_session_id(meta: dict[str, Any]) -> str:
+    session_id = meta.get("pineRuntimeSessionId")
+    if not session_id:
+        owner = meta.get("pineSessionOwner")
+        scope = (owner, meta.get("exchange"), meta.get("market_type"), meta.get("symbol"), meta.get("interval"))
+        session_id = hashlib.sha256(str(scope).encode()).hexdigest() if owner else uuid.uuid4().hex
+        meta["pineRuntimeSessionId"] = session_id
+    return session_id
+
+
 def _script_runtime_request(
     meta: dict[str, Any],
     bars: list[Any],
@@ -618,13 +631,7 @@ def _script_runtime_request(
 ) -> IndicatorRuntimeRequest:
     pine_options = {}
     if str(meta.get("language") or "pine") == "pine" and transport.startswith("websocket."):
-        # Identity belongs to this subscription, not source text shared by users.
-        if not meta.get("pineRuntimeSessionId"):
-            import hashlib
-            owner = meta.get("pineSessionOwner")
-            meta["pineRuntimeSessionId"] = hashlib.sha256(str((owner, meta.get("exchange"), meta.get("market_type"),
-                meta.get("symbol"), meta.get("interval"))).encode()).hexdigest() if owner else uuid.uuid4().hex
-        pine_options["pineSessionId"] = meta["pineRuntimeSessionId"]
+        pine_options["pineSessionId"] = _pine_snapshot_session_id(meta)
         pine_options["pineSessionEpoch"] = (meta.get("params") or {}).get("__pineSessionEpoch", "0")
         pine_options["pineLiveUpdate"] = bool(meta.get("pineLiveUpdate"))
         pine_options["pineLiveBarTime"] = int(meta.get("pineLiveBarTime") or 0)
@@ -732,10 +739,15 @@ def _plugin_snapshot_or_patch_from_result(
     bar_time: int = 0,
     reason: str = "bar_update",
 ) -> dict[str, Any]:
+    ordered_range = None
+    if bar_time and result.ok and result.output is not None:
+        update = result.meta.get("outputUpdate", result.output.meta.get("outputUpdate"))
+        if isinstance(update, dict) and update.get("timeOrder") == "ascending":
+            ordered_range = _render_update_range(update, bar_time)
     payload = _build_plugin_snapshot_from_payload(
         client_id,
         meta,
-        serialize_plugin_runtime_result(result),
+        serialize_plugin_runtime_result(result, ordered_range=ordered_range),
         bar_time=bar_time,
     )
     return _finish_plugin_snapshot_or_patch(
@@ -769,6 +781,27 @@ def _plugin_snapshot_or_patch_from_failure(
     )
 
 
+def _render_update_range(update: Any, bar_time: int) -> tuple[int, int] | None:
+    if (
+        not isinstance(update, dict)
+        or update.get("schema") != "render.update-range/1"
+        or update.get("mode") != "range"
+        or "range" not in update
+    ):
+        return None
+    changed = update["range"]
+    if changed is None:
+        return bar_time, bar_time
+    if (
+        isinstance(changed, dict)
+        and type(changed.get("start")) is int
+        and type(changed.get("end")) is int
+        and 0 <= changed["start"] <= changed["end"]
+    ):
+        return changed["start"], changed["end"]
+    return None
+
+
 def _finish_plugin_snapshot_or_patch(
     payload: dict[str, Any],
     bars: list[Any],
@@ -777,6 +810,34 @@ def _finish_plugin_snapshot_or_patch(
     reason: str,
 ) -> dict[str, Any]:
     if bar_time:
+        metadata = payload.get("meta")
+        if isinstance(metadata, dict) and "outputUpdate" in metadata:
+            update = metadata["outputUpdate"]
+            changed = _render_update_range(update, bar_time)
+            if changed is not None:
+                patch = _patch_from_snapshot(
+                    payload, reason=reason, start_s=changed[0], end_s=changed[1],
+                    ordered_times=update.get("timeOrder") == "ascending",
+                )
+                # A changed range is authoritative, including point deletion.
+                patch["type"] = "indicator.replace_range"
+                return patch
+            # Unknown or malformed ranges require a complete replacement.
+            snapshot = _finish_plugin_snapshot_or_patch(payload, bars, bar_time=0, reason=reason)
+            if (
+                isinstance(update, dict)
+                and update.get("schema") == "render.update-range/1"
+                and update.get("mode") == "snapshot"
+            ):
+                retained = update.get("range")
+                if (
+                    isinstance(retained, dict)
+                    and type(retained.get("start")) is int
+                    and type(retained.get("end")) is int
+                    and 0 <= retained["start"] <= retained["end"]
+                ):
+                    snapshot["range"] = dict(retained)
+            return snapshot
         return _patch_from_snapshot(
             payload,
             reason=reason,

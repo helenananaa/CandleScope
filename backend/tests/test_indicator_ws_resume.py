@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from pathlib import Path
 import threading
 from types import SimpleNamespace
 
@@ -15,6 +17,8 @@ from app.api.v1.stream_indicators import (
 from app.data_engine.data_manager.models import BarData
 from app.indicator import create_engine
 from app.indicator.range_result_service import IndicatorRangeResultService
+from app.indicator.runtime_routes import IndicatorRuntimeRoute, IndicatorRuntimeRoutes
+from app.indicator.runtime_service import IndicatorRuntimeService
 from app.indicator.series_revision import SeriesRevisionRegistry
 from app.core import config
 
@@ -58,15 +62,14 @@ class _DataManager:
         return None
 
 
-class _ScriptRuntimeService:
-    """Minimal routed sidecar boundary; these tests exercise stream setup only."""
+class _ScriptRuntimeService(IndicatorRuntimeService):
+    """Use production writer admission without starting a sidecar process."""
+
+    def __init__(self) -> None:
+        super().__init__(IndicatorRuntimeRoutes((IndicatorRuntimeRoute("pine", "sidecar", "test.pine"),)))
 
     async def start(self) -> None:
         return None
-
-    def route_for(self, language: str) -> SimpleNamespace:
-        assert language == "pine"
-        return SimpleNamespace(mode="sidecar", runtime_id="test.pine")
 
 
 @pytest.mark.parametrize(
@@ -305,6 +308,18 @@ def test_indicator_critical_queue_evicts_preview_or_requires_resync() -> None:
         assert queue.empty()  # terminal until a fresh connection/snapshot
 
     asyncio.run(_run())
+
+
+def test_pine_output_time_replacement_requires_resync_instead_of_preview_coalescing() -> None:
+    fixture = json.loads((Path(__file__).parent / "fixtures/plugin_runtime/script-output-ranges.json").read_text())
+    update = next(case["update"] for case in fixture["cases"] if case["id"] == "negative-line")
+    assert update["reason"] == "bar_update"
+    assert update["type"] == "indicator.replace_range"
+    queue = asyncio.Queue(maxsize=1)
+    _queue_indicator_message(queue, update)
+    _queue_indicator_message(queue, update)
+    assert queue.get_nowait()["type"] == "resync_required"
+    assert queue.empty()
 
 
 def test_indicator_seed_cache_is_bounded_lru() -> None:

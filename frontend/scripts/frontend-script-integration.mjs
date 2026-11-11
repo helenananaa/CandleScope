@@ -10,6 +10,9 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const annotationTools = process.argv.includes("--annotation-tools");
 const rangeMeasure = process.argv.includes("--range-measure") || annotationTools;
 const marketHealth = process.argv.includes("--market-health");
+const chartMarketPrepend = process.argv.includes("--chart-market-prepend");
+const chartMarketCalculation = chartMarketPrepend || process.argv.includes("--chart-market-calculation");
+const chartCalculation = chartMarketCalculation || process.argv.includes("--chart-calculation");
 const indicatorFlow = process.argv.includes("--indicator-flow");
 const native = process.argv.includes("--native");
 if (native && !marketHealth) throw new Error("The isolated native host currently supports only --market-health");
@@ -22,7 +25,7 @@ const historyStages = process.argv.includes("--history-stages");
 const quickReplayStep = process.argv.includes("--quick-replay-step");
 const chartTimeNavigation = process.argv.includes("--chart-time-navigation");
 const replayNotes = process.argv.includes("--replay-notes");
-const fixture = replayNotes ? "replay-notes-browser.html" : replayResize ? "replay-resize-browser.html" : annotationTools ? "annotation-tools-browser.html" : rangeMeasure ? "range-measure-browser.html" : accountOverlays ? "chart-account-overlays-browser.html" : quickReplayStep ? "quick-replay-step-browser.html" : chartTimeNavigation ? "chart-time-navigation-browser.html" : indicatorFlow ? "indicator-flow-browser.html" : marketHealth ? "market-health-browser.html" : historyStages ? "history-stages-browser.html" : intervalAdmission ? "interval-admission-browser.html" : trainingInput ? "replay-training-input-browser.html" : replay ? "replay-visible-indicators-browser.html" : "frontend-script-browser.html";
+const fixture = chartMarketPrepend ? "chart-market-prepend-browser.html" : chartMarketCalculation ? "chart-market-calculation-browser.html" : chartCalculation ? "chart-calculation-browser.html" : replayNotes ? "replay-notes-browser.html" : replayResize ? "replay-resize-browser.html" : annotationTools ? "annotation-tools-browser.html" : rangeMeasure ? "range-measure-browser.html" : accountOverlays ? "chart-account-overlays-browser.html" : quickReplayStep ? "quick-replay-step-browser.html" : chartTimeNavigation ? "chart-time-navigation-browser.html" : indicatorFlow ? "indicator-flow-browser.html" : marketHealth ? "market-health-browser.html" : historyStages ? "history-stages-browser.html" : intervalAdmission ? "interval-admission-browser.html" : trainingInput ? "replay-training-input-browser.html" : replay ? "replay-visible-indicators-browser.html" : "frontend-script-browser.html";
 const requested = process.argv.indexOf("--out");
 const output = requested === -1 ? fs.mkdtempSync(path.join(os.tmpdir(), "candlescope-frontend-js-")) : path.resolve(process.argv[requested + 1]);
 fs.mkdirSync(output, { recursive: true });
@@ -103,19 +106,29 @@ app.on("window-all-closed",()=>app.quit());
   }
   if (!lines) throw new Error("Owned test browser did not start");
   const base = `http://127.0.0.1:${lines[0]}`;
-  const version = await (await fetch(base + "/json/version")).json();
+  let version, tab, lastProbeError;
+  while (Date.now() < browserStartDeadline) {
+    if (child.exitCode !== null || child.signalCode !== null) throw new Error("Owned test browser exited during readiness");
+    try {
+      version = await (await fetch(base + "/json/version", { signal: AbortSignal.timeout(1000) })).json();
+      const tabs = await (await fetch(base + "/json/list", { signal: AbortSignal.timeout(1000) })).json();
+      tab = tabs.find(item => item.type === "page" && item.url === url);
+      if (version.webSocketDebuggerUrl && tab?.webSocketDebuggerUrl) break;
+    } catch (error) { lastProbeError = String(error); }
+    await sleep(100);
+  }
+  if (!version?.webSocketDebuggerUrl || !tab?.webSocketDebuggerUrl) {
+    throw new Error("Owned test browser debugger/page did not become ready: " + (lastProbeError || "page missing"));
+  }
   receipt.browser = version.Browser;
   browser = await CDP.open(version.webSocketDebuggerUrl);
   await browser.send("Target.setDiscoverTargets", { discover: true });
-  const tabs = await (await fetch(base + "/json/list")).json();
-  const tab = tabs.find(item => item.type === "page" && item.url === url);
-  if (!tab) throw new Error("Owned integration page is missing");
   page = await CDP.open(tab.webSocketDebuggerUrl);
   await page.send("Runtime.enable");
   // The tab can be discoverable while its initial document is still being
   // replaced. Probe readiness without starting the fixture, then invoke it
   // exactly once in the committed document.
-  const checkName = indicatorFlow ? "__indicatorFlowCheck" : marketHealth ? "__marketHealthCheck" : intervalAdmission ? "__intervalAdmissionCheck" : "__frontendScriptCheck";
+  const checkName = chartCalculation ? "__chartCalculationCheck" : indicatorFlow ? "__indicatorFlowCheck" : marketHealth ? "__marketHealthCheck" : intervalAdmission ? "__intervalAdmissionCheck" : "__frontendScriptCheck";
   let fixtureReady = false;
   for (let attempt = 0; attempt < 100; attempt++) {
     try {
@@ -165,7 +178,7 @@ app.on("window-all-closed",()=>app.quit());
   if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
   if (receipt.exceptions.length) throw new Error("Renderer exceptions occurred during the browser fixture");
   if (receipt.remainingWorkers.length) throw new Error("Browser workers remained after the cleanup deadline");
-  if (!chartTimeNavigation && !historyStages && !intervalAdmission && !marketHealth && !indicatorFlow && !quickReplayStep) {
+  if (!chartCalculation && !chartTimeNavigation && !historyStages && !intervalAdmission && !marketHealth && !indicatorFlow && !quickReplayStep) {
     const editor = await page.send("Runtime.evaluate", { expression: "window.__frontendScriptEditorCheck()", awaitPromise: true, returnByValue: true });
     receipt.editor = editor;
     if (editor.exceptionDetails) throw new Error(JSON.stringify(editor.exceptionDetails));

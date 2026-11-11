@@ -882,6 +882,11 @@ SYMBOL_CATALOG_SNAPSHOT_PATH = Path(
     )
 )
 
+# Pine live-chart transport is fixed for the backend process.
+PINE_CHART_TRANSPORT = os.getenv("CANDLESCOPE_PINE_CHART_TRANSPORT", "calculation")
+if PINE_CHART_TRANSPORT not in {"calculation", "snapshot"}:
+    raise ValueError("CANDLESCOPE_PINE_CHART_TRANSPORT must be calculation or snapshot")
+
 # Shared host limits for script indicator requests.
 SCRIPT_MAX_BARS = int(os.getenv("SCRIPT_MAX_BARS", "50000"))
 SCRIPT_TICK_RECOMPUTE_MAX_BARS = int(os.getenv("SCRIPT_TICK_RECOMPUTE_MAX_BARS", "5000"))
