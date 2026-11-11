@@ -19,6 +19,7 @@ export function StrategyResearchShell({
   libraryEnabled,
   libraryOpen,
   currentChartEnabled,
+  marketBatchAvailable = false,
   onOpenLibrary,
   onSelectCurrentChart,
   pageExportRef,
@@ -42,6 +43,7 @@ export function StrategyResearchShell({
   libraryEnabled: boolean;
   libraryOpen: boolean;
   currentChartEnabled: boolean;
+  marketBatchAvailable?: boolean;
   onOpenLibrary(): void;
   onSelectCurrentChart(): void;
   pageExportRef: Ref<HTMLDivElement>;
@@ -58,6 +60,7 @@ export function StrategyResearchShell({
   extraSurfaces: ReactNode;
 }) {
   const hasData = source !== null;
+  const hasWorkspace = hasData || marketBatchAvailable;
   const hostStatusKey = hostStatus ? ({
     DETACHED: null, READY: null, COMPLETED: null,
     RESOLVING: "chartTester.status.resolving",
@@ -115,12 +118,12 @@ export function StrategyResearchShell({
                 {chart}
               </section>
             )}
-            bottomPanel={hasData ? (
+            bottomPanel={hasWorkspace ? (
               <section className="strategy-research-result-slot" data-testid="strategy-research-result-slot">
                 {result}
               </section>
             ) : null}
-            rightRail={hasData ? (
+            rightRail={hasWorkspace ? (
               <aside className="strategy-research-right-rail" aria-label={t("strategy.scriptSlot")}>
                 <div className="strategy-research-script" data-testid="strategy-research-script-slot">
                   {script}

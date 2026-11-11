@@ -97,3 +97,31 @@ test("result retention is bounded and closing the owner clears only its own cach
   assert.equal(sibling.diagnostics().results.entries, 1);
   sibling.dispose();
 });
+
+test("comparison uses the requested ordered pair and rejects a response for another pair", async () => {
+  const manager = new StrategyDataManager(fixture({
+    async listRuns() { return [run("one"), run("two")]; },
+    async compareRuns(left, right, signal) {
+      assert.equal(left, "one");
+      assert.equal(right, "two");
+      assert.ok(signal);
+      const side = (runId: string) => ({ runId, hashes: {}, equity: [], equityDaily: [], drawdownDaily: [], metrics: {} });
+      return {
+        schema: "RUN_COMPARE_V3",
+        directComparisonAllowed: false,
+        incompatibleFields: ["dataset"],
+        comparisonContext: { leftHash: "left", rightHash: "right" },
+        precisionExplanation: null,
+        parameterDiff: {}, tradeDiff: {}, costDiff: {},
+        fingerprintDiff: { version: "TRADE_FINGERPRINT_V2", available: false, addedCount: null,
+          removedCount: null, unchangedCount: null, added: [], removed: [] },
+        left: side(right), right: side(left),
+      };
+    },
+  }));
+  assert.deepEqual((await manager.listRuns()).map(item => item.run_id), ["one", "two"]);
+  await assert.rejects(manager.compareRuns("one", "one"), { code: "COMPARISON_PAIR_INVALID" });
+  await assert.rejects(manager.compareRuns("one", "two"), { code: "RESULT_IDENTITY_MISMATCH" });
+  assert.equal(manager.diagnostics().operations, 0);
+  manager.dispose();
+});

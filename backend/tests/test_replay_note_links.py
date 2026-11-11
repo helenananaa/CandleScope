@@ -32,6 +32,7 @@ async def test_links_freeze_exact_versions_and_same_time_review_uses_ledger_pref
         initial = (await service.training.notes(run, track))["context"]
         original = await service.training.save_note(run, track, note_id="plan", fields={"entryBasis": "before fill"},
                                                   expected_revision=0, context=initial)
+        saved_event = await service.training.record_review_marker(run, command_id="plan-saved", text="Plan saved before buy")
         await buy(service, run, session, "linked-buy")
         current = (await service.training.notes(run, track))["context"]
         assert current["virtualTimeMs"] == initial["virtualTimeMs"]
@@ -66,8 +67,7 @@ async def test_links_freeze_exact_versions_and_same_time_review_uses_ledger_pref
         service = await _service(tmp_path / "linked-notes.db")
         assert (await service.training.notes(run, track))["notes"] == [combined]
         assert (await service.training.note_versions(run, track, "plan"))["versions"] == versions["versions"]
-        timeline = await service.training.start_review(run, event_id=None)
-        await service.training.start_review(run, event_id=timeline["events"][0]["event_id"])
+        await service.training.start_review(run, event_id=saved_event["event_id"])
         history = await service.training.notes(run, track)
         assert history["asOfMs"] == current["virtualTimeMs"]
         assert history["notes"] == [original]

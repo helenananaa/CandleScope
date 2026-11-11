@@ -4,6 +4,8 @@ import { supportEnglish } from "./supportEnglish.js";
 import { pineEnglish } from "./pineEnglish.js";
 export const nativeEnglish = {
   ...workbenchEnglish,
+  "workspace.link.drawingVisibility": "Drawing visibility",
+  "workspace.link.drawingVisibilityDesc": "Sync whether drawings are shown in each chart.",
   "native.replay.host": "Restore the CandleScope account and pending orders from the checkpoint, then continue through the remaining frozen market events.",
   "native.inputs.priceTick": "Minimum price increment",
   "native.inputs.currency": "Quote currency (requires the actual price tick)",

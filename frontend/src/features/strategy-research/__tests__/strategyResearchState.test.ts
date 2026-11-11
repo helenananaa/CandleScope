@@ -1,3 +1,4 @@
+import { changeReplayChartDisplay, DEFAULT_REPLAY_DISPLAY, replayDisplayKey } from "../strategyResultReplayDisplay.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
@@ -190,4 +191,43 @@ test("selecting a source does not mention internal identity in ordinary copy", (
   );
   assert.match(html, /research-data-source-bar/);
   assert.doesNotMatch(html.toLowerCase(), /dataset id|data epoch|snapshot hash|local profile/);
+});
+
+test("result replay persists its committed cursor and both immutable hashes", () => {
+  const store = new Map<string, string>();
+  const original = Object.getOwnPropertyDescriptor(globalThis, "window");
+  Object.defineProperty(globalThis, "window", { configurable: true, value: {
+    localStorage: {
+      getItem(key: string) { return store.get(key) ?? null; },
+      setItem(key: string, value: string) { store.set(key, value); },
+    },
+  } });
+  try {
+    const replay = { runId: "bt_local", snapshotHash: `sha256:${"a".repeat(64)}`,
+      reportHash: `sha256:${"b".repeat(64)}`, cursor: 12, interval: "5m", comparisonInterval: "1m", maPeriod: 3, comparisonMaPeriod: 5 };
+    const selected = strategyResearchReducer(EMPTY_STRATEGY_RESEARCH_STATE, { type: "result/setRun", runId: replay.runId });
+    const saved = strategyResearchReducer(selected, { type: "result/replay", replay });
+    persistStrategyResearchWorkspace(saved);
+    assert.deepEqual(loadStrategyResearchWorkspace().result.replay, replay);
+    assert.equal(strategyResearchReducer(saved, { type: "result/setRun", runId: "bt_other" }).result.replay, undefined);
+    assert.equal(strategyResearchReducer(saved, { type: "result/replay", replay: { ...replay, runId: "bt_other" } }), saved);
+    const pinned = { ...replay, comparisonInterval: replay.interval,
+      comparisonDataset: { datasetId: "local-" + "d".repeat(32), dataEpoch: "sha256:" + "e".repeat(64) } };
+    persistStrategyResearchWorkspace(strategyResearchReducer(selected, { type: "result/replay", replay: pinned }));
+    assert.deepEqual(loadStrategyResearchWorkspace().result.replay, pinned);
+    const key = replayDisplayKey(pinned);
+    const display = changeReplayChartDisplay(DEFAULT_REPLAY_DISPLAY, "comparison", "candleStyle", "hollow");
+    const configured = strategyResearchReducer(loadStrategyResearchWorkspace(), { type: "result/replayDisplay", key, display });
+    const differentRun = strategyResearchReducer(configured, { type: "result/viewHistory", runId: "bt_other" });
+    persistStrategyResearchWorkspace(differentRun);
+    assert.deepEqual(loadStrategyResearchWorkspace().replayDisplays, { [key]: display });
+    assert.equal(strategyResearchReducer(differentRun, { type: "result/replayDisplay", key, display }), differentRun);
+    assert.equal(loadStrategyResearchWorkspace().result.replay, undefined);
+    const raw = JSON.parse(store.get(STRATEGY_RESEARCH_WORKSPACE_KEY)!) as Record<string, unknown>;
+    store.set(STRATEGY_RESEARCH_WORKSPACE_KEY, JSON.stringify({ ...raw, runId: replay.runId, replay: { ...replay, reportHash: "wrong" } }));
+    assert.equal(loadStrategyResearchWorkspace().result.replay, undefined);
+  } finally {
+    if (original) Object.defineProperty(globalThis, "window", original);
+    else Reflect.deleteProperty(globalThis, "window");
+  }
 });

@@ -71,7 +71,7 @@ export function chartStrategyMaxDrawdown(report: BacktestReport): string {
 }
 
 /** Older reports have sampled event equity but no v2 performance block. */
-export function sampledReportDrawdown(report: BacktestReport) {
+export function sampledReportDrawdown(report: Pick<BacktestReport, "equity_curve" | "account">) {
   const points = report.equity_curve ?? [];
   if (points.length < 2) return null;
   const values = points.map((point) => ({

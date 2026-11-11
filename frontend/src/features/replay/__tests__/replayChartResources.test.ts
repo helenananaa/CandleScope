@@ -3,6 +3,7 @@ import test from "node:test";
 import { ReplayChartResourcePool } from "../replayChartRuntimePool.js";
 import { createReplayChartWorkspaceRepository, seedReplayChartWorkspace, seedForkReplayChartWorkspace } from "../replayChartWorkspaceRepository.js";
 import { createDefaultChartWorkspaceRecord, createTemplateChartWorkspaceDocument } from "../../chart-workspace/chartWorkspaceLibrary.js";
+import { applyLinkedAccountOverlayUpdate } from "../../chart-workspace/chartWorkspaceLinkModel.js";
 import { visibleCellIds } from "../../chart-workspace/chartWorkspaceLayout.js";
 import { createChartWorkspaceRepository } from "../../chart-workspace/chartWorkspaceRepository.js";
 import { loadInitialChartSession } from "../../chart-session/chartSessionModel.js";
@@ -76,12 +77,15 @@ test("replay workspace saves and recovers without reading or changing live/other
   const repository = createReplayChartWorkspaceRepository("run-a", session, storage);
   const loaded = await repository.loadLibrary();
   loaded.workspaces[0]!.name = "My replay";
+  loaded.workspaces[0]!.document.cells["cell-1"]!.drawingsHidden = true;
   await repository.saveLibrary(loaded);
   for (const [key, value] of untouched) assert.equal(values.get(key), value);
   const recovered = await createReplayChartWorkspaceRepository("run-a", session, storage).loadLibrary();
   assert.equal(recovered.workspaces[0]!.name, "My replay");
+  assert.equal(recovered.workspaces[0]!.document.cells["cell-1"]!.drawingsHidden, true);
   const other = await createReplayChartWorkspaceRepository("run-b", session, storage).loadLibrary();
   assert.notEqual(other.workspaces[0]!.name, "My replay");
+  assert.equal(other.workspaces[0]!.document.cells["cell-1"]!.drawingsHidden, false);
   assert.deepEqual((await live.loadLibrary()).workspaces, liveBefore.workspaces);
 });
 
@@ -95,7 +99,10 @@ test("new live-launched replay inherits four mixed charts and indicators without
   for (const [index,id] of ids.entries()) {
     const cell = source.cells[id]!;
     cell.chartSettings.chartType = types[index]!;
+    cell.drawingsHidden = index === 1;
     cell.session.symbol = "FUTURE-LIVE";
+    cell.accountOverlay = { accountId: "live-account", trades: index !== 0, positions: index !== 1, notes: true,
+      ...(index === 0 ? { noteSource: "original", noteFilter: "linked" } : {}) };
     cell.indicators = [{ id:"SMA",engineName:"SMA",params:{period:20},
       lines:[{data:[{time:9999999999,value:777}]}],renderHints:{future:777} }];
   }
@@ -107,6 +114,7 @@ test("new live-launched replay inherits four mixed charts and indicators without
   const copied = loaded.workspaces[0]!.document;
   assert.equal(visibleCellIds(copied.windows["main-window"]!.layoutTree).length,4);
   assert.deepEqual(ids.map(id=>copied.cells[id]!.chartSettings.chartType),types);
+  assert.deepEqual(ids.map(id=>copied.cells[id]!.drawingsHidden),[false,true,false,false]);
   for (const id of ids) {
     const cell = copied.cells[id]!;
     assert.equal(cell.session.symbol,"TRAINING");
@@ -117,11 +125,21 @@ test("new live-launched replay inherits four mixed charts and indicators without
     assert.equal(cell.nativeStrategies,undefined);
   }
   assert.equal(JSON.stringify(source),before);
+  assert.deepEqual(ids.map(id => copied.cells[id]!.accountOverlay), ids.map((_, index) => ({
+    accountId: null, trades: index !== 0, positions: index !== 1, notes: true,
+    ...(index === 0 ? { noteSource: "original", noteFilter: "linked" } : {}),
+  })));
   copied.cells[ids[0]!]!.indicators = [];
+  loaded.workspaces[0]!.document = applyLinkedAccountOverlayUpdate(copied, ids[0]!, {
+    accountId: null, trades: false, positions: false, notes: true,
+  });
   await repo.saveLibrary(loaded);
   seedReplayChartWorkspace("new-run", {document:source,windowId:"main-window"},storage);
   const resumed = await createReplayChartWorkspaceRepository("new-run",session,storage).loadLibrary();
-  assert.deepEqual(resumed.workspaces[0]!.document.cells[ids[0]!]!.indicators,[]);
+  const restored = resumed.workspaces[0]!.document;
+  assert.deepEqual(restored.cells[ids[0]!]!.indicators,[]);
+  assert.equal(restored.cells[ids[0]!]!.accountOverlay?.positions, false);
+  assert.equal(restored.cells[ids[2]!]!.accountOverlay?.positions, true);
   const unrelated = await createReplayChartWorkspaceRepository("unrelated",session,storage).loadLibrary();
   assert.equal(visibleCellIds(unrelated.workspaces[0]!.document.windows["main-window"]!.layoutTree).length,1);
 });
@@ -139,6 +157,7 @@ test("historical forks preserve mixed markets and layout while selected event ow
     const cell = source.cells[id]!;
     cell.session = { exchange: "binance", marketType: "futures", symbol: symbols[i]!, interval: i === 2 ? "7m" : "15m" };
     cell.chartSettings.chartType = types[i]!;
+    cell.drawingsHidden = i === 2;
     cell.indicators = [{ id: "SMA", engineName: "SMA", params: { period: 10 },
       lines: [{ data: [{ time: 9999999999, value: 123 }] }] }];
   }
@@ -157,6 +176,7 @@ test("historical forks preserve mixed markets and layout while selected event ow
   const copied = record.document;
   assert.deepEqual(ids.map(id => copied.cells[id]!.session.symbol), ["BTCUSDT", "SOLUSDT", "SOLUSDT", "SOLUSDT"]);
   assert.deepEqual(ids.map(id => copied.cells[id]!.chartSettings.chartType), types);
+  assert.deepEqual(ids.map(id => copied.cells[id]!.drawingsHidden), [false, false, true, false]);
   assert.equal(copied.windows["main-window"]!.activeCellId, ids[1]);
   assert.deepEqual(ids.map(id => copied.cells[id]!.session.interval), ["15m", "5m", "7m", "15m"]);
   for (const cell of Object.values(copied.cells)) assert.deepEqual(cell.indicators[0]!.lines?.[0]!.data, []);

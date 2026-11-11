@@ -39,7 +39,7 @@ test("replay observer opens a committed prefix while download continues", async 
   let polls = 0;
   const observed: PreparationJob[] = [];
   const fetcher: typeof fetch = async () => { polls++; throw new Error("unexpected poll"); };
-  const ready = await waitForPreparation(job, item => observed.push(item), undefined, { fetcher }, true);
+  const ready = await waitForPreparation(job, item => { observed.push(item); }, undefined, { fetcher }, true);
   assert.equal(ready, job);
   assert.equal(ready.state, "RUNNING");
   assert.equal(polls, 0);
@@ -128,4 +128,31 @@ test("an explicit replay retry is bounded and does not restart cancelled or non-
       if (paths.length === 2) assert.ok(paths[1]?.endsWith("/progressive-task/retry"));
     }
   }
+});
+
+test("strategy preparation retry verifies scope before reusing the same durable job", async t => {
+  const { createBacktestApi } = await import("../backtest/backtestApi.js");
+  const api = createBacktestApi("http://local.test/backtests");
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  const id = "a".repeat(32);
+  const scope = "research:batch:original";
+  const failed: PreparationJob = {
+    ...running(), id, state: "FAILED", result: null, revision: 4,
+    request: { consumer: "STRATEGY", requirements: [{ symbol: "BTCUSDT" }],
+      intent: { strategy: { chart_cell_scope: scope } } },
+    error: { code: "SOURCE_TEMPORARY", message: "Source temporarily unavailable", retryable: true },
+  };
+  const calls: string[] = [];
+  globalThis.fetch = async (url, options) => {
+    calls.push(`${options?.method ?? "GET"} ${new URL(String(url)).pathname}`);
+    return Response.json(options?.method === "POST" ? { ...failed, state: "READY", revision: 5, error: null } : failed);
+  };
+  await assert.rejects(api.observeStrategyPreparation!(id, "another-scope", true, () => {}), /IDENTITY_MISMATCH/);
+  assert.deepEqual(calls, [`GET /data-preparations/${id}`]);
+  const observed: string[] = [];
+  const result = await api.observeStrategyPreparation!(id, scope, true, job => { observed.push(job.id); });
+  assert.equal(result.state, "READY");
+  assert.deepEqual(observed, [id]);
+  assert.deepEqual(calls.slice(1), [`GET /data-preparations/${id}`, `POST /data-preparations/${id}/retry`]);
 });

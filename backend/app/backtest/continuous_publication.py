@@ -21,6 +21,9 @@ class ContinuousRepairPublication:
         row=self.store.summary(saved["run_id"])
         if row["phase"]!="REPAIR_REQUIRED" or self.store.results.identity(row)!=saved["base_identity"]:
             raise fail("CONTINUOUS_COMMIT_CONFLICT","Confirmed repair account changed before publication")
+        version = saved["plan"].get("auto_policy_version")
+        if version is not None:
+            self.store.auto_repair.guard(saved["run_id"], version)
         return row
 
     def _staging(self,saved):

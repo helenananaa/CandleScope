@@ -345,6 +345,7 @@ async def test_precise_strategy_prepares_bars_and_official_trades(tmp_path):
     from app.backtest.runtime import BacktestRuntime
     from app.core.config import load_backtest_settings
     from tests.test_data_preparation import bars
+    from tests.test_python_editor import compile_editor
 
     adapter, archive, calls = adapter_and_network(tmp_path)
     settings = load_backtest_settings({"BACKTEST_ENABLED": "1", "BACKTEST_BAR_ENABLED": "1",
@@ -365,12 +366,33 @@ async def test_precise_strategy_prepares_bars_and_official_trades(tmp_path):
                "fidelity_preference": "PRECISE"}
     try:
         assert runtime.chart_context.resolve(context, automatic_preparation=True)["status"] == "NEEDS_DATA"
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-            response = await client.post("/data-preparations/strategy", json={"idempotency_key": "precise-strategy", "context": context})
+        revision = compile_editor(runtime.service)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test",
+                headers={"Origin": "http://127.0.0.1:15173"}) as client:
+            response = await client.post("/data-preparations/strategy", json={
+                "idempotency_key": "precise-strategy",
+                "context": context,
+                "strategy": {
+                    "strategy_revision_id": revision["revision_id"],
+                    "python_runtime_mode": "TRUSTED_LOCAL",
+                    "python_trusted_confirmed": True,
+                },
+            })
             assert response.status_code == 202, response.text
             ready = await terminal(service, response.json()["id"])
             assert ready["state"] == "READY", ready["error"]
-            assert ready["result"]["resolution"]["fidelity"]["mode"] == "AGG_TRADE_EXECUTION"
+            resolution = ready["result"]["resolution"]
+            assert resolution["fidelity"]["mode"] == "AGG_TRADE_EXECUTION"
+            run_id = ready["result"]["strategy_run"]["run_id"]
+            for _ in range(200):
+                run = runtime.service.get_run(run_id)
+                if run["state"] in {"COMPLETED", "FAILED", "CANCELLED"}:
+                    break
+                await asyncio.sleep(0.05)
+            assert run["state"] == "COMPLETED", run
+            assert run["snapshot_hash"] == resolution["snapshot_hash"]
+            assert run["fidelity_mode"] == "AGG_TRADE_EXECUTION"
+            assert run["source_event_kind"] == "AGG_TRADE"
             assert len(calls) == 2
     finally:
         await service.shutdown()

@@ -10,6 +10,7 @@ from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
 from app.backtest.errors import BacktestError
+from app.backtest.external_provider.access import ExternalProviderAccess
 
 if TYPE_CHECKING:
     from app.backtest.service import BacktestService
@@ -124,6 +125,7 @@ class StrategyDataManager:
         self.heartbeat_seconds = heartbeat_seconds
         self._subscriptions: set[StrategyRunSubscription] = set()
         self._closed = False
+        self.external_providers = ExternalProviderAccess(self.control_plane, runtime, check_owner=self._require_open)
 
     def bind_continuous(self, runtime):
         """Adopt one backend owner; observing/unmounting a view never adopts it."""
@@ -157,9 +159,12 @@ class StrategyDataManager:
     async def start_continuous(self):
         return await self.continuous_access().start()
 
-    def control_plane(self) -> BacktestService:
+    def _require_open(self) -> None:
         if self._closed:
             raise BacktestError("STRATEGY_MANAGER_CLOSED", "strategy manager is closed")
+
+    def control_plane(self) -> BacktestService:
+        self._require_open()
         self._control_requests += 1
         return self.service
 

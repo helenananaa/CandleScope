@@ -482,6 +482,38 @@ async def import_csv(
         upload_path.unlink(missing_ok=True)
 
 
+@router.post("/imports/market-trades/csv", status_code=201)
+async def import_market_trades(
+    request: Request,
+    name: Annotated[str, Query(min_length=1, max_length=160)],
+    symbol: Annotated[str, Query(min_length=1, max_length=80)],
+    base_asset: Annotated[str, Query(min_length=1, max_length=32)],
+    quote_asset: Annotated[str, Query(min_length=1, max_length=32)],
+    timestamp_unit: Literal["s", "ms"],
+    coverage_start_ms: int,
+    coverage_end_ms: int,
+    trade_kind: Literal["MARKET_TRADE", "MARKET_AGG_TRADE"],
+    dataset_id: str | None = None,
+) -> dict[str, Any]:
+    from app.local_data.user_market_trades import UserMarketTradeOptions
+
+    service = _service(request)
+    options = UserMarketTradeOptions(
+        name=name, symbol=symbol, base_asset=base_asset, quote_asset=quote_asset,
+        timestamp_unit=timestamp_unit, coverage_start_ms=coverage_start_ms,
+        coverage_end_ms=coverage_end_ms, trade_kind=trade_kind, dataset_id=dataset_id,
+    )
+    upload_path = service.new_upload_path()
+    try:
+        options.declaration()
+        await _receive_upload(request, upload_path, empty_label="Market trade CSV")
+        return await asyncio.to_thread(service.import_user_market_trades, upload_path, options)
+    except LocalDatasetError as exc:
+        raise _translate_error(exc) from exc
+    finally:
+        upload_path.unlink(missing_ok=True)
+
+
 @router.post("/imports/csv/jobs", status_code=202)
 async def create_import_job(
     request: Request,

@@ -267,7 +267,9 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
                       <small>AGG_TRADE</small><strong>{t("replay.source.agg")}</strong><span>{t(
                         !runtime.capabilities?.sources.agg_trade.enabled
                           && runtime.capabilities?.sources.agg_trade.reason === "OFFICIAL_CATALOG_SYNCING"
-                          ? "replay.hub.catalogSyncing" : "replay.hub.aggHint",
+                          ? "replay.hub.catalogSyncing"
+                          : runtime.capabilities?.sources.agg_trade.fidelity === "USER_MARKET_TRADE_COVERAGE"
+                            ? "local.localOnly" : "replay.hub.aggHint",
                       )}</span>
                     </button>
                   </div>

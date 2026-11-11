@@ -17,6 +17,13 @@ import {
 
 import type { MainSeriesCrosshairValue } from "../../chart-adapter/chartAdapterTypes.js";
 const PreparationJobsPanel = lazy(() => import("../data-preparation/PreparationJobsPanel.js"));
+import { createActiveIndicatorPersistence } from "../indicators/activeIndicatorStore.js";
+import { getStrategyStorage } from "../../shared/strategyStorage.js";
+import { ResearchIndicatorScopeStore } from "./researchIndicatorScope.js";
+import { ResearchIndicatorScopeControl } from "./ResearchIndicatorScopeControl.js";
+import { useResearchIndicatorScopeResults } from "./useResearchIndicatorScopeResults.js";
+import type { ResearchMarketInput } from "./strategyResearchBatch.js";
+import { ResearchBatchResults, ResearchBatchSources } from "./ResearchBatchPanel.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { ResearchDataDrawer } from "../research-data/ResearchDataDrawer.js";
@@ -51,6 +58,8 @@ import { StrategyResearchRuntime } from "./StrategyResearchRuntime.js";
 import { StrategyResearchResultPanel } from "./StrategyResearchResultPanel.js";
 import { StrategyResearchScriptPanel } from "./StrategyResearchScriptPanel.js";
 import { openPythonStrategyDraft, getChartStrategyDraftStore } from "../backtest/chart-tester/chartStrategyTesterDrafts.js";
+import { DEFAULT_STRATEGY_RUN_SETTINGS } from "../../shared/strategyRunSettings.js";
+import { ResearchExternalModel } from "./ResearchExternalModel.js";
 import { saveResearchTemplate } from "./strategyTemplateDraft.js";
 import { readResearchHandoff } from "./strategyResearchHandoff.js";
 import ResearchReturnButton from "./ResearchReturnButton.js";
@@ -69,6 +78,7 @@ const BacktestResearchApp = lazy(() => import("../backtest/research/BacktestRese
 const StrategyResearchLiveChart = lazy(() => import("./StrategyResearchLiveChart.js"));
 const NativeStrategyPanel = lazy(() => import("../backtest/native/NativeStrategyPanel.js"));
 const NativeStrategyReport = lazy(() => import("../backtest/native/NativeStrategyReport.js").then((module) => ({ default: module.NativeStrategyReport })));
+const StrategyResultReplay = lazy(() => import("./StrategyResultReplay.js"));
 const StrategyRunHistory = lazy(() => import("./StrategyRunHistory.js"));
 const SavedContinuousAccounts = lazy(() => import("../backtest/continuous/SavedContinuousAccounts.js"));
 import {
@@ -77,6 +87,8 @@ import {
   strategyResearchVisualState,
   type StrategyResearchLaunchIntent,
 } from "./strategyResearchLaunch.js";
+import type { BacktestResultReplayCursor } from "../backtest/backtestTypes.js";
+import { DEFAULT_REPLAY_DISPLAY, replayDisplayKey, type ReplayDisplay } from "./strategyResultReplayDisplay.js";
 import type { StrategyResearchState } from "./strategyResearchState.js";
 
 class StrategyResearchDrawerBoundary extends Component<
@@ -137,7 +149,6 @@ export default function StrategyResearchApp({
   const locale = useLocale();
   const availability = useNativeAvailability();
   const [selectedNativeMode, setNativeMode] = useState<boolean | null>(["advanced", "deep-link", "handoff"].includes(intent.kind) ? false : null);
-  const nativeMode = selectedNativeMode ?? availability === "available";
   const [projectRestoreRevision, setProjectRestoreRevision] = useState(0);
   const [nativeRun, setNativeRun] = useState<import("../backtest/native/nativeBacktestApi.js").NativeRun | null>(null);
   const [nativeStatus, setNativeStatus] = useState<NativeFeedbackStatus>("idle");
@@ -178,6 +189,7 @@ export default function StrategyResearchApp({
 
   const launchImported = intent.kind === "imported" || intent.kind === "import";
   const source = state.source.source;
+  const nativeMode = selectedNativeMode ?? (availability === "available" && source !== null && state.result.runId === null);
   const launchImportedBoundRef = useRef(source?.kind === "IMPORTED_DATASET");
   const {
     datasets: libraryDatasets,
@@ -255,6 +267,15 @@ export default function StrategyResearchApp({
   }, [dispatch, runtime, setLibrarySelectedId]);
 
   const importedManifest = importedManifestForSource(source, library.selected);
+  const [indicatorScopes] = useState(() => new ResearchIndicatorScopeStore(getStrategyStorage()));
+  const indicatorScopeState = useSyncExternalStore(indicatorScopes.subscribe, indicatorScopes.snapshot, indicatorScopes.snapshot);
+  const indicatorResults = useResearchIndicatorScopeResults(indicatorScopeState.scopes, libraryDatasets);
+  const localIndicatorPersistence = useMemo(() => importedManifest && createActiveIndicatorPersistence(
+    `candlescope:local-indicators:v1:${importedManifest.dataset_id}:${importedManifest.data_epoch}`,
+  ), [importedManifest]);
+  const scopedIndicatorPersistence = useMemo(() => importedManifest && localIndicatorPersistence
+    ? indicatorScopes.chartPersistence(importedManifest, indicatorScopeState.scopes, localIndicatorPersistence)
+    : null, [importedManifest, indicatorScopes, indicatorScopeState.scopes, localIndicatorPersistence]);
 
   const { intervalScope, selectedInterval, handleIntervalSelect } = useLocalIntervalSelection(
     importedManifest,
@@ -379,9 +400,36 @@ export default function StrategyResearchApp({
     draftId: state.script.draftId,
     draftContentRevision: state.script.contentRevision,
     configuration: state.script.configuration,
-    restoreRunId: state.result.runId,
+    restoreRunId: state.result.replay ? null : state.result.runId,
     onRunId: handleRunId,
   });
+  const saveResultReplay = useCallback((replay: BacktestResultReplayCursor) => {
+    dispatch({ type: "result/replay", replay });
+  }, [dispatch]);
+  const saveReplayDisplay = useCallback((key: string, display: ReplayDisplay) => {
+    dispatch({ type: "result/replayDisplay", key, display });
+  }, [dispatch]);
+  const closeResultReplay = useCallback(() => dispatch({ type: "result/replay", replay: null }), [dispatch]);
+  const savedResult = researchRun.result;
+  const replaySnapshot = savedResult?.run.snapshot_hash;
+  const replayReport = savedResult?.report.hashes.report;
+  const canReplay = savedResult?.run.state === "COMPLETED"
+    && savedResult.run.run_id === state.result.runId
+    && savedResult.config.exchange === "local" && savedResult.config.market_type === "spot"
+    && savedResult.config.account_model === "SPOT_CASH_V1"
+    && (savedResult.run.fidelity_mode === "BAR_APPROX" || (savedResult.run.fidelity_mode === "AGG_TRADE_EXECUTION"
+      && savedResult.report.data_quality?.source_quality === "user_market_trades"))
+    && typeof replaySnapshot === "string" && typeof replayReport === "string";
+  const openResultReplay = () => {
+    if (canReplay) saveResultReplay({
+      runId: savedResult.run.run_id, snapshotHash: replaySnapshot, reportHash: replayReport,
+      cursor: 0, interval: savedResult.chart.interval,
+    });
+  };
+  const [marketInputs, setMarketInputs] = useState<readonly ResearchMarketInput[]>([]);
+  const marketBatchAvailable = hostReady && runtime.runtimeMode === "LIVE";
+  const batchState = useSyncExternalStore(researchRun.batch.subscribe, researchRun.batch.snapshot, researchRun.batch.snapshot);
+  const [batchError, setBatchError] = useState(false);
   const [advancedError, setAdvancedError] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [accountsOpen, setAccountsOpen] = useState(false);
@@ -400,14 +448,14 @@ export default function StrategyResearchApp({
       source,
       session: researchRun.session,
       draftId: state.script.draftId,
-      result: researchRun.result,
+      result: researchRun.sourceResult,
       configuration: state.script.configuration,
     }).then((href) => {
       window.location.assign(href);
     }).catch((reason: unknown) => {
       setAdvancedError(reason instanceof Error ? describeError(reason, reason.message) : String(reason));
     });
-  }, [researchRun.result, researchRun.session, source, state.script.draftId, state.script.configuration]);
+  }, [researchRun.session, researchRun.sourceResult, source, state.script.draftId, state.script.configuration]);
 
   useControlCommands(() => ({ id: "research-panels", title: "Strategy research panels", context: () => ({ chartUiScope, settingsOpen, indicatorPanel, historyOpen }), snapshot: () => ({ settingsOpen, indicatorPanel, historyOpen, advancedError }), commands: [
     command("settings", "Open/close research settings.", object({ open: bool }), ({ open }) => setSettingsOpen(open)),
@@ -432,6 +480,11 @@ export default function StrategyResearchApp({
         onRevisionActivated={handleRevisionActivated}
         onSettingsImported={setSettings}
         onProjectRestored={(manifest) => { dispatchImportedSource(dispatch, runtime.state.source.source, manifest); setProjectRestoreRevision((revision) => revision + 1); }}
+        onMarketTradesImported={async (dataset) => {
+          await library.refresh(dataset.dataset_id);
+          dispatchImportedSource(dispatch, runtime.state.source.source, dataset);
+          dispatch({ type: "source/libraryOpen", open: false });
+        }}
         onImport={async (input) => {
           const dataset = await library.handleImport(input);
           if (dataset) {
@@ -444,6 +497,8 @@ export default function StrategyResearchApp({
     </StrategyResearchDrawerBoundary>
   );
 
+  const [externalVisited, setExternalVisited] = useState(false);
+  const [externalOpen, setExternalOpen] = useState(false);
   const script = (
     <div data-strategy-draft={scriptDraft ?? ""}>
       <nav className="native-mode-switch" aria-label={t("native.mode")}>
@@ -472,16 +527,56 @@ export default function StrategyResearchApp({
         sourceKind={source?.kind ?? null}
         draftId={state.script.draftId}
         barOnly={researchRun.barOnly}
+        capitalAsset={importedManifest?.instrument?.quote_asset}
         runStatus={researchRun.runStatus}
         needsData={researchRun.needsData}
         onDraftId={handleDraftId}
         onDraftRevision={handleDraftRevision}
         onRun={researchRun.onRun}
+        marketBatchAvailable={marketBatchAvailable}
+        batchSession={marketBatchAvailable ? marketInputs[0]?.session ?? null : null}
+        batchControls={(request) => <ResearchBatchSources datasets={libraryDatasets} precise={state.script.configuration?.fidelityPreference === "PRECISE"}
+          marketEnabled={marketBatchAvailable} markets={marketInputs} onMarkets={setMarketInputs}>{(selected, exchange) => <>
+          <button type="button" className="research-primary" disabled={!request || (!exchange.length && selected.length < 2) || batchState.storageFailed}
+            onClick={() => {
+              if (!request) return;
+              setBatchError(false);
+              void researchRun.batch.submit(request, selected, exchange).catch(() => setBatchError(true));
+            }}>{t("researchBatch.run")}</button>
+          {batchState.jobs.length > 0 && <button type="button" onClick={() => setHistoryOpen(true)}>
+            {t("researchBatch.jobs")} · {batchState.jobs.length}
+          </button>}
+          {batchState.storageFailed ? <p role="alert">{t("researchBatch.storage")}</p>
+            : batchError && <p role="alert">{t("researchBatch.submitFailed")}</p>}
+        </>}</ResearchBatchSources>}
         onConfirmNeedsData={researchRun.onConfirmNeedsData}
         onOpenAdvanced={openAdvanced}
         configuration={state.script.configuration}
         onConfigure={(configuration) => dispatch({ type: "script/configure", configuration })}
       />}
+      {hostReady && importedManifest && !importedManifest.market_trade_input && selectedInterval && (
+        <details open={externalOpen} onToggle={event => {
+          if (event.target !== event.currentTarget) return;
+          setExternalOpen(event.currentTarget.open);
+          if (event.currentTarget.open) {
+            setExternalVisited(true);
+            setNativeMode(false);
+          }
+        }}>
+          <summary>{t("research.external.title")}</summary>
+          {externalVisited && <ResearchExternalModel
+            key={chartUiScope}
+            manager={researchRun.historyManager}
+            dataset={importedManifest}
+            interval={selectedInterval}
+            settings={state.script.configuration ?? DEFAULT_STRATEGY_RUN_SETTINGS}
+            savedRun={savedResult && savedResult.run.run_id === state.result.runId ? savedResult.run : null}
+            active={externalOpen}
+            runBusy={["RESOLVING", "QUEUED", "RUNNING"].includes(researchRun.runStatus)}
+            onRunCreated={handleRunId}
+          />}
+        </details>
+      )}
     </div>
   );
   const result = nativeMode ? researchRun.session && nativeRun?.result ? <Suspense fallback={<p>{t("native.loading")}</p>}>
@@ -497,18 +592,19 @@ export default function StrategyResearchApp({
     <>
     {researchRun.result?.run.state === "COMPLETED" && <ResearchReturnButton key={researchRun.result.run.run_id}
       runId={researchRun.result.run.run_id} origin={handoff ? { workspaceId: handoff.source.workspaceId, cellId: handoff.source.cellId }
-        : source?.kind === "CURRENT_CHART" ? { workspaceId: source.workspaceId, cellId: source.cellId } : null} />}
+        : researchRun.sourceResult && source?.kind === "CURRENT_CHART" ? { workspaceId: source.workspaceId, cellId: source.cellId } : null} />}
     <StrategyResearchResultPanel
       key={researchRun.result?.run.run_id ?? "pending"}
       result={researchRun.result}
       stale={researchRun.stale || state.result.stale}
       staleReasons={researchRun.staleReasons}
-      barOnly={researchRun.barOnly}
+      barOnly={researchRun.result ? researchRun.result.run.fidelity_mode === "BAR_APPROX" : researchRun.barOnly}
       error={researchRun.error}
       runStatus={researchRun.runStatus}
       network={networkDiagnostics}
       dataResolution={researchRun.dataResolution}
       onOpenAdvanced={openAdvanced}
+      {...(canReplay ? { onOpenReplay: openResultReplay } : {})}
       onLocateTrade={(timeMs) => setFocusedAnalysis((current) => ({
         scope: chartUiScope,
         value: {
@@ -557,7 +653,18 @@ export default function StrategyResearchApp({
       </aside>}
       {historyOpen && <aside className="research-data-drawer" role="dialog" aria-label={t("ux.history")}>
         <header><strong>{t("ux.history")}</strong><button type="button" onClick={() => setHistoryOpen(false)}>{t("backtest.close")}</button></header>
-        <Suspense fallback={<p>{t("research.loading")}</p>}><StrategyRunHistory draftId={state.script.draftId} currentRunId={researchRun.result?.run.run_id ?? null} onOpen={(runId) => { dispatch({ type: "result/viewHistory", runId }); setHistoryOpen(false); }} /></Suspense>
+        <Suspense fallback={<p>{t("research.loading")}</p>}><StrategyRunHistory manager={researchRun.historyManager} draftId={state.script.draftId} currentRunId={researchRun.result?.run.run_id ?? null} onOpen={(runId) => { dispatch({ type: "result/viewHistory", runId }); setNativeMode(false); setHistoryOpen(false); }} /></Suspense>
+        <ResearchBatchResults jobs={batchState.jobs} storageFailed={batchState.storageFailed}
+          onResume={(id, retry) => researchRun.batch.resume(id, retry)}
+          onOpen={job => {
+            if (libraryDatasets.some(dataset => dataset.dataset_id === job.datasetId && dataset.data_epoch === job.dataEpoch)) {
+              setLibrarySelectedId(job.datasetId);
+              onSelectDataset(job.datasetId);
+            }
+            if (job.runId) dispatch({ type: "result/viewHistory", runId: job.runId });
+            setNativeMode(false);
+            setHistoryOpen(false);
+          }} />
         <Suspense fallback={null}><PreparationJobsPanel /></Suspense>
       </aside>}
       {intent.kind === "handoff" && !handoff && <p role="alert">{t("ux.handoffMissing")}</p>}
@@ -601,6 +708,7 @@ export default function StrategyResearchApp({
     libraryEnabled: runtime.libraryEnabled,
     libraryOpen: state.source.libraryOpen,
     currentChartEnabled: false,
+    marketBatchAvailable,
     onOpenLibrary: () => dispatch({ type: "source/libraryOpen", open: true }),
     onSelectCurrentChart: selectCurrentChart,
     pageExportRef,
@@ -611,6 +719,15 @@ export default function StrategyResearchApp({
     result,
     extraSurfaces,
   };
+
+  if (state.result.replay) {
+    const displayKey = replayDisplayKey(state.result.replay);
+    return <Suspense fallback={<p role="status">{t("research.loading")}</p>}>
+      <StrategyResultReplay key={displayKey} initial={state.result.replay}
+        manager={researchRun.historyManager} datasets={libraryDatasets} onCommit={saveResultReplay} onClose={closeResultReplay}
+        display={state.replayDisplays?.[displayKey] ?? DEFAULT_REPLAY_DISPLAY} onDisplay={saveReplayDisplay} />
+    </Suspense>;
+  }
 
   if (intent.kind === "invalid") {
     return (
@@ -649,7 +766,7 @@ export default function StrategyResearchApp({
     );
   }
 
-  if (importedManifest !== null && analysisStore !== null && selectedInterval !== null) {
+  if (importedManifest !== null && analysisStore !== null && selectedInterval !== null && scopedIndicatorPersistence && localIndicatorPersistence) {
     const analysis = (
       <ImportedAnalysisPanel
         manifest={importedManifest}
@@ -666,6 +783,11 @@ export default function StrategyResearchApp({
         manifest={importedManifest}
         interval={selectedInterval}
         indicatorPresets={library.indicatorPresets}
+        indicatorPersistence={scopedIndicatorPersistence}
+        indicatorScopeControls={indicator => <ResearchIndicatorScopeControl indicator={indicator} current={importedManifest}
+          datasets={libraryDatasets} targets={indicatorScopeState.scopes.find(scope => scope.indicator.id === indicator.id)?.datasets ?? []}
+          results={indicatorResults} storageError={indicatorScopeState.storageError} local={localIndicatorPersistence}
+          apply={(definition, current, selected, local) => indicatorScopes.apply(definition, current, selected, local)} />}
         eventStore={analysisStore}
         focusRequest={focusRequest}
         indicatorPanelOpen={indicatorPanelOpen}
@@ -713,7 +835,7 @@ export default function StrategyResearchApp({
       chart={
         source?.kind === "CURRENT_CHART"
           ? hostReady && runtime.runtimeMode === "LIVE" && researchRun.session
-            ? <MarketDataWorkspaceProvider><Suspense fallback={<p>{t("research.loading")}</p>}><StrategyResearchLiveChart session={researchRun.session} result={nativeMode ? null : researchRun.result} focusRequest={focusRequest} /></Suspense></MarketDataWorkspaceProvider>
+            ? <MarketDataWorkspaceProvider><Suspense fallback={<p>{t("research.loading")}</p>}><StrategyResearchLiveChart session={researchRun.session} result={nativeMode ? null : researchRun.sourceResult} focusRequest={focusRequest} /></Suspense></MarketDataWorkspaceProvider>
             : <StrategyResearchCurrentChart />
           : (
             <StrategyResearchFirstOpen

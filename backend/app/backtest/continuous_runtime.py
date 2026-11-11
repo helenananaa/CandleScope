@@ -18,6 +18,7 @@ from app.data_engine.data_manager.models import DataEventType,SeriesKey
 from app.data_engine.series_identity import KlineSeriesIdentity
 from .continuous_bar_host import ContinuousBarHost,ContinuousExecutionStopping
 from .continuous_bar_source import ContinuousMarketBarSource,STEP
+from .continuous_source_identity import affects_protected_prefix
 from .errors import BacktestError
 
 logger=logging.getLogger(__name__)
@@ -99,6 +100,9 @@ class _Actor:
                 self.stream_unavailable=False
             elif event.event_type==DataEventType.SOURCE_GAP:
                 self.interrupted.set()
+            elif event.event_type in {DataEventType.BAR_AMENDED, DataEventType.BACKFILL_COMPLETED}:
+                if await run_storage(self.mark_revised_prefix):
+                    self.request_stop()
             elif event.event_type == DataEventType.BAR_CLOSED and event.bar is not None and event.bar.is_closed:
                 # A source close can precede our UTC minute boundary. Wake again
                 # when the closed input becomes eligible, without moving the fence.
@@ -116,6 +120,30 @@ class _Actor:
             interval=self.key.interval,exchange=self.key.exchange,market_type=self.key.market_type,
             series_identity=self.key.identity,event_types=WAKE_EVENTS,continuity="gap_aware",on_recovery=lost)
         self.stream_lost=False
+
+    def mark_revised_prefix(self):
+        """Publish staleness from the durable watch while the strategy worker is busy."""
+        host = self.host
+        point = host.source_receipt if host is not None else None
+        if self.stopping or point is None:
+            return False
+        watch = self.owner.manager.bars.prefixes.inspect(point.owner)
+        if (watch is None or watch["incarnation"] != point.incarnation or watch["version"] <= point.version
+                or not affects_protected_prefix(point, host.definition, watch["dirty_from_ms"], watch["dirty_through_ms"])):
+            return False
+        row = self.owner.store.summary(self.run_id)
+        if (row["phase"] not in {"CATCHING_UP", "LIVE"} or row["data_revision"] != point.incarnation
+                or row["event_time_ms"] != point.through_ms or row["generation"] != host.row["generation"]):
+            return False
+        try:
+            self.owner.store.stop(self.run_id, generation=row["generation"], revision=row["revision"],
+                phase="REPAIR_REQUIRED", error={"code":"CONTINUOUS_HISTORY_REVISED",
+                    "message":"Processed input changed; committed result retained"})
+        except BacktestError as failure:
+            if failure.code not in {"CONTINUOUS_COMMIT_CONFLICT", "CONTINUOUS_NOT_READY"}:
+                raise
+            return False
+        return True
 
     async def setup(self):
         await self.subscribe()
@@ -143,6 +171,9 @@ class _Actor:
             except Exception:
                 logger.exception("Could not record continuous restore failure; original recovery data retained")
 
+    def _closed_boundary(self):
+        return (self.owner.clock_ms() // STEP) * STEP - 1
+
     def step(self, gaps, stream_unavailable):
         if self.stopping:raise ContinuousExecutionStopping()
         try:
@@ -156,13 +187,14 @@ class _Actor:
                 self.host.input_control=self.check_input_control
             # Bridge a stop that raced host construction/restore.
             if self.stopping:self.host.request_stop()
-            through=(self.owner.clock_ms()//STEP)*STEP-1
+            through=self._closed_boundary()
             point=self.host.source_receipt
             if stream_unavailable or any(start<=through and end>=point.from_ms for start,end in gaps):
                 raise BacktestError("CONTINUOUS_SOURCE_GAP","DataManager is repairing a retained source gap")
             batch=self.source.acquire(self.host,revealed_through_ms=through)
-            batch.apply(self.host,self.owner.manager)
-            return bool(batch.events) and not batch.caught_up,False
+            batch.apply(self.host,self.owner.manager,current_source_boundary=self._closed_boundary)
+            more = (bool(batch.events) and not batch.caught_up) or through < self._closed_boundary()
+            return more,False
         except ContinuousExecutionStopping:
             raise
         except Exception as failure:

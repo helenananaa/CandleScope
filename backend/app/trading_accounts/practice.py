@@ -68,7 +68,7 @@ class MatchFill:
 class MatchResult:
     fills: list[MatchFill] = field(default_factory=list)
     filled: dict[str, tuple[Decimal, int, Decimal]] = field(default_factory=dict)
-    cancelled: dict[str, str] = field(default_factory=dict)
+    cancelled: dict[str, tuple[str, int]] = field(default_factory=dict)
     created: list[WorkingOrder] = field(default_factory=list)
     position: Decimal = ZERO
 
@@ -214,9 +214,10 @@ class PracticeMatcher:
     def working(self) -> list[WorkingOrder]:
         return sorted(self.orders.values(), key=lambda order: (order.created_at_ms, order.id))
 
-    def cancel(self, order_id: str, reason: str) -> None:
-        if self.orders.pop(order_id, None) is not None:
-            self.result.cancelled[order_id] = reason
+    def cancel(self, order_id: str, reason: str, ts_ms: int) -> None:
+        order = self.orders.pop(order_id, None)
+        if order is not None:
+            self.result.cancelled[order_id] = (reason, max(ts_ms, order.created_at_ms))
 
     def execute(self, order: WorkingOrder, price: Decimal, ts_ms: int, *, liquidity: str) -> bool:
         """Fill ``order`` completely (reduce-only orders clamp to the position)."""
@@ -225,11 +226,11 @@ class PracticeMatcher:
         direction = ONE if order.side == "buy" else -ONE
         if order.reduce_only:
             if position == 0 or (position > 0) == (direction > 0):
-                self.cancel(order.id, "nothing_to_reduce")
+                self.cancel(order.id, "nothing_to_reduce", ts_ms)
                 return False
             qty = min(qty, abs(position))
         elif not self.settings.allow_short and order.side == "sell" and position - qty < 0:
-            self.cancel(order.id, "insufficient_position")
+            self.cancel(order.id, "insufficient_position", ts_ms)
             return False
         if order.type in {"market", "stop"}:
             price = slipped(price, order.side, self.settings.slippage_bps)
@@ -243,11 +244,11 @@ class PracticeMatcher:
         if order.oco_group:
             for sibling in list(self.orders.values()):
                 if sibling.oco_group == order.oco_group:
-                    self.cancel(sibling.id, "oco_sibling_filled")
+                    self.cancel(sibling.id, "oco_sibling_filled", ts_ms)
         if self.result.position == 0:
             for other in list(self.orders.values()):
                 if other.reduce_only:
-                    self.cancel(other.id, "position_closed")
+                    self.cancel(other.id, "position_closed", ts_ms)
         if not order.reduce_only and (order.bracket_stop is not None or order.bracket_target is not None):
             self._create_bracket(order, qty, ts_ms)
         return True

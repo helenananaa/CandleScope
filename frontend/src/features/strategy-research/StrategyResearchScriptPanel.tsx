@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 
 import { t } from "../../i18n/index.js";
@@ -20,7 +21,6 @@ import { StrategyParametersEditor } from "../backtest/chart-tester/StrategyParam
 import { DEFAULT_STRATEGY_RUN_SETTINGS, validStrategyRunSettings, type StrategyRunSettings } from "../../shared/strategyRunSettings.js";
 import type { ChartSession } from "../chart-session/chartSessionTypes.js";
 import {
-  CHART_STRATEGY_TEMPLATES,
   diagnoseChartStrategyDraft,
   type ChartStrategyRunRequest,
 } from "../backtest/chart-tester/chartStrategyTesterUiModel.js";
@@ -37,6 +37,7 @@ import {
   type StrategyDraftRecord,
 } from "../backtest/chart-tester/StrategyDraftStore.js";
 import type { ResearchSourceKind } from "../research-data/researchDataTypes.js";
+import { RESEARCH_STRATEGY_TEMPLATES } from "./strategyTemplateDraft.js";
 
 const StrategyScriptWorkspace = lazy(() => import("../backtest/chart-tester/StrategyScriptWorkspace.js"));
 
@@ -63,6 +64,7 @@ export function StrategyResearchScriptPanel({
   sourceKind,
   draftId,
   barOnly,
+  capitalAsset,
   runStatus,
   needsData,
   onDraftId,
@@ -72,12 +74,16 @@ export function StrategyResearchScriptPanel({
   onOpenAdvanced,
   configuration = DEFAULT_STRATEGY_RUN_SETTINGS,
   onConfigure,
+  batchControls,
+  batchSession,
+  marketBatchAvailable,
 }: {
   cellScope: string;
   session: ChartSession | null;
   sourceKind: ResearchSourceKind | null;
   draftId: string | null;
   barOnly: boolean;
+  capitalAsset?: string | undefined;
   runStatus: string;
   needsData: boolean;
   onDraftId(draftId: string | null): void;
@@ -87,7 +93,11 @@ export function StrategyResearchScriptPanel({
   onOpenAdvanced(): void;
   configuration?: StrategyRunSettings | undefined;
   onConfigure?(settings: StrategyRunSettings): void;
+  batchControls?(request: ChartStrategyRunRequest | null): ReactNode;
+  batchSession?: ChartSession | null;
+  marketBatchAvailable?: boolean;
 }) {
+  const editorSession = session ?? batchSession;
   const draftStore = useMemo(() => getChartStrategyDraftStore(), []);
   const [draft, setDraft] = useState<StrategyDraftRecord | null>(null);
   const [source, setSource] = useState("");
@@ -221,8 +231,8 @@ export function StrategyResearchScriptPanel({
   }, [flushPendingDraft]);
 
   const startDraft = useCallback(async (templateId: string) => {
-    const template = CHART_STRATEGY_TEMPLATES.find((item) => item.id === templateId);
-    if (!template || session === null) return;
+    const template = RESEARCH_STRATEGY_TEMPLATES.find((item) => item.id === templateId);
+    if (!template || !editorSession) return;
     const generation = restoreGenerationRef.current + 1;
     restoreGenerationRef.current = generation;
     const record = await saveDraft({
@@ -238,7 +248,7 @@ export function StrategyResearchScriptPanel({
     setCursor(record.cursor);
     setOpenEditor(true);
     onDraftId(record.id);
-  }, [onDraftId, saveDraft, session]);
+  }, [editorSession, onDraftId, saveDraft]);
 
   const openAdvanced = useCallback(async () => {
     try {
@@ -251,12 +261,12 @@ export function StrategyResearchScriptPanel({
     onOpenAdvanced();
   }, [draftId, flushPendingDraft, onOpenAdvanced]);
 
-  const run = useCallback(() => {
-    if (draft === null || session === null) return;
-    if (!validStrategyRunSettings(configuration)) { setPane("conditions"); return; }
-    onRun({
+  const preciseBlocked = barOnly && configuration.fidelityPreference === "PRECISE";
+  const runRequest = useMemo<ChartStrategyRunRequest | null>(() => {
+    if (draft === null || !editorSession || (preciseBlocked && !marketBatchAvailable) || !validStrategyRunSettings(configuration)) return null;
+    return {
       cellScope,
-      session,
+      session: editorSession,
       draftId: draft.id,
       draftContentRevision: strategyDraftContentRevision(source),
       displayName: draft.displayName,
@@ -271,28 +281,35 @@ export function StrategyResearchScriptPanel({
         language: draft.language,
         parameters: {},
         fidelityPreference: "FAST",
-        quickPresetId: chartStrategyQuickPresetIdForMarket(session.marketType),
+        quickPresetId: chartStrategyQuickPresetIdForMarket(editorSession.marketType),
         autoRun: false,
         ...configuration,
       },
-    });
-  }, [cellScope, configuration, draft, onRun, session, source, pythonTrustedConfirmed]);
+    };
+  }, [cellScope, configuration, draft, editorSession, marketBatchAvailable, preciseBlocked, source, pythonTrustedConfirmed]);
 
-  const controlReady = () => session !== null && sourceKind !== null && !["RUNNING", "QUEUED", "RESOLVING"].includes(runStatus);
+  const run = useCallback(() => {
+    if (!runRequest || !session || preciseBlocked) { setPane("conditions"); return; }
+    onRun(runRequest);
+  }, [onRun, preciseBlocked, runRequest, session]);
+
+  const controlReady = () => !!editorSession && !["RUNNING", "QUEUED", "RESOLVING"].includes(runStatus);
   useControlCommands(() => ({ id: `host-strategy:${cellScope}`, title: "Host strategy editor and saved drafts", context: () => ({ session, sourceKind, draftId, source, configuration, runStatus }),
-    snapshot: () => ({ session, sourceKind, draft, source, configuration, runStatus, needsData, recentDrafts, templates: CHART_STRATEGY_TEMPLATES, pane, openEditor }), commands: [
-      command("template", "Create a saved draft from an existing template.", object({ templateId: text(128) }), ({ templateId }) => { if (!CHART_STRATEGY_TEMPLATES.some((row) => row.id === templateId)) throw new Error("TEMPLATE_UNAVAILABLE"); return startDraft(templateId); }, { available: controlReady }),
+    snapshot: () => ({ session, sourceKind, draft, source, configuration, runStatus, needsData, recentDrafts, templates: RESEARCH_STRATEGY_TEMPLATES, pane, openEditor }), commands: [
+      command("template", "Create a saved draft from an existing template.", object({ templateId: text(128) }), ({ templateId }) => { if (!RESEARCH_STRATEGY_TEMPLATES.some((row) => row.id === templateId)) throw new Error("TEMPLATE_UNAVAILABLE"); return startDraft(templateId); }, { available: controlReady }),
       command("selectDraft", "Select a currently listed draft.", object({ draftId: nullable(text(128)) }), ({ draftId }) => { if (draftId && !recentDrafts.some((row) => row.id === draftId)) throw new Error("DRAFT_UNAVAILABLE"); onDraftId(draftId); }, { available: controlReady }),
       command("source", "Edit the saved strategy source; flush separately to verify persistence.", object({ source: text(48000, 0) }), ({ source }) => setSource(source), { available: () => controlReady() && !!draft }),
       command("flush", "Flush the existing strategy draft persistence workflow.", empty, () => flushPendingDraft(), { available: () => !!draft }),
-      command("configure", "Edit known host run settings using the same validation as the UI.", object({ rangeMode: choice(["ALL_AVAILABLE", "CUSTOM"]), customRange: nullable(object({ startMs: number(0, 1e15, true), endMs: number(0, 1e15, true) })), parameters: optional(record), fidelityPreference: optional(choice(["FAST", "PRECISE"])), executionOverrides: optional(object({ initialBalance: text(64), equityPercent: text(64), leverage: text(64), feeBps: text(64), slippageBps: text(64) })) }), (value) => { if (!validStrategyRunSettings(value) || !onConfigure) throw new Error("RUN_SETTINGS_INVALID"); onConfigure(value); }, { available: () => controlReady() && !!onConfigure }),
+      command("configure", "Edit known host run settings using the same validation as the UI.", object({ rangeMode: choice(["ALL_AVAILABLE", "CUSTOM"]), customRange: nullable(object({ startMs: number(0, 1e15, true), endMs: number(0, 1e15, true) })), parameters: optional(record), fidelityPreference: optional(choice(["FAST", "PRECISE"])), executionOverrides: optional(object({ initialBalance: text(64), equityPercent: text(64), leverage: text(64), feeBps: text(64), slippageBps: text(64) })) }), (value) => { if (!validStrategyRunSettings(value) || (barOnly && !marketBatchAvailable && value.fidelityPreference === "PRECISE") || !onConfigure) throw new Error("RUN_SETTINGS_INVALID"); onConfigure(value); }, { available: () => controlReady() && !!onConfigure }),
       command("pane", "Select editor pane.", object({ pane: choice(["parameters", "code", "conditions"]) }), ({ pane }) => { setPane(pane); setOpenEditor(true); }),
-      command("run", "Start the host strategy through its draft/session/attachment ownership workflow.", empty, () => run(), { available: () => controlReady() && !!draft && validStrategyRunSettings(configuration) }),
-      command("prepare", "Confirm the current missing-data preparation workflow.", empty, () => onConfirmNeedsData(), { available: () => controlReady() && needsData }),
+      command("run", "Start the host strategy through its draft/session/attachment ownership workflow.", empty, () => run(), { available: () => controlReady() && session !== null && !preciseBlocked && runRequest !== null }),
+      command("prepare", "Confirm the current missing-data preparation workflow.", empty, () => onConfirmNeedsData(), { available: () => controlReady() && session !== null && !preciseBlocked && needsData && runRequest !== null }),
       command("openAdvanced", "Flush the draft and open advanced research.", empty, () => openAdvanced()),
     ] }));
-  if (session === null || sourceKind === null) {
-    return <p data-testid="strategy-research-script-empty">{t("strategy.scriptSlot")}</p>;
+  if (!editorSession) {
+    return <><p data-testid="strategy-research-script-empty">{t("strategy.scriptSlot")}</p>
+      {marketBatchAvailable && batchControls?.(null)}
+    </>;
   }
 
   return (
@@ -300,18 +317,18 @@ export function StrategyResearchScriptPanel({
       <header><strong>{draft?.displayName ?? t("strategy.scriptSlot")}</strong></header>
       {recentDrafts.length > 0 && <label className="strategy-condition-range">{t("chartTester.recentTitle")}
         <select value={draftId ?? ""} onChange={(event) => onDraftId(event.target.value || null)}>
-          <option value="">{t("chartTester.autosave.none")}</option>
+          <option value="">{t("chartTester.templateTitle")}</option>
           {recentDrafts.map((record) => <option key={record.id} value={record.id}>{record.displayName}</option>)}
         </select>
       </label>}
       {barOnly ? (
         <p className="strategy-research-bar-only" data-testid="strategy-research-bar-only">
-          {t("chartTester.result.fidelityFast")}
+          {t("research.capability.tapeDenied")}
         </p>
       ) : null}
       {draft === null ? (
         <div className="strategy-research-templates" data-testid="strategy-research-templates">
-          {CHART_STRATEGY_TEMPLATES.map((template) => (
+          {RESEARCH_STRATEGY_TEMPLATES.map((template) => (
             <button
               key={template.id}
               type="button"
@@ -340,7 +357,7 @@ export function StrategyResearchScriptPanel({
             {(["parameters", "code", "conditions"] as const).map((value) => <button type="button" role="tab" key={value} aria-selected={pane === value} onClick={() => setPane(value)}>{t(value === "parameters" ? "ux.parameters" : value === "code" ? "chartTester.tab.script" : "chartTester.tab.settings")}</button>)}
           </div>
           {pane === "parameters" && <StrategyParametersEditor source={source} onChange={setSource} />}
-          {pane === "conditions" && onConfigure && <StrategyConditionsEditor settings={configuration} marketType={session.marketType} onChange={onConfigure} />}
+          {pane === "conditions" && onConfigure && <StrategyConditionsEditor settings={configuration} marketType={editorSession.marketType} capitalAsset={capitalAsset} preciseAvailable={!barOnly || !!marketBatchAvailable} preciseArchiveHint={sourceKind === "CURRENT_CHART"} onChange={onConfigure} />}
           {openEditor && pane === "code" ? (
             <Suspense fallback={<p>{t("strategy.scriptSlot")}</p>}>
               <StrategyScriptWorkspace
@@ -360,7 +377,7 @@ export function StrategyResearchScriptPanel({
             type="button"
             data-testid="strategy-research-run"
             className="research-primary"
-            disabled={(draft.language === "python" && !pythonTrustedConfirmed) || !validStrategyRunSettings(configuration) || runStatus === "RUNNING" || runStatus === "QUEUED" || runStatus === "RESOLVING"}
+            disabled={!session || preciseBlocked || (draft.language === "python" && !pythonTrustedConfirmed) || !runRequest || runStatus === "RUNNING" || runStatus === "QUEUED" || runStatus === "RESOLVING"}
             onClick={needsData ? onConfirmNeedsData : run}
           >
             {t(needsData ? "chartTester.prepareDataRun" : "chartTester.run")}
@@ -375,6 +392,8 @@ export function StrategyResearchScriptPanel({
           </button>
         </>
       )}
+      {batchControls?.(runRequest && !runRequest.attachment.pythonBarExecution
+        && (runRequest.language !== "python" || pythonTrustedConfirmed) ? runRequest : null)}
     </section>
   );
 }

@@ -3,12 +3,14 @@ import type { ChartStrategyAttachmentRecord } from "../../chart-workspace/chartW
 import type { StrategyDraftLanguage } from "./StrategyDraftStore.js";
 
 export interface ChartStrategyTemplate {
-  id: "PYTHON_SMA";
+  id: "PYTHON_SMA" | "PINE_SAMPLED";
   nameKey:
+    | "chartTester.template.pineSample"
     | "chartTester.template.sma"
     | "chartTester.template.rsi"
     | "chartTester.template.donchian";
   descriptionKey:
+    | "chartTester.template.pineSampleDescription"
     | "chartTester.template.smaDescription"
     | "chartTester.template.rsiDescription"
     | "chartTester.template.donchianDescription";
