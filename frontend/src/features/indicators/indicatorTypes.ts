@@ -62,6 +62,8 @@ export interface IndicatorDefinition {
   is_builtin?: boolean;
   kind?: IndicatorKind | string;
   renderHints?: Record<string, unknown>;
+  /** Runtime only: spans of the cached result computed from a partial seed. */
+  partialSeed?: readonly IndicatorPartialSeedRange[];
 }
 
 interface IndicatorParameterBase {
@@ -148,6 +150,30 @@ export interface IndicatorLine {
   colorData?: IndicatorColorPoint[] | null;
   /** Internal renderer hint. Historical snapshot/patch/range paths reset it. */
   renderUpdate?: "tail" | "full" | null;
+  /** Owner indicator's partial-seed spans, attached by pane projection for legends. */
+  partialSeed?: readonly IndicatorPartialSeedRange[];
+}
+
+/**
+ * Whether a builtin range result had its full convergence warmup before the
+ * first returned bar (ADR-INDICATOR-001 §4). `partial` values were computed
+ * from the earliest locally stored bar and are recomputed when older history
+ * is persisted.
+ */
+export interface IndicatorSeedState {
+  state: "converged" | "partial";
+  warmupBars: number;
+  seedBars: number;
+}
+
+/**
+ * Bars whose values came from a partial seed: from the start of a range
+ * reported `partial` through the last bar before the convergence warmup was
+ * reached. `seedBars` counts stored bars before `start`.
+ */
+export interface IndicatorPartialSeedRange extends IndicatorRange {
+  warmupBars: number;
+  seedBars: number;
 }
 
 export interface IndicatorDrawing {
@@ -340,6 +366,8 @@ export interface IndicatorPayloadEnvelope {
   signals: IndicatorSignal[];
   param_schema: IndicatorParameterSchema[];
   range?: IndicatorRange;
+  /** Builtin range payloads only; absent elsewhere. */
+  seed?: IndicatorSeedState;
   dataRevision?: IndicatorRevision;
   __httpStatus?: number;
   history_state?: "ready" | "pending" | "exhausted";
@@ -613,6 +641,8 @@ export interface IndicatorCacheMetadata {
   revision?: IndicatorRevision | null;
   dataRevision?: IndicatorRevision | null;
   cascadeRight?: boolean;
+  /** Seed state of the payload being cached; applies to `range`. */
+  seed?: IndicatorSeedState | null;
 }
 
 export interface IndicatorCacheEntry {
@@ -628,6 +658,8 @@ export interface IndicatorCacheEntry {
   computedSegments: IndicatorRangeSegment[];
   staleSegments: IndicatorRangeSegment[];
   revision: IndicatorRevision | null;
+  /** Present only while some cached values came from a partial seed. */
+  partialSeed?: readonly IndicatorPartialSeedRange[];
   lastUpdatedMs: number;
   lastAccessMs: number;
 }
@@ -642,6 +674,7 @@ export interface IndicatorCacheResult {
   computedSegments: IndicatorRangeSegment[];
   staleSegments: IndicatorRangeSegment[];
   revision: IndicatorRevision | null;
+  partialSeed?: readonly IndicatorPartialSeedRange[];
   lastUpdatedMs: number;
 }
 
@@ -654,6 +687,7 @@ export interface IndicatorCacheResultMetadata {
   computedSegments: IndicatorRangeSegment[];
   staleSegments: IndicatorRangeSegment[];
   revision: IndicatorRevision | null;
+  partialSeed?: readonly IndicatorPartialSeedRange[];
   lastUpdatedMs: number;
 }
 

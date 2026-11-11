@@ -602,6 +602,7 @@ export const th = {
   "legend.change": "เปลี่ยน",
   "legend.amplitude": "กว้าง",
   "legend.noData": "ไม่มีข้อมูลสำหรับแท่งนี้",
+  "legend.partialSeed": "คำนวณจากแท่งที่จัดเก็บเก่าที่สุด (วอร์มอัพ {seed} จาก {warmup} แท่ง) ค่าอาจเปลี่ยนเมื่อโหลดประวัติที่เก่ากว่า",
   "legend.line": "เส้น {n}",
   "legend.mainPane": "{symbol} หลัก",
   "pane.main": "หลัก",

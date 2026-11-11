@@ -602,6 +602,7 @@ export const he = {
   "legend.change": "שינוי",
   "legend.amplitude": "משרעת",
   "legend.noData": "אין נתונים לנר זה",
+  "legend.partialSeed": "מחושב מהנר השמור המוקדם ביותר ({seed} מתוך {warmup} נרות חימום). הערכים עשויים להשתנות כשנטענת היסטוריה מוקדמת יותר.",
   "legend.line": "קו {n}",
   "legend.mainPane": "{symbol} ראשי",
   "pane.main": "ראשי",

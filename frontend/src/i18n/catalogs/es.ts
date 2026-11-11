@@ -607,6 +607,7 @@ export const es = {
   "legend.change": "Var.",
   "legend.amplitude": "Ampl.",
   "legend.noData": "Sin datos para esta barra",
+  "legend.partialSeed": "Calculado desde la barra almacenada más antigua ({seed} de {warmup} barras de calentamiento). Los valores pueden cambiar al cargar historial anterior.",
   "legend.line": "Línea {n}",
   "legend.mainPane": "{symbol} principal",
   "pane.main": "Principal",

@@ -601,6 +601,7 @@ export const vi = {
   "legend.change": "Th.đổi",
   "legend.amplitude": "Biên độ",
   "legend.noData": "Không có dữ liệu cho nến này",
+  "legend.partialSeed": "Tính từ nến đã lưu sớm nhất ({seed}/{warmup} nến khởi động). Giá trị có thể thay đổi khi tải lịch sử cũ hơn.",
   "legend.line": "Đường {n}",
   "legend.mainPane": "{symbol} chính",
   "pane.main": "Chính",

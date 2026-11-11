@@ -602,6 +602,7 @@ export const hu = {
   "legend.change": "Vált.",
   "legend.amplitude": "Ampl.",
   "legend.noData": "Nincs adat ehhez a gyertyához",
+  "legend.partialSeed": "A legrégebbi tárolt gyertyától számítva ({seed} / {warmup} bemelegítő gyertya). Az értékek változhatnak, ha régebbi előzmények töltődnek be.",
   "legend.line": "Vonal {n}",
   "legend.mainPane": "{symbol} fő",
   "pane.main": "Fő",

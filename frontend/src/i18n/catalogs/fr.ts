@@ -601,6 +601,7 @@ export const fr = {
   "legend.change": "Var.",
   "legend.amplitude": "Ampl.",
   "legend.noData": "Aucune donnée pour cette barre",
+  "legend.partialSeed": "Calculé depuis la plus ancienne barre stockée ({seed} sur {warmup} barres de préchauffage). Les valeurs peuvent changer au chargement d’un historique plus ancien.",
   "legend.line": "Ligne {n}",
   "legend.mainPane": "{symbol} principal",
   "pane.main": "Principal",

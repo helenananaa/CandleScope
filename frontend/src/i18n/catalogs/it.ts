@@ -601,6 +601,7 @@ export const it = {
   "legend.change": "Var.",
   "legend.amplitude": "Amp.",
   "legend.noData": "Nessun dato per questa barra",
+  "legend.partialSeed": "Calcolato dalla barra salvata più vecchia ({seed} di {warmup} barre di warmup). I valori possono cambiare quando viene caricato lo storico precedente.",
   "legend.line": "Linea {n}",
   "legend.mainPane": "{symbol} principale",
   "pane.main": "Principale",

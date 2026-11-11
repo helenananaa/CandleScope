@@ -602,6 +602,7 @@ export const cs = {
   "legend.change": "Změna",
   "legend.amplitude": "Ampl.",
   "legend.noData": "Pro tuto svíčku nejsou data",
+  "legend.partialSeed": "Vypočteno od nejstarší uložené svíčky ({seed} z {warmup} svíček zahřátí). Hodnoty se mohou změnit po načtení starší historie.",
   "legend.line": "Čára {n}",
   "legend.mainPane": "{symbol} hlavní",
   "pane.main": "Hlavní",

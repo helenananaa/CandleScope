@@ -601,6 +601,7 @@ export const pl = {
   "legend.change": "Zm.",
   "legend.amplitude": "Ampl.",
   "legend.noData": "Brak danych dla tej świecy",
+  "legend.partialSeed": "Obliczono od najstarszej zapisanej świecy ({seed} z {warmup} świec rozgrzewki). Wartości mogą się zmienić po wczytaniu starszej historii.",
   "legend.line": "Linia {n}",
   "legend.mainPane": "{symbol} główny",
   "pane.main": "Główny",

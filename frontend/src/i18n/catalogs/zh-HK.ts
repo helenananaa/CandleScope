@@ -602,6 +602,7 @@ export const zhHK = {
   "legend.change": "漲跌",
   "legend.amplitude": "振幅",
   "legend.noData": "該 K 線無數據",
+  "legend.partialSeed": "自最早一根本地 K 線起計（預熱 {seed}/{warmup} 根）。載入更早的歷史後，數值可能變動。",
   "legend.line": "線 {n}",
   "legend.mainPane": "{symbol} 主圖",
   "pane.main": "主圖",

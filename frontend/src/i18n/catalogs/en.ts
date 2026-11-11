@@ -905,6 +905,7 @@ export const en = {
   "legend.change": "Chg",
   "legend.amplitude": "Ampl.",
   "legend.noData": "No data for this bar",
+  "legend.partialSeed": "Computed from the earliest stored bar ({seed} of {warmup} warmup bars). Values may change when older history loads.",
   "legend.line": "Line {n}",
   "legend.mainPane": "{symbol} main",
 

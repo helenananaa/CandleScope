@@ -929,6 +929,7 @@ export const ja = {
   "legend.change": "騰落",
   "legend.amplitude": "振幅",
   "legend.noData": "この足にデータがありません",
+  "legend.partialSeed": "保存済みの最古の足から計算（ウォームアップ {seed}/{warmup} 本）。より古い履歴を読み込むと値が変わる場合があります。",
   "legend.line": "ライン {n}",
   "legend.mainPane": "{symbol} 主チャート",
   "pane.main": "メイン",

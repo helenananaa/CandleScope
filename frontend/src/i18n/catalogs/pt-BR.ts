@@ -1144,6 +1144,7 @@ export const ptBR = {
   "legend.change": "Var.",
   "legend.amplitude": "Ampl.",
   "legend.noData": "Sem dados para esta barra",
+  "legend.partialSeed": "Calculado a partir da barra armazenada mais antiga ({seed} de {warmup} barras de aquecimento). Os valores podem mudar quando um histórico mais antigo for carregado.",
   "legend.line": "Linha {n}",
   "legend.mainPane": "{symbol} principal",
 

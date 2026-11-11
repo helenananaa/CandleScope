@@ -602,6 +602,7 @@ export const nl = {
   "legend.change": "Wijz.",
   "legend.amplitude": "Ampl.",
   "legend.noData": "Geen gegevens voor deze kaars",
+  "legend.partialSeed": "Berekend vanaf de oudste opgeslagen kaars ({seed} van {warmup} opwarmkaarsen). Waarden kunnen veranderen wanneer oudere geschiedenis wordt geladen.",
   "legend.line": "Lijn {n}",
   "legend.mainPane": "{symbol} hoofd",
   "pane.main": "Hoofd",

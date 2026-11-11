@@ -602,6 +602,7 @@ export const sv = {
   "legend.change": "Förändr.",
   "legend.amplitude": "Ampl.",
   "legend.noData": "Ingen data för den här stapeln",
+  "legend.partialSeed": "Beräknat från den äldsta lagrade stapeln ({seed} av {warmup} uppvärmningsstaplar). Värdena kan ändras när äldre historik laddas.",
   "legend.line": "Linje {n}",
   "legend.mainPane": "{symbol} huvud",
   "pane.main": "Huvud",

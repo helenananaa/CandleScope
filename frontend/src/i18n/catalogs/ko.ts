@@ -1131,6 +1131,7 @@ export const ko = {
   "legend.change": "등락",
   "legend.amplitude": "진폭",
   "legend.noData": "이 캔들에 데이터 없음",
+  "legend.partialSeed": "저장된 가장 오래된 캔들부터 계산됨(워밍업 {seed}/{warmup}개). 더 오래된 기록을 불러오면 값이 바뀔 수 있음.",
   "legend.line": "선 {n}",
   "legend.mainPane": "{symbol} 메인",
   "pane.main": "메인",

@@ -601,6 +601,7 @@ export const de = {
   "legend.change": "Änd.",
   "legend.amplitude": "Ampl.",
   "legend.noData": "Keine Daten für diese Kerze",
+  "legend.partialSeed": "Ab der ältesten gespeicherten Kerze berechnet ({seed} von {warmup} Warmup-Kerzen). Die Werte können sich ändern, wenn älterer Verlauf geladen wird.",
   "legend.line": "Linie {n}",
   "legend.mainPane": "{symbol} Haupt",
   "pane.main": "Haupt",

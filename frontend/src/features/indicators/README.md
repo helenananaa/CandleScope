@@ -169,6 +169,15 @@ Hosted range lifecycle is `series + demand.scope + demand.generation`. Revision
 supersession inside that lifecycle marks prior work stale without unnecessarily
 rebuilding the scheduler epoch.
 
+Builtin range payloads may carry `seed` (ADR-INDICATOR-001 §4). The parser
+drops a missing or malformed seed instead of rejecting the values. A `partial`
+seed becomes a span from the range start through its last bar before the
+convergence warmup (`indicatorSeedState.ts`). The result cache and
+`activeIndicators` keep these spans with the same snapshot / replace-range /
+merge rules as lines, so a recomputed range drops its old span. Pane projection
+attaches the spans to each line. Chart legends show a marker when the value they
+display falls inside a span. Spans are runtime-only and never persisted.
+
 ## Internal Ownership
 
 - `activeIndicatorStore.ts` owns active indicator persistence and mutation.

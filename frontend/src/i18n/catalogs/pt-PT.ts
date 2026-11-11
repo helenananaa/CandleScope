@@ -602,6 +602,7 @@ export const ptPT = {
   "legend.change": "Var.",
   "legend.amplitude": "Ampl.",
   "legend.noData": "Sem dados para esta barra",
+  "legend.partialSeed": "Calculado a partir da barra guardada mais antiga ({seed} de {warmup} barras de aquecimento). Os valores podem mudar quando for carregado histórico mais antigo.",
   "legend.line": "Linha {n}",
   "legend.mainPane": "{symbol} principal",
   "pane.main": "Principal",
