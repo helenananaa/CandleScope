@@ -83,6 +83,8 @@ def history_locations(payload):
         locations.append((payload["engine"], "decisions"))
         if "execution_model_revision" in engine:
             locations.append((payload["engine"], "frozen_intents"))
+        if "replay_closed_bar_signals" in payload["engine"]:
+            locations.append((payload["engine"], "replay_closed_bar_signals"))
     return locations
 
 

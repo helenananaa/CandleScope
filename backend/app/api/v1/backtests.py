@@ -12,6 +12,8 @@ from app.backtest.request_contracts import (
     StrategyCopyRequest,
     StrategySmokeRequest,
     RunCloneRequest,
+    ResultReplayNoteRequest,
+    ResultReplayChartRequest,
     ReviewBridgeRequest,
     ResearchLaunchContextRequest,
     PythonBundleZipRequest,
@@ -22,10 +24,12 @@ from app.core.config import getenv as app_getenv
 
 import base64
 import json
-from typing import Any
+from time import time_ns
+from typing import Any, Literal
 
 from fastapi import APIRouter, Header, Request, Query
 from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import TypeAdapter, ValidationError
 
 from app.core.operator_origin import (
     effective_python_runtime_mode,
@@ -499,6 +503,63 @@ def get_report_details(request: Request, run_id: str, section: str = "fills",
 def get_chart(request: Request, run_id: str) -> dict[str, Any]:
     try:
         return _runtime(request).chart_data(run_id)
+    except BacktestError as exc:
+        return _error(exc)
+
+
+_RESULT_REPLAY_CHARTS = TypeAdapter(dict[Literal["extra1", "extra2"], ResultReplayChartRequest])
+
+
+@router.get("/runs/{run_id}/result-replay")
+def get_result_replay(
+    request: Request, run_id: str,
+    snapshot_hash: str = Query(pattern=r"^sha256:[a-f0-9]{64}$"),
+    report_hash: str = Query(pattern=r"^sha256:[a-f0-9]{64}$"),
+    cursor: int = Query(ge=0),
+    interval: str = Query(min_length=2, max_length=64),
+    comparison_interval: str | None = Query(default=None, min_length=2, max_length=64),
+    comparison_dataset_id: str | None = Query(default=None, min_length=1, max_length=80),
+    comparison_data_epoch: str | None = Query(default=None, pattern=r"^sha256:[a-f0-9]{64}$"),
+    ma_period: int | None = Query(default=None, ge=1, le=500),
+    comparison_ma_period: int | None = Query(default=None, ge=1, le=500),
+    additional_charts: str | None = Query(default=None, max_length=2048),
+) -> dict[str, Any]:
+    from app.backtest.result_replay import project_result_replay
+
+    try:
+        if (comparison_dataset_id is None) != (comparison_data_epoch is None):
+            raise BacktestError("SCHEMA_UNKNOWN_FIELD", "Comparison dataset and revision are required together")
+        comparison_dataset = (comparison_dataset_id, comparison_data_epoch) if comparison_dataset_id and comparison_data_epoch else None
+        try:
+            charts = _RESULT_REPLAY_CHARTS.validate_json(additional_charts) if additional_charts is not None else None
+        except ValidationError as exc:
+            raise BacktestError("SCHEMA_UNKNOWN_FIELD", "Invalid additional replay charts") from exc
+        return project_result_replay(
+            _runtime(request), run_id, snapshot_hash=snapshot_hash, report_hash=report_hash,
+            cursor=cursor, interval=interval, comparison_interval=comparison_interval,
+            ma_period=ma_period, comparison_ma_period=comparison_ma_period, comparison_dataset=comparison_dataset,
+            additional_charts=charts,
+        )
+    except BacktestError as exc:
+        return _error(exc)
+
+
+@router.post("/runs/{run_id}/result-replay/notes")
+def save_result_replay_note(request: Request, run_id: str, payload: ResultReplayNoteRequest) -> dict[str, Any]:
+    from app.backtest.result_replay import project_result_replay
+
+    try:
+        runtime = _runtime(request)
+        frame = project_result_replay(
+            runtime, run_id, snapshot_hash=payload.snapshot_hash, report_hash=payload.report_hash,
+            cursor=payload.cursor, interval=payload.interval,
+        )
+        runtime.service.repository.save_result_replay_note(
+            run_id, payload.snapshot_hash, payload.report_hash, payload.note_id,
+            expected_revision=payload.expected_revision, cursor=frame["cursor"], time_ms=frame["time_ms"],
+            body=payload.body, saved_at_ms=time_ns() // 1_000_000,
+        )
+        return {"revision": payload.expected_revision + 1}
     except BacktestError as exc:
         return _error(exc)
 

@@ -160,6 +160,15 @@ class ExternalConnectionRepository:
                 raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "external connection is unavailable")
             return json.loads(row["scope_json"])
 
+    @contextmanager
+    def run_admission(self, connection_id: str) -> Iterator[None]:
+        """Serialize durable Run admission with revocation across Host owners."""
+        with self._transaction() as connection:
+            row = self._row(connection, connection_id)
+            if row is None or row["revoked_ms"] is not None:
+                raise StrategyProviderError("PROVIDER_CONNECTION_REQUIRED", "external connection was revoked before Run admission")
+            yield
+
     def ready(self, connection_id: str, *, now_ms: int) -> bool:
         with self._read() as connection:
             row = self._row(connection, connection_id)

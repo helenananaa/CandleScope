@@ -12,6 +12,7 @@ import type { SeriesWindowView } from "../market-data/window/seriesWindowView.js
 import { liveFillLegs, liveJournalEntries, positionPriceLines, MAX_LIVE_FILL_MARKERS, type PositionLineKind } from "./liveChartOverlay.js";
 import { normalizeChartAccountOverlay, type ChartAccountOverlaySettings } from "../chart-workspace/chartAccountOverlaySettings.js";
 import { tradingAccountDataPool, type TradingAccountDataState } from "./tradingAccountDataPool.js";
+import { filterJournalNoteMarkers } from "./journalNoteMarkers.js";
 import { createReplayMarkerSource } from "./replayMarkerSource.js";
 import { tradingAccountsStore } from "./tradingAccountsStore.js";
 import { formatQty, tokenColor } from "./tradingFormat.js";
@@ -86,7 +87,7 @@ const emptyAccount = () => EMPTY_ACCOUNT;
 export function useTradingChartOverlay(input: TradingChartOverlayInput): TradingChartOverlay {
   const { enabled, exchange, marketType, symbol, interval, seriesStore, upColor, downColor, themeKey } = input;
   const locale = useLocale();
-  const settings = normalizeChartAccountOverlay(input.settings);
+  const settings = useMemo(() => normalizeChartAccountOverlay(input.settings), [input.settings]);
   const needsAccount = enabled && (settings.trades || settings.positions || settings.notes);
   const followsPanel = settings.accountId === null;
   const selected = useSyncExternalStore(tradingAccountsStore.subscribe, tradingAccountsStore.getSnapshot).selected;
@@ -113,7 +114,9 @@ export function useTradingChartOverlay(input: TradingChartOverlayInput): Trading
     };
     const legs = enabled && settings.trades && intervalSec
       ? liveFillLegs(trades, instrument, loaded, intervalSec, MAX_LIVE_FILL_MARKERS, bucketTime) : [];
-    const notes = enabled && settings.notes ? liveJournalEntries(entries, instrument, bucketTime) : [];
+    const notes = enabled && settings.notes
+      ? liveJournalEntries(filterJournalNoteMarkers(entries.filter(entry => entry.accountId === accountId), settings), instrument, bucketTime)
+      : [];
     markerSource.update({
       legs,
       notes,
@@ -123,7 +126,7 @@ export function useTradingChartOverlay(input: TradingChartOverlayInput): Trading
       lastVisibleSec: loaded?.lastSec ?? null,
       labels: { buy: t("trading.replay.buy"), sell: t("trading.replay.sell"), note: t("trading.note"), reviewNote: t("trading.journal.reviewNote") },
     });
-  }, [enabled, entries, exchange, interval, loaded, locale, marketType, markerSource, seriesStore, settings.notes, settings.trades, symbol, trades]);
+  }, [accountId, enabled, entries, exchange, interval, loaded, locale, marketType, markerSource, seriesStore, settings, symbol, trades]);
 
   useLayoutEffect(() => {
     if (!enabled || !settings.positions) {

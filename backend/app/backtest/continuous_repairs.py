@@ -9,6 +9,7 @@ import time
 from app.core.async_cleanup import finish_cleanup
 from app.core.executors import run_storage
 from app.data_engine.storage.prefix_watches import PrefixReceipt
+from .continuous_auto_repair import AutomaticRepairs, KEY_PREFIX
 from .continuous_repair_plan import preview
 from .continuous_repair_stages import RepairStages
 from .continuous_repair_worker import RepairWorker
@@ -25,6 +26,7 @@ class ContinuousRepairs:
         self.stages = None
         self.job = None
         self.previews = {}
+        self.automatic = AutomaticRepairs(self)
 
     @property
     def busy(self): return self.job is not None
@@ -69,6 +71,8 @@ class ContinuousRepairs:
     async def confirm(self, run_id, request_key, *, expected, plan_id, resume_after, confirmed):
         self.owner._live()
         _text(run_id, 128); _text(request_key, 128); _text(plan_id, 64)
+        if request_key.startswith(KEY_PREFIX):
+            raise fail("CONTINUOUS_INPUT_INVALID", "Automatic repair keys are reserved")
         if confirmed is not True or type(resume_after) is not bool:
             raise fail("CONTINUOUS_INPUT_INVALID", "Repair requires explicit confirmation and resume intent")
         prior = await run_storage(self.owner.store.epochs.request, request_key)
@@ -100,6 +104,17 @@ class ContinuousRepairs:
             job = self._start(request_key, run_id, plan)
         await asyncio.shield(job.reserved)
         return await run_storage(self.owner.store.epochs.request, request_key)
+
+    async def set_automatic(self, run_id, *, enabled, expected_version):
+        self.owner._live()
+        policy = await run_storage(self.owner.store.auto_repair.set, run_id, enabled=enabled,
+                                   expected_version=expected_version)
+        job = self.job
+        if (not enabled and job is not None and job.run_id == run_id
+                and job.plan.get("auto_policy_version") == expected_version):
+            job.request_stop()
+        self.automatic.start()
+        return policy
 
     async def drain_execution(self, run_id):
         starting = self.owner.runtime.starts.get(run_id)
@@ -194,6 +209,7 @@ class ContinuousRepairs:
 
     def request_stop(self):
         self.previews.clear()
+        self.automatic.stop()
         if self.job is not None: self.job.request_stop()
 
     async def close_job(self):

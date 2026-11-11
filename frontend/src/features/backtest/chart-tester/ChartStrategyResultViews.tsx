@@ -222,6 +222,9 @@ export function ChartStrategyResultOverview({
   onOpenAdvanced?: () => void;
 }) {
   const { report, chart, run } = result;
+  const reportedQuote = report.data_quality?.quote_asset;
+  const quote = typeof reportedQuote === "string" && /^[A-Z0-9][A-Z0-9._-]{0,31}$/.test(reportedQuote)
+    ? reportedQuote : "USDT";
   const locale = useLocale();
   const trades = report.trades ?? [];
   const latest = trades.at(-1) ?? null;
@@ -248,7 +251,7 @@ export function ChartStrategyResultOverview({
       <div className="chart-strategy-result-metrics">
         <ResultMetric
           label={t("chartTester.result.realizedPnl")}
-          value={`${formatChartStrategyNumber(report.metrics.realized_net_pnl)} USDT`}
+          value={`${formatChartStrategyNumber(report.metrics.realized_net_pnl)} ${quote}`}
           rawValue={chartStrategyMetricValue(report.metrics.realized_net_pnl)}
           detail={report.report_label === "APPROXIMATE" ? t("chartTester.result.fidelityFast") : report.report_label}
         />

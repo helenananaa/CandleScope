@@ -564,3 +564,82 @@ def test_database_alias_cannot_bypass_profile_exclusive_ownership(tmp_path):
             assert real.is_file()
         finally:await manager.event_bus.close()
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("history", [False, True])
+@pytest.mark.parametrize("gap_bars", [0, 3])
+def test_new_closes_during_restart_catchup_keep_the_account_catching_up(storage, tmp_path, monkeypatch, history, gap_bars):
+    manager, active, _ = market(storage, monkeypatch, count=31)
+    now = [START + 20 * STEP]
+    reference_now = list(now)
+    entered, release = Event(), Event()
+
+    async def scenario():
+        owner = await open_owner(tmp_path / "resume", manager, now)
+        reference = await open_owner(tmp_path / "reference", manager, reference_now)
+        try:
+            initial = await submit(owner, history=history, python=True)
+            run_id = initial["run_id"]
+            reference_id = (await submit(reference, history=history, python=True))["run_id"]
+            await asyncio.wait_for(owner.wait_initial("request"), 10)
+            await asyncio.wait_for(reference.wait_initial("request"), 10)
+            await wait_row(owner.store, run_id, lambda row: row["phase"] == "LIVE")
+            await wait_row(reference.store, reference_id, lambda row: row["phase"] == "LIVE")
+            saved = owner.store.load(run_id)
+            await owner.close()
+            assert "strategy:continuous:" + run_id not in active
+
+            now[0] = START + (20 + gap_bars) * STEP
+            first_cutoff = now[0] - 1
+            owner = await open_owner(tmp_path / "resume", manager, now)
+            prepare_checkpoint = owner.store.prepare_checkpoint
+            commit = owner.store.commit
+            publications = []
+
+            def block_recovery(value, *, event_time_ms, **kwargs):
+                if event_time_ms == first_cutoff:
+                    entered.set()
+                    if not release.wait(5):
+                        raise AssertionError("test did not advance the source boundary")
+                return prepare_checkpoint(value, event_time_ms=event_time_ms, **kwargs)
+
+            def record_commit(*args, **kwargs):
+                row = commit(*args, **kwargs)
+                publications.append((row["event_time_ms"], row["phase"], row["sequence"]))
+                return row
+
+            monkeypatch.setattr(owner.store, "prepare_checkpoint", block_recovery)
+            monkeypatch.setattr(owner.store, "commit", record_commit)
+            assert (await owner.restore())["started"] == [run_id]
+            assert await asyncio.to_thread(entered.wait, 5)
+            during = owner.store.load(run_id)
+            assert during["run"]["phase"] == "CATCHING_UP"
+            assert during["checkpoint"]["engine"] == saved["checkpoint"]["engine"]
+
+            now[0] = START + 31 * STEP
+            if gap_bars:
+                await manager.event_bus.emit(DataEvent(DataEventType.BAR_CLOSED, KEY))
+            release.set()
+            cutoff = now[0] - 1
+            await wait_row(owner.store, run_id, lambda row: row["event_time_ms"] == cutoff and row["phase"] == "LIVE")
+            reference_now[0] = now[0]
+            await manager.event_bus.emit(DataEvent(DataEventType.BAR_CLOSED, KEY))
+            await wait_row(reference.store, reference_id, lambda row: row["event_time_ms"] == cutoff and row["phase"] == "LIVE")
+            initial_sequence = 20 if history else 0
+            expected = [(first_cutoff, "CATCHING_UP", initial_sequence + gap_bars)] if gap_bars else []
+            assert publications == [*expected, (cutoff, "LIVE", initial_sequence + 11)]
+            restored = owner.store.load(run_id)
+            uninterrupted = reference.store.load(reference_id)
+            assert restored["run"]["id"] == run_id
+            assert restored["run"]["sequence"] == uninterrupted["run"]["sequence"]
+            for field in ("engine", "planner"):
+                assert restored["checkpoint"][field] == uninterrupted["checkpoint"][field]
+            assert restored["checkpoint"]["engine"]["fills"]
+        finally:
+            release.set()
+            await owner.close()
+            await reference.close()
+            await manager.event_bus.close()
+        assert not active
+
+    asyncio.run(scenario())

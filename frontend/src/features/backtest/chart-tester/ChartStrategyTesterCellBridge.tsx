@@ -31,6 +31,8 @@ import {
   currentChartStrategyTesterToken,
   type ResultProjectionIdentity,
 } from "./chartStrategyTesterState.js";
+import { loadChartStrategyPanelPreferences, resolveChartStrategyRunMode } from "./chartStrategyPanelPreferences.js";
+import type { ContinuousMode } from "../continuous/continuousTypes.js";
 import ChartStrategyTesterPanel from "./ChartStrategyTesterPanel.js";
 import {
   chartStrategyResultCache,
@@ -77,6 +79,7 @@ export interface ChartStrategyTesterCellBridgeProps {
   onNativeStrategiesChange?(value: NativeStrategyCollection): void;
   active: boolean;
   panelOpen: boolean;
+  continuousChartActive: boolean;
   bottomPanelHost: HTMLElement | null;
   seriesStore: SeriesWindowView | null;
   getCurrentVisibleRange(): ChartSurfaceVisibleRange | null;
@@ -100,6 +103,7 @@ export default function ChartStrategyTesterCellBridge({
   onNativeStrategiesChange,
   active,
   panelOpen,
+  continuousChartActive,
   bottomPanelHost,
   seriesStore,
   getCurrentVisibleRange,
@@ -114,6 +118,7 @@ export default function ChartStrategyTesterCellBridge({
   const locale = useLocale();
   const draftStore = useMemo(() => getChartStrategyDraftStore(), []);
   const cellScope = `${workspaceId}\u0000${cellId}`;
+  const [runMode, setRunMode] = useState<ContinuousMode>(() => resolveChartStrategyRunMode(loadChartStrategyPanelPreferences(cellScope), attachment));
   const [runtimeState, setRuntimeState] = useState(() => (
     createChartStrategyTesterState(null, cellScope)
   ));
@@ -173,8 +178,8 @@ export default function ChartStrategyTesterCellBridge({
     sessionKey: `${session.exchange}\u0000${session.marketType}\u0000${session.symbol}\u0000${session.interval}`,
     attachmentKey: autoRunAttachmentKey,
     contentRevision: draftContentRevision,
-    enabled: attachment?.autoRun === true,
-  }), [attachment?.autoRun, autoRunAttachmentKey, draftContentRevision, session.exchange,
+    enabled: runMode === "HISTORY" && attachment?.autoRun === true,
+  }), [attachment?.autoRun, autoRunAttachmentKey, draftContentRevision, runMode, session.exchange,
     session.interval, session.marketType, session.symbol]);
   const autoRunContextKey = `${autoRunContext.sessionKey}\u0000${autoRunContext.attachmentKey ?? ""}\u0000${autoRunContext.contentRevision ?? ""}\u0000${autoRunContext.enabled ? "1" : "0"}`;
   const projectionSeriesStore = useMemo(() => seriesStore ?? new SeriesWindowStore({
@@ -534,7 +539,7 @@ export default function ChartStrategyTesterCellBridge({
       queueMicrotask(() => setAutoRunPauseReason("FLAG_DISABLED"));
       return undefined;
     }
-    if (!attachment.autoRun) {
+    if (!autoRunContext.enabled) {
       cancelPendingAutoRun();
       queueMicrotask(() => setAutoRunPauseReason("USER_DISABLED"));
       return undefined;
@@ -773,15 +778,21 @@ export default function ChartStrategyTesterCellBridge({
       }}
       onCloseExplanation={() => setSelectedExplanation(null)}
       onLocateTrade={onLocateTrade}
+      continuousChartActive={continuousChartActive}
+      continuousMarketWindow={seriesStore}
+      continuousMarkerSource={resultMarkerSource}
+      onRunModeChange={setRunMode}
       {...(onReviewTrade ? { onReviewTrade } : {})}
       onPrepareData={handlePrepareData}
       onStopObserving={handleStopObserving}
       onResumeObserving={handleResumeObserving}
       onSourceDirty={() => setSourceDiagnostics([])}
       onOpenAdvanced={handleOpenAdvanced}
-      onOpenWorkspace={async (draft) => {
+      onOpenWorkspace={async (draft, settings) => {
         if (!attachment) return;
-        try { window.location.assign(await saveResearchHandoff({ session, workspaceId, cellId, attachment, draft, runId: result?.run.run_id ?? null })); }
+        try { window.location.assign(await saveResearchHandoff({ session, workspaceId, cellId,
+          attachment: settings ? { ...attachment, ...settings } : attachment,
+          draft, runId: settings ? null : result?.run.run_id ?? null })); }
         catch (reason) { setResultError(reason instanceof Error ? describeError(reason, reason.message) : String(reason)); throw reason; }
       }}
       onOpenBatchStudy={handleOpenBatchStudy}

@@ -544,3 +544,106 @@ export const STREAM_EVENTS = [
   "TERMINAL",
   "RESYNC_REQUIRED",
 ] as const;
+
+export const BACKTEST_REPLAY_EXTRA_SLOTS = ["extra1", "extra2"] as const;
+export type BacktestReplayExtraSlot = typeof BACKTEST_REPLAY_EXTRA_SLOTS[number];
+
+export interface BacktestReplayChartOptions {
+  interval: string;
+  dataset?: { datasetId: string; dataEpoch: string };
+  maPeriod?: number;
+}
+
+export type BacktestReplayExtraCharts = Partial<Record<BacktestReplayExtraSlot, BacktestReplayChartOptions>>;
+
+export interface BacktestResultReplayCursor {
+  runId: string;
+  snapshotHash: string;
+  reportHash: string;
+  cursor: number;
+  interval: string;
+  comparisonInterval?: string;
+  comparisonDataset?: { datasetId: string; dataEpoch: string };
+  maPeriod?: number;
+  comparisonMaPeriod?: number;
+  additionalCharts?: BacktestReplayExtraCharts;
+}
+
+export interface BacktestResultReplayBar {
+  open_time_ms: number;
+  close_time_ms?: number;
+  open: string;
+  high: string;
+  low: string;
+  close: string;
+  volume: string | null;
+  closed: boolean;
+}
+
+export interface BacktestResultReplayMA {
+  period: number;
+  points: Array<{ open_time_ms: number; value: number }>;
+}
+
+export interface BacktestResultReplayNote {
+  id: string;
+  revision: number;
+  cursor: number;
+  time_ms: number | null;
+  body: string;
+  saved_at_ms: number;
+}
+
+export interface BacktestResultReplayNoteDraft {
+  id: string;
+  expectedRevision: number;
+  body: string;
+}
+
+export interface BacktestResultReplayChart {
+  interval: string;
+  bars: BacktestResultReplayBar[];
+  ma?: BacktestResultReplayMA;
+  dataset_id?: string;
+  data_epoch?: string;
+  symbol?: string;
+  display_intervals?: string[];
+}
+
+export interface BacktestResultReplayFrame {
+  schema: "candlescope.user-trade-result-replay/1" | "candlescope.local-bar-result-replay/1";
+  run_id: string;
+  snapshot_hash: string;
+  report_hash: string;
+  symbol: string;
+  quote_asset: string;
+  interval: string;
+  signal_interval: string;
+  cursor: number;
+  total: number;
+  time_ms: number | null;
+  source_sequence: number | null;
+  bars: BacktestResultReplayBar[];
+  display_intervals?: string[];
+  ma?: BacktestResultReplayMA;
+  comparison?: BacktestResultReplayChart | null;
+  additional_charts?: Partial<Record<BacktestReplayExtraSlot, BacktestResultReplayChart>>;
+  fills: Array<{
+    cursor: number;
+    event_time_ms: number;
+    order_id: string;
+    side: string;
+    price: string;
+    qty: string;
+    fee: string;
+  }>;
+  order_events: Array<{ ordinal: number; order_id: string | null; state: string; reveal_sequence: number }>;
+  order_trace_available: boolean;
+  closed_bar_signals: Array<{ reveal_sequence: number; signal_sequence: number; event_time_ms: number; kind: string; value: string }>;
+  signal_trace_available: boolean;
+  fill_count: number;
+  notes?: BacktestResultReplayNote[];
+  cash: string;
+  position: string;
+  equity: string;
+}

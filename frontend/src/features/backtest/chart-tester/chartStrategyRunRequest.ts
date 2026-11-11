@@ -7,8 +7,9 @@ import {
   type ChartContextResolveRequest,
   type StrategyRevisionRecord,
 } from "../backtestApi.js";
-import { validExecutionOverrides } from "../../../shared/strategyRunSettings.js";
+import { validExecutionOverrides, validStrategyRunSettings, type StrategyRunSettings } from "../../../shared/strategyRunSettings.js";
 import { pollBacktestRunToTerminal, type waitForBacktestPoll } from "../backtestRunClient.js";
+import type { PreparationJob } from "../../data-preparation/api.js";
 import type { BacktestRunRecord } from "../backtestTypes.js";
 import { StrategyRunStreamError } from "../backtestRunStream.js";
 import {
@@ -37,6 +38,7 @@ export type ChartStrategyRunApi = Pick<BacktestApiClient,
 
 export type ResearchRunSource =
   | { kind: "CURRENT_CHART"; materializeResolution?: ChartContextResolution | null }
+  | { kind: "MARKET_HISTORY"; endTimeMsExclusive: number }
   | {
     kind: "IMPORTED_DATASET";
     datasetId: string;
@@ -46,6 +48,7 @@ export type ResearchRunSource =
     startTimeMs: number;
     endTimeMs: number;
     quality: ResearchQualitySummaryV1;
+    marketTradeInput?: boolean;
   };
 
 export type ChartStrategyRunStage =
@@ -134,6 +137,7 @@ function cloneFrozen<T>(value: T): T {
 }
 
 function selectedOutputMode(frozen: ChartStrategyFrozenRunRequest, revision: StrategyRevisionRecord): "SIGNAL" | "TARGET_POSITION" | "ORDER_INTENT" {
+  if (frozen.attachment.pythonBarExecution) return frozen.attachment.pythonBarExecution.outputMode;
   if (frozen.language === "pine" && revision.output_modes.includes("ORDER_INTENT")) return "ORDER_INTENT";
   if (revision.output_modes.includes("TARGET_POSITION")) return "TARGET_POSITION";
   return revision.output_modes[0] === "ORDER_INTENT" ? "ORDER_INTENT" : "SIGNAL";
@@ -206,7 +210,10 @@ export function chartContextRequestForFrozen(
     interval: frozen.session.interval,
     range_mode: rangeMode,
     start_time_ms: rangeMode === "ALL_AVAILABLE" ? null : range!.startMs,
-    end_time_ms: rangeMode === "ALL_AVAILABLE" ? null : range!.endMs,
+    // The precise research editor uses an exclusive end. Preparation expands
+    // the inclusive wire timestamp to the end of its containing bar.
+    end_time_ms: rangeMode === "ALL_AVAILABLE" ? null : range!.endMs
+      - (rangeMode === "CUSTOM" && frozen.attachment.fidelityPreference === "PRECISE" ? 1 : 0),
     fidelity_preference: frozen.attachment.fidelityPreference,
   };
 }
@@ -271,6 +278,36 @@ export function buildChartStrategyRunBody(input: {
   resolution: ChartContextResolution;
   pineContexts?: Awaited<ReturnType<typeof freezePineChartContexts>>;
 }): Record<string, unknown> {
+  return {
+    ...fixedStrategyRunBody({
+      session: input.frozen.session,
+      attachment: input.frozen.attachment,
+      cellScope: input.frozen.cellScope,
+      revision: input.revision,
+      resolution: input.resolution,
+      outputMode: selectedOutputMode(input.frozen, input.revision),
+      parameters: executionParameters(input.frozen),
+      warmupBars: input.frozen.attachment.pythonBarExecution?.warmupBars ?? input.resolution.preparation?.warmup_bars ?? 0,
+    }),
+    ...(input.frozen.language === "python" ? {
+      python_runtime_mode: "TRUSTED_LOCAL",
+      python_trusted_confirmed: input.frozen.pythonTrustedConfirmed === true,
+    } : {}),
+    ...(input.pineContexts?.length ? { pine_contexts: input.pineContexts } : {}),
+    strategy_draft_id: input.frozen.draftId,
+  };
+}
+
+function fixedStrategyRunBody(input: {
+  session: ChartStrategyRunRequest["session"];
+  attachment: Pick<ChartStrategyRunRequest["attachment"], "rangeMode" | "quickPresetId" | "executionOverrides" | "pythonBarExecution">;
+  cellScope: string;
+  revision: StrategyRevisionRecord;
+  resolution: ChartContextResolution;
+  parameters: Record<string, unknown>;
+  outputMode: string;
+  warmupBars: number;
+}): Record<string, unknown> {
   const identity = requireReadyIdentity(input.resolution);
   const range = readyRange(input.resolution);
   const cost = input.resolution.cost_preset;
@@ -278,7 +315,7 @@ export function buildChartStrategyRunBody(input: {
   const feeSource = requireString(cost, "fee_source");
   const feeBps = requireString(cost, "fee_bps");
   const presetRevision = requireString(cost, "preset_revision");
-  const quickPresetId = String(input.frozen.attachment.quickPresetId
+  const quickPresetId = String(input.attachment.quickPresetId
     || input.resolution.quick_preset_id).trim();
   if (!quickPresetId || quickPresetId !== input.resolution.quick_preset_id) {
     throw new ChartStrategyRunError(
@@ -287,12 +324,9 @@ export function buildChartStrategyRunBody(input: {
       { next_step: "use the resolved market preset and run again" },
     );
   }
-  const overrides = input.frozen.attachment.executionOverrides;
+  const overrides = input.attachment.executionOverrides;
+  const profile = input.attachment.pythonBarExecution;
   return {
-    ...(input.frozen.language === "python" ? {
-      python_runtime_mode: "TRUSTED_LOCAL",
-      python_trusted_confirmed: input.frozen.pythonTrustedConfirmed === true,
-    } : {}),
     strategy_revision_id: input.revision.revision_id,
     dataset_id: identity.datasetId,
     data_epoch: identity.dataEpoch,
@@ -301,12 +335,11 @@ export function buildChartStrategyRunBody(input: {
     source_event_kind: input.resolution.fidelity.mode === "BAR_APPROX" ? "BAR" : "AGG_TRADE",
     start_time_ms: range.startTimeMs,
     end_time_ms: range.endTimeMs,
-    symbol: input.frozen.session.symbol,
-    interval: input.frozen.session.interval,
-    warmup_bars: input.resolution.preparation?.warmup_bars ?? 0,
-    parameters: executionParameters(input.frozen),
-    ...(input.pineContexts?.length ? { pine_contexts: input.pineContexts } : {}),
-    output_mode: selectedOutputMode(input.frozen, input.revision),
+    symbol: input.session.symbol,
+    interval: input.session.interval,
+    warmup_bars: input.warmupBars,
+    parameters: input.parameters,
+    output_mode: input.outputMode,
     signal_trace_mode: "PAGED_V1",
     account_model: requireString(account, "account_model"),
     contract_data_mode: requireString(account, "contract_data_mode"),
@@ -321,19 +354,19 @@ export function buildChartStrategyRunBody(input: {
     leverage: overrides?.leverage ?? requireString(account, "leverage"),
     sizing_policy: requireString(account, "sizing_policy"),
     equity_percent: overrides?.equityPercent ?? requireString(account, "equity_percent"),
-    execution_model_revision: requireString(account, "execution_model_revision"),
-    participation_rate: "0.1",
+    ...(profile?.executionModel === "LEGACY" ? {} : {
+      execution_model_revision: requireString(account, "execution_model_revision"), participation_rate: "0.1",
+    }),
     latency_ms: 0,
     latency_events: 0,
     order_end_policy: "CANCEL_AT_END",
-    exchange: input.frozen.session.exchange,
-    market_type: input.frozen.session.marketType,
+    exchange: input.session.exchange,
+    market_type: input.session.marketType,
     gap_policy: "REJECT",
     quick_preset_id: quickPresetId,
     quick_preset_revision: presetRevision,
-    chart_range_mode: input.frozen.attachment.rangeMode,
-    chart_cell_scope: input.frozen.cellScope,
-    strategy_draft_id: input.frozen.draftId,
+    chart_range_mode: input.attachment.rangeMode,
+    chart_cell_scope: input.cellScope,
   };
 }
 
@@ -462,20 +495,21 @@ export async function assembleFrozenContextFromResolution(
       symbol: resolution.request.symbol,
       qualitySummary: quality,
     },
-    projectResearchCapabilities({ sourceKind, quality }),
+    projectResearchCapabilities({
+      sourceKind, quality, hasFrozenTrades: resolution.fidelity.mode === "AGG_TRADE_EXECUTION",
+    }),
     identity.snapshotHash,
   );
 }
 
 function resolutionFromImportedPreview(input: {
   source: Extract<ResearchRunSource, { kind: "IMPORTED_DATASET" }>;
-  frozen: ChartStrategyFrozenRunRequest;
+  rangeMode: ChartStrategyRunRequest["attachment"]["rangeMode"];
   preview: BacktestSnapshot;
+  precise: boolean;
 }): ChartContextResolution {
   const presets = importedSpotExecutionPresets();
-  const capabilities = (input.preview.fidelity_capabilities ?? []).includes("BAR_APPROX")
-    ? ["BAR_APPROX"]
-    : ["BAR_APPROX"];
+  const mode = input.precise ? "AGG_TRADE_EXECUTION" : "BAR_APPROX";
   const gapped = input.source.quality.status === "gap";
   return {
     schema_version: "candlescope.backtest-chart-context/1",
@@ -488,10 +522,10 @@ function resolutionFromImportedPreview(input: {
       market_type: "spot",
       symbol: input.source.symbol,
       interval: input.source.interval,
-      range_mode: input.frozen.attachment.rangeMode,
+      range_mode: input.rangeMode,
       start_time_ms: input.source.startTimeMs,
       end_time_ms: input.source.endTimeMs,
-      fidelity_preference: "FAST",
+      fidelity_preference: input.precise ? "PRECISE" : "FAST",
     },
     dataset_id: input.source.datasetId,
     data_epoch: input.source.dataEpoch,
@@ -513,9 +547,9 @@ function resolutionFromImportedPreview(input: {
       complete: !gapped,
     },
     fidelity: {
-      preference: "FAST",
-      mode: "BAR_APPROX",
-      capabilities,
+      preference: input.precise ? "PRECISE" : "FAST",
+      mode,
+      capabilities: [mode],
     },
     quality_warnings: input.source.quality.status === "gap"
       ? [{ code: "DATA_GAP", message: "imported data has gaps" }]
@@ -527,9 +561,43 @@ function resolutionFromImportedPreview(input: {
   };
 }
 
+export async function buildImportedExternalRunBody(input: {
+  api: ChartStrategyRunApi;
+  source: Extract<ResearchRunSource, { kind: "IMPORTED_DATASET" }>;
+  settings: StrategyRunSettings;
+  revision: StrategyRevisionRecord;
+  outputMode: string;
+  signal: AbortSignal;
+}): Promise<Record<string, unknown>> {
+  const { api, source, settings, revision, outputMode, signal } = input;
+  if (!validStrategyRunSettings(settings) || settings.fidelityPreference === "PRECISE"
+    || settings.pythonBarExecution || source.marketTradeInput) {
+    throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "External research needs imported candles and BAR execution");
+  }
+  if (revision.provider_kind !== "EXTERNAL_PROVIDER" || !revision.external_provider || !revision.output_modes.includes(outputMode)) {
+    throw new ChartStrategyRunError("SCHEMA_UNKNOWN_FIELD", "Choose a supported output mode from the external model revision");
+  }
+  const preview = await previewImportedSnapshot(api, source, false, signal);
+  const resolution = resolutionFromImportedPreview({ source, rangeMode: settings.rangeMode, preview, precise: false });
+  if (!resolution.coverage.complete) {
+    throw new ChartStrategyRunError("DATA_COVERAGE_INCOMPLETE", "Imported candles have gaps");
+  }
+  return fixedStrategyRunBody({
+    session: { exchange: "local", marketType: "spot", symbol: source.symbol, interval: source.interval },
+    attachment: { ...settings, quickPresetId: resolution.quick_preset_id },
+    cellScope: "strategy-research-external",
+    revision,
+    resolution,
+    parameters: {},
+    outputMode,
+    warmupBars: Number(revision.warmup_requirement.bars ?? 0),
+  });
+}
+
 async function previewImportedSnapshot(
   api: ChartStrategyRunApi,
   source: Extract<ResearchRunSource, { kind: "IMPORTED_DATASET" }>,
+  precise: boolean,
   signal?: AbortSignal,
 ): Promise<BacktestSnapshot> {
   if (typeof api.previewSnapshot !== "function") {
@@ -545,11 +613,11 @@ async function previewImportedSnapshot(
     start_time_ms: source.startTimeMs,
     end_time_ms: source.endTimeMs,
     interval: source.interval,
-    fidelity_mode: "BAR_APPROX",
+    fidelity_mode: precise ? "AGG_TRADE_EXECUTION" : "BAR_APPROX",
     exchange: "local",
     market_type: "spot",
     contract_data_mode: "LEGACY_FIXED_V1",
-    account_model: "LINEAR_PERP_ONE_WAY_V1",
+    account_model: precise ? "SPOT_CASH_V1" : "LINEAR_PERP_ONE_WAY_V1",
     funding_mode: "OFF",
   }, signal);
   if (preview.data_epoch !== source.dataEpoch) {
@@ -565,11 +633,10 @@ async function previewImportedSnapshot(
       "snapshot hash must come from the backend freeze step",
     );
   }
-  const tradeTape = (preview.fidelity_capabilities ?? []).some((item) => (
-    item === "AGG_TRADE_EXECUTION" || item === "AGG_TRADE_TAPE" || item === "TRADE_TAPE"
-  ));
-  if (tradeTape) {
-    // Imported CSV remains BAR_ONLY even if a preview lists unused tape capabilities.
+  if (precise && (!(preview.fidelity_capabilities ?? []).includes("AGG_TRADE_EXECUTION")
+    || preview.quality?.source_quality !== "user_market_trades"
+    || preview.coverage_start_ms !== source.startTimeMs || preview.coverage_end_ms !== source.endTimeMs)) {
+    throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "The frozen snapshot lacks the requested user market trades");
   }
   return preview;
 }
@@ -583,8 +650,9 @@ export async function runResearchBacktest(options: {
   wait?: typeof waitForBacktestPoll;
   onStage?(stage: ChartStrategyRunStage): void;
   onRevision?(revision: StrategyRevisionRecord): void;
+  onPreparation?(job: PreparationJob): void | Promise<void>;
   onResolution?(resolution: ChartContextResolution): void;
-  onRunCreated?(run: BacktestRunRecord, identity: ResultProjectionIdentity): void;
+  onRunCreated?(run: BacktestRunRecord, identity: ResultProjectionIdentity): void | Promise<void>;
   onRunUpdate?(run: BacktestRunRecord): void;
   waitForTerminal?: (runId: string, signal: AbortSignal | undefined, onUpdate: (run: BacktestRunRecord) => void) => Promise<BacktestRunRecord>;
 }): Promise<ChartStrategyRunOutcome> {
@@ -600,6 +668,12 @@ export async function runResearchBacktest(options: {
     }
     : options.request;
   const frozen = await freezeChartStrategyRunRequest(request);
+  const precise = frozen.attachment.fidelityPreference === "PRECISE";
+  if (precise && options.source.kind === "IMPORTED_DATASET" && !options.source.marketTradeInput) {
+    throw new ChartStrategyRunError(
+      "FIDELITY_UNSUPPORTED", "Imported data only supports bar estimates", { next_step: "use bar estimate" },
+    );
+  }
   options.onStage?.("COMPILING");
   const revision = await options.api.createStrategyRevision({
     name: frozen.displayName,
@@ -617,16 +691,9 @@ export async function runResearchBacktest(options: {
   let resolution: ChartContextResolution;
   let frozenContext: FrozenResearchContextV1 | null = null;
   if (options.source.kind === "IMPORTED_DATASET") {
-    if (frozen.attachment.fidelityPreference === "PRECISE") {
-      throw new ChartStrategyRunError(
-        "FIDELITY_UNSUPPORTED",
-        "imported data only supports bar estimate",
-        { next_step: "use bar estimate" },
-      );
-    }
     options.onStage?.("RESOLVING");
-    const preview = await previewImportedSnapshot(options.api, options.source, options.signal);
-    resolution = resolutionFromImportedPreview({ source: options.source, frozen, preview });
+    const preview = await previewImportedSnapshot(options.api, options.source, precise, options.signal);
+    resolution = resolutionFromImportedPreview({ source: options.source, rangeMode: frozen.attachment.rangeMode, preview, precise });
     options.onResolution?.(resolution);
     if (resolution.status !== "READY" || !resolution.coverage.complete) {
       return { kind: "UNSUPPORTED", frozen, revision, resolution, frozenContext: null };
@@ -637,8 +704,14 @@ export async function runResearchBacktest(options: {
       options.source.quality,
     );
   } else {
+    const profile = frozen.attachment.pythonBarExecution;
+    if (profile && (frozen.language !== "python" || frozen.attachment.fidelityPreference !== "FAST"
+      || frozen.session.interval !== "1m" || !options.api.prepareChartContext)) {
+      throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "The saved continuous profile needs Python 1-minute BAR preparation");
+    }
     const contextRequest = chartContextRequestForFrozen(frozen);
-    if (options.source.materializeResolution) {
+    if (options.source.kind === "MARKET_HISTORY") contextRequest.end_time_ms = options.source.endTimeMsExclusive - 1;
+    if (!precise && options.source.kind === "CURRENT_CHART" && options.source.materializeResolution) {
       options.onStage?.("MATERIALIZING");
       await options.api.materializeChartContext({
         resolution_token: options.source.materializeResolution.resolution_token,
@@ -655,6 +728,9 @@ export async function runResearchBacktest(options: {
     options.onStage?.("RESOLVING");
     resolution = await options.api.resolveChartContext(contextRequest, options.signal);
     options.onResolution?.(resolution);
+    if (precise && resolution.status === "READY" && resolution.fidelity.mode !== "AGG_TRADE_EXECUTION") {
+      throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "The resolved snapshot lacks aggregate-trade fidelity");
+    }
     if (options.api.prepareChartContext && resolution.automatic_preparation_available !== false
       && (resolution.status === "NEEDS_DATA" || (resolution.status === "READY" && resolution.automatic_preparation_available))) {
       options.onStage?.("MATERIALIZING");
@@ -663,6 +739,7 @@ export async function runResearchBacktest(options: {
         strategy_revision_id: revision.revision_id,
         parameters: executionParameters(frozen),
         ...(frozen.language === "pine" ? { output_mode: selectedOutputMode(frozen, revision) } : {}),
+        ...(profile ? { python_bar_execution: profile } : {}),
         ...(pineContexts.length ? { pine_contexts: pineContexts } : {}),
         ...(frozen.attachment.executionOverrides ? { execution_overrides: frozen.attachment.executionOverrides } : {}),
         chart_cell_scope: frozen.cellScope,
@@ -670,13 +747,26 @@ export async function runResearchBacktest(options: {
       };
       const preparationKey = await chartStrategySha256({ context: contextRequest, strategy: strategyIntent,
         resolved_context: resolution.chart_context_hash });
-      resolution = await options.api.prepareChartContext(contextRequest, options.signal, strategyIntent, preparationKey);
+      resolution = await options.api.prepareChartContext(contextRequest, options.signal, strategyIntent, preparationKey, options.onPreparation);
       options.onResolution?.(resolution);
+    }
+    if (profile && resolution.status === "READY" && !resolution.prepared_run) {
+      throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "The continuous execution profile was not prepared");
+    }
+    if (precise && (resolution.status === "NEEDS_DATA" || resolution.status === "UNSUPPORTED_FIDELITY")) {
+      throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "Verified aggregate-trade coverage is unavailable for this run");
+    }
+    if (precise && resolution.status === "READY" && resolution.fidelity.mode !== "AGG_TRADE_EXECUTION") {
+      throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "Preparation did not return an aggregate-trade run context");
     }
     if (resolution.status === "NEEDS_DATA") {
       return { kind: "NEEDS_DATA", frozen, revision, resolution, frozenContext: null };
     }
     if (resolution.status !== "READY") {
+      if (precise) {
+        const warning = resolution.quality_warnings[0];
+        throw new ChartStrategyRunError(warning?.code ?? resolution.status, warning?.message ?? "Trade-sequence data is unavailable");
+      }
       return { kind: "UNSUPPORTED", frozen, revision, resolution, frozenContext: null };
     }
     frozenContext = await assembleFrozenContextFromResolution(
@@ -708,8 +798,8 @@ export async function runResearchBacktest(options: {
 
   let refreshed = resolution;
   if (options.source.kind === "IMPORTED_DATASET") {
-    const preview = await previewImportedSnapshot(options.api, options.source, options.signal);
-    refreshed = resolutionFromImportedPreview({ source: options.source, frozen, preview });
+    const preview = await previewImportedSnapshot(options.api, options.source, precise, options.signal);
+    refreshed = resolutionFromImportedPreview({ source: options.source, rangeMode: frozen.attachment.rangeMode, preview, precise });
     if (!sameReadyContext(resolution, refreshed)) {
       throw new ChartStrategyRunError(
         "DATA_SNAPSHOT_MISMATCH",
@@ -754,6 +844,9 @@ export async function runResearchBacktest(options: {
     },
   });
   const created = resolution.prepared_run ?? await options.api.createRun(refreshedBody, idempotencyKey, options.signal);
+  if (precise && (created.fidelity_mode !== "AGG_TRADE_EXECUTION" || created.source_event_kind !== "AGG_TRADE")) {
+    throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "The run was not created with aggregate-trade fidelity");
+  }
   const identity = resultIdentity({
     frozen,
     revision,
@@ -763,7 +856,7 @@ export async function runResearchBacktest(options: {
     frozenContext,
   });
   options.onStage?.(created.state === "QUEUED" ? "QUEUED" : "RUNNING");
-  options.onRunCreated?.(created, identity);
+  await options.onRunCreated?.(created, identity);
   if (created.state === "COMPLETED") {
     return { kind: "TERMINAL", frozen, revision, resolution: refreshed, run: created, identity, frozenContext };
   }
@@ -794,7 +887,7 @@ export async function runChartStrategyBacktest(options: {
   onStage?(stage: ChartStrategyRunStage): void;
   onRevision?(revision: StrategyRevisionRecord): void;
   onResolution?(resolution: ChartContextResolution): void;
-  onRunCreated?(run: BacktestRunRecord, identity: ResultProjectionIdentity): void;
+  onRunCreated?(run: BacktestRunRecord, identity: ResultProjectionIdentity): void | Promise<void>;
   onRunUpdate?(run: BacktestRunRecord): void;
 }): Promise<ChartStrategyRunOutcome> {
   return runResearchBacktest({

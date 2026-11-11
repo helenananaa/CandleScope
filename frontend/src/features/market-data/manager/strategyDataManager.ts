@@ -1,15 +1,22 @@
-import { defaultBacktestApi, type BacktestApiClient } from "../../backtest/backtestApi.js";
-import type { BacktestRunRecord } from "../../backtest/backtestTypes.js";
+import type { BacktestReplayChartOptions, BacktestReplayExtraSlot, BacktestResultReplayChart } from "../../backtest/backtestTypes.js";
+import type { PreparationJob } from "../../data-preparation/api.js";
+import { defaultBacktestApi, type BacktestApiClient, type ExternalProviderConnection, type StrategyRevisionRecord } from "../../backtest/backtestApi.js";
+import type { BacktestResultReplayCursor, BacktestResultReplayNoteDraft, BacktestRunRecord } from "../../backtest/backtestTypes.js";
 import { isBacktestTerminalState } from "../../backtest/backtestRunClient.js";
 import { StrategyRunStreamError, type StrategyRunUpdate } from "../../backtest/backtestRunStream.js";
 import { ChartStrategyResultCache } from "../../backtest/chart-tester/chartStrategyResultCache.js";
-import { runResearchBacktest, type ChartStrategyRunApi } from "../../backtest/chart-tester/chartStrategyRunRequest.js";
+import { buildImportedExternalRunBody, runResearchBacktest, type ChartStrategyRunApi } from "../../backtest/chart-tester/chartStrategyRunRequest.js";
+import { externalSnapshotRequest, matchingExternalConnections } from "../../backtest/research/externalProviderModel.js";
 import { defaultContinuousApi } from "../../backtest/continuous/continuousApi.js";
 import type { ContinuousApi } from "../../backtest/continuous/continuousTypes.js";
 import { ContinuousStrategyDataManager } from "./continuousStrategyDataManager.js";
 
+type ExternalInput = Omit<Parameters<typeof buildImportedExternalRunBody>[0], "api" | "signal">;
+type ExternalRunDraft = { readonly revision: StrategyRevisionRecord; readonly body: Record<string, unknown> };
+
 type ResearchRequest = Omit<Parameters<typeof runResearchBacktest>[0], "api" | "waitForTerminal" | "wait" | "pollIntervalMs">;
-export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "streamRun" | "getReport" | "getChart" | "cancelRun">;
+export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "streamRun" | "getReport" | "getChart" | "cancelRun" | "listRuns" | "compareRuns"> & Pick<BacktestApiClient, "getResultReplay" | "saveResultReplayNote" | "observeStrategyPreparation">
+  & Partial<Pick<BacktestApiClient, "capabilities" | "listStrategyRevisions" | "externalProviders">>;
 
 /** Owns fixed-history operations and immutable results independently of live
  * chart stores. Releasing a consumer never cancels a durable shared run. */
@@ -75,6 +82,80 @@ export class StrategyDataManager {
     }));
   }
 
+  private externalProviderApi() {
+    if (!this.api.externalProviders) {
+      throw new StrategyRunStreamError("FLAG_DISABLED", "External model connections are unavailable");
+    }
+    return this.api.externalProviders;
+  }
+
+  externalModelRevisions(signal?: AbortSignal) {
+    return this.operation(signal, async (owned) => {
+      const capabilities = await this.api.capabilities?.(owned);
+      if (!capabilities?.flags.BACKTEST_EXTERNAL_PROVIDER_ENABLED) return null;
+      const revisions = await this.api.listStrategyRevisions?.(owned) ?? [];
+      return revisions.filter(revision => revision.provider_kind === "EXTERNAL_PROVIDER");
+    });
+  }
+
+  registerExternalModel(input: { name: string; manifest: Record<string, unknown> } | null, signal?: AbortSignal) {
+    return this.operation(signal, async (owned) => {
+      const manifest = input?.manifest ?? (await this.externalProviderApi().example(owned)).manifest;
+      return this.api.createStrategyRevision({
+        name: input?.name ?? String(manifest.provider_id),
+        language: "EXTERNAL_PROVIDER",
+        source_text: JSON.stringify(manifest),
+        parameter_schema: [],
+      }, owned);
+    });
+  }
+
+  prepareExternalModel(input: ExternalInput, signal?: AbortSignal): Promise<ExternalRunDraft> {
+    return this.operation(signal, async (owned) => ({
+      revision: input.revision,
+      body: await buildImportedExternalRunBody({ ...input, api: this.api, signal: owned }),
+    }));
+  }
+
+  externalModelConnections(draft: ExternalRunDraft, signal?: AbortSignal) {
+    return this.operation(signal, async (owned) =>
+      matchingExternalConnections(await this.externalProviderApi().list(owned), draft.body, draft.revision));
+  }
+
+  createExternalModelConnection(draft: ExternalRunDraft, signal?: AbortSignal) {
+    return this.operation(signal, (owned) => this.externalProviderApi().create(externalSnapshotRequest(draft.body), owned));
+  }
+
+  revokeExternalModelConnection(connectionId: string, signal?: AbortSignal) {
+    return this.operation(signal, (owned) => this.externalProviderApi().revoke(connectionId, owned));
+  }
+
+  startExternalModel(draft: ExternalRunDraft, connection: ExternalProviderConnection, parameters: Record<string, unknown>, signal?: AbortSignal) {
+    return this.operation(signal, async (owned) => {
+      if (!connection.ready || !matchingExternalConnections([connection], draft.body, draft.revision).length) {
+        throw new StrategyRunStreamError("PROVIDER_CONNECTION_REQUIRED", "Connect the external model for this frozen snapshot");
+      }
+      const body = { ...draft.body, parameters, external_connection_id: connection.connection_id };
+      await this.externalProviderApi().smoke(connection.connection_id, {
+        ...externalSnapshotRequest(draft.body),
+        parameters,
+        output_mode: draft.body.output_mode,
+      }, owned);
+      await this.api.validate(body, owned);
+      owned.throwIfAborted();
+      return this.api.createRun(body, crypto.randomUUID(), owned);
+    });
+  }
+
+  observeResearchPreparation(id: string, scope: string, retry: boolean, onProgress: (job: PreparationJob) => void | Promise<void>): Promise<PreparationJob> {
+    return this.operation(undefined, (signal) => {
+      if (!this.api.observeStrategyPreparation) {
+        throw new StrategyRunStreamError("STRATEGY_PREPARATION_UNAVAILABLE", "Strategy preparation is unavailable");
+      }
+      return this.api.observeStrategyPreparation(id, scope, retry, onProgress, signal);
+    });
+  }
+
   private async readResult(runId: string, signal: AbortSignal) {
     const result = await this.results.load(this.api, runId, signal);
     signal.throwIfAborted();
@@ -89,12 +170,105 @@ export class StrategyDataManager {
     return this.operation(signal, (owned) => this.readResult(runId, owned));
   }
 
+  loadResultReplay(cursor: BacktestResultReplayCursor, signal?: AbortSignal) {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.getResultReplay) throw new StrategyRunStreamError("STRATEGY_STREAM_UNAVAILABLE", "Result replay is unavailable");
+      const frame = await this.api.getResultReplay(cursor, owned);
+      const invalidBars = (bars: typeof frame.bars) => !Array.isArray(bars)
+        || bars.some(bar => !bar || frame.time_ms === null || bar.open_time_ms > frame.time_ms
+          || (bar.closed && bar.close_time_ms !== undefined && bar.close_time_ms > frame.time_ms));
+      const invalidStudy = (study: typeof frame.ma, period: number | undefined, bars: typeof frame.bars) => {
+        if (period === undefined) return study !== undefined;
+        if (study?.period !== period || !Array.isArray(study.points) || study.points.length > bars.length) return true;
+        const closed = new Set(bars.filter(bar => bar.closed && bar.close_time_ms !== undefined).map(bar => bar.open_time_ms));
+        let previous = -Infinity;
+        return study.points.some(point => {
+          const invalid = !point || !closed.has(point.open_time_ms) || point.open_time_ms <= previous
+            || !Number.isFinite(point.value);
+          if (!invalid) previous = point.open_time_ms;
+          return invalid;
+        });
+      };
+      const comparison = frame.comparison;
+      const invalidChart = (chart: BacktestResultReplayChart | null | undefined, requested: BacktestReplayChartOptions | undefined) => {
+        if (requested === undefined) return chart != null;
+        if (!chart || chart.interval !== requested.interval
+          || chart.dataset_id !== requested.dataset?.datasetId || chart.data_epoch !== requested.dataset?.dataEpoch
+          || invalidBars(chart.bars) || invalidStudy(chart.ma, requested.maPeriod, chart.bars)) return true;
+        return requested.dataset !== undefined && (typeof chart.symbol !== "string" || !chart.symbol
+          || !Array.isArray(chart.display_intervals) || !chart.display_intervals.includes(chart.interval)
+          || chart.display_intervals.some(interval => typeof interval !== "string")
+          || chart.bars.some(bar => !bar.closed || !Number.isSafeInteger(bar.close_time_ms)));
+      };
+      const expectedCharts = cursor.additionalCharts ?? {};
+      const extraCharts = frame.additional_charts;
+      const invalidExtras = (extraCharts !== undefined && (!extraCharts || typeof extraCharts !== "object" || Array.isArray(extraCharts)))
+        || Object.keys(extraCharts ?? {}).length !== Object.keys(expectedCharts).length
+        || Object.entries(expectedCharts).some(([slot, chart]) => invalidChart(extraCharts?.[slot as BacktestReplayExtraSlot], chart));
+      const notes = frame.notes;
+      const invalidNotes = notes !== undefined && (!Array.isArray(notes) || notes.length > 100
+        || new Set(notes.map(note => note?.id)).size !== notes.length
+        || notes.some(note => !note || typeof note.id !== "string" || !Number.isSafeInteger(note.revision)
+          || note.revision < 1 || note.revision > 20 || typeof note.body !== "string" || !note.body.trim()
+          || !Number.isSafeInteger(note.cursor) || note.cursor < 0 || note.cursor > frame.cursor
+          || (note.cursor === 0 ? note.time_ms !== null : (!Number.isSafeInteger(note.time_ms)
+            || frame.time_ms === null || note.time_ms === null || note.time_ms > frame.time_ms))));
+      if (invalidNotes || (frame.schema !== "candlescope.user-trade-result-replay/1" && frame.schema !== "candlescope.local-bar-result-replay/1")
+        || frame.run_id !== cursor.runId
+        || frame.snapshot_hash !== cursor.snapshotHash || frame.report_hash !== cursor.reportHash
+        || frame.cursor !== cursor.cursor || frame.interval !== cursor.interval
+        || !Number.isSafeInteger(frame.total) || frame.total < cursor.cursor
+        || (frame.display_intervals !== undefined && (!Array.isArray(frame.display_intervals)
+          || frame.display_intervals.some(interval => typeof interval !== "string")))
+        || invalidChart(comparison, cursor.comparisonInterval ? { interval: cursor.comparisonInterval,
+          ...(cursor.comparisonDataset ? { dataset: cursor.comparisonDataset } : {}),
+          ...(cursor.comparisonMaPeriod === undefined ? {} : { maPeriod: cursor.comparisonMaPeriod }),
+        } : undefined)
+        || invalidExtras || invalidBars(frame.bars) || invalidStudy(frame.ma, cursor.maPeriod, frame.bars)
+        || !Array.isArray(frame.fills) || !Array.isArray(frame.order_events)
+        || !Array.isArray(frame.closed_bar_signals)
+        || frame.closed_bar_signals.some(signal => signal.reveal_sequence > frame.cursor)
+        || frame.fills.some((fill) => fill.cursor > frame.cursor)
+        || frame.order_events.some((order) => order.reveal_sequence > frame.cursor)) {
+        throw new StrategyRunStreamError("DATA_SNAPSHOT_MISMATCH", "Result replay frame does not match the requested boundary");
+      }
+      return frame;
+    });
+  }
+
+  saveResultReplayNote(cursor: BacktestResultReplayCursor, note: BacktestResultReplayNoteDraft, signal?: AbortSignal) {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.saveResultReplayNote) throw new StrategyRunStreamError("STRATEGY_STREAM_UNAVAILABLE", "Result replay notes are unavailable");
+      const saved = await this.api.saveResultReplayNote(cursor, note, owned);
+      if (saved.revision !== note.expectedRevision + 1) {
+        throw new StrategyRunStreamError("RESULT_IDENTITY_MISMATCH", "Result replay note revision does not match the requested save");
+      }
+    });
+  }
+
   restoreRun(runId: string, signal?: AbortSignal) {
     return this.operation(signal, async (owned) => {
       const current = await this.api.getRun(runId, owned);
       const terminal = isBacktestTerminalState(current.state) && current.state !== "FAILED" ? current : await this.wait(runId, owned);
       this.requireCompleted(terminal);
       return this.readResult(runId, owned);
+    });
+  }
+
+  listRuns(signal?: AbortSignal) {
+    return this.operation(signal, (owned) => this.api.listRuns(owned));
+  }
+
+  compareRuns(leftRunId: string, rightRunId: string, signal?: AbortSignal) {
+    return this.operation(signal, async (owned) => {
+      if (!leftRunId || !rightRunId || leftRunId === rightRunId) {
+        throw new StrategyRunStreamError("COMPARISON_PAIR_INVALID", "Select two different runs");
+      }
+      const comparison = await this.api.compareRuns(leftRunId, rightRunId, owned);
+      if (comparison.schema !== "RUN_COMPARE_V3" || comparison.left.runId !== leftRunId || comparison.right.runId !== rightRunId) {
+        throw new StrategyRunStreamError("RESULT_IDENTITY_MISMATCH", "Comparison response does not match the selected runs");
+      }
+      return comparison;
     });
   }
 

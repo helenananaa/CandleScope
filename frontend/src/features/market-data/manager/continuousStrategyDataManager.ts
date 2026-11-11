@@ -1,7 +1,7 @@
 import { StrategyRunStreamError } from "../../backtest/backtestRunStream.js";
 import { ContinuousViewReducer, type ContinuousView } from "../../backtest/continuous/continuousView.js";
 import { mergeRepair } from "../../backtest/continuous/continuousRepairView.js";
-import type { CommittedIdentity, ContinuousApi, ContinuousCapabilities, ContinuousControl, ContinuousCreate,
+import type { ContinuousAutoRepairSetting, CommittedIdentity, ContinuousApi, ContinuousCapabilities, ContinuousControl, ContinuousCreate,
   ContinuousCreation, ContinuousPage, ContinuousPacket, ContinuousRepair, ContinuousRepairConfirm, ResultKind } from "../../backtest/continuous/continuousTypes.js";
 
 export interface ContinuousObservation {
@@ -32,11 +32,18 @@ export class ContinuousStrategyDataManager {
   constructor(private readonly api: ContinuousApi, private readonly operation: Operation, private readonly retryDelay = wait) {}
 
   capabilities(signal?: AbortSignal): Promise<ContinuousCapabilities> { return this.operation(signal, (owned) => this.api.capabilities(owned)); }
+  editorParameters(source: string, signal: AbortSignal) { return this.operation(signal, (owned) => this.api.editorParameters(source, owned)); }
   catalog(signal?: AbortSignal) { return this.operation(signal, (owned) => this.api.catalog(owned)); }
   create(key: string, body: ContinuousCreate, signal?: AbortSignal) { return this.operation(signal, (owned) => this.api.create(key, body, owned)); }
   request(key: string, signal?: AbortSignal) { return this.operation(signal, (owned) => this.api.request(key, owned)); }
   status(id: string, signal?: AbortSignal) { return this.operation(signal, (owned) => this.api.status(id, owned)); }
   control(key: string, body: ContinuousControl, signal?: AbortSignal) { return this.operation(signal, (owned) => this.api.control(key, body, owned)); }
+  autoRepair(id: string, signal?: AbortSignal) {
+    return this.operation(signal, (owned) => this.api.autoRepair(id, owned));
+  }
+  setAutoRepair(id: string, setting: ContinuousAutoRepairSetting, signal?: AbortSignal) {
+    return this.operation(signal, (owned) => this.api.setAutoRepair(id, setting, owned));
+  }
   repairPreview(id: string, body: { expected: CommittedIdentity; resume_after: boolean }, signal?: AbortSignal) { return this.operation(signal, (owned) => this.api.repairPreview(id, body, owned)); }
   async repairStatus(key: string, signal?: AbortSignal) {
     const response = await this.operation(signal, (owned) => this.api.repairStatus(key, owned));
@@ -127,19 +134,28 @@ export class ContinuousStrategyDataManager {
     }
   }
 
-  private packet(entry: Entry, packet: ContinuousPacket): void {
-    if (packet.type === "connected") { this.publish(entry, { connection: "connected", error: null }); return; }
-    if (packet.type === "heartbeat" || packet.type === "pong") return;
-    if (packet.type === "reset") { entry.reducer.reset(); return; }
+  private packet(entry: Entry, packet: ContinuousPacket): boolean {
+    if (packet.type === "connected" || packet.type === "pong") return false;
+    if (packet.type === "reset") { entry.reducer.reset(); return false; }
+    if (packet.type === "heartbeat") {
+      if (entry.reducer.hasPendingGroup) return false;
+      if (entry.state.connection !== "connected") this.publish(entry, { connection: "connected", error: null });
+      return true;
+    }
     if (packet.type === "snapshot" || packet.type === "update") {
-      this.publishRepair(entry, packet.repair);
       const result = entry.reducer.accept(packet as ContinuousPage, { snapshot: packet.type === "snapshot",
         begin: packet.begin === true, complete: packet.complete === true, after: packet.after_checkpoint ?? -1 });
-      if (result) this.publish(entry, { result, creation: packet.creation ?? entry.state.creation,
+      if (!result) return false;
+      this.publish(entry, { result, repair: mergeRepair(entry.state.repair, packet.repair, entry.reducer.runId),
+        creation: packet.creation ?? entry.state.creation,
         initialReady: packet.initial_result_ready === true, connection: "connected", error: null });
-    } else if (packet.type === "preparation" || packet.type === "initializing")
-      this.publish(entry, { creation: packet.creation ?? entry.state.creation, initialReady: false, connection: "connected" });
-    else throw new StrategyRunStreamError("PROTOCOL_UNSUPPORTED", "Unexpected continuous strategy event");
+      return true;
+    }
+    if (packet.type === "preparation" || packet.type === "initializing") {
+      this.publish(entry, { creation: packet.creation ?? entry.state.creation, initialReady: false, connection: "connected", error: null });
+      return true;
+    }
+    throw new StrategyRunStreamError("PROTOCOL_UNSUPPORTED", "Unexpected continuous strategy event");
   }
 
   private async follow(id: string, entry: Entry, signal: AbortSignal): Promise<void> {
@@ -151,8 +167,8 @@ export class ContinuousStrategyDataManager {
     while (!signal.aborted) {
       try {
         await this.api.stream(id, entry.reducer.current?.identity, signal, (packet) => {
-          signal.throwIfAborted(); this.packet(entry, packet);
-          if (packet.type !== "connected") failures = 0;
+          signal.throwIfAborted();
+          if (this.packet(entry, packet)) failures = 0;
         });
         this.publish(entry, { connection: "closed" }); return;
       } catch (failure) {

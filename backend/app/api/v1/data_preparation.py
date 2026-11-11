@@ -26,6 +26,13 @@ class ReplayPreparationPayload(BaseModel):
     random_by_market: bool = False
 
 
+class PythonBarExecution(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    outputMode: Literal["SIGNAL", "TARGET_POSITION", "ORDER_INTENT"]
+    executionModel: Literal["LEGACY", "V2"]
+    warmupBars: int = Field(ge=0, le=200_000, strict=True)
+
+
 class StrategyLaunchPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
     strategy_revision_id: str = Field(min_length=1, max_length=128)
@@ -33,6 +40,9 @@ class StrategyLaunchPayload(BaseModel):
     pine_contexts: list[RequestedNativeData] = Field(default_factory=list, max_length=16)
     output_mode: Literal["SIGNAL", "TARGET_POSITION", "ORDER_INTENT"] | None = None
     execution_overrides: ResearchExecutionOverrides | None = None
+    python_runtime_mode: Literal["SANDBOXED_LOCAL", "TRUSTED_LOCAL"] | None = None
+    python_trusted_confirmed: bool = False
+    python_bar_execution: PythonBarExecution | None = None
     chart_cell_scope: str | None = Field(default=None, min_length=1, max_length=320)
     strategy_draft_id: str | None = Field(default=None, pattern=r"^draft-[A-Za-z0-9_-]{8,152}$")
 
@@ -251,6 +261,11 @@ async def prepare_strategy(request: Request, payload: StrategyPreparationPayload
     from app.data_engine.interval_policy import parse_interval_spec
     from app.data_preparation.models import canonical
     submission = payload.model_dump(mode="json")
+    if payload.strategy is not None:
+        # Keep the persisted submission identity for retries from older clients.
+        for field in ("python_runtime_mode", "python_trusted_confirmed", "python_bar_execution"):
+            if field not in payload.strategy.model_fields_set:
+                submission["strategy"].pop(field)
     prior = await invoke_async(lambda: service(request).storage(service(request).repository.by_idempotency, payload.idempotency_key))
     if prior is not None:
         if canonical(prior["request"]["intent"].get("submission")) != canonical(submission):
@@ -286,7 +301,20 @@ async def prepare_strategy(request: Request, payload: StrategyPreparationPayload
     if payload.strategy is not None:
         from app.data_preparation.dependency_plan import strategy_warmup, warmup_start
         warmup_bars = await invoke_async(lambda: service(request).storage(strategy_warmup, runtime, payload.strategy.strategy_revision_id, payload.strategy.parameters))
-        if context.range_mode == "ALL_AVAILABLE":
+        profile = payload.strategy.python_bar_execution
+        if profile is not None:
+            if (context.fidelity_preference != "FAST" or context.interval != "1m" or context.range_mode != "CUSTOM"
+                    or payload.strategy.output_mode is not None):
+                raise HTTPException(422, detail={"code": "FIDELITY_UNSUPPORTED", "message": "A continuous profile requires a custom Python 1-minute BAR range"})
+            if not warmup_bars <= profile.warmupBars <= runtime.settings.max_warmup_bars:
+                raise HTTPException(422, detail={"code": "WARMUP_BUDGET", "message": "Saved warmup is incompatible with this strategy"})
+            warmup_bars = profile.warmupBars
+            # A continuing Run already starts with its warmup. Reuse those
+            # first bars instead of acquiring a second warmup before the range.
+            requested_start = start + warmup_bars * 60_000
+            if requested_start >= end:
+                raise HTTPException(422, detail={"code": "WARMUP_RANGE_INSUFFICIENT", "message": "The selected range contains no evaluation bars"})
+        elif context.range_mode == "ALL_AVAILABLE":
             # The first available bars are the warmup; do not invent required
             # history before listing simply because the user chose ALL.
             for _ in range(warmup_bars):

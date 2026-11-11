@@ -14,6 +14,7 @@ from app.data_engine.storage.raw_trade_archive import (
 )
 
 from ..errors import ReplayDomainError, ReplayErrorCode
+from ..local_trade_repository import LocalReplayTradeRepository, LocalTradeDatasetRef, TradeDatasetRef
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,14 +162,14 @@ class PagedReplayTradeReader:
 
     def __init__(
         self,
-        archive: RawAggTradeArchive,
-        dataset_ref: RawAggTradeDatasetRef,
+        archive: RawAggTradeArchive | LocalReplayTradeRepository,
+        dataset_ref: TradeDatasetRef,
         *,
         page_rows: int = 50_000,
         validate_generation: bool = True,
     ) -> None:
-        if not isinstance(dataset_ref, RawAggTradeDatasetRef):
-            raise TypeError("dataset_ref must be RawAggTradeDatasetRef")
+        if not isinstance(dataset_ref, (RawAggTradeDatasetRef, LocalTradeDatasetRef)):
+            raise TypeError("dataset_ref must identify an immutable replay trade source")
         if not archive.enabled:
             raise ReplayDomainError(
                 ReplayErrorCode.ARCHIVE_DISABLED,

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
+import ChartNoteFilterFields from "../chart-workspace/ChartNoteFilterFields.js";
 import { normalizeChartAccountOverlay, type ChartAccountOverlaySettings } from "../chart-workspace/chartAccountOverlaySettings.js";
 import { useTradingAccountsRuntime } from "./useTradingAccountsRuntime.js";
 import "./chartAccountOverlay.css";
@@ -40,12 +41,12 @@ export default function ChartAccountOverlayMenu({ cellId, settings, error, onCha
       aria-label={title} title={error ?? title} data-error={error ? "true" : undefined} aria-haspopup="dialog" aria-expanded={open}
       onDoubleClick={event => event.stopPropagation()} onClick={event => {
         const rect = event.currentTarget.getBoundingClientRect();
-        setPosition({ top: Math.min(rect.bottom + 6, Math.max(8, window.innerHeight - 300)), left: Math.max(8, Math.min(rect.left, window.innerWidth - 288)) });
+        setPosition({ top: Math.min(rect.bottom + 6, Math.max(8, window.innerHeight - 420)), left: Math.max(8, Math.min(rect.left, window.innerWidth - 288)) });
         setOpen(current => !current);
       }}>
       {t("trading.overlay.trigger")}
     </button>
-    {open && createPortal(<div ref={panel} className="chart-account-overlay-menu" role="dialog" aria-label={title} style={position}>
+    {open && createPortal(<div ref={panel} className="chart-account-overlay-menu" role="dialog" aria-label={title} style={{ ...position, maxHeight: `calc(100vh - ${position.top + 8}px)` }}>
       <strong>{title}</strong>
       <label>{t("trading.overlay.source")}
         <select value={value.accountId ?? ""} onChange={event => onChange({ ...value, accountId: event.target.value || null })}>
@@ -59,6 +60,7 @@ export default function ChartAccountOverlayMenu({ cellId, settings, error, onCha
         <input type="checkbox" checked={value[key]} onChange={event => onChange({ ...value, [key]: event.target.checked })} />
         {t(`trading.overlay.${key}`)}
       </label>)}
+      <ChartNoteFilterFields value={value} onChange={onChange} />
       {(error ?? view.error) && <p role="status">{error ?? view.error}</p>}
       <button type="button" onClick={() => { setOpen(false); trigger.current?.focus(); }}>{t("trading.close")}</button>
     </div>, document.body)}

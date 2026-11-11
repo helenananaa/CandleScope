@@ -10,6 +10,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from collections import deque
 from collections.abc import Iterable, Sequence
+from contextlib import nullcontext
 from typing import Any, Callable, Mapping
 
 from app.core.config import BacktestSettings
@@ -1271,11 +1272,20 @@ class BacktestService:
         queue_ceiling = self.settings.max_active_runs + (
             self.settings.max_concurrent_studies * self.settings.max_trials_per_study
         )
-        inserted = self.repository.insert_run_budgeted(
-            record,
-            max_active=self.settings.max_active_runs,
-            max_queued=queue_ceiling,
-        )
+        connection_id = normalized_execution.get("external_connection_id")
+        admission = self.external.store.run_admission(connection_id) if connection_id else nullcontext()
+        try:
+            with admission:
+                inserted = self.repository.insert_run_budgeted(
+                    record,
+                    max_active=self.settings.max_active_runs,
+                    max_queued=queue_ceiling,
+                )
+        except StrategyProviderError as exc:
+            concurrent = self.repository.get_run_by_idempotency(idempotency_key)
+            if concurrent is not None:
+                return concurrent
+            raise BacktestError(exc.code, str(exc)) from exc
         if inserted == "ACTIVE_LIMIT":
             raise BacktestError(
                 "RUN_CAPACITY_EXCEEDED",
@@ -1384,6 +1394,28 @@ class BacktestService:
                 "IDENTITY_MUTATION", "research launch context integrity check failed"
             )
         return {**context, "context_hash": expected_hash}
+
+    def revoke_external_connection(self, connection_id: str) -> None:
+        self.external.revoke(connection_id)
+        for run_id in self.repository.active_provider_runs(connection_id):
+            self._cancel_revoked_run(run_id)
+
+    def external_queue_exclusions(self) -> tuple[str, ...]:
+        waiting, revoked = self.external.queue_exclusions(self.repository.queued_provider_connections())
+        # Also finish cancellation if the Host stopped after revoking the
+        # credential, or an interrupted worker requeued a revoked Run.
+        for run_id in revoked:
+            self._cancel_revoked_run(run_id)
+        return waiting + revoked
+
+    def _cancel_revoked_run(self, run_id: str) -> None:
+        try:
+            self.cancel_run(run_id)
+        except BacktestError:
+            # A worker that crossed the financial commit fence may finish
+            # sealing its report. Terminal records retain their original fate.
+            if self.get_run(run_id)["state"] not in {"COMPLETING", "COMPLETED", "FAILED", "CANCELLED"}:
+                raise
 
     def cancel_run(
         self, run_id: str, *, now_ms: int | None = None
@@ -2751,6 +2783,7 @@ class BacktestService:
             resume_sequence = 0
 
             kernel = _build_bar_kernel(config, self._execution_reporter(session))
+            kernel.capture_result_replay = config.get("exchange") == "local" and config.get("account_model") == "SPOT_CASH_V1"
             host_hotpath = app_getenv("BACKTEST_HOST_HOTPATH_ENABLED", "1").strip() == "1"
             # Kept opt-in until full-run evidence establishes a stable benefit.
             kernel._specialized_bar = app_getenv("BACKTEST_SPECIALIZED_BAR_ENABLED", "0").strip() == "1"
@@ -2982,6 +3015,8 @@ class BacktestService:
             )
             self._assert_provider_state_budget(session.snapshot())
             strategy_metadata = _provider_report_metadata(provider)
+            if kernel.capture_result_replay and kernel.replay_signal_trace_complete:
+                strategy_metadata["replayClosedBarSignals"] = kernel.replay_closed_bar_signals
             final_sequence = (
                 events[-1].sequence
                 if materialized and events
@@ -3175,6 +3210,7 @@ class BacktestService:
                 leverage=_config_decimal(config, "leverage", "1"),
                 host_policy_revision=config.get("host_policy_revision"),
                 scale_stream_decisions=self.settings.python_scale_v1_enabled,
+                capture_result_replay=(snapshot_evidence or {}).get("quality", {}).get("source_quality") == "user_market_trades",
                 **_execution_kernel_kwargs(config),
                 execution_reporter=self._execution_reporter(session),
             )
@@ -3359,6 +3395,8 @@ class BacktestService:
             )
             self._assert_provider_state_budget(session.snapshot())
             strategy_metadata = _provider_report_metadata(provider)
+            if kernel.capture_result_replay and kernel.replay_signal_trace_complete:
+                strategy_metadata["replayClosedBarSignals"] = kernel.replay_closed_bar_signals
             final_sequence = events[-1].sequence if events else resume_sequence
             self._save_dual_clock_checkpoint(
                 record,

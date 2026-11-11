@@ -225,7 +225,7 @@ def assert_same_market_scope(
     # Imported dataset IDs are source identities, not distinct online venues.
     # Each actor still keeps its own dataset ID and pinned revision. Callers
     # additionally validate explicit primary/target import units before planning.
-    if (str(binding.get("source_kind")) == "BAR"
+    if (str(binding.get("source_kind")) in {"BAR", "AGG_TRADE"}
             and market_type == expected[1] == LOCAL_BAR_MARKET
             and DATASET_ID_RE.fullmatch(exchange) is not None
             and DATASET_ID_RE.fullmatch(expected[0]) is not None
