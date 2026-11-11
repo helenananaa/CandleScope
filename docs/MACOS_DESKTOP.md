@@ -45,7 +45,9 @@ The macOS command creates a DMG and ZIP and explicitly disables publishing.
 The `Frontend checks` workflow runs `npm run check` and the desktop control
 adapter tests on Ubuntu. The `CCXT integration` workflow provides early backend
 checks on Ubuntu. PRs that change the desktop host, packaging, or native
-dependencies also trigger both macOS jobs automatically. Pushes to `main`
+dependencies also trigger both macOS jobs automatically when ready for review.
+Draft PRs skip automatic CI jobs. Marking a PR ready starts the checks for its
+changed paths. Pushes to `main`
 still trigger native packaging for changes under `frontend/`, `backend/`, or
 `packages/`.
 

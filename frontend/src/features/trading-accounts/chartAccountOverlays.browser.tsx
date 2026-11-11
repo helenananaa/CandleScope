@@ -27,6 +27,13 @@ const note = (id: string, suffix: string, time: number): JournalEntry => ({ id: 
   templateId: null, templateVersion: null, tags: [], fields: {}, body: "Chart note", revisionCount: 1,
   stage: "pre", reviewNote: false, fieldTiming: {}, plan: null, snapshots: [] });
 
+const journal = (id: string) => [
+  { ...note(id, "visible", start + 1200), tradeId: `${id}-trade` },
+  { ...note(id, "hole", start + 1800), marketTimeMs: (start + 1800) * 1000, reviewNote: true,
+    snapshots: [{ id: "screenshot", createdAtMs: (start + 2400) * 1000, hasImage: true, state: {} }] },
+  note(id, "outside", start - 60),
+];
+
 /** Real menu + hook + chart: account pinning must never switch the panel or sibling. */
 export async function checkChartAccountOverlays() {
   const originalFetch = window.fetch;
@@ -48,14 +55,14 @@ export async function checkChartAccountOverlays() {
         const event = { schema: "candlescope.trading-account-state/1", type: "snapshot", replacement: true,
           identity: { accountId: id, ledgerEpoch: epoch }, connectionEpoch: "b".repeat(32), sequence: 1,
           state: { cursor: { epoch, sequence: 1 }, summary: summary(id!), trades: [trade(id!)],
-            entries: [note(id!, "visible", start + 1200), note(id!, "hole", start + 1800), note(id!, "outside", start - 60)], journalError: null } };
+            entries: journal(id!), journalError: null } };
         return new Response(new ReadableStream({ start(controller) {
           controller.enqueue(new TextEncoder().encode(JSON.stringify(event) + "\n"));
           init?.signal?.addEventListener("abort", () => controller.close(), { once: true });
         } }), { headers: { "content-type": "application/x-ndjson" } });
       }
       data = endpoint === "summary" ? summary(id!) : endpoint === "trades" ? { trades: [trade(id!)] }
-        : { entries: [note(id!, "visible", start + 1200), note(id!, "hole", start + 1800), note(id!, "outside", start - 60)] };
+        : { entries: journal(id!) };
     }
     return Response.json(data);
   };
@@ -89,8 +96,8 @@ export async function checkChartAccountOverlays() {
   const markers = (id: string) => overlays.get(id)!.markerSource.getSnapshot().markers;
   const lines = (id: string) => overlays.get(id)!.priceLineSource.getSnapshot().lines;
   const openLeft = async () => { await act(async () => { (host.querySelector('[data-cell="cell-1"] button') as HTMLButtonElement).click(); }); };
-  const choose = async (id: string) => { await act(async () => {
-    const select = document.querySelector(".chart-account-overlay-menu select") as HTMLSelectElement;
+  const choose = async (id: string, field = 0) => { await act(async () => {
+    const select = document.querySelectorAll<HTMLSelectElement>(".chart-account-overlay-menu select")[field]!;
     select.value = id; select.dispatchEvent(new Event("change", { bubbles: true }));
   }); };
   const toggle = async (index: number) => { await act(async () => {
@@ -110,6 +117,14 @@ export async function checkChartAccountOverlays() {
     assert(markers("cell-1").length === 2 && markers("cell-2").length === 1, "note visibility leaked to sibling or admitted an unloaded bar");
     await act(async () => { store.applyRange([rows[30]!]); });
     await waitFor(() => markers("cell-1").length === 3, "filling an axis hole did not reveal its correctly anchored note");
+    await choose("screenshots", 2);
+    assert(markers("cell-1").some(marker => marker.id.endsWith(":b-hole"))
+      && !markers("cell-1").some(marker => marker.id.endsWith(":b-visible")), "screenshot filter did not use the pinned account images");
+    await choose("original", 1);
+    assert(markers("cell-1").length === 1 && markers("cell-2").length === 1, "combined note filters changed fills or sibling");
+    await choose("linked", 2);
+    assert(markers("cell-1").some(marker => marker.id.endsWith(":b-visible")), "linked original was not shown");
+    await choose("all", 1); await choose("all", 2);
     await toggle(0); await toggle(1);
     assert(markers("cell-1").length === 2 && lines("cell-1").length === 0, "trade and position switches did not leave notes independent");
     await toggle(0); await toggle(1);
