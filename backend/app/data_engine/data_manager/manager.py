@@ -241,13 +241,6 @@ _FULL_ORDER_BOOK_PROVIDER = MarketDataProviderDescriptor(
 )
 
 
-class BackfillReconcilerLike(Protocol):
-    """Minimal backfill reconciler contract used during runtime wiring."""
-
-    def set_bar_aggregator(self, aggregator: BarAggregator) -> None:
-        ...
-
-
 class PriceStreamControllerLike(Protocol):
     """Optional controller contract for DataManager-owned price streams."""
 
@@ -328,6 +321,7 @@ class DataManager(DataManagerCore):
             cache=self.cache,
             event_bus=self.event_bus,
             interval_resolver=self.interval_resolver,
+            has_stream_lease=lambda key: key in self._stream_leases,
         )
         self.query_engine = QueryEngine(
             cache=self.cache,
@@ -465,8 +459,12 @@ class DataManager(DataManagerCore):
         from app.core.config import HISTORY_PREFIX_ENABLED
         from app.data_engine.bar_aggregator.history_prefix_runtime import HistoryPrefixRuntime
         from .history_prefix import HistoryPrefixReader
-        self.history_prefix_runtime = (HistoryPrefixRuntime(HistoryPrefixReader(self.query_engine), self.bar_aggregator,
-                                      self.aggregator_bridge._require_recovery) if HISTORY_PREFIX_ENABLED else None)
+        self.history_prefix_runtime = (
+            HistoryPrefixRuntime(
+                HistoryPrefixReader(self.query_engine), self.bar_aggregator,
+                self.aggregator_bridge._require_recovery, flush_delivery=self.aggregator_bridge.delivery.flush,
+            ) if HISTORY_PREFIX_ENABLED else None
+        )
         self.bar_aggregator.history_prefix_runtime = self.history_prefix_runtime
         self.warm_start.history_prefix_runtime = self.history_prefix_runtime
 
@@ -480,7 +478,6 @@ class DataManager(DataManagerCore):
         self.coordinator.set_gap_handler(self._handle_ingestion_gap)
         self.maintenance = MaintenanceService(
             storage_provider=lambda: self.query_engine.storage,
-            aggregator_config_snapshot=lambda: self.bar_aggregator.config.snapshot(),
             cache_invalidator=self.cache_invalidate,
             bars_backfilled=self.on_bars_backfilled,
             active_targets=self.bar_aggregator.get_targets,
@@ -631,13 +628,6 @@ class DataManager(DataManagerCore):
     @property
     def full_order_book_ready(self) -> bool:
         return self._full_order_book_service is not None
-
-    def wire_backfill_reconciler(self, reconciler: BackfillReconcilerLike) -> None:
-        """Attach this manager's BarAggregator to a backfill reconciler."""
-        set_bar_aggregator = getattr(reconciler, "set_bar_aggregator", None)
-        if not callable(set_bar_aggregator):
-            raise TypeError("reconciler must expose set_bar_aggregator()")
-        set_bar_aggregator(self.bar_aggregator)
 
     async def emit_event(self, event: DataEvent) -> None:
         """Emit a DataEvent through the manager-owned event bus."""

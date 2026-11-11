@@ -127,3 +127,25 @@ def test_annual_month_components_follow_calendar_not_thirty_day_spacing(year):
         rows, symbol="BTCUSDT", interval="12M", source_interval="1M"
     )
     assert len(result) == 1 and result[0].is_closed and result[0].volume == 12
+
+
+def test_listing_exclusion_cannot_promote_a_component_crossing_the_target_end():
+    component = BarData(time=180, open=1, high=2, low=1, close=2, volume=1, source="backfill")
+    bars = CustomIntervalQueryService._aggregate_read_only(
+        [component], "5m", 300, source_interval="3m",
+    )
+    base = QueryResult(
+        bars=[component],
+        earliest_available_ms=180_000,
+        excluded_ranges=[{
+            "start_ms": 0, "end_ms": 179_999,
+            "disposition": "terminal", "reason": "source_exhausted",
+        }],
+        metadata={"all_rows_final": True},
+    )
+
+    result = CustomIntervalQueryService._promote_rebuilt_finality(
+        bars, base, interval="5m", source_interval="3m", calendar=None,
+    )
+
+    assert len(result) == 1 and not result[0].is_closed

@@ -327,6 +327,7 @@ export class SharedKlineStreamCoordinator {
       controller: null as unknown as KlineStreamController,
     };
     subscriber.controller = {
+      reconnects: this.reconnects,
       readyState: () => entry.controller?.readyState(),
       isOpen: () => entry.open && entry.controller?.isOpen() === true,
       send: (payload) => entry.controller?.send(payload) === true,

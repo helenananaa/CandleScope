@@ -1,5 +1,6 @@
 """Real SQLite canonical changes through the actual live aggregator boundary."""
 import asyncio
+import sqlite3
 from dataclasses import replace
 import threading
 
@@ -9,8 +10,14 @@ from app.data_engine.bar_aggregator import BarAggregator
 from app.data_engine.bar_aggregator.models import MergeMode
 from app.data_engine.bar_aggregator.history_prefix_runtime import HistoryPrefixRuntime
 from tests.test_shared_blocks_integration import dm, write, read_rows, KEY, DAY
+from app.data_engine.data_manager.models import DataEventType
+from app.data_engine.ingestion.models import DataSource, MarketEvent, StreamType
+from app.data_engine.storage import klines_repo
 from tests.test_history_prefix_overlay import component, equal, state
 from app.data_engine.bar_aggregator.bar_state import ComponentSnapshotOHLCVMerge
+
+
+PRODUCTION_MIN_ROWS = HistoryPrefixRuntime.MIN_ROWS
 
 
 @pytest.fixture(autouse=True)
@@ -272,6 +279,150 @@ def test_large_new_bucket_and_partial_history_do_not_query_previous_full_bucket(
         assert current is not None and current._history_prefix is not None
         assert not current._history_prefix.complete
         assert calls and all(call.get('limit', 1000000) <= 257 for call in calls)
+    asyncio.run(check())
+
+
+def test_forming_fanout_reuses_reads_and_observes_a_mid_dispatch_commit(dm, runtime, monkeypatch):
+    agg, service, _ = runtime
+    intervals = ("121d", "122d")
+    agg.add_target("BTCUSDT", intervals[1], market_type="futures")
+    store = dm.query_engine.storage.revision_store
+    original = store._read_versions
+    reads = []
+
+    def count_read(conn, keys):
+        reads.append(conn)
+        return original(conn, keys)
+
+    async def check():
+        for interval in intervals:
+            assert await service.seed(KEY, interval, 0, 120 * DAY)
+        monkeypatch.setattr(store, "_read_versions", count_read)
+        rows = read_rows(dm)
+        tail = replace(rows[-1], time=120 * DAY // 1000, volume=4)
+        changed = replace(rows[31], volume=rows[31].volume / 2)
+        arrivals = []
+        amend = False
+
+        async def dispatch(exchange, market_type, symbol, interval, incoming):
+            await agg._handle_bar_input(exchange, market_type, symbol, interval, incoming,
+                                        emit_events=False)
+            arrivals.append(interval)
+            if amend and len(arrivals) == 1:
+                write([changed])
+
+        agg._router.set_on_bar_input(dispatch)
+
+        async def send(sequence, *, closed=False):
+            await agg.on_market_event(MarketEvent(
+                event_type=StreamType.KLINE, symbol="BTCUSDT", exchange="binance",
+                market_type="futures", event_time_ms=120 * DAY + sequence,
+                received_at_ms=120 * DAY + sequence, sequence=120 * DAY + sequence,
+                source=DataSource.WEBSOCKET,
+                data=dict(interval="1d", open_time=120 * DAY, close_time=121 * DAY - 1,
+                          open=tail.open, high=tail.high, low=tail.low, close=tail.close,
+                          volume=tail.volume, quote_volume=tail.quote_volume, trades=tail.trades,
+                          taker_buy_base=tail.taker_buy_base, taker_buy_quote=tail.taker_buy_quote,
+                          is_closed=closed),
+            ))
+
+        await send(1)
+        assert set(arrivals) == set(intervals)
+        assert len(reads) == 1
+        # The connection lives only for that input.
+        with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
+            reads[0].execute("SELECT 1")
+        before = reference(dm, tail)
+        arrivals.clear()
+        reads.clear()
+        amend = True
+        await send(2)
+        assert len(reads) >= 2 and reads[0] is reads[1]
+        first, second = arrivals
+        assert agg.get_bucket_state("BTCUSDT", first, 0, market_type="futures").volume == pytest.approx(before.volume)
+        equal(agg.get_bucket_state("BTCUSDT", second, 0, market_type="futures"), reference(dm, tail))
+        amend = False
+        await send(3)
+        for interval in intervals:
+            equal(agg.get_bucket_state("BTCUSDT", interval, 0, market_type="futures"), reference(dm, tail))
+        reads.clear()
+        await send(4, closed=True)
+        assert len(reads) == 2 and reads[0] is not reads[1]
+        await service.close()
+
+    asyncio.run(check())
+
+
+def test_production_size_stream_warm_start_publishes_one_durable_close(dm, monkeypatch):
+    monkeypatch.setattr(HistoryPrefixRuntime, "MIN_ROWS", PRODUCTION_MIN_ROWS)
+    # A prime target width above the threshold resolves to the 1m source.
+    interval = "2053m"
+    step = 60_000
+    count = 2053
+    final_open = (count - 1) * step
+    clock = [final_open + 1_000]
+    monkeypatch.setattr("time.time", lambda: clock[0] / 1000)
+    assert count - 1 >= PRODUCTION_MIN_ROWS
+    values = dict(open=1.0, high=3.0, low=0.5, close=2.0, volume=2.0,
+                  quote_volume=4.0, trades=1, taker_buy_base=1.0, taker_buy_quote=2.0)
+    klines_repo.upsert_klines("BTCUSDT", "1m", [
+        dict(values, open_time=index * step, close_time=(index + 1) * step - 1)
+        for index in range(count - 1)
+    ], source="backfill", market_type="futures")
+
+    class CapturingIngestion:
+        async def start(self, *, interval, on_market_event, **_identity):
+            assert interval == "1m"
+            self.on_market_event = on_market_event
+            return self
+
+        async def stop(self):
+            pass
+
+    ingestion = CapturingIngestion()
+    dm.set_ingestion_factory(ingestion)
+    closed = []
+    published = asyncio.Event()
+
+    async def observe(event):
+        closed.append(event)
+        published.set()
+
+    async def check():
+        try:
+            await dm.start()
+            await dm.subscribe_async(
+                observe, symbol="BTCUSDT", interval=interval, market_type="futures",
+                event_types={DataEventType.BAR_CLOSED}, continuity="gap_aware",
+            )
+            await dm.ensure_stream("BTCUSDT", interval, market_type="futures")
+            prefix = dm.history_prefix_runtime.snapshot()["last_adoption"]
+            assert prefix["accepted_slots"] == count - 1 and prefix["pages"] > 1
+            assert prefix["complete"]
+            clock[0] = count * step
+            event = MarketEvent(
+                event_type=StreamType.KLINE, symbol="BTCUSDT", exchange="binance",
+                market_type="futures", event_time_ms=clock[0], received_at_ms=clock[0],
+                sequence=clock[0], source=DataSource.WEBSOCKET,
+                data=dict(values, interval="1m", open_time=final_open,
+                          close_time=clock[0] - 1, is_closed=True),
+            )
+            await ingestion.on_market_event(event)
+            await asyncio.wait_for(published.wait(), timeout=5)
+            await ingestion.on_market_event(event)
+            await asyncio.sleep(0)
+            assert len(closed) == 1
+            assert closed[0].bar.volume == 2 * count
+            assert closed[0].detail["storage_revision"] > 0
+            assert dm.bar_aggregator.get_bucket_state("BTCUSDT", interval, 0, market_type="futures") is None
+            persisted = dm.query_engine.storage.query_bars(
+                "BTCUSDT", interval, start_ms=0, end_ms=0, market_type="futures",
+            )
+            assert len(persisted) == 1 and persisted[0]["volume"] == 2 * count
+
+        finally:
+            await dm.shutdown()
+
     asyncio.run(check())
 
 

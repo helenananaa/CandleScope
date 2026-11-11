@@ -96,6 +96,7 @@ export class BatchKlineStreamCoordinator {
       retryTimer: null,
     };
     subscription.controller = {
+      reconnects: this.reconnects,
       readyState: () => this.socket?.readyState,
       isOpen: () => this.isOpen(),
       send: (payload) => this.sendRaw(payload),
@@ -181,7 +182,10 @@ export class BatchKlineStreamCoordinator {
         this.clearRetry(item);
         item.options.onOpen?.(item.controller);
       });
-      this.sendCommand("subscribe", active);
+      // Open callbacks can reconcile intervals and already submit a subscription.
+      if (this.socket === socket) {
+        this.sendCommand("subscribe", active.filter(item => !item.closed && item.serverState === "absent"));
+      }
     };
     socket.onmessage = (event) => {
       if (this.socket !== socket) return;

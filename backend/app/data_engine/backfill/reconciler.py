@@ -4,15 +4,12 @@ Reconciler — deduplicates, aggregates custom intervals, writes to DB, and push
 Responsibilities:
   * Receive ``FetchResult`` objects from the Historical Fetcher
   * Deduplicate against existing DB data (skip / overwrite / backfill_wins)
-  * Aggregate standard-interval bars into custom-interval candles
-    — **preferring** BarAggregator when available (DRY compliance)
-    — falling back to built-in ``_default_aggregate`` when aggregator is not set
+  * Rebuild custom-interval candles from canonical stored components via K130
   * Write bars to ``StorageBackend`` in batches
   * Push recent bars to ``CacheBackend`` (optional)
   * Report per-phase statistics via ``ReconcileResult``
 
 Extension points:
-  * ``set_bar_aggregator(agg)``      — use BarAggregator for custom aggregation
   * ``set_custom_aggregator(fn)``    — override OHLCV aggregation logic
   * ``set_dedup_fn(fn)``             — override deduplication logic
   * ``on_write_batch(callback)``     — per-batch callback
@@ -22,9 +19,6 @@ Usage::
 
     reconciler = Reconciler(config, storage, cache=my_cache)
 
-    # Recommended: plug in the BarAggregator for consistent custom bars
-    reconciler.set_bar_aggregator(bar_aggregator)
-
     result = await reconciler.reconcile(fetch_results, plan)
 """
 from __future__ import annotations
@@ -33,17 +27,14 @@ import asyncio
 from dataclasses import replace
 import logging
 import time
+from itertools import pairwise
 from typing import Callable, Awaitable, Any
 
-from app.data_engine.interval_policy import (
-    aggregate_kline_rows,
-    compute_bucket_close_ms,
-    compute_bucket_start_ms,
-    parse_interval_ms,
-    parse_interval_spec,
-)
-from app.data_engine.kline_quality import source_rank
-from app.data_engine.storage.revisions import StaleAcquisition, prepare_derived_inputs
+from app.core.executors import run_preparation
+from app.data_engine.aggregation.semantics import valid_ohlcv
+from app.data_engine.interval_policy import aggregate_kline_rows, parse_interval_spec
+from app.data_engine.kline_quality import source_is_trusted_final, source_rank
+from app.data_engine.storage.revisions import StaleAcquisition, fenced_acquisition, prepare_derived_inputs
 from app.data_engine.storage.derived_history_fence import computation_scope
 from app.data_engine.series_identity import KlineSeriesIdentity
 from app.data_engine.custom_materialization import (
@@ -56,6 +47,7 @@ from .config import BackfillConfig
 from .models import (
     BackfillPlan,
     BackfillStatus,
+    BackfillTask,
     CacheBackend,
     DeduplicationStrategy,
     FetchedBar,
@@ -75,7 +67,7 @@ def _identity_kwargs(
     return {"series_identity": identity} if identity is not None else {}
 
 # Type aliases
-CustomAggregator = Callable[[list[FetchedBar], str, int, int, int], FetchedBar | None]
+CustomAggregator = Callable[[list[FetchedBar], str, str, int, int], FetchedBar | None]
 DedupFn = Callable[[FetchedBar, dict], bool]  # (new_bar, existing_row) → keep_new?
 WriteBatchCallback = Callable[[str, str, int], Awaitable[None]]  # symbol, interval, count
 ReconcileDoneCallback = Callable[[ReconcileResult], Awaitable[None]]
@@ -98,7 +90,6 @@ class Reconciler:
         # Extension points
         self._custom_aggregator: CustomAggregator | None = None
         self._custom_dedup_fn: DedupFn | None = None
-        self._bar_aggregator: Any = None  # BarAggregator instance (optional)
         self._write_batch_callbacks: list[WriteBatchCallback] = []
         self._done_callbacks: list[ReconcileDoneCallback] = []
         self._materialization_write_tasks: set[asyncio.Task[Any]] = set()
@@ -155,25 +146,6 @@ class Reconciler:
         """
         self._custom_dedup_fn = fn
 
-    def set_bar_aggregator(self, aggregator: Any) -> None:
-        """Plug in a BarAggregator for custom-interval aggregation.
-
-        When set, backfill data for custom intervals is routed through
-        the BarAggregator's ``on_backfill_bars()`` method instead of
-        the built-in ``_default_aggregate``.  This guarantees the same
-        bucketing, alignment, and OHLCV merge logic is used for both
-        live and historical data (DRY compliance).
-
-        Args:
-            aggregator: A ``BarAggregator`` instance.
-
-        Example::
-
-            reconciler.set_bar_aggregator(data_manager.bar_aggregator)
-        """
-        self._bar_aggregator = aggregator
-        logger.info("Reconciler: BarAggregator integration enabled")
-
     def on_write_batch(self, callback: WriteBatchCallback) -> None:
         """Register a callback invoked after each DB write batch."""
         self._write_batch_callbacks.append(callback)
@@ -184,6 +156,7 @@ class Reconciler:
 
     # ── Public: Reconcile ────────────────────────────────────
 
+    @fenced_acquisition
     async def reconcile(
         self,
         fetch_results: list[FetchResult],
@@ -291,11 +264,12 @@ class Reconciler:
                 and plan.custom_intervals
             ):
                 custom_started = time.monotonic()
-                for decomp in plan.decompositions:
+                decompositions = plan.decompositions[:1] if plan.derived_source_windows else plan.decompositions
+                for decomp in decompositions:
                     views = await prepare_derived_inputs(self._storage, decomp, grouped)
                     with computation_scope(views):
                         gen, wrt, failures, written_ranges = await self._generate_custom_bars(
-                            decomp, grouped,
+                            decomp, grouped, plan.derived_source_windows,
                         )
                     result.custom_bars_generated += gen
                     result.custom_bars_written += wrt
@@ -874,178 +848,74 @@ class Reconciler:
         self,
         decomp: IntervalDecomposition,
         grouped: dict[tuple[str, str, str, str], list[FetchedBar]],
+        source_windows: list[BackfillTask],
     ) -> tuple[int, int, list[dict[str, Any]], list[WrittenRange]]:
-        """Aggregate standard bars into custom-interval candles.
+        """Reduce canonical source windows after any fetched rows have committed."""
+        target = decomp.custom_interval
+        component_intervals = {component.interval for component in decomp.components}
+        by_target: dict[tuple[str, str, str], list[tuple[str, int, int, KlineSeriesIdentity | None]]] = {}
+        local_sources = set()
+        for task in source_windows:
+            if task.metadata.get("custom_interval") == target:
+                key = (task.exchange, task.market_type, task.symbol)
+                local_sources.add((*key, task.interval))
+                by_target.setdefault(key, []).append((task.interval, task.start_ms, task.end_ms, None))
 
-        When a BarAggregator is available, component bars are fed through
-        it via ``on_backfill_bars()`` — this reuses the exact same L1–L5
-        pipeline (TimeBucket, BarState, Finalizer, Publisher) that handles
-        live data, ensuring perfect consistency.
+        for (exchange, market_type, symbol, interval), bars in grouped.items():
+            if interval not in component_intervals or not bars or (exchange, market_type, symbol, interval) in local_sources:
+                continue
+            identity = bars[0].series_identity
+            if identity is not None and not identity.is_legacy_default_for(exchange):
+                continue
+            windows = by_target.setdefault((exchange, market_type, symbol), [])
+            # Keep distant fetched spans separate so they never load untouched history.
+            first = bars[0]
+            for previous, bar in pairwise(bars):
+                if bar.open_time != previous.close_time + 1:
+                    windows.append((interval, first.open_time, previous.open_time, identity))
+                    first = bar
+            windows.append((interval, first.open_time, bars[-1].open_time, identity))
 
-        When no BarAggregator is available, falls back to the built-in
-        ``_aggregate_to_custom`` implementation.
-
-        Returns (generated, written, failures, written_ranges).
-        """
-        custom_iv = decomp.custom_interval
-        custom_ms = decomp.custom_duration_ms
-        generated = 0
-        written = 0
+        generated = written = 0
         failures: list[dict[str, Any]] = []
         written_ranges: list[WrittenRange] = []
-
-        # Collect all component bars for each symbol
-        symbols: set[tuple[str, str, str]] = set()
-        component_bars: dict[tuple[str, str, str], list[FetchedBar]] = {}
-
-        for comp in decomp.components:
-            for (exchange, market_type, sym, iv), bars in grouped.items():
-                if iv == comp.interval:
-                    symbols.add((exchange, market_type, sym))
-                    component_bars.setdefault((exchange, market_type, sym), []).extend(bars)
-
-        for exchange, market_type, symbol in symbols:
-            bars = component_bars.get((exchange, market_type, symbol), [])
-            if not bars:
-                continue
-
-            bars.sort(key=lambda b: b.open_time)
-            bucket_min_ms, bucket_max_ms = self._custom_bucket_bounds(
-                bars, custom_ms, decomp.alignment_epoch_ms,
-                custom_interval=custom_iv,
-            )
-
-            archive_bulk_fast_path = (
-                decomp.alignment_epoch_ms == 0
-                and len(bars) >= 1_000
-                and any(
-                    bar.source.startswith("backfill_archive_")
-                    for bar in bars
+        for (exchange, market_type, symbol), windows in by_target.items():
+            canonical_rows = {}
+            for interval, start_ms, end_ms, identity in windows:
+                rows = await self._read_component_window(
+                    symbol, interval, start_ms, end_ms, exchange, market_type, identity,
                 )
-            )
-            if archive_bulk_fast_path:
-                # Archive packages are strictly ordered, closed and validated
-                # before they reach reconciliation.  Feeding 100k+ component
-                # rows one at a time through the live async event pipeline is
-                # semantically redundant and dominated warm rebuild time.
-                # The pure batch implementation shares interval-policy bucket
-                # boundaries and emits only fully covered buckets; parity with
-                # BarAggregator is guarded by interval-policy consistency tests.
-                custom_bars = self._aggregate_to_custom(
-                    bars,
-                    symbol,
-                    custom_iv,
-                    custom_ms,
-                    decomp.alignment_epoch_ms,
-                )
-                generated += len(custom_bars)
-                count, write_failures, ranges = (
-                    await self._write_custom_materialization(
-                        exchange=exchange,
-                        market_type=market_type,
-                        symbol=symbol,
-                        interval=custom_iv,
-                        bars=custom_bars,
-                        phase="custom_archive_bulk",
-                    )
-                )
-                written += count
-                failures.extend(write_failures)
-                written_ranges.extend(ranges)
-                self._metrics.inc("custom_archive_bulk_fast_paths")
-                self._metrics.inc(
-                    "custom_archive_bulk_component_rows",
-                    len(bars),
-                )
-                continue
+                canonical_rows.update({(interval, row["open_time"]): row for row in rows})
 
-            # ── Route through BarAggregator if available ─────
-            if self._bar_aggregator is not None:
-                try:
-                    # Aggregate in an isolated BarAggregator instance so the
-                    # reconciler cannot pollute live targets or active state.
-                    batch_states = await self._bar_aggregator.aggregate_batch(
-                        symbol,
-                        custom_iv,
-                        None,
-                        bars,
-                        exchange=exchange,
-                        market_type=market_type,
-                        require_authoritative=True,
-                    )
-                    custom_bars_from_agg = []
-                    for bar_state in batch_states:
-                        if not (bucket_min_ms <= bar_state.bucket_start_ms <= bucket_max_ms):
-                            continue
-                        custom_bars_from_agg.append(FetchedBar(
-                            symbol=symbol,
-                            interval=custom_iv,
-                            open_time=bar_state.bucket_start_ms,
-                            close_time=bar_state.bucket_end_ms - 1,
-                            open=bar_state.open,
-                            high=bar_state.high,
-                            low=bar_state.low,
-                            close=bar_state.close,
-                            volume=bar_state.volume,
-                            exchange=exchange,
-                            market_type=market_type,
-                            quote_volume=bar_state.quote_volume,
-                            trades=bar_state.trades,
-                            taker_buy_base=bar_state.taker_buy_base,
-                            taker_buy_quote=bar_state.taker_buy_quote,
-                            source="backfill_aggregated_via_bar_agg",
-                            enhanced_fields=bar_state.enhanced_fields,
-                        ))
-                    custom_bars_from_agg.sort(key=lambda b: b.open_time)
-                    generated += len(custom_bars_from_agg)
-
-                    count, write_failures, ranges = (
-                        await self._write_custom_materialization(
-                            exchange=exchange,
-                            market_type=market_type,
-                            symbol=symbol,
-                            interval=custom_iv,
-                            bars=custom_bars_from_agg,
-                            phase="custom_via_aggregator",
-                        )
-                    )
-                    written += count
-                    failures.extend(write_failures)
-                    written_ranges.extend(ranges)
-                    logger.debug(
-                        "Custom bars via BarAggregator: %s@%s → %d bars",
-                        symbol, custom_iv, len(custom_bars_from_agg),
-                    )
-                    continue  # skip fallback path for this symbol
-
-                except Exception as exc:
-                    logger.warning(
-                        "BarAggregator path failed for %s@%s, "
-                        "falling back to built-in: %s",
-                        symbol, custom_iv, exc,
-                    )
-                    # Fall through to built-in aggregation
-
-            # ── Fallback: built-in aggregation ───────────────
-            custom_bars = self._aggregate_to_custom(
-                bars, symbol, custom_iv, custom_ms,
-                decomp.alignment_epoch_ms,
+            custom_bars = await run_preparation(
+                self._reduce_custom_rows, list(canonical_rows.values()), symbol, target,
+                exchange, market_type, int(time.time() * 1000),
             )
             generated += len(custom_bars)
-
             count, write_failures, ranges = await self._write_custom_materialization(
-                exchange=exchange,
-                market_type=market_type,
-                symbol=symbol,
-                interval=custom_iv,
-                bars=custom_bars,
-                phase="custom",
+                exchange=exchange, market_type=market_type, symbol=symbol,
+                interval=target, bars=custom_bars, phase="custom",
             )
             written += count
             failures.extend(write_failures)
             written_ranges.extend(ranges)
 
         return generated, written, failures, written_ranges
+
+    async def _read_component_window(
+        self, symbol: str, interval: str, start_ms: int, end_ms: int,
+        exchange: str, market_type: str, identity: KlineSeriesIdentity | None,
+    ) -> list[dict]:
+        rows = await self._storage.query_time_range(
+            symbol, interval, start_ms, end_ms, exchange=exchange, market_type=market_type,
+            **_identity_kwargs(identity),
+        )
+        self._metrics.inc("custom_canonical_input_reads")
+        self._metrics.inc("custom_canonical_input_rows", len(rows))
+        return [
+            row if row.get("interval") == interval else {**row, "interval": interval}
+            for row in rows if source_is_trusted_final(row.get("source"))
+        ]
 
     @staticmethod
     def _standard_written_ranges(written: WrittenRange, batch: list[FetchedBar]) -> list[WrittenRange]:
@@ -1138,159 +1008,58 @@ class Reconciler:
                 f"({failure['phase']}): {failure['error']}"
             )
 
-    @staticmethod
-    def _custom_bucket_bounds(
-        bars: list[FetchedBar],
-        custom_ms: int,
-        epoch_ms: int,
-        *,
-        custom_interval: str | None = None,
-    ) -> tuple[int, int]:
-        """Return inclusive min/max custom bucket starts touched by *bars*."""
-        first_open = min(bar.open_time for bar in bars)
-        last_open = max(bar.open_time for bar in bars)
-        bucket_min = compute_bucket_start_ms(first_open, custom_ms, interval=custom_interval)
-        bucket_max = compute_bucket_start_ms(last_open, custom_ms, interval=custom_interval)
-        return bucket_min, bucket_max
-
-    def _aggregate_to_custom(
+    def _reduce_custom_rows(
         self,
-        bars: list[FetchedBar],
+        rows: list[dict],
         symbol: str,
-        custom_interval: str,
-        custom_ms: int,
-        epoch_ms: int,
+        interval: str,
+        exchange: str,
+        market_type: str,
+        now_ms: int,
     ) -> list[FetchedBar]:
-        """Aggregate component bars into custom-interval candles."""
-        if not bars:
-            return []
-
+        rebuilt = aggregate_kline_rows(
+            rows, target_interval=interval, source_interval=None, now_ms=now_ms,
+        )
         if self._custom_aggregator is None:
-            source_interval = bars[0].interval
-            if parse_interval_ms(source_interval) is None:
-                inferred_source_ms = int(bars[0].close_time) - int(bars[0].open_time) + 1
-                if inferred_source_ms <= 0 or inferred_source_ms % 1_000:
-                    return []
-                source_interval = f"{inferred_source_ms // 1_000}s"
-            rebuilt = aggregate_kline_rows(
-                [bar.to_storage_dict() for bar in bars],
-                target_interval=custom_interval,
-                source_interval=source_interval,
-                now_ms=max(int(bar.close_time) for bar in bars) + 1,
-            )
-            result: list[FetchedBar] = []
-            for row in rebuilt:
-                enhanced_fields = frozenset(
-                    field
-                    for field in (
-                        "quote_volume",
-                        "trades",
-                        "taker_buy_base",
-                        "taker_buy_quote",
-                    )
-                    if row.get(field) is not None
-                )
-                result.append(FetchedBar(
-                    symbol=symbol,
-                    interval=custom_interval,
-                    open_time=int(row["open_time"]),
-                    close_time=int(row["close_time"]),
-                    open=float(row["open"]),
-                    high=float(row["high"]),
-                    low=float(row["low"]),
-                    close=float(row["close"]),
-                    volume=float(row["volume"]),
-                    exchange=bars[0].exchange,
-                    market_type=bars[0].market_type,
-                    quote_volume=float(row.get("quote_volume") or 0),
-                    trades=int(row.get("trades") or 0),
-                    taker_buy_base=float(row.get("taker_buy_base") or 0),
-                    taker_buy_quote=float(row.get("taker_buy_quote") or 0),
-                    source="backfill_aggregated",
-                    enhanced_fields=enhanced_fields,
-                ))
-            return result
+            return [
+                self._fetched_from_row(row, symbol, interval, exchange, market_type, "backfill_aggregated")
+                for row in rebuilt
+            ]
 
-        result: list[FetchedBar] = []
-
-        # Assign each bar to a custom bucket
-        buckets: dict[int, list[FetchedBar]] = {}
-        for bar in bars:
-            bucket_start = compute_bucket_start_ms(bar.open_time, custom_ms, interval=custom_interval)
-            buckets.setdefault(bucket_start, []).append(bar)
-
-        for bucket_start in sorted(buckets.keys()):
-            bucket_bars = buckets[bucket_start]
-            bucket_bars.sort(key=lambda b: b.open_time)
-            bucket_end = compute_bucket_close_ms(
-                bucket_start,
-                custom_ms,
-                interval=custom_interval,
-            )
-
-            components_cover_bucket = (
-                bucket_bars[0].open_time == bucket_start
-                and all(
-                    current.open_time == previous.close_time + 1
-                    for previous, current in zip(bucket_bars, bucket_bars[1:])
-                )
-                and bucket_bars[-1].close_time >= bucket_end
-            )
-            if not components_cover_bucket:
-                logger.warning(
-                    "Skipping incomplete custom bucket %s@%s open=%d "
-                    "components=%d",
-                    symbol,
-                    custom_interval,
-                    bucket_start,
-                    len(bucket_bars),
-                )
-                continue
-
-            agg = self._custom_aggregator(
-                bucket_bars, symbol, custom_interval,
-                bucket_start, bucket_end,
-            )
-            if agg is not None:
-                result.append(agg)
-
+        target = parse_interval_spec(interval)
+        assert target is not None
+        components: dict[int, list[dict]] = {}
+        for row in rows:
+            components.setdefault(target.floor_ms(int(row["open_time"])), []).append(row)
+        result = []
+        for row in rebuilt:
+            start, end = row["open_time"], row["close_time"]
+            bucket = [
+                self._fetched_from_row(item, symbol, item["interval"], exchange, market_type, item["source"])
+                for item in sorted(components[start], key=lambda item: item["open_time"])
+            ]
+            bar = self._custom_aggregator(bucket, symbol, interval, start, end)
+            if bar is not None and (
+                bar.symbol, bar.interval, bar.exchange, bar.market_type, bar.open_time, bar.close_time
+            ) == (symbol, interval, exchange, market_type, start, end) and valid_ohlcv(
+                (bar.open, bar.high, bar.low, bar.close, bar.volume)
+            ):
+                result.append(bar)
         return result
 
     @staticmethod
-    def _default_aggregate(
-        bars: list[FetchedBar],
-        symbol: str,
-        custom_interval: str,
-        bucket_start: int,
-        bucket_end: int,
-    ) -> FetchedBar | None:
-        """Default OHLCV aggregation: standard candle merge."""
-        if not bars:
-            return None
-
-        enhanced_fields = frozenset.intersection(*(
-            frozenset(bar.enhanced_fields or ())
-            for bar in bars
-        ))
-
+    def _fetched_from_row(row, symbol, interval, exchange, market_type, source) -> FetchedBar:
+        enhanced = ("quote_volume", "trades", "taker_buy_base", "taker_buy_quote")
         return FetchedBar(
-            symbol=symbol,
-            interval=custom_interval,
-            open_time=bucket_start,
-            close_time=bucket_end,
-            open=bars[0].open,
-            high=max(b.high for b in bars),
-            low=min(b.low for b in bars),
-            close=bars[-1].close,
-            volume=sum(b.volume for b in bars),
-            exchange=bars[0].exchange,
-            quote_volume=sum(b.quote_volume for b in bars),
-            market_type=bars[0].market_type,
-            trades=sum(b.trades for b in bars),
-            taker_buy_base=sum(b.taker_buy_base for b in bars),
-            taker_buy_quote=sum(b.taker_buy_quote for b in bars),
-            source="backfill_aggregated",
-            enhanced_fields=enhanced_fields,
+            symbol=symbol, interval=interval, exchange=exchange, market_type=market_type,
+            open_time=int(row["open_time"]), close_time=int(row["close_time"]),
+            open=float(row["open"]), high=float(row["high"]), low=float(row["low"]),
+            close=float(row["close"]), volume=float(row["volume"]), source=source,
+            quote_volume=float(row.get("quote_volume") or 0),
+            trades=int(row.get("trades") or 0),
+            taker_buy_base=float(row.get("taker_buy_base") or 0),
+            taker_buy_quote=float(row.get("taker_buy_quote") or 0),
+            enhanced_fields=frozenset(field for field in enhanced if row.get(field) is not None),
         )
 
     # ── Internal: Cache push ─────────────────────────────────

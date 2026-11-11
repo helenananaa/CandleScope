@@ -12,19 +12,22 @@ from app.data_engine.market_data.kline_metrics import (
     KLINE_ENHANCED_FIELDS, normalize_kline_aggregation_fields,
 )
 
-from .semantics import ClosePolicy, Coverage, CoverageStatus, FieldSummary, summarize_fields
+from .semantics import ClosePolicy, Coverage, CoverageStatus, FieldSummary, summarize_fields, valid_ohlcv
 
 
-def chart_field_summary(rows: Sequence[Mapping]) -> FieldSummary:
+def chart_field_summary(rows: Sequence[Mapping], *, validate_ohlcv: bool = False) -> FieldSummary:
     values = []
     for row in rows:
+        ohlcv = (float(row["open"]), float(row["high"]), float(row["low"]), float(row["close"]), float(row["volume"]))
+        if validate_ohlcv and not valid_ohlcv(ohlcv):
+            raise ValueError("accepted OHLCV must be finite with nonnegative volume")
         enhanced = normalize_kline_aggregation_fields(
             volume=row.get("volume"), quote_volume=row.get("quote_volume"),
             trades=row.get("trades"), taker_buy_base=row.get("taker_buy_base"),
             taker_buy_quote=row.get("taker_buy_quote"),
         )
         values.append((
-            *(round(float(row[name]), 8) for name in ("open", "high", "low", "close", "volume")),
+            *(round(value, 8) for value in ohlcv),
             *enhanced,
         ))
     return summarize_fields(values)

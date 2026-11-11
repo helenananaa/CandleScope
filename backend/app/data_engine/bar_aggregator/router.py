@@ -368,6 +368,12 @@ class EventRouter:
             return
 
         src = bar_input.source_interval
+        if bar_input.is_closed and src != "tick":
+            # Enqueue the native close first. Its canonical commit invalidates
+            # overlapping projections, including a derived close from this input.
+            target_intervals = sorted(target_intervals, key=lambda interval: not (
+                src == interval or intervals_equivalent(src, interval)
+            ))
 
         for interval in target_intervals:
             if bar_input.identity not in self._target_identities.get(

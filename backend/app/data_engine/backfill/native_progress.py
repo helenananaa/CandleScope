@@ -51,6 +51,17 @@ class _Receipt:
 @dataclass(slots=True)
 class NativeBackfillProgress:
     receipts: dict[str, _Receipt] = field(default_factory=dict)
+    _invalidated: set[str] = field(default_factory=set, init=False)
+
+    def verified(self, task: BackfillTask) -> bool:
+        return task.task_key in self.receipts and task.task_key not in self._invalidated
+
+    def invalidated_ranges(self, interval: str) -> tuple[tuple[int, int], ...]:
+        return tuple(
+            (task.start_ms, task.end_ms)
+            for key in self._invalidated
+            if (task := self.receipts[key].task).interval == interval
+        )
 
     def subset(self, start_ms: int, end_ms: int) -> NativeBackfillProgress | None:
         receipts = {key: value for key, value in self.receipts.items()
@@ -79,14 +90,15 @@ class NativeBackfillProgress:
 
     def _covered_by_completed(self, task: BackfillTask) -> bool:
         return any(
-            receipt.completed_slot is not None
+            key not in self._invalidated
+            and receipt.completed_slot is not None
             and receipt.task.interval == task.interval
             and receipt.task.start_ms <= task.start_ms <= task.end_ms <= receipt.task.end_ms
-            for receipt in self.receipts.values()
+            for key, receipt in self.receipts.items()
         )
 
     def covers_task(self, task: BackfillTask) -> bool:
-        return task.task_key in self.receipts or self._covered_by_completed(task)
+        return self.verified(task) or self._covered_by_completed(task)
 
     @staticmethod
     def completed_receipt(request, rows: list[dict]) -> dict | None:
@@ -162,6 +174,7 @@ class NativeBackfillProgress:
     async def verify(self, storage, *, exchange: str, market_type: str, symbol: str,
                      start_ms: int | None, end_ms: int | None, metadata: dict) -> None:
         identity = identity_from_metadata(exchange, metadata)
+        self._invalidated.clear()
         for key, receipt in tuple(self.receipts.items()):
             task = receipt.task
             if ((task.exchange, task.market_type, task.symbol) != (exchange, market_type, symbol)
@@ -172,16 +185,18 @@ class NativeBackfillProgress:
                 continue
             rows = await _read_rows(storage, task)
             if _digest(rows) != receipt.digest:
-                del self.receipts[key]
+                # Keep the original fingerprint through another deferral.
+                # A generic trusted-row reuse pass must not consume this range.
+                self._invalidated.add(key)
 
     async def remember(self, storage, fetched: list[FetchResult], reconciled: ReconcileResult) -> None:
         if reconciled.errors:
             return
         calendar = AlwaysOpenCalendar()
         for result in fetched:
-            if len(self.receipts) >= _MAX_TASKS:
-                return
             task = result.task
+            if len(self.receipts) >= _MAX_TASKS and task.task_key not in self.receipts:
+                continue
             expected = list(islice(
                 calendar.expected_opens(task.start_ms, task.end_ms, task.interval),
                 _MAX_ROWS_PER_TASK + 1,
@@ -213,10 +228,11 @@ class NativeBackfillProgress:
             self.receipts[task.task_key] = _Receipt(
                 replace(task, parent_gap=None, metadata=scope), digest, tuple(written),
             )
+            self._invalidated.discard(task.task_key)
 
     def include_writes(self, result: ReconcileResult) -> None:
-        for receipt in self.receipts.values():
-            if not receipt.written or self._covered_by_completed(receipt.task):
+        for key, receipt in self.receipts.items():
+            if key in self._invalidated or not receipt.written or self._covered_by_completed(receipt.task):
                 continue
             result.written_ranges.extend(receipt.written)
             result.bars_written += sum(item.bars_written for item in receipt.written)

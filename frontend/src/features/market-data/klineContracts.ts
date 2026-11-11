@@ -399,6 +399,8 @@ export interface BackfillCompletedOptions {
 }
 
 export interface KlineStreamController {
+  /** A transport close preserves this subscription and retries its socket. */
+  readonly reconnects?: boolean;
   readyState(): number | undefined;
   isOpen(): boolean;
   send(payload: string): boolean;

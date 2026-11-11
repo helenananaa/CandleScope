@@ -105,3 +105,100 @@ def test_api_routes_use_data_manager_maintenance_facade() -> None:
                 offenders.append(f"{path.relative_to(BACKEND_ROOT)}:{token}")
 
     assert offenders == []
+
+
+def test_settings_repair_requires_complete_trusted_base_before_atomic_replace(tmp_path, monkeypatch):
+    from app.data_engine.storage import klines_repo
+
+    monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", tmp_path / "repair.sqlite")
+    klines_repo.init_klines_storage()
+    storage = klines_repo.KlinesRepoAdapter()
+
+    class Coordinator:
+        def __init__(self):
+            self.requests = []
+
+        async def request_and_wait(self, request):
+            self.requests.append(request)
+            return object()
+
+    def row(at, width, volume):
+        return {
+            "open_time": at, "close_time": at + width - 1,
+            "open": 3, "high": 4, "low": 2, "close": 3, "volume": volume,
+            "trades": None, "quote_volume": None, "taker_buy_base": None, "taker_buy_quote": None,
+        }
+
+    async def run():
+        dm = DataManager()
+        dm.set_storage(storage)
+        coordinator = Coordinator()
+        invalidations = []
+        invalidate = dm.maintenance._cache_invalidator
+
+        def record_invalidation(*args, **kwargs):
+            invalidations.append(args)
+            invalidate(*args, **kwargs)
+
+        monkeypatch.setattr(dm.maintenance, "_cache_invalidator", record_invalidation)
+        targets = [row(0, 120_000, 9), row(120_000, 120_000, 11)]
+        storage.upsert_bars("BTCUSDT", "1m", [row(at, 60_000, 1) for at in (0, 60_000, 120_000)], "backfill")
+        storage.upsert_bars("BTCUSDT", "1m", [row(180_000, 60_000, 2)], "data_manager_closed")
+
+        async def repair():
+            return await dm.repair_custom_storage(
+                symbols_filter=["BTCUSDT"], backfill_coordinator=coordinator,
+            )
+
+        def seed_target():
+            storage.upsert_bars("BTCUSDT", "2m", targets, "settings_manual_repair")
+
+        def read_target():
+            return storage.query_bars("BTCUSDT", "2m")
+
+        seed_target()
+        result = await repair()
+        assert result["failed_series"] == 1
+        assert coordinator.requests[0].metadata["requires_trusted_finality"] is True
+        assert [item["volume"] for item in read_target()] == [9, 11]
+
+        # A trusted label alone cannot make an incorrectly bounded component
+        # complete. One good target out of two must not authorize replacement.
+        storage.upsert_bars("BTCUSDT", "1m", [row(180_000, 59_999, 2)], "backfill")
+        seed_target()
+        result = await repair()
+        assert result["failed_series"] == 1
+        assert [item["volume"] for item in read_target()] == [9, 11]
+
+        storage.upsert_bars("BTCUSDT", "1m", [row(180_000, 60_000, -1)], "backfill")
+        seed_target()
+        result = await repair()
+        assert result["failed_series"] == 1
+        assert [item["volume"] for item in read_target()] == [9, 11]
+
+        storage.upsert_bars("BTCUSDT", "1m", [row(180_000, 60_000, 2)], "backfill")
+        seed_target()
+        replace_bars = storage.replace_bars
+
+        def replace_after_concurrent_write(*args, **kwargs):
+            storage.upsert_bars("BTCUSDT", "2m", [row(120_000, 120_000, 13)], "backfill_aggregated")
+            return replace_bars(*args, **kwargs)
+
+        with monkeypatch.context() as during_commit:
+            during_commit.setattr(storage, "replace_bars", replace_after_concurrent_write)
+            result = await repair()
+        assert result["failed_series"] == 1
+        assert [item["volume"] for item in read_target()] == [9, 13]
+
+        result = await repair()
+        assert result["repaired_series"] == 1
+        assert result["total_written_rows"] == 2
+        repaired = read_target()
+        assert [item["volume"] for item in repaired] == [2, 3]
+        assert all(item["source"] == "repair_derived_verified" for item in repaired)
+        assert all(item["quote_volume"] is None and item["trades"] is None for item in repaired)
+        assert (await repair())["unchanged_series"] == 1
+        assert invalidations == [("BTCUSDT", "2m")]
+        await dm.event_bus.close()
+
+    asyncio.run(run())
