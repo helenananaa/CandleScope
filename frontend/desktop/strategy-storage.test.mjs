@@ -11,8 +11,10 @@ test("profile state survives asset-port changes and queued writes finish before 
     const file = path.join(root, "strategy-storage.json");
     const first = new DesktopStrategyStorage(file);
     await first.load();
+    const batchKey = "candlescope:strategy-research-batch:v1";
+    const batch = JSON.stringify({schema: 1, jobs: [{id: "batch-job", runId: "bt_saved"}]});
     const writes = [first.setItem("candlescope-strategy-drafts-v1", '{"fast":4}'),
-      first.setItem("candlescope:strategy-research:v1", '{"draftId":"saved","runId":"completed"}')];
+      first.setItem("candlescope:strategy-research:v1", '{"draftId":"saved","runId":"completed"}'), first.setItem(batchKey, batch)];
     assert.equal(first.getItem("candlescope-strategy-drafts-v1"), '{"fast":4}');
     await first.flush();
     await Promise.all(writes);
@@ -20,8 +22,10 @@ test("profile state survives asset-port changes and queued writes finish before 
     await restarted.load();
     assert.equal(restarted.getItem("candlescope-strategy-drafts-v1"), '{"fast":4}');
     assert.equal(restarted.getItem("candlescope:strategy-research:v1"), '{"draftId":"saved","runId":"completed"}');
+    assert.equal(restarted.getItem(batchKey), batch);
+    assert.throws(() => restarted.setItem(batchKey, "x".repeat(256 * 1024 + 1)), /Invalid/);
     assert.deepEqual(Object.keys(JSON.parse(await readFile(file, "utf8")).values).sort(),
-      ["candlescope-strategy-drafts-v1", "candlescope:strategy-research:v1"].sort());
+      ["candlescope-strategy-drafts-v1", "candlescope:strategy-research:v1", batchKey].sort());
     assert.throws(() => restarted.setItem("../../secret", "bad"), /Invalid/);
     assert.throws(() => restarted.getItem("access-token"), /Unsupported/);
     assert.throws(() => restarted.setItem("candlescope-strategy-drafts-v1", "x".repeat(17 * 1024 * 1024)), /Invalid/);
