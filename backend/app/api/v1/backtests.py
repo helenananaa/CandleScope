@@ -12,6 +12,7 @@ from app.backtest.request_contracts import (
     StrategyCopyRequest,
     StrategySmokeRequest,
     RunCloneRequest,
+    ResultReplayNoteRequest,
     ReviewBridgeRequest,
     ResearchLaunchContextRequest,
     PythonBundleZipRequest,
@@ -22,6 +23,7 @@ from app.core.config import getenv as app_getenv
 
 import base64
 import json
+from time import time_ns
 from typing import Any
 
 from fastapi import APIRouter, Header, Request, Query
@@ -499,6 +501,49 @@ def get_report_details(request: Request, run_id: str, section: str = "fills",
 def get_chart(request: Request, run_id: str) -> dict[str, Any]:
     try:
         return _runtime(request).chart_data(run_id)
+    except BacktestError as exc:
+        return _error(exc)
+
+
+@router.get("/runs/{run_id}/result-replay")
+def get_result_replay(
+    request: Request, run_id: str,
+    snapshot_hash: str = Query(pattern=r"^sha256:[a-f0-9]{64}$"),
+    report_hash: str = Query(pattern=r"^sha256:[a-f0-9]{64}$"),
+    cursor: int = Query(ge=0),
+    interval: str = Query(min_length=2, max_length=64),
+    comparison_interval: str | None = Query(default=None, min_length=2, max_length=64),
+    ma_period: int | None = Query(default=None, ge=1, le=500),
+    comparison_ma_period: int | None = Query(default=None, ge=1, le=500),
+) -> dict[str, Any]:
+    from app.backtest.result_replay import project_result_replay
+
+    try:
+        return project_result_replay(
+            _runtime(request), run_id, snapshot_hash=snapshot_hash, report_hash=report_hash,
+            cursor=cursor, interval=interval, comparison_interval=comparison_interval,
+            ma_period=ma_period, comparison_ma_period=comparison_ma_period,
+        )
+    except BacktestError as exc:
+        return _error(exc)
+
+
+@router.post("/runs/{run_id}/result-replay/notes")
+def save_result_replay_note(request: Request, run_id: str, payload: ResultReplayNoteRequest) -> dict[str, Any]:
+    from app.backtest.result_replay import project_result_replay
+
+    try:
+        runtime = _runtime(request)
+        frame = project_result_replay(
+            runtime, run_id, snapshot_hash=payload.snapshot_hash, report_hash=payload.report_hash,
+            cursor=payload.cursor, interval=payload.interval,
+        )
+        runtime.service.repository.save_result_replay_note(
+            run_id, payload.snapshot_hash, payload.report_hash, payload.note_id,
+            expected_revision=payload.expected_revision, cursor=frame["cursor"], time_ms=frame["time_ms"],
+            body=payload.body, saved_at_ms=time_ns() // 1_000_000,
+        )
+        return {"revision": payload.expected_revision + 1}
     except BacktestError as exc:
         return _error(exc)
 

@@ -9,6 +9,7 @@ export type ReplayQualityMode = (typeof REPLAY_QUALITY_MODES)[number];
 export const REPLAY_DATA_FIDELITIES = [
   "EXACT_BAR_COVERAGE",
   "VERIFIED_AGG_TRADE_APPROXIMATE_BARS",
+  "USER_MARKET_TRADE_COVERAGE",
   "BEST_EFFORT",
 ] as const;
 export type ReplayDataFidelity = (typeof REPLAY_DATA_FIDELITIES)[number];

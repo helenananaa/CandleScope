@@ -145,9 +145,9 @@ export function ResearchDataImportForm({
       </div>
       <p>{t("local.requiredCols")}</p>
       <div className="local-import-grid">
-        <label>{t("local.baseAsset")}<input value={baseAsset} disabled={asRevision} maxLength={32} pattern="[A-Za-z0-9][A-Za-z0-9._-]{0,31}"
+        <label>{t("local.baseAsset")}<input value={baseAsset} disabled={asRevision} maxLength={32} pattern="[A-Za-z0-9][A-Za-z0-9._\-]{0,31}"
           required={quoteAsset.trim().length > 0} onChange={event => setBaseAsset(event.target.value)} /></label>
-        <label>{t("local.quoteAsset")}<input value={quoteAsset} disabled={asRevision} maxLength={32} pattern="[A-Za-z0-9][A-Za-z0-9._-]{0,31}"
+        <label>{t("local.quoteAsset")}<input value={quoteAsset} disabled={asRevision} maxLength={32} pattern="[A-Za-z0-9][A-Za-z0-9._\-]{0,31}"
           required={baseAsset.trim().length > 0} onChange={event => setQuoteAsset(event.target.value)} /></label>
       </div>
       <p>{t("local.assetUnitsHint")}</p>

@@ -1437,6 +1437,74 @@ class BacktestRepository:
             connection.execute("RELEASE report_read")
 
     @_locked
+    def result_replay_notes(
+        self, run_id: str, snapshot_hash: str, report_hash: str, cursor: int,
+    ) -> list[dict[str, Any]]:
+        rows = self.connection.execute(
+            """
+            WITH visible AS (
+                SELECT note_id AS id, revision, cursor, time_ms, body, saved_at_ms,
+                       ROW_NUMBER() OVER (PARTITION BY note_id ORDER BY revision DESC) AS rank
+                FROM backtest_result_replay_note_revisions
+                WHERE run_id = ? AND snapshot_hash = ? AND report_hash = ? AND cursor <= ?
+            )
+            SELECT id, revision, cursor, time_ms, body, saved_at_ms
+            FROM visible WHERE rank = 1 ORDER BY cursor, id
+            """,
+            (run_id, snapshot_hash, report_hash, cursor),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    @_locked
+    def save_result_replay_note(
+        self, run_id: str, snapshot_hash: str, report_hash: str, note_id: str, *,
+        expected_revision: int, cursor: int, time_ms: int | None, body: str, saved_at_ms: int,
+    ) -> None:
+        from .errors import BacktestError
+
+        scope = (run_id, snapshot_hash, report_hash)
+        note = (*scope, note_id)
+        revision = expected_revision + 1
+        connection = self.connection
+        with connection:
+            connection.execute("BEGIN IMMEDIATE")
+            existing = connection.execute(
+                """
+                SELECT revision, cursor, body FROM backtest_result_replay_note_revisions
+                WHERE run_id = ? AND snapshot_hash = ? AND report_hash = ? AND note_id = ?
+                ORDER BY revision DESC
+                """,
+                note,
+            ).fetchall()
+            if any(
+                row["revision"] == revision and row["cursor"] == cursor and row["body"] == body
+                for row in existing
+            ):
+                return
+            if expected_revision != len(existing) or (existing and cursor < existing[0]["cursor"]):
+                raise BacktestError("RESULT_REPLAY_NOTE_CONFLICT", "Result replay note revision changed")
+            if revision == 1:
+                note_count = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM backtest_result_replay_note_revisions
+                    WHERE run_id = ? AND snapshot_hash = ? AND report_hash = ? AND revision = 1
+                    """,
+                    scope,
+                ).fetchone()[0]
+                if note_count >= 100:
+                    raise BacktestError("RESULT_REPLAY_NOTE_LIMIT", "Result replay note limit reached")
+            if revision > 20:
+                raise BacktestError("RESULT_REPLAY_NOTE_LIMIT", "Result replay note revision limit reached")
+            connection.execute(
+                """
+                INSERT INTO backtest_result_replay_note_revisions (
+                    run_id, snapshot_hash, report_hash, note_id, revision, cursor, time_ms, body, saved_at_ms
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (*note, revision, cursor, time_ms, body, saved_at_ms),
+            )
+
+    @_locked
     def get_chart_cache(self, run_id: str) -> dict[str, Any] | None:
         row = self.connection.execute(
             "SELECT * FROM backtest_chart_cache WHERE run_id = ?", (run_id,)

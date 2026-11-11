@@ -99,7 +99,7 @@ function ReplayMarketPickerRow({
           onClick={onSelect}
         >
           {selecting
-            ? sourceKind === "AGG_TRADE"
+            ? sourceKind === "AGG_TRADE" && entry.quality !== "USER_MARKET_TRADE_COVERAGE"
               ? t("replay.picker.downloading")
               : t("replay.picker.init")
             : t("replay.picker.select")}
@@ -277,7 +277,7 @@ export default function ReplayInitialMarketPicker({
           {hedgeLocked && <div><span>{t("replay.picker.position")}</span><strong>{t("replay.picker.hedge")}</strong></div>}
         </section>
 
-        {run.source_kind === "AGG_TRADE" && (
+        {run.source_kind === "AGG_TRADE" && !catalog?.entries.some(entry => entry.quality === "USER_MARKET_TRADE_COVERAGE") && (
           <div className="replay-info-note" data-replay-agg-trade-download-note>
             {t("replay.picker.firstDownload")}
           </div>

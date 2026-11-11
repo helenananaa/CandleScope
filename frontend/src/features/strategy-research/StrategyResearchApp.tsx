@@ -70,6 +70,7 @@ const BacktestResearchApp = lazy(() => import("../backtest/research/BacktestRese
 const StrategyResearchLiveChart = lazy(() => import("./StrategyResearchLiveChart.js"));
 const NativeStrategyPanel = lazy(() => import("../backtest/native/NativeStrategyPanel.js"));
 const NativeStrategyReport = lazy(() => import("../backtest/native/NativeStrategyReport.js").then((module) => ({ default: module.NativeStrategyReport })));
+const StrategyResultReplay = lazy(() => import("./StrategyResultReplay.js"));
 const StrategyRunHistory = lazy(() => import("./StrategyRunHistory.js"));
 const SavedContinuousAccounts = lazy(() => import("../backtest/continuous/SavedContinuousAccounts.js"));
 import {
@@ -78,6 +79,7 @@ import {
   strategyResearchVisualState,
   type StrategyResearchLaunchIntent,
 } from "./strategyResearchLaunch.js";
+import type { BacktestResultReplayCursor } from "../backtest/backtestTypes.js";
 import type { StrategyResearchState } from "./strategyResearchState.js";
 
 class StrategyResearchDrawerBoundary extends Component<
@@ -380,9 +382,29 @@ export default function StrategyResearchApp({
     draftId: state.script.draftId,
     draftContentRevision: state.script.contentRevision,
     configuration: state.script.configuration,
-    restoreRunId: state.result.runId,
+    restoreRunId: state.result.replay ? null : state.result.runId,
     onRunId: handleRunId,
   });
+  const saveResultReplay = useCallback((replay: BacktestResultReplayCursor) => {
+    dispatch({ type: "result/replay", replay });
+  }, [dispatch]);
+  const closeResultReplay = useCallback(() => dispatch({ type: "result/replay", replay: null }), [dispatch]);
+  const savedResult = researchRun.result;
+  const replaySnapshot = savedResult?.run.snapshot_hash;
+  const replayReport = savedResult?.report.hashes.report;
+  const canReplay = savedResult?.run.state === "COMPLETED"
+    && savedResult.run.run_id === state.result.runId
+    && savedResult.config.exchange === "local" && savedResult.config.market_type === "spot"
+    && savedResult.config.account_model === "SPOT_CASH_V1"
+    && (savedResult.run.fidelity_mode === "BAR_APPROX" || (savedResult.run.fidelity_mode === "AGG_TRADE_EXECUTION"
+      && savedResult.report.data_quality?.source_quality === "user_market_trades"))
+    && typeof replaySnapshot === "string" && typeof replayReport === "string";
+  const openResultReplay = () => {
+    if (canReplay) saveResultReplay({
+      runId: savedResult.run.run_id, snapshotHash: replaySnapshot, reportHash: replayReport,
+      cursor: 0, interval: savedResult.chart.interval,
+    });
+  };
   const batchState = useSyncExternalStore(researchRun.batch.subscribe, researchRun.batch.snapshot, researchRun.batch.snapshot);
   const [batchError, setBatchError] = useState(false);
   const [advancedError, setAdvancedError] = useState<string | null>(null);
@@ -435,6 +457,11 @@ export default function StrategyResearchApp({
         onRevisionActivated={handleRevisionActivated}
         onSettingsImported={setSettings}
         onProjectRestored={(manifest) => { dispatchImportedSource(dispatch, runtime.state.source.source, manifest); setProjectRestoreRevision((revision) => revision + 1); }}
+        onMarketTradesImported={async (dataset) => {
+          await library.refresh(dataset.dataset_id);
+          dispatchImportedSource(dispatch, runtime.state.source.source, dataset);
+          dispatch({ type: "source/libraryOpen", open: false });
+        }}
         onImport={async (input) => {
           const dataset = await library.handleImport(input);
           if (dataset) {
@@ -475,6 +502,7 @@ export default function StrategyResearchApp({
         sourceKind={source?.kind ?? null}
         draftId={state.script.draftId}
         barOnly={researchRun.barOnly}
+        capitalAsset={importedManifest?.instrument?.quote_asset}
         runStatus={researchRun.runStatus}
         needsData={researchRun.needsData}
         onDraftId={handleDraftId}
@@ -525,6 +553,7 @@ export default function StrategyResearchApp({
       network={networkDiagnostics}
       dataResolution={researchRun.dataResolution}
       onOpenAdvanced={openAdvanced}
+      {...(canReplay ? { onOpenReplay: openResultReplay } : {})}
       onLocateTrade={(timeMs) => setFocusedAnalysis((current) => ({
         scope: chartUiScope,
         value: {
@@ -573,7 +602,7 @@ export default function StrategyResearchApp({
       </aside>}
       {historyOpen && <aside className="research-data-drawer" role="dialog" aria-label={t("ux.history")}>
         <header><strong>{t("ux.history")}</strong><button type="button" onClick={() => setHistoryOpen(false)}>{t("backtest.close")}</button></header>
-        <Suspense fallback={<p>{t("research.loading")}</p>}><StrategyRunHistory draftId={state.script.draftId} currentRunId={researchRun.result?.run.run_id ?? null} onOpen={(runId) => { dispatch({ type: "result/viewHistory", runId }); setHistoryOpen(false); }} /></Suspense>
+        <Suspense fallback={<p>{t("research.loading")}</p>}><StrategyRunHistory manager={researchRun.historyManager} draftId={state.script.draftId} currentRunId={researchRun.result?.run.run_id ?? null} onOpen={(runId) => { dispatch({ type: "result/viewHistory", runId }); setNativeMode(false); setHistoryOpen(false); }} /></Suspense>
         <ResearchBatchResults jobs={batchState.jobs} storageFailed={batchState.storageFailed}
           onResume={id => researchRun.batch.resume(id)}
           onOpen={job => {
@@ -638,6 +667,13 @@ export default function StrategyResearchApp({
     result,
     extraSurfaces,
   };
+
+  if (state.result.replay) {
+    return <Suspense fallback={<p role="status">{t("research.loading")}</p>}>
+      <StrategyResultReplay key={state.result.replay.runId} initial={state.result.replay}
+        manager={researchRun.historyManager} onCommit={saveResultReplay} onClose={closeResultReplay} />
+    </Suspense>;
+  }
 
   if (intent.kind === "invalid") {
     return (

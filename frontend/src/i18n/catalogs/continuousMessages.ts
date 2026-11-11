@@ -1,4 +1,4 @@
-import { researchBatchEnglish, researchBatchChinese, researchBatchKorean, researchBatchBrazilian } from "./researchBatchMessages.js";
+import { researchBatchBrazilian, researchBatchChinese, researchBatchEnglish, researchBatchKorean } from "./researchBatchMessages.js";
 import { repairEnglish, repairChinese, repairJapanese, repairKorean, repairPortuguese } from "./continuousRepairMessages.js";
 import { readerEnglish, readerChinese, readerJapanese, readerKorean, readerPortuguese } from "./continuousReaderMessages.js";
 import { researchReturnEnglish, researchReturnChinese, researchReturnJapanese, researchReturnKorean, researchReturnPortuguese } from "./researchReturnMessages.js";

@@ -1,4 +1,8 @@
 export const researchBatchEnglish = {
+  "researchBatch.compareFirst": "First run",
+  "researchBatch.compareSecond": "Second run",
+  "researchBatch.compareDelta": "Difference",
+  "researchBatch.compareLoading": "Comparing saved runs…",
   "researchBatch.sources": "Batch over imported data",
   "researchBatch.help": "Select two to {max} datasets. Each task uses the current strategy and settings with a fixed data version.",
   "researchBatch.run": "Run selected datasets",
@@ -13,6 +17,10 @@ export const researchBatchEnglish = {
 } as const;
 
 export const researchBatchChinese: Record<keyof typeof researchBatchEnglish, string> = {
+  "researchBatch.compareFirst": "第一项运行",
+  "researchBatch.compareSecond": "第二项运行",
+  "researchBatch.compareDelta": "差值",
+  "researchBatch.compareLoading": "正在比较已保存的运行…",
   "researchBatch.sources": "批量运行导入数据",
   "researchBatch.help": "选择 2 至 {max} 份数据。每项任务都使用当前策略和设置，以及各自固定的数据版本。",
   "researchBatch.run": "运行所选数据",
@@ -27,6 +35,10 @@ export const researchBatchChinese: Record<keyof typeof researchBatchEnglish, str
 };
 
 export const researchBatchKorean: Record<keyof typeof researchBatchEnglish, string> = {
+  "researchBatch.compareFirst": "첫 번째 실행",
+  "researchBatch.compareSecond": "두 번째 실행",
+  "researchBatch.compareDelta": "차이",
+  "researchBatch.compareLoading": "저장된 실행을 비교하는 중…",
   "researchBatch.sources": "가져온 데이터 일괄 실행",
   "researchBatch.help": "데이터 세트를 2개에서 {max}개까지 선택하세요. 각 작업은 현재 전략과 설정을 사용하며 데이터 버전은 각각 고정됩니다.",
   "researchBatch.run": "선택한 데이터 세트 실행",
@@ -41,6 +53,10 @@ export const researchBatchKorean: Record<keyof typeof researchBatchEnglish, stri
 };
 
 export const researchBatchBrazilian: Record<keyof typeof researchBatchEnglish, string> = {
+  "researchBatch.compareFirst": "Primeira execução",
+  "researchBatch.compareSecond": "Segunda execução",
+  "researchBatch.compareDelta": "Diferença",
+  "researchBatch.compareLoading": "Comparando execuções salvas…",
   "researchBatch.sources": "Executar em lote com dados importados",
   "researchBatch.help": "Selecione de 2 a {max} conjuntos de dados. Cada tarefa usa a estratégia e as configurações atuais e uma versão fixa dos dados.",
   "researchBatch.run": "Executar nos conjuntos selecionados",

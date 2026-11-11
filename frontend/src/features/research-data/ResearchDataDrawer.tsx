@@ -28,6 +28,7 @@ export function ResearchDataDrawer(props: {
   onSettingsImported?(settings: ChartSettings): void;
   onProjectRestored?(manifest: LocalDatasetManifest): void;
   onImport?(input: ResearchImportSubmitInput): Promise<unknown>;
+  onMarketTradesImported?(dataset: LocalDatasetManifest): Promise<void>;
   onClose(): void;
 }) {
   if (!props.open) return null;
@@ -50,6 +51,7 @@ function ResearchDataDrawerBody({
   onSettingsImported,
   onProjectRestored,
   onImport,
+  onMarketTradesImported,
   onClose,
 }: {
   open: boolean;
@@ -68,6 +70,7 @@ function ResearchDataDrawerBody({
   onSettingsImported?(settings: ChartSettings): void;
   onProjectRestored?(manifest: LocalDatasetManifest): void;
   onImport?(input: ResearchImportSubmitInput): Promise<unknown>;
+  onMarketTradesImported?(dataset: LocalDatasetManifest): Promise<void>;
   onClose(): void;
 }) {
   const kinds: ResearchSourceKind[] = availableKinds ?? ["CURRENT_CHART", "IMPORTED_DATASET", "COMPLETED_RUN"];
@@ -125,6 +128,7 @@ function ResearchDataDrawerBody({
             onSelectDataset?.(datasetId);
           }}
           onImport={onImport ?? library.handleImport}
+          {...(onMarketTradesImported ? { onMarketTradesImported } : {})}
           onCancelImport={library.cancelImport}
           management={(
             <ResearchDatasetManagement

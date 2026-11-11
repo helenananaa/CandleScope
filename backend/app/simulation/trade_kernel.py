@@ -100,6 +100,7 @@ class TradeSimulationKernel:
     _order_tif: dict[str, str] = field(default_factory=dict)
     _order_eligible_time_ms: dict[str, int] = field(default_factory=dict)
     _order_events: list[dict] = field(default_factory=list)
+    order_reveal_sequence: int | None = None
     _fill_source_events: list[MarketEvent] = field(default_factory=list)
     frozen_intents: list[dict] = field(default_factory=list)
     _decision_chain_hash: str = "sha256:GENESIS"
@@ -1052,6 +1053,8 @@ class TradeSimulationKernel:
                 if self._last_event is None
                 else self._last_event.event_time_ms,
                 "remaining_qty": str(order.qty),
+                **({"reveal_sequence": self.order_reveal_sequence}
+                   if self.order_reveal_sequence is not None else {}),
                 **({"fill_qty": str(fill_qty)} if fill_qty is not None else {}),
                 **({"reason": reason} if reason is not None else {}),
             }
@@ -1072,6 +1075,8 @@ class TradeSimulationKernel:
                 if self._last_event is None
                 else self._last_event.event_time_ms,
                 "reason": str(rejected.get("reason") or "REJECTED"),
+                **({"reveal_sequence": self.order_reveal_sequence}
+                   if self.order_reveal_sequence is not None else {}),
             }
         )
 

@@ -1,3 +1,4 @@
+import type { BacktestResultReplayCursor } from "../backtest/backtestTypes.js";
 import type { ResearchSourceRefV1 } from "../research-data/researchDataTypes.js";
 import { getStrategyStorage } from "../../shared/strategyStorage.js";
 import { validStrategyRunSettings, type StrategyRunSettings } from "../../shared/strategyRunSettings.js";
@@ -28,6 +29,7 @@ export type StrategyResearchResultSlice = {
   runId: string | null;
   stale: boolean;
   staleReason: StrategyResearchStaleReason;
+  replay?: BacktestResultReplayCursor;
 };
 
 export type StrategyResearchState = {
@@ -39,6 +41,7 @@ export type StrategyResearchState = {
 export type StrategyResearchAction =
   | { type: "result/viewHistory"; runId: string }
   | { type: "result/invalidate" }
+  | { type: "result/replay"; replay: BacktestResultReplayCursor | null }
   | { type: "script/configure"; configuration: StrategyRunSettings }
   | { type: "source/select"; source: ResearchSourceRefV1 }
   | { type: "source/clear" }
@@ -62,6 +65,12 @@ export function strategyResearchReducer(
 ): StrategyResearchState {
   switch (action.type) {
     case "result/viewHistory": return { ...state, result: { runId: action.runId, stale: true, staleReason: null } };
+    case "result/replay": {
+      if (action.replay && action.replay.runId !== state.result.runId) return state;
+      if (action.replay) return { ...state, result: { ...state.result, replay: action.replay } };
+      const { replay: _replay, ...result } = state.result;
+      return { ...state, result };
+    }
     case "result/invalidate": return { ...state, result: { ...state.result, stale: true } };
     case "script/configure":
       return { ...state, script: { ...state.script, configuration: action.configuration }, result: state.result.runId ? { ...state.result, stale: true, staleReason: "RANGE_CHANGED" } : state.result };
@@ -129,12 +138,33 @@ export function persistStrategyResearchWorkspace(state: StrategyResearchState): 
     configuration: state.script.configuration,
     stale: state.result.stale,
     runId: state.result.runId,
+    replay: state.result.replay,
   };
   try {
     void Promise.resolve(getStrategyStorage()?.setItem(STRATEGY_RESEARCH_WORKSPACE_KEY, JSON.stringify(payload))).catch(() => {});
   } catch {
     // Persistence is optional; in-memory state remains.
   }
+}
+
+function loadResultReplay(value: unknown, runId: unknown): BacktestResultReplayCursor | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const replay = value as Partial<BacktestResultReplayCursor>;
+  const hash = /^sha256:[a-f0-9]{64}$/;
+  if (typeof replay.runId !== "string" || replay.runId !== runId || !/^bt_[a-zA-Z0-9_-]+$/.test(replay.runId)
+    || typeof replay.snapshotHash !== "string" || !hash.test(replay.snapshotHash)
+    || typeof replay.reportHash !== "string" || !hash.test(replay.reportHash)
+    || typeof replay.cursor !== "number" || !Number.isSafeInteger(replay.cursor) || replay.cursor < 0
+    || typeof replay.interval !== "string" || replay.interval.length < 2 || replay.interval.length > 64) return undefined;
+  const comparisonInterval = typeof replay.comparisonInterval === "string" && replay.comparisonInterval !== replay.interval
+    && replay.comparisonInterval.length >= 2 && replay.comparisonInterval.length <= 64 ? replay.comparisonInterval : undefined;
+  const validPeriod = (period: number | undefined): period is number =>
+    typeof period === "number" && Number.isInteger(period) && period >= 1 && period <= 500;
+  return { runId: replay.runId, snapshotHash: replay.snapshotHash, reportHash: replay.reportHash,
+    cursor: replay.cursor, interval: replay.interval,
+    ...(comparisonInterval ? { comparisonInterval } : {}),
+    ...(validPeriod(replay.maPeriod) ? { maPeriod: replay.maPeriod } : {}),
+    ...(comparisonInterval && validPeriod(replay.comparisonMaPeriod) ? { comparisonMaPeriod: replay.comparisonMaPeriod } : {}) };
 }
 
 export function loadStrategyResearchWorkspace(): StrategyResearchState {
@@ -155,6 +185,7 @@ export function loadStrategyResearchWorkspace(): StrategyResearchState {
         return EMPTY_STRATEGY_RESEARCH_STATE;
       }
     }
+    const replay = loadResultReplay(record.replay, record.runId);
     return {
       source: {
         source,
@@ -169,6 +200,7 @@ export function loadStrategyResearchWorkspace(): StrategyResearchState {
         runId: typeof record.runId === "string" ? record.runId : null,
         stale: record.stale === true || (typeof record.runId === "string" && typeof record.contentRevision !== "number"),
         staleReason: null,
+        ...(replay ? { replay } : {}),
       },
     };
   } catch {
