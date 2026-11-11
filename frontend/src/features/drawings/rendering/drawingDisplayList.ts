@@ -1,4 +1,5 @@
 import type { DrawingRenderRevisionStamp } from "../engine/drawingRenderScheduler.js";
+import { pointInScreenPolygon } from "../geometry/drawingToolGeometry.js";
 import type { DrawingStyle } from "../core/drawingDocument.js";
 import type {
   AxisLineType,
@@ -16,6 +17,7 @@ export const DRAWING_DISPLAY_KIND_CODES: Readonly<Record<DrawingKind, number>> =
   "axis-line": 2,
   "angle-measure": 3,
   "range-measure": 10,
+  channel: 11,
   text: 4,
   fibonacci: 5,
   position: 6,
@@ -33,6 +35,17 @@ export type DrawingDisplayUnboundedAxis = "horizontal" | "vertical" | "both" | n
  * geometry or infer an opcode from point counts.
  */
 export type DrawingDisplayRenderSpec =
+  | Readonly<{
+      op: "channel";
+      strokeColor: string;
+      fillPaintColor: string | null;
+      lineWidthCssPx: number;
+      selected: boolean;
+      /** Points 0-3 are the closed parallelogram: start, end, parallel end, parallel start. */
+      polygonPointOffset: 0;
+      midlinePointOffset: 4;
+      offsetHandlePointOffset: 6;
+    }>
   | Readonly<{
       op: "range-measure";
       measureType: import("../drawingTypes.js").RangeMeasureType;
@@ -52,6 +65,7 @@ export type DrawingDisplayRenderSpec =
       mainPointOffset: 0;
       anchorPointOffset: 2;
       drawEndpointDots: boolean;
+      arrowEnd: boolean;
     }>
   | Readonly<{
       op: "axis-line";
@@ -162,6 +176,13 @@ export type DrawingDisplayRenderSpec =
       lineStyle: ShapeLineStyle;
       selected: boolean;
       boxPointOffset: 0;
+      /** Rectangle zone extras. Points 0-1 stay on the anchors so handles never
+       * move; an extended zone appends a [right-top, pane-edge-bottom] pair. */
+      extensionPointOffset: number | null;
+      midline: boolean;
+      label: string | null;
+      topPriceText: string | null;
+      bottomPriceText: string | null;
     }>
   | Readonly<{
       op: "freehand";
@@ -177,7 +198,7 @@ export type DrawingDisplayRenderSpec =
     }>;
 
 export interface DrawingDisplayHitZone {
-  readonly kind: "arc" | "box" | "ellipse" | "point" | "polyline";
+  readonly kind: "arc" | "box" | "ellipse" | "point" | "polygon" | "polyline";
   readonly name?: string;
   /** Entity-local point index. */
   readonly pointOffset: number;
@@ -577,7 +598,17 @@ function validRenderSpec(
       && spec.anchorPointOffset === 2
       && typeof spec.selectionHighlightColor === "string"
       && spec.drawEndpointDots === (spec.lineType === "line-segment")
+      && typeof spec.arrowEnd === "boolean"
+      && (!spec.arrowEnd || spec.lineType === "line-segment")
       && entity.points.length >= 8;
+  }
+  if (spec.op === "channel") {
+    return entity.kind === "channel"
+      && (spec.fillPaintColor === null || typeof spec.fillPaintColor === "string")
+      && spec.polygonPointOffset === 0
+      && spec.midlinePointOffset === 4
+      && spec.offsetHandlePointOffset === 6
+      && entity.points.length === 14;
   }
   if (spec.op === "range-measure") {
     return entity.kind === "range-measure" && entity.points.length === 8
@@ -687,6 +718,14 @@ function validRenderSpec(
       && (spec.fillPaintColor === null || typeof spec.fillPaintColor === "string")
       && (spec.lineStyle === "solid" || spec.lineStyle === "dashed" || spec.lineStyle === "dotted")
       && spec.boxPointOffset === 0
+      && (spec.extensionPointOffset === null
+        || (Number.isSafeInteger(spec.extensionPointOffset)
+          && spec.extensionPointOffset >= 2
+          && (spec.extensionPointOffset + 2) * 2 <= entity.points.length))
+      && typeof spec.midline === "boolean"
+      && (spec.label === null || typeof spec.label === "string")
+      && (spec.topPriceText === null || typeof spec.topPriceText === "string")
+      && (spec.bottomPriceText === null || typeof spec.bottomPriceText === "string")
       && entity.points.length >= 4;
   }
   return (entity.kind === "freehand" || entity.kind === "highlighter")
@@ -769,6 +808,7 @@ function validateEntity(entity: ProjectedDrawingEntity): void {
         || Number(zone.angleTolerance) < 0
       ))
       || (zone.kind === "ellipse" && zone.pointCount !== 2)
+      || (zone.kind === "polygon" && zone.pointCount < 3)
       || (zone.result !== undefined && !validHitResult(zone.result))) {
       throw new TypeError("display entity hit zone is invalid");
     }
@@ -1010,6 +1050,24 @@ function zoneHit(
         const dy = y - point[1];
         if (dx * dx + dy * dy <= toleranceSquared) return true;
       }
+    }
+    return false;
+  }
+  if (zone.kind === "polygon") {
+    const vertices: { x: number; y: number }[] = [];
+    for (let index = 0; index < zone.pointCount; index += 1) {
+      const point = pointAt(list.points, start + index);
+      if (!point) return false;
+      vertices.push({ x: point[0], y: point[1] });
+    }
+    if (pointInScreenPolygon(x, y, vertices)) return true;
+    if (zone.tolerance <= 0) return false;
+    const toleranceSquared = zone.tolerance * zone.tolerance;
+    for (let index = 0; index < vertices.length; index += 1) {
+      const first = vertices[index];
+      const second = vertices[(index + 1) % vertices.length];
+      if (first && second && distanceSquaredToSegment(x, y, first.x, first.y, second.x, second.y)
+        <= toleranceSquared) return true;
     }
     return false;
   }

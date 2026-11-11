@@ -27,6 +27,7 @@ export const DEFAULT_TEXT_RENDER_COLOR = "#e2e8f0";
 export const DEFAULT_TEXT_RENDER_FONT_SIZE = 14;
 export const DEFAULT_TEXT_RENDER_FONT_FAMILY = "'Inter', 'Segoe UI', sans-serif";
 export const DEFAULT_SHAPE_RENDER_FILL_OPACITY = 0.12;
+export const DEFAULT_CHANNEL_RENDER_FILL_OPACITY = 0.08;
 export const DEFAULT_POSITION_RENDER_SIZE = 1_000;
 export const DEFAULT_HIGHLIGHTER_RENDER_OPACITY = 0.35;
 
@@ -62,6 +63,17 @@ export type LineDrawingRenderEntity = DrawingRenderEntityBase<"line", {
   kind: "line";
   color: string;
   lineWidth: number;
+  arrowEnd: boolean;
+}>;
+
+export type ChannelDrawingRenderEntity = DrawingRenderEntityBase<"channel", {
+  kind: "channel";
+  dataPoints: readonly DrawingDataPoint[];
+}, {
+  kind: "channel";
+  color: string;
+  lineWidth: number;
+  fillOpacity: number;
 }>;
 
 export type AxisLineDrawingRenderEntity = DrawingRenderEntityBase<"axis-line", {
@@ -137,6 +149,7 @@ export type ShapeDrawingRenderEntity = DrawingRenderEntityBase<"shape", {
   kind: "shape";
   shapeType: ShapeType;
   dataPoints: readonly DrawingDataPoint[];
+  extendRight: boolean;
 }, {
   kind: "shape";
   color: string;
@@ -144,6 +157,9 @@ export type ShapeDrawingRenderEntity = DrawingRenderEntityBase<"shape", {
   fillColor: string;
   fillOpacity: number;
   lineStyle: ShapeLineStyle;
+  midline: boolean;
+  priceLabels: boolean;
+  label: string;
 }>;
 
 export type FreehandDrawingRenderEntity = DrawingRenderEntityBase<"freehand" | "highlighter", {
@@ -160,6 +176,7 @@ export type FreehandDrawingRenderEntity = DrawingRenderEntityBase<"freehand" | "
 }>;
 
 export type DrawingRenderEntity =
+  | ChannelDrawingRenderEntity
   | LineDrawingRenderEntity
   | AxisLineDrawingRenderEntity
   | RangeMeasureDrawingRenderEntity
@@ -305,6 +322,20 @@ export function normalizeDrawingEntityForRender(
           kind: "line" as const,
           color: renderColor(style.color),
           lineWidth: renderLineWidth(style.lineWidth),
+          // Rays and infinite lines have no end to point at.
+          arrowEnd: style.arrowEnd === true && (geometry.lineType ?? "line-segment") === "line-segment",
+        }),
+      });
+    case "channel":
+      if (entity.kind !== "channel" || style.kind !== "channel") return null;
+      return Object.freeze({
+        ...renderBase(entity, "channel"),
+        geometry: Object.freeze({ kind: "channel" as const, dataPoints: cloneFrozen(geometry.dataPoints) }),
+        style: Object.freeze({
+          kind: "channel" as const,
+          color: renderColor(style.color),
+          lineWidth: renderLineWidth(style.lineWidth),
+          fillOpacity: renderOpacity(style.fillOpacity, DEFAULT_CHANNEL_RENDER_FILL_OPACITY),
         }),
       });
     case "axis-line":
@@ -418,6 +449,8 @@ export function normalizeDrawingEntityForRender(
           kind: "shape" as const,
           shapeType: geometry.shapeType === "ellipse" ? "ellipse" : "rectangle",
           dataPoints: cloneFrozen(geometry.dataPoints ?? []),
+          // Zone options are rectangle-only; an ellipse never extends.
+          extendRight: geometry.extendRight === true && geometry.shapeType !== "ellipse",
         }),
         style: Object.freeze({
           kind: "shape" as const,
@@ -426,6 +459,9 @@ export function normalizeDrawingEntityForRender(
           fillColor: style.fillColor || color,
           fillOpacity: renderOpacity(style.fillOpacity, DEFAULT_SHAPE_RENDER_FILL_OPACITY),
           lineStyle: style.lineStyle || "solid",
+          midline: style.midline === true && geometry.shapeType !== "ellipse",
+          priceLabels: style.priceLabels === true && geometry.shapeType !== "ellipse",
+          label: geometry.shapeType === "ellipse" ? "" : (style.label ?? "").trim(),
         }),
       });
     }

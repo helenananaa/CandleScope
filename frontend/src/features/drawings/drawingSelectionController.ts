@@ -25,6 +25,7 @@ import {
   DEFAULT_DRAWING_RENDER_LINE_WIDTH,
   DEFAULT_FIBONACCI_RENDER_LEVELS,
   DEFAULT_HIGHLIGHTER_RENDER_OPACITY,
+  DEFAULT_CHANNEL_RENDER_FILL_OPACITY,
   DEFAULT_SHAPE_RENDER_FILL_OPACITY,
   DEFAULT_TEXT_RENDER_COLOR,
   DEFAULT_TEXT_RENDER_FONT_FAMILY,
@@ -68,6 +69,11 @@ export interface SelectedDrawingMeta {
   lineStyle?: ShapeLineStyle;
   levels?: FibonacciLevel[];
   positionSize?: number;
+  arrowEnd?: boolean;
+  extendRight?: boolean;
+  midline?: boolean;
+  priceLabels?: boolean;
+  label?: string;
 }
 
 export type DrawingPrimitiveHit = DrawingHit & (
@@ -252,7 +258,9 @@ export function selectedDrawingMetaFromSavedDrawing(
     positionSize: saved.positionSize ?? 1000,
   };
   const type = saved.type === "line"
-    ? saved.lineType ?? "line-segment"
+    ? saved.arrowEnd && (saved.lineType ?? "line-segment") === "line-segment"
+      ? "line-arrow"
+      : saved.lineType ?? "line-segment"
     : saved.type === "axis-line"
     ? saved.axisLineType === "cross" ? "cross-line" : `${saved.axisLineType ?? "horizontal"}-line`
     : saved.type === "angle-measure"
@@ -275,7 +283,19 @@ export function selectedDrawingMetaFromSavedDrawing(
       fillColor: saved.fillColor ?? saved.color ?? DEFAULT_DRAWING_RENDER_COLOR,
       fillOpacity: saved.fillOpacity ?? DEFAULT_SHAPE_RENDER_FILL_OPACITY,
       lineStyle: saved.lineStyle ?? "solid",
+      ...((saved.shapeType ?? "rectangle") === "rectangle" ? {
+        extendRight: saved.extendRight === true,
+        midline: saved.midline === true,
+        priceLabels: saved.priceLabels === true,
+        label: saved.label ?? "",
+      } : {}),
     } : {}),
+    ...(saved.type === "line" && (saved.lineType ?? "line-segment") === "line-segment"
+      ? { arrowEnd: saved.arrowEnd === true }
+      : {}),
+    ...(saved.type === "channel"
+      ? { fillOpacity: saved.fillOpacity ?? DEFAULT_CHANNEL_RENDER_FILL_OPACITY }
+      : {}),
     ...(saved.type === "fibonacci" ? {
       levels: (saved.levels ?? DEFAULT_FIBONACCI_RENDER_LEVELS).map((level) => ({ ...level })),
     } : {}),

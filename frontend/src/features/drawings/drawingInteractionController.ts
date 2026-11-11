@@ -1,4 +1,5 @@
 import { measureDrawingRange, rangeMeasurementLabel } from "./rangeMeasurement.js";
+import { parallelChannelScreenGeometry } from "./geometry/drawingToolGeometry.js";
 import { drawingObjectOrder } from "./drawingObjectApi.js";
 import { projectStrokeForDrag, type SavedStroke } from "./interaction/freehandDrag.js";
 import { drawingToolForSavedObject, isAutomaticObjectEditing, rememberAutomaticObjectTool, automaticObjectTool, clearAutomaticObjectTool } from "./drawingAutoSelection.js";
@@ -119,7 +120,7 @@ import type { DrawingDomPointerEvent } from "./drawingPointerController.js";
 import { useDrawingTextEdit } from "./drawingTextEditController.js";
 import type { TextEditingOptions } from "./drawingTextEditController.js";
 import { useDrawingKeyboard } from "./drawingKeyboardController.js";
-import { drawingPropertiesCandidate, type DrawingCoordinate } from "./drawingProperties.js";
+import { drawingPatchChangesGeometry, drawingPropertiesCandidate, type DrawingCoordinate } from "./drawingProperties.js";
 import {
   applyTextAndPositionDrag,
   applyLineFibShapeDrag,
@@ -158,6 +159,8 @@ import {
 import type {
   ActiveDrawingMovePayload,
   AngleToolId,
+  ArrowToolId,
+  ChannelToolId,
   RangeMeasureToolId,
   AxisLineToolId,
   BasicLineToolId,
@@ -263,8 +266,19 @@ type TwoPointDrawingPrimitive = LineDrawingPrimitive
   | AngleMeasurementPrimitive
   | FibonacciDrawingPrimitive
   | ShapeDrawingPrimitive;
-type LineToolId = RangeMeasureToolId | BasicLineToolId | AxisLineToolId | AngleToolId;
-type TwoPointCreationTool = RangeMeasureToolId | BasicLineToolId | AngleToolId | FibonacciToolId | ShapeToolId;
+type LineToolId = RangeMeasureToolId
+  | BasicLineToolId
+  | ArrowToolId
+  | ChannelToolId
+  | AxisLineToolId
+  | AngleToolId;
+type TwoPointCreationTool = RangeMeasureToolId
+  | BasicLineToolId
+  | ArrowToolId
+  | ChannelToolId
+  | AngleToolId
+  | FibonacciToolId
+  | ShapeToolId;
 
 function isLineToolId(tool: DrawingToolId | null | undefined): tool is LineToolId {
   return tool === "line-segment"
@@ -273,6 +287,8 @@ function isLineToolId(tool: DrawingToolId | null | undefined): tool is LineToolI
     || tool === "line-horizontal"
     || tool === "line-vertical"
     || tool === "line-cross"
+    || tool === "line-arrow"
+    || tool === "channel-parallel"
     || tool === "measure-price"
     || tool === "measure-time"
     || tool === "measure-price-time"
@@ -301,6 +317,8 @@ function isTwoPointCreationTool(
   return tool === "line-segment"
     || tool === "line-ray"
     || tool === "line-infinite"
+    || tool === "line-arrow"
+    || tool === "channel-parallel"
     || tool === "measure-price"
     || tool === "measure-time"
     || tool === "measure-price-time"
@@ -722,6 +740,17 @@ export function dynamicDecorationsForSavedDrawingDraft(
     const first = projected[0];
     const last = projected.at(-1);
     if (!first || !last) return [];
+    if (saved.type === "channel") {
+      const channel = parallelChannelScreenGeometry(projected[0], projected[1], projected[2]);
+      if (!channel) return [];
+      const [start, end] = channel.baseline;
+      const [parallelStart, parallelEnd] = channel.parallel;
+      return Object.freeze([
+        Object.freeze({ type: "line" as const, from: start, to: end, color, lineWidth, handles: Object.freeze([start, end, channel.offsetHandle]) }),
+        Object.freeze({ type: "line" as const, from: parallelStart, to: parallelEnd, color, lineWidth }),
+        Object.freeze({ type: "line" as const, from: channel.midline[0], to: channel.midline[1], color, lineWidth: Math.max(1, lineWidth / 2), dashed: true }),
+      ]);
+    }
     if (saved.type === "shape") {
       return [Object.freeze({
         type: "shape",
@@ -819,6 +848,9 @@ export function dynamicDecorationsForSavedDrawingDraft(
       color,
       lineWidth,
       ...(saved.type === "line" ? { extension: saved.lineType ?? "line-segment" } : {}),
+      ...(saved.type === "line" && saved.arrowEnd && (saved.lineType ?? "line-segment") === "line-segment"
+        ? { arrowEnd: true }
+        : {}),
       handles: Object.freeze([first, last]),
     })];
   }
@@ -1267,6 +1299,13 @@ export interface DrawingStylePatch {
   lineStyle?: ShapeLineStyle;
   levels?: FibonacciLevel[];
   positionSize?: number;
+  /** Segment arrowhead. */
+  arrowEnd?: boolean;
+  /** Rectangle zone options; extendRight is geometry and commits as a resize. */
+  extendRight?: boolean;
+  midline?: boolean;
+  priceLabels?: boolean;
+  label?: string;
 }
 
 /** Keep review/export reads available while all user edit entry points fail closed. */
@@ -1664,6 +1703,8 @@ export function useDrawing({
   const previewRef = useRef<TwoPointDrawingPrimitive | null>(null); // LineDrawingPrimitive (dashed preview)
   const previewEntityRef = useRef<SavedDrawing | null>(null);
   const anchorDataRef = useRef<DrawingDataPoint | null>(null); // { logical, price } first click
+  // Channels take a third click: the fixed baseline end between clicks two and three.
+  const channelBaselineEndRef = useRef<DrawingDataPoint | null>(null);
   const pendingTwoPointToolRef = useRef<TwoPointCreationTool | null>(null);
   const pendingToolExitAfterMouseUpRef = useRef<DrawingToolId | null>(null);
   const draggingRef = useRef<DrawingDragDescriptor | null>(null); // { id, pointIndex, startMouse, origPoints | origDataPoint }
@@ -2190,6 +2231,7 @@ export function useDrawing({
       dynamicOverlayControllerRef.current?.clear();
     }
     anchorDataRef.current = null;
+    channelBaselineEndRef.current = null;
     pendingTwoPointToolRef.current = null;
     return true;
   }, [detachPrim, interactionSurfaceMode]);
@@ -3086,12 +3128,16 @@ export function useDrawing({
             snap: drawingSnapEnabledRef.current && !e.altKey && !(isShape && e.shiftKey),
           });
           if (dataB) {
+            const anchor = Object.freeze({ ...anchorDataRef.current });
+            const pointer = Object.freeze({ ...dataB });
+            const baselineEnd = channelBaselineEndRef.current;
             previewEntityRef.current = Object.freeze({
               ...previewEntityRef.current,
-              dataPoints: Object.freeze([
-                Object.freeze({ ...anchorDataRef.current }),
-                Object.freeze({ ...dataB }),
-              ]),
+              dataPoints: Object.freeze(tool !== "channel-parallel"
+                ? [anchor, pointer]
+                : baselineEnd
+                  ? [anchor, Object.freeze({ ...baselineEnd }), pointer]
+                  : [anchor, pointer, pointer]),
             }) as SavedDrawing;
             renderDynamicFeedback();
           }
@@ -4013,12 +4059,33 @@ export function useDrawing({
               snap: drawingSnapEnabledRef.current && !e.altKey && !(isShape && e.shiftKey),
             });
             if (!dataB) return;
+            const baselineEnd = channelBaselineEndRef.current;
+            if (tool === "channel-parallel" && !baselineEnd) {
+              // Second channel click fixes the baseline; the third sets the width.
+              channelBaselineEndRef.current = Object.freeze({ ...dataB });
+              previewEntityRef.current = Object.freeze({
+                ...previewEntityRef.current,
+                dataPoints: Object.freeze([
+                  Object.freeze({ ...anchor }),
+                  Object.freeze({ ...dataB }),
+                  Object.freeze({ ...dataB }),
+                ]),
+              }) as SavedDrawing;
+              renderDynamicFeedback();
+              return;
+            }
             const finalDrawing = Object.freeze({
               ...previewEntityRef.current,
-              dataPoints: Object.freeze([
-                Object.freeze({ ...anchor }),
-                Object.freeze({ ...dataB }),
-              ]),
+              dataPoints: Object.freeze(tool === "channel-parallel" && baselineEnd
+                ? [
+                    Object.freeze({ ...anchor }),
+                    Object.freeze({ ...baselineEnd }),
+                    Object.freeze({ ...dataB }),
+                  ]
+                : [
+                    Object.freeze({ ...anchor }),
+                    Object.freeze({ ...dataB }),
+                  ]),
             }) as SavedDrawing;
             const commands = drawingCreateCommandsForSavedDrawing(finalDrawing);
             if (!commands || !finalDrawing.id) return;
@@ -4052,6 +4119,7 @@ export function useDrawing({
             }
             previewEntityRef.current = null;
             anchorDataRef.current = null;
+            channelBaselineEndRef.current = null;
             pendingTwoPointToolRef.current = null;
             selectPrimitive(finalDrawing.id);
             retainDynamicOverlayUntilPaint(receipt.ticket ?? null);
@@ -4082,7 +4150,7 @@ export function useDrawing({
 
         // Hit existing element?
         const hit = automaticHit || hitTestInteractive(pos.x, pos.y);
-        if (hit && (hit.type === "line" || hit.type === "axis-line" || hit.type === "angle" || hit.type === "range-measure" || hit.type === "fibonacci" || hit.type === "shape")) {
+        if (hit && (hit.type === "line" || hit.type === "axis-line" || hit.type === "angle" || hit.type === "range-measure" || hit.type === "channel" || hit.type === "fibonacci" || hit.type === "shape")) {
           const saved = savedDrawingFromInteractionHit(hit);
           const id = saved?.id;
           if (!saved || !id) return;
@@ -4243,6 +4311,7 @@ export function useDrawing({
             });
             if (!saved) return;
             anchorDataRef.current = dataPoint;
+            channelBaselineEndRef.current = null;
             previewEntityRef.current = saved;
             pendingTwoPointToolRef.current = tool;
             renderDynamicFeedback();
@@ -4988,6 +5057,7 @@ export function useDrawing({
     previewRef.current = null;
     previewEntityRef.current = null;
     anchorDataRef.current = null;
+    channelBaselineEndRef.current = null;
     pendingTwoPointToolRef.current = null;
     draggingRef.current = null;
     cancelActiveDrawingMove();
@@ -5421,7 +5491,7 @@ export function useDrawing({
     if (!saved) return false;
     const candidate = drawingPropertiesCandidate(saved, patch, coordinates, expectedCoordinates);
     if (!candidate) return false;
-    const commands = drawingCommandsForSavedDrawing(candidate, coordinates
+    const commands = drawingCommandsForSavedDrawing(candidate, coordinates || drawingPatchChangesGeometry(saved, candidate)
       ? { type: "update", geometryCommand: "resize" } : { type: "update-style" });
     if (!commands || !prepareTerminalTextMutation()) return false;
     const receipt = persistSceneCommands(commands);

@@ -44,6 +44,7 @@ test("Phase 8 assigns static scene ownership to all drawing kinds, including sou
     "axis-line",
     "angle-measure",
     "range-measure",
+    "channel",
     "text",
     "fibonacci",
     "position",

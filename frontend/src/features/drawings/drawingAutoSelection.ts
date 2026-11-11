@@ -3,7 +3,10 @@ import type { DrawingToolId, SavedDrawing } from "./drawingTypes.js";
 /** Keep the exact variant when entering an existing object's editing tool. */
 export function drawingToolForSavedObject(drawing: SavedDrawing): DrawingToolId {
   switch (drawing.type) {
-    case "line": return drawing.lineType ?? "line-segment";
+    case "line": return drawing.arrowEnd && (drawing.lineType ?? "line-segment") === "line-segment"
+      ? "line-arrow"
+      : drawing.lineType ?? "line-segment";
+    case "channel": return "channel-parallel";
     case "axis-line": return `line-${drawing.axisLineType ?? "horizontal"}`;
     case "range-measure": return `measure-${drawing.measureType}`;
     case "angle-measure": return "angle-measure";

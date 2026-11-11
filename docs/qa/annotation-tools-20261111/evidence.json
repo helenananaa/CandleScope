@@ -1,0 +1,100 @@
+{
+  "schema": "candlescope.annotation-tools-evidence/1",
+  "baseCommit": "094518a90",
+  "command": "node frontend/scripts/frontend-script-integration.mjs --annotation-tools",
+  "browser": "Chrome/157.0.8103.40",
+  "passed": true,
+  "fixtureScope": "Real Chromium pointer creation (arrow, three-click channel, rectangle), channel width drag, zone options, history, interval switch, IndexedDB remount and export",
+  "receiptScope": "Real Chromium, minified application fixture with development React act lifecycle; not native application qualification",
+  "exceptions": [],
+  "savedAfterAllSteps": [
+    {
+      "type": "line",
+      "id": "ln_1",
+      "color": "#f59e0b",
+      "lineWidth": 2,
+      "lineType": "line-segment",
+      "dataPoints": [
+        {
+          "time": 1800024094.8141892,
+          "price": 95.4130286379722
+        },
+        {
+          "time": 1800025472.179054,
+          "price": 98.14162637982086
+        }
+      ],
+      "arrowEnd": true
+    },
+    {
+      "type": "channel",
+      "id": "ch_2",
+      "color": "#f59e0b",
+      "lineWidth": 2,
+      "dataPoints": [
+        {
+          "time": 1800025931.3006756,
+          "price": 96.43625279116546
+        },
+        {
+          "time": 1800028839.070946,
+          "price": 99.84699996847628
+        },
+        {
+          "time": 1800027385.1858108,
+          "price": 102.57559771032494
+        }
+      ]
+    },
+    {
+      "type": "shape",
+      "id": "sh_3",
+      "color": "#f59e0b",
+      "lineWidth": 2,
+      "shapeType": "rectangle",
+      "dataPoints": [
+        {
+          "time": 1800024171.3344595,
+          "price": 104.62204601671144
+        },
+        {
+          "time": 1800025319.1385136,
+          "price": 101.89344827486278
+        }
+      ],
+      "fillColor": "#f59e0b",
+      "fillOpacity": 0.12,
+      "extendRight": true,
+      "midline": true,
+      "priceLabels": true,
+      "label": "Demand"
+    }
+  ],
+  "checks": [
+    "arrow-two-click-created-as-flagged-segment",
+    "channel-second-click-does-not-commit",
+    "channel-third-click-commits-three-anchors",
+    "channel-width-handle-moves-only-third-anchor",
+    "rectangle-zone-options-via-property-command",
+    "zone-extension-keeps-anchors",
+    "undo-redo-exact-payload",
+    "interval-switch-preserves-source-coordinates",
+    "indexeddb-remount-restores-exact-payload",
+    "export-barrier-synchronizes"
+  ],
+  "manualBrowserChecks": [
+    "Vite dev build in an in-app Chromium pane: live channel preview follows the pointer after the second click",
+    "Zone settings panel: unchecking extend-right and renaming commits through save-and-close",
+    "Object list names arrow and channel in zh-CN; both boundary prices render outside the zone"
+  ],
+  "screenshots": [
+    "arrow-channel-zone-selected.jpg",
+    "channel-third-click-preview.png"
+  ],
+  "limitations": [
+    "Chromium fixture with development React act lifecycle; packaged Electron app not qualified",
+    "macOS only; Windows not claimed",
+    "Legacy rollback renderer does not offer arrow/channel creation; a saved arrow renders there as a plain segment and channels are not drawn",
+    "Channels are source-time only; derived (lineage) representations keep them visible but not editable"
+  ]
+}

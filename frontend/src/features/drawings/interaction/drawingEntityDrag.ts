@@ -51,6 +51,7 @@ export function drawingEntityGeometryCommandForDrag(
       return descriptor.zone === "body" || descriptor.zone === "center" ? "move" : "resize";
     case "line":
     case "range-measure":
+    case "channel":
     case "angle":
     case "fibonacci":
       return descriptor.pointIndex < 0 ? "move" : "resize";
@@ -596,12 +597,14 @@ function applyLineLikeDrag(options: DrawingEntityDragOptions): SavedDrawing | nu
     dataToScreen,
     snap,
   } = options;
-  if (descriptor.type !== "line" && descriptor.type !== "angle" && descriptor.type !== "fibonacci" && descriptor.type !== "range-measure") {
+  if (descriptor.type !== "line" && descriptor.type !== "angle" && descriptor.type !== "fibonacci"
+    && descriptor.type !== "range-measure" && descriptor.type !== "channel") {
     return null;
   }
   if ((descriptor.type === "line" && drawing.type !== "line")
     || (descriptor.type === "angle" && drawing.type !== "angle-measure")
     || (descriptor.type === "range-measure" && drawing.type !== "range-measure")
+    || (descriptor.type === "channel" && drawing.type !== "channel")
     || (descriptor.type === "fibonacci" && drawing.type !== "fibonacci")) return null;
   const currentPoints = "dataPoints" in drawing && Array.isArray(drawing.dataPoints)
     ? immutableDataPoints(drawing.dataPoints)
@@ -618,15 +621,14 @@ function applyLineLikeDrag(options: DrawingEntityDragOptions): SavedDrawing | nu
     dataPoints = immutableDataPoints(changed);
   } else {
     const originalPoints = immutableDataPoints(descriptor.origPoints);
-    const first = originalPoints?.[0];
-    const second = originalPoints?.[1];
-    if (!first || !second || !finiteScreenPoint(descriptor.startMouse)) return null;
+    // Translate every anchor: a channel's third anchor must move with its baseline.
+    if (!originalPoints || originalPoints.length !== currentPoints.length
+      || !finiteScreenPoint(descriptor.startMouse)) return null;
     const dx = pos.x - descriptor.startMouse.x;
     const dy = pos.y - descriptor.startMouse.y;
-    const nextFirst = translatedDataPoint(first, dx, dy, dataToScreen, screenToData);
-    const nextSecond = translatedDataPoint(second, dx, dy, dataToScreen, screenToData);
-    dataPoints = nextFirst && nextSecond
-      ? immutableDataPoints([nextFirst, nextSecond])
+    const translated = originalPoints.map((point) => translatedDataPoint(point, dx, dy, dataToScreen, screenToData));
+    dataPoints = translated.every((point) => point !== null)
+      ? immutableDataPoints(translated as DrawingDataPoint[])
       : null;
   }
   return dataPoints ? frozenUpdate(drawing, { dataPoints } as Partial<typeof drawing>) : null;
@@ -670,7 +672,8 @@ export function applyDrawingEntityDrag(options: DrawingEntityDragOptions): Saved
         return applyShapeDrag(options);
       case "line":
       case "range-measure":
-    case "angle":
+      case "channel":
+      case "angle":
       case "fibonacci":
         return applyLineLikeDrag(options);
     }

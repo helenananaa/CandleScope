@@ -14,6 +14,7 @@ import {
   DEFAULT_FIBONACCI_RENDER_LEVELS,
   DEFAULT_HIGHLIGHTER_RENDER_OPACITY,
   DEFAULT_POSITION_RENDER_SIZE,
+  DEFAULT_CHANNEL_RENDER_FILL_OPACITY,
   DEFAULT_SHAPE_RENDER_FILL_OPACITY,
   DEFAULT_TEXT_RENDER_COLOR,
   DEFAULT_TEXT_RENDER_FONT_FAMILY,
@@ -72,6 +73,12 @@ function defaultEntities(): readonly DrawingEntity[] {
       style: { kind: "shape" },
     }),
     createDrawingEntity({
+      id: "channel-defaults",
+      kind: "channel",
+      geometry: { kind: "channel", dataPoints: [{ time: 1, price: 1 }, { time: 2, price: 2 }, { time: 1, price: 3 }] },
+      style: { kind: "channel" },
+    }),
+    createDrawingEntity({
       id: "freehand-defaults",
       kind: "freehand",
       geometry: { kind: "freehand", dataPoints: FREEHAND_POINTS },
@@ -95,9 +102,9 @@ function renderDefaultsByKind(): ReadonlyMap<DrawingEntity["kind"], DrawingRende
   return new Map(entries);
 }
 
-test("render normalization fills every optional default for all nine kinds", () => {
+test("render normalization fills every optional default for all ten kinds", () => {
   const defaults = renderDefaultsByKind();
-  assert.equal(defaults.size, 9);
+  assert.equal(defaults.size, 10);
 
   const line = defaults.get("line");
   assert.equal(line?.kind, "line");
@@ -107,6 +114,7 @@ test("render normalization fills every optional default for all nine kinds", () 
       kind: "line",
       color: DEFAULT_DRAWING_RENDER_COLOR,
       lineWidth: DEFAULT_DRAWING_RENDER_LINE_WIDTH,
+      arrowEnd: false,
     });
   }
 
@@ -187,7 +195,7 @@ test("render normalization fills every optional default for all nine kinds", () 
   const shape = defaults.get("shape");
   assert.equal(shape?.kind, "shape");
   if (shape?.kind === "shape") {
-    assert.deepEqual(shape.geometry, { kind: "shape", shapeType: "rectangle", dataPoints: [] });
+    assert.deepEqual(shape.geometry, { kind: "shape", shapeType: "rectangle", dataPoints: [], extendRight: false });
     assert.deepEqual(shape.style, {
       kind: "shape",
       color: DEFAULT_DRAWING_RENDER_COLOR,
@@ -195,6 +203,21 @@ test("render normalization fills every optional default for all nine kinds", () 
       fillColor: DEFAULT_DRAWING_RENDER_COLOR,
       fillOpacity: DEFAULT_SHAPE_RENDER_FILL_OPACITY,
       lineStyle: "solid",
+      midline: false,
+      priceLabels: false,
+      label: "",
+    });
+  }
+
+  const channel = defaults.get("channel");
+  assert.equal(channel?.kind, "channel");
+  if (channel?.kind === "channel") {
+    assert.equal(channel.geometry.dataPoints.length, 3);
+    assert.deepEqual(channel.style, {
+      kind: "channel",
+      color: DEFAULT_DRAWING_RENDER_COLOR,
+      lineWidth: DEFAULT_DRAWING_RENDER_LINE_WIDTH,
+      fillOpacity: DEFAULT_CHANNEL_RENDER_FILL_OPACITY,
     });
   }
 
@@ -233,7 +256,9 @@ test("render normalization fills every optional default for all nine kinds", () 
 });
 
 test("render defaults match actual legacy primitive construction", () => {
-  for (const entity of defaultEntities()) {
+  // Channels, like range rulers, exist only on the scene path; the rollback
+  // primitive renderer intentionally has no constructor for them.
+  for (const entity of defaultEntities().filter((candidate) => candidate.kind !== "channel")) {
     const normalized = normalizeDrawingEntityForRender(entity);
     const saved = savedDrawingFromEntity(entity);
     assert.ok(normalized, entity.kind);
