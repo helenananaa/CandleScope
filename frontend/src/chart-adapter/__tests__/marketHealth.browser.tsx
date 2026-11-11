@@ -104,7 +104,7 @@ async function checkInitialRetryOwner(host: HTMLElement, rows: KlineBar[]) {
     all_rows_final: true, truncated: false, backfill_triggered: false });
   const commit: CommitChartData = (_symbol, _interval, _rows, meta) => {
     buffer.record("active", [], { ownerToken: meta?.indicatorWindowOwner,
-      epoch: meta?.indicatorWindowEpoch, pending: meta?.deferIndicatorWindow });
+      epoch: meta?.indicatorWindowEpoch, pending: meta?.deferIndicatorWindow === true });
   };
   const feed = new SeriesDataFeed({ getActiveSeries: () => series,
     commitMergedChartData: commit, commitPatchedChartData: commit,

@@ -181,6 +181,11 @@ try{
  const retired=await q.execute('cell-1','addIndicator',{id:'qa-retired',name:'Unsupported legacy fixture',language:'pyne',script:'legacy fixture'});
  assert.equal(retired.state,'failed');assert.ok(JSON.stringify(retired).includes('PYNE_RETIRED'));await q.record('retired-entry-rejected',retired);
  await q.indicatorsReady(2,180_000);await q.record('four-runtime-numerical-oracle',await values('initial'));await state('four-runtime-saved',true);await q.screenshot('four-runtime-saved');
+ for(const input of [series('ETHUSDT','5m'),series('BTCUSDT','5m'),series('ETHUSDT'),series('BTCUSDT')]){
+  await q.execute('cell-1','session',input);await readyFor(input);
+  await q.indicatorsReady(2,180_000);
+  await q.record('runtime-matrix-'+input.symbol+'-'+input.interval,await values(input.symbol+'-'+input.interval));
+ }
  // Real renderer network disconnect, preserving bundled provider ownership.
  const session=await q.s.app.context().newCDPSession(q.s.page);
  await session.send('Network.enable');await session.send('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
@@ -222,6 +227,10 @@ try{
   await q.delay(Math.min(30_000,Math.max(1,durationMs-(Date.now()-started))));
  }
  assert.ok(Date.now()-started>=durationMs);assert.equal(nextCycle,10);
+ const timeline=await q.s.page.evaluate(()=>({marks:performance.getEntriesByType('mark').map(e=>e.name),measures:performance.getEntriesByType('measure').map(e=>e.name)}));
+ assert.equal(new Set(timeline.marks).size,timeline.marks.length,'repeated marks accumulated in the browser timeline');
+ assert.equal(new Set(timeline.measures).size,timeline.measures.length,'repeated measures accumulated in the browser timeline');
+ await q.record('bounded-performance-timeline',timeline);
  await q.record('soak-completed',{durationMs:Date.now()-started,cycles:nextCycle});
  const saved=await q.inspect();assert.equal(saved.persistence.state,'saved');await end();
  await begin();await q.ready(2,180_000);await q.indicatorsReady(2,180_000);await q.record('saved-exit-restart-oracle',await values('restart'));await state('restart-restored',true);await q.screenshot('restart-restored');
