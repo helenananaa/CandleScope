@@ -226,4 +226,21 @@ def compute_builtin_range_patch_from_bars(
     )
     patch["warmupBars"] = warmup
     patch["targetBars"] = target_bars
+    patch["seed"] = builtin_seed_state(bars, range_start_s, warmup)
     return patch
+
+
+def builtin_seed_state(bars: list[Any], first_target_s: int, warmup: int) -> dict[str, Any]:
+    """Whether the first returned value had its full convergence warmup.
+
+    ``partial`` values were computed from the earliest locally stored bar.
+    They are deterministic for that storage and are recomputed when older
+    history is persisted, which advances the series correction revision
+    (ADR-INDICATOR-001 §4).
+    """
+    seed_bars = sum(1 for bar in bars if int(bar.time) < first_target_s)
+    return {
+        "state": "converged" if seed_bars >= warmup else "partial",
+        "warmupBars": warmup,
+        "seedBars": seed_bars,
+    }
