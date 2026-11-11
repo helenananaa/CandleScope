@@ -232,3 +232,57 @@ def test_other_request_monotonically_merging_absence_is_not_candle_deletion(stor
     assert after['delete_revision']==before['delete_revision']
     with acquisition_scope(scope):assert write(95000,exchange='upbit')==1
     assert native_empty_seconds.read('BTCUSDT',90000,94000)==[(90000,94000)]
+
+
+@pytest.mark.parametrize('interval', ['1m', '5m', '1h'])
+def test_trusted_native_gap_repair_survives_live_tail_revision(store, interval):
+    """Real engine: a live append during REST must not starve a closed gap."""
+    from app.data_engine.backfill import BackfillEngine, BackfillConfig
+    from app.data_engine.interval_policy import parse_interval_ms
+    from tests.test_binance_backfill_fetcher import _FakeBinanceTransport, _make_binance_rows
+
+    width = parse_interval_ms(interval)
+    opened = 10 * width
+
+    class Transport(_FakeBinanceTransport):
+        async def http_fetch(self, request):
+            with acquisition_scope(None):
+                write(20 * width, interval=interval)
+            return await super().http_fetch(request)
+
+    async def run():
+        engine = BackfillEngine(BackfillConfig(fetch_rate_limit_delay=0),
+                                storage=klines_repo.AsyncKlinesRepoAdapter(),
+                                transport=Transport(_make_binance_rows(30, width)))
+        report = await engine.run('BTCUSDT', [interval], opened, opened,
+                                  metadata={'requires_trusted_finality': True})
+        assert not report.errors, report.errors
+        assert report.reconcile_result.bars_written == 1
+        assert any(r['open_time'] == opened for r in store.query_bars('BTCUSDT', interval))
+        await engine.close()
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('change', ['insert', 'correct', 'delete', 'empty-delete'])
+def test_trusted_minute_repair_still_rejects_changed_or_deleted_range(store, change):
+    if change in {'correct', 'delete'}:
+        write(60000, interval='1m')
+    scope = capture(store, interval='1m', start_ms=60000, end_ms=60000,
+                    metadata={'requires_trusted_finality': True})
+    if change in {'delete', 'empty-delete'}:
+        store.delete_bars('BTCUSDT', '1m', 60000, 60000)
+    else:
+        write(60000, 19, interval='1m')
+    with acquisition_scope(scope), pytest.raises(StaleAcquisition):
+        write(60000, interval='1m')
+
+
+@pytest.mark.parametrize('kwargs', [dict(metadata={}), dict(interval='7m'),
+                                   dict(market_type='futures'), dict(exchange='kraken'),
+                                   dict(end_ms=60000 * 8193),
+                                   dict(metadata={'requires_trusted_finality': True, 'series_identity':
+                                        KlineSeriesIdentity.for_exchange('binance', provider_id='foreign').to_dict()})])
+def test_trusted_range_permission_remains_bounded_native_and_default_identity(store, kwargs):
+    defaults = dict(interval='1m', start_ms=60000, end_ms=60000,
+                    metadata={'requires_trusted_finality': True})
+    assert capture(store, **{**defaults, **kwargs}).native_history_views == []
