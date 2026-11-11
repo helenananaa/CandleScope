@@ -1,4 +1,5 @@
 import { hasVerifiedCoverage } from "./quality/klineQualityPolicy.js";
+import { readLatestWindow } from "./readLatestWindow.js";
 import { bindSharedWindow } from "./manager/sharedWindowBinding.js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { t } from "../../i18n/index.js";
@@ -860,19 +861,19 @@ export function useMarketDataRuntime({
 
     const promise = (async () => {
       try {
-        const result = await seriesDataFeed.getBars(series, {
-          countBack,
-          source: "right-window-restore",
+        const result = await readLatestWindow({
+          read: () => seriesDataFeed.getBars(series, {
+            countBack,
+            source: "right-window-restore",
+            signal: controller.signal,
+            commit: "none",
+            maxWaitMs: 1500,
+            intent: "viewport",
+          }),
+          ownsRequest,
           signal: controller.signal,
-          commit: "none",
         });
-        if (
-          !ownsRequest()
-          || result.stale
-          || result.active === false
-          || !hasVerifiedCoverage(result, "history")
-          || !result.data?.length
-        ) return false;
+        if (!result?.data?.length || !ownsRequest()) return false;
 
         replaceChartData(symbol, interval, result.data, {
           source: "right-window-restore",
