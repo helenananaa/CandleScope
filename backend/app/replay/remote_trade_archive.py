@@ -8,6 +8,8 @@ import threading
 import time
 import urllib.request
 import uuid
+from bisect import bisect_left, bisect_right
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -1010,6 +1012,9 @@ class RemoteRawAggTradeArchive:
                 for item in availability.ranges
             )
         windows = _merge_selection_windows(local, remote, official=availability is not None)
+        retired = self.cache.retired_verified_days(identity)
+        if retired:
+            windows = _exclude_retired_days(windows, retired)
         if remote_epoch is not None and windows == remote:
             return remote_epoch, windows
         return canonical_sha256({
@@ -1335,6 +1340,14 @@ class RemoteRawAggTradeArchive:
             )
         return result
 
+    def verified_retention_inventory(self, *, limit: int) -> dict[str, Any]:
+        return self.cache.verified_retention_inventory(limit=limit)
+
+    def verified_retention_recheck(
+        self, *, day_id: str, limit: int,
+    ) -> AbstractContextManager[tuple[str, dict[str, Any] | None]]:
+        return self.cache.verified_retention_recheck(day_id=day_id, limit=limit)
+
     def scan_range(self, **kwargs: Any) -> list[dict[str, Any]]:
         return self.cache.scan_range(**kwargs)
 
@@ -1570,6 +1583,25 @@ def _merge_selection_windows(
         RawAggTradeSelectionWindow(start, end, (end - start + 1) // _DAY_MS)
         for start, end, _ in merged
     )
+
+
+def _exclude_retired_days(
+    windows: tuple[RawAggTradeSelectionWindow, ...], days: tuple[date, ...],
+) -> tuple[RawAggTradeSelectionWindow, ...]:
+    retired = tuple(map(_day_start_ms, days))
+    visible = []
+    for window in windows:
+        start = window.start_time_ms
+        first = bisect_left(retired, start)
+        last = bisect_right(retired, window.end_time_ms)
+        for cut in retired[first:last]:
+            if start < cut:
+                visible.append(RawAggTradeSelectionWindow(start, cut - 1, (cut - start) // _DAY_MS))
+            start = cut + _DAY_MS
+        if start <= window.end_time_ms:
+            end = window.end_time_ms
+            visible.append(RawAggTradeSelectionWindow(start, end, (end - start + 1) // _DAY_MS))
+    return tuple(visible)
 
 
 def _utc_days(start_time_ms: int, end_time_ms: int) -> tuple[date, ...]:

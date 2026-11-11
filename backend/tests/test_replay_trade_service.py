@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from dataclasses import replace
+from datetime import date
 from pathlib import Path
 
+import httpx
 import pytest
+from fastapi import FastAPI
 
+from app.api.v1.replay import router
+from app.data_engine.storage import raw_trade_archive
 from app.data_engine.storage.raw_trade_archive import (
     ParquetRawAggTradeArchive,
     VerifiedRawAggTradeBarWindow,
@@ -23,6 +29,7 @@ from app.replay.official_trade_catalog import OfficialAggTradeArchive
 from app.replay.service import ReplayService, SYNTHETIC_TIME_ANCHOR_MS
 from app.replay.storage import ReplaySQLiteStore
 from app.replay.trade_compatibility import build_trade_bar_compatibility
+from app.replay.trade_import import trade_archive_day_acquisition
 from tests.fixtures.replay.fakes import FixtureIdentity
 from tests.fixtures.replay.service_fakes import SessionIdFactory, replay_settings
 from tests.fixtures.replay.trade_service_fakes import (
@@ -72,6 +79,457 @@ async def _service(
     )
     await service.start()
     return service
+
+
+async def test_raw_trade_retention_preview_reports_live_and_saved_protection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive_root = tmp_path / "archive"
+    verified_trade_archive(archive_root)
+    archive = OfficialAggTradeArchive(archive_root, defer_refresh=True)
+    service = await _service(tmp_path / "replay.db", archive, prefix="retention-preview")
+    app = FastAPI()
+    app.state.replay_service = service
+    app.include_router(router, prefix="/api/v1")
+    uri = "/api/v1/replay/runs/storage/raw-trades/preview"
+    originals = {
+        p: p.read_bytes() for p in archive_root.rglob("*")
+        if p.is_file() and (p.name == "_verified_import.json" or "part-verified-" in p.name)
+    }
+    hash_file = raw_trade_archive._file_sha256
+
+    def metadata_hash(path: Path):
+        assert path.suffix != ".parquet", "preview opened a trade body"
+        return hash_file(path)
+
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test",
+        ) as client:
+            assert (await client.get(uri, params={"limit": 201})).status_code == 422
+
+            async def inspect():
+                with monkeypatch.context() as patch:
+                    patch.setattr(raw_trade_archive, "_file_sha256", metadata_hash)
+                    response = await client.get(uri, params={"limit": 1})
+                assert response.status_code == 200
+                payload = response.json()
+                assert payload["estimated_reclaim_bytes"] == 0
+                assert payload["policy_state"] == "UNMANAGED"
+                assert payload["observed_bytes"] == sum(map(len, originals.values()))
+                assert not payload["truncated"]
+                assert "partition_key" not in response.text
+                assert str(archive_root) not in response.text
+                assert "2026-06-01" not in response.text
+                return payload, payload["items"][0]
+
+            _, item = await inspect()
+            assert item["protection_reasons"] == ["UNMANAGED_RETENTION_POLICY"]
+            assert item["saved_reference_count"] == item["active_pin_count"] == 0
+            config = trade_replay_config()
+            created = await service.create_session(config)
+            with trade_archive_day_acquisition(
+                archive.cache, exchange=config.exchange, market_type=config.market_type,
+                symbol=config.symbol, day=date(2026, 6, 1),
+            ) as missing:
+                assert not missing
+                _, protected = await inspect()
+            assert protected["day_id"] == item["day_id"]
+            assert protected["active_pin_count"] == protected["saved_reference_count"] == 1
+            assert protected["retention_lease_busy"] is True
+            assert set(protected["protection_reasons"]) == {
+                "UNMANAGED_RETENTION_POLICY", "SAVED_REPLAY_REFERENCE",
+                "ACTIVE_DATASET_PIN", "DAY_ACQUISITION_IN_PROGRESS", "PARTITION_RETENTION_LEASE",
+            }
+            await service.release_session_to_hub(str(created["session_id"]))
+            _, saved = await inspect()
+            assert saved["active_pin_count"] == 0
+            assert saved["retention_lease_busy"] is False
+            assert saved["saved_reference_count"] == 1
+            assert saved["protection_reasons"] == ["UNMANAGED_RETENTION_POLICY", "SAVED_REPLAY_REFERENCE"]
+
+            def break_reference(connection):
+                connection.execute("UPDATE replay_dataset_ref SET snapshot_ref_json='invalid'")
+
+            await service.store.run_extension_write(break_reference)
+            payload, incomplete = await inspect()
+            assert not payload["saved_reference_scan_complete"]
+            assert "SAVED_REFERENCE_SCAN_INCOMPLETE" in incomplete["protection_reasons"]
+            await service.store.run_extension_write(
+                lambda connection: connection.execute("DELETE FROM replay_dataset_ref"),
+            )
+            payload, _ = await inspect()
+            assert not payload["saved_reference_scan_complete"]
+            assert all(p.read_bytes() == body for p, body in originals.items())
+    finally:
+        await service.shutdown(step_timeout=1.0)
+
+
+async def test_retention_preview_reads_saved_refs_across_profiles(tmp_path):
+    archive_root = tmp_path / "shared"
+    verified_trade_archive(archive_root)
+    first_db = tmp_path / "profile-first" / "replay.db"
+    second_db = tmp_path / "profile-second" / "replay.db"
+
+    def archive():
+        return OfficialAggTradeArchive(archive_root, defer_refresh=True)
+
+    first = await _service(first_db, archive(), prefix="first")
+    second = await _service(second_db, archive(), prefix="second")
+
+    async def inspect():
+        report = await second.training.raw_trade_retention_preview(limit=1)
+        assert report["estimated_reclaim_bytes"] == 0
+        assert str(first_db) not in json.dumps(report)
+        assert str(second_db) not in json.dumps(report)
+        return report, report["items"][0]
+
+    try:
+        created = await first.create_session(trade_replay_config())
+        session = str(created["session_id"])
+        live, item = await inspect()
+        assert live["saved_reference_store_count"] == 2
+        assert live["saved_reference_scan_complete"]
+        assert item["saved_reference_count"] == 1
+        assert item["active_pin_count"] == 0 and item["retention_lease_busy"]
+
+        await first.release_session_to_hub(session)
+        await first.shutdown(step_timeout=1.0)
+        dormant, item = await inspect()
+        assert dormant["saved_reference_scan_complete"]
+        assert item["saved_reference_count"] == 1 and not item["retention_lease_busy"]
+
+        parked = first_db.with_suffix(".parked")
+        first_db.rename(parked)
+        try:
+            missing, item = await inspect()
+            assert not missing["saved_reference_scan_complete"]
+            assert missing["unavailable_reference_store_count"] == 1
+            assert "SAVED_REFERENCE_SCAN_INCOMPLETE" in item["protection_reasons"]
+
+            replacement = ReplaySQLiteStore(first_db)
+            try:
+                replaced, _ = await inspect()
+                assert not replaced["saved_reference_scan_complete"]
+                assert replaced["unavailable_reference_store_count"] == 1
+            finally:
+                await replacement.close()
+        finally:
+            parked.replace(first_db)
+
+        # Emulate a pre-registration database which already has a saved replay.
+        registry = archive_root / ".replay-reference-stores"
+        for entry in registry.glob("*.json"):
+            if json.loads(entry.read_text())["database"] == str(first_db):
+                entry.unlink()
+                break
+        legacy = sqlite3.connect(first_db)
+        try:
+            legacy.execute("DROP TABLE replay_trade_reference_store")
+        finally:
+            legacy.close()
+        first = await _service(first_db, archive(), prefix="reopened")
+        enrolled, item = await inspect()
+        assert enrolled["saved_reference_scan_complete"]
+        assert item["saved_reference_count"] == 1
+        await first.discard_session(session)
+        after_delete, item = await inspect()
+        assert after_delete["saved_reference_scan_complete"]
+        assert after_delete["saved_reference_store_count"] == 2
+        assert item["saved_reference_count"] == 0
+        assert not item["retention_lease_busy"]
+        assert len(list(registry.glob("*.json"))) == 2
+    finally:
+        await first.shutdown(step_timeout=1.0)
+        await second.shutdown(step_timeout=1.0)
+
+
+async def test_retention_rechecks_stale_preview_against_other_profile(tmp_path: Path) -> None:
+    root = tmp_path / "archive"
+    verified_trade_archive(root)
+    receipt, = root.rglob("_verified_import.json")
+    originals = {path: path.read_bytes() for path in receipt.parent.iterdir() if path.is_file()}
+    first_db = tmp_path / "first" / "replay.db"
+    first = await _service(first_db, OfficialAggTradeArchive(root, defer_refresh=True), prefix="first")
+    second = await _service(
+        tmp_path / "second" / "replay.db",
+        OfficialAggTradeArchive(root, defer_refresh=True),
+        prefix="second",
+    )
+    app = FastAPI()
+    app.state.replay_service = second
+    app.include_router(router, prefix="/api/v1")
+    uri = "/api/v1/replay/runs/storage/raw-trades/recheck"
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            preview = await second.training.raw_trade_retention_preview(limit=1)
+            candidate, = preview["items"]
+            assert candidate["saved_reference_count"] == 0
+            day_id = candidate["day_id"]
+
+            async def inspect():
+                response = await client.get(uri, params={"day_id": day_id, "limit": 1})
+                assert response.status_code == 200
+                assert str(tmp_path) not in response.text
+                report = response.json()
+                assert report["estimated_reclaim_bytes"] == 0
+                return report
+
+            assert (await client.get(uri, params={"day_id": "not-a-receipt"})).status_code == 422
+            baseline = await inspect()
+            assert baseline["status"] == "RECHECKED"
+            assert baseline["saved_reference_scan_complete"]
+            assert baseline["item"]["protection_reasons"] == ["UNMANAGED_RETENTION_POLICY"]
+
+            config = trade_replay_config()
+            with trade_archive_day_acquisition(
+                second.raw_trade_archive.cache, exchange=config.exchange, market_type=config.market_type,
+                symbol=config.symbol, day=date(2026, 6, 1),
+            ):
+                assert (await inspect())["status"] == "DAY_ACQUISITION_IN_PROGRESS"
+
+            created = await first.create_session(config)
+            blocked = await inspect()
+            assert blocked["status"] == "PARTITION_RETENTION_LEASE"
+            assert blocked["item"] is None
+            await first.release_session_to_hub(str(created["session_id"]))
+            await first.shutdown(step_timeout=1.0)
+
+            saved = await inspect()
+            assert saved["status"] == "RECHECKED"
+            assert saved["saved_reference_scan_complete"]
+            assert saved["saved_reference_store_count"] == 2
+            assert saved["item"]["saved_reference_count"] == 1
+            assert saved["item"]["active_pin_count"] == 0
+            assert "SAVED_REPLAY_REFERENCE" in saved["item"]["protection_reasons"]
+
+            parked = first_db.with_suffix(".parked")
+            first_db.rename(parked)
+            try:
+                unavailable = await inspect()
+                assert not unavailable["saved_reference_scan_complete"]
+                assert unavailable["unavailable_reference_store_count"] == 1
+                assert "SAVED_REFERENCE_SCAN_INCOMPLETE" in unavailable["item"]["protection_reasons"]
+            finally:
+                parked.replace(first_db)
+
+            assert all(path.read_bytes() == body for path, body in originals.items())
+            try:
+                receipt.write_bytes(originals[receipt] + b"\n")
+                stale = await inspect()
+                assert stale["status"] == "STALE_OR_OUTSIDE_SCAN"
+                assert stale["item"] is None
+            finally:
+                receipt.write_bytes(originals[receipt])
+    finally:
+        await first.shutdown(step_timeout=1.0)
+        await second.shutdown(step_timeout=1.0)
+
+
+async def test_reclaim_revalidates_saved_references_for_each_batch(tmp_path: Path, monkeypatch) -> None:
+    from contextlib import nullcontext
+
+    from app.replay.training import raw_trade_retention
+
+    root = tmp_path / "archive"
+    archive = verified_trade_archive(root)
+    first_db = tmp_path / "first" / "replay.db"
+    first = await _service(first_db, OfficialAggTradeArchive(root, defer_refresh=True), prefix="first")
+    second = await _service(
+        tmp_path / "second" / "replay.db",
+        OfficialAggTradeArchive(root, defer_refresh=True),
+        prefix="second",
+    )
+    try:
+        report = await second.training.raw_trade_retention_preview(limit=1)
+        candidate, = report["items"]
+        assert candidate["saved_reference_count"] == 0
+        created = await first.create_session(trade_replay_config())
+        session_id = str(created["session_id"])
+        await first.release_session_to_hub(session_id)
+        operation = dict(identity=("binance", "futures", "BTCUSDT"),
+                         day="2026-06-01", day_id=candidate["day_id"])
+
+        def policy(_key, _receipt):
+            return nullcontext(True)
+
+        # Simulate an older operator moving a day after the preview. The
+        # reclaim owner must independently reject the new saved reference.
+        assert archive.move_verified_retention_day(**operation, authorize=policy, restore=False) == "RETIRED"
+        retired, = root.glob("exchange=*/market_type=*/symbol=*/.retired-date=*")
+        originals = {file.name: file.read_bytes() for file in retired.iterdir()}
+
+        async def reclaim():
+            return await raw_trade_retention.reclaim_retired_day(
+                second.store, archive, **operation, max_files=1,
+                max_bytes=sum(map(len, originals.values())), policy=policy,
+            )
+
+        assert (await reclaim()).status == "RETENTION_NOT_AUTHORIZED"
+        await first.discard_session(session_id)
+        await first.shutdown(step_timeout=1.0)
+        parked = first_db.with_suffix(".parked")
+        first_db.rename(parked)
+        try:
+            assert (await reclaim()).status == "RETENTION_NOT_AUTHORIZED"
+        finally:
+            parked.replace(first_db)
+        assert {file.name: file.read_bytes() for file in retired.iterdir()} == originals
+
+        original_unlink = Path.unlink
+
+        def check_fence(file, *args, **kwargs):
+            if file.parent == retired:
+                with pytest.raises(BlockingIOError):
+                    with raw_trade_retention._registry_lease(root / ".replay-reference-stores", shared=False):
+                        pytest.fail("registry publication overlapped reclaim")
+            return original_unlink(file, *args, **kwargs)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(Path, "unlink", check_fence)
+            result = await reclaim()
+        assert result.status == "RECLAIM_PENDING" and result.removed_files == 1
+        first_db.rename(parked)
+        try:
+            assert (await reclaim()).status == "RETENTION_NOT_AUTHORIZED"
+        finally:
+            parked.replace(first_db)
+        assert len(tuple(retired.iterdir())) == len(originals)  # One file removed and one marker added.
+    finally:
+        await first.shutdown(step_timeout=1.0)
+        await second.shutdown(step_timeout=1.0)
+
+
+async def test_managed_retention_routes_fence_use_policy_expiry_and_references(tmp_path, monkeypatch):
+    from app.replay.training import raw_trade_retention
+
+    root = tmp_path / "archive"
+    archive = verified_trade_archive(root)
+    first_db = tmp_path / "first" / "replay.db"
+    first = await _service(first_db, OfficialAggTradeArchive(root, defer_refresh=True), prefix="first")
+    second_db = tmp_path / "second" / "replay.db"
+    second = await _service(second_db, OfficialAggTradeArchive(root, defer_refresh=True), prefix="second")
+    app = FastAPI()
+    app.state.replay_service = second
+    app.include_router(router, prefix="/api/v1")
+    prefix = "/api/v1/replay/runs/storage/raw-trades"
+    now = TRADE_NOW_MS
+    monkeypatch.setattr(raw_trade_retention, "_now_ms", lambda: now)
+
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://127.0.0.1") as client:
+            preview = (await client.get(prefix + "/preview", params={"limit": 1})).json()
+            candidate, = preview["items"]
+            day = {"symbol": "BTCUSDT", "day": "2026-06-01", "day_id": candidate["day_id"]}
+
+            async def submit(method, route, **payload):
+                response = await client.request(method, prefix + route, json={**day, **payload})
+                assert response.status_code == 200, response.text
+                return response.json()
+
+            async def inspect_day():
+                response = await client.get(prefix + "/day", params={"symbol": day["symbol"], "day": day["day"]})
+                assert response.status_code == 200, response.text
+                return response.json()
+
+            assert (await inspect_day())["item"]["day_id"] == day["day_id"]
+            assert (await inspect_day())["policy"] is None
+
+            async def policy(revision, retain_until):
+                return await submit("PUT", "/policy", expected_revision=revision, retain_until_ms=retain_until)
+
+            async def plan():
+                return await submit("POST", "/plan", max_files=1, max_bytes=100_000)
+
+            async def run(record, action="RETIRE"):
+                return await submit("POST", "/run", plan_id=record["plan"]["plan_id"], action=action)
+
+            denied = await client.post(
+                prefix + "/plan", headers={"origin": "https://untrusted.invalid"},
+                json={**day, "max_files": 1, "max_bytes": 100_000},
+            )
+            assert denied.status_code == 403
+            denied = await client.post(
+                prefix + "/plan", headers={"host": "untrusted.invalid"},
+                json={**day, "max_files": 1, "max_bytes": 100_000},
+            )
+            assert denied.status_code == 403
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app, client=("192.0.2.10", 1111)),
+                base_url="http://127.0.0.1",
+            ) as remote:
+                denied = await remote.post(prefix + "/plan", json={**day, "max_files": 1, "max_bytes": 100_000})
+                assert denied.status_code == 403
+            assert (await plan())["status"] == "UNMANAGED"
+            assert (await policy(0, None))["policy"]["revision"] == 1
+            pinned = (await client.get(prefix + "/preview", params={"limit": 1})).json()
+            assert pinned["policy_state"] == "MANAGED"
+            assert pinned["items"][0]["retention_policy"]["revision"] == 1
+            assert pinned["items"][0]["protection_reasons"] == ["POLICY_RETAINS_DAY"]
+            assert (await policy(0, 0))["status"] == "POLICY_CONFLICT"
+            assert (await plan())["status"] == "POLICY_RETAINS_DAY"
+            assert (await policy(1, now + 1_000))["policy"]["revision"] == 2
+            assert (await plan())["status"] == "POLICY_RETAINS_DAY"
+            assert (await policy(2, 0))["policy"]["revision"] == 3
+
+            read_plan = await plan()
+            assert read_plan["status"] == "PLANNED"
+            assert read_plan["candidate"]["state"] == "COMMITTED"
+            archive.freeze_dataset(exchange="binance", market_type="futures", symbol="BTCUSDT",
+                                   start_time_ms=TRADE_REPLAY_START_MS, end_time_ms=TRADE_REPLAY_START_MS + 20_000)
+            assert (await run(read_plan))["status"] == "STALE_PLAN"
+
+            extended_plan = await plan()
+            assert (await policy(3, None))["policy"]["revision"] == 4
+            assert (await run(extended_plan))["status"] == "STALE_PLAN"
+            assert (await policy(4, 0))["policy"]["revision"] == 5
+            await second.shutdown(step_timeout=1.0)
+            second = await _service(second_db, OfficialAggTradeArchive(root, defer_refresh=True), prefix="second-restarted")
+            app.state.replay_service = second
+
+            saved_plan = await plan()
+            assert saved_plan["plan"]["revision"] == 5
+            created = await first.create_session(trade_replay_config())
+            session_id = str(created["session_id"])
+            await first.release_session_to_hub(session_id)
+            assert (await run(saved_plan))["status"] == "STALE_PLAN"
+            assert (await plan())["status"] == "SAVED_REFERENCES_PROTECTED"
+            await first.discard_session(session_id)
+            await first.shutdown(step_timeout=1.0)
+
+            expired = await plan()
+            now = expired["plan"]["expires_ms"]
+            assert (await run(expired))["status"] == "RETENTION_NOT_AUTHORIZED"
+            assert archive.verified_retention_inventory(limit=1)["items"]
+            current = await plan()
+            assert (await run(current))["status"] == "RETIRED"
+            assert archive.verified_retention_inventory(limit=1)["items"] == []
+            assert (await inspect_day())["item"]["state"] == "RETIRED"
+            assert not (await inspect_day())["item"]["reclaim_started"]
+            assert (await submit("POST", "/recover", action="RESTORE"))["status"] == "RESTORED"
+            assert (await run(current))["status"] == "STALE_PLAN"
+            current = await plan()
+            assert (await run(current))["status"] == "RETIRED"
+            reclaimed = await run(current, "RECLAIM")
+            assert reclaimed["status"] == "RECLAIM_PENDING" and reclaimed["removed_files"] == 1
+
+            parked = first_db.with_suffix(".parked")
+            first_db.rename(parked)
+            try:
+                assert (await run(current, "RECLAIM"))["status"] == "RETENTION_NOT_AUTHORIZED"
+            finally:
+                parked.replace(first_db)
+            while reclaimed["remaining_files"]:
+                reclaimed = await run(current, "RECLAIM")
+                assert reclaimed["removed_files"] == 1
+            assert reclaimed["status"] == "RECLAIMED"
+            assert (await run(current, "RECLAIM"))["removed_logical_bytes"] == 0
+            gone = (await inspect_day())["item"]
+            assert gone["reclaim_started"] and gone["files"] == 0
+            assert (await submit("POST", "/recover", action="REDOWNLOAD"))["status"] == "RECOVERY_BUDGET_REQUIRED"
+    finally:
+        await first.shutdown(step_timeout=1.0)
+        await second.shutdown(step_timeout=1.0)
 
 
 async def test_production_catalog_selects_a_local_day_before_official_discovery(

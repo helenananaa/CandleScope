@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import ipaddress
+from datetime import date
+
 from app.replay.request_contracts import (
     ReplayCanonicalIndicatorPayload,
     ReplayCommandPayload,
@@ -26,6 +29,10 @@ from app.replay.request_contracts import (
     ReplayHistoricalBookGcRunPayload,
     ReplayAccountHistoryGcPlanPayload,
     ReplayAccountHistoryGcRunPayload,
+    ReplayRawTradeRetentionPolicyPayload,
+    ReplayRawTradeRetentionPlanPayload,
+    ReplayRawTradeRetentionRunPayload,
+    ReplayRawTradeRetentionRecoverPayload,
 )
 
 from typing import Awaitable, Callable, Literal
@@ -36,6 +43,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.routing import APIRoute
 
 from app.core.config import REPLAY_SETTINGS
+from app.core.operator_origin import is_trusted_operator_origin, origin_from
 from app.data_engine.data_manager.replay import optional_replay_service_from_state
 from app.replay.constants import (
     REPLAY_PROTOCOL,
@@ -471,6 +479,90 @@ async def list_replay_v2_account_history(request: Request) -> dict[str, object]:
 @router.get("/runs/storage")
 async def replay_v2_storage_inventory(request: Request) -> dict[str, object]:
     return await _training_service(request).storage_inventory()
+
+@router.get("/runs/storage/raw-trades/preview")
+async def replay_v2_raw_trade_retention_preview(
+    request: Request, limit: int = Query(default=100, ge=1, le=200),
+) -> dict[str, object]:
+    return await _training_service(request).raw_trade_retention_preview(limit=limit)
+
+
+@router.get("/runs/storage/raw-trades/recheck")
+async def replay_v2_raw_trade_retention_recheck(
+    request: Request,
+    day_id: str = Query(pattern=r"^sha256:[0-9a-f]{64}$", min_length=71, max_length=71),
+    limit: int = Query(default=100, ge=1, le=200),
+) -> dict[str, object]:
+    return await _training_service(request).raw_trade_retention_recheck(day_id=day_id, limit=limit)
+
+
+def _is_loopback_address(host: str) -> bool:
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _require_retention_operator(request: Request) -> None:
+    peer = request.client.host if request.client else ""
+    host = request.url.hostname or ""
+    origin = origin_from(request.headers)
+    if (not _is_loopback_address(peer)
+            or (host != "localhost" and not _is_loopback_address(host))
+            or (origin is not None and not is_trusted_operator_origin(origin))):
+        raise TrainingRunError(
+            "RETENTION_OPERATOR_REQUIRED", "raw trade retention requires a local operator", status_code=403,
+        )
+
+
+@router.put(
+    "/runs/storage/raw-trades/policy",
+    dependencies=[Depends(_require_retention_operator), Depends(_training_service), Depends(enforce_replay_request_limit)],
+)
+async def set_replay_v2_raw_trade_retention_policy(
+    request: Request, payload: ReplayRawTradeRetentionPolicyPayload,
+) -> dict[str, object]:
+    return await _training_service(request).set_raw_trade_retention_policy(**payload.model_dump(mode="json"))
+
+
+@router.post(
+    "/runs/storage/raw-trades/plan",
+    dependencies=[Depends(_require_retention_operator), Depends(_training_service), Depends(enforce_replay_request_limit)],
+)
+async def plan_replay_v2_raw_trade_retention(
+    request: Request, payload: ReplayRawTradeRetentionPlanPayload,
+) -> dict[str, object]:
+    return await _training_service(request).plan_raw_trade_retention(**payload.model_dump(mode="json"))
+
+
+@router.post(
+    "/runs/storage/raw-trades/run",
+    dependencies=[Depends(_require_retention_operator), Depends(_training_service), Depends(enforce_replay_request_limit)],
+)
+async def execute_replay_v2_raw_trade_retention(
+    request: Request, payload: ReplayRawTradeRetentionRunPayload,
+) -> dict[str, object]:
+    return await _training_service(request).execute_raw_trade_retention(**payload.model_dump(mode="json"))
+
+
+@router.get(
+    "/runs/storage/raw-trades/day",
+    dependencies=[Depends(_require_retention_operator), Depends(_training_service)],
+)
+async def inspect_replay_v2_raw_trade_retention(
+    request: Request, day: date, symbol: str = Query(pattern=r"^[A-Z0-9]{1,64}$"),
+) -> dict[str, object]:
+    return await _training_service(request).inspect_raw_trade_retention(symbol=symbol, day=day.isoformat())
+
+
+@router.post(
+    "/runs/storage/raw-trades/recover",
+    dependencies=[Depends(_require_retention_operator), Depends(_training_service), Depends(enforce_replay_request_limit)],
+)
+async def recover_replay_v2_raw_trade_retention(
+    request: Request, payload: ReplayRawTradeRetentionRecoverPayload,
+) -> dict[str, object]:
+    return await _training_service(request).recover_raw_trade_retention(**payload.model_dump(mode="json"))
 
 
 @router.post("/runs/{run_id}/account-audit")

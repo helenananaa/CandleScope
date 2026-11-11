@@ -483,6 +483,62 @@ def import_local_verified_day(
     return accepted, metadata
 
 
+def redownload_official_day(
+    *, archive_dir: Path, exchange: str, market_type: str, symbol: str, day: date, day_id: str,
+    max_download_bytes: int, max_restore_bytes: int, download_timeout_seconds: float = 60.0,
+    opener: Callable[..., BinaryIO] = urllib.request.urlopen,
+) -> str:
+    """Explicitly rebuild an exact retired Binance day with bounded source transfer."""
+    if exchange.strip().lower() != "binance":
+        raise ReplayTradeImportError("only Binance official public data is accepted")
+    if type(max_download_bytes) is not int or not 1 <= max_download_bytes <= _MAX_OFFICIAL_DOWNLOAD_BYTES:
+        raise ReplayTradeImportError("official redownload byte budget is outside the supported range")
+    if download_timeout_seconds <= 0:
+        raise ReplayTradeImportError("official download timeout must be positive")
+    identity = ("binance", market_type.strip().lower(), symbol.strip().upper())
+    source_url, checksum_url, filename = official_agg_trade_urls(
+        market_type=identity[1], symbol=identity[2], day=day,
+    )
+    archive = ParquetRawAggTradeArchive(archive_dir.resolve())
+
+    def build(stage: Path, original: VerifiedRawAggTradeDay, rows_per_file: int) -> None:
+        if original.source_url != source_url or original.source_file != filename:
+            raise ReplayTradeImportError("retired day is not bound to this official source")
+        if rows_per_file > 1_000_000:
+            raise ReplayTradeImportError("retired day exceeds the supported rebuild chunk size")
+        with tempfile.TemporaryDirectory(prefix=".official-", dir=stage) as temporary:
+            checksum_path = Path(temporary) / f"{filename}.CHECKSUM"
+            _download_official(
+                checksum_url, checksum_path, opener=opener, timeout_seconds=download_timeout_seconds,
+                max_bytes=min(max_download_bytes, 1024 * 1024),
+            )
+            published = parse_official_checksum(checksum_path.read_text(encoding="utf-8"), expected_filename=filename)
+            if published != original.source_checksum_sha256:
+                raise ReplayTradeImportError("official ZIP checksum differs from the retired receipt")
+            remaining = max_download_bytes - checksum_path.stat().st_size
+            if remaining <= 0:
+                raise ReplayTradeImportError("official redownload exhausted its byte budget")
+            zip_path = Path(temporary) / filename
+            _download_official(
+                source_url, zip_path, opener=opener, timeout_seconds=download_timeout_seconds, max_bytes=remaining,
+            )
+
+            def verify_metadata(metadata: VerifiedRawAggTradeDay, _path: Path) -> None:
+                if metadata != original:
+                    raise ReplayTradeImportError("official day metadata differs from the retired receipt")
+
+            import_local_verified_day(
+                ParquetRawAggTradeArchive(stage, max_rows_per_file=rows_per_file),
+                zip_path=zip_path, checksum_path=checksum_path, source_url=source_url,
+                exchange=identity[0], market_type=identity[1], symbol=identity[2], day=day,
+                before_archive_import=verify_metadata,
+            )
+
+    return archive.redownload_reclaimed_verified_day(
+        identity=identity, day=day.isoformat(), day_id=day_id, max_restore_bytes=max_restore_bytes, build=build,
+    )
+
+
 def import_official_date_range(
     *,
     archive_dir: Path,
@@ -522,8 +578,10 @@ def import_official_date_range(
         max_rows_per_file=max_rows_per_file,
     )
     results: list[dict[str, object]] = []
+    identity = ("binance", market_type.strip().lower(), symbol.strip().upper())
     current = start
     while current <= end:
+        archive.require_day_not_retired(identity, current.isoformat())
         source_url, checksum_url, filename = official_agg_trade_urls(
             market_type=market_type,
             symbol=symbol,

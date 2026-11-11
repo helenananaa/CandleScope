@@ -127,6 +127,7 @@ from .sources.bar_source import (
 from .sources.trade_reader import PagedReplayTradeReader
 from .sources.trade_source import TradeReplaySource
 from .storage.sqlite_store import ReplaySQLiteStore, StoredCommand
+from .training.raw_trade_retention import register_store as register_trade_reference_store
 from .training.service import TrainingRunService
 
 
@@ -374,6 +375,7 @@ class ReplayService:
     async def start(self) -> None:
         """Recover non-ended sessions without ever resuming PLAYING."""
 
+        await register_trade_reference_store(self.store, self._raw_trade_archive)
         archive_dir = self.settings.replay_history_archive_dir
         if archive_dir is not None and (Path(archive_dir) / "progressive-index.sqlite3").exists():
             await asyncio.to_thread(self.progressive_history.reconcile_sessions,

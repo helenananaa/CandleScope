@@ -1966,10 +1966,15 @@ def _read_verified_repair_page(
     archive = ParquetRawAggTradeArchive(root, read_only=True)
     if defer_if_busy and archive.verified_day_acquisition_pending(identity, time_bounds):
         return None
-    return archive.read_verified_repair_page(
-        exchange=identity[0], market_type=identity[1], symbol=identity[2],
-        start_agg_trade_id=first, end_agg_trade_id=last, time_bounds=time_bounds,
-    )
+    try:
+        return archive.read_verified_repair_page(
+            exchange=identity[0], market_type=identity[1], symbol=identity[2],
+            start_agg_trade_id=first, end_agg_trade_id=last, time_bounds=time_bounds,
+        )
+    except BlockingIOError:
+        if defer_if_busy:
+            return None
+        raise
 
 
 def _validated_repair_archive_page(
@@ -1996,7 +2001,7 @@ def _validated_repair_archive_page(
 def _read_verified_archive_rollups(
     root: Path, identity: StreamIdentity, missing: list[int],
 ) -> TradeHistoryRead:
-    """Project verified daily objects without mutating either archive or SQLite."""
+    """Project verified daily objects without changing trade data or SQLite."""
     if not root.is_dir():
         return TradeHistoryRead([])
     try:
