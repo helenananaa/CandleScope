@@ -1,3 +1,4 @@
+import { indicatorRuntimeAdapter } from "./indicatorRuntimeAdapter.js";
 import { standaloneIndicatorResults } from "./indicatorResultManager.js";
 import { ChartCalculationSessions } from "./chartCalculationSessions.js";
 import { usesChartCalculation } from "./pineChartTransport.js";
@@ -3268,7 +3269,8 @@ export function useIndicatorRuntime(
         !== indicatorCacheHydrationSignature
       ) return;
 
-      const contentVersion = currentIndicators.map((indicator) => (
+      const sharedIndicators = currentIndicators.filter(indicator => indicatorRuntimeAdapter(indicator, cacheContext).sharing !== "private-session");
+      const contentVersion = sharedIndicators.map((indicator) => (
         getCachedIndicatorMetadata(indicator, cacheContext)?.contentVersion ?? "missing"
       )).join("|");
       indicatorHydrationScheduler.schedule({
@@ -3289,7 +3291,8 @@ export function useIndicatorRuntime(
 
           // Resolve at execution time so a WS/range update that lands while the
           // task is deferred wins over the snapshot observed when it was queued.
-          const cachedEntries = resolveCachedIndicatorResults(indicators, currentContext);
+          const shared = indicators.filter(indicator => indicatorRuntimeAdapter(indicator, currentContext).sharing !== "private-session");
+          const cachedEntries = resolveCachedIndicatorResults(shared, currentContext);
           setActiveIndicators((previous) => {
             if (
               buildIndicatorCacheHydrationSignature(previous, currentContext)
@@ -3297,9 +3300,10 @@ export function useIndicatorRuntime(
             ) return previous;
             return hydrateIndicatorDefinitionsFromCache(
               previous,
-              resolveCachedIndicatorResults(previous, getIndicatorCacheContext()),
+              resolveCachedIndicatorResults(previous.filter(indicator => indicatorRuntimeAdapter(indicator, currentContext).sharing !== "private-session"), getIndicatorCacheContext()),
               {
                 clearMissing: false,
+                preserveOutsideComputedRanges: true,
                 reconcileLines: (indicator, lines) => reapplyProvisionalIndicatorPreview(
                   indicator,
                   lines,
@@ -3309,7 +3313,16 @@ export function useIndicatorRuntime(
             );
           });
           if (indicatorHydrationLifecycleKeyRef.current === identity.lifecycleKey) {
-            outputDispatch({ type: "hydrate-cache", entries: cachedEntries });
+            for (const cached of cachedEntries) {
+              const definition = shared.find(indicator => indicator.id === cached.indicatorId);
+              if (definition && (isFrontendScript(definition) || definition.executionTarget === "local")) {
+                outputDispatch({ type: "snapshot", indicatorId: cached.indicatorId, normalized: cached.normalized, schema: cached.schema });
+              } else if (cached.computedSegments.length) {
+                for (const range of cached.computedSegments) outputDispatch({ type: "replace-range", indicatorId: cached.indicatorId, normalized: cached.normalized, range });
+              } else {
+                outputDispatch({ type: "patch", indicatorId: cached.indicatorId, normalized: cached.normalized, ok: true });
+              }
+            }
           }
         },
       });
@@ -3318,6 +3331,12 @@ export function useIndicatorRuntime(
     // view another wire snapshot. Publish that committed cache generation
     // through the existing deferred, lifecycle-fenced hydration scheduler.
     const unsubscribe = indicatorResults.subscribe((commit) => {
+      // Private hosted sessions already apply their own admitted wire delta.
+      // A prefix invalidation may leave only that range in the cache; reading
+      // it back as a complete projection would discard retained session history.
+      // Point updates already fan out through the shared stream. Rehydrating
+      // the whole cached range here would turn the incremental tail into a rebuild.
+      if (commit.adapter.sharing === "private-session" || commit.operation === "point") return;
       const context = getIndicatorCacheContext();
       if (activeIndicatorsRef.current.some(indicator => (
         buildIndicatorResultCacheKey(indicator, context) === commit.key
