@@ -125,6 +125,7 @@ function cloneInputs(inputs: ChartStrategyTesterInputs): ChartStrategyTesterInpu
     session: { ...inputs.session },
     attachment: {
       ...inputs.attachment,
+      ...(inputs.attachment.pythonBarExecution ? { pythonBarExecution: { ...inputs.attachment.pythonBarExecution } } : {}),
       ...(inputs.attachment.executionOverrides ? { executionOverrides: { ...inputs.attachment.executionOverrides } } : {}),
       parameters: JSON.parse(canonicalJson(inputs.attachment.parameters)) as Record<string, unknown>,
       customRange: inputs.attachment.customRange
@@ -168,6 +169,7 @@ export function chartStrategyTesterStaleReasons(
     reasons.push("FIDELITY_CHANGED");
   }
   if (left.quickPresetId !== right.quickPresetId || canonicalJson(left.executionOverrides ?? null) !== canonicalJson(right.executionOverrides ?? null)) reasons.push("QUICK_PRESET_CHANGED");
+  if (canonicalJson(left.pythonBarExecution ?? null) !== canonicalJson(right.pythonBarExecution ?? null)) reasons.push("FIDELITY_CHANGED");
   if (previous.sourceKind !== next.sourceKind || previous.datasetId !== next.datasetId) {
     reasons.push("SOURCE_CHANGED");
   }

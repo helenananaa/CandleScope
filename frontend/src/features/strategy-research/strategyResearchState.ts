@@ -1,7 +1,10 @@
+import type { BacktestResultReplayCursor } from "../backtest/backtestTypes.js";
 import type { ResearchSourceRefV1 } from "../research-data/researchDataTypes.js";
 import { getStrategyStorage } from "../../shared/strategyStorage.js";
 import { validStrategyRunSettings, type StrategyRunSettings } from "../../shared/strategyRunSettings.js";
 import { parseResearchSourceRef, ResearchDataError } from "../research-data/researchDataSourceModel.js";
+
+import { readReplayDisplays, replayDisplayKey, type ReplayDisplay } from "./strategyResultReplayDisplay.js";
 
 export const STRATEGY_RESEARCH_WORKSPACE_KEY = "candlescope:strategy-research:v1";
 
@@ -28,17 +31,21 @@ export type StrategyResearchResultSlice = {
   runId: string | null;
   stale: boolean;
   staleReason: StrategyResearchStaleReason;
+  replay?: BacktestResultReplayCursor;
 };
 
 export type StrategyResearchState = {
   source: StrategyResearchSourceSlice;
   script: StrategyResearchScriptSlice;
   result: StrategyResearchResultSlice;
+  replayDisplays?: Record<string, ReplayDisplay>;
 };
 
 export type StrategyResearchAction =
   | { type: "result/viewHistory"; runId: string }
   | { type: "result/invalidate" }
+  | { type: "result/replay"; replay: BacktestResultReplayCursor | null }
+  | { type: "result/replayDisplay"; key: string; display: ReplayDisplay }
   | { type: "script/configure"; configuration: StrategyRunSettings }
   | { type: "source/select"; source: ResearchSourceRefV1 }
   | { type: "source/clear" }
@@ -62,6 +69,15 @@ export function strategyResearchReducer(
 ): StrategyResearchState {
   switch (action.type) {
     case "result/viewHistory": return { ...state, result: { runId: action.runId, stale: true, staleReason: null } };
+    case "result/replay": {
+      if (action.replay && action.replay.runId !== state.result.runId) return state;
+      if (action.replay) return { ...state, result: { ...state.result, replay: action.replay } };
+      const { replay: _replay, ...result } = state.result;
+      return { ...state, result };
+    }
+    case "result/replayDisplay":
+      if (!state.result.replay || action.key !== replayDisplayKey(state.result.replay)) return state;
+      return { ...state, replayDisplays: { ...state.replayDisplays, [action.key]: action.display } };
     case "result/invalidate": return { ...state, result: { ...state.result, stale: true } };
     case "script/configure":
       return { ...state, script: { ...state.script, configuration: action.configuration }, result: state.result.runId ? { ...state.result, stale: true, staleReason: "RANGE_CHANGED" } : state.result };
@@ -80,6 +96,7 @@ export function strategyResearchReducer(
       };
     case "source/revisionChanged":
       return {
+        ...state,
         source: { ...state.source, source: action.source, previewFrozen: false },
         script: state.script,
         result: {
@@ -129,12 +146,39 @@ export function persistStrategyResearchWorkspace(state: StrategyResearchState): 
     configuration: state.script.configuration,
     stale: state.result.stale,
     runId: state.result.runId,
+    replay: state.result.replay,
+    replayDisplays: state.replayDisplays,
   };
   try {
     void Promise.resolve(getStrategyStorage()?.setItem(STRATEGY_RESEARCH_WORKSPACE_KEY, JSON.stringify(payload))).catch(() => {});
   } catch {
     // Persistence is optional; in-memory state remains.
   }
+}
+
+function loadResultReplay(value: unknown, runId: unknown): BacktestResultReplayCursor | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const replay = value as Partial<BacktestResultReplayCursor>;
+  const hash = /^sha256:[a-f0-9]{64}$/;
+  if (typeof replay.runId !== "string" || replay.runId !== runId || !/^bt_[a-zA-Z0-9_-]+$/.test(replay.runId)
+    || typeof replay.snapshotHash !== "string" || !hash.test(replay.snapshotHash)
+    || typeof replay.reportHash !== "string" || !hash.test(replay.reportHash)
+    || typeof replay.cursor !== "number" || !Number.isSafeInteger(replay.cursor) || replay.cursor < 0
+    || typeof replay.interval !== "string" || replay.interval.length < 2 || replay.interval.length > 64) return undefined;
+  const dataset = replay.comparisonDataset;
+  const comparisonDataset = dataset && typeof dataset.datasetId === "string" && /^local-[0-9a-f]{32}$/.test(dataset.datasetId)
+    && typeof dataset.dataEpoch === "string" && hash.test(dataset.dataEpoch)
+    ? { datasetId: dataset.datasetId, dataEpoch: dataset.dataEpoch } : undefined;
+  const comparisonInterval = typeof replay.comparisonInterval === "string"
+    && (dataset === undefined ? replay.comparisonInterval !== replay.interval : comparisonDataset !== undefined)
+    && replay.comparisonInterval.length >= 2 && replay.comparisonInterval.length <= 64 ? replay.comparisonInterval : undefined;
+  const validPeriod = (period: number | undefined): period is number =>
+    typeof period === "number" && Number.isInteger(period) && period >= 1 && period <= 500;
+  return { runId: replay.runId, snapshotHash: replay.snapshotHash, reportHash: replay.reportHash,
+    cursor: replay.cursor, interval: replay.interval,
+    ...(comparisonInterval ? { comparisonInterval, ...(comparisonDataset ? { comparisonDataset } : {}) } : {}),
+    ...(validPeriod(replay.maPeriod) ? { maPeriod: replay.maPeriod } : {}),
+    ...(comparisonInterval && validPeriod(replay.comparisonMaPeriod) ? { comparisonMaPeriod: replay.comparisonMaPeriod } : {}) };
 }
 
 export function loadStrategyResearchWorkspace(): StrategyResearchState {
@@ -155,7 +199,10 @@ export function loadStrategyResearchWorkspace(): StrategyResearchState {
         return EMPTY_STRATEGY_RESEARCH_STATE;
       }
     }
+    const replay = loadResultReplay(record.replay, record.runId);
+    const replayDisplays = readReplayDisplays(record.replayDisplays);
     return {
+      ...(replayDisplays ? { replayDisplays } : {}),
       source: {
         source,
         previewFrozen: false,
@@ -169,6 +216,7 @@ export function loadStrategyResearchWorkspace(): StrategyResearchState {
         runId: typeof record.runId === "string" ? record.runId : null,
         stale: record.stale === true || (typeof record.runId === "string" && typeof record.contentRevision !== "number"),
         staleReason: null,
+        ...(replay ? { replay } : {}),
       },
     };
   } catch {

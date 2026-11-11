@@ -99,8 +99,9 @@ function blankCell(
   existing: ChartCellState | undefined,
   id: ChartCellId,
 ): ChartCellState {
+  const { quickReplay: _quickReplay, ...cell } = cloneSerializable(existing ?? source);
   return {
-    ...cloneSerializable(existing ?? source),
+    ...cell,
     id,
     linkGroupId: null,
     session: cloneSerializable(source.session),
@@ -110,6 +111,7 @@ function blankCell(
     strategyTesterMode: "NATIVE",
     nativeStrategies: { activeId: "default", items: [{ id: "default", name: "", language: "pine", drafts: {}, runs: {} }] },
     drawingLayerSet: blankDrawingLayer(source, existing),
+    drawingsHidden: false,
     chartSettings: blankChartSettings(),
     accountOverlay: normalizeChartAccountOverlay(),
   };

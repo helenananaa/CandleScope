@@ -135,10 +135,11 @@ def test_unrelated_writes_keep_same_source_block_versions_and_target_reuse(dm):
 
 
 @pytest.mark.parametrize("mutation", ["amend", "delete", "external"])
-def test_real_commits_invalidate_all_dependent_blocks_and_old_views(dm, mutation):
+def test_real_commits_invalidate_the_affected_block_and_fence_old_views(dm, mutation):
     storage = dm.query_engine.storage
     original = read_rows(dm)
     reduce(dm, original, 4)
+    before = dm.shared_blocks.snapshot()
     floor = storage.revision_store.head()
     if mutation == "amend":
         write([replace(original[2], high=2, close=1, volume=1)])
@@ -149,7 +150,9 @@ def test_real_commits_invalidate_all_dependent_blocks_and_old_views(dm, mutation
     else:
         storage.delete_bars("BTCUSDT", "1d", start_ms=2 * DAY, end_ms=2 * DAY, market_type="futures")
     dm.shared_blocks.poll()
-    assert dm.shared_blocks.snapshot()["entries"] == 0
+    after = dm.shared_blocks.snapshot()
+    assert after["entries"] == before["entries"] - 1
+    assert after["revalidated_blocks"] == before["entries"] - 1
     with pytest.raises(BlockRevisionChanged):
         reduce(dm, original, 4, acquired_at=floor)
     actual, expected = reduce(dm, read_rows(dm), 4)

@@ -4,6 +4,9 @@ export interface ChartAccountOverlaySettings {
   trades: boolean;
   positions: boolean;
   notes: boolean;
+  /** Omitted values show all notes belonging to the chart's source. */
+  noteSource?: "original" | "review";
+  noteFilter?: "linked" | "screenshots";
 }
 
 export function normalizeChartAccountOverlay(value?: unknown): ChartAccountOverlaySettings {
@@ -14,10 +17,12 @@ export function normalizeChartAccountOverlay(value?: unknown): ChartAccountOverl
     trades: typeof source.trades === "boolean" ? source.trades : true,
     positions: typeof source.positions === "boolean" ? source.positions : true,
     notes: source.notes === true,
+    ...(source.noteSource === "original" || source.noteSource === "review" ? { noteSource: source.noteSource } : {}),
+    ...(source.noteFilter === "linked" || source.noteFilter === "screenshots" ? { noteFilter: source.noteFilter } : {}),
   };
 }
 
 export function sameChartAccountOverlay(left: ChartAccountOverlaySettings, right: ChartAccountOverlaySettings): boolean {
   return left.accountId === right.accountId && left.trades === right.trades
-    && left.positions === right.positions && left.notes === right.notes;
+    && left.positions === right.positions && left.notes === right.notes && left.noteSource === right.noteSource && left.noteFilter === right.noteFilter;
 }

@@ -49,6 +49,7 @@ export interface IndicatorSubPane {
   pointMetadata?: readonly IndicatorPanePointMetadata[];
   liveCountdown?: IndicatorPaneLiveCountdown;
   pointMetadataFallback?: "latest" | "none";
+  historyNote?: string;
   missingPointText?: string;
   statusText?: string | null;
 }

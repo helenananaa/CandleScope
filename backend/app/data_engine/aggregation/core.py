@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
-from math import isfinite
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -16,7 +15,7 @@ if TYPE_CHECKING:
 
 from .semantics import (
     ClosePolicy, Coverage, CoverageStatus, FieldSummary,
-    combine_coverage, combine_fields, summarize_fields,
+    combine_coverage, combine_fields, summarize_fields, valid_ohlcv,
 )
 
 ALGORITHM_VERSION = "k130-fsum-v1"
@@ -46,9 +45,7 @@ class AcceptedComponent:
             raise ValueError("component must have positive half-open width")
         if self.revision is not None and self.revision.series != self.series:
             raise ValueError("revision must identify the accepted source series")
-        if not all(isfinite(getattr(self.bar, field)) for field in (
-            "open", "high", "low", "close", "volume",
-        )) or self.bar.volume < 0:
+        if not valid_ohlcv((self.bar.open, self.bar.high, self.bar.low, self.bar.close, self.bar.volume)):
             raise ValueError("accepted OHLCV must be finite with nonnegative volume")
 
 

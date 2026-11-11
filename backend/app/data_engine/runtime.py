@@ -48,6 +48,7 @@ from app.core.config import (
     RAW_AGG_TRADE_ARCHIVE_MAX_ROWS_PER_BATCH,
     RAW_AGG_TRADE_ARCHIVE_TARGET_FILE_ROWS,
     RAW_AGG_TRADE_ARCHIVE_STREAMS,
+    REPLAY_AGG_TRADE_ARCHIVE_DIR,
     TRADE_FLOW_BATCH_INTERVAL_SECONDS,
     TRADE_FLOW_DB_PATH,
     TRADE_FLOW_EVENT_QUEUE_SIZE,
@@ -432,6 +433,7 @@ def _build_trade_flow_service(
         rollup_store=rollup_store,
         rollup_writer=rollup_writer,
         raw_archive=raw_archive,
+        verified_archive_root=REPLAY_AGG_TRADE_ARCHIVE_DIR,
         archive_writer=archive_writer,
         command_queue_size=event_queue_size,
         max_repair_trades_per_gap=_positive_int_config(
@@ -1010,7 +1012,6 @@ async def start_data_engine() -> DataEngineRuntime:
             _calendar_resolver,
             registry=history_service.calendars,
         )
-        dm.wire_backfill_reconciler(backfill_engine.reconciler)
 
         backfill_coordinator = BackfillCoordinator(
             storage=storage,

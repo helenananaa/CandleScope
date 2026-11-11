@@ -48,8 +48,8 @@ export const tradingApi = {
     request(path(`/accounts/${id(accountId)}/trades`), signal ? { signal } : {}) as Promise<{ trades: Trade[] }>,
   stats: (accountId: string, query: TradingStatsQuery = {}, signal?: AbortSignal) =>
     request(path(`/accounts/${id(accountId)}/stats${statsQuery(query)}`), signal ? { signal } : {}) as Promise<TradingStats>,
-  trade: (accountId: string, tradeId: string) =>
-    request(path(`/accounts/${id(accountId)}/trades/${id(tradeId)}`)) as Promise<TradeDetail>,
+  trade: (accountId: string, tradeId: string, signal?: AbortSignal) =>
+    request(path(`/accounts/${id(accountId)}/trades/${id(tradeId)}`), signal ? { signal } : {}) as Promise<TradeDetail>,
   excursion: (accountId: string, tradeId: string) =>
     request(path(`/accounts/${id(accountId)}/trades/${id(tradeId)}/excursion`)) as Promise<Excursion>,
   placeOrder: (accountId: string, body: Record<string, unknown>) =>

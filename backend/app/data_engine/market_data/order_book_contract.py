@@ -91,6 +91,11 @@ def order_book_contract(exchange: str, market_type: str) -> dict[str, Any]:
     }
 
 
+def order_book_history_status() -> dict[str, str]:
+    """Both book projections expose current state only."""
+    return {"status": "unavailable", "reason": "source_no_history"}
+
+
 def serialize_record(
     record: Any,
     *,

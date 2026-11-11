@@ -40,6 +40,7 @@ _SUPPORTED_CAPABILITY_SCHEMA_VERSION = 3
 _HISTORY_CADENCES = {"unknown", "regular", "scheduled", "event_driven"}
 _HISTORY_EMPTY_PAGE_SEMANTICS = {
     "unknown",
+    "inconclusive",
     "authoritative_range_empty",
     "terminal_exhaustion",
 }

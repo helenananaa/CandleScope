@@ -70,6 +70,7 @@ export interface LiquidationHistoryPayload {
   count: number;
   data: LiquidationRollup[];
   hasMore: boolean;
+  nextStartMs?: number | null;
   coverage: {
     earliestMs: number | null;
     latestMs: number | null;

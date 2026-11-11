@@ -6,17 +6,18 @@ import type {
   KlineStreamController,
   KlineStreamFactory,
   KlineStreamOptions,
+  KlineStreamSeries,
   KlineStreamSocket,
 } from "../klineContracts.js";
-import type { MarketSeries } from "../marketDataTypes.js";
+import { klineSeriesIdentityQuery } from "../klineSeriesIdentity.js";
 import { isPermanentSubscriptionFailure, parseKlineStreamMessage } from "./klineStreamSubscription.js";
 
 const SOCKET_OPEN = 1;
-type StreamSeries = Pick<MarketSeries, "exchange" | "marketType" | "symbol">;
 
 interface LogicalBatchSubscription {
   clientId: string;
-  series: StreamSeries;
+  series: KlineStreamSeries;
+  wireIdentity: Record<string, string>;
   intervals: IntervalString[];
   options: KlineStreamOptions;
   controller: KlineStreamController;
@@ -83,6 +84,7 @@ export class BatchKlineStreamCoordinator {
     const subscription = {
       clientId,
       series: { ...series },
+      wireIdentity: klineSeriesIdentityQuery(series.exchange, series),
       intervals: canonicalIntervals(options.intervals),
       options,
       controller: null as unknown as KlineStreamController,
@@ -94,6 +96,7 @@ export class BatchKlineStreamCoordinator {
       retryTimer: null,
     };
     subscription.controller = {
+      reconnects: this.reconnects,
       readyState: () => this.socket?.readyState,
       isOpen: () => this.isOpen(),
       send: (payload) => this.sendRaw(payload),
@@ -179,7 +182,10 @@ export class BatchKlineStreamCoordinator {
         this.clearRetry(item);
         item.options.onOpen?.(item.controller);
       });
-      this.sendCommand("subscribe", active);
+      // Open callbacks can reconcile intervals and already submit a subscription.
+      if (this.socket === socket) {
+        this.sendCommand("subscribe", active.filter(item => !item.closed && item.serverState === "absent"));
+      }
     };
     socket.onmessage = (event) => {
       if (this.socket !== socket) return;
@@ -232,6 +238,7 @@ export class BatchKlineStreamCoordinator {
         exchange: item.series.exchange,
         market_type: item.series.marketType,
         symbol: item.series.symbol,
+        ...item.wireIdentity,
         intervals: action === "unsubscribe" ? item.intervals : item.intervals.filter(interval => !item.rejectedIntervals.has(interval)),
       })),
     }));
@@ -275,6 +282,8 @@ export class BatchKlineStreamCoordinator {
       const clientId = text(record.client_id);
       const subscription = this.subscriptions.get(clientId);
       if (!subscription || subscription.closed) return;
+      if (Object.entries(subscription.wireIdentity)
+        .some(([name, value]) => record[name] !== value)) return;
       const result = parseKlineStreamMessage(record);
       if (result.kind === "status") {
         subscription.options.onStreamStatus?.(result.message, subscription.controller);

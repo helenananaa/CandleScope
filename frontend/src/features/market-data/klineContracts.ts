@@ -286,8 +286,10 @@ export type PatchCacheTick = (
   meta: FeedCacheMeta,
 ) => void;
 
+export type KlineStreamSeries = Omit<MarketSeries, "interval">;
+
 export type KlineStreamFactory = (
-  series: Pick<MarketSeries, "exchange" | "marketType" | "symbol">,
+  series: KlineStreamSeries,
   options?: KlineStreamOptions,
 ) => KlineStreamController;
 
@@ -397,6 +399,8 @@ export interface BackfillCompletedOptions {
 }
 
 export interface KlineStreamController {
+  /** A transport close preserves this subscription and retries its socket. */
+  readonly reconnects?: boolean;
   readyState(): number | undefined;
   isOpen(): boolean;
   send(payload: string): boolean;

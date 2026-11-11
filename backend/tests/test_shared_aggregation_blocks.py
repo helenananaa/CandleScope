@@ -131,6 +131,44 @@ def test_pins_prevent_eviction_then_last_release_allows_lru():
     assert_idle(m)
 
 
+@pytest.mark.parametrize(("total_kib", "owner_kib", "work_kib"), [(64, 48, 8), (256, 160, 32)])
+@pytest.mark.parametrize("reclaimable", [True, False])
+def test_competing_owner_pressure_preserves_leased_blocks(total_kib, owner_kib, work_kib, reclaimable):
+    budget = MemoryBudget(total_kib * 1024)
+    budget.register("history", limit_bytes=budget.total_bytes, usage=lambda: {"estimated_bytes": 0})
+    m = SharedBlockManager(budget=budget, source=Versions(), max_bytes=owner_kib * 1024)
+    work = work_kib * 1024
+    with m.view((SOURCE,)) as view:
+        with m.acquire(key(), view, lambda: build(view, key()), work_bytes=work) as pinned:
+            with m.acquire(key(1), view, lambda: build(view, key(1)), work_bytes=work):
+                pass
+            occupied = m.snapshot()["estimated_bytes"]
+            with m.acquire(key(1), view) as reusable:
+                cached = reusable
+            free = work if reclaimable else 256
+            other_work = budget.total_bytes - occupied - free
+            with budget.reserve("history", other_work):
+                if reclaimable:
+                    with pytest.raises(MemoryBudgetExceeded):
+                        m.acquire(key(2), view, lambda: build(view, key(2)), work_bytes=work,
+                                  reclaim_shared=False)
+                    assert m.snapshot()["evictions"] == 0
+                    with m.acquire(key(2), view, lambda: build(view, key(2)), work_bytes=work):
+                        assert budget.snapshot()["over_budget_bytes"] == 0
+                    assert m.acquire(key(1), view) is None
+                else:
+                    with pytest.raises(MemoryBudgetExceeded):
+                        m.acquire(key(2), view, lambda: build(view, key(2)), work_bytes=work)
+                    with m.acquire(key(1), view) as unchanged:
+                        assert unchanged is cached
+                with m.acquire(key(), view) as unchanged:
+                    assert unchanged is pinned
+                assert m.snapshot()["evictions"] == int(reclaimable)
+    assert_idle(m)
+    m.collect()
+    assert_idle(m, empty=True)
+
+
 def test_closed_lease_handle_does_not_retain_an_evicted_payload():
     import gc
     import weakref
@@ -327,6 +365,30 @@ def test_lru_repeated_revisions_never_accumulate_tombstones_or_retired_values():
         assert len(m._dependencies) <= 1
         assert_idle(m)
     m.close()
+    assert_idle(m, empty=True)
+
+
+def test_unchanged_revision_checks_skip_retained_entry_keys():
+    class TrackedKeys(set):
+        scans = 0
+
+        def __iter__(self):
+            self.scans += 1
+            return super().__iter__()
+
+    m = manager()
+    consume(m, key(0))
+    consume(m, key(1))
+    versions = m._dependencies[(SOURCE, m.source.domain)]
+    tracked = TrackedKeys(versions[1])
+    versions[1] = tracked
+    with m.view((SOURCE,)) as view:
+        with m.acquire(key(0), view) as value:
+            assert value.summary.values.volume == 6
+    assert tracked.scans == 0
+    m.source.amend()
+    m.poll()
+    assert tracked.scans == 1
     assert_idle(m, empty=True)
 
 

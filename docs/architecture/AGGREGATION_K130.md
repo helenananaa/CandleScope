@@ -93,6 +93,7 @@ summary flag; the existing commit owner still decides those transitions.
 | Streaming history | Same fixed reducer after bounded reverse-page assembly | #127 `FixedHistoryStream` |
 | Calendar/session/month history | Shared field reducer and explicit calendar prefix proof | Existing interval/calendar policy |
 | Strict stored reconstruction | Shared fields; actual source calendar ends and explicit closed-source qualification | Reconciler / existing writer |
+| Legacy derived warm start | Replays accepted leaves through the same component reducer. A cached forming row cannot replace a stored trusted close. A held builder is reused only when the leaves, including close evidence and field masks, match. | Warm-start service selects inputs and requests repair. The aggregator owns reconstruction. |
 | Live custom components | Shared fields and range proof after existing snapshot admission | #129 component index and lifecycle |
 | Live amendment/finalizer | One shared coverage proof, including exact target end | Existing finalizer / durable delivery |
 

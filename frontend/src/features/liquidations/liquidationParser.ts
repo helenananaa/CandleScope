@@ -239,13 +239,20 @@ export function parseLiquidationHistoryPayload(
     throw new LiquidationPayloadError(`${path}.count`, "must equal data.length");
   }
   const coverage = record(source.coverage, `${path}.coverage`);
+  const hasMore = boolean(source.has_more, `${path}.has_more`);
+  const nextStartMs = source.next_cursor == null ? source.next_cursor
+    : nonNegativeInteger(record(source.next_cursor, `${path}.next_cursor`).start_ms, `${path}.next_cursor.start_ms`);
+  if (!hasMore && nextStartMs != null) {
+    throw new LiquidationPayloadError(`${path}.next_cursor`, "must be null on the final page");
+  }
   return {
     type: "liquidation.history",
     protocol: LIQUIDATION_PROTOCOL,
     key: parseLiquidationStreamKey(source.key, `${path}.key`),
     count,
     data,
-    hasMore: boolean(source.has_more, `${path}.has_more`),
+    hasMore,
+    ...(nextStartMs !== undefined ? { nextStartMs } : {}),
     coverage: {
       earliestMs: nullableInteger(coverage.earliest_ms, `${path}.coverage.earliest_ms`),
       latestMs: nullableInteger(coverage.latest_ms, `${path}.coverage.latest_ms`),

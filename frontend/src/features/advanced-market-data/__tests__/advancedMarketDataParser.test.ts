@@ -53,7 +53,7 @@ test("history retains acquisition proof and tail expiry while rejecting reversed
   const payload = {
     type: "market.history", key: record().key, count: 0, data: [],
     coverage: { earliest_ms: null, latest_ms: null, complete: false,
-      basis: "native_binance_oi_bounded_query_v1", revalidate_after_ms: 12345,
+      basis: "native_binance_oi_sample_grid_v2", revalidate_after_ms: 12345,
       ranges: [{ start_ms: 100, end_ms: 199 }],
       missing_ranges: [{ start_ms: 200, end_ms: 299 }] },
   };

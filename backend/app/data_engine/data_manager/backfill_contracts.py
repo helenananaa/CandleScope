@@ -8,10 +8,14 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.data_engine.kline_quality import repair_requires_trusted_finality
-from app.data_engine.series_identity import identity_from_metadata
+from app.data_engine.series_identity import KlineSeriesIdentity, identity_from_metadata
+
+if TYPE_CHECKING:
+    from app.data_engine.backfill.native_progress import NativeBackfillProgress
+
 
 BACKFILL_REASON_PRIORITIES: dict[str, int] = {
     "initial_history": 10,
@@ -83,6 +87,26 @@ class RepairRetryDeferred(Exception):
         self.bucket_key = None
 
 
+RepairSeries = tuple[str, str, str, str] | tuple[str, str, str, str, KlineSeriesIdentity]
+
+
+def repair_series_key(
+    exchange: str, market_type: str, symbol: str, interval: str,
+    identity: KlineSeriesIdentity | None = None,
+) -> RepairSeries:
+    route = (
+        str(exchange or "binance").strip().lower(), str(market_type or "spot").strip().lower(),
+        str(symbol or "").strip().upper(), str(interval or "").strip(),
+    )
+    if identity is None or identity.is_legacy_default_for(route[0]):
+        return route
+    return (*route, identity)
+
+
+def repair_series_order(key: RepairSeries) -> tuple[str, ...]:
+    return (*key[:4], *(key[4].storage_values if len(key) == 5 else ()))
+
+
 @dataclass(slots=True)
 class RepairRequest:
     """A single requested historical repair range."""
@@ -101,6 +125,7 @@ class RepairRequest:
     request_id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
     _retry_attempt: int = field(default=1, repr=False)
+    _native_progress: NativeBackfillProgress | None = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if self.priority is None:

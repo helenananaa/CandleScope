@@ -237,6 +237,7 @@ class BackfillPlan:
         estimated_requests:   How many REST API calls are expected.
         estimated_bars:       Total bars expected to be fetched.
         custom_intervals:     List of custom intervals that need aggregation.
+        derived_source_windows: Canonical component windows for local warmup reconstruction.
         metadata:             Arbitrary user-attached metadata.
     """
     gaps: list[GapInfo]
@@ -246,6 +247,7 @@ class BackfillPlan:
     estimated_bars: int = 0
     custom_intervals: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+    derived_source_windows: list[BackfillTask] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {

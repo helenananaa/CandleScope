@@ -325,6 +325,7 @@ class TradingAccountService(JournalService):
             for row in self.store.orders(account_id, status="working", limit=10_000):
                 self.store.update(conn, "orders", {
                     "status": "cancelled", "reason": "account_reset", "updated_at_ms": now,
+                    "cancelled_at_ms": now,
                 }, "id = ?", (row["id"],))
             self.store.insert(conn, "cash_flows", {
                 "id": self.new_id("cf"),
@@ -578,7 +579,7 @@ class TradingAccountService(JournalService):
 
     @_ledger_snapshot
     def trade_detail(self, account_id: str, trade_id: str) -> dict[str, Any]:
-        self._account(account_id)
+        account = self._account(account_id)
         trades = self._trades(account_id)
         trade = next((item for item in trades if item.id == trade_id), None)
         if trade is None:
@@ -615,7 +616,55 @@ class TradingAccountService(JournalService):
             ],
             "linkSuggestions": suggestions,
         })
+        if account["kind"] == "practice":
+            view["protectionOrders"] = self._trade_protection_orders(trade, upper)
         return view
+
+    def _trade_protection_orders(self, trade: Trade, upper: int) -> list[dict[str, Any]]:
+        orders = self.store.all(
+            """SELECT id, type, qty, limit_price, stop_price, parent_id, protection_trade_id,
+                      status, created_at_ms, filled_at_ms, cancelled_at_ms, reason, updated_at_ms
+                 FROM orders
+                WHERE account_id = ? AND exchange = ? AND market_type = ? AND symbol = ?
+                  AND side = ? AND reduce_only = 1 AND type IN ('stop', 'limit')
+                  AND created_at_ms BETWEEN ? AND ?
+                ORDER BY created_at_ms, id""",
+            (trade.account_id, trade.exchange, trade.market_type, trade.symbol,
+             "sell" if trade.direction == "long" else "buy", trade.opened_at_ms, upper),
+        )
+        entry_orders = {leg.order_id for leg in trade.legs if leg.role in {"open", "add"}}
+        protection_orders = []
+        for order in orders:
+            start = order["created_at_ms"]
+            if order["parent_id"] is not None:
+                if order["parent_id"] not in entry_orders:
+                    continue
+            elif order["protection_trade_id"] != trade.id:
+                # Late fills can change which trade appears to contain a legacy order's timestamp.
+                continue
+            end = None
+            if order["status"] == "filled":
+                end = order["filled_at_ms"]
+            elif order["status"] == "cancelled":
+                end = order["cancelled_at_ms"]
+                if end is None and order["reason"] in {"user_cancelled", "account_reset"}:
+                    # These actions took effect immediately on the ledger clock.
+                    end = order["updated_at_ms"]
+            if order["status"] != "working" and (end is None or end < start):
+                continue
+            is_stop = order["type"] == "stop"
+            price = order["stop_price"] if is_stop else order["limit_price"]
+            if price is None or price <= ZERO:
+                continue
+            protection_orders.append({
+                "id": order["id"],
+                "kind": "stopLoss" if is_stop else "takeProfit",
+                "price": dec_str(price),
+                "qty": dec_str(order["qty"]),
+                "activeFromMs": start,
+                "inactiveFromMs": end,
+            })
+        return protection_orders
 
     def trade_excursion(self, account_id: str, trade_id: str) -> dict[str, Any]:
         """MFE/MAE from candles over the holding period (an estimate)."""
@@ -793,6 +842,12 @@ class TradingAccountService(JournalService):
                     code="TRADING_INSUFFICIENT_BALANCE",
                 )
 
+        protection_trade_id = None
+        if reduce_only and order_type in {"stop", "limit"}:
+            protection_trade_id = next(
+                trade.id for trade in trades if trade.status == "open"
+                and (trade.exchange, trade.market_type, trade.symbol) == instrument
+            )
         order_id = self.new_id("ord")
         row = {
             "id": order_id,
@@ -809,6 +864,7 @@ class TradingAccountService(JournalService):
             "oco_group": None,
             "tag": "exit" if reduce_only else "entry",
             "parent_id": None,
+            "protection_trade_id": protection_trade_id,
             "bracket_stop": bracket_stop,
             "bracket_target": bracket_target,
             "status": "working",
@@ -860,6 +916,7 @@ class TradingAccountService(JournalService):
         with self.store.transaction() as conn:
             self.store.update(conn, "orders", {
                 "status": "cancelled", "reason": "user_cancelled", "updated_at_ms": now,
+                "cancelled_at_ms": now,
             }, "id = ? AND status = 'working'", (order_id,))
         stored = self.store.order(order_id)
         assert stored is not None
@@ -927,9 +984,10 @@ class TradingAccountService(JournalService):
                 "filled_at_ms": ts_ms,
                 "updated_at_ms": now,
             }, "id = ?", (order_id,))
-        for order_id, reason in result.cancelled.items():
+        for order_id, (reason, ts_ms) in result.cancelled.items():
             self.store.update(conn, "orders", {
                 "status": "cancelled", "reason": reason, "updated_at_ms": now,
+                "cancelled_at_ms": ts_ms,
             }, "id = ? AND status = 'working'", (order_id,))
 
     # ── practice feeds ──────────────────────────────────────────

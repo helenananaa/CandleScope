@@ -85,6 +85,25 @@ class OkxPlugin(BuiltinExchangePlugin):
                     max_concurrency=concurrency,
                     cooldown_seconds=max(backoff, 2.0),
                 ),
+                # A shared IP bucket is conservative across instruments.
+                RateLimitRule(
+                    name="okx_contract_open_interest_history",
+                    bucket_key="okx:contract-open-interest-history:ip",
+                    endpoint="/api/v5/rubik/stat/contracts/open-interest-history",
+                    capacity=effective_rate_limit_capacity(10, safety_factor),
+                    refill_interval_seconds=2.0,
+                    max_concurrency=concurrency,
+                    cooldown_seconds=max(backoff, 2.0),
+                ),
+                RateLimitRule(
+                    name="okx_funding_rate_history",
+                    bucket_key="okx:funding-rate-history:ip",
+                    endpoint="/api/v5/public/funding-rate-history",
+                    capacity=effective_rate_limit_capacity(10, safety_factor),
+                    refill_interval_seconds=2.0,
+                    max_concurrency=concurrency,
+                    cooldown_seconds=max(backoff, 2.0),
+                ),
                 RateLimitRule(
                     name="okx_history_candles",
                     bucket_key="okx:history-candles:ip",

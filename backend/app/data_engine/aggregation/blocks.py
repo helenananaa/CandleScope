@@ -6,10 +6,11 @@ No lock is held across a builder, revision I/O, or a joined flight wait.
 """
 from __future__ import annotations
 
+from bisect import bisect_left
 from collections import OrderedDict
 from concurrent.futures import Future, CancelledError, TimeoutError
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import threading
 from typing import TYPE_CHECKING
 
@@ -53,6 +54,17 @@ class SharedBlock:
     key: BlockKey
     version: int
     summary: AggregateSummary
+
+
+@dataclass(frozen=True, slots=True)
+class BlockRevisionRanges:
+    previous: InputRevision
+    current: InputRevision
+    spans: tuple[tuple[int, int], ...]  # Sorted disjoint inclusive footprints.
+
+    def touches(self, key):
+        before_end = bisect_left(self.spans, (key.end_ms,)) - 1
+        return before_end >= 0 and self.spans[before_end][1] >= key.start_ms
 
 
 @dataclass(eq=False)
@@ -140,7 +152,8 @@ class SharedBlockManager:
         self._closed = False
         self._usage = {"estimated_bytes": 0}
         self._metrics = dict(hits=0, builds=0, joins=0, evictions=0,
-                             invalidations=0, stale_builds=0, failures=0, resets=0)
+                             invalidations=0, revalidated_blocks=0,
+                             stale_builds=0, failures=0, resets=0)
         self._last_error = None
         # This callback intentionally does not acquire _lock. Budget admission
         # owns its own lock; reversing that order would deadlock other owners.
@@ -195,8 +208,12 @@ class SharedBlockManager:
                     if reset:
                         self._reset()
                     for change in changes:
-                        self._invalidate(change[0], change[1],
-                                         except_version=change[2] if len(change) > 2 else None)
+                        if isinstance(change, BlockRevisionRanges):
+                            self._invalidate(change.current.series, change.current.domain,
+                                             except_version=change.current.version, proof=change)
+                        else:
+                            self._invalidate(change[0], change[1],
+                                             except_version=change[2] if len(change) > 2 else None)
                     # Observe changed tokens even if the adapter's notification
                     # was coalesced or delivered more than once.
                     for revision in revisions:
@@ -231,9 +248,8 @@ class SharedBlockManager:
                 raise BlockRevisionChanged("block manager changed during acquisition")
             if len(self._views) >= self.max_views:
                 raise MemoryBudgetExceeded("block read-view capacity exhausted")
-            self._make_room(size)
             view = BlockView(self, revisions, generation, size)
-            with self.budget.reserve(self.owner, size) as admission:
+            with self.budget.reserve(self.owner, size, reclaim=self._make_room) as admission:
                 def commit():
                     self._views.add(view)
                     self._bytes += size
@@ -265,41 +281,77 @@ class SharedBlockManager:
         entry.valid = False
         for dep in entry.block.summary.revisions:
             index_key = (dep.series, dep.domain)
-            indexed = self._dependencies.get(index_key)
-            if indexed is not None:
-                indexed.discard(key)
-                if not indexed:
-                    del self._dependencies[index_key]
+            by_version = self._dependencies[index_key]
+            indexed = by_version[dep.version]
+            indexed.remove(key)
+            if not indexed:
+                del by_version[dep.version]
+            if not by_version:
+                del self._dependencies[index_key]
         if entry.pins:
             self._retired.add(entry)
         else:
             self._bytes -= entry.size
 
-    def _make_room(self, extra, slots=0, exclude=None):
-        if self._bytes + extra <= self.max_bytes and len(self._entries) + len(self._retired) + slots <= self.max_entries:
-            return
-        for key, entry in tuple(self._entries.items()):
-            if self._bytes + extra <= self.max_bytes and len(self._entries) + len(self._retired) + slots <= self.max_entries:
-                break
+    def _make_room(self, bytes_needed, *, slots=0, exclude=None):
+        slots_needed = len(self._entries) + len(self._retired) + slots - self.max_entries
+        if bytes_needed <= 0 and slots_needed <= 0:
+            return True
+        # Keep only the LRU victims. A saturated cache usually needs a single
+        # eviction, so copying every retained entry would dominate small builds.
+        victims = []
+        for key, entry in self._entries.items():
             if not entry.pins and key != exclude:
-                self._drop(key, entry)
-                self._metrics["evictions"] += 1
+                victims.append((key, entry))
+                bytes_needed -= entry.size
+                slots_needed -= 1
+                if bytes_needed <= 0 and slots_needed <= 0:
+                    break
+        if bytes_needed > 0 or slots_needed > 0:
+            return False
+        for key, entry in victims:
+            self._drop(key, entry)
+            self._metrics["evictions"] += 1
         self._publish_usage()
-        if self._bytes + extra > self.max_bytes or len(self._entries) + len(self._retired) + slots > self.max_entries:
-            raise MemoryBudgetExceeded("block capacity is held by active consumers")
+        return True
 
-    def _invalidate(self, series, domain, *, except_version=None, start_ms=None, end_ms=None):
+    def _invalidate(self, series, domain, *, except_version=None, start_ms=None, end_ms=None,
+                    proof=None):
         def affected(deps):
             return any(d.series == series and d.domain == domain
                        and d.version != except_version for d in deps)
         def overlaps(key):
             return ((start_ms is None or key.end_ms > start_ms)
                     and (end_ms is None or key.start_ms < end_ms))
-        for key in tuple(self._dependencies.get((series, domain), ())):
-            entry = self._entries[key]
-            if affected(entry.block.summary.revisions) and overlaps(key[0]):
-                self._drop(key, entry)
-                self._metrics["invalidations"] += 1
+        # View acquisition and publication recheck unchanged revisions on
+        # every page. Only visit entries in older revision buckets.
+        by_version = self._dependencies.get((series, domain), {})
+        rekeyed = {}
+        for version, keys in tuple(by_version.items()):
+            if version == except_version:
+                continue
+            for key in tuple(keys):
+                if overlaps(key[0]):
+                    entry = self._entries[key]
+                    if (proof is not None and key[0].series == series and key[1] == (proof.previous,)
+                            and not entry.pins and not proof.touches(key[0])):
+                        new_key = key[0], (proof.current,)
+                        if new_key not in self._entries:
+                            keys.remove(key)
+                            by_version.setdefault(proof.current.version, set()).add(new_key)
+                            rekeyed[key] = new_key
+                            entry.block = replace(entry.block, summary=replace(
+                                entry.block.summary, revisions=new_key[1]))
+                            self._metrics["revalidated_blocks"] += 1
+                            continue
+                    self._drop(key, entry)
+                    self._metrics["invalidations"] += 1
+            if rekeyed and not keys:
+                by_version.pop(version, None)
+        if rekeyed:
+            # Preserve LRU order. An input revision check does not count as a hit.
+            self._entries = OrderedDict((rekeyed.get(key, key), entry)
+                                        for key, entry in self._entries.items())
         for (key, deps), flight in self._flights.items():
             if affected(deps) and overlaps(key):
                 flight.invalid = True
@@ -358,14 +410,15 @@ class SharedBlockManager:
             self._bytes -= entry.size
         self._publish_usage()
 
-    def acquire(self, key, view, build=None, *, work_bytes=64 * 1024, cancel=None):
+    def acquire(self, key, view, build=None, *, work_bytes=64 * 1024, cancel=None, reclaim_shared=True):
         """Join one pure build; cancellation only releases this participant.
 
         Inputs and output construction must fit work_bytes (caller-owned input
         pages remain charged to their existing owner). Returned leases expire
         with their view. A caller may not publish results until view exit passes.
         With no builder this is a cache-only lookup: a miss returns None without
-        I/O, a flight, or waiting for another consumer's build.
+        I/O, a flight, or waiting for another consumer's build. Optional
+        consumers can avoid displacing retained values under shared pressure.
         """
         cache_key = (key, view.revisions)
         owner = False
@@ -377,8 +430,8 @@ class SharedBlockManager:
                 raise MemoryBudgetExceeded("block lease capacity exhausted")
             entry = self._entries.get(cache_key)
             if entry is not None:
-                self._make_room(self.LEASE_BYTES, exclude=cache_key)
-                with self.budget.reserve(self.owner, self.LEASE_BYTES) as admission:
+                with self.budget.reserve(self.owner, self.LEASE_BYTES,
+                                         reclaim=lambda shortfall: self._make_room(shortfall, exclude=cache_key)) as admission:
                     def commit():
                         self._bytes += self.LEASE_BYTES
                         self._claimed += 1
@@ -398,8 +451,9 @@ class SharedBlockManager:
                     raise MemoryBudgetExceeded("block working allowance exceeds its owner budget")
                 if len(self._flights) >= self.max_flights:
                     raise MemoryBudgetExceeded("block build capacity exhausted")
-                self._make_room(work_bytes + 2048)
-                reservation = self.budget.reserve(self.owner, work_bytes + 2048)
+                reservation = self.budget.reserve(
+                    self.owner, work_bytes + 2048, reclaim=self._make_room, reclaim_shared=reclaim_shared,
+                )
                 admission = reservation.__enter__()
                 flight = _Flight(Future(), owner_thread=threading.get_ident())
                 self._flights[cache_key] = flight
@@ -422,7 +476,9 @@ class SharedBlockManager:
                         or summary.coverage.ranges[0][0] < key.start_ms
                         or summary.coverage.ranges[-1][1] > key.end_ms):
                     raise ValueError("block result violates its identity, bounds or dependency contract")
-                size = retained_size((cache_key, summary))[0] + 1024 + 256 * len(view.revisions)
+                # Include the dependency set and its version bucket, even
+                # when this block is the only member of that bucket.
+                size = retained_size((cache_key, summary))[0] + 1024 + 512 * len(view.revisions)
                 if size > work_bytes:
                     raise MemoryBudgetExceeded("block result exceeds declared build allowance")
                 with self._lock:
@@ -432,14 +488,14 @@ class SharedBlockManager:
                     self._version += 1
                     entry = _Entry(SharedBlock(key, self._version, summary), size, flight.participants)
                     cost = size + entry.pins * self.LEASE_BYTES
-                    self._make_room(cost, slots=1)
                     def commit():
                         self._entries[cache_key] = entry
                         for dep in view.revisions:
-                            self._dependencies.setdefault((dep.series, dep.domain), set()).add(cache_key)
+                            versions = self._dependencies.setdefault((dep.series, dep.domain), {})
+                            versions.setdefault(dep.version, set()).add(cache_key)
                         self._bytes += cost
                         self._publish_usage()
-                    admission.retain(cost, commit)
+                    admission.retain(cost, commit, reclaim=lambda shortfall: self._make_room(shortfall, slots=1))
                     flight.future.set_result(entry)
             except BaseException as exc:
                 with self._lock:

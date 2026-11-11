@@ -1,4 +1,5 @@
 import { continuousEnglish } from "./continuousMessages.js";
+import { tradeHistoryEnglish } from "./tradeHistoryMessages.js";
 import { replayNoteEnglish } from "./replayNoteMessages.js";
 import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
@@ -9,6 +10,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ar = {
   ...continuousEnglish,
+  ...tradeHistoryEnglish,
   ...replayNoteEnglish,
   ...historyStudyEnglish,
   "chartTime.title": "Go to date",
@@ -2213,6 +2215,7 @@ export const ar = {
   "replay.liq.adlHint": "دفتر الطرف المقابل {count} صفوف · محاكاة حتمية وليست طابوراً خاصاً تاريخياً للبورصة",
   "local.import": "استيراد CSV",
   "local.localOnly": "تبقى البيانات على هذا الجهاز",
+  "local.marketTradeCoverage": "استخدم ملف صفقات السوق بأرقام تسلسل متتالية من المصدر. حدد نطاق UTC. تبقى البيانات المستوردة محلية.",
   "local.chooseFile": "اختيار ملف CSV",
   "local.baseAsset": "أصل الكمية (وحدة الحجم)",
   "local.quoteAsset": "أصل تسعير السعر",
@@ -4305,6 +4308,7 @@ export const ar = {
   "research.data.noContext": "هذه المدخلة بلا هوية مجموعة مجمَّدة.",
   "research.data.available": "مجموعات محلية متاحة",
   "research.execution.precise": "تبقى دقة تسلسل الصفقات وافتراضات التنفيذ صريحة وثابتة لكل تشغيل.",
+  "research.execution.preciseArchiveHint": "يستخدم التنزيل التلقائي صفقات العقود الآجلة المجمّعة من Binance USD-M. اختر نطاقًا زمنيًا ضمن أيام UTC المنتهية.",
   "research.execution.python": "تُهيَّأ بيئات بايثون والنماذج الخارجية داخل تطبيق البحث هذا فقط.",
   "research.execution.general": "تبقى عناصر تحكم التنفيذ في نطاق المهمة المحددة ولا تعدِّل تشغيلاً مكتملاً أبداً.",
   "research.run.none": "لم يُحدَّد BacktestRun.",

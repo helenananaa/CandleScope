@@ -213,6 +213,92 @@ def _write_verified_input(
     return zip_path, checksum_path, source_url
 
 
+def test_explicit_redownload_resumes_exact_retired_day_without_refetch(tmp_path, monkeypatch):
+    from contextlib import nullcontext
+
+    from app.data_engine.storage.raw_trade_archive import VerifiedTradeDayRetired
+    from app.replay.trade_import import redownload_official_day
+
+    archive_dir = tmp_path / "archive"
+    archive = ParquetRawAggTradeArchive(archive_dir, max_rows_per_file=2)
+    zip_path, checksum_path, source_url = _write_verified_input(tmp_path, _rows())
+    identity = dict(exchange="binance", market_type="futures", symbol=SYMBOL)
+    import_local_verified_day(
+        archive, zip_path=zip_path, checksum_path=checksum_path, source_url=source_url, **identity, day=DAY,
+    )
+    receipt, = archive_dir.glob("exchange=*/market_type=*/symbol=*/date=*/_verified_import.json")
+    originals = {file.name: file.read_bytes() for file in receipt.parent.iterdir()}
+    expected = archive.freeze_dataset(**identity, start_time_ms=START_MS, end_time_ms=START_MS + 2_000)
+    day_id = "sha256:" + hashlib.sha256(originals[receipt.name]).hexdigest()
+
+    def approve(_partition, _receipt):
+        return nullcontext(True)
+
+    move = dict(identity=tuple(identity.values()), day=DAY.isoformat(), day_id=day_id, authorize=approve)
+    assert archive.move_verified_retention_day(**move, restore=False) == "RETIRED"
+    reclaimed = archive.reclaim_retired_verified_day(**move, max_files=4, max_bytes=100_000)
+    assert reclaimed.status == "RECLAIMED"
+    retired = receipt.parent.with_name(".retired-" + receipt.parent.name)
+    checksum_url = source_url + ".CHECKSUM"
+    transfer_bytes = zip_path.stat().st_size + checksum_path.stat().st_size
+    calls = []
+
+    def opener(url, **_kwargs):
+        calls.append(url)
+        return io.BytesIO((checksum_path if url == checksum_url else zip_path).read_bytes())
+
+    def redownload(*, restore_budget=reclaimed.removed_logical_bytes, transfer_budget=transfer_bytes):
+        return redownload_official_day(
+            archive_dir=archive_dir, **identity, day=DAY, day_id=day_id,
+            max_download_bytes=transfer_budget, max_restore_bytes=restore_budget, opener=opener,
+        )
+
+    with pytest.raises(VerifiedTradeDayRetired):
+        import_official_date_range(
+            archive_dir=archive_dir, **identity, start=DAY, end=DAY, require_checksum=True, opener=opener,
+        )
+    assert not calls
+    checksum_original = checksum_path.read_bytes()
+    checksum_path.write_text(f"{'0' * 64}  {zip_path.name}\n", encoding="utf-8")
+    with pytest.raises(ReplayTradeImportError, match="differs from the retired receipt"):
+        redownload()
+    assert calls == [checksum_url]
+    checksum_path.write_bytes(checksum_original)
+    calls.clear()
+    with pytest.raises(ReplayTradeImportError, match="byte limit"):
+        redownload(transfer_budget=transfer_bytes - 1)
+    assert calls == [checksum_url, source_url]
+    calls.clear()
+    assert redownload(restore_budget=reclaimed.removed_logical_bytes - 1) == "RESTORE_BUDGET_EXCEEDED"
+    assert sorted(file.name for file in retired.iterdir()) == ["_reclaim_started", receipt.name]
+    assert not receipt.parent.exists()
+
+    original_replace = Path.replace
+    calls.clear()
+
+    def interrupt(source, target):
+        result = original_replace(source, target)
+        if target.parent == retired:
+            raise OSError("injected after restoring first file")
+        return result
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "replace", interrupt)
+        with pytest.raises(OSError, match="after restoring first file"):
+            redownload()
+    assert calls == [checksum_url, source_url]
+    assert not receipt.parent.exists()
+    with pytest.raises(VerifiedTradeDayRetired):
+        archive.require_day_not_retired(tuple(identity.values()), DAY.isoformat())
+    calls.clear()
+    assert redownload() == "RESTORED"
+    assert redownload() == "RESTORED"
+    assert not calls
+    assert not retired.exists()
+    assert {file.name: file.read_bytes() for file in receipt.parent.iterdir()} == originals
+    assert archive.freeze_dataset(**identity, start_time_ms=START_MS, end_time_ms=START_MS + 2_000) == expected
+
+
 def test_verified_import_is_idempotent_and_freezes_checksum_generation(
     tmp_path: Path,
 ) -> None:

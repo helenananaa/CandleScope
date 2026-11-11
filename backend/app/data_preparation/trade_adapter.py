@@ -9,11 +9,20 @@ import zipfile
 from weakref import WeakValueDictionary
 
 from app.data_engine.storage.raw_trade_archive import RawAggTradeDatasetRef, ParquetRawAggTradeArchive
-from app.replay.trade_import import import_official_date_range, ReplayTradeImportError
+from app.replay.trade_import import (
+    import_official_date_range, ReplayTradeImportError, TradeArchiveAcquisitionBusy,
+    official_trade_object_missing, trade_archive_day_acquisition,
+)
 
 from .models import PreparationError
 
 DAY_MS = 86_400_000
+TRADE_DAY_COOLDOWN_MS = 15 * 60_000
+
+
+def _unavailable_day(retry_at_ms: int | None) -> PreparationError:
+    return PreparationError("TRADE_DAY_UNAVAILABLE", "The official trade package is unavailable for this UTC day",
+                            retry_at_ms=retry_at_ms)
 
 
 class TradePreparationAdapter:
@@ -23,14 +32,20 @@ class TradePreparationAdapter:
         # freeze method can download outside our budget/receipt lifecycle.
         # Preparation owns acquisition; inspect and freeze its local cache only.
         local = getattr(archive, "cache", None)
-        self.archive = local if isinstance(local, ParquetRawAggTradeArchive) else archive
+        self._publishes_wrapped_cache = isinstance(local, ParquetRawAggTradeArchive)
+        self.archive = local if self._publishes_wrapped_cache else archive
         self.importer = importer
         self._days: WeakValueDictionary = WeakValueDictionary()
+
+    @property
+    def can_import_official(self):
+        return (getattr(self.archive, "enabled", False) and hasattr(self.archive, "root")
+                and (self._publishes_wrapped_cache or not getattr(self.archive, "read_only", False)))
 
     def validate(self, requirement, now_ms):
         if self.archive is None or not getattr(self.archive, "enabled", False):
             raise PreparationError("TRADE_ARCHIVE_UNAVAILABLE", "Verified trade archive is unavailable")
-        if not hasattr(self.archive, "root"):
+        if not self.can_import_official:
             raise PreparationError("TRADE_ARCHIVE_READ_ONLY", "Automatic trade imports require a local archive")
         if (requirement.exchange != "binance" or requirement.market_type != "futures"
                 or not requirement.symbol.isalnum()):
@@ -45,7 +60,7 @@ class TradePreparationAdapter:
                        exchange=requirement.exchange, market_type=requirement.market_type,
                        symbol=requirement.symbol))
 
-    def _import_day(self, requirement, date, repository):
+    def _import_day(self, requirement, date, repository, day_key):
         token = None
         download_limit = 256 * 1024**2
         if repository is not None:
@@ -78,12 +93,35 @@ class TradePreparationAdapter:
                     ((path, "trade_archive") for path in partition.rglob("*") if path.is_file()), reservation=token)
                 repository.check_physical_budget()
         except BaseException as exc:
+            if official_trade_object_missing(exc):
+                # The importer removed temporary bytes and did not quarantine
+                # a missing object. Release its reservation with the cooldown.
+                retry_at = (repository.defer_trade_day(*day_key, cooldown_ms=TRADE_DAY_COOLDOWN_MS, reservation=token)
+                            if token is not None else None)
+                raise _unavailable_day(retry_at) from exc
             if token is not None:
                 repository.abandon_publication(token)
             if (download_limit < 256 * 1024**2 and isinstance(exc, ReplayTradeImportError)
                     and str(exc) == "official aggregate-trade object exceeds its byte limit"):
                 raise PreparationError("STORAGE_BUDGET", "Official trade package exceeds the remaining download allowance") from exc
             raise
+
+    def _acquire_day(self, requirement, date, repository):
+        self.archive.root.mkdir(parents=True, exist_ok=True)
+        with trade_archive_day_acquisition(
+            self.archive, exchange=requirement.exchange, market_type=requirement.market_type,
+            symbol=requirement.symbol, day=date,
+        ) as missing:
+            if not missing:
+                return
+            key = (requirement.exchange, requirement.market_type, requirement.symbol,
+                   requirement.start_ms // DAY_MS * DAY_MS)
+            retry_at = repository.trade_day_retry_at(*key) if repository is not None else None
+            if retry_at is not None:
+                raise _unavailable_day(retry_at)
+            if shutil.disk_usage(self.archive.root).free < 1024**3:
+                raise PreparationError("STORAGE_BUDGET", "Trade import requires 1 GiB of free working space")
+            self._import_day(requirement, date, repository, key)
 
     async def acquire(self, requirement, storage_call, *, repository=None):
         # Orchestrator fragments never cross UTC days. Different partial requests
@@ -93,12 +131,11 @@ class TradePreparationAdapter:
         lock = self._days.setdefault(key, asyncio.Lock())
         async with lock:
             if not await storage_call(self._covered, requirement):
-                self.archive.root.mkdir(parents=True, exist_ok=True)
-                if shutil.disk_usage(self.archive.root).free < 1024**3:
-                    raise PreparationError("STORAGE_BUDGET", "Trade import requires 1 GiB of free working space")
                 date = datetime.fromtimestamp(day * DAY_MS / 1000, timezone.utc).date()
                 try:
-                    await storage_call(self._import_day, requirement, date, repository)
+                    await storage_call(self._acquire_day, requirement, date, repository)
+                except TradeArchiveAcquisitionBusy as exc:
+                    raise PreparationError("TRADE_ACQUISITION_BUSY", str(exc), retryable=True) from exc
                 except ReplayTradeImportError as exc:
                     retryable = str(exc).startswith("failed to download official object:") or "time budget" in str(exc)
                     raise PreparationError("TRADE_IMPORT_FAILED", str(exc), retryable=retryable) from exc

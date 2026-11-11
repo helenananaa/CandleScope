@@ -92,6 +92,76 @@ def test_current_compact_history_prefix_commits_under_same_source_transaction(jo
     assert journal.commit('current-prefix-close')['phase'] == 'committed'
 
 
+@pytest.mark.parametrize("interference", ["disjoint", "overlap", "missing_receipt"])
+def test_derived_close_requires_complete_disjoint_footprints(journal, interference):
+    old_source = payload()["storage_row"]
+    old_target = {**old_source, "open_time": 0}
+    klines_repo.upsert_klines("BTCUSDT", "1m", [old_source], source="backfill")
+    klines_repo.upsert_klines("BTCUSDT", "2m", [old_target], source="backfill_aggregated")
+
+    derived = payload()
+    derived.update(interval="2m", derived=True)
+    derived["storage_row"].update(open_time=240_000, close_time=359_999)
+    derived["bar"]["time"] = 240
+    journal.enqueue("derived-close", derived)
+    sibling = {**derived, "interval": "4m", "storage_row": {**derived["storage_row"], "close_time": 479_999}}
+    journal.enqueue("sibling-close", sibling)
+
+    if interference == "overlap":
+        # An overlapping source write remains relevant even when the last
+        # change to that same source came from an older historical bucket.
+        inside = {**old_source, "open_time": 240_000, "close_time": 299_999}
+        klines_repo.upsert_klines("BTCUSDT", "1m", [inside], source="backfill")
+    klines_repo.upsert_klines("BTCUSDT", "1m", [{**old_source, "volume": 11}], source="backfill")
+    klines_repo.upsert_klines("BTCUSDT", "2m", [{**old_target, "volume": 11}], source="backfill_aggregated")
+    if interference == "missing_receipt":
+        with klines_repo._connect() as conn:
+            conn.execute("DELETE FROM kline_block_changes WHERE revision=(SELECT MAX(revision) FROM kline_block_changes)")
+
+    reopened = klines_repo.KlinesRepoAdapter().bar_delivery
+    result = reopened.commit("derived-close")
+    if interference != "disjoint":
+        assert result["phase"] == "rejected" and result["recovery_required"] == 1
+        assert result["canonical_row"] is None
+        return
+    assert result["phase"] == "committed" and result["canonical_row"]["volume"] == 10
+    reopened.acknowledge("derived-close")
+    retry = reopened.commit("derived-close")
+    assert retry["phase"] == "published"
+    assert retry["committed_revision"] == result["committed_revision"]
+    assert reopened.commit("sibling-close")["phase"] == "committed"
+
+
+@pytest.mark.parametrize("delete_open", [0, 240_000])
+def test_prior_sibling_proof_survives_only_a_disjoint_later_deletion(journal, delete_open):
+    source = payload()["storage_row"]
+    klines_repo.upsert_klines("BTCUSDT", "1m", [source], source="backfill")
+    klines_repo.upsert_klines("BTCUSDT", "2m", [{**source, "open_time": 0}], source="backfill_aggregated")
+    with klines_repo._connect() as conn:
+        acquired = klines_repo.current_revision(conn)
+    sibling = payload()
+    sibling.update(interval="2m", derived=True)
+    sibling["storage_row"].update(open_time=240_000, close_time=359_999)
+    sibling["bar"]["time"] = 240
+    journal.enqueue("earlier-sibling", sibling)
+    first = journal.commit("earlier-sibling")
+    assert first["phase"] == "committed" and first["written_revision"] > acquired
+    journal.acknowledge("earlier-sibling")
+    journal.enqueue("same-row", sibling)
+    replay = journal.commit("same-row")
+    assert replay["phase"] == "committed" and replay["written_revision"] == 0
+    journal.acknowledge("same-row")
+
+    klines_repo.KlinesRepoAdapter().delete_bars(
+        "BTCUSDT", "2m", start_ms=delete_open, end_ms=delete_open + 119_999,
+    )
+    later = {**sibling, "interval": "4m", "acquisition_revision": acquired,
+             "storage_row": {**sibling["storage_row"], "close_time": 479_999}}
+    journal.enqueue("later-close", later)
+    result = journal.commit("later-close")
+    assert result["phase"] == ("rejected" if delete_open else "committed")
+
+
 @pytest.mark.parametrize("mutation", ["repair", "delete"])
 @pytest.mark.parametrize("other_open", [0, 120_000])
 def test_disjoint_history_change_does_not_reject_a_fresh_native_close(journal, mutation, other_open):

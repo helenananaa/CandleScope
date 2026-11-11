@@ -1,6 +1,7 @@
 """Validated replay inputs shared by transports and preparation services."""
 from __future__ import annotations
 
+from datetime import date
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 from app.core.config import REPLAY_SETTINGS
@@ -16,6 +17,33 @@ _MAX_HORIZON_MS = REPLAY_SETTINGS.max_horizon_days * 86_400_000
 
 class _StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+class ReplayRawTradeRetentionDayPayload(_StrictModel):
+    symbol: str = Field(pattern=r"^[A-Z0-9]{1,64}$")
+    day: date
+    day_id: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+
+
+class ReplayRawTradeRetentionPolicyPayload(ReplayRawTradeRetentionDayPayload):
+    expected_revision: int = Field(ge=0, le=MAX_COUNTER)
+    retain_until_ms: int | None = Field(ge=0, le=MAX_TIMESTAMP_MS)
+
+
+class ReplayRawTradeRetentionPlanPayload(ReplayRawTradeRetentionDayPayload):
+    max_files: int = Field(ge=1, le=8192)
+    max_bytes: int = Field(ge=1, le=MAX_COUNTER)
+
+
+class ReplayRawTradeRetentionRunPayload(ReplayRawTradeRetentionDayPayload):
+    plan_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    action: Literal["RETIRE", "RECLAIM"]
+
+
+class ReplayRawTradeRetentionRecoverPayload(ReplayRawTradeRetentionDayPayload):
+    action: Literal["RESTORE", "REDOWNLOAD"]
+    max_download_bytes: int | None = Field(default=None, ge=1, le=2 * 1024**3)
+    max_restore_bytes: int | None = Field(default=None, ge=1, le=MAX_COUNTER)
 
 
 class ReplayCommandPayload(_StrictModel):

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
+from dataclasses import replace
+
 from app.data_engine.data_manager.backfill_coordinator import RepairRequest
-from app.data_engine.storage.gap_ledger import GapLedger
+from app.data_engine.storage.gap_ledger import NATIVE_PROGRESS_FIELD, GapLedger
 
 
 def _request() -> RepairRequest:
@@ -14,6 +17,93 @@ def _request() -> RepairRequest:
         market_type="spot",
         request_id="gap",
     )
+
+
+def test_bybit_chunk_cannot_shorten_its_parent_cooldown(tmp_path, monkeypatch) -> None:
+    from app.data_engine.storage import gap_ledger
+
+    now = 1_800_000_000_000
+    monkeypatch.setattr(gap_ledger, "_now_ms", lambda: now)
+    ledger = GapLedger(tmp_path / "klines.sqlite")
+    parent = replace(_request(), exchange="bybit", market_type="swap.inverse")
+    first = replace(parent, end_ms=0, metadata={"ledger_range": {"start_ms": 0, "end_ms": 60_000}})
+    second = replace(first, start_ms=60_000, end_ms=60_000)
+    ledger.upsert_detected(parent)
+    deadline = now + 10_000
+    ledger.mark_retry_wait(first, attempt=1, error="cooldown", next_retry_at=deadline)
+    ledger.mark_started(second, attempt=1)
+    assert ledger.get_status(parent)["next_retry_at"] == deadline
+    assert ledger.list_reconcilable(stale_before_ms=now, due_before_ms=now) == []
+    ledger.mark_retry_wait(second, attempt=1, error="metadata", next_retry_at=now + 500)
+    assert ledger.get_status(parent)["next_retry_at"] == deadline
+    now = deadline + 1
+    ledger.mark_started(first, attempt=1)
+    assert ledger.get_status(parent)["next_retry_at"] is None
+
+
+def test_bybit_interrupted_chunks_merge_receipts_for_the_same_ticket(tmp_path) -> None:
+    ledger = GapLedger(tmp_path / "klines.sqlite")
+    first_receipt = {"start_ms": 0, "end_ms": 0, "digest": "a" * 64, "written": []}
+    second_receipt = {"start_ms": 60_000, "end_ms": 60_000, "digest": "b" * 64, "written": []}
+    parent = replace(_request(), exchange="bybit", market_type="swap.inverse",
+                     metadata={NATIVE_PROGRESS_FIELD: [first_receipt]})
+    first = replace(parent, end_ms=0, metadata={"ledger_range": {"start_ms": 0, "end_ms": 60_000}})
+    second = replace(first, start_ms=60_000, end_ms=60_000)
+    ledger.upsert_detected(parent)
+
+    def defer(request, receipts):
+        ledger.mark_retry_wait(request, attempt=1, error="cooldown",
+                               next_retry_at=9_999_999_999_999, native_progress=receipts)
+
+    def receipts_by_open():
+        metadata = json.loads(ledger.get_status(parent)["metadata_json"])
+        return {receipt["start_ms"]: receipt for receipt in metadata.get(NATIVE_PROGRESS_FIELD, [])}
+
+    defer(second, [second_receipt])
+    assert receipts_by_open() == {0: first_receipt, 60_000: second_receipt}
+    defer(second, [])
+    assert receipts_by_open() == {0: first_receipt, 60_000: second_receipt}
+
+    replacement = {**first_receipt, "digest": "c" * 64}
+    defer(first, [replacement])
+    assert receipts_by_open() == {0: replacement, 60_000: second_receipt}
+    ledger.mark_native_chunk_verified(first, 0, replacement)
+    assert receipts_by_open() == {60_000: second_receipt}
+
+    successor = replace(parent, request_id="successor", metadata={})
+    ledger.upsert_detected(successor)
+    defer(first, [first_receipt])
+    assert receipts_by_open() == {}
+
+    defer(replace(second, request_id=successor.request_id), [second_receipt])
+    assert receipts_by_open() == {60_000: second_receipt}
+    assert ledger.finalize_parent(successor, status="filled")
+    assert receipts_by_open() == {}
+
+
+def test_covering_status_prefers_due_bybit_receipt_owner_over_stale_child(tmp_path, monkeypatch) -> None:
+    from app.data_engine.storage import gap_ledger
+
+    now = 1_800_000_000_000
+    monkeypatch.setattr(gap_ledger, "_now_ms", lambda: now)
+    ledger = GapLedger(tmp_path / "klines.sqlite")
+    parent = replace(_request(), exchange="bybit", market_type="swap.inverse",
+                     metadata={"acquisition_revision": 0})
+    child = replace(parent, start_ms=60_000, request_id="child", metadata={})
+    ledger.upsert_detected(parent)
+    ledger.mark_retry_wait(parent, attempt=1, error="cooldown", next_retry_at=now + 500,
+                           native_progress=[{"start_ms": 0, "end_ms": 0, "digest": "a" * 64, "written": []}])
+    ledger.upsert_detected(child)
+    now += 901_000
+    lookup = dict(exchange=parent.exchange, market_type=parent.market_type, symbol=parent.symbol,
+                  interval=parent.interval, start_ms=child.start_ms, end_ms=child.end_ms)
+    covering = ledger.get_covering_status(**lookup)
+    assert covering["repair_ticket"] == parent.request_id
+    assert covering["has_native_receipts"] == 1
+    assert ledger.finalize_parent(parent, status="filled")
+    covering = ledger.get_covering_status(**lookup)
+    assert covering["repair_ticket"] == child.request_id
+    assert covering["has_native_receipts"] == 0
 
 
 def test_gap_ledger_preserves_missing_count_when_resolution_count_unknown(tmp_path) -> None:
@@ -487,3 +577,91 @@ def test_gap_ledger_backlog_age_uses_first_seen_not_recent_recheck(
     assert health["age_buckets"]["lt_5m"] == 0
     assert health["last_checked_age_buckets"]["lt_5m"] == 1
     assert health["oldest_open_at"] == 0
+
+
+def test_equal_ranges_keep_separate_identity_tickets_and_checkpoints(tmp_path) -> None:
+    from dataclasses import replace
+
+    from app.data_engine.bar_basis import GATE_INVERSE_CONTRACTS
+    from app.data_engine.series_identity import KlineSeriesIdentity
+
+    ledger = GapLedger(tmp_path / "klines.sqlite")
+    legacy = RepairRequest(
+        exchange="gate", market_type="swap.inverse", symbol="BTC/USD:BTC",
+        interval="5m", start_ms=0, end_ms=300_000, request_id="legacy",
+    )
+    inverse = replace(legacy, request_id="inverse", metadata={
+        "series_identity": GATE_INVERSE_CONTRACTS.to_dict(),
+    })
+    quote = replace(legacy, request_id="quote", metadata={
+        "series_identity": KlineSeriesIdentity.for_exchange("gate", volume_semantics="quote_asset").to_dict(),
+    })
+    ledger.upsert_detected_many([legacy, inverse, quote])
+    for request in (legacy, inverse, quote):
+        ledger.mark_resolved(request, status="failed", error=request.request_id)
+
+    reopened = GapLedger(tmp_path / "klines.sqlite")
+    rows = {row["repair_ticket"]: row for row in reopened.list_open()}
+    assert set(rows) == {"legacy", "inverse", "quote"}
+    assert len({row["id"] for row in rows.values()}) == 3
+    inverse_row = rows["inverse"]
+    assert reopened.checkpoint_reconciliation_row(
+        inverse_row["id"], cursor_ms=300_000, scanned_bars=1,
+        next_retry_at=1, row_snapshot=inverse_row,
+    )
+    assert "reconciliation_checkpoint" in reopened.get_status(inverse)["metadata_json"]
+    assert "reconciliation_checkpoint" not in reopened.get_status(legacy)["metadata_json"]
+    assert "reconciliation_checkpoint" not in reopened.get_status(quote)["metadata_json"]
+
+    assert reopened.finalize_parent(
+        inverse, status="filled", coverage_start_ms=0, coverage_end_ms=599_999,
+    )
+    assert reopened.get_status(inverse)["status"] == "filled"
+    assert reopened.get_status(legacy)["last_error"] == "legacy"
+    assert reopened.get_status(quote)["last_error"] == "quote"
+    assert reopened.health_summary()["open_total"] == 2
+
+
+def test_legacy_writer_can_update_same_database_through_rollback(tmp_path) -> None:
+    import json
+    import sqlite3
+    from dataclasses import replace
+
+    from app.data_engine.bar_basis import GATE_INVERSE_CONTRACTS
+
+    db = tmp_path / "klines.sqlite"
+    ledger = GapLedger(db)
+    legacy = RepairRequest(
+        exchange="gate", market_type="swap.inverse", symbol="BTC/USD:BTC",
+        interval="5m", start_ms=0, end_ms=300_000, request_id="legacy",
+    )
+    inverse = replace(legacy, request_id="inverse", metadata={
+        "series_identity": GATE_INVERSE_CONTRACTS.to_dict(),
+    })
+    # This is the old writer's unique conflict target. Simulate the old
+    # release writing both before upgrade and after a rollback.
+    def old_write(request, state):
+        with sqlite3.connect(db) as conn:
+            conn.execute("""
+                INSERT INTO kline_gap_ledger (
+                    exchange, market_type, symbol, interval, start_ms, end_ms,
+                    expected_count, missing_count, status, reason, repair_ticket,
+                    first_seen_at, last_seen_at, metadata_json
+                ) VALUES (?, ?, ?, ?, ?, ?, 2, 2, ?, 'legacy-writer', ?, 1, 1, ?)
+                ON CONFLICT(exchange, market_type, symbol, interval, start_ms, end_ms)
+                DO UPDATE SET status = excluded.status
+            """, (
+                request.exchange, request.market_type, request.symbol, request.interval,
+                request.start_ms, request.end_ms, state, request.request_id, json.dumps(request.metadata),
+            ))
+
+    old_write(inverse, "failed")
+    upgraded = GapLedger(db)
+    assert upgraded.get_status(inverse)["status"] == "failed"
+    assert upgraded.get_status(legacy) is None
+    old_write(legacy, "queued")
+    old_write(legacy, "retry_wait")
+    again = GapLedger(db)
+    assert again.get_status(legacy)["status"] == "retry_wait"
+    assert again.get_status(inverse)["status"] == "failed"
+    assert len(again.list_open()) == 2

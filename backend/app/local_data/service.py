@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import errno
 import hashlib
 import json
 from itertools import groupby
@@ -16,7 +17,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path, PurePosixPath
-from typing import Any, Callable, Iterable, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from app.data_engine.bar_basis import BarBasis
 
@@ -35,6 +36,10 @@ from app.market_dataset.adapters.contract_aux import (
     write_contract_history,
 )
 from app.market_dataset.snapshot import MarketDatasetError, canonical_json
+
+
+if TYPE_CHECKING:
+    from .user_market_trades import UserMarketTradeOptions
 
 
 DATASET_ID_RE = re.compile(r"^local-[0-9a-f]{32}$")
@@ -208,6 +213,8 @@ class LocalDatasetService:
         instrument = self._import_instrument(options)
         if options.dataset_id is not None and (self.root / dataset_id).exists():
             current = self.get_manifest(dataset_id)
+            if current.get("market_trade_input") is not None:
+                raise LocalDatasetError("Use the market-trade importer to revise this dataset", code="dataset_identity_mismatch")
             if instrument is None:
                 # Omitted optional fields retain this dataset's established
                 # units, including imports through older CSV clients.
@@ -257,6 +264,116 @@ class LocalDatasetService:
         finally:
             if staging is not None and staging.exists():
                 shutil.rmtree(staging)
+
+    def import_user_market_trades(self, csv_path: Path, options: UserMarketTradeOptions) -> dict[str, Any]:
+        from app.simulation.trade_bar_builder import TradeBarBuilder
+
+        from .user_market_trades import USER_TRADE_SOURCE, read_market_trade_csv
+
+        self.start()
+        declaration = options.declaration()
+        name = options.name.strip()
+        symbol = options.symbol.strip().upper()
+        dataset_id = options.dataset_id or f"local-{uuid.uuid4().hex}"
+        if not name or not symbol or DATASET_ID_RE.fullmatch(dataset_id) is None:
+            raise LocalDatasetError("A name, symbol, and valid dataset identity are required")
+        bar_options = LocalImportOptions(name=name, symbol=symbol, interval="1m", volume_required=True,
+                                         timestamp_unit=options.timestamp_unit,
+                                         base_asset=options.base_asset, quote_asset=options.quote_asset)
+        instrument = self._import_instrument(bar_options)
+        if instrument is None or instrument["base_asset"] == instrument["quote_asset"]:
+            raise LocalDatasetError("Declare distinct quantity and price assets", code="trade_units_required")
+        if options.dataset_id is not None:
+            current = self.get_manifest(dataset_id)
+            if (current.get("source") != USER_TRADE_SOURCE or current["symbol"] != symbol
+                    or current.get("instrument") != instrument
+                    or current.get("market_trade_input", {}).get("kind") != options.trade_kind):
+                raise LocalDatasetError("A revision must retain the trade kind, symbol and units", code="dataset_identity_mismatch")
+
+        rows = read_market_trade_csv(csv_path, options)
+        interval = parse_interval_spec("1m")
+        assert interval is not None
+        builder = TradeBarBuilder(interval.canonical)
+        completed = []
+        for ordinal, row in enumerate(rows, start=1):
+            completed.extend(builder.push(row.event(ordinal)))
+        # The local file explicitly declares its exclusive coverage boundary.
+        # This final projection is for the library chart. The strategy still
+        # derives bars only as the execution clock reveals the original trades.
+        completed.extend(builder.close_before(options.coverage_end_ms))
+        bars = [
+            _NormalizedBar(
+                open_time_ms=event.payload["open_time_ms"], close_time_ms=event.payload["close_time_ms"],
+                open=event.payload["open"], high=event.payload["high"], low=event.payload["low"],
+                close=event.payload["close"], volume=event.payload["volume"], quote_volume=None, trades=None,
+                taker_buy_base=None, taker_buy_quote=None, is_closed=True, source_row=event.sequence,
+            )
+            for event in completed
+        ]
+        digest = hashlib.sha256(canonical_json({
+            "source": USER_TRADE_SOURCE, "symbol": symbol, "instrument": instrument, **declaration,
+        }).encode("utf-8"))
+        for row in rows:
+            digest.update(b"\n")
+            digest.update(canonical_json(row.storage_row()).encode("utf-8"))
+        epoch_hex = digest.hexdigest()
+        staging = self.root / ".staging" / f"{dataset_id}-{uuid.uuid4().hex}"
+        staging.mkdir()
+        try:
+            manifest = self._write_staging_dataset(
+                staging, dataset_id=dataset_id, epoch_hex=epoch_hex, name=name, symbol=symbol,
+                interval=interval, options=bar_options, bars=bars, excluded_ranges=[],
+                resolved_columns={"time": "time", "volume": "quantity"},
+                source=USER_TRADE_SOURCE, importer="candlescope.local.market-trades.v1",
+                manifest_metadata={
+                    "instrument": instrument, "exchange": "local", "market_type": "spot",
+                    "market_trade_input": {**declaration, "row_count": len(rows),
+                                           "first_sequence": rows[0].sequence, "last_sequence": rows[-1].sequence},
+                },
+                market_trades=(row.storage_row() for row in rows),
+            )
+            return self._publish(staging, dataset_id, epoch_hex, manifest)
+        finally:
+            if staging.exists():
+                shutil.rmtree(staging)
+
+    def open_user_market_trade_revision(self, dataset_id: str, data_epoch: str) -> tuple[dict[str, Any], Path]:
+        from .user_market_trades import USER_TRADE_SOURCE
+
+        manifest, revision = self._validated_pinned_revision_dir(dataset_id, data_epoch)
+        if manifest.get("source") != USER_TRADE_SOURCE or not isinstance(manifest.get("market_trade_input"), dict):
+            raise LocalDatasetError("Dataset is not a user market-trade source", code="FIDELITY_UNSUPPORTED")
+        return manifest, revision / "bars.sqlite"
+
+    def read_user_market_trades(
+        self, dataset_id: str, data_epoch: str, *, start_ms: int, end_ms: int, max_rows: int,
+        include_rows: bool,
+    ) -> tuple[dict[str, Any], int, list[tuple[int, int, str, str, int]]]:
+        manifest, database = self.open_user_market_trade_revision(dataset_id, data_epoch)
+        declaration = manifest["market_trade_input"]
+        if not declaration.get("coverage_start_ms", end_ms + 1) <= start_ms <= end_ms < declaration.get("coverage_end_ms_exclusive", 0):
+            raise LocalDatasetError("Selected window is outside the declared trade coverage", code="DATA_COVERAGE_INCOMPLETE")
+        try:
+            connection = sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)
+            try:
+                parameters = (start_ms, end_ms)
+                count, first, last = connection.execute(
+                    "SELECT COUNT(*), MIN(source_sequence), MAX(source_sequence) FROM market_trades WHERE time_ms BETWEEN ? AND ?",
+                    parameters,
+                ).fetchone()
+                if count < 1 or last - first + 1 != count:
+                    raise LocalDatasetError("Trade window has missing or invalid source sequence", code="DATA_GAP_REJECTED")
+                if count > max_rows:
+                    raise LocalDatasetError("Trade window exceeds the event limit", code="BUDGET_EXCEEDED")
+                rows = connection.execute(
+                    "SELECT time_ms, source_sequence, price, quantity, buyer_maker FROM market_trades "
+                    "WHERE time_ms BETWEEN ? AND ? ORDER BY time_ms, source_sequence", parameters,
+                ).fetchall() if include_rows else []
+            finally:
+                connection.close()
+        except sqlite3.DatabaseError as exc:
+            raise LocalDatasetError("Market trade payload is unreadable", code="DATA_SNAPSHOT_MISMATCH") from exc
+        return manifest, count, rows
 
     def freeze_host_bars(
         self,
@@ -1023,6 +1140,7 @@ class LocalDatasetService:
         source: str = "local_dataset",
         importer: str = "candlescope.local.csv.v1",
         manifest_metadata: Mapping[str, Any] | None = None,
+        market_trades: Iterable[tuple[int, int, str, str, bool]] | None = None,
     ) -> dict[str, Any]:
         db_path = staging / "bars.sqlite"
         connection = sqlite3.connect(db_path)
@@ -1084,6 +1202,13 @@ class LocalDatasetService:
                     for gap in excluded_ranges
                 ],
             )
+            if market_trades is not None:
+                connection.execute(
+                    "CREATE TABLE market_trades (time_ms INTEGER NOT NULL, source_sequence INTEGER NOT NULL, "
+                    "price TEXT NOT NULL, quantity TEXT NOT NULL, buyer_maker INTEGER NOT NULL, "
+                    "PRIMARY KEY(time_ms, source_sequence)) WITHOUT ROWID",
+                )
+                connection.executemany("INSERT INTO market_trades VALUES (?, ?, ?, ?, ?)", market_trades)
             check = connection.execute("PRAGMA quick_check").fetchone()
             if not check or check[0] != "ok":
                 raise LocalDatasetError("SQLite integrity validation failed")
@@ -1159,10 +1284,13 @@ class LocalDatasetService:
         dataset_root = self.root / dataset_id
         dataset_root.mkdir(exist_ok=True)
         target = dataset_root / epoch_hex
-        if target.exists():
+        try:
+            os.rename(staging, target)
+        except OSError as exc:
+            if exc.errno not in {errno.EEXIST, errno.ENOTEMPTY} or not target.is_dir():
+                raise
+            # Concurrent publication of the same content epoch already won.
             shutil.rmtree(staging)
-        else:
-            os.replace(staging, target)
         self._write_json(
             dataset_root / "current.json",
             {"data_epoch": manifest["data_epoch"], "revision": epoch_hex},
@@ -1768,6 +1896,49 @@ class LocalDatasetService:
                 }
             )
         return manifest, canonical
+
+    def load_pinned_closed_bars(
+        self,
+        dataset_id: str,
+        *,
+        data_epoch: str,
+        interval: str,
+        through_ms: int | None,
+        limit: int,
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        """Read a bounded chart tail from a pinned imported candle revision."""
+        manifest, revision_dir = self._validated_pinned_revision_dir(dataset_id, data_epoch)
+        if manifest.get("source") != "local_dataset":
+            raise LocalDatasetError("Comparison requires imported candles", code="FIDELITY_UNSUPPORTED")
+        plan = self.resolve_interval(manifest, interval)
+        if through_ms is None:
+            return manifest, []
+        if plan.derived:
+            if plan.factor * limit > 200_000:
+                raise LocalDatasetError("Comparison exceeds the source bar budget", code="BUDGET_EXCEEDED")
+            # Use the first target bucket whose close is later than the
+            # replay boundary. An unfinished bucket cannot supply OHLC.
+            before = plan.target.floor_ms(through_ms + 1)
+            start = before
+            for _ in range(limit):
+                start = plan.target.previous_ms(start)
+            rows = self._read_derived_rows(revision_dir, plan=plan, fetch_limit=limit,
+                                           before_ms=before, start_ms=start)
+            return manifest, [row for row in reversed(rows) if row["is_closed"]]
+        try:
+            connection = sqlite3.connect((revision_dir / "bars.sqlite").as_uri() + "?mode=ro", uri=True)
+            try:
+                connection.row_factory = sqlite3.Row
+                rows = connection.execute(
+                    """SELECT * FROM bars WHERE open_time_ms <= ? AND close_time_ms <= ?
+                       AND is_closed = 1 ORDER BY open_time_ms DESC LIMIT ?""",
+                    (through_ms, through_ms, limit),
+                ).fetchall()
+            finally:
+                connection.close()
+        except sqlite3.DatabaseError as exc:
+            raise LocalDatasetError("Dataset bars are unreadable", code="dataset_corrupt") from exc
+        return manifest, [dict(row) for row in reversed(rows)]
 
     @staticmethod
     def resolve_interval(

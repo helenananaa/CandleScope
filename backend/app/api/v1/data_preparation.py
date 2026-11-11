@@ -1,4 +1,5 @@
 """Preparation tasks are durable; disconnecting an HTTP observer never cancels one."""
+from datetime import datetime, timezone
 from typing import Literal
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -25,6 +26,13 @@ class ReplayPreparationPayload(BaseModel):
     random_by_market: bool = False
 
 
+class PythonBarExecution(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    outputMode: Literal["SIGNAL", "TARGET_POSITION", "ORDER_INTENT"]
+    executionModel: Literal["LEGACY", "V2"]
+    warmupBars: int = Field(ge=0, le=200_000, strict=True)
+
+
 class StrategyLaunchPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
     strategy_revision_id: str = Field(min_length=1, max_length=128)
@@ -32,6 +40,9 @@ class StrategyLaunchPayload(BaseModel):
     pine_contexts: list[RequestedNativeData] = Field(default_factory=list, max_length=16)
     output_mode: Literal["SIGNAL", "TARGET_POSITION", "ORDER_INTENT"] | None = None
     execution_overrides: ResearchExecutionOverrides | None = None
+    python_runtime_mode: Literal["SANDBOXED_LOCAL", "TRUSTED_LOCAL"] | None = None
+    python_trusted_confirmed: bool = False
+    python_bar_execution: PythonBarExecution | None = None
     chart_cell_scope: str | None = Field(default=None, min_length=1, max_length=320)
     strategy_draft_id: str | None = Field(default=None, pattern=r"^draft-[A-Za-z0-9_-]{8,152}$")
 
@@ -250,6 +261,11 @@ async def prepare_strategy(request: Request, payload: StrategyPreparationPayload
     from app.data_engine.interval_policy import parse_interval_spec
     from app.data_preparation.models import canonical
     submission = payload.model_dump(mode="json")
+    if payload.strategy is not None:
+        # Keep the persisted submission identity for retries from older clients.
+        for field in ("python_runtime_mode", "python_trusted_confirmed", "python_bar_execution"):
+            if field not in payload.strategy.model_fields_set:
+                submission["strategy"].pop(field)
     prior = await invoke_async(lambda: service(request).storage(service(request).repository.by_idempotency, payload.idempotency_key))
     if prior is not None:
         if canonical(prior["request"]["intent"].get("submission")) != canonical(submission):
@@ -285,7 +301,20 @@ async def prepare_strategy(request: Request, payload: StrategyPreparationPayload
     if payload.strategy is not None:
         from app.data_preparation.dependency_plan import strategy_warmup, warmup_start
         warmup_bars = await invoke_async(lambda: service(request).storage(strategy_warmup, runtime, payload.strategy.strategy_revision_id, payload.strategy.parameters))
-        if context.range_mode == "ALL_AVAILABLE":
+        profile = payload.strategy.python_bar_execution
+        if profile is not None:
+            if (context.fidelity_preference != "FAST" or context.interval != "1m" or context.range_mode != "CUSTOM"
+                    or payload.strategy.output_mode is not None):
+                raise HTTPException(422, detail={"code": "FIDELITY_UNSUPPORTED", "message": "A continuous profile requires a custom Python 1-minute BAR range"})
+            if not warmup_bars <= profile.warmupBars <= runtime.settings.max_warmup_bars:
+                raise HTTPException(422, detail={"code": "WARMUP_BUDGET", "message": "Saved warmup is incompatible with this strategy"})
+            warmup_bars = profile.warmupBars
+            # A continuing Run already starts with its warmup. Reuse those
+            # first bars instead of acquiring a second warmup before the range.
+            requested_start = start + warmup_bars * 60_000
+            if requested_start >= end:
+                raise HTTPException(422, detail={"code": "WARMUP_RANGE_INSUFFICIENT", "message": "The selected range contains no evaluation bars"})
+        elif context.range_mode == "ALL_AVAILABLE":
             # The first available bars are the warmup; do not invent required
             # history before listing simply because the user chose ALL.
             for _ in range(warmup_bars):
@@ -399,6 +428,163 @@ async def prepare_replay_market(request: Request, payload: ReplayMarketPreparati
     )))
 
 
+class TradeFlowHistoryPreparationPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    idempotency_key: str = Field(min_length=8, max_length=128)
+    exchange: Literal["binance"] = "binance"
+    market_type: Literal["futures"] = "futures"
+    symbol: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9]+$")
+    start_ms: int = Field(ge=0)
+    end_ms: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_minute_window(self):
+        if self.start_ms % 60_000 or self.end_ms % 60_000:
+            raise ValueError("TradeFlow history boundaries must be minute opens")
+        if self.end_ms < self.start_ms or (self.end_ms - self.start_ms) // 60_000 >= 5001:
+            raise ValueError("TradeFlow history must span between 1 and 5001 minutes")
+        return self
+
+
+@router.post("/trade-flow-history", status_code=202)
+async def prepare_trade_flow_history(request: Request, payload: TradeFlowHistoryPreparationPayload):
+    """Explicitly obtain missing official UTC days for read-only TradeFlow history."""
+    return await invoke_async(lambda: _prepare_trade_flow_history(request, payload))
+
+
+async def _prepare_trade_flow_history(request: Request, payload: TradeFlowHistoryPreparationPayload):
+    from app.core.config import REPLAY_AGG_TRADE_ARCHIVE_DIR
+    from app.core.executors import run_archive
+    from app.data_engine.market_data.models import MarketChannel, MarketStreamKey
+    from app.data_engine.market_data.trade_flow import BUCKET_INTERVAL_MS
+    from app.data_preparation.models import fingerprint
+    from app.data_preparation.trade_adapter import DAY_MS
+
+    instance = service(request)
+    start, end = payload.start_ms, payload.end_ms
+    scope = payload.model_dump(exclude={"idempotency_key"})
+    scope["symbol"] = payload.symbol.upper()
+    key = "trade-flow-history-" + fingerprint(payload.idempotency_key)
+    projection_unverified = "trade_archive_projection_unverified"
+    integrity_unverified = "trade_archive_integrity_unverified"
+
+    def result(job, unavailable):
+        status = "local"
+        if job is not None:
+            status = "preparation"
+        elif any(item["reason"] == integrity_unverified for item in unavailable):
+            status = "integrity_unverified"
+        elif any(item["reason"] == projection_unverified for item in unavailable):
+            status = "projection_unverified"
+        elif unavailable:
+            status = "unavailable"
+        return {
+            "mode": "fill_missing",
+            "status": status,
+            "requested_range": {"start_ms": start, "end_ms": end},
+            "unavailable_ranges": sorted(unavailable, key=lambda item: item["start_ms"]),
+            "job": job,
+        }
+
+    async def existing():
+        job = await instance.storage(instance.repository.by_idempotency, key)
+        if job is not None and job["request"]["intent"].get("trade_flow_history") != scope:
+            raise PreparationError("IDEMPOTENCY_CONFLICT", "Key belongs to a different TradeFlow history request")
+        return job
+
+    old = await existing()
+    if old is not None:
+        return result(old, old["request"]["intent"]["unavailable_ranges"])
+
+    dm = getattr(request.app.state, "data_manager", None)
+    if not getattr(dm, "trade_flow_ready", False):
+        raise HTTPException(503, detail={"code": "TRADE_FLOW_UNAVAILABLE", "message": "TradeFlow is unavailable"})
+    identity = {name: scope[name] for name in ("exchange", "market_type", "symbol")}
+    stream_key = MarketStreamKey.build(
+        identity["exchange"], identity["market_type"], identity["symbol"], MarketChannel.AGG_TRADE,
+    )
+    history = await dm.read_trade_flow_history(
+        stream_key, start_ms=start, end_ms=end, limit=(end - start) // BUCKET_INTERVAL_MS + 1,
+    )
+    complete = history.verified_empty_opens.union(
+        row["bucket_start_ms"] for row in history.rows if row["is_complete"] and row["is_final"]
+    )
+    today = instance.repository.now() // DAY_MS * DAY_MS
+    past_days = {}
+    unavailable = []
+
+    def add_unavailable(ranges, reason, *, retry_at_ms=None):
+        timing = {"retry_at_ms": retry_at_ms} if retry_at_ms is not None else {}
+        unavailable.extend(
+            {"start_ms": first, "end_ms": last, "reason": reason, **timing}
+            for first, last in ranges
+        )
+
+    for day in range(start // DAY_MS * DAY_MS, end + 1, DAY_MS):
+        first, last = max(day, start), min(day + DAY_MS - BUCKET_INTERVAL_MS, end)
+        ranges = []
+        for opened in range(first, last + 1, BUCKET_INTERVAL_MS):
+            if opened in complete:
+                continue
+            if ranges and ranges[-1][1] + BUCKET_INTERVAL_MS == opened:
+                ranges[-1] = (ranges[-1][0], opened)
+            else:
+                ranges.append((opened, opened))
+        if not ranges:
+            continue
+        if day < today:
+            past_days[day] = ranges
+        else:
+            add_unavailable(ranges, "trade_day_unpublished", retry_at_ms=day + DAY_MS)
+    if not past_days:
+        return result(None, unavailable)
+
+    trades = instance.adapter.trades
+    archive = trades.archive
+    if not trades.can_import_official or archive.root.resolve() != REPLAY_AGG_TRADE_ARCHIVE_DIR.resolve():
+        raise PreparationError("TRADE_ARCHIVE_UNAVAILABLE", "TradeFlow preparation requires the configured writable replay archive")
+    missing_days = []
+    for day, ranges in past_days.items():
+        date = datetime.fromtimestamp(day // 1000, timezone.utc).date().isoformat()
+        try:
+            committed = await run_archive(archive.has_verified_day, **identity, day=date)
+        except (OSError, RuntimeError, ValueError):
+            add_unavailable(ranges, integrity_unverified)
+            continue
+        if committed:
+            # The verified inventory and the bounded minute projection prove
+            # different things. Never re-download a day solely to reproject it.
+            add_unavailable(ranges, projection_unverified)
+            continue
+        retry_at = await instance.storage(instance.repository.trade_day_retry_at, **identity, day_ms=day)
+        if retry_at is not None:
+            add_unavailable(ranges, "trade_day_archive_unavailable", retry_at_ms=retry_at)
+        else:
+            missing_days.append(day)
+    if not missing_days:
+        return result(None, unavailable)
+
+    spec = PreparationRequest(
+        idempotency_key=key, consumer="PREFETCH",
+        requirements=[
+            Requirement(**identity, role="TRADES", start_ms=day, end_ms=day + DAY_MS)
+            for day in missing_days
+        ],
+        intent={"trade_flow_history": scope, "unavailable_ranges": unavailable},
+    )
+    try:
+        job = await instance.submit(spec)
+    except PreparationError as exc:
+        if exc.code != "IDEMPOTENCY_CONFLICT":
+            raise
+        # Another request with the same key may have planned against a newer
+        # local archive snapshot. The original scope owns the stable job.
+        job = await existing()
+        if job is None:
+            raise
+    return result(job, job["request"]["intent"]["unavailable_ranges"])
+
+
 def service(request: Request):
     instance = getattr(request.app.state, "data_preparation_service", None)
     if instance is None:
@@ -438,9 +624,7 @@ def capabilities(request: Request):
     adapter = instance.adapter
     replay = getattr(adapter, "replay_service", None)
     bar_reason = import_unavailable_reason(replay)
-    archive = getattr(getattr(adapter, "trades", None), "archive", None)
-    trade_ready = (archive is not None and getattr(archive, "enabled", False)
-                   and hasattr(archive, "root") and not getattr(archive, "read_only", False))
+    trade_ready = bool(getattr(getattr(adapter, "trades", None), "can_import_official", False))
     exact_account = getattr(getattr(getattr(replay, "training", None), "account_history", None), "enabled", False)
     return {"enabled": instance.enabled, "roles": ["BARS", *(["TRADES"] if trade_ready else [])],
             "replay_sources": {"BAR": instance.enabled and bar_reason is None,

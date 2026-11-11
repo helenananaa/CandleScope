@@ -94,6 +94,7 @@ from app.data_engine.market_data.catalog import (
     MarketDataProviderDescriptor,
 )
 from app.data_engine.market_data.models import MarketChannel, MarketStreamKey
+from app.data_engine.market_data.trade_flow import TradeHistoryRead
 from app.data_engine.market_data.ports import (
     AdvancedMarketDataPort,
     FullOrderBookPort,
@@ -104,6 +105,7 @@ from app.data_engine.market_data.ports import (
 from app.data_engine.series_identity import (
     KlineSeriesIdentity,
     identity_from_mapping,
+    identity_from_metadata,
     resolve_kline_series_identity,
 )
 from app.exchanges import supports_history_identity
@@ -150,7 +152,7 @@ from .models import (
 from .maintenance import MaintenanceService, RepairRequester
 from .price_cache import PriceSnapshot, PriceSnapshotCache, normalize_price_key, price_key
 from .query import BackfillTrigger, QueryEngine
-from .backfill_contracts import priority_for_reason
+from .backfill_contracts import RepairSeries, repair_series_key, repair_series_order, priority_for_reason
 from .retention import RetentionService
 from .runtime_pressure import (
     disk_pressure_snapshot,
@@ -239,13 +241,6 @@ _FULL_ORDER_BOOK_PROVIDER = MarketDataProviderDescriptor(
 )
 
 
-class BackfillReconcilerLike(Protocol):
-    """Minimal backfill reconciler contract used during runtime wiring."""
-
-    def set_bar_aggregator(self, aggregator: BarAggregator) -> None:
-        ...
-
-
 class PriceStreamControllerLike(Protocol):
     """Optional controller contract for DataManager-owned price streams."""
 
@@ -326,6 +321,7 @@ class DataManager(DataManagerCore):
             cache=self.cache,
             event_bus=self.event_bus,
             interval_resolver=self.interval_resolver,
+            has_stream_lease=lambda key: key in self._stream_leases,
         )
         self.query_engine = QueryEngine(
             cache=self.cache,
@@ -464,8 +460,12 @@ class DataManager(DataManagerCore):
         from app.core.config import HISTORY_PREFIX_ENABLED
         from app.data_engine.bar_aggregator.history_prefix_runtime import HistoryPrefixRuntime
         from .history_prefix import HistoryPrefixReader
-        self.history_prefix_runtime = (HistoryPrefixRuntime(HistoryPrefixReader(self.query_engine), self.bar_aggregator,
-                                      self.aggregator_bridge._require_recovery) if HISTORY_PREFIX_ENABLED else None)
+        self.history_prefix_runtime = (
+            HistoryPrefixRuntime(
+                HistoryPrefixReader(self.query_engine), self.bar_aggregator,
+                self.aggregator_bridge._require_recovery, flush_delivery=self.aggregator_bridge.delivery.flush,
+            ) if HISTORY_PREFIX_ENABLED else None
+        )
         self.bar_aggregator.history_prefix_runtime = self.history_prefix_runtime
         self.warm_start.history_prefix_runtime = self.history_prefix_runtime
 
@@ -479,7 +479,6 @@ class DataManager(DataManagerCore):
         self.coordinator.set_gap_handler(self._handle_ingestion_gap)
         self.maintenance = MaintenanceService(
             storage_provider=lambda: self.query_engine.storage,
-            aggregator_config_snapshot=lambda: self.bar_aggregator.config.snapshot(),
             cache_invalidator=self.cache_invalidate,
             bars_backfilled=self.on_bars_backfilled,
             active_targets=self.bar_aggregator.get_targets,
@@ -631,13 +630,6 @@ class DataManager(DataManagerCore):
     def full_order_book_ready(self) -> bool:
         return self._full_order_book_service is not None
 
-    def wire_backfill_reconciler(self, reconciler: BackfillReconcilerLike) -> None:
-        """Attach this manager's BarAggregator to a backfill reconciler."""
-        set_bar_aggregator = getattr(reconciler, "set_bar_aggregator", None)
-        if not callable(set_bar_aggregator):
-            raise TypeError("reconciler must expose set_bar_aggregator()")
-        set_bar_aggregator(self.bar_aggregator)
-
     async def emit_event(self, event: DataEvent) -> None:
         """Emit a DataEvent through the manager-owned event bus."""
         await self.event_bus.emit(event)
@@ -650,16 +642,16 @@ class DataManager(DataManagerCore):
         """Return configured prewarm intervals for runtime startup scans."""
         return self.coordinator.prewarm_intervals()
 
-    def gap_audit_series(self) -> list[tuple[str, str, str, str]]:
+    def gap_audit_series(self) -> list[RepairSeries]:
         """Return exact series that should be included in background gap audits."""
         series = self._gap_audit_tracked_series()
         try:
             series |= self._gap_audit_stored_series()
         except Exception:
             logger.exception("Failed to list storage series for gap audit")
-        return sorted(item for item in series if item[2] and item[3])
+        return sorted((item for item in series if item[2] and item[3]), key=repair_series_order)
 
-    async def gap_audit_series_async(self) -> list[tuple[str, str, str, str]]:
+    async def gap_audit_series_async(self) -> list[RepairSeries]:
         """Return gap-audit series without listing storage on the event loop.
 
         Prewarm and aggregator targets are read on the event-loop thread that
@@ -671,14 +663,14 @@ class DataManager(DataManagerCore):
             series |= await run_storage(self._gap_audit_stored_series)
         except Exception:
             logger.exception("Failed to list storage series for gap audit")
-        return sorted(item for item in series if item[2] and item[3])
+        return sorted((item for item in series if item[2] and item[3]), key=repair_series_order)
 
-    def gap_audit_tail_series(self) -> list[tuple[str, str, str, str]]:
+    def gap_audit_tail_series(self) -> list[RepairSeries]:
         """Return live/prewarm series whose closed tail should stay current."""
-        return sorted(item for item in self._gap_audit_tracked_series() if item[2] and item[3])
+        return sorted((item for item in self._gap_audit_tracked_series() if item[2] and item[3]), key=repair_series_order)
 
-    def _gap_audit_tracked_series(self) -> set[tuple[str, str, str, str]]:
-        series: set[tuple[str, str, str, str]] = set()
+    def _gap_audit_tracked_series(self) -> set[RepairSeries]:
+        series: set[RepairSeries] = set()
         for exchange, market_type, symbol in self.prewarm_targets():
             for interval in self.prewarm_intervals():
                 series.add((
@@ -687,27 +679,31 @@ class DataManager(DataManagerCore):
                     symbol.upper().strip(),
                     interval,
                 ))
-        for exchange, market_type, symbol, interval in self.bar_aggregator.get_targets():
-            series.add((
+        for exchange, market_type, symbol, interval, identity in self.bar_aggregator.get_series_targets():
+            series.add(repair_series_key(
                 exchange.strip().lower(),
                 self._normalize_market_type(market_type),
-                symbol.upper().strip(),
-                interval,
+                symbol, interval, identity,
             ))
         return series
 
-    def _gap_audit_stored_series(self) -> set[tuple[str, str, str, str]]:
+    def _gap_audit_stored_series(self) -> set[RepairSeries]:
         """List stored series for gap audits; a blocking SQLite read."""
-        series: set[tuple[str, str, str, str]] = set()
-        list_series = getattr(self.query_engine.storage, "list_series", None)
+        series: set[RepairSeries] = set()
+        storage = self.query_engine.storage
+        list_series = getattr(storage, "list_all_series", None)
+        if not callable(list_series):
+            list_series = getattr(storage, "list_series", None)
         if not callable(list_series):
             return series
         for row in list_series(custom_only=False):
-            series.add((
-                str(row.get("exchange") or "binance").strip().lower(),
+            exchange = str(row.get("exchange") or "binance").strip().lower()
+            series.add(repair_series_key(
+                exchange,
                 self._normalize_market_type(row.get("market_type") or "spot"),
                 str(row.get("symbol") or "").upper().strip(),
                 str(row.get("interval") or "").strip(),
+                identity_from_mapping(exchange, row),
             ))
         return series
 
@@ -911,6 +907,8 @@ class DataManager(DataManagerCore):
         end_ms: int,
         exchange: str = "binance",
         market_type: str = "spot",
+        *,
+        series_identity: KlineSeriesIdentity | None = None,
     ) -> dict[str, Any] | None:
         """Return a cached exact/covering repair cooldown, if one exists."""
         lookup = self._backfill_suppression_lookup
@@ -924,6 +922,8 @@ class DataManager(DataManagerCore):
                 int(end_ms),
                 str(exchange or "binance").strip().lower(),
                 self._normalize_market_type(market_type),
+                **({"series_identity": series_identity}
+                   if series_identity is not None and not series_identity.is_legacy_default_for(exchange) else {}),
             )
         except Exception:
             logger.exception("Backfill suppression lookup failed")
@@ -1382,6 +1382,7 @@ class DataManager(DataManagerCore):
                 repair_end_ms,
                 missing.exchange,
                 missing.market_type,
+                series_identity=result_identity,
             )
             if suppression is not None:
                 suppressions.append({
@@ -1579,6 +1580,7 @@ class DataManager(DataManagerCore):
             end_ms,
             exchange,
             market_type,
+            series_identity=identity_from_metadata(exchange, metadata),
         ) is not None:
             return False
         self._call_backfill_trigger(
@@ -1758,6 +1760,9 @@ class DataManager(DataManagerCore):
         **kwargs: Any,
     ) -> list[Any]:
         return await self.trades.history(key, **kwargs)
+
+    async def read_trade_flow_history(self, key: MarketStreamKey, **kwargs: Any) -> TradeHistoryRead:
+        return await self.trades.read_history(key, **kwargs)
 
     def attach_trade_flow(self, keys: list[MarketStreamKey], **kwargs: Any) -> Any:
         return self.trades.attach(keys, **kwargs)

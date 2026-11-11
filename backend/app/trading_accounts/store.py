@@ -16,7 +16,7 @@ from typing import Any, Iterator
 
 from .models import dec_str
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -64,6 +64,8 @@ CREATE TABLE IF NOT EXISTS orders (
     fill_price TEXT,
     filled_qty TEXT,
     filled_at_ms INTEGER,
+    cancelled_at_ms INTEGER,
+    protection_trade_id TEXT,
     reason TEXT
 );
 CREATE INDEX IF NOT EXISTS orders_working ON orders(status, exchange, market_type, symbol);
@@ -111,6 +113,7 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     symbol TEXT NOT NULL,
     kind TEXT NOT NULL,
     trade_id TEXT,
+    trade_linked_at_ms INTEGER,
     created_at_ms INTEGER NOT NULL,
     updated_at_ms INTEGER NOT NULL,
     market_time_ms INTEGER,
@@ -189,6 +192,14 @@ class TradingStore:
             for table in ("accounts", "cash_flows", "orders", "fills", "practice_cursors", "journal_entries", "journal_revisions", "snapshots"):
                 for operation in ("INSERT", "UPDATE", "DELETE"):
                     conn.execute(f"CREATE TRIGGER IF NOT EXISTS ledger_state_{table}_{operation.lower()} AFTER {operation} ON {table} BEGIN UPDATE ledger_state_revision SET sequence=sequence+1 WHERE id=1; END")
+            order_columns = {row[1] for row in conn.execute("PRAGMA table_info(orders)")}
+            if "cancelled_at_ms" not in order_columns:
+                conn.execute("ALTER TABLE orders ADD COLUMN cancelled_at_ms INTEGER")
+            if "protection_trade_id" not in order_columns:
+                conn.execute("ALTER TABLE orders ADD COLUMN protection_trade_id TEXT")
+            entry_columns = {row[1] for row in conn.execute("PRAGMA table_info(journal_entries)")}
+            if "trade_linked_at_ms" not in entry_columns:
+                conn.execute("ALTER TABLE journal_entries ADD COLUMN trade_linked_at_ms INTEGER")
             columns = {row[1] for row in conn.execute("PRAGMA table_info(journal_revisions)")}
             if "history_complete" not in columns:
                 # Old autosaves overwrote revisions. Preserve their bytes, but

@@ -8,6 +8,8 @@ import threading
 import time
 import urllib.request
 import uuid
+from bisect import bisect_left, bisect_right
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -28,7 +30,7 @@ from app.data_engine.storage.raw_trade_archive import (
 )
 
 from .canonical import canonical_sha256
-from .history_archive import ReplayHistoryArchiveError, _atomic_write_json, _file_sha256
+from .history_archive import ReplayHistoryArchiveError, _archive_mutation_lock, _atomic_write_json, _file_sha256
 from .remote_history import ReplayHistoryOrigin, ReplayHistoryOriginUnavailable
 from .metadata_retention import detach_obsolete_generations, remove_retired_generations
 from .trade_import import (
@@ -36,6 +38,7 @@ from .trade_import import (
     import_official_date_range,
     list_official_agg_trade_days,
     official_agg_trade_urls,
+    trade_archive_day_acquisition,
 )
 
 
@@ -409,7 +412,6 @@ class RemoteRawAggTradeArchive:
         # serialize refresh readers and cache publication/retirement, so a
         # cached index cannot lose files between reading its pointer and body.
         self._metadata_io_lock = threading.RLock()
-        self._partition_locks: dict[str, threading.Lock] = {}
         self._index: RemoteAggTradeIndex | None = None
         self._compatibility: tuple[_CompatibilityRecord, ...] = ()
         self._receipt_payloads: dict[str, Mapping[str, object]] = {}
@@ -430,7 +432,17 @@ class RemoteRawAggTradeArchive:
             "official_rows_imported": 0,
             "official_cache_hits": 0,
         }
-        self._refresh()
+        if not self._refresh_selection_metadata() and not self.cache.list_verified_identities():
+            raise ReplayHistoryOriginUnavailable(
+                "remote aggTrade metadata is unavailable and no local verified days exist"
+            )
+
+    def _refresh_selection_metadata(self) -> bool:
+        try:
+            self._refresh()
+        except ReplayHistoryOriginUnavailable:
+            return False
+        return True
 
     def _refresh(self) -> None:
         with self._lock:
@@ -554,18 +566,21 @@ class RemoteRawAggTradeArchive:
         availability: Mapping[str, Mapping[str, object]],
     ) -> None:
         metadata_root = self.root / "_remote_metadata"
-        for relative, payload in {
-            **compatibility,
-            **receipts,
-            **availability,
-        }.items():
-            _atomic_write_json(metadata_root / relative, payload)
-        _atomic_write_json(metadata_root / "trade-index.json", index.to_dict())
+        with _archive_mutation_lock(metadata_root / ".metadata.lock"):
+            for relative, payload in {
+                **compatibility,
+                **receipts,
+                **availability,
+            }.items():
+                _atomic_write_json(metadata_root / relative, payload)
+            _atomic_write_json(metadata_root / "trade-index.json", index.to_dict())
 
     def prune_metadata_cache(self) -> None:
         """Background-only cleanup of obsolete metadata, never trade objects."""
         metadata_root = self.root / "_remote_metadata"
-        with self._metadata_io_lock:
+        if not metadata_root.is_dir():
+            return
+        with self._metadata_io_lock, _archive_mutation_lock(metadata_root / ".metadata.lock"):
             try:
                 index = RemoteAggTradeIndex.from_dict(_read_json(metadata_root / "trade-index.json"))
             except (OSError, ReplayHistoryArchiveError):
@@ -589,19 +604,20 @@ class RemoteRawAggTradeArchive:
             raise ReplayHistoryOriginUnavailable(
                 "remote aggTrade metadata is unavailable and no cache exists"
             )
-        index = RemoteAggTradeIndex.from_dict(_read_json(index_path))
-        compatibility = {
-            item.path: self._read_bound_cached_json(metadata_root, item)
-            for item in index.compatibility_indexes
-        }
-        receipts = {
-            item.path: self._read_bound_cached_json(metadata_root, item)
-            for item in index.verified_receipts
-        }
-        availability = {
-            item.path: self._read_bound_cached_json(metadata_root, item)
-            for item in index.official_availability_indexes
-        }
+        with _archive_mutation_lock(metadata_root / ".metadata.lock"):
+            index = RemoteAggTradeIndex.from_dict(_read_json(index_path))
+            compatibility = {
+                item.path: self._read_bound_cached_json(metadata_root, item)
+                for item in index.compatibility_indexes
+            }
+            receipts = {
+                item.path: self._read_bound_cached_json(metadata_root, item)
+                for item in index.verified_receipts
+            }
+            availability = {
+                item.path: self._read_bound_cached_json(metadata_root, item)
+                for item in index.official_availability_indexes
+            }
         return index, compatibility, receipts, availability
 
     @staticmethod
@@ -856,22 +872,23 @@ class RemoteRawAggTradeArchive:
         return receipt_manifests, tuple(receipt_records)
 
     def list_verified_identities(self) -> list[dict[str, str]]:
-        """List identities available from receipts or the official catalog."""
+        """List identities available from local days or remote metadata."""
 
-        self._refresh()
-        with self._lock:
-            identities = {
-                (
-                    item.metadata.exchange,
-                    item.metadata.market_type,
-                    item.metadata.symbol,
+        remote_available = self._refresh_selection_metadata()
+        identities = {
+            (item["exchange"], item["market_type"], item["symbol"])
+            for item in self.cache.list_verified_identities()
+        }
+        if remote_available:
+            with self._lock:
+                identities.update(
+                    (item.metadata.exchange, item.metadata.market_type, item.metadata.symbol)
+                    for item in self._receipts
                 )
-                for item in self._receipts
-            }
-            identities.update(
-                (item.exchange, item.market_type, item.symbol)
-                for item in self._availability
-            )
+                identities.update(
+                    (item.exchange, item.market_type, item.symbol)
+                    for item in self._availability
+                )
         return [
             {"exchange": item[0], "market_type": item[1], "symbol": item[2]}
             for item in sorted(identities)
@@ -903,6 +920,12 @@ class RemoteRawAggTradeArchive:
                 )
                 == identity
             )
+        return self._merge_receipt_windows(receipts)
+
+    @staticmethod
+    def _merge_receipt_windows(
+        receipts: tuple[_ReceiptRecord, ...],
+    ) -> tuple[VerifiedRawAggTradeWindow, ...]:
         merged: list[VerifiedRawAggTradeWindow] = []
         for receipt in receipts:
             current = VerifiedRawAggTradeWindow(
@@ -936,7 +959,7 @@ class RemoteRawAggTradeArchive:
         market_type: str,
         symbol: str,
     ) -> tuple[RawAggTradeSelectionWindow, ...]:
-        """Return official daily availability independently of cached bodies."""
+        """Return selectable UTC ranges from local days and remote metadata."""
 
         return self.selection_snapshot(
             exchange=exchange,
@@ -951,55 +974,55 @@ class RemoteRawAggTradeArchive:
         market_type: str,
         symbol: str,
     ) -> tuple[str, tuple[RawAggTradeSelectionWindow, ...]]:
-        """Atomically bind selection coverage to its metadata revision."""
-
-        self._refresh()
+        """Bind advertised ranges to a captured remote snapshot and local inventory."""
+        remote_available = self._refresh_selection_metadata()
         identity = (
-            str(exchange).lower(),
-            str(market_type).lower(),
-            str(symbol).upper(),
+            str(exchange).strip().lower(),
+            str(market_type).strip().lower(),
+            str(symbol).strip().upper(),
+        )
+        local = self.cache.list_selection_windows(
+            exchange=identity[0], market_type=identity[1], symbol=identity[2],
+            verify_parquet=False,
         )
         with self._lock:
-            index = self._index
-            availability = next(
-                (
-                    item
-                    for item in self._availability
-                    if (item.exchange, item.market_type, item.symbol) == identity
-                ),
-                None,
-            )
+            index = self._index if remote_available else None
+            availability = next((
+                item for item in self._availability
+                if (item.exchange, item.market_type, item.symbol) == identity
+            ), None) if index is not None else None
+            receipts = tuple(
+                item for item in self._receipts
+                if (item.metadata.exchange, item.metadata.market_type, item.metadata.symbol) == identity
+            ) if index is not None and availability is None else ()
         if availability is None:
-            if index is None:
-                raise ReplayHistoryArchiveError(
-                    "remote aggTrade selection index is unavailable"
-                )
-            return (
-                index.index_epoch,
-                tuple(
-                    RawAggTradeSelectionWindow(
-                        start_time_ms=item.start_time_ms,
-                        end_time_ms=item.end_time_ms,
-                        partition_count=item.partition_count,
-                    )
-                    for item in self.list_verified_windows(
-                        exchange=exchange,
-                        market_type=market_type,
-                        symbol=symbol,
-                    )
-                )
+            remote_epoch = index.index_epoch if index is not None else None
+            remote = tuple(
+                RawAggTradeSelectionWindow(item.start_time_ms, item.end_time_ms, item.partition_count)
+                for item in self._merge_receipt_windows(receipts)
             )
-        return (
-            availability.catalog_epoch,
-            tuple(
+        else:
+            remote_epoch = availability.catalog_epoch
+            remote = tuple(
                 RawAggTradeSelectionWindow(
                     start_time_ms=_day_start_ms(item.start),
                     end_time_ms=_day_start_ms(item.end) + _DAY_MS - 1,
                     partition_count=item.day_count,
                 )
                 for item in availability.ranges
-            ),
-        )
+            )
+        windows = _merge_selection_windows(local, remote, official=availability is not None)
+        retired = self.cache.retired_verified_days(identity)
+        if retired:
+            windows = _exclude_retired_days(windows, retired)
+        if remote_epoch is not None and windows == remote:
+            return remote_epoch, windows
+        return canonical_sha256({
+            "schema": "replay-agg-trade-selection.v1",
+            "identity": identity,
+            "remote_epoch": remote_epoch,
+            "ranges": [(item.start_time_ms, item.end_time_ms) for item in windows],
+        }), windows
 
     def list_verified_bar_windows(
         self,
@@ -1067,9 +1090,36 @@ class RemoteRawAggTradeArchive:
         end_time_ms: int,
         page_rows: int = 50_000,
     ) -> RawAggTradeDatasetRef:
-        self._refresh()
-        identity = (str(exchange).lower(), str(market_type).lower(), str(symbol).upper())
+        identity = (
+            str(exchange).strip().lower(),
+            str(market_type).strip().lower(),
+            str(symbol).strip().upper(),
+        )
         requested_days = _utc_days(start_time_ms, end_time_ms)
+        missing_days = tuple(
+            day for day in requested_days
+            if not self.cache.has_verified_day(
+                exchange=identity[0], market_type=identity[1], symbol=identity[2],
+                day=day.isoformat(), allow_repair=True,
+            )
+        )
+        with self._lock:
+            self._metrics["official_cache_hits"] += len(requested_days) - len(missing_days)
+        if missing_days:
+            self._materialize_missing_days(identity, missing_days)
+        return self.cache.freeze_dataset(
+            exchange=exchange,
+            market_type=market_type,
+            symbol=symbol,
+            start_time_ms=start_time_ms,
+            end_time_ms=end_time_ms,
+            page_rows=page_rows,
+        )
+
+    def _materialize_missing_days(
+        self, identity: tuple[str, str, str], missing_days: tuple[date, ...],
+    ) -> None:
+        self._refresh()
         with self._lock:
             receipts_by_day = {
                 item.metadata.date: item
@@ -1095,27 +1145,13 @@ class RemoteRawAggTradeArchive:
                 availability is None
                 or not any(item.contains(day) for item in availability.ranges)
             )
-            for day in requested_days
+            for day in missing_days
         ):
             raise RuntimeError(
                 "remote aggTrade catalog does not continuously cover the selected range"
             )
-        cached_windows = self.cache.list_verified_windows(
-            exchange=identity[0],
-            market_type=identity[1],
-            symbol=identity[2],
-        )
         try:
-            for day in requested_days:
-                day_start_ms = _day_start_ms(day)
-                if any(
-                    item.start_time_ms <= day_start_ms
-                    and item.end_time_ms >= day_start_ms + _DAY_MS - 1
-                    for item in cached_windows
-                ):
-                    with self._lock:
-                        self._metrics["official_cache_hits"] += 1
-                    continue
+            for day in missing_days:
                 receipt = receipts_by_day.get(day.isoformat())
                 if receipt is not None:
                     self._materialize_receipt(receipt.path)
@@ -1130,14 +1166,6 @@ class RemoteRawAggTradeArchive:
             with self._lock:
                 self._metrics["materialization_failures"] += 1
             raise
-        return self.cache.freeze_dataset(
-            exchange=exchange,
-            market_type=market_type,
-            symbol=symbol,
-            start_time_ms=start_time_ms,
-            end_time_ms=end_time_ms,
-            page_rows=page_rows,
-        )
 
     def _materialize_official_day(
         self,
@@ -1147,28 +1175,10 @@ class RemoteRawAggTradeArchive:
         symbol: str,
         day: date,
     ) -> None:
-        receipt_path = (
-            f"exchange={exchange}/market_type={market_type}/symbol={symbol}/"
-            f"date={day.isoformat()}/_verified_import.json"
-        )
-        with self._lock:
-            partition_lock = self._partition_locks.setdefault(
-                receipt_path,
-                threading.Lock(),
-            )
-        with partition_lock:
-            # A concurrent preparation may have finished while this caller was
-            # waiting.  Revalidate the immutable receipt before avoiding I/O.
-            day_start_ms = _day_start_ms(day)
-            if any(
-                item.start_time_ms <= day_start_ms
-                and item.end_time_ms >= day_start_ms + _DAY_MS - 1
-                for item in self.cache.list_verified_windows(
-                    exchange=exchange,
-                    market_type=market_type,
-                    symbol=symbol,
-                )
-            ):
+        with trade_archive_day_acquisition(
+            self.cache, exchange=exchange, market_type=market_type, symbol=symbol, day=day,
+        ) as missing:
+            if not missing:
                 with self._lock:
                     self._metrics["official_cache_hits"] += 1
                 return
@@ -1204,15 +1214,19 @@ class RemoteRawAggTradeArchive:
             payload = self._receipt_payloads.get(receipt_path)
             manifests = self._receipt_manifests.get(receipt_path)
             index = self._index
-            partition_lock = self._partition_locks.setdefault(
-                receipt_path,
-                threading.Lock(),
-            )
         if payload is None or manifests is None or index is None:
             raise ReplayHistoryArchiveError(
                 "remote aggTrade receipt is not indexed"
             )
-        with partition_lock:
+        metadata = payload["metadata"]
+        assert isinstance(metadata, Mapping)
+        with trade_archive_day_acquisition(
+            self.cache, exchange=str(metadata["exchange"]), market_type=str(metadata["market_type"]),
+            symbol=str(metadata["symbol"]), day=date.fromisoformat(str(metadata["date"])),
+            allow_repair=True,
+        ) as missing:
+            if not missing:
+                return
             for item in manifests:
                 if (Path(item.object_id).parent / "_verified_import.json").as_posix() != receipt_path:
                     raise ReplayHistoryArchiveError(
@@ -1292,35 +1306,47 @@ class RemoteRawAggTradeArchive:
         return destination
 
     def diagnostics(self) -> dict[str, Any]:
-        self._refresh()
+        remote_available = self._refresh_selection_metadata()
         with self._lock:
+            remote_coverage = remote_available and bool(self._receipt_payloads or self._availability)
             official_day_count = sum(
                 date_range.day_count
                 for catalog in self._availability
                 for date_range in catalog.ranges
             )
-            return {
+            result = {
                 "enabled": True,
-                "state": "ready",
+                "state": "ready" if remote_available else "degraded",
                 "backend": "raw-agg-trade.remote-cache.v2",
                 "origin_kind": self.origin.kind,
                 "origin": self.origin.base_uri,
                 "remote_index_epoch": None if self._index is None else self._index.index_epoch,
                 "remote_metadata_fallback": self._metadata_fallback,
-                "verified_partitions_available": bool(
-                    self._receipt_payloads or self._availability
-                ),
-                "official_daily_archives_available": bool(self._availability),
-                "official_daily_archive_count": official_day_count,
-                "compatibility_proofs_available": bool(self._compatibility),
+                "verified_partitions_available": remote_coverage,
+                "official_daily_archives_available": remote_available and bool(self._availability),
+                "official_daily_archive_count": official_day_count if remote_available else 0,
+                "compatibility_proofs_available": remote_available and bool(self._compatibility),
                 "selection_basis": (
                     "official_daily_availability"
-                    if self._availability
+                    if remote_available and self._availability
                     else "verified_receipts"
                 ),
                 "bar_parity_required": False,
                 **self._metrics,
             }
+        if not remote_coverage and self.cache.list_verified_identities():
+            result.update(
+                state="ready", verified_partitions_available=True, selection_basis="committed_local_receipts",
+            )
+        return result
+
+    def verified_retention_inventory(self, *, limit: int) -> dict[str, Any]:
+        return self.cache.verified_retention_inventory(limit=limit)
+
+    def verified_retention_recheck(
+        self, *, day_id: str, limit: int,
+    ) -> AbstractContextManager[tuple[str, dict[str, Any] | None]]:
+        return self.cache.verified_retention_recheck(day_id=day_id, limit=limit)
 
     def scan_range(self, **kwargs: Any) -> list[dict[str, Any]]:
         return self.cache.scan_range(**kwargs)
@@ -1530,6 +1556,52 @@ def _day_start_ms(value: date) -> int:
         datetime.combine(value, datetime.min.time(), tzinfo=timezone.utc).timestamp()
         * 1_000
     )
+
+
+def _merge_selection_windows(
+    local: tuple[RawAggTradeSelectionWindow, ...],
+    remote: tuple[RawAggTradeSelectionWindow, ...],
+    *,
+    official: bool,
+) -> tuple[RawAggTradeSelectionWindow, ...]:
+    # Verified windows already join contiguous IDs. At an advertised boundary
+    # IDs are unknown until the selected days are acquired and frozen.
+    coverage = [(w.start_time_ms, w.end_time_ms, False) for w in local]
+    coverage.extend((w.start_time_ms, w.end_time_ms, official) for w in remote)
+    merged: list[tuple[int, int, bool]] = []
+    for start, end, advertised in sorted(coverage):
+        if merged:
+            left_start, left_end, left_advertised = merged[-1]
+            if start <= left_end or (start == left_end + 1 and (left_advertised or advertised)):
+                if end > left_end:
+                    merged[-1] = (left_start, end, advertised)
+                elif end == left_end and advertised:
+                    merged[-1] = (left_start, left_end, True)
+                continue
+        merged.append((start, end, advertised))
+    return tuple(
+        RawAggTradeSelectionWindow(start, end, (end - start + 1) // _DAY_MS)
+        for start, end, _ in merged
+    )
+
+
+def _exclude_retired_days(
+    windows: tuple[RawAggTradeSelectionWindow, ...], days: tuple[date, ...],
+) -> tuple[RawAggTradeSelectionWindow, ...]:
+    retired = tuple(map(_day_start_ms, days))
+    visible = []
+    for window in windows:
+        start = window.start_time_ms
+        first = bisect_left(retired, start)
+        last = bisect_right(retired, window.end_time_ms)
+        for cut in retired[first:last]:
+            if start < cut:
+                visible.append(RawAggTradeSelectionWindow(start, cut - 1, (cut - start) // _DAY_MS))
+            start = cut + _DAY_MS
+        if start <= window.end_time_ms:
+            end = window.end_time_ms
+            visible.append(RawAggTradeSelectionWindow(start, end, (end - start + 1) // _DAY_MS))
+    return tuple(visible)
 
 
 def _utc_days(start_time_ms: int, end_time_ms: int) -> tuple[date, ...]:

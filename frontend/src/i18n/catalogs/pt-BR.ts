@@ -1,4 +1,5 @@
 import { continuousPortuguese } from "./continuousMessages.js";
+import { tradeHistoryBrazilian } from "./tradeHistoryMessages.js";
 import { replayNoteBrazilian } from "./replayNoteMessages.js";
 import { historyStudyBrazilian } from "./historyStudyMessages.js";
 import { workbenchEnglish } from "./workbenchEnglish.js";
@@ -9,6 +10,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
   ...continuousPortuguese,
+  ...tradeHistoryBrazilian,
   ...replayNoteBrazilian,
   ...historyStudyBrazilian,
   "chartTime.title": "Ir para data",
@@ -1328,6 +1330,8 @@ export const ptBR = {
   "settings.appearance.cellThemeDescription": "Defina o tema deste gráfico. Os demais só mudam quando a vinculação de estilos está ativada.",
   "workspace.link.drawings": "Desenhos",
   "workspace.link.drawingsDesc": "Compartilhar o documento de desenho do mesmo mercado e conjunto de camadas",
+  "workspace.link.drawingVisibility": "Visibilidade dos desenhos",
+  "workspace.link.drawingVisibilityDesc": "Sincroniza a exibição dos desenhos em cada gráfico.",
   "workspace.link.definitions": "Lista de indicadores",
   "workspace.link.definitionsDesc": "Sincronizar adição, remoção e tipo de indicador",
   "workspace.link.parameters": "Parâmetros do indicador",
@@ -2773,6 +2777,7 @@ export const ptBR = {
 
   "local.import": "Importar CSV",
   "local.localOnly": "Os dados permanecem nesta máquina",
+  "local.marketTradeCoverage": "Escolha um arquivo de negócios de mercado com numeração sequencial de origem. Informe o período em UTC. Os dados importados ficam neste dispositivo.",
   "local.chooseFile": "Escolha um arquivo CSV",
   "local.baseAsset": "Ativo de quantidade (unidade do volume)",
   "local.quoteAsset": "Ativo de cotação do preço",
@@ -4918,6 +4923,7 @@ export const ptBR = {
   "research.data.noContext": "Esta entrada não tem identidade de conjunto congelada.",
   "research.data.available": "Conjuntos de dados locais disponíveis",
   "research.execution.precise": "A fidelidade da sequência de negócios e as premissas de execução permanecem explícitas e imutáveis por Run.",
+  "research.execution.preciseArchiveHint": "O download automático usa negócios agregados de futuros Binance USD-M. Selecione um intervalo em dias UTC já encerrados.",
   "research.execution.python": "Runtime Python e de modelos externos inicializam somente dentro desta aplicação de pesquisa.",
   "research.execution.general": "Os controles de execução permanecem no escopo da tarefa selecionada e nunca alteram um Run concluído.",
   "research.run.none": "Nenhum BacktestRun está selecionado.",

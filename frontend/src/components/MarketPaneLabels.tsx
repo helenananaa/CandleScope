@@ -70,6 +70,7 @@ const MarketPaneLabel = memo(function MarketPaneLabel({
     : null;
   const ariaLabel = [
     displayPoint?.accessibilityLabel ?? auxiliaryText ?? pane.label,
+    pane.historyNote,
     countdownLabel,
   ].filter((value): value is string => Boolean(value)).join("，");
 
@@ -97,6 +98,9 @@ const MarketPaneLabel = memo(function MarketPaneLabel({
       )}
       {auxiliaryText && (
         <span className="advanced-market-pane-status">{auxiliaryText}</span>
+      )}
+      {pane.historyNote && (
+        <span className="advanced-market-pane-status">{pane.historyNote}</span>
       )}
       {countdown && pane.liveCountdown && (
         <span className="advanced-market-pane-countdown" title={countdownLabel ?? undefined}>

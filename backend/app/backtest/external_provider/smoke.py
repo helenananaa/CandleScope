@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from collections.abc import Callable
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
@@ -39,16 +40,22 @@ def verify_snapshot(runtime: BacktestRuntime, values: dict[str, Any]) -> dict[st
     return preview
 
 
-def run_smoke(runtime: BacktestRuntime, values: dict[str, Any]) -> dict[str, Any]:
+def run_smoke(
+    runtime: BacktestRuntime, values: dict[str, Any], *, check_owner: Callable[[], None] | None = None,
+) -> dict[str, Any]:
     with runtime.service.external.smoke_slot():
-        return _run_smoke(runtime, values)
+        return _run_smoke(runtime, values, check_owner=check_owner)
 
 
-def _run_smoke(runtime: BacktestRuntime, values: dict[str, Any]) -> dict[str, Any]:
+def _run_smoke(
+    runtime: BacktestRuntime, values: dict[str, Any], *, check_owner: Callable[[], None] | None,
+) -> dict[str, Any]:
     """Probe inference, not a fabricated financial or deterministic-model result."""
     control = runtime.service.external
     parsed = control.manifest(values["strategy_revision_id"])
     preview = verify_snapshot(runtime, values)
+    if preview["quality"].get("source_quality") == "user_market_trades":
+        raise BacktestError("FIDELITY_UNSUPPORTED", "External smoke does not support local market trade inputs yet")
     binding = control.validate_binding(values)
     output_mode = values["output_mode"]
     if output_mode not in parsed.output_modes:
@@ -81,6 +88,8 @@ def _run_smoke(runtime: BacktestRuntime, values: dict[str, Any]) -> dict[str, An
         deadline = time.monotonic() + runtime.settings.max_run_seconds
 
         def check_control():
+            if check_owner is not None:
+                check_owner()
             if time.monotonic() > deadline:
                 raise StrategyProviderError("BUDGET_EXCEEDED", "external smoke exceeded the Host run budget")
             if runtime._shutdown:
@@ -111,6 +120,7 @@ def _run_smoke(runtime: BacktestRuntime, values: dict[str, Any]) -> dict[str, An
                 with suppress(Exception):
                     provider.abort()
             adapter.close()
+        check_control()
         stamp = int(time.time() * 1000)
         details = {"schema": "STRATEGY_SMOKE_V1", "revisionId": values["strategy_revision_id"],
                    "datasetId": values["dataset_id"], "snapshotHash": values["snapshot_hash"],

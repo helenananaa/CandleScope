@@ -7,6 +7,7 @@ import type { ContinuousRun } from "./continuousTypes.js";
 import { sameCommit } from "./continuousView.js";
 import { repairProgress } from "./continuousRepairView.js";
 import ContinuousAccountView from "./ContinuousAccountView.js";
+import { readContinuousAccountRows } from "./continuousAccountRows.js";
 
 const SELECTION = "candlescope.continuous-reader.v1";
 const phases = { REQUESTED: "repair.preparing", PREPARING: "repair.preparing", READY: "repair.ready",
@@ -25,7 +26,7 @@ function utc(value: number): string {
 export function SavedContinuousAccounts({ manager }: { manager: ContinuousStrategyDataManager }) {
   useLocale();
   const [runs, setRuns] = useState<ContinuousRun[]>([]), [selected, setSelected] = useState(remembered);
-  const [observation, setObservation] = useState<ContinuousObservation | null>(null);
+  const [observation, setObservation] = useState<(ContinuousObservation & { rows: ReturnType<typeof readContinuousAccountRows> }) | null>(null);
   const [error, setError] = useState<string | null>(null), [loading, setLoading] = useState(true);
   const [refresh, setRefresh] = useState(0);
   const selectedExists = runs.some((run) => run.id === selected);
@@ -43,7 +44,7 @@ export function SavedContinuousAccounts({ manager }: { manager: ContinuousStrate
   useEffect(() => {
     setObservation(null);
     if (!selected || !selectedExists) return;
-    try { return manager.observe(selected, setObservation); }
+    try { return manager.observe(selected, (next) => setObservation({ ...next, rows: readContinuousAccountRows(manager, next.result) })); }
     catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); }
   }, [manager, selected, selectedExists]);
   const view = observation?.result?.identity.id === selected ? observation.result : null;
@@ -65,7 +66,7 @@ export function SavedContinuousAccounts({ manager }: { manager: ContinuousStrate
     {error && <p role="alert">{error}</p>}
     {observation?.error && <p role="alert">{observation.error.message}</p>}
     {observation && <p role="status">{t(connections[observation.connection])}</p>}
-    {view && <>
+    {view && observation && <>
       <p>{t("reader.identity", { id: view.identity.id })} · {t("continuous.phase", { phase: view.run.phase })}</p>
       {!observation?.initialReady && <p role="status">{t("reader.partial")}</p>}
       {view.stale && <p role="alert">{t("continuous.stale")}</p>}
@@ -76,7 +77,7 @@ export function SavedContinuousAccounts({ manager }: { manager: ContinuousStrate
         {progress && ["REQUESTED", "PREPARING", "READY"].includes(repair.phase) && <p>{t("repair.progress", progress)}</p>}
         {repair.error && <p role="alert">{repair.error.message}</p>}
       </section>}
-      <ContinuousAccountView manager={manager} view={view} />
+      <ContinuousAccountView rows={observation.rows} view={view} />
     </>}
   </section>;
 }

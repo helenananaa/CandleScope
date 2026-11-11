@@ -13,9 +13,10 @@ from app.data_engine.data_manager.config import DataManagerConfig, EventBusConfi
 from app.data_engine.data_manager.models import BarData, DataEvent, DataEventType, SeriesKey
 from app.data_engine.ingestion import StreamPipeline
 from app.data_engine.ingestion.config import IngestionConfig
-from app.data_engine.ingestion.models import StreamDescriptor, StreamType
+from app.data_engine.ingestion.models import DataSource, RawMessage, StreamDescriptor, StreamType
 from app.data_engine.interval_policy import parse_interval_spec
 from app.data_engine.storage import klines_repo
+from app.exchanges.ccxt_ext.unified import make_unified_payload
 from tests.test_recovery_delivery_integration import _until
 from tests.test_recovery_kline_consumers import _Factory, _history_repair, _committed_backfill, _close, T, IDENTITY
 
@@ -34,7 +35,7 @@ class Factory(_Factory):
         return self.pipeline
 
 
-async def manager(tmp_path, monkeypatch, config=None):
+async def manager(tmp_path, monkeypatch, config=None, *, identity=IDENTITY):
     monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", tmp_path / "bars.sqlite")
     klines_repo.init_klines_storage()
     store = klines_repo.KlinesRepoAdapter()
@@ -45,7 +46,7 @@ async def manager(tmp_path, monkeypatch, config=None):
     dm.set_ingestion_factory(factory)
     requests = []
     dm.set_backfill_trigger(lambda *args, **kwargs: requests.append((args, kwargs)))
-    await dm.ensure_stream(**IDENTITY)
+    await dm.ensure_stream(**identity)
     return dm, store, factory, requests
 
 
@@ -94,6 +95,134 @@ async def test_strict_and_gap_aware_share_repair_without_blocking_latest(tmp_pat
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(("market_type", "symbol"), [
+    ("swap.linear", "BTC/USDT:USDT"),
+    ("swap.inverse", "BTC/USD:BTC"),
+])
+@pytest.mark.parametrize("delayed_confirm", [True, False])
+async def test_bybit_http_poll_cannot_mask_a_missed_or_delayed_confirm(
+    tmp_path, monkeypatch, market_type, symbol, delayed_confirm,
+):
+    from app.data_engine.bar_aggregator import aggregator as aggregator_module
+
+    identity = dict(symbol=symbol, interval="5m", exchange="bybit", market_type=market_type)
+    opened, step = 1_794_138_000_000, 300_000
+    now = opened
+    monkeypatch.setattr(aggregator_module, "time", SimpleNamespace(time=lambda: now / 1000))
+    dm, store, factory, requests = await manager(tmp_path, monkeypatch, identity=identity)
+    target = {**identity, "interval": "10m"}
+    events, errors, _ = capture(dm, identity=identity)
+    derived, derived_errors, _ = capture(dm, identity=target)
+
+    async def feed(bar_open, price, source, received, *, closed):
+        nonlocal now
+        now = received
+        fields = {"is_closed": closed}
+        if source is DataSource.WEBSOCKET:
+            fields["source_close_time_ms"] = bar_open + step - 1
+        await factory.pipeline.normalize.ingest(RawMessage(
+            payload=make_unified_payload("kline", [bar_open, price, price, price, price, 10], **fields),
+            source=source, stream_type=StreamType.KLINE, received_at_ms=received,
+        ))
+
+    try:
+        await dm.ensure_stream(**target)
+        await feed(opened, 100, DataSource.WEBSOCKET, opened + step, closed=True)
+        await feed(opened + step, 101, DataSource.WEBSOCKET, opened + 2 * step - 1000, closed=False)
+        # A poll may label the elapsed slot closed based solely on wall time.
+        await feed(opened + step, 101, DataSource.HTTP, opened + 2 * step + 1000, closed=True)
+
+        if delayed_confirm:
+            await feed(opened + step, 102, DataSource.WEBSOCKET, opened + 2 * step + 2000, closed=True)
+        await feed(opened + 2 * step, 103, DataSource.HTTP, opened + 2 * step + 3000, closed=False)
+
+        if delayed_confirm:
+            await _until(lambda: len(closed(events)) == 2 and len(closed(derived)) == 1)
+            rows = store.query_bars(**identity, start_ms=opened + step, end_ms=opened + step)
+            assert [(bar["close"], bar["source"]) for bar in rows] == [(102, "bybit_ws_confirmed")]
+            rows = store.query_bars(**target, start_ms=opened, end_ms=opened)
+            assert [(bar["close"], bar["source"]) for bar in rows] == [(102, "data_manager_composite_closed")]
+            assert dm.source_gaps.pending() == []
+        else:
+            pending = {gap.key.interval: gap.expected for gap in dm.source_gaps.pending()}
+            assert pending == {"5m": {opened + step}, "10m": {opened}}
+            submitted = {args[1]: (args[2], args[3]) for args, kwargs in requests
+                         if kwargs.get("requester") == "ingestion_gap"}
+            assert submitted == {"5m": (opened + step, opened + step), "10m": (opened, opened)}
+            assert store.query_bars(**identity, start_ms=opened + step, end_ms=opened + step) == []
+            from app.data_engine.backfill import BackfillConfig, BackfillEngine
+            from app.data_engine.data_manager.backfill_contracts import RepairRequest
+            from app.data_engine.history import (
+                ExchangeHistoryPolicyResolver, HistoryAvailabilityService, HistoryBoundaryRepository,
+                get_history_calendar_registry,
+            )
+            from app.data_engine.storage.gap_ledger import GapLedger
+
+            rest_calls = []
+
+            class Transport:
+                async def http_fetch(self, request):
+                    rest_calls.append((request.descriptor.interval, request.start_ms, request.end_ms))
+                    await asyncio.sleep(.05)
+                    return [
+                        RawMessage(make_unified_payload(
+                            "kline", [stamp, price, price, price, price, 10], is_closed=True,
+                        ), DataSource.HTTP, StreamType.KLINE, stamp + step, http_status=200)
+                        for stamp, price in [(opened, 100), (opened + step, 102)]
+                        if request.start_ms <= stamp <= request.end_ms
+                    ]
+
+            history = HistoryAvailabilityService(
+                calendars=get_history_calendar_registry(),
+                boundaries=HistoryBoundaryRepository(klines_repo.KLINES_DB_PATH),
+            )
+            policy = ExchangeHistoryPolicyResolver(history)
+            ledger = GapLedger(klines_repo.KLINES_DB_PATH)
+            engine = BackfillEngine(
+                BackfillConfig(history_archive_enabled=False, fetch_rate_limit_delay=0),
+                klines_repo.AsyncKlinesRepoAdapter(), Transport(),
+                ingestion_config=IngestionConfig(proxy_mode="none"),
+            )
+            async def no_rate_limit():
+                pass
+
+            engine.fetcher.set_rate_limiter(no_rate_limit)
+            coordinator = BackfillCoordinator(
+                storage=store, bars_backfilled=dm.on_bars_backfilled, emit_event=dm.emit_event,
+                source_available=dm.source_storage_available, engine=engine, gap_ledger=ledger,
+                history_service=history,
+                history_policy_resolver=lambda repair: policy.resolve(policy.series_key(
+                    exchange=repair.exchange, market_type=repair.market_type, symbol=repair.symbol,
+                    channel="kline", variant=repair.interval,
+                )),
+                loop=asyncio.get_running_loop(), max_concurrency=2,
+            )
+            # Exercise both possible orders while retaining independent target tickets.
+            repairs = [RepairRequest(
+                args[0], args[1], args[2], args[3], exchange=args[4], market_type=args[5], **kwargs,
+            ) for args, kwargs in requests if kwargs.get("requester") == "ingestion_gap"]
+            repairs.sort(key=lambda repair: repair.interval != ("5m" if market_type == "swap.inverse" else "10m"))
+            try:
+                results = await asyncio.wait_for(asyncio.gather(*(
+                    coordinator.request_and_wait(repair) for repair in repairs
+                )), 5)
+                assert all(result.status == "completed" and result.verified_contiguous for result in results)
+                assert rest_calls == [("5m", opened + step, opened + step)]
+                assert [ledger.get_status(repair)["status"] for repair in repairs] == ["filled", "filled"]
+            finally:
+                await coordinator.shutdown()
+                await engine.close()
+            await _until(lambda: len(closed(events)) == 2 and len(closed(derived)) == 1)
+            assert events[-1].bar.close == derived[-1].bar.close == 102
+            assert events[-1].detail["continuity_replayed"] is True
+            assert derived[-1].detail["continuity_replayed"] is True
+            assert dm.source_gaps.pending() == []
+        assert errors == derived_errors == []
+    finally:
+        await _close(dm, factory)
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize("repaired", [True, False])
 async def test_browser_batch_gets_exact_gap_before_repair_and_http_fences_only_that_range(
     tmp_path, monkeypatch, repaired,
@@ -101,7 +230,7 @@ async def test_browser_batch_gets_exact_gap_before_repair_and_http_fences_only_t
     from fastapi import FastAPI
     from httpx import ASGITransport, AsyncClient
     from app.api.v1.klines import router as klines_router
-    from app.api.v1.stream_kline_batch import KlineBatchConnection, KlineBatchLimits, _EVENT_TYPES
+    from app.api.v1.stream_kline_batch import KlineBatchConnection, KlineBatchLimits, _BatchSubscription, _EVENT_TYPES
     from tests.test_kline_batch_source_recovery import Socket
     from starlette.websockets import WebSocketDisconnect
 
@@ -121,8 +250,12 @@ async def test_browser_batch_gets_exact_gap_before_repair_and_http_fences_only_t
         return response.json()
 
     opened = T + 60_000
+    subscription = _BatchSubscription(
+        client_id="chart", consumer_id="chart-owner", exchange=IDENTITY["exchange"],
+        market_type=IDENTITY["market_type"], symbol=IDENTITY["symbol"],
+    )
     handle = await dm.subscribe_async(
-        connection._event_callback("chart"), **IDENTITY, event_types=_EVENT_TYPES,
+        connection._event_callback(subscription), **IDENTITY, event_types=_EVENT_TYPES,
         on_recovery=connection._require_resync,
     )
     try:

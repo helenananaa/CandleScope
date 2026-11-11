@@ -147,7 +147,9 @@ class StandardOHLCVMerge:
             state.last_input_at_ms = bar_input.open_time_ms
 
         if merge_mode == MergeMode.SNAPSHOT and (
-            bar_input.extra.get("source_ref") or bar_input.extra.get("bybit_close_confirmed") is True
+            bar_input.extra.get("source_ref")
+            or bar_input.extra.get("gate_close_source")
+            or bar_input.extra.get("bybit_close_confirmed") is True
         ):
             # A confirmed native snapshot supplies its complete final extrema
             # and quantities, including any correction to a forming snapshot.
@@ -286,6 +288,8 @@ class ComponentSnapshotOHLCVMerge:
             # silently treating every update as equally fresh.
             "sequence": bar_input.sequence,
         }
+        if bar_input.extra.get("warm_start_seed"):
+            snapshot["warm_start_seed"] = True
         snapshot["aggregation_values"] = snapshot_aggregation_values(snapshot)
         return ReadonlyFields(snapshot)
 
@@ -351,9 +355,16 @@ class ComponentSnapshotOHLCVMerge:
         candidate: dict,
         *,
         allow_authoritative_correction: bool = False,
+        allow_confirmed_close: bool = False,
     ) -> bool:
         if candidate == existing:
             return False
+
+        if (allow_confirmed_close and not existing["is_closed"] and candidate["is_closed"]
+                and candidate["close_time_ms"] == existing["close_time_ms"]):
+            # An explicit venue close replaces its own forming snapshot even
+            # when an extremum or quantity decreases.
+            return True
 
         source_ref = candidate.get("source_ref")
         previous_ref = existing.get("source_ref")
@@ -414,6 +425,7 @@ class ComponentSnapshotOHLCVMerge:
                 bar_input.source in {BarInputSource.BACKFILL, BarInputSource.CORRECTION}
                 and bar_input.is_closed
             ),
+            allow_confirmed_close=bar_input.extra.get("bybit_close_confirmed") is True,
         ):
             logger.debug(
                 "Ignored non-monotonic or stale component snapshot %s "
@@ -567,14 +579,16 @@ class BarStateEngine:
 
     # ── Public: Core Operation ───────────────────────────────
 
-    def adopt_history_prefix(self, prefix, *, refresh=False) -> BarState:
+    def adopt_history_prefix(self, prefix, *, refresh=False, replace_provisional=False) -> BarState:
         """Install a qualified prefix while retaining the current live overlay."""
         source = prefix.summary.target
         key = (source.exchange, source.market_type, source.symbol, prefix.start_ms)
         was_closed = key in self._closed
-        if ((was_closed and not refresh) or self._merge_strategy_overridden):
-            raise ValueError('history initialization requires an ordinary forming target')
         state = self._active.get(key) or self._closed.get(key)
+        replacing = (replace_provisional and was_closed and state.finality == BarFinality.PROVISIONAL
+                     and prefix.complete and prefix.through_ms == state.bucket_end_ms)
+        if (was_closed and not (refresh or replacing)) or self._merge_strategy_overridden:
+            raise ValueError('history initialization requires a forming or recoverable target')
         if refresh and (state is None or state._history_prefix is None):
             raise ValueError('history refresh requires an existing compact prefix')
         if state is None:
@@ -583,7 +597,7 @@ class BarStateEngine:
                              exchange=source.exchange, market_type=source.market_type,
                              series_identity=source.identity)
         self._component_merge_strategy.adopt_history_prefix(state, prefix)
-        if was_closed and has_complete_closed_component_coverage(state):
+        if was_closed and not replacing and has_complete_closed_component_coverage(state):
             state.finality = BarFinality.AUTHORITATIVE
             state.close_reason = 'history_prefix_refresh'
             self._closed.move_to_end(key)
@@ -750,6 +764,9 @@ class BarStateEngine:
                 state.quality_source = "trade_history_verified"
             elif bar_input.is_closed and bar_input.extra.get("bybit_close_confirmed") is True:
                 state.quality_source = BYBIT_WS_CONFIRMED_SOURCE
+            gate_source = bar_input.extra.get("gate_close_source")
+            if bar_input.is_closed and gate_source:
+                state.quality_source = gate_source
 
     # ── Public: State Queries ────────────────────────────────
 

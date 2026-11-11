@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from typing import Any
 
 from .models import MarketChannel, MarketStreamKey
+from .trade_flow import TradeHistoryRead
 from .trade_flow_service import TradeFlowService
 from .trade_tape_service import TradeTapeService
 
@@ -27,9 +28,12 @@ class PublicTradeService:
         return self._service(key).recent(key, **kwargs)
 
     async def history(self, key: MarketStreamKey, **kwargs: Any) -> list[Any]:
+        return (await self.read_history(key, **kwargs)).rows
+
+    async def read_history(self, key: MarketStreamKey, **kwargs: Any) -> TradeHistoryRead:
         if key.channel is MarketChannel.TRADE:
             raise ValueError("observational trade tape does not provide repairable history")
-        return await self.strict.history(key, **kwargs)
+        return await self.strict.read_history(key, **kwargs)
 
     def attach(
         self,

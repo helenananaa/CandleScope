@@ -1,4 +1,5 @@
 import { continuousKorean } from "./continuousMessages.js";
+import { tradeHistoryKorean } from "./tradeHistoryMessages.js";
 import { replayNoteKorean } from "./replayNoteMessages.js";
 import { historyStudyKorean } from "./historyStudyMessages.js";
 import { workbenchEnglish } from "./workbenchEnglish.js";
@@ -9,6 +10,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
   ...continuousKorean,
+  ...tradeHistoryKorean,
   ...replayNoteKorean,
   ...historyStudyKorean,
   "chartTime.title": "날짜로 이동",
@@ -1312,6 +1314,8 @@ export const ko = {
   "settings.appearance.cellThemeDescription": "이 차트의 테마를 설정합니다. 스타일 연동을 켠 경우에만 다른 차트도 변경됩니다.",
   "workspace.link.drawings": "그리기",
   "workspace.link.drawingsDesc": "같은 시장·레이어 세트의 그리기 문서 공유",
+  "workspace.link.drawingVisibility": "드로잉 표시 여부",
+  "workspace.link.drawingVisibilityDesc": "각 차트의 드로잉 표시 여부를 동기화합니다.",
   "workspace.link.definitions": "지표 목록",
   "workspace.link.definitionsDesc": "추가, 삭제, 지표 유형 동기화",
   "workspace.link.parameters": "지표 매개변수",
@@ -2744,6 +2748,7 @@ export const ko = {
   "replay.liq.adlHint": "상대방 원장 {count}행 · 결정적 시뮬레이션이며 과거 거래소 사설 큐가 아님",
   "local.import": "CSV 가져오기",
   "local.localOnly": "데이터는 이 기기에만 저장",
+  "local.marketTradeCoverage": "원본 순번이 연속된 시장 전체 체결 파일을 사용하고 UTC 범위를 지정하세요. 가져온 데이터는 로컬에 저장됩니다.",
   "local.chooseFile": "CSV 파일 선택",
   "local.baseAsset": "수량 자산 (거래량 단위)",
   "local.quoteAsset": "가격 표시 자산",
@@ -4849,6 +4854,7 @@ export const ko = {
   "research.data.noContext": "이 항목에 고정된 데이터셋 식별이 없음.",
   "research.data.available": "사용 가능한 로컬 데이터셋",
   "research.execution.precise": "체결 시퀀스 정밀도와 실행 가정은 Run마다 명시되고 불변.",
+  "research.execution.preciseArchiveHint": "자동 다운로드는 Binance USD-M 선물의 집계 체결을 사용합니다. 이미 종료된 UTC 날짜 내에서 기간을 선택하세요.",
   "research.execution.python": "Python과 외부 모델 런타임은 이 연구 앱 안에서만 초기화됨.",
   "research.execution.general": "실행 제어는 선택한 작업에만 적용되며 완료된 Run을 변경하지 않음.",
   "research.run.none": "BacktestRun이 선택되지 않음.",

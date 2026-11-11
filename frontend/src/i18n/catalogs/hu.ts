@@ -1,4 +1,5 @@
 import { continuousEnglish } from "./continuousMessages.js";
+import { tradeHistoryEnglish } from "./tradeHistoryMessages.js";
 import { replayNoteEnglish } from "./replayNoteMessages.js";
 import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
@@ -9,6 +10,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const hu = {
   ...continuousEnglish,
+  ...tradeHistoryEnglish,
   ...replayNoteEnglish,
   ...historyStudyEnglish,
   "chartTime.title": "Go to date",
@@ -2213,6 +2215,7 @@ export const hu = {
   "replay.liq.adlHint": "Ellenoldali főkönyv {count} sor · determinisztikus szimuláció, nem történelmi tőzsdei privát sor",
   "local.import": "CSV importálása",
   "local.localOnly": "Az adatok ezen a gépen maradnak",
+  "local.marketTradeCoverage": "Folytonos sorszámú piaci kötéseket tartalmazó fájlt használjon. Adja meg az UTC-időtartományt. Az import helyben marad.",
   "local.chooseFile": "CSV-fájl kiválasztása",
   "local.baseAsset": "Mennyiségi eszköz (forgalmi egység)",
   "local.quoteAsset": "Az ár jegyzési eszköze",
@@ -4305,6 +4308,7 @@ export const hu = {
   "research.data.noContext": "Ennek a belépőnek nincs befagyasztott adatkészlet-azonosítója.",
   "research.data.available": "Elérhető helyi adatkészletek",
   "research.execution.precise": "Az ügyletsorozat-pontosság és a végrehajtási feltételezések futtatásonként explicit és megváltoztathatatlan maradnak.",
+  "research.execution.preciseArchiveHint": "Az automatikus letöltés a Binance USD-M határidős ügyleteinek összesített kötéseit használja. Válassz lezárt UTC-napokon belüli időszakot.",
   "research.execution.python": "A Python és a külső modell futási környezetei csak ebben a kutatási alkalmazásban inicializálódnak.",
   "research.execution.general": "A végrehajtási vezérlők a kiválasztott feladatra korlátozódnak, és soha nem módosítanak befejezett futtatást.",
   "research.run.none": "Nincs kiválasztott BacktestRun.",

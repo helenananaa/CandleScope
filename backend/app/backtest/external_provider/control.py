@@ -178,14 +178,23 @@ class ExternalProviderControl:
                                         connection_id=identity["external_connection_id"], host_generation=int(record["generation"]),
                                         step_timeout_s=self.settings.provider_step_timeout_ms / 1000, check_control=check_control)
 
-    def waiting_runs(self, queued: list[tuple[str, str]]) -> tuple[str, ...]:
+    def queue_exclusions(self, queued: list[tuple[str, str]]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        """Separate reconnectable work from queued Runs whose binding was revoked."""
         if not queued:
-            return ()
+            return (), ()
         if not self.settings.enabled or not self.settings.external_provider_enabled or not self.store.path.exists():
-            return tuple(run_id for run_id, _ in queued)
+            return tuple(run_id for run_id, _ in queued), ()
         self.open()
         now = int(time.time() * 1000)
-        return tuple(run_id for run_id, connection_id in queued if not self.store.ready(connection_id, now_ms=now))
+        waiting, revoked = [], []
+        with self.store._read() as connection:
+            for run_id, connection_id in queued:
+                row = self.store._row(connection, connection_id)
+                if row is None or row["revoked_ms"] is not None:
+                    revoked.append(run_id)
+                elif row["client_id"] is None or row["lease_deadline_ms"] <= now:
+                    waiting.append(run_id)
+        return tuple(waiting), tuple(revoked)
 
     def waiting_reason(self, connection_id: str) -> str | None:
         if not self.settings.enabled or not self.settings.external_provider_enabled:

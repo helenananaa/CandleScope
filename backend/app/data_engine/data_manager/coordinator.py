@@ -151,7 +151,7 @@ class StreamCoordinator:
       * ``ensure_stream()`` — start a pipeline if not running.
       * ``stop_stream()`` — gracefully shut down a pipeline.
       * ``prewarm()`` — bulk-load historical data into cache.
-      * ``reap_idle()`` — stop streams with no subscribers.
+      * ``reap_idle()`` — stop streams with no subscribers or leases.
       * Route ingestion data through BarAggregator (not direct to cache).
 
     The coordinator is **exchange-agnostic** — it uses pluggable
@@ -167,11 +167,14 @@ class StreamCoordinator:
         cache: BarCache | None = None,
         event_bus: DataEventBus | None = None,
         interval_resolver: IntervalResolver | None = None,
+        *,
+        has_stream_lease: Callable[[SeriesKey], bool] | None = None,
     ) -> None:
         self._cfg = config or CoordinatorConfig()
         self._cache = cache
         self._bus = event_bus
         self._interval_resolver = interval_resolver or IntervalResolver()
+        self._has_stream_lease = has_stream_lease
 
         # Active streams: SeriesKey → _StreamEntry
         self._streams: dict[SeriesKey, _StreamEntry] = {}
@@ -272,6 +275,7 @@ class StreamCoordinator:
             if isinstance(series_identity, dict)
             else resolve_kline_series_identity(route.exchange, series_identity)
         )
+        route.require_series_identity(identity)
         if route.kind is IntervalRouteKind.TRADE and not identity.is_legacy_default_for(route.exchange):
             raise ValueError("Trade candles require the default crypto series identity")
         key = SeriesKey.create(
@@ -488,12 +492,14 @@ class StreamCoordinator:
         reaped: list[str] = []
 
         for key, entry in list(self._streams.items()):
-            # Check if stream has subscribers
-            sub_count = 0
-            if self._bus:
-                sub_count = self._bus.get_direct_subscriber_count(key)
+            if self._streams.get(key) is not entry:
+                continue
+            # Derived consumers lease their physical prerequisite without
+            # subscribing directly to its events.
+            has_lease = self._has_stream_lease is not None and self._has_stream_lease(key)
+            has_subscribers = self._bus is not None and self._bus.get_direct_subscriber_count(key) > 0
 
-            if sub_count > 0:
+            if has_lease or has_subscribers:
                 entry.touch()
                 continue
 
@@ -848,6 +854,8 @@ class StreamCoordinator:
                         start_kwargs["on_gap"] = on_gap
                     if "gap_repair_owner" in start_signature.parameters:
                         start_kwargs["gap_repair_owner"] = "data_manager"
+                    if "series_identity" in start_signature.parameters and not key.identity.is_legacy_default_for(key.exchange):
+                        start_kwargs["series_identity"] = key.identity
                 except (TypeError, ValueError):
                     logger.debug("Could not inspect ingestion factory start signature")
 

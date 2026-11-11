@@ -14,10 +14,10 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from app.data_engine.history.models import BoundaryReason
-from app.data_engine.interval_policy import parse_interval_ms
+from app.data_engine.interval_policy import parse_interval_ms, parse_interval_spec
 from app.data_engine.interval_resolution import IntervalPurpose, IntervalResolver
 from app.data_engine.interval_work_plan import IntervalWorkPlan, resolve_interval_work_plan
-from app.data_engine.kline_quality import repair_requires_trusted_finality
+from app.data_engine.kline_quality import repair_requires_trusted_finality, reuses_bybit_gap_inputs
 from app.exchanges.public_admission import (
     PublicDemand, TrafficClass, get_public_admission, public_demand,
 )
@@ -958,6 +958,8 @@ class BackfillScheduler:
                         },
                     },
                     request_id=request.request_id,
+                    _native_progress=(request._native_progress.subset(start, chunk_end)
+                                      if request._native_progress is not None else None),
                 )
                 chunks.append(_FetchChunk(
                     chunk_id=f"{request.request_id}:{sequence}",
@@ -1099,6 +1101,32 @@ class BackfillScheduler:
             return item
         return heapq.heappop(self._ready)
 
+    @staticmethod
+    def _shared_gap_input(request: RepairRequest) -> tuple[tuple[str, ...], int, int] | None:
+        work_plan = request.metadata.get("interval_work_plan", {})
+        if (not reuses_bybit_gap_inputs(request.exchange, request.market_type, request.requester)
+                or work_plan.get("base_interval") != "5m"):
+            return None
+        spec = parse_interval_spec(request.interval)
+        if spec is None:
+            return None
+        series = request.series_key
+        return (*series[:3], *series[4:]), request.start_ms, spec.next_ms(request.end_ms)
+
+    def _shared_gap_input_active(self, request: RepairRequest) -> bool:
+        source = self._shared_gap_input(request)
+        if source is None:
+            return False
+        series, start, end = source
+        for chunk_id in self._tasks:
+            active = self._chunks.get(chunk_id)
+            if active is None:
+                continue
+            other = self._shared_gap_input(active.request)
+            if other is not None and series == other[0] and start < other[2] and other[1] < end:
+                return True
+        return False
+
     def _drain(self) -> None:
         get_public_admission().refresh()
         if self._shutdown:
@@ -1135,7 +1163,9 @@ class BackfillScheduler:
                     skipped.append(item)
                     continue
                 series = self._series.setdefault(chunk.request.series_key, _SeriesState())
-                if series.active is not None:
+                # Leave overlapping Bybit component work in the queue. When
+                # it runs it can read the canonical inputs the first job wrote.
+                if series.active is not None or self._shared_gap_input_active(chunk.request):
                     skipped.append(item)
                     continue
                 if self._is_background(chunk.request) and (
@@ -1302,7 +1332,8 @@ class BackfillScheduler:
             if state is None or state.stale or state.failed is not None:
                 continue
             series = self._series.get(candidate.request.series_key)
-            if series is not None and series.active is not None:
+            if ((series is not None and series.active is not None)
+                    or self._shared_gap_input_active(candidate.request)):
                 continue
             if self._fairness_owner(candidate.request) != current_owner:
                 return True

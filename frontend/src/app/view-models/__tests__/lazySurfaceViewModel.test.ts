@@ -11,10 +11,12 @@ test("indicator panel receives capability-aware market studies and routed action
   const context = structuralMock<LazyContext>({
     advancedMarketActions: {
       addMarketStudy: (id: string) => calls.push(`add:${id}`),
+      retryMarketHistory: (channel: string) => calls.push(`refresh:${channel}`),
       removeMarketStudy: (id: string) => calls.push(`remove:${id}`),
       toggleMarketStudyVisibility: (id: string) => calls.push(`toggle:${id}`),
     },
     advancedMarketView: {
+      identity: { exchange: "binance", marketType: "spot" },
       marketStudies: [
         {
           id: "market:funding-rate",
@@ -102,6 +104,24 @@ test("indicator panel receives capability-aware market studies and routed action
   panel.onRemoveMarketStudy?.("trade-flow:cvd");
   panel.onToggleMarketStudyVisibility?.("trade-flow:cvd");
   panel.onAddMarketStudy?.("unknown");
+  panel.onRefreshMarketStudyHistory?.("market:funding-rate");
+  const observedPanel = buildLazySurfaceViewModel({
+    ...context,
+    advancedMarketView: {
+      ...context.advancedMarketView,
+      marketStudies: context.advancedMarketView.marketStudies.map((study) => ({
+        ...study,
+        visible: true,
+        supported: true,
+        status: "active",
+        historyNote: "历史覆盖未经验证",
+        canRefreshHistory: true,
+      })),
+    },
+  }).indicatorPanel;
+  assert.equal(observedPanel.marketStudies?.[0]?.statusText, "历史覆盖未经验证");
+  assert.equal(observedPanel.marketStudies?.[0]?.canRefreshHistory, true);
+  observedPanel.onRefreshMarketStudyHistory?.("market:funding-rate");
   assert.deepEqual(calls, [
     "add:market:funding-rate",
     "remove:market:funding-rate",
@@ -109,6 +129,7 @@ test("indicator panel receives capability-aware market studies and routed action
     "add:trade-flow:delta",
     "remove:trade-flow:cvd",
     "toggle:trade-flow:cvd",
+    "refresh:funding_rate",
   ]);
 });
 

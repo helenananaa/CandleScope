@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import ipaddress
+from datetime import date
+
 from app.replay.request_contracts import (
     ReplayCanonicalIndicatorPayload,
     ReplayCommandPayload,
@@ -26,16 +29,21 @@ from app.replay.request_contracts import (
     ReplayHistoricalBookGcRunPayload,
     ReplayAccountHistoryGcPlanPayload,
     ReplayAccountHistoryGcRunPayload,
+    ReplayRawTradeRetentionPolicyPayload,
+    ReplayRawTradeRetentionPlanPayload,
+    ReplayRawTradeRetentionRunPayload,
+    ReplayRawTradeRetentionRecoverPayload,
 )
 
 from typing import Awaitable, Callable, Literal
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.routing import APIRoute
 
 from app.core.config import REPLAY_SETTINGS
+from app.core.operator_origin import is_trusted_operator_origin, origin_from
 from app.data_engine.data_manager.replay import optional_replay_service_from_state
 from app.replay.constants import (
     REPLAY_PROTOCOL,
@@ -60,6 +68,7 @@ from app.replay.training.models import (
     TrainingRunSetupRequest,
 )
 from app.replay.training.service import TrainingRunService
+from app.replay.training.note_view import ReplayNoteView
 
 
 MAX_REPLAY_REQUEST_BYTES = 64 * 1024
@@ -470,6 +479,90 @@ async def list_replay_v2_account_history(request: Request) -> dict[str, object]:
 @router.get("/runs/storage")
 async def replay_v2_storage_inventory(request: Request) -> dict[str, object]:
     return await _training_service(request).storage_inventory()
+
+@router.get("/runs/storage/raw-trades/preview")
+async def replay_v2_raw_trade_retention_preview(
+    request: Request, limit: int = Query(default=100, ge=1, le=200),
+) -> dict[str, object]:
+    return await _training_service(request).raw_trade_retention_preview(limit=limit)
+
+
+@router.get("/runs/storage/raw-trades/recheck")
+async def replay_v2_raw_trade_retention_recheck(
+    request: Request,
+    day_id: str = Query(pattern=r"^sha256:[0-9a-f]{64}$", min_length=71, max_length=71),
+    limit: int = Query(default=100, ge=1, le=200),
+) -> dict[str, object]:
+    return await _training_service(request).raw_trade_retention_recheck(day_id=day_id, limit=limit)
+
+
+def _is_loopback_address(host: str) -> bool:
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _require_retention_operator(request: Request) -> None:
+    peer = request.client.host if request.client else ""
+    host = request.url.hostname or ""
+    origin = origin_from(request.headers)
+    if (not _is_loopback_address(peer)
+            or (host != "localhost" and not _is_loopback_address(host))
+            or (origin is not None and not is_trusted_operator_origin(origin))):
+        raise TrainingRunError(
+            "RETENTION_OPERATOR_REQUIRED", "raw trade retention requires a local operator", status_code=403,
+        )
+
+
+@router.put(
+    "/runs/storage/raw-trades/policy",
+    dependencies=[Depends(_require_retention_operator), Depends(_training_service), Depends(enforce_replay_request_limit)],
+)
+async def set_replay_v2_raw_trade_retention_policy(
+    request: Request, payload: ReplayRawTradeRetentionPolicyPayload,
+) -> dict[str, object]:
+    return await _training_service(request).set_raw_trade_retention_policy(**payload.model_dump(mode="json"))
+
+
+@router.post(
+    "/runs/storage/raw-trades/plan",
+    dependencies=[Depends(_require_retention_operator), Depends(_training_service), Depends(enforce_replay_request_limit)],
+)
+async def plan_replay_v2_raw_trade_retention(
+    request: Request, payload: ReplayRawTradeRetentionPlanPayload,
+) -> dict[str, object]:
+    return await _training_service(request).plan_raw_trade_retention(**payload.model_dump(mode="json"))
+
+
+@router.post(
+    "/runs/storage/raw-trades/run",
+    dependencies=[Depends(_require_retention_operator), Depends(_training_service), Depends(enforce_replay_request_limit)],
+)
+async def execute_replay_v2_raw_trade_retention(
+    request: Request, payload: ReplayRawTradeRetentionRunPayload,
+) -> dict[str, object]:
+    return await _training_service(request).execute_raw_trade_retention(**payload.model_dump(mode="json"))
+
+
+@router.get(
+    "/runs/storage/raw-trades/day",
+    dependencies=[Depends(_require_retention_operator), Depends(_training_service)],
+)
+async def inspect_replay_v2_raw_trade_retention(
+    request: Request, day: date, symbol: str = Query(pattern=r"^[A-Z0-9]{1,64}$"),
+) -> dict[str, object]:
+    return await _training_service(request).inspect_raw_trade_retention(symbol=symbol, day=day.isoformat())
+
+
+@router.post(
+    "/runs/storage/raw-trades/recover",
+    dependencies=[Depends(_require_retention_operator), Depends(_training_service), Depends(enforce_replay_request_limit)],
+)
+async def recover_replay_v2_raw_trade_retention(
+    request: Request, payload: ReplayRawTradeRetentionRecoverPayload,
+) -> dict[str, object]:
+    return await _training_service(request).recover_raw_trade_retention(**payload.model_dump(mode="json"))
 
 
 @router.post("/runs/{run_id}/account-audit")
@@ -1069,33 +1162,47 @@ async def replay_v2_training_journal(
     return await _training_service(request).journal(run_id)
 
 
+def _replay_note_view(
+    training_view: bool = False,
+    review_id: str | None = Query(default=None, min_length=1, max_length=128),
+    review_revision: int | None = Query(default=None, ge=1, le=MAX_TIMESTAMP_MS),
+) -> ReplayNoteView:
+    if (review_id is None) != (review_revision is None) or (training_view and review_id is not None):
+        raise HTTPException(status_code=422, detail="Select training or a complete Review cursor")
+    return ReplayNoteView(training_view, review_id, review_revision)
+
+
 @router.get("/runs/{run_id}/tracks/{track_id}/notes")
 async def replay_v2_training_notes(request: Request, run_id: str, track_id: str,
-                                   at_time_ms: int | None = Query(default=None, ge=0, le=MAX_TIMESTAMP_MS)) -> dict[str, object]:
-    return await _training_service(request).notes(run_id, track_id, at_time_ms=at_time_ms)
+                                   at_time_ms: int | None = Query(default=None, ge=0, le=MAX_TIMESTAMP_MS),
+                                   view: ReplayNoteView = Depends(_replay_note_view)) -> dict[str, object]:
+    return await _training_service(request).notes(run_id, track_id, at_time_ms=at_time_ms, view=view)
 
 
 @router.post("/runs/{run_id}/tracks/{track_id}/note-captures",
              dependencies=[Depends(_training_service), Depends(enforce_replay_request_limit)])
 async def replay_v2_note_capture_save(request: Request, run_id: str, track_id: str,
-        payload: ReplayNoteCapturePayload) -> Response:
+        payload: ReplayNoteCapturePayload,
+        view: ReplayNoteView = Depends(_replay_note_view)) -> Response:
     value = await _training_service(request).save_note_capture(run_id, track_id,
         capture_id=payload.id, image=payload.image, context=payload.context.model_dump(),
-        captured_context=payload.capturedContext.model_dump(), chart=payload.chart.model_dump())
+        captured_context=payload.capturedContext.model_dump(), chart=payload.chart.model_dump(), view=view)
     return JSONResponse(value, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/runs/{run_id}/tracks/{track_id}/note-captures")
 async def replay_v2_note_capture_list(request: Request, run_id: str, track_id: str,
-        capture_id: str | None = Query(default=None, min_length=1, max_length=128)) -> Response:
-    value = await _training_service(request).note_captures(run_id, track_id, capture_id=capture_id)
+        capture_id: str | None = Query(default=None, min_length=1, max_length=128),
+        view: ReplayNoteView = Depends(_replay_note_view)) -> Response:
+    value = await _training_service(request).note_captures(run_id, track_id, capture_id=capture_id, view=view)
     return JSONResponse(value, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/runs/{run_id}/tracks/{track_id}/notes/{note_id}/versions/{revision}/screenshots/{capture_id}")
 async def replay_v2_note_capture_image(request: Request, run_id: str, track_id: str, note_id: str,
-        revision: int, capture_id: str) -> Response:
-    value = await _training_service(request).note_capture_image(run_id, track_id, note_id, revision, capture_id)
+        revision: int, capture_id: str,
+        view: ReplayNoteView = Depends(_replay_note_view)) -> Response:
+    value = await _training_service(request).note_capture_image(run_id, track_id, note_id, revision, capture_id, view=view)
     return JSONResponse(value, headers={"Cache-Control": "no-store"})
 
 
@@ -1103,26 +1210,29 @@ async def replay_v2_note_capture_image(request: Request, run_id: str, track_id: 
 async def replay_v2_training_note_link_options(request: Request, run_id: str, track_id: str,
         kind: Literal["FILL", "TRADE"] = Query(),
         before_id: str | None = Query(default=None, min_length=1, max_length=128),
-        limit: int = Query(default=20, ge=1, le=20)) -> dict[str, object]:
-    return await _training_service(request).note_link_options(run_id, track_id, kind=kind, before_id=before_id, limit=limit)
+        limit: int = Query(default=20, ge=1, le=20),
+        view: ReplayNoteView = Depends(_replay_note_view)) -> dict[str, object]:
+    return await _training_service(request).note_link_options(run_id, track_id, kind=kind, before_id=before_id, limit=limit, view=view)
 
 
 @router.get("/runs/{run_id}/tracks/{track_id}/notes/{note_id}/versions")
 async def replay_v2_training_note_versions(request: Request, run_id: str, track_id: str, note_id: str,
         at_time_ms: int | None = Query(default=None, ge=0, le=MAX_TIMESTAMP_MS),
         before_revision: int | None = Query(default=None, ge=1, le=101),
-        limit: int = Query(default=20, ge=1, le=20)) -> dict[str, object]:
+        limit: int = Query(default=20, ge=1, le=20),
+        view: ReplayNoteView = Depends(_replay_note_view)) -> dict[str, object]:
     return await _training_service(request).note_versions(run_id, track_id, note_id,
-        at_time_ms=at_time_ms, before_revision=before_revision, limit=limit)
+        at_time_ms=at_time_ms, before_revision=before_revision, limit=limit, view=view)
 
 
 @router.post("/runs/{run_id}/tracks/{track_id}/notes",
              dependencies=[Depends(_training_service), Depends(enforce_replay_request_limit)])
 async def replay_v2_training_note_save(request: Request, run_id: str, track_id: str,
-                                       payload: ReplayNotePayload) -> dict[str, object]:
+                                       payload: ReplayNotePayload,
+                                       view: ReplayNoteView = Depends(_replay_note_view)) -> dict[str, object]:
     return await _training_service(request).save_note(
         run_id, track_id, note_id=payload.id, fields=payload.fields,
-        expected_revision=payload.expectedRevision, context=payload.context.model_dump())
+        expected_revision=payload.expectedRevision, context=payload.context.model_dump(), view=view)
 
 
 @router.get("/runs/{run_id}/report")

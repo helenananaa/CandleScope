@@ -99,9 +99,12 @@ class HistoryBlockReader:
     def _qualify(self, source):
         # v1 deliberately qualifies canonical crypto grids, not arbitrary
         # calendar/provider semantics. No implicit replacement with 1m data.
-        if (not isinstance(source, SeriesKey) or source.exchange not in ("binance", "okx")
-                or not source.identity.is_legacy_default_for(source.exchange)):
-            raise ValueError("H127 requires a qualified default Binance/OKX source identity")
+        if not isinstance(source, SeriesKey) or not source.identity.is_legacy_default_for(source.exchange):
+            raise ValueError("H127 requires a qualified default source identity")
+        bybit_5m = (source.exchange == "bybit" and source.interval == "5m"
+                    and source.market_type in {"spot", "swap.linear", "swap.inverse"})
+        if source.exchange not in ("binance", "okx") and not bybit_5m:
+            raise ValueError("H127 requires a qualified native source identity")
         route = self.engine._interval_resolver.resolve(exchange=source.exchange,
             market_type=source.market_type, interval=source.interval, purpose=IntervalPurpose.HISTORY)
         spec = parse_interval_spec(source.interval)

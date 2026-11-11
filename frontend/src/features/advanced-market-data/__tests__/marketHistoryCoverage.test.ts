@@ -8,6 +8,9 @@ import {
   HistoryGapRetryBudget,
   mergeHistoryCoverage,
   nextUncoveredHistoryRange,
+  OpenInterestHistoryRetryBudget,
+  openInterestSampleCells,
+  observationHistoryWindowKey,
 } from "../marketHistoryCoverage.js";
 
 test("explicit committed ranges preserve holes even on short pages or partial failures", () => {
@@ -34,6 +37,47 @@ test("unknown empty native pages do not cause unlimited automatic retries", () =
   assert.equal(budget.blocked("other"), false);
   budget.clear();
   assert.equal(budget.blocked("empty"), false);
+});
+
+test("a moving OI tail shares one sample budget without blocking the next cell", () => {
+  const budget = new OpenInterestHistoryRetryBudget();
+  const step = 300_000;
+  const gap = { startMs: step, endMs: step };
+  const cell = { startMs: step, endMs: 2 * step - 1 };
+  const moving = { startMs: step, endMs: step + 12_000 };
+  assert.deepEqual(openInterestSampleCells(gap, step), cell);
+  assert.deepEqual(openInterestSampleCells(moving, step), cell);
+  assert.equal(openInterestSampleCells({ startMs: step + 1, endMs: moving.endMs }, step), null);
+  assert.equal(budget.fail(gap, step, 1_000, 30_000), true);
+  assert.deepEqual(budget.deferred(moving, step, 1_100), { ranges: [cell], retryAt: 31_000 });
+  assert.equal(nextUncoveredHistoryRange(budget.deferred(moving, step, 1_100).ranges, moving), null);
+  assert.equal(nextUncoveredHistoryRange(budget.deferred(moving, step, 31_000).ranges, moving)?.startMs, step);
+  assert.equal(budget.fail(moving, step, 31_000, 30_000), true);
+  assert.equal(budget.fail(moving, step, 61_000, 30_000), false);
+  assert.deepEqual(budget.deferred(moving, step, 1_000_000), { ranges: [cell], retryAt: null });
+
+  const next = { startMs: 2 * step, endMs: 2 * step + 700 };
+  assert.deepEqual(budget.deferred(next, step, 1_000_000), { ranges: [], retryAt: null });
+  assert.deepEqual(nextUncoveredHistoryRange(budget.deferred(moving, step, 1_000_000).ranges, {
+    startMs: moving.startMs, endMs: next.endMs,
+  }), next);
+  budget.accept([{ start_ms: cell.startMs, end_ms: cell.endMs }]);
+  assert.equal(budget.fail(gap, step, 1_000_001, 30_000), true);
+  budget.clear();
+  assert.deepEqual(budget.deferred(moving, step, 1_000_002), { ranges: [], retryAt: null });
+});
+
+test("observation windows coalesce a moving edge without satisfying any coverage", () => {
+  const range = { startMs: 300_000, endMs: 600_000 };
+  assert.equal(observationHistoryWindowKey(range, 300_000),
+    observationHistoryWindowKey({ ...range, endMs: 608_000 }, 300_000));
+  assert.notEqual(observationHistoryWindowKey(range, 300_000),
+    observationHistoryWindowKey({ ...range, endMs: 900_000 }, 300_000));
+  assert.deepEqual(coverageRangesForHistoryPage(range, {
+    count: 1, complete: false, has_more: false,
+    coverage: { earliest_ms: 300_000, latest_ms: 300_000, complete: false,
+      ranges: [], basis: "observations_only" },
+  }, "backward"), []);
 });
 
 test("future-only market history ranges are not requested", () => {
