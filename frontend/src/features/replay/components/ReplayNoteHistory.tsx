@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { t } from "../../../i18n/index.js";
-import { sameReplayNoteContext, type ReplayNote, type ReplayNoteContext } from "../replayNotes.js";
+import { replayNoteView, sameReplayNoteContext, type ReplayNote, type ReplayNoteContext } from "../replayNotes.js";
 import type { ReplayV2ApiClient } from "../replayV2Api.js";
 import { ReplayNoteScreenshots, type ReplayNoteScreenshotSelection } from "./ReplayNoteScreenshots.js";
 import { ReplayNoteLinks } from "./ReplayNoteLinks.js";
@@ -19,7 +19,7 @@ export default function ReplayNoteHistory({ api, note, context, scope, asOfMs, f
   useEffect(() => {
     const controller = new AbortController();
     api.noteVersionsRun(context.runId, context.trackId, note.id,
-      { atTimeMs: asOfMs, beforeRevision: before, limit: 20 }, controller.signal).then(result => {
+      { atTimeMs: asOfMs, beforeRevision: before, limit: 20 }, controller.signal, replayNoteView(context)).then(result => {
       if (controller.signal.aborted) return;
       if (!sameReplayNoteContext(result.context, context)) throw new TypeError("Replay note history context changed");
       setPage(previous => ({ versions: [...previous.versions.filter(version => version.revisionCount >= before), ...result.versions], next: result.nextBeforeRevision,

@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths: ["frontend/**", "backend/**", "packages/**", ".github/workflows/macos-desktop.yml"]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
       - ".github/workflows/macos-desktop.yml"
       - "frontend/desktop/**"
@@ -32,6 +33,7 @@ concurrency:
 
 jobs:
   package:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: package (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     # Intel source builds and bundled regressions need room for the final restart check.

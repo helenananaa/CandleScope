@@ -2,6 +2,7 @@ name: Windows Python strategy worker
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
       - "backend/app/backtest/strategy/**"
       - "backend/app/backtest/continuous*.py"
@@ -25,6 +26,7 @@ concurrency:
 
 jobs:
   qualify:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: Native Windows worker and AppContainer
     runs-on: windows-latest
     timeout-minutes: 20

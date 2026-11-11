@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../../i18n/index.js";
-import { parseReplayNoteContext, sameReplayNoteContext, type ReplayNote, type ReplayNoteCapture, type ReplayNoteContext } from "../replayNotes.js";
+import { replayNoteView, parseReplayNoteContext, sameReplayNoteContext, type ReplayNote, type ReplayNoteCapture, type ReplayNoteContext } from "../replayNotes.js";
 import type { ReplayV2ApiClient } from "../replayV2Api.js";
 
 export interface ReplayNoteScreenshotSelection { noteId: string; revision: number; capture: ReplayNoteCapture; contextKey: string }
@@ -27,7 +27,7 @@ export function ReplayNoteScreenshotViewer({ api, selection, context, formatTime
   useEffect(() => { const value = dialog.current; value?.showModal(); return () => value?.close(); }, []);
   useEffect(() => {
     const controller = new AbortController();
-    api.noteScreenshotRun(expected.runId, expected.trackId, noteId, revision, capture.id, controller.signal).then(result => {
+    api.noteScreenshotRun(expected.runId, expected.trackId, noteId, revision, capture.id, controller.signal, replayNoteView(expected)).then(result => {
       if (controller.signal.aborted) return;
       if (!sameReplayNoteContext(result.context, expected) || JSON.stringify(result.capture) !== captureKey)
         throw new TypeError("Replay note image context changed");
