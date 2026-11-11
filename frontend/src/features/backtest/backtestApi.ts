@@ -7,6 +7,9 @@ import type {
   BacktestChartData,
   BacktestResearchLaunchContext,
   BacktestResearchLaunchContextInput,
+  BacktestResultReplayCursor,
+  BacktestResultReplayFrame,
+  BacktestResultReplayNoteDraft,
   BacktestRunRecord,
   RecentRunCompareV1,
   RunCompareV3,
@@ -184,10 +187,13 @@ export interface BacktestApiClient {
     parameters: Record<string, unknown>;
     pine_contexts?: unknown[];
       output_mode?: "SIGNAL" | "TARGET_POSITION" | "ORDER_INTENT";
+    python_bar_execution?: import("../../shared/strategyRunSettings.js").PythonBarExecution;
     execution_overrides?: import("../../shared/strategyRunSettings.js").StrategyExecutionOverrides;
     chart_cell_scope: string;
     strategy_draft_id: string;
-  }, idempotencyKey?: string): Promise<ChartContextResolution>;
+  }, idempotencyKey?: string, onProgress?: (job: PreparationJob) => void | Promise<void>): Promise<ChartContextResolution>;
+  observeStrategyPreparation?(jobId: string, scope: string, retry: boolean,
+    onProgress: (job: PreparationJob) => void | Promise<void>, signal?: AbortSignal): Promise<PreparationJob>;
   capabilities(signal?: AbortSignal): Promise<BacktestCapabilities>;
   listDatasets(signal?: AbortSignal): Promise<BacktestDataset[]>;
   previewSnapshot(
@@ -215,6 +221,9 @@ export interface BacktestApiClient {
   streamRun?(runId: string, signal?: AbortSignal, onUpdate?: (event: StrategyRunUpdate) => void): Promise<BacktestRunRecord>;
   getReport(runId: string, signal?: AbortSignal): Promise<BacktestReport>;
   getChart(runId: string, signal?: AbortSignal): Promise<BacktestChartData>;
+  getResultReplay?(cursor: BacktestResultReplayCursor, signal?: AbortSignal): Promise<BacktestResultReplayFrame>;
+  saveResultReplayNote?(cursor: BacktestResultReplayCursor, note: BacktestResultReplayNoteDraft,
+    signal?: AbortSignal): Promise<{ revision: number }>;
   exportRun(runId: string, signal?: AbortSignal): Promise<Record<string, unknown>>;
   cancelRun(runId: string, signal?: AbortSignal): Promise<BacktestRunRecord>;
   resumeRun(runId: string, signal?: AbortSignal): Promise<BacktestRunRecord>;
@@ -406,19 +415,39 @@ export function createBacktestApi(base = `${API_BASE}/backtests`): BacktestApiCl
         }, signal)),
       );
     },
-    async prepareChartContext(body, signal, strategy, idempotencyKey = crypto.randomUUID()) {
+    async prepareChartContext(body, signal, strategy, idempotencyKey = crypto.randomUUID(), onProgress = () => undefined) {
       const transport = { basePath: base.replace(/\/backtests$/, "/data-preparations") };
       const initial = await preparationRequest<PreparationJob>("/strategy", {
         method: "POST", headers: { "content-type": "application/json" }, signal: signal ?? null,
         body: JSON.stringify({ idempotency_key: idempotencyKey, context: body, ...(strategy ? { strategy } : {}) }),
       }, transport);
-      const ready = await waitForPreparation(initial, () => undefined, signal, transport);
+      const ready = await waitForPreparation(initial, onProgress, signal, transport);
       if (!ready.result?.resolution) throw new Error("Prepared strategy context is missing");
       if (ready.result.strategy_run) return { ...ready.result.resolution, prepared_run: ready.result.strategy_run };
       return readJson(await fetch(`${base}/chart-context/resolve`, requestOptions({
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify(ready.result.resolution.request),
       }, signal)));
+    },
+    async observeStrategyPreparation(jobId, scope, retry, onProgress, signal) {
+      const transport = { basePath: base.replace(/\/backtests$/, "/data-preparations") };
+      const path = `/${encodeURIComponent(jobId)}`;
+      const verify = (job: PreparationJob) => {
+        const intent = job.request.intent.strategy as { chart_cell_scope?: unknown } | undefined;
+        if (job.id !== jobId || job.request.consumer !== "STRATEGY" || intent?.chart_cell_scope !== scope) {
+          throw new Error("STRATEGY_PREPARATION_IDENTITY_MISMATCH");
+        }
+      };
+      let job = await preparationRequest<PreparationJob>(path, { signal: signal ?? null }, transport);
+      verify(job);
+      if (retry && (job.state === "BLOCKED_STORAGE" || (job.state === "FAILED" && job.error?.retryable))
+        && !job.cancel_requested) {
+        job = await preparationRequest<PreparationJob>(path + "/retry", { method: "POST", signal: signal ?? null }, transport);
+      }
+      return waitForPreparation(job, async update => {
+        verify(update);
+        await onProgress(update);
+      }, signal, transport);
     },
     async listRuns(signal) {
       const payload = await readJson<{ runs: BacktestRunRecord[] }>(
@@ -487,6 +516,39 @@ export function createBacktestApi(base = `${API_BASE}/backtests`): BacktestApiCl
           requestOptions({}, signal),
         ),
       );
+    },
+    async getResultReplay(cursor, signal) {
+      const query = new URLSearchParams({
+        snapshot_hash: cursor.snapshotHash, report_hash: cursor.reportHash,
+        cursor: String(cursor.cursor), interval: cursor.interval,
+        ...(cursor.comparisonInterval ? { comparison_interval: cursor.comparisonInterval } : {}),
+        ...(cursor.comparisonDataset ? {
+          comparison_dataset_id: cursor.comparisonDataset.datasetId,
+          comparison_data_epoch: cursor.comparisonDataset.dataEpoch,
+        } : {}),
+        ...(cursor.maPeriod !== undefined ? { ma_period: String(cursor.maPeriod) } : {}),
+        ...(cursor.comparisonMaPeriod !== undefined ? { comparison_ma_period: String(cursor.comparisonMaPeriod) } : {}),
+      });
+      if (cursor.additionalCharts && Object.keys(cursor.additionalCharts).length)
+        query.set("additional_charts", JSON.stringify(cursor.additionalCharts));
+      return readJson(await fetch(
+        `${base}/runs/${encodeURIComponent(cursor.runId)}/result-replay?${query}`,
+        requestOptions({}, signal),
+      ));
+    },
+    async saveResultReplayNote(cursor, note, signal) {
+      return readJson(await fetch(
+        `${base}/runs/${encodeURIComponent(cursor.runId)}/result-replay/notes`,
+        requestOptions({
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            snapshot_hash: cursor.snapshotHash, report_hash: cursor.reportHash,
+            cursor: cursor.cursor, interval: cursor.interval,
+            note_id: note.id, expected_revision: note.expectedRevision, body: note.body,
+          }),
+        }, signal),
+      ));
     },
     async exportRun(runId, signal) {
       return readJson(

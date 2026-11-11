@@ -146,6 +146,9 @@ class SimulationKernel:
     equity_curve_event_interval: int = 1
     equity_curve_mode: str | None = None
     scale_stream_decisions: bool = False
+    capture_result_replay: bool = field(default=False, kw_only=True)
+    replay_closed_bar_signals: list[dict] = field(default_factory=list, init=False)
+    replay_signal_trace_complete: bool = field(default=True, init=False)
     order_policy: Callable[[SimulatedOrder, MarketEvent], bool] | None = field(default=None, repr=False)
     market_observer: Callable[[MarketEvent], None] | None = field(default=None, repr=False)
     execution_reporter: Callable[[dict], None] | None = field(
@@ -303,6 +306,10 @@ class SimulationKernel:
             "fills": ([self._record_encoder(fill) for fill in self.fills]
                       if history_encoder is None else history_encoder("fills", self.fills)),
             "decisions": list(self.decisions),
+            **({
+                "replay_closed_bar_signals": list(self.replay_closed_bar_signals),
+                "replay_signal_trace_complete": self.replay_signal_trace_complete,
+            } if self.capture_result_replay else {}),
             "rejected": list(self.rejected),
             "equity_curve": list(self.equity_curve),
             "account": self.account.snapshot(),
@@ -400,6 +407,9 @@ class SimulationKernel:
             for item in payload["fills"]  # type: ignore[union-attr]
         ]
         self.decisions = list(payload["decisions"])  # type: ignore[arg-type]
+        if self.capture_result_replay:
+            self.replay_closed_bar_signals = [dict(item) for item in payload.get("replay_closed_bar_signals") or []]
+            self.replay_signal_trace_complete = payload.get("replay_signal_trace_complete") is True
         self.rejected = list(payload.get("rejected") or [])  # type: ignore[arg-type]
         if self.execution_model_revision == EXECUTION_REALISM_V2:
             self._order_tif = {
@@ -608,6 +618,10 @@ class SimulationKernel:
             sequence=market_event.sequence,
             watermark_ms=market_event.event_time_ms,
         )
+        if self.capture_result_replay and self.replay_signal_trace_complete:
+            self.replay_signal_trace_complete = record_result_replay_signal(
+                self.replay_closed_bar_signals, decision, market_event, market_event.sequence,
+            )
         if (
             self.execution_model_revision == EXECUTION_REALISM_V2
             or self.scale_stream_decisions
@@ -1340,6 +1354,34 @@ def _decision_record(
         "watermark_ms": watermark_ms,
         "intents": intents,
     }
+
+
+MAX_REPLAY_CLOSED_BAR_SIGNALS = 10_000
+
+
+def record_result_replay_signal(trace: list[dict], decision, bar: MarketEvent, reveal_sequence: int) -> bool:
+    wire = decision.get("provider_decision")
+    if not isinstance(wire, Mapping):
+        return True
+    kind = wire.get("kind")
+    payload = wire.get("payload") or {}
+    if kind == "SIGNAL":
+        value = str(payload.get("direction") or "FLAT")
+    elif kind == "TARGET_POSITION":
+        value = str(payload.get("targetExposure") or "0")
+    elif kind == "ORDER_INTENT":
+        intents = payload.get("intents")
+        value = str(len(intents) if isinstance(intents, list) else 1)
+    else:
+        return True
+    if len(trace) >= MAX_REPLAY_CLOSED_BAR_SIGNALS:
+        trace.clear()
+        return False
+    trace.append({
+        "reveal_sequence": reveal_sequence, "signal_sequence": bar.sequence,
+        "event_time_ms": bar.event_time_ms, "kind": kind, "value": value,
+    })
+    return True
 
 
 def _optional_decimal(value: object) -> Decimal | None:

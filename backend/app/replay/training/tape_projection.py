@@ -14,9 +14,9 @@ from app.data_engine.interval_policy import (
     compute_bucket_start_ms,
     parse_interval_ms,
 )
-from app.data_engine.storage.raw_trade_archive import RawAggTradeDatasetRef
 from app.replay.canonical import canonical_sha256
 from app.replay.dataset import ReplayBar
+from app.replay.local_trade_repository import decode_trade_dataset_ref
 from app.replay.models import ReplaySessionConfig, SourceKind
 from app.replay.sources.trade_reader import PagedReplayTradeReader, ReplayTrade
 
@@ -629,7 +629,7 @@ class TapeDisplayProjection:
     ):
         snapshot = _decode_bar_snapshot(persisted, config=config)
         raw = json.loads(bytes(persisted["snapshot_blob"]))
-        reference = RawAggTradeDatasetRef.from_dict(raw["trade_dataset_ref"])
+        reference = decode_trade_dataset_ref(raw["trade_dataset_ref"])
         if (
             reference.data_epoch != persisted["data_epoch"]
             or sequence > reference.row_count

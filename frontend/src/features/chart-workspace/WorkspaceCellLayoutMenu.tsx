@@ -20,6 +20,7 @@ export interface WorkspaceCellLayoutMenuProps {
   maxCellsPerWindow?: number;
   disabled?: boolean;
   portal?: boolean;
+  children?: ReactNode;
   onSplit(
     cellId: ChartCellId,
     direction: ChartWorkspaceSplitDirection,
@@ -35,6 +36,7 @@ export default function WorkspaceCellLayoutMenu({
   maxCellsPerWindow = 4,
   disabled = false,
   portal = false,
+  children,
   onSplit,
   onClose,
   onSwap,
@@ -172,6 +174,7 @@ export default function WorkspaceCellLayoutMenu({
               </div>
             </div>
           )}
+          {children}
           <button
             type="button"
             className="workspace-cell-close-action"

@@ -137,6 +137,51 @@ test("connections that open then drop before a server event cannot reset the ret
   assert.equal(observed!.result!.identity.revision, 1); release(); manager.dispose();
 });
 
+test("repeated partial groups and interleaved heartbeats preserve the committed view and exhaust retries", async () => {
+  const update = page(2, ["changed", "second"]);
+  const delays: number[] = [];
+  const observed: ContinuousObservation[] = [];
+  let streams = 0;
+  const manager = new ContinuousStrategyDataManager(fixture({
+    async stream(_id, after, _signal, accept) {
+      streams += 1;
+      assert.deepEqual(after, page().identity);
+      accept({ protocol: "continuous.v1", type: "connected" });
+      accept({ ...update, protocol: "continuous.v1", type: "update", begin: true, complete: false,
+        more: true, after_checkpoint: 1, initial_result_ready: true, items: [] });
+      accept({ protocol: "continuous.v1", type: "heartbeat" });
+      throw new StrategyRunStreamError("CONTINUOUS_DISCONNECTED", "dropped during group");
+    },
+  }), (signal, action) => action(signal!), async (delay) => { delays.push(delay); });
+  const release = manager.observe("one", (value) => { observed.push(value); });
+  await until(() => observed.at(-1)?.connection === "error");
+  assert.equal(streams, 6);
+  assert.deepEqual(delays, [250, 500, 1000, 2000, 4000]);
+  assert.ok(observed.every((view) => view.connection !== "connected" && (view.result?.identity.revision ?? 1) === 1));
+  assert.deepEqual(manager.rows("one", "fills", page().identity), ["first"]);
+  release(); manager.dispose();
+});
+
+test("an idle server heartbeat confirms the resumed committed view", async () => {
+  let observed: ContinuousObservation | undefined;
+  let attempts = 0;
+  const manager = new ContinuousStrategyDataManager(fixture({
+    async stream(_id, after, signal, accept) {
+      assert.deepEqual(after, page().identity);
+      accept({ protocol: "continuous.v1", type: "connected" });
+      if (++attempts === 1) throw new StrategyRunStreamError("CONTINUOUS_DISCONNECTED", "dropped before heartbeat");
+      assert.equal(observed?.connection, "reconnecting");
+      accept({ protocol: "continuous.v1", type: "heartbeat" });
+      await pending(signal);
+    },
+  }), (signal, action) => action(signal!), async () => undefined);
+  const release = manager.observe("one", (value) => { observed = value; });
+  await until(() => observed?.connection === "connected");
+  assert.equal(attempts, 2);
+  assert.deepEqual(observed?.result?.identity, page().identity);
+  release(); manager.dispose();
+});
+
 test("repair status shares account observation; late submit response cannot rewind socket completion", async () => {
   const financial = page(2); financial.stale = true; financial.run.phase = "REPAIR_REQUIRED";
   const repair: ContinuousRepair = { id: "repair-one", request_key: "repair/stable", run_id: "one", phase: "PREPARING",

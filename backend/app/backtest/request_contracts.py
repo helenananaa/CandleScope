@@ -247,6 +247,31 @@ class RunCloneRequest(BaseModel):
     value: Any
 
 
+class ResultReplayChartDataset(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    datasetId: str = Field(pattern=r"^local-[0-9a-f]{32}$")
+    dataEpoch: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+
+
+class ResultReplayChartRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    interval: str = Field(min_length=2, max_length=64)
+    dataset: ResultReplayChartDataset | None = None
+    maPeriod: int | None = Field(default=None, strict=True, ge=1, le=500)
+
+
+class ResultReplayNoteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    snapshot_hash: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    report_hash: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    cursor: int = Field(ge=0, strict=True)
+    interval: str = Field(min_length=2, max_length=64)
+    note_id: str = Field(pattern=r"^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$")
+    expected_revision: int = Field(ge=0, le=20, strict=True)
+    body: str = Field(min_length=1, max_length=2000)
+
+
 class ReviewBridgeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     start_time_ms: int

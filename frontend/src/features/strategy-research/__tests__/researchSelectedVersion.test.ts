@@ -26,7 +26,7 @@ test("explicit selected version produces independent inputs and no account, curs
   const value = projectSelectedVersion(selected);
   assert.equal(value.attachment.autoRun, false);
   assert.deepEqual(value.attachment.executionOverrides, { initialBalance: "5000", equityPercent: "20", leverage: "1", feeBps: "3.5", slippageBps: "2" });
-  assert.deepEqual(value.attachment.initialization, { runId: "bt_selected", versionHash: selected.version_hash, outputMode: "TARGET_POSITION", warmupBars: 20 });
+  assert.deepEqual(value.attachment.initialization, { runId: "bt_selected", versionHash: selected.version_hash, outputMode: "TARGET_POSITION", warmupBars: 20, preferredRunMode: "HISTORY_LIVE" });
   assert.deepEqual(value.attachment.customRange, { startMs: 1700000040000, endMs: 1700036040000 });
   assert.deepEqual(selected, before);
   (value.attachment.parameters.nested as { fast: number }).fast = 99;
@@ -34,7 +34,7 @@ test("explicit selected version produces independent inputs and no account, curs
   for (const key of ["account", "checkpoint", "request_key", "python_trusted_confirmed"]) assert.equal(key in value.attachment, false);
 });
 for (const [field, value] of Object.entries({ maker_fee_bps: "2", max_notional: "100", leverage: "2", funding_mode: "HISTORICAL_REQUIRED",
-  fidelity_mode: "TRADE_REPLAY", participation_rate: "0.2", start_time_ms: 1700000040001, output_mode: "SIGNAL", warmup_bars: 200001 })) {
+  fidelity_mode: "TRADE_REPLAY", participation_rate: "0.2", start_time_ms: 1700000040001, output_mode: "UNSUPPORTED", warmup_bars: 200001 })) {
   test(`unrepresentable ${field} refuses the selected version without modifying it`, () => {
     const selected = selectedFixture(); selected.configuration[field] = value;
     const before = structuredClone(selected);
@@ -94,4 +94,20 @@ test("return link waits for durable pointer storage and contains no source or ac
   assert.deepEqual(readResearchReturn(id, storage), reference);
   assert.ok([...values.values()][0]!.length < 300);
   assert.equal(readResearchReturn("invalid", storage), null);
+});
+
+test("return preserves legacy SIGNAL with its futures preset revision and warmup", () => {
+  const selected = selectedFixture();
+  const c = selected.configuration;
+  Object.assign(c, { market_type: "futures", account_model: "LINEAR_PERP_ONE_WAY_V1", output_mode: "SIGNAL",
+    quick_preset_id: "CRYPTO_PERP_STANDARD_V1", quick_preset_revision: "1" });
+  delete c.execution_model_revision;
+  delete c.participation_rate;
+  delete c.order_end_policy;
+  const projected = projectSelectedVersion(selected);
+  assert.equal(projected.session.marketType, "futures");
+  assert.deepEqual(projected.attachment.initialization, { runId: "bt_selected", versionHash: selected.version_hash,
+    outputMode: "SIGNAL", executionModel: "LEGACY", warmupBars: 20, preferredRunMode: "HISTORY_LIVE" });
+  c.participation_rate = "0.1";
+  assert.throws(() => projectSelectedVersion(selected), /participation_rate/);
 });

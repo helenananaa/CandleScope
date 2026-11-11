@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { t } from "../../../i18n/index.js";
 import { attachReplayNoteCapture, createReplayNoteCaptureDraft, readReplayNoteCaptureDraft, releaseReplayNoteCaptureDraft,
   replayNotePendingCapture, replayNotePendingCaptureField, replayNoteScreenshotField, replayNoteScreenshotIds, saveReplayNoteCaptureDraft } from "../replayNoteCaptureDraft.js";
-import { sameReplayNoteContext, type ReplayNoteCapture, type ReplayNoteCaptureSave, type ReplayNoteContext } from "../replayNotes.js";
+import { replayNoteView, sameReplayNoteContext, type ReplayNoteCapture, type ReplayNoteCaptureSave, type ReplayNoteContext } from "../replayNotes.js";
 import type { ReplayV2ApiClient } from "../replayV2Api.js";
 
 type Api = Pick<ReplayV2ApiClient, "saveNoteCaptureRun" | "noteCapturesRun">;
@@ -33,7 +33,7 @@ export default function ReplayNoteCaptureControls({ api, context, view, fields, 
     onBusy(false); setOperation(value => value?.key === viewKey ? { ...value, busy: false } : value);
   };
   const complete = async (payload: ReplayNoteCaptureSave, controller: AbortController) => {
-    const result = await api.saveNoteCaptureRun(context.runId, context.trackId, payload, controller.signal);
+    const result = await api.saveNoteCaptureRun(context.runId, context.trackId, payload, controller.signal, replayNoteView(payload.context));
     if (controller.signal.aborted) return;
     if (!within(result.capture)) throw new TypeError("Capture exceeds the draft view");
     if (edit(value => attachReplayNoteCapture(value, result.capture.id))) {
@@ -61,7 +61,7 @@ export default function ReplayNoteCaptureControls({ api, context, view, fields, 
       const payload = memory.current?.id === pending ? memory.current : readReplayNoteCaptureDraft(localStorage, pending, context, view);
       if (payload) { saveReplayNoteCaptureDraft(localStorage, payload); await complete(payload, controller); }
       else {
-        const result = await api.noteCapturesRun(context.runId, context.trackId, pending, controller.signal);
+        const result = await api.noteCapturesRun(context.runId, context.trackId, pending, controller.signal, replayNoteView(view));
         if (controller.signal.aborted) return;
         const capture = result.captures[0];
         if (!sameReplayNoteContext(result.context, view) || !capture || !within(capture)) throw new TypeError("Capture recovery changed its view");
@@ -75,7 +75,7 @@ export default function ReplayNoteCaptureControls({ api, context, view, fields, 
     setShowChoices(value => !value); if (showChoices) return;
     const controller = begin();
     try {
-      const result = await api.noteCapturesRun(context.runId, context.trackId, undefined, controller.signal);
+      const result = await api.noteCapturesRun(context.runId, context.trackId, undefined, controller.signal, replayNoteView(view));
       if (controller.signal.aborted) return;
       if (!sameReplayNoteContext(result.context, view)) throw new TypeError("Capture selection changed its view");
       setChoices({ key: viewKey, values: result.captures });

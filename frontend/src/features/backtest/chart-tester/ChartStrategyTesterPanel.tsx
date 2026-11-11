@@ -31,7 +31,7 @@ import { StrategyLanguageControls } from "./StrategyLanguageControls.js";
 import { strategyLanguageLabel } from "./strategyLanguageLabel.js";
 import { StrategyConditionsEditor } from "./StrategyConditionsEditor.js";
 import { StrategyParametersEditor } from "./StrategyParametersEditor.js";
-import { validStrategyRunSettings } from "../../../shared/strategyRunSettings.js";
+import { validStrategyRunSettings, type StrategyRunSettings } from "../../../shared/strategyRunSettings.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import {
   pendingStrategyDraftSave,
@@ -71,6 +71,9 @@ import {
   CHART_STRATEGY_MIN_PANEL_HEIGHT,
   clampChartStrategyPanelHeight,
   loadChartStrategyPanelPreferences,
+  loadDetachedChartStrategy,
+  resolveChartStrategyRunMode,
+  saveDetachedChartStrategy,
   saveChartStrategyPanelPreferences,
   type ChartStrategyPanelTab,
 } from "./chartStrategyPanelPreferences.js";
@@ -95,7 +98,9 @@ import { StrategySwitcher, type StrategySwitcherItem } from "./StrategySwitcher.
 const StrategyScriptWorkspace = lazy(() => import("./StrategyScriptWorkspace.js"));
 const NativeStrategyPanel = lazy(() => import("../native/NativeStrategyPanel.js"));
 const ContinuousStrategyPanel = lazy(() => import("../continuous/ContinuousStrategyPanel.js"));
+import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
 import type { ContinuousMode } from "../continuous/continuousTypes.js";
+import type { ChartStrategyResultMarkerSource } from "./chartStrategyResultMarkerSource.js";
 
 type PanelTab = ChartStrategyPanelTab;
 const PANEL_TABS: readonly PanelTab[] = ["overview", "trades", "script", "settings"];
@@ -202,6 +207,10 @@ export interface ChartStrategyTesterPanelProps {
   onSelectExplanation?(selection: TradeExplanationSelection): void;
   onCloseExplanation?(): void;
   onLocateTrade?(timeMs: number): void;
+  continuousChartActive?: boolean;
+  continuousMarketWindow?: SeriesWindowView | null;
+  onRunModeChange?(mode: ContinuousMode): void;
+  continuousMarkerSource?: Pick<ChartStrategyResultMarkerSource, "setContinuousResult">;
   active?: boolean;
   onReviewTrade?(trade: StrategyTradeFocus | null): void;
   onPrepareData(): void;
@@ -211,7 +220,7 @@ export interface ChartStrategyTesterPanelProps {
   onClose(): void;
   onOpenAdvanced?(): void;
   onOpenBatchStudy?(): void;
-  onOpenWorkspace?(draft: StrategyDraftRecord): void | Promise<void>;
+  onOpenWorkspace?(draft: StrategyDraftRecord, settings?: StrategyRunSettings): void | Promise<void>;
 }
 
 const HOST_STRATEGY_ID = "__candlescope_host__";
@@ -270,7 +279,8 @@ export default function ChartStrategyTesterPanel(props: ChartStrategyTesterPanel
     {(mode === "CANDLESCOPE" || visited.has("CANDLESCOPE")) && <StrategyDockPane hidden={mode !== "CANDLESCOPE"}>
       {availability === "error" && <StrategyDockSlot name="notice"><p className="strategy-notice" data-tone="info" role="status">{t("indicator.editor.runtimeUnavailableHelp")}</p></StrategyDockSlot>}
       {availability === "unavailable" && <StrategyDockSlot name="notice"><p className="strategy-notice" data-tone="info" role="status">{t("native.platformHelp")}</p></StrategyDockSlot>}
-      <CandleScopeStrategyTesterPanel {...props} active={props.active !== false && mode === "CANDLESCOPE"} />
+      <CandleScopeStrategyTesterPanel {...props} active={props.active !== false && mode === "CANDLESCOPE"}
+        continuousChartActive={mode === "CANDLESCOPE" && !!props.continuousChartActive} />
     </StrategyDockPane>}
   </StrategyDock>;
 }
@@ -296,6 +306,10 @@ export function CandleScopeStrategyTesterPanel({
   onSelectExplanation = () => undefined,
   onCloseExplanation = () => undefined,
   onLocateTrade = () => undefined,
+  continuousChartActive,
+  continuousMarketWindow,
+  onRunModeChange,
+  continuousMarkerSource,
   onReviewTrade,
   active = true,
   onPrepareData,
@@ -309,12 +323,22 @@ export function CandleScopeStrategyTesterPanel({
 }: ChartStrategyTesterPanelProps) {
   const locale = useLocale();
   const [focusMode, setFocusMode] = useState(false);
-  const [runMode, setRunMode] = useState<ContinuousMode>(() => loadChartStrategyPanelPreferences(cellScope).runMode ?? "HISTORY");
+  const [runModePreference, setRunModePreference] = useState(() => loadChartStrategyPanelPreferences(cellScope));
+  const runMode = resolveChartStrategyRunMode(runModePreference, attachment);
+  useLayoutEffect(() => { onRunModeChange?.(runMode); }, [onRunModeChange, runMode]);
   const [height, setHeight] = useState(() => loadChartStrategyPanelPreferences(cellScope).height);
   const [activeTab, setActiveTab] = useState<PanelTab>(() => (
     attachment ? loadChartStrategyPanelPreferences(cellScope).activeTab : "script"
   ));
   const currentAttachment = attachment;
+  const [detachedAttachment, setDetachedAttachment] = useState(() => loadDetachedChartStrategy(cellScope));
+  const [restorePending, setRestorePending] = useState(false);
+  const [restoreError, setRestoreError] = useState(false);
+  const attachmentContext = useRef<object | null>(null);
+  useLayoutEffect(() => {
+    attachmentContext.current = {};
+    return () => { attachmentContext.current = null; };
+  }, [active, cellScope, currentAttachment, runMode, session]);
   const [draft, setDraft] = useState<StrategyDraftRecord | null>(null);
   const activeDraft = draft?.id === currentAttachment?.strategyDraftId ? draft : null;
   const [source, setSource] = useState("");
@@ -340,8 +364,8 @@ export function CandleScopeStrategyTesterPanel({
 
   useEffect(() => () => resizeCleanupRef.current?.(), []);
   useEffect(() => {
-    saveChartStrategyPanelPreferences(cellScope, { height, activeTab, runMode });
-  }, [activeTab, cellScope, height, runMode]);
+    saveChartStrategyPanelPreferences(cellScope, { ...runModePreference, height, activeTab });
+  }, [activeTab, cellScope, height, runModePreference]);
   const resultCacheKey = result?.cacheKey ?? null;
   useEffect(() => {
     if (!resultCacheKey) return undefined;
@@ -447,8 +471,9 @@ export function CandleScopeStrategyTesterPanel({
     record: StrategyDraftRecord,
     shouldFocus: boolean,
     nextSaveState: StrategyDraftAutoSaveState = "SAVED",
+    restoredAttachment?: ChartStrategyAttachmentRecord,
   ) => {
-    const nextAttachment = attachmentForDraft(record, session);
+    const nextAttachment = restoredAttachment ?? attachmentForDraft(record, session);
     setDraft(record);
     setSource(record.source);
     setCursor(record.cursor);
@@ -528,18 +553,62 @@ export function CandleScopeStrategyTesterPanel({
     }).catch(() => undefined);
   }, [activeDraft, cursor, draftStore, source]);
 
+  const persistCurrentDraft = useCallback(async () => {
+    if (!activeDraft) throw new Error("DRAFT_UNAVAILABLE");
+    const input = pendingStrategyDraftSave({ draft: activeDraft, source, cursor });
+    if (!input && draftStore.snapshot(activeDraft.id).saveState === "SAVED") return activeDraft;
+    return draftStore.save(input ?? { id: activeDraft.id, displayName: activeDraft.displayName,
+      language: activeDraft.language, source, cursor });
+  }, [activeDraft, cursor, draftStore, source]);
+
+  async function detachStrategy() {
+    if (!currentAttachment || !activeDraft) throw new Error(t("continuous.draftUnavailable"));
+    const context = attachmentContext.current;
+    const edit = pendingSaveRef.current;
+    await persistCurrentDraft();
+    const latest = pendingSaveRef.current;
+    if (!context || attachmentContext.current !== context) return;
+    if (edit.source !== latest.source || edit.cursor !== latest.cursor) throw new Error(t("continuous.detachChanged"));
+    if (!saveDetachedChartStrategy(cellScope, currentAttachment)) throw new Error(t("continuous.storage"));
+    setDetachedAttachment(currentAttachment);
+    setRestoreError(false);
+    setPythonApproval(null);
+    onAttachmentChange(null);
+  }
+
+  async function restoreStrategy() {
+    const id = detachedAttachment?.strategyDraftId;
+    if (!id || restorePending) return;
+    const context = attachmentContext.current;
+    setRestorePending(true);
+    setRestoreError(false);
+    try {
+      const view = await draftStore.load(id);
+      if (!context || attachmentContext.current !== context) return;
+      if (view.record?.id !== id || view.record.language !== detachedAttachment.language) {
+        setRestoreError(true);
+        return;
+      }
+      setPythonApproval(null);
+      attachRecord(view.record, false, view.saveState, detachedAttachment);
+    } catch {
+      if (attachmentContext.current === context) setRestoreError(true);
+    } finally {
+      setRestorePending(false);
+    }
+  }
+
   const handoffOperation = useRef<Promise<void> | null>(null);
-  const openWorkspace = useCallback((): Promise<void> => {
+  const openWorkspace = useCallback((settings?: StrategyRunSettings): Promise<void> => {
     if (handoffOperation.current) return handoffOperation.current;
     if (!activeDraft || !onOpenWorkspace) return Promise.reject(new Error("DRAFT_UNAVAILABLE"));
-    const operation = draftStore.save({ id: activeDraft.id, displayName: activeDraft.displayName,
-      language: activeDraft.language, source, cursor }).then(onOpenWorkspace);
+    const operation = persistCurrentDraft().then((saved) => onOpenWorkspace(saved, settings));
     handoffOperation.current = operation;
     void operation.catch(() => setSaveState("ERROR")).finally(() => {
       if (handoffOperation.current === operation) handoffOperation.current = null;
     });
     return operation;
-  }, [activeDraft, cursor, draftStore, onOpenWorkspace, source]);
+  }, [activeDraft, onOpenWorkspace, persistCurrentDraft]);
 
   const beginResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -601,7 +670,7 @@ export function CandleScopeStrategyTesterPanel({
       command("resumeObserving", "Resume server-run observation.", empty, onResumeObserving),
       command("openAdvanced", "Open the existing advanced-research workflow.", empty, () => onOpenAdvanced?.(), { available: () => !!onOpenAdvanced }),
       command("openBatchStudy", "Open the existing batch study workflow.", empty, () => onOpenBatchStudy?.(), { available: () => !!onOpenBatchStudy }),
-      command("openWorkspace", "Save the current code and open an independent research experiment.", empty, openWorkspace, { available: () => !!onOpenWorkspace && !!activeDraft && active }),
+      command("openWorkspace", "Save the current code and open an independent research experiment.", empty, () => openWorkspace(), { available: () => runMode === "HISTORY" && !!onOpenWorkspace && !!activeDraft && active }),
       command("close", "Close the host strategy panel.", empty, onClose),
     ] }));
   const runLabel = pendingDataMatchesSource
@@ -689,10 +758,14 @@ export function CandleScopeStrategyTesterPanel({
         onPointerDown={beginResize}
         onKeyDown={handleResizeKey}
       />
-      <label className="continuous-mode">{t("continuous.mode")}<select aria-label={t("continuous.mode")} value={runMode} onChange={(event) => setRunMode(event.target.value as ContinuousMode)}>
+      <label className="continuous-mode">{t("continuous.mode")}<select aria-label={t("continuous.mode")} value={runMode} onChange={(event) => {
+        const next = event.target.value as ContinuousMode;
+        setRunModePreference({ height, activeTab, runMode: next,
+          ...(currentAttachment?.strategyDraftId ? { runModeDraftId: currentAttachment.strategyDraftId } : {}) });
+      }}>
         <option value="HISTORY">{t("continuous.history")}</option><option value="HISTORY_LIVE">{t("continuous.historyLive")}</option><option value="LIVE_ONLY">{t("continuous.liveOnly")}</option>
       </select></label>
-      {runMode === "HISTORY" ? <>
+      {runMode === "HISTORY" || !currentAttachment ? <>
       {currentAttachment && <StrategyDockSlot name="tabs">
         <div className="strategy-tabs" role="tablist" aria-label={t("chartTester.tabsAria")}>
           {PANEL_TABS.map((tab) => (
@@ -789,6 +862,12 @@ export function CandleScopeStrategyTesterPanel({
         {!currentAttachment && (
           <div className="chart-strategy-start">
             <p className="chart-strategy-start-lead">{t("chartTester.startLead", { symbol: session.symbol, interval: session.interval })}</p>
+            {detachedAttachment && <p>
+              <button type="button" className="strategy-dock-button" disabled={restorePending} onClick={() => { void restoreStrategy(); }}>
+                {t("continuous.restoreAttachment", { name: detachedAttachment.displayName })}
+              </button>
+            </p>}
+            {restoreError && <p role="alert">{t("continuous.draftUnavailable")}</p>}
             <div className="chart-strategy-start-columns">
               <section aria-label={t("chartTester.templateTitle")}>
                 <h3>{t("chartTester.start.template")}</h3>
@@ -1039,6 +1118,20 @@ export function CandleScopeStrategyTesterPanel({
         <ContinuousStrategyPanel key={JSON.stringify([cellScope, activeDraft?.id, session, runMode])}
           scope={JSON.stringify([cellScope, activeDraft?.id])} session={session} mode={runMode} source={source}
           language={activeDraft?.language ?? ""} parameters={currentAttachment?.parameters ?? {}} trusted={pythonTrustedConfirmed} active={active}
+          chartActive={!!continuousChartActive} marketWindow={continuousMarketWindow ?? null} onLocateTrade={onLocateTrade}
+          {...(continuousMarkerSource ? { markerSource: continuousMarkerSource } : {})}
+          {...(onOpenWorkspace && activeDraft ? { onOpenWorkspace: openWorkspace } : {})}
+          saveDraft={async () => { await persistCurrentDraft(); }}
+          onDetach={detachStrategy}
+          {...(currentAttachment && activeDraft?.language === "python" ? {
+            onParameterChange(name: string, value: string | number | boolean) {
+              onAttachmentChange({ ...currentAttachment, parameters: { ...currentAttachment.parameters, [name]: value } });
+            },
+            literalParameters(disabled: boolean) {
+              return <StrategyParametersEditor source={source} disabled={disabled}
+                onChange={(value) => { setSource(value); setRunReady(false); onSourceDirty(); }} />;
+            },
+          } : {})}
           {...(currentAttachment?.initialization ? { initialization: currentAttachment.initialization,
             ...(currentAttachment.executionOverrides ? { initialExecution: currentAttachment.executionOverrides } : {}),
             ...(currentAttachment.customRange ? { initialFromMs: currentAttachment.customRange.startMs } : {}) } : {})}

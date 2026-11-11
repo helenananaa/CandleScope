@@ -127,6 +127,14 @@ async def review_first():
     return await state()
 
 
+@app.post("/fixture/review-marker")
+async def review_marker():
+    review = await training().start_review(app.state.run_id, event_id=None)
+    marker = next(event for event in review["events"] if event["event_type"] == "USER_MARKER")
+    await training().start_review(app.state.run_id, event_id=marker["event_id"])
+    return await state()
+
+
 @app.post("/fixture/review-last")
 async def review_last():
     review = await training().start_review(app.state.run_id, event_id=None)

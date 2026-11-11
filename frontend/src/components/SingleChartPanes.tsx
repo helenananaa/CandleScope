@@ -294,6 +294,8 @@ export interface SingleChartPanesProps {
   contractVolume?: boolean;
   symbol: string;
   drawingKeyBase?: string;
+  drawingsEnabled?: boolean;
+  drawingsHidden?: boolean;
   drawingReadOnly?: boolean;
   drawingDocumentGeneration?: number;
   paneLayoutScope?: string | null;
@@ -819,6 +821,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   contractVolume = false,
   symbol,
   drawingKeyBase = "",
+  drawingsEnabled = true,
+  drawingsHidden,
   drawingReadOnly = false,
   drawingControlsHost = null,
   drawingDocumentGeneration = 0,
@@ -1089,7 +1093,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   >>(new Map());
   const selectedDrawingPaneIdRef = useRef<string | null>(null);
   const selectedDrawingsByPaneRef = useRef<Map<string, SelectedDrawingMeta>>(new Map());
-  const drawingsHiddenRef = useRef(false);
+  const drawingsHiddenRef = useRef(drawingsHidden ?? false);
   const linkedViewportReadyListenersRef = useRef<Set<(generation: number) => void>>(new Set());
   const linkedViewportReadyGenerationRef = useRef(0);
   const linkedViewportReadyStateRef = useRef(false);
@@ -1360,8 +1364,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     }
   }, [datasetKey, drawingSeriesGeneration, pluginChartLayerSource, usesDerivedAxis]);
   const drawingAnchorMode = resolvedDescriptor.drawingAnchorMode;
-  const supportsDrawingFeatures = supportsDrawingAnchorMode(drawingAnchorMode);
-  const effectiveDrawingTool = drawingToolForAnchorMode(drawingAnchorMode, drawingTool);
+  const supportsDrawingFeatures = drawingsEnabled && supportsDrawingAnchorMode(drawingAnchorMode);
+  const effectiveDrawingTool = drawingsEnabled ? drawingToolForAnchorMode(drawingAnchorMode, drawingTool) : null;
   const drawingEngineToolActive = effectiveDrawingTool != null
     && DRAWING_ENGINE_TOOL_IDS.has(effectiveDrawingTool);
   const cursorOverlayClass = cursorOverlayClassForTool(effectiveDrawingTool);
@@ -5198,6 +5202,9 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     drawingsHiddenRef.current = !!hidden;
     for (const api of drawingApisByPaneRef.current.values()) api.setHidden(hidden);
   }, []);
+  useLayoutEffect(() => {
+    if (drawingsHidden !== undefined && drawingsHidden !== drawingsHiddenRef.current) setDrawingsHidden(drawingsHidden);
+  }, [drawingsHidden, setDrawingsHidden]);
   const updateSelectedDrawingStyle = useCallback((patch: DrawingStylePatch) => {
     const paneId = selectedDrawingPaneIdRef.current;
     const api = paneId ? drawingApisByPaneRef.current.get(paneId) : null;
@@ -5618,7 +5625,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
               drawingInterval: interval,
               drawingCoordinateKey: surface.coordinateKey,
               drawingAnchorMode,
-              initialHidden: drawingsHiddenRef.current,
+              initialHidden: drawingsHidden ?? drawingsHiddenRef.current,
             }}
             interactionKey={surface.interactionKey}
             onPaneApiChange={handleDrawingApiChange}
