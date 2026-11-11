@@ -602,6 +602,7 @@ export const hi = {
   "legend.change": "परि.",
   "legend.amplitude": "आयाम",
   "legend.noData": "इस बार के लिए कोई डेटा नहीं",
+  "legend.partialSeed": "सबसे पुरानी संग्रहीत कैंडल से गणना की गई ({warmup} वार्मअप कैंडल में से {seed})। पुराना इतिहास लोड होने पर मान बदल सकते हैं।",
   "legend.line": "रेखा {n}",
   "legend.mainPane": "{symbol} मुख्य",
   "pane.main": "मुख्य",

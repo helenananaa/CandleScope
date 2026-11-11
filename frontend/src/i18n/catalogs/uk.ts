@@ -602,6 +602,7 @@ export const uk = {
   "legend.change": "Змін.",
   "legend.amplitude": "Ампл.",
   "legend.noData": "Немає даних для цієї свічки",
+  "legend.partialSeed": "Розраховано від найранішої збереженої свічки ({seed} з {warmup} свічок прогріву). Значення можуть змінитися після завантаження ранішої історії.",
   "legend.line": "Лінія {n}",
   "legend.mainPane": "{symbol} головний",
   "pane.main": "Головна",

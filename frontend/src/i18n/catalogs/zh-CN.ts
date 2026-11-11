@@ -1140,6 +1140,7 @@ export const zhCN = {
   "legend.change": "涨跌",
   "legend.amplitude": "振幅",
   "legend.noData": "该 K 线无数据",
+  "legend.partialSeed": "自最早一根本地 K 线起算（预热 {seed}/{warmup} 根）。加载更早的历史后，数值可能变化。",
   "legend.line": "线 {n}",
   "legend.mainPane": "{symbol} 主图",
 

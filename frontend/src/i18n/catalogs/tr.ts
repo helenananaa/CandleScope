@@ -601,6 +601,7 @@ export const tr = {
   "legend.change": "Değ.",
   "legend.amplitude": "Genl.",
   "legend.noData": "Bu çubuk için veri yok",
+  "legend.partialSeed": "En eski kayıtlı çubuktan hesaplandı ({warmup} ısınma çubuğundan {seed}). Daha eski geçmiş yüklendiğinde değerler değişebilir.",
   "legend.line": "Çizgi {n}",
   "legend.mainPane": "{symbol} ana",
   "pane.main": "Ana",

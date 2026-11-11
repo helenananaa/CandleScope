@@ -35,6 +35,7 @@ import {
   subtractIndicatorRange,
 } from "./indicatorRangeCoverage.js";
 import { isIndicatorRecord } from "./indicatorContracts.js";
+import { replacePartialSeedRanges, updatePartialSeedRanges } from "./indicatorSeedState.js";
 import type {
   IndicatorAuxiliaryItem,
   IndicatorCacheContext,
@@ -48,6 +49,7 @@ import type {
   IndicatorLine,
   IndicatorParameterSchema,
   IndicatorParams,
+  IndicatorPartialSeedRange,
   IndicatorRange,
   IndicatorRangeSegment,
   IndicatorRevision,
@@ -597,9 +599,17 @@ function snapshotCacheEntry(
     computedSegments: entry.computedSegments,
     staleSegments: entry.staleSegments,
     revision: entry.revision,
+    ...partialSeedField(entry.partialSeed),
     lastUpdatedMs: entry.lastUpdatedMs,
     lastAccessMs: entry.lastAccessMs,
   });
+}
+
+/** Absent rather than empty, so converged results keep their existing shape. */
+function partialSeedField(
+  ranges: readonly IndicatorPartialSeedRange[] | null | undefined,
+): { partialSeed?: readonly IndicatorPartialSeedRange[] } {
+  return ranges && ranges.length > 0 ? { partialSeed: ranges } : {};
 }
 
 function putEntry(
@@ -624,6 +634,7 @@ function putEntry(
   const computedSegments = freezeOwned(patch.computedSegments);
   const staleSegments = freezeOwned(patch.staleSegments);
   const revision = freezeOwned(patch.revision);
+  const seedField = partialSeedField(freezeOwned(patch.partialSeed));
   const lastUpdatedMs = Date.now();
   const base: IndicatorCacheEntry = {
     key,
@@ -638,6 +649,7 @@ function putEntry(
     computedSegments,
     staleSegments,
     revision,
+    ...seedField,
     lastUpdatedMs,
     lastAccessMs: Date.now(),
   };
@@ -651,6 +663,7 @@ function putEntry(
     computedSegments,
     staleSegments,
     revision,
+    ...seedField,
     lastUpdatedMs,
   });
   const metadataView = freezeOwned<IndicatorCacheResultMetadata>({
@@ -662,6 +675,7 @@ function putEntry(
     computedSegments,
     staleSegments,
     revision,
+    ...seedField,
     lastUpdatedMs,
   });
   const next: InternalIndicatorCacheEntry = {
@@ -778,6 +792,13 @@ export function cacheIndicatorSnapshot(
     normalizedContext,
   );
   const coverage = freezeOwned(buildOutputCoverage(payload));
+  const partialSeed = updatePartialSeedRanges(
+    current?.partialSeed,
+    "snapshot",
+    metadata.range,
+    metadata.seed,
+    payload.lines,
+  );
   return putEntry(key, {
     ...(metadata.inputVersion ? { inputVersion: metadata.inputVersion } : {}),
     indicatorId: indicator.id,
@@ -793,6 +814,7 @@ export function cacheIndicatorSnapshot(
       normalizedContext,
     ),
     revision: revision || current?.revision || null,
+    ...partialSeedField(partialSeed),
   });
 }
 
@@ -825,6 +847,13 @@ export function patchCachedIndicatorResult(
     metadata.revision || metadata.dataRevision || metadata,
   );
   const coverage = freezeOwned(buildOutputCoverage(nextNormalized));
+  const partialSeed = updatePartialSeedRanges(
+    current?.partialSeed,
+    "merge",
+    metadata.range,
+    metadata.seed,
+    incoming.lines,
+  );
   return putEntry(key, {
     indicatorId: indicator.id,
     context: normalizedContext,
@@ -844,6 +873,7 @@ export function patchCachedIndicatorResult(
       normalizedContext,
     ),
     revision: revision || current?.revision || null,
+    ...partialSeedField(partialSeed),
   });
 }
 
@@ -875,6 +905,13 @@ export function replaceCachedIndicatorRange(
     metadata.revision || metadata.dataRevision || metadata,
   );
   const coverage = freezeOwned(buildOutputCoverage(nextNormalized));
+  const partialSeed = updatePartialSeedRanges(
+    current?.partialSeed,
+    "replace-range",
+    range,
+    metadata.seed,
+    incoming.lines,
+  );
   return putEntry(key, {
     indicatorId: indicator.id,
     context: normalizedContext,
@@ -894,6 +931,7 @@ export function replaceCachedIndicatorRange(
       normalizedContext,
     ),
     revision: revision || current?.revision || null,
+    ...partialSeedField(partialSeed),
   });
 }
 
@@ -921,6 +959,7 @@ export function updateCachedIndicatorLines(
     computedSegments: current?.computedSegments || [],
     staleSegments: current?.staleSegments || [],
     revision: current?.revision || null,
+    ...partialSeedField(current?.partialSeed),
   });
 }
 
@@ -999,6 +1038,7 @@ export function upsertCachedIndicatorLinePoint(
       current.context,
     ),
     revision: current.revision || null,
+    ...partialSeedField(current.partialSeed),
   });
 }
 
@@ -1387,6 +1427,11 @@ export function trimIndicatorResultCacheEntries(
           ),
           staleSegments: entry.staleSegments,
           revision: entry.revision,
+          ...partialSeedField(replacePartialSeedRanges(
+            entry.partialSeed,
+            { start: 1, end: Number(victim.keepStart) - 1 },
+            null,
+          )),
         });
         if (!updated) {
           skipped.push({ key, reason: "dependency-unavailable" });

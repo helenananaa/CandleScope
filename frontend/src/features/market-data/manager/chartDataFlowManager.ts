@@ -187,9 +187,10 @@ export class ChartDataFlowManager {
         const covered = normalizeIndicatorRange({ start: Math.max(range.start, returned.start), end: Math.min(range.end, returned.end) });
         if (!covered) return;
         const revision = normalizeIndicatorRevision(payload);
+        const seed = payload.seed === undefined ? {} : { seed: payload.seed };
         const stored = getCachedIndicatorResult(indicator, context)
-          ? replaceCachedIndicatorRange(indicator, context, normalized, covered, { revision })
-          : cacheIndicatorSnapshot(indicator, context, normalized, payload.param_schema, { inputVersion, range: covered, revision });
+          ? replaceCachedIndicatorRange(indicator, context, normalized, covered, { revision, ...seed })
+          : cacheIndicatorSnapshot(indicator, context, normalized, payload.param_schema, { inputVersion, range: covered, revision, ...seed });
         if (stored) this.warmed += 1;
       } else if (cacheIndicatorSnapshot(indicator, context, normalized, payload.param_schema,
         { inputVersion, range: { start: Number(rows[0]!.time), end: Number(rows.at(-1)!.time) } })) this.warmed += 1;

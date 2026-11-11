@@ -9087,6 +9087,16 @@ div.right-drawer-overlay {
   font-weight: 500;
 }
 
+/* Partial-seed builtin values (ADR-INDICATOR-001 §4). The main legend ignores
+   pointer events, so the marker opts back in for its tooltip. */
+.chart-legend-seed-marker {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-weight: 600;
+  cursor: help;
+  pointer-events: auto;
+}
+
 .chart-indicator-status {
   position: absolute;
   bottom: 30px;

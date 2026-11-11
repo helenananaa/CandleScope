@@ -602,6 +602,7 @@ export const ro = {
   "legend.change": "Var.",
   "legend.amplitude": "Ampl.",
   "legend.noData": "Nu există date pentru această bară",
+  "legend.partialSeed": "Calculat de la cea mai veche bară stocată ({seed} din {warmup} bare de încălzire). Valorile se pot schimba când se încarcă istoric mai vechi.",
   "legend.line": "Linia {n}",
   "legend.mainPane": "{symbol} principal",
   "pane.main": "Principal",

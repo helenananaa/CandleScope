@@ -602,6 +602,7 @@ export const ar = {
   "legend.change": "تغيّر",
   "legend.amplitude": "مدى",
   "legend.noData": "لا بيانات لهذه الشمعة",
+  "legend.partialSeed": "محسوبة من أقدم شمعة مخزنة ({seed} من {warmup} شموع إحماء). قد تتغير القيم عند تحميل سجل أقدم.",
   "legend.line": "خط {n}",
   "legend.mainPane": "{symbol} رئيسي",
   "pane.main": "رئيسي",

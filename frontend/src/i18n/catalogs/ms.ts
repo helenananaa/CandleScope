@@ -602,6 +602,7 @@ export const ms = {
   "legend.change": "Ubah",
   "legend.amplitude": "Ampl.",
   "legend.noData": "Tiada data untuk bar ini",
+  "legend.partialSeed": "Dikira daripada bar tersimpan yang paling awal ({seed} daripada {warmup} bar pemanasan). Nilai mungkin berubah apabila sejarah yang lebih lama dimuatkan.",
   "legend.line": "Garis {n}",
   "legend.mainPane": "{symbol} utama",
   "pane.main": "Utama",

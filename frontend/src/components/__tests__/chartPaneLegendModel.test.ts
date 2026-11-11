@@ -6,6 +6,7 @@ import test from "node:test";
 import {
   groupChartPaneLegendValues,
   resolveChartPaneLegendValues,
+  selectLegendPartialSeed,
   shouldUseLatestChartPaneLegend,
 } from "../chartPaneLegendModel.js";
 
@@ -92,4 +93,25 @@ test("aggregate HA and ordinal crosshairs use the indicator bucket time, not the
   assert.equal(values[0]?.value, 53);
   assert.equal(resolveChartCrosshairSourceTime({ order: 3, sourceTime: 420, sourceOrdinal: 1 }, projected), 420);
   assert.equal(resolveChartCrosshairSourceTime(null), null);
+});
+
+test("legend marks a row only while its displayed value came from a partial seed", () => {
+  const seed = { start: 10, end: 20, warmupBars: 2964, seedBars: 100 };
+  const lines = [
+    { id: "ema", indicatorId: "ema", pane: "main", partialSeed: [seed], data: [{ time: 10, value: 1 }, { time: 20, value: 2 }, { time: 30, value: 3 }] },
+    { id: "rsi", indicatorId: "rsi", data: [{ time: 10, value: 50 }, { time: 30, value: 55 }] },
+  ];
+  const at = (time: number | null) => groupChartPaneLegendValues(resolveChartPaneLegendValues(lines, time))
+    .map((row) => [row.id, selectLegendPartialSeed(row.entries)]);
+
+  assert.deepEqual(at(10), [["indicator:ema", seed], ["indicator:rsi", null]]);
+  assert.deepEqual(at(20), [["indicator:ema", seed], ["indicator:rsi", null]]);
+  // The latest EMA value (30) converged; a missing value shows no marker.
+  assert.deepEqual(at(null), [["indicator:ema", null], ["indicator:rsi", null]]);
+  assert.deepEqual(at(15), [["indicator:ema", null], ["indicator:rsi", null]]);
+  // Converged values keep the legend value's existing shape.
+  assert.equal("partialSeed" in (resolveChartPaneLegendValues(lines, null)[0] ?? {}), false);
+
+  const shortSeries = [{ ...lines[0]!, partialSeed: [{ ...seed, end: 30 }] }];
+  assert.deepEqual(selectLegendPartialSeed(resolveChartPaneLegendValues(shortSeries, null)), { ...seed, end: 30 });
 });

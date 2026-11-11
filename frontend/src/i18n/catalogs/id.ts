@@ -601,6 +601,7 @@ export const id = {
   "legend.change": "Perubahan",
   "legend.amplitude": "Amplitudo",
   "legend.noData": "Tidak ada data untuk bar ini",
+  "legend.partialSeed": "Dihitung dari bar tersimpan paling awal ({seed} dari {warmup} bar pemanasan). Nilai dapat berubah saat riwayat yang lebih lama dimuat.",
   "legend.line": "Garis {n}",
   "legend.mainPane": "{symbol} utama",
   "pane.main": "Utama",

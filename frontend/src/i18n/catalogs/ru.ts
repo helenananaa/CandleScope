@@ -601,6 +601,7 @@ export const ru = {
   "legend.change": "Изм.",
   "legend.amplitude": "Ампл.",
   "legend.noData": "Нет данных по этой свече",
+  "legend.partialSeed": "Рассчитано от самой ранней сохранённой свечи ({seed} из {warmup} свечей прогрева). Значения могут измениться после загрузки более ранней истории.",
   "legend.line": "Линия {n}",
   "legend.mainPane": "{symbol} основной",
   "pane.main": "Основная",
