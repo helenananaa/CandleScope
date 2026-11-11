@@ -6,10 +6,12 @@ import {
   nextEventCursor,
   notesBefore,
   positionAt,
+  protectionOrdersAt,
   replayEvents,
   visibleBars,
   type ReplayBar,
 } from "./quickReplayModel.js";
+import { filterJournalNoteMarkers } from "./journalNoteMarkers.js";
 import type { JournalEntry, Trade, TradeLeg } from "./tradingTypes.js";
 
 const HOUR = 3_600;
@@ -72,6 +74,31 @@ test("review save time is not moved by later trade-link metadata changes", () =>
   assert.equal(review.updatedAtMs, 9000);
 });
 
+test("note filters respect exclusive screenshot and trade-link times across rewind", () => {
+  const original: JournalEntry = { ...baseNote, createdAtMs: 1000, updatedAtMs: 7000, tradeLinkedAtMs: 4000,
+    snapshots: [
+      { id: "state", createdAtMs: 1100, hasImage: false, state: {} },
+      { id: "image", createdAtMs: 5000, hasImage: true, state: {} },
+    ],
+    revisions: [{ revision: 1, savedAtMs: 1000, fields: {}, body: "original", historyComplete: true }],
+  };
+  const legacy = { ...original, id: "legacy" };
+  delete legacy.tradeLinkedAtMs;
+  const review = { ...original, id: "review", reviewNote: true, createdAtMs: 8000, marketTimeMs: 3000 };
+  const filtered = (cursor: number, settings: Parameters<typeof filterJournalNoteMarkers>[1]) => {
+    const { notes, reviewNotes } = journalAtCursor([original, legacy, review], cursor);
+    return filterJournalNoteMarkers([...notes, ...reviewNotes], settings, cursor * 1000).map(note => note.id);
+  };
+  assert.deepEqual(filtered(4, { noteSource: "original", noteFilter: "linked" }), []);
+  assert.deepEqual(filtered(5, { noteSource: "original", noteFilter: "linked" }), ["note"]);
+  assert.deepEqual(filtered(5, { noteSource: "original", noteFilter: "screenshots" }), []);
+  assert.deepEqual(filtered(6, { noteSource: "original", noteFilter: "screenshots" }), ["note", "legacy"]);
+  assert.deepEqual(filtered(8, { noteSource: "original", noteFilter: "linked" }), ["note", "legacy"]);
+  assert.deepEqual(filtered(3, { noteSource: "review", noteFilter: "screenshots" }), []);
+  assert.deepEqual(filtered(4, { noteSource: "review", noteFilter: "screenshots" }), ["review"]);
+  assert.deepEqual(filtered(2, { noteFilter: "screenshots" }), []);
+});
+
 function bar(time: number, open: number, high: number, low: number, close: number): ReplayBar {
   return { time, open, high, low, close, volume: 1 };
 }
@@ -99,6 +126,18 @@ test("finer steps rebuild the forming candle only from closed finer candles", ()
   assert.equal(partial.high, 105); // five 5m candles: 01:00..01:20
   assert.equal(partial.close, 104.5);
   assert.notEqual(partial.high, 110); // the full 1h high happens later
+});
+
+test("protection orders enter and leave on the same exclusive cut as fills", () => {
+  const stop = { id: "stop", kind: "stopLoss" as const, price: "98", qty: "1", activeFromMs: 2000, inactiveFromMs: 4000 };
+  const target = { id: "target", kind: "takeProfit" as const, price: "105", qty: "1", activeFromMs: 2500, inactiveFromMs: null };
+  const immediate = { ...stop, id: "immediate", inactiveFromMs: stop.activeFromMs };
+  const orders = [stop, target, immediate];
+  assert.deepEqual(protectionOrdersAt(orders, 2), []);
+  assert.deepEqual(protectionOrdersAt(orders, 2.5), [stop]);
+  assert.deepEqual(protectionOrdersAt(orders, 4), [stop, target]);
+  assert.deepEqual(protectionOrdersAt(orders, 4.001), [target]);
+  assert.deepEqual(protectionOrdersAt(orders, 3), [stop, target]);
 });
 
 test("position, P&L and excursions are computed as of the cursor", () => {

@@ -14,6 +14,7 @@ import {
   type ReplayReviewResponse,
   type ReplayRunRulesResponse,
   type ReplayTrainingReportResponse,
+  type SemanticViewAction,
 } from "./replayIntegrityModel.js";
 import { ReplayRefreshGate } from "./replayRefreshGate.js";
 import { replayEffectiveTrainingState } from "./replayUiModel.js";
@@ -126,12 +127,15 @@ export function useReplayIntegrityRuntime(
   const [error, setError] = useState<string | null>(null);
   const sampler = useRef(new SemanticViewActionSampler());
   const viewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const viewWork = useRef(Promise.resolve());
+  const viewActionsPaused = useRef(false);
   const generation = useRef(0);
   const refreshGate = useRef(new ReplayRefreshGate());
   const equityRefreshGate = useRef(new ReplayRefreshGate());
   const reportRefreshGate = useRef(new ReplayRefreshGate());
   const loadedRunRef = useRef<string | null>(null);
   const pendingPolicy = useRef(false);
+  const pendingReviewOpen = useRef(false);
   const pendingReviewControl = useRef(false);
   const runtimeRef = useRef(runtime);
   const viewerRef = useRef(viewer);
@@ -249,8 +253,16 @@ export function useReplayIntegrityRuntime(
     });
   }, [api]);
 
+  const discardPendingViewActions = useCallback(() => {
+    if (viewTimer.current !== null) clearTimeout(viewTimer.current);
+    viewTimer.current = null;
+    sampler.current.flush();
+  }, []);
+
   useEffect(() => {
     generation.current += 1;
+    discardPendingViewActions();
+    viewActionsPaused.current = false;
     setIntegrity(null);
     setRules(null);
     setEquity(null);
@@ -263,7 +275,7 @@ export function useReplayIntegrityRuntime(
     setError(null);
     loadedRunRef.current = null;
     if (runId !== null) void refresh();
-  }, [refresh, runId]);
+  }, [discardPendingViewActions, refresh, runId]);
 
   useEffect(() => {
     if (
@@ -353,10 +365,12 @@ export function useReplayIntegrityRuntime(
     }
   }, [api, buildCommand, refresh]);
 
-  const flushViewActions = useCallback(async () => {
-    viewTimer.current = null;
-    const actions = sampler.current.flush();
+  const flushViewActions = useCallback(async (
+    actions: readonly SemanticViewAction[],
+    runGeneration: number,
+  ) => {
     for (const action of actions) {
+      if (viewActionsPaused.current || generation.current !== runGeneration) break;
       try {
         const command = buildCommand("record_view_action", {
           event_type: action.event_type,
@@ -373,17 +387,23 @@ export function useReplayIntegrityRuntime(
 
   useEffect(() => () => {
     generation.current += 1;
-    if (viewTimer.current !== null) clearTimeout(viewTimer.current);
-  }, []);
+    discardPendingViewActions();
+  }, [discardPendingViewActions]);
 
   const offerViewAction = useCallback((
     eventType: string,
     semanticKey: string,
     value: Readonly<Record<string, ReplayV2Json>>,
   ) => {
+    if (viewActionsPaused.current) return;
     sampler.current.offer(eventType, semanticKey, value);
     if (viewTimer.current !== null) return;
-    viewTimer.current = setTimeout(() => { void flushViewActions(); }, 500);
+    viewTimer.current = setTimeout(() => {
+      viewTimer.current = null;
+      const actions = sampler.current.flush();
+      const runGeneration = generation.current;
+      viewWork.current = viewWork.current.then(() => flushViewActions(actions, runGeneration));
+    }, 500);
   }, [flushViewActions]);
 
   const recordDrawing = useCallback(async (
@@ -447,21 +467,36 @@ export function useReplayIntegrityRuntime(
   const startReview = useCallback(async (eventId: string | null = null): Promise<ReplayReviewResponse> => {
     const currentRunId = replayRunId(viewerRef.current);
     if (currentRunId === null) throw new Error("replay.v3 run is unavailable");
+    if (pendingReviewOpen.current) throw new Error("another Review is opening");
+    pendingReviewOpen.current = true;
+    const wasPaused = viewActionsPaused.current;
+    const runGeneration = generation.current;
+    viewActionsPaused.current = true;
+    // A read-only projection must open after any already-submitted training
+    // telemetry. Drop unsent samples and stop collecting during Review.
+    discardPendingViewActions();
     setOperation("review");
     setError(null);
     try {
+      await viewWork.current;
+      if (generation.current !== runGeneration) throw new Error("Review run changed before opening");
       const response = await api.reviewRun(currentRunId, eventId);
+      if (generation.current !== runGeneration) throw new Error("Review run changed while opening");
       setReview(response);
       setRules(response.projection.rules);
       setBudget(response.budget);
       return response;
     } catch (cause) {
-      setError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.rt.reviewLoad"));
+      if (generation.current === runGeneration) {
+        viewActionsPaused.current = wasPaused;
+        setError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.rt.reviewLoad"));
+      }
       throw cause;
     } finally {
+      pendingReviewOpen.current = false;
       setOperation((current) => current === "review" ? null : current);
     }
-  }, [api]);
+  }, [api, discardPendingViewActions]);
 
   const controlReview = useCallback(async (
     action: "JUMP" | "PREVIOUS" | "NEXT" | "PLAY" | "PAUSE",
@@ -537,6 +572,7 @@ export function useReplayIntegrityRuntime(
   ]);
 
   const closeReview = useCallback(() => {
+    viewActionsPaused.current = false;
     setReview(null);
     setForked(null);
     void refresh();

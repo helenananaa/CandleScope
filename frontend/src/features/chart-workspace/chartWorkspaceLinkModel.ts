@@ -11,6 +11,8 @@ import type {
   ChartLinkIndicatorSettings,
   ChartWorkspaceDocument,
 } from "./chartWorkspaceTypes.js";
+import { chartQuickReplayKey, type QuickReplayChange, type UpdateChartQuickReplay } from "./chartQuickReplayState.js";
+import { visibleCellIds } from "./chartWorkspaceLayout.js";
 import { chartWorkspaceCell } from "./chartWorkspaceDocument.js";
 import { buildChartSessionKey } from "../chart-session/chartSessionTransition.js";
 
@@ -21,12 +23,15 @@ export type ChartLinkChannel =
   | "timeAnchor"
   | "dateRange"
   | "drawings"
+  | "drawingVisibility"
   | "chartStyle"
   | "accountSource"
   | "tradingOverlays"
   | "noteOverlays"
   | "studyCursor"
   | "studyMode"
+  | "quickReplayMode"
+  | "quickReplayCursor"
   | "indicators";
 
 export type ChartLinkGroupSettingsPatch = Omit<Partial<ChartLinkGroupSettings>, "indicators"> & {
@@ -63,12 +68,15 @@ export function combineChartLinkSettings(
     timeAnchor: left.timeAnchor && right.timeAnchor,
     dateRange: left.dateRange && right.dateRange,
     drawings: left.drawings && right.drawings,
+    drawingVisibility: left.drawingVisibility === true && right.drawingVisibility === true,
     chartStyle: left.chartStyle === true && right.chartStyle === true,
     accountSource: left.accountSource === true && right.accountSource === true,
     tradingOverlays: left.tradingOverlays === true && right.tradingOverlays === true,
     noteOverlays: left.noteOverlays === true && right.noteOverlays === true,
     studyCursor: left.studyCursor === true && right.studyCursor === true,
     studyMode: left.studyMode === true && right.studyMode === true,
+    quickReplayMode: left.quickReplayMode === true && right.quickReplayMode === true,
+    quickReplayCursor: left.quickReplayCursor === true && right.quickReplayCursor === true,
     indicators: {
       definitions: left.indicators.definitions && right.indicators.definitions,
       parameters: left.indicators.parameters && right.indicators.parameters,
@@ -280,6 +288,19 @@ export function applyLinkedChartSettingsUpdate(
   return { ...document, cells };
 }
 
+export function applyLinkedDrawingVisibility(
+  document: ChartWorkspaceDocument, sourceCellId: ChartCellId, hidden: boolean,
+): ChartWorkspaceDocument {
+  const source = document.cells[sourceCellId];
+  if (!source || (source.drawingsHidden === true) === hidden) return document;
+  const cells = { ...document.cells, [sourceCellId]: { ...source, drawingsHidden: hidden } };
+  for (const { cellId } of resolveChartLinkTargetsForChannel(document, sourceCellId, "drawingVisibility")) {
+    const target = cells[cellId]!;
+    if ((target.drawingsHidden === true) !== hidden) cells[cellId] = { ...target, drawingsHidden: hidden };
+  }
+  return { ...document, cells };
+}
+
 /** Only changed preferences travel along explicitly enabled channels. */
 export function applyLinkedAccountOverlayUpdate(
   document: ChartWorkspaceDocument, sourceCellId: ChartCellId, value: ChartAccountOverlaySettings,
@@ -290,7 +311,7 @@ export function applyLinkedAccountOverlayUpdate(
   if (sameChartAccountOverlay(previous, next)) return document;
   const cells = { ...document.cells, [sourceCellId]: { ...source, accountOverlay: next } };
   const channels = {
-    accountSource: ["accountId"], tradingOverlays: ["trades", "positions"], noteOverlays: ["notes"],
+    accountSource: ["accountId"], tradingOverlays: ["trades", "positions"], noteOverlays: ["notes", "noteSource", "noteFilter"],
   } as const;
   for (const channel of Object.keys(channels) as (keyof typeof channels)[]) {
     const keys = channels[channel].filter(key => previous[key] !== next[key]);
@@ -298,9 +319,42 @@ export function applyLinkedAccountOverlayUpdate(
     const patch = Object.fromEntries(keys.map(key => [key, next[key]]));
     for (const target of resolveChartLinkTargetsForChannel(document, sourceCellId, channel)) {
       const cell = cells[target.cellId]!;
-      cells[target.cellId] = { ...cell, accountOverlay: {
+      cells[target.cellId] = { ...cell, accountOverlay: normalizeChartAccountOverlay({
         ...normalizeChartAccountOverlay(cell.accountOverlay), ...patch,
-      } };
+      }) };
+    }
+  }
+  return { ...document, cells };
+}
+
+/** Apply one user action to the graph. Targets keep their trade, interval and step. */
+export function applyQuickReplayUpdate(
+  document: ChartWorkspaceDocument, sourceId: ChartCellId, update: UpdateChartQuickReplay, change: QuickReplayChange,
+): ChartWorkspaceDocument {
+  const source = document.cells[sourceId];
+  if (!source) return document;
+  const previous = source.quickReplay;
+  const next = update(previous);
+  if (next === previous || (next && previous && chartQuickReplayKey(next) === chartQuickReplayKey(previous)
+    && next.cursorSec === previous.cursorSec && next.step === previous.step && (next.active !== false) === (previous.active !== false))) return document;
+
+  const { quickReplay: _quickReplay, ...rest } = source;
+  const cells: ChartWorkspaceDocument["cells"] = { ...document.cells, [sourceId]: next ? { ...rest, quickReplay: next } : rest };
+  const wasActive = previous !== undefined && previous.active !== false;
+  const isActive = next !== undefined && next.active !== false;
+  const changeMode = change === "mode" && wasActive !== isActive;
+  const cursorToLink = change === "cursor" && isActive && next.cursorSec !== previous?.cursorSec ? next.cursorSec : undefined;
+  if (!changeMode && cursorToLink === undefined) return { ...document, cells };
+
+  const visible = new Set(Object.values(document.windows).flatMap(window => visibleCellIds(window.layoutTree)));
+  for (const { cellId } of resolveChartLinkTargetsForChannel(document, sourceId, changeMode ? "quickReplayMode" : "quickReplayCursor")) {
+    const cell = cells[cellId]!;
+    const target = cell.quickReplay;
+    if (!visible.has(cellId) || !target) continue;
+    if (changeMode && (target.active !== false) !== isActive) {
+      cells[cellId] = { ...cell, quickReplay: { ...target, active: isActive } };
+    } else if (cursorToLink !== undefined && target.active !== false && target.cursorSec !== cursorToLink) {
+      cells[cellId] = { ...cell, quickReplay: { ...target, cursorSec: cursorToLink } };
     }
   }
   return { ...document, cells };

@@ -45,6 +45,9 @@ export class AppControlController {
       return { state: "failed", code: "INVALID_PARAMS", message: error instanceof Error ? error.message : String(error) };
     }
     const affected = command.layout ? this.port.read().view.layoutCellIds : command.charts.map(chart => chart.cellId!);
+    if (affected.some(id => this.cells.get(id)?.mode === "quick-replay")) {
+      return { state: "failed", code: "QUICK_REPLAY_ACTIVE", message: "Exit quick replay before replacing its live chart configuration." };
+    }
     if (affected.some(id => {
       const mode = this.cells.get(id)?.mode;
       return mode === "history-study" || mode === "restoring-study";
@@ -79,6 +82,9 @@ export class AppControlController {
         if (targets.some(({ cellId }) => this.cells.get(cellId)?.mode === "history-study")) {
           return { state: "applied", code: "HISTORICAL_STUDY_ACTIVE", readiness: "unverified", revision: appliedRevision,
             message: "The visible chart entered historical study; its live configuration is not the displayed study input.", snapshot: this.inspect() };
+        }
+        if (targets.some(({ cellId }) => this.cells.get(cellId)?.mode === "quick-replay")) {
+          return { state: "applied", code: "QUICK_REPLAY_ACTIVE", readiness: "unverified", revision: appliedRevision, snapshot: this.inspect() };
         }
         const allReady = targets.every(({ cellId }) => {
           const cell = view.document.cells[cellId];

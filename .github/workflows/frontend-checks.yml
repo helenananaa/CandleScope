@@ -2,6 +2,7 @@ name: Frontend checks
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths: ["frontend/**", "packages/**", "backend/app/core/version.py", ".github/workflows/frontend-checks.yml"]
   push:
     branches: [main]
@@ -16,6 +17,7 @@ concurrency:
 
 jobs:
   frontend:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     defaults:

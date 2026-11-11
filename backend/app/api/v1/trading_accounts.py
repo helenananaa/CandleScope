@@ -1,7 +1,7 @@
 """HTTP adapter for trading accounts, practice orders and the trade journal."""
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 import json
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
@@ -196,9 +196,12 @@ async def journal_at_time(request: Request, account_id: str,
                           market_type: str = Query(alias="marketType", max_length=32),
                           symbol: str = Query(max_length=40),
                           cursor_ms: int = Query(alias="cursorMs", ge=0, le=253402300799999),
-                          limit: int = Query(default=100, ge=1, le=100)) -> dict:
+                          limit: int = Query(default=100, ge=1, le=100),
+                          note_source: Literal["all", "original", "review"] = Query(default="all", alias="noteSource"),
+                          note_filter: Literal["all", "linked", "screenshots"] = Query(default="all", alias="noteFilter")) -> dict:
     return await _call(_service(request).journal_at_time, account_id, exchange=exchange,
-                       market_type=market_type, symbol=symbol, cursor_ms=cursor_ms, limit=limit)
+                       market_type=market_type, symbol=symbol, cursor_ms=cursor_ms, limit=limit,
+                       note_source=note_source, note_filter=note_filter)
 
 
 @router.get("/journal/{entry_id}")
