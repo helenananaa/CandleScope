@@ -75,11 +75,18 @@ async function values(name){
   for(const chart of charts){
    const bars=chart.bars.filter(b=>b.is_closed),points=[];
    assert.ok(bars.length>=499);
+   const view=(await q.query(chart.cellId)).snapshot.visibleRange;
+   const range=view?.time??view;
+   const visible=bars.filter(b=>Number(b.time)>=Number(range?.from??bars.at(-80).time)&&Number(b.time)<=Number(range?.to??bars.at(-1).time));
+   assert.ok(visible.length>=20,'numerical oracle requires a visible chart range');
    for(const line of chart.lines){
     const values=new Map(line.data.map(p=>[Number(p.time),p.value]));assert.equal(values.size,line.data.length);
     let checked=0;
     for(let i=19;i<bars.length;i++){
-     const actual=values.get(bars[i].time);if(actual===undefined)continue;
+     const actual=values.get(bars[i].time);
+     const required=visible.some(b=>b.time===bars[i].time)&&(line.id!=='qa-python'||i>=bars.length-450);
+     if(required)assert.notEqual(actual,undefined,`${name} ${line.id} missing visible ${bars[i].time}`);
+     if(actual===undefined)continue;
      const expected=line.id==='qa-ma'?bars.slice(i-19,i+1).reduce((sum,b)=>sum+b.close,0)/20
       :bars[i].close*(line.id==='qa-pine'?3:line.id==='qa-python'?4:2);
      assert.ok(Math.abs(actual-expected)<=Math.max(1e-7,Math.abs(expected)*1e-10),`${name} ${line.id} ${bars[i].time} ${actual} != ${expected}`);checked++;
@@ -109,7 +116,7 @@ try{
   q.s.receipt.cold.push({index,scope:'cold frontend pool / persistent backend history',input,...visible,tailReadyMs:Date.now()-q.s.startedAt,tail,
     http:q.s.traffic.requests.filter(r=>r.at>=q.s.startedAt).length});await q.save();
   const next=[series('BTCUSDT'),series('ETHUSDT'),series('BTCUSDT','5m'),series('ETHUSDT','5m')][(index+1)%4];
-  await q.execute(snap.cells[0].id,'session',next);await q.ready(1,180_000);await end();
+  await q.execute(snap.cells[0].cellId,'session',next);await q.ready(1,180_000);await end();
  }
  await begin();
  let configured=await q.configure([{session:series('BTCUSDT'),indicators:[]},{session:series('BTCUSDT'),indicators:[]}],'split-vertical');
@@ -164,9 +171,9 @@ try{
   const elapsedMs=Date.now()-started;
   if(nextCycle<10&&elapsedMs>=nextCycle*(durationMs/10)){
    const cells=(await q.inspect()).cells;
-   await q.execute(cells[0].id,'interval',{interval:nextCycle%2?'1m':'5m'});await q.ready(2,180_000);
-   await command('workspace','closeCell',{cellId:cells[0].id});await q.ready(1,180_000);
-   await command('workspace','splitCell',{cellId:cells[1].id,direction:'columns',creationMode:'copy'});await q.ready(2,180_000);
+   await q.execute(cells[0].cellId,'interval',{interval:nextCycle%2?'1m':'5m'});await q.ready(2,180_000);
+   await command('workspace','closeCell',{cellId:cells[0].cellId});await q.ready(1,180_000);
+   await command('workspace','splitCell',{cellId:cells[1].cellId,direction:'columns',creationMode:'copy'});await q.ready(2,180_000);
    nextCycle++;
   }
   const sample=await state('soak-'+q.s.receipt.soak.length);
@@ -179,7 +186,7 @@ try{
  await begin();await q.ready(2,180_000);await q.indicatorsReady(2,180_000);await q.record('saved-exit-restart-oracle',await values('restart'));await state('restart-restored',true);await q.screenshot('restart-restored');
  // Second supported source has its own receipt, no claimed Cartesian coverage.
  const okx=series('BTC-USDT','1m','okx');
- await q.execute((await q.inspect()).cells[0].id,'session',okx);await q.ready(2,180_000);await q.indicatorsReady(2,180_000);
+ await q.execute((await q.inspect()).cells[0].cellId,'session',okx);await q.ready(2,180_000);await q.indicatorsReady(2,180_000);
  await q.record('okx-four-runtime-oracle',await values('okx'));await state('okx-source',true);await q.screenshot('okx-source');
  await end();assert.deepEqual(q.s.receipt.errors,[]);q.s.receipt.passed=true;
 }catch(error){q.s.receipt.failure=String(error.stack??error);process.exitCode=1;if(running)await q.screenshot('failure').catch(()=>{});}
