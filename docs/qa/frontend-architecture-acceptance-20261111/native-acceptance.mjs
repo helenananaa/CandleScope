@@ -63,8 +63,14 @@ async function state(name,raw=false){
  const charts=await capture(q),workspace=await q.inspect(),broker=await q.broker();
  const metrics=await q.s.app.evaluate(({app})=>app.getAppMetrics());
  const heap=await q.s.page.evaluate(()=>({memory:performance.memory?{used:performance.memory.usedJSHeapSize,total:performance.memory.totalJSHeapSize,limit:performance.memory.jsHeapSizeLimit}:null,
-  frames:document.querySelectorAll('iframe').length,perf:window.__CANDLESCOPE_PERF__?.report()}));
- const evidence={workspace,broker,metrics,heap,charts:charts.map(summary)};
+  frames:document.querySelectorAll('iframe').length,observations:window.__architectureObservations??null,perf:window.__CANDLESCOPE_PERF__?.report()}));
+ const rows=cp.execFileSync('ps',['-axo','pid=,ppid=,rss=,%cpu=,args='],{encoding:'utf8'}).trim().split('\n').map(line=>{const m=line.trim().match(/^(\d+)\s+(\d+)\s+(\d+)\s+([\d.]+)\s+(.*)$/);return m&&{pid:+m[1],ppid:+m[2],rssKb:+m[3],cpuPct:+m[4],args:m[5]};}).filter(Boolean);
+ const pids=new Set([q.s.identity.pid]);for(let i=0;i<12;i++)for(const row of rows)if(pids.has(row.ppid))pids.add(row.pid);
+ const processes=rows.filter(row=>pids.has(row.pid));
+ const cache=broker?.marketDataManager?.cache;
+ if(cache){assert.ok(cache.series<=cache.maxSeries);assert.ok(cache.bars<=cache.maxBars);assert.equal(cache.listenerErrors,0);}
+ assert.ok((broker?.dataFlow?.indicators?.inputs?.subscriptions??0)<=workspace.cells.length,'closed charts retained JS input subscriptions');
+ const evidence={workspace,broker,metrics,heap,processes,sumRssKb:processes.reduce((sum,p)=>sum+p.rssKb,0),charts:charts.map(summary)};
  if(raw){const filename=name+'.bars.json';await fs.writeFile(path.join(q.s.root,filename),JSON.stringify(charts));evidence.raw=filename;}
  await q.record(name,evidence);return evidence;
 }
@@ -128,13 +134,17 @@ try{
  await q.until(async()=>{const h=await health(series('ETHUSDT'));return h?.action==='reuse'?h:false;},180_000);
  for(let index=0;index<10;index++){
   const input=series(index%2?'BTCUSDT':'ETHUSDT');
-  const before=await health(input),requests=q.s.traffic.requests.length,at=Date.now();assert.equal(before.action,'reuse');
+  const before=await health(input),requests=q.s.traffic.requests.length,sockets=q.s.traffic.sockets.length,at=Date.now();assert.equal(before.action,'reuse');
   const sibling=await q.query('cell-2');
   await q.execute('cell-1','session',input);await readyFor(input);
   const elapsedMs=Date.now()-at,after=await health(input);
   const traffic=q.s.traffic.requests.slice(requests);
+  const targetReads=traffic.filter(r=>{const u=new URL(r.url);return u.pathname.includes('/klines/')&&u.searchParams.get('symbol')===input.symbol&&u.searchParams.get('interval')===input.interval;});
+  const newMarketSockets=q.s.traffic.sockets.slice(sockets).filter(r=>r.url.includes('/stream/klines'));
+  assert.equal(targetReads.length,0,'healthy target switch repeated its history/latest request');
+  assert.equal(newMarketSockets.length,0,'healthy target switch opened another physical market socket');
   const bars=await capture(q);assert.equal(bars.find(c=>c.cellId==='cell-2').symbol,'BTCUSDT');
-  q.s.receipt.warm.push({index,input,elapsedMs,before,after,requests:traffic,sibling});await q.save();
+  q.s.receipt.warm.push({index,input,elapsedMs,before,after,requests:traffic,targetReads,newMarketSockets,sibling});await q.save();
  }
  await command('watchlist','setTier',{symbolKey:'spot:ETHUSDT',tier:'none'});
  await q.execute('cell-1','session',series('BTCUSDT'));await readyFor(series('BTCUSDT'));
@@ -155,16 +165,32 @@ try{
  await q.execute('cell-1','restoreLatestWindow',{});await readyFor(series('BTCUSDT'));
  await q.until(async()=>{const charts=await capture(q),a=charts.find(c=>c.cellId==='cell-1'),b=charts.find(c=>c.cellId==='cell-2');return a.bars.length<10_000&&a.bars.at(-1).time>=b.bars.at(-1).time-60;},120_000);await state('deep-history-back-to-live',true);
  for(const cell of ['cell-1','cell-2'])for(const indicator of indicators)await q.execute(cell,'addIndicator',indicator);
+ const retired=await q.execute('cell-1','addIndicator',{id:'qa-retired',name:'Unsupported legacy fixture',language:'pyne',script:'legacy fixture'});
+ assert.equal(retired.state,'failed');assert.ok(JSON.stringify(retired).includes('PYNE_RETIRED'));await q.record('retired-entry-rejected',retired);
  await q.indicatorsReady(2,180_000);await q.record('four-runtime-numerical-oracle',await values('initial'));await state('four-runtime-saved',true);await q.screenshot('four-runtime-saved');
  // Real renderer network disconnect, preserving bundled provider ownership.
  const session=await q.s.app.context().newCDPSession(q.s.page);
  await session.send('Network.enable');await session.send('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
+ const prototype=await session.send('Runtime.evaluate',{expression:'WebSocket.prototype'});
+ const sockets=await session.send('Runtime.queryObjects',{prototypeObjectId:prototype.result.objectId});
+ const closed=await session.send('Runtime.callFunctionOn',{objectId:sockets.objects.objectId,functionDeclaration:`function(){const closed=[];for(const socket of this){if(socket.url.includes('/api/v1/stream/')&&socket.readyState<2){closed.push(socket.url);socket.close(4000,'QA controlled renderer disconnect');}}return closed;}`,returnByValue:true});
+ await q.record('renderer-disconnect',{closed:closed.result.value});
+ await session.send('Runtime.releaseObject',{objectId:sockets.objects.objectId});
+ await session.send('Runtime.releaseObject',{objectId:prototype.result.objectId});
  await q.s.app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].minimize());
  await q.delay(75_000);
- await state('offline-minimized');
+ const offline=await state('offline-minimized');
+ assert.equal(offline.broker.scheduler?.windowVisible,false,'Native minimize was not observed');
+ assert.equal(offline.broker.scheduler?.runnableFrames,0,'Hidden rendering kept runnable frames');
+ assert.notEqual((await health(series('BTCUSDT'))).action,'reuse','Disconnected source was still reported healthy');
  await session.send('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});
  await q.s.app.evaluate(({BrowserWindow})=>{const window=BrowserWindow.getAllWindows()[0];window.restore();window.show();});
  await q.ready(2,180_000);await q.indicatorsReady(2,180_000);await q.record('four-runtime-reconnect-oracle',await values('reconnect'));await state('reconnect-restored',true);
+ await q.s.page.evaluate(()=>{
+  const observations={counts:{},longtasks:[],maxLongTask:0};window.__architectureObservations=observations;
+  const observer=new PerformanceObserver(list=>{for(const entry of list.getEntries()){if(entry.entryType==='mark')observations.counts[entry.name]=(observations.counts[entry.name]??0)+1;else{observations.maxLongTask=Math.max(observations.maxLongTask,entry.duration);if(observations.longtasks.length<2048)observations.longtasks.push(entry.duration);}}});
+  observer.observe({entryTypes:['mark','longtask']});window.__architectureObserver=observer;
+ });
  // This run's duration is measured on the actual app, without compressing time.
  const started=Date.now();let nextCycle=0;
  while(Date.now()-started<durationMs){
@@ -174,10 +200,11 @@ try{
    await q.execute(cells[0].cellId,'interval',{interval:nextCycle%2?'1m':'5m'});await q.ready(2,180_000);
    await command('workspace','closeCell',{cellId:cells[0].cellId});await q.ready(1,180_000);
    await command('workspace','splitCell',{cellId:cells[1].cellId,direction:'columns',creationMode:'copy'});await q.ready(2,180_000);
+   await q.indicatorsReady(2,180_000);await q.record('soak-cycle-oracle-'+nextCycle,await values('soak-cycle-'+nextCycle));
    nextCycle++;
   }
   const sample=await state('soak-'+q.s.receipt.soak.length);
-  q.s.receipt.soak.push({elapsedMs:Date.now()-started,cycle:nextCycle,broker:sample.broker,metrics:sample.metrics,heap:sample.heap});await q.save();
+  q.s.receipt.soak.push({elapsedMs:Date.now()-started,cycle:nextCycle,broker:sample.broker,metrics:sample.metrics,heap:sample.heap,sumRssKb:sample.sumRssKb,processes:sample.processes});await q.save();
   await q.delay(Math.min(30_000,Math.max(1,durationMs-(Date.now()-started))));
  }
  assert.ok(Date.now()-started>=durationMs);assert.equal(nextCycle,10);
