@@ -194,6 +194,8 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
     cellId: cell.id, workspaceId: `replay:${runId}:${workspace.view.activeWorkspaceId}`, links,
     scope,
     drawingScope: chartCellDrawingScopeBase(`replay:${runId}:${workspace.view.activeWorkspaceId}`, workspace.view.document, cell.id),
+    drawingsHidden: cell.drawingsHidden === true,
+    onDrawingsHiddenChange: (hidden: boolean) => workspace.actions.setCellDrawingsHidden(cell.id, hidden),
     active, integrity: cellIntegrity, projectionBoundaryMs: projection.boundaryMs, frame: ReplayCellFrame, controls, controlViewer: viewer, preferences,
     priceScale: cell.priceScale, noteRevision, onNoteSaved,
     ...(cell.accountOverlay ? { accountOverlay: cell.accountOverlay } : {}),
@@ -205,7 +207,7 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
     onVisibleRangeChange: saveViewport,
     onUserViewportRangeChange: linkUserViewport,
     subscribeIntervalChange: (prepare: (interval: string) => void) => intervalTransfers.register(cell.id, prepare),
-  }), [scope, runId, workspace.view.activeWorkspaceId, workspace.view.document, workspace.actions, cell.id, cell.priceScale, cell.accountOverlay, noteRevision, onNoteSaved, active, cellIntegrity, projection.boundaryMs, controls, viewer, links, runtime.marketData.actions, saveViewport, linkUserViewport, preferences, intervalTransfers]);
+  }), [scope, runId, workspace.view.activeWorkspaceId, workspace.view.document, workspace.actions, cell.id, cell.drawingsHidden, cell.priceScale, cell.accountOverlay, noteRevision, onNoteSaved, active, cellIntegrity, projection.boundaryMs, controls, viewer, links, runtime.marketData.actions, saveViewport, linkUserViewport, preferences, intervalTransfers]);
   const frame = useMemo(() => ({ active, hosts }), [active, hosts]);
   return <CellFrameContext.Provider value={frame}>
     <span hidden data-replay-cell-diagnostics={cell.id} data-replay-track-id={track.track_id}
@@ -431,6 +433,15 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
               <header className="multi-chart-cell-header" draggable={!workspace.view.layoutLocked}
                 onDragStart={(event) => writeChartCellDragData(event.dataTransfer, id)}>
                 <strong>{cell.session.symbol}</strong><span>{cell.session.interval}</span>
+                <button type="button" className="multi-chart-cell-drawing-visibility"
+                  aria-label={t(cell.drawingsHidden ? "drawing.showAll" : "drawing.hideAll")}
+                  title={t(cell.drawingsHidden ? "drawing.showAll" : "drawing.hideAll")}
+                  aria-pressed={cell.drawingsHidden === true}
+                  onPointerDown={event => event.stopPropagation()}
+                  onFocus={event => event.stopPropagation()}
+                  onClick={() => workspace.actions.setCellDrawingsHidden(id, cell.drawingsHidden !== true)}>
+                  <Icon name={cell.drawingsHidden ? "eye-off" : "eye"} size={14} />
+                </button>
                 <button type="button" onClick={() => workspace.actions.toggleMaximize(id)} aria-label={t("workspace.tab.layout")}><Icon name="maximize" size={14} /></button>
                 <WorkspaceCellLayoutMenu portal cellId={id} layoutCellIds={workspace.view.layoutCellIds}
                   maxCellsPerWindow={workspace.view.maxCellsPerWindow} disabled={workspace.view.layoutLocked}

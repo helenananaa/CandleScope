@@ -182,6 +182,7 @@ function normalizeLinkGroupSettings(value: unknown): ChartLinkGroupSettings {
     quickReplayMode: source.quickReplayMode === true,
     quickReplayCursor: source.quickReplayCursor === true,
     drawings: typeof source.drawings === "boolean" ? source.drawings : DEFAULT_CHART_LINK_GROUP_SETTINGS.drawings,
+    drawingVisibility: source.drawingVisibility === true,
     indicators: {
       definitions: typeof indicatorSource.definitions === "boolean"
         ? indicatorSource.definitions
@@ -224,6 +225,7 @@ function defaultCell(
     id,
     linkGroupId: DEFAULT_CHART_LINK_GROUP_ID,
     drawingLayerSet: "1",
+    drawingsHidden: false,
     session: { ...baseSession, interval: index === 0 ? baseSession.interval : interval },
     chartSettings: { ...chartSettings },
     accountOverlay: normalizeChartAccountOverlay(),
@@ -460,6 +462,7 @@ function normalizeCellState(
     ...(quickReplay ? { quickReplay } : {}),
     linkGroupId: requestedLinkGroupId,
     drawingLayerSet: normalizeDrawingLayerSet(source.drawingLayerSet),
+    drawingsHidden: source.drawingsHidden === true,
     session: normalizeSession(source.session, fallback.session),
     chartSettings: normalizeCellChartSettings(source.chartSettings),
     accountOverlay: normalizeChartAccountOverlay(source.accountOverlay),

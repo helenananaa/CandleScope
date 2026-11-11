@@ -60,6 +60,7 @@ export async function checkQuickReplayStep() {
     assert(key, "missing React surface");
     type Surface = {
       datasetKey?: string;
+      drawingsEnabled?: boolean;
       seriesStore?: { snapshot(): Array<{ time: number; high: number }> };
       externalMarkerSource?: ExternalMarkerSource;
       externalPriceLineSource?: ExternalPriceLineSource;
@@ -105,6 +106,8 @@ export async function checkQuickReplayStep() {
     render();
     await settle(); select("5m"); await settle();
     assert(renderedBars().length > 0, "hourly history missing");
+    assert(renderedSurface().drawingsEnabled === false && !host.querySelector("[data-drawing-engine]"),
+      "quick replay mounted a drawing engine with a live or legacy scope");
     select("1m"); await settle(); assert(resolveMinute && minuteRange, "minute load not pending");
     await move("ArrowRight");
     const pending = renderedBars();

@@ -123,6 +123,7 @@ export interface ChartLinkGroupSettings {
   timeAnchor: boolean;
   dateRange: boolean;
   drawings: boolean;
+  drawingVisibility?: boolean;
   chartStyle?: boolean;
   accountSource?: boolean;
   tradingOverlays?: boolean;
@@ -154,6 +155,7 @@ export interface ChartCellState {
   id: ChartCellId;
   linkGroupId: ChartLinkGroupId | null;
   drawingLayerSet: ChartDrawingLayerSetId;
+  drawingsHidden?: boolean;
   session: ChartSession;
   chartSettings: ChartCellChartSettings;
   quickReplay?: import("./chartQuickReplayState.js").ChartQuickReplayState;
@@ -225,6 +227,7 @@ export const DEFAULT_CHART_LINK_GROUP_SETTINGS: ChartLinkGroupSettings = Object.
   timeAnchor: false,
   dateRange: true,
   drawings: false,
+  drawingVisibility: false,
   chartStyle: false,
   accountSource: false,
   tradingOverlays: false,

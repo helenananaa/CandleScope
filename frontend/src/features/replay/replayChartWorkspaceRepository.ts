@@ -39,7 +39,7 @@ export function seedReplayChartWorkspace(runId: string, seed: ReplayWorkspaceSee
       const overlay = normalizeChartAccountOverlay(cell.accountOverlay);
       return [id, { id:cell.id, session:cell.session, linkGroupId:cell.linkGroupId,
         accountOverlay: { ...overlay, accountId: null },
-        drawingLayerSet:cell.drawingLayerSet, chartSettings:cell.chartSettings,
+        drawingLayerSet:cell.drawingLayerSet, drawingsHidden:cell.drawingsHidden, chartSettings:cell.chartSettings,
         priceScale:cell.priceScale, indicators:cell.indicators.map((indicator) => ({
           ...indicator, error:null, renderHints:undefined,
           lines:indicator.lines?.map((line) => ({ ...line, data:[], colorData:null, renderUpdate:null })),

@@ -83,6 +83,7 @@ import {
   applyLinkedIndicatorUpdate,
   applyLinkedSessionUpdate,
   applyLinkedChartSettingsUpdate,
+  applyLinkedDrawingVisibility,
   applyLinkedAccountOverlayUpdate,
   applyQuickReplayUpdate,
   assignCellLinkGroup,
@@ -173,6 +174,7 @@ export interface ChartWorkspaceRuntime {
     ): void;
     deleteLinkGroup(groupId: ChartLinkGroupId): void;
     setCellDrawingLayerSet(cellId: ChartCellId, layerSet: ChartDrawingLayerSetId): void;
+    setCellDrawingsHidden(cellId: ChartCellId, hidden: boolean): void;
     updateLinkGroupPolicy(
       groupId: ChartLinkGroupId,
       relationship: "peers" | "parent",
@@ -905,6 +907,10 @@ export function useChartWorkspaceRuntime(
     });
   }, [updateActiveDocument]);
 
+  const setCellDrawingsHidden = useCallback((cellId: ChartCellId, hidden: boolean) => {
+    updateActiveDocument(current => applyLinkedDrawingVisibility(current, cellId, hidden));
+  }, [updateActiveDocument]);
+
   const updateLinkGroupPolicy = useCallback((
     groupId: ChartLinkGroupId,
     relationship: "peers" | "parent",
@@ -1175,6 +1181,7 @@ export function useChartWorkspaceRuntime(
       updateLinkGroup,
       deleteLinkGroup,
       setCellDrawingLayerSet,
+      setCellDrawingsHidden,
       updateLinkGroupPolicy,
       setLayoutRatio,
       updateCellSession,
