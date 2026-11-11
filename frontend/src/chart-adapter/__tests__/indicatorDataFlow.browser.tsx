@@ -282,7 +282,7 @@ export async function checkIndicatorDataFlow() {
     assert(publishSharedRange(1234), "shared range commit was rejected");
     await until(() => ["left", "right"].every(id => sharedProjection(id)?.lines?.[0]?.data.find(p => p.time === middle)?.value === 1234),
       "a shared committed range remained absent from another mounted view");
-    assert(hostedExecutions === beforeSharedRange && socket.subscriptions.size === 2,
+    assert(hostedExecutions === beforeSharedRange && Number(socket.subscriptions.size) === 2,
       "cache publication repeated hosted transport work");
     assert(JSON.stringify(hosts[1]!.chart.timeScale().getVisibleRange()) === viewport, "shared result publication moved the sibling viewport");
     for (const id of ["left", "right"]) flushSync(() => latest.get(id)!.actions.removeIndicator("cache-shared"));
