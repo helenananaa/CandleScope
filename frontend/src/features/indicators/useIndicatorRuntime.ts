@@ -3260,59 +3260,71 @@ export function useIndicatorRuntime(
   ]);
 
   useEffect(() => {
-    const cacheContext = getIndicatorCacheContext();
-    const currentIndicators = activeIndicatorsRef.current;
-    if (
-      buildIndicatorCacheHydrationSignature(currentIndicators, cacheContext)
-      !== indicatorCacheHydrationSignature
-    ) return undefined;
+    const scheduleHydration = () => {
+      const cacheContext = getIndicatorCacheContext();
+      const currentIndicators = activeIndicatorsRef.current;
+      if (
+        buildIndicatorCacheHydrationSignature(currentIndicators, cacheContext)
+        !== indicatorCacheHydrationSignature
+      ) return;
 
-    const contentVersion = currentIndicators.map((indicator) => (
-      getCachedIndicatorMetadata(indicator, cacheContext)?.contentVersion ?? "missing"
-    )).join("|");
-    indicatorHydrationScheduler.schedule({
-      lifecycleKey: indicatorHydrationLifecycleKey,
-      contentSignature: indicatorCacheHydrationSignature,
-      contentVersion,
-      isCurrent: (identity) => (
-        indicatorHydrationLifecycleKeyRef.current === identity.lifecycleKey
-      ),
-      run: (identity) => {
-        if (indicatorHydrationLifecycleKeyRef.current !== identity.lifecycleKey) return;
-        const currentContext = getIndicatorCacheContext();
-        const indicators = activeIndicatorsRef.current;
-        if (
-          buildIndicatorCacheHydrationSignature(indicators, currentContext)
-          !== indicatorCacheHydrationSignature
-        ) return;
-
-        // Resolve at execution time so a WS/range update that lands while the
-        // task is deferred wins over the snapshot observed when it was queued.
-        const cachedEntries = resolveCachedIndicatorResults(indicators, currentContext);
-        setActiveIndicators((previous) => {
+      const contentVersion = currentIndicators.map((indicator) => (
+        getCachedIndicatorMetadata(indicator, cacheContext)?.contentVersion ?? "missing"
+      )).join("|");
+      indicatorHydrationScheduler.schedule({
+        lifecycleKey: indicatorHydrationLifecycleKey,
+        contentSignature: indicatorCacheHydrationSignature,
+        contentVersion,
+        isCurrent: (identity) => (
+          indicatorHydrationLifecycleKeyRef.current === identity.lifecycleKey
+        ),
+        run: (identity) => {
+          if (indicatorHydrationLifecycleKeyRef.current !== identity.lifecycleKey) return;
+          const currentContext = getIndicatorCacheContext();
+          const indicators = activeIndicatorsRef.current;
           if (
-            buildIndicatorCacheHydrationSignature(previous, currentContext)
+            buildIndicatorCacheHydrationSignature(indicators, currentContext)
             !== indicatorCacheHydrationSignature
-          ) return previous;
-          return hydrateIndicatorDefinitionsFromCache(
-            previous,
-            resolveCachedIndicatorResults(previous, getIndicatorCacheContext()),
-            {
-              clearMissing: false,
-              reconcileLines: (indicator, lines) => reapplyProvisionalIndicatorPreview(
-                indicator,
-                lines,
-                null,
-              ),
-            },
-          );
-        });
-        if (indicatorHydrationLifecycleKeyRef.current === identity.lifecycleKey) {
-          outputDispatch({ type: "hydrate-cache", entries: cachedEntries });
-        }
-      },
+          ) return;
+
+          // Resolve at execution time so a WS/range update that lands while the
+          // task is deferred wins over the snapshot observed when it was queued.
+          const cachedEntries = resolveCachedIndicatorResults(indicators, currentContext);
+          setActiveIndicators((previous) => {
+            if (
+              buildIndicatorCacheHydrationSignature(previous, currentContext)
+              !== indicatorCacheHydrationSignature
+            ) return previous;
+            return hydrateIndicatorDefinitionsFromCache(
+              previous,
+              resolveCachedIndicatorResults(previous, getIndicatorCacheContext()),
+              {
+                clearMissing: false,
+                reconcileLines: (indicator, lines) => reapplyProvisionalIndicatorPreview(
+                  indicator,
+                  lines,
+                  null,
+                ),
+              },
+            );
+          });
+          if (indicatorHydrationLifecycleKeyRef.current === identity.lifecycleKey) {
+            outputDispatch({ type: "hydrate-cache", entries: cachedEntries });
+          }
+        },
+      });
+    };
+    // Another view can fill shared builtin coverage without sending this
+    // view another wire snapshot. Publish that committed cache generation
+    // through the existing deferred, lifecycle-fenced hydration scheduler.
+    const unsubscribe = indicatorResults.subscribe((commit) => {
+      const context = getIndicatorCacheContext();
+      if (activeIndicatorsRef.current.some(indicator => (
+        buildIndicatorResultCacheKey(indicator, context) === commit.key
+      ))) scheduleHydration();
     });
-    return () => indicatorHydrationScheduler.cancel();
+    scheduleHydration();
+    return () => { unsubscribe(); indicatorHydrationScheduler.cancel(); };
   }, [
     activeIndicatorsRef,
     getIndicatorCacheContext,
@@ -3320,6 +3332,7 @@ export function useIndicatorRuntime(
     indicatorHydrationLifecycleKey,
     indicatorHydrationLifecycleKeyRef,
     indicatorHydrationScheduler,
+    indicatorResults,
     outputDispatch,
     reapplyProvisionalIndicatorPreview,
     setActiveIndicators,

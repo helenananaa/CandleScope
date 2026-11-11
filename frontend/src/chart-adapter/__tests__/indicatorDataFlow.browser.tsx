@@ -17,6 +17,8 @@ import { createActiveIndicatorPersistence } from "../../features/indicators/acti
 import { computeFrontendScript } from "../../features/indicators/frontendScriptRuntime.js";
 import { routeIndicatorComputeBatch } from "../../features/indicators/frontendScriptBatch.js";
 import { parseIndicatorPayloadEnvelope } from "../../features/indicators/indicatorContracts.js";
+import { normalizeIndicatorPayload } from "../../features/indicators/indicatorPayloadRuntime.js";
+import { buildIndicatorCacheContext } from "../../features/indicators/indicatorResultCacheStore.js";
 import { registerSharedMarketCache } from "../../features/cache-gc/sharedMarketCacheOwner.js";
 import { buildIndicatorOhlcv } from "../../features/indicators/indicatorComputeRuntime.js";
 import type { IndicatorRuntime } from "../../features/indicators/indicatorRuntimeContract.js";
@@ -264,6 +266,28 @@ export async function checkIndicatorDataFlow() {
       "late join discarded the first chart's historical output");
     assert(JSON.stringify(hosts[1]!.chart.timeScale().getVisibleRange()) === viewport, "late join moved the independent viewport");
     checks.push("two real hosted React runtimes share one wire; late join receives a fresh ACK and preserves prior history/viewport");
+    const sharedProjection = (id: string) => latest.get(id)?.view.activeIndicators.find(item => item.id === "cache-shared");
+    for (const id of ["left", "right"]) flushSync(() => latest.get(id)!.actions.addIndicator({
+      id: "cache-shared", name: "Cache EMA", engineName: "EMA", executionTarget: "hosted", params: { period: 77 }, visible: true,
+    }));
+    const middle = corpus.get("BTCUSDT")![200]!.time;
+    await until(() => ["left", "right"].every(id => sharedProjection(id)?.lines?.[0]?.data.some(p => p.time === middle)), "shared cache fixtures did not hydrate");
+    const beforeSharedRange = hostedExecutions;
+    const publishSharedRange = (value: number) => indicators.results.replaceRange(sharedProjection("right")!,
+      buildIndicatorCacheContext({ ...identity("BTCUSDT"), inputSource: indicators.inputSource,
+        candleUpColor: "#0f0", candleDownColor: "#f00" }),
+      normalizeIndicatorPayload(parseIndicatorPayloadEnvelope({ ok: true,
+        lines: [{ id: "ema", data: [{ time: middle, value }] }] }), "cache-shared"),
+      { start: middle, end: middle });
+    assert(publishSharedRange(1234), "shared range commit was rejected");
+    await until(() => ["left", "right"].every(id => sharedProjection(id)?.lines?.[0]?.data.find(p => p.time === middle)?.value === 1234),
+      "a shared committed range remained absent from another mounted view");
+    assert(hostedExecutions === beforeSharedRange && socket.subscriptions.size === 2,
+      "cache publication repeated hosted transport work");
+    assert(JSON.stringify(hosts[1]!.chart.timeScale().getVisibleRange()) === viewport, "shared result publication moved the sibling viewport");
+    for (const id of ["left", "right"]) flushSync(() => latest.get(id)!.actions.removeIndicator("cache-shared"));
+    await until(() => Number(socket.subscriptions.size) === 1, "shared cache fixtures retained a wire after release");
+    checks.push("shared result ingress updates both mounted projections without another range request, wire snapshot or viewport change");
     socket.serverClose();
     await until(() => sockets.length === 2 && sockets[1]!.subscriptions.size === 1, "shared overload reconnect did not restore one subscription");
     socket = sockets[1]!;
@@ -350,6 +374,7 @@ export async function checkIndicatorDataFlow() {
   } finally {
     controller.releaseAll(); flushSync(() => root.unmount()); rootHost.remove();
     assert(indicators.inputs.diagnostics().subscriptions === 0, "unmounted runtimes retained input range leases");
+    assert(indicators.results.diagnostics().subscribers === 0, "unmounted runtimes retained result subscriptions");
     windows.forEach(window => window.close());
     dataFlow.dispose(); streams.closeAll(); market.closeAll(); gate.dispose(); unregister();
     hosts.forEach(host => { host.chart.remove(); host.element.remove(); });
