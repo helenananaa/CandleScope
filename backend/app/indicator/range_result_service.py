@@ -71,6 +71,10 @@ class _BarsCacheEntry:
     bars: list[Any]
     created_at: float
     last_access: float
+    # Warmup the physical query asked for. Fewer rows than this means storage
+    # holds no earlier history, so asking again for up to this much cannot
+    # return more and must not re-query.
+    queried_warmup_bars: int = 0
 
 
 @dataclass(slots=True)
@@ -746,7 +750,7 @@ class IndicatorRangeResultService:
                 and entry.revision_token == revision_token
                 and entry.start <= start
                 and entry.end >= end
-                and entry.warmup_bars >= warmup_bars
+                and max(entry.warmup_bars, entry.queried_warmup_bars) >= warmup_bars
             ]
             if not candidates:
                 if count_stats:
@@ -805,6 +809,7 @@ class IndicatorRangeResultService:
                 bars=list(entry.bars),
                 created_at=entry.created_at,
                 last_access=entry.last_access,
+                queried_warmup_bars=entry.queried_warmup_bars,
             )
 
     def _put_bars(
@@ -876,6 +881,7 @@ class IndicatorRangeResultService:
                 bars=list(bars),
                 created_at=now,
                 last_access=now,
+                queried_warmup_bars=max(0, int(requested_warmup_bars)),
             ))
             self._stats["barsPuts"] += 1
             self._prune_bars_locked(now)

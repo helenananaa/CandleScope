@@ -70,7 +70,7 @@ S1 在生产路径上用模拟 1m 序列测得：
 - `app/indicator/warmup.py` 是唯一权威。图表区间、实时种子和警报数值都从它推导。
 - 实时实例的种子根数为 max(客户端 `historyLimit`, W + 1)。客户端 `historyLimit` 只决定显示多少输出，不再决定数学起点。
 - 警报数值的输入槽为所引用输出中最大的 W + 1，取代固定的 250。
-- 前端 `estimateOutputWarmupBars` 只用于显示填充，不再承担数学预热。S6 会改为读取后端目录，删除这份重复的表。
+- 前端 `estimateOutputWarmupBars` 只用于显示填充，不再承担数学预热。它还驱动 `resolveHostedSubscriptionSeedHistoryLimit` 的“窗口够长后重新订阅一次”。服务端已强制收敛种子，这一逻辑因此多余但无害。S6 会改为读取后端目录，删除这份重复的表。
 
 ### 4. 历史不足时显式标记（后续落实）
 
@@ -86,15 +86,19 @@ S1 在生产路径上用模拟 1m 序列测得：
 | opaque-script | Pine、Python | 只在输入域完全相同时复用（保持现状） |
 | window-relative | 前端 JS | 界面上标明“基于当前窗口 N 根”；不用于警报，不持久化 |
 
-### 6. 回放不变
+### 6. 回放
 
-正式回放以固定来源起点加检查点计算。起点固定，值就确定，因此已满足本契约。本 ADR 不修改回放。
+- **训练计算**（`indicator_prefix.py`）：以固定来源起点加检查点计算。起点固定，值就确定，因此已满足本契约，不做修改。
+- **回放显示**（`indicator_viewport.py`）：本次暂不切换，改用 `replay_display_warmup_bars` 保留原有倍数预算。
+  - 原因：回放数据准备按这一预算准备本地上下文（离线时也依赖它）。如果显示改用收敛预热，就会向来源请求本地没有的历史；`test_replay_bounded_context` 中“所需上下文均已在本地”的用例会失败，离线回放可能一直停在 `preparing`。
+  - 窗口首次显示后，锚点会持久保存，向左平移不会改写已显示的值，因此回放显示不会出现拼接台阶。但冷窗口左缘仍与窗口有关，见 O4。
 
 ## 待决问题
 
 - **O1 缺口语义**：回放遇到缺口会重置递归状态，图表和实时路径则跨缺口连续计算，两者在缺口之后的值不同。本 ADR 不改变任何一方，另行决定。
 - **O2 #170 持久化**：内置指标重算只需 1–3 ms，不持久化其完整输出。是否持久化 Pine/Python 结果，由 S9 的测量决定。
 - **O3** 部分种子在界面上如何呈现。
+- **O4 回放显示对齐契约**：需要与回放负责人一起，把数据准备的本地上下文按 `indicator_warmup_bars` 加大，再让 `indicator_viewport.py` 切换过去。同时要评估离线准备的体积与耗时，以及已保存锚点的版本切换。
 
 ## 影响
 
@@ -111,3 +115,15 @@ S1 在生产路径上用模拟 1m 序列测得：
 ## 计划调整
 
 取消原 S3（迁移回放检查点），S4 按本 ADR 实施。
+
+## 实施记录（S4）
+
+- `app/indicator/warmup.py`：按残差 1e-12 推导预热。
+- `app/api/v1/stream_indicator_payloads.py` 新增 `builtin_indicator_seed_limit`，由 `app/api/v1/stream_indicators.py` 调用：实时种子取 max(`historyLimit`, W + 1)。
+- `app/indicator/query_contracts.py`：`source_slots` 默认按输出推导，上限为 `MAX_NUMERIC_SOURCE_SLOTS = 8,192`。警报请求不再固定为 250；工作进程的输入上限同步调整。
+- `app/indicator/range_result_service.py`：K 线缓存记录查询时请求的预热根数（`queried_warmup_bars`）。存储里本来就没有更早的历史时，同一批次的后续指标不再各自重新查询。这是原有行为，但预热加长后，历史较短的序列会频繁触发。
+- `app/replay/training/indicator_viewport.py`：改用 `replay_display_warmup_bars`，行为不变（见第 6 节与 O4）。
+- 测试结果：
+  - 在修复前的代码上运行 `test_indicator_seed_consistency.py`（以原行为补齐种子函数），38 项中有 17 项失败。
+  - 修复后这 38 项全部通过，分歧表各项均为 0。
+  - 另加 7 项参数上限检查：各内置指标在参数允许的最大值下，预热仍落在数值输入和区间计算的上限内。

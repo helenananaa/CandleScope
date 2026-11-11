@@ -1,6 +1,6 @@
-"""S1: one builtin indicator, one bar, one value -- across every consumer path.
+"""One builtin indicator, one bar, one value -- across every consumer path.
 
-A builtin's value at a bar should be a pure function of the series, the
+ADR-INDICATOR-001: a builtin's value at a bar depends only on the series, the
 definition and parameters, and the bar time. These tests feed the same
 canonical bars through each production seed policy and compare:
 
@@ -8,17 +8,15 @@ canonical bars through each production seed policy and compare:
   local      local_data.compute_local_indicator_batch (whole imported dataset)
   chart      api.v1.indicator_range_batch: start - warmup, one shared bar query
              per batch, results cached by IndicatorRangeResultService
-  realtime   IndicatorEngine.subscribe seeded with the client's historyLimit
+  realtime   IndicatorEngine.subscribe seeded by builtin_indicator_seed_limit
              (the process owner runs this same engine out of process)
   alerts     the numeric history worker over alerts.indicator_requests slots
 
-Window-only builtins (MA, BOLL, VOL) are path independent. Recursive builtins
-(EMA, RSI, ATR, MACD) are not: their value near the start of a computation
-depends on where that computation began. Those cases are strict xfails until a
-canonical seed lands, so they turn red as soon as the behaviour changes.
-
-Run ``python -m tests.test_indicator_seed_consistency`` from ``backend`` for
-the divergence table.
+Before the convergence-derived warmup, recursive builtins (EMA, RSI, ATR,
+MACD) differed near the start of each range request, across scroll-left page
+seams, with batch partners, through order-dependent cache reuse, and on the
+realtime EMA200 tail. Run ``python -m tests.test_indicator_seed_consistency``
+from ``backend`` for the divergence table.
 """
 from __future__ import annotations
 
@@ -34,7 +32,10 @@ from app.api.v1.indicator_range_batch import (
     IndicatorRangeBatchJob,
     compute_indicator_range_batch_async,
 )
-from app.api.v1.stream_indicator_payloads import confirmed_indicator_seed_bars
+from app.api.v1.stream_indicator_payloads import (
+    builtin_indicator_seed_limit,
+    confirmed_indicator_seed_bars,
+)
 from app.core import config
 from app.data_engine.data_manager.models import BarData
 from app.indicator import create_engine
@@ -48,11 +49,15 @@ from app.local_data.indicator_compute import compute_local_indicator_batch
 
 SYMBOL, INTERVAL, EXCHANGE, MARKET = "BTCUSDT", "1m", "binance", "spot"
 STEP = 60
-BAR_COUNT = 2_600
+# Longer than the slowest warmup here (EMA200: 2,964) plus one chart page,
+# so a page's computation never starts where the reference starts.
+BAR_COUNT = 6_000
 # One chart page, and the backend default WS historyLimit.
 CHART_BARS = 500
-# frontend INDICATOR_HISTORY_LIMIT caps the realtime seed a chart can request.
+# frontend INDICATOR_HISTORY_LIMIT caps the historyLimit a chart can send.
 FRONTEND_HISTORY_CAP = 2_000
+# A chart that has loaded only a little history.
+SHORT_HISTORY = 120
 # Payloads round values to 8 decimals.
 WIRE_TOLERANCE = 2e-8
 LEFT_EDGE_BARS = 50
@@ -69,7 +74,7 @@ INDICATORS = {
 }
 WINDOW_ONLY = ("MA20", "BOLL20", "VOL")
 RECURSIVE = ("EMA20", "EMA200", "RSI14", "ATR14", "MACD")
-# A long EMA is the common chart partner with the largest warmup (5 x 200).
+# A long EMA is the common chart partner with the largest warmup.
 BATCH_PARTNER = "EMA200"
 ALERT_LABELS = {"rsi": ("RSI14", "rsi"), "macdHist": ("MACD", "hist"), "ma20": ("MA20", "ma")}
 
@@ -185,13 +190,15 @@ def chart(bars, labels, start=None, end=None) -> dict[str, SeriesValues]:
 
 
 def realtime(bars: list[BarData], label: str, history_limit: int) -> SeriesValues:
+    """Seed a realtime instance as the WS subscribe handler does."""
     name, params = INDICATORS[label]
-    seed = confirmed_indicator_seed_bars(bars)[-history_limit:]
+    seed_limit = builtin_indicator_seed_limit(history_limit, name, params)
+    seed = confirmed_indicator_seed_bars(bars)[-seed_limit:]
     engine = create_engine()
     try:
         _, result = engine.subscribe(
             SYMBOL, INTERVAL, MARKET, name, dict(params), bars=seed,
-            exchange=EXCHANGE, desired_seed_bars=history_limit)
+            exchange=EXCHANGE, desired_seed_bars=seed_limit)
         return _engine_lines(result)
     finally:
         engine.stop()
@@ -241,7 +248,33 @@ def _range_times(bars, count=CHART_BARS):
     return [bar.time for bar in bars[-count:]]
 
 
-# --- paths that already agree ----------------------------------------------
+def _left_edge(bars):
+    return _range_times(bars)[:LEFT_EDGE_BARS]
+
+
+# --- every path agrees with the converged reference --------------------------
+
+def test_series_is_longer_than_every_page_computation(bars):
+    """Otherwise a page would start where the reference starts and agree trivially."""
+    for label in RECURSIVE:
+        name, params = INDICATORS[label]
+        assert CHART_BARS + indicator_warmup_bars(name, params) < len(bars), label
+
+
+@pytest.mark.parametrize("name", ("MA", "EMA", "RSI", "ATR", "MACD", "BOLL", "VOL"))
+def test_slowest_allowed_parameters_fit_input_limits(name):
+    """Every schema-allowed builtin can converge within the numeric (alert)
+    input ceiling and, with a full page, the range compute ceiling."""
+    from app.api.v1.stream_indicator_payloads import _BUILTIN_INDICATOR_MAX_COMPUTE_BARS
+    from app.indicator import registry
+    from app.indicator.query_contracts import MAX_NUMERIC_SOURCE_SLOTS
+
+    slowest = {field.key: field.max for field in registry.get_spec(name).param_schema
+               if field.type == "int" and field.max is not None}
+    warmup = indicator_warmup_bars(name, slowest)
+    assert warmup + 1 <= MAX_NUMERIC_SOURCE_SLOTS
+    assert warmup + FRONTEND_HISTORY_CAP <= _BUILTIN_INDICATOR_MAX_COMPUTE_BARS
+
 
 @pytest.mark.parametrize("label", tuple(INDICATORS))
 def test_local_dataset_matches_converged_reference(bars, label):
@@ -258,58 +291,18 @@ def test_window_only_builtins_are_path_independent(bars, label):
     assert max_delta(realtime(bars, label, CHART_BARS), expected, times) <= WIRE_TOLERANCE
 
 
-@pytest.mark.parametrize("label", ("EMA20", "RSI14", "ATR14", "MACD"))
-def test_short_memory_builtins_agree_at_latest_closed_bar(bars, label):
-    """Guard: with a full page of history the newest value has converged."""
-    expected, latest = reference(bars, label), [bars[-1].time]
-    assert max_delta(chart(bars, (label,))[label], expected, latest) <= WIRE_TOLERANCE
-    assert max_delta(realtime(bars, label, CHART_BARS), expected, latest) <= WIRE_TOLERANCE
-
-
-def _alert_matches_chart(bars, field):
-    label, output = ALERT_LABELS[field]
-    alert = alerts(bars)[field]
-    shown = chart(bars, (label,))[label][output][bars[-1].time]
-    assert abs(alert - shown) <= WIRE_TOLERANCE, (field, alert, shown)
-
-
-@pytest.mark.parametrize("field", ("rsi", "ma20"))
-def test_alert_values_match_chart_at_latest_closed_bar(bars, field):
-    """Guard: alert fields equal what the chart shows for the newest bar."""
-    _alert_matches_chart(bars, field)
-
-
-# --- known divergence: strict xfails until a canonical seed lands ------------
-
-SEED_XFAIL = pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="S1: builtin results depend on where each computation started (fix: S4 canonical seed)",
-)
-
-
-@SEED_XFAIL
-def test_alert_macd_histogram_matches_chart_at_latest_closed_bar(bars):
-    """Alerts seed MACD from 250 slots, the chart from its page plus warmup;
-    the newest histogram value differs (~5e-7 here: invisible, not identical)."""
-    _alert_matches_chart(bars, "macdHist")
-
-
-@SEED_XFAIL
 @pytest.mark.parametrize("label", RECURSIVE)
 def test_chart_page_left_edge_matches_converged_value(bars, label):
     """The first bars of every range request (initial load, scroll-left page,
-    jump-to-date window) are computed from only ``indicator_warmup_bars``."""
-    edge = _range_times(bars)[:LEFT_EDGE_BARS]
+    jump-to-date window) carry their own warmup and must already converge."""
+    edge = _left_edge(bars)
     assert max_delta(chart(bars, (label,))[label], reference(bars, label), edge) <= WIRE_TOLERANCE
 
 
-@SEED_XFAIL
 def test_scrolled_left_pages_stitch_without_a_seam(bars):
     """Scrolling left, the frontend scheduler requests only ``desired - cached``
     (indicatorRangeScheduler.ts), so the older page ends where the cached page
-    began. Each page is seeded from its own start, and the cached page's
-    under-warmed first bars are never recomputed: the stitched line steps."""
+    began and the cached page's first bars are never recomputed."""
     newer_start = bars[-CHART_BARS].time
     older = chart(bars, ("RSI14",), bars[-2 * CHART_BARS].time, newer_start - STEP)["RSI14"]
     newer = chart(bars, ("RSI14",), newer_start, bars[-1].time)["RSI14"]
@@ -319,22 +312,20 @@ def test_scrolled_left_pages_stitch_without_a_seam(bars):
     assert max_delta(stitched, one_shot, seam) <= WIRE_TOLERANCE
 
 
-@SEED_XFAIL
 def test_chart_value_does_not_depend_on_batch_partners(bars):
-    """A batch shares one bar query seeded by its largest warmup, so RSI's
-    values change when the chart also shows a long EMA."""
-    edge = _range_times(bars)[:LEFT_EDGE_BARS]
+    """A batch shares one bar query sized by its largest warmup; RSI's values
+    must not change when the chart also shows a long EMA."""
+    edge = _left_edge(bars)
     alone = chart(bars, ("RSI14",))["RSI14"]
     together = chart(bars, ("RSI14", BATCH_PARTNER))["RSI14"]
     assert max_delta(alone, together, edge) <= WIRE_TOLERANCE
 
 
-@SEED_XFAIL
 def test_cached_chart_value_does_not_depend_on_request_order(bars):
     """The range cache key omits the seed origin, so an identical request is
-    answered from whichever earlier batch happened to compute it."""
+    answered from whichever earlier batch computed it; that must not matter."""
     start, end = bars[-CHART_BARS].time, bars[-1].time
-    edge = _range_times(bars)[:LEFT_EDGE_BARS]
+    edge = _left_edge(bars)
 
     async def run():
         fresh = (await chart_async(bars, ("RSI14",), start, end, range_service()))[0]
@@ -348,21 +339,30 @@ def test_cached_chart_value_does_not_depend_on_request_order(bars):
     assert max_delta(fresh, reused, edge) <= WIRE_TOLERANCE
 
 
-@SEED_XFAIL
-def test_realtime_long_ema_matches_chart_history_at_latest_bar(bars):
-    """A realtime instance is seeded with the chart's loaded bar count, which
-    is too short for EMA200 to converge, so the live tail steps away from the
-    historical line where they meet."""
+@pytest.mark.parametrize("label", RECURSIVE)
+@pytest.mark.parametrize("history_limit", (SHORT_HISTORY, CHART_BARS, FRONTEND_HISTORY_CAP))
+def test_realtime_latest_value_does_not_depend_on_loaded_history(bars, label, history_limit):
+    """The live tail continues the historical line however many bars the
+    chart loaded before subscribing."""
     latest = [bars[-1].time]
-    charted = chart(bars, ("EMA200",))["EMA200"]
-    assert max_delta(realtime(bars, "EMA200", CHART_BARS), charted, latest) <= WIRE_TOLERANCE
+    charted = chart(bars, (label,))[label]
+    assert max_delta(realtime(bars, label, history_limit), charted, latest) <= WIRE_TOLERANCE
+
+
+@pytest.mark.parametrize("field", tuple(ALERT_LABELS))
+def test_alert_values_match_chart_at_latest_closed_bar(bars, field):
+    """An alert evaluates exactly what the chart shows for the newest bar."""
+    label, output = ALERT_LABELS[field]
+    alert = alerts(bars)[field]
+    shown = chart(bars, (label,))[label][output][bars[-1].time]
+    assert abs(alert - shown) <= WIRE_TOLERANCE, (field, alert, shown)
 
 
 # --- divergence table ---------------------------------------------------------
 
 def divergence_rows(bars: list[BarData]) -> list[dict]:
     candle = statistics.median(bar.high - bar.low for bar in bars)
-    edge, latest = _range_times(bars)[:LEFT_EDGE_BARS], [bars[-1].time]
+    edge, latest = _left_edge(bars), [bars[-1].time]
     rows = []
     for label in (*WINDOW_ONLY, *RECURSIVE):
         name, params = INDICATORS[label]
