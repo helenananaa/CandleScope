@@ -1327,6 +1327,8 @@ export const ptBR = {
   "settings.appearance.cellThemeDescription": "Defina o tema deste gráfico. Os demais só mudam quando a vinculação de estilos está ativada.",
   "workspace.link.drawings": "Desenhos",
   "workspace.link.drawingsDesc": "Compartilhar o documento de desenho do mesmo mercado e conjunto de camadas",
+  "workspace.link.drawingVisibility": "Visibilidade dos desenhos",
+  "workspace.link.drawingVisibilityDesc": "Sincroniza a exibição dos desenhos em cada gráfico.",
   "workspace.link.definitions": "Lista de indicadores",
   "workspace.link.definitionsDesc": "Sincronizar adição, remoção e tipo de indicador",
   "workspace.link.parameters": "Parâmetros do indicador",
