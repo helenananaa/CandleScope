@@ -170,9 +170,19 @@ export interface LinkSuggestion {
   direction: "long" | "short" | null;
 }
 
+export interface TradeProtectionOrder {
+  id: string;
+  kind: "stopLoss" | "takeProfit";
+  price: string;
+  qty: string;
+  activeFromMs: number;
+  inactiveFromMs: number | null;
+}
+
 export interface TradeDetail extends Trade {
   entries: JournalEntry[];
   linkSuggestions: LinkSuggestion[];
+  protectionOrders?: TradeProtectionOrder[];
 }
 
 export interface PracticeOrder {

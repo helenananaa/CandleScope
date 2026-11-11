@@ -6,6 +6,7 @@ import {
   nextEventCursor,
   notesBefore,
   positionAt,
+  protectionOrdersAt,
   replayEvents,
   visibleBars,
   type ReplayBar,
@@ -125,6 +126,18 @@ test("finer steps rebuild the forming candle only from closed finer candles", ()
   assert.equal(partial.high, 105); // five 5m candles: 01:00..01:20
   assert.equal(partial.close, 104.5);
   assert.notEqual(partial.high, 110); // the full 1h high happens later
+});
+
+test("protection orders enter and leave on the same exclusive cut as fills", () => {
+  const stop = { id: "stop", kind: "stopLoss" as const, price: "98", qty: "1", activeFromMs: 2000, inactiveFromMs: 4000 };
+  const target = { id: "target", kind: "takeProfit" as const, price: "105", qty: "1", activeFromMs: 2500, inactiveFromMs: null };
+  const immediate = { ...stop, id: "immediate", inactiveFromMs: stop.activeFromMs };
+  const orders = [stop, target, immediate];
+  assert.deepEqual(protectionOrdersAt(orders, 2), []);
+  assert.deepEqual(protectionOrdersAt(orders, 2.5), [stop]);
+  assert.deepEqual(protectionOrdersAt(orders, 4), [stop, target]);
+  assert.deepEqual(protectionOrdersAt(orders, 4.001), [target]);
+  assert.deepEqual(protectionOrdersAt(orders, 3), [stop, target]);
 });
 
 test("position, P&L and excursions are computed as of the cursor", () => {
