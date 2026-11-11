@@ -4051,3 +4051,41 @@ test("declared terminal history reports each missing range and resets with the c
   assert.ok(snapshots.length >= 2);
   stop();
 });
+
+for (const knownRange of [true, false]) test(`initial backfill completion retires its original indicator owner (${knownRange ? "bounded range" : "count back"})`, async () => {
+  const { IndicatorWindowCommitBuffer } = await import("../indicatorWindowCommitBuffer.js");
+  const buffer = new IndicatorWindowCommitBuffer();
+  const series = { ...SERIES, interval: "1m" };
+  const key = "initial-owner-recovery";
+  let historyCalls = 0, rangeCalls = 0;
+  let pending: NonNullable<BackfillCompletedOptions["pendingInitial"]> | null = null;
+  const feed = new SeriesDataFeed({
+    getActiveSeries: () => series,
+    commitMergedChartData: (_symbol, _interval, _rows, meta) => {
+      buffer.record(key, [], { ownerToken: meta?.indicatorWindowOwner,
+        pending: meta?.deferIndicatorWindow === true, epoch: meta?.indicatorWindowEpoch });
+    },
+    api: {
+      fetchKlinesHistory: async () => ++historyCalls === 1
+        ? { data: rows([120]), complete: false, retryable: true, history_state: "pending" }
+        : { ...resolvedQuality, data: rows([120, 180]) },
+      fetchKlinesRange: async () => { rangeCalls++; return { ...resolvedQuality, data: rows([120, 180]) }; },
+    },
+  });
+  const initial = await feed.getBars(series, { countBack: 2, maxWaitMs: 0, intent: "viewport" });
+  assert.equal(buffer.hasPending(key), true);
+  pending = { ...series, countBack: 2, range: knownRange
+    ? { start: toEpochMilliseconds(120_000)!, end: toEpochMilliseconds(180_000)! } : null,
+    indicatorWindowOwner: initial.indicatorWindowOwner!, indicatorWindowEpoch: initial.indicatorWindowEpoch! };
+  feed.handleBackfillCompleted({ type: "backfill_completed", ...series, market_type: series.marketType,
+    detail: { request_id: "initial-owner-completion", reason: "initial_history", range_start_ms: 120_000, range_end_ms: 180_000 } }, {
+    activeSeries: series, pendingInitial: pending, getPendingInitial: () => pending,
+    getCacheRows: () => rows([120]), cooldownMs: 0,
+    onRecoveryProgress: event => { if (event.type === "initial-resolved") pending = null; },
+  });
+  while (feed.backfillReloadInFlight.size) await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(pending, null);
+  assert.equal(buffer.hasPending(key), false, "completed initial window retained its obsolete gate owner");
+  assert.equal(rangeCalls, 1);
+  assert.equal(historyCalls, knownRange ? 1 : 2, "unknown initial range still requires its full count-back proof");
+});

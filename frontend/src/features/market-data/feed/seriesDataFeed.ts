@@ -1402,7 +1402,9 @@ export class SeriesDataFeed {
       if (pendingInitial && job.options.getPendingInitial() !== pendingInitial) return false;
       const rowsRange = rowRangeMs(rows);
       if (pendingInitial && isSameSeries(job.series, pendingInitial)) {
-        if (!pendingInitial.range) return true;
+        // A completed child range cannot establish an unknown count-back
+        // window. Its original owner is settled by the full verification.
+        if (!pendingInitial.range) return false;
         const resultRange = numericResultRange(result) || rowsRange;
         return rangeCovers(resultRange, pendingInitial.range);
       }
@@ -1435,6 +1437,14 @@ export class SeriesDataFeed {
           repair: "none",
           strict: false,
           source: "backfill-completed",
+          // A full initial-window read is also that window's completion.
+          // Settling a fresh range owner would leave the original initial
+          // owner permanently blocking hosted indicators.
+          ...(pendingInitial?.range && rangeCovers(fetchRange, pendingInitial.range)
+            && job.options.getPendingInitial() === pendingInitial
+            && pendingInitial.indicatorWindowOwner
+            ? { indicatorWindowOwner: pendingInitial.indicatorWindowOwner }
+            : {}),
           ...(job.storageRevisionFloor ? { storageRevisionFloor: job.storageRevisionFloor } : {}),
         });
         let result = await read();

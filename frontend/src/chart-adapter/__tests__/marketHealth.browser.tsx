@@ -94,9 +94,12 @@ async function checkChartBatchReconnect(host: HTMLElement, api: KlineApi) {
   }
 }
 
-async function checkInitialRetryOwner(host: HTMLElement, rows: KlineBar[]) {
+async function checkInitialRetryOwner(host: HTMLElement, rows: KlineBar[], completion = false) {
   const series = instrument("BTCUSDT"), buffer = new IndicatorWindowCommitBuffer();
   const waits: Array<number | undefined> = [];
+  let loadFinished = false;
+  const completionProgress: string[] = [];
+  let rangeReads = 0;
   const pending = { current: null as PendingInitialSeries | null };
   const reply = (pending: boolean): KlineFetchResult => ({ data: rows,
     complete: !pending, retryable: pending, history_state: pending ? "pending" : "ready",
@@ -109,8 +112,8 @@ async function checkInitialRetryOwner(host: HTMLElement, rows: KlineBar[]) {
   const feed = new SeriesDataFeed({ getActiveSeries: () => series,
     commitMergedChartData: commit, commitPatchedChartData: commit,
     api: partialMock<KlineApi>({ fetchKlinesHistory: async (_s, _i, _d, _m, _e, options) => {
-      waits.push(options.maxWaitMs); return reply(waits.length === 1);
-    }, fetchLatestKlines: async () => reply(false) }) });
+      waits.push(options.maxWaitMs); return reply(completion ? waits.length <= 2 : waits.length === 1);
+    }, fetchLatestKlines: async () => reply(false), fetchKlinesRange: async () => { rangeReads++; return reply(false); } }) });
   const root = createRoot(host), noop = () => undefined;
   function Probe() {
     const load = useChartInitialLoad({ enabled: true, exchange: "binance", marketType: "spot",
@@ -121,13 +124,24 @@ async function checkInitialRetryOwner(host: HTMLElement, rows: KlineBar[]) {
       setConnectionStatus: noop, setLoading: noop, setError: noop, setLoadingMoreLeft: noop,
       setHasMoreLeft: noop, setCrosshairData: noop, setDataSource: noop });
     const latest = useRef(load); latest.current = load;
-    useEffect(() => { void latest.current(series.symbol, series.interval); }, []);
+    useEffect(() => { void latest.current(series.symbol, series.interval).then(() => { loadFinished = true; }); }, []);
     return null;
   }
   try {
     flushSync(() => root.render(<Probe />));
-    await until(() => waits.length >= 2 && pending.current === null,
-      "the initial probe did not settle through its bounded retry");
+    if (completion) {
+      await until(() => waits.length >= 2 && pending.current !== null && loadFinished, "initial repair owner was not established");
+      feed.handleBackfillCompleted({ type: "backfill_completed", ...series, market_type: series.marketType,
+        detail: { request_id: "browser-initial-owner-completion", reason: "initial_history",
+          range_start_ms: rows[0]!.time * 1000, range_end_ms: rows.at(-1)!.time * 1000 } }, {
+        activeSeries: series, pendingInitial: pending.current, getPendingInitial: () => pending.current,
+        getCacheRows: () => rows, cooldownMs: 0,
+        onRecoveryProgress: event => { completionProgress.push(event.type); if (event.type === "initial-resolved") pending.current = null; },
+      });
+    }
+    try { await until(() => waits.length >= 2 && pending.current === null,
+      "the initial probe did not settle through its bounded retry"); }
+    catch (error) { throw new Error(String(error)+JSON.stringify({completion,waits,pending:pending.current,rangeReads,completionProgress,pendingBuffer:buffer.hasPending("active")})); }
     assert(waits[0] === 0 && waits[1] === 1500, "probe and retry must retain their distinct transport waits");
     assert(!buffer.hasPending("active"), "settled cold retry left the original indicator window owner pending");
   } finally { flushSync(() => root.unmount()); feed.cancelSeriesRequests(series); }
@@ -416,6 +430,8 @@ export async function checkMarketHealth() {
     checks.push("the chart keeps the broker-recovered physical socket and sends one subscription");
     await checkInitialRetryOwner(host, corpus.get("BTCUSDT")!);
     checks.push("a completed bounded cold retry releases the original nonblocking probe's indicator window owner");
+    await checkInitialRetryOwner(host, corpus.get("BTCUSDT")!, true);
+    checks.push("a completed child range verifies the full unknown initial count-back and releases its React load owner");
     return { passed: true, checks, requests: calls, physicalStreamsCreated: sockets,
       scope: "Production-minified Chromium fixture with real React, initial-load hook and candle renderer; controlled market transport, not installed release acceptance" };
   } finally { if (host.hasChildNodes()) flushSync(() => root.unmount()); host.remove(); manager.closeAll(); gate.dispose(); }
