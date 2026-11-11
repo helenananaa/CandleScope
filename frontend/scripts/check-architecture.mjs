@@ -11,6 +11,7 @@ const UNSUPPORTED_TYPESCRIPT_EXTENSIONS = new Set([".mts", ".cts"]);
 const ALLOWED_NON_SOURCE_EXTENSIONS = new Set([".css", ".md", ".svg"]);
 
 const RULES = {
+  indicatorResultIngress: "indicator-result-ingress",
   admissionNoDisplayScheduler: "admission-no-display-scheduler",
   watchlistCandlesViaManager: "watchlist-candles-via-manager",
   liveWindowWriterBoundary: "live-window-writer-boundary",
@@ -347,6 +348,16 @@ function checkImports(absPath, filePath, content, projectDirectory) {
   for (const { specifier, line, typeOnly } of importSpecifiers(content)) {
     const target = resolveImportSpecifier(absPath, specifier, projectDirectory);
     const normalizedTarget = normalizeModulePath(target);
+    if (!isTestSourcePath(filePath) && filePath !== "src/features/indicators/indicatorResultManager.ts"
+      && filePath !== "src/features/indicators/indicatorResultCacheStore.ts"
+      && normalizedTarget === "src/features/indicators/indicatorResultCacheStore") {
+      const match = content.match(/import\s*\{([^}]+)\}\s*from\s*["'][^"']*indicatorResultCacheStore\.js["']/);
+      if (match && /\b(?:cacheIndicatorSnapshot|patchCachedIndicatorResult|replaceCachedIndicatorRange|upsertCachedIndicatorLinePoint|updateCachedIndicatorLines)\b/.test(match[1])) {
+        addViolation({ rule: RULES.indicatorResultIngress, filePath, line, target: normalizedTarget,
+          message: "indicator output must enter IndicatorResultManager before cache publication" });
+      }
+    }
+
     if (!isTestSourcePath(filePath) && filePath.startsWith("src/features/watchlist-full-cache/") && !typeOnly
       && (normalizedTarget.startsWith("src/services/") || normalizedTarget.startsWith("src/features/market-data/feed/")
         && normalizedTarget !== "src/features/market-data/feed/backfillRecoveryQueue"

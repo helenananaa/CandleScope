@@ -26,6 +26,17 @@ function runArchitectureFixture(t, files) {
   });
 }
 
+test("production indicator outputs cannot bypass the common result ingress", t => {
+  const files = {
+    "src/features/indicators/indicatorResultCacheStore.ts": "export function cacheIndicatorSnapshot() {}",
+    "src/features/indicators/useIndicatorRuntime.ts": 'import { cacheIndicatorSnapshot as write } from "./indicatorResultCacheStore.js";',
+  };
+  assert.equal(runArchitectureFixture(t, files).violations.some(v => v.rule === "indicator-result-ingress"), true);
+  delete files["src/features/indicators/useIndicatorRuntime.ts"];
+  files["src/features/indicators/indicatorResultManager.ts"] = 'import { cacheIndicatorSnapshot } from "./indicatorResultCacheStore.js";';
+  assert.equal(runArchitectureFixture(t, files).ok, true);
+});
+
 test("data admission cannot reintroduce the display scheduler", (t) => {
   const result = runArchitectureFixture(t, {
     "src/features/market-data/useKlineStreamRuntime.ts": 'import { ChartWorkScheduler } from "./chartWorkScheduler.js";',

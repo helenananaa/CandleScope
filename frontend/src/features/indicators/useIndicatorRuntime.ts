@@ -1,3 +1,4 @@
+import { standaloneIndicatorResults } from "./indicatorResultManager.js";
 import { ChartCalculationSessions } from "./chartCalculationSessions.js";
 import { usesChartCalculation } from "./pineChartTransport.js";
 import { indicatorWarmPlanKey, type IndicatorWarmPlan } from "../market-data/manager/chartDataFlowManager.js";
@@ -72,19 +73,15 @@ import {
   buildIndicatorCacheContext,
   buildIndicatorCacheHydrationSignature,
   buildIndicatorResultCacheKey,
-  cacheIndicatorSnapshot,
   getCachedIndicatorComputedSegments,
   getCachedIndicatorMetadata,
   getCachedIndicatorRevision,
   getCachedIndicatorResumeState,
   invalidateCachedIndicatorRange,
-  patchCachedIndicatorResult,
   rebaseCachedIndicatorRevision,
   removeCachedIndicatorResult,
-  replaceCachedIndicatorRange,
   resolveCachedIndicatorResults,
   snapshotIndicatorResultCacheDiagnostics,
-  upsertCachedIndicatorLinePoint,
 } from "./indicatorResultCacheStore.js";
 import {
   buildIndicatorRuntimeDiagnosticSnapshot,
@@ -642,6 +639,7 @@ export function useIndicatorRuntime(
   const computeChartData = frontendWindow.rows ?? chartData;
   const computeChartDataRef = useLatestRef(computeChartData);
   const inputSource = marketWorkspaceResources?.indicatorDataManager.inputSource;
+  const indicatorResults = marketWorkspaceResources?.indicatorDataManager.results ?? standaloneIndicatorResults;
   const localInputKey = useMemo(() => activeIndicators.some(indicator => isFrontendScript(indicator) || indicator.executionTarget === "local")
     ? buildIndicatorOhlcvSignature(computeChartData) : undefined, [activeIndicators, computeChartData]);
   const localInputKeyRef = useLatestRef(localInputKey);
@@ -1154,7 +1152,7 @@ export function useIndicatorRuntime(
     const dataRevision = normalizeIndicatorRevision(payload);
     if (dataRevision) seriesRevisionRef.current = dataRevision;
     if (!error) {
-      cacheIndicatorSnapshot(
+      indicatorResults.snapshot(
         indicator,
         getIndicatorCacheContext(),
         normalized,
@@ -1197,6 +1195,7 @@ export function useIndicatorRuntime(
     ownedCalculation,
     getIndicatorCacheContext,
     reapplyProvisionalIndicatorPreview,
+    indicatorResults,
     setActiveIndicators,
   ]);
 
@@ -1210,7 +1209,7 @@ export function useIndicatorRuntime(
     const dataRevision = normalizeIndicatorRevision(payload);
     if (dataRevision) seriesRevisionRef.current = dataRevision;
     if (payload?.ok !== false) {
-      patchCachedIndicatorResult(indicator, getIndicatorCacheContext(), normalized, {
+      indicatorResults.patch(indicator, getIndicatorCacheContext(), normalized, {
         range: payload?.range,
         revision: dataRevision,
       });
@@ -1251,6 +1250,7 @@ export function useIndicatorRuntime(
     getIndicatorCacheContext,
     markHostedSubscriptionReady,
     reapplyProvisionalIndicatorPreview,
+    indicatorResults,
     setActiveIndicators,
   ]);
 
@@ -1273,7 +1273,7 @@ export function useIndicatorRuntime(
     if (dataRevision) seriesRevisionRef.current = dataRevision;
     const resolvedEmpty = isResolvedIndicatorRangeEmpty(payload);
     if (payload?.ok !== false || resolvedEmpty) {
-      replaceCachedIndicatorRange(indicator, getIndicatorCacheContext(), normalized, range, {
+      indicatorResults.replaceRange(indicator, getIndicatorCacheContext(), normalized, range, {
         revision: dataRevision,
       });
     }
@@ -1308,6 +1308,7 @@ export function useIndicatorRuntime(
     ownedCalculation,
     getIndicatorCacheContext,
     reapplyProvisionalIndicatorPreview,
+    indicatorResults,
     setActiveIndicators,
   ]);
 
@@ -1348,7 +1349,7 @@ export function useIndicatorRuntime(
             })
           );
           if (update.isFinal && cacheContext) {
-            upsertCachedIndicatorLinePoint(
+            indicatorResults.point(
               indicator,
               cacheContext,
               update.values,
@@ -1381,6 +1382,7 @@ export function useIndicatorRuntime(
     candleUpColorRef,
     getIndicatorCacheContext,
     resolveRealtimeIndicatorConfigSignature,
+    indicatorResults,
     runtimeContextRef,
     setActiveIndicators,
   ]);
@@ -3195,6 +3197,7 @@ export function useIndicatorRuntime(
 
   const { computeAll, computing, recompute } = useIndicatorComputeController({
     executeBatch: marketWorkspaceResources?.indicatorDataManager.compute,
+    resultManager: indicatorResults,
     seriesIdentity,
     inputSource,
     activeIndicators,
