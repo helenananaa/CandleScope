@@ -128,6 +128,7 @@ try{
   const tail=await q.until(async()=>{const h=await health(input);return h?.action==='reuse'?h:false;},180_000);
   q.s.receipt.cold.push({index,scope:'cold frontend pool / persistent backend history',input,...visible,tailReadyMs:Date.now()-q.s.startedAt,tail,
     http:q.s.traffic.requests.filter(r=>r.at>=q.s.startedAt).length});await q.save();
+  console.log('cold',index,input.symbol,input.interval,Date.now()-q.s.startedAt);
   const next=[series('BTCUSDT'),series('ETHUSDT'),series('BTCUSDT','5m'),series('ETHUSDT','5m')][(index+1)%4];
   await q.execute(snap.cells[0].cellId,'session',next);await readyFor(next,1);await end();
  }
@@ -138,7 +139,11 @@ try{
  await state('initial-shared-two-chart',true);
  // A public full-tier consumer keeps ETH current while the sibling retains BTC.
  await command('watchlist','setTier',{symbolKey:'spot:ETHUSDT',tier:'full'});
+ // Establish the chart's actual window demand once before measuring hot
+ // switches; the watchlist's smaller preload alone is not equivalent proof.
+ await q.execute('cell-1','session',series('ETHUSDT'));await readyFor(series('ETHUSDT'));
  await q.until(async()=>{const h=await health(series('ETHUSDT'));return h?.action==='reuse'?h:false;},180_000);
+ await q.execute('cell-1','session',series('BTCUSDT'));await readyFor(series('BTCUSDT'));
  for(let index=0;index<10;index++){
   const input=series(index%2?'BTCUSDT':'ETHUSDT');
   const before=await health(input),requests=q.s.traffic.requests.length,sockets=q.s.traffic.sockets.length,at=Date.now();assert.equal(before.action,'reuse');
@@ -152,6 +157,7 @@ try{
   assert.equal(newMarketSockets.length,0,'healthy target switch opened another physical market socket');
   const bars=await capture(q);assert.equal(bars.find(c=>c.cellId==='cell-2').symbol,'BTCUSDT');
   q.s.receipt.warm.push({index,input,elapsedMs,before,after,requests:traffic,targetReads,newMarketSockets,sibling});await q.save();
+  console.log('warm',index,input.symbol,elapsedMs);
  }
  await command('watchlist','setTier',{symbolKey:'spot:ETHUSDT',tier:'none'});
  await q.execute('cell-1','session',series('BTCUSDT'));await readyFor(series('BTCUSDT'));
@@ -209,6 +215,7 @@ try{
    await command('workspace','splitCell',{cellId:cells[1].cellId,direction:'columns',creationMode:'copy'});await q.ready(2,180_000);
    await q.indicatorsReady(2,180_000);await q.record('soak-cycle-oracle-'+nextCycle,await values('soak-cycle-'+nextCycle));
    nextCycle++;
+   console.log('soak-cycle',nextCycle,Date.now()-started);
   }
   const sample=await state('soak-'+q.s.receipt.soak.length);
   q.s.receipt.soak.push({elapsedMs:Date.now()-started,cycle:nextCycle,broker:sample.broker,metrics:sample.metrics,heap:sample.heap,sumRssKb:sample.sumRssKb,processes:sample.processes});await q.save();
@@ -223,5 +230,18 @@ try{
  await q.execute((await q.inspect()).cells[0].cellId,'session',okx);await q.ready(2,180_000);await q.indicatorsReady(2,180_000);
  await q.record('okx-four-runtime-oracle',await values('okx'));await state('okx-source',true);await q.screenshot('okx-source');
  await end();assert.deepEqual(q.s.receipt.errors,[]);q.s.receipt.passed=true;
-}catch(error){q.s.receipt.failure=String(error.stack??error);process.exitCode=1;if(running)await q.screenshot('failure').catch(()=>{});}
-finally{if(running)try{await end();}catch(error){q.s.receipt.exitFailure=String(error);}await q.save();console.log(JSON.stringify({passed:q.s.receipt.passed??false,failure:q.s.receipt.failure,steps:q.s.receipt.steps.length}));}
+}catch(error){
+ q.s.receipt.failure=String(error.stack??error);process.exitCode=1;
+ if(running){
+  await q.screenshot('failure').catch(()=>{});
+  await state('failure-state',true).catch(()=>{});
+  for(const endpoint of ['support/diagnostics','settings/storage/health'])try{
+   const result=await fetch(q.s.backend+'/api/v1/'+endpoint,{signal:AbortSignal.timeout(10_000)}).then(r=>r.json());
+   await fs.writeFile(path.join(q.s.root,'failure-'+endpoint.replaceAll('/','-')+'.json'),JSON.stringify(result,null,2));
+  }catch{}
+ }
+}
+finally{
+ if(running)try{await end();}catch(error){q.s.receipt.exitFailure=String(error);try{await q.quit();await q.exited();}catch(cleanup){q.s.receipt.cleanupFailure=String(cleanup);}}
+ await q.save();console.log(JSON.stringify({passed:q.s.receipt.passed??false,failure:q.s.receipt.failure,steps:q.s.receipt.steps.length}));
+}
