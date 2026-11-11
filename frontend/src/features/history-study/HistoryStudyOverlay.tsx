@@ -31,10 +31,11 @@ import type { ChartStudyClockIssue } from "../chart-workspace/chartStudyClockLin
 import "../trading-accounts/tradingAccounts.css";
 import "./historyStudy.css";
 
-export default function HistoryStudyOverlay({ cellId, revision, workspaceId, linkCoordinator, accountOverlay, onControlObservation, playback, manager, style, indicators: definitions, active, busy, error, onMove, onAutomaticMove, onRetry, onEditingChanged, onFollowReady, onPlayStart, cursorLinkIssue, onRetryCursorLink }: {
+export default function HistoryStudyOverlay({ cellId, revision, workspaceId, linkCoordinator, accountOverlay, drawingsHidden, onControlObservation, playback, manager, style, indicators: definitions, active, busy, error, onMove, onAutomaticMove, onRetry, onEditingChanged, onFollowReady, onPlayStart, cursorLinkIssue, onRetryCursorLink }: {
   cellId: string; revision: number;
   onControlObservation?: ((cellId: string, observation: ControlCellObservation | null) => void) | undefined;
   accountOverlay?: ChartAccountOverlaySettings | undefined;
+  drawingsHidden?: boolean;
   workspaceId: string; linkCoordinator: ChartLinkCoordinator;
   playback: HistoryStudyPlayback; manager: MarketDataManager; style: QuickReplayChartStyle;
   indicators: readonly IndicatorDefinition[]; active: boolean; busy: boolean; error: unknown;
@@ -162,7 +163,7 @@ export default function HistoryStudyOverlay({ cellId, revision, workspaceId, lin
       {(error || notesError) ? <p className="trading-error" role="alert">{t("study.error")}</p> : null}
       {error ? <button className="trading-button" type="button" onClick={onRetry}>{t("study.retry")}</button> : null}
       <ChartErrorBoundary><SingleChartPanes ref={surface.ref} seriesStore={store} symbol={series.symbol} interval={series.interval}
-        drawingKeyBase={`history-study:${input.id}`} drawingReadOnly
+        drawingKeyBase={`history-study:${input.id}`} drawingReadOnly drawingsHidden={drawingsHidden ?? false}
         loading={false} dataMeta={dataMeta} datasetKey={input.id} upColor={style.upColor} downColor={style.downColor}
         {...(style.chartType === undefined ? {} : { chartType: normalizeMainChartType(style.chartType) })}
         theme={style.theme} customBg={style.customBg} inheritApplicationTheme={style.inheritApplicationTheme ?? true}

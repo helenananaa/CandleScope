@@ -114,7 +114,7 @@ def test_bracket_children_and_oco_inside_one_candle():
     target = next(child for child in m.result.created if child.tag == "take_profit")
     stop = next(child for child in m.result.created if child.tag == "stop_loss")
     assert target.id in tags and tags[target.id].price == D("104")
-    assert m.result.cancelled[stop.id] == "oco_sibling_filled"
+    assert m.result.cancelled[stop.id] == ("oco_sibling_filled", tags[target.id].ts_ms)
     assert m.result.position == 0
 
 
@@ -268,9 +268,75 @@ def test_journal_at_time_bounds_and_http_adapter_keep_account_and_instrument_sco
     assert result.status_code == 200
     assert result.json()["hasMore"]
     assert [note["body"] for note in result.json()["original"]] == ["note-2", "note-3"]
-    for patch in ({"limit": 0}, {"limit": 101}, {"cursorMs": -1}):
+    for patch in ({"limit": 0}, {"limit": 101}, {"cursorMs": -1}, {"noteSource": "latest"}, {"noteFilter": "state"}):
         assert client.get(f"/trading/accounts/{account['id']}/journal-at-time", params={**params, **patch}).status_code == 422
     assert client.get("/trading/accounts/not-an-account/journal-at-time", params=params).status_code == 404
+
+
+def test_journal_at_time_filters_before_limit_without_revealing_future_metadata(service):
+    account = service.create_account({"kind": "manual", "name": "Source"})
+    foreign = service.create_account({"kind": "manual", "name": "Foreign"})
+    clock = service.test_clock
+    instrument = {"exchange": "binance", "marketType": "spot", "symbol": "BTCUSDT"}
+    def quick(body, **extra):
+        return service.create_entry(account["id"], {**instrument, "kind": "quick", "body": body, **extra})
+
+    original = quick("original")
+    service.add_fill(account["id"], {**instrument, "side": "buy", "qty": "1", "price": "100"})
+    trade_id = service.list_trades(account["id"])["trades"][0]["id"]
+    clock.now += 10
+    service.add_snapshot(original["id"], {"state": {"interval": "1m"}})
+    clock.now += 10
+    attachment_time = clock.now
+    png = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"0" * 16).decode()
+    service.add_snapshot(original["id"], {"image": png})
+    service.link_entry(original["id"], trade_id)
+    clock.now += 10
+    quick("newer unlinked")
+    state_only = quick("newer state only")
+    service.add_snapshot(state_only["id"], {"state": {"interval": "5m"}})
+    service.save_entry(original["id"], {"body": "later text"})
+    foreign_note = service.create_entry(foreign["id"], {**instrument, "kind": "quick", "body": "foreign"})
+    service.add_snapshot(foreign_note["id"], {"image": png})
+    other_market = quick("other market", symbol="ETHUSDT")
+    service.add_snapshot(other_market["id"], {"image": png})
+    clock.now += 10
+    late_review = quick("review", marketTimeMs=attachment_time - 1, tradeId=trade_id)
+    service.add_snapshot(late_review["id"], {"image": png})
+
+    app = FastAPI()
+    app.include_router(trading_router)
+    app.state.trading_accounts = service
+    client = TestClient(app)
+    def read(cursor, source, attachment):
+        response = client.get(f"/trading/accounts/{account['id']}/journal-at-time", params={
+            "exchange": "BINANCE", "marketType": "SPOT", "symbol": "btcusdt",
+            "cursorMs": cursor, "limit": 1, "noteSource": source, "noteFilter": attachment,
+        })
+        assert response.status_code == 200
+        data = response.json()
+        assert {k: data[k] for k in ("exchange", "marketType", "symbol", "accountId", "cursorMs", "noteSource", "noteFilter")} == {
+            **instrument, "accountId": account["id"], "cursorMs": cursor, "noteSource": source, "noteFilter": attachment,
+        }
+        return data
+
+    for attachment in ("linked", "screenshots"):
+        assert read(attachment_time, "original", attachment)["original"] == []
+        assert read(attachment_time + 1, "original", attachment)["original"][0]["body"] == "original"
+        current = read(clock.now + 1, "original", attachment)
+        assert not current["hasMore"] and not current["reviews"]
+        assert [note["body"] for note in current["original"]] == ["later text"]
+        assert not {"tradeId", "snapshots", "tradeLinkedAtMs"}.intersection(current["original"][0])
+        assert read(attachment_time - 1, "review", attachment)["reviews"] == []
+        review = read(attachment_time, "review", attachment)
+        assert not review["original"] and not review["hasMore"]
+        assert review["reviews"][0]["id"] == late_review["id"]
+        assert review["reviews"][0]["savedAtMs"] > attachment_time
+
+    with service.store.transaction() as db:
+        db.execute("UPDATE journal_entries SET trade_linked_at_ms=NULL WHERE id=?", (original["id"],))
+    assert read(attachment_time + 1, "original", "linked")["original"] == []
+    assert read(clock.now + 1, "original", "linked")["original"][0]["id"] == original["id"]
 
 
 def test_journal_at_time_uses_one_committed_generation_for_entry_and_text(service, monkeypatch):
@@ -383,6 +449,8 @@ def test_v1_history_migration_preserves_bytes_and_marks_unknown_coverage(tmp_pat
     store.close()
     with sqlite3.connect(path) as conn:
         conn.execute("ALTER TABLE journal_revisions DROP COLUMN history_complete")
+        conn.execute("ALTER TABLE orders DROP COLUMN cancelled_at_ms")
+        conn.execute("ALTER TABLE orders DROP COLUMN protection_trade_id")
         conn.execute("UPDATE meta SET value = '1' WHERE key = 'schema_version'")
         before = conn.execute("SELECT entry_id, revision, saved_at_ms, fields_json, body FROM journal_revisions").fetchall()
     reopened = TradingStore(path)
@@ -390,6 +458,7 @@ def test_v1_history_migration_preserves_bytes_and_marks_unknown_coverage(tmp_pat
         restored = TradingAccountService(reopened, snapshot_dir=tmp_path / "snaps", clock=Clock(T0 + 1000))
         with sqlite3.connect(path) as conn:
             assert conn.execute("SELECT entry_id, revision, saved_at_ms, fields_json, body FROM journal_revisions").fetchall() == before
+            assert {"cancelled_at_ms", "protection_trade_id"} <= {row[1] for row in conn.execute("PRAGMA table_info(orders)")}
         assert not restored.entry_revisions(note["id"])["revisions"][0]["historyComplete"]
         restored.save_entry(note["id"], {"fields": {"entryBasis": "new observation"}, "expectedRevision": 1})
         revisions = restored.entry_revisions(note["id"])["revisions"]
@@ -412,9 +481,15 @@ def test_practice_flow_market_entry_bracket_and_candle_replay(service):
     summary = service.account_summary(account["id"])
     assert len(summary["positions"]) == 1
     assert {order["tag"] for order in summary["workingOrders"]} == {"stop_loss", "take_profit"}
+    trade_id = service.list_trades(account["id"])["trades"][0]["id"]
+    protection = service.trade_detail(account["id"], trade_id)["protectionOrders"]
+    assert {(order["kind"], order["price"]) for order in protection} == {
+        ("stopLoss", "98"), ("takeProfit", "103"),
+    }
+    assert all(order["activeFromMs"] == clock.now and order["inactiveFromMs"] is None for order in protection)
 
     # Same candle: old high 100.5 must not count; next candle reaches 103.5.
-    clock.now = T0 + 70_000
+    clock.now = T0 + 130_000
     fills = service.apply_market_bars(
         ("binance", "futures", "BTCUSDT"),
         [bar(minute, "100", "100.5", "99.8", "100.2"), bar(minute + 60, "100.2", "103.5", "100.1", "103.2")],
@@ -425,8 +500,49 @@ def test_practice_flow_market_entry_bracket_and_candle_replay(service):
     assert summary["positions"] == [] and summary["workingOrders"] == []
     trades = service.list_trades(account["id"])["trades"]
     assert trades[0]["status"] == "closed" and trades[0]["avgExitPrice"] == "103"
+    assert trades[0]["closedAtMs"] == T0 + 119_999 < clock.now
+    protection = service.trade_detail(account["id"], trade_id)["protectionOrders"]
+    assert {order["inactiveFromMs"] for order in protection} == {trades[0]["closedAtMs"]}
+    stop_id = next(order["id"] for order in protection if order["kind"] == "stopLoss")
+    stop_row = service.store.order(stop_id)
+    assert stop_row["updated_at_ms"] == clock.now
+    with service.store.transaction() as conn:
+        service.store.update(conn, "orders", {"cancelled_at_ms": None}, "id = ?", (stop_id,))
+    assert [order["kind"] for order in service.trade_detail(account["id"], trade_id)["protectionOrders"]] == ["takeProfit"]
     # 10000 + 3 profit - taker fee on entry - maker fee on target
     assert D(summary["balance"]) == D("10000") + D("3") - D("100") * D("0.0005") - D("103") * D("0.0002")
+
+
+def test_trade_protection_orders_preserve_explicit_ownership_and_cancellation_on_restart(service, tmp_path):
+    clock = service.test_clock
+    service.test_market.bar = bar(T0 // 1000, "100", "100", "100", "100")
+    account_id = service.create_account({"kind": "practice", "name": "Protection"})["id"]
+    service.place_order(account_id, {**INSTRUMENT, "side": "buy", "type": "market", "qty": "1"})
+    trade_id = service.list_trades(account_id)["trades"][0]["id"]
+    admission = clock.now
+    stop_id = service.place_order(account_id, {
+        **INSTRUMENT, "side": "sell", "type": "stop", "qty": "1", "stopPrice": "95", "reduceOnly": True,
+    })["order"]["id"]
+    clock.now += 1000
+    service.cancel_order(account_id, stop_id)
+    cancelled = clock.now
+    legacy_id = service.place_order(account_id, {
+        **INSTRUMENT, "side": "sell", "type": "limit", "qty": "1", "limitPrice": "105", "reduceOnly": True,
+    })["order"]["id"]
+    service.place_order(account_id, {
+        **INSTRUMENT, "side": "sell", "type": "limit", "qty": "1", "limitPrice": "110",
+    })
+    with service.store.transaction() as conn:
+        service.store.update(conn, "orders", {"protection_trade_id": None}, "id = ?", (legacy_id,))
+    reopened = TradingStore(service.store.path)
+    try:
+        restored = TradingAccountService(reopened, snapshot_dir=tmp_path / "snaps", clock=clock)
+        assert restored.trade_detail(account_id, trade_id)["protectionOrders"] == [{
+            "id": stop_id, "kind": "stopLoss", "price": "95", "qty": "1",
+            "activeFromMs": admission, "inactiveFromMs": cancelled,
+        }]
+    finally:
+        reopened.close()
 
 
 def test_practice_rejects_spot_short_and_wrong_side_stop(service):
@@ -461,13 +577,16 @@ def test_manual_journal_plan_link_and_hindsight_flags(service):
     detail = service.trade_detail(account["id"], trade["id"])
     assert [item["id"] for item in detail["linkSuggestions"]] == [note["id"]]
 
-    service.link_entry(note["id"], trade["id"])
+    linked_at = clock.now
+    assert service.link_entry(note["id"], trade["id"])["tradeLinkedAtMs"] == linked_at
     clock.now += 10_000
+    assert service.link_entry(note["id"], trade["id"])["tradeLinkedAtMs"] == linked_at
     saved = service.save_entry(note["id"], {"fields": {
         "entryPrice": "100", "stopPrice": "90", "riskUsdt": "100",
         "entryBasis": "breakout", "errors": "moved stop",
     }})
     assert saved["revisionCount"] == 2
+    assert saved["tradeLinkedAtMs"] == linked_at
     assert saved["fieldTiming"]["errors"]["phase"] == "post"
     detail = service.trade_detail(account["id"], trade["id"])
     assert detail["plan"]["riskUsdt"] == "50"
