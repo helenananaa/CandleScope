@@ -1110,6 +1110,8 @@ export const ja = {
   "settings.appearance.cellThemeDescription": "このチャートのテーマを設定します。スタイル連動を有効にした場合のみ、他のチャートにも反映されます。",
   "workspace.link.drawings": "描画",
   "workspace.link.drawingsDesc": "同一市場・同一レイヤーセットで描画ドキュメントを共有",
+  "workspace.link.drawingVisibility": "描画の表示",
+  "workspace.link.drawingVisibilityDesc": "各チャートで描画を表示するかどうかを同期します。",
   "workspace.link.definitions": "インジケーター一覧",
   "workspace.link.definitionsDesc": "追加、削除、インジケーター種類を同期",
   "workspace.link.parameters": "インジケーターパラメーター",

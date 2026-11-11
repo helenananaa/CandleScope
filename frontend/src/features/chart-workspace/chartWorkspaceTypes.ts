@@ -124,12 +124,15 @@ export interface ChartLinkGroupSettings {
   timeAnchor: boolean;
   dateRange: boolean;
   drawings: boolean;
+  drawingVisibility?: boolean;
   chartStyle?: boolean;
   accountSource?: boolean;
   tradingOverlays?: boolean;
   noteOverlays?: boolean;
   studyCursor?: boolean;
   studyMode?: boolean;
+  quickReplayMode?: boolean;
+  quickReplayCursor?: boolean;
   indicators: ChartLinkIndicatorSettings;
 }
 
@@ -153,8 +156,10 @@ export interface ChartCellState {
   id: ChartCellId;
   linkGroupId: ChartLinkGroupId | null;
   drawingLayerSet: ChartDrawingLayerSetId;
+  drawingsHidden?: boolean;
   session: ChartSession;
   chartSettings: ChartCellChartSettings;
+  quickReplay?: import("./chartQuickReplayState.js").ChartQuickReplayState;
   accountOverlay?: import("./chartAccountOverlaySettings.js").ChartAccountOverlaySettings;
   priceScale: ChartCellPriceScale;
   indicators: IndicatorDefinition[];
@@ -223,12 +228,15 @@ export const DEFAULT_CHART_LINK_GROUP_SETTINGS: ChartLinkGroupSettings = Object.
   timeAnchor: false,
   dateRange: true,
   drawings: false,
+  drawingVisibility: false,
   chartStyle: false,
   accountSource: false,
   tradingOverlays: false,
   noteOverlays: false,
   studyCursor: false,
   studyMode: false,
+  quickReplayMode: false,
+  quickReplayCursor: false,
   indicators: Object.freeze({
     definitions: true,
     parameters: true,

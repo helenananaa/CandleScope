@@ -3,6 +3,14 @@ export interface ReplayNoteContext {
   runRevision: number; sourceSequence: number; checkpointSequence: number; timelineSequence: number; virtualTimeMs: number;
   reviewId: string | null; reviewRevision: number | null; reviewNote: boolean;
 }
+export type ReplayNoteView = "training" | { reviewId: string; reviewRevision: number };
+
+export function replayNoteView(context: Pick<ReplayNoteContext, "reviewId" | "reviewRevision">): ReplayNoteView {
+  if (context.reviewId === null && context.reviewRevision === null) return "training";
+  if (context.reviewId === null || context.reviewRevision === null) throw new TypeError("Invalid replay note view");
+  return { reviewId: context.reviewId, reviewRevision: context.reviewRevision };
+}
+
 export interface ReplayNoteLink {
   kind: "FILL" | "TRADE"; id: string; fillId: string; eventTimeMs: number; sourceSequence: number;
   side: "BUY" | "SELL"; quantity: string; price: string;
