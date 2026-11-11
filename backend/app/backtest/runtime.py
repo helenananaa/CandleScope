@@ -721,8 +721,7 @@ class BacktestWorker:
                         owner=owner,
                         now_ms=_now_ms(),
                         lease_ms=self._lease_ms,
-                        excluded_run_ids=(service.external.waiting_runs(service.repository.queued_provider_connections())
-                                          if external_queue_guard else ()),
+                        excluded_run_ids=service.external_queue_exclusions() if external_queue_guard else (),
                     )
                     if record is None:
                         self._stop.wait(0.2)

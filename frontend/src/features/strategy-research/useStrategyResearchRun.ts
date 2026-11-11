@@ -95,6 +95,7 @@ export function useStrategyResearchRun(input: {
     if (!runId || tester.snapshot().activeRunId === runId) return;
     const controller = new AbortController();
     setRestoringRun(true);
+    setError(null);
     void dataManager.strategy.restoreRun(runId, controller.signal).then((bundle) => {
       if (!controller.signal.aborted) setResult(bundle);
     }).catch((reason: unknown) => { if (!controller.signal.aborted) setError(reason instanceof Error ? describeError(reason, reason.message) : String(reason)); })
@@ -139,8 +140,9 @@ export function useStrategyResearchRun(input: {
   const snapshot = tester.snapshot();
   const barOnly = input.source?.kind === "IMPORTED_DATASET" && !input.imported?.market_trade_input;
   const sourceResult = result && researchResultMatchesSource(result, input.source, session) ? result : null;
-  const inputStale = snapshot.status === "STALE" || (result !== null && sourceResult === null);
-  const updatingResult = result !== null && ["RESOLVING", "QUEUED", "RUNNING"].includes(snapshot.status);
+  const externalResult = result?.report.strategy?.external_provider !== undefined;
+  const inputStale = (snapshot.status === "STALE" && !externalResult) || (result !== null && sourceResult === null);
+  const updatingResult = result !== null && (restoringRun || ["RESOLVING", "QUEUED", "RUNNING"].includes(snapshot.status));
 
   const execute = useCallback(async (request: ChartStrategyRunRequest, materialize?: ChartContextResolution | null) => {
     pendingRequestRef.current = request;

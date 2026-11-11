@@ -1,16 +1,21 @@
 import type { PreparationJob } from "../../data-preparation/api.js";
-import { defaultBacktestApi, type BacktestApiClient } from "../../backtest/backtestApi.js";
+import { defaultBacktestApi, type BacktestApiClient, type ExternalProviderConnection, type StrategyRevisionRecord } from "../../backtest/backtestApi.js";
 import type { BacktestResultReplayCursor, BacktestResultReplayNoteDraft, BacktestRunRecord } from "../../backtest/backtestTypes.js";
 import { isBacktestTerminalState } from "../../backtest/backtestRunClient.js";
 import { StrategyRunStreamError, type StrategyRunUpdate } from "../../backtest/backtestRunStream.js";
 import { ChartStrategyResultCache } from "../../backtest/chart-tester/chartStrategyResultCache.js";
-import { runResearchBacktest, type ChartStrategyRunApi } from "../../backtest/chart-tester/chartStrategyRunRequest.js";
+import { buildImportedExternalRunBody, runResearchBacktest, type ChartStrategyRunApi } from "../../backtest/chart-tester/chartStrategyRunRequest.js";
+import { externalSnapshotRequest, matchingExternalConnections } from "../../backtest/research/externalProviderModel.js";
 import { defaultContinuousApi } from "../../backtest/continuous/continuousApi.js";
 import type { ContinuousApi } from "../../backtest/continuous/continuousTypes.js";
 import { ContinuousStrategyDataManager } from "./continuousStrategyDataManager.js";
 
+type ExternalInput = Omit<Parameters<typeof buildImportedExternalRunBody>[0], "api" | "signal">;
+type ExternalRunDraft = { readonly revision: StrategyRevisionRecord; readonly body: Record<string, unknown> };
+
 type ResearchRequest = Omit<Parameters<typeof runResearchBacktest>[0], "api" | "waitForTerminal" | "wait" | "pollIntervalMs">;
-export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "streamRun" | "getReport" | "getChart" | "cancelRun" | "listRuns" | "compareRuns"> & Pick<BacktestApiClient, "getResultReplay" | "saveResultReplayNote" | "observeStrategyPreparation">;
+export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "streamRun" | "getReport" | "getChart" | "cancelRun" | "listRuns" | "compareRuns"> & Pick<BacktestApiClient, "getResultReplay" | "saveResultReplayNote" | "observeStrategyPreparation">
+  & Partial<Pick<BacktestApiClient, "capabilities" | "listStrategyRevisions" | "externalProviders">>;
 
 /** Owns fixed-history operations and immutable results independently of live
  * chart stores. Releasing a consumer never cancels a durable shared run. */
@@ -74,6 +79,71 @@ export class StrategyDataManager {
       ...request, api: this.api, signal,
       waitForTerminal: (runId, _signal, onUpdate) => this.wait(runId, signal, onUpdate),
     }));
+  }
+
+  private externalProviderApi() {
+    if (!this.api.externalProviders) {
+      throw new StrategyRunStreamError("FLAG_DISABLED", "External model connections are unavailable");
+    }
+    return this.api.externalProviders;
+  }
+
+  externalModelRevisions(signal?: AbortSignal) {
+    return this.operation(signal, async (owned) => {
+      const capabilities = await this.api.capabilities?.(owned);
+      if (!capabilities?.flags.BACKTEST_EXTERNAL_PROVIDER_ENABLED) return null;
+      const revisions = await this.api.listStrategyRevisions?.(owned) ?? [];
+      return revisions.filter(revision => revision.provider_kind === "EXTERNAL_PROVIDER");
+    });
+  }
+
+  registerExternalModel(input: { name: string; manifest: Record<string, unknown> } | null, signal?: AbortSignal) {
+    return this.operation(signal, async (owned) => {
+      const manifest = input?.manifest ?? (await this.externalProviderApi().example(owned)).manifest;
+      return this.api.createStrategyRevision({
+        name: input?.name ?? String(manifest.provider_id),
+        language: "EXTERNAL_PROVIDER",
+        source_text: JSON.stringify(manifest),
+        parameter_schema: [],
+      }, owned);
+    });
+  }
+
+  prepareExternalModel(input: ExternalInput, signal?: AbortSignal): Promise<ExternalRunDraft> {
+    return this.operation(signal, async (owned) => ({
+      revision: input.revision,
+      body: await buildImportedExternalRunBody({ ...input, api: this.api, signal: owned }),
+    }));
+  }
+
+  externalModelConnections(draft: ExternalRunDraft, signal?: AbortSignal) {
+    return this.operation(signal, async (owned) =>
+      matchingExternalConnections(await this.externalProviderApi().list(owned), draft.body, draft.revision));
+  }
+
+  createExternalModelConnection(draft: ExternalRunDraft, signal?: AbortSignal) {
+    return this.operation(signal, (owned) => this.externalProviderApi().create(externalSnapshotRequest(draft.body), owned));
+  }
+
+  revokeExternalModelConnection(connectionId: string, signal?: AbortSignal) {
+    return this.operation(signal, (owned) => this.externalProviderApi().revoke(connectionId, owned));
+  }
+
+  startExternalModel(draft: ExternalRunDraft, connection: ExternalProviderConnection, parameters: Record<string, unknown>, signal?: AbortSignal) {
+    return this.operation(signal, async (owned) => {
+      if (!connection.ready || !matchingExternalConnections([connection], draft.body, draft.revision).length) {
+        throw new StrategyRunStreamError("PROVIDER_CONNECTION_REQUIRED", "Connect the external model for this frozen snapshot");
+      }
+      const body = { ...draft.body, parameters, external_connection_id: connection.connection_id };
+      await this.externalProviderApi().smoke(connection.connection_id, {
+        ...externalSnapshotRequest(draft.body),
+        parameters,
+        output_mode: draft.body.output_mode,
+      }, owned);
+      await this.api.validate(body, owned);
+      owned.throwIfAborted();
+      return this.api.createRun(body, crypto.randomUUID(), owned);
+    });
   }
 
   observeResearchPreparation(id: string, scope: string, retry: boolean, onProgress: (job: PreparationJob) => void | Promise<void>): Promise<PreparationJob> {
