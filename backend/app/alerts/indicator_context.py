@@ -1,8 +1,8 @@
-"""Readiness for compatibility field names; numeric computation is public."""
+"""Readiness of the indicator fields an alert rule requires."""
 from typing import Any
 import math
 
 
 def indicator_readiness(values: dict[str, Any]) -> dict[str, bool]:
-    return {key: isinstance(values.get(key), (int, float)) and math.isfinite(values[key])
-            for key in ("rsi", "macdHist", "ma20")}
+    return {key: isinstance(value, (int, float)) and math.isfinite(value)
+            for key, value in values.items()}
