@@ -1,3 +1,5 @@
+import type { ChartAccountOverlaySettings } from "../chart-workspace/chartAccountOverlaySettings.js";
+
 /** Only these historical text fields cross into the study view/control API.
  * Latest tags, links, plan metadata and images are not historical text facts. */
 export interface StudyJournalNote {
@@ -11,6 +13,12 @@ export interface StudyJournalView {
   original: StudyJournalNote[]; reviews: StudyJournalNote[];
 }
 
-export interface StudyJournalData {
-  accountId: string; cursorMs: number; original: StudyJournalNote[]; reviews: StudyJournalNote[]; hasMore: boolean;
+export interface StudyJournalFilters {
+  noteSource: "all" | NonNullable<ChartAccountOverlaySettings["noteSource"]>;
+  noteFilter: "all" | NonNullable<ChartAccountOverlaySettings["noteFilter"]>;
+}
+
+export interface StudyJournalData extends StudyJournalFilters {
+  accountId: string; cursorMs: number; exchange: string; marketType: string; symbol: string;
+  original: StudyJournalNote[]; reviews: StudyJournalNote[]; hasMore: boolean;
 }

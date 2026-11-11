@@ -47,7 +47,7 @@ async def test_version_images_preserve_pixels_and_same_time_event_boundary_acros
         original = await service.training.save_note(run, track, note_id="plan", fields=fields, expected_revision=0, context=context)
         assert original["screenshots"] == [first["capture"]]
         assert (await service.get_session(session))["snapshot"] == before
-        await service.training.record_review_marker(run, command_id="capture-event", text="same millisecond later event")
+        event = await service.training.record_review_marker(run, command_id="capture-event", text="same millisecond later event")
         later = (await service.training.notes(run, track))["context"]
         assert later["virtualTimeMs"] == context["virtualTimeMs"] and later["timelineSequence"] > context["timelineSequence"]
         second = await service.training.save_note_capture(run, track, **payload(later, "capture-b", png(200)))
@@ -71,7 +71,13 @@ async def test_version_images_preserve_pixels_and_same_time_event_boundary_acros
         with pytest.raises(TrainingRunError):
             await service.training.save_note(other_run, other_track, note_id="cross-run", fields=fields, expected_revision=0, context=other_context)
         review = await service.training.start_review(run, event_id=None)
-        await service.training.start_review(run, event_id=review["events"][0]["event_id"])
+        first_event = next(item for item in review["events"] if item["timeline_sequence"] == context["timelineSequence"])
+        await service.training.start_review(run, event_id=first_event["event_id"])
+        assert (await service.training.note_captures(run, track))["captures"] == []
+        with pytest.raises(TrainingRunError) as unpublished:
+            await service.training.note_capture_image(run, track, "plan", 1, "capture-a")
+        assert unpublished.value.status_code == 404
+        await service.training.start_review(run, event_id=event["event_id"])
         history = await service.training.notes(run, track)
         assert history["notes"] == [original]
         assert (await service.training.note_captures(run, track))["captures"] == [first["capture"]]
@@ -170,7 +176,8 @@ async def test_capture_http_keeps_large_png_limit_separate_and_images_bound_to_v
     from app.data_engine.data_manager.core import DataManagerCore
     service = await _service(tmp_path / "capture-http.db")
     try:
-        run, _, track = await create(service)
+        run, session, track = await create(service)
+        early = await service.training.record_review_marker(run, command_id="before-plan", text="Before note")
         context = (await service.training.notes(run, track))["context"]
         core = DataManagerCore()
         core.bind_replay(service)
@@ -202,6 +209,32 @@ async def test_capture_http_keeps_large_png_limit_separate_and_images_bound_to_v
                 "expectedRevision": 0, "context": context})
             assert oversized_text.status_code == 413
             assert (await client.post(base + "/note-captures", content=b"x" * (3 * 1024 * 1024 + 1))).status_code == 413
+            before = (await service.get_session(session))["snapshot"]
+            review = await service.training.start_review(run, event_id=early["event_id"])
+            cursor = {"review_id": review["review_id"], "review_revision": review["cursor_revision"]}
+            training = {"training_view": "true"}
+            assert (await client.get(base + "/notes", params=cursor)).json()["notes"] == []
+            assert (await client.get(image_path, params=cursor)).status_code == 404
+            assert (await client.get(base + "/note-captures", params=cursor)).json()["captures"] == []
+            assert (await client.get(base + "/notes", params={**cursor, **training})).status_code == 422
+            assert (await client.get(base + "/notes", params={"review_id": cursor["review_id"]})).status_code == 422
+            assert (await client.get(base + "/notes", params={**cursor, "review_revision": cursor["review_revision"] + 1})).status_code == 409
+            current = (await client.get(base + "/notes", params=training)).json()
+            assert current["context"]["reviewId"] is None and current["notes"] == [saved.json()]
+            assert (await client.get(image_path, params=training)).json()["image"] == request["image"]
+            assert (await client.get(base + "/note-captures", params=training)).json()["captures"] == [uploaded.json()["capture"]]
+            options = await client.get(base + "/notes/link-options", params={**training, "kind": "FILL"})
+            assert options.status_code == 200 and options.json()["context"] == current["context"]
+            edited = {"id": "plan", "fields": {**saved.json()["fields"], "entryBasis": "Training edit"},
+                      "expectedRevision": 1, "context": current["context"]}
+            assert (await client.post(base + "/notes", params=cursor, json=edited)).status_code == 409
+            result = await client.post(base + "/notes", params=training, json=edited)
+            assert result.status_code == 200 and result.json()["revisionCount"] == 2
+            assert (await client.post(base + "/notes", params=training, json=edited)).json() == result.json()
+            history = await client.get(base + "/notes/plan/versions", params=training)
+            assert history.status_code == 200 and history.json()["versions"] == [result.json(), saved.json()]
+            assert (await client.get(base + "/notes", params=cursor)).json()["notes"] == []
+            assert (await service.get_session(session))["snapshot"] == before
             assert core.replay.diagnostics()["control_accesses"] >= 6
     finally:
         await service.shutdown(step_timeout=1)
