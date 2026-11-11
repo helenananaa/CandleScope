@@ -11,8 +11,10 @@ import { SeriesWindowStore } from "../../features/market-data/window/seriesWindo
 import { BatchKlineStreamCoordinator } from "../../features/market-data/feed/batchKlineStreamCoordinator.js";
 import { useKlineStreamRuntime } from "../../features/market-data/useKlineStreamRuntime.js";
 import { useChartInitialLoad } from "../../features/market-data/useChartInitialLoad.js";
+import { IndicatorWindowCommitBuffer } from "../../features/market-data/indicatorWindowCommitBuffer.js";
+import { partialMock } from "../../test/testHelpers.js";
 import StatusBar from "../../app/StatusBar.js";
-import type { KlineApi, KlineFetchResult, KlineStreamController, KlineStreamOptions, KlineStreamSocket, PendingInitialSeries } from "../../features/market-data/klineContracts.js";
+import type { CommitChartData, KlineApi, KlineFetchResult, KlineStreamController, KlineStreamOptions, KlineStreamSocket, PendingInitialSeries } from "../../features/market-data/klineContracts.js";
 import type { EpochSeconds, KlineBar, MarketSeries } from "../../features/market-data/marketDataTypes.js";
 
 function assert(value: unknown, message: string): asserts value { if (!value) throw new Error(message); }
@@ -90,6 +92,45 @@ async function checkChartBatchReconnect(host: HTMLElement, api: KlineApi) {
     flushSync(() => root.unmount());
     manager.closeAll();
   }
+}
+
+async function checkInitialRetryOwner(host: HTMLElement, rows: KlineBar[]) {
+  const series = instrument("BTCUSDT"), buffer = new IndicatorWindowCommitBuffer();
+  const waits: Array<number | undefined> = [];
+  const pending = { current: null as PendingInitialSeries | null };
+  const reply = (pending: boolean): KlineFetchResult => ({ data: rows,
+    complete: !pending, retryable: pending, history_state: pending ? "pending" : "ready",
+    verified_contiguous: !pending, has_tail_gap: pending, missing_ranges: [],
+    all_rows_final: true, truncated: false, backfill_triggered: false });
+  const commit: CommitChartData = (_symbol, _interval, _rows, meta) => {
+    buffer.record("active", [], { ownerToken: meta?.indicatorWindowOwner,
+      epoch: meta?.indicatorWindowEpoch, pending: meta?.deferIndicatorWindow });
+  };
+  const feed = new SeriesDataFeed({ getActiveSeries: () => series,
+    commitMergedChartData: commit, commitPatchedChartData: commit,
+    api: partialMock<KlineApi>({ fetchKlinesHistory: async (_s, _i, _d, _m, _e, options) => {
+      waits.push(options.maxWaitMs); return reply(waits.length === 1);
+    }, fetchLatestKlines: async () => reply(false) }) });
+  const root = createRoot(host), noop = () => undefined;
+  function Probe() {
+    const load = useChartInitialLoad({ enabled: true, exchange: "binance", marketType: "spot",
+      nativeIntervalValues: ["1m"], getFromCache: () => [], seriesDataFeed: feed,
+      activateCachedChartData: () => null, detachActiveChartData: noop, replaceChartData: noop,
+      markChartDataTransition: noop, commitMergedChartData: commit, commitPatchedChartData: commit,
+      pendingInitialHistoryRef: pending, setInitialHistoryPending: noop, updateLastPrice: noop,
+      setConnectionStatus: noop, setLoading: noop, setError: noop, setLoadingMoreLeft: noop,
+      setHasMoreLeft: noop, setCrosshairData: noop, setDataSource: noop });
+    const latest = useRef(load); latest.current = load;
+    useEffect(() => { void latest.current(series.symbol, series.interval); }, []);
+    return null;
+  }
+  try {
+    flushSync(() => root.render(<Probe />));
+    await until(() => waits.length >= 2 && pending.current === null,
+      "the initial probe did not settle through its bounded retry");
+    assert(waits[0] === 0 && waits[1] === 1500, "probe and retry must retain their distinct transport waits");
+    assert(!buffer.hasPending("active"), "settled cold retry left the original indicator window owner pending");
+  } finally { flushSync(() => root.unmount()); feed.cancelSeriesRequests(series); }
 }
 
 /** Actual initial-load hook, Feed, shared manager, private stores and candle
@@ -373,6 +414,8 @@ export async function checkMarketHealth() {
     assert(physical.every(stream => stream.closed), "owned streams leaked");
     await checkChartBatchReconnect(host, api);
     checks.push("the chart keeps the broker-recovered physical socket and sends one subscription");
+    await checkInitialRetryOwner(host, corpus.get("BTCUSDT")!);
+    checks.push("a completed bounded cold retry releases the original nonblocking probe's indicator window owner");
     return { passed: true, checks, requests: calls, physicalStreamsCreated: sockets,
       scope: "Production-minified Chromium fixture with real React, initial-load hook and candle renderer; controlled market transport, not installed release acceptance" };
   } finally { if (host.hasChildNodes()) flushSync(() => root.unmount()); host.remove(); manager.closeAll(); gate.dispose(); }
