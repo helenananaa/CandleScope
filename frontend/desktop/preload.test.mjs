@@ -55,3 +55,9 @@ test("Pine transport is delivered from the host endpoint for each window", () =>
   assert.equal(load([], { port: 29123, pineChartTransport: "snapshot" }).pineChartTransport, "snapshot");
   assert.equal(load([], { port: 29124, pineChartTransport: "calculation" }).pineChartTransport, "calculation");
 });
+test("app appearance is reported on its own channel", () => {
+  const sent = [];
+  const bridge = load([], { port: 29125 }, { send: (channel, payload) => sent.push([channel, payload]) });
+  bridge.setAppearance({ background: "#ffffff" });
+  assert.deepEqual(sent, [["candlescope:desktop:appearance", { background: "#ffffff" }]]);
+});

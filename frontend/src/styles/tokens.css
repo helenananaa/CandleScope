@@ -10,33 +10,33 @@
   color-scheme: dark;
 
   /* Surfaces, darkest to most raised */
-  --surface-0: #0a0e17;      /* app + chart background */
-  --surface-1: #111827;      /* panels, bars */
-  --surface-2: #1a2332;      /* cards, inputs, raised controls */
-  --surface-hover: #253247;  /* hover / pressed on any surface */
+  --surface-0: #0d0e10;      /* app + chart background */
+  --surface-1: #141518;      /* panels, bars */
+  --surface-2: #1c1d21;      /* cards, inputs, raised controls */
+  --surface-hover: #272930;  /* hover / pressed on any surface */
 
   /* Lines */
-  --border-subtle: #1e293b;
-  --border-strong: #334155;
+  --border-subtle: #25272c;
+  --border-strong: #363940;
 
   /* Text */
-  --text-primary: #e2e8f0;
-  --text-secondary: #94a3b8;
-  --text-muted: #8794a8;
+  --text-primary: #e9eaec;
+  --text-secondary: #a6a9b0;
+  --text-muted: #9094a0;
   --text-on-accent: #ffffff;
 
   /* Semantic foregrounds (text and icons on surfaces) */
-  --text-accent: #60a5fa;
-  --text-info: #67e8f9;
+  --text-accent: #6aa9f5;
+  --text-info: #5fd4c6;
   --text-success: #86efac;
   --text-danger: #fda4af;
   --text-warning: #fcd34d;
   --text-purple: #d8b4fe;
 
   /* Accent fills and outlines */
-  --accent-blue: #3b82f6;     /* outlines, indicators, focus */
-  --accent-solid: #2563eb;    /* filled controls with --text-on-accent */
-  --accent-solid-hover: #1d4ed8;
+  --accent-blue: #3d8ef0;     /* outlines, indicators, focus */
+  --accent-solid: #1473e6;    /* brand blue; filled controls with --text-on-accent */
+  --accent-solid-hover: #0f63cc;
   --accent-purple: #8b5cf6;
   --accent-cyan: #06b6d4;
 
@@ -53,7 +53,9 @@
   --text-down: var(--candle-down);
 
   /* Type */
-  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Noto Sans', 'Liberation Sans', sans-serif;
+  /* CJK glyphs come from the system; each script gets its own stack (see the :lang blocks below). */
+  --font-cjk: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', 'Source Han Sans SC';
+  --font-sans: 'IBM Plex Sans', var(--font-cjk), system-ui, -apple-system, 'Segoe UI', 'Noto Sans', 'Liberation Sans', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
   --font-size-2xs: 10px;  /* count badges and key caps only */
   --font-size-xs: 11px;   /* smallest running text */
@@ -75,8 +77,8 @@
   --space-10: 40px;
 
   /* Elevation */
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08);
-  --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.12);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.16);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.24);
   --shadow-lg: 0 24px 48px rgba(0, 0, 0, 0.45);
   --backdrop: rgba(0, 0, 0, 0.6);
 
@@ -98,7 +100,7 @@
   --radius-full: 999px;
 
   /* Select chevron; an SVG url cannot read CSS variables, so each theme sets its own */
-  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2394a3b8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23a6a9b0' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 
   /* Legacy names kept so existing rules keep working; prefer the names above */
   --bg-primary: var(--surface-0);
@@ -108,29 +110,41 @@
   --border-color: var(--border-subtle);
 }
 
+/* Interface languages that need their own CJK fonts. Only <html> carries lang, so these redefine
+ * --font-cjk where --font-sans is computed. */
+:root:is(:lang(zh-TW), :lang(zh-HK), :lang(zh-MO), :lang(zh-Hant)) {
+  --font-cjk: 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', 'Source Han Sans TC';
+}
+:root:lang(ja) {
+  --font-cjk: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Meiryo', 'Noto Sans JP';
+}
+:root:lang(ko) {
+  --font-cjk: 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR';
+}
+
 [data-theme='light'] {
   color-scheme: light;
 
   --surface-0: #ffffff;
-  --surface-1: #f8fafc;
-  --surface-2: #f1f5f9;
-  --surface-hover: #e2e8f0;
+  --surface-1: #f7f7f8;
+  --surface-2: #f0f1f3;
+  --surface-hover: #e6e7ea;
 
-  --border-subtle: #d9e0ea;
-  --border-strong: #cbd5e1;
+  --border-subtle: #e2e3e7;
+  --border-strong: #c8cad0;
 
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #56657a;
+  --text-primary: #17181b;
+  --text-secondary: #4a4d55;
+  --text-muted: #5b5f69;
 
-  --text-accent: #1d4ed8;
-  --text-info: #0e7490;
-  --text-success: #15803d;
+  --text-accent: #0f5bbd;
+  --text-info: #0b6577;
+  --text-success: #12703a;
   --text-danger: #be123c;
   --text-warning: #92400e;
   --text-purple: #6d28d9;
 
-  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23475569' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%234a4d55' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 
   --text-up: color-mix(in srgb, var(--candle-up) 55%, var(--text-primary));
   --text-down: color-mix(in srgb, var(--candle-down) 55%, var(--text-primary));

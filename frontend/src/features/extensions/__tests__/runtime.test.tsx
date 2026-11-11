@@ -46,7 +46,7 @@ test("selected theme reaches chart canvas and removal restores ordinary appearan
   assert.deepEqual(getPaneThemeColors({ theme: "dark" }), { bgColor: "#fefefe", textColor: "#123456", gridColor: "#dddddd", borderColor: "#dddddd" });
   publishExtensions({ theme: { base: "light", tokens: { "accent-blue": "#112233" } } });
   assert.equal(getPaneThemeColors({ theme: "dark" }).bgColor, "#ffffff");
-  assert.equal(getPaneThemeColors({ theme: "dark" }).textColor, "#1e293b");
+  assert.equal(getPaneThemeColors({ theme: "dark" }).textColor, "#4a4d55");
   publishExtensions({ theme: null });
   assert.equal(getPaneThemeColors({ theme: "light" }).bgColor, "#ffffff");
 });

@@ -4,7 +4,7 @@ import { useChartTimeNavigation } from "../features/market-data/useChartTimeNavi
 import { useHistoryStudy } from "../features/history-study/useHistoryStudy.js";
 import { historyStudyOwner } from "../features/history-study/historyStudyOwner.js";
 import "../features/history-study/historyStudy.css";
-import { applicationSettingsPatch, nextCellChartSettings } from "../features/chart-workspace/chartWorkspaceChartSettings.js";
+import { applicationSettingsPatch, buildAppearanceTargets, nextCellChartSettings } from "../features/chart-workspace/chartWorkspaceChartSettings.js";
 import { useCellChartTheme } from "../features/settings/chartAppearanceSettings.js";
 import { ChartIntervalUnavailable } from "./ChartIntervalUnavailable.js";
 import { resolveStrategyTesterMode } from "../features/backtest/chart-tester/chartStrategyMode.js";
@@ -569,6 +569,12 @@ function LiveChartCell({
     const applicationPatch = applicationSettingsPatch(current, next);
     if (Object.keys(applicationPatch).length) globalSettings.setSettings(previous => ({ ...previous, ...applicationPatch }));
   }, [cell.id, cell.chartSettings, globalSettings, onChartSettingsChange]);
+  const appearanceTargets = useMemo(() => buildAppearanceTargets({
+    application: globalSettings.settings,
+    setApplication: globalSettings.setSettings,
+    cell: cell.chartSettings,
+    setCell: (next) => onChartSettingsChange(cell.id, next),
+  }), [cell.id, cell.chartSettings, globalSettings.settings, globalSettings.setSettings, onChartSettingsChange]);
 
   const priceScale = cell.priceScale;
   const setInvertScale = useCallback((invertScale: boolean) => {
@@ -737,6 +743,7 @@ function LiveChartCell({
     view: {
       settings: combinedSettings,
       appearanceScope: "chart",
+      appearanceTargets,
       resolvedTheme,
       isOpen: showSettings,
     },
@@ -747,6 +754,7 @@ function LiveChartCell({
     },
     status: {},
   }), [
+    appearanceTargets,
     closeSettingsPanel,
     combinedSettings,
     resolvedTheme,

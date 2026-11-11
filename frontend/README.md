@@ -4,6 +4,7 @@ React/Vite charting UI for CandleScope.
 
 ## Architecture
 
+- [Design system](../DESIGN.md) and [design refactor plan](FRONTEND_DESIGN_REFACTOR_PLAN.md)
 - [Frontend Architecture](ARCHITECTURE.md)
 - [前端架构](ARCHITECTURE_zh.md)
 - [Feature Boundaries](src/features/README.md)
@@ -71,6 +72,26 @@ keeps the six `no-unsafe-*` rules enabled for all TypeScript application, test,
 and tooling files. Test discovery accepts both `.test.ts` and
 `.test.tsx` at any depth below `src`, including nested `__tests__` directories
 and tests colocated with source files.
+
+### Design checks
+
+`npm run check:styles` reports the design-refactor metrics (unstyled class names,
+raw buttons, inline styles, `!important`, native dialogs). It only warns for now;
+see [FRONTEND_DESIGN_REFACTOR_PLAN.md](FRONTEND_DESIGN_REFACTOR_PLAN.md) §7.
+
+With the backend and Vite dev server running, capture named UI states in both
+themes for before/after review, then pair two runs in a comparison page:
+
+```bash
+npm run design:snapshots -- --label before
+npm run design:snapshots -- --label after --states market,alerts --viewports 1440x900,1024x768
+node scripts/design-snapshots.mjs --compare ../output/design-snapshots/before ../output/design-snapshots/after
+```
+
+Snapshots go to `../output/design-snapshots/<label>/` (ignored by git). Steps name
+i18n message keys, so `--locale en` captures the English interface.
+
+### Browser smoke check
 
 With the backend and Vite running, use the browser smoke check to verify the
 rendered chart, drawing toolbar, lazy symbol search, and lazy Settings panel:

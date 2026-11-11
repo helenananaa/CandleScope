@@ -35,7 +35,17 @@ export const DESKTOP_IPC = Object.freeze({
   seriesSnapshotRead: "candlescope:series-snapshot:read",
   seriesSnapshotPublish: "candlescope:series-snapshot:publish",
   seriesSnapshotDiagnostics: "candlescope:series-snapshot:diagnostics",
+  appearance: "candlescope:desktop:appearance",
 });
+
+/** The renderer reports its app background so native window fills match the theme. */
+export function validateAppearancePayload(value) {
+  const background = value && typeof value === "object" ? value.background : null;
+  if (typeof background !== "string" || !/^#[0-9a-f]{6}$/i.test(background)) {
+    throw new TypeError("Desktop appearance background must be a #rrggbb color");
+  }
+  return { background: background.toLowerCase() };
+}
 
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 

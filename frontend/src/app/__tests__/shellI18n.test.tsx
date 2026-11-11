@@ -419,7 +419,10 @@ test("Russian layout CSS keeps long chrome wrapping and a Cyrillic-capable font 
   assert.match(css, /@import "\.\/styles\/tokens\.css";/);
   assert.match(css, /html\[lang="ru"\] \.market-rail-accordion-trigger strong/);
   const main = fs.readFileSync(new URL("../../main.tsx", import.meta.url), "utf8");
-  assert.match(main, /@fontsource\/inter\/cyrillic-400\.css/);
+  assert.match(main, /\.\/styles\/fonts\.js/);
+  const fonts = fs.readFileSync(new URL("../../styles/fonts.ts", import.meta.url), "utf8");
+  assert.match(tokens, /--font-sans:\s*'IBM Plex Sans'/);
+  assert.match(fonts, /@fontsource\/ibm-plex-sans\/cyrillic-400\.css/);
   assert.match(settingsCss, /html\[lang="ru"\] \.st-group-title/);
   assert.match(settingsCss, /overflow-wrap: break-word/);
 });
