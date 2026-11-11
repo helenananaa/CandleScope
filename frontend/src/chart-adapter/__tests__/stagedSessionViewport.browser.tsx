@@ -97,11 +97,12 @@ export async function checkStagedSessionViewport() {
     }
   }
   samples.push(await checkLatestReturnAcrossDatasets());
+  samples.push(await checkLatestReturnAcrossDatasets(true));
   return { name: "staged admission waits for painted semantic viewport", status: "PASS", samples };
 }
 
 
-async function checkLatestReturnAcrossDatasets() {
+async function checkLatestReturnAcrossDatasets(restoreWindow = false) {
   const rows: KlineBar[] = Array.from({ length: 1500 }, (_, index) => ({
     time: (1_800_000_000 + index * 60) as KlineBar["time"], open: 100, high: 102, low: 98, close: 100, volume: 1,
   }));
@@ -111,11 +112,14 @@ async function checkLatestReturnAcrossDatasets() {
   document.head.append(style);document.body.append(host);
   const stores=new Map(["BTC", "ETH"].map(symbol=>{const store=new SeriesWindowStore({seriesKey:symbol});store.replace(rows);return [symbol,store] as const;}));
   let symbol="BTC",store=stores.get(symbol)!;
+  let truncated=restoreWindow;
+  if(restoreWindow)store.replace(rows.slice(0,500));
   let surface:ReturnType<typeof useChartSurfaceRuntime>|null=null;
   const root=createRoot(host);
   function Probe(){const value=useChartSurfaceRuntime();useLayoutEffect(()=>{surface=value;});return <SingleChartPanes ref={value.ref}
     seriesStore={store} datasetKey={symbol} symbol={symbol} interval="1m" chartType="candlestick" theme="dark" customBg=""
     upColor="#00aa00" downColor="#aa0000" drawingReadOnly followLatest={false} savedVisibleRange={{barSpacing:8,rightOffset:0}}
+    rightWindowTruncated={truncated} onRestoreLatestWindow={async()=>{store.replace(rows.slice(-500));truncated=false;flushSync(()=>root.render(<Probe/>));return true;}}
     dataMeta={{seriesKey:store.seriesKey,version:store.version,status:"ready",source:"initial-history",committedAt:null}}/>;}
   const settle=async()=>{for(let index=0;index<8;index++)await new Promise(requestAnimationFrame);};
   const handle=()=> (surface as ReturnType<typeof useChartSurfaceRuntime>|null)!.actions;
@@ -131,6 +135,6 @@ async function checkLatestReturnAcrossDatasets() {
     flushSync(()=>store.replace(rows));await settle();const roundtrip=handle().getVisibleRange();
     const latest=Number(rows.at(-1)!.time);
     if(!roundtrip?.time||roundtrip.time.from>latest||roundtrip.time.to<latest-60)throw new Error(`return-to-realtime resurrected old history after selection: ${JSON.stringify({returned,roundtrip,latest})}`);
-    return {stage:"return-to-realtime survives dataset roundtrip and late history",returned,roundtrip};
+    return {stage:"return-to-realtime survives dataset roundtrip and late history",restoreWindow,returned,roundtrip};
   }finally{flushSync(()=>root.unmount());host.remove();style.remove();}
 }

@@ -2212,11 +2212,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     latestWindowScrollGateRef.current.request(store, store.version, () => {
       if (datasetKeyRef.current !== requestedDatasetKey || seriesStoreRef.current !== store
         || leftHistoryInteractionGenerationRef.current !== interactionGeneration) return;
-      if (followLatestRef.current && displayRowsRef.current.length > 0) {
-        jumpToLatest();
-      } else {
-        chartRef.current?.timeScale().scrollToRealTime?.();
-      }
+      jumpToLatest();
     });
   }, [jumpToLatest]);
 
