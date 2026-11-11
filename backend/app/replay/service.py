@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Callable, Mapping, Sequence, TypeVar
 
 from app.core.config import ReplaySettings
+from app.core.executors import run_archive
 from app.data_engine.interval_policy import (
     compute_bucket_start_ms,
     parse_interval_ms,
@@ -576,8 +577,8 @@ class ReplayService:
         if source_kind is SourceKind.BAR:
             return snapshot.catalog_epoch, snapshot.entries
         if self._official_trade_catalog is not None:
-            # Selection is based on official availability, never on which
-            # daily bodies happened to be downloaded on this machine.
+            # Official availability and committed local days both contribute
+            # to the aggregate-trade selection catalog.
             snapshot = await asyncio.to_thread(
                 self._official_trade_catalog.build,
                 warmup_bars=snapshot.warmup_bars,
@@ -4673,7 +4674,7 @@ class ReplayService:
         dataset: BarDatasetSnapshot,
     ) -> TradeDatasetRef:
         try:
-            reference = await asyncio.to_thread(
+            reference = await run_archive(
                 self._raw_trade_archive.freeze_dataset,
                 exchange=config.exchange,
                 market_type=config.market_type,

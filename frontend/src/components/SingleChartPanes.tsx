@@ -291,6 +291,7 @@ export interface SingleChartPanesProps {
   suspended?: boolean;
   displayScheduler?: ChartDisplayScheduler;
   seriesStore?: SeriesWindowView | null;
+  contractVolume?: boolean;
   symbol: string;
   drawingKeyBase?: string;
   drawingsEnabled?: boolean;
@@ -817,6 +818,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   suspended = false,
   displayScheduler,
   seriesStore = null,
+  contractVolume = false,
   symbol,
   drawingKeyBase = "",
   drawingsEnabled = true,
@@ -5507,6 +5509,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         crosshairStore={paneCrosshairStore}
         lines={mainLegendLines}
         seriesStore={seriesStore}
+        contractVolume={contractVolume}
         displaySubscription={displaySubscription}
       />
 

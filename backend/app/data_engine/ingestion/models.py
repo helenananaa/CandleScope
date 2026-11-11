@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from app.data_engine.series_identity import KlineSeriesIdentity
     from app.exchanges.rate_limits import RateLimitReservation
 
 
@@ -58,6 +59,7 @@ class DataSource(str, enum.Enum):
     WEBSOCKET = "websocket"
     HTTP = "http"
     HTTP_BACKFILL = "http_backfill"  # gap-fill fetches
+    ARCHIVE = "archive"  # re-adopted from durable local trade history
     PLUGIN = "plugin"
     MOCK = "mock"
 
@@ -93,6 +95,7 @@ class StreamDescriptor:
     market_type: str = "spot"  # "spot" or "futures"
     poll_interval_seconds: float | None = None  # REST-only stream cadence override
     update_interval_ms: int | None = None  # optional WebSocket update-speed override
+    series_identity: KlineSeriesIdentity | None = None
 
     @property
     def key(self) -> str:
@@ -100,6 +103,8 @@ class StreamDescriptor:
         symbol = self.symbol.upper()
         if self.stream_type == StreamType.KLINE:
             base = f"{symbol}@kline_{self.interval}"
+            if self.series_identity is not None and not self.series_identity.is_legacy_default_for(self.exchange):
+                base += ":" + ":".join(self.series_identity.storage_values)
         elif self.stream_type == StreamType.DEPTH and self.depth_levels:
             base = f"{symbol}@depth{self.depth_levels}"
             if self.update_interval_ms is not None:

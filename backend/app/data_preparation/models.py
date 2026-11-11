@@ -16,8 +16,9 @@ def fingerprint(value: object) -> str:
 
 
 class PreparationError(ValueError):
-    def __init__(self, code: str, message: str, *, retryable: bool = False):
+    def __init__(self, code: str, message: str, *, retryable: bool = False, retry_at_ms: int | None = None):
         self.code, self.retryable = code, retryable
+        self.retry_at_ms = retry_at_ms
         super().__init__(message)
 
 

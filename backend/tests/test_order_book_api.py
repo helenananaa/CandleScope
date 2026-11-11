@@ -127,6 +127,7 @@ def test_order_book_http_transient_lease_returns_explicit_snapshot_contract() ->
     assert payload["delivery"] == "latest_snapshot"
     assert payload["full_depth"] is False
     assert payload["backfillable"] is False
+    assert payload["history"] == {"status": "unavailable", "reason": "source_no_history"}
     assert payload["persisted"] is False
     assert payload["data"]["key"] == _key(
         "ETHUSDT",

@@ -137,10 +137,14 @@ _LIQUIDATION_FIELDS = (
 _OPEN_INTEREST_PERIODS = ("5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d")
 
 
-def _history_policy(cadence: HistoryCadence) -> HistoryAvailabilityPolicy:
+def _history_policy(
+    cadence: HistoryCadence,
+    *,
+    empty_page_semantics: HistoryEmptyPageSemantics = HistoryEmptyPageSemantics.AUTHORITATIVE_RANGE_EMPTY,
+) -> HistoryAvailabilityPolicy:
     return HistoryAvailabilityPolicy(
         cadence=cadence,
-        empty_page_semantics=HistoryEmptyPageSemantics.AUTHORITATIVE_RANGE_EMPTY,
+        empty_page_semantics=empty_page_semantics,
         calendar_id=CRYPTO_24X7_CALENDAR_ID,
         timezone="UTC",
     )
@@ -480,7 +484,9 @@ def _channel_capabilities() -> list[MarketChannelCapability]:
                 "service.max_active_streams": 64,
             },
             known_limitations=("Binance USD-M exposes open interest through REST, not a public WS stream",),
-            history_policy=_history_policy(HistoryCadence.REGULAR),
+            history_policy=_history_policy(
+                HistoryCadence.REGULAR, empty_page_semantics=HistoryEmptyPageSemantics.INCONCLUSIVE,
+            ),
         ),
         MarketChannelCapability(
             channel=MarketChannel.LIQUIDATION,

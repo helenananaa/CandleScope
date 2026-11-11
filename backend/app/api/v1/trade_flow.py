@@ -57,17 +57,17 @@ async def trade_flow_history(
     dm = _data_manager(request)
     key = _key(exchange, market_type, symbol)
     try:
-        rows = await dm.trade_flow_history(
+        history = await dm.read_trade_flow_history(
             key,
             start_ms=start_ms,
             end_ms=end_ms,
-            limit=limit,
+            limit=limit + 1,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
         raise _upstream_http_error("trade-flow history", exc) from exc
-    return project_trade_history_payload(key, list(rows), limit=limit)
+    return project_trade_history_payload(key, history, limit=limit, start_ms=start_ms, end_ms=end_ms)
 
 
 @router.get("/archive/coverage")

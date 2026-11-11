@@ -1,13 +1,48 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { ApiError } from "../../../services/api.js";
+import { ApiPayloadError } from "../../../services/apiPayloadParsers.js";
 
 import {
+  LIQUIDATION_HISTORY_RETRY_DELAY_MS,
   LiquidationHistoryRequestCoordinator,
+  LiquidationHistoryRetryBudget,
   liquidationHistoryRangeForCandles,
   normalizeLiquidationHistoryRange,
   subtractLiquidationHistoryCoverage,
   subtractLiquidationHistoryRanges,
 } from "../liquidationHistoryRequests.js";
+
+test("permanent rejection and invalid history payload stop automatic requests", () => {
+  for (const error of [
+    new ApiError({ status: 422, detail: "Unsupported market", code: null, url: "/liquidations/history" }),
+    new ApiPayloadError("next_cursor", "Invalid cursor"),
+  ]) {
+    const budget = new LiquidationHistoryRetryBudget();
+    assert.equal(budget.failed(error, 0), false);
+    assert.equal(budget.canRequest(300_000), false);
+    assert.equal(budget.succeeded(300_000), false);
+  }
+});
+
+test("rate limiting allows two delayed retries and does not consume a retry for parallel failures", () => {
+  const delay = LIQUIDATION_HISTORY_RETRY_DELAY_MS;
+  const budget = new LiquidationHistoryRetryBudget();
+  const error = new ApiError({ status: 429, detail: "Rate limited", code: null, url: "/liquidations/history" });
+  assert.equal(budget.failed(error, 0), true);
+  assert.equal(budget.failed(error, 1), false);
+  assert.equal(budget.canRequest(delay - 1), false);
+  assert.equal(budget.canRequest(delay), true);
+  assert.equal(budget.failed(error, delay), true);
+  assert.equal(budget.failed(error, delay * 2), false);
+  assert.equal(budget.canRequest(delay * 10), false);
+
+  const recovered = new LiquidationHistoryRetryBudget();
+  assert.equal(recovered.failed(error, 0), true);
+  assert.equal(recovered.succeeded(delay), true);
+  assert.equal(recovered.failed(error, delay + 1), true);
+  assert.equal(recovered.failed(error, delay * 2 + 1), true);
+});
 
 test("forming hourly candle history reaches now instead of its opening minute", () => {
   const open = Date.UTC(2026, 9, 2, 10);

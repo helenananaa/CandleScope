@@ -30,6 +30,12 @@ class SourceQuality:
         return self.finality is FinalityTrust.TRUSTED_FINAL
 
 
+GATE_WS_CONFIRMED_SOURCE = "gate_linear_ws_confirmed"
+GATE_INVERSE_WS_CONFIRMED_SOURCE = "gate_inverse_contract_ws_confirmed"
+GATE_INVERSE_REST_CONFIRMED_SOURCE = "gate_inverse_contract_rest_confirmed"
+GATE_LEGACY_VOLUME_SOURCE = "gate_legacy_linear_volume"
+
+
 # Higher ranks may replace lower ranks at the same open_time.  Equal ranks are
 # deliberately replaceable so a later revision from the same authority can
 # amend values without requiring another schema column.
@@ -47,6 +53,10 @@ SOURCE_QUALITY: dict[str, SourceQuality] = {
     "data_manager_closed": SourceQuality(10, FinalityTrust.AMBIGUOUS),
     # Explicit exchange close (for example Binance kline x=true).
     "data_manager_exchange_closed": SourceQuality(50, FinalityTrust.TRUSTED_FINAL),
+    GATE_WS_CONFIRMED_SOURCE: SourceQuality(50, FinalityTrust.TRUSTED_FINAL),
+    GATE_INVERSE_WS_CONFIRMED_SOURCE: SourceQuality(10, FinalityTrust.AMBIGUOUS),
+    GATE_INVERSE_REST_CONFIRMED_SOURCE: SourceQuality(70, FinalityTrust.TRUSTED_FINAL),
+    GATE_LEGACY_VOLUME_SOURCE: SourceQuality(10, FinalityTrust.AMBIGUOUS),
     # Realtime custom bars whose complete component set carried final closes.
     "data_manager_composite_closed": SourceQuality(60, FinalityTrust.TRUSTED_FINAL),
     # Custom bars rebuilt from already-final component bars.

@@ -13,6 +13,7 @@ export interface AdvancedMarketChannelSupport {
   supported: boolean;
   realtime: boolean;
   history: boolean;
+  observationsOnly?: boolean;
   reason: string | null;
 }
 
@@ -69,6 +70,8 @@ export function resolveAdvancedMarketCapabilities({
       supported,
       realtime,
       history,
+      ...(history && isRecord(item.history_policy) && item.history_policy.empty_page_semantics === "inconclusive"
+        ? { observationsOnly: true } : {}),
       reason: supported ? null : t("market.cap.noRealtime"),
     };
   }

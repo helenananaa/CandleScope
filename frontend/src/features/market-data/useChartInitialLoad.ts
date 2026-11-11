@@ -591,7 +591,10 @@ export function useChartInitialLoad({
       }
     }
 
-    function commitHistoryResult(historyResult: FeedResult | null | undefined): boolean {
+    function commitHistoryResult(
+      historyResult: FeedResult | null | undefined,
+      readOnlyProbe = false,
+    ): boolean {
       if (!ownsInitialResult(historyResult)) {
         relinquishInitialOwnership();
         return false;
@@ -608,10 +611,7 @@ export function useChartInitialLoad({
 
       if (repairPending && historyResult) {
         const pendingInitial = {
-          exchange: ex,
-          marketType: mt,
-          symbol: sym,
-          interval: intv,
+          ...series,
           countBack: initialViewportCountBack,
           ...(historyResult.indicatorWindowOwner
             ? { indicatorWindowOwner: historyResult.indicatorWindowOwner, indicatorWindowEpoch: historyResult.indicatorWindowEpoch }
@@ -678,12 +678,16 @@ export function useChartInitialLoad({
           setConnectionStatus("connected");
           setLoading(false);
         };
-        let trackedRange = seriesDataFeed.trackPendingResultRepair(
-          series,
-          historyResult,
-          finalizePending,
-          failPending,
-        );
+        // A read-only viewport probe can describe a gap without scheduling
+        // repair. Exact polling has no completion to wait for until admitted.
+        let trackedRange = readOnlyProbe && historyResult.backfill_triggered === false
+          ? null
+          : seriesDataFeed.trackPendingResultRepair(
+            series,
+            historyResult,
+            finalizePending,
+            failPending,
+          );
         if (terminalFailed) {
           trackedRange = null;
         } else if (
@@ -945,7 +949,7 @@ export function useChartInitialLoad({
         source: result?.source || "unknown",
         bars: result?.data?.length || 0,
       });
-      if (!commitHistoryResult(result)) return;
+      if (!commitHistoryResult(result, true)) return;
     } catch (historyError) {
       if (!controller.signal.aborted) {
         lastHistoryFailure = historyError;

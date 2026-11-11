@@ -1,4 +1,5 @@
 import { continuousEnglish } from "./continuousMessages.js";
+import { tradeHistoryEnglish } from "./tradeHistoryMessages.js";
 import { replayNoteEnglish } from "./replayNoteMessages.js";
 import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
@@ -13,6 +14,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
  */
 export const es = {
   ...continuousEnglish,
+  ...tradeHistoryEnglish,
   ...replayNoteEnglish,
   ...historyStudyEnglish,
   "chartTime.title": "Go to date",

@@ -9,12 +9,24 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from .interval_policy import IntervalSpec, parse_interval_spec
+from .series_identity import KlineSeriesIdentity
+
+
+GATE_INVERSE_CONTRACTS = KlineSeriesIdentity.for_exchange("gate", volume_semantics="contract_count")
 
 
 class BoundarySchedule(Protocol):
     def floor_ms(self, timestamp_ms: int) -> int: ...
     def next_ms(self, open_ms: int) -> int: ...
     def previous_ms(self, open_ms: int) -> int: ...
+
+
+def is_gate_linear_5m(provider: str, market_type: str, interval: str | None) -> bool:
+    return provider == "gate" and market_type == "swap.linear" and interval == "5m"
+
+
+def is_gate_inverse_5m(provider: str, market_type: str, interval: str | None) -> bool:
+    return provider == "gate" and market_type == "swap.inverse" and interval == "5m"
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +81,7 @@ class NativeBarSpec:
     evidence: str | None = None
     protocol_version: str = "1"
     calendar_id: str | None = None
+    required_identity: KlineSeriesIdentity | None = None
 
     def to_dict(self) -> dict:
         basis = BarBasis.parse(self.basis_interval).to_dict() if self.basis_interval else None
@@ -91,6 +104,14 @@ class NativeBarSpec:
             protocol = {"rest_parameters": {"interval": "1m"}, "ws_channel": "spot.candlesticks",
                         "ws_payload": ["1m", "{currency_pair}"],
                         "finality_evidence": "REST row[7]=true; unified WS successor observed"}
+        elif is_gate_linear_5m(self.provider, self.market_type, self.interval):
+            protocol = {"rest_parameters": {"interval": "5m"}, "ws_channel": "futures.candlesticks",
+                        "ws_payload": ["5m", "{contract}"], "finality_evidence": "WS w=true or elapsed REST candle",
+                        "volume": "contract count × linear contract size"}
+        elif self.required_identity == GATE_INVERSE_CONTRACTS:
+            protocol = {"rest_parameters": {"interval": "5m", "settle": "btc"},
+                        "ws_channel": "futures.candlesticks", "ws_payload": ["5m", "{contract}"],
+                        "finality_evidence": "WS w=true or elapsed REST candle", "volume": "raw contract count"}
         elif self.provider == "upbit" and self.interval == "1s":
             protocol = {"rest_endpoint": "/v1/candles/seconds", "ws_channel": "candle.1s",
                         "finality_evidence": "closed REST window; WS successor observed; absent seconds require bounded REST proof"}
@@ -104,6 +125,7 @@ class NativeBarSpec:
                     qualification=self.qualification, evidence=self.evidence,
                     protocol=protocol,
                     protocol_version=self.protocol_version, calendar_id=self.calendar_id,
+                    **({"required_series_identity": self.required_identity.to_dict()} if self.required_identity else {}),
                     close_convention="inclusive_ms")
 
     def validate(self, open_ms: int, close_ms: int) -> None:
@@ -182,6 +204,15 @@ def native_bar_spec(provider: str, market_type: str, interval: str, purpose: str
         return NativeBarSpec(provider, market_type, "kline", purpose, interval, interval,
                              "fixture_verified", "docs/architecture/GATE_SPOT_1M_BASIS.md",
                              protocol_version="gate/spot-minute/1")
+    if is_gate_linear_5m(provider, market_type, interval):
+        return NativeBarSpec(provider, market_type, "kline", purpose, interval, interval,
+                             "fixture_verified", "https://www.gate.com/docs/developers/futures/ws/en/#candlesticks-api",
+                             protocol_version="gate/linear-five-minute/1")
+    if is_gate_inverse_5m(provider, market_type, interval):
+        return NativeBarSpec(provider, market_type, "kline", purpose, interval, interval,
+                             "fixture_verified", "https://www.gate.com/docs/developers/apiv4/en/futures/",
+                             protocol_version="gate/inverse-contracts-five-minute/1",
+                             required_identity=GATE_INVERSE_CONTRACTS)
     if provider in {"gate", "upbit"} and market_type == "spot" and interval == "1s":
         # Only the explicitly documented Unix-second / UTC-second native
         # route is admitted. Other periods still require their own contract.

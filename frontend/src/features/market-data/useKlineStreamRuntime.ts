@@ -16,6 +16,7 @@ import type {
   PatchCacheTick,
 } from "./klineContracts.js";
 import { observeMarketWindowVisibility } from "./marketWindowVisibility.js";
+import type { KlineSeriesIdentityInput } from "./klineSeriesIdentity.js";
 import type { KlineBar } from "./marketDataTypes.js";
 import { KlineConsumerRecovery } from "./feed/klineConsumerRecovery.js";
 import type { SeriesDataFeed } from "./feed/seriesDataFeed.js";
@@ -192,6 +193,7 @@ export interface UseKlineStreamRuntimeOptions {
   symbol: SymbolCode;
   exchange: ExchangeId;
   marketType: MarketType;
+  seriesIdentity?: KlineSeriesIdentityInput;
   nativeIntervalValues: readonly IntervalString[];
   tradeCandlesAvailable?: boolean;
   trackedIntervals: readonly IntervalString[];
@@ -218,6 +220,7 @@ export function useKlineStreamRuntime({
   symbol,
   exchange,
   marketType,
+  seriesIdentity,
   nativeIntervalValues,
   tradeCandlesAvailable = false,
   trackedIntervals,
@@ -248,6 +251,7 @@ export function useKlineStreamRuntime({
       return undefined;
     }
     let active = true;
+    const streamSeries = { exchange, marketType, symbol, ...seriesIdentity };
     const consumerRecovery = new KlineConsumerRecovery();
     let nextConsumerRecoveryAt = 0;
     let windowVisible = true;
@@ -304,7 +308,7 @@ export function useKlineStreamRuntime({
         try {
           const currentIntv = intervalRef.current;
           const result = await seriesDataFeed.getLatest(
-            { exchange, marketType, symbol, interval: currentIntv },
+            { ...streamSeries, interval: currentIntv },
             { limit: 2, source: "polling-latest", commit: "patch-active" },
           );
           if (
@@ -425,7 +429,7 @@ export function useKlineStreamRuntime({
 
       try {
         subscription = seriesDataFeed.subscribeBars(
-          { exchange, marketType, symbol },
+          streamSeries,
           {
             intervals: trackedIntervalsRef.current,
             onOpen: () => {
@@ -445,14 +449,14 @@ export function useKlineStreamRuntime({
                 const recoveryCountBack = planHeldKlineRecoveryCountBack(
                   currentIntv,
                   nativeIntervalValues,
-                  getCacheRows({ exchange, marketType, symbol, interval: currentIntv }).length,
+                  getCacheRows({ ...streamSeries, interval: currentIntv }).length,
                   tradeCandlesAvailable,
                 );
                 console.log(`[WS-Recovery] Reconnected, reloading recent bars for ${symbol}@${currentIntv}`);
                 if (recoveryCountBack <= 0) {
                   console.warn(`[WS-Recovery] Skipped ${currentIntv}; source-history budget exceeded`);
                 } else seriesDataFeed.getRecoveryHistory(
-                  { exchange, marketType, symbol, interval: currentIntv },
+                  { ...streamSeries, interval: currentIntv },
                   { countBack: recoveryCountBack, source: "ws-reconnect-history" },
                 )
                   .then((result) => {
@@ -464,13 +468,13 @@ export function useKlineStreamRuntime({
                     const latest = result.data[result.data.length - 1];
                     if (latest) updateLastPrice(latest, currentIntv);
                     void seriesDataFeed.repairVisibleGaps(
-                      { exchange, marketType, symbol, interval: currentIntv },
+                      { ...streamSeries, interval: currentIntv },
                       result.data,
                       null,
                       { source: "ws-reconnect-gap-planner" },
                     );
                     void seriesDataFeed.pollPendingRepairs(
-                      { exchange, marketType, symbol, interval: currentIntv },
+                      { ...streamSeries, interval: currentIntv },
                       { force: true },
                     );
                     console.log(`[WS-Recovery] Reloaded ${result.data.length} bars after reconnect`);
@@ -529,7 +533,7 @@ export function useKlineStreamRuntime({
               if (!active) return;
               const currentIntv = intervalRef.current;
 
-              const series = { exchange, marketType, symbol, interval: msgInterval };
+              const series = { ...streamSeries, interval: msgInterval };
               const heldRows = getCacheRows(series);
               const latest = heldRows.at(-1);
               // The normal forming path is O(1); only historical events search.
@@ -555,7 +559,7 @@ export function useKlineStreamRuntime({
               // Fence both the rendered interval and background tracked/base
               // intervals before either store path observes the realtime row.
               seriesDataFeed.recordRealtimeRows(
-                { exchange, marketType, symbol, interval: msgInterval },
+                { ...streamSeries, interval: msgInterval },
                 [tick],
               );
 
@@ -590,7 +594,7 @@ export function useKlineStreamRuntime({
             onClose: () => {
               if (!active) return;
               for (const interval of trackedIntervalsRef.current) {
-                const series = { exchange, marketType, symbol, interval };
+                const series = { ...streamSeries, interval };
                 consumerRecovery.capture(seriesDataFeed, series, getCacheRows(series));
               }
               nextConsumerRecoveryAt = 0;
@@ -623,7 +627,7 @@ export function useKlineStreamRuntime({
       if (!active || pendingRepairPollingInFlight) return;
       recoverConsumer();
       const currentIntv = intervalRef.current;
-      const series = { exchange, marketType, symbol, interval: currentIntv };
+      const series = { ...streamSeries, interval: currentIntv };
       if (seriesDataFeed.pendingRepairCount(series) === 0) return;
       pendingRepairPollingInFlight = true;
       void seriesDataFeed.pollPendingRepairs(series, { maxRequests: 2 })
@@ -635,7 +639,7 @@ export function useKlineStreamRuntime({
     heldWindowGapScanInterval = setInterval(() => {
       if (!active) return;
       const currentIntv = intervalRef.current;
-      const series = { exchange, marketType, symbol, interval: currentIntv };
+      const series = { ...streamSeries, interval: currentIntv };
       const heldRows = getCacheRows(series);
       if (heldRows.length < 2) return;
       void seriesDataFeed.repairVisibleGaps(series, heldRows, null, {
@@ -649,7 +653,7 @@ export function useKlineStreamRuntime({
       if (!visible) {
         suspendedAt = Date.now();
         for (const interval of trackedIntervalsRef.current) {
-          const series = { exchange, marketType, symbol, interval };
+          const series = { ...streamSeries, interval };
           suspendedTails.set(interval, getCacheRows(series).slice(-1));
         }
         setTransportStatus("reconnecting");
@@ -658,7 +662,7 @@ export function useKlineStreamRuntime({
       // Retain the pre-suspension row even if closed ticks advanced the Store.
       // Restore must catch up without requiring another WS tick or a 15s hide.
       for (const interval of trackedIntervalsRef.current) {
-        const series = { exchange, marketType, symbol, interval };
+        const series = { ...streamSeries, interval };
         consumerRecovery.capture(seriesDataFeed, series,
           suspendedTails.get(interval) ?? getCacheRows(series).slice(-1),
           { discoverTail: true });
@@ -722,6 +726,7 @@ export function useKlineStreamRuntime({
     tradeCandlesAvailable,
     patchCacheTick,
     seriesDataFeed,
+    seriesIdentity,
     setWsStatus,
     symbol,
     updateLastPrice,

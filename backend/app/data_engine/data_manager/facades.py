@@ -13,6 +13,7 @@ import inspect
 from typing import Any
 
 from app.data_engine.market_data.models import MarketStreamKey
+from app.data_engine.market_data.trade_flow import TradeHistoryRead
 from app.data_engine.market_data.ports import (
     AdvancedMarketDataPort,
     FullOrderBookPort,
@@ -171,6 +172,9 @@ class TradeDataFacade:
 
     async def history(self, key: MarketStreamKey, **kwargs: Any) -> list[Any]:
         return await self._service().history(key, **kwargs)
+
+    async def read_history(self, key: MarketStreamKey, **kwargs: Any) -> TradeHistoryRead:
+        return await self._service().read_history(key, **kwargs)
 
     def attach(self, keys: list[MarketStreamKey], **kwargs: Any) -> Any:
         return self._service().attach(keys, **kwargs)

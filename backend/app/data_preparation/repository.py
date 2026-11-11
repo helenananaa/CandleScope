@@ -58,6 +58,11 @@ class PreparationRepository:
                     PRIMARY KEY(owner, chunk_key),
                     FOREIGN KEY(chunk_key) REFERENCES preparation_chunks(key)
                 );
+                CREATE TABLE IF NOT EXISTS preparation_trade_day_cooldowns (
+                    exchange TEXT NOT NULL, market_type TEXT NOT NULL, symbol TEXT NOT NULL,
+                    day_ms INTEGER NOT NULL, retry_at_ms INTEGER NOT NULL,
+                    PRIMARY KEY(exchange, market_type, symbol, day_ms)
+                );
                 CREATE TABLE IF NOT EXISTS preparation_context_origins (
                     key TEXT PRIMARY KEY, generation INTEGER NOT NULL,
                     start_ms INTEGER NOT NULL, frozen_start_ms INTEGER NOT NULL
@@ -331,6 +336,9 @@ class PreparationRepository:
             row = self.wire(db.execute("SELECT * FROM preparation_jobs WHERE id=?", (job_id,)).fetchone())
             if row["state"] not in {"FAILED", "BLOCKED_STORAGE"}:
                 raise PreparationError("RETRY_NOT_ALLOWED", "Only failed or storage-blocked jobs may retry")
+            error = row["error"] or {}
+            if (error.get("retry_at_ms") or 0) > self.now():
+                return row
             occupied = db.execute("SELECT COALESCE(SUM(bytes),0) FROM preparation_storage").fetchone()[0]
             occupied += db.execute("SELECT COALESCE(SUM(reserved_bytes),0) FROM preparation_jobs WHERE state IN ('QUEUED','RUNNING') AND id<>?", (job_id,)).fetchone()[0]
             if occupied + row["reserved_bytes"] > self.cache_budget_bytes:
@@ -338,6 +346,28 @@ class PreparationRepository:
             db.execute("UPDATE preparation_jobs SET state='QUEUED',stage='QUEUED',error=NULL,cancel_requested=0,attempts=0,next_attempt_ms=0,revision=revision+1,updated_ms=? WHERE id=?",
                        (self.now(), job_id))
         return self.get(job_id)
+
+    def trade_day_retry_at(self, exchange: str, market_type: str, symbol: str, day_ms: int) -> int | None:
+        with self.connect() as db:
+            row = db.execute("""SELECT retry_at_ms FROM preparation_trade_day_cooldowns
+                WHERE exchange=? AND market_type=? AND symbol=? AND day_ms=? AND retry_at_ms>?""",
+                (exchange, market_type, symbol, day_ms, self.now())).fetchone()
+            return int(row[0]) if row is not None else None
+
+    def defer_trade_day(
+        self, exchange: str, market_type: str, symbol: str, day_ms: int, *, cooldown_ms: int, reservation: str,
+    ) -> int:
+        now = self.now()
+        retry_at = now + cooldown_ms
+        with self.connect() as db:
+            db.execute("DELETE FROM preparation_trade_day_cooldowns WHERE retry_at_ms<=?", (now,))
+            db.execute("""INSERT OR REPLACE INTO preparation_trade_day_cooldowns
+                VALUES (?,?,?,?,?)""", (exchange, market_type, symbol, day_ms, retry_at))
+            db.execute("DELETE FROM preparation_publication_writes WHERE id=?", (reservation,))
+            db.execute("""DELETE FROM preparation_trade_day_cooldowns WHERE rowid IN
+                (SELECT rowid FROM preparation_trade_day_cooldowns
+                 ORDER BY retry_at_ms DESC, rowid DESC LIMIT -1 OFFSET 512)""")
+        return retry_at
 
     def recover(self):
         with self.connect() as db:

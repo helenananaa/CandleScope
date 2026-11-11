@@ -180,6 +180,8 @@ export interface AdvancedMarketStudyView {
   visible: boolean;
   supported: boolean;
   supportReason: string | null;
+  canRefreshHistory?: boolean;
+  historyNote?: string;
   status: AdvancedMarketStudyStatus;
   error: string | null;
 }
@@ -204,6 +206,7 @@ export interface AdvancedMarketRuntime {
   actions: {
     ensureVisibleRange(range: unknown): boolean;
     retry(): void;
+    retryMarketHistory(channel: "open_interest" | "funding_rate"): void;
     addMarketStudy(id: MarketMetricId): void;
     removeMarketStudy(id: MarketMetricId): void;
     toggleMarketStudyVisibility(id: MarketMetricId): void;

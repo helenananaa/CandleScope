@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.data_engine.market_data.models import MarketChannel, MarketStreamKey
+from app.data_engine.public_market_projection import project_local_rollup_status
 
 
 PROTOCOL = "liquidation.v1"
@@ -58,6 +59,7 @@ async def liquidation_history(
     market_type: str = Query("futures"),
     period: str = Query(default="1m"),
     position_side: str | None = Query(default=None),
+    start_position_side: str | None = Query(default=None),
     start_ms: int | None = Query(default=None, ge=0),
     end_ms: int | None = Query(default=None, ge=0),
     limit: int = Query(default=500, ge=1, le=5000),
@@ -68,6 +70,9 @@ async def liquidation_history(
             detail="liquidation history only supports period=1m",
         )
     side = _position_side(position_side)
+    cursor_side = _position_side(start_position_side)
+    if cursor_side is not None and (start_ms is None or side is not None):
+        raise HTTPException(status_code=422, detail="start_position_side requires start_ms and an unfiltered page")
     if start_ms is not None and end_ms is not None and start_ms > end_ms:
         raise HTTPException(status_code=422, detail="start_ms must be <= end_ms")
     dm = _data_manager(request)
@@ -79,15 +84,22 @@ async def liquidation_history(
             start_ms=start_ms,
             end_ms=end_ms,
             limit=limit + 1,
+            **({"start_position_side": cursor_side} if cursor_side is not None else {}),
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
         raise _upstream_http_error("liquidation history", exc) from exc
     has_more = len(rows) > limit
-    if has_more:
-        rows = rows[-limit:] if start_ms is None and end_ms is None else rows[:limit]
-    data = [_serialize(item) for item in rows]
+    recent_tail = start_ms is None and end_ms is None
+    next_cursor = None
+    data = [_serialize(item) for item in (rows[-limit:] if recent_tail else rows[:limit])]
+    if has_more and not recent_tail:
+        following = _serialize(rows[limit])
+        next_start = int(following.get("bucket_start_ms", following.get("bucket_open_ms")))
+        next_cursor = {"start_ms": next_start}
+        if side is None:
+            next_cursor["start_position_side"] = following["position_side"]
     times = [
         int(item.get("bucket_start_ms", item.get("bucket_open_ms")))
         for item in data
@@ -102,6 +114,8 @@ async def liquidation_history(
         "count": len(data),
         "data": data,
         "has_more": has_more,
+        "next_cursor": next_cursor,
+        **project_local_rollup_status(start_ms=start_ms, end_ms=end_ms, reason="source_lossy"),
         "coverage": {
             "earliest_ms": min(times, default=None),
             "latest_ms": max(times, default=None),

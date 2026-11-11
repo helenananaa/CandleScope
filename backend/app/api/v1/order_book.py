@@ -13,7 +13,8 @@ from app.data_engine.market_data.order_book_projection import (
     cached_price_tick_size,
 )
 from app.data_engine.market_data.order_book_contract import (
-    PROTOCOL, serialize_record, order_book_contract as resolve_order_book_contract,
+    PROTOCOL, order_book_history_status, serialize_record,
+    order_book_contract as resolve_order_book_contract,
 )
 from app.data_engine.market_data.models import MarketChannel, MarketStreamKey
 
@@ -92,6 +93,7 @@ async def order_book_snapshot(
         "full_depth": False,
         "backfillable": False,
         "persisted": False,
+        "history": order_book_history_status(),
         "data": serialize_record(record, price_tick_size=cached_price_tick_size(key)),
     }
 

@@ -4,6 +4,7 @@ import test from "node:test";
 import type { KlineStreamSocket } from "../klineContracts.js";
 import { BatchKlineStreamCoordinator } from "../feed/batchKlineStreamCoordinator.js";
 import { resolveKlineBatchStreamEnabled } from "../klineBatchFeature.js";
+import { klineSeriesIdentityQuery } from "../klineSeriesIdentity.js";
 import { SeriesDataFeed } from "../feed/seriesDataFeed.js";
 import { KlineConsumerRecovery } from "../feed/klineConsumerRecovery.js";
 import type { KlineFetchResult } from "../klineContracts.js";
@@ -26,6 +27,25 @@ class FakeSocket implements KlineStreamSocket {
     this.onmessage?.({ data: JSON.stringify(payload) } as MessageEvent<string>);
   }
 }
+
+test("batch frames cannot cross the contract-volume identity boundary", () => {
+  const socket = new FakeSocket();
+  const coordinator = new BatchKlineStreamCoordinator({ url: "ws://test", socketFactory: () => socket });
+  const series = { exchange: "gate", marketType: "swap.inverse", symbol: "BTC/USD:BTC", volumeSemantics: "contract_count" };
+  const ticks: unknown[] = [];
+  coordinator.subscribe(series, { intervals: ["5m"], onKline: ({ tick }) => ticks.push(tick.volume) });
+  socket.open();
+  const message = JSON.parse(socket.sent[0]!) as { items: Array<{ volume_semantics: string; clientId: string }> };
+  const item = message.items[0];
+  assert.ok(item);
+  assert.equal(item.volume_semantics, "contract_count");
+  const event = { type: "kline", exchange: "gate", market_type: "swap.inverse", symbol: series.symbol,
+    interval: "5m", client_id: item.clientId, data: { time: 300, open: 1, high: 1, low: 1, close: 1, volume: 10 } };
+  socket.message(event);
+  socket.message({ ...event, ...klineSeriesIdentityQuery(series.exchange, series) });
+  assert.deepEqual(ticks, [10]);
+  coordinator.closeAll();
+});
 
 for (const retire of ["last-subscriber", "close-all"] as const) {
   test(`retired socket events cannot invalidate a new interval's history (${retire})`, async () => {

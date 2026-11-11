@@ -2,11 +2,14 @@
 from __future__ import annotations
 import time
 from datetime import datetime, timezone
+from itertools import islice
 from typing import Any
+from app.data_engine.bar_basis import is_gate_inverse_5m, is_gate_linear_5m
 from app.data_engine.ingestion.config import IngestionConfig
 from app.data_engine.ingestion.models import DataSource, RawMessage, StreamType, TransportRequest
+from app.exchanges.okx_intervals import OKX_FUNDING_HISTORY_LIMIT, OKX_OI_HISTORY_LIMIT
 from .generic import _GENERIC_STREAM_METHODS, _rest_method_for, resolve_market_selection, _timestamp
-from .catalog import market_selection_parts
+from .catalog import BYBIT_METRIC_HISTORY_LIMIT, market_selection_parts
 from .unified import make_unified_payload
 
 async def fetch_unified_history(
@@ -46,6 +49,7 @@ async def fetch_unified_history(
             market_type=selection,
         )
         rows: list[dict[str, Any]] = []
+        request_limit = req.limit
         from app.exchanges.trade_candles import uses_trade_candles
         if descriptor.stream_type == StreamType.KLINE and uses_trade_candles(context.entry.exchange_id, descriptor.market_type, descriptor.interval):
             from .trade_candles import fetch_trade_candles
@@ -135,13 +139,37 @@ async def fetch_unified_history(
                     cursor = opened + 1000
                 rows.append({"native_second_page": "upbit.spot", "start_ms": page_start,
                              "end_ms": page_end, "empty_ranges": empty_ranges})
+        elif descriptor.stream_type == StreamType.KLINE and (
+            is_gate_linear_5m(context.entry.exchange_id, descriptor.market_type, descriptor.interval)
+            or is_gate_inverse_5m(context.entry.exchange_id, descriptor.market_type, descriptor.interval)
+        ):
+            from .gate_candles import fetch_perpetual_candles
+            limit = min(max(1, int(req.limit or 1)), context.entry.history_limit)
+            rows = await fetch_perpetual_candles(exchange, symbol, req, limit=limit, now_ms=int(time.time() * 1000))
         elif descriptor.stream_type == StreamType.KLINE:
             limit = min(max(1, int(req.limit or 1)), context.entry.history_limit)
+            start_ms = req.start_ms
+            options = {}
+            if context.entry.exchange_id == "bybit" and req.end_ms is not None:
+                # The reverse-page cursor and the single-slot repair both
+                # depend on the inclusive upper bound reaching the venue.
+                options["params"] = {"end": req.end_ms}
+                if start_ms is not None:
+                    from app.data_engine.history.calendar import AlwaysOpenCalendar
+
+                    # Bybit can round a lower bound down to the candle open.
+                    # Count only eligible opens and send an aligned lower bound.
+                    opens = AlwaysOpenCalendar().expected_opens(start_ms, req.end_ms, descriptor.interval)
+                    start_ms = next(opens, None)
+                    if start_ms is None:
+                        return []
+                    limit = 1 + sum(1 for _ in islice(opens, limit - 1))
             values = await exchange.fetch_ohlcv(
                 symbol,
                 timeframe=descriptor.interval,
-                since=req.start_ms,
+                since=start_ms,
                 limit=limit,
+                **options,
             )
             from app.data_engine.interval_policy import parse_interval_spec
             spec = parse_interval_spec(descriptor.interval)
@@ -198,11 +226,26 @@ async def fetch_unified_history(
             rows = [make_unified_payload("derivatives_summary", dict(value))]
         elif descriptor.stream_type == StreamType.FUNDING_RATE:
             if req.history or req.start_ms is not None or req.end_ms is not None:
+                limit = max(1, int(req.limit or 1))
+                options = {}
+                if context.entry.exchange_id == "okx":
+                    limit = min(limit, OKX_FUNDING_HISTORY_LIMIT)
+                    request_limit = limit
+                    if req.end_ms is not None:
+                        options["params"] = {"after": req.end_ms + 1}
+                elif context.entry.exchange_id == "bybit":
+                    limit = min(limit, BYBIT_METRIC_HISTORY_LIMIT)
+                    request_limit = limit
+                    if req.end_ms is not None:
+                        options["params"] = {"until": req.end_ms}
                 values = await exchange.fetch_funding_rate_history(
-                    symbol,
-                    since=req.start_ms,
-                    limit=max(1, int(req.limit or 1)),
+                    symbol, since=req.start_ms, limit=limit, **options,
                 )
+                if context.entry.exchange_id == "okx":
+                    # The pinned method only sets this field from realizedRate.
+                    # Do not fall through to the raw projected rate in normalization.
+                    values = [value for value in values
+                              if isinstance(value, dict) and value.get("fundingRate") is not None]
             else:
                 values = [await exchange.fetch_funding_rate(symbol)]
             rows = [
@@ -214,12 +257,48 @@ async def fetch_unified_history(
             if (
                 req.history or req.start_ms is not None or req.end_ms is not None
             ) and context.entry.supports("fetchOpenInterestHistory"):
-                values = await exchange.fetch_open_interest_history(
-                    symbol,
-                    timeframe=descriptor.interval,
-                    since=req.start_ms,
-                    limit=max(1, int(req.limit or 1)),
-                )
+                if context.entry.exchange_id == "okx":
+                    from .venue_history import fetch_okx_contract_oi
+                    request_limit = min(max(1, int(req.limit or 1)), OKX_OI_HISTORY_LIMIT)
+                    values = await fetch_okx_contract_oi(exchange, symbol, req, limit=request_limit)
+                else:
+                    limit = max(1, int(req.limit or 1))
+                    options = {}
+                    if context.entry.exchange_id == "bybit":
+                        limit = min(limit, BYBIT_METRIC_HISTORY_LIMIT)
+                        request_limit = limit
+                        if req.end_ms is not None:
+                            options["params"] = {"until": req.end_ms}
+                    elif context.entry.exchange_id == "gate":
+                        # Keep CCXT's unified since filter in milliseconds.
+                        # Gate's contract statistics query takes Unix seconds.
+                        params = {}
+                        if req.start_ms is not None:
+                            params["from"] = (req.start_ms + 999) // 1000
+                        if req.end_ms is not None:
+                            params["to"] = req.end_ms // 1000
+                        if "from" in params and "to" in params and params["from"] > params["to"]:
+                            return []
+                        if descriptor.interval == "5m" and "from" in params and "to" in params:
+                            # Gate may return an extra earlier sample. Bound
+                            # the physical page to this range's 5m grid.
+                            count = params["to"] // 300 - (params["from"] + 299) // 300 + 1
+                            limit = min(limit, max(1, count))
+                            request_limit = limit
+                        if params:
+                            options["params"] = params
+                    values = await exchange.fetch_open_interest_history(
+                        symbol,
+                        timeframe=descriptor.interval,
+                        since=req.start_ms,
+                        limit=limit,
+                        **options,
+                    )
+                    if context.entry.exchange_id == "gate" and req.end_ms is not None:
+                        values = [
+                            value for value in values
+                            if (stamp := value.get("timestamp")) is not None and stamp <= req.end_ms
+                        ]
             else:
                 values = [await exchange.fetch_open_interest(symbol)]
             rows = [
@@ -259,7 +338,7 @@ async def fetch_unified_history(
                 received_at_ms=received,
                 endpoint=f"ccxt+rest://{context.entry.exchange_id}",
                 http_status=200,
-                request_limit=req.limit,
+                request_limit=request_limit,
             )
             for row in rows
         ]

@@ -6,17 +6,18 @@ import type {
   KlineStreamController,
   KlineStreamFactory,
   KlineStreamOptions,
+  KlineStreamSeries,
   KlineStreamSocket,
 } from "../klineContracts.js";
-import type { MarketSeries } from "../marketDataTypes.js";
+import { klineSeriesIdentityQuery } from "../klineSeriesIdentity.js";
 import { isPermanentSubscriptionFailure, parseKlineStreamMessage } from "./klineStreamSubscription.js";
 
 const SOCKET_OPEN = 1;
-type StreamSeries = Pick<MarketSeries, "exchange" | "marketType" | "symbol">;
 
 interface LogicalBatchSubscription {
   clientId: string;
-  series: StreamSeries;
+  series: KlineStreamSeries;
+  wireIdentity: Record<string, string>;
   intervals: IntervalString[];
   options: KlineStreamOptions;
   controller: KlineStreamController;
@@ -83,6 +84,7 @@ export class BatchKlineStreamCoordinator {
     const subscription = {
       clientId,
       series: { ...series },
+      wireIdentity: klineSeriesIdentityQuery(series.exchange, series),
       intervals: canonicalIntervals(options.intervals),
       options,
       controller: null as unknown as KlineStreamController,
@@ -232,6 +234,7 @@ export class BatchKlineStreamCoordinator {
         exchange: item.series.exchange,
         market_type: item.series.marketType,
         symbol: item.series.symbol,
+        ...item.wireIdentity,
         intervals: action === "unsubscribe" ? item.intervals : item.intervals.filter(interval => !item.rejectedIntervals.has(interval)),
       })),
     }));
@@ -275,6 +278,8 @@ export class BatchKlineStreamCoordinator {
       const clientId = text(record.client_id);
       const subscription = this.subscriptions.get(clientId);
       if (!subscription || subscription.closed) return;
+      if (Object.entries(subscription.wireIdentity)
+        .some(([name, value]) => record[name] !== value)) return;
       const result = parseKlineStreamMessage(record);
       if (result.kind === "status") {
         subscription.options.onStreamStatus?.(result.message, subscription.controller);

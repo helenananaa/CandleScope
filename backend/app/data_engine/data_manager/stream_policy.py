@@ -59,6 +59,7 @@ class StreamEnsurePlanner:
             if isinstance(series_identity, dict)
             else resolve_kline_series_identity(route.exchange, series_identity)
         )
+        route.require_series_identity(identity)
         if route.kind is IntervalRouteKind.TRADE and not identity.is_legacy_default_for(route.exchange):
             raise ValueError("Trade candles require the default crypto series identity")
         requested = SeriesKey.create(

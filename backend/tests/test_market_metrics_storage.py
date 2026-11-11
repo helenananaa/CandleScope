@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
+import threading
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import wraps
+from types import SimpleNamespace
 
 import pytest
 
+from app.data_engine.ingestion.config import IngestionConfig
+from app.data_engine.ingestion.factory import ExchangeIngestionFactory
 from app.data_engine.ingestion.models import DataSource, MarketEvent, StreamType
 from app.data_engine.market_data.models import MarketChannel, MarketStreamKey
 from app.data_engine.market_data.service import (
@@ -20,6 +26,8 @@ from app.data_engine.interval_policy import compute_bucket_start_ms
 from app.data_engine.market_data.storage_writer import MarketMetricStorageWriter
 from app.data_engine.storage import market_metrics_repo as market_metrics_repo_module
 from app.data_engine.storage.market_metrics_repo import MarketMetricsRepository
+from app.exchanges import bootstrap_default_adapters
+from app.exchanges.ccxt_ext.venue_history import _fetch_binance_raw
 
 
 def _async_test(function):
@@ -946,6 +954,79 @@ async def test_hybrid_funding_is_dense_no_lookahead_and_excludes_forming_bar(
     await service.shutdown()
 
 
+@pytest.mark.parametrize("channel, period", [
+    (MarketChannel.OPEN_INTEREST, "5m"),
+    (MarketChannel.FUNDING_RATE, None),
+])
+@_async_test
+async def test_ccxt_metric_history_observes_without_certifying_empty_or_short_pages(
+    tmp_path, monkeypatch, channel, period,
+) -> None:
+    now_ms = 1_790_000_000_000
+    start_ms, end_ms = now_ms - 2_400_000, now_ms - 1_800_000
+    monkeypatch.setattr("app.data_engine.market_data.service.time.time", lambda: now_ms / 1000)
+    repository = MarketMetricsRepository(tmp_path / "ccxt-metrics.sqlite")
+    factory = _Factory()
+    service = MarketDataService(factory, metrics_repository=repository)
+    key = MarketStreamKey.build("binanceusdm", "swap.linear", "BTCUSDT", channel)
+    kwargs = dict(period=period, start_ms=start_ms, end_ms=end_ms, limit=20)
+
+    class EmptyFactory:
+        async def fetch_market(self, *_args, **_kwargs):
+            return []
+
+    empty_service = MarketDataService(EmptyFactory(), metrics_repository=repository)
+    empty = await empty_service.history_page(key, **kwargs)
+    assert not empty.events and empty.complete is False and empty.has_more is False
+    assert empty.coverage_basis == "observations_only"
+    assert empty.covered_ranges == ()
+    assert empty.missing_ranges == ({"start_ms": start_ms, "end_ms": end_ms},)
+    await empty_service.shutdown()
+
+    observed = await service.history_page(key, **kwargs, mode="refresh")
+    assert [event.event_time_ms for event in observed.events] == [start_ms]
+    assert observed.covered_ranges == () and observed.missing_ranges == empty.missing_ranges
+    assert observed.complete is False and observed.query_mode == "refresh"
+    factory.fail_history = True
+    fallback = await service.history_page(key, **kwargs)
+    assert fallback.events == observed.events and fallback.fallback and fallback.retryable
+    assert fallback.complete is False and fallback.covered_ranges == ()
+    local = await service.history_page(key, **kwargs, mode="local_only")
+    assert local.events == observed.events and local.complete is False
+    assert not local.fallback and not local.retryable and len(factory.fetch_calls) == 2
+
+    identity = {"exchange": "binanceusdm", "market_type": "swap.linear"}
+    if channel == MarketChannel.FUNDING_RATE:
+        repository.upsert_funding([{
+            **_funding_row(rate=0.001, received_at_ms=end_ms, is_final=True, funding_time_ms=end_ms),
+            **identity,
+        }])
+    else:
+        repository.upsert_open_interest([{
+            **_oi_row(period="5m", value=9, received_at_ms=end_ms, event_time_ms=end_ms),
+            **identity,
+        }])
+    page = await service.history_page(key, **(kwargs | {"limit": 1}), mode="local_only")
+    assert page.has_more and not page.complete and not page.covered_ranges
+    if channel == MarketChannel.FUNDING_RATE:
+        assert page.next_start_ms == start_ms + 1 and page.next_end_ms is None
+        assert [event.event_time_ms for event in page.events] == [start_ms]
+        continued = await service.history_page(
+            key, **(kwargs | {"start_ms": page.next_start_ms, "limit": 1}), mode="local_only",
+        )
+        assert [event.event_time_ms for event in continued.events] == [end_ms]
+    else:
+        assert page.next_end_ms == end_ms - 1 and page.next_start_ms is None
+        assert [event.event_time_ms for event in page.events] == [end_ms]
+        continued = await service.history_page(
+            key, **(kwargs | {"end_ms": page.next_end_ms, "limit": 1}), mode="local_only",
+        )
+        assert [event.event_time_ms for event in continued.events] == [start_ms]
+    assert not continued.has_more and not continued.complete and not continued.covered_ranges
+    assert len(factory.fetch_calls) == 2
+    await service.shutdown()
+
+
 @_async_test
 async def test_hybrid_funding_service_canonicalizes_irregular_period_alias(tmp_path) -> None:
     repository = MarketMetricsRepository(tmp_path / "hybrid-canonical-period.sqlite")
@@ -1701,6 +1782,297 @@ async def test_settlement_refresh_successful_range_serves_hot_subset(
 
 
 @_async_test
+async def test_bounded_sparse_http_reuses_settlement_proof_and_paginates_forward(tmp_path):
+    from fastapi import FastAPI
+    import httpx
+    from app.api.v1.market import router
+
+    start = 1_700_000_040_000
+    end = start + 8 * 60 * 60_000
+    stamps = [start + 500, start + 4 * 60 * 60_000 + 200, end]
+    key = _key(MarketChannel.FUNDING_RATE)
+    events = [
+        MarketEvent(
+            event_type=StreamType.FUNDING_RATE, exchange=key.exchange, market_type=key.market_type,
+            symbol=key.symbol, event_time_ms=stamp, received_at_ms=stamp + 100,
+            source=DataSource.HTTP_BACKFILL, stream_key=key.topic,
+            data={"funding_time_ms": stamp, "funding_rate": 0.0001},
+        )
+        for stamp in stamps
+    ]
+    repo = MarketMetricsRepository(tmp_path / "funding-http.sqlite")
+    factory = _SettlementPagingFactory(events)
+    service = MarketDataService(factory, metrics_repository=repo)
+    app = FastAPI()
+    app.include_router(router)
+    app.state.data_manager = SimpleNamespace(market_data_ready=True, market_history_page=service.history_page)
+    params = dict(channel="funding_rate", start_ms=start, end_ms=end, limit=1)
+
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        async def request(**overrides):
+            response = await client.get("/market/history", params=params | overrides)
+            assert response.status_code == 200, response.text
+            return response.json()
+
+        local = await request(mode="local_only")
+        assert not local["complete"] and not local["retryable"] and not local["data"]
+        assert local["coverage"]["missing_ranges"] == [{"start_ms": start, "end_ms": end}]
+        assert not factory.fetch_calls
+
+        # The same acquisition owner is used by hybrid funding projection.
+        assert await service._fetch_funding_settlement_pages(key, start_ms=start, end_ms=end) == (True, end)
+        page = await request()
+        assert [row["event_time_ms"] for row in page["data"]] == [stamps[0]]
+        assert page["coverage"]["ranges"] == [{"start_ms": start, "end_ms": stamps[0]}]
+        assert page["has_more"] and page["next_start_ms"] == stamps[0] + 1
+        assert not page["complete"] and not page["retryable"]
+        assert len(factory.fetch_calls) == 1
+
+        await service.shutdown()
+        reopened = MarketDataService(factory, metrics_repository=MarketMetricsRepository(repo.db_path))
+        app.state.data_manager.market_history_page = reopened.history_page
+        try:
+            tail = await request(start_ms=page["next_start_ms"], limit=100, mode="local_only")
+            assert [row["event_time_ms"] for row in tail["data"]] == stamps[1:]
+            assert tail["complete"] and not tail["has_more"]
+            assert len(factory.fetch_calls) == 1
+
+            # Refresh deliberately revisits the requested range despite a
+            # complete local proof and a short display page.
+            forced = await request(mode="refresh")
+            assert forced["query_mode"] == "refresh"
+            assert len(factory.fetch_calls) == 2
+            assert factory.fetch_calls[-1]["start_ms"] == start
+            assert factory.fetch_calls[-1]["end_ms"] == end
+        finally:
+            await reopened.shutdown()
+
+
+@_async_test
+async def test_settlement_overlap_replans_only_the_suffix_and_releases_cancelled_waiters(tmp_path):
+    repo = MarketMetricsRepository(tmp_path / "settlement-overlap.sqlite")
+    service = MarketDataService(_Factory(), metrics_repository=repo)
+    key = _key(MarketChannel.FUNDING_RATE)
+    requests = []
+    started, release, cancelled = asyncio.Event(), asyncio.Event(), asyncio.Event()
+
+    async def provider(_descriptor, *, start_ms, end_ms, **_kwargs):
+        requests.append((start_ms, end_ms))
+        started.set()
+        try:
+            await release.wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+        return []
+
+    service._fetch_market = provider
+    async def acquire(start_ms, end_ms):
+        return await service._fetch_funding_settlement_pages(key, start_ms=start_ms, end_ms=end_ms)
+
+    first = asyncio.create_task(acquire(100, 200))
+    await started.wait()
+    joined = asyncio.create_task(acquire(125, 175))
+    overlap = asyncio.create_task(acquire(150, 300))
+    await asyncio.sleep(0)
+    first.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await first
+    assert not cancelled.is_set()
+    release.set()
+    assert await joined == (True, 175)
+    assert await overlap == (True, 300)
+    assert requests == [(100, 200), (201, 300)]
+
+    started.clear()
+    release.clear()
+    last = asyncio.create_task(acquire(400, 500))
+    await started.wait()
+    last.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await last
+    assert cancelled.is_set()
+    assert not service._funding_refresh_tasks and not service._funding_refresh_jobs
+    assert not service._funding_refresh_waiters
+    await service.shutdown()
+
+
+@_async_test
+async def test_cancelled_settlement_waiter_keeps_ownership_through_writer_ack(tmp_path, monkeypatch):
+    repo = MarketMetricsRepository(tmp_path / "settlement-writer-cancel.sqlite")
+    writer = MarketMetricStorageWriter(repo)
+    key = _key(MarketChannel.FUNDING_RATE)
+    service = MarketDataService(_Factory(), metrics_repository=repo, metrics_writer=writer)
+    request_count = 0
+    physical_started, release = threading.Event(), threading.Event()
+    write = repo.upsert_funding
+
+    def blocked_write(rows):
+        physical_started.set()
+        assert release.wait(5)
+        return write(rows)
+
+    async def provider(_descriptor, **_kwargs):
+        nonlocal request_count
+        request_count += 1
+        return [MarketEvent(
+            event_type=StreamType.FUNDING_RATE, exchange=key.exchange, market_type=key.market_type,
+            symbol=key.symbol, event_time_ms=60_000, received_at_ms=60_100,
+            source=DataSource.HTTP_BACKFILL, stream_key=key.topic,
+            data={"funding_time_ms": 60_000, "funding_rate": 0.0001},
+        )]
+
+    monkeypatch.setattr(repo, "upsert_funding", blocked_write)
+    service._fetch_market = provider
+    async def acquire():
+        return await service._fetch_funding_settlement_pages(key, start_ms=0, end_ms=120_000)
+
+    first = asyncio.create_task(acquire())
+    replacement = None
+    try:
+        assert await asyncio.to_thread(physical_started.wait, 4)
+        first.cancel()
+        await asyncio.sleep(0)
+        replacement = asyncio.create_task(acquire())
+        await asyncio.sleep(0.02)
+        assert not first.done() and not replacement.done()
+        assert request_count == 1
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+        assert await replacement == (True, 120_000)
+        assert request_count == 1
+    finally:
+        release.set()
+        await asyncio.gather(first, *([replacement] if replacement is not None else []), return_exceptions=True)
+        await service.shutdown()
+
+
+@_async_test
+async def test_settlement_receipts_survive_restart_and_reacquire_only_invalidated_ranges(tmp_path):
+    path = tmp_path / "settlement-restart.sqlite"
+    key = _key(MarketChannel.FUNDING_RATE)
+    events = [
+        MarketEvent(
+            event_type=StreamType.FUNDING_RATE,
+            exchange=key.exchange, market_type=key.market_type, symbol=key.symbol,
+            event_time_ms=stamp, received_at_ms=stamp + 100, source=DataSource.HTTP_BACKFILL,
+            data={"funding_rate": 0.0001, "funding_time_ms": stamp}, stream_key=key.topic,
+        )
+        for stamp in (60_000, 120_000, 180_000)
+    ]
+    factory = _SettlementPagingFactory(events)
+    service = MarketDataService(factory, metrics_repository=MarketMetricsRepository(path))
+    service._fetch_market = factory.fetch_market
+    for start_ms, end_ms in ((0, 90_000), (150_000, 240_000)):
+        assert await service._fetch_funding_settlement_pages(key, start_ms=start_ms, end_ms=end_ms) == (True, end_ms)
+    await service.shutdown()
+
+    reopened = MarketMetricsRepository(path)
+    factory = _SettlementPagingFactory(events)
+    service = MarketDataService(factory, metrics_repository=reopened)
+    service._fetch_market = factory.fetch_market
+    assert await service._fetch_funding_settlement_pages(key, start_ms=0, end_ms=90_000) == (True, 90_000)
+    assert factory.fetch_calls == []
+    assert await service._fetch_funding_settlement_pages(key, start_ms=0, end_ms=240_000) == (True, 240_000)
+    assert [(call["start_ms"], call["end_ms"]) for call in factory.fetch_calls] == [(90_001, 149_999)]
+
+    with sqlite3.connect(path) as writer:
+        writer.execute("DELETE FROM funding_rate_history WHERE funding_time_ms=120000")
+    assert await service._fetch_funding_settlement_pages(key, start_ms=0, end_ms=240_000) == (True, 240_000)
+    assert [(call["start_ms"], call["end_ms"]) for call in factory.fetch_calls] == [(90_001, 149_999)] * 2
+    assert [row["funding_time_ms"] for row in reopened.query_funding(
+        exchange=key.exchange, market_type=key.market_type, symbol=key.symbol,
+    )] == [60_000, 120_000, 180_000]
+    await service.shutdown()
+
+
+@pytest.mark.parametrize("timestamps", [(70_000, 60_000), (60_000, 60_000), (60_000, 60_010), (60_000, 130_000)])
+@_async_test
+async def test_invalid_settlement_page_cannot_write_rows_or_claim_coverage(tmp_path, timestamps):
+    repository = MarketMetricsRepository(tmp_path / "invalid-settlement.sqlite")
+    service = MarketDataService(_Factory(), metrics_repository=repository)
+    key = _key(MarketChannel.FUNDING_RATE)
+    calls = 0
+
+    async def fetch_market(_descriptor, **_kwargs):
+        nonlocal calls
+        calls += 1
+        return [
+            MarketEvent(
+                event_type=StreamType.FUNDING_RATE, exchange=key.exchange, market_type=key.market_type,
+                symbol=key.symbol, event_time_ms=stamp, received_at_ms=140_000,
+                source=DataSource.HTTP_BACKFILL, data={"funding_time_ms": stamp, "funding_rate": 0.001},
+                stream_key=key.topic,
+            )
+            for stamp in (timestamps if calls == 1 else (60_000, 120_000))
+        ]
+
+    service._fetch_market = fetch_market
+    try:
+        with pytest.raises(RuntimeError, match="funding settlement page"):
+            await service._fetch_funding_settlement_pages(key, start_ms=60_000, end_ms=120_000)
+        assert repository.query_funding(exchange=key.exchange, market_type=key.market_type,
+                                        symbol=key.symbol, limit=10) == []
+        assert await service._fetch_funding_settlement_pages(key, start_ms=60_000, end_ms=120_000) == (True, 120_000)
+        assert calls == 2
+    finally:
+        await service.shutdown()
+
+
+@_async_test
+async def test_native_settlement_history_validates_before_caching_coverage(tmp_path, monkeypatch):
+    bootstrap_default_adapters()
+    valid = {"symbol": "BTCUSDT", "fundingTime": 60_000, "fundingRate": "0.0001", "rateType": "Regular"}
+    replies = iter((valid, [{**valid, "fundingRate": None}], [valid]))
+    calls = []
+
+    class Exchange:
+        def market(self, symbol):
+            return {"id": "BTCUSDT"}
+
+        async def fapipublic_get_fundingrate(self, params):
+            calls.append(params)
+            return next(replies)
+
+    class Pool:
+        @asynccontextmanager
+        async def request(self, selection):
+            yield Exchange()
+
+        async def resolve_symbol(self, *_args, **_kwargs):
+            return "BTC/USDT:USDT"
+
+    config = IngestionConfig()
+    factory = ExchangeIngestionFactory(config)
+
+    async def http_fetch(request):
+        return await _fetch_binance_raw(request, config, Pool())
+
+    async def ingress():
+        return SimpleNamespace(transport=SimpleNamespace(http_fetch=http_fetch))
+
+    monkeypatch.setattr(factory, "_ensure_ingress", ingress)
+    repository = MarketMetricsRepository(tmp_path / "native-funding-pages.sqlite")
+    service = MarketDataService(factory, metrics_repository=repository)
+    key = _key(MarketChannel.FUNDING_RATE)
+    try:
+        for reason in ("array response", "settlement row"):
+            with pytest.raises(RuntimeError, match=reason):
+                await service._fetch_funding_settlement_pages(key, start_ms=60_000, end_ms=120_000)
+        assert repository.query_funding(exchange=key.exchange, market_type=key.market_type,
+                                        symbol=key.symbol, limit=10) == []
+        assert await service._fetch_funding_settlement_pages(key, start_ms=60_000, end_ms=120_000) == (True, 120_000)
+        assert await service._fetch_funding_settlement_pages(key, start_ms=60_000, end_ms=60_000) == (True, 60_000)
+        assert calls == [{"symbol": "BTCUSDT", "startTime": 60_000, "endTime": 120_000, "limit": 1000}] * 3
+        [row] = repository.query_funding(exchange=key.exchange, market_type=key.market_type,
+                                         symbol=key.symbol, limit=10)
+        assert row["is_final"] and row["funding_rate"] == 0.0001
+    finally:
+        await service.shutdown()
+
+
+@_async_test
 async def test_settlement_refresh_failure_is_not_cached(tmp_path) -> None:
     repository = MarketMetricsRepository(tmp_path / "settlement-failure.sqlite")
     service = MarketDataService(_Factory(), metrics_repository=repository)
@@ -1740,7 +2112,6 @@ async def test_settlement_refresh_current_edge_coverage_expires(
     calls = 0
     interval_ms = 8 * 60 * 60 * 1000
     wall_ms = 100 * interval_ms
-    monotonic_seconds = 100.0
 
     async def fetch_market(_descriptor, **_kwargs):
         nonlocal calls
@@ -1749,7 +2120,6 @@ async def test_settlement_refresh_current_edge_coverage_expires(
 
     service._fetch_market = fetch_market
     service._funding_refresh_wall_ms = lambda: wall_ms
-    service._funding_refresh_monotonic = lambda: monotonic_seconds
     key = _key(MarketChannel.FUNDING_RATE)
     historical_start_ms = 0
     historical_end_ms = wall_ms - interval_ms
@@ -1772,7 +2142,7 @@ async def test_settlement_refresh_current_edge_coverage_expires(
         start_ms=edge_start_ms,
         end_ms=edge_end_ms,
     ) == (True, edge_end_ms)
-    monotonic_seconds += 59.0
+    wall_ms += 59_000
     assert await service._fetch_funding_settlement_pages(
         key,
         start_ms=edge_start_ms,
@@ -1780,7 +2150,7 @@ async def test_settlement_refresh_current_edge_coverage_expires(
     ) == (True, edge_end_ms)
     assert calls == 2
 
-    monotonic_seconds += 2.0
+    wall_ms += 2_000
     assert await service._fetch_funding_settlement_pages(
         key,
         start_ms=edge_start_ms,
@@ -1788,7 +2158,7 @@ async def test_settlement_refresh_current_edge_coverage_expires(
     ) == (True, edge_end_ms)
     assert calls == 3
 
-    monotonic_seconds += 10_000.0
+    wall_ms += 10_000_000
     assert await service._fetch_funding_settlement_pages(
         key,
         start_ms=historical_start_ms,

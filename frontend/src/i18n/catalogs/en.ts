@@ -7,10 +7,12 @@ import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { pineEnglish } from "./pineEnglish.js";
 import { externalProviderEnglish } from "./externalProviderEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
+import { tradeHistoryEnglish } from "./tradeHistoryMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const en = {
   ...continuousEnglish,
+  ...tradeHistoryEnglish,
   ...replayNoteEnglish,
   ...historyStudyEnglish,
   "chartTime.title": "Go to date",

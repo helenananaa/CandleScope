@@ -6,9 +6,10 @@ import asyncio
 from bisect import bisect_right
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Iterable
 
+from app.core.async_cleanup import finish_cleanup
 from app.core.executors import run_storage
 from app.data_engine.ingestion.models import (
     DataSource,
@@ -39,12 +40,16 @@ from app.exchanges import (
     get_shared_rate_limit_manager,
 )
 
+from app.exchanges.models import ExchangeCapabilities, HistoryEmptyPageSemantics
+
 from .events import HubRecord, MarketStateEvent
 from .hub import MarketEventHub, MarketHubSubscription
 from .lifecycle import KeyedAsyncLockPool, drain_cancellation_safe_cleanup
 from .models import MarketChannel, MarketStreamKey
 from .storage_writer import MarketMetricStorageWriter
-from .oi_history import merge_ranges, missing_ranges
+from .oi_history import (
+    merge_ranges, missing_ranges, unsampled_prefixes, verified_sample_ranges,
+)
 
 
 logger = logging.getLogger("data_engine.market_data")
@@ -64,6 +69,12 @@ _HISTORY_STREAM_TYPES = {
     MarketChannel.LIQUIDATION: StreamType.LIQUIDATION,
 }
 _DEFAULT_OPEN_INTEREST_STORAGE_PERIOD = "5m"
+_BINANCE_OI_COVERAGE_REVISION = "binance-oi-grid-v2"
+_GATE_OI_COVERAGE_REVISION = "gate-oi-grid-v1"
+_OI_COVERAGE_BASES = {
+    _BINANCE_OI_COVERAGE_REVISION: "native_binance_oi_sample_grid_v2",
+    _GATE_OI_COVERAGE_REVISION: "gate_oi_sample_grid_v1",
+}
 _DEFAULT_OPEN_INTEREST_STORAGE_BUCKET_MS = 5 * 60 * 1000
 _HISTORY_RETENTION_SAFETY_MS = 60 * 1000
 _PREMIUM_INDEX_INTERVAL = "1m"
@@ -84,7 +95,8 @@ _MAX_PREMIUM_HISTORY_PAGES_PER_REQUEST = 64
 _PREMIUM_HISTORY_PAGE_POINTS = 1000
 _PREMIUM_FETCH_CONCURRENCY = 4
 _REALTIME_FUNDING_STALE_MS = 10_000
-_FUNDING_SETTLEMENT_EDGE_TTL_SECONDS = 60.0
+_FUNDING_SETTLEMENT_EDGE_TTL_MS = 60_000
+_FUNDING_SETTLEMENT_POLICY_REVISION = "binance-usdm-regular-settlement-v1"
 
 
 @dataclass(slots=True)
@@ -117,6 +129,7 @@ class MarketHistoryPage:
     missing_ranges: tuple[dict[str, Any], ...] = ()
     has_more: bool | None = None
     next_end_ms: int | None = None
+    next_start_ms: int | None = None
     query_mode: str | None = None
     coverage_basis: str = "unqualified_local"
     revalidate_after_ms: int | None = None
@@ -142,13 +155,6 @@ class _HybridFundingResult:
     retryable: bool = False
     fallback: bool = False
     excluded_ranges: tuple[dict[str, Any], ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
-class _FundingSettlementCoverage:
-    start_ms: int
-    end_ms: int
-    expires_at: float | None = None
 
 
 class MarketDataService:
@@ -183,15 +189,11 @@ class MarketDataService:
         self._history_jobs: set[asyncio.Task] = set()
         self._history_waiters: dict[tuple, int] = {}
         self._history_identity_locks = KeyedAsyncLockPool[tuple]()
-        self._funding_refresh_lock = asyncio.Lock()
-        self._funding_refresh_coverage: dict[
-            tuple[str, str, str],
-            list[_FundingSettlementCoverage],
-        ] = {}
         self._funding_refresh_tasks: dict[
-            tuple[tuple[str, str, str], int, int, int],
-            asyncio.Task[tuple[bool, int]],
+            tuple[tuple[str, str, str], int, int, int, bool], asyncio.Task[int | None],
         ] = {}
+        self._funding_refresh_jobs: set[asyncio.Task[int | None]] = set()
+        self._funding_refresh_waiters: dict[asyncio.Task[int | None], int] = {}
         self._rate_limits = get_shared_rate_limit_manager()
         self._metrics_repository = metrics_repository
         self._metrics_writer = metrics_writer
@@ -460,7 +462,7 @@ class MarketDataService:
         """
 
         self._ensure_open()
-        self._validate_key(key, history=True)
+        capabilities = self._validate_key(key, history=True)
         if mode not in {None, "local_only", "fill_missing", "refresh"}:
             raise ValueError("history mode must be local_only, fill_missing or refresh")
         if not 1 <= limit <= 1000:
@@ -521,24 +523,41 @@ class MarketDataService:
             start_ms=start_ms,
             end_ms=end_ms,
         )
-        # This first adapter qualifies bounded native OI query receipts. Sparse
-        # funding and other CCXT histories retain their existing fetch owner.
-        native_oi = (
-            key.channel == MarketChannel.OPEN_INTEREST
-            and key.exchange == "binance" and key.market_type == "futures"
+        native_bounded = (
+            key.exchange == "binance" and key.market_type == "futures"
             and start_ms is not None and end_ms is not None
             and self._metrics_repository is not None
         )
-        if native_oi:
-            step_ms = parse_interval_ms(period or "")
-            assert step_ms is not None
-            return await self._shared_oi_history(
-                event_key, descriptor, period=period or "", step_ms=step_ms,
-                start_ms=start_ms, end_ms=end_ms, limit=limit,
+        if native_bounded and key.channel == MarketChannel.FUNDING_RATE and not hybrid_funding:
+            assert start_ms is not None and end_ms is not None
+            return await self._sparse_funding_history_page(
+                event_key, start_ms=start_ms, end_ms=end_ms, limit=limit,
                 mode=mode or "fill_missing", plan=refresh_plan,
             )
-        if mode == "fill_missing":
-            raise ValueError("fill_missing requires bounded native Binance futures OI history")
+        if (key.channel == MarketChannel.OPEN_INTEREST and period is not None
+                and start_ms is not None and end_ms is not None and self._metrics_repository is not None):
+            revision = None
+            if native_bounded:
+                revision = _BINANCE_OI_COVERAGE_REVISION
+            elif key.exchange == "gate" and key.market_type in {"swap.linear", "swap.inverse"} and period == "5m":
+                revision = _GATE_OI_COVERAGE_REVISION
+            if revision is not None:
+                step_ms = parse_interval_ms(period)
+                assert step_ms is not None
+                return await self._shared_oi_history(
+                    event_key, descriptor, period=period, step_ms=step_ms,
+                    start_ms=start_ms, end_ms=end_ms, limit=limit,
+                    mode=mode or "fill_missing", plan=refresh_plan, revision=revision,
+                )
+        if mode == "fill_missing" and not hybrid_funding:
+            raise ValueError("fill_missing requires bounded history with a verified funding or OI policy")
+        capability = capabilities.channel_capability(key.channel, key.market_type)
+        policy = capability.history_policy if capability else None
+        if policy and policy.empty_page_semantics is HistoryEmptyPageSemantics.INCONCLUSIVE:
+            return await self._observed_metric_history_page(
+                event_key, descriptor, start_ms=start_ms, end_ms=end_ms, limit=limit,
+                mode=mode, plan=refresh_plan,
+            )
         if mode == "local_only":
             if hybrid_funding:
                 result = await self._build_hybrid_funding_history(
@@ -555,7 +574,7 @@ class MarketDataService:
                 excluded_ranges=refresh_plan.excluded_ranges,
             )
         if hybrid_funding:
-            return await self._hybrid_funding_history_page(
+            page = await self._hybrid_funding_history_page(
                 event_key,
                 period=period or "",
                 start_ms=start_ms,
@@ -563,6 +582,7 @@ class MarketDataService:
                 limit=limit,
                 refresh_plan=refresh_plan,
             )
+            return replace(page, query_mode=mode) if mode is not None else page
         fetch_start_ms = refresh_plan.start_ms
         fetch_end_ms = refresh_plan.end_ms
         if self._metrics_repository is None:
@@ -656,8 +676,156 @@ class MarketDataService:
             excluded_ranges=refresh_plan.excluded_ranges,
         )
 
+    async def _observed_metric_history_page(
+        self, key: MarketStreamKey, descriptor: StreamDescriptor, *,
+        start_ms: int | None, end_ms: int | None, limit: int,
+        mode: str | None, plan: _HistoryRefreshPlan,
+    ) -> MarketHistoryPage:
+        # The unified method returns observations. An empty or short result
+        # supplies neither a proof of absence nor a provider pagination cursor.
+        read_end = end_ms
+        if plan.event_cutoff_ms is not None:
+            read_end = min(end_ms, plan.event_cutoff_ms) if end_ms is not None else plan.event_cutoff_ms
+
+        async def read_local() -> list[MarketStateEvent]:
+            return await self._read_persisted_history(
+                key, period=descriptor.interval, limit=limit + 1, start_ms=start_ms, end_ms=read_end,
+            )
+
+        events = await read_local()
+        fallback = False
+        if mode != "local_only" and plan.should_fetch:
+            try:
+                raw = await self._fetch_market(
+                    descriptor, limit=min(limit, plan.max_page_size or limit),
+                    start_ms=plan.start_ms, end_ms=plan.end_ms, history=True,
+                )
+            except ValueError:
+                raise
+            except Exception:
+                if not events:
+                    raise
+                logger.warning("Metric history fetch failed; serving local %s observations",
+                               key.topic, exc_info=True)
+                fallback = True
+            else:
+                projected = [
+                    projected for event in raw
+                    if (plan.start_ms is None or event.event_time_ms >= plan.start_ms)
+                    and (plan.end_ms is None or event.event_time_ms <= plan.end_ms)
+                    and (projected := self._project(event, key)) is not None
+                ]
+                if self._metrics_repository is None:
+                    events = self._apply_history_event_cutoff(projected, plan)
+                else:
+                    await self._persist_final_history(projected, period=descriptor.interval)
+                    events = await read_local()
+
+        missing = (
+            missing_ranges(start_ms, end_ms, list(plan.excluded_ranges))
+            if start_ms is not None and end_ms is not None else []
+        )
+        complete = start_ms is not None and end_ms is not None and not missing
+        # A cursor proves only another stored observation, never source coverage.
+        more = len(events) > limit
+        next_start = next_end = None
+        if more and key.channel == MarketChannel.FUNDING_RATE:
+            events = events[:limit]
+            next_start = events[-1].event_time_ms + 1
+        elif more:
+            events = events[-limit:]
+            next_end = events[0].event_time_ms - 1
+        return MarketHistoryPage(
+            events=events, fallback=fallback, complete=complete, retryable=fallback,
+            terminal_reason=plan.terminal_reason if complete else None,
+            earliest_available_ms=plan.earliest_available_ms,
+            availability_revision=plan.availability_revision,
+            excluded_ranges=plan.excluded_ranges, covered_ranges=(),
+            missing_ranges=tuple(missing), has_more=more,
+            next_start_ms=next_start, next_end_ms=next_end,
+            query_mode=mode, coverage_basis="observations_only",
+        )
+
+    async def _sparse_funding_history_page(
+        self, key: MarketStreamKey, *, start_ms: int, end_ms: int, limit: int,
+        mode: str, plan: _HistoryRefreshPlan,
+    ) -> MarketHistoryPage:
+        repository = self._metrics_repository
+        assert repository is not None
+        read_end = min(end_ms, plan.event_cutoff_ms) if plan.event_cutoff_ms is not None else end_ms
+        fetch_start = max(start_ms, plan.start_ms if plan.start_ms is not None else start_ms)
+        fetch_end = min(read_end, plan.end_ms if plan.end_ms is not None else read_end)
+        fetchable = plan.should_fetch and fetch_start <= fetch_end
+        async def read():
+            return await run_storage(
+                repository.read_funding_with_settlement_coverage,
+                exchange=key.exchange, market_type=key.market_type, symbol=key.symbol,
+                start_ms=start_ms, end_ms=read_end, limit=limit + 1, coverage_end_ms=read_end,
+                policy_revision=_FUNDING_SETTLEMENT_POLICY_REVISION,
+                now_ms=self._funding_refresh_wall_ms(), use_cycle_range=False,
+            )
+
+        rows, proof = await read()
+        # A verified oldest-first page can end before the requested window.
+        # Its continuation owns the suffix and can acquire it independently.
+        acquisition_end = fetch_end
+        if mode == "fill_missing" and len(rows) > limit:
+            acquisition_end = min(fetch_end, rows[limit - 1]["funding_time_ms"])
+        failed = False
+        should_refresh = mode == "refresh" or (
+            mode == "fill_missing" and missing_ranges(fetch_start, acquisition_end, proof)
+        )
+        if fetchable and fetch_start <= acquisition_end and should_refresh:
+            try:
+                acquired, _ = await self._fetch_funding_settlement_pages(
+                    key, start_ms=fetch_start, end_ms=acquisition_end, refresh=mode == "refresh",
+                )
+                failed = mode == "refresh" and not acquired
+            except Exception:
+                logger.warning("Sparse funding settlement acquisition failed for %s", key.topic, exc_info=True)
+                failed = True
+            rows, proof = await read()
+
+        more = len(rows) > limit
+        rows = rows[:limit]
+        page_end = rows[-1]["funding_time_ms"] if more else end_ms
+        relevant_proof = [item for item in proof if item["start_ms"] <= page_end]
+        covered = merge_ranges([
+            {"start_ms": item["start_ms"], "end_ms": min(page_end, item["end_ms"])}
+            for item in relevant_proof
+        ])
+        excluded = [
+            {**item, "end_ms": min(page_end, item["end_ms"])}
+            for item in plan.excluded_ranges if item["start_ms"] <= page_end
+        ]
+        unavailable = (
+            [(start_ms, fetch_start - 1), (fetch_end + 1, page_end)] if fetchable
+            else [(start_ms, page_end)]
+        )
+        for left, right in unavailable:
+            for gap in missing_ranges(left, min(right, page_end), [*covered, *excluded]):
+                excluded.append({
+                    **gap, "disposition": "unavailable",
+                    "reason": plan.terminal_reason or "outside_provider_window",
+                })
+        missing = missing_ranges(start_ms, page_end, [*covered, *excluded])
+        events = self._funding_history_events(key, rows, now_ms=self._funding_refresh_wall_ms())
+        return MarketHistoryPage(
+            events=events, fallback=failed and bool(events),
+            complete=not missing and not more and not failed,
+            retryable=(failed or bool(missing)) and mode != "local_only",
+            terminal_reason=plan.terminal_reason, earliest_available_ms=plan.earliest_available_ms,
+            availability_revision=plan.availability_revision, excluded_ranges=tuple(excluded),
+            covered_ranges=tuple(covered), missing_ranges=tuple(missing), has_more=more,
+            next_start_ms=page_end + 1 if more and not missing and not failed else None,
+            query_mode=mode, coverage_basis=_FUNDING_SETTLEMENT_POLICY_REVISION,
+            revalidate_after_ms=min(
+                (item["expires_at_ms"] for item in relevant_proof if "expires_at_ms" in item), default=None,
+            ),
+        )
+
     async def _shared_oi_history(
-        self, key, descriptor, *, period, step_ms, start_ms, end_ms, limit, mode, plan,
+        self, key, descriptor, *, period, step_ms, start_ms, end_ms, limit, mode, plan, revision,
     ) -> MarketHistoryPage:
         identity = (key.exchange, key.market_type, key.symbol, period)
         request_id = (identity, start_ms, end_ms, limit, mode, plan.availability_revision)
@@ -669,7 +837,7 @@ class MarketDataService:
             self._ensure_open()
             task = asyncio.create_task(self._oi_history_page(
                 key, descriptor, identity=identity, period=period, step_ms=step_ms,
-                start_ms=start_ms, end_ms=end_ms, limit=limit, mode=mode, plan=plan,
+                start_ms=start_ms, end_ms=end_ms, limit=limit, mode=mode, plan=plan, revision=revision,
             ), name="market-oi-history")
             self._history_tasks[request_id] = task
             self._history_jobs.add(task)
@@ -698,10 +866,10 @@ class MarketDataService:
 
     async def _oi_history_page(
         self, key, descriptor, *, identity, period, step_ms,
-        start_ms, end_ms, limit, mode, plan,
+        start_ms, end_ms, limit, mode, plan, revision,
     ) -> MarketHistoryPage:
-        # Timestamps may be irregular and no-trade periods may be absent. Only
-        # a qualified successful bounded response proves acquisition coverage.
+        # Qualified OI sources are period-sampled. Off-grid observations can be
+        # retained, but only committed on-grid samples prove expected coverage.
         async with self._history_identity_locks.hold(identity):
             self._ensure_open()
             repository = self._metrics_repository
@@ -709,7 +877,8 @@ class MarketDataService:
             now_ms = int(time.time() * 1000)
             page_limit = min(500, plan.max_page_size or 500)
             window_start = max(start_ms, end_ms - 86_400_000 + 1)
-            revision = "binance-oi-range-v1:" + (plan.availability_revision or "static")
+            # The fetch boundary is a separate contract. A change in its
+            # availability revision cannot unprove an acquired local sample.
             common = dict(exchange=key.exchange, market_type=key.market_type,
                           symbol=key.symbol, period=period)
 
@@ -733,10 +902,16 @@ class MarketDataService:
                                  "disposition": "not_expected" if reason == "future" else "unavailable",
                                  "reason": reason})
             fetchable = plan.should_fetch and fetch_start <= fetch_end
-            pending = ([{"start_ms": fetch_start, "end_ms": fetch_end}] if mode == "refresh"
-                       else missing_ranges(fetch_start, fetch_end, covered)) if fetchable else []
+            pending = []
+            if fetchable:
+                if mode == "refresh":
+                    pending = [{"start_ms": fetch_start, "end_ms": fetch_end}]
+                else:
+                    empty_prefixes = unsampled_prefixes(fetch_start, fetch_end, covered, step_ms)
+                    pending = missing_ranges(fetch_start, fetch_end, [*covered, *empty_prefixes])
             failed = False
             if mode != "local_only":
+                refreshed = []
                 calls = 0
                 while pending and calls < 16:
                     run = pending.pop(0)
@@ -767,31 +942,41 @@ class MarketDataService:
                                               open_interest=event.data["open_interest"],
                                               open_interest_value=event.data.get("open_interest_value"),
                                               is_final=True) for event in projected]
-                        # Stable history and the mutable tail get independent
-                        # receipts; a new tail does not invalidate old history.
-                        stable_end = now_ms - 2 * step_ms
-                        segments = [(run["start_ms"], min(run["end_ms"], stable_end), None),
-                                    (max(run["start_ms"], stable_end + 1), run["end_ms"], now_ms + 60_000)]
-                        for left, right, expires in segments:
-                            if left > right:
-                                continue
-                            await run_storage(
-                                repository.record_open_interest_query, **common,
-                                start_ms=left, end_ms=right, policy_revision=revision,
-                                expected_rows=[row for row in expected_rows if left <= row["event_time_ms"] <= right],
-                                observed_at_ms=now_ms, expires_at_ms=expires,
-                            )
+                        # Split on a sample boundary so a mutable cell's
+                        # expiration cannot discard established history.
+                        mutable_start = (now_ms // step_ms - 1) * step_ms
+                        for proof in verified_sample_ranges(stamps, run["end_ms"], step_ms):
+                            start, end = proof["start_ms"], proof["end_ms"]
+                            segments = [(start, min(end, mutable_start - 1), None),
+                                        (max(start, mutable_start), end, now_ms + 60_000)]
+                            for left, right, expires in segments:
+                                if left > right:
+                                    continue
+                                recorded = await run_storage(
+                                    repository.record_open_interest_query, **common,
+                                    start_ms=left, end_ms=right, policy_revision=revision,
+                                    expected_rows=[row for row in expected_rows if left <= row["event_time_ms"] <= right],
+                                    observed_at_ms=now_ms, expires_at_ms=expires,
+                                )
+                                if recorded and mode == "refresh":
+                                    refreshed.append({"start_ms": left, "end_ms": right})
                     except ValueError:
                         raise
                     except Exception:
                         logger.warning("OI history range fetch failed", exc_info=True)
                         failed = True
                         break
+                failed = failed or bool(pending)
+                if mode == "refresh" and fetchable:
+                    refresh_prefixes = unsampled_prefixes(fetch_start, fetch_end, refreshed, step_ms)
+                    failed = failed or bool(missing_ranges(fetch_start, fetch_end, [*refreshed, *refresh_prefixes]))
                 if calls:
                     rows, covered, more_rows, revalidate_after_ms = await read()
             response_start = rows[0]["event_time_ms"] if more_rows else window_start
             covered = merge_ranges([{ "start_ms": max(response_start, r["start_ms"]), "end_ms": r["end_ms"] }
                                     for r in covered if r["end_ms"] >= response_start])
+            empty_prefixes = unsampled_prefixes(response_start, end_ms, [*covered, *excluded], step_ms)
+            covered = merge_ranges([*covered, *empty_prefixes])
             unresolved = missing_ranges(response_start, end_ms, [*covered, *excluded])
             events = [MarketStateEvent(
                 key=key, event_time_ms=row["event_time_ms"], received_at_ms=row["received_at_ms"],
@@ -811,7 +996,7 @@ class MarketDataService:
                 terminal_reason=plan.terminal_reason,
                 earliest_available_ms=plan.earliest_available_ms,
                 availability_revision=plan.availability_revision, query_mode=mode,
-                coverage_basis="native_binance_oi_bounded_query_v1",
+                coverage_basis=_OI_COVERAGE_BASES[revision],
                 revalidate_after_ms=revalidate_after_ms,
             )
 
@@ -1179,48 +1364,7 @@ class MarketDataService:
                 oldest_first=True,
                 **common,
             )
-            events: list[MarketStateEvent] = []
-            now_ms = int(time.time() * 1000)
-            for row in rows:
-                is_final = bool(row["is_final"])
-                cycle_ms = int(row["funding_cycle_ms"])
-                raw_time_ms = int(row["funding_time_ms"])
-                data: dict[str, Any] = {
-                    "funding_rate": row["funding_rate"],
-                    "funding_cycle_ms": cycle_ms,
-                    "raw_funding_time_ms": raw_time_ms,
-                    "is_final": is_final,
-                    "sample_kind": "settlement" if is_final else "preview",
-                    "provenance": (
-                        "exchange_settlement" if is_final else "exchange_realtime"
-                    ),
-                }
-                if is_final:
-                    data["funding_time_ms"] = raw_time_ms
-                    data["quality"] = "final"
-                else:
-                    stale_after_ms = int(row["received_at_ms"]) + _REALTIME_FUNDING_STALE_MS
-                    stale = now_ms > stale_after_ms or now_ms >= cycle_ms
-                    data.update({
-                        "next_funding_time_ms": cycle_ms,
-                        "observed_at_ms": int(row["received_at_ms"]),
-                        "valid_until_ms": cycle_ms,
-                        "stale_after_ms": stale_after_ms,
-                        "carried": False,
-                        "stale": stale,
-                        "quality": "stale" if stale else "live",
-                    })
-                events.append(
-                    MarketStateEvent(
-                        key=key,
-                        event_time_ms=raw_time_ms,
-                        received_at_ms=row["received_at_ms"],
-                        source=row["source"],
-                        data=data,
-                        sequence=raw_time_ms,
-                    ),
-                )
-            return events
+            return self._funding_history_events(key, rows, now_ms=int(time.time() * 1000))
 
         if key.channel == MarketChannel.OPEN_INTEREST:
             if not period:
@@ -1252,6 +1396,52 @@ class MarketDataService:
                 )
             return events
         return []
+
+    @staticmethod
+    def _funding_history_events(
+        key: MarketStreamKey, rows: list[dict[str, Any]], *, now_ms: int,
+    ) -> list[MarketStateEvent]:
+        events: list[MarketStateEvent] = []
+        for row in rows:
+            is_final = bool(row["is_final"])
+            cycle_ms = int(row["funding_cycle_ms"])
+            raw_time_ms = int(row["funding_time_ms"])
+            data: dict[str, Any] = {
+                "funding_rate": row["funding_rate"],
+                "funding_cycle_ms": cycle_ms,
+                "raw_funding_time_ms": raw_time_ms,
+                "is_final": is_final,
+                "sample_kind": "settlement" if is_final else "preview",
+                "provenance": (
+                    "exchange_settlement" if is_final else "exchange_realtime"
+                ),
+            }
+            if is_final:
+                data["funding_time_ms"] = raw_time_ms
+                data["quality"] = "final"
+            else:
+                stale_after_ms = int(row["received_at_ms"]) + _REALTIME_FUNDING_STALE_MS
+                stale = now_ms > stale_after_ms or now_ms >= cycle_ms
+                data.update({
+                    "next_funding_time_ms": cycle_ms,
+                    "observed_at_ms": int(row["received_at_ms"]),
+                    "valid_until_ms": cycle_ms,
+                    "stale_after_ms": stale_after_ms,
+                    "carried": False,
+                    "stale": stale,
+                    "quality": "stale" if stale else "live",
+                })
+            events.append(
+                MarketStateEvent(
+                    key=key,
+                    event_time_ms=raw_time_ms,
+                    received_at_ms=row["received_at_ms"],
+                    source=row["source"],
+                    data=data,
+                    sequence=raw_time_ms,
+                ),
+            )
+        return events
 
     async def _persist_final_history(
         self,
@@ -1412,17 +1602,32 @@ class MarketDataService:
                 + 100,
             ),
         )
-        funding_rows = await run_storage(
-            repository.query_funding,
-            exchange=key.exchange,
-            market_type=key.market_type,
-            symbol=key.symbol,
-            start_ms=funding_query_start_ms,
-            end_ms=funding_query_end_ms,
-            limit=funding_query_limit,
-            oldest_first=True,
-            use_cycle_range=True,
-        )
+        funding_query = {
+            "exchange": key.exchange,
+            "market_type": key.market_type,
+            "symbol": key.symbol,
+            "start_ms": funding_query_start_ms,
+            "end_ms": funding_query_end_ms,
+            "limit": funding_query_limit,
+        }
+        if (
+            fetch_missing and not settlement_refresh_failed
+            and settlement_covered_through_ms >= funding_query_start_ms
+        ):
+            funding_rows, coverage = await run_storage(
+                repository.read_funding_with_settlement_coverage,
+                **funding_query,
+                coverage_end_ms=settlement_covered_through_ms,
+                policy_revision=_FUNDING_SETTLEMENT_POLICY_REVISION,
+                now_ms=self._funding_refresh_wall_ms(),
+            )
+            if missing_ranges(funding_query_start_ms, settlement_covered_through_ms, coverage):
+                settlement_refresh_failed = True
+                settlement_refresh_complete = False
+        else:
+            funding_rows = await run_storage(
+                repository.query_funding, **funding_query, oldest_first=True, use_cycle_range=True,
+            )
         final_rows = sorted(
             (row for row in funding_rows if bool(row["is_final"])),
             key=lambda row: int(row["funding_cycle_ms"]),
@@ -1469,7 +1674,6 @@ class MarketDataService:
 
         needs_estimates = len(settlement_by_bucket) < len(bucket_starts)
         premium_rows: list[dict[str, Any]] = []
-        missing_ranges: list[tuple[int, int]] = []
         premium_continuous_through_ms: int | None = None
         if needs_estimates:
             if premium_capacity_truncated:
@@ -1483,7 +1687,7 @@ class MarketDataService:
                 })
             (
                 premium_rows,
-                missing_ranges,
+                premium_missing_ranges,
                 premium_fetch_failed,
                 premium_budget_exhausted,
             ) = await self._ensure_premium_index_history(
@@ -1494,7 +1698,7 @@ class MarketDataService:
             )
             relevant_missing_ranges = [
                 (max(missing_start, bucket_starts[0]), min(missing_end, support_end_ms))
-                for missing_start, missing_end in missing_ranges
+                for missing_start, missing_end in premium_missing_ranges
                 if missing_end >= bucket_starts[0] and missing_start <= support_end_ms
             ]
             if relevant_missing_ranges:
@@ -1871,252 +2075,188 @@ class MarketDataService:
         start_ms: int,
         end_ms: int,
         max_pages: int = _MAX_UPSTREAM_HISTORY_PAGES_PER_REQUEST,
+        refresh: bool = False,
     ) -> tuple[bool, int]:
         if self._metrics_repository is None or end_ms < start_ms:
             return True, end_ms
+        self._ensure_open()
         identity = (key.exchange, key.market_type, key.symbol)
-        page_limit = max(1, int(max_pages))
-        now_monotonic = self._funding_refresh_monotonic()
-        async with self._funding_refresh_lock:
-            for completed_key, completed_task in list(
-                self._funding_refresh_tasks.items(),
-            ):
-                if completed_task.done():
-                    self._funding_refresh_tasks.pop(completed_key, None)
-            covered_through_ms = self._funding_coverage_prefix_locked(
-                identity,
-                start_ms=start_ms,
-                end_ms=end_ms,
-                now_monotonic=now_monotonic,
+        page_limit = min(_MAX_UPSTREAM_HISTORY_PAGES_PER_REQUEST, max(1, int(max_pages)))
+        joined = next(
+            ((candidate_key, candidate)
+             for candidate_key, candidate in self._funding_refresh_tasks.items()
+             if not candidate.done() and candidate_key[0] == identity
+             and candidate_key[1] <= start_ms and candidate_key[2] >= end_ms
+             and candidate_key[3:] == (page_limit, refresh)),
+            None,
+        )
+        if joined is None:
+            if len(self._funding_refresh_jobs) >= 32:
+                return False, start_ms - 1
+            task_key = (identity, start_ms, end_ms, page_limit, refresh)
+            task = asyncio.create_task(
+                self._run_funding_settlement_acquisition(
+                    key, identity, start_ms, end_ms, max_pages=page_limit, refresh=refresh,
+                ), name=f"funding-settlement-refresh:{key.topic}",
             )
-            if covered_through_ms >= end_ms:
-                return True, end_ms
-
-            refresh_start_ms = max(start_ms, covered_through_ms + 1)
-            task_key: tuple[tuple[str, str, str], int, int, int] | None = None
-            task: asyncio.Task[tuple[bool, int]] | None = None
-            for candidate_key, candidate_task in self._funding_refresh_tasks.items():
-                (
-                    candidate_identity,
-                    candidate_start_ms,
-                    candidate_end_ms,
-                    _candidate_page_limit,
-                ) = candidate_key
-                if (
-                    candidate_identity == identity
-                    and candidate_start_ms <= refresh_start_ms
-                    and candidate_end_ms >= end_ms
-                ):
-                    task_key = candidate_key
-                    task = candidate_task
-                    break
-
-            if task is None:
-                task_key = (identity, refresh_start_ms, end_ms, page_limit)
-                task = asyncio.create_task(
-                    self._run_funding_settlement_refresh(
-                        key,
-                        identity=identity,
-                        start_ms=refresh_start_ms,
-                        end_ms=end_ms,
-                        max_pages=page_limit,
-                    ),
-                    name=f"funding-settlement-refresh:{key.topic}",
-                )
-                self._funding_refresh_tasks[task_key] = task
-                task.add_done_callback(
-                    lambda completed, cache_key=task_key: (
-                        self._discard_funding_refresh_task(cache_key, completed)
-                    ),
-                )
-
-        await asyncio.shield(task)
-
-        async with self._funding_refresh_lock:
-            covered_through_ms = self._funding_coverage_prefix_locked(
-                identity,
-                start_ms=start_ms,
-                end_ms=end_ms,
-                now_monotonic=self._funding_refresh_monotonic(),
+            self._funding_refresh_tasks[task_key] = task
+            self._funding_refresh_jobs.add(task)
+            task.add_done_callback(
+                lambda completed, cache_key=task_key: self._discard_funding_refresh_task(cache_key, completed),
             )
-        return covered_through_ms >= end_ms, min(end_ms, covered_through_ms)
+        else:
+            task_key, task = joined
+        self._funding_refresh_waiters[task] = self._funding_refresh_waiters.get(task, 0) + 1
+        try:
+            refreshed_through = await asyncio.shield(task)
+        finally:
+            remaining = self._funding_refresh_waiters[task] - 1
+            if remaining:
+                self._funding_refresh_waiters[task] = remaining
+            else:
+                self._funding_refresh_waiters.pop(task)
+                if not task.done():
+                    task.cancel()
+                    # Unlink before draining, so a new request never joins a
+                    # cancelled owner. The identity lock remains held until
+                    # any physical storage write in that owner drains.
+                    if self._funding_refresh_tasks.get(task_key) is task:
+                        self._funding_refresh_tasks.pop(task_key)
+                    async def drain():
+                        await asyncio.gather(task, return_exceptions=True)
+                    if await drain_cancellation_safe_cleanup(drain(), name="funding-settlement-release"):
+                        raise asyncio.CancelledError
+        remaining_gaps = await self._funding_settlement_gaps(identity, start_ms, end_ms)
+        through = remaining_gaps[0]["start_ms"] - 1 if remaining_gaps else end_ms
+        if refresh:
+            through = min(through, refreshed_through if refreshed_through is not None else start_ms - 1)
+        return through >= end_ms, max(start_ms - 1, through)
+
+    async def _run_funding_settlement_acquisition(
+        self, key: MarketStreamKey, identity: tuple[str, str, str],
+        start_ms: int, end_ms: int, *, max_pages: int, refresh: bool,
+    ) -> int | None:
+        async with self._history_identity_locks.hold(identity):
+            self._ensure_open()
+            # Partially overlapping requests wait for the first owner, then
+            # plan only the still-unverified part against committed receipts.
+            gaps = ([{"start_ms": start_ms, "end_ms": end_ms}] if refresh
+                    else await self._funding_settlement_gaps(identity, start_ms, end_ms))
+            return await self._fetch_funding_settlement_gaps(key, identity, gaps, max_pages=max_pages)
+
+    async def _funding_settlement_gaps(
+        self, identity: tuple[str, str, str], start_ms: int, end_ms: int,
+    ) -> list[dict[str, int]]:
+        coverage = await run_storage(
+            self._metrics_repository.funding_settlement_coverage,
+            identity,
+            start_ms=start_ms,
+            end_ms=end_ms,
+            policy_revision=_FUNDING_SETTLEMENT_POLICY_REVISION,
+            now_ms=self._funding_refresh_wall_ms(),
+        )
+        return missing_ranges(start_ms, end_ms, coverage)
 
     def _discard_funding_refresh_task(
         self,
-        task_key: tuple[tuple[str, str, str], int, int, int],
-        task: asyncio.Task[tuple[bool, int]],
+        task_key: tuple[tuple[str, str, str], int, int, int, bool],
+        task: asyncio.Task[int | None],
     ) -> None:
+        self._funding_refresh_jobs.discard(task)
         if not task.cancelled():
             task.exception()
         if self._funding_refresh_tasks.get(task_key) is task:
             self._funding_refresh_tasks.pop(task_key, None)
 
-    async def _run_funding_settlement_refresh(
-        self,
-        key: MarketStreamKey,
-        *,
-        identity: tuple[str, str, str],
-        start_ms: int,
-        end_ms: int,
-        max_pages: int,
-    ) -> tuple[bool, int]:
-        complete, covered_through_ms = (
-            await self._fetch_funding_settlement_pages_uncached(
-                key,
-                start_ms=start_ms,
-                end_ms=end_ms,
-                max_pages=max_pages,
-            )
-        )
-        successful_end_ms = end_ms if complete else covered_through_ms
-        if successful_end_ms >= start_ms:
-            async with self._funding_refresh_lock:
-                self._record_funding_coverage_locked(
-                    identity,
-                    start_ms=start_ms,
-                    end_ms=successful_end_ms,
-                    now_ms=self._funding_refresh_wall_ms(),
-                    now_monotonic=self._funding_refresh_monotonic(),
-                )
-        return complete, covered_through_ms
-
-    async def _fetch_funding_settlement_pages_uncached(
-        self,
-        key: MarketStreamKey,
-        *,
-        start_ms: int,
-        end_ms: int,
-        max_pages: int,
-    ) -> tuple[bool, int]:
+    async def _fetch_funding_settlement_gaps(
+        self, key: MarketStreamKey, identity: tuple[str, str, str],
+        gaps: list[dict[str, int]], *, max_pages: int,
+    ) -> int | None:
+        last_committed_end = None
         descriptor = StreamDescriptor(
             symbol=key.symbol,
             stream_type=StreamType.FUNDING_RATE,
             exchange=key.exchange,
             market_type=key.market_type,
         )
-        cursor_ms = start_ms
-        covered_through_ms = start_ms - 1
-        pages = 0
-        while cursor_ms <= end_ms and pages < max_pages:
-            raw_events = await self._fetch_market(
-                descriptor,
-                limit=1000,
-                start_ms=cursor_ms,
-                end_ms=end_ms,
-                history=True,
-            )
-            pages += 1
-            projected_events = [
-                projected
-                for event in raw_events
-                if (projected := self._project(event, key)) is not None
-            ]
-            if not projected_events:
-                return True, end_ms
-            await self._persist_final_history(projected_events, period=None)
-            latest_time_ms = max(
-                int(event.data.get("funding_time_ms", event.event_time_ms))
-                for event in projected_events
-            )
-            if latest_time_ms < cursor_ms:
-                return False, covered_through_ms
-            covered_through_ms = latest_time_ms
-            cursor_ms = latest_time_ms + 1
-            if len(projected_events) < 1000:
-                return True, end_ms
-        return cursor_ms > end_ms, (
-            end_ms if cursor_ms > end_ms else covered_through_ms
+        for gap in gaps:
+            cursor_ms, end_ms = gap["start_ms"], gap["end_ms"]
+            previous_cycle_ms = -1
+            while cursor_ms <= end_ms:
+                if max_pages <= 0:
+                    return last_committed_end
+                raw_events = await self._fetch_market(
+                    descriptor,
+                    limit=1000,
+                    start_ms=cursor_ms,
+                    end_ms=end_ms,
+                    history=True,
+                )
+                max_pages -= 1
+                if len(raw_events) > 1000:
+                    raise RuntimeError("Binance funding settlement page exceeds its request limit")
+                projected_events = []
+                latest_time_ms = cursor_ms - 1
+                for event in raw_events:
+                    time_ms = event.data.get("funding_time_ms")
+                    if (
+                        event.event_type != StreamType.FUNDING_RATE
+                        or (event.exchange, event.market_type, event.symbol) != identity
+                        or type(time_ms) is not int
+                        or time_ms != event.event_time_ms
+                        or not latest_time_ms < time_ms <= end_ms
+                    ):
+                        raise RuntimeError("Invalid Binance funding settlement page identity, bounds or order")
+                    projected = self._project(event, key)
+                    if projected is None or projected.data["funding_cycle_ms"] <= previous_cycle_ms:
+                        raise RuntimeError("Unrepresentable Binance funding settlement page")
+                    projected_events.append(projected)
+                    latest_time_ms = time_ms
+                    previous_cycle_ms = projected.data["funding_cycle_ms"]
+                # An exhaustive short or empty response proves the bounded gap.
+                # A full page proves only its prefix through the last settlement.
+                covered_end = end_ms if len(raw_events) < 1000 else latest_time_ms
+                # The production writer can finish an accepted batch even if
+                # its caller is cancelled. Retain the identity owner through
+                # both the acknowledged rows and their verified receipt.
+                await finish_cleanup(self._commit_funding_settlement_page(
+                    identity, cursor_ms, covered_end, projected_events,
+                ))
+                last_committed_end = covered_end
+                cursor_ms = covered_end + 1
+        return last_committed_end
+
+    async def _commit_funding_settlement_page(
+        self, identity: tuple[str, str, str], start_ms: int, end_ms: int,
+        events: list[MarketStateEvent],
+    ) -> None:
+        await self._persist_final_history(events, period=None)
+        now_ms = self._funding_refresh_wall_ms()
+        cutoff = now_ms - _DEFAULT_FUNDING_INTERVAL_MS
+        rows = [self._funding_storage_row(event, is_final=True) for event in events]
+        spans = (
+            (start_ms, min(cutoff, end_ms), None),
+            (max(start_ms, cutoff + 1), end_ms, now_ms + _FUNDING_SETTLEMENT_EDGE_TTL_MS),
         )
+        for first, last, expires_at_ms in spans:
+            if last < first:
+                continue
+            recorded = await run_storage(
+                self._metrics_repository.record_funding_settlement_query,
+                identity=identity,
+                start_ms=first,
+                end_ms=last,
+                policy_revision=_FUNDING_SETTLEMENT_POLICY_REVISION,
+                expected_rows=[row for row in rows if first <= row["funding_time_ms"] <= last],
+                observed_at_ms=now_ms,
+                expires_at_ms=expires_at_ms,
+            )
+            if not recorded:
+                raise RuntimeError("Committed funding settlements differ from the acquired page")
 
     @staticmethod
     def _funding_refresh_wall_ms() -> int:
         return int(time.time() * 1000)
-
-    @staticmethod
-    def _funding_refresh_monotonic() -> float:
-        return time.monotonic()
-
-    def _funding_coverage_prefix_locked(
-        self,
-        identity: tuple[str, str, str],
-        *,
-        start_ms: int,
-        end_ms: int,
-        now_monotonic: float,
-    ) -> int:
-        active = [
-            coverage
-            for coverage in self._funding_refresh_coverage.get(identity, ())
-            if coverage.expires_at is None or coverage.expires_at > now_monotonic
-        ]
-        if active:
-            self._funding_refresh_coverage[identity] = active
-        else:
-            self._funding_refresh_coverage.pop(identity, None)
-            return start_ms - 1
-
-        covered_through_ms = start_ms - 1
-        for coverage in sorted(active, key=lambda item: (item.start_ms, item.end_ms)):
-            if coverage.end_ms < start_ms:
-                continue
-            if coverage.start_ms > covered_through_ms + 1:
-                break
-            covered_through_ms = max(covered_through_ms, coverage.end_ms)
-            if covered_through_ms >= end_ms:
-                return end_ms
-        return min(end_ms, covered_through_ms)
-
-    def _record_funding_coverage_locked(
-        self,
-        identity: tuple[str, str, str],
-        *,
-        start_ms: int,
-        end_ms: int,
-        now_ms: int,
-        now_monotonic: float,
-    ) -> None:
-        if end_ms < start_ms:
-            return
-        historical_cutoff_ms = now_ms - _DEFAULT_FUNDING_INTERVAL_MS
-        records = self._funding_refresh_coverage.setdefault(identity, [])
-        historical_end_ms = min(end_ms, historical_cutoff_ms)
-        if start_ms <= historical_end_ms:
-            records.append(_FundingSettlementCoverage(
-                start_ms=start_ms,
-                end_ms=historical_end_ms,
-            ))
-        edge_start_ms = max(start_ms, historical_cutoff_ms + 1)
-        if edge_start_ms <= end_ms:
-            records.append(_FundingSettlementCoverage(
-                start_ms=edge_start_ms,
-                end_ms=end_ms,
-                expires_at=(
-                    now_monotonic + _FUNDING_SETTLEMENT_EDGE_TTL_SECONDS
-                ),
-            ))
-        permanent = sorted(
-            (record for record in records if record.expires_at is None),
-            key=lambda record: (record.start_ms, record.end_ms),
-        )
-        merged_permanent: list[_FundingSettlementCoverage] = []
-        for record in permanent:
-            if (
-                merged_permanent
-                and record.start_ms <= merged_permanent[-1].end_ms + 1
-            ):
-                previous = merged_permanent[-1]
-                merged_permanent[-1] = _FundingSettlementCoverage(
-                    start_ms=previous.start_ms,
-                    end_ms=max(previous.end_ms, record.end_ms),
-                )
-            else:
-                merged_permanent.append(record)
-        records[:] = merged_permanent + [
-            record
-            for record in records
-            if record.expires_at is not None
-            and record.expires_at > now_monotonic
-        ]
 
     @staticmethod
     def _premium_index_storage_row(event: MarketEvent) -> dict[str, Any]:
@@ -2190,10 +2330,8 @@ class MarketDataService:
         if snapshot_tasks:
             await asyncio.gather(*snapshot_tasks, return_exceptions=True)
 
-        async with self._funding_refresh_lock:
-            funding_refresh_tasks = list(self._funding_refresh_tasks.values())
-            self._funding_refresh_tasks.clear()
-            self._funding_refresh_coverage.clear()
+        funding_refresh_tasks = list(self._funding_refresh_jobs)
+        self._funding_refresh_tasks.clear()
         for task in funding_refresh_tasks:
             if not task.done():
                 task.cancel()
@@ -2787,7 +2925,7 @@ class MarketDataService:
             raise RuntimeError("market data service is closed")
 
     @staticmethod
-    def _validate_key(key: MarketStreamKey, *, history: bool) -> None:
+    def _validate_key(key: MarketStreamKey, *, history: bool) -> ExchangeCapabilities:
         if key.params:
             raise ValueError("P1 realtime market streams do not accept params")
         if len(key.symbol) > 64:
@@ -2816,6 +2954,7 @@ class MarketDataService:
             raise ValueError(
                 f"{key.exchange}:{key.market_type}:{key.channel.value} does not support {mode}",
             )
+        return capabilities
 
 
 def _inferred_funding_interval_ms(

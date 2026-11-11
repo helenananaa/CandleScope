@@ -1,4 +1,5 @@
 import { continuousJapanese } from "./continuousMessages.js";
+import { tradeHistoryJapanese } from "./tradeHistoryMessages.js";
 import { replayNoteJapanese } from "./replayNoteMessages.js";
 import { historyStudyJapanese } from "./historyStudyMessages.js";
 import { workbenchEnglish } from "./workbenchEnglish.js";
@@ -10,6 +11,7 @@ import { tradingAccountsJa } from "./tradingAccountsMessages.js";
 
 export const ja = {
   ...continuousJapanese,
+  ...tradeHistoryJapanese,
   ...replayNoteJapanese,
   ...historyStudyJapanese,
   "chartTime.title": "Go to date",

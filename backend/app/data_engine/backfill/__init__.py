@@ -78,7 +78,8 @@ from .models import (
 )
 from .gap_detector import GapDetector
 from .planner import BackfillPlanner
-from .fetcher import HistoricalFetcher
+from .fetcher import FetchBatchDeferred, HistoricalFetcher
+from .native_progress import NativeBackfillDeferred, NativeBackfillProgress
 from .reconciler import Reconciler
 from .publisher import RepairPublisher
 
@@ -244,6 +245,8 @@ class BackfillEngine:
         metadata: dict[str, Any] | None = None,
         exchange: str = "binance",
         market_type: str = "spot",
+        *,
+        native_progress: NativeBackfillProgress | None = None,
     ) -> RepairReport:
         """Execute a complete backfill run.
 
@@ -277,6 +280,11 @@ class BackfillEngine:
         status = BackfillStatus.PENDING
 
         try:
+            if native_progress is not None:
+                await native_progress.verify(
+                    self._storage, exchange=exchange, market_type=market_type, symbol=symbol,
+                    start_ms=range_start_ms, end_ms=range_end_ms, metadata=metadata,
+                )
             # ── Phase 1: Detect ──
             status = BackfillStatus.DETECTING
             if repair_requires_trusted_finality(metadata):
@@ -309,13 +317,16 @@ class BackfillEngine:
             if not gaps:
                 logger.info("No gaps detected for %s — nothing to do", symbol)
                 status = BackfillStatus.COMPLETED
+                if native_progress is not None:
+                    reconcile_result = ReconcileResult()
+                    native_progress.include_writes(reconcile_result)
                 report = self.publisher.build_report(
                     symbol=symbol,
                     exchange=exchange,
                     status=status,
                     plan=None,
                     fetch_results=[],
-                    reconcile_result=None,
+                    reconcile_result=reconcile_result,
                     started_at_ms=started_at_ms,
                     metadata=metadata,
                 )
@@ -357,7 +368,20 @@ class BackfillEngine:
             status = BackfillStatus.FETCHING
             await prepare_native_history_views(self._storage, plan.tasks)
             await prepare_derived_targets(self._storage, plan)
-            fetch_results = await self.fetcher.fetch(plan.tasks)
+            if (exchange == "bybit" and not plan.decompositions
+                    and metadata.get("chunk_sequence") is not None
+                    and callable(getattr(self._storage, "query_time_range", None))):
+                native_progress = native_progress or NativeBackfillProgress()
+                pending = [task for task in plan.tasks if not native_progress.covers_task(task)]
+                try:
+                    fetch_results = await self.fetcher.fetch(pending, keep_completed=True)
+                except FetchBatchDeferred as exc:
+                    committed = await self.reconciler.reconcile(exc.completed, plan)
+                    await native_progress.remember(self._storage, exc.completed, committed)
+                    raise NativeBackfillDeferred(exc, native_progress, committed) from exc
+            else:
+                native_progress = None
+                fetch_results = await self.fetcher.fetch(plan.tasks)
 
             fetch_error_summaries: list[str] = []
             for result in fetch_results:
@@ -387,7 +411,7 @@ class BackfillEngine:
                 )
 
             # Check if all tasks failed
-            all_failed = all(
+            all_failed = bool(fetch_results) and all(
                 fr.status == BackfillStatus.FAILED for fr in fetch_results
             )
             if all_failed:
@@ -402,6 +426,8 @@ class BackfillEngine:
                 reconcile_result = await self.reconciler.reconcile(
                     fetch_results, plan,
                 )
+                if native_progress is not None:
+                    native_progress.include_writes(reconcile_result)
                 # Successful object transactions remain eligible even if a
                 # different task/derived calculation failed. The worker reads
                 # durable proofs; fetch metadata and whole-run status grant
@@ -436,8 +462,7 @@ class BackfillEngine:
                     status = BackfillStatus.COMPLETED
 
         except RateLimitDeferred:
-            # Quota deferral is scheduler control flow.  No reconcile/write or
-            # terminal report may be produced for work that has not run yet.
+            # Quota deferral never publishes a terminal report for the batch.
             raise
         except Exception as exc:
             status = BackfillStatus.FAILED

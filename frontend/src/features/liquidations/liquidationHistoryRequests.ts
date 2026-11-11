@@ -1,3 +1,5 @@
+import { ApiError } from "../../services/api.js";
+import { ApiPayloadError } from "../../services/apiPayloadParsers.js";
 import {
   clampHistoryRangeToNow,
   type MarketHistoryRange,
@@ -180,5 +182,42 @@ export class LiquidationHistoryRequestCoordinator {
       .filter((claim) => claim.side === side)
       .map((claim) => ({ ...claim.range }))
       .sort((left, right) => left.startMs - right.startMs || left.endMs - right.endMs);
+  }
+}
+export const LIQUIDATION_HISTORY_RETRY_DELAY_MS = 30_000;
+const MAX_HISTORY_RETRIES = 2;
+
+/** The local history route has a separate retry budget for each side. */
+export class LiquidationHistoryRetryBudget {
+  private failures = 0;
+  private nextAttemptAt = 0;
+
+  canRequest(now: number): boolean {
+    return now >= this.nextAttemptAt;
+  }
+
+  failed(error: unknown, now: number): boolean {
+    const status = error instanceof ApiError ? error.status : null;
+    const rejected = status !== null
+      && ((status >= 400 && status < 500 && status !== 408 && status !== 429) || status === 501);
+    if (rejected || error instanceof ApiPayloadError) {
+      this.nextAttemptAt = Number.POSITIVE_INFINITY;
+      return false;
+    }
+    if (!this.canRequest(now)) return false;
+    if (this.failures >= MAX_HISTORY_RETRIES) {
+      this.nextAttemptAt = Number.POSITIVE_INFINITY;
+      return false;
+    }
+    this.failures += 1;
+    this.nextAttemptAt = now + LIQUIDATION_HISTORY_RETRY_DELAY_MS;
+    return true;
+  }
+
+  succeeded(now: number): boolean {
+    if (!this.canRequest(now)) return false;
+    this.failures = 0;
+    this.nextAttemptAt = 0;
+    return true;
   }
 }

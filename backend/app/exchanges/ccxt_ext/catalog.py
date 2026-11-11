@@ -20,6 +20,7 @@ from app.data_engine.market_data.models import (
     MarketChannel,
     TransportMode,
 )
+from app.exchanges.okx_intervals import OKX_FUNDING_HISTORY_LIMIT, OKX_OI_HISTORY_LIMIT, OKX_OI_HISTORY_PERIODS
 from app.exchanges.models import (
     CRYPTO_24X7_CALENDAR_ID,
     ExchangeCapabilities,
@@ -32,6 +33,10 @@ from app.exchanges.models import (
 
 from .binance_usdm import SUPPORTED_CCXT_VERSION
 from app.exchanges.trade_candles import supports_trade_candles, trade_candle_profile
+
+
+BYBIT_METRIC_HISTORY_LIMIT = 200
+BYBIT_OI_HISTORY_PERIODS = ("5m", "15m", "30m", "1h", "4h", "1d")
 
 
 _PUBLIC_METHODS = (
@@ -434,11 +439,18 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
                 )
             )
 
+    metric_market_types = contract_market_types
+    if entry.exchange_id == "gate":
+        # The pinned OI and funding methods reject delivery contracts.
+        metric_market_types = tuple(
+            market_type for market_type in contract_market_types
+            if market_selection_parts(market_type)[0] == "swap"
+        )
     fetch_funding = entry.supports("fetchFundingRate")
     fetch_funding_history = entry.supports("fetchFundingRateHistory")
     watch_funding = entry.supports("watchFundingRate") and entry.pro
     funding_realtime = watch_funding or fetch_funding
-    if contract_market_types and (funding_realtime or fetch_funding_history):
+    if metric_market_types and (funding_realtime or fetch_funding_history):
         transports: list[TransportMode] = []
         if watch_funding:
             transports.append(TransportMode.PLUGIN_STREAM)
@@ -447,7 +459,7 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
         channels.append(
             MarketChannelCapability(
                 channel=MarketChannel.FUNDING_RATE,
-                market_types=contract_market_types,
+                market_types=metric_market_types,
                 realtime=funding_realtime,
                 history=fetch_funding_history,
                 realtime_transports=tuple(transports),
@@ -468,12 +480,13 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
                 history_policy=(
                     HistoryAvailabilityPolicy(
                         cadence=HistoryCadence.SCHEDULED,
-                        empty_page_semantics=(
-                            HistoryEmptyPageSemantics.AUTHORITATIVE_RANGE_EMPTY
-                        ),
+                        empty_page_semantics=HistoryEmptyPageSemantics.INCONCLUSIVE,
                         calendar_id=CRYPTO_24X7_CALENDAR_ID,
                         timezone="UTC",
-                        max_page_size=entry.history_limit,
+                        max_page_size={
+                            "okx": OKX_FUNDING_HISTORY_LIMIT,
+                            "bybit": BYBIT_METRIC_HISTORY_LIMIT,
+                        }.get(entry.exchange_id, entry.history_limit),
                     )
                     if fetch_funding_history
                     else None
@@ -483,13 +496,17 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
 
     fetch_open_interest = entry.supports("fetchOpenInterest")
     fetch_open_interest_history = entry.supports("fetchOpenInterestHistory")
-    if contract_market_types and (
+    oi_history_periods = {
+        "okx": OKX_OI_HISTORY_PERIODS,
+        "bybit": BYBIT_OI_HISTORY_PERIODS,
+    }.get(entry.exchange_id)
+    if metric_market_types and (
         fetch_open_interest or fetch_open_interest_history
     ):
         channels.append(
             MarketChannelCapability(
                 channel=MarketChannel.OPEN_INTEREST,
-                market_types=contract_market_types,
+                market_types=metric_market_types,
                 realtime=fetch_open_interest,
                 history=fetch_open_interest_history,
                 realtime_transports=(
@@ -504,18 +521,21 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
                 snapshot=True,
                 available_fields=("open_interest", "open_interest_value"),
                 connection_model="polling_only",
+                params=({"period": oi_history_periods}
+                        if fetch_open_interest_history and oi_history_periods else {}),
                 known_limitations=(
                     "Pinned CCXT exposes open interest through REST for this exchange",
                 ),
                 history_policy=(
                     HistoryAvailabilityPolicy(
                         cadence=HistoryCadence.REGULAR,
-                        empty_page_semantics=(
-                            HistoryEmptyPageSemantics.AUTHORITATIVE_RANGE_EMPTY
-                        ),
+                        empty_page_semantics=HistoryEmptyPageSemantics.INCONCLUSIVE,
                         calendar_id=CRYPTO_24X7_CALENDAR_ID,
                         timezone="UTC",
-                        max_page_size=entry.history_limit,
+                        max_page_size={
+                            "okx": OKX_OI_HISTORY_LIMIT,
+                            "bybit": BYBIT_METRIC_HISTORY_LIMIT,
+                        }.get(entry.exchange_id, entry.history_limit),
                     )
                     if fetch_open_interest_history
                     else None

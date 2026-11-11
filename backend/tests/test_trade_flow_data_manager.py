@@ -1,12 +1,39 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
+import subprocess
+import sys
 from types import SimpleNamespace
 
 import pytest
 
 from app.data_engine.data_manager import DataManager
 from app.data_engine.market_data.models import MarketChannel, MarketStreamKey
+from app.data_engine.market_data.public_trade_service import PublicTradeService
+from app.data_engine.market_data.trade_flow import TradeHistoryRead
+
+
+def test_trade_archive_importer_can_load_before_market_services() -> None:
+    subprocess.run(
+        [sys.executable, "-c", "from app.replay.trade_import import import_official_date_range"],
+        cwd=Path(__file__).resolve().parents[1], check=True,
+    )
+
+
+def test_production_trade_router_exposes_history_evidence_to_data_manager() -> None:
+    async def run():
+        manager = DataManager()
+        strict = _TradeFlowService()
+        router = PublicTradeService(strict, object())
+        manager.set_trade_flow_service(router)
+        result = await manager.read_trade_flow_history(_key(), limit=20)
+        assert result.verified_empty_opens == {60_000}
+        observed = MarketStreamKey.build("binance", "futures", "BTCUSDT", MarketChannel.TRADE)
+        with pytest.raises(ValueError, match="observational trade tape"):
+            await manager.read_trade_flow_history(observed, limit=20)
+
+    asyncio.run(run())
 
 
 class _TradeFlowService:
@@ -28,6 +55,10 @@ class _TradeFlowService:
     async def history(self, key, **kwargs):
         self.calls.append(("history", key, kwargs))
         return ["rollup"]
+
+    async def read_history(self, key, **kwargs):
+        self.calls.append(("read_history", key, kwargs))
+        return TradeHistoryRead([], frozenset({60_000}))
 
     def attach(self, keys, **kwargs):
         self.calls.append(("attach", keys, kwargs))
@@ -64,6 +95,7 @@ def test_data_manager_trade_flow_facade_preserves_sync_and_async_contracts() -> 
         ) is True
         assert manager.trade_flow_recent(key, limit=10) == ["raw"]
         assert await manager.trades.history(key, limit=20) == ["rollup"]
+        assert (await manager.read_trade_flow_history(key, limit=20)).verified_empty_opens == {60_000}
         assert manager.attach_trade_flow([key], recent_limit=5).subscription == (
             "subscription"
         )
@@ -80,6 +112,7 @@ def test_data_manager_trade_flow_facade_preserves_sync_and_async_contracts() -> 
             "ensure",
             "recent",
             "history",
+            "read_history",
             "attach",
             "coverage",
             "release",

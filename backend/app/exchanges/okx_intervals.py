@@ -11,6 +11,11 @@ OKX_UTC_INTERVALS = {
     "3d": "3Dutc", "1w": "1Wutc", "1M": "1Mutc", "3M": "3Mutc",
 }
 
+# The contract statistics endpoint exposes a different set from candles.
+OKX_OI_HISTORY_PERIODS = ("5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d")
+OKX_OI_HISTORY_LIMIT = 100
+OKX_FUNDING_HISTORY_LIMIT = 400
+
 
 def okx_utc_interval(interval: str) -> str:
     try:

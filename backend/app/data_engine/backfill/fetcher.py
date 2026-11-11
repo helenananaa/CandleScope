@@ -34,7 +34,7 @@ from dataclasses import replace
 from typing import Callable, Awaitable, Any
 
 from app.data_engine.market_data.kline_metrics import declared_enhanced_fields
-from app.data_engine.series_identity import identity_from_metadata
+from app.data_engine.series_identity import identity_from_metadata, resolve_kline_series_identity
 from app.exchanges import (
     HistoricalRequest,
     RateLimitDeferred,
@@ -76,6 +76,14 @@ ProgressCallback = Callable[
 ]  # task, fetched, total
 ErrorCallback = Callable[[BackfillTask, str], Awaitable[None]]  # task, error_msg
 RateLimiter = Callable[[], Awaitable[None]]  # async sleep / token-bucket
+
+
+class FetchBatchDeferred(RateLimitDeferred):
+    """Quota control flow with completed siblings available to the caller."""
+
+    def __init__(self, deferred: RateLimitDeferred, completed: list[FetchResult]) -> None:
+        super().__init__(deferred.admission)
+        self.completed = completed
 
 
 class HistoricalFetcher:
@@ -239,11 +247,12 @@ class HistoricalFetcher:
 
     # ── Public: Fetch ────────────────────────────────────────
 
-    async def fetch(self, tasks: list[BackfillTask]) -> list[FetchResult]:
+    async def fetch(self, tasks: list[BackfillTask], *, keep_completed: bool = False) -> list[FetchResult]:
         """Execute all fetch tasks, respecting concurrency limits.
 
         Args:
             tasks: Ordered list of ``BackfillTask`` from the Planner.
+            keep_completed: Attach successful siblings to a quota deferral.
 
         Returns:
             A list of ``FetchResult``, one per task, in the same order.
@@ -275,10 +284,13 @@ class HistoricalFetcher:
             # One scheduler chunk may contain several physical gap tasks.  A
             # parent retry must wait for the latest shared-bucket deadline so
             # it does not immediately re-enter and churn the queue again.
-            raise max(
-                deferred,
-                key=lambda exc: int(exc.retry_at_ms or 0),
-            )
+            latest = max(deferred, key=lambda exc: int(exc.retry_at_ms or 0))
+            if keep_completed:
+                completed = [item for item in raw_results if isinstance(item, FetchResult)
+                             and item.status == BackfillStatus.COMPLETED and not item.errors]
+                if completed:
+                    raise FetchBatchDeferred(latest, completed)
+            raise latest
 
         # Handle any unexpected exceptions returned by gather
         results: list[FetchResult] = []
@@ -369,6 +381,7 @@ class HistoricalFetcher:
             interval=task.interval,
             exchange=task.exchange,
             market_type=task.market_type,
+            series_identity=identity_from_metadata(task.exchange, task.metadata),
         )
 
         # Create a normalizer for parsing raw REST responses
@@ -410,6 +423,7 @@ class HistoricalFetcher:
             retry_count = 0
             success = False
             max_attempts = max_retries + 1
+            page_budget_deadline = None
 
             while retry_count < max_attempts:
                 try:
@@ -515,8 +529,18 @@ class HistoricalFetcher:
                     success = True
                     break
 
-                except RateLimitDeferred:
-                    raise
+                except RateLimitDeferred as exc:
+                    if task.exchange != "bybit" or not pages_fetched or exc.reason != "budget":
+                        raise
+                    # The next reverse page may follow a fast response before
+                    # the bucket refills. Preserve its cursor for short pacing
+                    # waits, while still yielding the worker for real cooldowns.
+                    now = time.monotonic()
+                    if page_budget_deadline is None:
+                        page_budget_deadline = now + 0.05
+                    if now + exc.retry_after_seconds > page_budget_deadline:
+                        raise
+                    await asyncio.sleep(exc.retry_after_seconds)
 
                 except TransportError as exc:
                     retry_count += 1
@@ -975,6 +999,10 @@ class HistoricalFetcher:
         # Skip unclosed bars
         if not data.get("is_closed", True):
             return None
+        task_identity = identity_from_metadata(task.exchange, task.metadata)
+        event_identity = identity_from_metadata(task.exchange, data)
+        if event_identity is not None and event_identity != resolve_kline_series_identity(task.exchange, task_identity):
+            return None
 
         try:
             enhanced_fields = declared_enhanced_fields(
@@ -1004,10 +1032,7 @@ class HistoricalFetcher:
                 source="trade_history_verified" if data.get("trade_coverage_verified") is True else "backfill",
                 source_ref=dict(data["source_ref"]) if data.get("source_ref") else None,
                 enhanced_fields=enhanced_fields,
-                series_identity=identity_from_metadata(
-                    task.exchange,
-                    task.metadata,
-                ),
+                series_identity=task_identity,
             )
         except (KeyError, ValueError, TypeError) as exc:
             logger.warning("Failed to convert event to bar: %s", exc)

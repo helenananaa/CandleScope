@@ -1,4 +1,5 @@
 import { continuousPortuguese } from "./continuousMessages.js";
+import { tradeHistoryBrazilian } from "./tradeHistoryMessages.js";
 import { replayNoteBrazilian } from "./replayNoteMessages.js";
 import { historyStudyBrazilian } from "./historyStudyMessages.js";
 import { workbenchEnglish } from "./workbenchEnglish.js";
@@ -9,6 +10,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
   ...continuousPortuguese,
+  ...tradeHistoryBrazilian,
   ...replayNoteBrazilian,
   ...historyStudyBrazilian,
   "chartTime.title": "Ir para data",

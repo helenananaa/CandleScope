@@ -199,6 +199,7 @@ def test_full_order_book_http_returns_live_trimmed_projection_contract() -> None
     assert payload["output_limit"] == 2
     assert payload["persisted"] is False
     assert payload["backfillable"] is False
+    assert payload["history"] == {"status": "unavailable", "reason": "source_no_history"}
     assert payload["data"]["key"] == _key(
         "ETHUSDT",
         update_interval_ms=100,
