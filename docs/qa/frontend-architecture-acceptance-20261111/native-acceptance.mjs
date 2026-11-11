@@ -46,7 +46,10 @@ async function readyFor(input,count=2,timeout=180_000){
  },timeout).catch(error=>{throw new Error(error.message+' '+JSON.stringify(last));});
 }
 async function begin(){
- const launch=await q.launch();running=true;
+ const launch=await q.launch({
+  ...(process.env.CS_ACCEPTANCE_APP?{executablePath:process.env.CS_ACCEPTANCE_APP}:{}),
+  ...(process.env.CS_ACCEPTANCE_PROFILE?{profileRoot:process.env.CS_ACCEPTANCE_PROFILE}:{}),
+ });running=true;
  assert.equal(q.s.identity.packaged,true);
  await q.record('launch',launch);
  const visible=await q.until(async()=>{try{const charts=await capture(q);return charts.length&&charts.every(c=>c.bars.length>=1)?charts.map(summary):false;}catch{return false;}},180_000);
@@ -113,6 +116,10 @@ const indicators=[
 ];
 try{
  await fs.mkdir(q.s.root,{recursive:true});
+ // Exclude the default workspace smoke from the finite cold matrix.
+ await begin();
+ await q.configure([{session:series('BTCUSDT'),indicators:[]}],'single');
+ await readyFor(series('BTCUSDT'),1);await end();
  // Same profile and machine; every restart recreates the frontend pool.
  // Persistent backend history is intentionally retained and separately named.
  for(let index=0;index<10;index++){
@@ -122,7 +129,7 @@ try{
   q.s.receipt.cold.push({index,scope:'cold frontend pool / persistent backend history',input,...visible,tailReadyMs:Date.now()-q.s.startedAt,tail,
     http:q.s.traffic.requests.filter(r=>r.at>=q.s.startedAt).length});await q.save();
   const next=[series('BTCUSDT'),series('ETHUSDT'),series('BTCUSDT','5m'),series('ETHUSDT','5m')][(index+1)%4];
-  await q.execute(snap.cells[0].cellId,'session',next);await q.ready(1,180_000);await end();
+  await q.execute(snap.cells[0].cellId,'session',next);await readyFor(next,1);await end();
  }
  await begin();
  let configured=await q.configure([{session:series('BTCUSDT'),indicators:[]},{session:series('BTCUSDT'),indicators:[]}],'split-vertical');

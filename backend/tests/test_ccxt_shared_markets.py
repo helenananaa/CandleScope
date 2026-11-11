@@ -136,6 +136,11 @@ def test_market_rails_follow_venue_class_and_market_family() -> None:
     okx_spot = rest(okx, "spot")
     okx_swap = rest(okx, "swap.linear")
 
+    assert rest_spot.timeout == ws_spot.timeout == 30_000
+    assert rest(binance, "spot", IngestionConfig(http_timeout=45)).timeout == 45_000
+    generic_ws = _create_exchange(binance, config, market_type="spot", websocket=True)
+    assert generic_ws.urls["api"]["ws"]["spot"] == "wss://stream.binance.com:443/ws"
+
     # REST and ccxt.pro clients of one venue rail build the same tables; the
     # proxy only changes the path to them.
     assert market_rail_key(rest_spot) == market_rail_key(ws_spot)

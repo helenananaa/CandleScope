@@ -104,6 +104,20 @@ def test_spot_close_releases_owned_rest_session() -> None:
     asyncio.run(run())
 
 
+def test_spot_profile_uses_official_standard_tls_stream_with_proxy() -> None:
+    exchange = BinanceSpotCcxtProfile().create_exchange(
+        IngestionConfig(proxy_mode="custom", http_proxy="http://127.0.0.1:7890"),
+        raw_event_sink=None,
+        lifecycle_sink=None,
+    )
+    assert exchange.urls["api"]["ws"]["spot"] == "wss://stream.binance.com:443/ws"
+    assert exchange.urls["api"]["ws"]["future"] == "wss://fstream.binance.com/ws"
+    assert exchange.urls["test"]["ws"]["spot"] == "wss://stream.testnet.binance.vision/ws"
+    assert exchange.httpsProxy == "http://127.0.0.1:7890"
+    assert exchange.wssProxy == "http://127.0.0.1:7890"
+    assert exchange.timeout == 30_000
+
+
 def test_spot_profile_uses_explicit_aggregate_trade_and_depth_rate() -> None:
     calls: list[tuple[str, tuple[Any, ...], dict[str, Any]]] = []
 
