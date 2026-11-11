@@ -1,4 +1,5 @@
 import { continuousEnglish } from "./continuousMessages.js";
+import { tradeHistoryEnglish } from "./tradeHistoryMessages.js";
 import { replayNoteEnglish } from "./replayNoteMessages.js";
 import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
@@ -9,6 +10,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const id = {
   ...continuousEnglish,
+  ...tradeHistoryEnglish,
   ...replayNoteEnglish,
   ...historyStudyEnglish,
   "chartTime.title": "Go to date",
@@ -2214,6 +2216,7 @@ export const id = {
   "replay.liq.adlHint": "Buku besar counterparty {count} baris · simulasi deterministik, bukan antrean privat bursa historis",
   "local.import": "Impor CSV",
   "local.localOnly": "Data tetap di mesin ini",
+  "local.marketTradeCoverage": "Gunakan berkas perdagangan pasar dengan nomor urut sumber yang berurutan. Nyatakan cakupan UTC. Impor tetap lokal.",
   "local.chooseFile": "Pilih berkas CSV",
   "local.baseAsset": "Aset kuantitas (satuan volume)",
   "local.quoteAsset": "Aset kuotasi harga",
@@ -4305,6 +4308,7 @@ export const id = {
   "research.data.noContext": "Entri ini tidak memiliki identitas kumpulan data beku.",
   "research.data.available": "Kumpulan data lokal yang tersedia",
   "research.execution.precise": "Fidelitas urutan transaksi dan asumsi eksekusi tetap eksplisit dan tidak dapat diubah per Run.",
+  "research.execution.preciseArchiveHint": "Pengunduhan otomatis menggunakan perdagangan agregat futures Binance USD-M. Pilih rentang dalam hari UTC yang sudah berakhir.",
   "research.execution.python": "Runtime Python dan model eksternal diinisialisasi hanya di dalam aplikasi riset ini.",
   "research.execution.general": "Kontrol eksekusi tetap tercakup pada tugas yang dipilih dan tidak pernah mengubah Run yang selesai.",
   "research.run.none": "Tidak ada BacktestRun yang dipilih.",

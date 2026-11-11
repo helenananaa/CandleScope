@@ -127,14 +127,15 @@ class DataManagerConsumerPort:
             records = self.data_manager.trade_flow_recent(key, limit=request.limit)
             payload = project_trade_recent_payload(key, list(records))
         else:
-            records = await self.data_manager.trade_flow_history(
+            history = await self.data_manager.read_trade_flow_history(
                 key,
                 start_ms=request.start_ms,
                 end_ms=request.end_ms,
-                limit=request.limit,
+                limit=request.limit + 1,
             )
             payload = project_trade_history_payload(
-                key, list(records), limit=request.limit
+                key, history, limit=request.limit,
+                start_ms=request.start_ms, end_ms=request.end_ms,
             )
         return wrap_trades(request.context, payload)
 

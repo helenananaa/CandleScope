@@ -482,7 +482,6 @@ async def test_storage_gc_fails_closed_without_guarded_delete_integration() -> N
 
     maintenance = MaintenanceService(
         storage_provider=lambda: storage,
-        aggregator_config_snapshot=lambda: {},
         cache_invalidator=lambda *_args, **_kwargs: None,
         bars_backfilled=noop_async,
         active_targets=lambda: [],

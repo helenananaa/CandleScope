@@ -9,12 +9,18 @@ batches, and sends all Parquet I/O to the shared storage executor.
 from __future__ import annotations
 
 import asyncio
+import errno
 import hashlib
 import json
 import os
-from collections.abc import Iterable
+import shutil
+import time
+from collections import Counter
+from collections.abc import Callable, Iterable, Iterator
+from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+from itertools import islice
 from pathlib import Path
 from threading import Lock
 from typing import Any, Mapping, Protocol, runtime_checkable
@@ -23,8 +29,13 @@ from uuid import uuid4
 
 from app.core.executors import run_storage
 
+from .raw_trade_retention_lock import ReadOnlyLeaseDirectory, partition_lease
+
 
 ARCHIVE_SCHEMA_VERSION = "1"
+_RETENTION_OBJECT_LIMIT = 4_096
+_RETENTION_RECLAIM_MARKER = "_reclaim_started"
+_RETENTION_REDOWNLOAD_STAGE = "_redownload_stage"
 RAW_AGG_TRADE_COLUMNS = (
     "exchange",
     "market_type",
@@ -320,6 +331,18 @@ class RawAggTradePage:
     data_epoch: str | None
 
 
+class VerifiedTradeDayRetired(RuntimeError):
+    """A deliberately detached official day needs an explicit restore."""
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedTradeReclaimResult:
+    status: str
+    removed_files: int = 0
+    removed_logical_bytes: int = 0
+    remaining_files: int | None = None
+
+
 @dataclass(frozen=True, slots=True)
 class VerifiedRawAggTradeDay:
     """Validated official-source provenance supplied to the archive writer."""
@@ -512,6 +535,7 @@ class RawAggTradeArchive(Protocol):
         after: RawAggTradeCursor | None = None,
         limit: int = 50_000,
         dataset_ref: RawAggTradeDatasetRef | None = None,
+        reject_id_conflicts: bool = False,
     ) -> RawAggTradePage:
         """Read one bounded page after an exclusive stable cursor."""
 
@@ -653,6 +677,7 @@ class DisabledRawAggTradeArchive:
         after: RawAggTradeCursor | None = None,
         limit: int = 50_000,
         dataset_ref: RawAggTradeDatasetRef | None = None,
+        reject_id_conflicts: bool = False,
     ) -> RawAggTradePage:
         del (
             exchange,
@@ -664,6 +689,7 @@ class DisabledRawAggTradeArchive:
             end_agg_trade_id,
             after,
             limit,
+            reject_id_conflicts,
         )
         return RawAggTradePage(
             rows=(),
@@ -824,6 +850,13 @@ class RawAggTradeScanLimitError(RuntimeError):
     """The requested archive read cannot be completed inside safety limits."""
 
 
+@dataclass(frozen=True, slots=True)
+class _RawTradePin:
+    data_epoch: str
+    partitions: frozenset[str]
+    leases: ExitStack
+
+
 class ParquetRawAggTradeArchive:
     """PyArrow-backed partitioned immutable micro-batch archive.
 
@@ -872,7 +905,7 @@ class ParquetRawAggTradeArchive:
             ) from exc
         self._schema = _parquet_schema(self._pa)
         self._write_lock = Lock()
-        self._pins: dict[str, tuple[str, str]] = {}
+        self._pins: dict[str, _RawTradePin] = {}
         self._pin_counts: dict[str, int] = {}
         self._health_marker_path = self.root / "_archive_health.json"
         durability_error, health_marker_error = self._load_health_marker()
@@ -1140,9 +1173,557 @@ class ParquetRawAggTradeArchive:
                 **self._stats,
             }
 
+    def _verified_receipt_paths(self) -> Iterable[Path]:
+        return self.root.glob("exchange=*/market_type=*/symbol=*/date=*/_verified_import.json")
+
+    def retention_lease_path(self, partition_key: str) -> Path:
+        key = hashlib.sha256(partition_key.encode("utf-8")).hexdigest()
+        return self.root / ".trade-retention-locks" / key
+
+    def retention_partition_key(self, identity: tuple[str, str, str], day: str) -> str:
+        return self._partition_path((*identity, day)).relative_to(self.root).as_posix()
+
+    def retention_policy_path(self, partition_key: str, *, plan: bool) -> Path:
+        key = hashlib.sha256(partition_key.encode("utf-8")).hexdigest()
+        suffix = "plan" if plan else "policy"
+        return self.root / ".trade-retention-policies" / f"{key}.{suffix}.json"
+
+    def invalidate_retention_plan(self, partition_key: str) -> None:
+        plan = self.retention_policy_path(partition_key, plan=True)
+        if plan.parent.is_symlink():
+            raise OSError("unsafe retention plan directory")
+        try:
+            plan.unlink()
+        except FileNotFoundError:
+            return
+        _sync_retention_directory(plan.parent)
+
+    def _enter_retention_lease(self, leases: ExitStack, partition_key: str, deadline: float) -> None:
+        try:
+            leases.enter_context(partition_lease(
+                self.retention_lease_path(partition_key), shared=True, create=True,
+                timeout_seconds=max(0.0, deadline - time.monotonic()),
+            ))
+        except ReadOnlyLeaseDirectory:
+            # Legacy externally mounted read-only archives remain readable.
+            if not self.read_only:
+                raise
+        else:
+            self.invalidate_retention_plan(partition_key)
+
+    def _retention_lease_busy(self, partition_key: str) -> bool:
+        try:
+            with partition_lease(self.retention_lease_path(partition_key), shared=False, create=False):
+                return False
+        except FileNotFoundError:
+            return False
+        except BlockingIOError:
+            return True
+
+    @staticmethod
+    def _retired_partition(partition: Path) -> Path:
+        # A single same-parent rename is both the visibility change and the
+        # recovery record. Ordinary scans only enumerate date=*.
+        return partition.with_name(f".retired-{partition.name}")
+
+    def require_day_not_retired(self, identity: tuple[str, str, str], day: str) -> None:
+        partition = self._partition_path((*identity, day))
+        retired = self._retired_partition(partition)
+        if retired.exists() or retired.is_symlink():
+            raise VerifiedTradeDayRetired("verified trade day was retired and requires explicit restore")
+
+    def retired_verified_days(self, identity: tuple[str, str, str]) -> tuple[date, ...]:
+        days = []
+        for entry in self._identity_path(identity).glob(".retired-date=????-??-??"):
+            try:
+                days.append(date.fromisoformat(entry.name.removeprefix(".retired-date=")))
+            except ValueError:
+                continue
+        return tuple(sorted(days))
+
+    @contextmanager
+    def _verified_retention_leases(
+        self, identity: tuple[str, str, str], day: str, partition: Path,
+    ) -> Iterator[str | None]:
+        blocked = "DAY_ACQUISITION_IN_PROGRESS"
+        with ExitStack() as leases:
+            try:
+                leases.enter_context(partition_lease(
+                    self.verified_day_acquisition_lock_path(identity, day), shared=False, create=True,
+                ))
+                blocked = "PARTITION_RETENTION_LEASE"
+                leases.enter_context(partition_lease(
+                    self.retention_lease_path(partition.relative_to(self.root).as_posix()),
+                    shared=False, create=True,
+                ))
+            except BlockingIOError:
+                yield blocked
+            except OSError:
+                yield "LEASE_UNAVAILABLE"
+            else:
+                yield None
+
+    @contextmanager
+    def retention_policy_candidate(
+        self, *, identity: tuple[str, str, str], day: str, day_id: str | None,
+        inspect_pending: bool = False,
+    ) -> Iterator[tuple[str, dict[str, Any] | None]]:
+        """Bind an explicit policy request to one safe committed or retired receipt."""
+        if day_id is not None:
+            day_id = _prefixed_sha256_digest(day_id, "verified day ID")
+        partition = self._partition_path((*identity, day))
+        retired = self._retired_partition(partition)
+        with self._verified_retention_leases(identity, day, partition) as blocked:
+            if blocked is not None:
+                yield blocked, None
+                return
+            if (partition.is_symlink() or retired.is_symlink()
+                    or not partition.parent.resolve().is_relative_to(self.root.resolve())
+                    or (partition.exists() and retired.exists())):
+                yield "PARTITION_UNSAFE", None
+                return
+            source = retired if retired.exists() else partition
+            receipt = source / "_verified_import.json"
+            if receipt.is_symlink() or not receipt.is_file():
+                yield "STALE_RECEIPT", None
+                return
+            actual_day_id = "sha256:" + _file_sha256(receipt)
+            if day_id is not None and day_id != actual_day_id:
+                yield "STALE_RECEIPT", None
+                return
+            key = partition.relative_to(self.root).as_posix()
+            if self._has_retention_pin(key):
+                yield "ACTIVE_DATASET_PIN", None
+                return
+            expected = self._retention_expected_files(partition, source, (*identity, day))
+            marker = source / _RETENTION_RECLAIM_MARKER
+            started = source == retired and marker.is_file() and not marker.is_symlink() and not marker.stat().st_size
+            stage = source / _RETENTION_REDOWNLOAD_STAGE
+            staged = inspect_pending and started and stage.is_dir() and not stage.is_symlink()
+            files = None if expected is None else self._retention_present_files(
+                source, expected, reclaim_started=started, redownload_staged=staged,
+            )
+            if files is None or (not started and files.keys() != expected.keys()):
+                yield "PARTITION_UNSAFE", None
+                return
+            yield "READY", {
+                "partition_key": key, "day_id": actual_day_id,
+                "state": "RETIRED" if source == retired else "COMMITTED", "reclaim_started": started,
+                "files": len(files), "logical_bytes": sum(file.stat().st_size for file in files.values()),
+            }
+
+    def move_verified_retention_day(
+        self, *, identity: tuple[str, str, str], day: str, day_id: str, restore: bool,
+        authorize: Callable[[str, str], AbstractContextManager[bool]],
+    ) -> str:
+        """Detach or restore an exact partition under a caller-held policy/reference fence.
+
+        This reversible primitive preserves all bytes. The authorizer must
+        retain its policy and reference fence until the context exits.
+        """
+        day_id = _prefixed_sha256_digest(day_id, "verified day ID")
+        partition = self._partition_path((*identity, day))
+        retired = self._retired_partition(partition)
+        source, destination = (retired, partition) if restore else (partition, retired)
+        complete = "RESTORED" if restore else "RETIRED"
+        with self._verified_retention_leases(identity, day, partition) as blocked:
+            if blocked is not None:
+                return blocked
+            if (partition.is_symlink() or retired.is_symlink()
+                    or not partition.parent.resolve().is_relative_to(self.root.resolve())):
+                return "PARTITION_UNSAFE"
+            if not source.exists():
+                existing = destination / "_verified_import.json"
+                if (existing.is_file() and not existing.is_symlink()
+                        and "sha256:" + _file_sha256(existing) == day_id):
+                    with authorize(partition.relative_to(self.root).as_posix(), day_id) as approved:
+                        if not approved:
+                            return "RETENTION_NOT_AUTHORIZED"
+                        _sync_retention_directory(destination.parent)
+                        return complete
+                return "STALE_RECEIPT"
+            if destination.exists():
+                return "DESTINATION_OCCUPIED"
+            receipt_path = source / "_verified_import.json"
+            if not receipt_path.is_file() or receipt_path.is_symlink():
+                return "STALE_RECEIPT"
+            if "sha256:" + _file_sha256(receipt_path) != day_id:
+                return "STALE_RECEIPT"
+            partition_key = partition.relative_to(self.root).as_posix()
+            if self._has_retention_pin(partition_key):
+                return "ACTIVE_DATASET_PIN"
+            with authorize(partition_key, day_id) as approved:
+                if not approved:
+                    return "RETENTION_NOT_AUTHORIZED"
+                if restore and os.path.lexists(source / _RETENTION_RECLAIM_MARKER):
+                    return "RECLAIM_STARTED"
+                expected = self._retention_expected_files(partition, source, (*identity, day))
+                if expected is None:
+                    return "PARTITION_UNSAFE"
+                files = self._retention_present_files(source, expected, reclaim_started=False)
+                if files is None or files.keys() != expected.keys():
+                    return "PARTITION_UNSAFE"
+                if any(
+                    _file_sha256(file) != expected[name]
+                    for name, file in files.items() if restore or name.endswith(".manifest.json")
+                ):
+                    return "PARTITION_UNSAFE"
+                if restore:
+                    self.invalidate_retention_plan(partition_key)
+                source.rename(destination)
+                _sync_retention_directory(destination.parent)
+                return complete
+
+    def reclaim_retired_verified_day(
+        self, *, identity: tuple[str, str, str], day: str, day_id: str,
+        max_files: int, max_bytes: int,
+        authorize: Callable[[str, str], AbstractContextManager[bool]],
+    ) -> VerifiedTradeReclaimResult:
+        """Remove a bounded batch of verified files, preserving the retired day and its receipt."""
+        if type(max_files) is not int or not 1 <= max_files <= 2 * _RETENTION_OBJECT_LIMIT:
+            raise ValueError("retention file budget is outside the supported range")
+        if type(max_bytes) is not int or max_bytes < 1:
+            raise ValueError("retention byte budget must be positive")
+        day_id = _prefixed_sha256_digest(day_id, "verified day ID")
+        partition = self._partition_path((*identity, day))
+        retired = self._retired_partition(partition)
+        with self._verified_retention_leases(identity, day, partition) as blocked:
+            if blocked is not None:
+                return VerifiedTradeReclaimResult(blocked)
+            if (partition.exists() or partition.is_symlink() or retired.is_symlink()
+                    or not partition.parent.resolve().is_relative_to(self.root.resolve())):
+                return VerifiedTradeReclaimResult("PARTITION_UNSAFE")
+            receipt = retired / "_verified_import.json"
+            if receipt.is_symlink() or not receipt.is_file() or "sha256:" + _file_sha256(receipt) != day_id:
+                return VerifiedTradeReclaimResult("STALE_RECEIPT")
+            partition_key = partition.relative_to(self.root).as_posix()
+            if self._has_retention_pin(partition_key):
+                return VerifiedTradeReclaimResult("ACTIVE_DATASET_PIN")
+            with authorize(partition_key, day_id) as approved:
+                if not approved:
+                    return VerifiedTradeReclaimResult("RETENTION_NOT_AUTHORIZED")
+                return self._reclaim_verified_files(partition, retired, (*identity, day), max_files, max_bytes)
+
+    def redownload_reclaimed_verified_day(
+        self, *, identity: tuple[str, str, str], day: str, day_id: str, max_restore_bytes: int,
+        build: Callable[[Path, VerifiedRawAggTradeDay, int], None],
+    ) -> str:
+        """Publish an exact rebuilt day only through an explicit, receipt-bound request."""
+        if type(max_restore_bytes) is not int or max_restore_bytes < 1:
+            raise ValueError("restore byte budget must be positive")
+        day_id = _prefixed_sha256_digest(day_id, "verified day ID")
+        partition = self._partition_path((*identity, day))
+        retired = self._retired_partition(partition)
+        with self._verified_retention_leases(identity, day, partition) as blocked:
+            if blocked is not None:
+                return blocked
+            if (partition.is_symlink() or retired.is_symlink()
+                    or not partition.parent.resolve().is_relative_to(self.root.resolve())):
+                return "PARTITION_UNSAFE"
+            if not retired.exists():
+                existing = partition / "_verified_import.json"
+                if existing.is_symlink() or not existing.is_file() or "sha256:" + _file_sha256(existing) != day_id:
+                    return "STALE_RECEIPT"
+                self._verified_partition_receipt(partition, (*identity, day))
+                _sync_retention_directory(partition.parent)
+                return "RESTORED"
+            if partition.exists():
+                return "DESTINATION_OCCUPIED"
+            receipt = retired / "_verified_import.json"
+            if receipt.is_symlink() or not receipt.is_file() or "sha256:" + _file_sha256(receipt) != day_id:
+                return "STALE_RECEIPT"
+            if self._has_retention_pin(partition.relative_to(self.root).as_posix()):
+                return "ACTIVE_DATASET_PIN"
+            return self._redownload_verified_files(partition, retired, (*identity, day), max_restore_bytes, build)
+
+    def _redownload_verified_files(
+        self, partition: Path, retired: Path, identity_day: tuple[str, str, str, str],
+        max_restore_bytes: int, build: Callable[[Path, VerifiedRawAggTradeDay, int], None],
+    ) -> str:
+        marker = retired / _RETENTION_RECLAIM_MARKER
+        stage = retired / _RETENTION_REDOWNLOAD_STAGE
+        started = os.path.lexists(marker)
+        if started and (marker.is_symlink() or not marker.is_file() or marker.stat().st_size):
+            return "PARTITION_UNSAFE"
+        if stage.is_symlink() or (stage.exists() and (not started or not stage.is_dir())):
+            return "PARTITION_UNSAFE"
+        expected = self._retention_expected_files(partition, retired, identity_day)
+        if expected is None:
+            return "PARTITION_UNSAFE"
+        files = self._retention_present_files(
+            retired, expected, reclaim_started=started, redownload_staged=stage.exists(),
+        )
+        if files is None or any(_file_sha256(file) != expected[name] for name, file in files.items()):
+            return "PARTITION_UNSAFE"
+        missing = expected.keys() - files.keys()
+        if missing and not started:
+            return "PARTITION_UNSAFE"
+
+        rebuilt = {}
+        if missing:
+            original = self._read_verified_receipt(retired / "_verified_import.json")
+            staged_day = stage / partition.relative_to(self.root)
+            if not staged_day.resolve().is_relative_to(stage.resolve()):
+                return "PARTITION_UNSAFE"
+            rebuilt = self._redownload_staged_files(staged_day, original, expected, missing)
+            if rebuilt is None:
+                if stage.exists():
+                    shutil.rmtree(stage)
+                stage.mkdir()
+                try:
+                    metadata, objects = original["metadata"], original["objects"]
+                    assert isinstance(metadata, Mapping) and isinstance(objects, list)
+                    first_object = RawAggTradeObjectManifest.from_dict(objects[0])
+                    build(stage, VerifiedRawAggTradeDay(**metadata), first_object.row_count)
+                    rebuilt = self._redownload_staged_files(staged_day, original, expected, missing)
+                except Exception:
+                    shutil.rmtree(stage)
+                    raise
+                if rebuilt is None:
+                    shutil.rmtree(stage)
+                    return "REDOWNLOAD_RECEIPT_MISMATCH"
+        if sum(file.stat().st_size for file in (*files.values(), *rebuilt.values())) > max_restore_bytes:
+            if stage.exists():
+                shutil.rmtree(stage)
+            return "RESTORE_BUDGET_EXCEEDED"
+
+        for name, file in sorted(rebuilt.items()):
+            with file.open("r+b") as handle:
+                os.fsync(handle.fileno())
+            file.replace(retired / name)
+        _sync_retention_directory(retired)
+        if stage.exists():
+            shutil.rmtree(stage)
+        if started:
+            marker.unlink()
+        _sync_retention_directory(retired)
+        self.invalidate_retention_plan(partition.relative_to(self.root).as_posix())
+        retired.rename(partition)
+        _sync_retention_directory(partition.parent)
+        return "RESTORED"
+
+    def _redownload_staged_files(
+        self, staged_day: Path, original: Mapping[str, object], expected: Mapping[str, str],
+        missing: set[str],
+    ) -> dict[str, Path] | None:
+        receipt = staged_day / "_verified_import.json"
+        if not receipt.is_file() or receipt.is_symlink():
+            return None
+        try:
+            if self._read_verified_receipt(receipt) != original:
+                return None
+        except (OSError, RuntimeError, ValueError):
+            return None
+        files = self._retention_present_files(staged_day, expected, reclaim_started=False)
+        if files is None or not missing <= files.keys():
+            return None
+        needed = {name: files[name] for name in missing}
+        if any(_file_sha256(file) != expected[name] for name, file in needed.items()):
+            return None
+        return needed
+
+    def _has_retention_pin(self, partition_key: str) -> bool:
+        with self._write_lock:
+            return any(partition_key in pin.partitions for pin in self._pins.values())
+
+    def _retention_expected_files(
+        self, partition: Path, source: Path, identity_day: tuple[str, str, str, str],
+    ) -> dict[str, str] | None:
+        receipt = self._read_verified_receipt(source / "_verified_import.json")
+        metadata, objects = receipt["metadata"], receipt["objects"]
+        assert isinstance(metadata, Mapping) and isinstance(objects, list)
+        if tuple(metadata[key] for key in ("exchange", "market_type", "symbol", "date")) != identity_day:
+            return None
+        if len(objects) > _RETENTION_OBJECT_LIMIT:
+            return None
+        expected: dict[str, str] = {}
+        for raw in objects:
+            item = RawAggTradeObjectManifest.from_dict(raw)
+            path = self.root / item.object_id
+            if (path.parent != partition or not path.name.startswith("part-verified-")
+                    or path.suffix != ".parquet" or path.name in expected
+                    or item.source_quality != "binance_public_checksum"
+                    or item.source_checksum_sha256 != metadata["source_checksum_sha256"]):
+                return None
+            expected[path.name] = item.parquet_sha256
+            expected[_manifest_path(path).name] = item.manifest_sha256
+        return expected
+
+    @staticmethod
+    def _retention_present_files(
+        source: Path, expected: Mapping[str, str], *, reclaim_started: bool, redownload_staged: bool = False,
+    ) -> dict[str, Path] | None:
+        metadata = {"_verified_import.json"}
+        if reclaim_started:
+            metadata.add(_RETENTION_RECLAIM_MARKER)
+        if redownload_staged:
+            metadata.add(_RETENTION_REDOWNLOAD_STAGE)
+        files = {}
+        for entry in islice(source.iterdir(), len(expected) + len(metadata) + 1):
+            if entry.name in metadata:
+                continue
+            if entry.name not in expected or entry.is_symlink() or not entry.is_file():
+                return None
+            files[entry.name] = entry
+        return files
+
+    def _reclaim_verified_files(
+        self, partition: Path, retired: Path, identity_day: tuple[str, str, str, str],
+        max_files: int, max_bytes: int,
+    ) -> VerifiedTradeReclaimResult:
+        marker = retired / _RETENTION_RECLAIM_MARKER
+        started = os.path.lexists(marker)
+        if started and (marker.is_symlink() or not marker.is_file() or marker.stat().st_size):
+            return VerifiedTradeReclaimResult("PARTITION_UNSAFE")
+        expected = self._retention_expected_files(partition, retired, identity_day)
+        if expected is None:
+            return VerifiedTradeReclaimResult("PARTITION_UNSAFE")
+        files = self._retention_present_files(retired, expected, reclaim_started=started)
+        if files is None or (not started and files.keys() != expected.keys()):
+            return VerifiedTradeReclaimResult("PARTITION_UNSAFE")
+        if not files:
+            _sync_retention_directory(retired)
+            return VerifiedTradeReclaimResult("RECLAIMED", remaining_files=0)
+
+        selected: list[Path] = []
+        remaining_budget = max_bytes
+        for name in sorted(files)[:max_files]:
+            file = files[name]
+            size = file.stat().st_size
+            if size > remaining_budget:
+                break
+            if _file_sha256(file) != expected[name]:
+                return VerifiedTradeReclaimResult("PARTITION_UNSAFE")
+            selected.append(file)
+            remaining_budget -= size
+        if not selected:
+            return VerifiedTradeReclaimResult("RECLAIM_PENDING", remaining_files=len(files))
+
+        # The durable empty marker forbids restore before the first unlink.
+        # After interruption the receipt still describes exactly what may be removed.
+        if not started:
+            with marker.open("xb") as handle:
+                os.fsync(handle.fileno())
+        _sync_retention_directory(retired)
+        for file in selected:
+            file.unlink()
+        _sync_retention_directory(retired)
+        remaining = len(files) - len(selected)
+        return VerifiedTradeReclaimResult(
+            "RECLAIM_PENDING" if remaining else "RECLAIMED",
+            len(selected), max_bytes - remaining_budget, remaining,
+        )
+
+    def _verified_retention_item(
+        self, receipt_path: Path, receipt: dict[str, object], *, observe_locks: bool = True,
+    ) -> dict[str, Any]:
+        partition = receipt_path.parent
+        metadata = receipt["metadata"]
+        objects = receipt["objects"]
+        assert isinstance(metadata, Mapping) and isinstance(objects, list)
+        identity = (str(metadata["exchange"]), str(metadata["market_type"]), str(metadata["symbol"]))
+        day = str(metadata["date"])
+        if self._partition_path((*identity, day)) != partition:
+            raise RuntimeError("verified receipt does not match its partition")
+        self._validate_verified_receipt_objects(partition, receipt, verify_parquet=False)
+        byte_size = receipt_path.stat().st_size
+        for item in objects:
+            path = self._resolve_object_path(str(item["object_id"]))
+            byte_size += path.stat().st_size + _manifest_path(path).stat().st_size
+        partition_key = partition.relative_to(self.root).as_posix()
+        reasons = ["UNMANAGED_RETENTION_POLICY"]
+        if (partition / "_verified_import_conflict.json").exists():
+            reasons.append("QUARANTINED_DAY")
+        lease_busy = False
+        if observe_locks:
+            lease_busy = self._retention_lease_busy(partition_key)
+            if lease_busy:
+                reasons.append("PARTITION_RETENTION_LEASE")
+            day_start = int(datetime.fromisoformat(day).replace(tzinfo=timezone.utc).timestamp() * 1000)
+            if self.verified_day_acquisition_pending(identity, (day_start, day_start)):
+                reasons.append("DAY_ACQUISITION_IN_PROGRESS")
+        return {
+            "partition_key": partition_key,
+            "day_id": "sha256:" + _file_sha256(receipt_path),
+            "identity": dict(zip(("exchange", "market_type", "symbol"), identity)),
+            "object_count": len(objects),
+            "byte_size": byte_size,
+            "retention_lease_busy": lease_busy,
+            "protection_reasons": reasons,
+        }
+
+    def verified_retention_inventory(self, *, limit: int) -> dict[str, Any]:
+        """Inspect committed day objects without refreshing access or opening their bodies."""
+        with self._write_lock:
+            pins = Counter(partition for pin in self._pins.values() for partition in pin.partitions)
+        paths = list(islice(self._verified_receipt_paths(), limit + 1))
+        items: list[dict[str, object]] = []
+        unreadable = 0
+        objects_left = _RETENTION_OBJECT_LIMIT
+        truncated = len(paths) > limit
+        for receipt_path in sorted(paths[:limit]):
+            try:
+                receipt = self._read_verified_receipt(receipt_path)
+                objects = receipt["objects"]
+                assert isinstance(objects, list)
+                if len(objects) > objects_left:
+                    truncated = True
+                    continue
+                objects_left -= len(objects)
+                item = self._verified_retention_item(receipt_path, receipt)
+            except (KeyError, OSError, OverflowError, RuntimeError, TypeError, ValueError):
+                unreadable += 1
+                continue
+            count = pins[item["partition_key"]]
+            if count:
+                item["protection_reasons"].insert(1, "ACTIVE_DATASET_PIN")
+            item["active_pin_count"] = count
+            items.append(item)
+        return {"items": items, "unreadable_day_count": unreadable, "truncated": truncated}
+
+    @contextmanager
+    def verified_retention_recheck(
+        self, *, day_id: str, limit: int,
+    ) -> Iterator[tuple[str, dict[str, Any] | None]]:
+        """Revalidate a preview candidate while day publishers and partition readers are fenced."""
+        inventory = self.verified_retention_inventory(limit=limit)
+        selected = next((item for item in inventory["items"] if item["day_id"] == day_id), None)
+        if selected is None:
+            yield "STALE_OR_OUTSIDE_SCAN", None
+            return
+        partition_key = selected["partition_key"]
+        partition = self.root / partition_key
+        day = partition.name.removeprefix("date=")
+        identity = selected["identity"]
+        with self._verified_retention_leases(
+            (identity["exchange"], identity["market_type"], identity["symbol"]), day, partition,
+        ) as blocked:
+            if blocked is not None:
+                yield blocked, None
+                return
+            item = None
+            try:
+                receipt_path = partition / "_verified_import.json"
+                receipt = self._read_verified_receipt(receipt_path)
+                objects = receipt["objects"]
+                assert isinstance(objects, list)
+                if len(objects) <= _RETENTION_OBJECT_LIMIT:
+                    item = self._verified_retention_item(receipt_path, receipt, observe_locks=False)
+            except (KeyError, OSError, OverflowError, RuntimeError, TypeError, ValueError):
+                pass
+            if item is None or item["day_id"] != day_id:
+                yield "STALE_OR_OUTSIDE_SCAN", None
+                return
+            with self._write_lock:
+                count = sum(partition_key in pin.partitions for pin in self._pins.values())
+            item["active_pin_count"] = count
+            if count:
+                item["protection_reasons"].append("ACTIVE_DATASET_PIN")
+            yield "RECHECKED", item
+
     def list_verified_identities(self) -> list[dict[str, str]]:
         identities: dict[tuple[str, str, str], dict[str, str]] = {}
-        for receipt_path in sorted(self.root.rglob("_verified_import.json")):
+        for receipt_path in self._verified_receipt_paths():
             if (receipt_path.parent / "_verified_import_conflict.json").exists():
                 continue
             try:
@@ -1154,7 +1735,15 @@ class ParquetRawAggTradeArchive:
                     str(metadata["market_type"]),
                     str(metadata["symbol"]),
                 )
-            except (AssertionError, KeyError, RuntimeError, TypeError, ValueError):
+                if identity in identities:
+                    continue
+                identity_day = (*identity, str(metadata["date"]))
+                if self._partition_path(identity_day) != receipt_path.parent:
+                    continue
+                self._validate_verified_receipt_objects(
+                    receipt_path.parent, receipt, verify_parquet=False,
+                )
+            except (AssertionError, KeyError, OSError, RuntimeError, TypeError, ValueError):
                 continue
             identities[identity] = {
                 "exchange": identity[0],
@@ -1163,6 +1752,62 @@ class ParquetRawAggTradeArchive:
             }
         return [identities[key] for key in sorted(identities)]
 
+    def has_verified_day(self, *, exchange: str, market_type: str, symbol: str, day: str,
+                         allow_repair: bool = False) -> bool:
+        """Check one committed partition and its objects without scanning other days."""
+        identity = (
+            _identity(exchange, "exchange", lower=True),
+            _identity(market_type, "market_type", lower=True),
+            _identity(symbol, "symbol", upper=True),
+        )
+        self.require_day_not_retired(identity, day)
+        partition = self._partition_path((*identity, day))
+        if (partition / "_verified_import_conflict.json").exists():
+            raise RuntimeError("checksum-verified raw aggTrade partition is quarantined")
+        if not (partition / "_verified_import.json").is_file():
+            return False
+        try:
+            self._verified_partition_receipt(partition, (*identity, day))
+        except (OSError, RuntimeError, ValueError):
+            if not allow_repair:
+                raise
+            return False
+        return True
+
+    def verified_day_acquisition_lock_path(self, identity: tuple[str, str, str], day: str) -> Path:
+        """Use stable, bounded lock slots shared by the day publishers and readers."""
+        slot = hashlib.blake2b("\0".join((*identity, day)).encode(), digest_size=1).hexdigest()
+        return self.root / ".trade-day-locks" / slot
+
+    def verified_day_acquisition_pending(
+        self, identity: tuple[str, str, str], time_bounds: tuple[int, int],
+    ) -> bool:
+        """Observe an existing publisher lock without creating files or waiting on it."""
+        first, last = (bound // 86_400_000 for bound in time_bounds)
+        for day in range(first, last + 1):
+            day_text = datetime.fromtimestamp(day * 86_400, tz=timezone.utc).date().isoformat()
+            path = self.verified_day_acquisition_lock_path(identity, day_text)
+            try:
+                handle = path.open("rb")
+            except FileNotFoundError:
+                continue
+            with handle:
+                try:
+                    if os.name == "nt":
+                        import msvcrt
+
+                        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                    else:
+                        import fcntl
+
+                        fcntl.flock(handle.fileno(), fcntl.LOCK_SH | fcntl.LOCK_NB)
+                except OSError as exc:
+                    if exc.errno in {errno.EACCES, errno.EAGAIN, errno.EWOULDBLOCK}:
+                        return True
+                    raise
+        return False
+
     def list_verified_windows(
         self,
         *,
@@ -1170,14 +1815,20 @@ class ParquetRawAggTradeArchive:
         market_type: str,
         symbol: str,
     ) -> tuple[VerifiedRawAggTradeWindow, ...]:
-        """Read only receipt metadata and merge truly contiguous UTC days.
+        """Verify receipts and bodies, then merge truly contiguous UTC days.
 
         A verified daily receipt proves the full UTC partition, including quiet
         time before its first trade and after its last trade. Adjacent days are
         merged only when their aggregate-trade IDs are also contiguous, so a
         replay window can never cross an unresolved source gap.
         """
+        return self._verified_windows(
+            exchange=exchange, market_type=market_type, symbol=symbol, verify_parquet=True,
+        )
 
+    def _verified_windows(
+        self, *, exchange: str, market_type: str, symbol: str, verify_parquet: bool,
+    ) -> tuple[VerifiedRawAggTradeWindow, ...]:
         identity = (
             _identity(exchange, "exchange", lower=True),
             _identity(market_type, "market_type", lower=True),
@@ -1200,17 +1851,11 @@ class ParquetRawAggTradeArchive:
                     continue
                 date = date_component.removeprefix("date=")
                 _validate_utc_date(date)
-                receipt = self._read_verified_receipt(receipt_path)
+                receipt = self._verified_partition_receipt(
+                    partition, (*identity, date), verify_parquet=verify_parquet,
+                )
                 metadata = receipt["metadata"]
                 assert isinstance(metadata, Mapping)
-                if (
-                    metadata.get("exchange"),
-                    metadata.get("market_type"),
-                    metadata.get("symbol"),
-                    metadata.get("date"),
-                ) != (*identity, date):
-                    continue
-                self._validate_verified_receipt_objects(partition, receipt)
                 day_start = int(
                     datetime.strptime(date, "%Y-%m-%d")
                     .replace(tzinfo=timezone.utc)
@@ -1265,8 +1910,9 @@ class ParquetRawAggTradeArchive:
         exchange: str,
         market_type: str,
         symbol: str,
+        verify_parquet: bool = True,
     ) -> tuple[RawAggTradeSelectionWindow, ...]:
-        """Local archives can select only from their verified receipt coverage."""
+        """List committed candidates, optionally deferring body checks to freeze."""
 
         return tuple(
             RawAggTradeSelectionWindow(
@@ -1274,10 +1920,11 @@ class ParquetRawAggTradeArchive:
                 end_time_ms=item.end_time_ms,
                 partition_count=item.partition_count,
             )
-            for item in self.list_verified_windows(
+            for item in self._verified_windows(
                 exchange=exchange,
                 market_type=market_type,
                 symbol=symbol,
+                verify_parquet=verify_parquet,
             )
         )
 
@@ -1616,16 +2263,16 @@ class ParquetRawAggTradeArchive:
             raise RuntimeError(
                 "aggregate-trade BAR compatibility source epoch changed"
             )
-        current_objects = tuple(
-            self._object_manifest(item)
-            for item in self._discover_verified_manifests(
+        with ExitStack() as leases:
+            manifests = self._discover_verified_manifests(
+                leases=leases,
                 exchange=identity[0],
                 market_type=identity[1],
                 symbol=identity[2],
                 start_time_ms=dataset_ref.start_time_ms,
                 end_time_ms=dataset_ref.end_time_ms,
             )
-        )
+            current_objects = tuple(self._object_manifest(item) for item in manifests)
         if current_objects != dataset_ref.objects:
             raise RuntimeError(
                 "aggregate-trade BAR compatibility source object changed"
@@ -1695,7 +2342,7 @@ class ParquetRawAggTradeArchive:
         try:
             return any(
                 not (receipt.parent / "_verified_import_conflict.json").exists()
-                for receipt in self.root.rglob("_verified_import.json")
+                for receipt in self._verified_receipt_paths()
                 if receipt.is_file()
             )
         except OSError:
@@ -1723,7 +2370,11 @@ class ParquetRawAggTradeArchive:
         conflict_path = partition / "_verified_import_conflict.json"
         checksum_prefix = metadata.source_checksum_sha256[:24]
         written: list[Path] = []
-        with self._write_lock:
+        with partition_lease(
+            self.retention_lease_path(partition.relative_to(self.root).as_posix()),
+            shared=True, create=True, timeout_seconds=1.0,
+        ), self._write_lock:
+            self.require_day_not_retired(key[:3], metadata.date)
             if conflict_path.exists():
                 raise RuntimeError(
                     "verified raw aggTrade partition is quarantined by an "
@@ -1852,6 +2503,63 @@ class ParquetRawAggTradeArchive:
         end_time_ms: int,
         page_rows: int = 50_000,
     ) -> RawAggTradeDatasetRef:
+        with ExitStack() as leases:
+            ref = self._freeze_dataset(
+                leases=leases, exchange=exchange, market_type=market_type, symbol=symbol,
+                start_time_ms=start_time_ms, end_time_ms=end_time_ms, page_rows=page_rows,
+            )
+        assert ref is not None
+        return ref
+
+    def read_verified_range(
+        self, *, exchange: str, market_type: str, symbol: str,
+        start_time_ms: int, end_time_ms: int, limit: int,
+    ) -> tuple[RawAggTradeDatasetRef, list[dict[str, Any]]]:
+        """Read a bounded exact range using the same proof as replay freezing."""
+        rows: list[dict[str, Any]] = []
+        with ExitStack() as leases:
+            ref = self._freeze_dataset(
+                leases=leases, exchange=exchange, market_type=market_type, symbol=symbol,
+                start_time_ms=start_time_ms, end_time_ms=end_time_ms,
+                page_rows=limit, collected=rows, max_rows=limit,
+            )
+        assert ref is not None
+        return ref, rows
+
+    def read_verified_daily_slice(
+        self, *, exchange: str, market_type: str, symbol: str,
+        start_time_ms: int, end_time_ms: int, limit: int,
+    ) -> tuple[RawAggTradeDatasetRef | None, list[dict[str, Any]]]:
+        """Read one UTC day's verified history. A successful empty slice proves quiet time."""
+        if start_time_ms // 86_400_000 != end_time_ms // 86_400_000:
+            raise ValueError("verified daily slice must stay inside one UTC day")
+        rows: list[dict[str, Any]] = []
+        with ExitStack() as leases:
+            ref = self._freeze_dataset(
+                leases=leases, exchange=exchange, market_type=market_type, symbol=symbol,
+                start_time_ms=start_time_ms, end_time_ms=end_time_ms,
+                page_rows=limit, collected=rows, max_rows=limit, allow_empty=True,
+            )
+        return ref, rows
+
+    def _freeze_dataset(
+        self,
+        *,
+        leases: ExitStack,
+        exchange: str,
+        market_type: str,
+        symbol: str,
+        start_time_ms: int,
+        end_time_ms: int,
+        page_rows: int = 50_000,
+        collected: list[dict[str, Any]] | None = None,
+        max_rows: int | None = None,
+        allow_empty: bool = False,
+    ) -> RawAggTradeDatasetRef | None:
+        if max_rows is not None:
+            if max_rows < 1:
+                raise ValueError("max_rows must be positive")
+            page_rows = min(page_rows, max_rows)
         bounds = self._normalize_scan_bounds(
             start_time_ms=start_time_ms,
             end_time_ms=end_time_ms,
@@ -1869,6 +2577,7 @@ class ParquetRawAggTradeArchive:
             _identity(symbol, "symbol", upper=True),
         )
         manifests = self._discover_verified_manifests(
+            leases=leases,
             exchange=identity[0],
             market_type=identity[1],
             symbol=identity[2],
@@ -1876,6 +2585,10 @@ class ParquetRawAggTradeArchive:
             end_time_ms=bounds[1],
         )
         if not manifests:
+            if allow_empty:
+                # Discovery already required and checked the daily receipt
+                # and every object, including those outside the slice.
+                return None
             raise RuntimeError("no checksum-verified raw aggTrade objects cover the range")
         objects = tuple(self._object_manifest(item) for item in manifests)
         provisional = self._build_dataset_ref(
@@ -1904,6 +2617,12 @@ class ParquetRawAggTradeArchive:
                 limit=page_rows,
                 dataset_ref=provisional,
             )
+            if max_rows is not None and (
+                row_count + len(page.rows) > max_rows
+                or (row_count + len(page.rows) == max_rows and not page.exhausted)
+            ):
+                self._record_scan_limit_rejection()
+                raise RawAggTradeScanLimitError("exact raw aggTrade generation exceeds max_rows")
             for row in page.rows:
                 order = (row["trade_time_ms"], row["agg_trade_id"])
                 if previous_order is not None and order <= previous_order:
@@ -1918,11 +2637,16 @@ class ParquetRawAggTradeArchive:
                 last_id = row["agg_trade_id"]
                 previous_order = order
                 row_count += 1
+            if collected is not None:
+                collected.extend(page.rows)
             if page.exhausted:
                 break
             if page.next_cursor is None or page.next_cursor == cursor:
                 raise RuntimeError("raw aggTrade pagination cursor did not advance")
             cursor = page.next_cursor
+        if not row_count and allow_empty:
+            self.validate_dataset(provisional)
+            return None
         if first_id is None or last_id is None or row_count != last_id - first_id + 1:
             raise RuntimeError("exact raw aggTrade range is empty or incomplete")
         dataset_ref = self._build_dataset_ref(
@@ -1972,13 +2696,20 @@ class ParquetRawAggTradeArchive:
                 raise RuntimeError("raw aggTrade object manifest changed")
 
     def pin_dataset(self, dataset_ref: RawAggTradeDatasetRef) -> str:
-        self.validate_dataset(dataset_ref)
+        if not isinstance(dataset_ref, RawAggTradeDatasetRef):
+            raise TypeError("dataset_ref must be RawAggTradeDatasetRef")
         token = uuid4().hex
-        with self._write_lock:
-            self._pins[token] = (dataset_ref.data_epoch, dataset_ref.symbol)
-            self._pin_counts[dataset_ref.data_epoch] = (
-                self._pin_counts.get(dataset_ref.data_epoch, 0) + 1
-            )
+        partitions = frozenset(item.object_id.rsplit("/", 1)[0] for item in dataset_ref.objects)
+        deadline = time.monotonic() + 1.0
+        with ExitStack() as leases:
+            for partition in sorted(partitions):
+                self._enter_retention_lease(leases, partition, deadline)
+            self.validate_dataset(dataset_ref)
+            with self._write_lock:
+                self._pins[token] = _RawTradePin(dataset_ref.data_epoch, partitions, leases.pop_all())
+                self._pin_counts[dataset_ref.data_epoch] = (
+                    self._pin_counts.get(dataset_ref.data_epoch, 0) + 1
+                )
         return token
 
     def release_dataset(self, pin_token: str) -> None:
@@ -1987,12 +2718,13 @@ class ParquetRawAggTradeArchive:
             pinned = self._pins.pop(token, None)
             if pinned is None:
                 return
-            data_epoch = pinned[0]
+            data_epoch = pinned.data_epoch
             remaining = self._pin_counts[data_epoch] - 1
             if remaining <= 0:
                 self._pin_counts.pop(data_epoch, None)
             else:
                 self._pin_counts[data_epoch] = remaining
+        pinned.leases.close()
 
     def scan_range(
         self,
@@ -2032,9 +2764,9 @@ class ParquetRawAggTradeArchive:
         after: RawAggTradeCursor | None = None,
         limit: int = 50_000,
         dataset_ref: RawAggTradeDatasetRef | None = None,
+        reject_id_conflicts: bool = False,
     ) -> RawAggTradePage:
         page_limit = max(1, min(int(limit), 1_000_000))
-        bounded_limit = page_limit + 1
         if after is not None and not isinstance(after, RawAggTradeCursor):
             raise TypeError("after must be RawAggTradeCursor or None")
         bounds = self._normalize_scan_bounds(
@@ -2043,6 +2775,11 @@ class ParquetRawAggTradeArchive:
             start_agg_trade_id=start_agg_trade_id,
             end_agg_trade_id=end_agg_trade_id,
         )
+        if reject_id_conflicts and (
+            after is not None or start_time_ms is not None or end_time_ms is not None
+            or bounds[2] is None or bounds[3] is None or bounds[3] - bounds[2] + 1 > page_limit
+        ):
+            raise ValueError("conflict checking requires an entire bounded ID window")
         if dataset_ref is None:
             manifests = self._discover_manifests(
                 exchange=exchange,
@@ -2086,6 +2823,43 @@ class ParquetRawAggTradeArchive:
                 )
             ]
             data_epoch = dataset_ref.data_epoch
+        return self._scan_manifests(
+            manifests, bounds, after, page_limit,
+            filter_arrow=dataset_ref is not None,
+            reject_id_conflicts=dataset_ref is not None or reject_id_conflicts,
+            data_epoch=data_epoch,
+        )
+
+    def read_verified_repair_page(
+        self, *, exchange: str, market_type: str, symbol: str,
+        start_agg_trade_id: int, end_agg_trade_id: int, time_bounds: tuple[int, int],
+    ) -> RawAggTradePage:
+        """Read bounded repair candidates from committed, checksum-verified days."""
+        start_ms, end_ms, first, last = self._normalize_scan_bounds(
+            start_time_ms=time_bounds[0], end_time_ms=time_bounds[1],
+            start_agg_trade_id=start_agg_trade_id, end_agg_trade_id=end_agg_trade_id,
+        )
+        assert start_ms is not None and end_ms is not None and first is not None and last is not None
+        if last - first >= 1000 or end_ms // 86_400_000 - start_ms // 86_400_000 > 1:
+            raise ValueError("verified repair requires at most 1,000 IDs across two UTC days")
+        with ExitStack() as leases:
+            manifests = self._discover_verified_manifests(
+                leases=leases,
+                exchange=_identity(exchange, "exchange", lower=True),
+                market_type=_identity(market_type, "market type", lower=True),
+                symbol=_identity(symbol, "symbol", upper=True),
+                start_time_ms=start_ms, end_time_ms=end_ms, repair_ids=(first, last),
+            )
+            # Use time to select days only. A matching ID outside the bracket must
+            # reach the repair owner so it can reject it instead of hiding it.
+            return self._scan_manifests(
+                manifests, (None, None, first, last), None, last - first + 1,
+                filter_arrow=True, reject_id_conflicts=True, data_epoch=None,
+            )
+
+    def _scan_manifests(self, manifests, bounds, after, page_limit, *,
+                        filter_arrow, reject_id_conflicts, data_epoch):
+        bounded_limit = page_limit + 1
         if len(manifests) > self.max_scan_files:
             self._record_scan_limit_rejection()
             raise RawAggTradeScanLimitError(
@@ -2094,7 +2868,7 @@ class ParquetRawAggTradeArchive:
             )
         estimated_physical_rows = sum(item.row_count for item in manifests)
         if (
-            dataset_ref is None
+            data_epoch is None
             and estimated_physical_rows > self.max_physical_scan_rows
         ):
             self._record_scan_limit_rejection()
@@ -2134,7 +2908,7 @@ class ParquetRawAggTradeArchive:
                         "time/ID bounds",
                     )
                 cutoff = _row_cutoff(deduplicated, bounded_limit)
-                if dataset_ref is not None:
+                if filter_arrow:
                     # A revealed tape page can contain only a handful of IDs
                     # in a multi-million-row day. Filter in Arrow before Python
                     # conversion so these UI reads cannot monopolize the actor.
@@ -2173,10 +2947,10 @@ class ParquetRawAggTradeArchive:
                     if not _row_matches_bounds(row, bounds):
                         continue
                     current = deduplicated.get(row["agg_trade_id"])
-                    if current is not None and dataset_ref is not None:
+                    if current is not None and reject_id_conflicts:
                         if _immutable_trade_payload(current) != _immutable_trade_payload(row):
                             raise RuntimeError(
-                                "exact raw aggTrade generation contains conflicting "
+                                "raw aggTrade read contains conflicting "
                                 f"duplicate aggregate-trade ID {row['agg_trade_id']}"
                             )
                     if current is None or row["received_at_ms"] >= current["received_at_ms"]:
@@ -2372,16 +3146,19 @@ class ParquetRawAggTradeArchive:
             scanned_row_count=scanned_rows,
         )
 
-    def _partition_path(self, key: tuple[str, str, str, str]) -> Path:
-        exchange, market_type, symbol, date = key
-        _validate_utc_date(date)
+    def _identity_path(self, identity: tuple[str, str, str]) -> Path:
+        exchange, market_type, symbol = identity
         return (
             self.root
             / f"exchange={_partition_value(exchange)}"
             / f"market_type={_partition_value(market_type)}"
             / f"symbol={_partition_value(symbol)}"
-            / f"date={date}"
         )
+
+    def _partition_path(self, key: tuple[str, str, str, str]) -> Path:
+        exchange, market_type, symbol, day = key
+        _validate_utc_date(day)
+        return self._identity_path((exchange, market_type, symbol)) / f"date={day}"
 
     def _write_verified_chunk(
         self,
@@ -2440,21 +3217,51 @@ class ParquetRawAggTradeArchive:
         self,
         partition: Path,
         receipt: Mapping[str, object],
+        *,
+        repair_ids: tuple[int, int] | None = None,
+        verify_parquet: bool = True,
     ) -> None:
         objects = receipt.get("objects")
-        if not isinstance(objects, list):
+        metadata = receipt.get("metadata")
+        if not isinstance(objects, list) or not isinstance(metadata, Mapping):
             raise RuntimeError("verified raw aggTrade receipt objects are invalid")
         for raw in objects:
             if not isinstance(raw, Mapping):
                 raise RuntimeError("verified raw aggTrade receipt object is invalid")
             item = RawAggTradeObjectManifest.from_dict(raw)
+            if (item.source_quality != "binance_public_checksum"
+                    or item.source_checksum_sha256 != metadata["source_checksum_sha256"]):
+                raise RuntimeError("verified raw aggTrade object does not match the day source")
+            if repair_ids is not None and not _overlaps_ids(item, repair_ids):
+                continue
             path = self._resolve_object_path(item.object_id)
             if path.parent.resolve() != partition.resolve():
                 raise RuntimeError("verified raw aggTrade receipt object escaped partition")
             if not path.is_file() or not _manifest_path(path).is_file():
                 raise RuntimeError("verified raw aggTrade receipt object is missing")
-            if self._object_manifest(self._read_file_manifest(path)) != item:
+            manifest = self._read_file_manifest(path, allow_fallback=verify_parquet)
+            if self._object_manifest(manifest, verify_parquet=verify_parquet) != item:
                 raise RuntimeError("verified raw aggTrade receipt checksum changed")
+
+    def _verified_partition_receipt(
+        self,
+        partition: Path,
+        identity_day: tuple[str, str, str, str],
+        *,
+        repair_ids: tuple[int, int] | None = None,
+        verify_parquet: bool = True,
+    ) -> dict[str, object]:
+        receipt = self._read_verified_receipt(partition / "_verified_import.json")
+        metadata = receipt["metadata"]
+        assert isinstance(metadata, Mapping)
+        if (
+            metadata["exchange"], metadata["market_type"], metadata["symbol"], metadata["date"],
+        ) != identity_day:
+            raise RuntimeError("verified raw aggTrade receipt identity changed")
+        self._validate_verified_receipt_objects(
+            partition, receipt, repair_ids=repair_ids, verify_parquet=verify_parquet,
+        )
+        return receipt
 
     def _record_import_conflict(
         self,
@@ -2506,11 +3313,13 @@ class ParquetRawAggTradeArchive:
     def _discover_verified_manifests(
         self,
         *,
+        leases: ExitStack,
         exchange: str,
         market_type: str,
         symbol: str,
         start_time_ms: int,
         end_time_ms: int,
+        repair_ids: tuple[int, int] | None = None,
     ) -> list[_FileManifest]:
         identity_root = (
             self.root
@@ -2528,49 +3337,58 @@ class ParquetRawAggTradeArchive:
                     "checksum-verified raw aggTrade partition is quarantined"
                 )
             if not receipt_path.is_file():
+                if repair_ids is not None:
+                    continue
                 raise RuntimeError(
                     "checksum-verified raw aggTrade daily coverage is missing"
                 )
-            receipt = self._read_verified_receipt(receipt_path)
-            metadata = receipt["metadata"]
-            assert isinstance(metadata, Mapping)
-            if (
-                metadata.get("exchange"),
-                metadata.get("market_type"),
-                metadata.get("symbol"),
-                metadata.get("date"),
-            ) != (exchange, market_type, symbol, date):
-                raise RuntimeError("verified raw aggTrade receipt identity changed")
-            self._validate_verified_receipt_objects(partition, receipt)
+            # Repair already has a bounded async retry budget in its owner.
+            deadline = time.monotonic() + (1.0 if repair_ids is None else 0.0)
+            self._enter_retention_lease(leases, partition.relative_to(self.root).as_posix(), deadline)
+            # Maintenance could have won the lease after the first observation.
+            if conflict_path.exists():
+                raise RuntimeError("checksum-verified raw aggTrade partition is quarantined")
+            if not receipt_path.is_file():
+                if repair_ids is not None:
+                    continue
+                raise RuntimeError("checksum-verified raw aggTrade daily coverage is missing")
+            receipt = self._verified_partition_receipt(
+                partition, (exchange, market_type, symbol, date), repair_ids=repair_ids,
+            )
             objects = receipt["objects"]
             assert isinstance(objects, list)
             for raw in objects:
                 assert isinstance(raw, Mapping)
                 item = RawAggTradeObjectManifest.from_dict(raw)
-                if item.max_trade_time_ms < start_time_ms:
-                    continue
-                if item.min_trade_time_ms > end_time_ms:
+                if repair_ids is not None:
+                    if not _overlaps_ids(item, repair_ids):
+                        continue
+                elif item.max_trade_time_ms < start_time_ms or item.min_trade_time_ms > end_time_ms:
                     continue
                 manifests.append(
                     self._file_manifest_from_object(item)
                 )
+            if len(manifests) > self.max_scan_files:
+                raise RawAggTradeScanLimitError(
+                    "exact raw aggTrade generation exceeds max_scan_files"
+                )
         manifests.sort(key=lambda item: (item.first_order_key, item.path.name))
-        if len(manifests) > self.max_scan_files:
-            raise RawAggTradeScanLimitError(
-                "exact raw aggTrade generation exceeds max_scan_files"
-            )
         return manifests
 
     def _object_manifest(
         self,
         manifest: _FileManifest,
+        *,
+        verify_parquet: bool = True,
     ) -> RawAggTradeObjectManifest:
         path = manifest.path.resolve()
         root = self.root.resolve()
         if not path.is_relative_to(root):
             raise RuntimeError("raw aggTrade object escaped archive root")
         sidecar = _manifest_path(path)
-        parquet_sha256 = _file_sha256(path)
+        parquet_sha256 = _file_sha256(path) if verify_parquet else manifest.parquet_sha256
+        if parquet_sha256 is None:
+            raise RuntimeError("verified raw aggTrade Parquet checksum is missing")
         if (
             manifest.parquet_sha256 is not None
             and manifest.parquet_sha256 != parquet_sha256
@@ -2813,11 +3631,11 @@ class ParquetRawAggTradeArchive:
         manifests.sort(key=lambda item: (item.first_order_key, item.path.name))
         return manifests
 
-    def _read_file_manifest(self, path: Path) -> _FileManifest:
+    def _read_file_manifest(self, path: Path, *, allow_fallback: bool = True) -> _FileManifest:
         sidecar = _manifest_path(path)
         try:
             payload = json.loads(sidecar.read_text(encoding="utf-8"))
-            if payload.get("file") != path.name:
+            if not isinstance(payload, dict) or payload.get("file") != path.name:
                 raise ValueError("manifest file identity mismatch")
             parquet_sha256 = payload.get("parquet_sha256")
             if parquet_sha256 is not None:
@@ -2866,6 +3684,8 @@ class ParquetRawAggTradeArchive:
                 source_checksum_sha256=source_checksum,
             )
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            if not allow_fallback:
+                raise
             with self._write_lock:
                 self._stats["manifest_fallbacks"] += 1
             parquet = self._pq.ParquetFile(path)
@@ -3605,6 +4425,15 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _sync_retention_directory(path: Path) -> None:
+    if os.name == "posix":
+        descriptor = os.open(path, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
+
 def _atomic_write_json(path: Path, payload: Mapping[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
@@ -3651,6 +4480,10 @@ def _immutable_trade_payload(row: Mapping[str, object]) -> tuple[object, ...]:
         for field_name in RAW_AGG_TRADE_COLUMNS
         if field_name not in {"event_time_ms", "received_at_ms", "source"}
     )
+
+
+def _overlaps_ids(item: RawAggTradeObjectManifest, ids: tuple[int, int]) -> bool:
+    return item.min_agg_trade_id <= ids[1] and item.max_agg_trade_id >= ids[0]
 
 
 __all__ = [

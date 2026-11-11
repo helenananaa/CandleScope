@@ -1,5 +1,6 @@
 import PreparationJobsPanel from "../../data-preparation/PreparationJobsPanel.js";
 import { useState } from "react";
+import ReplayRawTradeRetentionPanel from "./ReplayRawTradeRetentionPanel.js";
 
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
@@ -151,6 +152,7 @@ export default function ReplayStorageGovernancePanel({
       </header>
 
       <PreparationJobsPanel />
+      <ReplayRawTradeRetentionPanel disabled={busy} formatBytes={formatBytes} />
 
       {inventory === null ? (
         <div className="training-hub-empty">

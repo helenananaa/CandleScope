@@ -64,20 +64,22 @@ class ReverseTimePaginationPolicy:
         if cursor_end_ms is None:
             return None
         oldest_bar_time = min(int(bar.open_time) for bar in bars)
-        if oldest_bar_time >= cursor_end_ms:
+        if oldest_bar_time > cursor_end_ms:
             return None
-        if task.start_ms is not None and oldest_bar_time <= task.start_ms:
+        start_ms = previous_request.start_ms
+        if start_ms is not None and oldest_bar_time <= start_ms:
             return None
         return TransportRequest(
             descriptor=previous_request.descriptor,
             limit=batch_size,
-            start_ms=int(task.start_ms) if task.start_ms is not None else None,
+            start_ms=start_ms,
             end_ms=oldest_bar_time - 1,
         )
 
     @staticmethod
     def _descriptor(task) -> StreamDescriptor:
         from app.data_engine.ingestion.models import StreamDescriptor, StreamType
+        from app.data_engine.series_identity import identity_from_metadata
 
         return StreamDescriptor(
             symbol=task.symbol,
@@ -85,7 +87,28 @@ class ReverseTimePaginationPolicy:
             interval=task.interval,
             exchange=task.exchange,
             market_type=task.market_type,
+            series_identity=identity_from_metadata(task.exchange, task.metadata),
         )
+
+
+class BybitHistoricalPaginationPolicy(ReverseTimePaginationPolicy):
+    """Bybit selects the newest rows within an inclusive bounded range."""
+
+    def first_request(
+        self, task, *, batch_size: int, now_ms: int,
+    ) -> TransportRequest:
+        from app.data_engine.interval_policy import parse_interval_spec
+
+        request = super().first_request(task, batch_size=batch_size, now_ms=now_ms)
+        spec = parse_interval_spec(task.interval)
+        if spec is not None:
+            if request.start_ms is not None:
+                first = spec.floor_ms(request.start_ms)
+                request.start_ms = first if first == request.start_ms else spec.next_ms(first)
+            last_closed = spec.previous_ms(spec.floor_ms(now_ms))
+            if request.start_ms is None or request.start_ms <= last_closed:
+                request.end_ms = min(request.end_ms, last_closed)
+        return request
 
 
 class BinanceHistoricalPaginationPolicy(ReverseTimePaginationPolicy):

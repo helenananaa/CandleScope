@@ -2,6 +2,8 @@
 from concurrent.futures import CancelledError
 from dataclasses import FrozenInstanceError, replace
 import gc
+import subprocess
+import sys
 import threading
 import weakref
 
@@ -12,6 +14,7 @@ from app.data_engine.aggregation.core import combine
 from app.data_engine.data_manager.models import SeriesKey
 from app.data_engine.memory_budget import MemoryBudgetExceeded
 from app.data_engine.storage import klines_repo
+from app.data_engine.storage.revisions import BLOCK_CHANGE_WINDOW
 from tests.test_shared_blocks_integration import dm, write, KEY, DAY, read_rows
 from tests.test_shared_aggregation_blocks import assert_idle
 
@@ -79,6 +82,53 @@ def test_warm_pages_avoid_candle_row_io_and_do_not_reserve_decode_allowance(dm, 
     assert second == first and receipt.cache_hits == 8 and receipt.storage_rows == 0
     assert dm.shared_blocks.snapshot()['builds'] == builds
     assert dm.memory_budget.snapshot()['reserved_bytes'] == 0
+
+
+def test_disjoint_external_amendments_reuse_unaffected_blocks_at_the_new_revision(dm):
+    previous, old_receipt = read(dm)
+    state = dm.shared_blocks.snapshot()
+    subprocess.run([sys.executable, '-c', """
+import sqlite3
+import sys
+with sqlite3.connect(sys.argv[1]) as conn:
+    conn.executemany('UPDATE klines SET volume=volume+1 WHERE open_time=?',
+                     [(16*86400000,), (48*86400000,)])
+""", str(klines_repo.KLINES_DB_PATH)], check=True)
+
+    middle, receipt = read(dm, start=32 * DAY, end=48 * DAY)
+    assert receipt.cache_hits == 1 and receipt.storage_rows == 0
+    assert receipt.revisions != old_receipt.revisions
+    assert middle == (replace(previous[2], revisions=receipt.revisions),)
+    current, fresh = read(dm)
+    assert fresh.revisions == receipt.revisions and fresh.cache_hits == 6
+    assert [summary.values.volume - prior.values.volume
+            for summary, prior in zip(current, previous)] == [0, 1, 0, 1, 0, 0, 0, 0]
+    assert combine(current).values.volume == pytest.approx(combine(previous).values.volume + 2)
+    assert previous[2].revisions == old_receipt.revisions
+    observed = dm.shared_blocks.snapshot()
+    assert observed['builds'] - state['builds'] == 2
+    assert observed['invalidations'] - state['invalidations'] == 2
+    assert observed['revalidated_blocks'] - state['revalidated_blocks'] == 6
+    assert_idle(dm.shared_blocks)
+
+
+@pytest.mark.parametrize('missing_proof', ['journal-gap', 'overflow'])
+def test_history_blocks_fall_back_when_exact_changes_cannot_be_proven(dm, missing_proof):
+    previous, old_receipt = read(dm)
+    with klines_repo._connect() as conn:
+        edits = 1 if missing_proof == 'journal-gap' else BLOCK_CHANGE_WINDOW + 1
+        conn.executemany('UPDATE klines SET volume=volume+1 WHERE open_time=?', [(DAY,)] * edits)
+        if missing_proof == 'journal-gap':
+            conn.execute('DELETE FROM kline_block_changes WHERE revision=(SELECT MAX(revision) FROM kline_block_changes)')
+        assert conn.execute('SELECT COUNT(*) FROM kline_block_changes').fetchone()[0] <= BLOCK_CHANGE_WINDOW
+        conn.commit()
+
+    current, fresh = read(dm)
+    assert fresh.revisions != old_receipt.revisions
+    assert fresh.cache_hits == 0 and fresh.storage_rows == 120
+    assert current[0].values.volume == previous[0].values.volume + edits
+    assert dm.shared_blocks.snapshot()['revalidated_blocks'] == 0
+    assert_idle(dm.shared_blocks)
 
 
 def test_missing_and_untrusted_slots_are_partial_not_exhausted_or_budget_gaps(dm):

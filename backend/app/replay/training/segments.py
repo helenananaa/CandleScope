@@ -146,7 +146,11 @@ def _archive_descriptor(
             "source_quality": trade_ref.get("source_quality"),
             "object_manifests": objects if isinstance(objects, list) else [],
         }
-        adapter_kind = "RAW_AGG_TRADE_PARTITION_SET"
+        if trade_ref.get("source_quality") == "user_market_trades":
+            source_manifest["local_revision"] = trade_ref.get("revision")
+            adapter_kind = "LOCAL_MARKET_TRADE_REVISION"
+        else:
+            adapter_kind = "RAW_AGG_TRADE_PARTITION_SET"
     else:
         raise ValueError("archive segment source_kind is unsupported")
 

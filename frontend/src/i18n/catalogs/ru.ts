@@ -1,4 +1,5 @@
 import { continuousEnglish } from "./continuousMessages.js";
+import { tradeHistoryEnglish } from "./tradeHistoryMessages.js";
 import { replayNoteEnglish } from "./replayNoteMessages.js";
 import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
@@ -9,6 +10,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ru = {
   ...continuousEnglish,
+  ...tradeHistoryEnglish,
   ...replayNoteEnglish,
   ...historyStudyEnglish,
   "chartTime.title": "Go to date",
@@ -2214,6 +2216,7 @@ export const ru = {
   "replay.liq.adlHint": "Журнал контрагента {count} строк · детерминированная симуляция, не историческая частная очередь биржи",
   "local.import": "Импорт CSV",
   "local.localOnly": "Данные остаются на этом компьютере",
+  "local.marketTradeCoverage": "Используйте файл рыночных сделок с непрерывной нумерацией и укажите интервал UTC. Импорт остаётся локальным.",
   "local.chooseFile": "Выберите файл CSV",
   "local.baseAsset": "Актив количества (единица объёма)",
   "local.quoteAsset": "Актив котировки цены",
@@ -4306,6 +4309,7 @@ export const ru = {
   "research.data.noContext": "У этого входа нет идентичности замороженного набора данных.",
   "research.data.available": "Доступные локальные наборы данных",
   "research.execution.precise": "Точность последовательности сделок и допущения исполнения остаются явными и неизменяемыми для каждого запуска.",
+  "research.execution.preciseArchiveHint": "Для автоматической загрузки используются агрегированные сделки фьючерсов Binance USD-M. Выберите диапазон в пределах завершённых суток UTC.",
   "research.execution.python": "Среды выполнения Python и внешних моделей инициализируются только внутри этого исследовательского приложения.",
   "research.execution.general": "Элементы управления исполнением ограничены выбранной задачей и никогда не изменяют завершённый запуск.",
   "research.run.none": "BacktestRun не выбран.",

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import gc
+from types import SimpleNamespace
 from typing import Any
 
 import aiohttp
@@ -133,6 +134,86 @@ def test_catalog_routes_market_families_and_capabilities_fail_closed() -> None:
     assert depth.supports_transport(TransportMode.PLUGIN_STREAM)
     assert "orderbook.ccxt_managed_snapshot" in capabilities.protocol_features
     assert capabilities.channel_capability(MarketChannel.FULL_DEPTH, "spot") is None
+
+
+def test_gate_metric_history_is_advertised_for_perpetuals_only() -> None:
+    caps = CcxtUnifiedPlugin(get_ccxt_catalog_entry("gate")).capabilities()
+    for channel in (MarketChannel.OPEN_INTEREST, MarketChannel.FUNDING_RATE):
+        for swap in ("swap.linear", "swap.inverse"):
+            capability = caps.channel_capability(channel, swap)
+            assert capability is not None and capability.history
+        for delivery in ("future.linear", "future.inverse"):
+            assert caps.channel_capability(channel, delivery) is None
+
+
+def test_gate_open_interest_uses_second_bounds_with_pinned_ccxt(monkeypatch: Any) -> None:
+    from ccxt.async_support import gate
+
+    start_s, end_s = 1_794_200_700, 1_794_202_800
+    symbol = "BTC/USDT:USDT"
+    exchange = gate()
+    market = {
+        "id": "BTC_USDT", "symbol": symbol, "swap": True, "linear": True,
+        "settleId": "usdt",
+    }
+    exchange.markets = {symbol: market}
+    calls = []
+
+    async def load_markets():
+        return exchange.markets
+
+    async def fetch_stats(params):
+        calls.append(params)
+        return [
+            {"time": start_s - 300, "open_interest": "10", "open_interest_usd": "20"},
+            {"time": start_s, "open_interest": "11", "open_interest_usd": "22"},
+            {"time": end_s, "open_interest": "12", "open_interest_usd": "24"},
+            {"time": end_s + 300, "open_interest": "13", "open_interest_usd": "26"},
+        ]
+
+    monkeypatch.setattr(exchange, "load_markets", load_markets)
+    monkeypatch.setattr(exchange, "publicFuturesGetSettleContractStats", fetch_stats)
+    monkeypatch.setattr(
+        "app.exchanges.ccxt_ext.generic._create_exchange", lambda *_args, **_kwargs: exchange,
+    )
+    config = IngestionConfig(proxy_mode="none")
+    plugin = CcxtUnifiedPlugin(get_ccxt_catalog_entry("gate"))
+    descriptor = StreamDescriptor(
+        "BTC_USDT", StreamType.OPEN_INTEREST, interval="5m", exchange="gate",
+        market_type="swap.linear",
+    )
+
+    async def run():
+        try:
+            rows = await plugin.fetch_history_with_config(
+                TransportRequest(
+                    descriptor, limit=30, start_ms=start_s * 1000 - 1,
+                    end_ms=end_s * 1000 + 999, history=True,
+                ),
+                config,
+            )
+            empty = await plugin.fetch_history_with_config(
+                TransportRequest(
+                    descriptor, limit=30, start_ms=start_s * 1000 + 1,
+                    end_ms=start_s * 1000 + 999, history=True,
+                ),
+                config,
+            )
+            assert empty == []
+            return rows
+        finally:
+            await plugin.close_history_transport(config)
+
+    rows = asyncio.run(run())
+    assert calls == [{
+        "contract": "BTC_USDT", "settle": "usdt", "interval": "5m",
+        "limit": 8, "from": start_s, "to": end_s,
+    }]
+    normalizer = plugin.normalizer(config, descriptor)
+    parsed = [normalizer.parse(row) for row in rows]
+    assert [event.event_time_ms for event in parsed] == [start_s * 1000, end_s * 1000]
+    assert [event.data["open_interest"] for event in parsed] == [11, 12]
+    assert [event.data["open_interest_value"] for event in parsed] == [22, 24]
 
 
 def test_generic_provider_flag_controls_websocket_routing() -> None:
@@ -334,7 +415,8 @@ def test_unified_kline_projection_emits_one_closure_transition() -> None:
     assert event.data["open_time"] == first_open
 
 
-def test_bybit_live_close_preserves_venue_confirmation_and_final_volume(tmp_path, monkeypatch) -> None:
+@pytest.mark.parametrize("preview_high", ["74854.2", "74854.4"])
+def test_bybit_live_close_preserves_venue_confirmation_and_final_volume(tmp_path, monkeypatch, preview_high) -> None:
     async def run():
         descriptor = StreamDescriptor("BTCUSDT", StreamType.KLINE, interval="5m",
                                       exchange="bybit", market_type="swap.linear")
@@ -348,7 +430,7 @@ def test_bybit_live_close_preserves_venue_confirmation_and_final_volume(tmp_path
         confirmed = {"start": opened, "end": opened + 299_999, "confirm": True,
                      "open": "74826.6", "high": "74854.3", "low": "74758.7",
                      "close": "74766.1", "volume": "183.532"}
-        preview = {**confirmed, "confirm": False, "high": "74854.4", "volume": "183.414"}
+        preview = {**confirmed, "confirm": False, "high": preview_high, "volume": "183.414"}
         successor = {**preview, "start": opened + 300_000, "end": opened + 599_999}
 
         def project(candle):
@@ -375,9 +457,12 @@ def test_bybit_live_close_preserves_venue_confirmation_and_final_volume(tmp_path
                 received_at_ms=opened + 300_000,
             )).data["is_closed"]
 
+            from app.data_engine.bar_aggregator import aggregator as aggregator_module
             from app.data_engine.data_manager.manager import DataManager
             from app.data_engine.storage import klines_repo
 
+            now_ms = opened + 299_000
+            monkeypatch.setattr(aggregator_module, "time", SimpleNamespace(time=lambda: now_ms / 1000))
             monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", tmp_path / "live.sqlite")
             klines_repo.init_klines_storage()
             manager = DataManager()
@@ -385,14 +470,14 @@ def test_bybit_live_close_preserves_venue_confirmation_and_final_volume(tmp_path
             manager._started = True  # Enable the production bridge without opening exchange sockets.
             agg = manager.bar_aggregator
             agg.add_target("BTCUSDT", "5m", exchange="bybit", market_type="swap.linear")
+            agg.add_target("BTCUSDT", "10m", exchange="bybit", market_type="swap.linear")
             preview_event = normalizer.parse(RawMessage(
                 payload=preview_events[0].payload, source=DataSource.WEBSOCKET,
                 stream_type=StreamType.KLINE, received_at_ms=opened + 299_000,
             ))
             await agg.on_market_event(preview_event)
+            now_ms = opened + 300_000
             await agg.on_market_event(event)
-            await manager.aggregator_bridge.delivery.stop()
-            await manager.event_bus.close()
             [saved] = klines_repo.query_klines("BTCUSDT", "5m", exchange="bybit", market_type="swap.linear")
             assert saved["source"] == "bybit_ws_confirmed"
             assert saved["high"] == 74854.3 and saved["volume"] == 183.532
@@ -403,6 +488,21 @@ def test_bybit_live_close_preserves_venue_confirmation_and_final_volume(tmp_path
             [unconfirmed] = project({**successor, "confirm": None, "volume": "183.415"})
             assert unconfirmed.payload["is_closed"] is False
             assert "source_close_time_ms" not in unconfirmed.payload
+
+            [final_leaf] = project({**successor, "confirm": True, "open": "74766.1",
+                                    "high": "74780.0", "volume": "20.005"})
+            final_event = normalizer.parse(RawMessage(
+                payload=final_leaf.payload, source=DataSource.WEBSOCKET,
+                stream_type=StreamType.KLINE, received_at_ms=opened + 600_000,
+            ))
+            now_ms = opened + 600_000
+            await agg.on_market_event(final_event)
+            await manager.aggregator_bridge.delivery.stop()
+            await manager.event_bus.close()
+            [derived] = klines_repo.query_klines("BTCUSDT", "10m", exchange="bybit", market_type="swap.linear")
+            assert derived["source"] == "data_manager_composite_closed"
+            assert derived["open_time"] == opened and derived["volume"] == pytest.approx(203.537)
+            assert derived["high"] == 74854.3
         finally:
             await exchange.close()
 
@@ -780,14 +880,17 @@ class _CountingRestExchange(_UnifiedFakeExchange):
         timeframe: str,
         since: int | None,
         limit: int,
+        *,
+        params: dict[str, int],
     ) -> list[list[Any]]:
-        assert (symbol, timeframe, since, limit) == (
+        assert (symbol, timeframe, since, limit, params) == (
             "BTC/USDT",
             "1m",
-            1_700_000_000_000,
+            1_700_000_040_000,
             2,
+            {"end": 1_700_000_100_000},
         )
-        return [[1_700_000_000_000, 10, 12, 9, 11, 3]]
+        return [[1_700_000_040_000, 10, 12, 9, 11, 3]]
 
     async def fetch_ticker(self, symbol: str) -> dict[str, Any]:
         assert symbol == "BTC/USDT"
@@ -818,8 +921,8 @@ def test_generic_rest_fetch_reuses_pooled_exchange_and_returns_unified_rows(
     request = TransportRequest(
         descriptor=_descriptor(StreamType.KLINE),
         limit=2,
-        start_ms=1_700_000_000_000,
-        end_ms=1_700_000_060_000,
+        start_ms=1_700_000_040_000,
+        end_ms=1_700_000_100_000,
     )
 
     async def run() -> list[RawMessage]:
@@ -1602,3 +1705,313 @@ def test_global_registry_contains_every_pinned_id() -> None:
     assert {"bybit", "kraken", "bitget", "gate"}.issubset(ids)
     assert len(ids) == 106
     assert "twelvedata" in ids
+
+
+@pytest.mark.parametrize("repair", ["complete", "incomplete", "target_deleted", "source_changed", "successor_first", "dispatcher_busy", "clock_skew"])
+def test_bybit_mid_bucket_repair_joins_the_live_close(tmp_path, monkeypatch, repair):
+    from app.data_engine.bar_aggregator import aggregator as aggregator_module
+    from app.data_engine.data_manager.manager import DataManager
+    from app.data_engine.data_manager.models import BarData
+    from app.data_engine.ingestion.models import MarketEvent
+    from app.data_engine.storage import klines_repo
+
+    key = dict(exchange="bybit", market_type="swap.linear", symbol="BTCUSDT")
+    start, step = 1_794_138_000_000, 300_000
+    boundary = start + 4 * step
+    now = boundary - 1000
+    monkeypatch.setattr(aggregator_module, "time", SimpleNamespace(time=lambda: now / 1000))
+    monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", tmp_path / "cold-repair.sqlite")
+    klines_repo.init_klines_storage()
+
+    def row(opened, price):
+        return dict(open_time=opened, close_time=opened + step - 1, open=price, high=price + 1,
+                    low=price - 1, close=price, volume=price, quote_volume=None, trades=None,
+                    taker_buy_base=None, taker_buy_quote=None)
+
+    async def run():
+        nonlocal now
+        manager = DataManager()
+        storage = klines_repo.KlinesRepoAdapter()
+        manager.set_storage(storage)
+        manager._started = True
+        try:
+            for interval in ("5m", "20m"):
+                manager.bar_aggregator.add_target(interval=interval, **key)
+            final = row(boundary - step, 4)
+            if repair == "source_changed":
+                publisher = manager.bar_aggregator.publisher
+                original_emit = publisher.emit_closed
+
+                async def amend_before_commit(bar):
+                    if bar.interval == "20m":
+                        klines_repo.upsert_klines(interval="5m", rows=[row(start, 7)], source="backfill", **key)
+                    return await original_emit(bar)
+
+                monkeypatch.setattr(publisher, "emit_closed", amend_before_commit)
+            for closed in (False, True):
+                if closed:
+                    repaired = [row(start + i * step, i + 1) for i in range(2 if repair == "incomplete" else 3)]
+                    klines_repo.upsert_klines(interval="5m", rows=repaired, source="backfill", **key)
+                    await manager.on_bars_backfilled(interval="5m",
+                        bars=[BarData.from_storage_row({**bar, "source": "backfill"}) for bar in repaired],
+                        **key)
+                    if repair == "target_deleted":
+                        storage.delete_bars(interval="20m", start_ms=start, end_ms=start, **key)
+                    now = boundary
+                async def feed(bar, is_closed):
+                    values = {**bar, "interval": "5m", "is_closed": is_closed,
+                              "bybit_close_confirmed": is_closed, "quote_volume": 0}
+                    await manager.bar_aggregator.on_market_event(MarketEvent(
+                        StreamType.KLINE, key["symbol"], key["exchange"], bar["open_time"], now,
+                        DataSource.PLUGIN, data=values, market_type=key["market_type"],
+                    ))
+
+                if closed and repair == "successor_first":
+                    await feed(row(boundary, 5), False)
+                if closed and repair == "dispatcher_busy":
+                    delivery = manager.aggregator_bridge.delivery
+                    await delivery._dispatcher.acquire()
+                    asyncio.get_running_loop().call_later(.3, delivery._dispatcher.release)
+                if closed and repair == "clock_skew":
+                    from app.data_engine.bar_aggregator import history_prefix_runtime
+                    from app.data_engine.data_manager import history_blocks
+
+                    clock = [boundary - 60]
+                    fake_time = SimpleNamespace(time=lambda: clock[0] / 1000)
+                    monkeypatch.setattr(history_prefix_runtime, "time", fake_time)
+                    monkeypatch.setattr(history_blocks, "time", fake_time)
+                    asyncio.get_running_loop().call_later(.03, clock.__setitem__, 0, boundary)
+                await feed(final, closed)
+            await manager.aggregator_bridge.delivery.flush()
+            rows = klines_repo.query_klines(interval="20m", **key)
+            if repair in {"complete", "successor_first", "dispatcher_busy", "clock_skew"}:
+                [saved] = rows
+                assert (saved["open_time"], saved["open"], saved["close"], saved["volume"]) == (start, 1, 4, 10)
+                assert saved["source"] == "data_manager_composite_closed"
+            else:
+                assert rows == []
+        finally:
+            await manager.shutdown()
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("requester", ["warm_start_custom_tail", "warm_start_custom_seed", "explicit_refresh"])
+def test_bybit_linear_warmup_reuses_committed_components(tmp_path, monkeypatch, requester):
+    from app.data_engine.backfill import BackfillConfig, BackfillEngine, BackfillStatus
+    from app.data_engine.storage import klines_repo
+    from app.exchanges.ccxt_ext.unified import make_unified_payload
+
+    monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", tmp_path / "bybit-warmup.db")
+    klines_repo.init_klines_storage()
+    market = {"exchange": "bybit", "market_type": "swap.linear"}
+    symbol = "BTC/USDT:USDT"
+    step = 300_000
+    start = 1_700_000_400_000
+    storage = klines_repo.AsyncKlinesRepoAdapter()
+
+    def bar(index, volume=2):
+        opened = start + index * step
+        return {"open_time": opened, "close_time": opened + step - 1,
+                "open": 100, "high": 110, "low": 90, "close": 105, "volume": volume,
+                "quote_volume": None, "trades": None, "taker_buy_base": None, "taker_buy_quote": None}
+
+    class Transport:
+        def __init__(self):
+            self.requests = []
+
+        async def http_fetch(self, request):
+            self.requests.append(request)
+            return [
+                RawMessage(make_unified_payload("kline", [row["open_time"], 100, 110, 90, 105, 3], is_closed=True),
+                           DataSource.HTTP, StreamType.KLINE, row["close_time"])
+                for row in (bar(index) for index in range(4))
+                if request.start_ms <= row["open_time"] <= request.end_ms
+            ]
+
+    transport = Transport()
+    engine = BackfillEngine(
+        BackfillConfig(history_archive_enabled=False, fetch_rate_limit_delay=0, reconcile_enable_cache_push=False),
+        storage, transport, ingestion_config=IngestionConfig(proxy_mode="none"),
+    )
+
+    async def no_rate_limit():
+        pass
+
+    engine.fetcher.set_rate_limiter(no_rate_limit)
+
+    async def exercise():
+        try:
+            await storage.upsert_bars(symbol, "5m", [bar(0), bar(2)], source="bybit_ws_confirmed", **market)
+            await storage.upsert_bars(symbol, "5m", [bar(3, 999)], source="manual", **market)
+            derived = requester == "warm_start_custom_tail"
+            interval = "10m" if derived else "5m"
+            end = start + (2 if derived else 3) * step
+            metadata = {"requester": requester, "history_calendar_id": "crypto.24x7.utc",
+                        "requires_trusted_finality": not derived}
+            report = await engine.run(symbol, [interval], start, end, **market, metadata=metadata)
+            assert report.status is BackfillStatus.COMPLETED
+            expected_requests = [(start + step, start + step), (start + 3 * step, start + 3 * step)]
+            if requester == "explicit_refresh":
+                expected_requests = [(start, end)]
+            assert [(request.start_ms, request.end_ms) for request in transport.requests] == expected_requests
+            targets = await storage.query_time_range(symbol, interval, start, end, **market)
+            if derived:
+                assert [(row["open_time"], row["volume"], row["source"]) for row in targets] == [
+                    (start, 5, "backfill_aggregated"), (start + 2 * step, 5, "backfill_aggregated"),
+                ]
+            else:
+                expected_volume = [3, 3, 3, 3] if requester == "explicit_refresh" else [2, 3, 2, 3]
+                assert [row["volume"] for row in targets] == expected_volume
+            if requester == "warm_start_custom_seed":
+                # A queued repeat observes the just-committed inputs at dispatch.
+                repeat = await engine.run(symbol, [interval], start, end, **market, metadata=metadata)
+                assert repeat.status is BackfillStatus.COMPLETED
+                assert len(transport.requests) == 2
+        finally:
+            await engine.close()
+
+    asyncio.run(exercise())
+
+
+def test_okx_metric_history_preserves_contract_identity_bounds_and_realized_rate(monkeypatch: Any) -> None:
+    from ccxt.async_support import okx
+
+    symbol = "BTC/USDT:USDT"
+    instrument = "BTC-USDT-SWAP"
+    exchange = okx()
+    market = {"id": instrument, "symbol": symbol, "baseId": "BTC", "swap": True, "linear": True}
+    exchange.markets = {symbol: market}
+    exchange.markets_by_id = {instrument: [market]}
+    first, last = 1_794_220_500_000, 1_794_220_800_000
+    calls = []
+
+    async def load_markets():
+        return exchange.markets
+
+    async def fetch_contract_oi(params):
+        calls.append(("oi", params))
+        return {"code": "0", "data": [
+            [str(last), "27.5", "0.275", "18700"],
+            [str(first), "24.5", "0.245", "17000"],
+        ]}
+
+    async def reject_currency_oi(*_args, **_kwargs):
+        pytest.fail("Currency-wide open interest cannot populate a contract")
+
+    async def fetch_funding(params):
+        calls.append(("funding", params))
+        return {"code": "0", "data": [
+            {"instId": instrument, "fundingTime": str(last), "fundingRate": "0.0003", "realizedRate": ""},
+            {"instId": instrument, "fundingTime": str(first), "fundingRate": "0.0004", "realizedRate": "-0.0001"},
+        ]}
+
+    monkeypatch.setattr(exchange, "load_markets", load_markets)
+    monkeypatch.setattr(exchange, "public_get_rubik_stat_contracts_open_interest_history", fetch_contract_oi)
+    monkeypatch.setattr(exchange, "fetch_open_interest_history", reject_currency_oi)
+    monkeypatch.setattr(exchange, "publicGetPublicFundingRateHistory", fetch_funding)
+    monkeypatch.setattr(
+        "app.exchanges.ccxt_ext.generic._create_exchange", lambda *_args, **_kwargs: exchange,
+    )
+    bootstrap_default_adapters()
+    plugin = get_exchange_registry().get_plugin("okx")
+    config = IngestionConfig(proxy_mode="none")
+    oi = StreamDescriptor(instrument, StreamType.OPEN_INTEREST, interval="5m", exchange="okx", market_type="futures")
+    funding = StreamDescriptor(instrument, StreamType.FUNDING_RATE, exchange="okx", market_type="futures")
+
+    async def run():
+        try:
+            output = []
+            for descriptor, limit in ((oi, 100), (funding, 400)):
+                rows = await plugin.fetch_history_with_config(
+                    TransportRequest(descriptor, limit=1000, start_ms=first, end_ms=last, history=True), config,
+                )
+                assert rows and all(row.request_limit == limit for row in rows)
+                normalizer = plugin.normalizer(config, descriptor)
+                output.append([normalizer.parse(row) for row in rows])
+            return output
+        finally:
+            await plugin.close_history_transport(config)
+
+    oi_events, funding_events = asyncio.run(run())
+    assert calls == [
+        ("oi", {"instId": instrument, "period": "5m", "limit": 100, "begin": first - 1, "end": last + 1}),
+        ("funding", {"instId": instrument, "limit": 400, "before": first - 1, "after": last + 1}),
+    ]
+    assert [(e.event_time_ms, e.data["open_interest"], e.data["open_interest_value"]) for e in oi_events] == [
+        (first, 24.5, 17000), (last, 27.5, 18700),
+    ]
+    assert [(e.event_time_ms, e.data["funding_rate"]) for e in funding_events] == [(first, -0.0001)]
+    assert plugin.capabilities().channel_capability(MarketChannel.OPEN_INTEREST, "futures").history_policy.max_page_size == 100
+
+
+@pytest.mark.parametrize(("category", "instrument", "symbol"), [
+    ("linear", "BTCUSDT", "BTC/USDT:USDT"),
+    ("inverse", "BTCUSD", "BTC/USD:BTC"),
+])
+def test_bybit_metric_history_sends_exact_window_and_endpoint_limit(monkeypatch, category, instrument, symbol):
+    from ccxt.async_support import bybit
+
+    exchange = bybit()
+    market = {
+        "id": instrument, "symbol": symbol, "baseId": "BTC", "spot": False, "option": False,
+        "type": "swap", "swap": True, "contract": True, "linear": category == "linear",
+        "inverse": category == "inverse", "info": {},
+    }
+    exchange.markets = {symbol: market}
+    exchange.markets_by_id = {instrument: [market]}
+    start, end = 1_794_219_600_000, 1_794_222_000_000
+    calls = []
+
+    async def load_markets():
+        return exchange.markets
+
+    async def fetch_oi(params):
+        calls.append(("oi", params))
+        return {"retCode": 0, "result": {"symbol": instrument, "category": category, "list": [
+            {"timestamp": str(end), "openInterest": "12.5"},
+        ]}}
+
+    async def fetch_funding(params):
+        calls.append(("funding", params))
+        return {"retCode": 0, "result": {"category": category, "list": [
+            {"symbol": instrument, "fundingRateTimestamp": str(end), "fundingRate": "-0.0001"},
+        ]}}
+
+    monkeypatch.setattr(exchange, "load_markets", load_markets)
+    monkeypatch.setattr(exchange, "publicGetV5MarketOpenInterest", fetch_oi)
+    monkeypatch.setattr(exchange, "publicGetV5MarketFundingHistory", fetch_funding)
+    monkeypatch.setattr(
+        "app.exchanges.ccxt_ext.generic._create_exchange", lambda *_args, **_kwargs: exchange,
+    )
+    bootstrap_default_adapters()
+    plugin = get_exchange_registry().get_plugin("bybit")
+    config = IngestionConfig(proxy_mode="none")
+    market_type = f"swap.{category}"
+    oi = StreamDescriptor(instrument, StreamType.OPEN_INTEREST, interval="5m", exchange="bybit", market_type=market_type)
+    funding = StreamDescriptor(instrument, StreamType.FUNDING_RATE, exchange="bybit", market_type=market_type)
+
+    async def run():
+        try:
+            output = []
+            for descriptor in (oi, funding):
+                rows = await plugin.fetch_history_with_config(
+                    TransportRequest(descriptor, limit=1000, start_ms=start, end_ms=end, history=True), config,
+                )
+                assert len(rows) == 1
+                output.append((rows[0], plugin.normalizer(config, descriptor).parse(rows[0])))
+            return output
+        finally:
+            await plugin.close_history_transport(config)
+
+    (oi_raw, oi_event), (funding_raw, funding_event) = asyncio.run(run())
+    bounds = dict(symbol=instrument, category=category, startTime=start, endTime=end, limit=200)
+    assert calls == [("oi", {**bounds, "intervalTime": "5min"}), ("funding", bounds)]
+    assert oi_raw.request_limit == funding_raw.request_limit == 200
+    assert oi_event.event_time_ms == funding_event.event_time_ms == end
+    assert oi_event.data["open_interest"] == 12.5
+    assert oi_event.data.get("open_interest_value") == (12.5 if category == "inverse" else None)
+    assert funding_event.data["funding_rate"] == -0.0001
+    capabilities = plugin.capabilities()
+    assert capabilities.channel_capability(MarketChannel.OPEN_INTEREST, market_type).history_policy.max_page_size == 200
+    assert capabilities.channel_capability(MarketChannel.FUNDING_RATE, market_type).history_policy.max_page_size == 200

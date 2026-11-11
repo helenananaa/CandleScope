@@ -6,6 +6,8 @@ from collections.abc import Callable
 
 from app.data_engine.kline_quality import BYBIT_WS_CONFIRMED_SOURCE
 from app.core.executors import run_storage
+from app.data_engine.bar_basis import is_gate_inverse_5m, is_gate_linear_5m
+from app.data_engine.kline_quality import GATE_INVERSE_REST_CONFIRMED_SOURCE, GATE_WS_CONFIRMED_SOURCE
 from app.data_engine.bar_delivery_errors import BarDeliveryUnavailable
 
 from ..bar_aggregator import BarEvent, BarEventType, BarFinality, BarState
@@ -134,7 +136,12 @@ class AggregatorBridge:
                 payload['history_prefix_revisions'] = [
                     [revision.series.interval, revision.version]
                     for revision in bar_state._history_prefix.summary.revisions]
-            if bar_state.acquisition_revision is not None:
+            if bar_state.canonical_recovery_delete_floor is not None:
+                # Older writers still see the original permission floor and
+                # reject a recovered close they cannot verify.
+                payload["acquisition_revision"] = bar_state.canonical_recovery_delete_floor
+                payload["canonical_recovery_revision"] = bar_state.acquisition_revision
+            elif bar_state.acquisition_revision is not None:
                 payload["acquisition_revision"] = bar_state.acquisition_revision
             return await self.delivery.submit(event.delivery_id, payload, key)
 
@@ -242,6 +249,14 @@ class AggregatorBridge:
             return "source_snapshot_verified"
         if bar_state.quality_source == "trade_history_verified":
             return "trade_history_verified"
+        if bar_state.close_reason == "source_close" and is_gate_linear_5m(
+            bar_state.exchange, bar_state.market_type, bar_state.interval,
+        ):
+            return bar_state.quality_source if bar_state.quality_source in {GATE_WS_CONFIRMED_SOURCE, "backfill"} else None
+        if bar_state.close_reason == "source_close" and is_gate_inverse_5m(
+            bar_state.exchange, bar_state.market_type, bar_state.interval,
+        ):
+            return bar_state.quality_source if bar_state.quality_source in {GATE_INVERSE_REST_CONFIRMED_SOURCE, "backfill"} else None
         if event_type == DataEventType.BAR_AMENDED:
             return "data_manager_amended"
         if bar_state.exchange == "bybit" and bar_state.close_reason == "source_close":

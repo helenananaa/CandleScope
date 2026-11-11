@@ -1447,7 +1447,7 @@ export function useReplayViewerRuntime(
     historyBootstrapBeforeMs: historyBootstrap?.store === seriesStore
       && historyBootstrap.dataEpoch === dataEpoch ? historyBootstrap.beforeMs : null,
     ...(requiresTapeProjection ? { tapeObservation: tapeStatus?.store === seriesStore ? tapeStatus.observation : null } : {}),
-    loading: loading || (requiresTapeProjection && seriesStore.isEmpty() && (tapeStatus?.store !== seriesStore || tapeStatus.loading)),
+    loading: loading || (!controllerOnly && requiresTapeProjection && seriesStore.isEmpty() && (tapeStatus?.store !== seriesStore || tapeStatus.loading)),
     error,
     eventStopMessage,
     controlPending,

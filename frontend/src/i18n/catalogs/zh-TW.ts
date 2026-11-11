@@ -1,4 +1,5 @@
 import { continuousEnglish } from "./continuousMessages.js";
+import { tradeHistoryTraditional } from "./tradeHistoryMessages.js";
 import { replayNoteTraditional } from "./replayNoteMessages.js";
 import { historyStudyTraditional } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
@@ -9,6 +10,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const zhTW = {
   ...continuousEnglish,
+  ...tradeHistoryTraditional,
   ...replayNoteTraditional,
   ...historyStudyTraditional,
   "chartTime.title": "跳轉到日期",
@@ -821,6 +823,8 @@ export const zhTW = {
   "settings.appearance.cellThemeDescription": "設定目前圖表的主題；僅在啟用圖表樣式連動時同步其他圖表。",
   "workspace.link.drawings": "繪圖",
   "workspace.link.drawingsDesc": "同市場、同圖層集共用繪圖文件",
+  "workspace.link.drawingVisibility": "繪圖可見性",
+  "workspace.link.drawingVisibilityDesc": "同步各圖表的繪圖顯示開關。",
   "workspace.link.definitions": "指標列表",
   "workspace.link.definitionsDesc": "同步新增、刪除與指標型別",
   "workspace.link.parameters": "指標引數",
@@ -2253,6 +2257,7 @@ export const zhTW = {
   "replay.liq.adlHint": "對手方帳本 {count} 條 · 確定性模擬，不代表歷史交易所私有佇列",
   "local.import": "匯入 CSV",
   "local.localOnly": "資料唯寫入本機",
+  "local.marketTradeCoverage": "請選擇市場成交檔案，來源序號必須連續。請聲明 UTC 涵蓋區間。匯入資料只儲存在本機。",
   "local.chooseFile": "選擇 CSV 檔案",
   "local.baseAsset": "數量資產（成交量單位）",
   "local.quoteAsset": "價格計價資產",
@@ -4355,6 +4360,7 @@ export const zhTW = {
   "research.data.noContext": "該入口沒有凍結資料身份。",
   "research.data.available": "本地可用資料集",
   "research.execution.precise": "逐筆精度和執行假設在每個 Run 內顯式記錄且不可變。",
+  "research.execution.preciseArchiveHint": "自動下載使用 Binance USD-M 合約的聚合成交資料。請選擇已結束的 UTC 日期內的時間範圍。",
   "research.execution.python": "Python 與外部模型 runtime 只在該研究應用內初始化。",
   "research.execution.general": "執行控制只屬於當前任務，不會修改已完成 Run。",
   "research.run.none": "尚未選擇 BacktestRun。",

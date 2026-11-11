@@ -37,6 +37,8 @@ const PERMANENT_SUBSCRIPTION_FAILURE_CODES = new Set([
   "purpose_unsupported",
   "no_native_intervals",
   "no_exact_base",
+  "series_identity_unsupported",
+  "invalid_series_identity",
   "unsupported",
 ]);
 

@@ -3,8 +3,10 @@ import { continuousChinese } from "./continuousMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyChinese } from "./historyStudyMessages.js";
 import { tradingAccountsZhCN } from "./tradingAccountsMessages.js";
+import { tradeHistoryChinese } from "./tradeHistoryMessages.js";
 export const zhCN = {
   ...continuousChinese,
+  ...tradeHistoryChinese,
   ...replayNoteChinese,
   ...historyStudyChinese,
   "chartTime.title": "跳转到日期",
@@ -1323,6 +1325,8 @@ export const zhCN = {
   "settings.appearance.cellThemeDescription": "设置当前图表的主题；仅在启用图表样式联动时同步其他图表。",
   "workspace.link.drawings": "绘图",
   "workspace.link.drawingsDesc": "同市场、同图层集共享绘图文档",
+  "workspace.link.drawingVisibility": "绘图可见性",
+  "workspace.link.drawingVisibilityDesc": "同步各图表的绘图显示开关。",
   "workspace.link.definitions": "指标列表",
   "workspace.link.definitionsDesc": "同步新增、删除与指标类型",
   "workspace.link.parameters": "指标参数",
@@ -2768,6 +2772,7 @@ export const zhCN = {
 
   "local.import": "导入 CSV",
   "local.localOnly": "数据只写入本机",
+  "local.marketTradeCoverage": "请选择市场成交文件，源序号必须连续。请声明 UTC 覆盖区间。导入数据仅保存在本机。",
   "local.chooseFile": "选择 CSV 文件",
   "local.baseAsset": "数量资产（成交量单位）",
   "local.quoteAsset": "价格计价资产",
@@ -4910,6 +4915,7 @@ export const zhCN = {
   "research.data.noContext": "该入口没有冻结数据身份。",
   "research.data.available": "本地可用数据集",
   "research.execution.precise": "逐笔精度和执行假设在每个 Run 内显式记录且不可变。",
+  "research.execution.preciseArchiveHint": "自动下载使用 Binance USD-M 合约聚合成交数据。请选择已结束的 UTC 日期内的时间范围。",
   "research.execution.python": "Python 与外部模型 runtime 只在该研究应用内初始化。",
   "research.execution.general": "执行控制只属于当前任务，不会修改已完成 Run。",
   "research.run.none": "尚未选择 BacktestRun。",

@@ -275,6 +275,7 @@ export function buildLiquidationPane(
     legendItems: liquidationLegend(),
     pointMetadata: projected.map(metadataForBucket),
     pointMetadataFallback: "none",
+    historyNote: t("liq.history.localSamples"),
     missingPointText: t("liq.missing"),
     statusText: projected.length === 0 ? statusText(view) : null,
   };

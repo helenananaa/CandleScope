@@ -48,7 +48,9 @@ def aggregate_closed_history(manager, bars, *, source_key, source_seconds,
                                                   for row in leaves)).encode()).hexdigest()
                         key = BlockKey(source_key, leaves[0].time_ms,
                                        (leaves[-1].time + source_seconds) * 1000, digest)
-                        block = leases.enter_context(manager.acquire(key, view, build, work_bytes=16 * 1024))
+                        block = leases.enter_context(manager.acquire(
+                            key, view, build, work_bytes=16 * 1024, reclaim_shared=False,
+                        ))
                         parts.append(block.summary)
                     cursor += take
                 summary = combine(parts)

@@ -30,6 +30,12 @@ class SourceQuality:
         return self.finality is FinalityTrust.TRUSTED_FINAL
 
 
+GATE_WS_CONFIRMED_SOURCE = "gate_linear_ws_confirmed"
+GATE_INVERSE_WS_CONFIRMED_SOURCE = "gate_inverse_contract_ws_confirmed"
+GATE_INVERSE_REST_CONFIRMED_SOURCE = "gate_inverse_contract_rest_confirmed"
+GATE_LEGACY_VOLUME_SOURCE = "gate_legacy_linear_volume"
+
+
 # Higher ranks may replace lower ranks at the same open_time.  Equal ranks are
 # deliberately replaceable so a later revision from the same authority can
 # amend values without requiring another schema column.
@@ -47,6 +53,10 @@ SOURCE_QUALITY: dict[str, SourceQuality] = {
     "data_manager_closed": SourceQuality(10, FinalityTrust.AMBIGUOUS),
     # Explicit exchange close (for example Binance kline x=true).
     "data_manager_exchange_closed": SourceQuality(50, FinalityTrust.TRUSTED_FINAL),
+    GATE_WS_CONFIRMED_SOURCE: SourceQuality(50, FinalityTrust.TRUSTED_FINAL),
+    GATE_INVERSE_WS_CONFIRMED_SOURCE: SourceQuality(10, FinalityTrust.AMBIGUOUS),
+    GATE_INVERSE_REST_CONFIRMED_SOURCE: SourceQuality(70, FinalityTrust.TRUSTED_FINAL),
+    GATE_LEGACY_VOLUME_SOURCE: SourceQuality(10, FinalityTrust.AMBIGUOUS),
     # Realtime custom bars whose complete component set carried final closes.
     "data_manager_composite_closed": SourceQuality(60, FinalityTrust.TRUSTED_FINAL),
     # Custom bars rebuilt from already-final component bars.
@@ -75,6 +85,26 @@ UNKNOWN_SOURCE_QUALITY = SourceQuality(0, FinalityTrust.UNTRUSTED)
 # this semantic policy beside the source-quality table so detection, repair,
 # and verification cannot drift apart again.
 TRUSTED_FINALITY_REPAIR_REASONS = frozenset({"query_untrusted_finality"})
+
+
+def reuses_bybit_gap_inputs(exchange: str, market_type: str, requester: object) -> bool:
+    """Live Bybit perpetual gap repair can reuse already authoritative inputs."""
+    return exchange == "bybit" and market_type in {"swap.linear", "swap.inverse"} and requester == "ingestion_gap"
+
+
+def bybit_recovery_source_gap_id(
+    exchange: str, market_type: str, reason: object, metadata: Mapping[str, Any],
+) -> str | None:
+    """Recover only a source-owned gap, preserving explicit refresh semantics."""
+    gap_id = metadata.get("source_gap_id")
+    revision = metadata.get("acquisition_revision")
+    if (reuses_bybit_gap_inputs(exchange, market_type, "ingestion_gap")
+            and reason in ("tail_gap", "ledger_recovery")
+            and metadata.get("requires_trusted_finality") is True
+            and type(revision) is int and revision >= 0
+            and isinstance(gap_id, str) and gap_id):
+        return gap_id
+    return None
 
 
 def normalize_kline_source(source: object) -> str:

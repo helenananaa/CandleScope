@@ -2,7 +2,7 @@
 import asyncio
 from concurrent.futures import CancelledError as FutureCancelled
 from contextlib import asynccontextmanager
-from dataclasses import asdict
+from dataclasses import asdict,replace
 import json
 from pathlib import Path
 import re
@@ -335,3 +335,73 @@ def test_current_frontend_sdk_signal_template_and_equity_policy_execute_through_
     _initial,_page,values=full_initial(api,accepted['run_id'])
     assert_values(api.gate.continuous,accepted['run_id'],values)
     assert len(values['fills'])>0
+
+
+def test_editor_parameter_defaults_are_static_bounded_and_local(api):
+    source = """
+raise AssertionError("The parameter reader must not execute editor code")
+class Strategy:
+    def prepare(self, ctx):
+        self.fast = int(ctx.parameters.get("fast", 3))
+        self.enabled = ctx.parameters.get("enabled", False)
+        self.delta = ctx.parameters.get("delta", -0.25)
+        self.label = ctx.parameters.get("label", "paper")
+        self.conflicting = ctx.parameters.get("ambiguous", 1)
+        self.another = ctx.parameters.get("ambiguous", 2)
+        self.dynamic = ctx.parameters.get("dynamic", unknown())
+        self.decoy = other.parameters.get("foreign", 1)
+        self.message = 'ctx.parameters.get("string_literal", 4)'
+        # ctx.parameters.get("comment", 9)
+"""
+    url = BASE + "/editor-parameters"
+    request = {"source_text": source}
+    assert api.client.post(url, json=request, headers={"Origin": "https://remote.invalid"}).status_code == 403
+    headers = {"Origin": next(iter(trusted_operator_origins()))}
+    response = api.client.post(url, json=request, headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["fields"] == [
+        {"name": "fast", "type": "integer", "default": 3},
+        {"name": "enabled", "type": "boolean", "default": False},
+        {"name": "delta", "type": "number", "default": -0.25},
+        {"name": "label", "type": "string", "default": "paper"},
+    ]
+    assert api.client.post(url, json={"source_text": "invalid("}, headers=headers).json() == {"fields": []}
+    invalid = api.client.post(url, json={"source_text": "x" * 262145}, headers=headers)
+    assert invalid.status_code == 422 and "xxxx" not in invalid.text
+    assert api.client.get(BASE + "/runs").json()["runs"] == []
+
+
+def test_forming_ticks_and_early_final_do_not_move_committed_account_before_boundary(api):
+    from app.data_engine.data_manager.models import BarData
+
+    run_id=create(api)["run_id"]
+    full_initial(api,run_id)
+    controller=api.gate.continuous
+    async def exercise():
+        await wait_row(controller.store,run_id,lambda row:row["phase"]=="LIVE" and row["sequence"]==20)
+        before=controller.store.load(run_id)
+        opened=START+20*STEP
+        forming=BarData(time=opened//1000,open=200,high=999,low=100,close=999,volume=10,is_closed=False,source=SOURCE)
+        api.now[0]=opened+500
+        for _ in range(3):
+            await api.manager.event_bus.emit(DataEvent(DataEventType.BAR_UPDATED,KEY,bar=forming))
+        await asyncio.sleep(.02)
+        assert controller.store.load(run_id)==before
+
+        final=replace(forming,open=106,high=107,low=105,close=106,is_closed=True)
+        api.now[0]=opened+STEP-1
+        await api.manager.event_bus.emit(DataEvent(DataEventType.BAR_CLOSED,KEY,bar=final))
+        await asyncio.sleep(.01)
+        assert controller.store.load(run_id)==before
+
+        # The first final arrived before the host UTC fence. The scheduled
+        # wake must admit it once the wall clock crosses the minute.
+        api.now[0]=opened+STEP
+        await wait_row(controller.store,run_id,lambda row:row["phase"]=="LIVE" and row["sequence"]==21)
+        after=controller.store.load(run_id)
+        assert after["run"]["event_time_ms"]==opened+STEP-1
+        assert after["checkpoint"]["provider"]["lastSequence"]==21
+        await api.manager.event_bus.emit(DataEvent(DataEventType.BAR_CLOSED,KEY,bar=final))
+        await asyncio.sleep(.02)
+        assert controller.store.load(run_id)==after
+    api.client.portal.call(exercise)

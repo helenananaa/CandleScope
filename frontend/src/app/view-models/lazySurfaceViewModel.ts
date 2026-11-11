@@ -70,6 +70,7 @@ export function buildLazySurfaceViewModel({
           visible: study.visible,
           supported: study.supported,
           unsupportedReason: study.supportReason,
+          ...(study.canRefreshHistory ? { canRefreshHistory: true } : {}),
           status: study.id === "market:liquidations" && study.status === "hidden"
             ? "ready" as const
             : marketStudyStatus(study.status),
@@ -77,11 +78,9 @@ export function buildLazySurfaceViewModel({
             ? study.id === "market:liquidations"
               ? t("study.hiddenLiq")
               : t("study.hiddenPaused")
-            : study.status === "loading"
-              ? t("study.loading")
-              : study.status === "unavailable"
-                ? study.supportReason
-                : null,
+            : study.status === "unavailable"
+              ? study.supportReason
+              : study.historyNote ?? (study.status === "loading" ? t("study.loading") : null),
           error: study.error,
         })),
         ...TRADE_FLOW_INDICATOR_DEFINITIONS.map((definition) => {
@@ -113,6 +112,13 @@ export function buildLazySurfaceViewModel({
           };
         }),
       ],
+      onRefreshMarketStudyHistory: (id) => {
+        const study = advancedMarketView.marketStudies.find((item) => item.id === id);
+        if (!study?.canRefreshHistory) return;
+        if (study.channel === "open_interest" || study.channel === "funding_rate") {
+          advancedMarketActions.retryMarketHistory(study.channel);
+        }
+      },
       onAddMarketStudy: (id) => {
         if (isMarketMetricId(id)) advancedMarketActions.addMarketStudy(id);
         else if (isTradeFlowIndicatorId(id)) tradeFlowActions.addIndicator(id);

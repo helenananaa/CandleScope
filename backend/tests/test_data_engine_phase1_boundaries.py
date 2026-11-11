@@ -7,6 +7,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -25,6 +26,7 @@ from app.data_engine.bar_aggregator import (
 from app.data_engine.bar_aggregator import models as aggregator_models
 from app.data_engine.data_manager.aggregator_bridge import AggregatorBridge
 from app.data_engine.data_manager import DataManager
+from app.data_engine.data_manager import coordinator as coordinator_module
 from app.data_engine.data_manager.backfill_coordinator import (
     BackfillCoordinator,
     RepairRequest,
@@ -911,8 +913,13 @@ def test_data_manager_stream_leases_reuse_upstream_until_last_consumer(interval,
     asyncio.run(_run())
 
 
-def test_data_manager_stream_leases_keep_prerequisite_until_last_dependent() -> None:
+def test_data_manager_stream_leases_keep_prerequisite_until_last_dependent(monkeypatch) -> None:
+    now = time.time()
+    monkeypatch.setattr(coordinator_module, "time", SimpleNamespace(time=lambda: now))
+
     async def _run() -> None:
+        nonlocal now
+
         class _Handle:
             def __init__(self) -> None:
                 self.stopped = 0
@@ -982,6 +989,17 @@ def test_data_manager_stream_leases_keep_prerequisite_until_last_dependent() -> 
             dm.get_stream_info("BTC-USDT", "4h", exchange="okx", market_type="spot")
             is not None
         )
+
+        unowned = await dm.coordinator.ensure_stream(
+            "ETH-USDT", "1m", exchange="okx", market_type="spot",
+        )
+        base = SeriesKey("BTC-USDT", "1m", exchange="okx", market_type="spot")
+        assert dm.event_bus.get_direct_subscriber_count(base) == 0
+        now += dm.config.coordinator.idle_stream_timeout_seconds + 1
+        assert await dm.coordinator.reap_idle() == [str(unowned.key)]
+        assert factory.handles[base_key].stopped == 0
+        assert factory.handles[four_hour_key].stopped == 0
+        assert factory.handles[("okx", "spot", "ETH-USDT", "1m")].stopped == 1
 
         await dm.release_stream(
             "BTC-USDT",

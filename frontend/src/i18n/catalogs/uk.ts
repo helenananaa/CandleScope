@@ -1,4 +1,5 @@
 import { continuousEnglish } from "./continuousMessages.js";
+import { tradeHistoryEnglish } from "./tradeHistoryMessages.js";
 import { replayNoteEnglish } from "./replayNoteMessages.js";
 import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
@@ -9,6 +10,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const uk = {
   ...continuousEnglish,
+  ...tradeHistoryEnglish,
   ...replayNoteEnglish,
   ...historyStudyEnglish,
   "chartTime.title": "Go to date",
@@ -2213,6 +2215,7 @@ export const uk = {
   "replay.liq.adlHint": "Книга контрагента {count} рядків · детермінована симуляція, а не історична приватна черга біржі",
   "local.import": "Імпортувати CSV",
   "local.localOnly": "Дані лишаються на цьому комп’ютері",
+  "local.marketTradeCoverage": "Використовуйте файл ринкових угод із послідовною нумерацією. Укажіть проміжок UTC. Імпорт залишається локальним.",
   "local.chooseFile": "Виберіть файл CSV",
   "local.baseAsset": "Актив кількості (одиниця обсягу)",
   "local.quoteAsset": "Актив котирування ціни",
@@ -4305,6 +4308,7 @@ export const uk = {
   "research.data.noContext": "Цей вхід не має зафіксованої ідентичності набору даних.",
   "research.data.available": "Доступні локальні набори даних",
   "research.execution.precise": "Точність послідовності угод і припущення виконання лишаються явними й незмінними для кожного Run.",
+  "research.execution.preciseArchiveHint": "Для автоматичного завантаження використовуються агреговані угоди ф’ючерсів Binance USD-M. Виберіть період у межах завершених діб UTC.",
   "research.execution.python": "Середовища Python і зовнішніх моделей ініціалізуються лише всередині цього дослідницького застосунку.",
   "research.execution.general": "Елементи керування виконанням лишаються в межах вибраного завдання й ніколи не змінюють завершений Run.",
   "research.run.none": "BacktestRun не вибрано.",

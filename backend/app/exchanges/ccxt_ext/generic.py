@@ -6,6 +6,7 @@ import asyncio
 import logging
 import sys
 import time
+from collections import OrderedDict
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
@@ -16,6 +17,7 @@ import ccxt
 import ccxt.async_support as ccxt_async
 import ccxt.pro as ccxtpro
 
+from app.data_engine.bar_basis import GATE_INVERSE_CONTRACTS, is_gate_inverse_5m, is_gate_linear_5m
 from app.data_engine.ingestion.config import IngestionConfig
 from app.data_engine.ingestion.models import (
     StreamDescriptor,
@@ -108,6 +110,9 @@ def _owned_exchange_class(exchange_class: type, *, windows: bool) -> type:
     if exchange_class is ccxtpro.okx:
         from .okx import OkxWebSocketProtocolMixin
         protocol_mixins = (OkxWebSocketProtocolMixin,)
+    if exchange_class is ccxtpro.gate:
+        from .gate_candles import GateKlineProtocolMixin
+        protocol_mixins = (GateKlineProtocolMixin,)
     return type(
         f"CandleScopeOwned{exchange_class.__name__}",
         (*protocol_mixins, RestSourceCaptureMixin, PublicCcxtAdmissionMixin, mixin, exchange_class),
@@ -695,6 +700,10 @@ class CcxtUnifiedProfile:
     entry: CcxtCatalogEntry
     market_type: str
     selection: str = field(init=False)
+    _gate_close_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
+    _gate_close_rows: OrderedDict[tuple[str, int], list | None] = field(
+        default_factory=OrderedDict, init=False, repr=False,
+    )
 
     def __post_init__(self) -> None:
         self.market_type = str(self.market_type or "").strip().lower()
@@ -769,6 +778,30 @@ class CcxtUnifiedProfile:
     ) -> Any:
         if descriptor.stream_type == StreamType.KLINE:
             value = await exchange.watch_ohlcv(ccxt_symbol, descriptor.interval)
+            inverse = is_gate_inverse_5m(self.exchange_id, descriptor.market_type, descriptor.interval)
+            if inverse or is_gate_linear_5m(self.exchange_id, descriptor.market_type, descriptor.interval):
+                from .gate_candles import candle_row, confirm_inverse_close, perpetual_volume_scale
+                scale = perpetual_volume_scale(exchange.market(ccxt_symbol), descriptor)
+                rows = []
+                snapshots = [tuple(row) for row in value]
+                for row in snapshots:
+                    marked = len(row) > 6 and row[6] is True
+                    if inverse and marked:
+                        key = (ccxt_symbol, int(row[0]))
+                        async with self._gate_close_lock:
+                            if key not in self._gate_close_rows:
+                                self._gate_close_rows[key] = await confirm_inverse_close(
+                                    exchange, ccxt_symbol, descriptor, key[1],
+                                )
+                                if len(self._gate_close_rows) > 128:
+                                    self._gate_close_rows.popitem(last=False)
+                            proof = self._gate_close_rows[key]
+                        if proof is not None:
+                            rows.append([*proof, True, "gate_rest"])
+                            continue
+                        marked = False
+                    rows.append([*candle_row(row, row[5], scale), marked])
+                return rows
             # The pinned Upbit native seconds channel returns one OHLCV row.
             return [value] if self.exchange_id == "upbit" and descriptor.interval == "1s" else value
         if descriptor.stream_type == StreamType.TRADE:
@@ -949,6 +982,8 @@ async def load_ccxt_symbols(
                     listed_at_ms=_timestamp(market.get("created")),
                     expiry_at_ms=_timestamp(market.get("expiry")),
                     price_tick_size=_price_tick_size(exchange, market),
+                    **({"volume_semantics": GATE_INVERSE_CONTRACTS.volume_semantics}
+                       if entry.exchange_id == "gate" and selected == "swap.inverse" else {}),
                     **ccxt_contract_rules(exchange, market, tick_mode=ccxt.TICK_SIZE,
                                           decimal_mode=ccxt.DECIMAL_PLACES, significant_mode=ccxt.SIGNIFICANT_DIGITS),
                 )

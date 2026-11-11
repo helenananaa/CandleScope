@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError, replace
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from decimal import Decimal
 import random
@@ -23,8 +23,9 @@ from app.data_engine.data_manager.custom_query import (
     CustomIntervalQueryService, _aggregate_fixed_bars_to_interval, _aggregate_rows_to_interval,
 )
 from app.data_engine.data_manager.history_stream import FixedHistoryStream
+from app.data_engine.history.calendar import AlwaysOpenCalendar, SessionCalendar
 from app.data_engine.data_manager.models import BarData, SeriesKey
-from app.data_engine.interval_policy import aggregate_kline_rows, parse_interval_spec
+from app.data_engine.interval_policy import IntervalSpec, aggregate_kline_rows, parse_interval_spec
 
 SOURCE = SeriesKey("BTC-USDT", "1m", exchange="okx", market_type="spot")
 TARGET = replace(SOURCE, interval="7m")
@@ -260,6 +261,50 @@ def test_cumulative_replacement_and_authoritative_extrema_reduction_rebuild_once
     assert state.quote_volume == reference.values.project()["quote_volume"]
 
 
+def test_session_bulk_aggregation_does_not_build_a_holiday_bucket():
+    calendar = SessionCalendar(
+        calendar_id="test.holiday", timezone_name="America/New_York",
+        weekly_sessions={0: [("09:30", "09:50")]}, holidays=["2024-03-11"],
+    )
+    opens = [int(datetime.fromisoformat(date).timestamp()) for date in (
+        "2024-03-04T14:30:00+00:00", "2024-03-11T13:30:00+00:00",
+    )]
+
+    def aggregate(opened):
+        rows = [replace(bar(i), time=opened + i * 300).to_aggregation_dict() for i in range(4)]
+        return _aggregate_rows_to_interval(
+            rows, 900, interval="15m", source_interval="5m", calendar=calendar,
+        )
+
+    before_dst = aggregate(opens[0])
+    assert [row["time"] for row in before_dst] == [opens[0], opens[0] + 900]
+    assert all(row["is_closed"] and row["quote_volume"] is not None for row in before_dst)
+    assert aggregate(opens[1]) == []
+
+
+def test_sparse_calendar_history_only_expands_source_opens_for_present_components():
+    class MeasuredCalendar(AlwaysOpenCalendar):
+        def __init__(self):
+            super().__init__()
+            self.expanded = 0
+
+        def expected_opens(self, start_ms, end_ms, interval):
+            for opened in super().expected_opens(start_ms, end_ms, interval):
+                self.expanded += 1
+                assert self.expanded <= 4, "expanded empty history or unseen source components"
+                yield opened
+
+    calendar = MeasuredCalendar()
+    starts = [int(datetime(year, 1, 1, tzinfo=timezone.utc).timestamp()) for year in (2020, 2025)]
+    rows = [replace(bar(i), time=opened).to_aggregation_dict() for i, opened in enumerate(starts)]
+    result = _aggregate_rows_to_interval(
+        list(reversed(rows)), 30 * 86_400, interval="1M", source_interval="1m", calendar=calendar,
+    )
+    assert [row["time"] for row in result] == starts
+    assert not any(row["is_closed"] or row["quote_volume"] is not None for row in result)
+    assert calendar.expanded == 4
+
+
 def test_crossing_source_cannot_close_history_or_realtime_target():
     bars = [replace(bar(0), time=0), replace(bar(1), time=180)]
     fixed = _aggregate_fixed_bars_to_interval(bars, 300, source_interval_seconds=180)[0]
@@ -305,6 +350,57 @@ def test_calendar_source_closed_rebuild_uses_actual_month_ends():
                         target=replace(TARGET, interval="12M"))
     assert queried[0].is_closed
     assert queried[0].volume == summary.values.volume == rebuilt[0]["volume"]
+
+
+@pytest.mark.parametrize(("start", "count", "closed"), [
+    ("2024-03-10T05:00+00:00", 23, True),
+    ("2024-11-03T04:00+00:00", 24, False),
+    ("2024-11-03T04:00+00:00", 25, True),
+])
+def test_history_fallback_obeys_zoned_target_day_length(start, count, closed):
+    from app.data_engine.data_manager.cache import BarCache
+    from app.data_engine.data_manager.config import QueryConfig
+
+    service = CustomIntervalQueryService(cache=BarCache(), config=QueryConfig(), base_query=lambda: None)
+    opened = int(datetime.fromisoformat(start).timestamp())
+    bars = [replace(bar(index), time=opened + index * 3600) for index in range(count)]
+    target = "1d~c1~America/New_York"
+    queried, = service.aggregate_custom_bars(bars, "BTC-USDT", target, "1h", exchange="okx")
+    summary = summarize(accepted(bars, series=replace(SOURCE, interval="1h")),
+                        target=replace(TARGET, interval=target))
+    end_ms = parse_interval_spec(target).next_ms(opened * 1000)
+    assert queried.time == opened
+    assert queried.is_closed is summary.evaluate(opened * 1000, end_ms).closed is closed
+    assert queried.quote_volume == (summary.values.project()["quote_volume"] if closed else None)
+
+
+def test_fixed_history_target_does_not_treat_zoned_source_as_nominal_width():
+    opened = int(datetime.fromisoformat("2024-11-03T04:00+00:00").timestamp())
+    queried, = CustomIntervalQueryService._aggregate_read_only(
+        [replace(bar(0), time=opened)], "1d~a1~14400000", 86400,
+        source_interval="1d~c1~America/New_York", calendar=AlwaysOpenCalendar(),
+    )
+    assert queried.time == opened
+    assert not queried.is_closed and queried.quote_volume is None
+
+
+def test_sparse_closed_rebuild_only_steps_over_present_source_prefix(monkeypatch):
+    target_ms = 10007 * 60_000
+    calls = []
+    original = IntervalSpec.next_ms
+
+    def track_next(spec, opened):
+        if spec.canonical == "1m":
+            calls.append(opened)
+        return original(spec, opened)
+
+    monkeypatch.setattr(IntervalSpec, "next_ms", track_next)
+    rows = [dict(open_time=opened, close_time=opened + 59_999, open=10, high=12,
+                 low=8, close=11, volume=1, is_closed=True)
+            for opened in [0, 60_000, target_ms - 60_000, 2 * target_ms - 60_000]]
+    assert aggregate_kline_rows(rows, target_interval="10007m", source_interval="1m",
+                                now_ms=2 * target_ms) == []
+    assert calls == [0, 60_000]
 
 
 def test_raw_rebuild_and_compact_decode_share_per_component_precision():

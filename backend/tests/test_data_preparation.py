@@ -759,3 +759,69 @@ def test_storage_reservation_is_atomic_and_cannot_be_bypassed_by_retry(tmp_path)
     repo.create(request("reserve-0002"), 1)
     with pytest.raises(PreparationError, match="budget"):
         repo.retry(first["id"])
+
+
+@async_test
+@pytest.mark.parametrize("model", ["LEGACY", "V2"])
+async def test_continuous_research_prepares_exact_warmup_range_and_model(tmp_path, model):
+    import json
+    import httpx
+    from fastapi import FastAPI
+    from app.api.v1.data_preparation import router
+    from tests.test_backtest_chart_context import _runtime
+    from tests.test_python_editor import compile_editor
+
+    runtime = _runtime(tmp_path)
+    revision_id = compile_editor(runtime.service)["revision_id"]
+    rows = []
+
+    class Coordinator:
+        async def request_and_wait(self, repair):
+            for timestamp in range(repair.start_ms, repair.end_ms + 1, 60_000):
+                rows.append({**bars()[0], "open_time": timestamp, "close_time": timestamp + 59_999})
+
+    adapter = BarPreparationAdapter(tmp_path / "chunks", coordinator=Coordinator(), local_data=runtime.local_data,
+        backtest_runtime=runtime, query=lambda *args, **kwargs: [
+            row for row in rows if kwargs["start_ms"] <= row["open_time"] <= kwargs["end_ms"]
+        ])
+    service = PreparationService(PreparationRepository(tmp_path / "jobs.db"), adapter)
+    await service.start()
+    app = FastAPI()
+    app.state.data_preparation_service = service
+    app.state.backtest_runtime = runtime
+    app.include_router(router)
+    end = START + 30 * 60_000 - 1
+    body = {"idempotency_key": "continuous-research", "context": {
+        "exchange": "binance", "market_type": "spot", "symbol": "BTCUSDT", "interval": "1m",
+        "range_mode": "CUSTOM", "fidelity_preference": "FAST", "start_time_ms": START, "end_time_ms": end,
+    }, "strategy": {"strategy_revision_id": revision_id, "python_runtime_mode": "TRUSTED_LOCAL",
+        "python_trusted_confirmed": True, "execution_overrides": {"initialBalance": "4321",
+            "equityPercent": "17", "leverage": "1", "feeBps": "3", "slippageBps": "2"},
+        "python_bar_execution": {"executionModel": model, "outputMode": "TARGET_POSITION", "warmupBars": 5}}}
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test",
+                headers={"Origin": "http://127.0.0.1:15173"}) as client:
+            response = await client.post("/data-preparations/strategy", json=body)
+            assert response.status_code == 202, response.text
+            job = await terminal(service, response.json()["id"])
+            assert job["state"] == "READY", job
+            resolution = job["result"]["resolution"]
+            assert resolution["coverage"]["row_count"] == 30
+            assert resolution["preparation"] == {"warmup_bars": 5, "requested_start_ms": START + 5 * 60_000,
+                "prepared_start_ms": START}
+            run = runtime.service.repository.get_run_by_id(job["result"]["strategy_run"]["run_id"])
+            config = json.loads(run["config_json"])
+            assert config["start_time_ms"] == START
+            assert config["end_time_ms"] == end
+            assert config["warmup_bars"] == 5
+            assert config["output_mode"] == "TARGET_POSITION"
+            assert config["initial_balance"] == "4321"
+            assert config["equity_percent"] == "17"
+            assert config["taker_fee_bps"] == "3"
+            assert config.get("execution_model_revision") == ("EXECUTION_REALISM_V2" if model == "V2" else None)
+            repeated = await client.post("/data-preparations/strategy", json=body)
+            assert repeated.status_code == 202
+            assert repeated.json()["id"] == job["id"]
+    finally:
+        await service.shutdown()
+        runtime.shutdown()

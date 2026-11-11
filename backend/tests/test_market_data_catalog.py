@@ -26,6 +26,11 @@ class _PublicTradeService:
     async def history(self, key, **kwargs):
         return []
 
+    async def read_history(self, key, **kwargs):
+        from app.data_engine.market_data.trade_flow import TradeHistoryRead
+
+        return TradeHistoryRead([])
+
     def attach(self, keys, **kwargs):
         return SimpleNamespace(subscription="subscription", recent={})
 

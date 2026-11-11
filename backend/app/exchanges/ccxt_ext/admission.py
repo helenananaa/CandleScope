@@ -14,7 +14,7 @@ from urllib.parse import parse_qs, urlsplit
 import ccxt
 
 from app.exchanges.public_admission import acquire_public
-from app.exchanges.rate_limits import HistoricalRequest, scope_rate_limit_rule
+from app.exchanges.rate_limits import BYBIT_RATE_LIMIT_CODE, HistoricalRequest, scope_rate_limit_rule
 
 _observation: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
     "ccxt_physical_response", default=None,
@@ -33,10 +33,10 @@ def quota_error_feedback(error: BaseException) -> dict[str, Any]:
             "body_code": _body_code(str(error))}
 
 
-def _body_code(body: str) -> str | None:
+def _body_code(body: str, field: str = "code") -> str | None:
     try:
         value = json.loads(body[body.index("{"):])
-        code = value.get("code")
+        code = value.get(field)
         return str(code) if code is not None else None
     except (ValueError, TypeError, AttributeError):
         return None
@@ -96,6 +96,10 @@ class PublicCcxtAdmissionMixin:
             return result
         except BaseException as exc:
             feedback = observation or quota_error_feedback(exc)
+            if (exchange_id == "bybit" and feedback.get("body_code") == BYBIT_RATE_LIMIT_CODE
+                    and isinstance(exc, ccxt.RateLimitExceeded)):
+                permit.finish(**feedback, fallback_cooldown_seconds=rule.cooldown_seconds)
+                raise await permit.manager.deferred_error(permit.rule, permit.request) from exc
             if feedback.get("status_code") is None and feedback.get("body_code") is None:
                 feedback = {"response_unknown": True}
             permit.finish(**feedback)
@@ -111,6 +115,6 @@ class PublicCcxtAdmissionMixin:
         observation = _observation.get()
         if observation is not None:
             observation.update(status_code=code, headers=dict(response_headers or {}),
-                               body_code=_body_code(response_body))
+                               body_code=_body_code(response_body, "retCode" if self.id == "bybit" else "code"))
         return super().on_rest_response(code, reason, url, method, response_headers,
                                         response_body, request_headers, request_body)

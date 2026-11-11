@@ -1,4 +1,5 @@
 import { continuousEnglish } from "./continuousMessages.js";
+import { tradeHistoryEnglish } from "./tradeHistoryMessages.js";
 import { replayNoteEnglish } from "./replayNoteMessages.js";
 import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
@@ -9,6 +10,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const cs = {
   ...continuousEnglish,
+  ...tradeHistoryEnglish,
   ...replayNoteEnglish,
   ...historyStudyEnglish,
   "chartTime.title": "Go to date",
@@ -2213,6 +2215,7 @@ export const cs = {
   "replay.liq.adlHint": "Kniha protistrany {count} řádků · deterministická simulace, nikoli historická soukromá fronta burzy",
   "local.import": "Importovat CSV",
   "local.localOnly": "Data zůstávají na tomto počítači",
+  "local.marketTradeCoverage": "Použijte soubor tržních obchodů se souvislým číslováním. Zadejte rozsah UTC. Import zůstává místní.",
   "local.chooseFile": "Zvolte soubor CSV",
   "local.baseAsset": "Aktivum množství (jednotka objemu)",
   "local.quoteAsset": "Aktivum cenové kotace",
@@ -4305,6 +4308,7 @@ export const cs = {
   "research.data.noContext": "Tento vstup nemá zmrazenou identitu datové sady.",
   "research.data.available": "Dostupné místní datové sady",
   "research.execution.precise": "Věrnost posloupnosti obchodů a předpoklady provedení zůstávají explicitní a neměnné na Run.",
+  "research.execution.preciseArchiveHint": "Automatické stahování používá agregované obchody futures Binance USD-M. Vyberte období v rámci ukončených dnů UTC.",
   "research.execution.python": "Běhová prostředí Pythonu a externích modelů se inicializují jen uvnitř této výzkumné aplikace.",
   "research.execution.general": "Ovládací prvky provedení zůstávají v rozsahu zvolené úlohy a nikdy nemění dokončený Run.",
   "research.run.none": "Není vybrán žádný BacktestRun.",

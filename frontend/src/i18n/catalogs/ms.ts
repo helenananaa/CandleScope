@@ -1,4 +1,5 @@
 import { continuousEnglish } from "./continuousMessages.js";
+import { tradeHistoryEnglish } from "./tradeHistoryMessages.js";
 import { replayNoteEnglish } from "./replayNoteMessages.js";
 import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
@@ -9,6 +10,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ms = {
   ...continuousEnglish,
+  ...tradeHistoryEnglish,
   ...replayNoteEnglish,
   ...historyStudyEnglish,
   "chartTime.title": "Go to date",
@@ -2213,6 +2215,7 @@ export const ms = {
   "replay.liq.adlHint": "Lejar pihak lawan {count} baris · simulasi deterministik, bukan baris gilir peribadi bursa sejarah",
   "local.import": "Import CSV",
   "local.localOnly": "Data kekal pada mesin ini",
+  "local.marketTradeCoverage": "Gunakan fail dagangan pasaran dengan nombor jujukan sumber berturutan. Nyatakan liputan UTC. Import kekal setempat.",
   "local.chooseFile": "Pilih fail CSV",
   "local.baseAsset": "Aset kuantiti (unit volum)",
   "local.quoteAsset": "Aset sebut harga",
@@ -4305,6 +4308,7 @@ export const ms = {
   "research.data.noContext": "Pintu ini tiada identiti set data beku.",
   "research.data.available": "Set data setempat tersedia",
   "research.execution.precise": "Ketepatan jujukan dagangan dan andaian pelaksanaan kekal eksplisit dan tidak boleh diubah setiap Run.",
+  "research.execution.preciseArchiveHint": "Muat turun automatik menggunakan dagangan agregat niaga hadapan Binance USD-M. Pilih julat dalam hari UTC yang telah tamat.",
   "research.execution.python": "Runtime Python dan model luaran dimulakan hanya dalam aplikasi penyelidikan ini.",
   "research.execution.general": "Kawalan pelaksanaan kekal terhad kepada tugas yang dipilih dan tidak pernah mengubah Run siap.",
   "research.run.none": "Tiada BacktestRun dipilih.",

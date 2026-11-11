@@ -273,7 +273,14 @@ class PreparationService:
                 self._acquisitions.pop(key, None)
                 self._acquisition_specs.pop(key, None)
 
-    async def _parts(self, fragment, job_id):
+    async def _parts(self, fragment, job_id, *, whole_trade_day=False):
+        if whole_trade_day and fragment.role == "TRADES":
+            from .trade_adapter import DAY_MS
+            if fragment.start_ms % DAY_MS == 0 and fragment.end_ms - fragment.start_ms == DAY_MS:
+                # A whole-day history request needs its day receipt even when
+                # a cached replay selection already covers some of its trades.
+                # The remainder can contain no events and cannot be frozen alone.
+                return [await self._obtain(fragment, fingerprint(fragment.model_dump()), job_id)]
         series = self.repository.series_key(fragment.model_dump())
         # Join already running overlapping downloads before calculating gaps.
         # This never expands the new consumer's requested output range.
@@ -339,7 +346,9 @@ class PreparationService:
                 for fragment in split_requirement(requirement):
                     await self._checkpoint(job_id)
                     await self._storage(self.repository.update, job_id, stage="FETCHING")
-                    parts = await self._parts(fragment, job_id)
+                    parts = await self._parts(
+                        fragment, job_id, whole_trade_day="trade_flow_history" in request.intent,
+                    )
                     await self._checkpoint(job_id)
                     for chunk in parts:
                         if chunk["key"] not in sized_keys:
@@ -369,6 +378,8 @@ class PreparationService:
             logger.debug("Preparation deferred by executor capacity: %s", job_id)
         except PreparationError as exc:
             error = {"code": exc.code, "message": str(exc), "retryable": exc.retryable}
+            if exc.retry_at_ms is not None:
+                error["retry_at_ms"] = exc.retry_at_ms
             if exc.retryable and (await self._storage(self.repository.get, job_id))["attempts"] < 3:
                 await self._storage(self.repository.defer, job_id, error)
                 return

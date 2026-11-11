@@ -266,7 +266,7 @@ class SQLiteTradeFlowRollupStore:
         if end_ms is not None:
             where.append("bucket_open_ms <= ?")
             params.append(_non_negative_int(end_ms, "end_ms"))
-        bounded_limit = max(1, min(int(limit), 5000))
+        bounded_limit = max(1, min(int(limit), 5001))
         with closing(_connect(self.db_path)) as conn:
             rows = conn.execute(
                 f"""

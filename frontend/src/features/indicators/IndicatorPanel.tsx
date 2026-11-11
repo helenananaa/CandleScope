@@ -114,6 +114,7 @@ export interface IndicatorPanelMarketStudy {
   unsupportedReason?: string | null;
   status?: IndicatorPanelMarketStudyStatus;
   statusText?: string | null;
+  canRefreshHistory?: boolean;
   error?: string | null;
 }
 
@@ -146,6 +147,7 @@ export interface IndicatorPanelProps {
   onClose(): void;
   activeIndicators: IndicatorDefinition[];
   paramSchemas?: Record<string, IndicatorParameterSchema[]>;
+  activeControls?: (indicator: IndicatorDefinition) => ReactNode;
   onAddIndicator(indicator: IndicatorDefinition): void;
   onRemoveIndicator(indicatorId: string): void;
   onToggleVisibility(indicatorId: string): void;
@@ -165,6 +167,7 @@ export interface IndicatorPanelProps {
   onAddMarketStudy?: (studyId: string) => void;
   onRemoveMarketStudy?: (studyId: string) => void;
   onToggleMarketStudyVisibility?: (studyId: string) => void;
+  onRefreshMarketStudyHistory?: (id: string) => void;
   modeNotice?: {
     label: string;
     description: string;
@@ -305,6 +308,7 @@ export default function IndicatorPanel({
   onClose,
   activeIndicators,
   paramSchemas = {},
+  activeControls,
   onAddIndicator,
   onRemoveIndicator,
   onToggleVisibility,
@@ -317,6 +321,7 @@ export default function IndicatorPanel({
   onAddMarketStudy,
   onRemoveMarketStudy,
   onToggleMarketStudyVisibility,
+  onRefreshMarketStudyHistory,
   modeNotice = null,
   resolveIndicatorSupport,
 }: IndicatorPanelProps) {
@@ -1072,6 +1077,7 @@ export default function IndicatorPanel({
                           </div>
                         )}
 
+                        {activeControls?.(ind)}
                         {ind.error && (
                           <div className="indicator-error-msg">{ind.error}</div>
                         )}
@@ -1125,6 +1131,17 @@ export default function IndicatorPanel({
                                 </span>
                               )}
                               <div className="indicator-active-actions">
+                                {study.canRefreshHistory && study.supported && study.visible && onRefreshMarketStudyHistory && (
+                                  <button
+                                    type="button"
+                                    className="indicator-action-btn"
+                                    onClick={() => onRefreshMarketStudyHistory(study.id)}
+                                    title={t("alert.refreshHistory")}
+                                    aria-label={t("alert.refreshHistory")}
+                                  >
+                                    <Icon name="refresh" size={14} />
+                                  </button>
+                                )}
                                 <button
                                   className="indicator-action-btn indicator-remove-btn"
                                   onClick={() => onRemoveMarketStudy?.(study.id)}

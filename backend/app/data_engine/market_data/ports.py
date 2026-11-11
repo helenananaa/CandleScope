@@ -8,9 +8,11 @@ single generic query method.
 
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from .models import MarketStreamKey
+if TYPE_CHECKING:
+    from .trade_flow import TradeHistoryRead
 
 
 @runtime_checkable
@@ -51,6 +53,8 @@ class PublicTradePort(Protocol):
     def recent(self, key: MarketStreamKey, **kwargs: Any) -> list[Any]: ...
 
     async def history(self, key: MarketStreamKey, **kwargs: Any) -> list[Any]: ...
+
+    async def read_history(self, key: MarketStreamKey, **kwargs: Any) -> TradeHistoryRead: ...
 
     def attach(self, keys: list[MarketStreamKey], **kwargs: Any) -> Any: ...
 

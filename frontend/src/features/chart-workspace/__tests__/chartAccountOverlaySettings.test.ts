@@ -56,3 +56,21 @@ test("malformed preference inputs cannot enable links or manufacture an account 
   assert.deepEqual(normalizeChartAccountOverlay({ accountId: {}, trades: "false", positions: 0, notes: "yes" }), normalizeChartAccountOverlay());
   assert.equal(normalizeChartAccountOverlay({ accountId: " ", notes: true }).accountId, null);
 });
+
+test("linked note filters propagate and clear only the changed field", () => {
+  const document = createDefaultChartWorkspace();
+  const group = document.linkGroups[DEFAULT_CHART_LINK_GROUP_ID]!;
+  group.peerPolicy = { ...group.peerPolicy, noteOverlays: true };
+  const local = { ...normalizeChartAccountOverlay(), notes: true, noteSource: "original" as const };
+  document.cells["cell-1"]!.accountOverlay = local;
+  document.cells["cell-2"]!.accountOverlay = { ...local, accountId: "peer-account", notes: false, noteFilter: "linked" };
+  const changed = applyLinkedAccountOverlayUpdate(document, "cell-1", { ...local, noteSource: "review" });
+  assert.deepEqual(changed.cells["cell-2"]!.accountOverlay, {
+    ...local, accountId: "peer-account", notes: false, noteFilter: "linked", noteSource: "review",
+  });
+  const cleared = applyLinkedAccountOverlayUpdate(changed, "cell-1", normalizeChartAccountOverlay({ ...local, noteSource: "all" }));
+  const restored = normalizeChartWorkspaceWithDiagnostics(JSON.parse(JSON.stringify(cleared)));
+  assert.equal(restored.document.cells["cell-1"]!.accountOverlay?.noteSource, undefined);
+  assert.equal(restored.document.cells["cell-2"]!.accountOverlay?.noteSource, undefined);
+  assert.equal(restored.document.cells["cell-2"]!.accountOverlay?.noteFilter, "linked");
+});

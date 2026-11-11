@@ -4,6 +4,7 @@ from __future__ import annotations
 
 
 from .ordered_playback import TrainingOrderedPlayback
+from app.replay.training.note_view import ReplayNoteView
 from .advance_service import TrainingAdvanceService
 from .review_service import TrainingReviewService
 
@@ -103,6 +104,15 @@ from .multitrack import (
 )
 from .storage import TrainingRunStore
 from .storage_governance import ReplayStorageGovernance
+from .raw_trade_retention import (
+    execute_managed_retention,
+    inspect_managed_day,
+    recover_managed_day,
+    plan_managed_retention,
+    set_managed_policy,
+)
+from .raw_trade_retention import preview as preview_raw_trade_retention
+from .raw_trade_retention import recheck as recheck_raw_trade_retention
 from .segments import (
     ReplaySegmentManager,
     resolve_history_policy,
@@ -798,6 +808,54 @@ class TrainingRunService:
     async def storage_inventory(self) -> dict[str, object]:
         return await self.storage_governance.inventory()
 
+    async def raw_trade_retention_preview(self, *, limit: int) -> dict[str, object]:
+        return await preview_raw_trade_retention(
+            self.replay_service.store, self.replay_service.raw_trade_archive, limit=limit,
+        )
+
+    async def raw_trade_retention_recheck(self, *, day_id: str, limit: int) -> dict[str, object]:
+        return await recheck_raw_trade_retention(
+            self.replay_service.store, self.replay_service.raw_trade_archive, day_id=day_id, limit=limit,
+        )
+
+    async def set_raw_trade_retention_policy(
+        self, *, symbol: str, day: str, day_id: str, expected_revision: int, retain_until_ms: int | None,
+    ) -> dict[str, object]:
+        return await set_managed_policy(
+            self.replay_service.raw_trade_archive, identity=("binance", "futures", symbol), day=day, day_id=day_id,
+            expected_revision=expected_revision, retain_until_ms=retain_until_ms,
+        )
+
+    async def plan_raw_trade_retention(
+        self, *, symbol: str, day: str, day_id: str, max_files: int, max_bytes: int,
+    ) -> dict[str, object]:
+        return await plan_managed_retention(
+            self.replay_service.store, self.replay_service.raw_trade_archive,
+            identity=("binance", "futures", symbol), day=day, day_id=day_id, max_files=max_files, max_bytes=max_bytes,
+        )
+
+    async def execute_raw_trade_retention(
+        self, *, symbol: str, day: str, day_id: str, plan_id: str, action: str,
+    ) -> dict[str, object]:
+        return await execute_managed_retention(
+            self.replay_service.store, self.replay_service.raw_trade_archive,
+            identity=("binance", "futures", symbol), day=day, day_id=day_id, plan_id=plan_id, action=action,
+        )
+
+    async def inspect_raw_trade_retention(self, *, symbol: str, day: str) -> dict[str, object]:
+        return await inspect_managed_day(
+            self.replay_service.store, self.replay_service.raw_trade_archive, symbol=symbol, day=day,
+        )
+
+    async def recover_raw_trade_retention(
+        self, *, symbol: str, day: str, day_id: str, action: str,
+        max_download_bytes: int | None, max_restore_bytes: int | None,
+    ) -> dict[str, object]:
+        return await recover_managed_day(
+            self.replay_service.raw_trade_archive, symbol=symbol, day=day, day_id=day_id, action=action,
+            max_download_bytes=max_download_bytes, max_restore_bytes=max_restore_bytes,
+        )
+
     async def account_history_gc_plan(
         self, *, target_reclaim_bytes: int, max_archives: int
     ) -> dict[str, object]:
@@ -1394,41 +1452,42 @@ class TrainingRunService:
     async def current_drawing_document(self, run_id: str) -> dict[str, object]:
         return await self._review_service.current_drawing_document(run_id)
 
-    async def notes(self, run_id: str, track_id: str, *, at_time_ms: int | None = None) -> dict[str, object]:
-        return await self._review_service.notes(run_id, track_id, at_time_ms=at_time_ms)
+    async def notes(self, run_id: str, track_id: str, *, at_time_ms: int | None = None,
+                    view: ReplayNoteView = ReplayNoteView()) -> dict[str, object]:
+        return await self._review_service.notes(run_id, track_id, at_time_ms=at_time_ms, view=view)
 
     async def save_note_capture(self, run_id: str, track_id: str, *, capture_id: str, image: str,
                                 context: Mapping[str, object], captured_context: Mapping[str, object],
-                                chart: Mapping[str, object]) -> dict[str, object]:
+                                chart: Mapping[str, object], view: ReplayNoteView = ReplayNoteView()) -> dict[str, object]:
         normalized = self._identifier(run_id, field_name="run_id")
         actor = self._run_actors.setdefault(normalized, TrainingRunActor(normalized))
         async with actor.serialized():
             return await self._review_service.save_note_capture(normalized, track_id, capture_id=capture_id, image=image,
-                context=context, captured_context=captured_context, chart=chart)
+                context=context, captured_context=captured_context, chart=chart, view=view)
 
-    async def note_captures(self, run_id: str, track_id: str, *, capture_id: str | None = None) -> dict[str, object]:
-        return await self._review_service.note_captures(run_id, track_id, capture_id=capture_id)
+    async def note_captures(self, run_id: str, track_id: str, *, capture_id: str | None = None, view: ReplayNoteView = ReplayNoteView()) -> dict[str, object]:
+        return await self._review_service.note_captures(run_id, track_id, capture_id=capture_id, view=view)
 
-    async def note_capture_image(self, run_id: str, track_id: str, note_id: str, revision: int, capture_id: str) -> dict[str, object]:
-        return await self._review_service.note_capture_image(run_id, track_id, note_id, revision, capture_id)
+    async def note_capture_image(self, run_id: str, track_id: str, note_id: str, revision: int, capture_id: str, *, view: ReplayNoteView = ReplayNoteView()) -> dict[str, object]:
+        return await self._review_service.note_capture_image(run_id, track_id, note_id, revision, capture_id, view=view)
 
     async def note_link_options(self, run_id: str, track_id: str, *, kind: str,
-                                before_id: str | None = None, limit: int = 20) -> dict[str, object]:
-        return await self._review_service.note_link_options(run_id, track_id, kind=kind, before_id=before_id, limit=limit)
+                                before_id: str | None = None, limit: int = 20, view: ReplayNoteView = ReplayNoteView()) -> dict[str, object]:
+        return await self._review_service.note_link_options(run_id, track_id, kind=kind, before_id=before_id, limit=limit, view=view)
 
     async def note_versions(self, run_id: str, track_id: str, note_id: str, *,
                             at_time_ms: int | None = None, before_revision: int | None = None,
-                            limit: int = 20) -> dict[str, object]:
+                            limit: int = 20, view: ReplayNoteView = ReplayNoteView()) -> dict[str, object]:
         return await self._review_service.note_versions(run_id, track_id, note_id,
-            at_time_ms=at_time_ms, before_revision=before_revision, limit=limit)
+            at_time_ms=at_time_ms, before_revision=before_revision, limit=limit, view=view)
 
     async def save_note(self, run_id: str, track_id: str, *, note_id: str, fields: dict[str, str],
-                        expected_revision: int, context: Mapping[str, object]) -> dict[str, object]:
+                        expected_revision: int, context: Mapping[str, object], view: ReplayNoteView = ReplayNoteView()) -> dict[str, object]:
         normalized = self._identifier(run_id, field_name="run_id")
         actor = self._run_actors.setdefault(normalized, TrainingRunActor(normalized))
         async with actor.serialized():
             return await self._review_service.save_note(normalized, track_id, note_id=note_id, fields=fields,
-                                                        expected_revision=expected_revision, context=context)
+                                                        expected_revision=expected_revision, context=context, view=view)
 
     async def record_drawing_document(
         self,

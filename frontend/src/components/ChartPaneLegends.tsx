@@ -26,6 +26,7 @@ interface MainChartLegendProps {
   crosshairStore: PaneCrosshairStore;
   lines: readonly IndicatorLine[];
   seriesStore: SeriesWindowView | null;
+  contractVolume?: boolean;
   displaySubscription?: ChartDisplaySubscription | null;
 }
 
@@ -119,6 +120,7 @@ export const MainChartLegend = memo(function MainChartLegend({
   crosshairStore,
   lines,
   seriesStore,
+  contractVolume,
   displaySubscription,
 }: MainChartLegendProps) {
   useLocale();
@@ -165,13 +167,14 @@ export const MainChartLegend = memo(function MainChartLegend({
   if (!mainData && indicatorEntries.length === 0) return null;
   const isUp = marketSummary?.isUp ?? true;
   const signedDiff = mainData ? `${isUp ? "+" : "-"}${formatPriceDiff(mainData.close - mainData.open)}` : "";
+  const volume = formatVolume(mainData?.volume) + (contractVolume ? ` ${t("account.contracts")}` : "");
   const ariaLabel = mainData && marketSummary
     ? t("legend.mainAria", {
       open: formatPrice(mainData.open),
       high: formatPrice(mainData.high),
       low: formatPrice(mainData.low),
       close: formatPrice(mainData.close),
-      volume: formatVolume(mainData.volume),
+      volume,
       diff: signedDiff,
       change: marketSummary.priceChange.toFixed(2),
       amplitude: marketSummary.amplitude,
@@ -188,7 +191,7 @@ export const MainChartLegend = memo(function MainChartLegend({
           <span className="chart-main-range"><span className="chart-legend-key">H</span><strong>{formatPrice(mainData.high)}</strong></span>
           <span className="chart-main-range"><span className="chart-legend-key">L</span><strong>{formatPrice(mainData.low)}</strong></span>
           <span><span className="chart-legend-key">C</span><strong>{formatPrice(mainData.close)}</strong></span>
-          <span className="chart-main-secondary"><span className="chart-legend-key">Vol</span>{formatVolume(mainData.volume)}</span>
+          <span className="chart-main-secondary"><span className="chart-legend-key">Vol</span>{volume}</span>
           {marketSummary && (
             <span>
               <span className="chart-legend-key">{t("legend.change")}</span>

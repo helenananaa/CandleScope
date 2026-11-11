@@ -1,4 +1,5 @@
 import { continuousEnglish } from "./continuousMessages.js";
+import { tradeHistoryEnglish } from "./tradeHistoryMessages.js";
 import { replayNoteEnglish } from "./replayNoteMessages.js";
 import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
@@ -9,6 +10,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const de = {
   ...continuousEnglish,
+  ...tradeHistoryEnglish,
   ...replayNoteEnglish,
   ...historyStudyEnglish,
   "chartTime.title": "Go to date",
@@ -2214,6 +2216,7 @@ export const de = {
   "replay.liq.adlHint": "Gegenpartei-Ledger {count} Zeilen · deterministische Simulation, keine historische private Börsenwarteschlange",
   "local.import": "CSV importieren",
   "local.localOnly": "Daten bleiben auf diesem Gerät",
+  "local.marketTradeCoverage": "Verwende eine Markttransaktionsdatei mit lückenlosen Sequenznummern. Gib den UTC-Zeitraum an. Der Import bleibt lokal.",
   "local.chooseFile": "CSV-Datei wählen",
   "local.baseAsset": "Mengenwert (Volumeneinheit)",
   "local.quoteAsset": "Preisnotierungswert",
@@ -4305,6 +4308,7 @@ export const de = {
   "research.data.noContext": "Dieser Einstieg hat keine eingefrorene Datensatzidentität.",
   "research.data.available": "Verfügbare lokale Datensätze",
   "research.execution.precise": "Trade-Sequenz-Genauigkeit und Ausführungsannahmen bleiben je Lauf explizit und unveränderlich.",
+  "research.execution.preciseArchiveHint": "Der automatische Download verwendet aggregierte Trades von Binance USD-M Futures. Wähle einen Zeitraum innerhalb abgeschlossener UTC-Tage.",
   "research.execution.python": "Python- und externe Modelllaufzeiten werden nur innerhalb dieser Forschungsanwendung initialisiert.",
   "research.execution.general": "Ausführungssteuerungen bleiben auf die gewählte Aufgabe beschränkt und ändern niemals einen abgeschlossenen Lauf.",
   "research.run.none": "Kein BacktestRun ausgewählt.",

@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import io
+import sys
+from contextlib import ExitStack
 from dataclasses import dataclass
 from functools import wraps
 
@@ -9,15 +13,18 @@ import pytest
 from app.data_engine.ingestion.models import DataSource, MarketEvent, StreamType
 from app.data_engine.market_data.append_hub import AppendBatchHub
 from app.data_engine.market_data.models import MarketChannel, MarketStreamKey
-from app.data_engine.market_data.trade_flow import TradeFlowEngine
+from app.data_engine.market_data.trade_flow import NormalizedAggTrade, TradeFlowEngine
 from app.data_engine.market_data.trade_flow_service import TradeFlowService
 from app.data_engine.storage.raw_trade_archive import DisabledRawAggTradeArchive
 from app.data_engine.storage.raw_trade_archive import (
     ParquetRawAggTradeArchive,
     RawAggTradeArchiveWriter,
 )
+from app.data_engine.storage.raw_trade_retention_lock import partition_lease
 from app.data_engine.storage.trade_flow_store import SQLiteTradeFlowRollupStore
 from app.data_engine.storage.trade_flow_writer import TradeFlowRollupWriter
+from app.replay.trade_import import import_official_date_range
+from tests.test_replay_trade_import import DAY as OFFICIAL_DAY, START_MS as OFFICIAL_START, _zip_bytes
 
 
 MINUTE = 60_000
@@ -1049,3 +1056,275 @@ def test_capability_validation_fails_closed(tmp_path) -> None:
         await service.shutdown()
 
     asyncio.run(_run())
+
+
+@pytest.mark.parametrize(
+    ("local_ids", "conflict", "failures", "expected_calls", "reused"),
+    [
+        ([2, 3, 4, 5, 6], False, 0, [], 5),
+        ([2, 4, 6], False, 0, [(3, 1), (5, 1)], 3),
+        ([2, 4, 6], False, 1, [(3, 1), (3, 1), (5, 1)], 3),
+        ([2, 3, 4, 5, 6], True, 0, [(2, 5)], 0),
+    ],
+)
+@_async_test
+async def test_repair_reuses_local_parquet_and_only_fetches_unproved_id_runs(
+    tmp_path, local_ids, conflict, failures, expected_calls, reused,
+) -> None:
+    pytest.importorskip("pyarrow")
+    root = tmp_path / "archive"
+    archive = ParquetRawAggTradeArchive(root)
+    archive.append([NormalizedAggTrade.from_market_event(_event(i)).to_dict() for i in local_ids])
+    if conflict:
+        # A conflicting copy outside the live time bracket must also veto reuse.
+        archive.append([NormalizedAggTrade.from_market_event(
+            _event(4, trade_time_ms=START_MS + 86_400_000),
+        ).to_dict()])
+
+    factory = _Factory()
+    factory.fetch_failures_remaining = failures
+    factory.repair_rows = {i: _event(i, source=DataSource.HTTP_BACKFILL) for i in range(2, 7)}
+    store = SQLiteTradeFlowRollupStore(tmp_path / "rollups.sqlite")
+    service = TradeFlowService(
+        factory, engine=TradeFlowEngine(initial_bucket_complete=True),
+        rollup_store=store, raw_archive=ParquetRawAggTradeArchive(root),
+    )
+    await service.ensure_stream(_key(), consumer_id="archive-repair")
+    await factory.emit(_event(1))
+    await factory.emit(_event(7))
+    await _wait_until(lambda: service.diagnostics()["repairs_succeeded"] == 1)
+    assert service.engine.gap_snapshot(IDENTITY) == ()
+    bucket, = service.engine.bucket_snapshot(IDENTITY)
+    assert bucket.is_complete and bucket.agg_trade_count == 7
+    assert [(kwargs["from_id"], kwargs["limit"]) for _, kwargs in factory.fetch_calls] == expected_calls
+    await service.shutdown()
+    diagnostics = service.diagnostics()
+    assert diagnostics["repair_rows_reused_from_archive"] == reused
+    assert diagnostics["repair_archive_reads_rejected"] == int(conflict)
+    assert diagnostics["archive_writer"]["rows_archived"] == 7 - reused
+
+
+@pytest.mark.parametrize(
+    ("case", "calls", "verified_count", "rejected"),
+    [
+        ("verified-only", [], 5, 0),
+        ("retention-busy", [], 5, 0),
+        ("partial", [(5, 1)], 3, 0),
+        ("conflict", [(4, 1)], 4, 0),
+        ("midnight", [(5, 2)], 3, 0),
+        ("corrupt", [(2, 5)], 0, 1),
+        ("orphan", [(2, 5)], 0, 0),
+        ("wrong-time", [(2, 5)], 0, 1),
+    ],
+)
+@_async_test
+async def test_repair_consumes_committed_official_days_without_download(
+    tmp_path, monkeypatch, case, calls, verified_count, rejected,
+):
+    pytest.importorskip("pyarrow")
+    verified_root = tmp_path / "verified"
+    start = OFFICIAL_START + (86_400_000 - 5 if case == "midnight" else 100)
+    official_ids = range(2, 5) if case in {"partial", "midnight"} else range(2, 7)
+    rows = [[str(i), str(100 + i), "1", str(i * 2), str(i * 2 + 1),
+             str(start + i + (10 if case == "wrong-time" else 0)), "false"]
+            for i in official_ids]
+    body, filename = _zip_bytes(rows)
+    checksum = f"{hashlib.sha256(body).hexdigest()}  {filename}\n".encode()
+    import_official_date_range(
+        archive_dir=verified_root, exchange="binance", market_type="futures",
+        symbol="BTCUSDT", start=OFFICIAL_DAY, end=OFFICIAL_DAY, require_checksum=True,
+        max_rows_per_file=2, opener=lambda url, **_: io.BytesIO(checksum if url.endswith(".CHECKSUM") else body),
+    )
+    if case == "corrupt":
+        next(verified_root.rglob("*.parquet")).write_bytes(b"damaged")
+    elif case == "orphan":
+        next(verified_root.rglob("_verified_import.json")).unlink()
+
+    observed = None
+    if case in {"partial", "conflict"}:
+        observed = ParquetRawAggTradeArchive(tmp_path / "observed")
+        i = 6 if case == "partial" else 4
+        observed.append([NormalizedAggTrade.from_market_event(
+            _event(i, trade_time_ms=start + i, buyer_maker=case == "conflict"),
+        ).to_dict()])
+    factory = _Factory()
+    factory.repair_rows = {i: _event(i, trade_time_ms=start + i, source=DataSource.HTTP_BACKFILL)
+                           for i in range(2, 7)}
+    service = TradeFlowService(
+        factory, engine=TradeFlowEngine(initial_bucket_complete=True),
+        rollup_store=SQLiteTradeFlowRollupStore(tmp_path / "flow.sqlite"),
+        raw_archive=observed, verified_archive_root=verified_root,
+    )
+    try:
+        with ExitStack() as locks:
+            if case == "retention-busy":
+                monkeypatch.setattr(
+                    "app.data_engine.market_data.trade_flow_service._VERIFIED_REPAIR_WAIT_SECONDS", 3.0,
+                )
+                partition = next(verified_root.rglob("_verified_import.json")).parent
+                path = ParquetRawAggTradeArchive(verified_root).retention_lease_path(
+                    partition.relative_to(verified_root).as_posix(),
+                )
+                locks.enter_context(partition_lease(path, shared=False, create=True))
+            await service.ensure_stream(_key(), consumer_id="verified-repair")
+            await factory.emit(_event(1, trade_time_ms=start + 1))
+            await factory.emit(_event(7, trade_time_ms=start + 7))
+            if case == "retention-busy":
+                await _wait_until(lambda: service.diagnostics()["repair_verified_acquisition_waits"] == 1)
+                assert not factory.fetch_calls
+        await _wait_until(lambda: service.diagnostics()["repairs_succeeded"] == 1)
+        assert service.engine.gap_snapshot(IDENTITY) == ()
+        assert sum(bucket.agg_trade_count for bucket in service.engine.bucket_snapshot(IDENTITY)) == 7
+        assert [(args["from_id"], args["limit"]) for _, args in factory.fetch_calls] == calls
+        diagnostics = service.diagnostics()
+        assert diagnostics["repair_rows_reused_from_verified_archive"] == verified_count
+        assert diagnostics["repair_archive_reads_rejected"] == rejected
+        assert diagnostics["repair_archive_id_conflicts"] == int(case == "conflict")
+    finally:
+        await service.shutdown()
+
+
+@pytest.mark.parametrize("outcome", ["commit", "abort", "timeout", "already-filled", "local-filled"])
+@_async_test
+async def test_live_repair_observes_a_separate_official_day_publisher(tmp_path, monkeypatch, outcome):
+    pytest.importorskip("pyarrow")
+    verified_root = tmp_path / "verified"
+    start = OFFICIAL_START + 100
+    body, filename = _zip_bytes([
+        [str(i), str(100 + i), "1", str(i * 2), str(i * 2 + 1), str(start + i), "false"]
+        for i in range(2, 7)
+    ])
+    archive_file = tmp_path / filename
+    archive_file.write_bytes(body)
+    publisher_script = """
+import hashlib
+import io
+import sys
+from datetime import date
+from pathlib import Path
+import pyarrow.parquet
+from app.data_engine.storage.raw_trade_archive import ParquetRawAggTradeArchive
+from app.replay.trade_import import import_official_date_range, trade_archive_day_acquisition
+
+root, source, day = Path(sys.argv[1]), Path(sys.argv[2]), date.fromisoformat(sys.argv[3])
+identity = dict(exchange="binance", market_type="futures", symbol="BTCUSDT")
+with trade_archive_day_acquisition(ParquetRawAggTradeArchive(root), day=day, **identity) as owns:
+    assert owns
+    print("locked", flush=True)
+    if sys.stdin.readline().strip() == "commit":
+        body = source.read_bytes()
+        checksum = f"{hashlib.sha256(body).hexdigest()}  {source.name}\\n".encode()
+        import_official_date_range(
+            archive_dir=root, start=day, end=day, require_checksum=True, **identity,
+            opener=lambda url, **_: io.BytesIO(checksum if url.endswith(".CHECKSUM") else body),
+        )
+"""
+    publisher = await asyncio.create_subprocess_exec(
+        sys.executable, "-c", publisher_script, str(verified_root), str(archive_file),
+        OFFICIAL_DAY.isoformat(), stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+    )
+    monkeypatch.setattr(
+        "app.data_engine.market_data.trade_flow_service._VERIFIED_REPAIR_WAIT_SECONDS",
+        0.2 if outcome == "timeout" else 3.0,
+    )
+    factory = _Factory()
+    factory.repair_rows = {i: _event(i, trade_time_ms=start + i, source=DataSource.HTTP_BACKFILL)
+                           for i in range(2, 7)}
+    if outcome == "local-filled":
+        observed = ParquetRawAggTradeArchive(tmp_path / "observed")
+        observed.append([
+            NormalizedAggTrade.from_market_event(_event(i, trade_time_ms=start + i)).to_dict()
+            for i in range(2, 7)
+        ])
+        service = TradeFlowService(
+            factory, engine=TradeFlowEngine(initial_bucket_complete=True),
+            rollup_store=SQLiteTradeFlowRollupStore(tmp_path / "flow.sqlite"),
+            raw_archive=observed, verified_archive_root=verified_root,
+        )
+    else:
+        service = _service(factory, tmp_path, verified_archive_root=verified_root)
+    try:
+        assert await asyncio.wait_for(publisher.stdout.readline(), timeout=15) == b"locked\n"
+        await service.ensure_stream(_key(), consumer_id="in-flight-official")
+        await factory.emit(_event(1, trade_time_ms=start + 1))
+        await factory.emit(_event(7, trade_time_ms=start + 7))
+        if outcome != "local-filled":
+            await _wait_until(lambda: service.diagnostics()["repair_verified_acquisition_waits"] == 1)
+        assert not factory.fetch_calls
+        if outcome in {"commit", "abort"}:
+            publisher.stdin.write(f"{outcome}\n".encode())
+            await publisher.stdin.drain()
+            assert await asyncio.wait_for(publisher.wait(), timeout=10) == 0
+        elif outcome == "already-filled":
+            for i in range(2, 7):
+                await service._adopt_repair_trade(
+                    IDENTITY, NormalizedAggTrade.from_market_event(factory.repair_rows[i]),
+                )
+        await _wait_until(lambda: service.diagnostics()["repairs_succeeded"] == 1, timeout=5)
+        assert service.engine.gap_snapshot(IDENTITY) == ()
+        calls = [(args["from_id"], args["limit"]) for _, args in factory.fetch_calls]
+        assert calls == ([(2, 5)] if outcome in {"abort", "timeout"} else [])
+        diagnostics = service.diagnostics()
+        if outcome == "local-filled":
+            assert publisher.returncode is None
+            assert diagnostics["repair_verified_acquisition_waits"] == 0
+            assert diagnostics["repair_rows_reused_from_archive"] == 5
+        assert diagnostics["repair_rows_reused_from_verified_archive"] == (5 if outcome == "commit" else 0)
+        assert diagnostics["repair_verified_acquisition_wait_expired"] == int(outcome == "timeout")
+    finally:
+        if publisher.returncode is None:
+            publisher.terminate()
+            await publisher.wait()
+        await service.shutdown()
+
+
+@pytest.mark.parametrize(
+    ("archived", "proven", "expected_count"),
+    [
+        ([(10, -1), (11, 0), (12, 10)], True, 3),
+        ([(12, -1)], True, 1),
+        ([(10, 0), (11, 1), (12, 10)], False, 1),
+        ([(10, -1), (12, 10)], False, 1),
+        ([(10, -1), (11, 40), (12, 10)], False, 1),
+    ],
+)
+@_async_test
+async def test_live_initial_bucket_requires_archive_boundary_and_contiguous_prefix(
+    tmp_path, archived, proven, expected_count,
+) -> None:
+    pytest.importorskip("pyarrow")
+    archive = ParquetRawAggTradeArchive(tmp_path / "archive")
+    archive.append([
+        NormalizedAggTrade.from_market_event(_event(i, trade_time_ms=START_MS + offset)).to_dict()
+        for i, offset in archived
+    ])
+    factory = _Factory()
+    store = SQLiteTradeFlowRollupStore(tmp_path / "rollups.sqlite")
+    service = TradeFlowService(
+        factory, engine=TradeFlowEngine(raw_ring_size=1),
+        rollup_store=store, raw_archive=archive,
+    )
+    await service.ensure_stream(_key(), consumer_id="archive-initial-minute")
+    await service.ensure_stream(_key(), consumer_id="archive-initial-sibling")
+    await factory.emit(_event(13, trade_time_ms=START_MS + 25))
+    await factory.emit(_event(14, trade_time_ms=START_MS + MINUTE))
+    await service.shutdown()
+
+    assert not factory.fetch_calls
+    assert service.diagnostics()["archive_bootstraps_queued"] == 1
+    assert service.diagnostics()["archive_bootstraps_applied"] == int(proven)
+    assert service.diagnostics()["archive_writer"]["rows_archived"] == 2
+    bucket, next_bucket = service.engine.bucket_snapshot(IDENTITY)
+    assert bucket.is_complete is proven
+    assert bucket.is_final
+    assert bucket.agg_trade_count == expected_count
+    assert next_bucket.agg_trade_count == 1
+    assert [row.agg_trade_id for row in service.engine.raw_tail(IDENTITY, 1)] == [14]
+    reopened = SQLiteTradeFlowRollupStore(tmp_path / "rollups.sqlite")
+    stored, = await reopened.query_rollups(
+        exchange="binance", market_type="futures", symbol="BTCUSDT",
+        start_ms=START_MS, end_ms=START_MS,
+    )
+    assert stored["is_final"] == 1
+    assert stored["is_complete"] == int(proven)
+    assert stored["agg_trade_count"] == expected_count

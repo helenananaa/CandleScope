@@ -10,6 +10,8 @@ from typing import Any
 
 import ccxt
 
+from app.data_engine.bar_basis import GATE_INVERSE_CONTRACTS, is_gate_inverse_5m, is_gate_linear_5m
+from app.data_engine.kline_quality import GATE_INVERSE_REST_CONFIRMED_SOURCE, GATE_WS_CONFIRMED_SOURCE
 from app.data_engine.ingestion.models import (
     DataSource,
     MarketEvent,
@@ -120,6 +122,9 @@ class CcxtUnifiedProjector:
         # rows are sufficient to publish the latest forming bar and the one
         # closure transition immediately before it.
         rows = rows[-2:]
+        if (is_gate_linear_5m(self.exchange_id, self.market_type, self.descriptor.interval)
+                or is_gate_inverse_5m(self.exchange_id, self.market_type, self.descriptor.interval)):
+            return self._project_gate_klines(rows)
         if self.exchange_id == "bybit":
             return self._project_bybit_klines(rows)
         newest_open = int(rows[-1][0])
@@ -153,6 +158,26 @@ class CcxtUnifiedProjector:
         while len(self._kline_rows) > _MAX_KLINE_REVISIONS:
             open_time, _row = self._kline_rows.popitem(last=False)
             self._kline_fingerprints.pop(open_time, None)
+        return payloads
+
+    def _project_gate_klines(self, rows: list[list[Any]]) -> list[dict[str, Any]]:
+        payloads = []
+        inverse = self.market_type == "swap.inverse"
+        for row in rows:
+            if len(row) not in (7, 8) or type(row[6]) is not bool:
+                continue
+            rest_confirmed = inverse and len(row) == 8 and row[7] == "gate_rest"
+            confirmed = row[6] and (not inverse or rest_confirmed)
+            previous = self._kline_fingerprints.get(int(row[0]))
+            if not confirmed and previous and previous[1]:
+                continue
+            payload = self._kline_payload(row[:6], is_closed=confirmed)
+            payload["gate_close_confirmed"] = confirmed and not inverse
+            payload["gate_rest_close_verified"] = confirmed and rest_confirmed
+            if self._remember_kline(payload):
+                payloads.append(payload)
+        while len(self._kline_fingerprints) > _MAX_KLINE_REVISIONS:
+            self._kline_fingerprints.pop(next(iter(self._kline_fingerprints)))
         return payloads
 
     def _project_bybit_klines(self, rows: list[list[Any]]) -> list[dict[str, Any]]:
@@ -398,15 +423,43 @@ class CcxtUnifiedNormalizer:
             if spec is None or spec.floor_ms(open_time) != open_time:
                 return None
             end_time = spec.next_ms(open_time)
+            gate_linear = is_gate_linear_5m(
+                self._descriptor.exchange, self._descriptor.market_type, self._descriptor.interval,
+            )
+            gate_inverse = is_gate_inverse_5m(
+                self._descriptor.exchange, self._descriptor.market_type, self._descriptor.interval,
+            )
+            if gate_inverse and self._descriptor.series_identity != GATE_INVERSE_CONTRACTS:
+                return None
+            gate_perpetual = gate_linear or gate_inverse
+            gate_source = ""
+            if gate_perpetual and payload.get("is_closed") is True:
+                if msg.source == DataSource.WEBSOCKET:
+                    if gate_inverse and payload.get("gate_rest_close_verified") is True:
+                        gate_source = GATE_INVERSE_REST_CONFIRMED_SOURCE
+                    elif gate_linear and payload.get("gate_close_confirmed") is True:
+                        gate_source = GATE_WS_CONFIRMED_SOURCE
+                if (msg.source in {DataSource.HTTP, DataSource.HTTP_BACKFILL}
+                        and payload.get("gate_rest_close_verified") is True):
+                    gate_source = "backfill"
             if "source_close_time_ms" in payload and payload["source_close_time_ms"] != end_time - 1:
                 return None
             is_closed = bool(payload.get("is_closed", end_time <= msg.received_at_ms))
-            bybit_live = self._descriptor.exchange == "bybit" and msg.source == DataSource.WEBSOCKET
+            bybit_live = self._descriptor.exchange == "bybit" and msg.source in {
+                DataSource.WEBSOCKET, DataSource.HTTP,
+            }
+            # A realtime REST poll has no venue close flag. Treat it as a
+            # preview so it cannot suppress a late confirmation or mask a gap.
             bybit_close_confirmed = (
                 bybit_live
+                and msg.source == DataSource.WEBSOCKET
                 and payload.get("is_closed") is True
                 and payload.get("source_close_time_ms") == end_time - 1
             )
+            if gate_perpetual:
+                is_closed = bool(gate_source)
+            elif bybit_live:
+                is_closed = bybit_close_confirmed
             data = {
                 "interval": self._descriptor.interval or "",
                 "open_time": open_time,
@@ -424,11 +477,14 @@ class CcxtUnifiedNormalizer:
                 "trades": 0,
                 "taker_buy_base": 0.0,
                 "taker_buy_quote": 0.0,
-                "is_closed": bybit_close_confirmed if bybit_live else is_closed,
+                "gate_close_source": gate_source,
+                "is_closed": is_closed,
                 "bybit_close_confirmed": bybit_close_confirmed,
                 "trade_coverage_verified": payload.get("trade_coverage_verified") is True,
                 "trade_candle_source": payload.get("trade_candle_source") is True,
             }
+            if gate_inverse:
+                data["series_identity"] = GATE_INVERSE_CONTRACTS.to_dict()
         except (TypeError, ValueError):
             return None
         return self._event(
@@ -663,7 +719,7 @@ class CcxtUnifiedNormalizer:
             info,
             "openInterestValue",
             "open_interest_value",
-            "oiCcy",
+            "oiUsd" if self._descriptor.exchange == "okx" else "oiCcy",
         )
         if notional is not None:
             data["open_interest_value"] = notional

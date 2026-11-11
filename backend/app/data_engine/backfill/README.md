@@ -162,7 +162,7 @@ Alignment modes:
 | `market` | Align to market-open semantics when available |
 | `none` | Start directly from gap start |
 
-Custom interval writes reuse `BarAggregator.aggregate_batch()` so batch repair does not mutate live aggregator targets or active state.
+Custom interval repair reads the canonical stored components from the fetched windows and uses the pure K130 reducer before committing through the existing materialization lease and revision fence.
 
 ## Fetching And Rate Limits
 

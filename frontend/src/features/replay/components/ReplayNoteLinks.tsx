@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { t } from "../../../i18n/index.js";
-import { replayNoteLinkField, replayNoteSelectedLinks, sameReplayNoteContext,
+import { replayNoteView, replayNoteLinkField, replayNoteSelectedLinks, sameReplayNoteContext,
   type ReplayNoteContext, type ReplayNoteLink } from "../replayNotes.js";
 import type { ReplayV2ApiClient } from "../replayV2Api.js";
 
@@ -23,7 +23,7 @@ function LinkOptions({ api, context, kind, selected, full, disabled, onToggle }:
   const request = JSON.stringify([before, attempt]), loading = page.request !== request;
   useEffect(() => {
     const controller = new AbortController();
-    api.noteLinkOptionsRun(context.runId, context.trackId, { kind, ...(before ? { beforeId: before } : {}) }, controller.signal).then(result => {
+    api.noteLinkOptionsRun(context.runId, context.trackId, { kind, ...(before ? { beforeId: before } : {}) }, controller.signal, replayNoteView(context)).then(result => {
       if (controller.signal.aborted) return;
       if (!sameReplayNoteContext(result.context, context)) throw new TypeError("Replay note reference context changed");
       setPage({ links: result.links, next: result.nextBeforeId, request, error: false });

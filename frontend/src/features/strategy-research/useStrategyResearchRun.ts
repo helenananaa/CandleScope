@@ -9,7 +9,6 @@ import {
 import {
   ChartStrategyRunError,
   chartStrategyRunDiagnostics,
-  qualitySummaryFromImportedManifest,
 } from "../backtest/chart-tester/chartStrategyRunRequest.js";
 import { ChartStrategyTesterRuntime } from "../backtest/chart-tester/ChartStrategyTesterRuntime.js";
 import type {
@@ -20,6 +19,9 @@ import { currentChartStrategyTesterToken } from "../backtest/chart-tester/chartS
 import type { ChartStrategyRunRequest } from "../backtest/chart-tester/chartStrategyTesterUiModel.js";
 import type { LocalDatasetManifest } from "../local-data/localDataTypes.js";
 import type { ResearchRuntimeMode, ResearchSourceRefV1 } from "../research-data/researchDataTypes.js";
+import { getStrategyStorage } from "../../shared/strategyStorage.js";
+import { importedResearchRunSource } from "./importedDatasetSource.js";
+import { StrategyResearchBatch } from "./strategyResearchBatch.js";
 import { StrategyResearchRunEffectGuard } from "./strategyResearchRunLifecycle.js";
 import { MarketDataManagerCore } from "../market-data/manager/marketDataManagerCore.js";
 import { DEFAULT_STRATEGY_RUN_SETTINGS, validStrategyRunSettings, type StrategyRunSettings } from "../../shared/strategyRunSettings.js";
@@ -41,6 +43,19 @@ export function sessionFromResearchSource(
   return null;
 }
 
+export function researchResultMatchesSource(
+  result: ChartStrategyResultBundle,
+  source: ResearchSourceRefV1 | null,
+  session: ChartSession | null,
+): boolean {
+  if (!session || result.chart.symbol !== session.symbol || result.chart.interval !== session.interval) return false;
+  if (source?.kind === "IMPORTED_DATASET") {
+    return result.run.dataset_id === source.datasetId && result.run.data_epoch === source.dataEpoch;
+  }
+  return source?.kind === "CURRENT_CHART"
+    && result.config.exchange === session.exchange && result.config.market_type === session.marketType;
+}
+
 function isAbortError(reason: unknown): boolean {
   if (reason instanceof DOMException && reason.name === "AbortError") return true;
   return reason instanceof Error && reason.name === "AbortError";
@@ -60,7 +75,11 @@ export function useStrategyResearchRun(input: {
   const tester = useMemo(() => new ChartStrategyTesterRuntime("strategy-research", null), []);
   const dataManager = useMemo(() => new MarketDataManagerCore(), []);
   const managerLifecycle = useMemo(() => new StrategyResearchRunEffectGuard(), []);
-  useEffect(() => managerLifecycle.mount({ dispose: () => dataManager.closeAll() }), [dataManager, managerLifecycle]);
+  const batch = useMemo(() => new StrategyResearchBatch(dataManager.strategy, getStrategyStorage()), [dataManager]);
+  useEffect(() => {
+    batch.start();
+    return managerLifecycle.mount({ dispose() { batch.dispose(); dataManager.closeAll(); } });
+  }, [batch, dataManager, managerLifecycle]);
   const [, setTesterVersion] = useState(0);
   const [result, setResult] = useState<ChartStrategyResultBundle | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -76,6 +95,7 @@ export function useStrategyResearchRun(input: {
     if (!runId || tester.snapshot().activeRunId === runId) return;
     const controller = new AbortController();
     setRestoringRun(true);
+    setError(null);
     void dataManager.strategy.restoreRun(runId, controller.signal).then((bundle) => {
       if (!controller.signal.aborted) setResult(bundle);
     }).catch((reason: unknown) => { if (!controller.signal.aborted) setError(reason instanceof Error ? describeError(reason, reason.message) : String(reason)); })
@@ -118,15 +138,11 @@ export function useStrategyResearchRun(input: {
   }, [configuration, input.draftContentRevision, input.draftId, input.source, session, tester]);
 
   const snapshot = tester.snapshot();
-  const barOnly = input.source?.kind === "IMPORTED_DATASET";
-  const restoredContextChanged = result !== null && session !== null && (
-    result.chart.symbol !== session.symbol || result.chart.interval !== session.interval
-    || (input.source?.kind === "IMPORTED_DATASET" && (
-      result.run.dataset_id !== input.source.datasetId || result.run.data_epoch !== input.source.dataEpoch
-    ))
-  );
-  const inputStale = snapshot.status === "STALE" || restoredContextChanged;
-  const updatingResult = result !== null && ["RESOLVING", "QUEUED", "RUNNING"].includes(snapshot.status);
+  const barOnly = input.source?.kind === "IMPORTED_DATASET" && !input.imported?.market_trade_input;
+  const sourceResult = result && researchResultMatchesSource(result, input.source, session) ? result : null;
+  const externalResult = result?.report.strategy?.external_provider !== undefined;
+  const inputStale = (snapshot.status === "STALE" && !externalResult) || (result !== null && sourceResult === null);
+  const updatingResult = result !== null && (restoringRun || ["RESOLVING", "QUEUED", "RUNNING"].includes(snapshot.status));
 
   const execute = useCallback(async (request: ChartStrategyRunRequest, materialize?: ChartContextResolution | null) => {
     pendingRequestRef.current = request;
@@ -149,6 +165,9 @@ export function useStrategyResearchRun(input: {
           "live chart backtesting is unavailable in the offline runtime",
           { next_step: "use the market-page strategy tester or imported library data" },
         );
+      }
+      if (configuration.pythonBarExecution && source.kind !== "CURRENT_CHART") {
+        throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "The saved continuous profile requires its chart market source");
       }
       if (source.kind === "IMPORTED_DATASET" && imported === null) {
         throw new ChartStrategyRunError(
@@ -174,23 +193,7 @@ export function useStrategyResearchRun(input: {
       const researchSource = source.kind === "CURRENT_CHART" ? {
         kind: "CURRENT_CHART" as const,
         materializeResolution: materialize ?? null,
-      } : {
-        kind: "IMPORTED_DATASET" as const,
-        datasetId: imported!.dataset_id,
-        dataEpoch: imported!.data_epoch,
-        interval: input.interval ?? source.interval,
-        symbol: imported!.symbol,
-        startTimeMs: configuration.customRange?.startMs ?? imported!.first_open_ms,
-        endTimeMs: configuration.customRange?.endMs ?? imported!.last_open_ms + 1,
-        quality: qualitySummaryFromImportedManifest({
-          rows: imported!.rows,
-          excludedRangeCount: imported!.excluded_range_count,
-          volumeAvailable: imported!.volume_available,
-        }),
-      };
-      if (researchSource.kind === "IMPORTED_DATASET" && imported && (researchSource.startTimeMs < imported.first_open_ms || researchSource.endTimeMs > imported.last_open_ms + 1)) {
-        throw new ChartStrategyRunError("DATA_COVERAGE_INCOMPLETE", "The selected dates exceed the imported data coverage", { next_step: "choose dates within the data coverage" });
-      }
+      } : importedResearchRunSource(imported!, request.attachment, input.interval ?? source.interval);
       const outcome = await dataManager.strategy.runResearch({
         request,
         source: researchSource,
@@ -200,7 +203,8 @@ export function useStrategyResearchRun(input: {
           tester.dispatch({
             type: "REQUEST_STATUS",
             token,
-            status: resolution.status === "NEEDS_DATA" ? "NEEDS_DATA" : "RESOLVING",
+            status: resolution.status === "NEEDS_DATA" && !resolution.automatic_preparation_available
+              ? "NEEDS_DATA" : "RESOLVING",
           });
         },
         onRunUpdate(run) {
@@ -268,12 +272,15 @@ export function useStrategyResearchRun(input: {
 
   return {
     session,
+    batch,
+    historyManager: dataManager.strategy,
     barOnly,
     runStatus: (restoringRun ? "RUNNING" : snapshot.status) as ChartStrategyTesterStatus,
     stale: inputStale || updatingResult,
     inputStale,
     staleReasons: snapshot.staleReasons as ChartStrategyTesterStaleReason[],
     result,
+    sourceResult,
     error,
     needsData: needsData !== null,
     dataResolution: needsData,

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+from types import SimpleNamespace
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -306,3 +309,41 @@ def test_liquidation_http_rejects_unready_and_redacts_internal_errors() -> None:
     )
     assert "secret" not in failed_recent.text
     assert "secret" not in failed_history.text
+
+
+def test_bounded_history_cursor_retains_both_sides_at_the_same_minute(tmp_path) -> None:
+    from app.data_engine.market_data.liquidation_service import LiquidationService
+    from app.data_engine.storage.liquidation_store import SQLiteLiquidationRollupStore
+    from tests.test_liquidation_storage import _rollup as stored_rollup
+
+    first = 1_700_000_040_000
+    last = first + 120_000
+    store = SQLiteLiquidationRollupStore(tmp_path / "liquidation.sqlite")
+    asyncio.run(store.upsert_rollups([
+        stored_rollup(first, position_side="short", is_final=True),
+        stored_rollup(first, position_side="long", is_final=True),
+        stored_rollup(last, position_side="long", is_final=True),
+    ]))
+    service = LiquidationService(object(), rollup_store=store)
+    with _client(SimpleNamespace(liquidation_ready=True, liquidation_history=service.history)) as client:
+        params = {"start_ms": first, "end_ms": last, "limit": 1}
+        seen = []
+        for page_index in range(3):
+            response = client.get("/api/v1/liquidations/history", params=params)
+            assert response.status_code == 200, response.text
+            page = response.json()
+            assert page["mode"] == "local_only"
+            assert page["terminal_reason"] == "source_lossy"
+            assert page["complete"] is page["retryable"] is False
+            assert page["coverage"]["all_rows_final"] is True
+            seen.extend((row["bucket_start_ms"], row["position_side"]) for row in page["data"])
+            assert page["has_more"] is (page_index < 2)
+            if page["has_more"]:
+                params.update(page["next_cursor"])
+            else:
+                assert page["next_cursor"] is None
+        assert seen == [(first, "long"), (first, "short"), (last, "long")]
+
+        empty = client.get("/api/v1/liquidations/history", params={"start_ms": first + 60_000, "end_ms": first + 60_000}).json()
+        assert empty["data"] == [] and empty["next_cursor"] is None
+        assert empty["complete"] is False and empty["terminal_reason"] == "source_lossy"

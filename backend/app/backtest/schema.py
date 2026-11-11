@@ -164,6 +164,19 @@ CREATE TABLE IF NOT EXISTS backtest_reports (
     generated_at_ms INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS backtest_result_replay_note_revisions (
+    run_id TEXT NOT NULL REFERENCES backtest_runs(run_id) ON DELETE CASCADE,
+    snapshot_hash TEXT NOT NULL,
+    report_hash TEXT NOT NULL,
+    note_id TEXT NOT NULL,
+    revision INTEGER NOT NULL,
+    cursor INTEGER NOT NULL,
+    time_ms INTEGER,
+    body TEXT NOT NULL,
+    saved_at_ms INTEGER NOT NULL,
+    PRIMARY KEY (run_id, snapshot_hash, report_hash, note_id, revision)
+);
+
 CREATE TABLE IF NOT EXISTS backtest_chart_cache (
     run_id TEXT PRIMARY KEY,
     cache_schema TEXT NOT NULL,

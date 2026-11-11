@@ -385,7 +385,8 @@ class BarAggregator:
         epoch = self._target_epochs.get(key)
         return (key, epoch) if epoch is not None else None
 
-    def adopt_history_prefix(self, prefix, token, *, acquisition_revision=None, refresh=False):
+    def adopt_history_prefix(self, prefix, token, *, acquisition_revision=None, refresh=False,
+                             replace_provisional=False):
         """Loop-owned, synchronous last step after the durable read fence.
 
         No await separates the target-generation check and builder adoption.
@@ -405,7 +406,9 @@ class BarAggregator:
         pipeline = self._pipelines[self._pipeline_key(interval, exchange, identity)]
         previous = pipeline.bar_state.get_state(exchange, market_type, symbol, prefix.start_ms)
         overlay_floor = previous.acquisition_revision if previous is not None else None
-        state = pipeline.bar_state.adopt_history_prefix(prefix, refresh=refresh)
+        state = pipeline.bar_state.adopt_history_prefix(
+            prefix, refresh=refresh, replace_provisional=replace_provisional,
+        )
         state.acquisition_revision = (prefix.acquisition_revision if acquisition_revision is None
                                       else min(acquisition_revision, prefix.acquisition_revision))
         if state.source_snapshots:
@@ -429,7 +432,12 @@ class BarAggregator:
         to all matching interval pipelines.
         """
         await self._publisher.retry_source_deliveries()
-        await self._router.on_market_event(event)
+        runtime = self.history_prefix_runtime
+        if runtime is None:
+            await self._router.on_market_event(event)
+        else:
+            async with runtime.forming_input_scope(event):
+                await self._router.on_market_event(event)
 
     async def on_backfill_bars(
         self,
@@ -1008,6 +1016,13 @@ class BarAggregator:
 
         if state.acquisition_revision is None:
             state.acquisition_revision = acquisition_revision
+        warm_floor = bar_input.extra.get("warm_start_acquisition_floor")
+        if warm_floor is not None:
+            # A replayed forming input keeps its original delete fence.
+            state.acquisition_revision = (
+                warm_floor if state.acquisition_revision is None
+                else min(warm_floor, state.acquisition_revision)
+            )
 
         # Drain eviction buffers — emit events for bars that were
         # force-closed or expired during apply() due to limit enforcement.
@@ -1023,6 +1038,14 @@ class BarAggregator:
             elif change == BarStateChange.AMENDED:
                 await self._publisher.emit_amended(state)
         check_target()
+
+        runtime = self.history_prefix_runtime
+        if (emit_events and runtime is not None and bar_input.merge_mode == MergeMode.COMPONENT
+                and bar_input.extra.get("bybit_close_confirmed") is True):
+            state = await runtime.complete_repaired_bucket(pipeline, state, bar_input)
+            if state is None:
+                return
+            check_target()
 
         # L4: Check if this bar should be finalized
         is_backfill = bar_input.source == BarInputSource.BACKFILL

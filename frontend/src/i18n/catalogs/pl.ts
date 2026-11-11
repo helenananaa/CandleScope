@@ -1,4 +1,5 @@
 import { continuousEnglish } from "./continuousMessages.js";
+import { tradeHistoryEnglish } from "./tradeHistoryMessages.js";
 import { replayNoteEnglish } from "./replayNoteMessages.js";
 import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
@@ -9,6 +10,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const pl = {
   ...continuousEnglish,
+  ...tradeHistoryEnglish,
   ...replayNoteEnglish,
   ...historyStudyEnglish,
   "chartTime.title": "Go to date",
@@ -2214,6 +2216,7 @@ export const pl = {
   "replay.liq.adlHint": "Księga kontrahenta {count} wierszy · symulacja deterministyczna, nie historyczna prywatna kolejka giełdy",
   "local.import": "Importuj CSV",
   "local.localOnly": "Dane pozostają na tej maszynie",
+  "local.marketTradeCoverage": "Użyj pliku transakcji rynkowych z kolejnymi numerami sekwencji. Określ zakres UTC. Import pozostaje lokalny.",
   "local.chooseFile": "Wybierz plik CSV",
   "local.baseAsset": "Aktywo ilości (jednostka wolumenu)",
   "local.quoteAsset": "Aktywo kwotowania ceny",
@@ -4305,6 +4308,7 @@ export const pl = {
   "research.data.noContext": "Ten wpis nie ma zamrożonej tożsamości zestawu danych.",
   "research.data.available": "Dostępne lokalne zestawy danych",
   "research.execution.precise": "Wierność sekwencji transakcji i założenia wykonania pozostają jawne i niezmienne dla każdego przebiegu.",
+  "research.execution.preciseArchiveHint": "Automatyczne pobieranie korzysta z zagregowanych transakcji kontraktów futures Binance USD-M. Wybierz zakres w obrębie zakończonych dni UTC.",
   "research.execution.python": "Środowiska Pythona i modeli zewnętrznych inicjalizują się wyłącznie wewnątrz tej aplikacji badawczej.",
   "research.execution.general": "Sterowanie wykonaniem pozostaje ograniczone do wybranego zadania i nigdy nie mutuje ukończonego przebiegu.",
   "research.run.none": "Nie wybrano BacktestRun.",

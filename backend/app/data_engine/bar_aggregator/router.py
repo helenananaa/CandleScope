@@ -368,6 +368,12 @@ class EventRouter:
             return
 
         src = bar_input.source_interval
+        if bar_input.is_closed and src != "tick":
+            # Enqueue the native close first. Its canonical commit invalidates
+            # overlapping projections, including a derived close from this input.
+            target_intervals = sorted(target_intervals, key=lambda interval: not (
+                src == interval or intervals_equivalent(src, interval)
+            ))
 
         for interval in target_intervals:
             if bar_input.identity not in self._target_identities.get(
@@ -548,6 +554,7 @@ class EventRouter:
                 ),
                 sequence=sequence,
                 extra={**({"source_ref": dict(data["source_ref"])} if data.get("source_ref") else {}),
+                       "gate_close_source": data.get("gate_close_source") if exchange == "gate" else None,
                        "trade_coverage_verified": data.get("trade_coverage_verified") is True,
                        "bybit_close_confirmed": exchange == "bybit" and data.get("bybit_close_confirmed") is True},
             )

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
@@ -30,6 +31,39 @@ def archive(tmp_path, monkeypatch):
 
 def generations(root):
     return list((root / "generations").iterdir())
+
+
+def test_shared_catalog_pruner_cannot_retire_another_writers_staging_generation(tmp_path, monkeypatch):
+    import app.replay.remote_trade_archive as remote
+
+    writer = archive(tmp_path, monkeypatch)
+    writer.refresh_official_catalog()
+    writer.refresh_official_catalog()
+    pruner = OfficialAggTradeArchive(writer.root, symbols=writer.symbols, defer_refresh=True)
+    entered, release = threading.Event(), threading.Event()
+    lookup = remote.list_official_agg_trade_days
+
+    def paused(**kwargs):
+        entered.set()
+        assert release.wait(5)
+        return lookup(**kwargs)
+
+    monkeypatch.setattr(remote, "list_official_agg_trade_days", paused)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        refresh = pool.submit(writer.refresh_official_catalog)
+        assert entered.wait(5)
+        try:
+            stage = writer._catalog_stage
+            assert stage is not None and stage.is_dir()
+            os.utime(stage, ns=(1, 1))
+            pruner.prune_metadata_cache()
+            assert stage.is_dir()
+        finally:
+            release.set()
+        refresh.result(timeout=5)
+    pruner.prune_metadata_cache()
+    assert len(generations(writer.catalog_root)) <= 2
+    assert writer.list_verified_identities() == pruner.list_verified_identities()
 
 
 def test_repeated_refresh_is_bounded_and_offline_restart_keeps_all_markets(
@@ -194,6 +228,50 @@ def test_offline_cache_reader_finishes_before_retirement(tmp_path, monkeypatch):
         assert len(reader.result(timeout=5)) == 2
         pruning.result(timeout=5)
     assert len(generations(item.root / "_remote_metadata")) <= 2
+
+
+def test_shared_cache_publication_waits_for_another_offline_reader(tmp_path, monkeypatch):
+    writer = archive(tmp_path, monkeypatch)
+    reader = OfficialAggTradeArchive(writer.root, symbols=writer.symbols, defer_refresh=True, refresh_seconds=0)
+    reading, publishing, release, finished = (threading.Event() for _ in range(4))
+    read = reader._read_bound_cached_json
+    publish = writer._cache_metadata
+
+    def paused(*args):
+        reading.set()
+        assert release.wait(5)
+        return read(*args)
+
+    def signal_publish(*args):
+        publishing.set()
+        return publish(*args)
+
+    def offline(*_args, **_kwargs):
+        raise ReplayHistoryOriginUnavailable("offline")
+
+    monkeypatch.setattr(reader, "_read_bound_cached_json", paused)
+    monkeypatch.setattr(reader.origin, "read_json", offline)
+    monkeypatch.setattr(writer, "_cache_metadata", signal_publish)
+
+    def publish_and_prune():
+        for _ in range(3):
+            writer.refresh_official_catalog()
+            assert len(writer.list_verified_identities()) == 2
+        writer.prune_metadata_cache()
+        finished.set()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        result = pool.submit(reader.list_verified_identities)
+        assert reading.wait(5)
+        refresh = pool.submit(publish_and_prune)
+        try:
+            assert publishing.wait(5)
+            assert not finished.wait(0.1)
+        finally:
+            release.set()
+        assert len(result.result(timeout=5)) == 2
+        refresh.result(timeout=5)
+    assert len(generations(writer.root / "_remote_metadata")) <= 2
 
 
 def test_retirement_is_narrow_and_resumes_after_interruption(tmp_path):

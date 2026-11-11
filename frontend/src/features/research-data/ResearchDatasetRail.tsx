@@ -3,6 +3,7 @@ import { useState, type ReactNode } from "react";
 import { t } from "../../i18n/index.js";
 import type { LocalDatasetManifest, LocalImportJob } from "./researchDataApi.js";
 import { formatResearchRows } from "./researchDataFormat.js";
+import { ResearchMarketTradeImportForm } from "./ResearchMarketTradeImportForm.js";
 import { ResearchDataImportForm } from "./ResearchDataImportForm.js";
 import type { ResearchImportSubmitInput } from "./useResearchDataLibrary.js";
 
@@ -14,6 +15,7 @@ export function ResearchDatasetRail({
   uploadProgress,
   onSelect,
   onImport,
+  onMarketTradesImported,
   onCancelImport,
   management,
   analysis,
@@ -25,6 +27,7 @@ export function ResearchDatasetRail({
   uploadProgress: number | null;
   onSelect(datasetId: string): void;
   onImport(input: ResearchImportSubmitInput): Promise<unknown>;
+  onMarketTradesImported?(dataset: LocalDatasetManifest): Promise<void>;
   onCancelImport(): void;
   management: ReactNode;
   analysis: ReactNode;
@@ -40,6 +43,10 @@ export function ResearchDatasetRail({
         ))}
       </div>
       <div hidden={view !== "import"} role="tabpanel" aria-label={t("local.import")}>
+      {onMarketTradesImported && <ResearchMarketTradeImportForm
+        selected={datasets.find((dataset) => dataset.dataset_id === selectedId) ?? null}
+        onImported={onMarketTradesImported}
+      />}
       <ResearchDataImportForm
         importing={importing}
         importJob={importJob}
@@ -68,7 +75,7 @@ export function ResearchDatasetRail({
               data-testid={`research-dataset-${dataset.dataset_id}`}
               onClick={() => onSelect(dataset.dataset_id)}
             >
-              <span><strong>{dataset.name}</strong><em>{dataset.symbol} · {dataset.interval} · {dataset.volume_available ? "OHLCV" : "OHLC-only"}</em></span>
+              <span><strong>{dataset.name}</strong><em>{dataset.symbol} · {dataset.interval} · {dataset.market_trade_input ? t(dataset.market_trade_input.kind === "MARKET_AGG_TRADE" ? "settings.exchange.channel.aggTrade" : "settings.exchange.channel.trade") : dataset.volume_available ? "OHLCV" : "OHLC-only"}</em></span>
               <span><b>{formatResearchRows(dataset.rows)}</b><small>{t("local.gaps", { count: dataset.excluded_range_count })}</small></span>
             </button>
           ))}

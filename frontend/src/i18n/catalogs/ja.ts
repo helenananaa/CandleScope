@@ -1,4 +1,5 @@
 import { continuousJapanese } from "./continuousMessages.js";
+import { tradeHistoryJapanese } from "./tradeHistoryMessages.js";
 import { replayNoteJapanese } from "./replayNoteMessages.js";
 import { historyStudyJapanese } from "./historyStudyMessages.js";
 import { workbenchEnglish } from "./workbenchEnglish.js";
@@ -10,6 +11,7 @@ import { tradingAccountsJa } from "./tradingAccountsMessages.js";
 
 export const ja = {
   ...continuousJapanese,
+  ...tradeHistoryJapanese,
   ...replayNoteJapanese,
   ...historyStudyJapanese,
   "chartTime.title": "Go to date",
@@ -1110,6 +1112,8 @@ export const ja = {
   "settings.appearance.cellThemeDescription": "このチャートのテーマを設定します。スタイル連動を有効にした場合のみ、他のチャートにも反映されます。",
   "workspace.link.drawings": "描画",
   "workspace.link.drawingsDesc": "同一市場・同一レイヤーセットで描画ドキュメントを共有",
+  "workspace.link.drawingVisibility": "描画の表示",
+  "workspace.link.drawingVisibilityDesc": "各チャートで描画を表示するかどうかを同期します。",
   "workspace.link.definitions": "インジケーター一覧",
   "workspace.link.definitionsDesc": "追加、削除、インジケーター種類を同期",
   "workspace.link.parameters": "インジケーターパラメーター",
@@ -2542,6 +2546,7 @@ export const ja = {
   "replay.liq.adlHint": "相手方台帳 {count} 件 · 決定論的シミュレーションであり、過去の取引所プライベートキューではありません",
   "local.import": "CSV をインポート",
   "local.localOnly": "データはこのマシン内のみ",
+  "local.marketTradeCoverage": "市場全体の約定ファイルを使用し、元の連番と UTC の対象期間を指定してください。データはローカルに保存されます。",
   "local.chooseFile": "CSV ファイルを選択",
   "local.baseAsset": "数量資産（出来高の単位）",
   "local.quoteAsset": "価格の建値資産",
@@ -4647,6 +4652,7 @@ export const ja = {
   "research.data.noContext": "このエントリには凍結データセット ID がありません。",
   "research.data.available": "利用可能なローカルデータセット",
   "research.execution.precise": "約定系列の忠実度と執行前提は、ランごとに明示され不変です。",
+  "research.execution.preciseArchiveHint": "自動ダウンロードには Binance USD-M 先物の集約約定を使用します。終了済みの UTC 日付内で期間を指定してください。",
   "research.execution.python": "Python と外部モデルのランタイムは、この研究アプリ内でのみ初期化されます。",
   "research.execution.general": "執行コントロールは選択中のタスクに限定され、完了ランは変更しません。",
   "research.run.none": "BacktestRun が未選択です。",

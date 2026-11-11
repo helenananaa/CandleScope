@@ -1,4 +1,5 @@
 import type { MarketHistoryRange } from "../advanced-market-data/marketHistoryCoverage.js";
+import { ApiPayloadError } from "../../services/apiPayloadParsers.js";
 import { fetchLiquidationHistory } from "./liquidationApi.js";
 import type { LiquidationHistoryPayload, LiquidationIdentity, LiquidationPositionSide } from "./liquidationTypes.js";
 
@@ -12,7 +13,7 @@ export async function loadLiquidationHistoryPages({
   range: MarketHistoryRange;
   signal: AbortSignal;
   isCurrent(): boolean;
-  onPage(payload: LiquidationHistoryPayload, covered: MarketHistoryRange): void;
+  onPage(payload: LiquidationHistoryPayload, scanned: MarketHistoryRange): void;
   fetchPage?: typeof fetchLiquidationHistory;
 }): Promise<void> {
   let cursor = range.startMs;
@@ -26,17 +27,23 @@ export async function loadLiquidationHistoryPages({
       || payload.key.symbol !== identity.symbol.toUpperCase()
       || payload.key.params.period !== "1m"
       || payload.key.params.position_side !== side) {
-      throw new Error(`Liquidation ${side} history identity did not match the request`);
+      throw new ApiPayloadError("liquidations.history.key", `${side} history identity did not match the request`);
+    }
+    if (!payload.hasMore) {
+      onPage(payload, { startMs: cursor, endMs: range.endMs });
+      return;
     }
     const tail = payload.data.at(-1);
-    if (payload.hasMore && (!tail || tail.bucketStartMs < cursor)) {
-      throw new Error(`Liquidation ${side} history did not advance its cursor`);
+    // Older servers omit next_cursor. Their one-side page can only resume
+    // immediately after the last observed minute.
+    const next = payload.nextStartMs === undefined && tail
+      ? tail.bucketStartMs + 60_000
+      : payload.nextStartMs;
+    if (!tail || tail.bucketStartMs < cursor || next == null
+      || next <= tail.bucketStartMs || next > range.endMs) {
+      throw new ApiPayloadError("liquidations.history.next_cursor", `${side} history did not advance its cursor`);
     }
-    const endMs = payload.hasMore && tail
-      ? Math.min(range.endMs, tail.bucketStartMs + 60_000 - 1)
-      : range.endMs;
-    onPage(payload, { startMs: cursor, endMs });
-    if (!payload.hasMore) return;
-    cursor = endMs + 1;
+    onPage(payload, { startMs: cursor, endMs: next - 1 });
+    cursor = next;
   }
 }

@@ -17,6 +17,7 @@ from app.data_engine.storage.raw_trade_archive import (
 
 from .history_archive import ReplayHistoryArchiveRuntimeLease
 from .catalog import ReplaySeriesIdentity
+from .local_trade_repository import LocalReplayTradeRepository
 from .remote_trade_archive import RemoteRawAggTradeArchive
 from .official_trade_catalog import OfficialAggTradeArchive
 from .service import ReplayService
@@ -97,7 +98,7 @@ async def start_replay_runtime(
     *,
     store_factory: Callable[[str], ReplaySQLiteStore] | None = None,
     service_factory: Callable[..., ReplayService] = ReplayService,
-    raw_trade_archive: RawAggTradeArchive | None = None,
+    raw_trade_archive: RawAggTradeArchive | LocalReplayTradeRepository | None = None,
     repository: object | None = None,
     native_intervals: Callable[[ReplaySeriesIdentity], Sequence[str]] | None = None,
     instrument_metadata_resolver: (

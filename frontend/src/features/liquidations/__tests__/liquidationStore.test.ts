@@ -118,18 +118,18 @@ test("eviction removes coverage and reloading an older page retains its data", (
   const requested = { startMs: base, endMs: base + 3 * 60_000 - 1 };
   store.mergeHistory(identity, rows, quality, { side: "long", range: requested });
   const coordinator = new LiquidationHistoryRequestCoordinator();
-  const claims = coordinator.claim("long", requested, store.historyCoverage(identity, "long"));
+  const claims = coordinator.claim("long", requested, store.historyScans(identity, "long"));
   assert.deepEqual(claims.map((claim) => claim.range), [{ startMs: base, endMs: base + 59_999 }]);
   const first = rows[0]!;
   store.mergeHistory(identity, [first], quality, { side: "long", range: claims[0]!.range });
   assert.equal(store.getSnapshot(identity).rollups[0], first);
-  assert.deepEqual(store.historyCoverage(identity, "long"), [
+  assert.deepEqual(store.historyScans(identity, "long"), [
     { startMs: base, endMs: base + 59_999 },
     { startMs: base + 120_000, endMs: requested.endMs },
   ]);
 });
 
-test("coverage preserves confirmed empty ranges and other liquidation sides", () => {
+test("local scans retain empty reads separately for each liquidation side", () => {
   const store = new LiquidationStore({ maxRollupsPerIdentity: 1 });
   const base = 1_699_999_980_000;
   const range = { startMs: base, endMs: base + 179_999 };
@@ -138,10 +138,10 @@ test("coverage preserves confirmed empty ranges and other liquidation sides", ()
   store.mergeHistory(identity, [rollup({
     bucketStartMs: base + 120_000, bucketEndMs: base + 180_000,
   })], quality);
-  assert.deepEqual(store.historyCoverage(identity, "short"), [range]);
-  assert.deepEqual(store.historyCoverage(identity, "long"), [{ startMs: base + 60_000, endMs: range.endMs }]);
-  store.invalidateHistoryCoverage(identity, { startMs: base + 120_000, endMs: range.endMs });
-  assert.deepEqual(store.historyCoverage(identity, "long"), [{ startMs: base + 60_000, endMs: base + 119_999 }]);
+  assert.deepEqual(store.historyScans(identity, "short"), [range]);
+  assert.deepEqual(store.historyScans(identity, "long"), [{ startMs: base + 60_000, endMs: range.endMs }]);
+  store.invalidateHistoryScans(identity, { startMs: base + 120_000, endMs: range.endMs });
+  assert.deepEqual(store.historyScans(identity, "long"), [{ startMs: base + 60_000, endMs: base + 119_999 }]);
 });
 
 test("history and coverage are released only after the last runtime and subscriber leave", () => {
@@ -157,7 +157,7 @@ test("history and coverage are released only after the last runtime and subscrib
   assert.equal(store.getSnapshot(identity).rollups.length, 1);
   unsubscribe();
   assert.equal(store.getSnapshot(identity).rollups.length, 0);
-  assert.deepEqual(store.historyCoverage(identity, "long"), []);
+  assert.deepEqual(store.historyScans(identity, "long"), []);
   store.setConnectionStatus(identity, "disconnected");
   assert.equal(store.getSnapshot(identity).connectionStatus, "disabled");
 });
@@ -187,7 +187,7 @@ test("global active-record trimming invalidates coverage and publishes the reduc
   const unsubscribe = store.subscribe(identity, () => { notifications += 1; });
   store.mergeHistory(eth, [rollup(eth)], quality, { side: "long", range });
   assert.equal(store.getSnapshot(identity).rollups.length, 0);
-  assert.deepEqual(store.historyCoverage(identity, "long"), []);
+  assert.deepEqual(store.historyScans(identity, "long"), []);
   assert.equal(notifications, 1);
   assert.equal(store.getSnapshot(eth).rollups.length, 1);
   unsubscribe(); releaseA(); releaseB();
@@ -243,7 +243,7 @@ test("production history loader advances past evicted pages without restarting a
     onPage: (payload, range) => store.mergeHistory(identity, payload.data, payload.quality, { side: "long", range }),
   });
   assert.deepEqual(starts, [base, base + 120_000, base + 240_000]);
-  assert.deepEqual(store.historyCoverage(identity, "long"), [{ startMs: base + 240_000, endMs: requested.endMs }]);
+  assert.deepEqual(store.historyScans(identity, "long"), [{ startMs: base + 240_000, endMs: requested.endMs }]);
   assert.equal(store.getSnapshot(identity).rollups.length, 2);
 });
 
@@ -266,7 +266,7 @@ test("a cancelled or superseded history response cannot repopulate a released id
     resolvePage(historyPage([rollup()], false));
     await loading;
     assert.equal(store.getSnapshot(identity).rollups.length, 0);
-    assert.deepEqual(store.historyCoverage(identity, "long"), []);
+    assert.deepEqual(store.historyScans(identity, "long"), []);
   }
 });
 
@@ -281,5 +281,28 @@ test("history cursor failures stop before admitting misleading coverage", async 
     onPage: (payload, range) => store.mergeHistory(identity, payload.data, payload.quality, { side: "long", range }),
   }), /did not advance/);
   assert.equal(calls, 2);
-  assert.deepEqual(store.historyCoverage(identity, "long"), [{ startMs: base, endMs: base + 59_999 }]);
+  assert.deepEqual(store.historyScans(identity, "long"), [{ startMs: base, endMs: base + 59_999 }]);
+});
+
+
+test("the backend cursor crosses an empty interval without treating it as market coverage", async () => {
+  const base = 1_699_999_980_000;
+  const afterGap = base + 180_000;
+  const starts: number[] = [];
+  const scans: Array<{ startMs: number; endMs: number }> = [];
+  await loadLiquidationHistoryPages({
+    identity, side: "long", range: { startMs: base, endMs: afterGap + 59_999 },
+    signal: new AbortController().signal, isCurrent: () => true,
+    fetchPage: async (_identity, query) => {
+      starts.push(query.startMs);
+      return { ...historyPage([rollup({ bucketStartMs: query.startMs })], starts.length === 1),
+        nextStartMs: starts.length === 1 ? afterGap : null };
+    },
+    onPage: (_page, scanned) => scans.push(scanned),
+  });
+  assert.deepEqual(starts, [base, afterGap]);
+  assert.deepEqual(scans, [
+    { startMs: base, endMs: afterGap - 1 },
+    { startMs: afterGap, endMs: afterGap + 59_999 },
+  ]);
 });

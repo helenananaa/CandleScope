@@ -336,6 +336,7 @@ class QueryEngine:
         market_type = route.market_type
         interval = route.canonical_interval
         identity = resolve_kline_series_identity(exchange, series_identity)
+        route.require_series_identity(identity)
         if route.kind is IntervalRouteKind.TRADE and not identity.is_legacy_default_for(exchange):
             raise IntervalResolutionError(
                 IntervalResolutionErrorCode.SERIES_IDENTITY_UNSUPPORTED,
@@ -737,6 +738,7 @@ class QueryEngine:
         market_type = route.market_type
         interval = route.canonical_interval
         identity = resolve_kline_series_identity(exchange, series_identity)
+        route.require_series_identity(identity)
         if route.kind is IntervalRouteKind.TRADE and not identity.is_legacy_default_for(exchange):
             raise IntervalResolutionError(
                 IntervalResolutionErrorCode.SERIES_IDENTITY_UNSUPPORTED,

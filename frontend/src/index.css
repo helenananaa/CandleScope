@@ -1217,6 +1217,12 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   border-bottom: 1px solid var(--border-color);
 }
 
+.ob-history-note {
+  padding: 2px 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
 .ob-mode-switch {
   display: inline-flex;
   min-width: 0;
@@ -1506,6 +1512,39 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   min-height: 0;
   overflow: hidden;
   contain: strict;
+}
+
+.tf-history {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  font-size: var(--font-size-xs);
+}
+
+.tf-history-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 4px 8px;
+}
+
+.tf-history-status {
+  padding: 2px 8px 5px;
+  color: var(--text-muted);
+}
+
+.tf-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.tf-history-table th,
+.tf-history-table td {
+  padding: 3px 5px;
+  border-bottom: 1px solid var(--border-color);
+  text-align: start;
 }
 
 .tf-summary {
@@ -10215,6 +10254,7 @@ div.right-drawer-overlay {
 }
 
 .multi-chart-cell-maximize,
+.multi-chart-cell-drawing-visibility,
 .multi-chart-cell-drag-handle,
 .multi-chart-cell-layout-trigger {
   display: grid;
@@ -10231,6 +10271,8 @@ div.right-drawer-overlay {
 }
 
 .multi-chart-cell-maximize:hover,
+.multi-chart-cell-drawing-visibility:hover,
+.multi-chart-cell-drawing-visibility[aria-pressed="true"],
 .multi-chart-cell-drag-handle:hover,
 .multi-chart-cell-layout-trigger:hover,
 .multi-chart-cell-layout-trigger[aria-expanded="true"] {
@@ -15569,6 +15611,9 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
 .workspace-member-row strong { font-size: var(--font-size-sm); font-weight: 600; }
 .workspace-member-bulk select { font: inherit; }
 /* Replay cells share the existing workspace geometry; controls have one host. */
+.workspace-cell-layout-popover .replay-note-filter-settings { flex-direction: column; }
+.replay-note-filter-settings label:has(select) { justify-content: space-between; }
+.replay-note-filter-settings select { min-width: 0; max-width: 65%; font: inherit; }
 .replay-workspace-host { display: contents; }
 .replay-chart-cell .workspace-cell-layout-menu { margin-left: auto; }
 .replay-chart-cell .multi-chart-cell-header > button { margin-left: auto; }

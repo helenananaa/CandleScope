@@ -65,7 +65,7 @@ def test_repair_keeps_single_source_claim_and_resyncs_only_after_verified_repair
         assert not socket.closes and not dm.releases
         await connection._require_resync(timeout())
         assert dm.waits==1
-        await connection._event_callback('chart')(DataEvent(DataEventType.BAR_CLOSED,KEY,
+        await connection._event_callback(connection.subscriptions['chart'])(DataEvent(DataEventType.BAR_CLOSED,KEY,
             BarData(time=2,open=1,high=2,low=1,close=2,volume=1,source='backfill')))
         await socket.input.put('ping');await until(lambda:'pong' in socket.messages)
         assert not any(isinstance(m,dict) and m.get('type')=='kline' for m in socket.messages)

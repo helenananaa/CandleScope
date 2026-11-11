@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
+import math
 import time
 import weakref
 from collections import deque
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
+
+
+BYBIT_RATE_LIMIT_CODE = "10006"
 
 
 _response_owner: contextvars.ContextVar[Any] = contextvars.ContextVar("quota_response_owner", default=None)
@@ -126,8 +130,7 @@ class RateLimitReservation:
         if (
             bool(kwargs.get("response_unknown"))
             or bool(kwargs.get("response_complete", True))
-            or status_code in {418, 429}
-            or body_code in {"-1003", "50011"}
+            or _is_rate_limited(self.rule, status_code, body_code)
         ):
             self.settled = True
         return recorded
@@ -495,10 +498,7 @@ class RateLimitManager:
                 response_is_unknown=True,
             )
             return False
-        response_is_rate_limited = status_code in {418, 429} or body_code in {
-            "-1003",
-            "50011",
-        }
+        response_is_rate_limited = _is_rate_limited(rule, status_code, body_code)
         if response_complete or response_is_rate_limited:
             self._release_probe_for_response(
                 bucket,
@@ -518,17 +518,17 @@ class RateLimitManager:
         if credits_left is not None:
             bucket.tokens = min(bucket.tokens, max(0.0, credits_left))
 
+        if not response_is_rate_limited:
+            return False
         parsed_retry_after = retry_after
         if parsed_retry_after is None:
             parsed_retry_after = _parse_retry_after(
                 normalized_headers.get("retry-after"),
             )
-        cooldown_seconds = _cooldown_seconds(
-            status_code=status_code,
-            body_code=body_code,
-            retry_after=parsed_retry_after,
-            fallback=fallback_cooldown_seconds,
-        )
+        cooldown_seconds = max(0.0, float(parsed_retry_after or 0.0),
+                               float(fallback_cooldown_seconds or 0.0))
+        if rule.bucket_key.startswith("bybit:") and body_code == BYBIT_RATE_LIMIT_CODE:
+            cooldown_seconds = max(cooldown_seconds, _bybit_reset_delay(normalized_headers))
         if cooldown_seconds <= 0:
             return False
         bucket_extended = self.record_cooldown(rule, cooldown_seconds)
@@ -937,6 +937,7 @@ def _rate_limit_headers(headers: Mapping[str, str]) -> dict[str, str]:
             or key == "retry-after"
             or key.startswith("x-ratelimit")
             or key.startswith("api-credits-")
+            or key == "x-bapi-limit-reset-timestamp"
         ):
             interesting[key] = value
     return interesting
@@ -976,20 +977,20 @@ def _parse_retry_after(value: str | None) -> float | None:
     return retry_after
 
 
-def _cooldown_seconds(
-    *,
-    status_code: int | None,
-    body_code: str | None,
-    retry_after: float | None,
-    fallback: float | None,
-) -> float:
-    if status_code in {418, 429} or body_code in {"-1003", "50011"}:
-        return max(
-            0.0,
-            float(retry_after or 0.0),
-            float(fallback or 0.0),
-        )
-    return 0.0
+def _is_rate_limited(rule: RateLimitRule, status_code: int | None, body_code: str | None) -> bool:
+    return (
+        status_code in {418, 429}
+        or body_code in {"-1003", "50011"}
+        or (rule.bucket_key.startswith("bybit:") and body_code == BYBIT_RATE_LIMIT_CODE)
+    )
+
+
+def _bybit_reset_delay(headers: Mapping[str, str]) -> float:
+    try:
+        reset_ms = float(headers.get("x-bapi-limit-reset-timestamp", ""))
+    except ValueError:
+        return 0.0
+    return max(0.0, reset_ms / 1000 - time.time()) if math.isfinite(reset_ms) else 0.0
 
 
 @dataclass(slots=True)

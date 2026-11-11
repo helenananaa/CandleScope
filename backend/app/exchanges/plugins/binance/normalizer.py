@@ -933,6 +933,21 @@ class BinanceNormalizer:
 
     def _parse_http_funding_rate(self, msg: RawMessage) -> MarketEvent | None:
         payload = msg.payload
+        history = msg.source == DataSource.HTTP_BACKFILL
+        if history:
+            expected_symbol = self._symbols.normalize(
+                self._descriptor.symbol, self._descriptor.market_type,
+            ).upper()
+            if (
+                not isinstance(payload, dict)
+                or str(payload.get("symbol", "")).upper() != expected_symbol
+                or type(payload.get("fundingTime")) is not int
+                or payload["fundingTime"] < 0
+                or payload.get("fundingRate") in (None, "")
+                or isinstance(payload.get("fundingRate"), bool)
+                or payload.get("rateType") not in (None, "Regular")
+            ):
+                raise RuntimeError("Invalid Binance funding settlement row")
         if not isinstance(payload, dict):
             return None
         if "fundingTime" not in payload:
@@ -940,12 +955,19 @@ class BinanceNormalizer:
         if payload.get("fundingRate") in (None, ""):
             return None
 
-        data = {
-            "funding_rate": float(payload["fundingRate"]),
-            "funding_time_ms": int(payload["fundingTime"]),
-        }
-        if payload.get("markPrice") not in (None, ""):
-            data["mark_price"] = float(payload["markPrice"])
+        try:
+            data = {
+                "funding_rate": float(payload["fundingRate"]),
+                "funding_time_ms": int(payload["fundingTime"]),
+            }
+            if payload.get("markPrice") not in (None, ""):
+                data["mark_price"] = float(payload["markPrice"])
+        except (ValueError, TypeError, OverflowError) as exc:
+            if history:
+                raise RuntimeError("Invalid Binance funding settlement values") from exc
+            raise
+        if history and not all(math.isfinite(value) for value in data.values()):
+            raise RuntimeError("Non-finite Binance funding settlement values")
         return self._event(
             event_type=StreamType.FUNDING_RATE,
             event_time_ms=data["funding_time_ms"],
