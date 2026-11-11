@@ -8,7 +8,7 @@
  * `t` is complete once `t + interval <= cursor`, and a candle still forming at
  * the cursor is rebuilt from finer candles that closed before it.
  */
-import type { JournalEntry, Trade, TradeLeg } from "./tradingTypes.js";
+import type { JournalEntry, Trade, TradeLeg, TradeProtectionOrder } from "./tradingTypes.js";
 
 export interface ReplayBar {
   time: number;
@@ -80,6 +80,15 @@ export function visibleBars(
 
 export function legsBefore(legs: readonly TradeLeg[], cursorSec: number): TradeLeg[] {
   return legs.filter((leg) => leg.tsMs < cursorSec * 1000);
+}
+
+export function protectionOrdersAt(
+  orders: readonly TradeProtectionOrder[],
+  cursorSec: number,
+): TradeProtectionOrder[] {
+  const cut = cursorSec * 1000;
+  return orders.filter((order) => order.activeFromMs < cut
+    && (order.inactiveFromMs === null || order.inactiveFromMs >= cut));
 }
 
 /** Position, P&L and excursions as they stood at the cursor. */
@@ -222,6 +231,9 @@ export function journalAtCursor(entries: readonly JournalEntry[], cursorSec: num
       fields: historyUnavailable ? {} : revision.fields,
       body: historyUnavailable ? "" : revision.body,
       updatedAtMs: revision?.savedAtMs ?? entry.createdAtMs,
+      // The current link is only known to have existed since its recorded
+      // change time. Legacy rows expose a safe upper bound via the last edit.
+      tradeLinkedAtMs: entry.tradeId === null ? null : entry.tradeLinkedAtMs ?? entry.updatedAtMs,
       revisionCount: revision?.revision ?? 0,
       // These latest-only metadata are not historical facts.
       tags: [], fieldTiming: {}, revisions: [],

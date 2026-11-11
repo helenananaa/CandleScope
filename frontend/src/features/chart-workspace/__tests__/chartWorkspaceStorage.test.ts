@@ -267,3 +267,20 @@ test("strategy tester mode is saved independently for each chart", () => {
   assert.equal(chartWorkspaceCell(restored, "cell-1").strategyTesterMode, "NATIVE");
   assert.equal(chartWorkspaceCell(restored, "cell-2").strategyTesterMode, "CANDLESCOPE");
 });
+
+
+test("quick replay saves the selected trade version and cursor on one chart", () => {
+  const workspace = createDefaultChartWorkspace();
+  const saved = { accountId: "review-account", tradeId: "trade-id", readonlyVersion: "version-1",
+    interval: "15m", step: "1m", cursorSec: 1700000120 };
+  workspace.cells["cell-1"]!.quickReplay = saved;
+  const { storage } = memoryStorage();
+  saveChartWorkspace(workspace, storage);
+  const result = loadChartWorkspace(storage);
+  assert.deepEqual(result.cells["cell-1"]!.quickReplay, saved);
+  assert.ok(Object.values(result.cells).filter(cell => cell.id !== "cell-1").every(cell => cell.quickReplay === undefined));
+
+  const untrusted = { ...workspace, cells: { ...workspace.cells,
+    "cell-1": { ...workspace.cells["cell-1"], quickReplay: { ...saved, readonlyVersion: "" } } } };
+  assert.equal(normalizeChartWorkspaceWithDiagnostics(untrusted).document.cells["cell-1"]?.quickReplay, undefined);
+});

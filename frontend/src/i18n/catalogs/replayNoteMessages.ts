@@ -1,4 +1,9 @@
 export const replayNoteEnglish = {
+  "replay.notes.markerSource": "Note source",
+  "replay.notes.markerFilter": "Note filter",
+  "replay.notes.allMarkers": "All notes",
+  "replay.notes.linkedMarkers": "With a linked trade or fill",
+  "replay.notes.screenshotMarkers": "With screenshots",
   "replay.notes.capture": "Capture current chart",
   "replay.notes.capturesChoose": "Choose saved screenshots",
   "replay.notes.captureHint": "Attach up to two PNGs per version. Each image is limited to 2 MiB and 4096×4096 pixels, and each run to 16 MiB. Save the note to bind its screenshots.",
@@ -50,6 +55,11 @@ export const replayNoteEnglish = {
   "replay.notes.draftFailed": "The draft could not be read or saved. Its stored recovery data is retained.",
 };
 export const replayNoteChinese = {
+  "replay.notes.markerSource": "笔记来源",
+  "replay.notes.markerFilter": "笔记筛选",
+  "replay.notes.allMarkers": "全部笔记",
+  "replay.notes.linkedMarkers": "已关联交易或成交",
+  "replay.notes.screenshotMarkers": "带截图",
   "replay.notes.capture": "截取当前图表",
   "replay.notes.capturesChoose": "选择已保存截图",
   "replay.notes.captureHint": "每个版本最多关联两张 PNG，每张不超过 2 MiB 和 4096×4096 像素，每次运行最多 16 MiB。保存笔记后可查看该版本截图。",
@@ -100,6 +110,11 @@ export const replayNoteChinese = {
   "replay.notes.draftFailed": "草稿无法读取或保存，原有恢复数据仍保留。",
 };
 export const replayNoteTraditional = {
+  "replay.notes.markerSource": "筆記來源",
+  "replay.notes.markerFilter": "筆記篩選",
+  "replay.notes.allMarkers": "全部筆記",
+  "replay.notes.linkedMarkers": "已關聯交易或成交",
+  "replay.notes.screenshotMarkers": "附有截圖",
   "replay.notes.capture": "截取目前圖表",
   "replay.notes.capturesChoose": "選擇已儲存截圖",
   "replay.notes.captureHint": "每個版本最多關聯兩張 PNG，每張不超過 2 MiB 和 4096×4096 像素，每次執行最多 16 MiB。儲存筆記後可查看該版本截圖。",
@@ -151,6 +166,11 @@ export const replayNoteTraditional = {
 };
 
 export const replayNoteBrazilian = {
+  "replay.notes.markerSource": "Origem das notas",
+  "replay.notes.markerFilter": "Filtro de notas",
+  "replay.notes.allMarkers": "Todas as notas",
+  "replay.notes.linkedMarkers": "Com operação ou execução vinculada",
+  "replay.notes.screenshotMarkers": "Com capturas de tela",
   "replay.notes.capture": "Capturar gráfico atual",
   "replay.notes.capturesChoose": "Selecionar capturas salvas",
   "replay.notes.captureHint": "Anexe até dois PNGs por versão. Cada imagem pode ter até 2 MiB e resolução de até 4096 por 4096, e cada replay até 16 MiB. Salve a nota para vincular as capturas.",
@@ -203,6 +223,11 @@ export const replayNoteBrazilian = {
 };
 
 export const replayNoteKorean = {
+  "replay.notes.markerSource": "메모 출처",
+  "replay.notes.markerFilter": "메모 필터",
+  "replay.notes.allMarkers": "모든 메모",
+  "replay.notes.linkedMarkers": "거래 또는 체결 연결됨",
+  "replay.notes.screenshotMarkers": "스크린샷 포함",
   "replay.notes.capture": "현재 차트 캡처",
   "replay.notes.capturesChoose": "저장된 캡처 선택",
   "replay.notes.captureHint": "버전당 PNG를 최대 2개 연결할 수 있습니다. 이미지당 2 MiB 및 4096×4096픽셀, 실행당 총 16 MiB까지 저장됩니다. 메모를 저장하면 해당 버전의 캡처를 볼 수 있습니다.",
@@ -255,6 +280,11 @@ export const replayNoteKorean = {
 };
 
 export const replayNoteJapanese = {
+  "replay.notes.markerSource": "メモの種類",
+  "replay.notes.markerFilter": "メモの絞り込み",
+  "replay.notes.allMarkers": "すべてのメモ",
+  "replay.notes.linkedMarkers": "取引または約定に関連付け済み",
+  "replay.notes.screenshotMarkers": "スクリーンショット付き",
   "replay.notes.capture": "現在のチャートを撮影",
   "replay.notes.capturesChoose": "保存済みの画像を選択",
   "replay.notes.captureHint": "各版にPNGを最大2枚関連付けられます。1枚2 MiB・4096×4096ピクセル、1回の実行で合計16 MiBまでです。メモを保存すると、その版の画像を確認できます。",
