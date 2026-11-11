@@ -801,6 +801,9 @@ class DataManager(DataManagerCore):
             logger.exception("Failed to submit source repair for %s", target)
 
     async def _annotate_source_continuity(self, event: DataEvent) -> DataEvent:
+        # Quote subscriptions share lifecycle delivery, not candle continuity.
+        if event.key.interval == "price":
+            return event
         if event.event_type == DataEventType.BACKFILL_COMPLETED:
             await self._refresh_source_gap_proof(event.key)
         elif (event.event_type in {DataEventType.BAR_CLOSED, DataEventType.BAR_AMENDED}
