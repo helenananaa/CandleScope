@@ -7,6 +7,7 @@ import type { ContinuousStrategyDataManager } from "../../market-data/manager/co
 import { resultKinds } from "./continuousTypes.js";
 import type { ContinuousView } from "./continuousView.js";
 import ContinuousAccountView from "./ContinuousAccountView.js";
+import { readContinuousAccountRows } from "./continuousAccountRows.js";
 import { SavedContinuousAccounts } from "./SavedContinuousAccounts.js";
 
 test("committed account renderer keeps exact values and asks only for bounded matching-identity rows", () => {
@@ -21,10 +22,15 @@ test("committed account renderer keeps exact values and asks only for bounded ma
     assert.equal(limit, kind === "fills" ? 100 : 200);
     return kind === "fills" ? [{ event_time_ms: 60000, side: "BUY", qty: "0.123456789012345678", price: "100.000000000001" }] : [{ equity: "1" }, { equity: "2" }];
   } } as ContinuousStrategyDataManager;
-  const html = renderToStaticMarkup(<ContinuousAccountView manager={manager} view={view} />);
+  const rows = readContinuousAccountRows(manager, view);
+  const locate = () => { throw new Error("Render must not navigate the chart"); };
+  const html = renderToStaticMarkup(<ContinuousAccountView rows={rows} view={view} onLocateTrade={locate} />);
   assert.match(html, /10000\.123456789012345678/); assert.match(html, /0\.000000000123456789/);
   assert.match(html, /0\.123456789012345678/); assert.match(html, /100\.000000000001/);
   assert.match(html, /1970-01-01 00:01:00 UTC/); assert.match(html, /data-continuous-account="saved"/);
+  assert.doesNotMatch(html, /<button/);
+  const current = renderToStaticMarkup(<ContinuousAccountView rows={rows} view={{ ...view, stale: false }} onLocateTrade={locate} />);
+  assert.match(current, /<button[^>]*>1970-01-01 00:01:00 UTC<\/button>/);
   assert.deepEqual(reads, ["fills", "equity_curve"]);
 });
 

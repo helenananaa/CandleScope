@@ -6,6 +6,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { CandleScopeStrategyTesterPanel as ChartStrategyTesterPanel } from "../ChartStrategyTesterPanel.js";
 import {
   loadChartStrategyPanelPreferences,
+  loadDetachedChartStrategy,
+  resolveChartStrategyRunMode,
+  saveDetachedChartStrategy,
   saveChartStrategyPanelPreferences,
 } from "../chartStrategyPanelPreferences.js";
 import { StrategyDraftStore, createMemoryStrategyDraftAdapter } from "../StrategyDraftStore.js";
@@ -173,4 +176,70 @@ test("panel height and active tab persist by cell scope without cross-cell copyi
     height: 383,
     activeTab: "script",
   });
+});
+
+test("an empty continuous chart can attach a strategy or restore its own saved settings", () => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  const values = new Map<string, string>();
+  const storage = {
+    getItem(key: string) { return values.get(key) ?? null; },
+    setItem(key: string, value: string) { values.set(key, value); },
+  };
+  Object.defineProperty(globalThis, "localStorage", { value: storage, configurable: true });
+  try {
+    const cellScope = "workspace\u0000cell-1";
+    const saved = { ...attachment, parameters: { size: 20 }, rangeMode: "CUSTOM" as const, customRange: { startMs: 0, endMs: 60000 } };
+    assert.equal(saveDetachedChartStrategy(cellScope, saved), true);
+    saveChartStrategyPanelPreferences(cellScope, { height: 400, activeTab: "script", runMode: "LIVE_ONLY" });
+    assert.deepEqual(loadDetachedChartStrategy(cellScope), saved);
+    assert.equal(loadDetachedChartStrategy("workspace\u0000cell-2"), null);
+    const html = renderToStaticMarkup(
+      <ChartStrategyTesterPanel
+        cellScope={cellScope}
+        session={session}
+        attachment={null}
+        draftStore={new StrategyDraftStore(createMemoryStrategyDraftAdapter())}
+        onAttachmentChange={() => undefined}
+        onEntryStateChange={() => undefined}
+        onRunRequest={() => undefined}
+        runState={createChartStrategyTesterState(null, cellScope)}
+        resolution={null}
+        sourceDiagnostics={[]}
+        pendingDataDraftRevision={null}
+        onPrepareData={() => undefined}
+        onStopObserving={() => undefined}
+        onResumeObserving={() => undefined}
+        onSourceDirty={() => undefined}
+        onClose={() => undefined}
+      />,
+    );
+    assert.match(html, /value="LIVE_ONLY" selected/);
+    assert.ok(html.includes(t("continuous.restoreAttachment", { name: saved.displayName })));
+    assert.ok(html.includes(t("chartTester.start.template")));
+    assert.doesNotMatch(html, /data-continuous-account/);
+  } finally {
+    if (descriptor) Object.defineProperty(globalThis, "localStorage", descriptor);
+    else Reflect.deleteProperty(globalThis, "localStorage");
+  }
+});
+
+test("a selected research version defaults to history plus live in the target chart", () => {
+  const initialization = {
+    runId: "bt_selected",
+    versionHash: `sha256:${"a".repeat(64)}`,
+    outputMode: "SIGNAL" as const,
+    warmupBars: 20,
+  };
+  const selected = {
+    ...attachment,
+    language: "python" as const,
+    strategyDraftId: "returned-version",
+    initialization: { ...initialization, preferredRunMode: "HISTORY_LIVE" as const },
+  };
+  const otherDraftPreference = { runMode: "LIVE_ONLY" as const, runModeDraftId: "existing-draft" };
+  assert.equal(resolveChartStrategyRunMode({}, selected), "HISTORY_LIVE");
+  assert.equal(resolveChartStrategyRunMode(otherDraftPreference, selected), "HISTORY_LIVE");
+  assert.equal(resolveChartStrategyRunMode({ ...otherDraftPreference, runModeDraftId: "returned-version" }, selected), "LIVE_ONLY");
+  assert.equal(resolveChartStrategyRunMode({ runModeDraftId: "returned-version" }, selected), "HISTORY");
+  assert.equal(resolveChartStrategyRunMode(otherDraftPreference, { ...selected, initialization }), "LIVE_ONLY");
 });

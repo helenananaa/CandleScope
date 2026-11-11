@@ -6,12 +6,13 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import type { ChartStrategyResultBundle } from "../../backtest/chart-tester/chartStrategyResultCache.js";
 import { qualitySummaryFromImportedManifest } from "../../backtest/chart-tester/chartStrategyRunRequest.js";
 import StrategyResearchApp from "../StrategyResearchApp.js";
 import { StrategyResearchScriptPanel } from "../StrategyResearchScriptPanel.js";
 import { StrategyResearchResultPanel } from "../StrategyResearchResultPanel.js";
 import { parseStrategyResearchLaunch } from "../strategyResearchLaunch.js";
-import { sessionFromResearchSource } from "../useStrategyResearchRun.js";
+import { researchResultMatchesSource, sessionFromResearchSource } from "../useStrategyResearchRun.js";
 
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -118,4 +119,38 @@ test("BAR_ONLY result panel does not advertise trade-sequence precision", () => 
   );
   assert.match(html, /strategy-research-bar-only-result/);
   assert.doesNotMatch(html, /成交序列精算|Trade-sequence calculation/);
+});
+
+
+test("a frozen research result remains bound to its market or imported data version", () => {
+  const source = {
+    schemaVersion: "candlescope.research-source/1",
+    kind: "CURRENT_CHART",
+    workspaceId: "workspace",
+    cellId: "cell-1",
+    exchange: "binance",
+    marketType: "spot",
+    symbol: "BTCUSDT",
+    interval: "1m",
+  } as const;
+  const session = sessionFromResearchSource(source, null, null)!;
+  const result = {
+    chart: { symbol: "BTCUSDT", interval: "1m" },
+    config: { exchange: "binance", market_type: "spot" },
+    run: {},
+  } as ChartStrategyResultBundle;
+  assert.equal(researchResultMatchesSource(result, source, session), true);
+  for (const change of [{ exchange: "bybit" }, { marketType: "futures" }, { interval: "5m" }, { symbol: "ETHUSDT" }]) {
+    const next = { ...source, ...change };
+    assert.equal(researchResultMatchesSource(result, next, sessionFromResearchSource(next, null, null)), false);
+  }
+  assert.equal(researchResultMatchesSource(result, source, null), false);
+  assert.equal(researchResultMatchesSource({ ...result, config: { start_time_ms: 0, end_time_ms: 60000, market_type: "spot" } }, source, session), false);
+
+  const imported = { schemaVersion: source.schemaVersion, kind: "IMPORTED_DATASET", datasetId: "local-1", dataEpoch: "old", interval: "1m" } as const;
+  const importedSession = { ...session, exchange: "local" };
+  const localResult = { ...result, run: { ...result.run, dataset_id: imported.datasetId, data_epoch: imported.dataEpoch } };
+  assert.equal(researchResultMatchesSource(localResult, imported, importedSession), true);
+  assert.equal(researchResultMatchesSource(localResult, { ...imported, dataEpoch: "new" }, importedSession), false);
+  assert.equal(researchResultMatchesSource(localResult, { ...imported, datasetId: "local-2" }, importedSession), false);
 });

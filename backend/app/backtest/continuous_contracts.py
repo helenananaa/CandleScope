@@ -14,6 +14,10 @@ class StrictInput(BaseModel):
     model_config=ConfigDict(extra="forbid",strict=True)
 
 
+class EditorParameters(StrictInput):
+    source_text: str = Field(max_length=262144)
+
+
 class SeriesIdentity(StrictInput):
     provider_id:str=Field(min_length=1,max_length=64,pattern=r"^\S+$")
     venue:str=Field(min_length=1,max_length=64,pattern=r"^\S+$")
