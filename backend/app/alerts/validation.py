@@ -4,6 +4,12 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from app.alerts.indicator_requests import (
+    INDICATOR_FIELD_PREFIX,
+    parse_indicator_field,
+    rule_outputs,
+)
+
 
 ALERT_EXPRESSION_MAX_DEPTH = 32
 ALERT_EXPRESSION_MAX_NODES = 256
@@ -46,6 +52,18 @@ def normalize_after_trigger(value: Any) -> str:
     return normalized
 
 
+def _validate_value_field(field: str, path: str) -> None:
+    if field in VALID_VALUE_FIELDS:
+        return
+    if field.startswith(INDICATOR_FIELD_PREFIX):
+        try:
+            parse_indicator_field(field)
+        except ValueError as exc:
+            raise ValueError(f"Unsupported alert indicator at {path}: {exc}") from None
+        return
+    raise ValueError(f"Unsupported alert value field at {path}: {field or '<empty>'}")
+
+
 def validate_alert_expression(expression: Any) -> None:
     """Validate the recursive expression contract shared with the frontend."""
     count = 0
@@ -82,8 +100,7 @@ def validate_alert_expression(expression: Any) -> None:
             raise ValueError(f"Unsupported alert operator at {path}: {raw_op}")
 
         left = str(node.get("left") or "").strip()
-        if left not in VALID_VALUE_FIELDS:
-            raise ValueError(f"Unsupported alert value field at {path}.left: {left or '<empty>'}")
+        _validate_value_field(left, f"{path}.left")
         comparator = str(node.get("comparator") or node.get("operator") or "").strip()
         if comparator not in VALID_COMPARATORS:
             raise ValueError(
@@ -112,14 +129,12 @@ def validate_alert_expression(expression: Any) -> None:
             return
         if right_type in {"field", "indicator"}:
             field = str(right.get("value") or right.get("field") or "").strip()
-            if field not in VALID_VALUE_FIELDS:
-                raise ValueError(
-                    f"Unsupported alert reference field at {path}.right.value: {field or '<empty>'}"
-                )
+            _validate_value_field(field, f"{path}.right.value")
             return
         raise ValueError(f"Unsupported alert right-hand type at {path}.right: {right_type or '<empty>'}")
 
     visit(expression, path="expression", depth=0)
+    rule_outputs(referenced_alert_fields(expression))
 
 
 def referenced_alert_fields(expression: Any) -> set[str]:
@@ -134,12 +149,12 @@ def referenced_alert_fields(expression: Any) -> set[str]:
                 visit(child)
             return
         left = str(node.get("left") or "").strip()
-        if left in VALID_VALUE_FIELDS:
+        if left in VALID_VALUE_FIELDS or left.startswith(INDICATOR_FIELD_PREFIX):
             fields.add(left)
         right = node.get("right")
         if isinstance(right, dict) and right.get("type") in {"field", "indicator"}:
             field = str(right.get("value") or right.get("field") or "").strip()
-            if field in VALID_VALUE_FIELDS:
+            if field in VALID_VALUE_FIELDS or field.startswith(INDICATOR_FIELD_PREFIX):
                 fields.add(field)
 
     visit(expression)

@@ -31,10 +31,23 @@ import {
   describeAlertRule,
   expressionDraftReducer,
   formatAlertTime,
+  canonicalAlertField,
+  isAlertIndicatorField,
   labelForComparator,
   labelForRightType,
   labelForSource,
+  referencedAlertIndicatorFields,
 } from "../../features/alerts/alertRuleModel";
+import {
+  alertIndicatorOptions,
+  loadAlertIndicatorSpecs,
+  type AlertIndicatorSpec,
+} from "../../features/alerts/alertIndicatorCatalog.js";
+import {
+  AlertIndicatorCatalogContext,
+  AlertIndicatorParamFields,
+  useAlertIndicatorOptions,
+} from "./AlertIndicatorFields.js";
 import {
   ALERT_PANEL_OPEN_REQUEST_EVENT,
   ALERT_RULE_STATE_CHANGED_EVENT,
@@ -77,8 +90,8 @@ type TestContextBucket = "previous" | "values";
 type TestValueField = "close" | "last" | "rsi" | "macdHist" | "ma20" | "volume";
 
 interface AlertTestContext {
-  previous: Record<TestValueField, string>;
-  values: Record<TestValueField, string>;
+  previous: Record<string, string>;
+  values: Record<string, string>;
 }
 
 interface WatchlistAlertProduct extends AlertProductInput {
@@ -263,13 +276,27 @@ interface ConditionCardProps {
   canDelete: boolean;
 }
 
+const PRICE_SOURCE_OPTIONS = ALERT_SOURCE_OPTIONS
+  .filter((item) => !isAlertIndicatorField(item.value))
+  .map((item) => ({ value: item.value as string, label: labelForSource(item.value) }));
+
+/** Aliases display as their canonical key; the stored value changes only on edit. */
+function sourceSelectValue(value: string): string {
+  return isAlertIndicatorField(value) ? canonicalAlertField(value) : value;
+}
+
 function ConditionCard({ node, index, onAction, canDelete }: ConditionCardProps) {
   const update = (patch: Partial<AlertConditionDraft>) => onAction({ type: "update-node", nodeId: node.id, patch });
   const isRangeComparator = RANGE_COMPARATORS.has(node.comparator);
   const isPercentComparator = PERCENT_CHANGE_COMPARATORS.has(node.comparator);
+  const leftIndicators = useAlertIndicatorOptions(node.left);
+  const rightIndicators = useAlertIndicatorOptions(node.rightValue);
+  const leftChoices = [...PRICE_SOURCE_OPTIONS, ...leftIndicators];
   const sourceChoices = node.rightType === "indicator"
-    ? ALERT_SOURCE_OPTIONS.filter((item) => ["rsi", "macdHist", "ma20"].includes(item.value))
-    : ALERT_SOURCE_OPTIONS;
+    ? rightIndicators
+    : [...PRICE_SOURCE_OPTIONS, ...rightIndicators];
+  const rightIsIndicator = node.rightType !== "number" && !isRangeComparator && !isPercentComparator
+    && isAlertIndicatorField(node.rightValue);
   const updateComparator = (value: AlertComparator) => {
     const patch: Partial<AlertConditionDraft> = { comparator: value };
     if (RANGE_COMPARATORS.has(value)) {
@@ -298,8 +325,8 @@ function ConditionCard({ node, index, onAction, canDelete }: ConditionCardProps)
       <div className="alert-condition-grid">
         <label className="alert-field compact">
           <span>{t("alert.left")}</span>
-          <select value={node.left} onChange={(event) => update({ left: event.target.value })}>
-            {ALERT_SOURCE_OPTIONS.map((item) => <option key={item.value} value={item.value}>{labelForSource(item.value)}</option>)}
+          <select value={sourceSelectValue(node.left)} onChange={(event) => update({ left: event.target.value })}>
+            {leftChoices.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
           </select>
         </label>
         <label className="alert-field compact">
@@ -328,7 +355,7 @@ function ConditionCard({ node, index, onAction, canDelete }: ConditionCardProps)
           <>
             <label className="alert-field compact">
               <span>{t("alert.rightType")}</span>
-              <select value={node.rightType} onChange={(event) => update({ rightType: event.target.value as AlertConditionDraft["rightType"], rightValue: event.target.value === "number" ? node.rightValue : "close" })}>
+              <select value={node.rightType} onChange={(event) => update({ rightType: event.target.value as AlertConditionDraft["rightType"], rightValue: event.target.value === "number" ? node.rightValue : event.target.value === "indicator" ? (rightIndicators[0]?.value ?? "rsi") : "close" })}>
                 {ALERT_RIGHT_TYPE_OPTIONS.map((item) => <option key={item.value} value={item.value}>{labelForRightType(item.value)}</option>)}
               </select>
             </label>
@@ -337,14 +364,20 @@ function ConditionCard({ node, index, onAction, canDelete }: ConditionCardProps)
               {node.rightType === "number" ? (
                 <input type="number" value={node.rightValue} onChange={(event) => update({ rightValue: event.target.value })} />
               ) : (
-                <select value={node.rightValue || "close"} onChange={(event) => update({ rightValue: event.target.value })}>
-                  {sourceChoices.map((item) => <option key={item.value} value={item.value}>{labelForSource(item.value)}</option>)}
+                <select value={sourceSelectValue(node.rightValue || "close")} onChange={(event) => update({ rightValue: event.target.value })}>
+                  {sourceChoices.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                 </select>
               )}
             </label>
           </>
         )}
       </div>
+      {isAlertIndicatorField(node.left) && (
+        <AlertIndicatorParamFields value={node.left} onChange={(left) => update({ left })} />
+      )}
+      {rightIsIndicator && (
+        <AlertIndicatorParamFields value={node.rightValue} onChange={(rightValue) => update({ rightValue })} />
+      )}
     </div>
   );
 }
@@ -378,11 +411,11 @@ function createDefaultTestContext(price: unknown): AlertTestContext {
 }
 
 function normalizeTestContext(context: AlertTestContext): AlertEvaluationContext {
-  const normalizeBucket = (bucket: Record<TestValueField, string>): Record<string, number> => {
+  const normalizeBucket = (bucket: Record<string, string>): Record<string, number> => {
     const normalized: Record<string, number> = {};
-    for (const { key } of TEST_VALUE_FIELDS) {
-      const value = Number(bucket[key]);
-      if (Number.isFinite(value)) normalized[key] = value;
+    for (const [key, raw] of Object.entries(bucket)) {
+      const value = Number(raw);
+      if (raw !== "" && Number.isFinite(value)) normalized[key] = value;
     }
     return normalized;
   };
@@ -737,9 +770,10 @@ interface RuleTestPanelProps {
   testContext: AlertTestContext;
   testResult: AlertEvaluateResult | null;
   testLoading: boolean;
-  onContextChange(bucket: TestContextBucket, key: TestValueField, value: string): void;
+  onContextChange(bucket: TestContextBucket, key: string, value: string): void;
   onResetContext(): void;
   onRunTest(): void;
+  indicatorFields: readonly string[];
 }
 
 function RuleTestPanel({
@@ -749,7 +783,13 @@ function RuleTestPanel({
   onContextChange,
   onResetContext,
   onRunTest,
+  indicatorFields,
 }: RuleTestPanelProps) {
+  const fixed = new Set<string>(TEST_VALUE_FIELDS.map((field) => field.key));
+  const fields = [
+    ...TEST_VALUE_FIELDS.map((field) => ({ key: field.key as string, label: field.labelKey ? t(field.labelKey) : field.label })),
+    ...indicatorFields.filter((key) => !fixed.has(key)).map((key) => ({ key, label: labelForSource(key) })),
+  ];
   return (
     <section className="alert-editor-card alert-test-card">
       <SectionHeader
@@ -761,9 +801,9 @@ function RuleTestPanel({
       <div className="alert-test-grid">
         <div className="alert-test-column">
           <div className="alert-test-column-title">{t("alert.prevSample")}</div>
-          {TEST_VALUE_FIELDS.map((field) => (
+          {fields.map((field) => (
             <label key={`previous-${field.key}`} className="alert-field compact">
-              <span>{field.labelKey ? t(field.labelKey) : field.label}</span>
+              <span>{field.label}</span>
               <input
                 type="number"
                 value={testContext.previous[field.key] ?? ""}
@@ -774,9 +814,9 @@ function RuleTestPanel({
         </div>
         <div className="alert-test-column">
           <div className="alert-test-column-title">{t("alert.currSample")}</div>
-          {TEST_VALUE_FIELDS.map((field) => (
+          {fields.map((field) => (
             <label key={`values-${field.key}`} className="alert-field compact">
-              <span>{field.labelKey ? t(field.labelKey) : field.label}</span>
+              <span>{field.label}</span>
               <input
                 type="number"
                 value={testContext.values[field.key] ?? ""}
@@ -1154,7 +1194,7 @@ export default function AlertsPanel({
     setTestResult(null);
   }, []);
 
-  const updateTestContext = useCallback((bucket: TestContextBucket, key: TestValueField, value: string) => {
+  const updateTestContext = useCallback((bucket: TestContextBucket, key: string, value: string) => {
     setTestContext((prev) => ({
       ...prev,
       [bucket]: {
@@ -1348,6 +1388,19 @@ export default function AlertsPanel({
     return () => controller.abort();
   }, [isOpen, loadAlerts]);
 
+  const [indicatorSpecs, setIndicatorSpecs] = useState<AlertIndicatorSpec[]>([]);
+  useEffect(() => {
+    if (!isOpen || indicatorSpecs.length) return undefined;
+    let active = true;
+    // Without the registry the editor still offers the three default fields.
+    loadAlertIndicatorSpecs().then((specs) => { if (active) setIndicatorSpecs(specs); }, () => undefined);
+    return () => { active = false; };
+  }, [isOpen, indicatorSpecs.length]);
+  const indicatorCatalog = useMemo(
+    () => ({ specs: indicatorSpecs, options: alertIndicatorOptions(indicatorSpecs) }),
+    [indicatorSpecs],
+  );
+
   useEffect(() => {
     if (!isOpen) return undefined;
     const refreshTriggeredRule = () => {
@@ -1520,7 +1573,9 @@ export default function AlertsPanel({
                   title={t("alert.stepLogic")}
                   desc={t("alert.stepLogicDesc")}
                 />
-                <NestedLogicBuilder expression={draft.expression} onAction={applyExpressionAction} />
+                <AlertIndicatorCatalogContext.Provider value={indicatorCatalog}>
+                  <NestedLogicBuilder expression={draft.expression} onAction={applyExpressionAction} />
+                </AlertIndicatorCatalogContext.Provider>
               </section>
 
               <ExpirationAndNotification
@@ -1543,6 +1598,7 @@ export default function AlertsPanel({
                 onContextChange={updateTestContext}
                 onResetContext={resetTestContext}
                 onRunTest={runRuleTest}
+                indicatorFields={referencedAlertIndicatorFields(draft.expression)}
               />
 
               <div className="alert-editor-actions sticky-actions">

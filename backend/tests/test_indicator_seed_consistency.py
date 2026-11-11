@@ -349,6 +349,29 @@ def test_realtime_latest_value_does_not_depend_on_loaded_history(bars, label, hi
     assert max_delta(realtime(bars, label, history_limit), charted, latest) <= WIRE_TOLERANCE
 
 
+def test_range_payload_reports_whether_its_seed_converged(bars):
+    """A page with its full warmup is ``converged``; one computed from the
+    earliest stored bar is ``partial`` and counted in the cache diagnostics."""
+    async def page(series, label):
+        service = range_service()
+        job = IndicatorRangeBatchJob(client_id="s1", meta=meta(label), start=series[-CHART_BARS].time,
+                                     end=series[-1].time, reason="s1")
+        [payload] = await compute_indicator_range_batch_async(
+            dm=_WindowDataManager(series), jobs=[job], range_service=service)
+        return payload["seed"], service.snapshot()
+
+    name, params = INDICATORS["EMA200"]
+    warmup = indicator_warmup_bars(name, params)
+    seed, stats = asyncio.run(page(bars, "EMA200"))
+    assert seed == {"state": "converged", "warmupBars": warmup, "seedBars": warmup}
+    assert stats["partialSeedComputes"] == 0
+
+    short = bars[-(CHART_BARS + 100):]
+    seed, stats = asyncio.run(page(short, "EMA200"))
+    assert seed == {"state": "partial", "warmupBars": warmup, "seedBars": 100}
+    assert stats["partialSeedComputes"] == 1
+
+
 @pytest.mark.parametrize("field", tuple(ALERT_LABELS))
 def test_alert_values_match_chart_at_latest_closed_bar(bars, field):
     """An alert evaluates exactly what the chart shows for the newest bar."""
