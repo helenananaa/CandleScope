@@ -10,6 +10,7 @@ import {
   visibleBars,
   type ReplayBar,
 } from "./quickReplayModel.js";
+import { filterJournalNoteMarkers } from "./journalNoteMarkers.js";
 import type { JournalEntry, Trade, TradeLeg } from "./tradingTypes.js";
 
 const HOUR = 3_600;
@@ -70,6 +71,31 @@ test("review save time is not moved by later trade-link metadata changes", () =>
   assert.equal(projected.updatedAtMs, 5000);
   assert.equal(projected.body, "review text");
   assert.equal(review.updatedAtMs, 9000);
+});
+
+test("note filters respect exclusive screenshot and trade-link times across rewind", () => {
+  const original: JournalEntry = { ...baseNote, createdAtMs: 1000, updatedAtMs: 7000, tradeLinkedAtMs: 4000,
+    snapshots: [
+      { id: "state", createdAtMs: 1100, hasImage: false, state: {} },
+      { id: "image", createdAtMs: 5000, hasImage: true, state: {} },
+    ],
+    revisions: [{ revision: 1, savedAtMs: 1000, fields: {}, body: "original", historyComplete: true }],
+  };
+  const legacy = { ...original, id: "legacy" };
+  delete legacy.tradeLinkedAtMs;
+  const review = { ...original, id: "review", reviewNote: true, createdAtMs: 8000, marketTimeMs: 3000 };
+  const filtered = (cursor: number, settings: Parameters<typeof filterJournalNoteMarkers>[1]) => {
+    const { notes, reviewNotes } = journalAtCursor([original, legacy, review], cursor);
+    return filterJournalNoteMarkers([...notes, ...reviewNotes], settings, cursor * 1000).map(note => note.id);
+  };
+  assert.deepEqual(filtered(4, { noteSource: "original", noteFilter: "linked" }), []);
+  assert.deepEqual(filtered(5, { noteSource: "original", noteFilter: "linked" }), ["note"]);
+  assert.deepEqual(filtered(5, { noteSource: "original", noteFilter: "screenshots" }), []);
+  assert.deepEqual(filtered(6, { noteSource: "original", noteFilter: "screenshots" }), ["note", "legacy"]);
+  assert.deepEqual(filtered(8, { noteSource: "original", noteFilter: "linked" }), ["note", "legacy"]);
+  assert.deepEqual(filtered(3, { noteSource: "review", noteFilter: "screenshots" }), []);
+  assert.deepEqual(filtered(4, { noteSource: "review", noteFilter: "screenshots" }), ["review"]);
+  assert.deepEqual(filtered(2, { noteFilter: "screenshots" }), []);
 });
 
 function bar(time: number, open: number, high: number, low: number, close: number): ReplayBar {

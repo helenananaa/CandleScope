@@ -129,6 +129,8 @@ export interface ChartLinkGroupSettings {
   noteOverlays?: boolean;
   studyCursor?: boolean;
   studyMode?: boolean;
+  quickReplayMode?: boolean;
+  quickReplayCursor?: boolean;
   indicators: ChartLinkIndicatorSettings;
 }
 
@@ -154,6 +156,7 @@ export interface ChartCellState {
   drawingLayerSet: ChartDrawingLayerSetId;
   session: ChartSession;
   chartSettings: ChartCellChartSettings;
+  quickReplay?: import("./chartQuickReplayState.js").ChartQuickReplayState;
   accountOverlay?: import("./chartAccountOverlaySettings.js").ChartAccountOverlaySettings;
   priceScale: ChartCellPriceScale;
   indicators: IndicatorDefinition[];
@@ -228,6 +231,8 @@ export const DEFAULT_CHART_LINK_GROUP_SETTINGS: ChartLinkGroupSettings = Object.
   noteOverlays: false,
   studyCursor: false,
   studyMode: false,
+  quickReplayMode: false,
+  quickReplayCursor: false,
   indicators: Object.freeze({
     definitions: true,
     parameters: true,
