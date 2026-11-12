@@ -1,0 +1,11 @@
+{
+  "base": "30fe07760d3cf0e9b871dc13d9f7900baf277674",
+  "product_head": "c16156abb71d406c179e90d96c13ca953d1825d9",
+  "files": {
+    "backend/app/data_engine/backfill/mixed_plan.py": "92c51289e1002fbbb8125d56ea3f4ed556794ac32a06fcbbfd0220e8a099300f",
+    "backend/app/data_engine/backfill/reconciler.py": "ba19e0e82917b406c1107030ab7cea465ead7ea5e4c070a5766fd8df62517f25",
+    "backend/app/data_engine/interval_policy.py": "6fd84c50908b96628e4c4311d44634c576ca8c902f284c40515b250dcba1f5ab",
+    "backend/scripts/ccxt_contracts/integration.py": "79ce96a41b4fdaf70f7e2c8cb6005a139176ac81d7eac6d4bea39b7d1909b92a",
+    "backend/tests/test_canonical_history_stream.py": "079b3a8b6866906d393821a196698795853f2c2730497e10eb4baadc1b09fb34"
+  }
+}
