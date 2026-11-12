@@ -1,0 +1,227 @@
+[
+  {
+    "case": "single",
+    "variant": "baseline",
+    "normalizations": 512,
+    "component_references": 33,
+    "unique_values": 33,
+    "component_graph_bytes": 30862,
+    "held_root_heap_bytes": 302164,
+    "warm_traced_retained": 131860,
+    "cpu": {
+      "p50_us": 119.0,
+      "p95_us": 123.0,
+      "p99_us": 143.0,
+      "samples": 512
+    },
+    "wall": {
+      "p50_us": 119.25,
+      "p95_us": 123.542,
+      "p99_us": 144.292,
+      "samples": 512
+    },
+    "process_peak_rss": 215400448,
+    "input_hash": "7db6afcbc514315f291059341c2d9c12dae20e88f4f4872dcd12cbc47a204745",
+    "final_hash": "4e6aa91ab3d28f72908ecf56587b9e72f3915fd12ef04cac1d73e8cbd4b847f2"
+  },
+  {
+    "case": "single",
+    "variant": "independent",
+    "normalizations": 512,
+    "component_references": 33,
+    "unique_values": 33,
+    "component_graph_bytes": 30862,
+    "held_root_heap_bytes": 302220,
+    "warm_traced_retained": 135252,
+    "cpu": {
+      "p50_us": 139.0,
+      "p95_us": 146.0,
+      "p99_us": 172.0,
+      "samples": 512
+    },
+    "wall": {
+      "p50_us": 139.833,
+      "p95_us": 146.584,
+      "p99_us": 171.625,
+      "samples": 512
+    },
+    "process_peak_rss": 215302144,
+    "input_hash": "7db6afcbc514315f291059341c2d9c12dae20e88f4f4872dcd12cbc47a204745",
+    "final_hash": "4e6aa91ab3d28f72908ecf56587b9e72f3915fd12ef04cac1d73e8cbd4b847f2"
+  },
+  {
+    "case": "single",
+    "variant": "shared",
+    "normalizations": 512,
+    "component_references": 33,
+    "unique_values": 33,
+    "component_graph_bytes": 30862,
+    "held_root_heap_bytes": 302220,
+    "warm_traced_retained": 135524,
+    "cpu": {
+      "p50_us": 148.0,
+      "p95_us": 155.0,
+      "p99_us": 183.0,
+      "samples": 512
+    },
+    "wall": {
+      "p50_us": 148.875,
+      "p95_us": 156.25,
+      "p99_us": 189.084,
+      "samples": 512
+    },
+    "process_peak_rss": 215515136,
+    "input_hash": "7db6afcbc514315f291059341c2d9c12dae20e88f4f4872dcd12cbc47a204745",
+    "final_hash": "4e6aa91ab3d28f72908ecf56587b9e72f3915fd12ef04cac1d73e8cbd4b847f2"
+  },
+  {
+    "case": "multi",
+    "variant": "baseline",
+    "normalizations": 2048,
+    "component_references": 260,
+    "unique_values": 260,
+    "component_graph_bytes": 223470,
+    "held_root_heap_bytes": 571249,
+    "warm_traced_retained": 577248,
+    "cpu": {
+      "p50_us": 354.0,
+      "p95_us": 370.0,
+      "p99_us": 401.0,
+      "samples": 512
+    },
+    "wall": {
+      "p50_us": 354.375,
+      "p95_us": 370.25,
+      "p99_us": 411.291,
+      "samples": 512
+    },
+    "process_peak_rss": 215891968,
+    "input_hash": "3acaeb8eb24bb2dad5005047a5919213a1813c637ab36ed9d7321c7dd6f37752",
+    "final_hash": "50f851eeaa8450d7db071939904f906b9984924a25afbc5f15d244182c93b02b"
+  },
+  {
+    "case": "multi",
+    "variant": "independent",
+    "normalizations": 2048,
+    "component_references": 260,
+    "unique_values": 260,
+    "component_graph_bytes": 223470,
+    "held_root_heap_bytes": 571305,
+    "warm_traced_retained": 605328,
+    "cpu": {
+      "p50_us": 419.0,
+      "p95_us": 440.0,
+      "p99_us": 478.0,
+      "samples": 512
+    },
+    "wall": {
+      "p50_us": 419.125,
+      "p95_us": 442.625,
+      "p99_us": 490.375,
+      "samples": 512
+    },
+    "process_peak_rss": 216236032,
+    "input_hash": "3acaeb8eb24bb2dad5005047a5919213a1813c637ab36ed9d7321c7dd6f37752",
+    "final_hash": "50f851eeaa8450d7db071939904f906b9984924a25afbc5f15d244182c93b02b"
+  },
+  {
+    "case": "multi",
+    "variant": "shared",
+    "normalizations": 512,
+    "component_references": 260,
+    "unique_values": 65,
+    "component_graph_bytes": 61086,
+    "held_root_heap_bytes": 408921,
+    "warm_traced_retained": 458352,
+    "cpu": {
+      "p50_us": 388.0,
+      "p95_us": 415.0,
+      "p99_us": 461.0,
+      "samples": 512
+    },
+    "wall": {
+      "p50_us": 388.167,
+      "p95_us": 420.458,
+      "p99_us": 464.625,
+      "samples": 512
+    },
+    "process_peak_rss": 216186880,
+    "input_hash": "3acaeb8eb24bb2dad5005047a5919213a1813c637ab36ed9d7321c7dd6f37752",
+    "final_hash": "50f851eeaa8450d7db071939904f906b9984924a25afbc5f15d244182c93b02b"
+  },
+  {
+    "case": "long",
+    "variant": "baseline",
+    "normalizations": 1024,
+    "component_references": 8196,
+    "unique_values": 8196,
+    "component_graph_bytes": 7000814,
+    "held_root_heap_bytes": 8719681,
+    "warm_traced_retained": 9149368,
+    "cpu": {
+      "p50_us": 357.0,
+      "p95_us": 378.0,
+      "p99_us": 448.0,
+      "samples": 256
+    },
+    "wall": {
+      "p50_us": 357.5415,
+      "p95_us": 379.25,
+      "p99_us": 459.916,
+      "samples": 256
+    },
+    "process_peak_rss": 233750528,
+    "input_hash": "606c3433df2c0d7d934bd6eaad7521821ac4a8a33060c311402c0d359224b4c4",
+    "final_hash": "b8360222fc90c70ff32619da8b5882325b0843b185afc8831d822a3b108b5741"
+  },
+  {
+    "case": "long",
+    "variant": "independent",
+    "normalizations": 1024,
+    "component_references": 8196,
+    "unique_values": 8196,
+    "component_graph_bytes": 7000814,
+    "held_root_heap_bytes": 8719737,
+    "warm_traced_retained": 9368264,
+    "cpu": {
+      "p50_us": 422.0,
+      "p95_us": 439.0,
+      "p99_us": 500.0,
+      "samples": 256
+    },
+    "wall": {
+      "p50_us": 422.292,
+      "p95_us": 439.583,
+      "p99_us": 503.125,
+      "samples": 256
+    },
+    "process_peak_rss": 234848256,
+    "input_hash": "606c3433df2c0d7d934bd6eaad7521821ac4a8a33060c311402c0d359224b4c4",
+    "final_hash": "b8360222fc90c70ff32619da8b5882325b0843b185afc8831d822a3b108b5741"
+  },
+  {
+    "case": "long",
+    "variant": "shared",
+    "normalizations": 256,
+    "component_references": 8196,
+    "unique_values": 2049,
+    "component_graph_bytes": 1886366,
+    "held_root_heap_bytes": 3605289,
+    "warm_traced_retained": 4322856,
+    "cpu": {
+      "p50_us": 389.0,
+      "p95_us": 413.0,
+      "p99_us": 449.0,
+      "samples": 256
+    },
+    "wall": {
+      "p50_us": 389.667,
+      "p95_us": 414.875,
+      "p99_us": 457.167,
+      "samples": 256
+    },
+    "process_peak_rss": 225755136,
+    "input_hash": "606c3433df2c0d7d934bd6eaad7521821ac4a8a33060c311402c0d359224b4c4",
+    "final_hash": "b8360222fc90c70ff32619da8b5882325b0843b185afc8831d822a3b108b5741"
+  }
+]
