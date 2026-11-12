@@ -40,9 +40,6 @@
 .replay-top-bar .advanced-market-summary,
 .replay-top-bar > a,
 .replay-top-bar > button { flex: 0 0 auto; }
-@media (max-width: 1450px) {
-  .replay-top-bar .advanced-market-summary { display: none; }
-}
 .replay-mode-badge {
   display: inline-flex;
   flex-shrink: 0;
@@ -805,7 +802,6 @@
   .replay-storage-support > div { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 1400px) {
-  .replay-top-bar .logo-text { display: none; }
   .replay-identity-readonly { max-width: 15vw; }
 }
 @media (max-width: 900px) {
