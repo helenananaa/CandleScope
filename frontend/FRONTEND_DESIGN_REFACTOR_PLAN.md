@@ -239,14 +239,14 @@ A trading terminal earns trust through calm, density, and precision, not decorat
   - A "恢复跟随应用" action.
   - A note "同步到联动组的 N 个图表" when style linking is on.
 - **Overrides are visible.** A chart with its own appearance shows a small marker in its header, so it's never a mystery why one chart looks different.
-- **No regression in between.** Until the chart menu ships (Phase 4), Settings shows a second group, 当前图表外观, below the app theme. Per-chart themes keep working the whole time.
+- **No regression in between.** Until the chart menu ships (Phase 4), Settings shows a second group, 当前图表外观, below the app theme. Per-chart themes keep working the whole time. *(Done in 4c: the chart menu has shipped, and Settings no longer shows the group on pages whose charts have a header menu.)*
 
 **Migration.**
 
 - **Keep existing per-chart overrides.** They are user data; the marker and the reset action make them visible. Many were probably created by accident through the old picker. If every chart overrides the app theme with the same value on the first launch after the change, offer once to make that the app theme instead.
 - **Convert an app theme of 自定义.** It becomes 深色 or 亮色 depending on its background's luminance. *Changed during Phase 1:* charts that inherited an app-level custom background are not rewritten. Workspace documents live in versioned storage, replay keeps its own copy, and charts in windows that aren't open can't be reached at startup. Those charts follow the converted app theme instead, and the old custom colour becomes the starting value when a chart gets its own background. App-level 自定义 was only reachable from the strategy and replay page settings, so few users are affected.
 - **No schema or backend change.** Workspace documents and link groups keep their schema.
-- **Moved to Phase 4 with the chart menu:** the "N 个图表使用自己的外观 · 全部恢复跟随应用" line, the one-time offer to adopt a common chart override as the app theme, and the header marker. All three need workspace-wide state that the chart menu work adds.
+- **Moved to Phase 4 with the chart menu:** the "N 个图表使用自己的外观 · 全部恢复跟随应用" line, the one-time offer to adopt a common chart override as the app theme, and the header marker. All three need workspace-wide state that the chart menu work adds. *(Done in 4c.)*
 
 **Related fixes.**
 
@@ -371,6 +371,14 @@ Still outside the stack, and moved when each is rebuilt:
 - The right rail keeps the chart at 65% of the window (31% for the rail at 1024 px, was 36%). Its tab strip is 60 px and labels wrap instead of truncating (交易账户, "Trading accounts", "Beobach-tungsliste"). At that width the watchlist keeps change % and drops the exchange badge.
 - The status bar drops whole items, lowest priority first, with separators, and uses classes instead of inline colours.
 - Moved to Phase 5: panel toggles and Settings on the kit `IconButton` (it has no slot for the indicator count badge yet), and the English truncations inside the chart header ("Controller gro…") and order book controls, which belong to those surfaces.
+
+**Phase 4c is done (branch `design/phase-4c-chart-appearance`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_4C.md`](../docs/FRONTEND_DESIGN_QA_PHASE_4C.md).
+
+- Each chart's header menu starts with 图表外观: 跟随应用主题 or 单独设置, then 深色, 亮色 or 自定义 with its background colour, and 单独设置涨跌颜色. It stays available when the layout is locked or the chart is maximized, on the market page and in the replay session.
+- A chart with its own appearance shows a palette marker beside its menu button. Settings → 外观显示 says how many charts have their own appearance, with 全部恢复跟随应用, and no longer shows 当前图表外观 where charts have the menu.
+- On the first launch with the menu, if every chart sets the same theme on its own and the app uses another, a notice offers once to make it the app theme.
+- The menu is named 图 N 外观与布局 (was 图 N 布局操作) and renders outside the chart cell on the market page too, so small charts in a grid no longer cut it off; it sits under modals and toasts.
+- `SegmentedControl` labels wrap (hyphenated where the language allows) instead of running under the next option.
 
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 

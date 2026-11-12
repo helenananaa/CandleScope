@@ -22,21 +22,24 @@
   justify-content: center;
   gap: 6px;
   min-width: 0;
-  height: calc(var(--control-height-md) - 6px);
-  padding: 0 12px;
+  min-height: calc(var(--control-height-md) - 6px);
+  padding: 2px 12px;
   border: 1px solid transparent;
   border-radius: calc(var(--radius-control) - 2px);
   background: transparent;
   color: var(--text-secondary);
-  font: 500 var(--font-size-sm)/1 var(--font-sans);
-  white-space: nowrap;
+  font: 500 var(--font-size-sm)/1.2 var(--font-sans);
+  /* A label too long for its share wraps (hyphenated where the language allows) instead of running under its neighbour. */
+  text-align: center;
+  overflow-wrap: break-word;
+  hyphens: auto;
   cursor: pointer;
   transition: background-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
 }
 
 .ui-segmented-sm .ui-segment {
-  height: calc(var(--control-height-sm) - 6px);
-  padding: 0 8px;
+  min-height: calc(var(--control-height-sm) - 6px);
+  padding: 2px 6px;
   font-size: var(--font-size-xs);
 }
 
