@@ -333,6 +333,8 @@ class BarAggregator:
         Does NOT destroy the pipeline — other symbols may use it.  Any
         forming state for this exact target is discarded so a detached
         stream cannot later be promoted to CLOSED by timeout or shutdown.
+        Closed correction builders are released too; canonical history and
+        pending delivery snapshots keep their existing independent owners.
         """
         symbol = symbol.upper()
         exchange = exchange.lower().strip()
@@ -369,6 +371,7 @@ class BarAggregator:
                     state.bucket_start_ms,
                 ) is not None:
                     expired += 1
+            pipeline.bar_state.clear(symbol, exchange, market_type)
         key = (
             exchange,
             market_type,
@@ -998,10 +1001,14 @@ class BarAggregator:
 
     async def _handle_bar_input(self, exchange, market_type, symbol, interval,
                                 bar_input, emit_events=True):
+        # Capture before any reader, history admission or callback can suspend.
+        # A native/default target needs the same detach fence as a compact
+        # history target. Unregistered direct maintenance ingest remains valid.
+        target_token = self.history_target_token(bar_input, interval)
         runtime = self.history_prefix_runtime
         if runtime is None:
             return await self._apply_bar_input(exchange, market_type, symbol, interval,
-                                               bar_input, emit_events)
+                                               bar_input, emit_events, target_token=target_token)
         if runtime.closing:
             from app.data_engine.bar_delivery_errors import BarDeliveryUnavailable
             raise BarDeliveryUnavailable('history/live owner is shutting down')
@@ -1017,7 +1024,8 @@ class BarAggregator:
                 if not runtime._current(slot):
                     raise RuntimeError('history target detached before input adoption')
             return await self._apply_bar_input(exchange, market_type, symbol, interval,
-                                               bar_input, emit_events, target_token=slot.token if slot else None)
+                                               bar_input, emit_events,
+                                               target_token=target_token or (slot.token if slot else None))
 
     async def _apply_bar_input(
         self,
@@ -1044,7 +1052,9 @@ class BarAggregator:
         def check_target():
             if target_token is not None and self._target_epochs.get(target_token[0]) is not target_token[1]:
                 from app.data_engine.aggregation.blocks import BlockRevisionChanged
-                raise BlockRevisionChanged('history target detached during input')
+                raise BlockRevisionChanged('aggregation target detached during input')
+
+        check_target()
 
         revision_provider = getattr(self, "acquisition_revision_provider", None)
         acquisition_revision = revision_provider() if revision_provider is not None else None
@@ -1092,6 +1102,7 @@ class BarAggregator:
             bucket_start_ms,
             bar_input,
             emit_events=emit_events,
+            check_target=check_target,
         )
         check_target()
 
@@ -1166,6 +1177,7 @@ class BarAggregator:
         bar_input: BarInput,
         *,
         emit_events: bool = True,
+        check_target=lambda: None,
     ) -> None:
         """Close any older active bars when a new bucket's data arrives."""
         if not self._cfg.use_event_driven_close:
@@ -1173,6 +1185,9 @@ class BarAggregator:
 
         active = pipeline.bar_state.get_all_active(exchange, market_type, symbol)
         for state in active:
+            check_target()
+            if pipeline.bar_state.get_active(exchange, market_type, symbol, state.bucket_start_ms) is not state:
+                continue
             if state.bucket_start_ms < new_bucket_start_ms:
                 trigger = FinalizeTrigger(
                     trigger_type="next_bucket",
@@ -1188,6 +1203,7 @@ class BarAggregator:
                         if emit_events:
                             await self._publisher.emit_closed(closed)
                         await self._drain_eviction_buffers(pipeline, emit_events=emit_events)
+                        check_target()
                 elif pipeline.finalizer.should_expire_unconfirmed(state, trigger):
                     state.close_reason = "next_bucket_unconfirmed"
                     expired = pipeline.bar_state.expire_bar(
@@ -1198,6 +1214,7 @@ class BarAggregator:
                     )
                     if expired is not None and emit_events:
                         await self._publisher.emit_expired(expired)
+                        check_target()
 
     # ── Internal: Eviction Buffer Drain ──────────────────────
 
