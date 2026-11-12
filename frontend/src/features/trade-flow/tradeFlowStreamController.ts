@@ -1,4 +1,5 @@
 import { t } from "../../i18n/index.js";
+import { describeError } from "../../i18n/serverErrors.js";
 import { parseTradeFlowSocketMessage } from "./tradeFlowParser.js";
 import type {
   TradeFlowContinuityMode,
@@ -225,7 +226,8 @@ export class TradeFlowStreamController {
           return;
         }
         if (message.kind === "error") {
-          const error = new Error(`${message.code}: ${message.detail}`);
+          // Keep the code on the error so the message shown is the localized one for that code.
+          const error = Object.assign(new Error(message.detail || message.code), { code: message.code });
           if (message.code === "SUBSCRIBE_FAILED") {
             if (
               message.requestId === null
@@ -472,7 +474,7 @@ export class TradeFlowStreamController {
 
   private errorMessage(error: unknown): string {
     return error instanceof Error && error.message
-      ? error.message
+      ? describeError(error, error.message)
       : t("trade.rt.disconnected");
   }
 

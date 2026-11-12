@@ -91,9 +91,9 @@ export function ImportedDatasetIntervalStrip({
       />
       <div className="local-dataset-truthbar">
         <span>
-          {`${formatIntervalLabel(interval)}${interval === manifest.interval ? t("local.sourceData") : t("local.derived", { interval: formatIntervalLabel(manifest.interval) })} · ${manifest.timezone} · ${formatResearchRows(manifest.rows)} source bars · ${manifest.volume_available ? "OHLCV" : t("local.volumeUnavailable")}`}
+          {`${formatIntervalLabel(interval)}${interval === manifest.interval ? t("local.sourceData") : t("local.derived", { interval: formatIntervalLabel(manifest.interval) })} · ${manifest.timezone} · ${t("local.sourceBars", { count: formatResearchRows(manifest.rows) })} · ${manifest.volume_available ? "OHLCV" : t("local.volumeUnavailable")}`}
         </span>
-        <span>{`dataEpoch ${manifest.data_epoch.slice(7, 19)}`}</span>
+        <span title={manifest.data_epoch}>{t("local.dataVersion", { id: manifest.data_epoch.slice(7, 19) })}</span>
       </div>
     </div>
   );

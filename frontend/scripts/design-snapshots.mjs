@@ -36,7 +36,8 @@ export const STATES = [
   { name: "rail-tape", page: "/", steps: [{ key: "rail.expandView", params: { title: { key: "rail.tape" } } }] },
   { name: "rail-accounts", page: "/", steps: [{ key: "rail.expandView", params: { title: { key: "rail.accounts" } } }] },
   { name: "chart-tester", page: "/", steps: [{ key: "chartTester.entryHint" }] },
-  { name: "extension-recovery", page: "/", steps: [{ selector: ".extension-recovery > button" }] },
+  // Extensions are managed in Settings → 插件与扩展; the recovery notice shows only in recovery mode or after a failure.
+  { name: "extension-recovery", page: "/?extensions=off", steps: [{ selector: ".ui-toast .ui-btn" }] },
   { name: "replay-hub", page: "/replay.html" },
   { name: "strategy", page: "/strategy.html" },
   { name: "strategy-local-source", page: "/strategy.html?source=imported" },

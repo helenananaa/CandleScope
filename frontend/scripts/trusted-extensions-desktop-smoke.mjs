@@ -70,7 +70,8 @@ async function launch(safe = false) {
   app.process().stderr.on("data", (chunk) => appendFileSync(path.join(root, `process-${run}.log`), chunk));
   page = await app.firstWindow({ timeout: 60_000 });
   page.setDefaultTimeout(20_000);
-  await page.getByRole("button", { name: /^(扩展恢复|Extension recovery)/ }).waitFor();
+  // The page is up once the top bar has its Settings button.
+  await page.getByRole("button", { name: zhEn("设置", "Settings") }).first().waitFor();
   const identity = await app.evaluate(({ app }) => ({ packaged: app.isPackaged, resources: process.resourcesPath, userData: app.getPath("userData"), pid: process.pid }));
   assert.equal(identity.packaged, true);
   assert.equal(path.resolve(identity.userData), path.join(root, "profile"));
@@ -83,15 +84,21 @@ async function close(verifyCleanup = true) {
   await previous.close();
   if (verifyCleanup) for (const realm of ["backend", "desktop"]) verifyRealmCleanup(realm);
 }
+// Extensions are managed in Settings → 插件与扩展 (the plugin center) → 可信扩展. The recovery notice only
+// appears after a failure or in recovery mode, so the smoke always takes the Settings route.
+const managerPanel = () => page.locator(".extension-manager");
 async function manager() {
-  if (!await page.getByRole("heading", { name: zhEn("可信扩展", "Trusted extensions") }).isVisible())
-    await page.getByRole("button", { name: /^(扩展恢复|Extension recovery)/ }).click();
+  if (await managerPanel().isVisible()) return;
+  await page.getByRole("button", { name: zhEn("设置", "Settings") }).first().click();
+  await page.getByRole("button", { name: zhEn("插件与扩展", "Plugins") }).click();
+  await page.locator(".pc-navigation").getByRole("button", { name: zhEn("可信扩展", "Trusted extensions") }).click();
+  await managerPanel().waitFor();
 }
 async function confirm() {
   await page.getByRole("checkbox", { name: zhEn("我信任并启用这个版本", "I trust and enable this version") }).check();
   await page.getByRole("button", { name: zhEn("确认启用", "Enable this version") }).click();
   await page.getByRole("region", { name: zhEn("扩展授权", "Extension approval") }).waitFor({ state: "hidden" });
-  await page.getByRole("button", { name: zhEn("刷新", "Refresh") }).waitFor();
+  await managerPanel().getByRole("button", { name: zhEn("刷新", "Refresh") }).waitFor();
 }
 async function install(file) {
   await manager();
@@ -168,7 +175,7 @@ try {
   await close();
   await launch(true);
   await manager();
-  await page.getByText(/恢复模式：|Recovery mode:/).waitFor();
+  await managerPanel().getByText(/恢复模式：|Recovery mode:/).waitFor();
   assert.equal(await page.locator(".terminal-extension-label").count(), 0);
   assert.equal(await page.evaluate(() => window.__extensionQualification), undefined);
   activated("backend", ["1.0.0", "1.1.0", "1.0.0"]); activated("desktop", ["1.0.0", "1.1.0", "1.0.0"]);

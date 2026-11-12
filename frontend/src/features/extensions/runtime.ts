@@ -116,6 +116,7 @@ async function reconcile(): Promise<void> {
   const plan = response;
   if (plan.revision === lastRevision) return;
   const safe = extensionSafeMode() || plan.safeMode;
+  if (getExtensionState().safeMode !== Boolean(plan.safeMode)) publishExtensions({ safeMode: Boolean(plan.safeMode) });
   const active = safe ? [] : plan.active ?? [];
   const errors = { ...getExtensionState().errors };
   delete errors.runtime;
