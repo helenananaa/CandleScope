@@ -164,7 +164,7 @@ class CacheRevisionConsumer:
     def _memory_roots(self):
         # Private diagnostic roots only; do not expose mutable queue containers.
         with self._lock:
-            return [list(self._recent), list(self._readbacks.values()), self._readback_reset]
+            return [list(self._recent), dict(self._readbacks), self._readback_reset]
 
     def snapshot(self):
         with self._lock:
