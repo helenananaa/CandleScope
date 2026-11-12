@@ -84,3 +84,10 @@ def test_update_error_keeps_prior_valid_changes_and_weights():
     index=ComponentSnapshots()
     with pytest.raises(ValueError):index.update([('valid',record(8192)),('bad',)])
     assert list(index)==['valid'];covered(index)
+
+
+def test_empty_proof_mapping_still_has_an_owned_projection_allocation():
+    index=ComponentSnapshots(entry=ReadonlyFields({'source_ref':{}}))
+    assert index.source_proof_bytes>0
+    index['entry']=ReadonlyFields({'source_ref':None})
+    assert index.source_proof_bytes==0

@@ -23,7 +23,7 @@ class ComponentSnapshots(dict, RetainedMetadata):
         if type(value) is ReadonlyFields:
             self._payload_bytes += sign * (sys.getsizeof(key) + value.estimated_bytes)
             proof = value.get('source_ref')
-            if proof:
+            if proof is not None:
                 self._proof_bytes += sign * (sys.getsizeof(key) + frozen_reference_weight(proof))
         elif sign > 0:
             if self._foreign is None:
