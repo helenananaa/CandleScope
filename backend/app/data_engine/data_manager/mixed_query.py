@@ -22,7 +22,7 @@ from .mixed_precedence import MixedPrecedence, BATCH_TARGETS, WORK_BYTES
 
 
 def query_closed_mixed(engine, key, *, start_ms=None, end_ms=None, before_ms=None,
-                       limit, report):
+                       limit, report, auto_backfill=None):
     """Try a bounded closed page; unavailable inputs keep the original route.
 
     A stale view never falls back into a new generation. ``report`` contains
@@ -170,6 +170,26 @@ def query_closed_mixed(engine, key, *, start_ms=None, end_ms=None, before_ms=Non
         return None
     except (BlockUnavailable, CoverUnavailable) as exc:
         report["mixed_fallback_reason"] = str(exc)
+        if (isinstance(exc, BlockUnavailable) and exc.__cause__ is None
+                and str(exc) in {"mixed history source has unavailable coverage or fields",
+                                 "mixed history cannot prove complete authoritative coverage"}
+                and base_spec is not None and (stop - first) // base_spec.nominal_ms > config.max_limit):
+            # A large legacy base-window reservation can defer before it ever
+            # reports a gap. Surface the actual closed target demand to the
+            # existing DataManager scheduler instead of silently starving it.
+            allow = config.auto_backfill if auto_backfill is None else bool(auto_backfill)
+            missing = engine._trigger_backfill(key, first, last, reason="query_empty",
+                missing_bars=(stop - first) // spec.nominal_ms, submit=allow)
+            if missing is not None:
+                return QueryResult(bars=[], symbol=key.symbol, interval=key.interval,
+                    exchange=key.exchange, market_type=key.market_type, source=QuerySource.EMPTY,
+                    complete=False, retryable=True, history_state="pending", has_more=True,
+                    missing_ranges=[missing], backfill_triggered=bool(allow and engine._backfill_trigger),
+                    metadata={**report, "derived_from": "mixed", "mixed_target_repair": True,
+                        "storage_reads": report["mixed_page_reads"] + report["mixed_probe_reads"]
+                            + report["mixed_count_reads"] + report["mixed_presence_reads"],
+                        "storage_rows": report["mixed_page_rows"] + report["mixed_probe_rows"]
+                            + report["mixed_count_rows"] + report["mixed_presence_rows"]})
         return None
     return QueryResult(bars=bars, symbol=key.symbol, interval=key.interval, exchange=key.exchange,
         market_type=key.market_type, source=QuerySource.STORAGE, total=len(bars),

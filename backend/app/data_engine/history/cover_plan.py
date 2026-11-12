@@ -158,7 +158,8 @@ def plan_fixed_batch(
         explored += plan.explored_positions
         if rows + plan.planned_rows > max_source_rows:
             if not covers:
-                raise CoverBudgetExceeded("one target exceeds the source-row work budget")
+                raise CoverBudgetExceeded("one target exceeds the source-row work budget",
+                                          explored_positions=explored)
             stopped = "source_rows"
             break
         covers.append(plan)

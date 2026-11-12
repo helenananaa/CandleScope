@@ -40,8 +40,9 @@ def test_source_row_budget_never_splits_or_labels_the_remaining_request_complete
     assert batch.explored_positions > batch.covers[0].explored_positions
     resumed = plan_fixed_batch(target, batch.next_start_ms, 2 * width, (source(1),))
     assert resumed.next_start_ms is None and resumed.covers[0].start_ms == width
-    with pytest.raises(CoverBudgetExceeded, match="source-row"):
+    with pytest.raises(CoverBudgetExceeded, match="source-row") as caught:
         plan_fixed_batch(target, 0, width, (source(1),), max_source_rows=10000)
+    assert caught.value.explored_positions > 0
 
 
 def test_search_budget_is_shared_by_all_targets_and_not_hidden_in_an_abandoned_attempt():

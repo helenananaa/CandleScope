@@ -21,6 +21,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from app.data_engine.market_data.kline_metrics import declared_enhanced_fields
 from app.data_engine.series_identity import KlineSeriesIdentity
+from app.exchanges.models import HistoryCompositionPolicy
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -167,9 +168,13 @@ class IntervalDecomposition:
     is_standard: bool = False
     alignment_mode: AlignmentMode = AlignmentMode.EPOCH
     alignment_epoch_ms: int = 0
+    # Mixed counts cover the requested target range rather than one uniform
+    # bucket. Source windows carry the actual phase-specific cover.
+    composition_policy: HistoryCompositionPolicy | None = None
+    composition_target_range: tuple[int, int] | None = None
 
     def to_dict(self) -> dict:
-        return {
+        result = {
             "custom_interval": self.custom_interval,
             "custom_duration_ms": self.custom_duration_ms,
             "components": [c.to_dict() for c in self.components],
@@ -177,6 +182,11 @@ class IntervalDecomposition:
             "alignment_mode": self.alignment_mode.value,
             "alignment_epoch_ms": self.alignment_epoch_ms,
         }
+        if self.composition_policy is not None:
+            result.update(history_composition=self.composition_policy.to_dict(),
+                          composition_target_range=self.composition_target_range,
+                          component_count_scope="requested_target_range")
+        return result
 
 
 @dataclass(slots=True)
@@ -250,7 +260,7 @@ class BackfillPlan:
     derived_source_windows: list[BackfillTask] = field(default_factory=list)
 
     def to_dict(self) -> dict:
-        return {
+        result = {
             "gaps": [g.to_dict() for g in self.gaps],
             "decompositions": [d.to_dict() for d in self.decompositions],
             "tasks": [t.to_dict() for t in self.tasks],
@@ -259,6 +269,10 @@ class BackfillPlan:
             "custom_intervals": self.custom_intervals,
             "metadata": self.metadata,
         }
+        if self.metadata.get("mixed_history"):
+            result["mixed_source_windows"] = [dict(interval=t.interval, start_ms=t.start_ms,
+                end_ms=t.end_ms, rows=t.estimated_bars) for t in self.derived_source_windows]
+        return result
 
 
 # ═══════════════════════════════════════════════════════════════
