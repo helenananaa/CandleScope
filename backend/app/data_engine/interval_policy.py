@@ -21,7 +21,7 @@ from functools import lru_cache
 from typing import Any, Mapping, Optional, Sequence
 
 from app.data_engine.aggregation.adapters import chart_field_summary
-from app.data_engine.aggregation.semantics import ClosePolicy, evaluate_coverage
+from app.data_engine.aggregation.semantics import ClosePolicy, evaluate_coverage, combine_fields
 
 
 VALID_INTERVALS = [
@@ -555,6 +555,109 @@ def latest_eligible_bar_open_ms(
     return min(last_closed_ms, requested_open_ms)
 
 
+class ClosedKlineRowStream:
+    """Reduce ordered canonical pages with one target's sufficient statistics.
+
+    Source selection, durable revisions, paging and work admission belong to the
+    caller. This adapter owns no cache or writer. Field arithmetic is K130's;
+    partial totals are never rounded before the final projection. An invalid
+    component invalidates its target, not a later independent target.
+    """
+
+    def __init__(self, *, target_interval: str, source_interval: str | None, now_ms: int):
+        self.target = parse_interval_spec(target_interval)
+        self.source = parse_interval_spec(source_interval) if source_interval is not None else None
+        if self.target is None or (source_interval is not None and self.source is None):
+            raise ValueError("canonical aggregation requires valid intervals")
+        self.now_ms = now_ms
+        self._bucket = self._end = self._covered_to = self._values = None
+        self._last_open = None
+        self._invalid = False
+        self._finished = False
+        self.pages = self.rows = 0
+
+    def _finish_bucket(self):
+        if self._bucket is None or self._invalid or self._values is None:
+            return []
+        proof = evaluate_coverage(
+            has_components=True, starts_at_boundary=True, contiguous=True,
+            reaches_end=self._covered_to == self._end, within_bounds=True,
+            all_closed=True, last_closed=True, close_policy=ClosePolicy.EXPLICIT,
+        )
+        if not proof.closed:
+            return []
+        return [{"open_time": self._bucket, "close_time": self._end - 1,
+                 **self._values.project(), "is_closed": True}]
+
+    def _push_chunk(self, items):
+        if self._invalid:
+            return
+        covered_to = self._covered_to
+        for opened, row in items:
+            spec = self.source or parse_interval_spec(row.get("interval"))
+            if (opened != covered_to or spec is None
+                    or spec.nominal_ms >= self.target.nominal_ms or spec.floor_ms(opened) != opened):
+                self._invalid = True
+                self._values = None
+                return
+            end = spec.next_ms(opened)
+            if end > self._end or not _stored_component_is_closed(
+                    row, open_time_ms=opened, source_end_ms=end, now_ms=self.now_ms):
+                self._invalid = True
+                self._values = None
+                return
+            covered_to = end
+        try:
+            part = chart_field_summary([row for _, row in items], validate_ohlcv=True)
+            self._values = combine_fields((self._values, part)) if self._values is not None else part
+            self._covered_to = covered_to
+        except (KeyError, OverflowError, TypeError, ValueError):
+            self._invalid = True
+            self._values = None
+
+    def push(self, component_rows):
+        if self._finished:
+            raise ValueError("canonical stream is already finished")
+        prepared = []
+        for row in component_rows:
+            try:
+                opened = int(row["open_time"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if self._last_open is not None and opened < self._last_open:
+                raise ValueError("canonical aggregation pages must be ordered")
+            self._last_open = opened
+            prepared.append((opened, row))
+        self.pages += 1
+        self.rows += len(prepared)
+        completed = []
+        chunk = []
+        for opened, row in prepared:
+            bucket = self.target.floor_ms(opened)
+            if bucket != self._bucket:
+                if chunk:
+                    self._push_chunk(chunk)
+                    chunk.clear()
+                completed.extend(self._finish_bucket())
+                self._bucket = bucket
+                self._end = self.target.next_ms(bucket)
+                self._covered_to = bucket
+                self._values = None
+                self._invalid = self._end > self.now_ms
+            chunk.append((opened, row))
+        if chunk:
+            self._push_chunk(chunk)
+        return completed
+
+    def finish(self):
+        if self._finished:
+            raise ValueError("canonical stream is already finished")
+        result = self._finish_bucket()
+        self._values = None
+        self._finished = True
+        return result
+
+
 def aggregate_kline_rows(
     component_rows: Sequence[Mapping[str, Any]],
     *,
@@ -562,76 +665,28 @@ def aggregate_kline_rows(
     source_interval: str | None,
     now_ms: int,
 ) -> list[dict[str, Any]]:
-    """Safely rebuild closed target K-lines from complete stored components.
+    """Rebuild closed targets from complete canonical components through K130.
 
-    A single source interval may be passed once. Mixed inputs declare their
-    canonical interval on each row and must tile the target without overlaps.
-
-    The helper is intentionally strict.  A target bucket is emitted only when
-    every expected source open is present, every component has its canonical
-    close timestamp, every component is closed by ``now_ms``, and the target
-    bucket itself is already closed.  It is therefore safe to use for
-    derived/custom series without ever turning a forming bucket into durable
-    history.  It must not replace an exchange-native standard candle: venues
-    can aggregate volume and order-flow differently from persisted minute
-    components, so a missing native ``1d`` remains an authoritative-history
-    repair task.
-
-    Input and output rows use the storage shape (``open_time`` in
-    milliseconds).  Optional order-flow fields are preserved only when every
-    component supplies a valid value, matching the existing calendar-month
-    aggregation semantics.
+    Batch callers may provide unordered inputs. Streaming consumers supply
+    chronologically ordered pages to ClosedKlineRowStream, using the same
+    strict field/coverage/finality rules without retaining a whole source range.
+    Source authority and native-vs-derived qualification remain caller contracts.
     """
-    target = parse_interval_spec(target_interval)
-    source = parse_interval_spec(source_interval) if source_interval is not None else None
-    if not component_rows or target is None or (source_interval is not None and source is None):
+    if not component_rows:
         return []
-
-    buckets: dict[int, list[tuple[int, Mapping[str, Any]]]] = {}
+    try:
+        stream = ClosedKlineRowStream(target_interval=target_interval,
+                                      source_interval=source_interval, now_ms=now_ms)
+    except ValueError:
+        return []
+    prepared = []
     for row in component_rows:
         try:
-            opened = int(row["open_time"])
+            prepared.append((int(row["open_time"]), row))
         except (KeyError, TypeError, ValueError):
             continue
-        bucket_open = target.floor_ms(opened)
-        buckets.setdefault(bucket_open, []).append((opened, row))
-
-    rebuilt: list[dict[str, Any]] = []
-    for bucket_open in sorted(buckets):
-        bucket_end = target.next_ms(bucket_open)
-        if bucket_end > now_ms:
-            continue
-        covered_to = bucket_open
-        rows = []
-        for opened, row in sorted(buckets[bucket_open], key=lambda item: item[0]):
-            spec = source or parse_interval_spec(row.get("interval"))
-            if (
-                opened != covered_to or spec is None
-                or spec.nominal_ms >= target.nominal_ms or spec.floor_ms(opened) != opened
-            ):
-                break
-            end = spec.next_ms(opened)
-            if end > bucket_end or not _stored_component_is_closed(
-                row, open_time_ms=opened, source_end_ms=end, now_ms=now_ms,
-            ):
-                break
-            rows.append(row)
-            covered_to = end
-        else:
-            if covered_to != bucket_end:
-                continue
-            try:
-                rebuilt.append({
-                    "open_time": bucket_open,
-                    "close_time": bucket_end - 1,
-                    **chart_field_summary(rows, validate_ohlcv=True).project(),
-                    "is_closed": True,
-                })
-            except (KeyError, OverflowError, TypeError, ValueError):
-                # Malformed values cannot prove a final target candle.
-                continue
-
-    return rebuilt
+    ordered = [row for _, row in sorted(prepared, key=lambda item: item[0])]
+    return [*stream.push(ordered), *stream.finish()]
 
 
 def _stored_component_is_closed(
