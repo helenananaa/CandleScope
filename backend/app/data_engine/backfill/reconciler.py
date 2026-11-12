@@ -272,6 +272,7 @@ class Reconciler:
                         gen, wrt, failures, written_ranges = await self._generate_custom_bars(
                             decomp, grouped, plan.derived_source_windows,
                             **({"binding_check": plan.mixed_binding.validate if plan.mixed_binding is not None else None,
+                                "owner_check": plan.mixed_binding.validate_owner if plan.mixed_binding is not None else None,
                                 "confirmed_empty": bool(fetch_results) and all(
                                 r.source_complete is True and not r.retryable and not r.errors and not r.bars and bool(r.empty_reason)
                                 for r in fetch_results)} if getattr(decomp, "composition_policy", None) is not None else {}),
@@ -868,7 +869,7 @@ class Reconciler:
         decomp: IntervalDecomposition,
         grouped: dict[tuple[str, str, str, str], list[FetchedBar]],
         source_windows: list[BackfillTask],
-        *, confirmed_empty: bool = False, binding_check=None,
+        *, confirmed_empty: bool = False, binding_check=None, owner_check=None,
     ) -> tuple[int, int, list[dict[str, Any]], list[WrittenRange]]:
         """Reduce canonical source windows after any fetched rows have committed."""
         target = decomp.custom_interval
@@ -925,7 +926,7 @@ class Reconciler:
                 windows = checked
             if policy is not None:
                 custom_bars, observed_rows = await self._stream_component_windows(
-                    windows, symbol, target, exchange, market_type, bounds, binding_check,
+                    windows, symbol, target, exchange, market_type, bounds, owner_check or binding_check,
                 )
             else:
                 canonical_rows = {}
@@ -962,7 +963,7 @@ class Reconciler:
         return generated, written, failures, written_ranges
 
     async def _stream_component_windows(
-        self, windows, symbol, target, exchange, market_type, bounds, binding_check,
+        self, windows, symbol, target, exchange, market_type, bounds, owner_check,
     ):
         """Fold/release each qualified canonical page before requesting another.
 
@@ -1010,7 +1011,7 @@ class Reconciler:
                 **resolve_kline_series_identity(exchange, identity).to_dict(),
             }
             while cursor <= last:
-                binding_check()
+                owner_check()
                 page = await self._storage.query_canonical_page(
                     symbol, interval, cursor, last, limit=256,
                     exchange=exchange, market_type=market_type, **_identity_kwargs(identity),
@@ -1029,7 +1030,7 @@ class Reconciler:
                 # fields. Unknown/untrusted rows leave their actual coverage gap.
                 selected = [row for row in page if source_is_trusted_final(row.get("source"))]
                 output.extend(await run_preparation(stream.push, selected))
-                binding_check()
+                owner_check()
                 self._metrics.inc("custom_canonical_stream_pages")
                 self._metrics.inc("custom_canonical_stream_rows", len(selected))
                 peak_rows = max(peak_rows, len(page))

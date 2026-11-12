@@ -153,7 +153,7 @@ def test_default_mixed_pipeline_folds_and_releases_each_page_before_next_read(mi
 
 
 @pytest.mark.parametrize('fault',['order','range','oversize','type','exchange','symbol','series_variant',
-                                 'rollout','revision','cancel','gap'])
+                                 'rollout','revision','cancel','gap','calendar','resolver','storage','config','qualification'])
 def test_late_page_failure_never_materializes_or_releases_its_fences_early(mixed_query,monkeypatch,fault):
     engine=engine_for(mixed_query)
     ready=False
@@ -176,6 +176,17 @@ def test_late_page_failure_never_materializes_or_releases_its_fences_early(mixed
             elif fault=='type':values[0]={**values[0],'open_time':str(values[0]['open_time'])}
             elif fault in {'exchange','symbol','series_variant'}:values[0]={**values[0],fault:'foreign-series'}
             elif fault=='rollout':engine.config.mixed_custom_history=False
+            elif fault=='calendar':engine.detector.set_calendar_resolver(lambda *args:'unknown.session')
+            elif fault=='resolver':
+                from app.data_engine.interval_resolution import IntervalResolver
+                engine.planner._interval_resolver=IntervalResolver()
+            elif fault=='storage':
+                from app.data_engine.storage.klines_repo import AsyncKlinesRepoAdapter
+                engine._storage=AsyncKlinesRepoAdapter()
+            elif fault=='config':
+                from dataclasses import replace
+                engine._cfg=replace(engine.config)
+            elif fault=='qualification':engine.planner._interval_resolver.history_composition_routes=lambda **kwargs:None
             elif fault=='revision':Context().run(mixed_query.storage.upsert_bars,'BTCUSDT','1h',
                 [{**row(0,60*MINUTE),'volume':99}],source='data_manager_amended',market_type='futures')
             elif fault=='cancel':raise asyncio.CancelledError()

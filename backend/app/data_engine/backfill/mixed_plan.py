@@ -68,19 +68,29 @@ class _MixedBinding:
     target: SeriesKey
     declaration: tuple
 
-    def validate(self):
+    def validate_owner(self):
+        """Cheap cancellation/rebind checks between tentative source pages.
+
+        Qualification/calendar proof is still fully re-evaluated before reads
+        begin and immediately before materialization; no page publishes data.
+        """
         cfg, planner, target = self.config, self.planner, self.target
         if (self.engine._cfg is not cfg or self.engine._storage is not self.storage
                 or self.engine.planner is not planner or self.engine.detector is not self.detector
                 or planner._interval_resolver is not self.resolver
                 or self.detector._calendar_resolver is not self.calendar_resolver
-                or self.detector._resolve_calendar(target.exchange, target.market_type, target.symbol) != self.calendar
                 or not cfg.mixed_custom_history or not cfg.reconcile_generate_custom
                 or cfg.custom_alignment_mode != "epoch" or cfg.alignment_epoch_ms
                 or getattr(planner, "_custom_alignment_fn", None) is not None
                 or getattr(planner, "_custom_decomposition_fn", None) is not None
                 or target.interval in getattr(planner, "_interval_mappings", {})
-                or getattr(self.engine.reconciler, "_custom_aggregator", None) is not None
+                or getattr(self.engine.reconciler, "_custom_aggregator", None) is not None):
+            raise StaleAcquisition("mixed backfill owner or qualification binding changed")
+
+    def validate(self):
+        self.validate_owner()
+        target = self.target
+        if (self.detector._resolve_calendar(target.exchange, target.market_type, target.symbol) != self.calendar
                 or self.resolver.history_composition_routes(exchange=target.exchange,
                     market_type=target.market_type, interval=target.interval) != self.declaration):
             raise StaleAcquisition("mixed backfill owner or qualification binding changed")
