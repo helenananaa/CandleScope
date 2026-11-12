@@ -367,3 +367,55 @@ def test_unscoped_interest_capacity_queues_independent_parent_without_dropping_w
         assert all(result.status == 'completed' for result in results)
         assert calls.count(60_000) == 2
     asyncio.run(run())
+
+
+@pytest.mark.parametrize("other_requester,revoke,expected", [
+    ("klines_range", False, ["klines_history", "klines_range"]),
+    ("explicit_refresh", False, ["explicit_refresh", "klines_history"]),
+    ("explicit_refresh", True, ["klines_history"]),
+])
+def test_coalesced_dispatch_retains_active_requester_purposes(other_requester, revoke, expected):
+    async def run():
+        entered, release = asyncio.Event(), asyncio.Event()
+        calls = []
+        class Engine:
+            async def run(self, **kwargs):
+                if kwargs["symbol"] == "HELD":
+                    entered.set()
+                    await release.wait()
+                else:
+                    calls.append(kwargs["metadata"])
+                return _RepairReport(status="completed")
+        dm = _DataManager()
+        coordinator = BackfillCoordinator(storage=_Storage(), bars_backfilled=dm.on_bars_backfilled,
+            emit_event=dm.event_bus.emit, engine=Engine(), loop=asyncio.get_running_loop(),
+            max_concurrency=1, base_delay_seconds=0)
+        async def verified(*args, **kwargs):
+            return {"verified_contiguous": True, "remaining_missing_bars": 0}
+        coordinator._verify_request_range = verified
+        held = _request(0, 0, request_id="holder")
+        held.symbol = "HELD"
+        holder = coordinator.request(held)
+        await entered.wait()
+        first = _request(0, 0, request_id="read-owner")
+        first.interval, first.requester = "2m", "klines_history"
+        first.metadata["demand_owner_id"] = "first"
+        second = _request(0, 0, request_id="other-owner")
+        second.interval, second.requester = "2m", other_requester
+        second.metadata["demand_owner_id"] = "second"
+        try:
+            parent = coordinator.request(first)
+            assert coordinator.request(second) == parent
+            if revoke:
+                await coordinator.revoke_demand_owner("second", reason="view_closed")
+            release.set()
+            await asyncio.wait_for(asyncio.gather(coordinator.wait_for_request(holder),
+                coordinator.wait_for_request(parent)), 5)
+            assert len(calls) == 1
+            assert calls[0]["requester_kinds"] == expected
+            assert calls[0]["requester"] == (expected[0] if len(expected) == 1 else "mixed")
+        finally:
+            release.set()
+            await coordinator.shutdown()
+        assert coordinator.snapshot()["active"] == []
+    asyncio.run(run())
