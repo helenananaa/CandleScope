@@ -275,7 +275,11 @@ def test_source_retry_releases_acknowledged_payload_before_next_callback_awaits(
             except BarDeliveryUnavailable:pass
         assert len(agg.publisher._pending_source_events)==2
         first=next(iter(agg.publisher._pending_source_events.values()))
-        retired=weakref.ref(first.bar);del first
+        class WatchedIndex(dict):pass
+        # BarState is slotted; observe its uniquely owned index without
+        # changing any component values or the production snapshot type.
+        first.bar.source_snapshots=WatchedIndex(first.bar.source_snapshots)
+        retired=weakref.ref(first.bar.source_snapshots);del first
         agg.remove_target('BTCUSDT','97m')
         failing=False
         task=asyncio.create_task(agg.publisher.retry_source_deliveries())
