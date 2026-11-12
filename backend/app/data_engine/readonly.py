@@ -8,6 +8,7 @@ from decimal import Decimal
 from fractions import Fraction
 from numbers import Number, Integral, Real, Complex
 from types import MappingProxyType
+import sys
 
 _SCALARS = (str, bytes, int, float, complex, bool, type(None), Decimal, Fraction)
 
@@ -48,7 +49,7 @@ def _freeze(value, active):
         return complex(value)
     if isinstance(value, Mapping):
         result = object.__new__(ReadonlyFields)
-        object.__setattr__(result, '_values', MappingProxyType(_mapping(value, active)))
+        _initialize(result, _mapping(value, active))
         return result
     if isinstance(value, (list, tuple, set, frozenset)):
         marker = id(value)
@@ -63,12 +64,40 @@ def _freeze(value, active):
     raise TypeError(f'unsupported mutable published field type: {type(value).__name__}')
 
 
+def _reference_weight(value):
+    """Conservative Python value bytes per reference, without graph dedup."""
+    if isinstance(value, ReadonlyFields):
+        return value.estimated_bytes
+    weight = sys.getsizeof(value)
+    if isinstance(value, (tuple, frozenset)):
+        weight += sum(_reference_weight(item) for item in value)
+    return weight
+
+
+def _initialize(result, values):
+    proxy = MappingProxyType(values)
+    object.__setattr__(result, '_values', proxy)
+    # Nested immutable maps already have their weight. Tuples/frozensets are
+    # visited only up to those cached map boundaries; no global object cache.
+    base = (sys.getsizeof(result) + sys.getsizeof(proxy) + sys.getsizeof(values)
+            + sum(_reference_weight(key) + _reference_weight(value)
+                  for key, value in values.items()))
+    weight = base + sys.getsizeof(base)
+    weight = base + sys.getsizeof(weight)  # include the retained counter itself
+    object.__setattr__(result, '_estimated_bytes', weight)
+
+
 class ReadonlyFields(Mapping):
-    __slots__ = ('_values',)
+    __slots__ = ('_values', '_estimated_bytes')
 
     def __init__(self, values):
         mapping = values if isinstance(values, Mapping) else dict(values)
-        object.__setattr__(self, '_values', MappingProxyType(_mapping(mapping, set())))
+        _initialize(self, _mapping(mapping, set()))
+
+    @property
+    def estimated_bytes(self):
+        """Cached accepted value weight; sharing may overcount, not an RSS cap."""
+        return self._estimated_bytes
 
     def __setattr__(self, name, value):
         raise TypeError('published fields are read-only')
