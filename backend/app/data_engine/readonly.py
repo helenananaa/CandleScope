@@ -10,6 +10,8 @@ from numbers import Number, Integral, Real, Complex
 from types import MappingProxyType
 import sys
 
+from app.data_engine.memory_budget import RetainedMetadata
+
 _SCALARS = (str, bytes, int, float, complex, bool, type(None), Decimal, Fraction)
 
 
@@ -25,7 +27,7 @@ def _mapping(values, active):
 
 
 def _freeze(value, active):
-    if isinstance(value, ReadonlyFields) or type(value) in _SCALARS:
+    if type(value) is ReadonlyFields or type(value) in _SCALARS:
         return value
     # Keep the precision of immutable NumPy scalar values. Mutable arrays are
     # not Numbers and do not enter this path. Other numeric/string subclasses
@@ -64,13 +66,16 @@ def _freeze(value, active):
     raise TypeError(f'unsupported mutable published field type: {type(value).__name__}')
 
 
-def _reference_weight(value):
+def frozen_reference_weight(value):
     """Conservative Python value bytes per reference, without graph dedup."""
-    if isinstance(value, ReadonlyFields):
+    if type(value) is ReadonlyFields:
         return value.estimated_bytes
+    if not (type(value) in _SCALARS or isinstance(value, (tuple, frozenset))
+            or (type(value).__module__ == "numpy" and isinstance(value, Number))):
+        raise TypeError('reference weights require accepted frozen values')
     weight = sys.getsizeof(value)
     if isinstance(value, (tuple, frozenset)):
-        weight += sum(_reference_weight(item) for item in value)
+        weight += sum(frozen_reference_weight(item) for item in value)
     return weight
 
 
@@ -80,14 +85,14 @@ def _initialize(result, values):
     # Nested immutable maps already have their weight. Tuples/frozensets are
     # visited only up to those cached map boundaries; no global object cache.
     base = (sys.getsizeof(result) + sys.getsizeof(proxy) + sys.getsizeof(values)
-            + sum(_reference_weight(key) + _reference_weight(value)
+            + sum(frozen_reference_weight(key) + frozen_reference_weight(value)
                   for key, value in values.items()))
     weight = base + sys.getsizeof(base)
     weight = base + sys.getsizeof(weight)  # include the retained counter itself
     object.__setattr__(result, '_estimated_bytes', weight)
 
 
-class ReadonlyFields(Mapping):
+class ReadonlyFields(Mapping, RetainedMetadata):
     __slots__ = ('_values', '_estimated_bytes')
 
     def __init__(self, values):
@@ -111,5 +116,10 @@ class ReadonlyFields(Mapping):
     def __len__(self):
         return len(self._values)
 
+    def _memory_metadata(self):
+        return (self._estimated_bytes,)
+
     def __deepcopy__(self, memo):
-        return self
+        # Subclasses may override reads with mutable state; capture their
+        # current fields rather than sharing that foreign execution object.
+        return self if type(self) is ReadonlyFields else ReadonlyFields(self)

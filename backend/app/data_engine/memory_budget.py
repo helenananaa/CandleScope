@@ -15,6 +15,14 @@ import sys
 import threading
 
 
+class RetainedMetadata:
+    """Opt-in value metadata included by owner diagnostic traversal."""
+    __slots__ = ()
+
+    def _memory_metadata(self):
+        return ()
+
+
 class MemoryBudgetExceeded(RuntimeError):
     pass
 
@@ -103,12 +111,7 @@ def retained_size(roots, seen=None):
             pending.extend(value.values())
             if hasattr(value, "_values"):
                 total += sys.getsizeof(dict(value))  # private map backing allocation
-                # The proxy and cached immutable value weight are real owned
-                # objects too; keep their actual references in the traversal.
                 pending.append(value._values)
-                weight = getattr(value, "_estimated_bytes", None)
-                if type(weight) is int:
-                    pending.append(weight)
         elif isinstance(value, (list, tuple, set, frozenset)):
             pending.extend(value)
         elif is_dataclass(value):
@@ -116,6 +119,8 @@ def retained_size(roots, seen=None):
                 pending.append(vars(value))
             else:
                 pending.extend(getattr(value, field.name) for field in fields(value))
+        if isinstance(value, RetainedMetadata):
+            pending.extend(value._memory_metadata())
     return total, objects
 
 

@@ -100,6 +100,8 @@ from .bar_state import BarStateEngine
 from .component_inputs import SourceComponentPreparation, SourcePreparationCapacity, PREPARATION_BYTES, SCOPE_BYTES, MAX_PREPARATION_TARGETS
 from .finalizer import Finalizer
 from .publisher import BarAggregatorPublisher
+from .component_memory import ComponentSnapshots
+from app.data_engine.memory_budget import retained_size
 
 logger = logging.getLogger("bar_aggregator")
 
@@ -969,6 +971,24 @@ class BarAggregator:
         history_prefixes = sum(state._history_prefix is not None for state in resident)
         queued_components = sum(len(state.source_snapshots) for event in events
                                 for state in (event.bar, event.previous_bar) if state is not None)
+        component_payload_bytes = source_ref_bytes = 0
+        for state in retained.values():
+            snapshots = state.source_snapshots
+            if isinstance(snapshots, ComponentSnapshots):
+                component_payload_bytes += snapshots.estimated_bytes
+                if snapshots and not snapshots.foreign_entries and len(state.source_refs) <= len(snapshots):
+                    # Accepted proof weights cover the ordinary cloned source
+                    # dictionaries conservatively; they may overcount leaves
+                    # shared with immutable components. Arbitrary consumer
+                    # mutation is not a hard bound; heap roots remain diagnostic.
+                    source_ref_bytes += sys.getsizeof(state.source_refs)
+                    if state.source_refs:
+                        source_ref_bytes += snapshots.source_proof_bytes
+                else:
+                    source_ref_bytes += retained_size([state.source_refs])[0]
+            else:
+                component_payload_bytes += retained_size([snapshots])[0]
+                source_ref_bytes += retained_size([state.source_refs])[0]
         retained_components = sum(len(state.source_snapshots) for state in retained.values())
         retained_prefixes = sum(state._history_prefix is not None for state in retained.values())
         claim_metadata_bytes = sum(sys.getsizeof(p.eviction_claims) + len(p.eviction_claims) * 16
@@ -983,6 +1003,8 @@ class BarAggregator:
                 "retained_payload_states": len(payload_states),
                 "retained_states": len(retained),
                 "retained_components": retained_components,
+                "retained_component_payload_bytes": component_payload_bytes,
+                "source_ref_estimated_bytes": source_ref_bytes,
                 "retained_events": len(retained_events),
                 **publisher_counts,
                 "component_index_bytes": component_index_bytes,
@@ -996,12 +1018,12 @@ class BarAggregator:
                 "source_preparation_in_use": self._preparation_capacity.in_use,
                 "source_preparation_capacity_bytes": self._preparation_capacity.capacity * PREPARATION_BYTES,
                 **self._source_preparation_metrics,
-                "estimated_bytes": (len(retained) * 1024 + retained_components * 1024
+                "estimated_bytes": (len(retained) * 1024 + component_payload_bytes + source_ref_bytes
                     + sum(index_bytes.values()) + retained_prefixes * 32 * 1024
                     + len(retained_events) * 256 + publisher_counts["publisher_metadata_bytes"]
                     + claim_metadata_bytes + handoff_bytes + len(self._active_preparations) * SCOPE_BYTES
                     + self._preparation_capacity.capacity * PREPARATION_BYTES),
-                "estimate_basis": "unique retained state containers; component references may overcount shared immutable values",
+                "estimate_basis": "accepted component/proof reference weights; shared values may be overcounted; mutable consumer changes are not a heap cap",
                 "protection": "active/correction state and pending publications stay with realtime owner"}
 
     def _memory_roots(self):
