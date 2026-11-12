@@ -57,7 +57,7 @@ try {
   const identity = await app.evaluate(({ app }) => ({ packaged: app.isPackaged, userData: app.getPath("userData") }));
   assert.equal(identity.packaged, true);
   assert.equal(path.resolve(identity.userData), profile);
-  await page.getByRole("button", { name: /扩展恢复|Extension recovery/ }).waitFor();
+  await page.getByRole("button", { name: /^(设置|Settings)$/ }).first().waitFor();
   const origin = new URL(page.url()).origin;
   await page.goto(`${origin}/replay.html`);
   page.on("pageerror", error => { report.exceptions.push(error.stack); save(); });
@@ -131,7 +131,7 @@ try {
   page = await app.firstWindow({ timeout: 90_000 });
   page.setDefaultTimeout(30_000);
   page.on("pageerror", error => { report.exceptions.push(error.stack); save(); });
-  await page.getByRole("button", { name: /扩展恢复|Extension recovery/ }).waitFor();
+  await page.getByRole("button", { name: /^(设置|Settings)$/ }).first().waitFor();
   await page.goto(`${new URL(page.url()).origin}/replay.html`);
   await page.locator(".training-hub-card").getByRole("button", { name: "继续训练", exact: true }).click();
   await ready();

@@ -11,6 +11,13 @@ export function formatResearchDate(value: string): string {
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString(getLocale());
 }
 
+/** A dataset quality status from the server, in the user's language; an unknown status stays as sent. */
+export function formatQualityStatus(status: string): string {
+  if (status === "accepted") return t("local.qualityStatus.accepted");
+  if (status === "accepted_with_gaps") return t("local.qualityStatus.acceptedWithGaps");
+  return status;
+}
+
 export function researchLibraryErrorMessage(reason: unknown): string {
   if (reason instanceof LocalDataApiError && reason.code === "local_profile_not_active") {
     return t("local.offlineMode");

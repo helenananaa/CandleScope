@@ -41,3 +41,12 @@ test("errors without a backend code keep their message, and non-errors use the f
   assert.equal(describeError(new CodedError("lowercase-code", "kept"), "fallback"), "kept");
   assert.equal(describeError("not an error", "fallback"), "fallback");
 });
+
+test("a code with its own message shows only that message, without the English server text", () => {
+  setLocale("zh-CN");
+  const boundary = new CodedError("HISTORY_ORIGIN_UNAVAILABLE", "Could not read the provider history boundary");
+  assert.equal(describeError(boundary, "fallback"), "暂时无法读取交易所的历史起点，请稍后重试");
+  assert.doesNotMatch(describeError(new CodedError("SUBSCRIBE_FAILED", "trade-flow subscription rejected"), "fallback"), /[A-Za-z]/);
+  setLocale("en");
+  assert.equal(describeError(boundary, "fallback"), "Couldn't read where the exchange's history begins. Try again shortly.");
+});

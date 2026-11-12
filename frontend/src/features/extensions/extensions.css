@@ -1,18 +1,28 @@
-.extension-manager { padding: 18px; color: var(--text-primary); background: var(--bg-secondary); font: 13px/1.5 var(--font-sans); }
-.extension-manager h3 { margin: 0 0 8px; }
-.extension-manager p { margin: 8px 0; }
-.extension-manager fieldset { border: 0; padding: 0; min-width: 0; }
-.extension-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
-.extension-actions label { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.extension-manager button, .extension-manager select, .extension-recovery button { border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 7px 10px; color: var(--text-primary); background: var(--bg-tertiary); cursor: pointer; }
-.extension-manager button:disabled { opacity: .5; cursor: default; }
-.extension-manager input[type=file] { max-width: 230px; }
-.extension-review, .extension-item { border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px; margin: 12px 0; overflow-wrap: anywhere; }
-.extension-review { border-color: var(--accent-blue); }
-.extension-review code { display: block; font-size: 11px; margin: 12px 0; }
-.extension-item > span { margin-inline-start: 10px; color: var(--text-secondary); }
-.extension-recovery { position: fixed; bottom: 5px; right: 8px; z-index: var(--z-modal); font: 11px var(--font-sans); }
-.extension-recovery-panel { position: fixed; right: 8px; bottom: 40px; width: min(680px, calc(100vw - 16px)); max-height: calc(100vh - 80px); overflow: auto; background: var(--bg-secondary); border: 1px solid var(--border-color); box-shadow: 0 8px 32px #0006; }
+/* Trusted extension management (Settings → 插件与扩展 → 可信扩展, and the recovery dialog).
+   Controls come from the kit; these rules lay them out. Theme extensions target
+   .extension-manager, .extension-item, .extension-review and .extension-actions. */
+.extension-manager { display: grid; gap: var(--space-4); min-width: 0; color: var(--text-primary); font: var(--font-size-md)/1.5 var(--font-sans); }
+.extension-manager-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
+.extension-manager-head > div { display: grid; gap: 4px; min-width: 0; }
+.extension-manager-head h3 { margin: 0; font: 600 var(--font-size-base)/1.4 var(--font-sans); }
+.extension-manager-head p { max-width: 72ch; margin: 0; color: var(--text-secondary); font-size: var(--font-size-sm); }
+.extension-manager-body { display: grid; gap: var(--space-4); min-width: 0; margin: 0; padding: 0; border: 0; }
+.extension-toolbar { display: grid; gap: var(--space-3); }
+.extension-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.extension-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-3); }
+.extension-review, .extension-item { display: grid; gap: var(--space-3); padding: 14px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--surface-0); overflow-wrap: anywhere; }
+.extension-review { border-color: color-mix(in srgb, var(--accent-blue) 55%, var(--border-subtle)); }
+.extension-review > p, .extension-note { margin: 0; color: var(--text-secondary); font-size: var(--font-size-sm); }
+.extension-item > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.extension-facts, .extension-realms { display: grid; gap: 6px; margin: 0; }
+.extension-facts > div, .extension-realms > div { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 2px 12px; font-size: var(--font-size-sm); }
+.extension-facts dt, .extension-realms dt { color: var(--text-muted); }
+.extension-facts dd, .extension-realms dd { margin: 0; color: var(--text-primary); }
+.extension-realms .extension-failure { grid-column: 2; }
+/* Messages written by an extension or the host stay as written, set apart as technical detail. */
+.extension-detail { color: var(--text-secondary); font: var(--font-size-xs)/1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.extension-uninstall { color: var(--text-danger); }
+
 .extension-rail-slot { display: flex; flex: 0 0 auto; min-height: 0; }
 .extension-bottom-slot { display: flex; flex: 0 0 auto; flex-direction: column; min-width: 0; }
 .extension-rail-slot[data-extension-rail-side=left] .right-market-rail > .wl-resize-handle { order: 1; margin-right: 0; margin-left: -2px; }
