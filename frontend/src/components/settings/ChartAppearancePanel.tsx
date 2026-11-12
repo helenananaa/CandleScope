@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { SegmentedControl } from "../ui/Choice.js";
 import { Icon } from "../icons/Icon.js";
 import type { IconName } from "../icons/Icon.js";
 import type {
@@ -141,24 +142,18 @@ export default function ChartAppearancePanel({ settings, onUpdate, appearanceSco
                 <div className="st-group" data-settings-chart-appearance="true">
                     <div className="st-group-title">{t("settings.appearance.chartAppearanceTitle")}</div>
                     <div className="st-group-desc">{t("settings.appearance.cellThemeDescription")}</div>
-                    <div className="st-preset-row" role="group" aria-label={t("settings.appearance.chartAppearanceTitle")}>
-                        <button
-                            type="button"
-                            className={`st-preset-btn ${chartHasOwnAppearance ? '' : 'active'}`}
-                            aria-pressed={!chartHasOwnAppearance}
-                            onClick={() => chart.set(null)}
-                        >
-                            {t("settings.appearance.followApp")}
-                        </button>
-                        <button
-                            type="button"
-                            className={`st-preset-btn ${chartHasOwnAppearance ? 'active' : ''}`}
-                            aria-pressed={chartHasOwnAppearance}
-                            onClick={() => { if (!chartHasOwnAppearance) chart.set({ theme: effectiveScheme(appTheme) }); }}
-                        >
-                            {t("settings.appearance.ownAppearance")}
-                        </button>
-                    </div>
+                    <SegmentedControl
+                        label={t("settings.appearance.chartAppearanceTitle")}
+                        value={chartHasOwnAppearance ? "own" : "follow"}
+                        onChange={(next) => {
+                            if (next === "follow") chart.set(null);
+                            else if (!chartHasOwnAppearance) chart.set({ theme: effectiveScheme(appTheme) });
+                        }}
+                        options={[
+                            { value: "follow", label: t("settings.appearance.followApp") },
+                            { value: "own", label: t("settings.appearance.ownAppearance") },
+                        ]}
+                    />
                     {chartHasOwnAppearance && (
                         <div className="st-theme-grid st-appearance-theme-grid">
                             {CHART_THEME_OPTIONS.map((theme) => (

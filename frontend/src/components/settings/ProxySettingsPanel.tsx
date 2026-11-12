@@ -1,3 +1,4 @@
+import { Button } from "../ui/Button.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { Icon } from "../icons/Icon.js";
@@ -148,10 +149,10 @@ export default function ProxySettingsPanel({
                             <div className="st-actions-row">
                                 <label><input type="checkbox" checked={route.enabled}
                                     onChange={(event) => updateRoute(route.id, { enabled: event.target.checked })} /> {t("settings.proxy.enabled")}</label>
-                                {index > 0 && <button className="st-btn st-btn-secondary" onClick={() => onProxyRoutesChange?.([route, ...proxyRoutes.filter((value) => value.id !== route.id)])}>
-                                    {t("settings.proxy.makePrimary")}</button>}
-                                <button className="st-btn st-btn-secondary" onClick={() => onProxyRoutesChange?.(proxyRoutes.filter((value) => value.id !== route.id))}>
-                                    {t("settings.proxy.remove")}</button>
+                                {index > 0 && <Button onClick={() => onProxyRoutesChange?.([route, ...proxyRoutes.filter((value) => value.id !== route.id)])}>
+                                    {t("settings.proxy.makePrimary")}</Button>}
+                                <Button onClick={() => onProxyRoutesChange?.(proxyRoutes.filter((value) => value.id !== route.id))}>
+                                    {t("settings.proxy.remove")}</Button>
                             </div>
                             <div className="st-result-detail" role="status">
                                 {status && <div>{t("settings.proxy.active", { count: status.active_requests })}</div>}
@@ -188,11 +189,11 @@ export default function ProxySettingsPanel({
                             </div>
                         </fieldset>;
                     })}
-                    <button className="st-btn st-btn-secondary" disabled={proxyLoading || proxyRoutes.length >= 16}
+                    <Button disabled={proxyLoading || proxyRoutes.length >= 16}
                         onClick={() => onProxyRoutesChange?.([...proxyRoutes, { id: crypto.randomUUID(), name: "", url: "",
                             egress_group: "shared", enabled: true, exchanges: [], max_concurrency: 4, max_ws_subscriptions: 64 }])}>
                         {t("settings.proxy.add")}
-                    </button>
+                    </Button>
                 </div>
             )}
 
@@ -204,20 +205,18 @@ export default function ProxySettingsPanel({
             )}
 
             <div className="st-actions-row">
-                <button
-                    className="st-btn st-btn-secondary"
+                <Button
                     onClick={onProxyTest}
                     disabled={proxyLoading}
                 >
                     {proxyLoading ? t("settings.proxy.testing") : t("settings.proxy.test")}
-                </button>
-                <button
-                    className="st-btn st-btn-primary"
+                </Button>
+                <Button variant="primary"
                     onClick={onProxySave}
                     disabled={proxyLoading}
                 >
                     {proxyLoading ? t("settings.proxy.saving") : t("settings.proxy.save")}
-                </button>
+                </Button>
             </div>
 
             {proxyTestResult && (

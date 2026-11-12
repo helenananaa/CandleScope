@@ -84,6 +84,7 @@ export default defineConfig([
       'src/**/__tests__/**/*.{ts,tsx}',
       'src/**/*.test.{ts,tsx}',
       'src/test/**/*.{ts,tsx}',
+      'dev/**/*.{ts,tsx}',
     ],
     languageOptions: {
       globals: {

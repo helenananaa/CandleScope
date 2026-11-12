@@ -1,3 +1,4 @@
+import { Button } from "../../components/ui/Button.js";
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { PluginSettingsPanel } from '../plugins/PluginCenter.js';
 import DataWorkbenchModal from '../data-workbench/DataWorkbenchModal.js';
@@ -139,9 +140,9 @@ export default function SettingsModal({
                         ))}
                     </div>
                     <div className="st-sidebar-footer">
-                        <button className="st-btn st-btn-primary st-btn-close" onClick={onClose}>
+                        <Button variant="primary" fullWidth onClick={onClose}>
                             {t("settings.saveAndClose")}
-                        </button>
+                        </Button>
                     </div>
                 </nav>
 

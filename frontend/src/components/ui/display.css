@@ -1,0 +1,257 @@
+/* Badges, sections, stats, disclosures, inline alerts and empty states (primitives layer). */
+
+.ui-badge {
+  --badge-color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, var(--badge-color) 30%, transparent);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--badge-color) 10%, transparent);
+  color: var(--badge-color);
+  font: 600 var(--font-size-xs)/1 var(--font-sans);
+  white-space: nowrap;
+}
+
+.ui-badge[data-tone='accent'] { --badge-color: var(--text-accent); }
+.ui-badge[data-tone='success'] { --badge-color: var(--text-success); }
+.ui-badge[data-tone='warning'] { --badge-color: var(--text-warning); }
+.ui-badge[data-tone='danger'] { --badge-color: var(--text-danger); }
+
+.ui-section {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.ui-section + .ui-section {
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.ui-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.ui-section-heading {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ui-section-title {
+  margin: 0;
+  color: var(--text-primary);
+  font: 600 var(--font-size-base)/1.4 var(--font-sans);
+}
+
+.ui-section-description {
+  max-width: 64ch;
+  margin: 0;
+  color: var(--text-secondary);
+  font: var(--font-size-sm)/1.6 var(--font-sans);
+}
+
+.ui-section-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ui-section-body {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.ui-stat {
+  --stat-color: var(--text-primary);
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ui-stat[data-tone='accent'] { --stat-color: var(--text-accent); }
+.ui-stat[data-tone='success'] { --stat-color: var(--text-success); }
+.ui-stat[data-tone='warning'] { --stat-color: var(--text-warning); }
+.ui-stat[data-tone='danger'] { --stat-color: var(--text-danger); }
+
+.ui-stat-label {
+  color: var(--text-muted);
+  font: 500 var(--font-size-xs)/1.4 var(--font-sans);
+}
+
+.ui-stat-value {
+  overflow: hidden;
+  color: var(--stat-color);
+  font: 600 var(--font-size-lg)/1.2 var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-stat-hint {
+  color: var(--text-secondary);
+  font: var(--font-size-xs)/1.4 var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+.ui-disclosure {
+  min-width: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+}
+
+.ui-disclosure-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  color: var(--text-secondary);
+  font: 500 var(--font-size-sm)/1.4 var(--font-sans);
+  list-style: none;
+  cursor: pointer;
+}
+
+.ui-disclosure-summary::-webkit-details-marker {
+  display: none;
+}
+
+.ui-disclosure-summary:hover {
+  color: var(--text-primary);
+}
+
+.ui-disclosure-summary:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: -2px;
+  border-radius: var(--radius-md);
+}
+
+.ui-disclosure-chevron {
+  flex: 0 0 auto;
+  transition: transform var(--motion-fast) var(--ease-out);
+}
+
+.ui-disclosure[open] > .ui-disclosure-summary .ui-disclosure-chevron {
+  transform: rotate(90deg);
+}
+
+.ui-disclosure-body {
+  padding: 0 12px 12px 30px;
+  color: var(--text-secondary);
+  font: var(--font-size-sm)/1.6 var(--font-sans);
+}
+
+.ui-alert {
+  --alert-color: var(--text-info);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--alert-color) 32%, transparent);
+  border-left-width: 3px;
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--alert-color) 7%, var(--surface-0));
+  color: var(--text-primary);
+}
+
+.ui-alert[data-tone='success'] { --alert-color: var(--text-success); }
+.ui-alert[data-tone='warning'] { --alert-color: var(--text-warning); }
+.ui-alert[data-tone='danger'] { --alert-color: var(--text-danger); }
+
+.ui-alert-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ui-alert-title {
+  color: var(--alert-color);
+  font: 600 var(--font-size-sm)/1.4 var(--font-sans);
+}
+
+.ui-alert-body {
+  color: var(--text-secondary);
+  font: var(--font-size-sm)/1.6 var(--font-sans);
+  overflow-wrap: anywhere;
+}
+
+.ui-alert-action {
+  flex: 0 0 auto;
+}
+
+/* Empty / waiting / error state inside a panel */
+.ui-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* "safe" keeps content inside short panels instead of spilling past both edges */
+  justify-content: safe center;
+  min-height: 0;
+  overflow: auto;
+  gap: 6px;
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+}
+
+.ui-empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-bottom: 2px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  color: var(--text-muted);
+}
+
+.ui-empty[data-tone='accent'] .ui-empty-icon { color: var(--text-accent); }
+.ui-empty[data-tone='warning'] .ui-empty-icon { color: var(--text-warning); }
+.ui-empty[data-tone='danger'] .ui-empty-icon { color: var(--text-danger); }
+
+/* Rails and docks */
+.ui-empty-compact {
+  gap: 4px;
+  padding: var(--space-3);
+}
+
+.ui-empty-compact .ui-empty-icon {
+  width: 28px;
+  height: 28px;
+}
+
+.ui-empty-compact .ui-empty-title {
+  font-size: var(--font-size-sm);
+}
+
+.ui-empty-compact .ui-empty-description {
+  font-size: var(--font-size-xs);
+}
+
+.ui-empty-compact .ui-empty-action {
+  margin-top: var(--space-1);
+}
+
+.ui-empty-title {
+  color: var(--text-primary);
+  font: 600 var(--font-size-md)/1.4 var(--font-sans);
+}
+
+.ui-empty-description {
+  max-width: 32ch;
+  color: var(--text-muted);
+  font: var(--font-size-sm)/1.5 var(--font-sans);
+}
+
+.ui-empty-action {
+  margin-top: var(--space-2);
+}

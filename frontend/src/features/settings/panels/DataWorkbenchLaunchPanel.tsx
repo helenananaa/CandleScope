@@ -1,3 +1,4 @@
+import { Button } from "../../../components/ui/Button.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import { Icon } from "../../../components/icons/Icon.js";
@@ -19,7 +20,7 @@ export default function DataWorkbenchLaunchPanel({ onOpen }: DataWorkbenchLaunch
           </div>
         </div>
         <div className="st-actions-row">
-          <button className="st-btn st-btn-accent" onClick={onOpen} type="button">{t("settings.workbench.open")}</button>
+          <Button onClick={onOpen}>{t("settings.workbench.open")}</Button>
         </div>
       </div>
     </section>

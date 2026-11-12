@@ -16,7 +16,8 @@
     "src/**/*.test.tsx",
     "src/types/**/*.d.ts",
     "src/test/**/*.ts",
-    "src/test/**/*.tsx"
+    "src/test/**/*.tsx",
+    "dev/**/*.tsx"
   ],
   "exclude": ["dist", "node_modules"]
 }

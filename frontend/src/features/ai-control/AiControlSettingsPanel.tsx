@@ -1,3 +1,4 @@
+import { Button } from "../../components/ui/Button.js";
 import { useEffect, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -56,20 +57,20 @@ export default function AiControlSettingsPanel() {
     {workflows && <p>{t("aiControl.workflowScope")}</p>}
     <p><label><input type="checkbox" checked={grant} onChange={(event) => setGrant(event.target.checked)} /> {t("aiControl.grant")}</label></p>
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-      <button className="st-btn" disabled={busy || !status} onClick={() => { void change("read"); }}>{t("aiControl.enableRead")}</button>
-      <button className="st-btn" disabled={busy || !status || !grant} onClick={() => { void change("control"); }}>{t("aiControl.enableControl")}</button>
-      <button className="st-btn" disabled={busy || !status || status.mode === "off"} onClick={() => { void change("off"); }}>{t("aiControl.revoke")}</button>
+      <Button disabled={busy || !status} onClick={() => { void change("read"); }}>{t("aiControl.enableRead")}</Button>
+      <Button disabled={busy || !status || !grant} onClick={() => { void change("control"); }}>{t("aiControl.enableControl")}</Button>
+      <Button disabled={busy || !status || status.mode === "off"} onClick={() => { void change("off"); }}>{t("aiControl.revoke")}</Button>
     </div>
     {status?.endpoint && <><p><code>{status.endpoint}</code></p>
-      <button className="st-btn" onClick={() => { void copy(); }}>{t(copied ? "aiControl.copied" : "aiControl.copy")}</button>
-      <button className="st-btn" aria-expanded={showConfiguration} onClick={() => setShowConfiguration((value) => !value)}>{t("aiControl.configuration")}</button>
+      <Button onClick={() => { void copy(); }}>{t(copied ? "aiControl.copied" : "aiControl.copy")}</Button>
+      <Button aria-expanded={showConfiguration} onClick={() => setShowConfiguration((value) => !value)}>{t("aiControl.configuration")}</Button>
       {showConfiguration && <textarea readOnly rows={10} aria-label={t("aiControl.configuration")} value={connectionConfiguration} style={{ width: "100%", fontFamily: "monospace" }} />}
       <p>{t("aiControl.secret")}</p></>}
     {status?.workflow?.enabled && <div className="st-info-box">
       <h4>{t("aiControl.workflowConfiguration")}</h4>
       <p>{t("aiControl.workflowScope")}</p>
       <label>{t("aiControl.workflowFormat")} <select value={format} onChange={(event) => { setFormat(event.target.value as "json" | "toml"); setWorkflowCopied(false); }}><option value="json">JSON</option><option value="toml">TOML</option></select></label>
-      <p><button className="st-btn" disabled={!workflowConfiguration || !status.workflow.adapterAvailable} onClick={() => { void copyWorkflow(); }}>{t(workflowCopied ? "aiControl.copied" : "aiControl.copy")}</button></p>
+      <p><Button disabled={!workflowConfiguration || !status.workflow.adapterAvailable} onClick={() => { void copyWorkflow(); }}>{t(workflowCopied ? "aiControl.copied" : "aiControl.copy")}</Button></p>
       <textarea readOnly rows={10} aria-label={t("aiControl.workflowConfiguration")} value={workflowConfiguration} style={{ width: "100%", fontFamily: "monospace" }} />
       {!status.workflow.adapterAvailable && <p role="alert">{t("aiControl.workflowAdapterMissing")}</p>}
     </div>}
