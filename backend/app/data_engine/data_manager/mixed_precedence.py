@@ -5,11 +5,11 @@ cache, writer or revision owner: the caller pins and fences all source versions
 through B130/D126. Probes never qualify a finer row as an accepted component.
 """
 from app.data_engine.aggregation.blocks import BlockUnavailable
-from app.data_engine.history.cover_plan import plan_fixed_target
+from app.data_engine.history.cover_plan import plan_fixed_batch
+from app.data_engine.history.source_precedence import finer_requirements, collect_presence_windows
 from app.data_engine.memory_budget import MemoryBudgetExceeded, retained_size
 
 BATCH_TARGETS = 32
-MAX_PROBES = 4096
 WORK_BYTES = 4 * 1024 * 1024
 PLAN_BYTES = 32_768 * 512 + 64 * 1024
 
@@ -22,37 +22,21 @@ class MixedPrecedence:
         self.presence = {}
 
     def _requirements(self, span):
-        for fine, width in self.precedences:
-            if width >= span.source.width_ms:
-                continue
-            lo, hi = max(0, span.start_ms - width + 1), span.end_ms
-            change = self.mutations[fine]
-            # The pinned minimum open covers rows and withdrawals. Do not use
-            # the close-based upper envelope to skip probes: a malformed finer
-            # close may precede its open, including in historical deletions.
-            if change is None or change["start_ms"] >= hi:
-                continue
-            yield fine, lo, hi, change["delete_revision"] > 0
+        return finer_requirements(span, self.precedences, self.mutations)
 
     def prepare(self, opens, width):
         self.presence.clear()
         if not callable(getattr(self.storage, "query_bars_range_presence", None)):
             return
-        requested = {}
-        count = 0
+        opens = tuple(opens)
+        if not opens:
+            return
         with self.engine.memory_budget.reserve("history-query", PLAN_BYTES):
-            for opened in opens:
-                plan = plan_fixed_target(self.target, opened, opened + width, self.sources,
-                                         required_fields=self.sources[0].fields)
-                self.report["mixed_preflight_positions"] += plan.explored_positions
-                for span in plan.spans:
-                    for fine, lo, hi, deleted in self._requirements(span):
-                        if deleted or count >= MAX_PROBES:
-                            continue
-                        bounds = requested.setdefault(fine, set())
-                        before = len(bounds)
-                        bounds.add((lo, hi))
-                        count += len(bounds) - before
+            batch = plan_fixed_batch(self.target, opens[0], opens[-1] + width, self.sources,
+                required_fields=self.sources[0].fields, max_targets=len(opens), max_source_rows=131_072)
+            self.report["mixed_preflight_positions"] += batch.explored_positions
+            requested = collect_presence_windows((span for cover in batch.covers for span in cover.spans),
+                                                  self.precedences, self.mutations)
         for source, values in requested.items():
             windows = sorted(values)
             for offset in range(0, len(windows), 256):

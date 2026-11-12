@@ -472,10 +472,10 @@ class CustomIntervalQueryService:
         self._bar_aggregator = bar_aggregator
 
     def _try_mixed(self, key, *, limit, started_at, materialized_result,
-                   materialized_probe_ms, report, **bounds):
+                   materialized_probe_ms, report, auto_backfill=None, **bounds):
         if self._mixed_query is None:
             return None
-        result = self._mixed_query(key, limit=limit, report=report, **bounds)
+        result = self._mixed_query(key, limit=limit, report=report, auto_backfill=auto_backfill, **bounds)
         if result is None:
             return None
         written, role = self._persist_rebuilt_target(result.bars, result,
@@ -1758,7 +1758,7 @@ class CustomIntervalQueryService:
         mixed_report = {}
         mixed = self._try_mixed(key, limit=effective_limit, started_at=started_at,
             materialized_result=materialized_result, materialized_probe_ms=materialized_probe_ms,
-            report=mixed_report, start_ms=start_ms, end_ms=end_ms)
+            report=mixed_report, start_ms=start_ms, end_ms=end_ms, auto_backfill=auto_backfill)
         if mixed is not None:
             return mixed
 
@@ -2160,7 +2160,7 @@ class CustomIntervalQueryService:
         mixed_report = {}
         mixed = self._try_mixed(key, limit=effective_limit, started_at=started_at,
             materialized_result=materialized_result, materialized_probe_ms=materialized_probe_ms,
-            report=mixed_report, before_ms=before_ms)
+            report=mixed_report, before_ms=before_ms, auto_backfill=auto_backfill)
         if mixed is not None:
             return mixed
 

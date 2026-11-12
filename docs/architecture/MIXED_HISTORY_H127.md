@@ -146,10 +146,48 @@ enhancements, revision/deletion, rebinding, cancellation and resource release.
 Synthetic coarse/fine parity is deliberately separate from real venue
 qualification.
 
-The default integration above does not yet choose/download native components
-for a truly empty store, combine a closed mixed prefix with a live forming tail,
-or broaden replay/calendar admission. History-task planning, network/request
-cost selection, batched precedence probes, first-screen/warmup scheduling and
-real cold-load/multi-chart/native performance remain #127 work. The measured
+## Qualified cold backfill
+
+`plan_fixed_batch` exposes a bounded prefix plus resume cursor, with distinct
+source-unavailable, row, target and position limits. Backfill consumes batches
+of at most 32 covers inside a single closed request of at most 512 targets,
+16,384 native rows and 131,072 total explored positions. Its temporary proposal
+and search reservations use the existing common memory budget. No unbounded
+continuation state or new shared cache is persisted.
+
+`backfill.mixed_plan` offers qualified Binance USD-M closed, epoch-zero fixed
+requests to the existing engine. It reads canonical inputs through bounded
+256-row pages, checks finer precedence and source revisions, and produces
+native missing-run tasks plus the full exact source windows. Cost selection
+compares estimated REST pages against the original single-base route. Small
+cold requests which fan out into more requests retain that route. Counts and
+source declarations never prove actual final coverage. Native component
+`ledger_range` bounds prevent the parent custom interval from authorizing a
+whole fine archive download for a tiny edge. This is a bounded REST heuristic,
+not a global archive/network-cost optimizer.
+
+Fetching, physical admission, normalization, archive routing and quota deferral
+remain with existing owners. Committed native inputs survive deferral and are
+reused on retry. After those commits, reconciliation checks finer precedence
+again, including additional rows imported under the same acquisition. A stale
+coarse proposal cannot conceal that finer history. K130 reduces the canonical
+source windows; D126/materialization registry remain the only target writer.
+Unknown enhancements or missing input leave the target incomplete, with no
+false write-error count. Confirmed wholly empty upstream evidence is retained
+without inventing a target. Target coverage never grants minute coverage.
+
+For a large ordinary closed query whose absent mixed input would otherwise hit
+the legacy base-window limit before detecting a gap, the query returns the
+actual target demand to the existing DataManager/BackfillCoordinator scheduler.
+Only known semantic coverage failures permit that demand; budget, I/O and stale
+binding failures do not become market gaps. `auto_backfill=False` detects
+without submitting. `BackfillConfig.mixed_custom_history=False` (environment
+`BACKFILL_MIXED_CUSTOM_HISTORY=false`) restores original planning; an in-flight
+switch rejects old mixed materialization and preserves canonical data.
+
+The default integration does not yet combine a closed mixed prefix with a live
+forming tail or broaden replay/calendar admission. Full archive-aware cost
+selection, first-screen/warmup scheduling and real cold-load/multi-chart/native
+performance remain #127 work. The measured
 SQL-probe overhead is explicitly retained in the QA report; fewer source candles
 is not a claim of lower wall-clock latency.

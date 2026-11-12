@@ -365,9 +365,15 @@ class BackfillEngine:
 
             # ── Phase 2: Plan ──
             status = BackfillStatus.PLANNING
-            plan = self.planner.plan(gaps)
+            from .mixed_plan import build_mixed_backfill_plan
+            mixed_diagnostics = {}
+            plan = await build_mixed_backfill_plan(self, gaps, metadata, mixed_diagnostics)
+            if plan is None:
+                plan = self.planner.plan(gaps)
+            plan.metadata.update(mixed_diagnostics)
+            metadata.update(mixed_diagnostics)
 
-            if not plan.tasks:
+            if not plan.tasks and not plan.derived_source_windows:
                 logger.info("Planner produced no tasks for %s", symbol)
                 status = BackfillStatus.COMPLETED
                 report = self.publisher.build_report(
@@ -384,7 +390,7 @@ class BackfillEngine:
                 return report
 
             reserve_work(getattr(self, "memory_budget", None), "history-backfill",
-                         max(1, plan.estimated_bars) * 2048)
+                         max(1, plan.estimated_bars, plan.metadata.get("mixed_source_rows", 0)) * 2048)
             # ── Phase 3: Fetch ──
             # Set market_type on all tasks so the fetcher routes correctly
             for task in plan.tasks:
@@ -511,6 +517,10 @@ class BackfillEngine:
                 "Backfill run failed for %s: %s", symbol, exc, exc_info=True,
             )
 
+        # Runtime fences must not keep engine/storage owners alive through
+        # retained reports after this run has completed.
+        if plan is not None:
+            plan.mixed_binding = None
         # ── Phase 5: Publish ──
         report = self.publisher.build_report(
             symbol=symbol,
@@ -540,6 +550,10 @@ class BackfillEngine:
         self, plan: BackfillPlan, metadata: dict[str, Any], *, bybit_gap: bool,
     ) -> None:
         """Keep complete target inputs for reconciliation, fetching only unqualified source slots."""
+        if plan.metadata.get("mixed_history"):
+            # The qualified planner already retained the exact canonical cover
+            # and selected only missing native runs for the existing fetcher.
+            return
         if (self._storage is None or (not bybit_gap and repair_requires_trusted_finality(metadata)
                                      and not _is_read_repair(metadata))
                 or metadata.get("history_calendar_id") != "crypto.24x7.utc"

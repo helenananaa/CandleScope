@@ -317,3 +317,19 @@ def test_kline_api_threads_nonlegacy_identity_without_starting_crypto_stream() -
     assert payload["venue"] == "xnys"
     assert payload["price_adjustment"] == "split_adjusted"
     assert [identity.provider_id for identity in seen] == ["polygon"]
+
+
+def test_shared_series_key_retains_one_public_identity_type():
+    from copy import deepcopy
+    from dataclasses import replace, FrozenInstanceError
+    import pickle
+    import pytest
+    from app.data_engine.series_key import SeriesKey
+    from app.data_engine.data_manager.models import SeriesKey as ExportedSeriesKey
+    assert ExportedSeriesKey is SeriesKey
+    key = SeriesKey('btcUSdt', '89m', market_type='futures', series_variant='mark')
+    assert pickle.loads(pickle.dumps(key)) == deepcopy(key) == key
+    assert hash(key) == hash(ExportedSeriesKey('BTCUSDT', '89m', market_type='futures', series_variant='mark'))
+    assert replace(key, interval='97m').identity == key.identity
+    with pytest.raises(FrozenInstanceError):
+        key.symbol = 'OTHER'
