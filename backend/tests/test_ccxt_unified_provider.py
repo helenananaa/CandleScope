@@ -1796,16 +1796,20 @@ def test_bybit_mid_bucket_repair_joins_the_live_close(tmp_path, monkeypatch, rep
     asyncio.run(run())
 
 
+@pytest.mark.parametrize("venue,product,symbol", [
+    ("bybit", "swap.linear", "BTC/USDT:USDT"),
+    ("binance", "spot", "BTCUSDT"), ("binance", "futures", "BTCUSDT"),
+    ("okx", "spot", "BTC-USDT"), ("okx", "futures", "BTC-USDT-SWAP"),
+])
 @pytest.mark.parametrize("requester", ["warm_start_custom_tail", "warm_start_custom_seed", "explicit_refresh"])
-def test_bybit_linear_warmup_reuses_committed_components(tmp_path, monkeypatch, requester):
+def test_native_warmup_reuses_committed_components(tmp_path, monkeypatch, requester, venue, product, symbol):
     from app.data_engine.backfill import BackfillConfig, BackfillEngine, BackfillStatus
     from app.data_engine.storage import klines_repo
     from app.exchanges.ccxt_ext.unified import make_unified_payload
 
-    monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", tmp_path / "bybit-warmup.db")
+    monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", tmp_path / "native-warmup.db")
     klines_repo.init_klines_storage()
-    market = {"exchange": "bybit", "market_type": "swap.linear"}
-    symbol = "BTC/USDT:USDT"
+    market = {"exchange": venue, "market_type": product}
     step = 300_000
     start = 1_700_000_400_000
     storage = klines_repo.AsyncKlinesRepoAdapter()
@@ -1842,7 +1846,8 @@ def test_bybit_linear_warmup_reuses_committed_components(tmp_path, monkeypatch, 
 
     async def exercise():
         try:
-            await storage.upsert_bars(symbol, "5m", [bar(0), bar(2)], source="bybit_ws_confirmed", **market)
+            await storage.upsert_bars(symbol, "5m", [bar(0), bar(2)],
+                                      source="bybit_ws_confirmed" if venue == "bybit" else "backfill", **market)
             await storage.upsert_bars(symbol, "5m", [bar(3, 999)], source="manual", **market)
             derived = requester == "warm_start_custom_tail"
             interval = "10m" if derived else "5m"

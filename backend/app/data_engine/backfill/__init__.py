@@ -609,9 +609,26 @@ class BackfillEngine:
                 or metadata.get("history_calendar_id") != "crypto.24x7.utc"):
             return gaps
         gap = gaps[0]
-        if (gap.interval != "5m" if bybit_gap
-                else (gap.exchange, gap.market_type, gap.interval) != _BYBIT_WARMUP_SOURCE):
-            return gaps
+        if bybit_gap:
+            if gap.interval != "5m":
+                return gaps
+        elif (gap.exchange, gap.market_type, gap.interval) != _BYBIT_WARMUP_SOURCE:
+            # Multiple custom targets can queue the same already-closed native
+            # seed before the first repair commits. Recheck the canonical owner
+            # at dispatch, as on the qualified Bybit route; do not widen source
+            # admission or reuse provisional/manual/unknown rows.
+            if gap.exchange not in {"binance", "okx"} or gap.market_type not in {"spot", "futures"}:
+                return gaps
+            from app.data_engine.interval_resolution import IntervalResolver, IntervalPurpose, IntervalResolutionError
+            try:
+                route = IntervalResolver().resolve(exchange=gap.exchange, market_type=gap.market_type,
+                    interval=gap.interval, purpose=IntervalPurpose.HISTORY)
+            except IntervalResolutionError:
+                return gaps
+            if (not route.is_native or route.canonical_interval != gap.interval
+                    or route.spec.alignment is not IntervalAlignment.FIXED_EPOCH
+                    or route.spec.phase_ms or not 60_000 <= route.spec.nominal_ms <= 86_400_000):
+                return gaps
         identity = identity_from_metadata(gap.exchange, metadata)
         if identity is not None and not identity.is_legacy_default_for(gap.exchange):
             return gaps
