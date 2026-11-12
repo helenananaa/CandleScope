@@ -193,6 +193,7 @@ class QueryEngine:
             calendar_provider=self._calendar_for,
             memory_budget_provider=lambda: getattr(self, "memory_budget", None),
             block_manager_provider=lambda: getattr(self, "shared_blocks", None),
+            mixed_query=self._query_closed_mixed,
         )
 
         from .history_blocks import HistoryBlockReader
@@ -270,6 +271,10 @@ class QueryEngine:
         """Lease-scoped H127 canonical history page; publish only after context exit."""
         return self.history_blocks.read(source, start_ms, end_ms, **options)
 
+    def _query_closed_mixed(self, key, **options):
+        from .mixed_query import query_closed_mixed
+        return query_closed_mixed(self, key, **options)
+
     def read_mixed_history_blocks(self, target: SeriesKey, start_ms: int, end_ms: int, sources, **options):
         """One qualified mixed target; consume only after the context fence."""
         from .mixed_history import MixedHistoryReader
@@ -286,6 +291,12 @@ class QueryEngine:
                 market_type=source.market_type, series_identity=source.identity))
         except Exception as exc:
             raise BlockUnavailable("canonical history page read failed") from exc
+
+    def _count_canonical_history_rows(self, storage, source, start_ms, end_ms):
+        # One scalar SQL result; this chooses an executor, never proves finality.
+        return self._measure_storage_read(_QueryIOMetrics(), lambda: [storage.count_bars(
+            symbol=source.symbol, interval=source.interval, start_ms=start_ms, end_ms=end_ms - 1,
+            exchange=source.exchange, market_type=source.market_type, series_identity=source.identity)])[0]
 
     # ── Public: Main Query ───────────────────────────────────
 

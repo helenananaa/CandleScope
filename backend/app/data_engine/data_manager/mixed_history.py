@@ -64,7 +64,7 @@ class MixedHistoryReader:
     @contextmanager
     def read(self, target, start_ms, end_ms, sources, *, max_positions=32_768,
              page_rows=256, required_fields=frozenset({"open", "high", "low", "close", "volume"}),
-             cancel=None):
+             cancel=None, admit_span=None, on_page=None):
         """Prepare one closed target; publish only after successful context exit.
 
         Runs on the caller's storage worker, using the synchronous H127 reader;
@@ -118,8 +118,8 @@ class MixedHistoryReader:
                     span = pending.popleft()
                     cursor = None
                     span_summary = None
-                    unavailable = False
-                    while True:
+                    unavailable = admit_span is not None and not admit_span(span)
+                    while not unavailable:
                         history._cancelled(cancel)
                         with history.read(span.source.series, span.start_ms, span.end_ms,
                                           max_rows=page_rows, cursor=cursor,
@@ -135,6 +135,8 @@ class MixedHistoryReader:
                                 if retained_size((span_summary,))[0] > _SUMMARY_BYTES:
                                     raise MemoryBudgetExceeded("mixed history summary exceeds its work allowance")
                         receipt = page.receipt
+                        if on_page is not None:
+                            on_page(receipt)
                         pages += 1
                         storage_rows += receipt.storage_rows
                         cache_hits += receipt.cache_hits

@@ -429,6 +429,7 @@ class CustomIntervalQueryService:
         bar_aggregator: Any | None = None,
         memory_budget_provider: Callable[[], Any] | None = None,
         block_manager_provider: Callable[[], Any] | None = None,
+        mixed_query: Callable[..., QueryResult | None] | None = None,
     ) -> None:
         self._cache = cache
         self._cfg = config
@@ -441,6 +442,7 @@ class CustomIntervalQueryService:
         self._bar_aggregator = bar_aggregator
         self._memory_budget_provider = memory_budget_provider
         self._block_manager_provider = block_manager_provider
+        self._mixed_query = mixed_query
         self._flight_lock = threading.Lock()
         self._flights: dict[tuple[Any, ...], Future[QueryResult]] = {}
         self._base_window_flight_lock = threading.Lock()
@@ -468,6 +470,31 @@ class CustomIntervalQueryService:
     def set_bar_aggregator(self, bar_aggregator: Any | None) -> None:
         """Retain runtime wiring compatibility; reads use the pure bulk reducer."""
         self._bar_aggregator = bar_aggregator
+
+    def _try_mixed(self, key, *, limit, started_at, materialized_result,
+                   materialized_probe_ms, report, **bounds):
+        if self._mixed_query is None:
+            return None
+        result = self._mixed_query(key, limit=limit, report=report, **bounds)
+        if result is None:
+            return None
+        written, role = self._persist_rebuilt_target(result.bars, result,
+            symbol=key.symbol, interval=key.interval, exchange=key.exchange, market_type=key.market_type)
+        self._cache.bulk_load(key, result.bars)
+        result.metadata.update(self._combined_io_metadata(materialized_result, result))
+        result.metadata.update(elapsed_ms=round((time.monotonic() - started_at) * 1000, 2),
+            materialized_probe_ms=round(materialized_probe_ms, 2),
+            target_materialized=False, target_materialized_written=written,
+            target_materialization_role=role)
+        return result
+
+    @staticmethod
+    def _record_mixed_fallback(result, report):
+        result.metadata.update(report)
+        for name, value in (("storage_reads", report.get("mixed_page_reads", 0) + report.get("mixed_probe_reads", 0) + report.get("mixed_count_reads", 0)),
+                            ("storage_rows", report.get("mixed_page_rows", 0) + report.get("mixed_probe_rows", 0) + report.get("mixed_count_rows", 0)),
+                            ("storage_failures", report.get("mixed_count_failures", 0))):
+            result.metadata[name] = result.metadata.get(name, 0) + value
 
     def snapshot(self) -> dict[str, int | float]:
         """Return cumulative custom-query work, including joined singleflights."""
@@ -1728,6 +1755,13 @@ class CustomIntervalQueryService:
                 materialized_probe_ms=materialized_probe_ms,
             )
 
+        mixed_report = {}
+        mixed = self._try_mixed(key, limit=effective_limit, started_at=started_at,
+            materialized_result=materialized_result, materialized_probe_ms=materialized_probe_ms,
+            report=mixed_report, start_ms=start_ms, end_ms=end_ms)
+        if mixed is not None:
+            return mixed
+
         month_count = parse_monthly_count(interval)
         aligned_start_ms = None
         if start_ms is not None:
@@ -1901,6 +1935,7 @@ class CustomIntervalQueryService:
             base_result, derived_bars, boundary_components = streamed
         if fallback_reason:
             self._record_stream_fallback(base_result, fallback_reason)
+        self._record_mixed_fallback(base_result, mixed_report)
         self._annotate_single_base_page(base_result)
         streamed_aggregation_ms = float(base_result.metadata.get("base_stream_aggregation_ms") or 0)
         base_query_ms = (time.monotonic() - base_started_at) * 1000 - streamed_aggregation_ms
@@ -2122,6 +2157,13 @@ class CustomIntervalQueryService:
                 materialized_probe_ms=materialized_probe_ms,
             )
 
+        mixed_report = {}
+        mixed = self._try_mixed(key, limit=effective_limit, started_at=started_at,
+            materialized_result=materialized_result, materialized_probe_ms=materialized_probe_ms,
+            report=mixed_report, before_ms=before_ms)
+        if mixed is not None:
+            return mixed
+
         month_count = parse_monthly_count(interval)
         if calendar is not None:
             last_bucket_start_ms = containing_expected_open_ms(
@@ -2222,6 +2264,7 @@ class CustomIntervalQueryService:
             base_result, derived_bars, boundary_components = streamed
         if fallback_reason:
             self._record_stream_fallback(base_result, fallback_reason)
+        self._record_mixed_fallback(base_result, mixed_report)
         self._annotate_single_base_page(base_result)
         streamed_aggregation_ms = float(base_result.metadata.get("base_stream_aggregation_ms") or 0)
         base_query_ms = (time.monotonic() - base_started_at) * 1000 - streamed_aggregation_ms

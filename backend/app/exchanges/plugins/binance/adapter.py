@@ -21,6 +21,7 @@ from app.exchanges.models import (
     ExchangeMarket,
     HistoryAvailabilityPolicy,
     HistoryCadence,
+    HistoryCompositionPolicy,
     HistoryEmptyPageSemantics,
     MarketChannelCapability,
     SymbolInfo,
@@ -211,6 +212,14 @@ def _channel_capabilities() -> list[MarketChannelCapability]:
             limits={"rest.max_limit": 1000},
             known_limitations=("The USD-M kline endpoint does not support 1s bars",),
             history_policy=_history_policy(HistoryCadence.REGULAR),
+            history_composition=HistoryCompositionPolicy(
+                contract_id="binance.usdm.trade-klines/base-utc/1",
+                native_intervals=("1m", "5m", "15m", "1h"),
+                fields=("open", "high", "low", "close", "volume", "quote_volume",
+                        "trades", "taker_buy_base", "taker_buy_quote"),
+                evidence=("docs/qa/aggregation-core-closeout-20261112/evidence/inputs.json",
+                          "docs/qa/aggregation-core-closeout-20261112/evidence/source-mixed.json.gz"),
+            ),
         ),
         MarketChannelCapability(
             channel=MarketChannel.AGG_TRADE,
