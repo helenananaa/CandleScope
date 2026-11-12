@@ -65,6 +65,13 @@
     background: var(--surface-1);
   }
 
+  .gallery-popover {
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    width: 240px;
+  }
+
   .gallery-panel {
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);

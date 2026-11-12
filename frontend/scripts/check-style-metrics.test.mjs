@@ -8,8 +8,9 @@ test("TSX class extraction reads plain and conditional className values", () => 
     <div className="panel panel-wide" />
     <button className={active ? "tab is-active" : "tab"} />
     <span className={\`badge \${tone}\`} />
+    <a className={buttonClassName({ variant: "primary", className: "x" })} />
   `);
-  assert.deepEqual([...names].sort(), ["badge", "is-active", "panel", "panel-wide", "tab"]);
+  assert.deepEqual([...names].sort(), ["badge", "is-active", "panel", "panel-wide", "tab", "ui-btn"]);
 });
 
 test("CSS extraction ignores comments and finds every selector class", () => {

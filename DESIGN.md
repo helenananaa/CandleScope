@@ -86,8 +86,14 @@ Build surfaces from the primitives in `frontend/src/components/ui` (import from 
 | Secondary detail, diagnostics | `Disclosure` (closed by default) |
 | A message inside a panel | `InlineAlert`; `EmptyState` when the panel has nothing to show |
 | Choosing a file | `FileDrop` |
+| A task that needs full attention | `Dialog` (modal) |
+| Asking before an action that cannot be undone | `confirmAction({ title, confirmLabel, tone: "danger" })`, or `ConfirmDialog` when rendering one yourself. Never `window.confirm`. |
+| The result of an action (saved, failed) | `notify({ tone, title, message })`. Never `window.alert`. |
+| A side panel next to the chart | `Drawer` (one per side; opening another replaces it) |
+| Options anchored to a control | `Popover`; `Menu` for a list of actions |
+| A short description of an icon control | `Tooltip` (hover and keyboard focus) |
 
-Dialogs, drawers, menus, popovers, tooltips and toasts arrive with the overlay manager (design refactor Phase 2c).
+Overlays share one stack (`components/ui/overlay`): drawers, then modals, then popovers and menus, with toasts above modals. Escape closes the topmost layer only, focus returns to the control that opened it, and a modal makes everything beneath it inert.
 
 ## Stylesheets and cascade layers
 

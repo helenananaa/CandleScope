@@ -1,4 +1,5 @@
 import { t } from "../../i18n/index.js";
+import { confirmAction } from "../../components/ui/overlay/overlayApi.js";
 import type {
   LocalDatasetManifest,
   LocalDatasetRevision,
@@ -29,10 +30,10 @@ export function ResearchDatasetRevisions({
             <span><b>{revision.data_epoch.slice(7, 17)}</b><small>{t("local.revisionRows", { date: formatResearchDate(revision.imported_at), rows: formatResearchRows(revision.rows), status: revision.quality_status })}</small></span>
             {revision.current ? <em>{t("local.current")}</em> : <span className="local-revision-actions">
               <button type="button" disabled={busy !== null} onClick={() => onCompare(revision.data_epoch)}>{t("local.compare")}</button>
-              <button type="button" disabled={busy !== null} onClick={() => {
-                if (!window.confirm(t("local.switchConfirm"))) return;
+              <button type="button" disabled={busy !== null} onClick={() => void (async () => {
+                if (!(await confirmAction({ title: t("local.switchConfirm"), confirmLabel: t("local.switchRevision") }))) return;
                 onActivate(revision.data_epoch);
-              }}>{t("local.switchRevision")}</button>
+              })()}>{t("local.switchRevision")}</button>
             </span>}
           </div>
         ))}
