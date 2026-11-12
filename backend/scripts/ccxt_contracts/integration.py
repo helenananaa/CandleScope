@@ -21,7 +21,7 @@ def main() -> int:
     patterns = (
         "test_ccxt_*.py", "test_history_archive_*.py", "test_backfill_coordinator.py",
         "test_backfill_rate_limit.py", "test_binance_backfill_fetcher.py",
-        "test_warm_start_bridge.py", "test_backfill_interest_priority.py",
+        "test_data_manager_warm_start_bridge.py", "test_backfill_interest_priority.py",
         "test_bar_basis_migration.py", "test_calendar_basis.py",
         "test_catalog_worker.py", "test_exchange_registry_plugins.py", "test_fixed_anchor.py",
         "test_ingestion_health_observer.py", "test_ingestion_session_types.py",
