@@ -146,13 +146,19 @@ class MemoryBudget:
             reserved = dict(self._reserved)
         result = {}
         seen = set()
+        # Owners may construct temporary diagnostic containers. Keep their
+        # views alive across owners: otherwise Python can reuse an already
+        # counted container's id and hide a later owner's unrelated graph.
+        root_views = []
         for name, (limit, usage, roots) in owners.items():
             item = dict(usage())
             used = max(0, int(item.get("estimated_bytes", 0)))
             item.update(limit_bytes=limit, reserved_bytes=reserved[name],
                         over_budget_bytes=max(0, used + reserved[name] - limit))
             if measure_heap and roots is not None:
-                item["unique_retained_bytes"], item["unique_objects"] = retained_size(roots(), seen)
+                view = roots()
+                root_views.append(view)
+                item["unique_retained_bytes"], item["unique_objects"] = retained_size(view, seen)
             result[name] = item
         estimated = sum(item.get("estimated_bytes", 0) for item in result.values())
         total_reserved = sum(reserved.values())

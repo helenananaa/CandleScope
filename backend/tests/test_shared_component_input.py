@@ -497,3 +497,30 @@ def test_mutable_numeric_subclass_is_captured_as_an_owned_scalar_value():
     record=ReadonlyFields({'value':value})
     value.current=9
     assert type(record['value']) is float and record['value'] == 1
+
+
+def test_heap_diagnostics_keep_temporary_owner_root_views_alive_until_all_owners_finish():
+    import gc
+    import weakref
+    class Roots(list):
+        pass
+    first_refs=[]
+    shared={'same-value':object()}
+    first_values=[{'first':list(range(20))},shared]
+    second_values=[{'second':list(range(30))},shared]
+    def first_roots():
+        roots=Roots(first_values)
+        first_refs.append(weakref.ref(roots))
+        return roots
+    def second_roots():
+        gc.collect()
+        assert first_refs[-1]() is not None
+        return Roots(second_values)
+    budget=MemoryBudget()
+    budget.register('first',limit_bytes=100000,usage=lambda:{},roots=first_roots)
+    budget.register('second',limit_bytes=100000,usage=lambda:{},roots=second_roots)
+    measured=budget.snapshot(measure_heap=True)
+    # Only root contents are traversed. The same shared graph is counted once.
+    expected=retained_size(first_values+second_values)[0]
+    assert sum(owner['unique_retained_bytes'] for owner in measured['owners'].values()) == expected
+    assert first_refs[-1]() is None
