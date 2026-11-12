@@ -935,31 +935,52 @@ class BarAggregator:
     # ── Public: Snapshot ─────────────────────────────────────
 
     def memory_usage(self):
-        active = closed = components = history_prefixes = 0
-        component_index_bytes = 0
+        active = closed = 0
+        resident = []
+        buffered = []
         for pipeline in list(self._pipelines.values()):
             engine = pipeline.bar_state
             active += len(engine._active)
             closed += len(engine._closed)
-            components += sum(len(state.source_snapshots) for state in
-                              [*engine._active.values(), *engine._closed.values()])
-            history_prefixes += sum(state._history_prefix is not None for state in
-                                    (*engine._active.values(), *engine._closed.values()))
-            component_index_bytes += sum(state._component_accumulator.snapshot()["estimated_bytes"]
-                for state in (*engine._active.values(), *engine._closed.values())
-                if state._component_accumulator is not None)
+            resident.extend([*engine._active.values(), *engine._closed.values()])
+            buffered.extend([*engine.evicted_closed, *engine.evicted_expired])
         events = [event for queue, _ in list(self._publisher._subscribers)
                   for event in list(queue._queue) if isinstance(event, BarEvent)]
+        publications, inputs, publisher_counts = self._publisher._retained_payloads()
+        retained_events = {id(event): event for event in [*events, *publications]}
+        payload_states = {id(state): state for state in [
+            *buffered, *inputs,
+            *(state for event in retained_events.values()
+              for state in (event.bar, event.previous_bar) if state is not None),
+        ]}
+        # Deduplicate state containers which are both resident and in a handoff.
+        # Immutable component values may still be conservatively counted once
+        # per state index; optional retained-heap traversal deduplicates values.
+        retained = {id(state): state for state in [*resident, *payload_states.values()]}
+        index_bytes = {key: state._component_accumulator.snapshot()["estimated_bytes"]
+                       if state._component_accumulator is not None else 0
+                       for key, state in retained.items()}
+        component_index_bytes = sum(index_bytes[id(state)] for state in resident)
+        components = sum(len(state.source_snapshots) for state in resident)
+        history_prefixes = sum(state._history_prefix is not None for state in resident)
         queued_components = sum(len(state.source_snapshots) for event in events
                                 for state in (event.bar, event.previous_bar) if state is not None)
-        queued_prefixes = sum(state._history_prefix is not None for event in events
-                              for state in (event.bar, event.previous_bar) if state is not None)
+        retained_components = sum(len(state.source_snapshots) for state in retained.values())
+        retained_prefixes = sum(state._history_prefix is not None for state in retained.values())
         handoff = self.history_prefix_runtime
         handoff_bytes = len(handoff.targets) * 1024 + len(handoff.tasks) * 8192 if handoff else 0
         return {"active_bars": active, "closed_bars": closed, "components": components,
                 "queued_snapshots": len(events), "queued_components": queued_components,
+                "buffered_handoff_states": len(buffered),
+                "retained_payload_states": len(payload_states),
+                "retained_states": len(retained),
+                "retained_components": retained_components,
+                "retained_events": len(retained_events),
+                **publisher_counts,
                 "component_index_bytes": component_index_bytes,
+                "retained_component_index_bytes": sum(index_bytes.values()),
                 "history_prefixes": history_prefixes,
+                "retained_history_prefixes": retained_prefixes,
                 "history_handoff_bytes": handoff_bytes,
                 "source_preparation_scopes": len(self._active_preparations),
                 "source_preparation_capacity_slots": self._preparation_capacity.capacity,
@@ -967,15 +988,22 @@ class BarAggregator:
                 "source_preparation_in_use": self._preparation_capacity.in_use,
                 "source_preparation_capacity_bytes": self._preparation_capacity.capacity * PREPARATION_BYTES,
                 **self._source_preparation_metrics,
-                "estimated_bytes": (active + closed + len(events)) * 1024 + (components + queued_components) * 1024 + component_index_bytes + (history_prefixes + queued_prefixes) * 32 * 1024 + handoff_bytes + len(self._active_preparations) * SCOPE_BYTES + self._preparation_capacity.capacity * PREPARATION_BYTES,
-                "protection": "active and correction state owned by realtime executor"}
+                "estimated_bytes": (len(retained) * 1024 + retained_components * 1024
+                    + sum(index_bytes.values()) + retained_prefixes * 32 * 1024
+                    + len(retained_events) * 256 + publisher_counts["publisher_metadata_bytes"]
+                    + handoff_bytes + len(self._active_preparations) * SCOPE_BYTES
+                    + self._preparation_capacity.capacity * PREPARATION_BYTES),
+                "estimate_basis": "unique retained state containers; component references may overcount shared immutable values",
+                "protection": "active/correction state and pending publications stay with realtime owner"}
 
     def _memory_roots(self):
         # Diagnostic traversal is synchronous on the aggregation event loop;
         # callers must not retain or mutate the owner-private roots.
         return [*[list(engine._active.values()) + list(engine._closed.values())
+                  + list(engine.evicted_closed) + list(engine.evicted_expired)
                   for pipeline in list(self._pipelines.values()) for engine in [pipeline.bar_state]],
                 *[list(queue._queue) for queue, _ in list(self._publisher._subscribers)],
+                self._publisher._memory_roots(),
                 list(self.history_prefix_runtime.targets.values()) if self.history_prefix_runtime else [],
                 [preparation.memory_roots() for preparation in list(self._active_preparations)]]
 
