@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 import math
 
-from app.data_engine.data_manager.models import SeriesKey
+from app.data_engine.series_key import SeriesKey
 from app.data_engine.interval_policy import IntervalAlignment, parse_interval_spec
 
 

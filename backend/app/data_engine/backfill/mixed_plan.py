@@ -11,7 +11,7 @@ import time
 
 from app.core.executors import run_preparation, run_storage
 from app.data_engine.aggregation.adapters import chart_field_summary
-from app.data_engine.data_manager.models import SeriesKey
+from app.data_engine.series_key import SeriesKey
 from app.data_engine.history.cover_plan import (
     CoverUnavailable, FixedHistorySource, HistoryReadSpan,
     plan_fixed_batch, plan_fixed_range,

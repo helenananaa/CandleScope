@@ -37,7 +37,7 @@ from app.data_engine.kline_quality import source_is_trusted_final, source_rank
 from app.data_engine.storage.revisions import StaleAcquisition, fenced_acquisition, prepare_derived_inputs
 from app.data_engine.storage.derived_history_fence import computation_scope
 from app.data_engine.series_identity import KlineSeriesIdentity, resolve_kline_series_identity
-from app.data_engine.data_manager.models import SeriesKey
+from app.data_engine.series_key import SeriesKey
 from app.data_engine.custom_materialization import (
     MaterializationLease,
     custom_materialization_registry,
