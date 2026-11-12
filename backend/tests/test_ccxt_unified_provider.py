@@ -1796,16 +1796,20 @@ def test_bybit_mid_bucket_repair_joins_the_live_close(tmp_path, monkeypatch, rep
     asyncio.run(run())
 
 
-@pytest.mark.parametrize("requester", ["warm_start_custom_tail", "warm_start_custom_seed", "explicit_refresh"])
-def test_bybit_linear_warmup_reuses_committed_components(tmp_path, monkeypatch, requester):
+@pytest.mark.parametrize("venue,product,symbol", [
+    ("bybit", "swap.linear", "BTC/USDT:USDT"),
+    ("binance", "spot", "BTCUSDT"), ("binance", "futures", "BTCUSDT"),
+    ("okx", "spot", "BTC-USDT"), ("okx", "futures", "BTC-USDT-SWAP"),
+])
+@pytest.mark.parametrize("requester", ["warm_start_custom_tail", "warm_start_custom_seed", "klines_history", "klines_history_before", "klines_range", "mixed_reads", "mixed_refresh", "explicit_refresh"])
+def test_native_warmup_reuses_committed_components(tmp_path, monkeypatch, requester, venue, product, symbol):
     from app.data_engine.backfill import BackfillConfig, BackfillEngine, BackfillStatus
     from app.data_engine.storage import klines_repo
     from app.exchanges.ccxt_ext.unified import make_unified_payload
 
-    monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", tmp_path / "bybit-warmup.db")
+    monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", tmp_path / "native-warmup.db")
     klines_repo.init_klines_storage()
-    market = {"exchange": "bybit", "market_type": "swap.linear"}
-    symbol = "BTC/USDT:USDT"
+    market = {"exchange": venue, "market_type": product}
     step = 300_000
     start = 1_700_000_400_000
     storage = klines_repo.AsyncKlinesRepoAdapter()
@@ -1842,23 +1846,28 @@ def test_bybit_linear_warmup_reuses_committed_components(tmp_path, monkeypatch, 
 
     async def exercise():
         try:
-            await storage.upsert_bars(symbol, "5m", [bar(0), bar(2)], source="bybit_ws_confirmed", **market)
+            await storage.upsert_bars(symbol, "5m", [bar(0), bar(2)],
+                                      source="bybit_ws_confirmed" if venue == "bybit" else "backfill", **market)
             await storage.upsert_bars(symbol, "5m", [bar(3, 999)], source="manual", **market)
-            derived = requester == "warm_start_custom_tail"
+            derived = requester in {"warm_start_custom_tail", "klines_history", "klines_history_before", "klines_range", "mixed_reads", "mixed_refresh"}
             interval = "10m" if derived else "5m"
             end = start + (2 if derived else 3) * step
             metadata = {"requester": requester, "history_calendar_id": "crypto.24x7.utc",
-                        "requires_trusted_finality": not derived}
+                        "requires_trusted_finality": requester != "warm_start_custom_tail"}
+            if requester.startswith("mixed_"):
+                metadata.update(requester="mixed", requester_kinds=["klines_history",
+                    "klines_range" if requester == "mixed_reads" else "explicit_refresh"])
             report = await engine.run(symbol, [interval], start, end, **market, metadata=metadata)
             assert report.status is BackfillStatus.COMPLETED
             expected_requests = [(start + step, start + step), (start + 3 * step, start + 3 * step)]
-            if requester == "explicit_refresh":
-                expected_requests = [(start, end)]
+            if requester in {"explicit_refresh", "mixed_refresh"}:
+                expected_requests = [(start, start + 3 * step)]
             assert [(request.start_ms, request.end_ms) for request in transport.requests] == expected_requests
             targets = await storage.query_time_range(symbol, interval, start, end, **market)
             if derived:
                 assert [(row["open_time"], row["volume"], row["source"]) for row in targets] == [
-                    (start, 5, "backfill_aggregated"), (start + 2 * step, 5, "backfill_aggregated"),
+                    (start, 6 if requester == "mixed_refresh" else 5, "backfill_aggregated"),
+                    (start + 2 * step, 6 if requester == "mixed_refresh" else 5, "backfill_aggregated"),
                 ]
             else:
                 expected_volume = [3, 3, 3, 3] if requester == "explicit_refresh" else [2, 3, 2, 3]

@@ -1,0 +1,26 @@
+[
+  {
+    "interval": "1m",
+    "url": "https://data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/1m/BTCUSDT-1m-2026-10.zip",
+    "sha256": "da3ed73cd4316854f48567321752ddc53f976cc37c9ef1fa57c1230eb0e17fec",
+    "bytes": 1842526
+  },
+  {
+    "interval": "5m",
+    "url": "https://data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/5m/BTCUSDT-5m-2026-10.zip",
+    "sha256": "31dcc9c67516101f495ef9e290d271dd87b592d323dcb9aba50a5535c50d1d8d",
+    "bytes": 400552
+  },
+  {
+    "interval": "15m",
+    "url": "https://data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/15m/BTCUSDT-15m-2026-10.zip",
+    "sha256": "4c146566bbff66b73f4058120be7d2188d7cef4d2fd7c0deab8308233de80b85",
+    "bytes": 142135
+  },
+  {
+    "interval": "1h",
+    "url": "https://data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2026-10.zip",
+    "sha256": "da0ec480b8857600067635308423022972e994d9dffe8b0251f0b7813018e2c8",
+    "bytes": 37961
+  }
+]

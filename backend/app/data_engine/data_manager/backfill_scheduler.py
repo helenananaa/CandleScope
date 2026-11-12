@@ -511,6 +511,12 @@ class BackfillScheduler:
             request.metadata.pop(key, None)
         request.metadata.update(winner.metadata)
         request.metadata["_api_latest_interest"] = any(item.api_latest for item in interests)
+        # Keep bounded purpose provenance after coalescing. Consumers must not
+        # infer that an unknown/mixed repair is an ordinary read or refresh.
+        request.metadata["requester_kinds"] = (
+            sorted(requesters) if len(requesters) <= 32 and all(isinstance(value, str) and len(value) <= 128 for value in requesters)
+            else ["unknown"]
+        )
 
     @staticmethod
     def _demand_leases_from_request(

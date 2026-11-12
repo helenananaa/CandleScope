@@ -96,6 +96,17 @@ logger = logging.getLogger("backfill.Engine")
 
 _BYBIT_WARMUP_SOURCE = ("bybit", "swap.linear", "5m")
 
+_READ_REPAIR_REQUESTERS = frozenset({"klines_history", "klines_history_before", "klines_range"})
+
+
+def _is_read_repair(metadata: dict[str, Any]) -> bool:
+    requester = metadata.get("requester")
+    if isinstance(requester, str) and requester in _READ_REPAIR_REQUESTERS:
+        return True
+    kinds = metadata.get("requester_kinds")
+    return (requester == "mixed" and isinstance(kinds, (list, tuple))
+            and 0 < len(kinds) <= 32 and all(isinstance(kind, str) and kind in _READ_REPAIR_REQUESTERS for kind in kinds))
+
 __all__ = [
     # Engine
     "BackfillEngine",
@@ -385,7 +396,8 @@ class BackfillEngine:
                 # demand (not from a single ~1000-source-row chunk).
                 task.metadata = {**metadata, **task.metadata}
             if (self._cfg.reconcile_generate_custom and len(intervals or ()) == 1
-                    and (bybit_derived_gap or metadata.get("requester") == "warm_start_custom_tail")):
+                    and (bybit_derived_gap or metadata.get("requester") == "warm_start_custom_tail"
+                         or _is_read_repair(metadata))):
                 await self._reuse_derived_components(plan, metadata, bybit_gap=bybit_derived_gap)
             status = BackfillStatus.FETCHING
             await prepare_native_history_views(self._storage, plan.tasks)
@@ -528,7 +540,8 @@ class BackfillEngine:
         self, plan: BackfillPlan, metadata: dict[str, Any], *, bybit_gap: bool,
     ) -> None:
         """Keep complete target inputs for reconciliation, fetching only unqualified source slots."""
-        if (self._storage is None or (not bybit_gap and repair_requires_trusted_finality(metadata))
+        if (self._storage is None or (not bybit_gap and repair_requires_trusted_finality(metadata)
+                                     and not _is_read_repair(metadata))
                 or metadata.get("history_calendar_id") != "crypto.24x7.utc"
                 or len(plan.custom_intervals) != 1 or self._cfg.alignment_epoch_ms != 0):
             return
@@ -609,9 +622,26 @@ class BackfillEngine:
                 or metadata.get("history_calendar_id") != "crypto.24x7.utc"):
             return gaps
         gap = gaps[0]
-        if (gap.interval != "5m" if bybit_gap
-                else (gap.exchange, gap.market_type, gap.interval) != _BYBIT_WARMUP_SOURCE):
-            return gaps
+        if bybit_gap:
+            if gap.interval != "5m":
+                return gaps
+        elif (gap.exchange, gap.market_type, gap.interval) != _BYBIT_WARMUP_SOURCE:
+            # Multiple custom targets can queue the same already-closed native
+            # seed before the first repair commits. Recheck the canonical owner
+            # at dispatch, as on the qualified Bybit route; do not widen source
+            # admission or reuse provisional/manual/unknown rows.
+            if gap.exchange not in {"binance", "okx"} or gap.market_type not in {"spot", "futures"}:
+                return gaps
+            from app.data_engine.interval_resolution import IntervalResolver, IntervalPurpose, IntervalResolutionError
+            try:
+                route = IntervalResolver().resolve(exchange=gap.exchange, market_type=gap.market_type,
+                    interval=gap.interval, purpose=IntervalPurpose.HISTORY)
+            except IntervalResolutionError:
+                return gaps
+            if (not route.is_native or route.canonical_interval != gap.interval
+                    or route.spec.alignment is not IntervalAlignment.FIXED_EPOCH
+                    or route.spec.phase_ms or not 60_000 <= route.spec.nominal_ms <= 86_400_000):
+                return gaps
         identity = identity_from_metadata(gap.exchange, metadata)
         if identity is not None and not identity.is_legacy_default_for(gap.exchange):
             return gaps
