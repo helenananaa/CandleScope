@@ -270,6 +270,11 @@ class QueryEngine:
         """Lease-scoped H127 canonical history page; publish only after context exit."""
         return self.history_blocks.read(source, start_ms, end_ms, **options)
 
+    def read_mixed_history_blocks(self, target: SeriesKey, start_ms: int, end_ms: int, sources, **options):
+        """One qualified mixed target; consume only after the context fence."""
+        from .mixed_history import MixedHistoryReader
+        return MixedHistoryReader(self).read(target, start_ms, end_ms, sources, **options)
+
     def _read_canonical_history_rows(self, storage, source, start_ms, end_ms, limit):
         # Full canonical rows retain actual close_time; the compact chart
         # projection intentionally omits it and cannot prove H127 bounds.
