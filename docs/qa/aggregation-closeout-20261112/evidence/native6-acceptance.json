@@ -1,0 +1,430 @@
+{
+  "schema": "candlescope.aggregation-closeout-native/1",
+  "sourceCommit": "17e57c043ea369edfc9cc01aeeb0c5a534dec854",
+  "scope": "macOS arm64 packaged application; isolated profile; real public OKX history/realtime; no response substitution",
+  "input": "fresh profile with only an explicit canonical SQLite backup from earlier public-data QA; not cold-load qualification",
+  "steps": [
+    {
+      "name": "packaged-launch",
+      "at": "2026-11-12T02:23:38.924Z",
+      "evidence": {
+        "identity": {
+          "packaged": true,
+          "pid": 6687,
+          "userData": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/output/aggregation-closeout-20261112/native6/profile",
+          "resources": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/frontend/desktop-dist/mac-arm64/CandleScope.app/Contents/Resources"
+        },
+        "bootstrap": {
+          "mode": "native",
+          "multiWindowAvailable": true,
+          "multiWindowEnabled": false,
+          "windowId": "main-window",
+          "workspaceId": null,
+          "shellRevision": -1,
+          "displayCount": 1,
+          "sidecar": {
+            "pid": 6711,
+            "running": true,
+            "startedAt": "2026-11-12T02:22:44.507Z",
+            "readyMs": 51030,
+            "command": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/frontend/desktop-dist/mac-arm64/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3",
+            "args": [
+              "-m",
+              "app.desktop_sidecar",
+              "--host",
+              "127.0.0.1",
+              "--port",
+              "0"
+            ],
+            "healthUrl": "http://127.0.0.1:59322/health",
+            "logPath": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/output/aggregation-closeout-20261112/native6/profile/logs/backend-sidecar.log"
+          },
+          "logsPath": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/output/aggregation-closeout-20261112/native6/profile/logs"
+        }
+      }
+    },
+    {
+      "name": "initial-derived-targets",
+      "at": "2026-11-12T02:24:35.600Z",
+      "evidence": {
+        "values": [
+          {
+            "interval": "45m",
+            "compared": 128,
+            "first": {
+              "time": 1794104100,
+              "open": 75690.1,
+              "high": 75792.8,
+              "low": 75653.5,
+              "close": 75792.5,
+              "volume": 29.05469589,
+              "is_closed": true,
+              "quote_volume": 2200034.08621346,
+              "trades": null,
+              "taker_buy_base": null,
+              "taker_buy_quote": null,
+              "order_flow": null
+            },
+            "last": {
+              "time": 1794447000,
+              "open": 73629.5,
+              "high": 73905.8,
+              "low": 73586.6,
+              "close": 73828.3,
+              "volume": 557.79588165,
+              "is_closed": true,
+              "quote_volume": 41104659.61883209,
+              "trades": null,
+              "taker_buy_base": null,
+              "taker_buy_quote": null,
+              "order_flow": null
+            }
+          },
+          {
+            "interval": "90m",
+            "compared": 128,
+            "first": {
+              "time": 1793755800,
+              "open": 76967.5,
+              "high": 77214.1,
+              "low": 76163.5,
+              "close": 76163.5,
+              "volume": 649.59609055,
+              "is_closed": true,
+              "quote_volume": 49869444.93923388,
+              "trades": null,
+              "taker_buy_base": null,
+              "taker_buy_quote": null,
+              "order_flow": null
+            },
+            "last": {
+              "time": 1794441600,
+              "open": 74018.7,
+              "high": 74229.5,
+              "low": 73602.2,
+              "close": 73629.5,
+              "volume": 374.16866508,
+              "is_closed": true,
+              "quote_volume": 27638621.50965413,
+              "trades": null,
+              "taker_buy_base": null,
+              "taker_buy_quote": null,
+              "order_flow": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "released-derived-targets",
+      "at": "2026-11-12T02:25:59.262Z",
+      "evidence": {
+        "diagnostics": "preserved in native6-acceptance.full.json.gz"
+      }
+    },
+    {
+      "name": "recreated-within-same-bucket",
+      "at": "2026-11-12T02:26:02.991Z",
+      "evidence": {
+        "values": [
+          {
+            "interval": "45m",
+            "compared": 128,
+            "first": {
+              "time": 1794104100,
+              "open": 75690.1,
+              "high": 75792.8,
+              "low": 75653.5,
+              "close": 75792.5,
+              "volume": 29.05469589,
+              "is_closed": true,
+              "quote_volume": 2200034.08621346,
+              "trades": null,
+              "taker_buy_base": null,
+              "taker_buy_quote": null,
+              "order_flow": null
+            },
+            "last": {
+              "time": 1794447000,
+              "open": 73629.5,
+              "high": 73905.8,
+              "low": 73586.6,
+              "close": 73828.3,
+              "volume": 557.79588165,
+              "is_closed": true,
+              "quote_volume": 41104659.61883209,
+              "trades": null,
+              "taker_buy_base": null,
+              "taker_buy_quote": null,
+              "order_flow": null
+            }
+          },
+          {
+            "interval": "90m",
+            "compared": 128,
+            "first": {
+              "time": 1793755800,
+              "open": 76967.5,
+              "high": 77214.1,
+              "low": 76163.5,
+              "close": 76163.5,
+              "volume": 649.59609055,
+              "is_closed": true,
+              "quote_volume": 49869444.93923388,
+              "trades": null,
+              "taker_buy_base": null,
+              "taker_buy_quote": null,
+              "order_flow": null
+            },
+            "last": {
+              "time": 1794441600,
+              "open": 74018.7,
+              "high": 74229.5,
+              "low": 73602.2,
+              "close": 73629.5,
+              "volume": 374.16866508,
+              "is_closed": true,
+              "quote_volume": 27638621.50965413,
+              "trades": null,
+              "taker_buy_base": null,
+              "taker_buy_quote": null,
+              "order_flow": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "full-process-exit",
+      "at": "2026-11-12T02:26:06.886Z",
+      "evidence": {
+        "processes": [
+          {
+            "pid": 6687,
+            "ppid": 6653,
+            "args": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/frontend/desktop-dist/mac-arm64/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0 --no-sandbox"
+          },
+          {
+            "pid": 6705,
+            "ppid": 6687,
+            "args": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/frontend/desktop-dist/mac-arm64/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/output/aggregation-closeout-20261112/native6/profile --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,2517482153679727573,11435548584567234506,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,10751213114474451577,16164535333129940091,4 --trace-process-track-uuid=3190708988185955192"
+          },
+          {
+            "pid": 6707,
+            "ppid": 6687,
+            "args": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/frontend/desktop-dist/mac-arm64/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/output/aggregation-closeout-20261112/native6/profile --shared-files --field-trial-handle=1718379636,r,2517482153679727573,11435548584567234506,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,10751213114474451577,16164535333129940091,4 --trace-process-track-uuid=3190708989122997041"
+          },
+          {
+            "pid": 6711,
+            "ppid": 6687,
+            "args": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/frontend/desktop-dist/mac-arm64/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 7353,
+            "ppid": 6711,
+            "args": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/output/aggregation-closeout-20261112/native6/profile/data/plugins/installs/candlescope.pine-compat/8817eb2648e72e24ec2140f1e84240ec030e6ad4b261ef49cd3dc50f148485f0/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 7358,
+            "ppid": 6711,
+            "args": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/output/aggregation-closeout-20261112/native6/profile/data/plugins/installs/candlescope.python-indicator/8bed1b64f3d905855d390368f40a0a5f348d9ff8f568fed1cb6c9a46b8ae6461/venv/bin/python -I -u -m candlescope_plugin_python_indicator"
+          },
+          {
+            "pid": 7449,
+            "ppid": 6711,
+            "args": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/frontend/desktop-dist/mac-arm64/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(56)"
+          },
+          {
+            "pid": 7450,
+            "ppid": 6711,
+            "args": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/frontend/desktop-dist/mac-arm64/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=63, pipe_handle=65) --multiprocessing-fork"
+          },
+          {
+            "pid": 7476,
+            "ppid": 6687,
+            "args": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/frontend/desktop-dist/mac-arm64/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/output/aggregation-closeout-20261112/native6/profile --app-path=/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/frontend/desktop-dist/mac-arm64/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1794441535461027 --launch-time-ticks=8680392582 --shared-files --field-trial-handle=1718379636,r,2517482153679727573,11435548584567234506,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,10751213114474451577,16164535333129940091,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=59322 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit"
+          },
+          {
+            "pid": 7484,
+            "ppid": 6711,
+            "args": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/frontend/desktop-dist/mac-arm64/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=63, pipe_handle=73) --multiprocessing-fork"
+          }
+        ],
+        "elapsedMs": 3530
+      }
+    },
+    {
+      "name": "packaged-launch",
+      "at": "2026-11-12T02:26:21.057Z",
+      "evidence": {
+        "identity": {
+          "packaged": true,
+          "pid": 9003,
+          "userData": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/output/aggregation-closeout-20261112/native6/profile",
+          "resources": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/frontend/desktop-dist/mac-arm64/CandleScope.app/Contents/Resources"
+        },
+        "bootstrap": {
+          "mode": "native",
+          "multiWindowAvailable": true,
+          "multiWindowEnabled": false,
+          "windowId": "main-window",
+          "workspaceId": null,
+          "shellRevision": -1,
+          "displayCount": 1,
+          "sidecar": {
+            "pid": 9008,
+            "running": true,
+            "startedAt": "2026-11-12T02:26:07.823Z",
+            "readyMs": 11672,
+            "command": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/frontend/desktop-dist/mac-arm64/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3",
+            "args": [
+              "-m",
+              "app.desktop_sidecar",
+              "--host",
+              "127.0.0.1",
+              "--port",
+              "0"
+            ],
+            "healthUrl": "http://127.0.0.1:59938/health",
+            "logPath": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/output/aggregation-closeout-20261112/native6/profile/logs/backend-sidecar.log"
+          },
+          "logsPath": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/output/aggregation-closeout-20261112/native6/profile/logs"
+        }
+      }
+    },
+    {
+      "name": "saved-exit-restart",
+      "at": "2026-11-12T02:26:23.062Z",
+      "evidence": {
+        "values": [
+          {
+            "interval": "45m",
+            "compared": 128,
+            "first": {
+              "time": 1794104100,
+              "open": 75690.1,
+              "high": 75792.8,
+              "low": 75653.5,
+              "close": 75792.5,
+              "volume": 29.05469589,
+              "is_closed": true,
+              "quote_volume": 2200034.08621346,
+              "trades": null,
+              "taker_buy_base": null,
+              "taker_buy_quote": null,
+              "order_flow": null
+            },
+            "last": {
+              "time": 1794447000,
+              "open": 73629.5,
+              "high": 73905.8,
+              "low": 73586.6,
+              "close": 73828.3,
+              "volume": 557.79588165,
+              "is_closed": true,
+              "quote_volume": 41104659.61883209,
+              "trades": null,
+              "taker_buy_base": null,
+              "taker_buy_quote": null,
+              "order_flow": null
+            }
+          },
+          {
+            "interval": "90m",
+            "compared": 128,
+            "first": {
+              "time": 1793755800,
+              "open": 76967.5,
+              "high": 77214.1,
+              "low": 76163.5,
+              "close": 76163.5,
+              "volume": 649.59609055,
+              "is_closed": true,
+              "quote_volume": 49869444.93923388,
+              "trades": null,
+              "taker_buy_base": null,
+              "taker_buy_quote": null,
+              "order_flow": null
+            },
+            "last": {
+              "time": 1794441600,
+              "open": 74018.7,
+              "high": 74229.5,
+              "low": 73602.2,
+              "close": 73629.5,
+              "volume": 374.16866508,
+              "is_closed": true,
+              "quote_volume": 27638621.50965413,
+              "trades": null,
+              "taker_buy_base": null,
+              "taker_buy_quote": null,
+              "order_flow": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "full-process-exit",
+      "at": "2026-11-12T02:26:29.170Z",
+      "evidence": {
+        "processes": [
+          {
+            "pid": 9003,
+            "ppid": 6653,
+            "args": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/frontend/desktop-dist/mac-arm64/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0 --no-sandbox"
+          },
+          {
+            "pid": 9006,
+            "ppid": 9003,
+            "args": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/frontend/desktop-dist/mac-arm64/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/output/aggregation-closeout-20261112/native6/profile --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,18122009936506111809,10077771011593307128,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,10291785437470905702,17372111116027362686,4 --trace-process-track-uuid=3190708988185955192"
+          },
+          {
+            "pid": 9007,
+            "ppid": 9003,
+            "args": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/frontend/desktop-dist/mac-arm64/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/output/aggregation-closeout-20261112/native6/profile --shared-files --field-trial-handle=1718379636,r,18122009936506111809,10077771011593307128,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,10291785437470905702,17372111116027362686,4 --trace-process-track-uuid=3190708989122997041"
+          },
+          {
+            "pid": 9008,
+            "ppid": 9003,
+            "args": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/frontend/desktop-dist/mac-arm64/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 9071,
+            "ppid": 9008,
+            "args": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/output/aggregation-closeout-20261112/native6/profile/data/plugins/installs/candlescope.pine-compat/8817eb2648e72e24ec2140f1e84240ec030e6ad4b261ef49cd3dc50f148485f0/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 9072,
+            "ppid": 9008,
+            "args": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/output/aggregation-closeout-20261112/native6/profile/data/plugins/installs/candlescope.python-indicator/8bed1b64f3d905855d390368f40a0a5f348d9ff8f568fed1cb6c9a46b8ae6461/venv/bin/python -I -u -m candlescope_plugin_python_indicator"
+          },
+          {
+            "pid": 9111,
+            "ppid": 9008,
+            "args": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/frontend/desktop-dist/mac-arm64/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(63)"
+          },
+          {
+            "pid": 9112,
+            "ppid": 9008,
+            "args": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/frontend/desktop-dist/mac-arm64/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=72, pipe_handle=74) --multiprocessing-fork"
+          },
+          {
+            "pid": 9123,
+            "ppid": 9003,
+            "args": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/frontend/desktop-dist/mac-arm64/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/output/aggregation-closeout-20261112/native6/profile --app-path=/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/frontend/desktop-dist/mac-arm64/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1794441535455371 --launch-time-ticks=8844253569 --shared-files --field-trial-handle=1718379636,r,18122009936506111809,10077771011593307128,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,10291785437470905702,17372111116027362686,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=59938 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit"
+          },
+          {
+            "pid": 9128,
+            "ppid": 9008,
+            "args": "/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/frontend/desktop-dist/mac-arm64/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=72, pipe_handle=79) --multiprocessing-fork"
+          }
+        ],
+        "elapsedMs": 5636
+      }
+    }
+  ],
+  "errors": [],
+  "minimumBars": 128,
+  "passed": true
+}

@@ -8,6 +8,86 @@ from app.data_engine.data_manager.backfill_coordinator import BackfillCoordinato
 from tests.test_backfill_coordinator import _DataManager, _Storage, _RepairReport, _request
 
 
+def test_tiny_derived_recovery_keeps_bounded_dispatch_turns_under_foreground_load():
+    """Eligibility ages source-aware one-target chunks, including quota retry."""
+    import time
+    from app.data_engine.data_manager.backfill_contracts import RepairRequest
+    from tests.test_backfill_coordinator import _quota_deferral
+
+    async def run():
+        held, release = asyncio.Event(), asyncio.Event()
+        calls = []
+        retry_at = None
+
+        class Engine:
+            async def run(self, **kwargs):
+                nonlocal retry_at
+                symbol = kwargs["symbol"]
+                now = time.monotonic()
+                calls.append((symbol, now, kwargs["range_start_ms"]))
+                if symbol == "HELD":
+                    held.set()
+                    await release.wait()
+                if symbol == "BTC/USDT:USDT" and retry_at is None:
+                    retry_at = now + .04
+                    raise _quota_deferral(.04, bucket_key="tiny-bybit-recovery")
+                # Keep the foreground queue nonempty across the quota reset.
+                await asyncio.sleep(.01)
+                return _RepairReport(status="completed")
+
+        dm = _DataManager()
+        coordinator = BackfillCoordinator(
+            storage=_Storage(), bars_backfilled=dm.on_bars_backfilled,
+            emit_event=dm.event_bus.emit, engine=Engine(),
+            loop=asyncio.get_running_loop(), chunk_bars=1, max_concurrency=1,
+            base_delay_seconds=0,
+        )
+        async def verified(*_args, **_kwargs):
+            return {"verified_contiguous": True, "remaining_missing_bars": 0}
+        coordinator._verify_request_range = verified
+        def foreground(symbol):
+            return coordinator.request(RepairRequest(
+                symbol, "1m", 0, 0, reason="initial_history", priority=10,
+            ))
+        try:
+            ids = [foreground("HELD")]
+            await held.wait()
+            recovery = RepairRequest(
+                "BTC/USDT:USDT", "10m", 0, 1_800_000, exchange="bybit",
+                market_type="swap.linear", reason="bar_delivery_recovery", priority=100,
+                metadata={"requires_trusted_finality": True},
+            )
+            recovery_id = coordinator.request(recovery)
+            duplicate = RepairRequest(
+                recovery.symbol, recovery.interval, recovery.start_ms, recovery.end_ms,
+                exchange=recovery.exchange, market_type=recovery.market_type,
+                reason=recovery.reason, priority=recovery.priority,
+                metadata=dict(recovery.metadata),
+            )
+            assert coordinator.request(duplicate) == recovery_id
+            ids += [foreground(f"VISIBLE{i}") for i in range(40)]
+            ids.append(recovery_id)
+            release.set()
+            outcomes = await asyncio.wait_for(asyncio.gather(*(
+                coordinator.wait_for_request(request_id) for request_id in ids
+            )), 5)
+            assert all(outcome.status == "completed" for outcome in outcomes)
+            recovery_calls = [i for i, (symbol, _, _) in enumerate(calls) if symbol == recovery.symbol]
+            assert len(recovery_calls) == 5  # Four targets, one deferred attempt.
+            assert recovery_calls[0] <= 9  # Initial holder plus at most eight bypasses.
+            after_retry = [i for i, (_, at, _) in enumerate(calls) if at >= retry_at]
+            assert recovery_calls[1] - after_retry[0] <= 8
+            assert all(b - a <= 9 for a, b in zip(recovery_calls[1:], recovery_calls[2:]))
+            assert len({calls[i][2] for i in recovery_calls}) == 4
+            assert coordinator.snapshot()["running_chunks"] == 0
+        finally:
+            release.set()
+            await coordinator.shutdown()
+        assert coordinator.snapshot()["active"] == []
+
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize('background_reason', ['background_gap_audit', 'startup_gap_scan+latest_refresh+price_daily_open'])
 @pytest.mark.parametrize('release', ['owner', 'scope', 'lease'])
 @pytest.mark.parametrize('observer_first', [False, True])
