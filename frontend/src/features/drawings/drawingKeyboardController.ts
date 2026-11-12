@@ -11,6 +11,7 @@
  * editor is active (editingTextIdRef set) this handler bails out early.
  */
 import { useEffect } from "react";
+import { hasOpenOverlay } from "../../components/ui/overlay/overlayRuntime.js";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { EMPTY_SELECTED_TEXT_UI } from "./drawingSelectionController.js";
 import type { SelectedTextUi } from "./drawingSelectionController.js";
@@ -107,7 +108,8 @@ export function useDrawingKeyboard({
       if (editingTextIdRef.current || e.defaultPrevented) return;
 
       if (e.key === "Escape") {
-        // Editors own their Escape; closing a panel must not also exit the tool.
+        // Editors own their Escape, and an open drawer or dialog closes first; closing a panel must not also exit the tool.
+        if (hasOpenOverlay()) return;
         if (e.target instanceof Element && e.target.closest('dialog, input, textarea, select, [contenteditable="true"]')) return;
         handleDrawingEscape({
           exitObjectEditing: () => exitObjectEditing?.() === true,

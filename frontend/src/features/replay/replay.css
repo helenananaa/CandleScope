@@ -619,9 +619,6 @@
   background: var(--bg-primary);
   box-shadow: -18px 0 56px rgba(2, 6, 23, .34);
 }
-.replay-shared-indicator-panel .indicator-panel-overlay {
-  z-index: calc(var(--z-overlay) + 120);
-}
 .replay-indicator-panel {
   display: flex;
   flex-direction: column;

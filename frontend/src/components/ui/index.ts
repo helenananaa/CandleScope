@@ -12,8 +12,9 @@ export type { BadgeProps, DisclosureProps, InlineAlertProps, SectionProps, StatP
 export { DateTimeInput, FileDrop } from "./Inputs.js";
 export { buttonClassName, choiceKeyTarget, fromDateTimeInputValue, tabId, tabPanelId, toDateTimeInputValue } from "./helpers.js";
 export type { DateTimeInputProps, FileDropProps } from "./Inputs.js";
-export { Dialog, DialogSurface, Drawer, Menu, Popover, Tooltip } from "./Overlays.js";
-export type { DialogProps, DrawerProps, MenuItem, MenuProps, PopoverProps, TooltipProps } from "./Overlays.js";
+export { Dialog, DialogSurface, Drawer, Menu, OverlayLayer, Popover, Tooltip } from "./Overlays.js";
+export type { DialogProps, DrawerProps, MenuItem, MenuProps, OverlayLayerProps, PopoverProps, TooltipProps } from "./Overlays.js";
+export { hasOpenOverlay } from "./overlay/overlayRuntime.js";
 export { ConfirmDialog, ToastRegion } from "./Feedback.js";
 export type { ConfirmDialogProps } from "./Feedback.js";
 export { confirmAction, dismissToast, notify } from "./overlay/overlayApi.js";

@@ -1,5 +1,6 @@
 import { useChartAiControl } from "../features/ai-control/useChartAiControl.js";
 import { describeError } from "../i18n/serverErrors.js";
+import { hasOpenOverlay } from "../components/ui/overlay/overlayRuntime.js";
 import {
   lazy,
   Suspense,
@@ -527,7 +528,8 @@ function LiveWorkspaceApp() {
   useEffect(() => {
     if (workspace.view.window.maximizedCellId == null) return undefined;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) return;
+      // An open drawer or dialog takes Escape first; the next Escape restores the layout.
+      if (event.key !== "Escape" || event.defaultPrevented || hasOpenOverlay()) return;
       toggleWorkspaceMaximize(workspace.view.window.maximizedCellId!);
     };
     window.addEventListener("keydown", handleKeyDown);

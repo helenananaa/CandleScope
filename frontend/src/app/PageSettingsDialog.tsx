@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
+import { OverlayLayer } from "../components/ui/Overlays.js";
 import type { MouseEvent } from "react";
 import ChartAppearancePanel from "../components/settings/ChartAppearancePanel.js";
 import { Icon } from "../components/icons/Icon.js";
@@ -19,25 +20,11 @@ export default function PageSettingsDialog({
   onClose(): void;
 }) {
   useLocale();
+  // The overlay layer moves focus to the panel, returns it on close and handles Escape.
   const panelRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    panelRef.current?.focus();
-    return () => { opener?.focus(); };
-  }, []);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) return;
-      event.preventDefault();
-      onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => { window.removeEventListener("keydown", onKeyDown); };
-  }, [onClose]);
-
   return (
+    <OverlayLayer kind="modal" onClose={onClose} initialFocusRef={panelRef}>
     <div className="st-overlay" onClick={onClose}>
       <div
         ref={panelRef}
@@ -65,5 +52,6 @@ export default function PageSettingsDialog({
       </div>
       <SettingsModalStyles />
     </div>
+    </OverlayLayer>
   );
 }
