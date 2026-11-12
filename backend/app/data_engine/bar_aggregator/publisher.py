@@ -31,6 +31,7 @@ from copy import deepcopy
 import asyncio
 import copy
 import logging
+import sys
 import time
 from typing import Callable, Awaitable, AsyncIterator
 
@@ -82,6 +83,39 @@ class BarAggregatorPublisher:
         self._queue_recovery_required: int = 0
         self._preview_drops: int = 0
         self._pending_source_events: dict[str, BarEvent] = {}
+        # References to payloads already held by suspended publisher frames.
+        # Registration adds no new snapshot and ends on success/error/cancel.
+        self._inflight_payloads: dict[object, tuple[str, object]] = {}
+
+    def _hold_payload(self, kind, payload):
+        token = object()
+        self._inflight_payloads[token] = (kind, payload)
+        return token
+
+    def _release_payload(self, token):
+        self._inflight_payloads.pop(token, None)
+        if not self._inflight_payloads:
+            self._inflight_payloads.clear()  # release capacity after a burst
+
+    def _retained_payloads(self):
+        frames = list(self._inflight_payloads.values())
+        events = [*list(self._pending_source_events.values()),
+                  *(payload for _, payload in frames if isinstance(payload, BarEvent))]
+        inputs = [bar for kind, payload in frames if kind == "input"
+                  for bar in payload if bar is not None]
+        counts = {f"inflight_{kind}_frames": sum(k == kind for k, _ in frames)
+                  for kind in ("input", "dispatch", "callback", "retry_input", "retry_keys")}
+        counts["pending_source_snapshots"] = len(self._pending_source_events)
+        counts["publisher_metadata_bytes"] = (
+            sys.getsizeof(self._pending_source_events) + sys.getsizeof(self._inflight_payloads)
+            + (len(frames) + len(self._pending_source_events)) * 128
+            + sum(sys.getsizeof(payload) + sum(sys.getsizeof(key) for key in payload)
+                  for kind, payload in frames if kind == "retry_keys")
+        )
+        return events, inputs, counts
+
+    def _memory_roots(self):
+        return [self._pending_source_events, self._inflight_payloads]
 
     # ── Public: Callback Registration ────────────────────────
 
@@ -213,41 +247,51 @@ class BarAggregatorPublisher:
         # ticks may mutate its builder while callbacks are suspended.
         event = deepcopy(event)
         self._events_emitted += 1
+        token = self._hold_payload("dispatch", event)
+        try:
+            # Fire type-specific callbacks. A retry keeps the original pending
+            # version without constructing a discarded duplicate snapshot.
+            if event.bar.source_refs and event.delivery_id not in self._pending_source_events:
+                self._pending_source_events[event.delivery_id] = copy.deepcopy(event)
+            await self._fire_callbacks(event)
+            if (self._pending_source_events.pop(event.delivery_id, None) is not None
+                    and not self._pending_source_events):
+                self._pending_source_events.clear()
+            # Push to subscriber queues
+            self._enqueue(event)
+        finally:
+            self._release_payload(token)
 
-        # Fire type-specific callbacks
-        if event.bar.source_refs:
-            self._pending_source_events.setdefault(event.delivery_id, copy.deepcopy(event))
-        await self._fire_callbacks(event)
-        self._pending_source_events.pop(event.delivery_id, None)
-
-        # Push to subscriber queues
-        self._enqueue(event)
+    async def _emit_bar_event(self, event_type, bar, previous=None):
+        # Convenience-call arguments are real retained builder references even
+        # if a callback detaches their target while the publication awaits.
+        token = self._hold_payload("input", (bar, previous))
+        try:
+            await self.emit(BarEvent(event_type=event_type, bar=bar, previous_bar=previous))
+        finally:
+            self._release_payload(token)
 
     async def emit_created(self, bar: BarState) -> None:
         """Convenience: emit a CREATED event."""
-        await self.emit(BarEvent(event_type=BarEventType.CREATED, bar=bar))
+        await self._emit_bar_event(BarEventType.CREATED, bar)
 
     async def emit_updated(self, bar: BarState) -> None:
         """Convenience: emit an UPDATED event (subject to throttling)."""
-        await self.emit(BarEvent(event_type=BarEventType.UPDATED, bar=bar))
+        await self._emit_bar_event(BarEventType.UPDATED, bar)
 
     async def emit_closed(self, bar: BarState) -> None:
         """Convenience: emit a CLOSED event."""
-        await self.emit(BarEvent(event_type=BarEventType.CLOSED, bar=bar))
+        await self._emit_bar_event(BarEventType.CLOSED, bar)
 
     async def emit_amended(
         self, bar: BarState, previous: BarState | None = None,
     ) -> None:
         """Convenience: emit an AMENDED event."""
-        await self.emit(BarEvent(
-            event_type=BarEventType.AMENDED,
-            bar=bar,
-            previous_bar=previous,
-        ))
+        await self._emit_bar_event(BarEventType.AMENDED, bar, previous)
 
     async def emit_expired(self, bar: BarState) -> None:
         """Convenience: emit an EXPIRED event."""
-        await self.emit(BarEvent(event_type=BarEventType.EXPIRED, bar=bar))
+        await self._emit_bar_event(BarEventType.EXPIRED, bar)
 
     # ── Public: Throttle Configuration ───────────────────────
 
@@ -264,6 +308,7 @@ class BarAggregatorPublisher:
     # ── Public: Snapshot ─────────────────────────────────────
 
     def snapshot(self) -> dict:
+        _, _, payload_counts = self._retained_payloads()
         return {
             "layer": "L5_Publisher",
             "events_emitted": self._events_emitted,
@@ -279,6 +324,7 @@ class BarAggregatorPublisher:
             "expired_callbacks": len(self._expired_callbacks),
             "active_subscribers": len(self._subscribers),
             "update_throttle_ms": self._cfg.update_throttle_ms,
+            **payload_counts,
         }
 
     # ── Internal: Should Emit ────────────────────────────────
@@ -322,8 +368,23 @@ class BarAggregatorPublisher:
     # ── Internal: Callback Dispatch ──────────────────────────
 
     async def retry_source_deliveries(self) -> None:
-        for event in list(self._pending_source_events.values()):
-            await self.emit(event)
+        keys = tuple(self._pending_source_events)
+        if not keys:
+            return
+        keys_token = self._hold_payload("retry_keys", keys)
+        try:
+            for key in keys:
+                event = self._pending_source_events.get(key)
+                if event is None:
+                    continue  # Another retry already acknowledged this record.
+                token = self._hold_payload("retry_input", event)
+                try:
+                    await self.emit(event)
+                finally:
+                    self._release_payload(token)
+                    del event
+        finally:
+            self._release_payload(keys_token)
 
     async def _fire_callbacks(self, event: BarEvent) -> None:
         """Fire all matching callbacks for this event."""
@@ -344,8 +405,11 @@ class BarAggregatorPublisher:
 
         # Fire type-specific + all-events callbacks
         for cb in specific + self._all_callbacks:
+            callback_event = token = None
             try:
-                await cb(deepcopy(event))
+                callback_event = deepcopy(event)
+                token = self._hold_payload("callback", callback_event)
+                await cb(callback_event)
             except BarDeliveryUnavailable:
                 self._callback_errors += 1
                 raise
@@ -357,6 +421,10 @@ class BarAggregatorPublisher:
                 )
                 if event.bar.source_refs:
                     raise BarDeliveryUnavailable(str(exc)) from exc
+            finally:
+                if token is not None:
+                    self._release_payload(token)
+                del callback_event
 
     # ── Internal: Queue Dispatch ─────────────────────────────
 
