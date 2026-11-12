@@ -16,6 +16,10 @@ from app.data_engine.interval_policy import IntervalAlignment, parse_interval_sp
 class CoverUnavailable(ValueError):
     """The qualified grids cannot exactly cover the requested target."""
 
+    def __init__(self, message, *, explored_positions=0):
+        super().__init__(message)
+        self.explored_positions = explored_positions
+
 
 class CoverBudgetExceeded(CoverUnavailable):
     """Planning stopped at its work budget; this is not a source-data gap."""
@@ -92,6 +96,80 @@ class TargetCover:
     required_fields: frozenset[str]
 
 
+@dataclass(frozen=True, slots=True)
+class TargetCoverBatch:
+    """Bounded proposals, not proof that any source has actually been read."""
+    target: SeriesKey
+    requested_range: tuple[int, int]
+    planned_range: tuple[int, int]
+    covers: tuple[TargetCover, ...]
+    next_start_ms: int | None
+    stopped_by: str | None
+    planned_rows: int
+    explored_positions: int
+
+
+def plan_fixed_batch(
+    target: SeriesKey, start_ms: int, end_ms: int, sources: tuple[FixedHistorySource, ...], *,
+    required_fields: frozenset[str] = frozenset({"open", "high", "low", "close", "volume"}),
+    max_targets: int = 32, max_source_rows: int = 16_384, max_positions: int = 32_768,
+) -> TargetCoverBatch:
+    """Plan whole targets until a work/output bound, returning an exact cursor.
+
+    A range cannot be made complete by clipping its final target. Later source
+    unavailability and work limits preserve only the already proposed prefix;
+    an empty prefix raises the original distinct unavailable/budget error.
+    Consumers still qualify actual inputs, revisions and finality before use.
+    """
+    spec = parse_interval_spec(target.interval) if isinstance(target, SeriesKey) else None
+    if (spec is None or spec.alignment is not IntervalAlignment.FIXED_EPOCH
+            or type(start_ms) is not int or type(end_ms) is not int
+            or not 0 <= start_ms < end_ms <= (1 << 63) - 1
+            or spec.floor_ms(start_ms) != start_ms or spec.floor_ms(end_ms) != end_ms):
+        raise CoverUnavailable("an aligned whole-target fixed range required")
+    if (type(max_targets) is not int or not 1 <= max_targets <= 32
+            or type(max_source_rows) is not int or not 1 <= max_source_rows <= 131_072
+            or type(max_positions) is not int or not 1 <= max_positions <= 131_072):
+        raise ValueError("bounded target, source-row and planning budgets required")
+    covers = []
+    cursor, rows, explored = start_ms, 0, 0
+    stopped = None
+    while cursor < end_ms and len(covers) < max_targets:
+        remaining = max_positions - explored
+        if remaining <= 0:
+            stopped = "planning_budget"
+            break
+        try:
+            plan = plan_fixed_target(target, cursor, spec.next_ms(cursor), sources,
+                                     required_fields=required_fields, max_positions=remaining)
+        except CoverBudgetExceeded as error:
+            if not covers:
+                raise
+            # The abandoned attempt still spent the remaining search budget.
+            explored += error.explored_positions
+            stopped = "planning_budget"
+            break
+        except CoverUnavailable as error:
+            if not covers:
+                raise
+            explored += error.explored_positions
+            stopped = "source_unavailable"
+            break
+        explored += plan.explored_positions
+        if rows + plan.planned_rows > max_source_rows:
+            if not covers:
+                raise CoverBudgetExceeded("one target exceeds the source-row work budget")
+            stopped = "source_rows"
+            break
+        covers.append(plan)
+        rows += plan.planned_rows
+        cursor = plan.end_ms
+    if cursor < end_ms and stopped is None:
+        stopped = "targets"
+    return TargetCoverBatch(target, (start_ms, end_ms), (start_ms, cursor), tuple(covers),
+                            cursor if cursor < end_ms else None, stopped, rows, explored)
+
+
 def plan_fixed_target(
     target: SeriesKey, start_ms: int, end_ms: int,
     sources: tuple[FixedHistorySource, ...], *,
@@ -165,11 +243,13 @@ def plan_fixed_range(
         if stop == end_ms:
             break
         if explored >= max_positions:
-            raise CoverBudgetExceeded("fixed-grid coverage planning position budget exhausted")
+            raise CoverBudgetExceeded("fixed-grid coverage planning position budget exhausted",
+                                      explored_positions=explored)
         explored += 1
         stack.append((stop, iter(candidates)))
     else:
-        raise CoverUnavailable("qualified source grids cannot exactly tile this target")
+        raise CoverUnavailable("qualified source grids cannot exactly tile this target",
+                               explored_positions=explored)
 
     spans = []
     for piece in path:
