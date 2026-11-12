@@ -111,6 +111,23 @@ storage reads/rows and block hits. A scalar count is one SQL result row, not one
 additional candle. Revision polls/SQLite internal I/O are separate from these
 canonical query counters.
 
+Finer-presence probes are now grouped across at most 32 target plans at a time.
+The repository's optional `query_bars_range_presence` accepts up to 256 half-open
+windows for one full series identity and returns ordered booleans using one SQL
+statement. Known disjoint/untouched durable source envelopes require no probe;
+overlapping deletion evidence still rejects coarse input. The per-query working
+index is limited to 4096 windows and charged 4MiB, then cleared for the next
+batch. Initial plan search has its own bounded temporary reservation; this is
+not another shared/persistent cache. Refinement spans outside the initial batch
+and stores without the optional API retain bounded single-row probes. The
+encompassing multi-source fence also covers these preflight reads.
+
+Diagnostics distinguish `mixed_presence_reads` (SQL calls),
+`mixed_presence_rows` (scalar boolean results), `mixed_probe_rows` (raw finer
+rows) and `mixed_page_rows` (H127 input candles). Total `storage_rows` therefore
+includes scalar probe/count results and must not be presented as candle count.
+See the probe QA report for same-source before/after counts and measured limits.
+
 `QueryConfig.mixed_custom_history=False` restores single-base reads. In-flight
 mixed work is fenced if the switch changes; valid target materialization and
 all source data/revisions remain. No migration or second writer is involved.

@@ -18,6 +18,7 @@ from app.data_engine.interval_resolution import IntervalPurpose
 from app.data_engine.memory_budget import reserve_work
 from app.data_engine.storage.revisions import acquisition_revision, StaleAcquisition
 from .models import BarData, QueryResult, QuerySource
+from .mixed_precedence import MixedPrecedence, BATCH_TARGETS, WORK_BYTES
 
 
 def query_closed_mixed(engine, key, *, start_ms=None, end_ms=None, before_ms=None,
@@ -85,6 +86,8 @@ def query_closed_mixed(engine, key, *, start_ms=None, end_ms=None, before_ms=Non
     report.update(mixed_history_attempted=True, mixed_page_reads=0, mixed_page_rows=0,
                   mixed_cache_hits=0, mixed_probe_reads=0, mixed_probe_rows=0,
                   mixed_count_reads=0, mixed_count_rows=0, mixed_count_failures=0,
+                  mixed_presence_reads=0, mixed_presence_rows=0, mixed_presence_failures=0,
+                  mixed_preflight_positions=0,
                   mixed_fallbacks=0, mixed_accepted_rows=0, mixed_planned_rows=0,
                   mixed_contract=policy.contract_id)
     expected_base_rows = (stop - first) // base_spec.nominal_ms if base_spec is not None else 0
@@ -125,7 +128,7 @@ def query_closed_mixed(engine, key, *, start_ms=None, end_ms=None, before_ms=Non
         # Keep staged output charged through the caller's materialization/cache
         # adoption, rather than releasing it when this helper returns.
         reserve_work(engine.memory_budget, "history-query", limit * 1024)
-        with engine.memory_budget.reserve("history-query", 64 * 1024):
+        with engine.memory_budget.reserve("history-query", 64 * 1024 + WORK_BYTES):
             with manager.view(keys, acquired_at=floor) as view:
                 binding()
                 values = [(source.exchange, source.market_type, source.symbol, source.interval,
@@ -140,38 +143,24 @@ def query_closed_mixed(engine, key, *, start_ms=None, end_ms=None, before_ms=Non
                     raise BlockRevisionChanged("mixed precedence evidence changed")
                 mutations = dict(zip(keys, changes))
 
-                def admit(span):
-                    for fine, width in precedences:
-                        if width >= span.source.width_ms:
-                            continue
-                        # A finer candle crossing a span boundary is known
-                        # contradictory input too; native coarse cannot clip it.
-                        lo = max(0, span.start_ms - width + 1)
-                        change = mutations[fine]
-                        if (change and change["delete_revision"] > 0
-                                and change["start_ms"] < span.end_ms
-                                and change["end_ms"] >= lo):
-                            return False
-                        report["mixed_probe_reads"] += 1
-                        rows = engine._read_canonical_history_rows(storage, fine, lo, span.end_ms, 1)
-                        report["mixed_probe_rows"] += len(rows)
-                        if rows:
-                            return False
-                    return True
-
-                for opened in range(first, stop, spec.nominal_ms):
-                    with engine.read_mixed_history_blocks(key, opened, opened + spec.nominal_ms,
-                            sources, required_fields=frozenset(policy.fields),
-                            admit_span=admit, on_page=page) as read:
-                        pass
-                    if any(revision.version != versions[revision.series] for revision in read.receipt.revisions):
-                        raise BlockRevisionChanged("mixed target generations differ")
-                    receipt = read.receipt
-                    report["mixed_planned_rows"] += receipt.planned_rows
-                    report["mixed_accepted_rows"] += receipt.accepted_rows
-                    report["mixed_fallbacks"] += receipt.fallbacks
-                    bars.append(BarData(time=opened // 1000, is_closed=True, source="backfill_aggregated",
-                        **read.summary.values.project(enhanced_complete=True)))
+                probes = MixedPrecedence(engine, storage, key, sources, precedences, mutations, report)
+                for batch_start in range(first, stop, spec.nominal_ms * BATCH_TARGETS):
+                    opens = range(batch_start, min(stop, batch_start + spec.nominal_ms * BATCH_TARGETS),
+                                  spec.nominal_ms)
+                    probes.prepare(opens, spec.nominal_ms)
+                    for opened in opens:
+                        with engine.read_mixed_history_blocks(key, opened, opened + spec.nominal_ms,
+                                sources, required_fields=frozenset(policy.fields),
+                                admit_span=probes.admits, on_page=page) as read:
+                            pass
+                        if any(revision.version != versions[revision.series] for revision in read.receipt.revisions):
+                            raise BlockRevisionChanged("mixed target generations differ")
+                        receipt = read.receipt
+                        report["mixed_planned_rows"] += receipt.planned_rows
+                        report["mixed_accepted_rows"] += receipt.accepted_rows
+                        report["mixed_fallbacks"] += receipt.fallbacks
+                        bars.append(BarData(time=opened // 1000, is_closed=True, source="backfill_aggregated",
+                            **read.summary.values.project(enhanced_complete=True)))
                 binding()
             binding()
     except BlockRevisionChanged as exc:
@@ -187,6 +176,6 @@ def query_closed_mixed(engine, key, *, start_ms=None, end_ms=None, before_ms=Non
         has_more=first > 0, cache_hit=False, complete=True,
         next_before_ms=first if first > 0 else None,
         metadata={**report, "mixed_history": True, "all_rows_final": True,
-                  "storage_reads": report["mixed_page_reads"] + report["mixed_probe_reads"] + report["mixed_count_reads"],
-                  "storage_rows": report["mixed_page_rows"] + report["mixed_probe_rows"] + report["mixed_count_rows"],
+                  "storage_reads": report["mixed_page_reads"] + report["mixed_probe_reads"] + report["mixed_count_reads"] + report["mixed_presence_reads"],
+                  "storage_rows": report["mixed_page_rows"] + report["mixed_probe_rows"] + report["mixed_count_rows"] + report["mixed_presence_rows"],
                   "derived_from": "mixed", "mixed_acquisition_revision": floor})

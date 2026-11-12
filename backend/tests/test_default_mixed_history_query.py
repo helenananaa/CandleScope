@@ -159,7 +159,7 @@ def test_partial_finer_unqualified_grid_blocks_coarse_and_stays_incomplete(mixed
                           min_revision=engine.storage.revision_store.head())
     assert not result.bars
     assert result.metadata["mixed_fallback_reason"]
-    assert result.metadata["mixed_probe_reads"] > 0
+    assert result.metadata["mixed_probe_reads"] + result.metadata["mixed_presence_reads"] > 0
 
 
 @pytest.mark.parametrize("market,interval", [("spot", "89m"), ("futures", "1h"), ("futures", "5M")])

@@ -1753,6 +1753,36 @@ class KlinesRepoAdapter:
             ).fetchone()
         return int(row["cnt"] if row is not None else 0)
 
+    def query_bars_range_presence(
+        self, symbol: str, interval: str, ranges: tuple[tuple[int, int], ...], *,
+        exchange: str | None = None, market_type: str | None = None,
+        series_identity: KlineSeriesIdentity | None = None,
+    ) -> list[bool]:
+        """Probe up to 256 half-open windows in one canonical read.
+
+        Presence includes every provenance/quality. It selects a conservative
+        history route, never proves completeness, finality or field parity.
+        No raw candles are retained, and all identity values are bound params.
+        """
+        if (not isinstance(ranges, tuple) or not 1 <= len(ranges) <= 256
+                or any(not isinstance(bounds, tuple) or len(bounds) != 2
+                       or any(type(v) is not int for v in bounds)
+                       or not 0 <= bounds[0] < bounds[1] <= (1 << 63) - 1 for bounds in ranges)):
+            raise ValueError("one to 256 bounded half-open windows required")
+        where, params, _ = _series_where(
+            exchange=exchange or self._exchange, market_type=market_type or self._market_type,
+            symbol=symbol, interval=interval, series_identity=series_identity or self._series_identity)
+        slots = ",".join(f"({index},?,?)" for index in range(len(ranges)))
+        values = [value for bounds in ranges for value in bounds]
+        with _connect() as conn:
+            rows = conn.execute(f"""
+                WITH requested(slot, lo, hi) AS (VALUES {slots})
+                SELECT slot, EXISTS(SELECT 1 FROM klines WHERE {' AND '.join(where)}
+                    AND open_time>=requested.lo AND open_time<requested.hi) AS present
+                FROM requested ORDER BY slot
+                """, (*values, *params)).fetchall()
+        return [bool(row["present"]) for row in rows]
+
     def verify_contiguous_range(
         self,
         symbol: str,
