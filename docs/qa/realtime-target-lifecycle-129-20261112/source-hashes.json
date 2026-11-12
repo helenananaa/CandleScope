@@ -1,0 +1,9 @@
+{
+  "base": "19a1edee9a30bc0ede1dff291cf463aa38b2404c",
+  "product_head": "88e7df8c96b866a6b3475ccece86cc87381ea31a",
+  "files": {
+    "backend/app/data_engine/bar_aggregator/aggregator.py": "2b59b30cc21a90c3fa6d8284ddf93d21d612293f987a1fd415246bb302468317",
+    "backend/scripts/ccxt_contracts/integration.py": "3c29d8343189b57a52e31d26abe56b68d2016d75ff8b8bdb4b6fcd97a328d83c",
+    "backend/tests/test_realtime_target_lifecycle.py": "00f4b597fa975da2a4019e23f311bb82e3455d53c82f5efc81a8d54daf5fadb8"
+  }
+}
