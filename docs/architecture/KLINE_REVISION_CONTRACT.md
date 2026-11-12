@@ -184,6 +184,16 @@ This accounting does not discard data or raise budgets. Fixed component byte
 weights still require calibration, particularly for source proofs. See
 [handoff accounting evidence and limits](../qa/realtime-handoff-accounting-126-20261112/README.md).
 
+Eviction drains claim one raw buffer item synchronously before awaiting the
+existing public emitter. Per-pipeline claims remain in realtime-state roots until
+completion. A task-context observation marks transfer to the existing publisher
+source snapshot before callbacks await; failure/cancel restores raw data only
+before transfer, even when a concurrent retry already acknowledged the snapshot.
+No-source/pre-transfer failures retain their original retryable buffer item.
+Silent drains cannot discard another task's claim. Successful items release
+before later callbacks; no callback lock or independent delivery ledger is added.
+See [eviction handoff proof and costs](../qa/realtime-eviction-handoff-129-20261113/README.md).
+
 ## Migration and operational rollback
 
 1. Stop old writers and back up the SQLite database (including WAL through a

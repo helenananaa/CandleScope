@@ -1,0 +1,10 @@
+{
+  "base": "39fc06ef4205732f6d2a030b41233ebf9651e0e6",
+  "product_head": "4d62f15ed16c3ed9a5c6125caf9aa0992d4296a5",
+  "files": {
+    "backend/app/data_engine/bar_aggregator/aggregator.py": "77c79070ba853a5b66efb9a3b60c055482163facaf2f78c41566726022951719",
+    "backend/app/data_engine/bar_aggregator/publisher.py": "5b77eb2f3390b14b5e17eb71eface6d2e05b35388e0f568885dd2c1b4ca99153",
+    "backend/scripts/ccxt_contracts/integration.py": "62e8b90e33e3bd7a89f49fa5409fd1b6f491ea2b877e9a8faef1caced936336c",
+    "backend/tests/test_realtime_eviction_handoff.py": "178d7a5569e083a95a9e82a72ca48a2d6f15daa3f6238e6c03768f4d3e40d964"
+  }
+}
