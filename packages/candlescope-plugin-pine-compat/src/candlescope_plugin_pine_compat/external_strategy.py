@@ -1,7 +1,6 @@
 """External broker adapter. Never evaluates the native broker ledger."""
 
 import re
-import json
 from functools import lru_cache
 
 import pine_compat
@@ -35,6 +34,7 @@ def describe():
             "candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-external/13"
         ),
         "workbench_control": "candlescope.pine-workbench-control/1",
+        "chart_signal_events": ("candlescope.chart-signal-events/1" if getattr(pine_compat,"EXTERNAL_CHART_EVENT_SCHEMA_VERSION",0)==1 else None),
         "ordered_chart_strategy": ("ordered-chart-strategy/1" if getattr(pine_compat, "EXTERNAL_ORDERED_CHART_SCHEMA_VERSION", 0) == 1 else None),
         "external_replay": "candlescope.external-replay/1",
         "fixed_history_contract": "candlescope.pine-fixed-history/1",
@@ -147,18 +147,8 @@ def _execute(request):
     if chart_contract is not None and (chart_contract != "ordered-chart-strategy/1" or getattr(pine_compat, "EXTERNAL_ORDERED_CHART_SCHEMA_VERSION", 0) != 1):
         raise ValueError("EXTERNAL_UNSUPPORTED: ordered chart strategy runtime required")
     if chart_contract is not None:
-        config = request.get("signal_chart") or {}
-        transform = config.get("transform")
-        chart = {"heikin-ashi": "heikinashi", "line-break": "linebreak", "point-and-figure": "pointfigure"}.get(transform, transform)
-        if chart not in {"heikinashi", "renko", "kagi", "linebreak", "pointfigure"}:
-            raise ValueError("EXTERNAL_UNSUPPORTED: chart signal definition required")
-        descriptor = dict(chart=chart, symbol=request["context"]["symbol"])
-        if chart == "linebreak":descriptor["lines"] = config.get("number_of_lines", 3)
-        elif chart != "heikinashi":
-            descriptor.update(style="ATR" if config.get("mode") == "atr" else "Traditional",
-                param=config.get("atr_length",14) if config.get("mode") == "atr" else config.get("reversal_amount",3) if chart == "kagi" else config.get("box_size",1))
-            if chart == "pointfigure":descriptor.update(source="close",reversal=config.get("reversal_amount",3))
-        request = {**request, "context": {**request["context"], "symbol": json.dumps(descriptor, separators=(",", ":"))}}
+        from .chart_signal_input import symbol
+        request = {**request, "context": {**request["context"], "symbol": symbol(request["context"],request.get("signal_chart") or {})}}
     incremental = (
         chart_contract is None and
         callable(getattr(program, "external_session", None))

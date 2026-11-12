@@ -269,10 +269,10 @@ Causality differs from repaintable display-window output:
 Pine's explicit `ordered-chart-strategy/1` contract accepts repeated main source
 clocks only through the external-account engine entry point. Ordinary candle
 entry points still reject duplicate times. Pine indicators retain their separate
-ordered-chart input contract. Fill/every-tick execution schedules, fixed-history
-endpoint-sensitive Workbench programs and whole-market Python batch execution
-are not qualified with chart signals and fail explicitly instead of computing
-on raw candles or permitting synthetic-price fills.
+ordered-chart input contract. Close-only fixed-history endpoint-sensitive
+Workbench programs and whole-market Python batch execution remain explicit
+unsupported combinations with chart signals. Event schedules use the separate
+observed-price contract below.
 
 The Host planner checkpoint owns the bounded transform cursor (ATR, tick, pending
 volume/column and ordinals). Native external replay separately persists the raw
@@ -283,3 +283,60 @@ provider/account checksums and commit fences remain the recovery owners.
 See [strategy signal qualification](qa/chart-strategy-signals-20261112/README.md).
 This qualifies source/local runtime behavior; native macOS save/exit/restart,
 Windows, endurance and large-history performance remain separate acceptance work.
+
+
+## Special-chart fill and physical-tick recalculation
+
+`candlescope.chart-signal-events/1` is selected automatically for special-chart
+Pine programs with `calc_on_order_fills` or `calc_on_every_tick`. Both settings
+can operate together through one shared chart cursor. This applies to queued
+chart Host runs, independent cost accounts, native external Host runs and saved
+native replay. No extra rollout switch is required. Source-declared fill
+recalculation is effective without a second Workbench checkbox.
+
+The real market loop advances this cursor once per observed price, then executes
+the existing real matcher. A fill callback sees the updated account and current
+chart row; another callback at the same physical event does not reapply its
+price or volume. Confirmed chart rows are evaluated and their plans admitted
+serially before the next row. The subsequent ordinary tick callback sees the
+same forming row. Multiple bricks can retain the exact same millisecond start;
+`bar_index` is their ordinal, not a fabricated timestamp.
+
+- **Actual trade data:** `calc_on_every_tick` requires frozen physical trade or
+  aggregate-trade events. Book-assisted modes retain their original trade/book
+  ownership, quote constraints and capacity. The report labels this input
+  `OBSERVED_TRADE_STREAM` and volume `OBSERVED_TRADE_QUANTITY`. Account/funding or
+  book-only updates cannot manufacture a new price print.
+- **BAR approximation:** fill recalculation also works on the existing OHLC
+  path matcher. The chart sees only the visited price prefix. Its report labels
+  price `OHLC_PATH_APPROXIMATION` and volume `LINEAR_TIME_PROXY`; elapsed source
+  time allocates the source volume estimate. This mode is not true tick data.
+  Special-chart `calc_on_every_tick` with BAR-only data and the historical
+  pseudo-tick option fail explicitly.
+- **Chart math:** HA recomputes its forming candle from the observed source OHLC
+  and prior committed HA values, then confirms at the source close. Renko and
+  Line Break confirm crossing rows when the observed price crosses; P&F/Kagi
+  confirm on reversal. Their active column/leg is not closed by reaching the end
+  of a run. ATR uses completed source bars plus only the currently revealed
+  partial range. Actual market tick metadata is frozen before the first step.
+- **Pine state:** ordinary realtime variables roll back between previews;
+  `varip` persists across observations. Confirmation commits the row. Explicit
+  standard-symbol `request.security` remains a separately frozen real dataset,
+  revealed only when available; it cannot alias the selected special root.
+- **Recovery:** source-bar, physical-event, chart-ordinal and Pine stream cursors
+  remain independent. A checkpoint retains the forming row, ATR/math state,
+  callback budget, requested-data cursor and evaluator transcript. Restore
+  rebuilds evaluator state without replaying any market fill. Fill callbacks
+  are bounded to 64 per physical event; crossing batches retain their separate
+  chart-row bound.
+
+These observed-price event charts can produce different history from the
+close-source strategy contract above and from a repaintable display-window
+reconstruction. Choosing a tick/fill schedule freezes that distinction in the
+run contract. The execution ledger, marks, fees, slippage, liquidity, eligibility
+and `process_orders_on_close` continue to use the existing real-price owners.
+Synthetic prices are never substituted into the matcher.
+
+See [event schedule qualification](qa/chart-strategy-events-20261112/README.md)
+for the default source artifact and local evidence. This does not establish
+installed desktop save/exit/restart, Windows or long-history performance.

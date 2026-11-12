@@ -26,6 +26,7 @@ def describe():
         **stream_capabilities(),
         **request_update_capabilities(),
         **event_capabilities(),
+        "chart_signal_events": ("candlescope.chart-signal-events/1" if getattr(pine_compat,"EXTERNAL_CHART_EVENT_SCHEMA_VERSION",0)==1 else None),
         "ordered_chart_strategy": ("ordered-chart-strategy/1" if getattr(pine_compat,"EXTERNAL_ORDERED_CHART_SCHEMA_VERSION",0)==1 else None),
         "external_orders": getattr(pine_compat, "EXTERNAL_ORDER_SCHEMA_VERSION", 1),
         "external_sizing": getattr(pine_compat, "EXTERNAL_SIZING_SCHEMA_VERSION", 0),

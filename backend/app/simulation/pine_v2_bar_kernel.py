@@ -238,16 +238,26 @@ class PineV2BarKernel(PineChartBarKernel):
         return replace(result, report_hash="sha256:" + sha256_hex({"parent": result.report_hash, "path_contract": CONTRACT}))
 
     def run(self, events, strategy, *, warmup_events=0, finalize=False, checkpoint_callback=None, fill_callback=None,
-            vertex_callback=None, **options):
+            vertex_callback=None, chart_event_callbacks=None, **options):
         if fill_callback is None or warmup_events or options or self._failed_bar:
             raise MarketDatasetError("Pine V2 requires its historical callback clock", code="FIDELITY_UNSUPPORTED")
         prior = self.execution_reporter
         checked_sequence, checked_time = self.source_sequence, self.source_time_ms
         pending = []
 
+        prior_observer = self.market_observer
+        if chart_event_callbacks is not None:
+            def observed(point):
+                if 'price' in point.payload:
+                    chart_event_callbacks.prepare_path(self._active_bar,point)
+                if prior_observer is not None:prior_observer(point)
+            self.market_observer=observed
+
         def apply(plan, point):
-            self._record_decision(plan, point)
-            self._enqueue_many(plan, current_sequence=point.sequence)
+            from .chart_decisions import decision_plans
+            for item in decision_plans(plan):
+                self._record_decision(item, point)
+                self._enqueue_many(item, current_sequence=point.sequence)
 
         def callback(bar, point, trigger):
             if vertex_callback is None:
@@ -305,7 +315,8 @@ class PineV2BarKernel(PineChartBarKernel):
                     raise MarketDatasetError("invalid Pine V2 bar volume", code="DATA_QUALITY_FAILED")
                 self._capacity_left = volume * self.participation_rate if self.execution_model_revision == EXECUTION_REALISM_V2 else None
                 self.walk_bar(source, close, on_vertex=(
-                    (lambda point, index: vertex_callback(source, point, index)) if vertex_callback is not None else None))
+                    (lambda point,index:apply(chart_event_callbacks.after_path(self._active_bar,point),point)) if chart_event_callbacks is not None else (
+                    (lambda point, index: vertex_callback(source, point, index)) if vertex_callback is not None else None)))
                 if self._auxiliary_cursor != len(self._auxiliary):
                     raise MarketDatasetError("Pine account event beyond its bar", code="DATA_QUALITY_FAILED")
                 self.source_sequence, self.source_time_ms = source.sequence, source.event_time_ms
@@ -330,6 +341,7 @@ class PineV2BarKernel(PineChartBarKernel):
             self._failed_bar = True
             raise
         finally:
+            self.market_observer = prior_observer
             self.execution_reporter, self._callback, self._active_bar, self._observation_point = prior, None, None, None
             self._auxiliary, self._auxiliary_cursor = [], 0
         return self.result()

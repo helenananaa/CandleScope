@@ -32,6 +32,9 @@ def host_identity():
     files.append(Path(__file__).with_name("pine_entry_risk.py"))
     files.extend(Path(__file__).with_name(name) for name in ("pine_risk_state.py", "pine_risk_stops.py"))
     files.append(Path(__file__).with_name("pine_workbench.py"))
+    files.extend(Path(__file__).with_name(name) for name in ("pine_chart_events.py","pine_chart_event_execution.py"))
+    from app.data_engine.synthetic_series import events as chart_events
+    files.append(Path(chart_events.__file__))
     files.append(Path(__file__).with_name("pine_sizing.py"))
     files.append(Path(__file__).with_name("pine_order_metadata.py"))
     files.append(Path(__file__).with_name("external_support.py"))
@@ -89,6 +92,8 @@ def run_external_host(plugin, wire, runner, cancelled, **options):
     from .native_session import SessionWorker
     options.setdefault("deadline", time.monotonic() + 120)
     options.setdefault("_scenario_runner", runner)
+    if wire.get("chart_event_contract"):
+        return _run_external_host(plugin,wire,runner,cancelled,**options)
     if wire.get("pine_history_tick_contract") or wire.get("pine_print_tick_contract"):
         if wire.get("pine_print_tick_contract"):
             from .pine_print_tick_execution import open_stream, _physical_source
@@ -201,7 +206,7 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
         clock,last_request=resume["clock"],resume["last_request"]
         # Rebuild only the evaluator transcript. Restored fills, fees, depth and
         # ownership stay in the Host kernel and must never be matched again.
-        if _pine_stream is None and last_request is not None:
+        if _pine_stream is None and last_request is not None and not wire.get("chart_event_contract"):
             reproduced=runner(plugin,last_request,cancelled=cancelled,timeout=120)
             from .native_replay_storage import same_json
             if not same_json(reproduced,latest):
@@ -229,7 +234,7 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
         return runner(plugin,request,**kwargs)
 
     from .pine_request_updates import from_wire as requested_feed_from_wire, validate_replay as validate_requested_replay
-    request_feed = requested_feed_from_wire(wire) if not (wire.get("fill_recalculation") or _pine_stream is not None) else None
+    request_feed = requested_feed_from_wire(wire) if not (wire.get("chart_event_contract") or wire.get("fill_recalculation") or _pine_stream is not None) else None
     request_groups = deepcopy((last_request or {}).get("request_updates", [])) if request_feed is not None else []
     if request_feed is not None and resume is not None:
         validate_requested_replay(request_feed, clock.get("request_feed"), request_groups)
@@ -243,7 +248,7 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
 
     signal_series = None
     signal_bars, signal_clocks = [], []
-    if wire.get("signal_chart"):
+    if wire.get("signal_chart") and not wire.get("chart_event_contract"):
         from app.data_engine.synthetic_series.signals import ChartSignalSeries
         signal_series = ChartSignalSeries(wire["signal_chart"])
         if resume is not None:
@@ -331,7 +336,10 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
         return ChartDecisionBatch(plans())
 
     execution_passes = None
-    if wire.get("pine_print_tick_contract"):
+    if wire.get("chart_event_contract"):
+        from .pine_chart_event_execution import run_clock
+        latest,history,accounts,execution_passes,clock,last_request=run_clock(kernel,orders,wire,plugin,cancelled,deadline,state=clock,target=target)
+    elif wire.get("pine_print_tick_contract"):
         from .pine_print_tick_execution import run_clock
         execution=run_clock(_pine_stream,kernel,orders,wire,state=clock,target=target,
             discovery_only=_discovery_only,capture_checkpoint=capture,_capture_owned=_capture_owned,
@@ -405,6 +413,13 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
     quantity = (wire.get("pine_host_control") or {}).get("default_quantity")
     if quantity is not None:
         result["raw_output"]["default_quantity"] = dict(quantity)
+    if wire.get("chart_event_contract"):
+        result["raw_output"]["chart_signal_events"] = {
+            "contract":wire["chart_event_contract"],
+            "price_source":"OHLC_PATH_APPROXIMATION" if fidelity=="BAR_APPROX" else "OBSERVED_TRADE_STREAM",
+            "volume_source":"LINEAR_TIME_PROXY" if fidelity=="BAR_APPROX" else "OBSERVED_TRADE_QUANTITY",
+            "confirmed_rows":clock["driver"]["series"]["count"],
+            "forming_row":clock["driver"]["series"]["active"] is not None}
     if wire.get("pine_bar_path_contract"):
         result["raw_output"]["pine_bar_path"] = {"contract": wire["pine_bar_path_contract"],
             "vertices": "NEAREST_EXTREME_FIRST_LOW_ON_TIE", "timestamps": "LINEAR_INTERPOLATION_SYNTHETIC",

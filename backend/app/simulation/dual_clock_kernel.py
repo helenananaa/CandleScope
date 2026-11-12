@@ -203,8 +203,9 @@ class DualClockSimulationKernel:
         tick_callback: Callable[[MarketEvent, MarketEvent], list[dict]] | None = None,
         close_callback=None,
         end_time_ms: int | None = None,
+        combined_callbacks: bool = False,
     ) -> SimulationResult:
-        if tick_callback is not None and fill_callback is not None:
+        if tick_callback is not None and fill_callback is not None and not combined_callbacks:
             raise MarketDatasetError("tick and fill callbacks must use one strategy clock", code="FIDELITY_UNSUPPORTED")
         if self.process_orders_on_close and close_callback is None:
             raise MarketDatasetError("closing-tick handler is required", code="FIDELITY_UNSUPPORTED")
@@ -275,19 +276,21 @@ class DualClockSimulationKernel:
                 return
             forming = self.builder.forming_bar(source.event_time_ms)
             intents = fill_callback(source, forming)
-            wire = getattr(intents, "decision", None) or {}
-            decision = _decision_record(intents, sequence=wire.get("sequence", forming.sequence),
-                watermark_ms=source.event_time_ms)
-            decision.update(trigger="ORDER_FILL", signal_sequence=forming.sequence, source_sequence=source.sequence)
-            if settlement is not None:
-                decision.update(execution_kind="ACCOUNT_LIQUIDATION", **settlement, observation_deferred=deferred)
-                self._account_callback_count += 1
-            if self.scale_stream_decisions:
-                self._decision_chain_hash = "sha256:" + sha256_hex({"previous": self._decision_chain_hash, "decision": decision})
-                self._decision_count += 1
-            else:
-                self.decisions.append(decision)
-            self.execution._enqueue_many(intents, current_sequence=source.sequence)
+            from .chart_decisions import decision_plans
+            for plan in decision_plans(intents):
+                wire = getattr(plan, "decision", None) or {}
+                decision = _decision_record(plan, sequence=wire.get("sequence", forming.sequence),
+                    watermark_ms=source.event_time_ms)
+                decision.update(trigger="ORDER_FILL", signal_sequence=forming.sequence, source_sequence=source.sequence)
+                if settlement is not None:
+                    decision.update(execution_kind="ACCOUNT_LIQUIDATION", **settlement, observation_deferred=deferred)
+                    self._account_callback_count += 1
+                if self.scale_stream_decisions:
+                    self._decision_chain_hash = "sha256:" + sha256_hex({"previous": self._decision_chain_hash, "decision": decision})
+                    self._decision_count += 1
+                else:
+                    self.decisions.append(decision)
+                self.execution._enqueue_many(plan, current_sequence=source.sequence)
 
         def with_execution_reports(operation, source):
             if fill_callback is None:
@@ -381,17 +384,20 @@ class DualClockSimulationKernel:
                 # print. Its new orders become eligible only on a later print.
                 forming = self.builder.forming_bar(trade.event_time_ms)
                 intents = tick_callback(trade, forming)
-                wire = getattr(intents, "decision", None) or {}
-                decision = _decision_record(intents, sequence=wire.get("sequence", forming.sequence),
-                    watermark_ms=trade.event_time_ms)
-                decision.update(trigger="REALTIME_TICK", signal_sequence=forming.sequence,
-                    source_sequence=trade.sequence)
-                if self.scale_stream_decisions:
-                    self._decision_chain_hash = "sha256:" + sha256_hex({"previous":self._decision_chain_hash,"decision":decision})
-                    self._decision_count += 1
-                else:
-                    self.decisions.append(decision)
-                self.execution._enqueue_many(intents, current_sequence=trade.sequence)
+                from .chart_decisions import decision_plans
+                for plan in decision_plans(intents):
+                    wire = getattr(plan, "decision", None) or {}
+                    decision = _decision_record(plan, sequence=wire.get("sequence", forming.sequence),
+                        watermark_ms=trade.event_time_ms)
+                    decision.update(trigger="REALTIME_TICK", signal_sequence=forming.sequence,
+                        source_sequence=trade.sequence)
+                    if self.scale_stream_decisions:
+                        self._decision_chain_hash = "sha256:" + sha256_hex({"previous":self._decision_chain_hash,"decision":decision})
+                        self._decision_count += 1
+                    else:
+                        self.decisions.append(decision)
+                    self.execution._enqueue_many(plan, current_sequence=trade.sequence)
+
             sample_curve = (
                 self.equity_curve_mode == "UTC_DAILY_CLOSE_V1"
                 or self.execution_model_revision is None

@@ -1163,7 +1163,7 @@ class BacktestService:
             stored_payload['chart_book_data_hash']=normalized_execution['chart_book_data_hash']
         if normalized_execution.get("pine_runtime_identity"):
             stored_payload["pine_runtime_identity"] = normalized_execution["pine_runtime_identity"]
-        for name in ("pine_chart_metadata", "pine_contexts", "pine_local_data_root", "pine_order_runtime_identity", "pine_fill_callbacks", "pine_process_on_close", "pine_risk_windows", "pine_bar_path_contract", "pine_v2_bar_contract", "pine_history_ticks", "pine_realtime_ticks"):
+        for name in ("chart_event_contract", "pine_chart_metadata", "pine_contexts", "pine_local_data_root", "pine_order_runtime_identity", "pine_fill_callbacks", "pine_process_on_close", "pine_risk_windows", "pine_bar_path_contract", "pine_v2_bar_contract", "pine_history_ticks", "pine_realtime_ticks"):
             stored_payload.pop(name, None)
             if name in normalized_execution:
                 stored_payload[name] = normalized_execution[name]
@@ -2752,6 +2752,7 @@ class BacktestService:
                     "tradeExplanationEnabled": self.settings.trade_explanation_effective,
                     "pineChartMetadata": config.get("pine_chart_metadata") or ({"priceTickSize": str(config["price_tick"])} if config.get("price_tick") is not None else None),
                     **({"signalChart": config["signal_chart"]} if config.get("signal_chart") else {}),
+                    **({"signalChartEvents": config["chart_event_contract"]} if config.get("chart_event_contract") else {}),
                     "pineChartInterval": config.get("signal_interval") or config.get("interval"),
                     "pineChartMarketType": config.get("market_type"),
                     "pineRequestedContexts": config.get("pine_contexts", []),
@@ -2810,13 +2811,22 @@ class BacktestService:
             if config.get("signal_chart"):
                 self._assert_frame_inputs(provider, bar={}, trade=None)
                 from .strategy.chart_signals import ChartSignalClock
-                chart_clock = ChartSignalClock(config["signal_chart"], adapter, planner,
-                    market=observation_market or {"venue": "local", "symbol": str(record["dataset_id"])},
-                    warmup=warmup_events,
-                    features=lambda bar: self._observation_features(provider, bar=bar, trade=None),
-                    context=lambda event: None if planner.config is None else _planning_context(getattr(kernel, "execution", kernel), event),
-                    account=(lambda: _pine_account_view(kernel)) if config.get("pine_runtime_identity") else None,
-                    control=lambda: self._assert_execution_control(run_id, deadline=deadline, expected_generation=expected_generation))
+                if config.get("chart_event_contract"):
+                    from .pine_chart_events import HostChartEventCallbacks
+                    chart_clock = HostChartEventCallbacks(session, adapter, planner, kernel,
+                        definition=config["signal_chart"], market=observation_market or {"venue":"local","symbol":str(record["dataset_id"])},
+                        warmup=warmup_events,features=lambda bar:self._observation_features(provider,bar=bar,trade=None),
+                        every_tick=bool(config.get("pine_realtime_ticks")),fills=bool(config.get("pine_fill_callbacks")),
+                        bar_state="historical" if record["fidelity_mode"]=="BAR_APPROX" else "realtime",
+                        control=lambda:self._assert_execution_control(run_id,deadline=deadline,expected_generation=expected_generation))
+                else:
+                    chart_clock = ChartSignalClock(config["signal_chart"], adapter, planner,
+                        market=observation_market or {"venue": "local", "symbol": str(record["dataset_id"])},
+                        warmup=warmup_events,
+                        features=lambda bar: self._observation_features(provider, bar=bar, trade=None),
+                        context=lambda event: None if planner.config is None else _planning_context(getattr(kernel, "execution", kernel), event),
+                        account=(lambda: _pine_account_view(kernel)) if config.get("pine_runtime_identity") else None,
+                        control=lambda: self._assert_execution_control(run_id, deadline=deadline, expected_generation=expected_generation))
             checkpoint = self.repository.latest_checkpoint(run_id)
             if checkpoint is not None:
                 payload = self._verified_checkpoint_payload(record, checkpoint)
@@ -2858,7 +2868,9 @@ class BacktestService:
                 from .pine_closing import ChartClosingTicks
                 closing = ChartClosingTicks(kernel)
             historical_callbacks = None
-            if config.get("pine_bar_path_contract"):
+            if config.get("chart_event_contract"):
+                historical_callbacks = chart_clock
+            elif config.get("pine_bar_path_contract"):
                 from .pine_chart_bar import ChartHistoricalBarCallbacks,ChartHistoricalTicks
                 callback_type=ChartHistoricalTicks if config.get("pine_history_ticks") else ChartHistoricalBarCallbacks
                 historical_callbacks = callback_type(session, adapter, planner, kernel,
@@ -2999,7 +3011,8 @@ class BacktestService:
                 return kernel.run(
                     remaining_events(),strategy,warmup_events=0,finalize=True,
                     checkpoint_callback=checkpoint_after,
-                    **({"fill_callback": historical_callbacks.on_fill} if historical_callbacks is not None else {}),
+                    **({"fill_callback": historical_callbacks.on_path_fill if config.get("chart_event_contract") else historical_callbacks.on_fill} if historical_callbacks is not None else {}),
+                    **({"chart_event_callbacks":chart_clock} if config.get("chart_event_contract") else {}),
                     **({"vertex_callback":historical_callbacks.on_vertex} if config.get("pine_history_ticks") else {}),
                     **({"close_callback": closing.process} if closing is not None else {}))
             def reset_window_bookkeeping():
@@ -3175,7 +3188,7 @@ class BacktestService:
                 config = {}
             planner = _new_host_planner(config, execution_reporter=self._execution_reporter(session))
             from .pine_event_requests import chart_realtime_context
-            realtime_context=chart_realtime_context(config,events,max_bars=self.settings.max_bar_rows,
+            realtime_context={} if config.get("chart_event_contract") else chart_realtime_context(config,events,max_bars=self.settings.max_bar_rows,
                 max_bytes=self.settings.worker_memory_mb*1024*1024)
             adapter.start(
                 {
@@ -3189,6 +3202,7 @@ class BacktestService:
                     "tradeExplanationEnabled": self.settings.trade_explanation_effective,
                     "pineChartMetadata": config.get("pine_chart_metadata") or ({"priceTickSize": str(config["price_tick"])} if config.get("price_tick") is not None else None),
                     **({"signalChart": config["signal_chart"]} if config.get("signal_chart") else {}),
+                    **({"signalChartEvents": config["chart_event_contract"]} if config.get("chart_event_contract") else {}),
                     "pineChartInterval": config.get("signal_interval") or config.get("interval"),
                     "pineChartMarketType": config.get("market_type"),
                     "pineRequestedContexts": config.get("pine_contexts", []),
@@ -3239,13 +3253,22 @@ class BacktestService:
             if config.get("signal_chart"):
                 self._assert_frame_inputs(provider, bar={}, trade=None)
                 from .strategy.chart_signals import ChartSignalClock
-                chart_clock = ChartSignalClock(config["signal_chart"], adapter, planner,
-                    market=observation_market or {"venue": "local", "symbol": str(record["dataset_id"])},
-                    warmup=warmup_events,
-                    features=lambda bar: self._observation_features(provider, bar=bar, trade=None),
-                    context=lambda event: None if planner.config is None else _planning_context(getattr(kernel, "execution", kernel), event),
-                    account=(lambda: _pine_account_view(kernel)) if config.get("pine_runtime_identity") else None,
-                    control=lambda: self._assert_execution_control(run_id, deadline=deadline, expected_generation=expected_generation))
+                if config.get("chart_event_contract"):
+                    from .pine_chart_events import HostChartEventCallbacks
+                    chart_clock = HostChartEventCallbacks(session, adapter, planner, kernel,
+                        definition=config["signal_chart"], market=observation_market or {"venue":"local","symbol":str(record["dataset_id"])},
+                        warmup=warmup_events,features=lambda bar:self._observation_features(provider,bar=bar,trade=None),
+                        every_tick=bool(config.get("pine_realtime_ticks")),fills=bool(config.get("pine_fill_callbacks")),
+                        bar_state="historical" if record["fidelity_mode"]=="BAR_APPROX" else "realtime",
+                        control=lambda:self._assert_execution_control(run_id,deadline=deadline,expected_generation=expected_generation))
+                else:
+                    chart_clock = ChartSignalClock(config["signal_chart"], adapter, planner,
+                        market=observation_market or {"venue": "local", "symbol": str(record["dataset_id"])},
+                        warmup=warmup_events,
+                        features=lambda bar: self._observation_features(provider, bar=bar, trade=None),
+                        context=lambda event: None if planner.config is None else _planning_context(getattr(kernel, "execution", kernel), event),
+                        account=(lambda: _pine_account_view(kernel)) if config.get("pine_runtime_identity") else None,
+                        control=lambda: self._assert_execution_control(run_id, deadline=deadline, expected_generation=expected_generation))
             checkpoint = self.repository.latest_checkpoint(run_id)
             if checkpoint is not None:
                 payload = self._verified_checkpoint_payload(record, checkpoint)
@@ -3281,7 +3304,9 @@ class BacktestService:
             collected_chart_bars = []
 
             callbacks = None
-            if config.get("pine_fill_callbacks") or config.get("pine_realtime_ticks"):
+            if config.get("chart_event_contract"):
+                callbacks = chart_clock
+            elif config.get("pine_fill_callbacks") or config.get("pine_realtime_ticks"):
                 from .pine_callbacks import ChartFillCallbacks
                 from .pine_realtime_ticks import ChartRealtimeTicks
                 callback_type=ChartRealtimeTicks if config.get("pine_realtime_ticks") else ChartFillCallbacks
@@ -3397,9 +3422,10 @@ class BacktestService:
                 rows,cutoff=trial_events(remaining_events,adapter.input_plan,pending)
                 return kernel.run(rows,strategy,warmup_events=0,finalize=True,checkpoint_callback=checkpoint_after,
                     **({"end_time_ms":cutoff} if cutoff is not None else
-                       {"end_time_ms":int(config["end_time_ms"])} if record["fidelity_mode"] in BOOK_MODES else {}),
-                    **({"fill_callback": callbacks.on_fill} if callbacks is not None and not config.get("pine_realtime_ticks") else {}),
-                    **({"tick_callback":callbacks.on_tick} if config.get("pine_realtime_ticks") else {}),
+                       {"end_time_ms":int(config["end_time_ms"])} if record["fidelity_mode"] in BOOK_MODES or config.get("chart_event_contract") else {}),
+                    **({"fill_callback": callbacks.on_fill} if callbacks is not None and (not config.get("pine_realtime_ticks") or config.get("chart_event_contract") and config.get("pine_fill_callbacks")) else {}),
+                    **({"tick_callback":callbacks.on_tick} if config.get("pine_realtime_ticks") or config.get("chart_event_contract") else {}),
+                    **({"combined_callbacks":True} if config.get("chart_event_contract") and config.get("pine_fill_callbacks") else {}),
                     **({"close_callback": closing.process} if closing is not None else {}))
             def reset_window_bookkeeping():
                 nonlocal planner,last_order_count,last_fill_count
@@ -3576,6 +3602,7 @@ class BacktestService:
                     "tradeExplanationEnabled": self.settings.trade_explanation_effective,
                     "pineChartMetadata": config.get("pine_chart_metadata") or ({"priceTickSize": str(config["price_tick"])} if config.get("price_tick") is not None else None),
                     **({"signalChart": config["signal_chart"]} if config.get("signal_chart") else {}),
+                    **({"signalChartEvents": config["chart_event_contract"]} if config.get("chart_event_contract") else {}),
                     "pineChartInterval": config.get("signal_interval") or config.get("interval"),
                     "pineChartMarketType": config.get("market_type"),
                     "pineRequestedContexts": config.get("pine_contexts", []),
@@ -4773,8 +4800,12 @@ class BacktestService:
                 raise BacktestError("SCHEMA_UNKNOWN_FIELD", str(exc)) from exc
             if fidelity not in {"BAR_APPROX", *DUAL_MODES}:
                 raise BacktestError("FIDELITY_UNSUPPORTED", "Chart signals require a closed BAR source clock")
-            if any(execution_config.get(name) for name in ("pine_fill_callbacks", "pine_history_ticks", "pine_realtime_ticks", "pine_bar_path_contract")):
-                raise BacktestError("FIDELITY_UNSUPPORTED", "Chart signals require close-only Pine evaluation")
+            if execution_config.get("pine_history_ticks"):
+                raise BacktestError("FIDELITY_UNSUPPORTED", "Special charts use actual prints for tick recalculation")
+            if any(execution_config.get(name) for name in ("pine_fill_callbacks","pine_realtime_ticks")):
+                if json.loads(compiled_pine["executionSource"])["identity"].get("chart_signal_events") != "candlescope.chart-signal-events/1":
+                    raise BacktestError("FIDELITY_UNSUPPORTED","Install the chart event runtime")
+                execution_config["chart_event_contract"] = "candlescope.chart-signal-events/1"
             if execution_config.get("python_execution_protocol") == "MARKET_BATCH_V1":
                 raise BacktestError("FIDELITY_UNSUPPORTED", "Chart signals require sequential provider observations")
             execution_config["signal_chart"] = signal_chart

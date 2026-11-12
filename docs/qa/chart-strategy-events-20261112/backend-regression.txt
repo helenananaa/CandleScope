@@ -1,0 +1,38 @@
+........................................................................ [ 35%]
+........................................................................ [ 70%]
+............................................................             [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/starlette/testclient.py:40
+  /Users/ryanliang/.codex/worktrees/synthetic-series-150-20261112/CandleScope/.venv/lib/python3.12/site-packages/starlette/testclient.py:40: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = typing.Callable[[], typing.ContextManager[anyio.abc.BlockingPortal]]
+
+tests/test_chart_strategy_signals.py::test_fixed_and_continuing_service_real_provider_resume_agree[False-heikin-ashi]
+  /Users/ryanliang/.codex/worktrees/synthetic-series-150-20261112/CandleScope/backend/app/main.py:597: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/test_chart_strategy_signals.py::test_fixed_and_continuing_service_real_provider_resume_agree[False-heikin-ashi]
+tests/test_chart_strategy_signals.py::test_fixed_and_continuing_service_real_provider_resume_agree[False-heikin-ashi]
+  /Users/ryanliang/.codex/worktrees/synthetic-series-150-20261112/CandleScope/.venv/lib/python3.12/site-packages/fastapi/applications.py:4495: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)
+
+tests/test_chart_strategy_signals.py::test_fixed_and_continuing_service_real_provider_resume_agree[False-heikin-ashi]
+  /Users/ryanliang/.codex/worktrees/synthetic-series-150-20261112/CandleScope/backend/app/main.py:937: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+204 passed, 5 warnings in 192.84s (0:03:12)

@@ -380,9 +380,18 @@ class NativeBacktests:
                                 cost_sensitivity_mode=account_settings.cost_sensitivity_mode)
                     from .pine_workbench import freeze_control
                     freeze_control(self, plugin, wire, payload)
-                if wire.get("signal_chart") and (wire.get("fill_recalculation") or any(wire.get(name) for name in
-                        ("pine_bar_path_contract", "pine_print_tick_contract", "pine_history_tick_contract", "fixed_history_contract"))):
-                    raise BacktestError("EXTERNAL_UNSUPPORTED", "Chart signals require causal close-only Pine evaluation")
+                if wire.get("signal_chart"):
+                    control=(wire.get("pine_host_control") or {}).get("execution") or {}
+                    if control.get("calcOnEveryHistoryTick"):
+                        raise BacktestError("EXTERNAL_UNSUPPORTED","Special chart tick recalculation requires physical prints")
+                    if wire.get("fill_recalculation") or wire.get("pine_print_tick_contract"):
+                        if identity.get("chart_signal_events")!="candlescope.chart-signal-events/1":
+                            raise BacktestError("EXTERNAL_UNSUPPORTED","Install the chart event runtime")
+                        wire.update(chart_event_contract="candlescope.chart-signal-events/1",chart_every_tick=bool(wire.get("pine_print_tick_contract")))
+                        wire.pop("pine_print_tick_contract",None)
+                        wire.pop("fixed_history_contract",None)
+                    elif wire.get("fixed_history_contract"):
+                        raise BacktestError("EXTERNAL_UNSUPPORTED","Chart close signals require causal endpoint-independent Pine")
                 from .pine_workbench_v2 import freeze_account
                 freeze_account(wire, payload, settings=account_settings if payload["language"] == "pine" else None)
                 wire["execution_events"] = freeze_execution(self, payload, bars,

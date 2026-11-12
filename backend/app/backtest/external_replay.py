@@ -39,6 +39,14 @@ def _validate_state_content(wire,state):
     from .native import digest
     from .external import host_identity
     cursor=state.get("cursor")
+    if wire.get("chart_event_contract"):
+        if (state.get("contract")!=CONTRACT or state.get("input_hash")!=digest(wire)
+                or state.get("host_runtime_identity")!=wire["host_runtime_identity"] or wire["host_runtime_identity"]!=host_identity()
+                or type(cursor) is not int or not 1<=cursor<=len(wire["bars"])):
+            raise BacktestError("NATIVE_IDENTITY_MISMATCH","chart event replay identity differs")
+        from .pine_chart_event_execution import validate_state as validate_chart_events
+        validate_chart_events(wire,state)
+        return
     signal_count = (state.get("clock") or {}).get("signal_input", {}).get("count") if wire.get("signal_chart") else cursor
     if (state.get("contract")!=CONTRACT or state.get("input_hash")!=digest(wire)
             or state.get("host_runtime_identity")!=wire["host_runtime_identity"]
