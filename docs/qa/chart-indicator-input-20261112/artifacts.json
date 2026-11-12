@@ -1,0 +1,281 @@
+{
+  "scope": "Source-built Darwin arm64 bundles and installed isolated Pine RPC, not native application UI acceptance",
+  "implementationBase": "969209b53dab913fca00281b760e42fd31baa159",
+  "algorithm": "close-source/2",
+  "engineContract": "ordered-chart-input/1",
+  "artifacts": [
+    {
+      "path": "output/chart-indicator-plugin-build/candlescope_plugin_pine_compat-0.4.0-py3-none-any.whl",
+      "sha256": "010f6cc5376f29657d66081ceca82fc6ab5567fd757c37968e9de85cd38d7cce",
+      "size": 251517
+    },
+    {
+      "path": "output/chart-indicator-plugin-build/candlescope_plugin_python_indicator-0.1.0-py3-none-any.whl",
+      "sha256": "6b1f1543fa557dd9d840a95f91c511c0d2aa8823474b19cd5fe99822ae372c56",
+      "size": 23745
+    },
+    {
+      "path": "output/chart-indicator-plugin-build/pine_compat_runtime-0.3.3+cs.1-cp310-abi3-macosx_11_0_arm64.whl",
+      "sha256": "5f5cff2be2a5ad949a125957b8df7b4e0be1911be1d07e2a21aae62f3c8347bb",
+      "size": 4293532
+    },
+    {
+      "path": "output/chart-indicator-plugin-build/candlescope_plugin_sdk-0.2.1-py3-none-any.whl",
+      "sha256": "1d86850cf9a25d9a1dfadfcc8d13bdd93896bb8c043ae7bca6e2a03fe6e6aeab",
+      "size": 495067
+    },
+    {
+      "path": "output/chart-indicator-plugin-build/candlescope-plugin-python-indicator-0.1.0-Darwin-arm64.cspkg",
+      "sha256": "8bed1b64f3d905855d390368f40a0a5f348d9ff8f568fed1cb6c9a46b8ae6461",
+      "size": 521208
+    },
+    {
+      "path": "output/chart-indicator-plugin-build/candlescope-plugin-pine-compat-0.4.0-Darwin-arm64.cspkg",
+      "sha256": "0b637817ad975f19e484d991614810f541d20612385a401082284c3dda0bd20e",
+      "size": 5042981
+    },
+    {
+      "path": "packages/candlescope-plugin-pine-compat/engine-patches/host-contracts-v3.patch",
+      "sha256": "20d6f0704f89e9b90cebd1ff8aa4fb3ed60c161eeb25056f91b23b7c4bd4e7dc",
+      "size": 28066
+    }
+  ],
+  "sourceFiles": [
+    {
+      "path": "backend/app/api/v1/chart_indicator_input.py",
+      "sha256": "b0863a15017e24c8ac85ea9afd3199f2693e86d8f442d382228e7ccc0419616e"
+    },
+    {
+      "path": "backend/app/api/v1/indicators.py",
+      "sha256": "68b122130dd41abcd4f2add683dcb89261b7304a9370d82c7d84415f32030a77"
+    },
+    {
+      "path": "backend/app/data_engine/synthetic_series/core.py",
+      "sha256": "119e009f4924aeec5da63c160a5906ea68d367b68cd54a8fec01ae355afc8911"
+    },
+    {
+      "path": "backend/app/indicator/pine_host.py",
+      "sha256": "a94062f9dcc1397bbebf31a71d38770979f6b8b21ffcc84aa0a867f3effe7a97"
+    },
+    {
+      "path": "backend/app/indicator/pine_host_inputs.py",
+      "sha256": "462f495e17148ad6345f4bbea1f481fd289977950b4be4d5117abf2577527232"
+    },
+    {
+      "path": "backend/app/indicator/runtime_service.py",
+      "sha256": "dcb93e1163e50e65221e6610cf6063bd6a69b939c4a8c9b809e72ff5825e9ffc"
+    },
+    {
+      "path": "backend/scripts/qualify_synthetic_series.py",
+      "sha256": "d5eff93eb5d1b8ed0a3d736f9e8f5d58da69f8d51b97740d23651b5ab47f8ef4"
+    },
+    {
+      "path": "backend/tests/chart_indicator_browser_server.py",
+      "sha256": "46d6ae891bb5dc5e3ab557b5de62a93609be8bf2afd69d717d211f355f6453df"
+    },
+    {
+      "path": "backend/tests/test_chart_indicator_input.py",
+      "sha256": "7655048d7b65ed734bcfa4b22ca9e49f2a65e508bab1ee08950d51ba89742c1f"
+    },
+    {
+      "path": "backend/tests/test_native_chart_indicator_input.py",
+      "sha256": "45ce0d4d692efb07d8d153f15f150a0f0015a432454767d9f404328a7cd4a1da"
+    },
+    {
+      "path": "backend/tests/test_pine_host_inputs.py",
+      "sha256": "ddff4608549506c45bf76e74ae7cb9f21a61ebfe12bc717371619f62ff958ff5"
+    },
+    {
+      "path": "backend/tests/test_synthetic_series.py",
+      "sha256": "e0230277c85b2efbb8b81f5cbb6165a210cabbfbd76bbba635daa905b6041b4b"
+    },
+    {
+      "path": "frontend/scripts/chart-indicator-browser.html",
+      "sha256": "45bb324584a2a1b8491121d8986d17474f87ffb0eabdef7d14e429431b13ac1b"
+    },
+    {
+      "path": "frontend/scripts/desktop-plugin-sources.json",
+      "sha256": "8f90590313ffd506064e9a2c289fad4de8076e1a1e28efd5841bfaf0a8f3105d"
+    },
+    {
+      "path": "frontend/scripts/frontend-script-integration.mjs",
+      "sha256": "e662fad2f6c6885c31669963b82187f1427009a5ea5128cacc17a53b767843dc"
+    },
+    {
+      "path": "frontend/src/app/LiveChartCell.tsx",
+      "sha256": "474d038d52368959722a47ab83de3e35ee24f3b5cbcba4063650cbca3e5b4a61"
+    },
+    {
+      "path": "frontend/src/chart-adapter/__tests__/chartIndicatorInput.browser.tsx",
+      "sha256": "073952180455b4e68acec2da06a9ed13e1d9d4ab4267f605a80fd22199c7ea2a"
+    },
+    {
+      "path": "frontend/src/chart-adapter/__tests__/pineScenePrimitive.test.ts",
+      "sha256": "4d293f1ee021694a1b5d32f2a6a1c353a96b3fd2eb173d103f2e38fd14f3f765"
+    },
+    {
+      "path": "frontend/src/chart-adapter/chartAdapterTypes.ts",
+      "sha256": "e1f0f25737ee4400b697af0b740cbce49d6db1d90790a16efb2f96fd14734ad2"
+    },
+    {
+      "path": "frontend/src/chart-adapter/chartSeriesData.ts",
+      "sha256": "be4e7c555a3a33170abc69e19d4e6703de7da2112c36f74089920fee8cab9642"
+    },
+    {
+      "path": "frontend/src/chart-adapter/mainSeriesModel.ts",
+      "sha256": "abf1a28a1c7dac1089c2fe9e17ed781d3672ebdafea89b3f858078656d88743b"
+    },
+    {
+      "path": "frontend/src/chart-adapter/pineObjectPrimitive.ts",
+      "sha256": "4e6bda8056431b4f189d84cfd883686f10dfb5efee185e27ab33ed4069212604"
+    },
+    {
+      "path": "frontend/src/chart-adapter/pineScenePrimitive.ts",
+      "sha256": "c018b1d58713f1eb024e34eb672f14ab2e6267b9a8028dd41b371e319347aca3"
+    },
+    {
+      "path": "frontend/src/components/ChartPaneLegends.tsx",
+      "sha256": "56962017d91f0d596db162fe9eab463a13717153fd0b723fb893f701fa4e928f"
+    },
+    {
+      "path": "frontend/src/components/MarketPaneLabels.tsx",
+      "sha256": "3fb60a21324b2a1a482774960407932076447ebb169eaa5a33dd7d9d5a8289f7"
+    },
+    {
+      "path": "frontend/src/components/SingleChartPanes.tsx",
+      "sha256": "fa190de28f8f8f2f2cf668afa8eb5bd2bb4b362328005af3dc2f4c30883de7fb"
+    },
+    {
+      "path": "frontend/src/components/__tests__/paneCrosshairStore.test.ts",
+      "sha256": "0fab7a83c41f0d5ed68630a9a99f211124fa4debd81f85cf67bd7222ee6462f4"
+    },
+    {
+      "path": "frontend/src/components/__tests__/singleChartPanesCrosshairLifecycle.test.ts",
+      "sha256": "c5f53586c8ba9165de786e1ec75c69c35c72d3793656e15fe45605d57677ef43"
+    },
+    {
+      "path": "frontend/src/components/chartPaneLegendModel.ts",
+      "sha256": "4277632c5d0c3e93d347d982684908c01af7387412bc423977f1df5dec7606fd"
+    },
+    {
+      "path": "frontend/src/components/paneCrosshairStore.ts",
+      "sha256": "c83457ea12d924ef010fed07f643a2276b84eb675d7ee2e48aefa33610a789ff"
+    },
+    {
+      "path": "frontend/src/features/chart-representation/derivedAuxiliaryProjection.ts",
+      "sha256": "a7404f98c95fd7655b3522dcd0f2d522e88aa3302427673bc68d767e440eabd7"
+    },
+    {
+      "path": "frontend/src/features/history-study/HistoryStudyOverlay.tsx",
+      "sha256": "4ff140a1d1a3db53d04420328af6c85ed5513b66d9df720d4aae12f8bb4d395f"
+    },
+    {
+      "path": "frontend/src/features/indicators/__tests__/chartIndicatorInput.test.ts",
+      "sha256": "49c4dfe9690bd776d28666e5eefd212706813c5b791960075ef6ccd81cf036a6"
+    },
+    {
+      "path": "frontend/src/features/indicators/chartIndicatorInput.ts",
+      "sha256": "6483652d76c37fc3b5a4ab0332773142bca9616dba2942e03429b655962bd29c"
+    },
+    {
+      "path": "frontend/src/features/indicators/frontendScriptRuntime.ts",
+      "sha256": "7f4bd4fcc6977078dba26074bbb050cd434c7481742c8b954ba6597494c0eac7"
+    },
+    {
+      "path": "frontend/src/features/indicators/indicatorTypes.ts",
+      "sha256": "0697d6ba9fd80b392e0ceb53d925558f84fb589938277c84befd3b9609a710e6"
+    },
+    {
+      "path": "frontend/src/features/indicators/useChartIndicatorInput.ts",
+      "sha256": "7dc54e68dce6833b9ff89002590b068c6f82da64797a2322573ecbd9cb130aea"
+    },
+    {
+      "path": "frontend/src/features/indicators/useChartIndicatorRuntime.ts",
+      "sha256": "b714598ec8aeb27f8b808da0f809dc37f7211e38f8888c5597c3758911d046ec"
+    },
+    {
+      "path": "frontend/src/features/indicators/useIndicatorRuntime.ts",
+      "sha256": "4e4109891776b818d5981a2681ee97ea5e64045dc757ad2e9a4efb2cfe49e1d6"
+    },
+    {
+      "path": "frontend/src/features/indicators/useProvidedBarsIndicatorRuntime.ts",
+      "sha256": "140df5c92c39ccf04dee6c1c40a554bdd34cd65159c7ebadb8abdcda2bd6d409"
+    },
+    {
+      "path": "frontend/src/features/local-data/useLocalIndicatorRuntime.ts",
+      "sha256": "a6f3874da484abdab46d6494cb795fcfbcfccccf00a96ff336a0b3e622ab700f"
+    },
+    {
+      "path": "frontend/src/features/market-data/synthetic/syntheticChartBinding.ts",
+      "sha256": "c30c69bfde40bd69753daba88410f17042b4b84b8252bdb811bfb1783e02e8f1"
+    },
+    {
+      "path": "frontend/src/features/market-data/synthetic/syntheticSeries.test.ts",
+      "sha256": "4cf3e1e047a848a9cf6abb770e696a1085454baa558a38c05a57ceab8a6e0868"
+    },
+    {
+      "path": "frontend/src/features/market-data/synthetic/syntheticSeries.ts",
+      "sha256": "c8657bbf70a3d375750f019061667b4374a82fbd8a9823e617c3fd1c20844a0f"
+    },
+    {
+      "path": "frontend/src/features/market-data/synthetic/syntheticSeriesManager.ts",
+      "sha256": "bbe9da1529723797b62328dd6729282c15340c177ffb8c1e051ded6c2a38a2ef"
+    },
+    {
+      "path": "frontend/src/features/replay/ReplayChartWorkspace.tsx",
+      "sha256": "4aaccdd1453ace7cd5c4c88f61cbca6fd7eca11cb3bc17b1e4623c39f90b9634"
+    },
+    {
+      "path": "frontend/src/features/replay/ReplayTrainingPageShell.tsx",
+      "sha256": "125d59a134802d41c7aa0413563c2dee5cd6eac2c6c87bc5922cd3c2d2469884"
+    },
+    {
+      "path": "frontend/src/features/replay/__tests__/replaySharedIndicators.test.ts",
+      "sha256": "9c2d704e32c91892120e3d9b732c742a435350890d4e039d7f1288a0956b801c"
+    },
+    {
+      "path": "frontend/src/features/replay/useReplayReviewIndicators.ts",
+      "sha256": "02c49e6167df7ef5b070d8e772b837ce398db5daece02c6d665749ce74063c37"
+    },
+    {
+      "path": "frontend/src/features/replay/useReplaySharedIndicatorRuntime.ts",
+      "sha256": "e0f00571a2d206a5ec8900c61526feb386aedfb0b0c13595e5ed62a4192bd965"
+    },
+    {
+      "path": "frontend/src/features/strategy-research/StrategyResearchChart.tsx",
+      "sha256": "f3559e4dc329444daaf516a4a4a338e39b0ad7e57d0cb63a1bd6ae7bcc999cf4"
+    },
+    {
+      "path": "frontend/src/features/trading-accounts/QuickReplayOverlay.tsx",
+      "sha256": "115f78e225a3fb8a39b68de0b86eb19df3e954a44be5b81f98a62147d5b8d174"
+    },
+    {
+      "path": "frontend/src/services/indicatorApi.ts",
+      "sha256": "befab98fcddfee1753aa313a03af860a161ffe8ce90731615f019852eaaa6f2f"
+    },
+    {
+      "path": "packages/candlescope-plugin-pine-compat/engine-patches/host-contracts-v3.patch",
+      "sha256": "20d6f0704f89e9b90cebd1ff8aa4fb3ed60c161eeb25056f91b23b7c4bd4e7dc"
+    },
+    {
+      "path": "packages/candlescope-plugin-pine-compat/scripts/prepare_qualified_release.py",
+      "sha256": "42c038253108d1e9f7b645621699a1548eff0bf91636e4f2883c781c61882f4d"
+    },
+    {
+      "path": "packages/candlescope-plugin-pine-compat/scripts/qualify_host_contracts.py",
+      "sha256": "565d72bda1ba4171b03e92f7738d795da11a08efe0b2d94e026aa201af08006d"
+    },
+    {
+      "path": "packages/candlescope-plugin-pine-compat/scripts/qualify_release.py",
+      "sha256": "89e779a7657aadaf8cc1b0eda86225f65e74f99f7fcaf033ad7184647003d7cd"
+    },
+    {
+      "path": "packages/candlescope-plugin-pine-compat/src/candlescope_plugin_pine_compat/runtime.py",
+      "sha256": "0d2df166ce4e2d2829b423de0557432fffcd8c517a780e6e93d8ade4b284f933"
+    },
+    {
+      "path": "packages/candlescope-plugin-pine-compat/tests/test_chart_indicator_input.py",
+      "sha256": "6d4c133aaddb04bf049a862b74c710eaf1b3157965ce6c7bf293efe6d3fa2e2c"
+    }
+  ]
+}

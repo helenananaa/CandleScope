@@ -121,7 +121,7 @@ class IndicatorRuntimeRequest:
         from app.data_engine.interval_policy import parse_interval_spec
         bars = _sdk_bars(output_stream, self.bars)
         spec = parse_interval_spec(self.interval)
-        if spec and (spec.phase_ms or spec.timezone) and bars:
+        if spec and (spec.phase_ms or spec.timezone) and bars and not options.get("chartInput"):
             times = [bar.time * 1000 if bar.time < 100_000_000_000 else bar.time for bar in bars]
             if any(spec.floor_ms(at) != at for at in times):
                 raise ValueError("indicator_bar_basis_mismatch")

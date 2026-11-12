@@ -28,6 +28,7 @@ interface Entry {
   preparation: AbortController | null;
 }
 export interface SyntheticView {
+  getRequest(): SyntheticRequest;
   getSnapshot(): SyntheticSnapshot;
   subscribe(listener: () => void): () => void;
   release(): void;
@@ -82,6 +83,7 @@ export class SyntheticSeriesManager {
     target.listeners.add(hold);
     if (!target.socket && !target.timer && !target.preparation) this.connect(target, Boolean(capture));
     return {
+      getRequest: () => target.request,
       getSnapshot: () => target.state,
       subscribe: listener => {
         if (released) return () => {};

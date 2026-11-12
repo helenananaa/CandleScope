@@ -3,7 +3,7 @@
 Live-reference, frozen/result, imported-data and replay charts default to backend
 computation for Heikin Ashi, Renko, Point & Figure, Kagi and Line Break. Fixed and existing display-window ATR
 settings retain their previous semantics. Issue #150 remains open for the
-separate shared indicator/strategy, durable checkpoint and scale qualifications.
+separate strategy execution, durable checkpoint and scale qualifications.
 
 ## Ownership
 
@@ -47,12 +47,13 @@ snapshot.
 * `display-window/1` requires an explicit source `anchor` and `through`.
   It preserves the old loaded-window initialization and inferred tick / whole
   window ATR behavior. Changing the loaded range selects another definition.
-  ATR/tick recalibration announces a new generation. This mode is display-only.
+  ATR/tick recalibration announces a new generation. This mode supplies displayed bars and chart indicators, and remains unqualified for strategy execution.
 * `anchored/1` requires an explicit initialization anchor. Non-HA transforms
   additionally require fixed parameters and explicit `min_tick`; ATR is rejected. A missing prefix is
   unavailable, never permission to initialize from an arbitrary recent tail.
   Source range/finality must be qualified before output is adopted.
 
+The current `close-source/2` algorithm adds the documented volume allocation.
 Both identities include the complete source identity, transformation settings
 and algorithm version. The service reuses the source calendar resolved by
 DataManager, including session gaps. A continuous crypto calendar is the fallback
@@ -62,9 +63,57 @@ Closed inputs must carry DataManager's trusted finality. A controlled session-ga
 test is not a claim of live qualification for every provider/calendar.
 
 The API reports `strategy_qualified: false`, including for anchored kernels.
-This batch does not connect synthetic OHLC to indicator or strategy execution.
-Existing indicators still use original bars and their existing coordinate
-mapping. Real-price execution and supported language contracts are unchanged.
+Indicators now default to the current displayed input: ordinary candle/line/area
+styles retain admitted OHLCV; the five transforms consume the same shared backend
+snapshot as the main chart. Strategy runs and broker execution keep their existing
+explicit source contracts. Chart rendering alone does not qualify a strategy input.
+
+
+## Indicator input contract
+
+`useChartIndicatorRuntime` selects the normal hosted runtime for ordinary price
+styles and the shared explicit-bars runtime for transformed charts. Only the
+selected runtime receives indicator definitions. Live, imported, review, training,
+history-study and quick-review adapters supply the same source identity, loaded
+window and settings as their chart. Market studies/order flow retain their own
+market data semantics; changing a price style does not transform funding rates.
+
+The indicator input hook leases `MarketDataManager.synthetic`. Builtin and Pine
+batch requests include `context.chartInput` with the synthetic request, series ID,
+generation and revision. The server attaches the same DM instance, verifies that
+exact immutable version, and resolves submitted row keys back to authoritative
+OHLCV. A raced revision returns 409; it never substitutes newer prices. The next
+displayed revision schedules a fresh calculation. No synthetic indicator opens a
+raw-candle hosted subscription or reuses the ordinary hosted result cache.
+
+Non-time-based outputs use numeric execution keys `ordinal + 1` inside the
+existing numeric indicator codecs. These are identities, never artificial dates.
+Renderer lines/annotations/colors and crosshair legends opt into the display
+ordinal axis, preserving distinct values on every same-time brick. Pine drawing
+`bar_index` positions use that ordered axis; explicit `xloc.bar_time` positions
+continue to use source clocks. Heikin Ashi keeps its source-time axis. Parameter,
+source, range, generation and rewind changes invalidate prior calculations while
+preserving durable indicator definitions and their original execution target.
+
+Frontend JavaScript receives real source times in `bars[i].time`, plus its ordered
+`index`; output values still bind by array position. The bundled Pine source build
+adds `ordered-chart-input/1`: equal source times are allowed only in that explicit
+immutable indicator mode, every row advances series history, and partial/preview
+flags remain unconfirmed. A disposable batch reconstructs preview state per
+revision; it cannot reuse mutable candle sessions or run the strategy broker.
+Ordinary Pine batches still reject duplicate times. An older engine fails with a
+capability diagnostic. Other plugin languages currently have no chart-clock
+adapter and fail explicitly; definitions remain visible and editable. They are
+never silently run over raw bars or execution keys as dates. Retired Pyne remains
+rejected. Explicit Pine requested contexts keep their existing contracts and use
+real source times plus the captured revealed cutoff for provider reads.
+
+HA preserves source volume. Other transforms carry accumulated source volume to
+the next emitted display cohort and divide it equally across that cohort's rows;
+unemitted trailing volume stays pending. This deterministic display allocation
+avoids multiplying one candle's volume across many bricks. It is an estimate,
+not trade-level brick volume or a claim of TradingView parity. Enlarging a
+same-time preview cohort can therefore replace its entire volume-bearing prefix.
 
 ## Transport and frontend
 
@@ -165,7 +214,7 @@ See [pinned-source qualification](qa/synthetic-series-pinned-20261112/README.md)
 [default-path qualification](qa/synthetic-series-default-20261112/README.md)
 and the retained [first-slice record](qa/synthetic-series-150-20261112/README.md).
 The remaining issue scope includes durable
-checkpoint/restart qualification, indicator and
+checkpoint/restart qualification, additional plugin chart-clock contracts and
 strategy adapters, full execution/resource scheduling, independent output-cursor UI paging,
 multi-chart performance and native macOS/Windows save/exit/restart evidence.
 Retained frontend algorithms remain offline migration oracles and the explicitly

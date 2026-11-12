@@ -305,7 +305,7 @@ export default function ReplayTrainingPageShell({
   const [reviewLoadedPrefixKey, setReviewLoadedPrefixKey] = useState<string | null>(null);
   const [reviewIndicatorBinding, setReviewIndicatorBinding] = useState<ReplayCanonicalBinding | null>(null);
   const reviewIndicators = useReplayReviewIndicators({ seriesStore: reviewSeriesStore,
-    sourceBinding: reviewIndicatorBinding,
+    sourceBinding: reviewIndicatorBinding, appearance: settings,
     requestedKey: reviewPrefixKey, loadedKey: reviewLoadedPrefixKey, cursorMs: reviewCursorVirtualTimeMs,
     definitions: indicators.view.activeIndicators,
     exchange: typeof reviewProjectedExchange === "string" ? reviewProjectedExchange : "",

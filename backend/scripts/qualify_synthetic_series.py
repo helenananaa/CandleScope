@@ -46,7 +46,9 @@ def main():
         assert len(actual) == len(reference), (case["transform"], len(case["rows"]), len(actual), len(reference))
         for left, right in zip(actual, reference, strict=True):
             assert left["time"] == right["time"], (case["transform"], len(case["rows"]), left, right)
-            for field in ("open", "high", "low", "close", "volume"):
+            # close-source/2 intentionally adds an explicit cohort volume policy.
+            # Keep the legacy price/lineage oracle independent and unchanged.
+            for field in ("open", "high", "low", "close", *(("volume",) if case["transform"] == "heikin-ashi" else ())):
                 assert (field in left) == (field in right)
                 if field in left:
                     assert math.isclose(left[field], right[field], rel_tol=1e-12, abs_tol=1e-8), (field, left, right)
@@ -59,8 +61,13 @@ def main():
                 key = {"renko": "renko", "point-and-figure": "pointAndFigure", "kagi": "kagi", "line-break": "lineBreak"}[case["transform"]]
                 assert left["customValues"][key] == right["customValues"][key], (case["transform"], left, right)
             count += 1
+        if case["transform"] != "heikin-ashi":
+            through = max((row["customValues"]["chartProjection"]["sourceToTime"] for row in actual), default=-1)
+            represented = sum(row["volume"] for row in case["rows"] if row["time"] <= through)
+            assert all(math.isfinite(row["volume"]) and row["volume"] >= 0 for row in actual)
+            assert math.isclose(sum(row["volume"] for row in actual), represented, rel_tol=1e-12, abs_tol=1e-8)
     print(json.dumps({"status": "PASS", "cases": len(cases), "output_rows": count,
-        "scope": "offline Python vs retained TypeScript display oracle; not native/performance acceptance"}))
+        "scope": "offline Python price/lineage vs unchanged TypeScript oracle; HA volume parity and non-HA volume conservation checked separately; not native/performance acceptance"}))
 
 
 if __name__ == "__main__":

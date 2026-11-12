@@ -82,7 +82,9 @@ import type { ForegroundPreloadGate } from "../features/market-data/foregroundPr
 import { useAdvancedMarketDataRuntime } from "../features/advanced-market-data/useAdvancedMarketDataRuntime.js";
 import { useDrawingRuntime } from "../features/drawings/useDrawingRuntime.js";
 import type { DrawingToolSelectionRuntime } from "../features/drawings/drawingToolState.js";
-import { useIndicatorRuntime } from "../features/indicators/useIndicatorRuntime.js";
+import { useChartIndicatorRuntime } from "../features/indicators/useChartIndicatorRuntime.js";
+import { chartIndicatorSelection } from "../features/indicators/chartIndicatorInput.js";
+import { backendSyntheticSourceFor } from "../features/market-chart-platform/marketChartSurfaceModel.js";
 import { indicatorSignature, type ControlCellObservation } from "../features/app-control/controlModel.js";
 import { useControlCommands } from "../features/app-control/useControlCommands.js";
 import { chartCommands } from "../features/app-control/chartCommands.js";
@@ -606,7 +608,8 @@ function LiveChartCell({
     [cell.id, windowId, workspaceId],
   );
 
-  const indicators = useIndicatorRuntime({
+  const indicators = useChartIndicatorRuntime({
+    chart: chartIndicatorSelection(backendSyntheticSourceFor(liveReferenceSource), sourceMarketData.view.seriesStore, combinedSettings),
     // Workspace schema v8 persists an explicit indicator list for every cell.
     // An empty list is therefore intentional (and is required by capacity
     // scenarios such as S3), not a signal to inject the legacy VOL default.

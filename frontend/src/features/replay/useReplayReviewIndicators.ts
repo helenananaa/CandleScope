@@ -1,3 +1,6 @@
+import type { ChartSettings } from "../settings/chartAppearanceSettings.js";
+import { chartIndicatorSelection } from "../indicators/chartIndicatorInput.js";
+import { replaySyntheticSource } from "./replaySyntheticSource.js";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { useLocale } from "../../i18n/useLocale.js";
 import { replayIndicatorPresentation } from "./replayIndicatorPresentation.js";
@@ -29,7 +32,7 @@ export function reviewIndicatorBars(rows: readonly KlineBar[], requestedKey: str
 }
 
 export function useReplayReviewIndicators({ seriesStore, requestedKey, loadedKey, cursorMs,
-  definitions, exchange, marketType, symbol, interval, sourceBinding }: {
+  definitions, exchange, marketType, symbol, interval, sourceBinding, appearance }: {
   seriesStore: SeriesWindowStore;
   requestedKey: string | null;
   loadedKey: string | null;
@@ -40,6 +43,7 @@ export function useReplayReviewIndicators({ seriesStore, requestedKey, loadedKey
   symbol: string;
   interval: string;
   sourceBinding: ReplayCanonicalBinding | null;
+  appearance?: Partial<ChartSettings>;
 }) {
   const locale = useLocale();
   const subscribe = useCallback((listener: () => void) => seriesStore.subscribe(listener), [seriesStore]);
@@ -57,7 +61,14 @@ export function useReplayReviewIndicators({ seriesStore, requestedKey, loadedKey
   const meta = useMemo(() => ({ version: revision, status: "ready", committedAt: null,
     source: "replay-indicator-revealed-prefix" }), [revision]);
   const outputBarTimes = useMemo(() => bars.map(bar => bar.time), [bars]);
-  const runtime = useProvidedBarsIndicatorRuntime({ bars, outputBarTimes, computeBatch, chartDataMeta: meta, persistence,
+  const runtime = useProvidedBarsIndicatorRuntime({
+    chart: chartIndicatorSelection(replaySyntheticSource({
+      market: { exchange, marketType, symbol, interval }, seriesKey: ready ? seriesStore.seriesKey : null,
+      sessionId: sourceBinding?.sessionId ?? null, trackId: sourceBinding?.trackId ?? null,
+      dataEpoch: sourceBinding?.dataEpoch ?? null, revealedBoundaryMs: sourceBinding?.revealedBoundaryMs ?? null,
+      sourceSequence: sourceBinding?.sourceSequence ?? (sourceBinding ? 0 : null),
+      ...(sourceBinding?.historyEpoch ? { historyEpoch: sourceBinding.historyEpoch } : {}),
+    }), seriesStore, appearance ?? {}), bars, outputBarTimes, computeBatch, chartDataMeta: meta, persistence,
     visibleRangePriority: true,
     datasetKey: `${requestedKey ?? "review-inactive"}|${canonical.sourceKey}`,
     sourceScopeKey: `${requestedKey ?? "review-inactive"}|${canonical.sourceKey}`,

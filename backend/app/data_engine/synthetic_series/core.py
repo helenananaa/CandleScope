@@ -14,7 +14,7 @@ import math
 MAX_SOURCE_ROWS = 10_000
 MAX_OUTPUT_ROWS = 50_000
 MAX_BRICKS_PER_SOURCE = 10_000
-ALGORITHM_VERSION = "close-source/1"
+ALGORITHM_VERSION = "close-source/2"
 TRANSFORMS = ("heikin-ashi", "renko", "point-and-figure", "kagi", "line-break")
 
 
@@ -378,6 +378,32 @@ class SyntheticKernel:
             raise SyntheticError("synthetic output budget exceeded")
         return state, confirmed, count, output
 
+    def _with_volume(self, output, source):
+        if self.config.transform == "heikin-ashi" or not output:
+            return output
+        # Source volume waits for the next emitted display group, then divides
+        # evenly among that group's records. Never duplicate one candle's full
+        # volume on every same-time brick. Unemitted trailing volume stays pending.
+        groups = []
+        for index, point in enumerate(output):
+            time = point["customValues"]["chartProjection"]["sourceToTime"]
+            if not groups or groups[-1][0] != time:
+                groups.append([time, [index], 0.0])
+            else:
+                groups[-1][1].append(index)
+        at = 0
+        for row in source:
+            while at < len(groups) and row["time"] > groups[at][0]:
+                at += 1
+            if at == len(groups):
+                break
+            groups[at][2] += row.get("volume", 0)
+        result = list(output)
+        for _, indexes, volume in groups:
+            for index in indexes:
+                result[index] = {**output[index], "volume": volume / len(indexes)}
+        return result
+
     def replace_snapshot(self, rows):
         """Project a frozen display window, including historical partial buckets.
 
@@ -401,9 +427,9 @@ class SyntheticKernel:
         except BaseException:
             self.options = previous_options
             raise
-        self.source, self.output, self._snapshot_only = source, output, True
+        self.source, self.output, self._snapshot_only = source, self._with_volume(output, source), True
         self._state, self._confirmed_output, self._confirmed_count = {}, [], 0
-        return output
+        return self.output
 
     def replace(self, rows):
         if len(rows) > MAX_SOURCE_ROWS:
@@ -421,7 +447,7 @@ class SyntheticKernel:
         except BaseException:
             self.options = previous_options
             raise
-        self.source, self.output = source, result[3]
+        self.source, self.output = source, self._with_volume(result[3], source)
         self._state, self._confirmed_output, self._confirmed_count = result[:3]
         self._snapshot_only = False
         return self.output
@@ -452,6 +478,6 @@ class SyntheticKernel:
         if resolve_options(self.config, source) != self.options:
             return self.replace(source)
         result = self._calculate(source, reset=False)
-        self.source, self.output = source, result[3]
+        self.source, self.output = source, self._with_volume(result[3], source)
         self._state, self._confirmed_output, self._confirmed_count = result[:3]
         return self.output

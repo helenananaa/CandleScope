@@ -1,3 +1,4 @@
+import type { AxisTime } from "../../features/chart-representation/chartRepresentationTypes.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -67,7 +68,7 @@ test("SingleChartPanes crosshair lifecycle replaces the StrictMode rehearsal gen
       },
     };
   });
-  const snapshots: Array<number | null> = [];
+  const snapshots: Array<AxisTime | null> = [];
   const unsubscribe = lifecycle.store.subscribe(() => {
     snapshots.push(lifecycle.store.getSnapshot());
   });

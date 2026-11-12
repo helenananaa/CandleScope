@@ -158,7 +158,7 @@ import type {
 
 export { buildIndicatorRangeLifecycleKey } from "./indicatorRangeLifecycle.js";
 
-interface UseIndicatorRuntimeOptions {
+export interface UseIndicatorRuntimeOptions {
   seriesIdentity?: KlineSeriesIdentityInput;
   autoAddVolume?: boolean;
   session?: ChartSessionRuntime;

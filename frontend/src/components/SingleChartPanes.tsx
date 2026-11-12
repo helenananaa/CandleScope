@@ -2515,7 +2515,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         return true;
       }
       chart.setCrosshairPosition(price, displayRow.time, series);
-      paneCrosshairStore.publish(sourceTime);
+      paneCrosshairStore.publish(displayRow.time);
       const includeVolume = !isOrdinalAxisTime(displayRow.time)
         || isLastDisplayTargetForSourceTime(displayRowsRef.current, displayIndex);
       publishMainLegendCrosshair(buildMainSeriesCrosshairValue(
@@ -2891,7 +2891,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         reportCrosshairMove(null);
         return;
       }
-      paneCrosshairStore.publish(sourceTime);
+      paneCrosshairStore.publish(axisTime);
       const includeVolume = initialDescriptor.axisMode === "time"
         || isLastDisplayTargetForSourceTime(displayRowsRef.current, displayIndex);
       const crosshairValue = buildMainSeriesCrosshairValue(
@@ -4929,8 +4929,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       const series = pane.id === "main" ? mainSeriesRef.current : selectIndicatorPaneAnnotationTarget(indicatorSeriesRef.current, pane.id,
         panePlaceholderSeriesRef.current.seriesByPane.get(pane.paneIndex)?.series ?? null);
       if (!series) continue;
-      const primitive = new PineObjectPrimitive();
-      primitive.update(scenes, sourceRowsRef.current, (time) => {
+      const sourceCoordinate = (time: number) => {
         const display = displayRowsRef.current;
         if (!display.length) return null;
         const sourceTime = (index: number) => { const row = display[index]!; return typeof row.time === "number" ? row.time : row.time.sourceTime; };
@@ -4947,9 +4946,24 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         if (a === null) return null;
         const step = display[left + 1] ? sourceTime(left + 1) - sourceTime(left) : (parseIntervalSeconds(interval) || 60);
         return a + (time - sourceTime(left)) / Math.max(1, step) * (b === null ? chart.timeScale().options().barSpacing : b - a);
-      });
-      series.attachPrimitive(primitive);
-      attached.push({ series, primitive });
+      };
+      for (const ordinal of [false, true]) {
+        const group = scenes.filter(scene => (scene.inputAxis === "display-ordinal") === ordinal);
+        if (!group.length) continue;
+        const primitive = new PineObjectPrimitive();
+        const bars = ordinal ? displayRowsRef.current.map(row => ({ ...row,
+          time: typeof row.time === "object" ? row.time.order + 1 : row.time })) : sourceRowsRef.current;
+        const coordinate = ordinal ? (key: number) => {
+          const rows = displayRowsRef.current;
+          const index = key - 1, anchor = Math.max(0, Math.min(rows.length - 1, Math.floor(index)));
+          const row = rows[anchor]; if (!row) return null;
+          const x = chart.timeScale().timeToCoordinate(row.time);
+          return x === null ? null : x + (index - anchor) * chart.timeScale().options().barSpacing;
+        } : sourceCoordinate;
+        primitive.update(group, bars, coordinate, sourceCoordinate);
+        series.attachPrimitive(primitive);
+        attached.push({ series, primitive });
+      }
     }
     return () => { for (const { series, primitive } of attached) series.detachPrimitive(primitive); };
   }, [dataMeta, indicatorDatasetOwned, indicatorDrawings, interval, paneDescriptors, seriesReady]);

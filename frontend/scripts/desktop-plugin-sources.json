@@ -11,8 +11,8 @@
         "sha256": "sha256:d7da1e620453bd978ea7afd76642717462d0bacf1000bc248f1acaa238a8b695"
       },
       "bridge": "candlescope-plugin-pine-compat",
-      "patch": "packages/candlescope-plugin-pine-compat/engine-patches/host-contracts-v2.patch",
-      "patchSha256": "sha256:53cc3758f4fb575d02e00094b5b8a29ff35e2992eddd57273ff72b1af6485ec3"
+      "patch": "packages/candlescope-plugin-pine-compat/engine-patches/host-contracts-v3.patch",
+      "patchSha256": "sha256:20d6f0704f89e9b90cebd1ff8aa4fb3ed60c161eeb25056f91b23b7c4bd4e7dc"
     }
   },
   "numpy": {

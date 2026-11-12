@@ -27,7 +27,7 @@ function row(ordinal: number, generation = "generation", close = 102 + ordinal *
 }
 function snapshot(revision = 1, generation = "generation") {
   return { protocol: "candlescope.synthetic/1", type: "snapshot", series_id: "series",
-    definition: { source: request.source, config: { ...request.config, algorithm: "close-source/1" }, anchor: 60, through: 120 },
+    definition: { source: request.source, config: { ...request.config, algorithm: "close-source/2" }, anchor: 60, through: 120 },
     generation, revision, status: "ready", reason: null, from_index: 0, total: 3,
     rows: [row(0, generation), row(1, generation), row(2, generation)] };
 }

@@ -148,7 +148,7 @@ export function adoptSynthetic(previous: SyntheticSnapshot, raw: unknown, reques
     || Object.keys(origin).length !== Object.keys(request.origin).length
     || Object.entries(request.origin).some(([key, value]) => (origin as Record<string, unknown>)[key] !== value))
     : origin != null) throw new Error("Synthetic source origin changed");
-  if (config["algorithm"] !== "close-source/1") throw new Error("Unsupported synthetic algorithm");
+  if (config["algorithm"] !== "close-source/2") throw new Error("Unsupported synthetic algorithm");
   if (Object.entries(request.source).some(([key, value]) => source[key] !== value)
     || Object.entries(request.config).some(([key, value]) => config[key] !== value)
     || definition["anchor"] !== request.anchor || definition["through"] !== request.through) {

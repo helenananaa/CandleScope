@@ -78,6 +78,7 @@ export class SyntheticChartBinding {
     return () => { this.listeners.delete(listener); };
   };
   snapshot(): SyntheticSnapshot { return this.view?.getSnapshot() ?? EMPTY_SYNTHETIC; }
+  request() { return this.view?.getRequest() ?? null; }
   rows(): DisplayRow[] { return Array.from(this.snapshot().rows); }
   get configurationKey() {
     const snapshot = this.snapshot();

@@ -288,7 +288,7 @@ def test_one_cancelled_seed_consumer_does_not_cancel_other_consumer():
 def test_consumer_payloads_do_not_alias_and_failed_capacity_preserves_last_result():
     async def run():
         source = Source([bar(60, 100), bar(120, 106, closed=False)])
-        service = SyntheticSeriesService(source, max_bytes=20_000)
+        service = SyntheticSeriesService(source, max_bytes=30_000)
         definition = SyntheticDefinition(SeriesKey("BTCUSDT", "1m"), SyntheticConfig("renko", box_size=2, min_tick=1), 60, 120)
         first, second = await service.attach(definition), await service.attach(definition)
         await source.emit(DataEventType.BAR_UPDATED, bar(120, 108, closed=False))
@@ -359,6 +359,9 @@ def test_complete_window_chunks_pin_one_snapshot_then_deliver_queued_tail():
         assert rest[-1]["complete"] is True
         assert sum(len(part["rows"]) for part in [first, *rest]) == 6000
         delta = await lease.next()
-        assert delta["from_index"] == 6000 and delta["total"] == 6005 and len(delta["rows"]) == 5
+        # Same source cohort gains bricks: its volume is redistributed, so the
+        # patch must replace the whole cohort, including the captured prefix.
+        assert delta["from_index"] == 0 and delta["total"] == 6005 and len(delta["rows"]) == 6005
+        assert sum(row["volume"] for row in delta["rows"]) == pytest.approx(4)
         await lease.close()
     asyncio.run(run())

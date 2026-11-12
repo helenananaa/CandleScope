@@ -1,0 +1,1 @@
+{"status": "PASS", "cases": 270, "output_rows": 19231, "scope": "offline Python price/lineage vs unchanged TypeScript oracle; HA volume parity and non-HA volume conservation checked separately; not native/performance acceptance"}

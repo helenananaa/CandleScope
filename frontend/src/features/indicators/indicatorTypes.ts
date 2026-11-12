@@ -90,6 +90,8 @@ export type IndicatorParameterSchema =
 
 export interface IndicatorOhlcvBar {
   time: number;
+  /** Original script clock for ordered chart rows. */
+  sourceTime?: number;
   open: number;
   high: number;
   low: number;
@@ -125,6 +127,7 @@ export type IndicatorAnnotationPoint =
   | (IndicatorAnnotationPointFields & { value: number; time?: number });
 
 export interface IndicatorLine {
+  inputAxis?: "display-ordinal";
   nativeScene?: Record<string, unknown>;
   data: IndicatorValuePoint[];
   id?: string;
@@ -151,6 +154,7 @@ export interface IndicatorLine {
 }
 
 export interface IndicatorDrawing {
+  inputAxis?: "display-ordinal";
   id: string;
   indicatorId?: string;
   pane: string;
@@ -160,6 +164,7 @@ export interface IndicatorDrawing {
 }
 
 export interface IndicatorMarker {
+  inputAxis?: "display-ordinal";
   data: IndicatorAnnotationPoint[];
   indicatorId?: string;
   id?: string;
@@ -172,6 +177,7 @@ export interface IndicatorMarker {
 }
 
 export interface IndicatorFill {
+  inputAxis?: "display-ordinal";
   indicatorId?: string;
   id?: string;
   pane?: string;
@@ -187,6 +193,7 @@ export interface IndicatorFill {
 }
 
 export interface IndicatorHLine {
+  inputAxis?: "display-ordinal";
   indicatorId?: string;
   id?: string;
   pane?: string;
@@ -199,6 +206,7 @@ export interface IndicatorHLine {
 }
 
 export interface IndicatorBgColor {
+  inputAxis?: "display-ordinal";
   indicatorId?: string;
   id?: string;
   pane?: string;
@@ -209,6 +217,7 @@ export interface IndicatorBgColor {
 }
 
 export interface IndicatorBarColor {
+  inputAxis?: "display-ordinal";
   indicatorId?: string;
   id?: string;
   pane?: string;
@@ -216,6 +225,7 @@ export interface IndicatorBarColor {
 }
 
 export interface IndicatorSignal {
+  inputAxis?: "display-ordinal";
   indicatorId?: string;
   id?: string;
   pane?: string;
@@ -463,7 +473,13 @@ export interface IndicatorReplayContext {
   sourceSequence?: number;
 }
 
+export interface IndicatorChartInput {
+  request: import("../market-data/synthetic/syntheticSeries.js").SyntheticRequest;
+  seriesId: string; generation: string; revision: number;
+}
+
 export interface IndicatorComputeRequest {
+  chartInput?: IndicatorChartInput;
   seriesIdentity?: KlineSeriesIdentityInput | undefined;
   mode?: string;
   language?: string;

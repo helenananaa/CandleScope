@@ -5,6 +5,7 @@ import { indicatorSignature, type ControlCellObservation } from "../app-control/
 import { historyStudyCommands } from "./historyStudyCommands.js";
 import { ChartErrorBoundary } from "../../app/AppProviders.js";
 import SingleChartPanes from "../../components/SingleChartPanes.js";
+import { chartIndicatorSelection } from "../indicators/chartIndicatorInput.js";
 import { capturedSyntheticSource } from "../market-data/synthetic/capturedSyntheticSource.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -130,7 +131,8 @@ export default function HistoryStudyOverlay({ cellId, revision, workspaceId, lin
     committedAt: null, optimistic: false, historyComplete: true, dataRevision: input.id }), [input.id, rows, store.seriesKey, version]);
   const persistence = useMemo(() => ({ controlled: true, load: () => definitions.map(item => ({ ...item })), save: () => undefined }), [definitions]);
   const unsupported = definitions.map(indicator => ({ indicator, support: providedBarsIndicatorSupport(indicator) })).filter(item => !item.support.supported);
-  const indicators = useProvidedBarsIndicatorRuntime({ bars: rows, chartDataMeta: dataMeta, datasetKey: input.id,
+  const indicators = useProvidedBarsIndicatorRuntime({
+    chart: chartIndicatorSelection(capturedSyntheticSource(series, store.seriesKey, `study:${input.id}`, cursorMs), store, { chartType: normalizeMainChartType(style.chartType) }), bars: rows, chartDataMeta: dataMeta, datasetKey: input.id,
     exchange: series.exchange, marketType: series.marketType, symbol: series.symbol, interval: series.interval,
     persistence, seriesReady: version, sourceOrdinal: cursorMs, sourceScopeKey: input.id,
     visibleThroughSeconds: rows.at(-1)?.time ?? null, candleUpColor: style.upColor, candleDownColor: style.downColor });

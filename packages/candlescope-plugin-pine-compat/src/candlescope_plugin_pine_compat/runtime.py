@@ -514,6 +514,23 @@ def _normalize_bars(
     *, prefix_capture: list[RetainedInputPrefix] | None = None,
 ) -> tuple[list[dict[str, float | int]], list[int]]:
     """Validate and convert bars; ``previous`` is an earlier (bars, result) to reuse."""
+    chart = request.options.get("chartInput")
+    if chart is not None:
+        from dataclasses import replace
+        if (not isinstance(chart, Mapping) or chart.get("contract") != "candlescope.chart-indicator-input/1"
+                or not isinstance(chart.get("sourceTimes"), list) or not isinstance(chart.get("closed"), list)
+                or len(chart["sourceTimes"]) != len(request.bars) or len(chart["closed"]) != len(request.bars)
+                or any(type(value) is not int or value < 0 or value >= 10_000_000_000 for value in chart["sourceTimes"])
+                or any(type(value) is not bool for value in chart["closed"])
+                or any(a > b for a, b in zip(chart["sourceTimes"], chart["sourceTimes"][1:]))
+                or any(bar.is_closed != flag for bar, flag in zip(request.bars, chart["closed"]))):
+            raise BridgeError("PINE_INVALID_INPUT", "Invalid ordered chart clock/finality contract")
+        options = {key: value for key, value in request.options.items() if key != "chartInput"}
+        rows, host_times = _normalize_bars(replace(request, options=options,
+            bars=tuple(replace(bar, is_closed=True) for bar in request.bars)))
+        for row, clock in zip(rows, chart["sourceTimes"]):
+            row["time"] = clock * 1000
+        return rows, host_times
     if len(request.bars) > MAX_BARS:
         raise BridgeError(
             "PINE_INPUT_LIMIT_EXCEEDED",
@@ -1798,7 +1815,14 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
                 if (not session_id or chart_commit == expected_chart_commit
                         or any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{32}", value) for value in commits)):
                     raise BridgeError("PINE_HOST_INPUT_INVALID", "Invalid chart journal commit identity.")
-            forming = bool(request.bars and not request.bars[-1].is_closed)
+            chart_input = request.options.get("chartInput")
+            if chart_input is not None:
+                if getattr(engine, "ORDERED_CHART_INPUT_CONTRACT", None) != "ordered-chart-input/1":
+                    raise BridgeError("PINE_HOST_CAPABILITY_UNSUPPORTED", "Install an engine with ordered-chart-input/1 for chart-derived indicators.")
+                if session_id:
+                    raise BridgeError("PINE_INVALID_INPUT", "Ordered chart snapshots cannot reuse a candle session")
+                options["chart_closed"] = chart_input["closed"]
+            forming = bool(chart_input is None and request.bars and not request.bars[-1].is_closed)
             execution_meta = {"executionMode": "historical-batch", "incremental": False,
                               "formingBar": False, "sessionRetained": False}
             if session_id or forming:
@@ -1876,6 +1900,9 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
                         {"start": host_times[0], "end": host_times[-1]} if host_times else None
                     )
             meta.update(execution_meta)
+            if chart_input is not None:
+                meta["chartInput"] = {key: value for key, value in chart_input.items() if key not in {"sourceTimes", "closed"}}
+                meta["formingBar"] = any(not value for value in chart_input["closed"])
             if libraries:
                 meta["libraryDigests"] = library_digests(request.options)
             if clocks is not None:

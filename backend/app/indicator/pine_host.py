@@ -175,7 +175,9 @@ class PineHostInputs:
             bars = sdk.bars
             spec = parse_interval_spec(request.interval)
             if bars and spec:
-                times = [bar.time * 1000 if bar.time < 100_000_000_000 else bar.time for bar in bars]
+                chart = request.options.get("chartInput")
+                times = [value * 1000 for value in chart["sourceTimes"]] if chart else [
+                    bar.time * 1000 if bar.time < 100_000_000_000 else bar.time for bar in bars]
                 revealed = request.options.get("pineRevealedBoundaryMs")
                 now = revealed if revealed is not None else int(time.time() * 1000)
                 if (requirements.get("execution") or {}).get("clock") == "explicitTimestampWhenEvaluated" and "executionTimes" not in supplied:

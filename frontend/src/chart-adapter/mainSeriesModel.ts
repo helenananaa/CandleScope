@@ -85,7 +85,8 @@ export function buildIndicatorBarColorMap(
   for (const group of indicatorBarcolors || []) {
     if (!Array.isArray(group?.data)) continue;
     for (const entry of group.data) {
-      if (entry?.time != null && entry.color) colorMap.set(entry.time, entry.color);
+      if (entry?.time != null && entry.color) colorMap.set(group.inputAxis === "display-ordinal"
+        ? `chart-order:${Number(entry.time) - 1}` : entry.time, entry.color);
     }
   }
   return colorMap;
@@ -160,6 +161,9 @@ function indicatorColorForRow(
   const time = row?.time;
   if (time == null) return null;
   if (colorMap.has(time)) return colorMap.get(time) || null;
+  if (typeof time === "object" && "order" in time && colorMap.has(`chart-order:${time.order}`)) {
+    return colorMap.get(`chart-order:${time.order}`) || null;
+  }
   const sourceTime = sourceTimeFromChartTime(time);
   if (sourceTime !== null && sourceTime !== time) {
     return colorMap.get(sourceTime) || null;
