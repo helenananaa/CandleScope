@@ -154,6 +154,24 @@ exclude allocator fragmentation, native memory and unregistered transient work.
 and reconstruction; #130 owns block leases/dependency retention. Their minimum
 consumer integration receipts and joint budget acceptance remain separate work.
 
+R129 default source dispatch shares only a recursively immutable component value
+among compatible default derived targets. Target admission, indexes, finality and
+revision handling remain independent. Nested source references are captured before
+publication; mutable caller payloads cannot change accepted values. Preparation
+holds at most one latest value per dispatch, at most 128 target handles, and uses
+the existing realtime-state budget for up to 64 reusable 16 KiB work allowances.
+Capacity is an estimate, distinct from physical heap; no source values persist in
+the allowance pool. Cancellation releases task-local values; detach, rollback and
+stop trim idle allowance. Optional admission failure uses independent preparation.
+`BAR_AGG_SHARED_COMPONENT_INPUTS=false` disables sharing while preserving ownership
+and revision fixes. Custom extension routes remain independent.
+
+Heap diagnostics retain temporary root views across all owners so identity-based
+deduplication cannot hide a later owner's graph through recycled container IDs.
+Ordinary budget estimates remain conservative target-reference counts and may
+overcount shared immutable values. See [source preparation evidence and limits](../qa/realtime-shared-input-129-20261112/README.md);
+this does not establish whole-runtime resource or native acceptance.
+
 ## Migration and operational rollback
 
 1. Stop old writers and back up the SQLite database (including WAL through a

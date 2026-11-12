@@ -182,6 +182,10 @@ class BarAggregatorConfig:
         default_factory=lambda: _env_bool("BAR_AGG_INCREMENTAL_COMPONENTS", True),
     )
 
+    shared_component_inputs: bool = field(
+        default_factory=lambda: _env_bool("BAR_AGG_SHARED_COMPONENT_INPUTS", True),
+    )
+
     # ── Methods ──────────────────────────────────────────────
 
     def update(self, **kwargs) -> None:

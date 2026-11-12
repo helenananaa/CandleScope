@@ -442,6 +442,7 @@ class DataManager(DataManagerCore):
 
         from app.data_engine.memory_budget import MemoryBudget
         self.memory_budget = MemoryBudget(self._cfg.memory_budget_bytes)
+        self.bar_aggregator.memory_budget = self.memory_budget
         for owner, service, limit in (("bar-cache", self.cache, 128 * 1024 * 1024),
                                       ("realtime-state", self.bar_aggregator, 128 * 1024 * 1024),
                                       ("event-delivery", self.event_bus, 32 * 1024 * 1024),
