@@ -202,3 +202,14 @@ def test_late_page_failure_never_materializes_or_releases_its_fences_early(mixed
     assert seen>=2
     assert mixed_query.storage.count_bars('BTCUSDT','20011m',0,20011*MINUTE-1,market_type='futures')==0
     assert mixed_query.memory_budget.snapshot()['reserved_bytes']==0
+
+
+def test_out_of_order_page_is_rejected_before_advancing_the_stream():
+    values=stream_rows(89,count=1)
+    stream=ClosedKlineRowStream(target_interval='89m',source_interval=None,now_ms=89*MINUTE)
+    assert not stream.push(values[:7])
+    with pytest.raises(ValueError,match='ordered'):
+        stream.push([values[8],values[7]])
+    # A corrected page may resume exactly after the accepted prefix.
+    assert not stream.push(values[7:])
+    assert len(stream.finish())==1

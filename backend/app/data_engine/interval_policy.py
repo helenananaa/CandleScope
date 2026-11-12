@@ -619,15 +619,23 @@ class ClosedKlineRowStream:
         if self._finished:
             raise ValueError("canonical stream is already finished")
         prepared = []
+        last_open = self._last_open
         for row in component_rows:
             try:
                 opened = int(row["open_time"])
             except (KeyError, TypeError, ValueError):
                 continue
-            if self._last_open is not None and opened < self._last_open:
+            if last_open is not None and opened < last_open:
                 raise ValueError("canonical aggregation pages must be ordered")
-            self._last_open = opened
+            last_open = opened
             prepared.append((opened, row))
+        return self._push_ordered(prepared)
+
+    def _push_ordered(self, prepared):
+        # Batch callers have already parsed and sorted these pairs; retain no
+        # second full-size timestamp/index copy merely to feed the same proof.
+        if prepared:
+            self._last_open = prepared[-1][0]
         self.pages += 1
         self.rows += len(prepared)
         completed = []
@@ -685,8 +693,8 @@ def aggregate_kline_rows(
             prepared.append((int(row["open_time"]), row))
         except (KeyError, TypeError, ValueError):
             continue
-    ordered = [row for _, row in sorted(prepared, key=lambda item: item[0])]
-    return [*stream.push(ordered), *stream.finish()]
+    prepared.sort(key=lambda item: item[0])
+    return [*stream._push_ordered(prepared), *stream.finish()]
 
 
 def _stored_component_is_closed(
