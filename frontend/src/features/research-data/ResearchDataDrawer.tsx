@@ -1,4 +1,5 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
+import { OverlayLayer } from "../../components/ui/Overlays.js";
 
 import { t } from "../../i18n/index.js";
 import { ordinarySourceLabel, isCapabilityAvailable } from "./researchDataSourceModel.js";
@@ -74,21 +75,15 @@ function ResearchDataDrawerBody({
   onClose(): void;
 }) {
   const kinds: ResearchSourceKind[] = availableKinds ?? ["CURRENT_CHART", "IMPORTED_DATASET", "COMPLETED_RUN"];
+  // The overlay layer focuses the drawer, returns focus on close and handles Escape.
   const drawerRef = useRef<HTMLElement>(null);
-  const closeRef = useRef(onClose);
-  useEffect(() => { closeRef.current = onClose; }, [onClose]);
-  useEffect(() => {
-    const previous = document.activeElement;
-    drawerRef.current?.focus();
-    return () => { if (previous instanceof HTMLElement && previous.isConnected) previous.focus(); };
-  }, []);
   return (
+    <OverlayLayer kind="drawer" side="right" onClose={onClose} initialFocusRef={drawerRef}>
     <aside className="research-data-drawer" data-testid="research-data-drawer" ref={drawerRef}
-      role="dialog" aria-label={t("research.drawer.title")} tabIndex={-1}
-      onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); closeRef.current(); } }}>
+      role="dialog" aria-label={t("research.drawer.title")} tabIndex={-1}>
       <header>
         <strong>{t("research.drawer.title")}</strong>
-        <button type="button" onClick={onClose}>{t("backtest.close")}</button>
+        <button type="button" onClick={onClose} data-overlay-close="">{t("backtest.close")}</button>
       </header>
       {kinds.length > 1 && <div className="research-source-cards">
         {kinds.map((kind) => {
@@ -146,5 +141,6 @@ function ResearchDataDrawerBody({
         />
       ) : null}
     </aside>
+    </OverlayLayer>
   );
 }

@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { DialogSurface } from "../Overlays.js";
 import { createOverlayStack, type OverlayEntry } from "../overlay/overlayStack.js";
 import { placePopover } from "../overlay/position.js";
-import { trappedFocusTarget } from "../overlay/overlayRuntime.js";
+import { escapeClosesTopLayer, trappedFocusTarget } from "../overlay/overlayRuntime.js";
 import { MAX_TOASTS, createToastStore } from "../overlay/toastStore.js";
 
 function entry(id: string, kind: OverlayEntry["kind"], extra: Partial<OverlayEntry> = {}, closed: string[] = []): OverlayEntry {
@@ -63,6 +63,35 @@ test("a layer that refuses Escape keeps it from closing anything below", () => {
   assert.equal(stack.escape(), false);
   assert.deepEqual(closed, []);
   assert.equal(createOverlayStack().escape(), false);
+});
+
+test("whether a layer refuses Escape is read when Escape is pressed", () => {
+  const closed: string[] = [];
+  const stack = createOverlayStack();
+  let editing = true;
+  stack.open(entry("indicators", "drawer", { closeOnEscape: () => !editing }, closed));
+  assert.equal(stack.escape(), false);
+  editing = false;
+  assert.equal(stack.escape(), true);
+  assert.deepEqual(closed, ["indicators"]);
+});
+
+test("Escape closes the top layer only after every other handler declined it", () => {
+  const key = (extra: Partial<Parameters<typeof escapeClosesTopLayer>[0]> = {}) => ({
+    key: "Escape", isComposing: false, keyCode: 27, defaultPrevented: false, cancelBubble: false, ...extra,
+  });
+  const open = { layersOpen: true, nativeModalOpen: false };
+  assert.equal(escapeClosesTopLayer(key(), open), true);
+  // A widget in the layer (an editor, a nested picker, a rename field) used it.
+  assert.equal(escapeClosesTopLayer(key({ defaultPrevented: true }), open), false);
+  assert.equal(escapeClosesTopLayer(key({ cancelBubble: true }), open), false);
+  // Input methods use Escape to cancel composition.
+  assert.equal(escapeClosesTopLayer(key({ isComposing: true }), open), false);
+  assert.equal(escapeClosesTopLayer(key({ keyCode: 229 }), open), false);
+  // A native modal <dialog> handles its own Escape; nothing to close without layers.
+  assert.equal(escapeClosesTopLayer(key(), { layersOpen: true, nativeModalOpen: true }), false);
+  assert.equal(escapeClosesTopLayer(key(), { layersOpen: false, nativeModalOpen: false }), false);
+  assert.equal(escapeClosesTopLayer(key({ key: "Enter" }), open), false);
 });
 
 test("subscribers hear opens and closes", () => {

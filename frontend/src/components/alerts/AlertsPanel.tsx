@@ -1,5 +1,6 @@
 import { Button } from "../ui/Button.js";
 import { confirmAction } from "../ui/overlay/overlayApi.js";
+import { OverlayLayer } from "../ui/Overlays.js";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { useControlCommands } from "../../features/app-control/useControlCommands.js";
 import { command } from "../../features/app-control/commandRegistry.js";
@@ -1386,6 +1387,7 @@ export default function AlertsPanel({
   if (!isOpen) return null;
 
   return (
+    <OverlayLayer kind="drawer" side="right" onClose={onClose}>
     <div className={`alert-panel-overlay right-drawer-overlay ${isResizing ? "is-resizing" : ""}`}
       onClick={(event) => { if (event.target === event.currentTarget && !isResizing) onClose(); }}
     >
@@ -1411,6 +1413,7 @@ export default function AlertsPanel({
           </div>
           <button
             className="alert-panel-close"
+            data-overlay-close=""
             onClick={onClose}
             type="button"
             aria-label={t("alert.closePanel")}
@@ -1675,5 +1678,6 @@ export default function AlertsPanel({
         </div>
       </aside>
     </div>
+    </OverlayLayer>
   );
 }

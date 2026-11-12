@@ -6,6 +6,7 @@
  * - View & manage active indicators (toggle visibility, remove, edit params)
  * - Open code editor for custom indicators
  */
+import { OverlayLayer } from "../../components/ui/Overlays.js";
 import { confirmAction, notify } from "../../components/ui/overlay/overlayApi.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import { Icon } from "../../components/icons/Icon.js";
@@ -728,6 +729,7 @@ export default function IndicatorPanel({
   if (!isOpen) return null;
 
   return (
+    <OverlayLayer kind="drawer" side="right" onClose={onClose} closeOnEscape={!(tab === "editor" && editingIndicator)}>
     <div className={`indicator-panel-overlay right-drawer-overlay ${isResizing ? "is-resizing" : ""}`}
       onClick={(event) => { if (event.target === event.currentTarget && !isResizing) onClose(); }}
     >
@@ -790,6 +792,7 @@ export default function IndicatorPanel({
               </h3>
               <button
                 className="indicator-panel-close"
+                data-overlay-close=""
                 onClick={onClose}
                 type="button"
                 aria-label={t("indicator.closePanel")}
@@ -1194,5 +1197,6 @@ export default function IndicatorPanel({
         )}
       </div>
     </div>
+    </OverlayLayer>
   );
 }

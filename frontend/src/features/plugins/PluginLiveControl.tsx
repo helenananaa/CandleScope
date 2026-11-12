@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { OverlayLayer } from "../../components/ui/Overlays.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import type {
@@ -20,6 +21,7 @@ function HostModal({
   testId: string;
 }>) {
   return (
+    <OverlayLayer kind="modal" onClose={onClose}>
     <div
       className="plugin-modal-overlay live-host-modal-overlay"
       role="presentation"
@@ -36,11 +38,12 @@ function HostModal({
       >
         <header>
           <h2>{title}</h2>
-          <button type="button" aria-label={t("plugin.host.close")} onClick={onClose}><Icon name="close" size={14} /></button>
+          <button type="button" aria-label={t("plugin.host.close")} onClick={onClose} data-overlay-close=""><Icon name="close" size={14} /></button>
         </header>
         <div className="plugin-modal-body">{children}</div>
       </section>
     </div>
+    </OverlayLayer>
   );
 }
 
