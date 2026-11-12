@@ -4469,6 +4469,8 @@ export const zhHK = {
   "common.cancel": "取消",
   "common.close": "關閉",
   "common.notifications": "通知",
+  "common.working": "正在處理…",
+  "common.pickDateTime": "選擇日期和時間",
   "replay.indicators.revealedPrefix": "回放已揭示行情",
   "replay.indicators.revealedPrefixHint": "只使用回放時刻及之前已揭示的行情，包含形成中的 K 線；該柱指標值會隨回放推進更新。",
   "settings.category.ai": "AI MCP",

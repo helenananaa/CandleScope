@@ -1,4 +1,5 @@
 import { formatIntervalLabel } from "../../utils/intervals.js";
+import { Button, InlineAlert } from "../../components/ui/index.js";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 
 import SingleChartPanes from "../../components/SingleChartPanes.js";
@@ -169,10 +170,10 @@ function StrategyResearchChartPanes({
       data-interval={interval}
     >
       {runtime.error !== null && (
-        <div className="local-chart-error" role="alert">
-          <span>{runtime.error}</span>
-          <button type="button" onClick={runtime.retry}>{t("replay.retry")}</button>
-        </div>
+        <InlineAlert tone="danger" className="local-chart-error"
+          action={<Button size="sm" onClick={runtime.retry}>{t("replay.retry")}</Button>}>
+          {runtime.error}
+        </InlineAlert>
       )}
       <ChartErrorBoundary>
         <SingleChartPanes
@@ -507,6 +508,7 @@ export function ImportedAnalysisPanel({
   crosshair,
   onFocus,
   onError,
+  defaultOpen,
 }: {
   manifest: LocalDatasetManifest;
   snapshot: LocalAnalysisSnapshot;
@@ -514,10 +516,12 @@ export function ImportedAnalysisPanel({
   crosshair: MainSeriesCrosshairValue | null;
   onFocus(event: LocalAnalysisEvent): void;
   onError(message: string | null): void;
+  defaultOpen?: boolean;
 }) {
   return (
     <LocalAnalysisPanel
       key={manifest.data_epoch}
+      {...(defaultOpen === undefined ? {} : { defaultOpen })}
       manifest={manifest}
       snapshot={snapshot}
       eventStore={eventStore}

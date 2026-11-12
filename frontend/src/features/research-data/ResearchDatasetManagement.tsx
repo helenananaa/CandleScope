@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { Button, FileDrop, Input } from "../../components/ui/index.js";
 import { confirmAction } from "../../components/ui/overlay/overlayApi.js";
 import { useControlCommands } from "../app-control/useControlCommands.js";
 import { command } from "../app-control/commandRegistry.js";
@@ -73,7 +74,6 @@ export function ResearchDatasetManagement({
   const [archived, setArchived] = useState<LocalDatasetManifest[]>([]);
   const [draftName, setDraftName] = useState(manifest?.name ?? "");
   const [busy, setBusy] = useState<string | null>(null);
-  const packageInputRef = useRef<HTMLInputElement | null>(null);
   const reloadGenerationRef = useRef(0);
 
   const reloadMetadata = useCallback(async () => {
@@ -123,31 +123,28 @@ export function ResearchDatasetManagement({
     command("importProject", "Import and restore settings, drawings and events through the same project restoration workflow as the UI.", object({ fileRef: text(96) }), ({ fileRef }) => run("importing project", async () => restoreProject(await readControlFile(fileRef))), { available: () => busy === null }),
   ] }));
   return (
-    <section className="local-dataset-management" data-testid="research-dataset-management">
-      <header>
-        <div><span>{t("local.kicker.dataOps")}</span><strong>{t("local.ops")}</strong></div>
-        <small>{busy ?? "ready"}</small>
-      </header>
+    <section className="local-dataset-management" data-testid="research-dataset-management" aria-busy={busy !== null}>
+      {busy !== null && <p className="local-dataset-busy" role="status">{t("common.working")}</p>}
       {manifest !== null && (
         <>
           <div className="local-library-actions">
-            <input value={draftName} onChange={(event) => setDraftName(event.target.value)} aria-label={t("local.datasetName")} />
-            <button type="button" disabled={busy !== null || !draftName.trim() || draftName.trim() === manifest.name} onClick={() => void run("renaming", async () => {
+            <Input size="sm" value={draftName} onChange={(event) => setDraftName(event.target.value)} aria-label={t("local.datasetName")} />
+            <Button size="sm" disabled={busy !== null || !draftName.trim() || draftName.trim() === manifest.name} onClick={() => void run("renaming", async () => {
               await updateLocalDataset(manifest.dataset_id, { name: draftName.trim() });
               await onChanged(manifest.dataset_id);
-            })}>{t("local.rename")}</button>
-            <button type="button" disabled={busy !== null} onClick={() => void run("archiving", async () => {
+            })}>{t("local.rename")}</Button>
+            <Button size="sm" disabled={busy !== null} onClick={() => void run("archiving", async () => {
               await updateLocalDataset(manifest.dataset_id, { archived: true });
               await onChanged();
-            })}>{t("local.archive")}</button>
-            <button type="button" className="danger" disabled={busy !== null} onClick={() => void (async () => {
+            })}>{t("local.archive")}</Button>
+            <Button size="sm" variant="ghost" className="local-dataset-trash" disabled={busy !== null} onClick={() => void (async () => {
               if (!(await confirmAction({ title: t("local.trashConfirm", { name: manifest.name }), confirmLabel: t("local.trash"), tone: "danger" }))) return;
               void run("trashing", async () => {
                 await trashLocalDataset(manifest.dataset_id);
                 await onChanged();
                 await reloadMetadata();
               });
-            })()}>{t("local.trash")}</button>
+            })()}>{t("local.trash")}</Button>
           </div>
           <ResearchDatasetQuality
             manifest={manifest}
@@ -171,48 +168,46 @@ export function ResearchDatasetManagement({
               });
             })}
           />
-          <button type="button" className="local-project-export" disabled={busy !== null} onClick={() => void run("exporting", async () => {
+          <Button size="sm" className="local-project-export" disabled={busy !== null} onClick={() => void run("exporting", async () => {
             const state = await captureLocalProjectState(manifest, settings, events);
             await exportLocalProject(manifest, state);
-          })}>{t("local.exportProject")}</button>
+          })}>{t("local.exportProject")}</Button>
         </>
       )}
-      <label className="local-project-import">
-        <span>{t("local.importProject")}</span>
-        <input
-          ref={packageInputRef}
-          type="file"
-          accept=".csproject,application/zip,application/vnd.candlescope.local-project+zip"
-          disabled={busy !== null}
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (!file) return;
-            void run("importing project", () => restoreProject(file)).finally(() => {
-              if (packageInputRef.current !== null) packageInputRef.current.value = "";
-            });
-          }}
-        />
-      </label>
+      <FileDrop
+        compact
+        label={t("local.importProject")}
+        hint=".csproject"
+        accept=".csproject,application/zip,application/vnd.candlescope.local-project+zip"
+        disabled={busy !== null}
+        onFiles={([file]) => { if (file) void run("importing project", () => restoreProject(file)); }}
+      />
       {archived.length > 0 && (
         <div className="local-trash-list">
-          <strong>{t("local.archived")}</strong>
-          {archived.map((dataset) => (
-            <div key={dataset.dataset_id}><span>{dataset.name}<small>{dataset.symbol} · {dataset.interval}</small></span><button type="button" disabled={busy !== null} onClick={() => void run("unarchiving", async () => {
-              await updateLocalDataset(dataset.dataset_id, { archived: false });
-              await onChanged(dataset.dataset_id);
-            })}>{t("local.restoreLibrary")}</button></div>
-          ))}
+          <h4>{t("local.archived")}</h4>
+          <ul>{archived.map((dataset) => (
+            <li key={dataset.dataset_id}>
+              <span><strong>{dataset.name}</strong><small>{dataset.symbol} · {dataset.interval}</small></span>
+              <Button size="sm" disabled={busy !== null} onClick={() => void run("unarchiving", async () => {
+                await updateLocalDataset(dataset.dataset_id, { archived: false });
+                await onChanged(dataset.dataset_id);
+              })}>{t("local.restoreLibrary")}</Button>
+            </li>
+          ))}</ul>
         </div>
       )}
       {trash.length > 0 && (
         <div className="local-trash-list">
-          <strong>{t("local.recycle")}</strong>
-          {trash.slice(0, 3).map((entry) => (
-            <div key={entry.trash_id}><span>{entry.name}<small>{formatResearchDate(entry.deleted_at)}</small></span><button type="button" disabled={busy !== null} onClick={() => void run("restoring", async () => {
-              const restored = await restoreLocalTrash(entry.trash_id);
-              await onChanged(restored.dataset_id);
-            })}>{t("local.restore")}</button></div>
-          ))}
+          <h4>{t("local.recycle")}</h4>
+          <ul>{trash.slice(0, 3).map((entry) => (
+            <li key={entry.trash_id}>
+              <span><strong>{entry.name}</strong><small>{formatResearchDate(entry.deleted_at)}</small></span>
+              <Button size="sm" disabled={busy !== null} onClick={() => void run("restoring", async () => {
+                const restored = await restoreLocalTrash(entry.trash_id);
+                await onChanged(restored.dataset_id);
+              })}>{t("local.restore")}</Button>
+            </li>
+          ))}</ul>
         </div>
       )}
     </section>

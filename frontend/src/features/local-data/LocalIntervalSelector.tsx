@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Button, Checkbox, DateTimeInput, Input, Select } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 
@@ -83,9 +84,10 @@ export default function LocalIntervalSelector({
           setFeedback(customSupport.message);
         }}
       >
-        <label>
-          {t("local.custom")}
-          <input
+        <label className="local-custom-interval-field">
+          <span>{t("local.custom")}</span>
+          <Input
+            size="sm"
             value={custom}
             onChange={(event) => {
               setCustom(event.target.value);
@@ -96,16 +98,22 @@ export default function LocalIntervalSelector({
             aria-label={t("local.customInterval")}
           />
         </label>
-        <label><input type="checkbox" checked={mode === "anchor"} onChange={(event) => { setMode(event.target.checked ? "anchor" : "default"); setCustomEdited(true); setFeedback(null); }} />{t("interval.anchorEnabled")}</label>
-        {mode === "anchor" && <label>{t("interval.anchorTime")}<input type="datetime-local" step="60" value={anchorTime} onChange={(event) => { setAnchorTime(event.target.value); setFeedback(null); }} /></label>}
-        <label><input type="checkbox" checked={mode === "calendar"} onChange={(event) => {
+        <Checkbox label={t("interval.anchorEnabled")} checked={mode === "anchor"} onChange={(event) => { setMode(event.target.checked ? "anchor" : "default"); setCustomEdited(true); setFeedback(null); }} />
+        {mode === "anchor" && (
+          <label className="local-custom-interval-field">
+            <span>{t("interval.anchorTime")}</span>
+            <DateTimeInput size="sm" zoneLabel={false} value={anchorTime ? Date.parse(`${anchorTime}Z`) : null}
+              onChange={(ms) => { setAnchorTime(ms === null ? "" : new Date(ms).toISOString().slice(0, 16)); setFeedback(null); }} />
+          </label>
+        )}
+        <Checkbox label={t("interval.calendarEnabled")} checked={mode === "calendar"} onChange={(event) => {
           setMode(event.target.checked ? "calendar" : "default"); setCustomEdited(true); setFeedback(null);
           if (event.target.checked && !["d", "w", "M"].includes(parseIntervalParts(custom)?.unit ?? "")) setCustom("1d");
-        }} />{t("interval.calendarEnabled")}</label>
-        {mode === "calendar" && <select aria-label={t("interval.calendarZone")} value={zone} onChange={(event) => { setZone(event.target.value as CalendarZone); setFeedback(null); }}>
+        }} />
+        {mode === "calendar" && <Select size="sm" aria-label={t("interval.calendarZone")} value={zone} onChange={(event) => { setZone(event.target.value as CalendarZone); setFeedback(null); }}>
           {CALENDAR_ZONES.map(value => <option key={value} value={value}>{value}</option>)}
-        </select>}
-        <button type="submit" disabled={!customSupport.supported}>{t("local.switch")}</button>
+        </Select>}
+        <Button size="sm" type="submit" disabled={!customSupport.supported}>{t("local.switch")}</Button>
       </form>
       <span
         className={`local-interval-feedback ${customSupport.supported ? "ok" : "error"}`}

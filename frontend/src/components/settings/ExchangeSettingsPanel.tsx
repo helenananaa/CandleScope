@@ -273,7 +273,7 @@ function MarketCapabilityDetail({
             {channels.length === 0 ? (
                 <div className="st-exchange-empty">{t("settings.exchange.noChannels")}</div>
             ) : (
-                <div className="st-exchange-capability-table">
+                <div>
                     <div className="st-exchange-capability-header">
                         <span>{t("settings.exchange.dataChannel")}</span>
                         <span>{t("settings.exchange.realtime")}</span>

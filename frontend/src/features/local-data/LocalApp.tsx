@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Button, InlineAlert } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import type { MainSeriesCrosshairValue } from "../../chart-adapter/chartAdapterTypes.js";
@@ -253,10 +254,10 @@ export default function LocalApp() {
         <>
           <span data-testid="local-app-compat-shell" hidden />
           {error !== null && (
-            <div className="local-global-error" role="alert">
-              <span>{error}</span>
-              <button type="button" onClick={() => setError(null)}>{t("backtest.close")}</button>
-            </div>
+            <InlineAlert tone="danger" className="strategy-research-page-alert"
+              action={<Button size="sm" variant="ghost" onClick={() => setError(null)}>{t("backtest.close")}</Button>}>
+              {error}
+            </InlineAlert>
           )}
           <SettingsModal
             isOpen={settingsOpen}

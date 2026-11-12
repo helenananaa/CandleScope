@@ -1,4 +1,4 @@
-import { OverlayLayer } from "../../components/ui/Overlays.js";
+import { Button, InlineAlert, OverlayLayer } from "../../components/ui/index.js";
 import { useNativeAvailability } from "../backtest/native/useNativeAvailability.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import {
@@ -619,8 +619,8 @@ export default function StrategyResearchApp({
   const advancedWorkspace = intent.kind === "advanced" || intent.kind === "deep-link";
   const controls = (
     <>
-      <button type="button" className="research-header-btn ui-control" onClick={() => setAccountsOpen((open) => !open)} aria-expanded={accountsOpen}>{t("reader.title")}</button>
-      <button type="button" className="research-header-btn ui-control" onClick={() => setHistoryOpen((open) => !open)} aria-expanded={historyOpen}>{t("ux.history")}</button>
+      <button type="button" className="ui-control" onClick={() => setAccountsOpen((open) => !open)} aria-expanded={accountsOpen}>{t("reader.title")}</button>
+      <button type="button" className="ui-control" onClick={() => setHistoryOpen((open) => !open)} aria-expanded={historyOpen}>{t("ux.history")}</button>
       <button
         type="button"
         className="settings-btn indicator-toggle-btn"
@@ -672,21 +672,21 @@ export default function StrategyResearchApp({
         <Suspense fallback={null}><PreparationJobsPanel /></Suspense>
       </aside>
       </OverlayLayer>}
-      {intent.kind === "handoff" && !handoff && <p role="alert">{t("ux.handoffMissing")}</p>}
+      {intent.kind === "handoff" && !handoff && <InlineAlert tone="danger" className="strategy-research-page-alert">{t("ux.handoffMissing")}</InlineAlert>}
       {(intent.page === "local" || intent.page === "backtest") ? (
         <StrategyResearchCompatNotice page={intent.page} />
       ) : null}
       {library.error !== null && (
-        <div className="local-global-error" role="alert">
-          <span>{library.error}</span>
-          <button type="button" onClick={() => library.setError(null)}>{t("backtest.close")}</button>
-        </div>
+        <InlineAlert tone="danger" className="strategy-research-page-alert"
+          action={<Button size="sm" variant="ghost" onClick={() => library.setError(null)}>{t("backtest.close")}</Button>}>
+          {library.error}
+        </InlineAlert>
       )}
       {advancedError !== null && (
-        <div className="local-global-error" role="alert" data-testid="strategy-research-advanced-error">
-          <span>{advancedError}</span>
-          <button type="button" onClick={() => setAdvancedError(null)}>{t("backtest.close")}</button>
-        </div>
+        <InlineAlert tone="danger" className="strategy-research-page-alert"
+          action={<Button size="sm" variant="ghost" onClick={() => setAdvancedError(null)}>{t("backtest.close")}</Button>}>
+          <span data-testid="strategy-research-advanced-error">{advancedError}</span>
+        </InlineAlert>
       )}
       <SettingsModal
         isOpen={settingsOpen}
@@ -780,6 +780,7 @@ export default function StrategyResearchApp({
         crosshair={lastCrosshair}
         onFocus={focusAnalysisEvent}
         onError={library.setError}
+        defaultOpen={false}
       />
     );
     return (

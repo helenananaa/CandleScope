@@ -128,7 +128,7 @@ export function StrategyResearchShell({
                 <div className="strategy-research-script" data-testid="strategy-research-script-slot">
                   {script}
                 </div>
-                <details className="strategy-research-analysis"><summary>{t("local.ops")}</summary>{analysis}</details>
+                {analysis ? <div className="strategy-research-analysis">{analysis}</div> : null}
               </aside>
             ) : null}
           />

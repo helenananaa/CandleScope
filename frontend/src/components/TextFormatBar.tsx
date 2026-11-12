@@ -50,8 +50,8 @@ export default function TextFormatBar({ snapshot, onPatch, onDelete, onToggleLoc
   return <div ref={toolbar.root} className="selected-drawing-style-bar drawing-text-style-bar" style={toolbar.style}
     onPointerDown={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onWheel={(event) => event.stopPropagation()} onContextMenu={(event) => event.stopPropagation()}>
     <div className="selected-drawing-style-bar-main" inert={expanded}>
-      <button type="button" className="drawing-toolbar-grip" aria-label={t("drawing.editor.moveToolbar")} {...toolbar.handle}><StyleIcon name="drag" /></button>
-      <span className="drawing-object-name">{t("drawing.textNote")}</span>
+      <button type="button" className="drawing-drag-handle" aria-label={t("drawing.editor.moveToolbar")} {...toolbar.handle}><StyleIcon name="drag" /></button>
+      <strong>{t("drawing.textNote")}</strong>
       <ColorControl color={value.color} label={t("format.textColor")} onCommit={(color) => patch({ color })} />
       <FontSize key={value.fontSize} value={value.fontSize} commit={(fontSize) => patch({ fontSize })} />
       <div className="drawing-line-options">{toggles}</div>

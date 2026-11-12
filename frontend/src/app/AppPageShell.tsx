@@ -26,7 +26,6 @@ export default function AppPageShell({
     <div className="app-page">
       <MarketTopBarFrame
         source={source}
-        className="app-page-top-bar"
         trailing={(
           <>
             {trailing}

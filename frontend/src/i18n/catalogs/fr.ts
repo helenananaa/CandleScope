@@ -4470,6 +4470,8 @@ export const fr = {
   "common.cancel": "Annuler",
   "common.close": "Fermer",
   "common.notifications": "Notifications",
+  "common.working": "Traitement…",
+  "common.pickDateTime": "Choisir la date et l’heure",
   "status.barCount.many": "{count} de barres",
   "status.exchangeLimitationCount.many": "{count} de limitations d’exchange",
   "workbench.intervalCount.many": "{count} d’intervalles",

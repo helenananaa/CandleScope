@@ -15,6 +15,12 @@ const SRC = path.resolve(import.meta.dirname, "../src");
 export const HOOK_CLASSES = new Set([
   "export-exclude", // export.ts drops these nodes from screenshots
   "pane-overlay-anchor", // positioning anchor read by pane overlays
+  "drawing-text-style-bar", // drawingModel.ts keeps pointer events inside the text toolbar
+  "settings-btn", // scripts/smoke.mjs finds the Settings button on every page
+  "export-workspace", // scripts/export-matrix.mjs finds the export dialog
+  "indicator-editor-console", // frontendScript browser test reads script output
+  "indicator-editor-run", // frontendScript browser test runs the script
+  "replay-public-time", // replay workspace test reads the public clock
 ]);
 
 function walk(dir) {
@@ -48,6 +54,12 @@ export function classNamesInTsx(source) {
     let expression = source.slice(open + 1, closingBrace(source, open) - 1);
     // buttonClassName({ variant: "primary" }) composes primitive classes; its arguments are options, not classes.
     expression = expression.replace(/\bbuttonClassName\(\{[^}]*\}\)/g, '"ui-btn"');
+    // Values compared or looked up to choose a class (side === "short" ? "negative" : …,
+    // ["profit", "pnl"].includes(column)) are data, not classes.
+    expression = expression
+      .replace(/\[[^\]]*\]\s*\.includes\(/g, "(")
+      .replace(/([!=]==?)\s*("[^"]*"|'[^']*')/g, "$1 _")
+      .replace(/("[^"]*"|'[^']*')\s*(?=[!=]==?)/g, "_ ");
     // Replace template interpolations (which may nest braces) with a separator.
     for (let at = expression.indexOf("${"); at !== -1; at = expression.indexOf("${")) {
       expression = `${expression.slice(0, at)} ${expression.slice(closingBrace(expression, at + 1))}`;

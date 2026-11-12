@@ -45,7 +45,6 @@ export default function ResearchStrategyPanel({ runtime }: { runtime: BacktestRe
     <ResearchPanelFrame
       eyebrow={t("research.panel.strategy")}
       title={draft?.displayName ?? selectedRevisionId ?? t("research.strategy.noDraft")}
-      className="research-strategy-panel"
     >
       {draft && (
         <dl className="research-facts">

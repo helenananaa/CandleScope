@@ -399,6 +399,7 @@ export function ManualHistoryDownloadPanel({
       </label>
       <button
         type="button"
+        className="dw-button dw-button-secondary dw-manual-add-interval"
         data-testid="manual-history-add-custom-interval"
         onClick={onAddCustomInterval}
       >

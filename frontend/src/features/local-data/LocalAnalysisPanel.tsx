@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { t, getLocale } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import type { MainSeriesCrosshairValue } from "../../chart-adapter/chartAdapterTypes.js";
+import { Button, Disclosure, EmptyState, Field, InlineAlert, Input, Select, Textarea } from "../../components/ui/index.js";
 import LocalAnalysisCsvImport from "./LocalAnalysisCsvImport.js";
 import type { LocalAnalysisEventStore } from "./localAnalysisStore.js";
 import {
@@ -59,6 +60,7 @@ export default function LocalAnalysisPanel({
   crosshair,
   onFocus,
   onError,
+  defaultOpen = true,
 }: {
   manifest: LocalDatasetManifest;
   snapshot: LocalAnalysisSnapshot;
@@ -66,6 +68,8 @@ export default function LocalAnalysisPanel({
   crosshair: MainSeriesCrosshairValue | null;
   onFocus(event: LocalAnalysisEvent): void;
   onError(message: string): void;
+  /** Start expanded. The strategy page starts collapsed, below the script. */
+  defaultOpen?: boolean;
 }) {
   useLocale();
   const [kind, setKind] = useState<LocalAnalysisEventKind>("note");
@@ -134,28 +138,34 @@ export default function LocalAnalysisPanel({
       command("resetCorrupt", "Reset a corrupt analysis document with explicit confirmation.", object({ confirmed: choice([true]) }), () => eventStore.resetCorruptDocument(), { available: () => !!snapshot.storage_error }),
     ] }));
   return (
-    <section className="local-analysis-panel" aria-label={t("local.analysisAria")}>
-      <header>
-        <div>
-          <span>{t("local.kicker.analysis")}</span>
+    <Disclosure
+      className="local-analysis-panel"
+      defaultOpen={defaultOpen}
+      summary={(
+        <span className="local-analysis-summary">
           <strong>{t("local.events")}</strong>
-        </div>
-        <small>{t("local.autoSave", { count: snapshot.events.length })}</small>
-      </header>
-
+          <small>{t("local.autoSave", { count: snapshot.events.length })}</small>
+        </span>
+      )}
+    >
       {snapshot.storage_error !== null && (
-        <div className="local-analysis-storage-error" role="alert">
-          <span>{snapshot.storage_error}</span>
-          <button
-            type="button"
-            onClick={() => {
-              try { eventStore.resetCorruptDocument(); }
-              catch (reason) { onError(reason instanceof Error ? describeError(reason, reason.message) : t("local.resetFailed")); }
-            }}
-          >
-            {t("local.resetFile")}
-          </button>
-        </div>
+        <InlineAlert
+          tone="danger"
+          action={(
+            <Button
+              size="sm"
+              variant="danger"
+              onClick={() => {
+                try { eventStore.resetCorruptDocument(); }
+                catch (reason) { onError(reason instanceof Error ? describeError(reason, reason.message) : t("local.resetFailed")); }
+              }}
+            >
+              {t("local.resetFile")}
+            </Button>
+          )}
+        >
+          {snapshot.storage_error}
+        </InlineAlert>
       )}
 
       <div className="local-analysis-anchor" data-ready={activeAnchor !== null ? "true" : "false"}>
@@ -163,15 +173,15 @@ export default function LocalAnalysisPanel({
         <strong>{activeAnchor === null ? t("local.moveHint") : formatEventTime(activeAnchor.time, manifest.timezone)}</strong>
         <small>{activeAnchor === null ? t("local.keepLast") : formatPrice(activeAnchor.price)}</small>
         {editingId !== null && liveAnchor !== null && (
-          <button type="button" onClick={() => setEditingAnchor(liveAnchor)}>{t("local.moveToPoint")}</button>
+          <Button size="sm" variant="ghost" onClick={() => setEditingAnchor(liveAnchor)}>{t("local.moveToPoint")}</Button>
         )}
       </div>
 
       <div className="local-analysis-form">
         <div className="local-analysis-form-grid">
-          <label>
-            {t("local.kind")}
-            <select
+          <Field label={t("local.kind")}>
+            <Select
+              size="sm"
               value={kind}
               onChange={(event) => {
                 const next = event.target.value as LocalAnalysisEventKind;
@@ -182,40 +192,39 @@ export default function LocalAnalysisPanel({
               {LOCAL_ANALYSIS_EVENT_KINDS.map((value) => (
                 <option value={value} key={value}>{LOCAL_ANALYSIS_KIND_LABELS[value]}</option>
               ))}
-            </select>
-          </label>
-          <label className="local-analysis-color-field">
-            {t("local.color")}
-            <input type="color" value={color} onChange={(event) => setColor(event.target.value)} />
-          </label>
+            </Select>
+          </Field>
+          <Field label={t("local.color")} className="local-analysis-color-field">
+            <Input size="sm" type="color" value={color} onChange={(event) => setColor(event.target.value)} />
+          </Field>
         </div>
-        <label>
-          {t("local.title")}
-          <input
+        <Field label={t("local.title")}>
+          <Input
+            size="sm"
             value={label}
             maxLength={160}
             onChange={(event) => setLabel(event.target.value)}
             placeholder={t("local.kindOptional", { kind: LOCAL_ANALYSIS_KIND_LABELS[kind] })}
           />
-        </label>
-        <label>
-          {t("local.note")}
-          <textarea
+        </Field>
+        <Field label={t("local.note")}>
+          <Textarea
             value={note}
             maxLength={8_000}
             onChange={(event) => setNote(event.target.value)}
             placeholder={t("local.notePh")}
           />
-        </label>
+        </Field>
         <div className="local-analysis-form-actions">
-          {editingId !== null && <button type="button" className="secondary" onClick={resetForm}>{t("replay.hub.cancel")}</button>}
-          <button
-            type="button"
+          {editingId !== null && <Button size="sm" variant="ghost" onClick={resetForm}>{t("replay.hub.cancel")}</Button>}
+          <Button
+            size="sm"
+            variant="primary"
             onClick={submit}
             disabled={activeAnchor === null || snapshot.storage_error !== null}
           >
             {editingId === null ? t("local.addToChart") : t("local.saveEdit")}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -227,50 +236,51 @@ export default function LocalAnalysisPanel({
       />
 
       <div className="local-analysis-list-head">
-        <strong>{t("local.projectEvents")}</strong>
-        <select value={filter} onChange={(event) => setFilter(event.target.value as typeof filter)}>
+        <h4>{t("local.projectEvents")}</h4>
+        <Select size="sm" aria-label={t("local.kind")} value={filter} onChange={(event) => setFilter(event.target.value as typeof filter)}>
           <option value="all">{t("local.allKinds")}</option>
           {LOCAL_ANALYSIS_EVENT_KINDS.map((value) => (
             <option value={value} key={value}>{LOCAL_ANALYSIS_KIND_LABELS[value]}</option>
           ))}
-        </select>
+        </Select>
       </div>
-      <div className="local-analysis-event-list">
-        {visibleEvents.length === 0 ? (
-          <div className="local-analysis-event-empty">
-            {snapshot.events.length === 0 ? t("local.noMarkers") : t("local.noFilter")}
-          </div>
-        ) : visibleEvents.map((event) => (
-          <article className={event.id === editingId ? "editing" : ""} key={event.id}>
-            <button type="button" className="local-analysis-event-main" onClick={() => onFocus(event)}>
-              <i style={{ background: event.color }} />
-              <span>
-                <strong>{eventTitle(event)}{event.source === "csv" ? " · CSV" : ""}</strong>
-                <small>{formatEventTime(event.time, manifest.timezone)} · {formatPrice(event.price)}</small>
-                {event.note && <em>{event.note}</em>}
-              </span>
-            </button>
-            <div className="local-analysis-event-actions">
-              <button type="button" onClick={() => onFocus(event)}>{t("local.locate")}</button>
-              <button type="button" onClick={() => startEdit(event)}>{t("local.edit")}</button>
-              <button
-                type="button"
-                className="danger"
-                onClick={() => {
-                  try {
-                    eventStore.delete(event.id);
-                    if (editingId === event.id) resetForm();
-                  } catch (reason) {
-                    onError(reason instanceof Error ? describeError(reason, reason.message) : t("local.deleteMarkerFailed"));
-                  }
-                }}
-              >
-                {t("replay.hub.delete")}
+      {visibleEvents.length === 0 ? (
+        <EmptyState compact title={snapshot.events.length === 0 ? t("local.noMarkers") : t("local.noFilter")} />
+      ) : (
+        <ul className="local-analysis-event-list">
+          {visibleEvents.map((event) => (
+            <li data-editing={event.id === editingId ? "true" : undefined} key={event.id}>
+              <button type="button" className="local-analysis-event-main" onClick={() => onFocus(event)}>
+                <i style={{ background: event.color }} aria-hidden="true" />
+                <span>
+                  <strong>{eventTitle(event)}{event.source === "csv" ? " · CSV" : ""}</strong>
+                  <small>{formatEventTime(event.time, manifest.timezone)} · {formatPrice(event.price)}</small>
+                  {event.note && <em>{event.note}</em>}
+                </span>
               </button>
-            </div>
-          </article>
-        ))}
-      </div>
-    </section>
+              <div className="local-analysis-event-actions">
+                <Button size="sm" variant="ghost" onClick={() => onFocus(event)}>{t("local.locate")}</Button>
+                <Button size="sm" variant="ghost" onClick={() => startEdit(event)}>{t("local.edit")}</Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="local-analysis-delete"
+                  onClick={() => {
+                    try {
+                      eventStore.delete(event.id);
+                      if (editingId === event.id) resetForm();
+                    } catch (reason) {
+                      onError(reason instanceof Error ? describeError(reason, reason.message) : t("local.deleteMarkerFailed"));
+                    }
+                  }}
+                >
+                  {t("replay.hub.delete")}
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Disclosure>
   );
 }

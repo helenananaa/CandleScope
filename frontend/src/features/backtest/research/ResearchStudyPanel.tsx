@@ -10,7 +10,7 @@ export default function ResearchStudyPanel({ runtime }: { runtime: BacktestResea
   const studyCompatible = selectedRevision?.output_modes.includes("SIGNAL") === true;
   const contractReady = (runtime.view.snapshot?.quality.contract_data as Record<string, unknown> | undefined)?.status === "complete";
   return (
-    <ResearchPanelFrame eyebrow={t("research.panel.study")} title={activeStudy?.name ?? t("research.study.none")} className="research-study-panel">
+    <ResearchPanelFrame eyebrow={t("research.panel.study")} title={activeStudy?.name ?? t("research.study.none")}>
       <p className="research-panel-copy">{t("research.study.draftHint")}</p>
       {advancedEnabled && (
         <>

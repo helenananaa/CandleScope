@@ -94,7 +94,7 @@ export default function AccountJournal({ newNoteRequest, onRequestHandled }: { n
     } catch (failure) { setError(failure instanceof AccountApiError ? failure.code : "ACCOUNT_SYNC_FAILED"); }
   };
 
-  return <section className="readonly-account-journal">
+  return <section>
     <p className="readonly-account-help">{t("account.noteHelp", {}, locale)}</p>
     {newNoteRequest && <div role="status"><p>{t("account.pendingFillNote", { id: newNoteRequest.fillId }, locale)}</p>
       <button type="button" onClick={onRequestHandled}>{t("account.cancelNewNote", {}, locale)}</button></div>}

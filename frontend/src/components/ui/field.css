@@ -64,7 +64,9 @@
   outline-offset: 0;
 }
 
-.ui-input[aria-invalid='true'] {
+/* Hover must not hide an invalid value. */
+.ui-input[aria-invalid='true'],
+.ui-input[aria-invalid='true']:hover:not(:disabled) {
   border-color: var(--text-danger);
 }
 
@@ -93,10 +95,69 @@
 }
 
 .ui-datetime {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+/* The calendar button sits inside the field's border, on the right. */
+.ui-datetime-control {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ui-datetime-control > .ui-input {
+  min-width: 15ch;
+  padding-right: 32px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ui-datetime-picker {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.ui-datetime-picker:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.ui-datetime-picker:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 0;
+}
+
+.ui-datetime-picker:disabled {
+  cursor: not-allowed;
+}
+
+/* The browser's own control only anchors its picker; it is never seen or tabbed to. */
+.ui-datetime-native {
+  position: absolute;
+  right: 4px;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .ui-datetime-zone {
@@ -246,4 +307,33 @@
 .ui-file-drop-hint {
   color: var(--text-muted);
   font: var(--font-size-xs)/1.5 var(--font-sans);
+}
+
+/* One row for narrow panels: icon, then the label over the hint. */
+.ui-file-drop-compact {
+  grid-template-columns: auto minmax(0, 1fr);
+  justify-items: start;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 0;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.ui-file-drop-compact .ui-file-drop-icon {
+  display: inline-flex;
+  grid-row: span 2;
+  color: var(--text-muted);
+}
+
+.ui-file-drop-compact .ui-file-drop-label,
+.ui-file-drop-compact .ui-file-drop-hint {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-file-drop-compact .ui-file-drop-label {
+  font-size: var(--font-size-sm);
 }
