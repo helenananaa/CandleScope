@@ -510,6 +510,7 @@ class DataManager(DataManagerCore):
         """
         self.query_engine.set_storage(storage)
         self.coordinator.set_storage(storage)
+        self.warm_start.reset_tail_repairs()
         store = getattr(storage, "revision_store", None)
         if store is not None:
             # Startup establishes the cheap lower-bound used by aggregation

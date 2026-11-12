@@ -66,7 +66,11 @@ class AggregatorWarmStartService:
         self._backfill_trigger_provider = backfill_trigger_provider
         self._interval_resolver = interval_resolver or IntervalResolver()
         self.history_prefix_runtime = None
-        self._tail_repair_buckets: dict[SeriesKey, int] = {}
+        self._tail_repair_buckets: dict[SeriesKey, tuple[int, object | None]] = {}
+
+    def reset_tail_repairs(self) -> None:
+        """A replacement storage binding cannot reuse the old repair demand."""
+        self._tail_repair_buckets.clear()
 
     async def seed_if_needed(
         self,
@@ -543,9 +547,14 @@ class AggregatorWarmStartService:
         repair_key = SeriesKey.create(
             symbol, interval, exchange=exchange, market_type=market_type, identity=series_identity,
         )
+        # A request belongs to one target lifetime. Closing its last consumer
+        # may cancel queued work; reopening within the same bucket must get a
+        # new demand. The aggregator already owns this generation token.
+        target_token = self._bar_aggregator.history_target_token(repair_key, interval)
+        repair_scope = (repair_bucket_ms, target_token[1] if target_token is not None else None)
         if (
             repair_bucket_ms is not None
-            and self._tail_repair_buckets.get(repair_key) == repair_bucket_ms
+            and self._tail_repair_buckets.get(repair_key) == repair_scope
         ):
             return
 
@@ -587,7 +596,7 @@ class AggregatorWarmStartService:
                 series_identity=series_identity,
             )
             if submitted and repair_bucket_ms is not None:
-                self._tail_repair_buckets[repair_key] = repair_bucket_ms
+                self._tail_repair_buckets[repair_key] = repair_scope
                 if len(self._tail_repair_buckets) > 2_048:
                     self._tail_repair_buckets.pop(
                         next(iter(self._tail_repair_buckets)),

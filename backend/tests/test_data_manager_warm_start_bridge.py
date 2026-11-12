@@ -286,6 +286,56 @@ def test_custom_tail_repair_is_coalesced_within_one_target_bucket() -> None:
     assert len(triggers) == 2
 
 
+def test_custom_tail_repair_reopens_after_target_is_removed_and_recreated() -> None:
+    """A closed chart's cancelled repair cannot suppress its replacement."""
+    agg = BarAggregator(BarAggregatorConfig(update_throttle_ms=0))
+    triggers: list[tuple] = []
+    service = _service(cache=BarCache(), aggregator=agg, storage=_Storage(),
+                       triggers=triggers, base_interval="15m")
+    target = dict(exchange="okx", market_type="spot")
+    agg.add_target("BTC-USDT", "45m", **target)
+    with patch("app.data_engine.data_manager.warm_start.time.time", return_value=27_900):
+        service._trigger_custom_tail_repair("BTC-USDT", "45m", **target)
+        # Closing the last consumer destroys this aggregation lifetime. Its
+        # queued repair may be cancelled; a new lifetime needs a fresh demand.
+        agg.remove_target("BTC-USDT", "45m", **target)
+        agg.add_target("BTC-USDT", "45m", **target)
+        service._trigger_custom_tail_repair("BTC-USDT", "45m", **target)
+        service._trigger_custom_tail_repair("BTC-USDT", "45m", **target)
+    assert len(triggers) == 2
+
+
+def test_storage_rebinding_invalidates_tail_repair_deduplication(tmp_path, monkeypatch) -> None:
+    from app.core import config as core_config
+    from app.data_engine.data_manager import DataManager
+
+    database = tmp_path / "tail-rebind.sqlite"
+    monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", database)
+    monkeypatch.setattr(core_config, "KLINES_DB_PATH", database)
+    klines_repo.init_klines_storage()
+    dm = DataManager()
+    calls = []
+    dm.warm_start._backfill_trigger_provider = lambda: (
+        lambda *args, **kwargs: calls.append((args, kwargs))
+    )
+    target = dict(exchange="okx", market_type="spot")
+    dm.bar_aggregator.add_target("BTC-USDT", "45m", **target)
+    try:
+        dm.set_storage(klines_repo.KlinesRepoAdapter())
+        with patch("app.data_engine.data_manager.warm_start.time.time", return_value=27_900):
+            dm.warm_start._trigger_custom_tail_repair("BTC-USDT", "45m", **target)
+            dm.warm_start._trigger_custom_tail_repair("BTC-USDT", "45m", **target)
+            assert len(calls) == 1
+            # A new canonical binding establishes its own recovery state even
+            # when it reopens the same SQLite file and target bucket.
+            dm.set_storage(klines_repo.KlinesRepoAdapter())
+            dm.warm_start._trigger_custom_tail_repair("BTC-USDT", "45m", **target)
+            dm.warm_start._trigger_custom_tail_repair("BTC-USDT", "45m", **target)
+        assert len(calls) == 2
+    finally:
+        asyncio.run(dm.shutdown())
+
+
 def test_warm_start_exchange_derived_standard_uses_resolved_four_hour_base() -> None:
     async def _run() -> None:
         agg = BarAggregator(BarAggregatorConfig(update_throttle_ms=0))
