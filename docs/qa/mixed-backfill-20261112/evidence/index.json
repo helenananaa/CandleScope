@@ -123,6 +123,44 @@
       "sha256": "2821c011ea1599274782b3a127db697454da970e1da989c56c4d812037393b16",
       "uncompressed_bytes": 119,
       "source": "architecture-final2.log"
+    },
+    {
+      "path": "evidence/ci-layer-failure.txt.gz",
+      "sha256": "857a77d089fc9f3fc5c124b8310f836a67ef94c9d0e66c8894e9d1fafe342016",
+      "uncompressed_bytes": 4634,
+      "source": "ci-layer-failure.txt"
+    },
+    {
+      "path": "evidence/layer-fix.log.gz",
+      "sha256": "0c3d03a1ee63df40b57cbb3c0de4af96d399d475d6ecbeef37850ff4c022db8a",
+      "uncompressed_bytes": 1513,
+      "source": "layer-fix.log"
+    },
+    {
+      "path": "evidence/layer-fix.xml.gz",
+      "sha256": "6734219c307ae392138452d4671750a9abab3464286e1f26b0b89008e7222e1c",
+      "uncompressed_bytes": 29521,
+      "source": "layer-fix.xml"
+    },
+    {
+      "path": "evidence/key-export.log.gz",
+      "sha256": "9f0575ed99175a8a914639a1d38c828875bce2a5e3b52abed57bb9c63fd5a160",
+      "uncompressed_bytes": 725,
+      "source": "key-export.log"
+    },
+    {
+      "path": "evidence/architecture-layer.log.gz",
+      "sha256": "2821c011ea1599274782b3a127db697454da970e1da989c56c4d812037393b16",
+      "uncompressed_bytes": 119,
+      "source": "architecture-layer.log"
     }
-  ]
+  ],
+  "layering_fix_product": "d9ee7513cdd35abfdc2828d9bc26403edb68acc4",
+  "layering_fix_source_sha256": {
+    "backend/app/data_engine/series_key.py": "66ef924893b3e1e21014ef9214e5ff20697731bd6240619c1da631a4ec3f4a4b",
+    "backend/app/data_engine/data_manager/models.py": "db132ffe0320523ff6e35646df41d272b81d7f73800fa41222a3911340faf3f8",
+    "backend/app/data_engine/history/cover_plan.py": "8eab7cbedb6886e8954e5bc28f584bda92320a54bc789eec6339cdd0f67b1edc",
+    "backend/app/data_engine/backfill/mixed_plan.py": "07825359a84621463a22a9cdc262cb01ed2dfb97fed42136ecdd3b8008e47532",
+    "backend/app/data_engine/backfill/reconciler.py": "8d4a1ae386cedad227f4f05a0bfaacba3d9b2b7e1ca1878ebe93c0208470714a"
+  }
 }

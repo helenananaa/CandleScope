@@ -1,12 +1,12 @@
 # H127 冷库混合回补接线（2026-11-12）
 
-最终产品提交：`e2706e167589b4a4e62916cdf17e8dd4df0dadf2`（主要接线 `5edf1b445c34232c12fd466fc4bfed409072ef4f`）；基线 `e38c9b1b57af81818c4f8034ff3639d90560ec68`。关联 #127，消费 #126/D126、#130/K130/B130、#124 归档与 #125 调度。父 issue 保持开放。
+接线及官方录制验证产品提交：`e2706e167589b4a4e62916cdf17e8dd4df0dadf2`（主要接线 `5edf1b445c34232c12fd466fc4bfed409072ef4f`）；基线 `e38c9b1b57af81818c4f8034ff3639d90560ec68`。关联 #127，消费 #126/D126、#130/K130/B130、#124 归档与 #125 调度。父 issue 保持开放。
 
 本批补上普通大周期闭合查询曾在基础窗口预算处提前延期、未产生回补需求的缺口。默认 DataManager 将真实目标需求交给既有 Coordinator/Scheduler/GapLedger。回补只为合格 Binance USD-M、默认 trade/base 身份、UTC epoch-zero 固定闭合范围提出粗细输入计划，沿用既有下载/归档/额度/规范写入/物化 owner。没有新 writer、额度表或第二个块缓存。
 
 ## 验证结果
 
-最终产品完整本地回归 **1128 passed / 47 warnings / 141.01s**；40 项定向绑定/回补回归通过，架构边界与 `git diff --check` 通过。警告为现有 FastAPI lifespan/aiohttp 弃用提示。云端 PR CI 另行核对。
+接线产品 e2706e 完整本地回归 **1128 passed / 47 warnings / 141.01s**；40 项定向绑定/回补回归通过，架构边界与 `git diff --check` 通过。警告为现有 FastAPI lifespan/aiohttp 弃用提示。云端 PR CI 另行核对。
 
 - 默认 facade → scheduler → 回补 → 规范存储 → 目标物化 → GapLedger 的隔离端到端测试通过；10007m 最终 `verified_contiguous=True`、剩余缺口 0、账本 `filled`。禁用提交只检测，不产生下载。规划预算失败不转为行情缺口。
 - 实际 TransportLayer / HistoricalFetcher / pinned CCXT / HTTP loopback / normalize / SQLite 链路通过。epoch-zero 合成 10007m 使用 3 次 K 线请求，完整九字段一致，分钟库仅有实际取得的 2 根。元数据共享加载通过现有延期控制流重试。
@@ -39,3 +39,9 @@
 `evidence/index.json` 记录压缩原始回执 SHA-256。保留初次 socket 用例的元数据延期（测试最初未模拟 scheduler 重试）以及两次录制脚本错误：CSV 时间/笔数尚未转换 REST JSON 整数、错误调用同步 adapter 不存在的接口。修正测试/脚本后重跑；它们不是已通过的产品结果。没有删除原始失败记录。
 
 综合回归首次临时启动脚本缺少 `__main__` 保护，导致多进程目录加载用例超时；中止时为 967 passed / 1 failed。修正脚本后 1125 项通过，最终围栏修改后 1128 项再次通过。原始失败 XML/log 与误指不存在测试文件的空收集记录均保留。
+
+## 云端分层检查及修正
+
+云端 [43173211327](https://github.com/helenananaa/CandleScope/actions/runs/43173211327) 为 1781 passed / 1 failed：新增 backfill 代码直接导入 DataManager 的 SeriesKey，违反既有分层规则。本地 1128 项命令未包含该方向性测试；单独 architecture 脚本也未覆盖该条规则，不能将其成功当作同一规则已通过。
+
+产品修正 `d9ee7513cdd35abfdc2828d9bc26403edb68acc4` 将唯一 SeriesKey 定义移到中立 `data_engine.series_key`，DataManager 保留同一 class 的导出。backfill 和历史纯计划引用中立定义，没有放宽架构测试。字段、归一化、hash/equality、冻结及公开导出保持；旧导出身份、替换/深拷贝/pickle 往返回归通过。分层/混合/共享/来源身份定向 201 项通过，补充导出用例后的身份/分层 68 项通过。原始云端失败片段及新回执保留。官方录制源数值/网络结果仍明确属于 e2706e，未冒称在类型移动后重新进行公网或原生验收。
