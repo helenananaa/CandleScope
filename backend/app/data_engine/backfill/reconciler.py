@@ -36,7 +36,7 @@ from app.data_engine.interval_policy import aggregate_kline_rows, parse_interval
 from app.data_engine.kline_quality import source_is_trusted_final, source_rank
 from app.data_engine.storage.revisions import StaleAcquisition, fenced_acquisition, prepare_derived_inputs
 from app.data_engine.storage.derived_history_fence import computation_scope
-from app.data_engine.series_identity import KlineSeriesIdentity
+from app.data_engine.series_identity import KlineSeriesIdentity, resolve_kline_series_identity
 from app.data_engine.custom_materialization import (
     MaterializationLease,
     custom_materialization_registry,
@@ -329,11 +329,23 @@ class Reconciler:
             tuple[str, str, str, str],
             dict[int, FetchedBar],
         ] = {}
+        identities: dict[tuple[str, str, str, str], KlineSeriesIdentity] = {}
+        defaults: dict[str, KlineSeriesIdentity] = {}
         for fr in fetch_results:
             if fr.status == BackfillStatus.FAILED:
                 continue
             for bar in fr.bars:
                 key = (bar.exchange, bar.market_type, bar.symbol, bar.interval)
+                canonical = bar.series_identity
+                if canonical is None:
+                    canonical = defaults.get(bar.exchange)
+                    if canonical is None:
+                        canonical = resolve_kline_series_identity(bar.exchange, None)
+                        defaults[bar.exchange] = canonical
+                # Validate before timestamp deduplication can discard evidence
+                # of a foreign identity, including fully overlapping batches.
+                if identities.setdefault(key, canonical) != canonical:
+                    raise ValueError("reconciliation group contains multiple K-line series identities")
                 by_open_time = indexed.setdefault(key, {})
                 existing = by_open_time.get(bar.open_time)
                 if existing is None or Reconciler._prefer_grouped_bar(existing, bar):
@@ -431,7 +443,9 @@ class Reconciler:
             return 0, 0, 0, [], [], 0, 0, set()
 
         series_identity = bars[0].series_identity
-        if any(bar.series_identity != series_identity for bar in bars):
+        default_identity = resolve_kline_series_identity(exchange, None)
+        canonical_identity = series_identity or default_identity
+        if any((bar.series_identity or default_identity) != canonical_identity for bar in bars):
             raise ValueError(
                 "reconciliation group contains multiple K-line series identities"
             )

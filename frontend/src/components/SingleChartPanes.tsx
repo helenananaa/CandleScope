@@ -205,6 +205,7 @@ import { useDrawingFontMetricRevision } from "../features/drawings/text/drawingF
 import {
   axisTimeKey,
   bindSurfaceViewportSourceAnchor,
+  buildSurfaceViewportCacheKey,
   buildDisplaySourceTimeIndex,
   buildSurfaceViewportSnapshot,
   findDisplayIndexForAxisAnchor,
@@ -2179,6 +2180,10 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   const jumpToLatest = useCallback(() => {
     const lastIndex = displayRowsRef.current.length - 1;
     if (lastIndex < 0) return;
+    // Explicit follow-latest retires the remembered historical intent too;
+    // revisiting this dataset must not resurrect it after late history arrives.
+    const rememberedKey = buildSurfaceViewportCacheKey(datasetKeyRef.current, surfaceConfigKeyRef.current);
+    if (rememberedKey) surfaceViewportCacheRef.current.delete(rememberedKey);
     transferredHistoryRef.current = null;
     pendingSurfaceViewportRef.current = null;
     boundSurfaceViewportAnchorRef.current = null;
@@ -2207,11 +2212,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     latestWindowScrollGateRef.current.request(store, store.version, () => {
       if (datasetKeyRef.current !== requestedDatasetKey || seriesStoreRef.current !== store
         || leftHistoryInteractionGenerationRef.current !== interactionGeneration) return;
-      if (followLatestRef.current && displayRowsRef.current.length > 0) {
-        jumpToLatest();
-      } else {
-        chartRef.current?.timeScale().scrollToRealTime?.();
-      }
+      jumpToLatest();
     });
   }, [jumpToLatest]);
 

@@ -830,6 +830,12 @@ export function useChartInitialLoad({
             maxWaitMs: INITIAL_VIEWPORT_MAX_WAIT_MS,
             intent: "viewport",
             source: "initial-history-retry",
+            // A longer transport wait is still the original viewport load.
+            // Reuse its owner so a settled retry releases the nonblocking
+            // probe's pending indicator window instead of orphaning it.
+            ...(ownedPendingInitial?.indicatorWindowOwner
+              ? { indicatorWindowOwner: ownedPendingInitial.indicatorWindowOwner }
+              : {}),
             signal: controller.signal,
           });
           if (controller.signal.aborted || stoppedRetrying) return false;

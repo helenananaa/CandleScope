@@ -34,6 +34,7 @@ function workerMain() {
       send(JSON.stringify({ error: error instanceof Error ? error.message.slice(0, 512) : "Frontend script failed" }));
     }
   };
+  send("ready");
 }
 
 /** Blob workers inherit this restrictive document CSP. No same-origin token. */
@@ -46,19 +47,25 @@ addEventListener('message', function start(event) {
   const port = event.ports[0];
   const url = URL.createObjectURL(new Blob([${worker}], {type: 'text/javascript'}));
   let worker;
+  let ready = false, started = false;
   const stop = () => { if (worker) worker.terminate(); URL.revokeObjectURL(url); };
-  port.onmessage = () => { stop(); port.postMessage('stopped'); port.close(); };
+  port.onmessage = (message) => {
+    if (message.data === 'run' && ready && !started) {
+      started = true;
+      worker.postMessage(event.data);
+    } else if (message.data === 'stop') { stop(); port.postMessage('stopped'); port.close(); }
+  };
   addEventListener('pagehide', stop, {once: true});
   try {
     worker = new Worker(url);
     worker.onmessage = (reply) => {
+      if (!ready && reply.data === 'ready') { ready = true; port.postMessage('ready'); return; }
       stop();
       port.postMessage(typeof reply.data === 'string' && reply.data.length <= 1048576
         ? reply.data : '{"error":"Invalid frontend script output"}');
       port.close();
     };
     worker.onerror = () => { stop(); port.postMessage('{"error":"Frontend script worker failed"}'); port.close(); };
-    worker.postMessage(event.data);
   } catch (_) { stop(); port.postMessage('{"error":"Frontend script isolation unavailable"}'); port.close(); }
 });
 </script>`;

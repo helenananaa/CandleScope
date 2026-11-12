@@ -1,0 +1,35 @@
+{
+  "workers": [
+    {
+      "pid": 50733,
+      "returncode": 0,
+      "absent": true
+    }
+  ],
+  "sourceWatches": 0,
+  "callbacks": 0,
+  "leases": 0,
+  "registry": {
+    "capacity": 8,
+    "entries": 0,
+    "opening": 0,
+    "borrowers": 0,
+    "holders": 0,
+    "retiring": 0,
+    "closed": true
+  },
+  "queries": [
+    [
+      1699988040000,
+      1700029980000
+    ],
+    [
+      1699928040000,
+      1700029980000
+    ],
+    [
+      1700029980000,
+      1700030040000
+    ]
+  ]
+}

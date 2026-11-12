@@ -38,7 +38,14 @@ class BinanceSpotCcxtProfile:
         values: dict[str, Any] = {
             "newUpdates": True,
             "enableRateLimit": True,
+            # The spot catalog is ~18 MB. A healthy download can exceed
+            # CCXT's 10-second default, blocking every shared stream bootstrap.
+            "timeout": max(30_000, config.http_timeout * 1000),
             "aiohttp_trust_env": config.proxy_mode == "system",
+            # Binance documents 443 and 9443 for the same public stream.
+            # Prefer standard TLS: some networks reset 9443 while REST and
+            # the equivalent 443 stream remain available.
+            "urls": {"api": {"ws": {"spot": "wss://stream.binance.com:443/ws"}}},
             "options": {"defaultType": "spot", "fetchMarkets": {"types": ["spot"]}},
         }
         if config.http_proxy and config.proxy_mode != "none":

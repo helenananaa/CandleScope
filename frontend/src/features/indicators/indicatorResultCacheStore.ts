@@ -10,7 +10,6 @@ import {
   replaceIndicatorItemsRange,
   replaceIndicatorLinesRange,
   resolveWsValue,
-  stringSignature,
   upsertLinePoint,
 } from "./indicatorPayloadRuntime.js";
 import {
@@ -192,7 +191,7 @@ function indicatorIdentity(
 ): string {
   const builtin = isBuiltinIndicator(indicator);
   const computeParams = resolveCacheComputeParams(indicator, context);
-  return [
+  return stableJson([
     indicator.id || "",
     indicator.executionTarget || "hosted",
     builtin ? "builtin" : "script",
@@ -200,11 +199,11 @@ function indicatorIdentity(
       indicator.engineName ||
       indicator.name ||
       "",
-    stringSignature(indicator.script || ""),
+    indicator.script || "",
     indicator.language || "",
     indicator.securityMode || "",
     stableJson(computeParams || {}),
-  ].join("|");
+  ]);
 }
 
 function resolveCacheComputeParams(

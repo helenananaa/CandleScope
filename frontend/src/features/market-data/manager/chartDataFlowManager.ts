@@ -9,7 +9,7 @@ import { buildIndicatorComputeParams, buildIndicatorOhlcv, buildIndicatorOhlcvSi
 import { resolveLocalIndicatorExecution } from "../../indicators/indicatorComputeJobRuntime.js";
 import { buildHostedSubscriptionMessage } from "../../indicators/indicatorWsRuntime.js";
 import { normalizeParsedIndicatorPayload } from "../../indicators/indicatorPayloadRuntime.js";
-import { buildIndicatorCacheContext, cacheIndicatorSnapshot, getCachedIndicatorResult, replaceCachedIndicatorRange } from "../../indicators/indicatorResultCacheStore.js";
+import { buildIndicatorCacheContext, getCachedIndicatorResult } from "../../indicators/indicatorResultCacheStore.js";
 import { indicatorRangeCovered, normalizeIndicatorRange, normalizeIndicatorRevision } from "../../indicators/indicatorRangeCoverage.js";
 import { indicatorRequestKey } from "../../indicators/indicatorRequestBroker.js";
 
@@ -188,10 +188,10 @@ export class ChartDataFlowManager {
         if (!covered) return;
         const revision = normalizeIndicatorRevision(payload);
         const stored = getCachedIndicatorResult(indicator, context)
-          ? replaceCachedIndicatorRange(indicator, context, normalized, covered, { revision })
-          : cacheIndicatorSnapshot(indicator, context, normalized, payload.param_schema, { inputVersion, range: covered, revision });
+          ? this.indicators.results.replaceRange(indicator, context, normalized, covered, { revision })
+          : this.indicators.results.snapshot(indicator, context, normalized, payload.param_schema, { inputVersion, range: covered, revision });
         if (stored) this.warmed += 1;
-      } else if (cacheIndicatorSnapshot(indicator, context, normalized, payload.param_schema,
+      } else if (this.indicators.results.snapshot(indicator, context, normalized, payload.param_schema,
         { inputVersion, range: { start: Number(rows[0]!.time), end: Number(rows.at(-1)!.time) } })) this.warmed += 1;
     }));
   }

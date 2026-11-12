@@ -1,0 +1,23 @@
+{
+  "result": "passed",
+  "scope": "Source/common adapter and production-minified Chromium qualification; installed-release and Windows acceptance not repeated",
+  "frontend_functional": 5074,
+  "frontend_isolated_performance": 1,
+  "desktop_tests": 134,
+  "frontend_skips": 0,
+  "browser_scenarios": 16,
+  "browser_remaining_workers": 0,
+  "browser_renderer_exceptions": 0,
+  "backend_primary_passed": 70,
+  "backend_primary_skipped": 12,
+  "backend_gated_configured_passed": 12,
+  "python_plugin_passed": 48,
+  "final_source_typecheck": "passed",
+  "final_source_affected_lint": "passed",
+  "full_frontend_check": "passed",
+  "existing_warnings": [
+    "SingleChartPanes effect cleanup",
+    "production bundle size",
+    "Starlette/AnyIO deprecation"
+  ]
+}

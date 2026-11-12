@@ -1,7 +1,7 @@
-"""Bounded pre-fetch views for independent native second-candle repairs.
+"""Bounded pre-fetch views for independent native REST repairs.
 
 This is an optimistic range read, not a relaxation for derived calculations.
-Only the three explicitly supported spot/native 1s REST sources qualify.
+The existing native 1s sources and trusted Binance spot gap repairs qualify.
 There is no new durable mutation log: canonical rows and the existing durable
 deletion watermark remain the authority, including writers in other processes.
 """
@@ -15,6 +15,36 @@ MAX_WINDOWS = 32
 MAX_SLOTS = 8192
 FIELDS = ("open_time", "close_time", "open", "high", "low", "close", "volume",
           "quote_volume", "trades", "taker_buy_base", "taker_buy_quote", "source")
+
+
+def _window_slots(task):
+    if (task.exchange in {"binance", "gate", "upbit"}
+            and task.market_type == "spot" and task.interval == "1s"):
+        return (task.end_ms - task.start_ms) // 1000 + 1
+    metadata = getattr(task, "metadata", {})
+    if (task.exchange != "binance" or task.market_type != "spot"
+            or metadata.get("requires_trusted_finality") is not True):
+        return None
+    from app.data_engine.interval_resolution import IntervalResolver, IntervalPurpose, IntervalResolutionError
+    from app.data_engine.series_identity import identity_from_metadata
+
+    identity = identity_from_metadata(task.exchange, metadata)
+    if identity is not None and not identity.is_legacy_default_for(task.exchange):
+        return None
+    try:
+        route = IntervalResolver().resolve(exchange=task.exchange, market_type=task.market_type,
+                                           interval=task.interval, purpose=IntervalPurpose.HISTORY)
+    except IntervalResolutionError:
+        return None
+    if not route.is_native or route.canonical_interval != task.interval:
+        return None
+    cursor, count = route.spec.floor_ms(task.start_ms), 0
+    if cursor != task.start_ms:
+        return None
+    while cursor <= task.end_ms and count <= MAX_SLOTS:
+        count += 1
+        cursor = route.spec.next_ms(cursor)
+    return count
 
 
 def fingerprint(conn, key, start, end):
@@ -55,16 +85,15 @@ def capture_native_history_views(store, scope, tasks):
     selected = []
     slots = 0
     for task in tasks:
-        if (task.exchange not in {"binance", "gate", "upbit"}
-                or task.market_type != "spot" or task.interval != "1s"):
-            continue
         start, end = task.start_ms, task.end_ms
         if not isinstance(start, int) or not isinstance(end, int) or start > end:
             continue
-        count = (end - start) // 1000 + 1
+        count = _window_slots(task)
+        if count is None:
+            continue
         if len(selected) >= MAX_WINDOWS or slots + count > MAX_SLOTS:
             continue
-        selected.append((series_values(task.symbol, "1s", task.exchange, "spot"), start, end))
+        selected.append((series_values(task.symbol, task.interval, task.exchange, task.market_type), start, end))
         slots += count
     if not selected:
         return

@@ -1,0 +1,169 @@
+{
+  "sourceCommit": "77358341a0c1e668b54de6634c90653128bae584",
+  "scope": "Completed native core, 30-minute endurance, and same-profile restart subphases; full historical run failed in the subsequent OKX phase",
+  "fullRunPassed": false,
+  "fullRunFailure": "Error: Timed out waiting for acceptance state\n    at until (file:///Users/ryanliang/.codex/worktrees/indicator-results-161-164-20261111/CandleScope/docs/qa/backend-batch1-20261101/driver.mjs:29:9)\n    at async file:///Users/ryanliang/.codex/worktrees/indicator-results-161-164-20261111/CandleScope/docs/qa/frontend-architecture-acceptance-20261111/native-acceptance.mjs:375:69",
+  "coldDefinition": "New renderer context/frontend pool; running backend/catalog/history and the same persistent profile",
+  "coldVisibleMs": [
+    889,
+    834,
+    818,
+    439,
+    846,
+    440,
+    864,
+    853,
+    848,
+    434
+  ],
+  "coldTailReadyMs": [
+    5388,
+    6989,
+    8845,
+    8719,
+    5355,
+    13756,
+    9886,
+    8018,
+    8436,
+    9410
+  ],
+  "hotMs": [
+    782,
+    749,
+    753,
+    738,
+    732,
+    743,
+    741,
+    737,
+    735,
+    748
+  ],
+  "hotIntervals": [
+    "1m"
+  ],
+  "hotTargetReads": 0,
+  "hotNewSockets": 0,
+  "hotHealthyBeforeAndAfter": true,
+  "soakCompletion": {
+    "durationMs": 1800330,
+    "cycles": 10
+  },
+  "samples": 53,
+  "resources": {
+    "rssMiB": {
+      "first": 2497.6875,
+      "last": 1326.21875,
+      "min": 1325.65625,
+      "max": 4295.375
+    },
+    "rendererUsedHeapMiB": {
+      "first": 57.176581382751465,
+      "last": 87.80847549438477,
+      "min": 55.90538692474365,
+      "max": 108.261794090271
+    },
+    "cacheBars": {
+      "first": 15131,
+      "last": 15167,
+      "min": 15131,
+      "max": 15167
+    },
+    "inputSubscribers": {
+      "first": 2,
+      "last": 2,
+      "min": 2,
+      "max": 2
+    },
+    "resultSubscribers": {
+      "first": 2,
+      "last": 2,
+      "min": 2,
+      "max": 2
+    },
+    "jsEntries": {
+      "first": 9,
+      "last": 18,
+      "min": 9,
+      "max": 24
+    },
+    "jsBytes": {
+      "first": 1154194,
+      "last": 4144165,
+      "min": 1154194,
+      "max": 4150963
+    }
+  },
+  "rendererErrors": [],
+  "nearEnd": {
+    "schema": "candlescope.frontend-near-end-values/1",
+    "sourceCommit": "77358341a0c1e668b54de6634c90653128bae584",
+    "appPid": 1205,
+    "attempts": [
+      {
+        "at": 1794407569267,
+        "elapsedMs": 1779479,
+        "checked": [
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "lastClosedTime": 1794407460,
+            "points": [
+              {
+                "id": "qa-ma",
+                "checked": 60
+              },
+              {
+                "id": "qa-js",
+                "checked": 60
+              },
+              {
+                "id": "qa-pine",
+                "checked": 60
+              },
+              {
+                "id": "qa-python",
+                "checked": 60
+              }
+            ]
+          },
+          {
+            "cellId": "cell-1",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "lastClosedTime": 1794407460,
+            "points": [
+              {
+                "id": "qa-ma",
+                "checked": 60
+              },
+              {
+                "id": "qa-js",
+                "checked": 60
+              },
+              {
+                "id": "qa-pine",
+                "checked": 60
+              },
+              {
+                "id": "qa-python",
+                "checked": 60
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "scope": "Read-only actual candle/indicator series verification near the end of the original live 30-minute app process",
+    "passed": true
+  },
+  "completedCoreSteps": [
+    "return-to-realtime-ui",
+    "retired-entry-rejected",
+    "four-runtime-reconnect-oracle",
+    "bounded-performance-timeline",
+    "saved-exit-restart-oracle"
+  ]
+}

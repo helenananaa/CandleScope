@@ -476,3 +476,64 @@ test("a storage correction rejects older range snapshots before they reach cache
   assert.deepEqual(requests.at(-1)?.storageRevisionFloor, { epoch: "server-a", revision: 43 });
   assert.deepEqual(committed, [21, 23, 24]);
 });
+
+test("stream recovery admits repair instead of repeatedly issuing read-only viewport probes", async t => {
+  let options!: KlineStreamOptions, controller!: KlineStreamController, reads = 0;
+  const manager = new MarketDataManager({ cache: { now: () => now }, batchHistory: false,
+    api: { getMultiStreamUrl: () => "ws://test",
+      fetchKlinesHistory: async (_symbol, _interval, _days, _type, _exchange, request) => {
+        reads += 1;
+        // The production history route makes zero-wait viewport probes read-only.
+        if (request?.intent === "viewport" && request.maxWaitMs === 0) return {
+          ...proof(wire(2, 2), [row(60), row(180)]), complete: false,
+          history_state: "pending", verified_contiguous: false, retryable: true,
+          missing_ranges: [{ interval: "1m", start_ms: 120_000, end_ms: 120_000 }],
+        };
+        return proof(wire(2, 2), [row(60), row(120), row(180)]);
+      },
+      fetchKlinesRange: async () => { throw new Error("unexpected range"); },
+      fetchKlinesBefore: async () => { throw new Error("unexpected before"); },
+      fetchLatestKlines: async () => { throw new Error("unexpected latest"); },
+    } satisfies KlineApi,
+    streams: { subscribe: (_series, opts = {}) => {
+      options = opts;
+      controller = { readyState: () => 1, isOpen: () => true, send: () => true,
+        sendPing: () => true, updateIntervals() {}, close() {} };
+      queueMicrotask(() => opts.onOpen?.(controller)); return controller;
+    }, closeAll() {}, diagnostics: () => ({ physical: 1 }) },
+  });
+  t.after(() => manager.closeAll());
+  manager.subscribe(series, { intervals: ["1m"] });
+  await new Promise<void>(resolve => setImmediate(resolve));
+  const token = manager.cache.beginRead(series);
+  manager.cache.admitResponse(token, proof(wire(0, 0), [row(60), row(120), row(180)])); token.release();
+  manager.cache.invalidateRange(series, { from: 120, to: 120 }, wire(2, 2));
+  options.onKline?.({ interval: "1m", tick: row(240, false), message: {
+    type: "kline", interval: "1m", data: row(240, false), event_type: "bar.created",
+    stream_version: wire(2, 2), previous_open_ms: 180_000,
+  } }, controller);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(reads, 1, "one bounded verification request owns admission");
+  assert.equal(manager.cache.read(series, { from: 60, to: 180 }).complete, true,
+    "the missing durable range must be repaired and proven");
+  options.onKline?.({ interval: "1m", tick: row(240, false), message: {
+    type: "kline", interval: "1m", data: row(240, false), event_type: "bar.updated",
+    stream_version: wire(3, 2), previous_open_ms: 180_000,
+  } }, controller);
+  assert.equal(manager.cache.planHistory(series, 3).action, "reuse");
+});
+
+test("a proven latest tail cannot silence recovery of invalidated demanded history", () => {
+  const cache = healthy();
+  // A missed historical correction invalidates the original two-row proof.
+  read(cache, wire(3, 2), [row(120)]);
+  cache.admitRealtime(series, row(180, false), "bar.updated", wire(4, 2), 120_000);
+  assert.equal(cache.hasCurrentStream(series), true, "tail continuity has recovered");
+  assert.equal(cache.read(series, { from: 120, to: 120 }).complete, true);
+  assert.equal(cache.planHistory(series, 2).health.historyCovered, false);
+  assert.equal(cache.verificationDemand(series), 2,
+    "the original history demand still needs its own complete range proof");
+  read(cache, wire(4, 2));
+  assert.equal(cache.planHistory(series, 2).action, "reuse");
+  assert.equal(cache.verificationDemand(series), 0);
+});

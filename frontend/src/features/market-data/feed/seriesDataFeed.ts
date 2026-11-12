@@ -214,6 +214,8 @@ interface PendingGapRepair {
   terminalReason?: string;
   onResolved?: (result: KlineFetchResult) => void;
   onTerminal?: (reason: string) => void;
+  indicatorWindowOwner?: string;
+  indicatorWindowEpoch?: number;
 }
 
 interface EpochLease {
@@ -1402,7 +1404,9 @@ export class SeriesDataFeed {
       if (pendingInitial && job.options.getPendingInitial() !== pendingInitial) return false;
       const rowsRange = rowRangeMs(rows);
       if (pendingInitial && isSameSeries(job.series, pendingInitial)) {
-        if (!pendingInitial.range) return true;
+        // A completed child range cannot establish an unknown count-back
+        // window. Its original owner is settled by the full verification.
+        if (!pendingInitial.range) return false;
         const resultRange = numericResultRange(result) || rowsRange;
         return rangeCovers(resultRange, pendingInitial.range);
       }
@@ -1435,6 +1439,14 @@ export class SeriesDataFeed {
           repair: "none",
           strict: false,
           source: "backfill-completed",
+          // A full initial-window read is also that window's completion.
+          // Settling a fresh range owner would leave the original initial
+          // owner permanently blocking hosted indicators.
+          ...(pendingInitial?.range && rangeCovers(fetchRange, pendingInitial.range)
+            && job.options.getPendingInitial() === pendingInitial
+            && pendingInitial.indicatorWindowOwner
+            ? { indicatorWindowOwner: pendingInitial.indicatorWindowOwner }
+            : {}),
           ...(job.storageRevisionFloor ? { storageRevisionFloor: job.storageRevisionFloor } : {}),
         });
         let result = await read();
@@ -1575,6 +1587,9 @@ export class SeriesDataFeed {
       ...(nextTerminalReason ? { terminalReason: nextTerminalReason } : {}),
       ...(nextResolved ? { onResolved: nextResolved } : {}),
       ...(nextTerminal ? { onTerminal: nextTerminal } : {}),
+      ...(current?.indicatorWindowOwner && current.indicatorWindowEpoch !== undefined
+        ? { indicatorWindowOwner: current.indicatorWindowOwner, indicatorWindowEpoch: current.indicatorWindowEpoch }
+        : {}),
     };
     this.pendingGapRepairs.set(key, pending);
     if (current?.terminalReason !== nextTerminalReason) this.publishTerminalHistoryGaps();
@@ -1656,8 +1671,20 @@ export class SeriesDataFeed {
       }
       if (!this.isGapRangeSatisfied(result, pending.range, series.interval)) continue;
       this.deletePendingGapRepair(repairKey);
+      this.settlePendingRepairWindow(pending, result);
       pending.onResolved?.(result);
     }
+  }
+
+  private settlePendingRepairWindow(pending: PendingGapRepair | undefined, result: KlineFetchResult): void {
+    const epoch = pending?.indicatorWindowEpoch;
+    if (!pending?.indicatorWindowOwner || epoch === undefined
+      || !this.isCurrent(pending.series, epoch) || !this.shouldCommitActive(pending.series)
+      || !this.isGapRangeSatisfied(result, pending.range, pending.series.interval)) return;
+    this.commitMergedChartData(pending.series.symbol, pending.series.interval, [], {
+      source: "exact-repair-settled", deferIndicatorWindow: false,
+      indicatorWindowOwner: pending.indicatorWindowOwner, indicatorWindowEpoch: epoch,
+    });
   }
 
   pendingRepairCount(series?: MarketSeries): number {
@@ -1781,6 +1808,7 @@ export class SeriesDataFeed {
     const intervalTimeline = createIntervalTimeline(series.interval);
     if (intervalTimeline && this.isGapRangeSatisfied(result, range, series.interval)) {
       this.clearPendingGapRepair(series, range);
+      this.settlePendingRepairWindow(current, result);
       resolvedCallback?.(result);
       return;
     }
@@ -1831,10 +1859,11 @@ export class SeriesDataFeed {
           result,
           range,
           children.length,
-          resolvedCallback
+          resolvedCallback || current?.indicatorWindowOwner
             ? (aggregateResult) => {
                 if (hasExplicitResolvedRangeProof(aggregateResult)) {
-                  resolvedCallback(aggregateResult);
+                  this.settlePendingRepairWindow(current, aggregateResult);
+                  resolvedCallback?.(aggregateResult);
                   return;
                 }
                 // Child ranges can be individually usable while their combined
@@ -1850,6 +1879,11 @@ export class SeriesDataFeed {
                   resolvedCallback,
                   terminalCallback,
                 );
+                const restored = this.pendingGapRepairs.get(this.gapRepairKey(series, range));
+                if (restored && current?.indicatorWindowOwner && current.indicatorWindowEpoch !== undefined) {
+                  restored.indicatorWindowOwner = current.indicatorWindowOwner;
+                  restored.indicatorWindowEpoch = current.indicatorWindowEpoch;
+                }
               }
             : undefined,
         );
@@ -1963,6 +1997,7 @@ export class SeriesDataFeed {
   ): Promise<boolean> {
     const range = { start: plan.start, end: plan.end };
     const key = this.gapRepairKey(series, range);
+    const epoch = this.currentEpoch(series);
     const repairContext = this.repairGenerationContext(series);
     const repairGeneration = repairContext.generation;
     const lease = this.acquireEpochLease(
@@ -1978,7 +2013,13 @@ export class SeriesDataFeed {
     }
     const attempts = (current?.attempts ?? 0) + 1;
     const dormant = false;
-    this.trackPendingGapRepair(series, range, attempts, dormant);
+    const pendingWindow = this.trackPendingGapRepair(series, range, attempts, dormant);
+    // The repair owns one deferred window across transport attempts. Any
+    // authoritative completion of this range must retire that same owner.
+    const indicatorWindowOwner = pendingWindow.indicatorWindowOwner
+      ?? this.indicatorWindowOwner("range", series, epoch, [range.start, range.end, "exact-repair"]);
+    pendingWindow.indicatorWindowOwner = indicatorWindowOwner;
+    pendingWindow.indicatorWindowEpoch = epoch;
     try {
       const result = await this.getRange(series, {
         start: range.start,
@@ -1990,6 +2031,7 @@ export class SeriesDataFeed {
         maxPages: 4,
         signal: repairContext.signal,
         requestScope: repairContext.requestScope,
+        indicatorWindowOwner,
       });
       if (this.currentGapRepairGeneration(series) !== repairGeneration) return true;
       const tracked = this.pendingGapRepairs.get(key);
@@ -1999,6 +2041,11 @@ export class SeriesDataFeed {
         return true;
       }
       this.updatePendingGapRepairFromResult(series, range, result, attempts, dormant);
+      const remaining = this.pendingGapRepairs.get(key);
+      if (remaining) {
+        remaining.indicatorWindowOwner = indicatorWindowOwner;
+        remaining.indicatorWindowEpoch = epoch;
+      }
       return true;
     } catch (error) {
       if (
@@ -2008,6 +2055,8 @@ export class SeriesDataFeed {
       this.trackPendingGapRepair(series, range, attempts, dormant);
       const tracked = this.pendingGapRepairs.get(key);
       if (tracked) {
+        tracked.indicatorWindowOwner = indicatorWindowOwner;
+        tracked.indicatorWindowEpoch = epoch;
         const failureAttempts = (current?.failureAttempts ?? 0) + 1;
         tracked.failureAttempts = failureAttempts;
         tracked.nextPollAt = Date.now() + Math.min(

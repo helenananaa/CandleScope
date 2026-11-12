@@ -1,0 +1,1597 @@
+{
+  "scope": "Real Chromium, production-minified browser fixture and real React lifecycle; not native application qualification",
+  "output": "/tmp/cs-frontend-architecture-chart-prepend-configured",
+  "browser": "Chrome/157.0.8103.40",
+  "result": {
+    "result": {
+      "type": "object",
+      "value": {
+        "scope": "Full market/indicator React hooks and actual Pine HTTP/WS/SDK/core; controlled market transport, not Native acceptance",
+        "snapshots": [
+          {
+            "phase": "before-add",
+            "meta": {
+              "version": 3,
+              "status": "ready",
+              "source": "initial-history",
+              "seriesKey": "binance-spot-BTCUSDT-1m",
+              "symbol": "BTCUSDT",
+              "interval": "1m",
+              "bars": 500,
+              "firstTime": 1700000040,
+              "lastTime": 1700029980,
+              "coverage": {
+                "from": 1700000040,
+                "to": 1700029980,
+                "bars": 500
+              },
+              "committedAt": 1700030040024,
+              "historyComplete": true,
+              "historyRepairPending": false,
+              "historyValidatedCountBack": 500,
+              "lastValidatedMs": 1700030040024,
+              "changedRanges": [],
+              "indicatorWindowDeferred": false
+            },
+            "market": {
+              "hasMoreLeft": true,
+              "loadingMoreLeft": false,
+              "loadingMoreRight": false,
+              "initialHistoryPending": false,
+              "activeChartReady": true,
+              "historyPreparing": true,
+              "canLoadMoreLeft": true,
+              "canLoadMoreRight": false,
+              "canRestoreLatestWindow": true,
+              "barCount": 500,
+              "cacheDiagnostics": {},
+              "trimCacheEntries": {},
+              "indicatorRangeRequests": [],
+              "requestDemand": {
+                "scope": "chart:fgsnx77l:mwbneqlg-vlr4zyim:1:workspace:fixture:window:browser:cell:full-market",
+                "generation": 1
+              }
+            },
+            "indicatorMonitor": {
+              "capturedAtMs": 1700030040041,
+              "runtimes": [
+                {
+                  "runtimeId": "_r_2_",
+                  "cache": {
+                    "owner": "indicator-result-cache",
+                    "entryCount": 0,
+                    "maxEntries": 80,
+                    "totalPoints": 0,
+                    "totalItems": 0,
+                    "estimatedBytes": 0,
+                    "entries": []
+                  },
+                  "capturedAtMs": 1700030040042,
+                  "chart": {
+                    "barCount": 500,
+                    "closedBarCount": 500,
+                    "duplicateTimes": 0,
+                    "firstTime": 1700000040,
+                    "lastClosedTime": 1700029980,
+                    "lastTime": 1700029980,
+                    "outOfOrderBars": 0
+                  },
+                  "context": {
+                    "exchange": "binance",
+                    "seriesIdentity": {
+                      "providerId": "binance",
+                      "venue": "binance",
+                      "assetClass": "crypto",
+                      "seriesVariant": "native",
+                      "priceAdjustment": "raw",
+                      "sessionVariant": "continuous",
+                      "volumeSemantics": "base_asset"
+                    },
+                    "interval": "1m",
+                    "marketType": "spot",
+                    "sessionKey": "market-hook",
+                    "symbol": "BTCUSDT"
+                  },
+                  "gates": [
+                    "initial-hydration-unsettled"
+                  ],
+                  "indicators": [],
+                  "issueCounts": {},
+                  "issues": [],
+                  "state": {
+                    "chartDataReady": true,
+                    "chartDataStatus": "ready",
+                    "historyWindowPending": false,
+                    "initialHistoryPending": false,
+                    "initialHydrationSettled": false,
+                    "realtimeEnabled": true,
+                    "requestDemand": {
+                      "scope": "chart:fgsnx77l:mwbneqlg-vlr4zyim:1:workspace:fixture:window:browser:cell:full-market",
+                      "generation": 1
+                    },
+                    "seriesReady": 1,
+                    "hostedPendingResumePatchIds": [],
+                    "hostedSubscribedIds": []
+                  }
+                }
+              ],
+              "schemaVersion": 1
+            },
+            "scheduler": {
+              "activeAsync": 0,
+              "activeHydration": 0,
+              "cells": [
+                {
+                  "cellId": "full-market",
+                  "committed": {
+                    "initial-history": 1
+                  },
+                  "dropped": 0,
+                  "lastCommitAt": 1700030040021,
+                  "lastLane": "initial-history",
+                  "lastQueueWaitMs": 0,
+                  "maxQueueWaitMs": 0,
+                  "pending": {},
+                  "replaced": 0,
+                  "tier": "visible-secondary"
+                }
+              ],
+              "disposed": false,
+              "pendingAsync": 0,
+              "pendingFrames": 0,
+              "runnableFrames": 0,
+              "windowVisible": true
+            },
+            "http": [
+              {
+                "url": "/api/v1/indicators/calculations",
+                "method": "POST"
+              },
+              {
+                "url": "/api/v1/indicators/calculations/a1f47c4d74f2490cbd3f16a57c9ae014/range",
+                "method": "POST"
+              },
+              {
+                "url": "/api/v1/indicators/calculations/a1f47c4d74f2490cbd3f16a57c9ae014",
+                "method": "DELETE"
+              },
+              {
+                "url": "/api/v1/indicators/calculations",
+                "method": "POST"
+              },
+              {
+                "url": "/api/v1/indicators/calculations/af1b4950c0a8435eba62caeff04c7e00/range",
+                "method": "POST"
+              },
+              {
+                "url": "/api/v1/indicators/calculations/af1b4950c0a8435eba62caeff04c7e00/range",
+                "method": "POST"
+              },
+              {
+                "url": "/api/v1/indicators/calculations/af1b4950c0a8435eba62caeff04c7e00",
+                "method": "DELETE"
+              }
+            ],
+            "marketCalls": [
+              "history:500",
+              "latest:500",
+              "latest:500",
+              "latest:500",
+              "history:1500",
+              "history:1500",
+              "latest:500"
+            ]
+          },
+          {
+            "phase": "initial-counter",
+            "meta": {
+              "version": 3,
+              "status": "ready",
+              "source": "initial-history",
+              "seriesKey": "binance-spot-BTCUSDT-1m",
+              "symbol": "BTCUSDT",
+              "interval": "1m",
+              "bars": 500,
+              "firstTime": 1700000040,
+              "lastTime": 1700029980,
+              "coverage": {
+                "from": 1700000040,
+                "to": 1700029980,
+                "bars": 500
+              },
+              "committedAt": 1700030040024,
+              "historyComplete": true,
+              "historyRepairPending": false,
+              "historyValidatedCountBack": 500,
+              "lastValidatedMs": 1700030040024,
+              "changedRanges": [],
+              "indicatorWindowDeferred": false
+            },
+            "market": {
+              "hasMoreLeft": true,
+              "loadingMoreLeft": false,
+              "loadingMoreRight": false,
+              "initialHistoryPending": false,
+              "activeChartReady": true,
+              "historyPreparing": true,
+              "canLoadMoreLeft": true,
+              "canLoadMoreRight": false,
+              "canRestoreLatestWindow": true,
+              "barCount": 500,
+              "cacheDiagnostics": {},
+              "trimCacheEntries": {},
+              "indicatorRangeRequests": [],
+              "requestDemand": {
+                "scope": "chart:fgsnx77l:mwbneqlg-vlr4zyim:1:workspace:fixture:window:browser:cell:full-market",
+                "generation": 1
+              }
+            },
+            "indicatorMonitor": {
+              "capturedAtMs": 1700030043422,
+              "runtimes": [
+                {
+                  "runtimeId": "_r_2_",
+                  "cache": {
+                    "owner": "indicator-result-cache",
+                    "entryCount": 1,
+                    "maxEntries": 80,
+                    "totalPoints": 749,
+                    "totalItems": 500,
+                    "estimatedBytes": 119920,
+                    "entries": [
+                      {
+                        "owner": "indicator-result-cache",
+                        "key": "binance::spot::BTCUSDT::1m::market-input-1::projection:_r_0_::[\"counter\",\"hosted\",\"script\",\"market counter\",\"//@version=6\\nindicator(\\\"owned counter\\\")\\nvarip int ticks = 0\\nticks += 1\\nplot(ticks, title=\\\"counter\\\")\\nplot(ticks % 2 == 0 ? close : na, title=\\\"old point\\\", offset=-2)\\nplotshape(ticks % 2 == 0, style=shape.circle, offset=-2)\\nbgcolor(ticks % 2 == 0 ? color.green : na, offset=-2)\\n\",\"pine\",\"\",\"{}\"]",
+                        "indicatorId": "counter",
+                        "dependencyKey": "binance:spot:BTCUSDT:1m",
+                        "dependencyState": {
+                          "dependencies": [
+                            "binance:spot:BTCUSDT:1m"
+                          ],
+                          "missingDependencies": [],
+                          "orphan": false
+                        },
+                        "tier": "active",
+                        "activeLeaseCount": 1,
+                        "contentVersion": 3,
+                        "generation": 3,
+                        "context": {
+                          "inputSource": {
+                            "scope": "market-input-1",
+                            "capture": {},
+                            "captureProvided": {}
+                          },
+                          "projectionOwner": "_r_0_",
+                          "exchange": "binance",
+                          "marketType": "spot",
+                          "symbol": "BTCUSDT",
+                          "interval": "1m",
+                          "candleUpColor": "#22c55e",
+                          "candleDownColor": "#ef4444"
+                        },
+                        "points": 749,
+                        "items": 500,
+                        "lineCount": 2,
+                        "outputCounts": {
+                          "markers": 1,
+                          "fills": 0,
+                          "hlines": 0,
+                          "bgcolors": 1,
+                          "barcolors": 0,
+                          "signals": 0
+                        },
+                        "estimatedBytes": 119920,
+                        "accounting": {
+                          "points": 749,
+                          "items": 500,
+                          "estimatedBytes": 119920
+                        },
+                        "coverage": {
+                          "firstTime": 1700000040,
+                          "lastTime": 1700029980,
+                          "points": 749
+                        },
+                        "outputCoverage": {
+                          "firstTime": 1700000040,
+                          "lastTime": 1700029980,
+                          "points": 749
+                        },
+                        "computedSegments": [
+                          {
+                            "start": 1700000040,
+                            "end": 1700029980,
+                            "revision": {
+                              "serverEpoch": "chart-browser",
+                              "correctionRevision": "0",
+                              "closedThrough": 1700029980
+                            }
+                          }
+                        ],
+                        "staleSegments": [],
+                        "revision": {
+                          "serverEpoch": "chart-browser",
+                          "correctionRevision": "0",
+                          "closedThrough": 1700029980
+                        },
+                        "rangeSegments": [
+                          {
+                            "start": 1700000040,
+                            "end": 1700029980,
+                            "revision": {
+                              "serverEpoch": "chart-browser",
+                              "correctionRevision": "0",
+                              "closedThrough": 1700029980
+                            }
+                          }
+                        ],
+                        "trimSafety": {
+                          "safeRangeTrim": false,
+                          "reason": "complex-output",
+                          "unsafeOutputs": [
+                            "markers",
+                            "bgcolors"
+                          ]
+                        },
+                        "lastAccessMs": 1700030043414,
+                        "lastUpdatedMs": 1700030043414
+                      }
+                    ]
+                  },
+                  "capturedAtMs": 1700030043423,
+                  "chart": {
+                    "barCount": 500,
+                    "closedBarCount": 500,
+                    "duplicateTimes": 0,
+                    "firstTime": 1700000040,
+                    "lastClosedTime": 1700029980,
+                    "lastTime": 1700029980,
+                    "outOfOrderBars": 0
+                  },
+                  "context": {
+                    "exchange": "binance",
+                    "seriesIdentity": {
+                      "providerId": "binance",
+                      "venue": "binance",
+                      "assetClass": "crypto",
+                      "seriesVariant": "native",
+                      "priceAdjustment": "raw",
+                      "sessionVariant": "continuous",
+                      "volumeSemantics": "base_asset"
+                    },
+                    "interval": "1m",
+                    "marketType": "spot",
+                    "sessionKey": "market-hook",
+                    "symbol": "BTCUSDT"
+                  },
+                  "gates": [],
+                  "indicators": [
+                    {
+                      "error": null,
+                      "id": "counter",
+                      "lines": [
+                        {
+                          "duplicateTimes": 0,
+                          "firstTime": 1700000040,
+                          "interiorMissingBars": 0,
+                          "interiorMissingRanges": [],
+                          "invalidPoints": 0,
+                          "lastTime": 1700029980,
+                          "leadingMissingBars": 0,
+                          "lineId": "pine-plot-1",
+                          "name": "counter",
+                          "offChartPoints": 0,
+                          "outOfOrderPoints": 0,
+                          "pointCount": 500,
+                          "status": "ok",
+                          "trailingMissingBars": 0
+                        },
+                        {
+                          "duplicateTimes": 0,
+                          "firstTime": 1700000100,
+                          "interiorMissingBars": 248,
+                          "interiorMissingRanges": [
+                            {
+                              "start": 1700000160,
+                              "end": 1700000160,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1700000280,
+                              "end": 1700000280,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1700000400,
+                              "end": 1700000400,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1700000520,
+                              "end": 1700000520,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1700000640,
+                              "end": 1700000640,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1700000760,
+                              "end": 1700000760,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1700000880,
+                              "end": 1700000880,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1700001000,
+                              "end": 1700001000,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1700001120,
+                              "end": 1700001120,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1700001240,
+                              "end": 1700001240,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1700001360,
+                              "end": 1700001360,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1700001480,
+                              "end": 1700001480,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1700001600,
+                              "end": 1700001600,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1700001720,
+                              "end": 1700001720,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1700001840,
+                              "end": 1700001840,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1700001960,
+                              "end": 1700001960,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1700002080,
+                              "end": 1700002080,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1700002200,
+                              "end": 1700002200,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1700002320,
+                              "end": 1700002320,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1700002440,
+                              "end": 1700002440,
+                              "missingBars": 1
+                            }
+                          ],
+                          "invalidPoints": 0,
+                          "lastTime": 1700029860,
+                          "leadingMissingBars": 1,
+                          "lineId": "pine-plot-2",
+                          "name": "old point",
+                          "offChartPoints": 0,
+                          "outOfOrderPoints": 0,
+                          "pointCount": 249,
+                          "status": "gapped",
+                          "trailingMissingBars": 2
+                        }
+                      ],
+                      "name": "market counter",
+                      "status": "gapped",
+                      "visible": true
+                    }
+                  ],
+                  "issueCounts": {
+                    "indicator-interior-gap": 1
+                  },
+                  "issues": [
+                    "indicator-interior-gap"
+                  ],
+                  "state": {
+                    "chartDataReady": true,
+                    "chartDataStatus": "ready",
+                    "historyWindowPending": false,
+                    "initialHistoryPending": false,
+                    "initialHydrationSettled": true,
+                    "realtimeEnabled": true,
+                    "requestDemand": {
+                      "scope": "chart:fgsnx77l:mwbneqlg-vlr4zyim:1:workspace:fixture:window:browser:cell:full-market",
+                      "generation": 1
+                    },
+                    "seriesReady": 1,
+                    "hostedPendingResumePatchIds": [],
+                    "hostedSubscribedIds": [
+                      "counter"
+                    ]
+                  }
+                }
+              ],
+              "schemaVersion": 1
+            },
+            "scheduler": {
+              "activeAsync": 1,
+              "activeHydration": 1,
+              "cells": [
+                {
+                  "cellId": "full-market",
+                  "committed": {
+                    "initial-history": 1,
+                    "load-more": 3,
+                    "indicator-range": 1
+                  },
+                  "dropped": 0,
+                  "lastCommitAt": 1700030043372,
+                  "lastLane": "indicator-range",
+                  "lastQueueWaitMs": 0,
+                  "maxQueueWaitMs": 0,
+                  "pending": {
+                    "active-hydration": 1
+                  },
+                  "replaced": 0,
+                  "tier": "visible-secondary"
+                }
+              ],
+              "disposed": false,
+              "pendingAsync": 1,
+              "pendingFrames": 0,
+              "runnableFrames": 0,
+              "windowVisible": true
+            },
+            "http": [
+              {
+                "url": "/api/v1/indicators/calculations",
+                "method": "POST"
+              },
+              {
+                "url": "/api/v1/indicators/calculations/a1f47c4d74f2490cbd3f16a57c9ae014/range",
+                "method": "POST"
+              },
+              {
+                "url": "/api/v1/indicators/calculations/a1f47c4d74f2490cbd3f16a57c9ae014",
+                "method": "DELETE"
+              },
+              {
+                "url": "/api/v1/indicators/calculations",
+                "method": "POST"
+              },
+              {
+                "url": "/api/v1/indicators/calculations/af1b4950c0a8435eba62caeff04c7e00/range",
+                "method": "POST"
+              },
+              {
+                "url": "/api/v1/indicators/calculations/af1b4950c0a8435eba62caeff04c7e00/range",
+                "method": "POST"
+              },
+              {
+                "url": "/api/v1/indicators/calculations/af1b4950c0a8435eba62caeff04c7e00",
+                "method": "DELETE"
+              }
+            ],
+            "marketCalls": [
+              "history:500",
+              "latest:500",
+              "latest:500",
+              "latest:500",
+              "history:1500",
+              "history:1500",
+              "latest:500"
+            ]
+          },
+          {
+            "phase": "historical-left1500",
+            "meta": {
+              "version": 4,
+              "status": "ready",
+              "source": "active-history-hydration",
+              "seriesKey": "binance-spot-BTCUSDT-1m",
+              "symbol": "BTCUSDT",
+              "interval": "1m",
+              "bars": 1500,
+              "firstTime": 1699940040,
+              "lastTime": 1700029980,
+              "coverage": {
+                "from": 1699940040,
+                "to": 1700029980,
+                "bars": 1500
+              },
+              "committedAt": 1700030043501,
+              "incomingBars": 1500,
+              "incomingFirstTime": 1699940040,
+              "incomingLastTime": 1700029980,
+              "historyComplete": true,
+              "historyRepairPending": false,
+              "historyValidatedCountBack": 1500,
+              "lastValidatedMs": 1700030043498,
+              "originalBars": 1500,
+              "trimmedLeft": 0,
+              "trimmedRight": 0,
+              "windowDeltaType": "prepend",
+              "addedLeft": 1000,
+              "addedRight": 0,
+              "changedRanges": [
+                {
+                  "start": 1699940040,
+                  "end": 1699999980,
+                  "type": "prepend"
+                }
+              ],
+              "indicatorWindowDeferred": false
+            },
+            "market": {
+              "hasMoreLeft": true,
+              "loadingMoreLeft": false,
+              "loadingMoreRight": false,
+              "initialHistoryPending": false,
+              "activeChartReady": true,
+              "historyPreparing": false,
+              "canLoadMoreLeft": true,
+              "canLoadMoreRight": false,
+              "canRestoreLatestWindow": true,
+              "barCount": 1500,
+              "cacheDiagnostics": {},
+              "trimCacheEntries": {},
+              "indicatorRangeRequests": [],
+              "requestDemand": {
+                "scope": "chart:fgsnx77l:mwbneqlg-vlr4zyim:1:workspace:fixture:window:browser:cell:full-market",
+                "generation": 1
+              }
+            },
+            "indicatorMonitor": {
+              "capturedAtMs": 1700030044096,
+              "runtimes": [
+                {
+                  "runtimeId": "_r_2_",
+                  "cache": {
+                    "owner": "indicator-result-cache",
+                    "entryCount": 1,
+                    "maxEntries": 80,
+                    "totalPoints": 2249,
+                    "totalItems": 1500,
+                    "estimatedBytes": 359920,
+                    "entries": [
+                      {
+                        "owner": "indicator-result-cache",
+                        "key": "binance::spot::BTCUSDT::1m::market-input-1::projection:_r_0_::[\"counter\",\"hosted\",\"script\",\"market counter\",\"//@version=6\\nindicator(\\\"owned counter\\\")\\nvarip int ticks = 0\\nticks += 1\\nplot(ticks, title=\\\"counter\\\")\\nplot(ticks % 2 == 0 ? close : na, title=\\\"old point\\\", offset=-2)\\nplotshape(ticks % 2 == 0, style=shape.circle, offset=-2)\\nbgcolor(ticks % 2 == 0 ? color.green : na, offset=-2)\\n\",\"pine\",\"\",\"{}\"]",
+                        "indicatorId": "counter",
+                        "dependencyKey": "binance:spot:BTCUSDT:1m",
+                        "dependencyState": {
+                          "dependencies": [
+                            "binance:spot:BTCUSDT:1m"
+                          ],
+                          "missingDependencies": [],
+                          "orphan": false
+                        },
+                        "tier": "active",
+                        "activeLeaseCount": 1,
+                        "contentVersion": 6,
+                        "generation": 6,
+                        "context": {
+                          "inputSource": {
+                            "scope": "market-input-1",
+                            "capture": {},
+                            "captureProvided": {}
+                          },
+                          "projectionOwner": "_r_0_",
+                          "exchange": "binance",
+                          "marketType": "spot",
+                          "symbol": "BTCUSDT",
+                          "interval": "1m",
+                          "candleUpColor": "#22c55e",
+                          "candleDownColor": "#ef4444"
+                        },
+                        "points": 2249,
+                        "items": 1500,
+                        "lineCount": 2,
+                        "outputCounts": {
+                          "markers": 1,
+                          "fills": 0,
+                          "hlines": 0,
+                          "bgcolors": 1,
+                          "barcolors": 0,
+                          "signals": 0
+                        },
+                        "estimatedBytes": 359920,
+                        "accounting": {
+                          "points": 2249,
+                          "items": 1500,
+                          "estimatedBytes": 359920
+                        },
+                        "coverage": {
+                          "firstTime": 1699940040,
+                          "lastTime": 1700029980,
+                          "points": 2249
+                        },
+                        "outputCoverage": {
+                          "firstTime": 1699940040,
+                          "lastTime": 1700029980,
+                          "points": 2249
+                        },
+                        "computedSegments": [
+                          {
+                            "start": 1699940040,
+                            "end": 1700029980,
+                            "revision": {
+                              "serverEpoch": "chart-browser",
+                              "correctionRevision": "0",
+                              "closedThrough": 1700029980
+                            }
+                          }
+                        ],
+                        "staleSegments": [],
+                        "revision": {
+                          "serverEpoch": "chart-browser",
+                          "correctionRevision": "0",
+                          "closedThrough": 1700029980
+                        },
+                        "rangeSegments": [
+                          {
+                            "start": 1699940040,
+                            "end": 1700029980,
+                            "revision": {
+                              "serverEpoch": "chart-browser",
+                              "correctionRevision": "0",
+                              "closedThrough": 1700029980
+                            }
+                          }
+                        ],
+                        "trimSafety": {
+                          "safeRangeTrim": false,
+                          "reason": "complex-output",
+                          "unsafeOutputs": [
+                            "markers",
+                            "bgcolors"
+                          ]
+                        },
+                        "lastAccessMs": 1700030044096,
+                        "lastUpdatedMs": 1700030044096
+                      }
+                    ]
+                  },
+                  "capturedAtMs": 1700030044098,
+                  "chart": {
+                    "barCount": 1500,
+                    "closedBarCount": 1500,
+                    "duplicateTimes": 0,
+                    "firstTime": 1699940040,
+                    "lastClosedTime": 1700029980,
+                    "lastTime": 1700029980,
+                    "outOfOrderBars": 0
+                  },
+                  "context": {
+                    "exchange": "binance",
+                    "seriesIdentity": {
+                      "providerId": "binance",
+                      "venue": "binance",
+                      "assetClass": "crypto",
+                      "seriesVariant": "native",
+                      "priceAdjustment": "raw",
+                      "sessionVariant": "continuous",
+                      "volumeSemantics": "base_asset"
+                    },
+                    "interval": "1m",
+                    "marketType": "spot",
+                    "sessionKey": "market-hook",
+                    "symbol": "BTCUSDT"
+                  },
+                  "gates": [],
+                  "indicators": [
+                    {
+                      "error": null,
+                      "id": "counter",
+                      "lines": [
+                        {
+                          "duplicateTimes": 0,
+                          "firstTime": 1699940040,
+                          "interiorMissingBars": 0,
+                          "interiorMissingRanges": [],
+                          "invalidPoints": 0,
+                          "lastTime": 1700029980,
+                          "leadingMissingBars": 0,
+                          "lineId": "pine-plot-1",
+                          "name": "counter",
+                          "offChartPoints": 0,
+                          "outOfOrderPoints": 0,
+                          "pointCount": 1500,
+                          "status": "ok",
+                          "trailingMissingBars": 0
+                        },
+                        {
+                          "duplicateTimes": 0,
+                          "firstTime": 1699940100,
+                          "interiorMissingBars": 748,
+                          "interiorMissingRanges": [
+                            {
+                              "start": 1699940160,
+                              "end": 1699940160,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699940280,
+                              "end": 1699940280,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699940400,
+                              "end": 1699940400,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699940520,
+                              "end": 1699940520,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699940640,
+                              "end": 1699940640,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699940760,
+                              "end": 1699940760,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699940880,
+                              "end": 1699940880,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699941000,
+                              "end": 1699941000,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699941120,
+                              "end": 1699941120,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699941240,
+                              "end": 1699941240,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699941360,
+                              "end": 1699941360,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699941480,
+                              "end": 1699941480,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699941600,
+                              "end": 1699941600,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699941720,
+                              "end": 1699941720,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699941840,
+                              "end": 1699941840,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699941960,
+                              "end": 1699941960,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699942080,
+                              "end": 1699942080,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699942200,
+                              "end": 1699942200,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699942320,
+                              "end": 1699942320,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699942440,
+                              "end": 1699942440,
+                              "missingBars": 1
+                            }
+                          ],
+                          "invalidPoints": 0,
+                          "lastTime": 1700029860,
+                          "leadingMissingBars": 1,
+                          "lineId": "pine-plot-2",
+                          "name": "old point",
+                          "offChartPoints": 0,
+                          "outOfOrderPoints": 0,
+                          "pointCount": 749,
+                          "status": "gapped",
+                          "trailingMissingBars": 2
+                        }
+                      ],
+                      "name": "market counter",
+                      "status": "gapped",
+                      "visible": true
+                    }
+                  ],
+                  "issueCounts": {
+                    "indicator-interior-gap": 1
+                  },
+                  "issues": [
+                    "indicator-interior-gap"
+                  ],
+                  "state": {
+                    "chartDataReady": true,
+                    "chartDataStatus": "ready",
+                    "historyWindowPending": false,
+                    "initialHistoryPending": false,
+                    "initialHydrationSettled": true,
+                    "realtimeEnabled": true,
+                    "requestDemand": {
+                      "scope": "chart:fgsnx77l:mwbneqlg-vlr4zyim:1:workspace:fixture:window:browser:cell:full-market",
+                      "generation": 1
+                    },
+                    "seriesReady": 1,
+                    "hostedPendingResumePatchIds": [],
+                    "hostedSubscribedIds": [
+                      "counter"
+                    ]
+                  }
+                }
+              ],
+              "schemaVersion": 1
+            },
+            "scheduler": {
+              "activeAsync": 0,
+              "activeHydration": 0,
+              "cells": [
+                {
+                  "cellId": "full-market",
+                  "committed": {
+                    "initial-history": 1,
+                    "load-more": 4,
+                    "indicator-range": 3,
+                    "active-hydration": 2
+                  },
+                  "dropped": 0,
+                  "lastCommitAt": 1700030044084,
+                  "lastLane": "indicator-range",
+                  "lastQueueWaitMs": 0,
+                  "maxQueueWaitMs": 472,
+                  "pending": {},
+                  "replaced": 0,
+                  "tier": "visible-secondary"
+                }
+              ],
+              "disposed": false,
+              "pendingAsync": 0,
+              "pendingFrames": 0,
+              "runnableFrames": 0,
+              "windowVisible": true
+            },
+            "http": [
+              {
+                "url": "/api/v1/indicators/calculations",
+                "method": "POST"
+              },
+              {
+                "url": "/api/v1/indicators/calculations/a1f47c4d74f2490cbd3f16a57c9ae014/range",
+                "method": "POST"
+              },
+              {
+                "url": "/api/v1/indicators/calculations/a1f47c4d74f2490cbd3f16a57c9ae014",
+                "method": "DELETE"
+              },
+              {
+                "url": "/api/v1/indicators/calculations",
+                "method": "POST"
+              },
+              {
+                "url": "/api/v1/indicators/calculations/af1b4950c0a8435eba62caeff04c7e00/range",
+                "method": "POST"
+              },
+              {
+                "url": "/api/v1/indicators/calculations/af1b4950c0a8435eba62caeff04c7e00/range",
+                "method": "POST"
+              },
+              {
+                "url": "/api/v1/indicators/calculations/af1b4950c0a8435eba62caeff04c7e00",
+                "method": "DELETE"
+              }
+            ],
+            "marketCalls": [
+              "history:500",
+              "latest:500",
+              "latest:500",
+              "latest:500",
+              "history:1500",
+              "history:1500",
+              "latest:500"
+            ]
+          },
+          {
+            "phase": "forming-counter",
+            "meta": {
+              "version": 5,
+              "status": "ready",
+              "source": "kline-ws",
+              "seriesKey": "binance-spot-BTCUSDT-1m",
+              "symbol": "BTCUSDT",
+              "interval": "1m",
+              "bars": 1501,
+              "firstTime": 1699940040,
+              "lastTime": 1700030040,
+              "coverage": {
+                "from": 1699940040,
+                "to": 1700030040,
+                "bars": 1501
+              },
+              "committedAt": 1700030074144,
+              "incomingBars": 1,
+              "incomingFirstTime": 1700030040,
+              "incomingLastTime": 1700030040,
+              "seeded": false,
+              "originalBars": 1501,
+              "trimmedLeft": 0,
+              "trimmedRight": 0,
+              "windowDeltaType": "tick",
+              "changedRanges": [],
+              "indicatorWindowDeferred": false,
+              "historyComplete": true,
+              "historyRepairPending": false,
+              "historyValidatedCountBack": 1500,
+              "lastValidatedMs": 1700030043498
+            },
+            "market": {
+              "hasMoreLeft": true,
+              "loadingMoreLeft": false,
+              "loadingMoreRight": false,
+              "initialHistoryPending": false,
+              "activeChartReady": true,
+              "historyPreparing": false,
+              "canLoadMoreLeft": true,
+              "canLoadMoreRight": false,
+              "canRestoreLatestWindow": true,
+              "barCount": 1501,
+              "cacheDiagnostics": {},
+              "trimCacheEntries": {},
+              "indicatorRangeRequests": [],
+              "requestDemand": {
+                "scope": "chart:fgsnx77l:mwbneqlg-vlr4zyim:1:workspace:fixture:window:browser:cell:full-market",
+                "generation": 1
+              }
+            },
+            "indicatorMonitor": {
+              "capturedAtMs": 1700030074166,
+              "runtimes": [
+                {
+                  "runtimeId": "_r_2_",
+                  "cache": {
+                    "owner": "indicator-result-cache",
+                    "entryCount": 1,
+                    "maxEntries": 80,
+                    "totalPoints": 2250,
+                    "totalItems": 1500,
+                    "estimatedBytes": 360000,
+                    "entries": [
+                      {
+                        "owner": "indicator-result-cache",
+                        "key": "binance::spot::BTCUSDT::1m::market-input-1::projection:_r_0_::[\"counter\",\"hosted\",\"script\",\"market counter\",\"//@version=6\\nindicator(\\\"owned counter\\\")\\nvarip int ticks = 0\\nticks += 1\\nplot(ticks, title=\\\"counter\\\")\\nplot(ticks % 2 == 0 ? close : na, title=\\\"old point\\\", offset=-2)\\nplotshape(ticks % 2 == 0, style=shape.circle, offset=-2)\\nbgcolor(ticks % 2 == 0 ? color.green : na, offset=-2)\\n\",\"pine\",\"\",\"{}\"]",
+                        "indicatorId": "counter",
+                        "dependencyKey": "binance:spot:BTCUSDT:1m",
+                        "dependencyState": {
+                          "dependencies": [
+                            "binance:spot:BTCUSDT:1m"
+                          ],
+                          "missingDependencies": [],
+                          "orphan": false
+                        },
+                        "tier": "active",
+                        "activeLeaseCount": 1,
+                        "contentVersion": 8,
+                        "generation": 8,
+                        "context": {
+                          "inputSource": {
+                            "scope": "market-input-1",
+                            "capture": {},
+                            "captureProvided": {}
+                          },
+                          "projectionOwner": "_r_0_",
+                          "exchange": "binance",
+                          "marketType": "spot",
+                          "symbol": "BTCUSDT",
+                          "interval": "1m",
+                          "candleUpColor": "#22c55e",
+                          "candleDownColor": "#ef4444"
+                        },
+                        "points": 2250,
+                        "items": 1500,
+                        "lineCount": 2,
+                        "outputCounts": {
+                          "markers": 1,
+                          "fills": 0,
+                          "hlines": 0,
+                          "bgcolors": 1,
+                          "barcolors": 0,
+                          "signals": 0
+                        },
+                        "estimatedBytes": 360000,
+                        "accounting": {
+                          "points": 2250,
+                          "items": 1500,
+                          "estimatedBytes": 360000
+                        },
+                        "coverage": {
+                          "firstTime": 1699940040,
+                          "lastTime": 1700030040,
+                          "points": 2250
+                        },
+                        "outputCoverage": {
+                          "firstTime": 1699940040,
+                          "lastTime": 1700030040,
+                          "points": 2250
+                        },
+                        "computedSegments": [
+                          {
+                            "start": 1699940040,
+                            "end": 1700030040,
+                            "revision": {
+                              "serverEpoch": "chart-browser",
+                              "correctionRevision": "0",
+                              "closedThrough": 1700029980
+                            }
+                          }
+                        ],
+                        "staleSegments": [],
+                        "revision": {
+                          "serverEpoch": "chart-browser",
+                          "correctionRevision": "0",
+                          "closedThrough": 1700029980
+                        },
+                        "rangeSegments": [
+                          {
+                            "start": 1699940040,
+                            "end": 1700030040,
+                            "revision": {
+                              "serverEpoch": "chart-browser",
+                              "correctionRevision": "0",
+                              "closedThrough": 1700029980
+                            }
+                          }
+                        ],
+                        "trimSafety": {
+                          "safeRangeTrim": false,
+                          "reason": "complex-output",
+                          "unsafeOutputs": [
+                            "markers",
+                            "bgcolors"
+                          ]
+                        },
+                        "lastAccessMs": 1700030074159,
+                        "lastUpdatedMs": 1700030074159
+                      }
+                    ]
+                  },
+                  "capturedAtMs": 1700030074167,
+                  "chart": {
+                    "barCount": 1501,
+                    "closedBarCount": 1500,
+                    "duplicateTimes": 0,
+                    "firstTime": 1699940040,
+                    "lastClosedTime": 1700029980,
+                    "lastTime": 1700030040,
+                    "outOfOrderBars": 0
+                  },
+                  "context": {
+                    "exchange": "binance",
+                    "seriesIdentity": {
+                      "providerId": "binance",
+                      "venue": "binance",
+                      "assetClass": "crypto",
+                      "seriesVariant": "native",
+                      "priceAdjustment": "raw",
+                      "sessionVariant": "continuous",
+                      "volumeSemantics": "base_asset"
+                    },
+                    "interval": "1m",
+                    "marketType": "spot",
+                    "sessionKey": "market-hook",
+                    "symbol": "BTCUSDT"
+                  },
+                  "gates": [],
+                  "indicators": [
+                    {
+                      "error": null,
+                      "id": "counter",
+                      "lines": [
+                        {
+                          "duplicateTimes": 0,
+                          "firstTime": 1699940040,
+                          "interiorMissingBars": 0,
+                          "interiorMissingRanges": [],
+                          "invalidPoints": 0,
+                          "lastTime": 1700030040,
+                          "leadingMissingBars": 0,
+                          "lineId": "pine-plot-1",
+                          "name": "counter",
+                          "offChartPoints": 1,
+                          "outOfOrderPoints": 0,
+                          "pointCount": 1501,
+                          "status": "ok",
+                          "trailingMissingBars": 0
+                        },
+                        {
+                          "duplicateTimes": 0,
+                          "firstTime": 1699940100,
+                          "interiorMissingBars": 748,
+                          "interiorMissingRanges": [
+                            {
+                              "start": 1699940160,
+                              "end": 1699940160,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699940280,
+                              "end": 1699940280,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699940400,
+                              "end": 1699940400,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699940520,
+                              "end": 1699940520,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699940640,
+                              "end": 1699940640,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699940760,
+                              "end": 1699940760,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699940880,
+                              "end": 1699940880,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699941000,
+                              "end": 1699941000,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699941120,
+                              "end": 1699941120,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699941240,
+                              "end": 1699941240,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699941360,
+                              "end": 1699941360,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699941480,
+                              "end": 1699941480,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699941600,
+                              "end": 1699941600,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699941720,
+                              "end": 1699941720,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699941840,
+                              "end": 1699941840,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699941960,
+                              "end": 1699941960,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699942080,
+                              "end": 1699942080,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699942200,
+                              "end": 1699942200,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699942320,
+                              "end": 1699942320,
+                              "missingBars": 1
+                            },
+                            {
+                              "start": 1699942440,
+                              "end": 1699942440,
+                              "missingBars": 1
+                            }
+                          ],
+                          "invalidPoints": 0,
+                          "lastTime": 1700029860,
+                          "leadingMissingBars": 1,
+                          "lineId": "pine-plot-2",
+                          "name": "old point",
+                          "offChartPoints": 0,
+                          "outOfOrderPoints": 0,
+                          "pointCount": 749,
+                          "status": "gapped",
+                          "trailingMissingBars": 2
+                        }
+                      ],
+                      "name": "market counter",
+                      "status": "gapped",
+                      "visible": true
+                    }
+                  ],
+                  "issueCounts": {
+                    "indicator-interior-gap": 1
+                  },
+                  "issues": [
+                    "indicator-interior-gap"
+                  ],
+                  "state": {
+                    "chartDataReady": true,
+                    "chartDataStatus": "ready",
+                    "historyWindowPending": false,
+                    "initialHistoryPending": false,
+                    "initialHydrationSettled": true,
+                    "realtimeEnabled": true,
+                    "requestDemand": {
+                      "scope": "chart:fgsnx77l:mwbneqlg-vlr4zyim:1:workspace:fixture:window:browser:cell:full-market",
+                      "generation": 1
+                    },
+                    "seriesReady": 1,
+                    "hostedPendingResumePatchIds": [],
+                    "hostedSubscribedIds": [
+                      "counter"
+                    ]
+                  }
+                }
+              ],
+              "schemaVersion": 1
+            },
+            "scheduler": {
+              "activeAsync": 0,
+              "activeHydration": 0,
+              "cells": [
+                {
+                  "cellId": "full-market",
+                  "committed": {
+                    "initial-history": 1,
+                    "load-more": 4,
+                    "indicator-range": 3,
+                    "active-hydration": 2
+                  },
+                  "dropped": 0,
+                  "lastCommitAt": 1700030044084,
+                  "lastLane": "indicator-range",
+                  "lastQueueWaitMs": 0,
+                  "maxQueueWaitMs": 472,
+                  "pending": {},
+                  "replaced": 0,
+                  "tier": "visible-secondary"
+                }
+              ],
+              "disposed": false,
+              "pendingAsync": 0,
+              "pendingFrames": 0,
+              "runnableFrames": 0,
+              "windowVisible": true
+            },
+            "http": [
+              {
+                "url": "/api/v1/indicators/calculations",
+                "method": "POST"
+              },
+              {
+                "url": "/api/v1/indicators/calculations/a1f47c4d74f2490cbd3f16a57c9ae014/range",
+                "method": "POST"
+              },
+              {
+                "url": "/api/v1/indicators/calculations/a1f47c4d74f2490cbd3f16a57c9ae014",
+                "method": "DELETE"
+              },
+              {
+                "url": "/api/v1/indicators/calculations",
+                "method": "POST"
+              },
+              {
+                "url": "/api/v1/indicators/calculations/af1b4950c0a8435eba62caeff04c7e00/range",
+                "method": "POST"
+              },
+              {
+                "url": "/api/v1/indicators/calculations/af1b4950c0a8435eba62caeff04c7e00/range",
+                "method": "POST"
+              },
+              {
+                "url": "/api/v1/indicators/calculations/af1b4950c0a8435eba62caeff04c7e00",
+                "method": "DELETE"
+              }
+            ],
+            "marketCalls": [
+              "history:500",
+              "latest:500",
+              "latest:500",
+              "latest:500",
+              "history:1500",
+              "history:1500",
+              "latest:500"
+            ]
+          }
+        ],
+        "http": [
+          {
+            "url": "/api/v1/indicators/calculations",
+            "method": "POST"
+          },
+          {
+            "url": "/api/v1/indicators/calculations/a1f47c4d74f2490cbd3f16a57c9ae014/range",
+            "method": "POST"
+          },
+          {
+            "url": "/api/v1/indicators/calculations/a1f47c4d74f2490cbd3f16a57c9ae014",
+            "method": "DELETE"
+          },
+          {
+            "url": "/api/v1/indicators/calculations",
+            "method": "POST"
+          },
+          {
+            "url": "/api/v1/indicators/calculations/af1b4950c0a8435eba62caeff04c7e00/range",
+            "method": "POST"
+          },
+          {
+            "url": "/api/v1/indicators/calculations/af1b4950c0a8435eba62caeff04c7e00/range",
+            "method": "POST"
+          },
+          {
+            "url": "/api/v1/indicators/calculations/af1b4950c0a8435eba62caeff04c7e00",
+            "method": "DELETE"
+          }
+        ],
+        "frames": [
+          {
+            "type": "connected"
+          },
+          {
+            "type": "indicator.subscribed",
+            "ok": true,
+            "calculation": {
+              "schemaVersion": 1,
+              "domainId": "a1f47c4d74f2490cbd3f16a57c9ae014",
+              "generation": 1,
+              "sequence": 1,
+              "view": "current-projection",
+              "origin": 1700000040,
+              "observedThrough": 1700029980,
+              "closedThrough": 1700029980,
+              "inputRevision": "chart-browser:0:delivery:0"
+            }
+          },
+          {
+            "type": "indicator.snapshot",
+            "ok": true,
+            "calculation": {
+              "schemaVersion": 1,
+              "domainId": "a1f47c4d74f2490cbd3f16a57c9ae014",
+              "generation": 1,
+              "sequence": 1,
+              "view": "current-projection",
+              "origin": 1700000040,
+              "observedThrough": 1700029980,
+              "closedThrough": 1700029980,
+              "inputRevision": "chart-browser:0:delivery:0"
+            }
+          },
+          {
+            "type": "error"
+          },
+          {
+            "type": "indicator.unsubscribed"
+          },
+          {
+            "type": "indicator.subscribed",
+            "ok": true,
+            "calculation": {
+              "schemaVersion": 1,
+              "domainId": "af1b4950c0a8435eba62caeff04c7e00",
+              "generation": 1,
+              "sequence": 1,
+              "view": "current-projection",
+              "origin": 1699940040,
+              "observedThrough": 1700029980,
+              "closedThrough": 1700029980,
+              "inputRevision": "chart-browser:0:delivery:0"
+            }
+          },
+          {
+            "type": "indicator.snapshot",
+            "ok": true,
+            "calculation": {
+              "schemaVersion": 1,
+              "domainId": "af1b4950c0a8435eba62caeff04c7e00",
+              "generation": 1,
+              "sequence": 1,
+              "view": "current-projection",
+              "origin": 1699940040,
+              "observedThrough": 1700029980,
+              "closedThrough": 1700029980,
+              "inputRevision": "chart-browser:0:delivery:0"
+            }
+          },
+          {
+            "type": "indicator.replace_range",
+            "ok": true,
+            "calculation": {
+              "schemaVersion": 1,
+              "domainId": "af1b4950c0a8435eba62caeff04c7e00",
+              "generation": 1,
+              "sequence": 2,
+              "view": "current-projection",
+              "origin": 1699940040,
+              "observedThrough": 1700030040,
+              "closedThrough": 1700029980,
+              "inputRevision": "chart-browser:0:delivery:0"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "immediateWorkerCount": 0,
+  "remainingWorkers": [],
+  "exceptions": [],
+  "passed": true,
+  "browserExitCode": 0
+}
