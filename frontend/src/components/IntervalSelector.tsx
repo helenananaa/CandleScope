@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { confirmAction } from "./ui/overlay/overlayApi.js";
 import { getLocale, t, type LocaleId } from "../i18n/index.js";
 import { useLocale } from "../i18n/useLocale.js";
 import {
@@ -677,9 +678,9 @@ function IntervalSelector({
     onRemoveCustomInterval(value);
   }, [onRemoveCustomInterval]);
 
-  const handleClear = useCallback(() => {
+  const handleClear = useCallback(async () => {
     if (customIntervalRecords.length === 0) return;
-    if (!window.confirm(t("interval.confirmClear", {}, locale))) return;
+    if (!(await confirmAction({ title: t("interval.confirmClear", {}, locale), confirmLabel: t("interval.clear", {}, locale), tone: "danger" }))) return;
     onClearCustomIntervals();
   }, [customIntervalRecords.length, locale, onClearCustomIntervals]);
 

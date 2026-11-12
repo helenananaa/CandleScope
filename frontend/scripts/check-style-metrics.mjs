@@ -46,6 +46,8 @@ export function classNamesInTsx(source) {
   for (const match of source.matchAll(/className=\{/g)) {
     const open = match.index + match[0].length - 1;
     let expression = source.slice(open + 1, closingBrace(source, open) - 1);
+    // buttonClassName({ variant: "primary" }) composes primitive classes; its arguments are options, not classes.
+    expression = expression.replace(/\bbuttonClassName\(\{[^}]*\}\)/g, '"ui-btn"');
     // Replace template interpolations (which may nest braces) with a separator.
     for (let at = expression.indexOf("${"); at !== -1; at = expression.indexOf("${")) {
       expression = `${expression.slice(0, at)} ${expression.slice(closingBrace(expression, at + 1))}`;

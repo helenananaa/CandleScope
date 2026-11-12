@@ -1,4 +1,5 @@
 import { describeError } from "../../i18n/serverErrors.js";
+import { confirmAction } from "../../components/ui/overlay/overlayApi.js";
 import { useEffect, useMemo, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -107,7 +108,7 @@ export function PaperRows({
   const toggleKillSwitch = async () => {
     if (!paper) return;
     const next = !paper.killSwitchEnabled;
-    if (!next && !window.confirm(t("plugin.host.paperResumeConfirm"))) return;
+    if (!next && !(await confirmAction({ title: t("plugin.host.paperResumeConfirm"), confirmLabel: t("plugin.host.resumePaperOrders") }))) return;
     try {
       await runtime.actions.setPaperKillSwitch(next);
       await reload();
@@ -353,13 +354,16 @@ export function MarketplacePanel({
                     type="button"
                     data-marketplace-activate={entry.pluginId}
                     disabled={!runtime.view.managementAvailable || !activationReady || busy !== null}
-                    onClick={() => {
-                      if (!window.confirm(t("plugin.market.activateConfirm", { plugin: entry.pluginId, version: candidate.version }))) return;
+                    onClick={() => void (async () => {
+                      if (!(await confirmAction({
+                        title: t("plugin.market.activateConfirm", { plugin: entry.pluginId, version: candidate.version }),
+                        confirmLabel: t("plugin.market.activateObserve"),
+                      }))) return;
                       void run(
                         `activate:${entry.pluginId}`,
                         () => runtime.actions.activateMarketplaceRelease(entry.pluginId),
                       );
-                    }}
+                    })()}
                   >
                     {busy === `activate:${entry.pluginId}` ? t("plugin.market.activating") : t("plugin.market.activateObserve")}
                   </button>

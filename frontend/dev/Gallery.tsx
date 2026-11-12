@@ -1,8 +1,8 @@
 // Gallery of the UI primitives; rendered by dev/ui-gallery.tsx.
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  Badge, Button, Checkbox, DateTimeInput, Disclosure, EmptyState, Field, FileDrop, IconButton, InlineAlert, Input, Section,
-  SegmentedControl, Select, Stat, Switch, TabPanel, Tabs, Textarea,
+  Badge, Button, Checkbox, DateTimeInput, Dialog, Disclosure, Drawer, EmptyState, Field, FileDrop, IconButton, InlineAlert, Input, Menu,
+  Popover, Section, SegmentedControl, Select, Stat, Switch, TabPanel, Tabs, Textarea, Tooltip, confirmAction, notify,
 } from "../src/components/ui/index.js";
 
 const PlusIcon = () => (
@@ -115,6 +115,8 @@ export default function Gallery() {
         <Disclosure summary="Technical details">Request id 7f3c · provider binance · retry after 2 s</Disclosure>
       </Section>
 
+      <Overlays />
+
       <Section title="Empty states">
         <div className="gallery-grid">
           <div className="gallery-panel"><EmptyState title="No alerts yet" description="Create an alert from the chart or here." action={<Button size="sm" variant="primary">Create alert</Button>} /></div>
@@ -122,5 +124,54 @@ export default function Gallery() {
         </div>
       </Section>
     </main>
+  );
+}
+
+
+function Overlays() {
+  const [dialog, setDialog] = useState(false);
+  const [drawer, setDrawer] = useState<"alerts" | "indicators" | null>(null);
+  const [popover, setPopover] = useState(false);
+  const [menu, setMenu] = useState(false);
+  const [result, setResult] = useState("");
+  const popoverAnchor = useRef<HTMLButtonElement>(null);
+  const menuAnchor = useRef<HTMLButtonElement>(null);
+  return (
+    <Section title="Overlays" description="One stack: one drawer per side, modals above drawers, popovers above both; Escape closes the top layer and focus returns to the control that opened it.">
+      <Row label="open">
+        <Button onClick={() => setDialog(true)}>Dialog</Button>
+        <Button onClick={() => setDrawer("alerts")}>Drawer: alerts</Button>
+        <Button onClick={() => setDrawer("indicators")}>Drawer: indicators</Button>
+        <Button ref={popoverAnchor} aria-expanded={popover} onClick={() => setPopover((v) => !v)}>Popover</Button>
+        <Button ref={menuAnchor} aria-expanded={menu} aria-haspopup="menu" onClick={() => setMenu((v) => !v)}>Menu</Button>
+        <Button variant="danger" onClick={() => { void confirmAction({ title: "Delete alert “BTC above 75k”?", message: "The rule and its history are removed. This cannot be undone.", confirmLabel: "Delete alert", tone: "danger" }).then((ok) => setResult(ok ? "Deleted" : "Kept")); }}>Confirm</Button>
+        <Button onClick={() => notify({ tone: "success", title: "Alert created", message: "BTCUSDT above 75,000 on 1h" })}>Toast</Button>
+        <Button onClick={() => notify({ tone: "danger", title: "Save failed", message: "The indicator script has a syntax error on line 12.", action: { label: "Show", onClick: () => setDialog(true) } })}>Error toast</Button>
+        <Tooltip content="Opens the export panel (⌘E)"><IconButton label="Export" icon={<PlusIcon />} /></Tooltip>
+      </Row>
+      {result ? <p className="gallery-note">Confirm result: {result}</p> : null}
+      <Dialog open={dialog} onClose={() => setDialog(false)} title="Rename workspace" description="Names appear in the workspace switcher."
+        footer={<><Button onClick={() => setDialog(false)}>Cancel</Button><Button variant="primary" onClick={() => setDialog(false)}>Save</Button></>}>
+        <Field label="Name"><Input defaultValue="BTC scalping" /></Field>
+      </Dialog>
+      <Drawer open={drawer !== null} onClose={() => setDrawer(null)} title={drawer === "alerts" ? "Alerts" : "Indicators"}
+        footer={<Button variant="primary">Create alert</Button>}>
+        <p className="gallery-note">Opening the other drawer replaces this one.</p>
+        <Button onClick={() => setDialog(true)}>Open a dialog above the drawer</Button>
+      </Drawer>
+      <Popover open={popover} onClose={() => setPopover(false)} anchorRef={popoverAnchor} label="Layout">
+        <div className="gallery-popover">
+          <Field label="Columns"><Select defaultValue="2"><option>1</option><option>2</option><option>3</option></Select></Field>
+          <Checkbox label="Link symbols" defaultChecked />
+        </div>
+      </Popover>
+      <Menu open={menu} onClose={() => setMenu(false)} anchorRef={menuAnchor} label="Chart actions"
+        items={[
+          { id: "copy", label: "Copy chart", hint: "⌘C", onSelect: () => setResult("Copied") },
+          { id: "split", label: "Split right", onSelect: () => setResult("Split") },
+          { id: "lock", label: "Lock layout", disabled: true, onSelect: () => undefined },
+          { id: "close", label: "Close chart", tone: "danger", onSelect: () => setResult("Closed") },
+        ]} />
+    </Section>
   );
 }

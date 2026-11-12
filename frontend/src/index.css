@@ -9,6 +9,7 @@
 @import "./components/ui/field.css" layer(primitives);
 @import "./components/ui/choice.css" layer(primitives);
 @import "./components/ui/display.css" layer(primitives);
+@import "./components/ui/overlay.css" layer(primitives);
 @import "./styles/components.css" layer(features);
 @import "./features/plugins/pluginCenter.css" layer(features);
 @import "./features/extensions/extensions.css" layer(features);
