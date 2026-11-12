@@ -22,6 +22,7 @@ import type { BacktestMarkerChart } from "../chart-tester/chartStrategyResultPro
 import "./continuousStrategy.css";
 
 export interface ContinuousStrategyPanelProps {
+  signalChart?: import("../../../shared/strategyRunSettings.js").ChartSignalDefinition | undefined;
   scope: string; session: ChartSession; mode: Exclude<ContinuousMode, "HISTORY">;
   source: string; language: string; parameters: Record<string, unknown>;
   trusted: boolean; active: boolean; editor: (run: () => void) => ReactNode;
@@ -75,8 +76,8 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
   const identity = resolveKlineSeriesIdentity(props.session.exchange, props.session);
   const scope = JSON.stringify([props.scope, props.mode, props.session.exchange, props.session.marketType,
     props.session.symbol, props.session.interval, identity]);
-  const inputRevision = useMemo(() => String(strategyDraftContentRevision(JSON.stringify([props.source, props.parameters, balance, percent, fee, slippage, output, props.initialization, props.mode === "HISTORY_LIVE" ? from : null]))),
-    [props.source, props.parameters, props.mode, props.initialization, balance, percent, fee, slippage, output, from]);
+  const inputRevision = useMemo(() => String(strategyDraftContentRevision(JSON.stringify([props.source, props.parameters, props.signalChart, balance, percent, fee, slippage, output, props.initialization, props.mode === "HISTORY_LIVE" ? from : null]))),
+    [props.source, props.parameters, props.signalChart, props.mode, props.initialization, balance, percent, fee, slippage, output, from]);
   const executionModel = props.initialization ? props.initialization.executionModel ?? "V2" : "LEGACY";
   const hasSource = useMemo(() => props.source.trim().length > 0, [props.source]);
   const qualified = props.language === "python" && hasSource && props.session.interval === "1m"
@@ -169,7 +170,7 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
           identity: { provider_id: identity.providerId, venue: identity.venue, asset_class: identity.assetClass,
             series_variant: identity.seriesVariant, price_adjustment: identity.priceAdjustment, session_variant: identity.sessionVariant, volume_semantics: identity.volumeSemantics } },
         provider: { language: "python", source_text: props.source, parameters: props.parameters, output_mode: output, runtime_mode: "TRUSTED_LOCAL", trusted_confirmed: true },
-        execution: { account_model: props.session.marketType === "spot" ? "SPOT_CASH_V1" : "LINEAR_PERP_ONE_WAY_V1",
+        execution: { ...(props.signalChart ? { signal_chart: props.signalChart } : {}), account_model: props.session.marketType === "spot" ? "SPOT_CASH_V1" : "LINEAR_PERP_ONE_WAY_V1",
           initial_balance: balance, sizing_policy: "EQUITY_PERCENT_V1", equity_percent: percent, taker_fee_bps: fee, maker_fee_bps: fee, slippage_bps: slippage,
           ...(executionModel === "V2" ? { execution_model_revision: "EXECUTION_REALISM_V2", participation_rate: "0.1", order_end_policy: "CANCEL_AT_END" } : {}) },
         ...(props.initialization ? { warmup_bars: props.initialization.warmupBars } : {}),

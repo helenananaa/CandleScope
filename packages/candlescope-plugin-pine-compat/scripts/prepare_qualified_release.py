@@ -47,7 +47,7 @@ def main() -> None:
         root = args.artifacts / f"pine-host-contracts-{platform}"
         receipt = json.loads((root / "qualification-receipt.json").read_text())
         assert receipt["qualified"] is True and receipt["head"] == args.head, platform
-        assert set(receipt["contracts"]) == {"host-bar-boundaries/1", "renko-event-rows/1"}
+        assert set(receipt["contracts"]) == {"host-bar-boundaries/1", "renko-event-rows/1", "ordered-chart-input/1"}
         suites = list(ET.parse(root / "host-contracts.xml").getroot().iter("testsuite"))
         assert suites and all(int(s.attrib[k]) == 0 for s in suites for k in ("errors", "failures", "skipped"))
         tests = sum(int(s.attrib["tests"]) for s in suites)

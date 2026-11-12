@@ -1,11 +1,14 @@
+import type { AxisTime } from "../features/chart-representation/chartRepresentationTypes.js";
+import { isOrdinalAxisTime } from "../features/chart-representation/axisTime.js";
+
 export interface PaneCrosshairFrameScheduler {
   request(callback: () => void): number;
   cancel(frameId: number): void;
 }
 
 export interface PaneCrosshairStore {
-  getSnapshot(): number | null;
-  publish(time: number | null | undefined): void;
+  getSnapshot(): AxisTime | null;
+  publish(time: AxisTime | null | undefined): void;
   clear(): void;
   subscribe(listener: () => void): () => void;
   dispose(): void;
@@ -29,15 +32,16 @@ function browserFrameScheduler(): PaneCrosshairFrameScheduler | null {
   };
 }
 
-function normalizeTime(time: number | null | undefined): number | null {
+function normalizeTime(time: AxisTime | null | undefined): AxisTime | null {
+  if (isOrdinalAxisTime(time)) return time;
   return typeof time === "number" && Number.isFinite(time) ? time : null;
 }
 
 export function createPaneCrosshairStore(
   scheduler: PaneCrosshairFrameScheduler | null = browserFrameScheduler(),
 ): PaneCrosshairStore {
-  let snapshot: number | null = null;
-  let pendingSnapshot: number | null = null;
+  let snapshot: AxisTime | null = null;
+  let pendingSnapshot: AxisTime | null = null;
   let frameId: number | null = null;
   let disposed = false;
   const listeners = new Set<() => void>();

@@ -39,13 +39,34 @@ def _validate_state_content(wire,state):
     from .native import digest
     from .external import host_identity
     cursor=state.get("cursor")
+    if wire.get("chart_event_contract"):
+        if (state.get("contract")!=CONTRACT or state.get("input_hash")!=digest(wire)
+                or state.get("host_runtime_identity")!=wire["host_runtime_identity"] or wire["host_runtime_identity"]!=host_identity()
+                or type(cursor) is not int or not 1<=cursor<=len(wire["bars"])):
+            raise BacktestError("NATIVE_IDENTITY_MISMATCH","chart event replay identity differs")
+        from .pine_chart_event_execution import validate_state as validate_chart_events
+        validate_chart_events(wire,state)
+        return
+    signal_count = (state.get("clock") or {}).get("signal_input", {}).get("count") if wire.get("signal_chart") else cursor
     if (state.get("contract")!=CONTRACT or state.get("input_hash")!=digest(wire)
             or state.get("host_runtime_identity")!=wire["host_runtime_identity"]
             or wire["host_runtime_identity"]!=host_identity()
             or type(cursor) is not int
-            or not 1<=cursor<=len(wire["bars"]) or len(state.get("accounts",[]))!=cursor
-            or len((state.get("last_request") or {}).get("bars",[]))!=cursor):
+            or not 1<=cursor<=len(wire["bars"]) or len(state.get("accounts",[]))!=signal_count
+            or len((state.get("last_request") or {}).get("bars",[]))!=signal_count):
         raise BacktestError("NATIVE_IDENTITY_MISMATCH","external account checkpoint identity differs")
+    if wire.get("signal_chart"):
+        from app.data_engine.synthetic_series.signals import ChartSignalSeries
+        try:
+            clock = state["clock"]
+            series = ChartSignalSeries(wire["signal_chart"])
+            series.restore(clock["signal_input"])
+            if (clock.get("signal_source_cursor") != cursor or series.source_count != cursor
+                    or len(clock.get("signal_bars", [])) != signal_count
+                    or len(clock.get("signal_clocks", [])) != signal_count):
+                raise ValueError("chart source/signal cursors differ")
+        except (KeyError, TypeError, ValueError) as exc:
+            raise BacktestError("NATIVE_IDENTITY_MISMATCH", "chart signal checkpoint differs") from exc
     if wire["execution_fidelity"]!="BAR_APPROX":
         clock=state.get("clock") or {}
         event_cursor=clock.get("event_cursor")
@@ -111,7 +132,7 @@ def _validate_state_content(wire,state):
                 observations = pass_observations(last.get("execution_passes", []), scheduled=False)
             else:
                 observations = last.get("request_updates", [])
-                if len(observations) != cursor:
+                if len(observations) != signal_count:
                     raise ValueError("requested transcript count differs")
             validate_replay(feed, (state.get("clock") or {}).get("request_feed"), observations)
         except (KeyError, ValueError, TypeError) as exc:

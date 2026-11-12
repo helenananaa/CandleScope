@@ -1,0 +1,51 @@
+{
+  "scope": "Real Chromium, production-minified browser fixture and real React lifecycle; not native application qualification",
+  "browser": "Chrome/157.0.8103.40",
+  "result": {
+    "result": {
+      "type": "object",
+      "value": {
+        "status": "PASS",
+        "scope": "default MarketChartSurface + workspace data center + real DataManager HTTP/WS; all five transforms",
+        "initialBricks": 9,
+        "updatedBricks": 11,
+        "haPreviewClose": 118,
+        "extra": [
+          {
+            "transform": "point-and-figure",
+            "initial": 3,
+            "extendedClose": 118,
+            "retracted": 3
+          },
+          {
+            "transform": "kagi",
+            "initial": 3,
+            "extendedClose": 118,
+            "retracted": 3
+          },
+          {
+            "transform": "line-break",
+            "initial": 3,
+            "extendedClose": 118,
+            "retracted": 2
+          }
+        ],
+        "reconnect": true,
+        "shared": {
+          "instances": 1,
+          "leases": 1
+        },
+        "browserComputation": 0,
+        "state": {
+          "instances": 0,
+          "leases": 0
+        }
+      }
+    }
+  },
+  "immediateWorkerCount": 0,
+  "remainingWorkers": [],
+  "exceptions": [],
+  "passed": true,
+  "browserExitCode": 0
+}

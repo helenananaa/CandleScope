@@ -1,0 +1,172 @@
+{
+  "scope": "source and default exported Darwin-arm64 runtime; no installed desktop acceptance",
+  "sourceParent": "cc805a55da9e641bfdd0e3b1d55216d05cb5f6c7",
+  "sourceRevision": "commit containing this receipt",
+  "chartEventContract": "candlescope.chart-signal-events/1",
+  "artifacts": [
+    {
+      "path": "frontend/scripts/desktop-plugin-sources.json",
+      "size": 2926,
+      "sha256": "sha256:95d71ddf3ea400e24a4678805f7115afc7000c4ed850d76cdd44df67ee7d5e77"
+    },
+    {
+      "path": "packages/candlescope-plugin-pine-compat/engine-patches/host-contracts-v5.patch",
+      "size": 39968,
+      "sha256": "sha256:973ccd5815e037448ccc862746c6db8a4e4d7cc4ecae87a2854f0014635e6821"
+    },
+    {
+      "path": "output/chart-event-plugin-build/candlescope_plugin_pine_compat-0.4.0-py3-none-any.whl",
+      "size": 255840,
+      "sha256": "sha256:13b1f6efe42c655112b39ac1defee75da247b3c8e4f402b131a24f3b7a63e7dc"
+    },
+    {
+      "path": "output/chart-event-plugin-build/candlescope_plugin_python_indicator-0.1.0-py3-none-any.whl",
+      "size": 23745,
+      "sha256": "sha256:6b1f1543fa557dd9d840a95f91c511c0d2aa8823474b19cd5fe99822ae372c56"
+    },
+    {
+      "path": "output/chart-event-plugin-build/candlescope_plugin_sdk-0.2.1-py3-none-any.whl",
+      "size": 495067,
+      "sha256": "sha256:1d86850cf9a25d9a1dfadfcc8d13bdd93896bb8c043ae7bca6e2a03fe6e6aeab"
+    },
+    {
+      "path": "output/chart-event-plugin-build/pine_compat_runtime-0.3.3+cs.1-cp310-abi3-macosx_11_0_arm64.whl",
+      "size": 4293968,
+      "sha256": "sha256:76060a76481991f5310a7af6e0b1741507b31bd3bf5d0fc994e143fa041c5929"
+    },
+    {
+      "path": "output/chart-event-plugin-build/candlescope-plugin-pine-compat-0.4.0-Darwin-arm64.cspkg",
+      "size": 5047740,
+      "sha256": "sha256:7419778e9a5798181a540ab5c8b22bd16604fe4bd62a6fd7f2349448e852f1db"
+    },
+    {
+      "path": "output/chart-event-plugin-build/candlescope-plugin-python-indicator-0.1.0-Darwin-arm64.cspkg",
+      "size": 521208,
+      "sha256": "sha256:8bed1b64f3d905855d390368f40a0a5f348d9ff8f568fed1cb6c9a46b8ae6461"
+    },
+    {
+      "path": "output/chart-event-plugin-build/manifest.json",
+      "size": 1073,
+      "sha256": "sha256:6e6c576dd299129b4348e9221dac03886af880dbd0463b96fc0ab232bc3f8c64"
+    },
+    {
+      "path": "output/chart-event-plugin-build/candlescope-plugin-pine-compat.lock.json",
+      "size": 2872,
+      "sha256": "sha256:82eb7b29e42250362568bea3b113b2e257627576f8da5db92ac01a8857654aa7"
+    }
+  ],
+  "manifest": {
+    "schemaVersion": 2,
+    "releaseStatus": "desktop-source-build-unpublished",
+    "plugins": [
+      {
+        "runtimeId": "candlescope.pine-compat",
+        "package": "candlescope-plugin-pine-compat",
+        "version": "0.4.0",
+        "filename": "candlescope-plugin-pine-compat-0.4.0-Darwin-arm64.cspkg",
+        "sha256": "sha256:7419778e9a5798181a540ab5c8b22bd16604fe4bd62a6fd7f2349448e852f1db",
+        "size": 5047740,
+        "platform": {
+          "system": "Darwin",
+          "machine": "arm64",
+          "implementation": "CPython",
+          "pythonVersion": "3.12"
+        }
+      },
+      {
+        "runtimeId": "candlescope.python-indicator",
+        "package": "candlescope-plugin-python-indicator",
+        "version": "0.1.0",
+        "filename": "candlescope-plugin-python-indicator-0.1.0-Darwin-arm64.cspkg",
+        "sha256": "sha256:8bed1b64f3d905855d390368f40a0a5f348d9ff8f568fed1cb6c9a46b8ae6461",
+        "size": 521208,
+        "platform": {
+          "system": "Darwin",
+          "machine": "arm64",
+          "implementation": "CPython",
+          "pythonVersion": "3.12"
+        }
+      }
+    ]
+  },
+  "pineLock": {
+    "schemaVersion": 1,
+    "releaseStatus": "desktop-source-build-unpublished",
+    "plugin": {
+      "id": "candlescope.pine-compat",
+      "package": "candlescope-plugin-pine-compat",
+      "version": "0.4.0"
+    },
+    "python": {
+      "requires": ">=3.11,<3.14",
+      "module": "candlescope_plugin_pine_compat"
+    },
+    "wheels": {
+      "candlescope-plugin-pine-compat": {
+        "version": "0.4.0",
+        "artifactFilename": "candlescope_plugin_pine_compat-0.4.0-py3-none-any.whl",
+        "sha256": "sha256:13b1f6efe42c655112b39ac1defee75da247b3c8e4f402b131a24f3b7a63e7dc",
+        "size": 255840
+      },
+      "candlescope-plugin-sdk": {
+        "version": "0.2.1",
+        "artifactFilename": "candlescope_plugin_sdk-0.2.1-py3-none-any.whl",
+        "sha256": "sha256:1d86850cf9a25d9a1dfadfcc8d13bdd93896bb8c043ae7bca6e2a03fe6e6aeab",
+        "size": 495067
+      },
+      "pine-compat-runtime": {
+        "version": "0.3.3+cs.1",
+        "artifactFilename": "pine_compat_runtime-0.3.3+cs.1-cp310-abi3-macosx_11_0_arm64.whl",
+        "sha256": "sha256:76060a76481991f5310a7af6e0b1741507b31bd3bf5d0fc994e143fa041c5929",
+        "size": 4293968
+      }
+    },
+    "probe": {
+      "source": "//@version=5\nindicator(\"CSPKG Pine Probe\", overlay=false)\nplot(close * 2, \"Close x2\", color=color.green)\n",
+      "context": {
+        "exchange": "binance",
+        "marketType": "spot",
+        "symbol": "BTCUSDT",
+        "interval": "1m"
+      },
+      "bars": [
+        {
+          "time": 1700000000,
+          "open": 100,
+          "high": 102,
+          "low": 99,
+          "close": 101,
+          "volume": 10,
+          "isClosed": true
+        },
+        {
+          "time": 1700000060,
+          "open": 101,
+          "high": 103,
+          "low": 100,
+          "close": 102,
+          "volume": 11,
+          "isClosed": true
+        }
+      ],
+      "params": {},
+      "options": {},
+      "analysisSha256": "sha256:50cb14c7713a4f942f5dd906310ee7aaa785c3090cd2d3886f3c82a6e0ee5b62",
+      "executionSha256": "sha256:b18b584f5bff54a253b0028a03cf267f83eac1fec364d252a2e453f99e35de57"
+    },
+    "engineProvenance": {
+      "commit": "c0ecc3bde5eece9c4f2a63c6785aec9c5e571acc",
+      "version": "0.3.3+cs.1",
+      "archive": {
+        "filename": "pine-compat-runtime-c0ecc3bde5eece9c4f2a63c6785aec9c5e571acc.tar.gz",
+        "url": "https://codeload.github.com/helenananaa/pine-compat-runtime/tar.gz/c0ecc3bde5eece9c4f2a63c6785aec9c5e571acc",
+        "sha256": "sha256:d7da1e620453bd978ea7afd76642717462d0bacf1000bc248f1acaa238a8b695"
+      },
+      "bridge": "candlescope-plugin-pine-compat",
+      "patch": "packages/candlescope-plugin-pine-compat/engine-patches/host-contracts-v5.patch",
+      "patchSha256": "sha256:973ccd5815e037448ccc862746c6db8a4e4d7cc4ecae87a2854f0014635e6821"
+    },
+    "bridgeSourceSha256": "sha256:339d21bd4013a1a1c66aea0f955a7a4944f1b92780ecea9fc62e2f95ed829b7f",
+    "sdkSourceSha256": "sha256:7f3e77f009d5b77fe6e2c49d9e54bb9a23368e2e9bb9a24464c016134fc87767"
+  }
+}

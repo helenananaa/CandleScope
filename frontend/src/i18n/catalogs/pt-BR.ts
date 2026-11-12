@@ -1,3 +1,4 @@
+import { syntheticEnglish } from "./syntheticMessages.js";
 import { continuousPortuguese } from "./continuousMessages.js";
 import { tradeHistoryBrazilian } from "./tradeHistoryMessages.js";
 import { replayNoteBrazilian } from "./replayNoteMessages.js";
@@ -9,6 +10,7 @@ import { tradingAccountsPtBR } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
+  ...syntheticEnglish,
   ...continuousPortuguese,
   ...tradeHistoryBrazilian,
   ...replayNoteBrazilian,
@@ -4531,6 +4533,8 @@ export const ptBR = {
   "local.kicker.dataOps": "OPERAÇÕES DE DADOS",
   "local.status.ready": "CONJUNTO LOCAL · ANÁLISE PRONTA",
   "chart.loadingKlines": "Carregando candles {symbol} {interval}…",
+  "chart.syntheticPreparing": "Preparando os dados do gráfico…",
+  "chart.syntheticUnavailable": "Os dados do gráfico estão indisponíveis no momento. Reconectando…",
   "backtest.decisionFillHashes": "Hash de decisão / preenchimento: {left} ↔ {right}",
   "backtest.bundleHash": "Pacote {hash}",
   "backtest.sourceManifestHashes": "Fonte {source} · manifesto {manifest}",

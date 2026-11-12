@@ -5,6 +5,7 @@ import type { ChartSession } from "../chart-session/chartSessionTypes.js";
 import { useMarketDataRuntime } from "../market-data/useMarketDataRuntime.js";
 import { useLiveReferenceMarketChartSource } from "../market-chart-platform/useLiveReferenceMarketChartSource.js";
 import { createRunResultSource } from "../market-chart-platform/marketChartSourceRuntime.js";
+import { backendSyntheticSourceFor } from "../market-chart-platform/marketChartSurfaceModel.js";
 import SingleChartPanes from "../../components/SingleChartPanes.js";
 import { useChartSettingsRuntime } from "../settings/chartAppearanceSettings.js";
 import type { ChartStrategyResultBundle } from "../backtest/chart-tester/chartStrategyResultCache.js";
@@ -35,8 +36,14 @@ export default function StrategyResearchLiveChart({ session, result, focusReques
     {source.marketData.view.error ? <p role="alert">{String(source.marketData.view.error)}</p> : <SingleChartPanes ref={surface.ref}
       symbol={source.session.symbol} interval={source.session.interval} datasetKey={source.datasetKey}
       seriesStore={source.marketData.view.seriesStore} loading={source.marketData.view.loading} dataMeta={source.marketData.view.meta}
+      backendSyntheticSource={backendSyntheticSourceFor(source)}
       onNeedMoreLeft={source.marketData.actions.loadMoreLeft} onVisibleRangeChange={source.marketData.actions.onVisibleRangeChange}
       onCrosshairMove={source.marketData.actions.onCrosshairMove}
+      renkoBoxSizeMode={appearance.settings.renkoBoxSizeMode} renkoAtrLength={appearance.settings.renkoAtrLength} renkoBoxSize={appearance.settings.renkoBoxSize}
+      pointFigureBoxSizeMode={appearance.settings.pointFigureBoxSizeMode} pointFigureAtrLength={appearance.settings.pointFigureAtrLength}
+      pointFigureBoxSize={appearance.settings.pointFigureBoxSize} pointFigureReversalAmount={appearance.settings.pointFigureReversalAmount}
+      kagiReversalMode={appearance.settings.kagiReversalMode} kagiAtrLength={appearance.settings.kagiAtrLength} kagiReversalAmount={appearance.settings.kagiReversalAmount}
+      lineBreakNumberOfLines={appearance.settings.lineBreakNumberOfLines}
       upColor={appearance.settings.upColor} downColor={appearance.settings.downColor} chartType={appearance.settings.chartType}
       theme={appearance.resolvedTheme} customBg={appearance.settings.customBg} followLatest={result === null}
       canLoadMoreLeft={source.marketData.status.canLoadMoreLeft} />}

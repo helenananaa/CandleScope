@@ -300,7 +300,7 @@ export function buildChartStrategyRunBody(input: {
 
 function fixedStrategyRunBody(input: {
   session: ChartStrategyRunRequest["session"];
-  attachment: Pick<ChartStrategyRunRequest["attachment"], "rangeMode" | "quickPresetId" | "executionOverrides" | "pythonBarExecution">;
+  attachment: Pick<ChartStrategyRunRequest["attachment"], "rangeMode" | "quickPresetId" | "executionOverrides" | "pythonBarExecution" | "signalChart">;
   cellScope: string;
   revision: StrategyRevisionRecord;
   resolution: ChartContextResolution;
@@ -327,6 +327,7 @@ function fixedStrategyRunBody(input: {
   const overrides = input.attachment.executionOverrides;
   const profile = input.attachment.pythonBarExecution;
   return {
+    ...(input.attachment.signalChart ? { signal_chart: input.attachment.signalChart } : {}),
     strategy_revision_id: input.revision.revision_id,
     dataset_id: identity.datasetId,
     data_epoch: identity.dataEpoch,
@@ -736,6 +737,7 @@ export async function runResearchBacktest(options: {
       options.onStage?.("MATERIALIZING");
       const strategyIntent = {
         ...(frozen.language === "python" ? { python_runtime_mode: "TRUSTED_LOCAL", python_trusted_confirmed: frozen.pythonTrustedConfirmed === true } : {}),
+        ...(frozen.attachment.signalChart ? { signal_chart: frozen.attachment.signalChart } : {}),
         strategy_revision_id: revision.revision_id,
         parameters: executionParameters(frozen),
         ...(frozen.language === "pine" ? { output_mode: selectedOutputMode(frozen, revision) } : {}),

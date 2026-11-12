@@ -1,0 +1,1 @@
+Plugin Platform architecture check passed (26 host files, one opaque-origin sandbox gateway).

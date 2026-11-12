@@ -28,10 +28,9 @@ def build_cost_sensitivity_matrix(
     if getattr(kernel, "execution_model_revision", None) != EXECUTION_REALISM_V2:
         return {}
     frozen = list(getattr(kernel, "frozen_intents", []))
-    by_sequence = {
-        int(item["sequence"]): [dict(intent) for intent in item.get("intents") or []]
-        for item in frozen
-    }
+    by_sequence: dict[int, list[dict]] = {}
+    for item in frozen:
+        by_sequence.setdefault(int(item["sequence"]), []).extend(dict(intent) for intent in item.get("intents") or [])
 
     def strategy(_visible: tuple[MarketEvent, ...], event: MarketEvent) -> list[dict]:
         return [dict(intent) for intent in by_sequence.get(event.sequence, [])]

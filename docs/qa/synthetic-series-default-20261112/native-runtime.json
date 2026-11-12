@@ -1,0 +1,23 @@
+{
+  "status": "PASS",
+  "platform": "macOS arm64",
+  "package": "ad-hoc signed unpacked app",
+  "bundledBackendTests": 36,
+  "bundledBackendSourcesMatch": [
+    "app/data_engine/synthetic_series/core.py",
+    "app/data_engine/synthetic_series/service.py",
+    "app/api/v1/synthetic.py",
+    "app/data_engine/data_manager/manager.py"
+  ],
+  "signatureBeforeTests": "PASS",
+  "signatureAfterTests": "PASS",
+  "testMode": "bundled Python -B, pytest --assert=plain, isolated data profile",
+  "instrumentationNote": "An initial pytest run added 31 assertion-rewrite bytecode files under bundled anyio. They were moved into a retained QA artifact directory; no sealed resource changed. Signature restored without resigning, then tests passed without bundle writes.",
+  "limitations": [
+    "No normal app save/exit/restart acceptance",
+    "No Windows acceptance",
+    "Controlled source fixtures, no live exchange acceptance"
+  ],
+  "bundledFrontendFilesMatch": 121,
+  "frontendBuild": "normal production build, default backend computation, no opt-in flag"
+}

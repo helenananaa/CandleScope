@@ -91,13 +91,14 @@ def main() -> None:
     env = {**os.environ, "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1", "NATIVE_CALENDAR_TEST": "1",
            "NATIVE_TEST_PYTHON": sys.executable, "PYTHONPATH": str(repository / "backend"),
            "DATA_DIR": str(args.output.resolve() / "data"), "CANDLE_DATA_DIR": str(args.output.resolve() / "data")}
-    subprocess.run([sys.executable, "-c", "import pine_compat as p; assert p.BAR_BOUNDARY_SCHEMA == 'host-bar-boundaries/1'; assert p.EVENT_REQUEST_SERIES_CONTRACT == 'renko-event-rows/1'"], check=True)
+    subprocess.run([sys.executable, "-c", "import pine_compat as p; assert p.BAR_BOUNDARY_SCHEMA == 'host-bar-boundaries/1'; assert p.EVENT_REQUEST_SERIES_CONTRACT == 'renko-event-rows/1'; assert p.ORDERED_CHART_INPUT_CONTRACT == 'ordered-chart-input/1'"], check=True)
     subprocess.run([sys.executable, "-m", "pytest", "-o", "pythonpath=", "-q",
                     "-p", "pytest_asyncio.plugin", "-p", "anyio.pytest_plugin", "-p", "pytest_timeout", "--timeout=120",
                     f"--basetemp={args.output.resolve() / 'pytest-tmp'}", f"--junitxml={args.output.resolve() / 'published-host.xml'}",
                     str(repository / "packages/candlescope-plugin-pine-compat/tests/test_runtime.py"),
                     str(repository / "packages/candlescope-plugin-pine-compat/tests/test_native_sessions.py"),
                     str(repository / "packages/candlescope-plugin-pine-compat/tests/test_event_strategy.py"),
+                    str(repository / "packages/candlescope-plugin-pine-compat/tests/test_chart_indicator_input.py"),
                     str(repository / "backend/tests/test_native_calendar_basis.py")], env=env, check=True)
     print(f"Qualified {bundle_path.name}: {bundle.sha256}")
 

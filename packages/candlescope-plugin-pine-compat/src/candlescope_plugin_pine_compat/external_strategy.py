@@ -34,6 +34,8 @@ def describe():
             "candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-external/13"
         ),
         "workbench_control": "candlescope.pine-workbench-control/1",
+        "chart_signal_events": ("candlescope.chart-signal-events/1" if getattr(pine_compat,"EXTERNAL_CHART_EVENT_SCHEMA_VERSION",0)==1 else None),
+        "ordered_chart_strategy": ("ordered-chart-strategy/1" if getattr(pine_compat, "EXTERNAL_ORDERED_CHART_SCHEMA_VERSION", 0) == 1 else None),
         "external_replay": "candlescope.external-replay/1",
         "fixed_history_contract": "candlescope.pine-fixed-history/1",
         **schedule_capabilities(),
@@ -141,7 +143,14 @@ def _execute(request):
                 request_bars=environment or None)} if risk else {})}
     # Growing historical prefixes change dataset-end builtins retroactively.
     # Only prefix-stable programs can reuse committed execution state.
+    chart_contract = request.get("chart_signal_contract")
+    if chart_contract is not None and (chart_contract != "ordered-chart-strategy/1" or getattr(pine_compat, "EXTERNAL_ORDERED_CHART_SCHEMA_VERSION", 0) != 1):
+        raise ValueError("EXTERNAL_UNSUPPORTED: ordered chart strategy runtime required")
+    if chart_contract is not None:
+        from .chart_signal_input import symbol
+        request = {**request, "context": {**request["context"], "symbol": symbol(request["context"],request.get("signal_chart") or {})}}
     incremental = (
+        chart_contract is None and
         callable(getattr(program, "external_session", None))
         and not endpoint_sensitive
         and not any(feature.startswith("ticker.") for feature in features)
@@ -165,7 +174,7 @@ def _execute(request):
             raise ValueError("EXTERNAL_UNSUPPORTED: unknown order metadata contract")
         annotations = {"order_metadata": True}
     try:
-        if endpoint_sensitive and request.get("fixed_history_contract") == "candlescope.pine-fixed-history/1":
+        if chart_contract is None and endpoint_sensitive and request.get("fixed_history_contract") == "candlescope.pine-fixed-history/1":
             from .fixed_history import FixedHistory
             if _fixed_history is None:
                 _fixed_history = FixedHistory(program, request, dict(
@@ -207,6 +216,7 @@ def _execute(request):
                 lambda request_bars: program.run_external(
                     engine_bars(request["bars"]),
                     accounts,
+                    **({"ordered_chart": True} if chart_contract else {}),
                     input_overrides=parameters or None,
                     chart_symbol=request["context"]["symbol"],
                     chart_timeframe=request["context"]["timeframe"],

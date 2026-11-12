@@ -263,3 +263,15 @@ if not barstate.isconfirmed and strategy.position_size>0
     assert resumed["report"]["cost_sensitivity"]==baseline["report"]["cost_sensitivity"]
     for key in ("decision_hash","fill_hash","ledger_hash","report_hash"):
         assert resumed["result"][key]==baseline["result"][key]
+
+
+@pytest.mark.parametrize('transform',['heikin-ashi','renko'])
+def test_chart_signal_scenarios_reexecute_same_chart_clock_with_real_accounts(service,transform):
+    from tests.test_chart_strategy_signals import event
+    source='//@version=6\nstrategy("Chart cost",pyramiding=5)\nif bar_index < 3\n    strategy.entry("L",strategy.long,qty=1)'
+    value=config(service,source=source,signal_chart={'transform':transform,'box_size':2,'min_tick':1})
+    completed=execute(service,value,events=tuple(event(i,c) for i,c in enumerate([100,106,107,100,98])))
+    rows=scenarios(completed)
+    assert rows['BASELINE']['hashes']['fill']==completed['result']['fill_hash']
+    assert rows['BASELINE']['hashes']['decision']==completed['result']['decision_hash']
+    assert completed['result']['fills']

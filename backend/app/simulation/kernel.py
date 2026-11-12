@@ -526,8 +526,10 @@ class SimulationKernel:
             account.mark = _bar_decimal(event, "close")
             match(event)
             intents = strategy((event,), event)
-            record(intents, event)
-            enqueue(intents, current_sequence=event.sequence)
+            from .chart_decisions import decision_plans
+            for plan in decision_plans(intents):
+                record(plan, event)
+                enqueue(plan, current_sequence=event.sequence)
             equity(event)
             if checkpoint_callback is not None:
                 checkpoint_callback(event)
@@ -590,8 +592,10 @@ class SimulationKernel:
             intents = strategy((market_event,), market_event)
             if self._market_event_count <= warmup_events:
                 intents = []
-            self._record_decision(intents, market_event)
-            self._enqueue_many(intents, current_sequence=market_event.sequence - (1 if self.process_orders_on_close else 0))
+            from .chart_decisions import decision_plans
+            for plan in decision_plans(intents):
+                self._record_decision(plan, market_event)
+                self._enqueue_many(plan, current_sequence=market_event.sequence - (1 if self.process_orders_on_close else 0))
             if self.process_orders_on_close:
                 close_callback(market_event, market_event.sequence)
             self._record_equity(market_event)
@@ -1378,7 +1382,8 @@ def record_result_replay_signal(trace: list[dict], decision, bar: MarketEvent, r
         trace.clear()
         return False
     trace.append({
-        "reveal_sequence": reveal_sequence, "signal_sequence": bar.sequence,
+        "reveal_sequence": reveal_sequence, "signal_sequence": (wire.get("chart_signal") or {}).get("ordinal", bar.sequence - 1) + 1,
+        **({"chart_signal": wire["chart_signal"]} if wire.get("chart_signal") else {}),
         "event_time_ms": bar.event_time_ms, "kind": kind, "value": value,
     })
     return True

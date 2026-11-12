@@ -16,6 +16,8 @@ if TYPE_CHECKING:
 
 class DataManagerCore:
     def __init__(self) -> None:
+        from app.data_engine.synthetic_series.service import SyntheticSeriesService
+        self.synthetic = SyntheticSeriesService(None)
         self.strategy: StrategyDataManager | None = None
         self.readonly_account: ReadOnlyAccountDataManager | None = None
         self.trading: TradingAccountDataManager | None = None

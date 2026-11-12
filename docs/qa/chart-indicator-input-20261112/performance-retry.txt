@@ -1,0 +1,16 @@
+
+> frontend@0.3.0 test:performance
+> node scripts/run-frontend-tests.mjs --workers 1 src/features/drawings/core/__tests__/drawingCommandPerformance.test.ts
+
+
+[frontend] isolated performance gate: 1 files, concurrency=1
+✔ 512-entity style, move, and reorder commands finish synchronously below the latency budget (568.455584ms)
+ℹ style/move/reorder attempt 1: median=0.400ms, p95=0.592ms per command
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1610.491208

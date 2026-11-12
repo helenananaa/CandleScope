@@ -156,7 +156,7 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
     load: () => cell.indicators,
     save: (indicators) => workspace.actions.updateCellIndicators(cell.id, indicators),
   }), [cell.id, cell.indicators, workspace.actions]);
-  const indicators = useReplaySharedIndicatorRuntime(runtime, viewer, scope, persistence);
+  const indicators = useReplaySharedIndicatorRuntime(runtime, viewer, scope, persistence, { ...globalSettings.settings, ...cell.chartSettings });
   const resolvedTheme = useCellChartTheme(cell.chartSettings.theme, globalSettings.resolvedTheme);
   const settings = useMemo<ChartSettingsRuntime>(() => ({
     ...globalSettings,

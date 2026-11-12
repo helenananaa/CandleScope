@@ -16,6 +16,7 @@ import { MarketHealthRecovery } from "./marketHealthRecovery.js";
 import { MarketWarmStreams } from "./marketWarmStreams.js";
 import { MarketWarmQueue, type MarketWarmLease } from "./marketWarmQueue.js";
 import { MarketDataManagerCore } from "./marketDataManagerCore.js";
+import { SyntheticSeriesManager } from "../synthetic/syntheticSeriesManager.js";
 
 interface StreamTransport {
   readonly reconnects?: boolean;
@@ -50,6 +51,7 @@ function aborted(): DOMException { return new DOMException("The operation was ab
  * fan-out. Chart/watchlist consumers own independent request/stream leases;
  * cache facts contain no viewport or chart-selection state. */
 export class MarketDataManager extends MarketDataManagerCore implements MarketDataService {
+  readonly synthetic = new SyntheticSeriesManager();
   readonly ownsRequestLeases = true;
   readonly cache: SharedMarketCache;
   readonly requestCoordinator: SharedKlineRequestCoordinator;
@@ -346,13 +348,14 @@ export class MarketDataManager extends MarketDataManagerCore implements MarketDa
     const logical = this.sharedStreams.diagnostics();
     return { ...this.transport.diagnostics(), logicalSubscribers: logical.logicalSubscribers,
       sharedInstruments: logical.entries.length, rejectedRealtime: this.rejectedRealtime, rangeHits: this.rangeHits, beforeHits: this.beforeHits, historyHits: this.historyHits,
-      cache: this.cache.diagnostics(), ...super.diagnostics(), warmStreams: this.warmStreams.diagnostics(), healthRecovery: this.healthRecovery.diagnostics(), warming: this.warmQueue.diagnostics() };
+      cache: this.cache.diagnostics(), ...super.diagnostics(), synthetic: this.synthetic.diagnostics(), warmStreams: this.warmStreams.diagnostics(), healthRecovery: this.healthRecovery.diagnostics(), warming: this.warmQueue.diagnostics() };
   }
 
   closeAll(): void {
     if (this.closed) return;
     this.closed = true;
     super.closeAll();
+    this.synthetic.closeAll();
     this.warmQueue.dispose();
     this.warmStreams.dispose();
     this.healthRecovery.dispose();

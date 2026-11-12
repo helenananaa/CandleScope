@@ -47,6 +47,8 @@ def freeze_control(native, plugin, wire, payload):
             quantity = declaration(response.get("default_quantity"))
         except ValueError as exc:
             raise BacktestError("EXTERNAL_PROTOCOL_ERROR", str(exc)) from exc
+    if execution.get("calcOnOrderFills") and not wire.get("fill_recalculation") and wire.get("signal_chart"):
+        wire["fill_recalculation"]=True
     if execution.get("calcOnOrderFills") and not wire.get("fill_recalculation"):
         raise BacktestError("EXTERNAL_UNSUPPORTED", "Pine calc_on_order_fills requires explicit fill_recalculation")
     if execution.get("processOrdersOnClose"):
@@ -69,6 +71,8 @@ def freeze_control(native, plugin, wire, payload):
         "risk_rules": deepcopy(configuration)}
     if quantity is not None:
         wire["pine_host_control"]["default_quantity"] = quantity
+    if wire.get("signal_chart") and execution.get("calcOnEveryTick") and wire["execution_fidelity"]=="BAR_APPROX":
+        raise BacktestError("FIDELITY_UNSUPPORTED","Real chart tick recalculation requires frozen trade data")
     if execution.get("calcOnEveryTick") and wire["execution_fidelity"]!="BAR_APPROX":
         from .native_session import STREAM_CONTRACT,SCHEDULE_CONTRACT,TICK_CONTRACT
         from .pine_print_tick_execution import CONTRACT as PRINT_CONTRACT

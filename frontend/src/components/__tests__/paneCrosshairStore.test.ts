@@ -1,3 +1,4 @@
+import type { AxisTime } from "../../features/chart-representation/chartRepresentationTypes.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -33,7 +34,7 @@ function controlledScheduler() {
 test("pane crosshair store publishes only the latest value once per frame", () => {
   const frames = controlledScheduler();
   const store = createPaneCrosshairStore(frames.scheduler);
-  const snapshots: Array<number | null> = [];
+  const snapshots: Array<AxisTime | null> = [];
   store.subscribe(() => snapshots.push(store.getSnapshot()));
 
   store.publish(10);

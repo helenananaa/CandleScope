@@ -249,12 +249,12 @@ export function alignIndicatorLinesToTimes(
     ...line,
     data: normalizeLineSeriesData(
       line,
-      allowedTimeSet,
-      allowedKeys,
-      expectedIntervalSeconds,
+      line.inputAxis === "display-ordinal" ? null : allowedTimeSet,
+      line.inputAxis === "display-ordinal" ? null : allowedKeys,
+      line.inputAxis === "display-ordinal" ? 1 : expectedIntervalSeconds,
     ),
     ...(Array.isArray(line?.colorData)
-      ? { colorData: filterEntriesByTime(line.colorData, allowedTimeSet, allowedKeys) }
+      ? { colorData: line.inputAxis === "display-ordinal" ? line.colorData : filterEntriesByTime(line.colorData, allowedTimeSet, allowedKeys) }
       : {}),
   }));
 }
@@ -276,7 +276,7 @@ export function alignIndicatorMarkersToTimes(
   const allowedKeys = allowedKeysInput ?? buildAllowedTimeKeys(allowedTimeSet);
   const result = (indicatorMarkers || []).map((group) => ({
     ...group,
-    data: filterEntriesByTime(group?.data, allowedTimeSet, allowedKeys),
+    data: group.inputAxis === "display-ordinal" ? group.data ?? [] : filterEntriesByTime(group?.data, allowedTimeSet, allowedKeys),
   }));
   alignedMarkerCache.set(cacheKey, {
     allowedTimeSet,
@@ -303,8 +303,8 @@ export function alignIndicatorBgcolorsToTimes(
   const allowedKeys = allowedKeysInput ?? buildAllowedTimeKeys(allowedTimeSet);
   const result = (indicatorBgcolors || []).map((group) => ({
     ...group,
-    data: filterEntriesByTime(group?.data, allowedTimeSet, allowedKeys),
-    regions: filterEntriesByTime(group?.regions, allowedTimeSet, allowedKeys),
+    data: group.inputAxis === "display-ordinal" ? group.data ?? [] : filterEntriesByTime(group?.data, allowedTimeSet, allowedKeys),
+    regions: group.inputAxis === "display-ordinal" ? group.regions ?? [] : filterEntriesByTime(group?.regions, allowedTimeSet, allowedKeys),
   }));
   alignedBgcolorCache.set(cacheKey, {
     allowedTimeSet,

@@ -393,6 +393,8 @@ def create_research_launch_context(
 ) -> dict[str, Any]:
     try:
         body = payload.model_dump()
+        if payload.signal_chart is None:
+            body.pop("signal_chart", None)
         if payload.execution_overrides is None:
             body.pop("execution_overrides", None)
         return _service(request).create_research_launch_context(body)

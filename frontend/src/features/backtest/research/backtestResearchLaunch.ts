@@ -46,6 +46,7 @@ export function buildBacktestResearchLaunchContext(input: {
     strategy_revision_id: input.attachment.strategyRevisionId,
     parameters: { ...input.attachment.parameters },
     quick_preset_id: input.attachment.quickPresetId,
+    ...(input.attachment.signalChart ? { signal_chart: { ...input.attachment.signalChart } } : {}),
     ...(input.attachment.executionOverrides ? { execution_overrides: { ...input.attachment.executionOverrides } } : {}),
     chart_session: {
       exchange: input.session.exchange,

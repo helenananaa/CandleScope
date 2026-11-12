@@ -97,6 +97,7 @@ import { captureReplayNoteChart } from "./replayNoteChartCapture.js";
 import type { ReplayNoteContext } from "./replayNotes.js";
 import ReplayNotesPanel from "./components/ReplayNotesPanel.js";
 import { t } from "../../i18n/index.js";
+import { replaySyntheticSource } from "./replaySyntheticSource.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { Icon } from "../../components/icons/Icon.js";
 import { useChartTimeNavigation } from "../market-data/useChartTimeNavigation.js";
@@ -304,7 +305,7 @@ export default function ReplayTrainingPageShell({
   const [reviewLoadedPrefixKey, setReviewLoadedPrefixKey] = useState<string | null>(null);
   const [reviewIndicatorBinding, setReviewIndicatorBinding] = useState<ReplayCanonicalBinding | null>(null);
   const reviewIndicators = useReplayReviewIndicators({ seriesStore: reviewSeriesStore,
-    sourceBinding: reviewIndicatorBinding,
+    sourceBinding: reviewIndicatorBinding, appearance: settings,
     requestedKey: reviewPrefixKey, loadedKey: reviewLoadedPrefixKey, cursorMs: reviewCursorVirtualTimeMs,
     definitions: indicators.view.activeIndicators,
     exchange: typeof reviewProjectedExchange === "string" ? reviewProjectedExchange : "",
@@ -696,6 +697,25 @@ export default function ReplayTrainingPageShell({
   const displayedSymbol = review !== null && typeof reviewSelectedTrack?.symbol === "string"
     ? reviewSelectedTrack.symbol
     : activeSelectedTrack?.symbol ?? config?.symbol ?? "--";
+  const displayedSyntheticSource = replaySyntheticSource({
+    market: { symbol: displayedSymbol, interval: displayedInterval,
+      exchange: typeof reviewSelectedTrack?.exchange === "string" ? reviewSelectedTrack.exchange
+        : activeSelectedTrack?.exchange ?? config?.exchange ?? "",
+      marketType: typeof reviewSelectedTrack?.market_type === "string" ? reviewSelectedTrack.market_type
+        : activeSelectedTrack?.market_type ?? config?.market_type ?? "" },
+    seriesKey: displayedSeriesStore.seriesKey,
+    sessionId: review === null ? runtime.store.sessionId : reviewIndicatorBinding?.sessionId ?? null,
+    trackId: review === null ? viewer.viewerState?.selected_track_id ?? null : reviewIndicatorBinding?.trackId ?? null,
+    dataEpoch: review === null ? runtime.store.dataEpoch : reviewIndicatorBinding?.dataEpoch ?? null,
+    revealedBoundaryMs: review === null
+      ? (viewer.tapeObservation === undefined ? runtime.store.virtualTimeMs : viewer.tapeObservation?.virtualTimeMs ?? null)
+      : reviewIndicatorBinding?.revealedBoundaryMs ?? null,
+    sourceSequence: review === null
+      ? (viewer.tapeObservation === undefined ? runtime.store.sourceSequence : viewer.tapeObservation?.sourceSequence ?? null)
+      : reviewIndicatorBinding?.sourceSequence ?? (reviewIndicatorBinding ? 0 : null),
+    ...((review === null ? viewer.tapeObservation?.historyEpoch : reviewIndicatorBinding?.historyEpoch)
+      ? { historyEpoch: review === null ? viewer.tapeObservation!.historyEpoch : reviewIndicatorBinding!.historyEpoch! } : {}),
+  });
   const ownPageExportRef = useRef<HTMLDivElement | null>(null);
   const exportMetadata = useMemo(() => ({
     exchange: activeSelectedTrack?.exchange ?? config?.exchange ?? "",
@@ -1023,6 +1043,7 @@ export default function ReplayTrainingPageShell({
     <SingleChartPanes
       ref={chartSurfaceRef}
       seriesStore={displayedSeriesStore}
+      backendSyntheticSource={displayedSyntheticSource}
       symbol={displayedSymbol}
       drawingKeyBase={drawingScopeBase}
       {...(cell ? { drawingsHidden: cell.drawingsHidden } : {})}

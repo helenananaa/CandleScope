@@ -1,3 +1,4 @@
+import { syntheticEnglish } from "./syntheticMessages.js";
 import { continuousKorean } from "./continuousMessages.js";
 import { tradeHistoryKorean } from "./tradeHistoryMessages.js";
 import { replayNoteKorean } from "./replayNoteMessages.js";
@@ -9,6 +10,7 @@ import { tradingAccountsKo } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
+  ...syntheticEnglish,
   ...continuousKorean,
   ...tradeHistoryKorean,
   ...replayNoteKorean,
@@ -4462,6 +4464,8 @@ export const ko = {
   "local.kicker.dataOps": "데이터 작업",
   "local.status.ready": "로컬 데이터셋 · 분석 준비됨",
   "chart.loadingKlines": "{symbol} {interval} 캔들을 불러오는 중…",
+  "chart.syntheticPreparing": "차트 데이터를 준비하는 중…",
+  "chart.syntheticUnavailable": "현재 차트 데이터를 사용할 수 없습니다. 다시 연결하는 중…",
   "backtest.decisionFillHashes": "결정 / 체결 해시: {left} ↔ {right}",
   "backtest.bundleHash": "번들 {hash}",
   "backtest.sourceManifestHashes": "소스 {source} · 매니페스트 {manifest}",

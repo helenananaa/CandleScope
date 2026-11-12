@@ -2,8 +2,21 @@ import type { RefAttributes } from "react";
 import type { ChartSurfaceHandle } from "../../chart-adapter/useChartSurfaceRuntime.js";
 import type { SingleChartPanesProps } from "../../components/SingleChartPanes.js";
 import type { MarketChartSourceRuntime } from "./marketChartSourceRuntime.js";
+import { BACKEND_SYNTHETIC_SERIES_ENABLED } from "../market-data/synthetic/backendSyntheticFeature.js";
+import { capturedSyntheticSource } from "../market-data/synthetic/capturedSyntheticSource.js";
 
 export type MarketChartSurfaceChartProps = SingleChartPanesProps & RefAttributes<ChartSurfaceHandle>;
+
+export function backendSyntheticSourceFor(source: MarketChartSourceRuntime) {
+  if (!BACKEND_SYNTHETIC_SERIES_ENABLED) return null;
+  if (source.mode === "LIVE_REFERENCE") return source.session;
+  if (!source.syntheticOrigin) return capturedSyntheticSource(source.session,
+    source.marketData.view.seriesStore?.seriesKey ?? null, JSON.stringify(source.executionIdentity ?? source.sourceId),
+    Number(source.marketData.view.seriesStore?.last()?.time ?? 0) * 1000);
+  return { ...source.session,
+    syntheticOrigin: source.syntheticOrigin,
+    syntheticSeriesKey: String(source.marketData.view.seriesStore?.seriesKey ?? "unavailable") };
+}
 
 export function bindMarketChartSurfaceProps(input: {
   source: MarketChartSourceRuntime;
@@ -20,6 +33,7 @@ export function bindMarketChartSurfaceProps(input: {
     interval: source.session.interval,
     datasetKey: source.datasetKey,
     seriesStore: source.marketData.view.seriesStore,
+    backendSyntheticSource: backendSyntheticSourceFor(source),
     loading: source.marketData.view.loading,
     dataMeta: source.marketData.view.meta,
     onNeedMoreLeft: source.marketData.actions.loadMoreLeft,

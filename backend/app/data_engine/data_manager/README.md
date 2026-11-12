@@ -111,6 +111,7 @@ Common methods on `DataManager`:
 Channel-specific operations are grouped under typed namespaces:
 
 - `dm.bars`: bar queries, bounds, and stream ensure.
+- `dm.synthetic`: shared HA/Renko/Point & Figure/Kagi/Line Break instances, snapshots/pages, revisions and consumer leases. See the [synthetic contract](../../../../docs/synthetic-series.md); indicator/strategy integration and installed-package qualification remain open.
 - `dm.market_state`: ticker/mark/funding/open-interest/basis latest and history.
 - `dm.trades` and `dm.liquidations`: append-only event access with distinct coverage guarantees.
 - `dm.books.partial` and `dm.books.full`: replaceable Top-N versus sequence-gated full-depth books.
