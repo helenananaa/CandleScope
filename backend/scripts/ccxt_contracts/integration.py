@@ -44,6 +44,7 @@ def main() -> int:
         "test_history_cover_plan.py", "test_mixed_history_reader.py", "test_default_mixed_history_query.py",
         "test_mixed_history_precedence.py",
         "test_history_cover_batch.py", "test_backfill_canonical_planning_reads.py",
+        "test_canonical_history_stream.py",
         "test_mixed_backfill_*.py",
         "test_component_incremental.py", "test_shared_component_input.py", "test_realtime_target_lifecycle.py",
         "test_interval_policy_consistency.py", "test_bar_aggregator_contracts.py",

@@ -172,6 +172,18 @@ reused on retry. After those commits, reconciliation checks finer precedence
 again, including additional rows imported under the same acquisition. A stale
 coarse proposal cannot conceal that finer history. K130 reduces the canonical
 source windows; D126/materialization registry remain the only target writer.
+Canonical reconciliation now folds/releases each ordered page (at most 256
+rows) before requesting another, retaining sufficient statistics for one target
+and at most 512 bounded target outputs. Duplicate same-source windows coalesce;
+overlapping grids and conflicting complete source identities are rejected.
+`ClosedKlineRowStream` and the existing batch `aggregate_kline_rows` adapter use
+the same strict grid/closed-row proof and K130 field arithmetic, rounding only
+the final projection. Paging preserves the established floating equivalence
+contract rather than claiming arbitrary IEEE grouping is bitwise associative.
+The existing outer history-backfill reservation and source/target/position limits
+remain. All source pages finish before target materialization; a bad/old/cancelled
+page cannot leave a partially proved target committed. Canonical page/row and
+stream peak-page diagnostics describe this stage, not public network I/O.
 Unknown enhancements or missing input leave the target incomplete, with no
 false write-error count. Confirmed wholly empty upstream evidence is retained
 without inventing a target. Target coverage never grants minute coverage.
@@ -185,6 +197,9 @@ without submitting. `BackfillConfig.mixed_custom_history=False` (environment
 `BACKFILL_MIXED_CUSTOM_HISTORY=false`) restores original planning; an in-flight
 switch rejects old mixed materialization and preserves canonical data.
 
+Fetch-result/report retention and the unqualified/custom-aggregator batch paths
+remain separate work; paged canonical reconciliation is not a claim that every
+phase of download/import/report delivery is now streaming.
 The default integration does not yet combine a closed mixed prefix with a live
 forming tail or broaden replay/calendar admission. Full archive-aware cost
 selection, first-screen/warmup scheduling and real cold-load/multi-chart/native
