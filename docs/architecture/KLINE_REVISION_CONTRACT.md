@@ -187,7 +187,9 @@ weights still require calibration, particularly for source proofs. See
 Eviction drains claim one raw buffer item synchronously before awaiting the
 existing public emitter. Per-pipeline claims remain in realtime-state roots until
 completion. A task-context observation marks transfer to the existing publisher
-source snapshot before callbacks await; failure/cancel restores raw data only
+source snapshot before callbacks await. The inherited context contains only a
+numeric identity and flags, deactivated on scope exit; no payload or callback is
+retained by child contexts. Failure/cancel restores raw data only
 before transfer, even when a concurrent retry already acknowledged the snapshot.
 No-source/pre-transfer failures retain their original retryable buffer item.
 Silent drains cannot discard another task's claim. Successful items release

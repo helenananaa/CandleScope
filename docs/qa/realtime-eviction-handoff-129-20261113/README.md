@@ -1,7 +1,7 @@
 # Eviction buffer publication ownership and retry transfer
 
 Refs #126 / #129; parent issues remain open. Base `39fc06ef4205732f6d2a030b41233ebf9651e0e6`.
-Product `4d62f15ed16c3ed9a5c6125caf9aa0992d4296a5`; exact source hashes and raw
+Product `30735eeacf9abb62dee0a9f24aad693514c4c2e9`; exact source hashes and raw
 receipts accompany this report. Main's subsequent #385 is documentation only.
 
 ## Reproduced defects and ownership
@@ -21,7 +21,9 @@ Successful items release immediately, and empty claim dictionaries clear capacit
 Actual dictionaries, tokens and states participate in estimates/opt-in heap roots.
 
 A task-context observer records the synchronous transfer to the publisher's
-existing source retry snapshot before callbacks can suspend. On failure/cancel,
+existing source retry snapshot before callbacks can suspend. Its inherited ContextVar holds only a numeric
+object ID and transfer/active flags, with the observer deactivated on scope exit;
+it retains no raw payload or callback function. On failure/cancel,
 raw data is restored only if that transfer did not happen. This also handles a
 concurrent retry acknowledging the snapshot before the original callback resumes
 and fails: current dictionary membership alone cannot prove ownership history.
@@ -39,14 +41,15 @@ scheduler. No budget increase, canonical deletion, new writer or revision ledger
 - Two unchanged probe cases fail against the **complete** base backend and pass
   against this product: concurrent same-head publication and source retry then
   raw re-emission. Baseline and product logs are retained.
-- Ten new owning cases cover those defects, normal/source cancellation, target
+- Twelve new owning cases cover those defects, normal/source cancellation, target
   detach with a suspended claim still accounted, concurrent early acknowledgment,
   callback reentry, pre-handoff deepcopy failure/observer reset, silent drain,
-  and actual BarStateEngine active/closed capacity eviction for closed/expired.
-- Final source/publication/lifecycle focus: **35 passed**. Final expanded
+  actual BarStateEngine active/closed capacity eviction for closed/expired, and
+  background callback tasks inheriting context without retaining the completed raw index.
+- Final source/publication/lifecycle focus: **37 passed**. Final expanded
   aggregation, source fork/revision/SQLite/durable recovery, history, caches,
-  queries, retention, architecture and Pyne retirement regression: **1737 passed**,
-  six existing warnings, 120.90 seconds. CI selects the new owning tests.
+  queries, retention, architecture and Pyne retirement regression: **1739 passed**,
+  six existing warnings, 121.94 seconds. CI selects the new owning tests.
 - Architecture and diff checks pass. No new network, native, endurance or whole
   resource-budget acceptance is claimed. Current changed-backend native attempts
   remain [failed/pending](../realtime-handoff-native-126-20261113/README.md).
@@ -56,7 +59,11 @@ metadata refinement/new cases. The next expanded run had 1735 passes and two tes
 expectation failures: new tests wrote `closed`/`expired` while the established enum
 values are `bar.closed`/`bar.expired`. Only those expectations changed; production
 values and publication semantics were preserved. Final focused and full reruns
-pass. Logs/XML of both attempts remain indexed.
+pass. A subsequent new weak-reference test caught a local implementation leak:
+the original observer tuple contained the raw bar and callback and was inherited
+by spawned tasks. Both no-source/source cases failed before the final scalar-only
+observer, then passed. The earlier corrected 1737-test run and final 1739-test run
+are separately retained; all failures remain indexed.
 
 ## Controlled cost and lifetime comparison
 
@@ -70,12 +77,13 @@ Synthetic direct buffers do not establish source authority or network qualificat
 
 | Handoffs | Baseline / product held states | Baseline / product visible retained bytes | Baseline / product drain CPU P50/P95/P99 us |
 | --- | ---: | ---: | ---: |
-| 1 | 4 / 4 | 253763 / 253995 | 405/426/452 vs 411/434/473 |
-| 128 | 131 / 4 | 3426858 / 254023 | 50819/51598/51666 vs 50848.5/51288/51427 |
+| 1 | 4 / 4 | 253763 / 253995 | 402/433/446 vs 403/450/472 |
+| 128 | 131 / 4 | 3426858 / 254023 | 51672/52380/54797 vs 51590/54568/54843 |
 
-These final sequential fresh-process measurements ran **after** our regression
+The final scalar-observer sequential fresh-process measurements ran **after** our regression
 processes ended, product first then baseline. Earlier pilot pairs overlapped our
-regression work and had much higher CPU costs; they are retained and not used as
+regression work and had much higher CPU costs; the intermediate observer version
+also has its own sequential measurements. All are retained and not used as
 performance qualification. Other host load is uncontrolled. This is one
 instrumented-host comparison, not a stable latency/throughput or RSS pass.
 
