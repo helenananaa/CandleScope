@@ -271,7 +271,8 @@ class Reconciler:
                     with computation_scope(views):
                         gen, wrt, failures, written_ranges = await self._generate_custom_bars(
                             decomp, grouped, plan.derived_source_windows,
-                            **({"confirmed_empty": bool(fetch_results) and all(
+                            **({"binding_check": plan.mixed_binding.validate if plan.mixed_binding is not None else None,
+                                "confirmed_empty": bool(fetch_results) and all(
                                 r.source_complete is True and not r.retryable and not r.errors and not r.bars and bool(r.empty_reason)
                                 for r in fetch_results)} if getattr(decomp, "composition_policy", None) is not None else {}),
                         )
@@ -867,7 +868,7 @@ class Reconciler:
         decomp: IntervalDecomposition,
         grouped: dict[tuple[str, str, str, str], list[FetchedBar]],
         source_windows: list[BackfillTask],
-        *, confirmed_empty: bool = False,
+        *, confirmed_empty: bool = False, binding_check=None,
     ) -> tuple[int, int, list[dict[str, Any]], list[WrittenRange]]:
         """Reduce canonical source windows after any fetched rows have committed."""
         target = decomp.custom_interval
@@ -904,6 +905,9 @@ class Reconciler:
             rejected_windows = False
             if policy is not None:
                 from .mixed_plan import checked_mixed_windows, MAX_TARGETS
+                if not callable(binding_check):
+                    raise StaleAcquisition("mixed materialization has no owner binding fence")
+                binding_check()
                 if not self._cfg.mixed_custom_history or self._custom_aggregator is not None:
                     raise StaleAcquisition("mixed materialization rollout or reducer binding changed")
                 bounds = decomp.composition_target_range
@@ -948,6 +952,8 @@ class Reconciler:
                     failures.append(dict(exchange=exchange, market_type=market_type, symbol=symbol,
                         interval=target, phase="mixed_coverage", write_error=False,
                         error=f"{len(missing)} target buckets lack trusted composition fields/coverage; replan from canonical inputs"))
+            if policy is not None:
+                binding_check()
             generated += len(custom_bars)
             count, write_failures, ranges = await self._write_custom_materialization(
                 exchange=exchange, market_type=market_type, symbol=symbol,

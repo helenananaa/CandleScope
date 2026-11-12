@@ -259,6 +259,9 @@ class BackfillPlan:
     metadata: dict[str, Any] = field(default_factory=dict)
     derived_source_windows: list[BackfillTask] = field(default_factory=list)
 
+    # Ephemeral owner/config fence. It is neither serialized nor persisted.
+    mixed_binding: Any = field(default=None, repr=False, compare=False)
+
     def to_dict(self) -> dict:
         result = {
             "gaps": [g.to_dict() for g in self.gaps],

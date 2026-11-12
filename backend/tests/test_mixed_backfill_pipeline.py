@@ -56,6 +56,7 @@ def test_default_cold_pipeline_fetches_native_mixed_inputs_and_materializes_only
     report = asyncio.run(repair(engine))
     assert report.status == BackfillStatus.COMPLETED, report.errors
     assert report.metadata["mixed_history"] and report.plan.estimated_requests < 11
+    assert report.plan.mixed_binding is None
     assert report.reconcile_result.custom_bars_written == 1
     assert {task.interval for task in upstream.calls} == {"1h", "15m", "1m"}
     result = mixed_query.query("BTCUSDT", "10007m", start_ms=0, end_ms=10007 * MINUTE - 1,
@@ -189,3 +190,25 @@ def test_confirmed_empty_upstream_keeps_empty_evidence_without_fabricating_targe
     assert report.reconcile_result.custom_bars_written == report.reconcile_result.bars_written == 0
     assert mixed_query.storage.count_bars("BTCUSDT", "10007m", 0, 10007 * MINUTE - 1,
                                           market_type="futures") == 0
+
+
+@pytest.mark.parametrize("mutation", ["calendar", "resolver", "alignment"])
+def test_download_completion_cannot_materialize_after_owner_binding_changes(mixed_query, mutation):
+    engine = engine_for(mixed_query)
+    class Changed(Upstream):
+        async def fetch(self, tasks, **options):
+            result = await super().fetch(tasks, **options)
+            if mutation == "calendar":
+                engine.detector.set_calendar_resolver(lambda *args: "unknown.session")
+            elif mutation == "resolver":
+                from app.data_engine.interval_resolution import IntervalResolver
+                engine.planner._interval_resolver = IntervalResolver()
+            else:
+                engine.config.alignment_epoch_ms = 60000
+            return result
+    engine._fetcher = Changed()
+    report = asyncio.run(repair(engine))
+    assert report.status != BackfillStatus.COMPLETED
+    assert report.reconcile_result.custom_bars_written == 0
+    assert mixed_query.storage.count_bars("BTCUSDT", "10007m", 0, 10007 * MINUTE - 1,
+                                           market_type="futures") == 0

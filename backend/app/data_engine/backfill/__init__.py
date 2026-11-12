@@ -517,6 +517,10 @@ class BackfillEngine:
                 "Backfill run failed for %s: %s", symbol, exc, exc_info=True,
             )
 
+        # Runtime fences must not keep engine/storage owners alive through
+        # retained reports after this run has completed.
+        if plan is not None:
+            plan.mixed_binding = None
         # ── Phase 5: Publish ──
         report = self.publisher.build_report(
             symbol=symbol,

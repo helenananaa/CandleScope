@@ -5,7 +5,7 @@ ownership, quota and publication remain with their existing owners.
 """
 from collections import deque
 from contextlib import nullcontext
-from dataclasses import replace
+from dataclasses import dataclass, replace
 import math
 import time
 
@@ -53,6 +53,37 @@ def reusable_component(row, width, now_ms, fields):
         return all(values.get(field) is not None for field in fields)
     except (KeyError, TypeError, ValueError, OverflowError):
         return False
+
+
+@dataclass(frozen=True)
+class _MixedBinding:
+    engine: object
+    config: object
+    storage: object
+    planner: object
+    resolver: object
+    detector: object
+    calendar_resolver: object
+    calendar: object
+    target: SeriesKey
+    declaration: tuple
+
+    def validate(self):
+        cfg, planner, target = self.config, self.planner, self.target
+        if (self.engine._cfg is not cfg or self.engine._storage is not self.storage
+                or self.engine.planner is not planner or self.engine.detector is not self.detector
+                or planner._interval_resolver is not self.resolver
+                or self.detector._calendar_resolver is not self.calendar_resolver
+                or self.detector._resolve_calendar(target.exchange, target.market_type, target.symbol) != self.calendar
+                or not cfg.mixed_custom_history or not cfg.reconcile_generate_custom
+                or cfg.custom_alignment_mode != "epoch" or cfg.alignment_epoch_ms
+                or getattr(planner, "_custom_alignment_fn", None) is not None
+                or getattr(planner, "_custom_decomposition_fn", None) is not None
+                or target.interval in getattr(planner, "_interval_mappings", {})
+                or getattr(self.engine.reconciler, "_custom_aggregator", None) is not None
+                or self.resolver.history_composition_routes(exchange=target.exchange,
+                    market_type=target.market_type, interval=target.interval) != self.declaration):
+            raise StaleAcquisition("mixed backfill owner or qualification binding changed")
 
 
 async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
@@ -108,6 +139,8 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
     if store is None or floor is None:
         return None
     target = SeriesKey(gap.symbol, spec.canonical, exchange=gap.exchange, market_type=gap.market_type)
+    binding = _MixedBinding(engine, cfg, storage, planner, resolver, detector,
+                            calendar_resolver, calendar, target, declaration)
     sources = tuple(FixedHistorySource(replace(target, interval=r.canonical_interval), r.spec.nominal_ms,
         0, ((0, stop),), frozenset(policy.fields), policy.contract_id) for r in routes)
     precedences = tuple((replace(target, interval=r.canonical_interval), r.spec.nominal_ms)
@@ -176,6 +209,7 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
             if (not cfg.mixed_custom_history or composition_for(exchange=target.exchange,
                     market_type=target.market_type, interval=target.interval) != declaration):
                 raise StaleAcquisition("mixed planning qualification changed")
+            binding.validate()
             components = [IntervalComponent(interval, sum(t.estimated_bars for t in windows if t.interval == interval),
                                              parse_interval_spec(interval).nominal_ms)
                           for interval in dict.fromkeys(task.interval for task in windows)]
@@ -188,7 +222,7 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
             planner.metrics.set("last_mixed_estimated_requests", requests)
             return BackfillPlan(gaps=gaps, decompositions=[decomp], tasks=tasks,
                 estimated_requests=requests, estimated_bars=sum(t.estimated_bars for t in tasks),
-                custom_intervals=[target.interval], metadata=dict(diagnostics), derived_source_windows=windows)
+                custom_intervals=[target.interval], metadata=dict(diagnostics), derived_source_windows=windows, mixed_binding=binding)
     except (_DeclineMixed, CoverUnavailable) as exc:
         diagnostics["mixed_plan_positions"] += getattr(exc, "explored_positions", 0)
         diagnostics["mixed_plan_fallback"] = str(exc)
