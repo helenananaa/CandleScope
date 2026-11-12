@@ -31,9 +31,14 @@
       "sha256": "deca9c509536b9d542c0761011e65bfd23147569bc762a01b61260fc4189c2d2"
     },
     {
+      "path": "native6-acceptance.full.json.gz",
+      "bytes": 33582,
+      "sha256": "7de5d129615330f3e07f430400efc528b337dc9727a4ce0a1e04aa61d90040cd"
+    },
+    {
       "path": "native6-acceptance.json",
-      "bytes": 478128,
-      "sha256": "833f190b9196eef3d69667e78888e4b5d37f2523cb290c87cbeea0eabc8d9cbe"
+      "bytes": 23982,
+      "sha256": "acc53723e10e14ab1522da4616cb3eab8461f079a16f1bbaa87960491af80ff1"
     },
     {
       "path": "package-source-manifest.json.gz",
