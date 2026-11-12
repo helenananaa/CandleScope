@@ -26,19 +26,26 @@ def main():
                 rows.append(dict(time=1_700_000_040 + index * 60, open=opening,
                     close=price, high=round(max(opening, price) + 1, precision),
                     low=round(min(opening, price) - 1, precision), volume=2, is_closed=index < size - 1))
-            for transform, mode in (("heikin-ashi", "traditional"), ("renko", "traditional"), ("renko", "atr")):
-                cases.append(dict(transform=transform, settings=dict(mode=mode, boxSize=2, atrLength=14), rows=rows))
+            for transform, mode in (("heikin-ashi", "traditional"), ("renko", "traditional"), ("renko", "atr"),
+                    ("point-and-figure", "traditional"), ("point-and-figure", "atr"),
+                    ("kagi", "traditional"), ("kagi", "atr"), ("line-break", "traditional")):
+                variants = (1, 3, 5) if transform == "point-and-figure" else (0.1, 2, 10) if transform == "kagi" else (1, 3, 10) if transform == "line-break" else (3,)
+                for value in variants:
+                    cases.append(dict(transform=transform, settings=dict(mode=mode, boxSize=2, atrLength=14,
+                        reversalAmount=value if transform != "line-break" else 3,
+                        numberOfLines=value if transform == "line-break" else 3), rows=rows))
     result = subprocess.run([str(root / "frontend/node_modules/.bin/tsx"),
         str(root / "frontend/scripts/synthetic-reference.mts")],
         input=json.dumps(cases), text=True, capture_output=True, check=True, cwd=root)
     expected = json.loads(result.stdout)
     count = 0
     for case, reference in zip(cases, expected, strict=True):
-        kernel = SyntheticKernel(SyntheticConfig(case["transform"], mode=case["settings"]["mode"], box_size=2))
+        kernel = SyntheticKernel(SyntheticConfig(case["transform"], mode=case["settings"]["mode"], box_size=2,
+            reversal_amount=case["settings"]["reversalAmount"], number_of_lines=case["settings"]["numberOfLines"]))
         actual = kernel.replace(case["rows"])
         assert len(actual) == len(reference), (case["transform"], len(case["rows"]), len(actual), len(reference))
         for left, right in zip(actual, reference, strict=True):
-            assert left["time"] == right["time"]
+            assert left["time"] == right["time"], (case["transform"], len(case["rows"]), left, right)
             for field in ("open", "high", "low", "close", "volume"):
                 assert (field in left) == (field in right)
                 if field in left:
@@ -47,9 +54,10 @@ def main():
             rm = right["customValues"]["chartProjection"]
             for field in ("projectorId", "sourceFromTime", "sourceToTime", "sourceOrdinal", "synthetic"):
                 assert lm[field] == rm[field], (field, left, right)
-            if case["transform"] == "renko":
+            if case["transform"] != "heikin-ashi":
                 assert lm["provisional"] == rm["provisional"]
-                assert left["customValues"]["renko"] == right["customValues"]["renko"]
+                key = {"renko": "renko", "point-and-figure": "pointAndFigure", "kagi": "kagi", "line-break": "lineBreak"}[case["transform"]]
+                assert left["customValues"][key] == right["customValues"][key], (case["transform"], left, right)
             count += 1
     print(json.dumps({"status": "PASS", "cases": len(cases), "output_rows": count,
         "scope": "offline Python vs retained TypeScript display oracle; not native/performance acceptance"}))

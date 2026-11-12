@@ -1,6 +1,6 @@
-/** Candidate rollout. Enable only in a backend-matched acceptance build. */
+/** Backend computation is the default; 0 is an explicit rollout rollback. */
 export function resolveBackendSyntheticEnabled(value: unknown): boolean {
-  return value === true || value === 1 || value === "1";
+  return value === undefined || value === true || value === 1 || value === "1";
 }
 
 export const BACKEND_SYNTHETIC_SERIES_ENABLED = resolveBackendSyntheticEnabled(

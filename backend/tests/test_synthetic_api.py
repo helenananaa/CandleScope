@@ -57,3 +57,14 @@ def test_websocket_snapshot_patch_and_disconnect_release():
                 await asyncio.sleep(0.01)
         client.portal.call(drained)
         assert not source.active and not service.instances
+
+
+def test_websocket_complete_window_is_chunked_in_one_generation():
+    client, source, service, body = setup()
+    with client:
+        with client.websocket_connect("/synthetic/stream") as websocket:
+            websocket.send_json({**body, "complete_window": True, "limit": 1})
+            messages = [websocket.receive_json() for _ in range(3)]
+            assert [message["from_index"] for message in messages] == [0, 1, 2]
+            assert [message["complete"] for message in messages] == [False, False, True]
+            assert len({(message["generation"], message["revision"]) for message in messages}) == 1

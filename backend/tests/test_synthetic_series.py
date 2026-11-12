@@ -10,6 +10,7 @@ from app.data_engine.data_manager.models import BarData, DataEvent, DataEventTyp
 from app.data_engine.data_manager.stream_version import StreamVersionClock
 from app.data_engine.synthetic_series.core import SyntheticConfig, SyntheticError, SyntheticKernel
 from app.data_engine.synthetic_series.service import SyntheticDefinition, SyntheticSeriesService
+from app.data_engine.history.calendar import AlwaysOpenCalendar
 
 
 def bar(time, close, *, closed=True, opening=None):
@@ -38,7 +39,7 @@ def test_ha_independent_recursive_reference():
     assert [row["volume"] for row in output] == [2, 3]
 
 
-@pytest.mark.parametrize("transform", ["renko", "heikin-ashi"])
+@pytest.mark.parametrize("transform", ["renko", "heikin-ashi", "point-and-figure", "kagi", "line-break"])
 def test_preview_replacements_close_and_append_equal_batch(transform):
     config = SyntheticConfig(transform, semantics="anchored/1", box_size=2, min_tick=1)
     kernel = SyntheticKernel(config)
@@ -62,6 +63,62 @@ def test_preview_replacements_close_and_append_equal_batch(transform):
     assert kernel.output == reference.output
 
 
+@pytest.mark.parametrize("transform", ["point-and-figure", "kagi"])
+def test_active_column_or_leg_replacement_does_not_duplicate_output(transform):
+    kernel = SyntheticKernel(SyntheticConfig(transform, semantics="anchored/1", box_size=2,
+        reversal_amount=2, min_tick=1))
+    kernel.replace([bar(60, 100), bar(120, 104)])
+    assert len(kernel.output) == 1
+    kernel.apply(bar(180, 110, closed=False))
+    assert len(kernel.output) == 1 and kernel.output[0]["close"] == 110
+    assert kernel.output[0]["time"]["order"] == 0
+    kernel.apply(bar(180, 104, closed=False))
+    assert len(kernel.output) == 1 and kernel.output[0]["close"] == 104
+    assert kernel.output[0]["time"]["sourceTime"] == 120
+    kernel.apply(bar(180, 110))
+    kernel.apply(bar(240, 100, closed=False))
+    assert len(kernel.output) == 2
+    assert [item["time"]["order"] for item in kernel.output] == [0, 1]
+    kernel.apply(bar(240, 110, closed=False))
+    assert len(kernel.output) == 1 and kernel.output[0]["close"] == 110
+
+
+def test_kagi_strict_style_boundaries_and_line_break_reference_window():
+    kernel = SyntheticKernel(SyntheticConfig("kagi", semantics="anchored/1", min_tick=1, reversal_amount=2))
+    result = kernel.replace([bar(60, 100), bar(120, 106), bar(180, 102), bar(240, 106), bar(300, 108)])
+    tail = result[-1]["customValues"]["kagi"]
+    assert tail["state"] == "yang"
+    assert tail["sections"] == [{"from": 102, "to": 106, "style": "yin"},
+        {"from": 106, "to": 108, "style": "yang"}]
+    line = SyntheticKernel(SyntheticConfig("line-break", semantics="anchored/1", min_tick=1, number_of_lines=2))
+    result = line.replace([bar(60, 100), bar(120, 106), bar(180, 108), bar(240, 107), bar(300, 99)])
+    assert [(item["open"], item["close"]) for item in result] == [(100, 106), (106, 108), (106, 99)]
+    assert result[-1]["customValues"]["lineBreak"]["referenceHigh"] == 108
+    assert result[-1]["customValues"]["lineBreak"]["referenceLow"] == 100
+
+
+@pytest.mark.parametrize("transform", ["heikin-ashi", "renko", "point-and-figure", "kagi", "line-break"])
+@pytest.mark.parametrize("mode", ["traditional", "atr"])
+def test_repeated_forming_observations_and_parameter_recalibration_equal_full_prefix(transform, mode):
+    config = SyntheticConfig(transform, mode=mode, box_size=2, reversal_amount=2, number_of_lines=2)
+    actual, expected = SyntheticKernel(config), SyntheticKernel(config)
+    rows = [bar(60, 100)]
+    actual.replace(rows)
+    for index, price in enumerate([106, 102, 110, 114, 100, 96, 108, 104, 98, 112], start=2):
+        preview = bar(index * 60, price + 8, closed=False)
+        actual.apply(preview)
+        expected.replace([*rows, preview])
+        assert actual.output == expected.output
+        preview = bar(index * 60, price, closed=False)
+        actual.apply(preview)
+        expected.replace([*rows, preview])
+        assert actual.output == expected.output
+        rows.append(bar(index * 60, price))
+        actual.apply(rows[-1])
+        expected.replace(rows)
+        assert actual.output == expected.output
+
+
 def test_extreme_output_rejected_atomically():
     kernel = SyntheticKernel(SyntheticConfig("renko", semantics="anchored/1", min_tick=1))
     kernel.replace([bar(60, 100)])
@@ -69,6 +126,14 @@ def test_extreme_output_rejected_atomically():
     with pytest.raises(SyntheticError, match="brick budget"):
         kernel.apply(bar(120, 20_000))
     assert kernel.__dict__ == before
+
+
+def test_rounding_at_safe_integer_boundary_does_not_overflow_on_half_addition():
+    kernel = SyntheticKernel(SyntheticConfig("renko", semantics="anchored/1", min_tick=1))
+    kernel.replace([bar(60, 2**53 - 1)])
+    assert kernel._state["last"] == 2**53 - 1
+    with pytest.raises(SyntheticError, match="safe integer"):
+        kernel.apply(bar(120, 2**53))
 
 
 def test_causal_prefix_and_display_atr_are_distinct_contracts():
@@ -255,4 +320,45 @@ def test_terminal_source_delivery_recreates_subscription_before_recovery():
         await source.emit(DataEventType.BAR_UPDATED, bar(120, 108, closed=False))
         assert (await second.next())["total"] == 4
         await service.close()
+    asyncio.run(run())
+
+
+def test_source_calendar_is_reused_for_session_gaps_instead_of_crypto_grid():
+    async def run():
+        class SessionCalendar(AlwaysOpenCalendar):
+            def expected_opens(self, start_ms, end_ms, interval):
+                return iter(value for value in (60_000, 180_000) if start_ms <= value <= end_ms)
+            def count_expected(self, start_ms, end_ms, interval):
+                return len(list(self.expected_opens(start_ms, end_ms, interval)))
+            def next_expected_open(self, open_ms, interval):
+                return 180_000 if open_ms == 60_000 else 240_000
+        source = Source([bar(60, 100), bar(180, 106)])
+        source.calendar_for = lambda key: SessionCalendar()
+        service = SyntheticSeriesService(source)
+        key = SeriesKey("BTCUSDT", "1m", asset_class="equity", session_variant="regular")
+        lease = await service.attach(SyntheticDefinition(key, SyntheticConfig("heikin-ashi"), 60, 180))
+        assert (await lease.snapshot())["status"] == "ready"
+        assert lease.instance.calendar.next_expected_open(60_000, "1m") == 180_000
+        await lease.close()
+    asyncio.run(run())
+
+
+def test_complete_window_chunks_pin_one_snapshot_then_deliver_queued_tail():
+    async def run():
+        source = Source([bar(60, 100), bar(120, 6100, closed=False)])
+        service = SyntheticSeriesService(source)
+        lease = await service.attach(SyntheticDefinition(SeriesKey("BTCUSDT", "1m"),
+            SyntheticConfig("renko", min_tick=1), 60, 120))
+        parts = lease.snapshot_chunks(limit=2000)
+        first = await anext(parts)
+        assert first["from_index"] == 0 and first["total"] == 6000 and first["complete"] is False
+        await source.emit(DataEventType.BAR_UPDATED, bar(120, 6105, closed=False))
+        rest = [part async for part in parts]
+        assert [part["from_index"] for part in rest] == [2000, 4000]
+        assert all(part["revision"] == first["revision"] and part["generation"] == first["generation"] for part in rest)
+        assert rest[-1]["complete"] is True
+        assert sum(len(part["rows"]) for part in [first, *rest]) == 6000
+        delta = await lease.next()
+        assert delta["from_index"] == 6000 and delta["total"] == 6005 and len(delta["rows"]) == 5
+        await lease.close()
     asyncio.run(run())

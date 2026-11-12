@@ -111,7 +111,7 @@ liquidations = dm.liquidations.attach(liquidation_keys, continuity="gap_aware")
 各类行情通过强类型命名空间分组：
 
 - `dm.bars`：K 线查询、边界和 stream ensure。
-- `dm.synthetic`：候选合成序列共享实例、快照/分页、修订和消费者租约；当前支持 HA/Renko，详见[合成序列契约](../../../../docs/synthetic-series.md)。指标/策略接线和安装版资格尚未完成。
+- `dm.synthetic`：合成序列共享实例、快照/分页、修订和消费者租约；当前支持 HA/Renko/Point & Figure/Kagi/Line Break，详见[合成序列契约](../../../../docs/synthetic-series.md)。指标/策略接线和安装版资格尚未完成。
 - `dm.market_state`：ticker/mark/funding/open-interest/basis 的 latest 与 history。
 - `dm.trades` 和 `dm.liquidations`：不同完备性保证的 append-only 事件访问。
 - `dm.books.partial` 和 `dm.books.full`：可替换 Top-N 快照与 sequence-gated 全量深度簿。

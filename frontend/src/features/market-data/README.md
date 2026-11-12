@@ -5,9 +5,9 @@ initial history loading, bounded window stores, left-side pagination, backend
 backfill completion, live K-line WebSocket updates, background interval warming,
 and header price state.
 
-`MarketDataManager.synthetic` owns the candidate shared backend HA/Renko
+`MarketDataManager.synthetic` owns the shared backend synthetic-series
 replicas and transports. Chart bindings retain independent range demands and
-renderer mappings. The candidate is default-off; see the
+renderer mappings. Live charts use backend calculation by default; see the
 [synthetic series contract](../../../../docs/synthetic-series.md).
 
 ## Public Contract

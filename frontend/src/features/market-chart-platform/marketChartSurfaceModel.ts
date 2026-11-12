@@ -6,6 +6,10 @@ import { BACKEND_SYNTHETIC_SERIES_ENABLED } from "../market-data/synthetic/backe
 
 export type MarketChartSurfaceChartProps = SingleChartPanesProps & RefAttributes<ChartSurfaceHandle>;
 
+export function backendSyntheticSourceFor(source: Pick<MarketChartSourceRuntime, "mode" | "session">) {
+  return BACKEND_SYNTHETIC_SERIES_ENABLED && source.mode === "LIVE_REFERENCE" ? source.session : null;
+}
+
 export function bindMarketChartSurfaceProps(input: {
   source: MarketChartSourceRuntime;
   chartProps: MarketChartSurfaceChartProps;
@@ -21,7 +25,7 @@ export function bindMarketChartSurfaceProps(input: {
     interval: source.session.interval,
     datasetKey: source.datasetKey,
     seriesStore: source.marketData.view.seriesStore,
-    backendSyntheticSource: BACKEND_SYNTHETIC_SERIES_ENABLED && source.mode === "LIVE_REFERENCE" ? source.session : null,
+    backendSyntheticSource: backendSyntheticSourceFor(source),
     loading: source.marketData.view.loading,
     dataMeta: source.marketData.view.meta,
     onNeedMoreLeft: source.marketData.actions.loadMoreLeft,

@@ -10,15 +10,16 @@ import { resolveBackendSyntheticEnabled } from "./backendSyntheticFeature.js";
 
 const source = { exchange: "binance", marketType: "spot", symbol: "BTCUSDT", interval: "1m" };
 const request = syntheticRequest(source, "renko", { mode: "traditional", boxSize: 2 }, 60, 120);
-test("backend candidate rollout requires an explicit acceptance-build switch", () => {
-  for (const value of [undefined, false, 0, "0", "true"]) assert.equal(resolveBackendSyntheticEnabled(value), false);
-  for (const value of [true, 1, "1"]) assert.equal(resolveBackendSyntheticEnabled(value), true);
+test("backend computation defaults on and supports an explicit rollout rollback", () => {
+  for (const value of [false, 0, "0", "true"]) assert.equal(resolveBackendSyntheticEnabled(value), false);
+  for (const value of [undefined, true, 1, "1"]) assert.equal(resolveBackendSyntheticEnabled(value), true);
 });
 function row(ordinal: number, generation = "generation", close = 102 + ordinal * 2) {
   return { id: `series:${generation}:${ordinal}`, ordinal,
     time: { order: ordinal, sourceTime: 120, sourceOrdinal: ordinal },
     open: close - 2, high: close, low: close - 2, close,
-    customValues: { chartProjection: { projectorId: "renko", sourceFromTime: 60, sourceToTime: 120, sourceOrdinal: ordinal, synthetic: true } } };
+    customValues: { renko: { direction: "up", boxSize: 2, source: "close", wickPolicy: "none" },
+      chartProjection: { projectorId: "renko", sourceFromTime: 60, sourceToTime: 120, sourceOrdinal: ordinal, synthetic: true } } };
 }
 function snapshot(revision = 1, generation = "generation") {
   return { protocol: "candlescope.synthetic/1", type: "snapshot", series_id: "series",
@@ -78,6 +79,34 @@ test("shared transport, independent leases and late-frame fencing", () => {
   sockets[0]!.receive(snapshot(3));
   assert.equal(manager.diagnostics().sharedSeries, 0);
   manager.closeAll();
+});
+
+test("complete-window chunks publish atomically and keep more than 5000 bricks", () => {
+  const socket = new Socket(), manager = new SyntheticSeriesManager(() => socket);
+  const view = manager.acquire(request);
+  const rows = Array.from({ length: 6000 }, (_, index) => row(index));
+  socket.receive({ ...snapshot(), type: "snapshot_chunk", rows: rows.slice(0, 3000), total: 6000, complete: false });
+  assert.equal(view.getSnapshot().rows.length, 0);
+  assert.equal(view.getSnapshot().status, "preparing");
+  socket.receive({ ...snapshot(), type: "snapshot_chunk", from_index: 3000, rows: rows.slice(3000), total: 6000, complete: true });
+  assert.equal(view.getSnapshot().rows.length, 6000);
+  assert.equal(view.getSnapshot().from, 0);
+  socket.receive({ ...snapshot(2), type: "patch", from_index: 6000, delete_count: 0, total: 6001, rows: [row(6000)] });
+  assert.equal(view.getSnapshot().rows.length, 6001);
+  assert.equal(view.getSnapshot().rows[0]?.ordinal, 0);
+  view.release(); manager.closeAll();
+});
+
+test("mixed-generation chunks fail closed without publishing a partial series", () => {
+  const socket = new Socket(), manager = new SyntheticSeriesManager(() => socket);
+  const view = manager.acquire(request);
+  socket.receive({ ...snapshot(), type: "snapshot_chunk", rows: [row(0)], complete: false });
+  socket.receive({ ...snapshot(2, "changed"), type: "snapshot_chunk", from_index: 1,
+    rows: [row(1, "changed"), row(2, "changed")], complete: true });
+  assert.equal(view.getSnapshot().rows.length, 0);
+  assert.equal(view.getSnapshot().status, "stale");
+  assert.equal(socket.closed, true);
+  view.release(); manager.closeAll();
 });
 
 test("backend renderer adapter consumes supplied prices without a local transform", () => {

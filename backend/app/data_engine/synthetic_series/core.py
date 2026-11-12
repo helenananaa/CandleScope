@@ -1,4 +1,4 @@
-"""Pure close-source Renko and Heikin Ashi transforms.
+"""Pure close-source synthetic transforms.
 
 All state belongs to one kernel. Preview is calculated from confirmed state;
 it never advances that state. No network, database, React or chart dependency.
@@ -15,6 +15,7 @@ MAX_SOURCE_ROWS = 10_000
 MAX_OUTPUT_ROWS = 50_000
 MAX_BRICKS_PER_SOURCE = 10_000
 ALGORITHM_VERSION = "close-source/1"
+TRANSFORMS = ("heikin-ashi", "renko", "point-and-figure", "kagi", "line-break")
 
 
 class SyntheticError(ValueError):
@@ -32,7 +33,8 @@ def _round(value):
     # Match ECMAScript Math.round, including negative half-ticks.
     if not math.isfinite(value) or abs(value) > 2**53 - 1:
         raise SyntheticError("price exceeds safe integer tick range")
-    return math.floor(value + 0.5)
+    base = math.floor(value)
+    return base + int(value - base >= 0.5)
 
 
 @dataclass(frozen=True)
@@ -43,9 +45,11 @@ class SyntheticConfig:
     box_size: float = 1.0
     min_tick: float | None = None
     atr_length: int = 14
+    reversal_amount: float = 3
+    number_of_lines: int = 3
 
     def __post_init__(self):
-        if self.transform not in {"renko", "heikin-ashi"}:
+        if self.transform not in TRANSFORMS:
             raise SyntheticError("unsupported synthetic transform")
         if self.semantics not in {"display-window/1", "anchored/1"}:
             raise SyntheticError("unsupported synthetic semantics")
@@ -56,9 +60,15 @@ class SyntheticConfig:
             object.__setattr__(self, "min_tick", _positive(self.min_tick, "min_tick"))
         if not 2 <= self.atr_length <= 500:
             raise SyntheticError("atr_length must be between 2 and 500")
-        if self.semantics == "anchored/1" and self.transform == "renko":
+        object.__setattr__(self, "reversal_amount", _positive(self.reversal_amount, "reversal_amount"))
+        if self.transform == "point-and-figure" and (
+                not self.reversal_amount.is_integer() or self.reversal_amount > 100):
+            raise SyntheticError("Point & Figure reversal_amount must be an integer between 1 and 100")
+        if isinstance(self.number_of_lines, bool) or not isinstance(self.number_of_lines, int) or not 1 <= self.number_of_lines <= 50:
+            raise SyntheticError("number_of_lines must be an integer between 1 and 50")
+        if self.semantics == "anchored/1" and self.transform != "heikin-ashi":
             if self.mode != "traditional" or self.min_tick is None:
-                raise SyntheticError("anchored Renko requires fixed box_size and min_tick")
+                raise SyntheticError("anchored synthetic series requires fixed parameters and min_tick")
 
     def to_dict(self):
         return {**asdict(self), "algorithm": ALGORITHM_VERSION}
@@ -88,11 +98,16 @@ def resolve_options(config, rows):
     if config.transform == "heikin-ashi":
         return {}
     precision = 0
-    for value in [config.box_size, *(row[field] for row in rows for field in ("open", "high", "low", "close"))]:
+    preferred = config.reversal_amount if config.transform == "kagi" else config.box_size
+    values = ([row["close"] for row in rows] if config.transform == "line-break"
+        else [preferred, *(row[field] for row in rows for field in ("open", "high", "low", "close"))])
+    for value in values:
         if value > 0:
             precision = max(precision, min(8, max(0, -Decimal(str(value)).normalize().as_tuple().exponent)))
     tick = config.min_tick or 10 ** -precision
-    box = config.box_size
+    if config.transform == "line-break":
+        return {"min_tick": tick, "number_of_lines": config.number_of_lines}
+    box = preferred
     if config.mode == "atr":
         ranges, previous = [], None
         for row in rows:
@@ -104,12 +119,15 @@ def resolve_options(config, rows):
         atr = sum(ranges[:length]) / length if length else 0
         for value in ranges[length:]:
             atr = (atr * (config.atr_length - 1) + value) / config.atr_length
-        box = atr or max(tick, (previous or config.box_size) * 0.005)
+        box = atr or max(tick, (previous or preferred) * 0.005)
     ratio = box / tick
     ticks = max(1, _round(ratio))
     if config.semantics == "anchored/1" and abs(ratio - ticks) > math.ulp(1.0) * max(16, abs(ratio) * 16):
         raise SyntheticError("box_size must be an integer multiple of min_tick")
-    return {"min_tick": tick, "box_ticks": ticks, "box_size": round(ticks * tick, 8)}
+    options = {"min_tick": tick, "box_ticks": ticks, "box_size": round(ticks * tick, 8)}
+    if config.transform == "point-and-figure":
+        options["reversal_amount"] = int(config.reversal_amount)
+    return options
 
 
 class SyntheticKernel:
@@ -125,7 +143,151 @@ class SyntheticKernel:
         self._confirmed_count = 0
 
     def _initial(self):
-        return {"last": None, "direction": None, "pending": None, "order": 0}
+        return {"last": None, "direction": None, "pending": None, "order": 0,
+            "active": None, "style": "yin", "shoulder": None, "waist": None, "window": []}
+
+    def _price(self, ticks):
+        return round(ticks * self.options["min_tick"], 8)
+
+    def _point(self, state, row, opening, close, values, field, *, order=None, source_from=None):
+        return {"time": {"order": state["order"] if order is None else order,
+            "sourceTime": row["time"], "sourceOrdinal": 0},
+            "open": self._price(opening), "close": self._price(close),
+            "high": self._price(max(opening, close)), "low": self._price(min(opening, close)),
+            "customValues": {field: values, "chartProjection": {
+                "sourceFromTime": row["time"] if source_from is None else source_from,
+                "sourceOrdinal": 0}}}
+
+    def _point_figure(self, state, row):
+        price = _round(row["close"] / self.options["min_tick"])
+        box = self.options["box_ticks"]
+        if state["last"] is None:
+            state.update(last=math.floor(price / box) * box, pending=row["time"])
+            return []
+        active = state["active"]
+        direction = state["direction"]
+        low = high = None
+        new = False
+        if active is None:
+            if abs(price - state["last"]) < box:
+                return []
+            direction = "x" if price > state["last"] else "o"
+            distance = math.floor(abs(price - state["last"]) / box) * box
+            low, high = ((state["last"] + box, state["last"] + distance) if direction == "x"
+                else (state["last"] - distance, state["last"] - box))
+            new = True
+        else:
+            low, high = active["low"], active["high"]
+            if direction == "x":
+                if price >= high + box:
+                    high += math.floor((price - high) / box) * box
+                elif price <= high - self.options["reversal_amount"] * box:
+                    low, high = high - math.floor((high - price) / box) * box, high - box
+                    direction, new = "o", True
+                else:
+                    return []
+            else:
+                if price <= low - box:
+                    low -= math.floor((low - price) / box) * box
+                elif price >= low + self.options["reversal_amount"] * box:
+                    low, high = low + box, low + math.floor((price - low) / box) * box
+                    direction, new = "x", True
+                else:
+                    return []
+        if (high - low) // box + 1 > MAX_BRICKS_PER_SOURCE:
+            raise SyntheticError("Point & Figure column exceeds glyph budget")
+        if new:
+            active = {"order": state["order"], "from": active["time"] if active else state["pending"]}
+            state["order"] += 1
+        else:
+            active = dict(active)
+        active.update(low=low, high=high, time=row["time"])
+        state.update(active=active, direction=direction)
+        opening, closing = (low, high) if direction == "x" else (high, low)
+        return [self._point(state, row, opening, closing,
+            {"direction": direction, "boxSize": self.options["box_size"],
+                "reversalAmount": self.options["reversal_amount"], "source": "close"},
+            "pointAndFigure", order=active["order"], source_from=active["from"])]
+
+    def _kagi_sections(self, state, active):
+        opening, close, style = active["open"], active["close"], active["start_style"]
+        boundary, next_style = None, style
+        if state["direction"] == "up" and style == "yin" and state["shoulder"] is not None and close > state["shoulder"]:
+            boundary, next_style = state["shoulder"], "yang"
+        elif state["direction"] == "down" and style == "yang" and state["waist"] is not None and close < state["waist"]:
+            boundary, next_style = state["waist"], "yin"
+        if boundary is None:
+            return [{"from": self._price(opening), "to": self._price(close), "style": style}], style
+        sections = []
+        if opening != boundary:
+            sections.append({"from": self._price(opening), "to": self._price(boundary), "style": style})
+        sections.append({"from": self._price(boundary), "to": self._price(close), "style": next_style})
+        return sections, next_style
+
+    def _kagi(self, state, row):
+        price = _round(row["close"] / self.options["min_tick"])
+        if state["last"] is None:
+            state.update(last=price, pending=row["time"])
+            return []
+        active = state["active"]
+        direction = state["direction"]
+        kind, turn = None, None
+        new = active is None
+        if new:
+            opening = state["last"]
+            if abs(price - opening) < self.options["box_ticks"]:
+                return []
+            direction = "up" if price > opening else "down"
+        else:
+            opening = active["open"]
+            closing = active["close"]
+            extends = price > closing if direction == "up" else price < closing
+            if not extends:
+                if abs(price - closing) < self.options["box_ticks"]:
+                    return []
+                new, opening, turn = True, closing, closing
+                if direction == "up":
+                    state["shoulder"], direction, kind = turn, "down", "shoulder"
+                else:
+                    state["waist"], direction, kind = turn, "up", "waist"
+        if new:
+            active = {"order": state["order"], "open": opening,
+                "from": active["time"] if active else state["pending"],
+                "kind": kind, "turn": turn, "start_style": state["style"]}
+            state["order"] += 1
+        else:
+            active = dict(active)
+        active.update(close=price, time=row["time"])
+        state.update(active=active, direction=direction)
+        sections, style = self._kagi_sections(state, active)
+        state["style"] = style
+        return [self._point(state, row, active["open"], price,
+            {"direction": direction, "state": style, "reversalKind": active["kind"],
+                "turnPrice": self._price(active["turn"]) if active["turn"] is not None else None,
+                "reversalAmount": self.options["box_size"], "reversalTicks": self.options["box_ticks"],
+                "source": "close", "sections": sections}, "kagi",
+            order=active["order"], source_from=active["from"])]
+
+    def _line_break(self, state, row):
+        price = _round(row["close"] / self.options["min_tick"])
+        if state["last"] is None:
+            state.update(last=price, pending=row["time"])
+            return []
+        window = state["window"]
+        reference_high = max(item["high"] for item in window) if window else state["last"]
+        reference_low = min(item["low"] for item in window) if window else state["last"]
+        if price <= reference_high and price >= reference_low:
+            return []
+        direction = "up" if price > reference_high else "down"
+        opening = (window[-1]["high"] if direction == "up" else window[-1]["low"]) if window else state["last"]
+        point = self._point(state, row, opening, price,
+            {"direction": direction, "numberOfLines": self.config.number_of_lines, "source": "close",
+                "referenceHigh": self._price(reference_high), "referenceLow": self._price(reference_low)},
+            "lineBreak", source_from=window[-1]["time"] if window else state["pending"])
+        state["order"] += 1
+        state["window"] = [*window, {"high": max(opening, price), "low": min(opening, price),
+            "time": row["time"]}][-self.config.number_of_lines:]
+        return [point]
 
     def _step(self, state, row, provisional):
         time = row["time"]
@@ -139,6 +301,12 @@ class SyntheticKernel:
             if "volume" in row:
                 point["volume"] = row["volume"]
             points = [point]
+        elif self.config.transform == "point-and-figure":
+            points = self._point_figure(state, row)
+        elif self.config.transform == "kagi":
+            points = self._kagi(state, row)
+        elif self.config.transform == "line-break":
+            points = self._line_break(state, row)
         else:
             tick, box = self.options["min_tick"], self.options["box_ticks"]
             price = _round(row["close"] / tick)
@@ -182,6 +350,15 @@ class SyntheticKernel:
             metadata.setdefault("sourceOrdinal", 0)
         return points
 
+    @staticmethod
+    def _merge(output, points):
+        for point in points:
+            if (output and isinstance(point["time"], dict) and
+                    point["time"]["order"] == output[-1]["time"]["order"]):
+                output[-1] = point
+            else:
+                output.append(point)
+
     def _calculate(self, rows, *, reset):
         state = self._initial() if reset else deepcopy(self._state)
         confirmed = [] if reset else list(self._confirmed_output)
@@ -189,13 +366,13 @@ class SyntheticKernel:
         for row in rows[count:]:
             if not row["is_closed"]:
                 break
-            confirmed.extend(self._step(state, row, False))
+            self._merge(confirmed, self._step(state, row, False))
             count += 1
             if len(confirmed) > MAX_OUTPUT_ROWS:
                 raise SyntheticError("synthetic output budget exceeded")
         output = list(confirmed)
         if count < len(rows):
-            output.extend(self._step(deepcopy(state), rows[count], True))
+            self._merge(output, self._step(deepcopy(state), rows[count], True))
         if len(output) > MAX_OUTPUT_ROWS:
             raise SyntheticError("synthetic output budget exceeded")
         return state, confirmed, count, output

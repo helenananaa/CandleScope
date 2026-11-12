@@ -2,7 +2,7 @@ import type { DisplayRow } from "../../chart-representation/chartRepresentationT
 import type { MarketSeries } from "../marketDataTypes.js";
 import type { SeriesWindowView } from "../window/seriesWindowView.js";
 import { buildSeriesWindowKey } from "../window/seriesWindowKey.js";
-import { EMPTY_SYNTHETIC, syntheticRequest, type SyntheticSnapshot } from "./syntheticSeries.js";
+import { EMPTY_SYNTHETIC, syntheticRequest, type SyntheticSnapshot, type SyntheticSettings, type SyntheticTransform } from "./syntheticSeries.js";
 import type { SyntheticSeriesManager, SyntheticView } from "./syntheticSeriesManager.js";
 
 let nextBindingId = 1;
@@ -18,8 +18,8 @@ export class SyntheticChartBinding {
   private error: string | null = null;
 
   constructor(private manager: SyntheticSeriesManager, private source: MarketSeries,
-    private reader: SeriesWindowView, private transform: "renko" | "heikin-ashi",
-    private settings: { mode?: string; boxSize?: number; atrLength?: number }) {}
+    private reader: SeriesWindowView, private transform: SyntheticTransform,
+    private settings: SyntheticSettings) {}
 
   start() {
     this.refreshRange();

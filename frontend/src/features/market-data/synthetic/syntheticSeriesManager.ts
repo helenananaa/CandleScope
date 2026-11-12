@@ -1,5 +1,5 @@
 import { API_BASE, httpBaseToWsBase } from "../../../services/apiConfig.js";
-import { adoptSynthetic, EMPTY_SYNTHETIC, type SyntheticRequest, type SyntheticSnapshot } from "./syntheticSeries.js";
+import { adoptSynthetic, EMPTY_SYNTHETIC, type SyntheticRequest, type SyntheticRow, type SyntheticSnapshot } from "./syntheticSeries.js";
 
 export interface SyntheticSocket {
   onopen: (() => void) | null;
@@ -17,6 +17,7 @@ interface Entry {
   listeners: Set<() => void>;
   attempts: number;
   closed: boolean;
+  pendingRows: number;
 }
 export interface SyntheticView {
   getSnapshot(): SyntheticSnapshot;
@@ -35,7 +36,7 @@ export class SyntheticSeriesManager {
     let entry = this.entries.get(key);
     if (!entry) {
       if (this.entries.size >= 32) throw new Error("Synthetic subscription budget exceeded");
-      entry = { request, state: EMPTY_SYNTHETIC, socket: null, timer: null, listeners: new Set(), attempts: 0, closed: false };
+      entry = { request, state: EMPTY_SYNTHETIC, socket: null, timer: null, listeners: new Set(), attempts: 0, closed: false, pendingRows: 0 };
       this.entries.set(key, entry);
     }
     const target = entry;
@@ -79,16 +80,42 @@ export class SyntheticSeriesManager {
     entry.socket = socket;
     const current = () => !entry.closed && entry.socket === socket;
     let first = true;
+    let assembly: { state: SyntheticSnapshot; rows: SyntheticRow[]; total: number } | null = null;
     socket.onopen = () => { if (current()) socket.send(JSON.stringify(entry.request)); };
     socket.onmessage = event => {
       if (!current() || event.data === "pong") return;
       try {
         const message: unknown = JSON.parse(event.data);
         const previous = first ? EMPTY_SYNTHETIC : entry.state;
-        const state = adoptSynthetic(previous, message, entry.request);
-        if (first && (message as { type?: string }).type !== "snapshot") throw new Error("Synthetic snapshot required");
-        const totalRows = [...this.entries.values()].reduce((sum, other) => sum + (other === entry ? 0 : other.state.rows.length), 0);
-        if (totalRows + state.rows.length > 20_000) throw new Error("Shared synthetic cache budget exceeded");
+        const envelope = message as Record<string, unknown> | null;
+        let state: SyntheticSnapshot;
+        if (envelope?.["type"] === "snapshot_chunk") {
+          const from = envelope["from_index"], total = envelope["total"], rows = envelope["rows"];
+          if (typeof from !== "number" || !Number.isSafeInteger(from) || from < 0
+            || typeof total !== "number" || !Number.isSafeInteger(total) || total < 0 || total > 50_000
+            || !Array.isArray(rows) || rows.length > entry.request.limit || from + rows.length > total
+            || typeof envelope["complete"] !== "boolean" || (!rows.length && total !== 0)) throw new Error("Invalid synthetic snapshot chunk");
+          const part = adoptSynthetic(EMPTY_SYNTHETIC, { ...envelope, type: "snapshot", total: from + rows.length }, entry.request);
+          if (!assembly) {
+            if (from !== 0) throw new Error("Synthetic snapshot prefix missing");
+            assembly = { state: part, rows: [], total };
+          }
+          if (from !== assembly.rows.length || total !== assembly.total || part.generation !== assembly.state.generation
+            || part.revision !== assembly.state.revision || part.seriesId !== assembly.state.seriesId) throw new Error("Synthetic snapshot changed between chunks");
+          assembly.rows.push(...part.rows);
+          entry.pendingRows = assembly.rows.length;
+          this.checkRows();
+          if (envelope["complete"] !== (entry.pendingRows === total)) throw new Error("Invalid synthetic snapshot completion");
+          if (!envelope["complete"]) return;
+          state = Object.freeze({ ...part, from: 0, total, rows: Object.freeze(assembly.rows) });
+          assembly = null; entry.pendingRows = 0;
+        } else {
+          if (assembly) throw new Error("Synthetic snapshot interrupted");
+          state = adoptSynthetic(previous, message, entry.request);
+          if (first && envelope?.["type"] !== "snapshot") throw new Error("Synthetic snapshot required");
+          if (entry.request.complete_window && envelope?.["type"] === "snapshot" && state.from !== 0) throw new Error("Synthetic snapshot prefix missing");
+        }
+        this.checkRows(entry, state.rows.length);
         first = false;
         entry.attempts = 0;
         this.publish(entry, state);
@@ -100,9 +127,15 @@ export class SyntheticSeriesManager {
     socket.onclose = () => { if (current()) this.recover(entry, "Synthetic connection interrupted"); };
     socket.onerror = () => { if (current()) this.recover(entry, "Synthetic connection interrupted"); };
   }
+  private checkRows(replace?: Entry, rows = 0) {
+    const total = [...this.entries.values()].reduce((sum, entry) =>
+      sum + (entry === replace ? rows : entry.state.rows.length) + entry.pendingRows, 0);
+    if (total > 100_000) throw new Error("Shared synthetic cache budget exceeded");
+  }
   private recover(entry: Entry, reason: string) {
     const socket = entry.socket;
     entry.socket = null;
+    entry.pendingRows = 0;
     socket?.close();
     if (entry.closed || entry.timer) return;
     this.publish(entry, Object.freeze({ ...entry.state, status: "stale", reason }));

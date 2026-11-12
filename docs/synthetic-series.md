@@ -1,8 +1,9 @@
-# Synthetic series candidate — issue #150
+# Backend synthetic chart series — issue #150
 
-This is the first migration slice: close-source Renko (fixed box and the
-existing display-window ATR rule) and Heikin Ashi. Point & Figure, Kagi and Line
-Break are not migrated by this change. Issue #150 remains open.
+Live-reference charts default to backend computation for Heikin Ashi, Renko,
+Point & Figure, Kagi and Line Break. Fixed and existing display-window ATR
+settings retain their previous semantics. Issue #150 remains open for the
+separate shared indicator/strategy, durable checkpoint and scale qualifications.
 
 ## Ownership
 
@@ -42,16 +43,18 @@ snapshot.
   It preserves the old loaded-window initialization and inferred tick / whole
   window ATR behavior. Changing the loaded range selects another definition.
   ATR/tick recalibration announces a new generation. This mode is display-only.
-* `anchored/1` requires an explicit initialization anchor. Renko additionally
-  requires fixed `box_size` and `min_tick`; ATR is rejected. A missing prefix is
+* `anchored/1` requires an explicit initialization anchor. Non-HA transforms
+  additionally require fixed parameters and explicit `min_tick`; ATR is rejected. A missing prefix is
   unavailable, never permission to initialize from an arbitrary recent tail.
   Source range/finality must be qualified before output is adopted.
 
 Both identities include the complete source identity, transformation settings
-and algorithm version. A source is currently admitted only for crypto with a
-continuous calendar, and every expected source row in the requested range must
-be present. Sparse/no-trade and session-calendar qualification remain open.
-Closed inputs must carry DataManager's trusted finality.
+and algorithm version. The service reuses the source calendar resolved by
+DataManager, including session gaps. A continuous crypto calendar is the fallback
+only when the source declares that identity. Every expected input in the requested
+range must be present; missing calendars for other sources fail explicitly.
+Closed inputs must carry DataManager's trusted finality. A controlled session-gap
+test is not a claim of live qualification for every provider/calendar.
 
 The API reports `strategy_qualified: false`, including for anchored kernels.
 This batch does not connect synthetic OHLC to indicator or strategy execution.
@@ -80,17 +83,23 @@ Each chart binding owns only its source-range demand and display projection.
 There is no mutable shared K-line `SeriesWindowStore` for synthetic records:
 that store's timestamp index would discard equal-time bricks.
 
-The current renderer retains the latest 5,000 output records. Snapshot `before`
-and `total` expose the older output; no complete-history claim is made. Deep
-ordinal paging in the product UI remains open.
+Live charts request `complete_window` snapshots. The service captures one
+immutable output generation and sends chunks of at most 5,000 records. The
+frontend validates order/generation/revision, then atomically publishes the full
+loaded source window (within the 50,000-output calculation limit). Updates queued
+during transfer follow that snapshot. Small fixed boxes therefore do not silently
+lose the first 5,000+ bricks. Independent output-cursor paging remains available
+to backend/HTTP consumers; the UI still navigates through its source-window demand.
 
-## Candidate rollout
+## Default computation and explicit rollback
 
-`VITE_BACKEND_SYNTHETIC_SERIES=1` opts a matched frontend/backend build's
-`LIVE_REFERENCE` market chart surfaces into this candidate for HA and Renko.
-It is off by default pending installed-package acceptance. Other chart types,
-offline/frozen sources and replay keep their existing owners. Enabling the
-candidate never silently falls back when its backend is unavailable.
+`LIVE_REFERENCE` market chart surfaces, including strategy-research live charts,
+use the backend by default for all five synthetic types. No environment opt-in
+is needed. `VITE_BACKEND_SYNTHETIC_SERIES=0` is an explicit build-time rollback
+to the old display owner. Backend failure in the normal default never invokes a
+browser transform. Pure renderer styles still use original bars. Offline/frozen
+sources and replay retain their source-specific owners, so a historical view is
+not silently redirected to current market data.
 
 The chart binding uses the explicit loaded source range to preserve the old
 display mode. A source-window prepend/trim/new right edge can therefore require
@@ -102,16 +111,18 @@ causal strategy-input implementation.
 Limits are explicit: 10,000 source rows (also subject to the DM query limit),
 50,000 generated outputs, 10,000 bricks per input, 32 shared backend instances,
 128 backend consumer leases, 64 MiB estimated shared backend retention, and
-bounded consumer queues. The frontend allows 32 shared subscriptions and 20,000
-total retained output rows. Budget exhaustion reports unavailable/resync rather
+bounded consumer queues. The frontend allows 32 shared subscriptions and 100,000
+total retained/staged output rows. Budget exhaustion reports unavailable/resync rather
 than silently truncating a calculation into a complete result.
 
 ## Validation and remaining acceptance
 
-See [the source qualification record](qa/synthetic-series-150-20261112/README.md).
-The remaining issue scope includes the other three transforms, durable
+See [default-path qualification](qa/synthetic-series-default-20261112/README.md)
+and the retained [first-slice record](qa/synthetic-series-150-20261112/README.md).
+The remaining issue scope includes durable
 checkpoint/restart qualification, pinned immutable replay inputs, indicator and
-strategy adapters, full execution/resource scheduling, production deep paging,
+strategy adapters, full execution/resource scheduling, independent output-cursor UI paging,
 multi-chart performance and native macOS/Windows save/exit/restart evidence.
-Retained frontend algorithms remain offline migration oracles and the explicit
-default-off legacy path; they are not a runtime fallback for enabled candidates.
+Retained frontend algorithms remain offline migration oracles, source-specific
+offline/replay implementations and the explicitly selected rollback path. They
+are not an automatic fallback for live backend failures.

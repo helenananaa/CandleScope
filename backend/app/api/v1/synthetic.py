@@ -40,6 +40,8 @@ class SyntheticConfigRequest(BaseModel):
     box_size: float = Field(default=1, gt=0, allow_inf_nan=False)
     min_tick: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     atr_length: int = Field(default=14, ge=2, le=500)
+    reversal_amount: float = Field(default=3, gt=0, allow_inf_nan=False)
+    number_of_lines: int = Field(default=3, ge=1, le=50)
 
 
 class SyntheticRequest(BaseModel):
@@ -51,6 +53,7 @@ class SyntheticRequest(BaseModel):
     before: int | None = Field(default=None, ge=0, strict=True)
     limit: int = Field(default=5000, ge=1, le=5000)
     generation: str | None = Field(default=None, max_length=64)
+    complete_window: bool = False
 
     def definition(self):
         return SyntheticDefinition(SeriesKey(**self.source.model_dump()),
@@ -88,13 +91,20 @@ async def stream_synthetic(websocket: WebSocket):
             raise SyntheticError("synthetic request too large")
         body = SyntheticRequest.model_validate_json(raw)
         lease = await _service(websocket).attach(body.definition())
-        await send_json_with_timeout(websocket, await lease.snapshot(limit=body.limit))
+        async def send_snapshot():
+            if body.complete_window:
+                async for chunk in lease.snapshot_chunks(limit=body.limit):
+                    await send_json_with_timeout(websocket, chunk)
+            else:
+                await send_json_with_timeout(websocket, await lease.snapshot(limit=body.limit))
+        await send_snapshot()
 
         async def forward():
             while True:
                 message = await lease.next()
                 if message["type"] == "resync":
-                    message = await lease.snapshot(limit=body.limit)
+                    await send_snapshot()
+                    continue
                 await send_json_with_timeout(websocket, message)
 
         async def receive():

@@ -6,13 +6,14 @@ import type { ChartDisplaySubscription } from "../chartDisplaySubscription.js";
 import { useMarketDataWorkspaceResources } from "../marketDataWorkspaceContext.js";
 import { SyntheticSeriesManager } from "./syntheticSeriesManager.js";
 import { SyntheticChartBinding } from "./syntheticChartBinding.js";
+import { isSyntheticTransform, type SyntheticSettings } from "./syntheticSeries.js";
 
 const idleSubscribe = () => () => {};
 const idleStatus = () => "";
 
 export function useBackendSyntheticSeries(input: {
   source: MarketSeries | null; reader: SeriesWindowView | null; chartType: MainChartType;
-  settings: { mode?: string; boxSize?: number; atrLength?: number };
+  settings: SyntheticSettings;
   display: ChartDisplaySubscription | null;
 }) {
   const { reader, chartType } = input;
@@ -23,9 +24,9 @@ export function useBackendSyntheticSeries(input: {
   const settingsKey = JSON.stringify(input.settings);
   const binding = useMemo(() => {
     const source = JSON.parse(sourceKey) as MarketSeries | null;
-    if (!source || !reader || (chartType !== "renko" && chartType !== "heikin-ashi")) return null;
+    if (!source || !reader || !isSyntheticTransform(chartType)) return null;
     return new SyntheticChartBinding(manager, source, reader, chartType,
-      JSON.parse(settingsKey) as { mode?: string; boxSize?: number; atrLength?: number });
+      JSON.parse(settingsKey) as SyntheticSettings);
   }, [chartType, reader, manager, settingsKey, sourceKey]);
   useEffect(() => {
     binding?.start();

@@ -427,7 +427,8 @@ class DataManager(DataManagerCore):
         from app.data_engine.synthetic_series.service import SyntheticSeriesService, SyntheticSourcePort
         self.synthetic = SyntheticSeriesService(SyntheticSourcePort(
             self.bars.query, self.subscribe, self.unsubscribe, self.bars.ensure_stream,
-            self.release_stream, self.event_bus.stream_versions, self.query_row_limit),
+            self.release_stream, self.event_bus.stream_versions, self.query_row_limit,
+            self.query_engine._calendar_for),
             max_bytes=self._cfg.memory_owner_budgets.get("synthetic-series", 64 * 1024 * 1024))
         self.trades = TradeDataFacade(self._require_trade_flow_service)
         self.liquidations = LiquidationDataFacade(self._require_liquidation_service)

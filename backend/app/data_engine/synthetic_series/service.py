@@ -14,7 +14,7 @@ from app.core.async_cleanup import finish_cleanup
 from app.core.bounded_executor import ExecutorBusyError
 from app.data_engine.data_manager.models import DataEventType, SeriesKey
 from app.data_engine.history.calendar import AlwaysOpenCalendar
-from .core import MAX_SOURCE_ROWS, SyntheticConfig, SyntheticError, SyntheticKernel
+from .core import MAX_SOURCE_ROWS, TRANSFORMS, SyntheticConfig, SyntheticError, SyntheticKernel
 
 
 @dataclass(frozen=True)
@@ -26,6 +26,7 @@ class SyntheticSourcePort:
     release_stream: object
     clock: object
     query_row_limit: int
+    calendar_for: object = None
 
 
 @dataclass(frozen=True)
@@ -40,8 +41,6 @@ class SyntheticDefinition:
             raise SyntheticError("invalid analysis range")
         if self.config.semantics == "display-window/1" and self.through is None:
             raise SyntheticError("display mode requires an explicit analysis range")
-        if self.source.asset_class != "crypto" or self.source.session_variant != "continuous":
-            raise SyntheticError("synthetic calendar not qualified for this source")
 
     def to_dict(self):
         return {"source": asdict(self.source), "config": self.config.to_dict(),
@@ -63,6 +62,21 @@ class SyntheticLease:
 
     async def snapshot(self, *, before=None, limit=2000, generation=None):
         return await self.instance.snapshot(before=before, limit=limit, generation=generation)
+
+    async def snapshot_chunks(self, *, limit=5000):
+        if not isinstance(limit, int) or not 1 <= limit <= 5000:
+            raise SyntheticError("invalid synthetic page size")
+        async with self.instance.lock:
+            envelope = self.instance.envelope("snapshot_chunk")
+            output = self.instance.kernel.output
+        # Kernel updates replace owned arrays/points; this captured generation
+        # remains immutable while the source continues producing ordered deltas.
+        total = len(output)
+        for start in range(0, max(1, total), limit):
+            end = min(total, start + limit)
+            rows = await run_preparation(self.instance.wire_rows, output,
+                envelope["generation"], start, end)
+            yield {**envelope, "from_index": start, "rows": rows, "total": total, "complete": end == total}
 
     async def next(self):
         message = await self.queue.get()
@@ -94,6 +108,7 @@ class _Instance:
         self.version = None
         self.source_revision = None
         self.start_task = None
+        self.calendar = None
 
     def source_options(self):
         key = self.definition.source
@@ -109,9 +124,12 @@ class _Instance:
             "strategy_qualified": False}
 
     def rows(self, start=0, end=None):
-        result = deepcopy(self.kernel.output[start:end])
+        return self.wire_rows(self.kernel.output, self.generation, start, end)
+
+    def wire_rows(self, output, generation, start=0, end=None):
+        result = deepcopy(output[start:end])
         for index, row in enumerate(result, start):
-            row["id"] = f"{self.key}:{self.generation}:{index}"
+            row["id"] = f"{self.key}:{generation}:{index}"
             row["ordinal"] = index
         return result
 
@@ -139,6 +157,12 @@ class _Instance:
         source = self.service.source
         options = self.source_options()
         async with self.lock:
+            resolver = getattr(source, "calendar_for", None)
+            self.calendar = await run_storage(resolver, self.definition.source) if callable(resolver) else None
+            if self.calendar is None:
+                if self.definition.source.asset_class != "crypto" or self.definition.source.session_variant != "continuous":
+                    raise SyntheticError("source calendar unavailable")
+                self.calendar = AlwaysOpenCalendar()
             self.subscription = source.subscribe(self.on_event, **options,
                 continuity="gap_aware", on_recovery=self.on_recovery)
             self.stream_claimed = True
@@ -158,7 +182,7 @@ class _Instance:
         end = self.definition.through
         if end is None:
             end = int(time.time())
-        calendar = AlwaysOpenCalendar()
+        calendar = self.calendar
         start_ms, end_ms = self.definition.anchor * 1000, end * 1000
         count = calendar.count_expected(start_ms, end_ms, self.definition.source.interval)
         if count > MAX_SOURCE_ROWS or count > self.service.source.query_row_limit:
@@ -245,7 +269,7 @@ class _Instance:
                 # K-line completeness follows the source calendar, never the
                 # spacing between synthetic bricks.
                 last = self.kernel.source[-1]["time"]
-                if row["time"] > last and row["time"] * 1000 != AlwaysOpenCalendar().next_expected_open(last * 1000, self.definition.source.interval):
+                if row["time"] > last and row["time"] * 1000 != self.calendar.next_expected_open(last * 1000, self.definition.source.interval):
                     raise SyntheticError("source continuity lost")
                 if event.bar.is_closed and not event.bar.trusted_final:
                     raise SyntheticError("source finality not qualified")
@@ -320,7 +344,7 @@ class SyntheticSeriesService:
         return {**self.memory_usage(), "max_instances": self.max_instances, "max_bytes": self.max_bytes,
             "consumers": sum(len(instance.leases) for instance in self.instances.values()),
             "status": "closed" if self.closed else "available",
-            "supported_transforms": ["renko", "heikin-ashi"], "strategy_qualified": False}
+            "supported_transforms": list(TRANSFORMS), "strategy_qualified": False}
 
     def pending_rows(self):
         return sum(lease.queued_rows for instance in tuple(self.instances.values())
