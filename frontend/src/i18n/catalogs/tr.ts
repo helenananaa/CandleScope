@@ -4469,6 +4469,7 @@ export const tr = {
   "common.cancel": "İptal",
   "common.close": "Kapat",
   "common.notifications": "Bildirimler",
+  "shell.moreActions": "Diğer işlemler",
   "serverError.code.historyOriginUnavailable": "Borsa geçmişinin başlangıcı okunamadı. Birazdan tekrar deneyin.",
   "serverError.code.subscribeFailed": "Gerçek zamanlı veri aboneliği başarısız oldu",
   "local.qualityStatus.accepted": "Kabul edildi",

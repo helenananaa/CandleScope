@@ -5077,6 +5077,7 @@ export const zhCN = {
   "common.cancel": "取消",
   "common.close": "关闭",
   "common.notifications": "通知",
+  "shell.moreActions": "更多操作",
   "serverError.code.historyOriginUnavailable": "暂时无法读取交易所的历史起点，请稍后重试",
   "serverError.code.subscribeFailed": "实时数据订阅失败",
   "local.qualityStatus.accepted": "已通过",

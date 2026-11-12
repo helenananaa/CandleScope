@@ -8,7 +8,7 @@ import { useChartSurfaceRuntime } from "../../../chart-adapter/useChartSurfaceRu
 import IntervalSelector from "../../../components/IntervalSelector.js";
 import MarketPageFrame from "../../../app/MarketPageFrame.js";
 import MarketStatusBar from "../../../app/MarketStatusBar.js";
-import MarketTopBarFrame from "../../../app/MarketTopBarFrame.js";
+import AppHeader from "../../../app/AppHeader.js";
 import MarketWorkspaceFrame from "../../../app/MarketWorkspaceFrame.js";
 import { getLocale, t } from "../../../i18n/index.js";
 import { useChartSession } from "../../chart-session/useChartSession.js";
@@ -228,28 +228,28 @@ export default function ResearchMarketChart({ runtime }: { runtime: BacktestRese
   return (
     <MarketPageFrame
       topBar={(
-        <MarketTopBarFrame
+        <AppHeader
           source="research"
           className="research-top-bar"
-          navigation={(
+          badge={(
             <button type="button" className="research-task-home-button" onClick={() => runtime.actions.selectTask(null)}>
               {t("research.task.home")}
             </button>
           )}
-          identity={(
+          context={(
             <div className="research-market-identity">
               <strong>{chartSession.view.symbol}</strong>
               <span>{chartSession.view.exchange} · {chartSession.view.marketType} · {chartSession.view.interval}</span>
             </div>
           )}
-          controls={(
+          tools={(
             <div className="research-source-switch" role="group" aria-label={t("research.aria.chartSource")}>
               <button type="button" disabled={runtime.view.runtimeMode === "LOCAL_OFFLINE"} title={runtime.view.runtimeMode === "LOCAL_OFFLINE" ? t("research.source.liveOffline") : ""} data-active={effectiveSourceMode === "LIVE_REFERENCE"} onClick={() => runtime.actions.selectSourceMode("LIVE_REFERENCE")}>{t("research.source.live")}</button>
               <button type="button" disabled={frozenDisabled} title={frozenDisabled ? t("research.source.frozenUnavailable") : ""} data-active={effectiveSourceMode === "FROZEN_SNAPSHOT"} onClick={() => runtime.actions.selectSourceMode("FROZEN_SNAPSHOT")}>{t("research.source.frozen")}</button>
               <button type="button" disabled={runModeDisabled} title={runModeDisabled ? t("research.source.runUnavailable") : ""} data-active={effectiveSourceMode === "RUN_RESULT"} onClick={() => runtime.actions.selectSourceMode("RUN_RESULT")}>{t("research.source.run")}</button>
             </div>
           )}
-          trailing={(
+          extras={(
             <div className="research-top-actions">
               <span className="research-advanced-state" data-enabled={runtime.view.advancedEnabled}>
                 {runtime.view.advancedEnabled ? t("research.advanced.on") : t("research.advanced.off")}

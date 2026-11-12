@@ -4832,6 +4832,7 @@ export const en = {
   "common.cancel": "Cancel",
   "common.close": "Close",
   "common.notifications": "Notifications",
+  "shell.moreActions": "More actions",
   "serverError.code.historyOriginUnavailable": "Couldn't read where the exchange's history begins. Try again shortly.",
   "serverError.code.subscribeFailed": "Couldn't subscribe to live data",
   "local.qualityStatus.accepted": "Accepted",

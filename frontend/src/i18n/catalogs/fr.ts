@@ -4470,6 +4470,7 @@ export const fr = {
   "common.cancel": "Annuler",
   "common.close": "Fermer",
   "common.notifications": "Notifications",
+  "shell.moreActions": "Autres actions",
   "serverError.code.historyOriginUnavailable": "Impossible de lire le début de l’historique de la bourse. Réessayez dans un instant.",
   "serverError.code.subscribeFailed": "Échec de l’abonnement aux données en temps réel",
   "local.qualityStatus.accepted": "Accepté",

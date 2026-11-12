@@ -4469,6 +4469,7 @@ export const th = {
   "common.cancel": "ยกเลิก",
   "common.close": "ปิด",
   "common.notifications": "การแจ้ง",
+  "shell.moreActions": "การทำงานเพิ่มเติม",
   "serverError.code.historyOriginUnavailable": "อ่านจุดเริ่มต้นของประวัติข้อมูลกระดานเทรดไม่ได้ โปรดลองอีกครั้งในอีกสักครู่",
   "serverError.code.subscribeFailed": "สมัครรับข้อมูลเรียลไทม์ไม่สำเร็จ",
   "local.qualityStatus.accepted": "ผ่าน",

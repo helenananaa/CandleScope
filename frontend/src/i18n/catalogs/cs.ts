@@ -4469,6 +4469,7 @@ export const cs = {
   "common.cancel": "Zrušit",
   "common.close": "Zavřít",
   "common.notifications": "Oznámení",
+  "shell.moreActions": "Další akce",
   "serverError.code.historyOriginUnavailable": "Začátek historie burzy se nepodařilo načíst. Zkuste to za chvíli znovu.",
   "serverError.code.subscribeFailed": "Přihlášení k odběru dat v reálném čase se nezdařilo",
   "local.qualityStatus.accepted": "Přijato",

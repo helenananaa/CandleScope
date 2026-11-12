@@ -5084,6 +5084,7 @@ export const ptBR = {
   "common.cancel": "Cancelar",
   "common.close": "Fechar",
   "common.notifications": "Notificações",
+  "shell.moreActions": "Mais ações",
   "serverError.code.historyOriginUnavailable": "Não foi possível ler onde começa o histórico da corretora. Tente novamente em instantes.",
   "serverError.code.subscribeFailed": "Falha ao assinar os dados em tempo real",
   "local.qualityStatus.accepted": "Aceito",

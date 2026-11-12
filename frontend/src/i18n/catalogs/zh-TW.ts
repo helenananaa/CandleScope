@@ -4521,6 +4521,7 @@ export const zhTW = {
   "common.cancel": "取消",
   "common.close": "關閉",
   "common.notifications": "通知",
+  "shell.moreActions": "更多操作",
   "serverError.code.historyOriginUnavailable": "暫時無法讀取交易所的歷史起點，請稍後重試",
   "serverError.code.subscribeFailed": "即時資料訂閱失敗",
   "local.qualityStatus.accepted": "已通過",

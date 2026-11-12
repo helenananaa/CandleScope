@@ -4469,6 +4469,7 @@ export const id = {
   "common.cancel": "Batal",
   "common.close": "Tutup",
   "common.notifications": "Notifikasi",
+  "shell.moreActions": "Tindakan lainnya",
   "serverError.code.historyOriginUnavailable": "Tidak dapat membaca awal riwayat bursa. Coba lagi sebentar lagi.",
   "serverError.code.subscribeFailed": "Gagal berlangganan data waktu nyata",
   "local.qualityStatus.accepted": "Diterima",

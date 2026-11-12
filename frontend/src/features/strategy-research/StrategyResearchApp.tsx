@@ -71,7 +71,7 @@ import { loadStrategyResearchHostHealth } from "./strategyResearchHostHealth.js"
 import type { StrategyResearchNetworkDiagnostics } from "./strategyResearchHostHealth.js";
 import { createStrategyResearchAdvancedHref } from "./strategyResearchAdvanced.js";
 import { StrategyResearchCompatNotice } from "./StrategyResearchCompatNotice.js";
-import { CapabilityRailIcon, ProfileRailIcon } from "../../app/marketRailIcons.js";
+import { ProfileRailIcon } from "../../app/marketRailIcons.js";
 import { MarketDataWorkspaceProvider } from "../market-data/MarketDataWorkspaceProvider.js";
 import { datasetIdentityChanged } from "../backtest/native/nativeExecutionSettings.js";
 
@@ -617,19 +617,12 @@ export default function StrategyResearchApp({
     </>
   );
   const advancedWorkspace = intent.kind === "advanced" || intent.kind === "deep-link";
-  const controls = (
-    <>
-      <button type="button" className="ui-control" onClick={() => setAccountsOpen((open) => !open)} aria-expanded={accountsOpen}>{t("reader.title")}</button>
-      <button type="button" className="ui-control" onClick={() => setHistoryOpen((open) => !open)} aria-expanded={historyOpen}>{t("ux.history")}</button>
-      <button
-        type="button"
-        className="settings-btn indicator-toggle-btn"
-        onClick={() => setSettingsOpen(true)}
-        title={t("shell.settings")}
-        aria-label={t("shell.settings")}
-      >
-        <span aria-hidden="true" style={{ display: "flex" }}><CapabilityRailIcon /></span>
-      </button>
+  const header = {
+    actions: [
+      { id: "saved-accounts", label: t("reader.title"), hasPopup: "dialog" as const, expanded: accountsOpen, onSelect: () => setAccountsOpen((open) => !open) },
+      { id: "run-history", label: t("ux.history"), hasPopup: "dialog" as const, expanded: historyOpen, onSelect: () => setHistoryOpen((open) => !open) },
+    ],
+    panels: (
       <button
         type="button"
         className={`indicator-toggle-btn ${indicatorPanelOpen ? "active" : ""}`}
@@ -637,14 +630,16 @@ export default function StrategyResearchApp({
         onClick={() => setIndicatorPanel({ scope: chartUiScope, open: !indicatorPanelOpen })}
         title={t("shell.indicators")}
         aria-label={t("shell.indicators")}
+        aria-expanded={indicatorPanelOpen}
       >
         <span aria-hidden="true" style={{ display: "flex" }}><ProfileRailIcon /></span>
         {activeIndicatorCount > 0 && (
           <span className="indicator-badge">{activeIndicatorCount}</span>
         )}
       </button>
-    </>
-  );
+    ),
+    settings: { onOpen: () => setSettingsOpen(true) },
+  };
   const extraSurfaces = (
     <>
       {/* Right-hand drawers on the overlay stack: opening one closes the others. */}
@@ -717,7 +712,7 @@ export default function StrategyResearchApp({
     onOpenLibrary: () => dispatch({ type: "source/libraryOpen", open: true }),
     onSelectCurrentChart: selectCurrentChart,
     pageExportRef,
-    controls,
+    header,
     runtimeMode: runtime.runtimeMode,
     drawer,
     script,

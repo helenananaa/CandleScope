@@ -4469,6 +4469,7 @@ export const nl = {
   "common.cancel": "Annuleren",
   "common.close": "Sluiten",
   "common.notifications": "Meldingen",
+  "shell.moreActions": "Meer acties",
   "serverError.code.historyOriginUnavailable": "Kon het begin van de beursgeschiedenis niet lezen. Probeer het zo opnieuw.",
   "serverError.code.subscribeFailed": "Abonneren op realtime gegevens is mislukt",
   "local.qualityStatus.accepted": "Geaccepteerd",
