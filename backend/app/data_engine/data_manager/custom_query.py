@@ -491,9 +491,9 @@ class CustomIntervalQueryService:
     @staticmethod
     def _record_mixed_fallback(result, report):
         result.metadata.update(report)
-        for name, value in (("storage_reads", report.get("mixed_page_reads", 0) + report.get("mixed_probe_reads", 0) + report.get("mixed_count_reads", 0)),
-                            ("storage_rows", report.get("mixed_page_rows", 0) + report.get("mixed_probe_rows", 0) + report.get("mixed_count_rows", 0)),
-                            ("storage_failures", report.get("mixed_count_failures", 0))):
+        for name, value in (("storage_reads", report.get("mixed_page_reads", 0) + report.get("mixed_probe_reads", 0) + report.get("mixed_count_reads", 0) + report.get("mixed_presence_reads", 0)),
+                            ("storage_rows", report.get("mixed_page_rows", 0) + report.get("mixed_probe_rows", 0) + report.get("mixed_count_rows", 0) + report.get("mixed_presence_rows", 0)),
+                            ("storage_failures", report.get("mixed_count_failures", 0) + report.get("mixed_presence_failures", 0))):
             result.metadata[name] = result.metadata.get(name, 0) + value
 
     def snapshot(self) -> dict[str, int | float]:

@@ -298,6 +298,15 @@ class QueryEngine:
             symbol=source.symbol, interval=source.interval, start_ms=start_ms, end_ms=end_ms - 1,
             exchange=source.exchange, market_type=source.market_type, series_identity=source.identity)])[0]
 
+    def _probe_canonical_history_ranges(self, storage, source, ranges):
+        from app.data_engine.aggregation.blocks import BlockUnavailable
+        try:
+            return self._measure_storage_read(_QueryIOMetrics(), lambda: storage.query_bars_range_presence(
+                source.symbol, source.interval, ranges, exchange=source.exchange,
+                market_type=source.market_type, series_identity=source.identity))
+        except Exception as exc:
+            raise BlockUnavailable("canonical range presence read failed") from exc
+
     # ── Public: Main Query ───────────────────────────────────
 
     @revision_checked_query

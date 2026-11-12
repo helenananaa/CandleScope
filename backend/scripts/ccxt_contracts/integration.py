@@ -42,6 +42,7 @@ def main() -> int:
         "test_shared_aggregation_blocks.py", "test_shared_blocks_integration.py",
         "test_history_block_reader.py",
         "test_history_cover_plan.py", "test_mixed_history_reader.py", "test_default_mixed_history_query.py",
+        "test_mixed_history_precedence.py",
         "test_component_incremental.py",
         "test_interval_policy_consistency.py", "test_bar_aggregator_contracts.py",
         "test_kline_order_flow_metrics.py", "test_history_calendar.py",
