@@ -2,8 +2,11 @@
 
 Live-reference, frozen/result, imported-data and replay charts default to backend
 computation for Heikin Ashi, Renko, Point & Figure, Kagi and Line Break. Fixed and existing display-window ATR
-settings retain their previous semantics. Issue #150 remains open for the
-separate strategy execution, durable checkpoint and scale qualifications.
+settings retain their previous semantics. Issue #150 follows the
+[closure scope agreed on 2026-11-13](https://github.com/helenananaa/CandleScope/issues/150):
+core correctness and resource boundaries, a minimal actual desktop flow, basic
+performance evidence and integration. Durable display caches and broader scale
+qualification are independent follow-up work, not prerequisites for this delivery.
 
 ## Ownership
 
@@ -213,13 +216,37 @@ than silently truncating a calculation into a complete result.
 See [pinned-source qualification](qa/synthetic-series-pinned-20261112/README.md),
 [default-path qualification](qa/synthetic-series-default-20261112/README.md)
 and the retained [first-slice record](qa/synthetic-series-150-20261112/README.md).
-The remaining issue scope includes durable
-checkpoint/restart qualification, additional plugin chart-clock contracts and
-additional strategy execution modes, full execution/resource scheduling, independent output-cursor UI paging,
-multi-chart performance and native macOS/Windows save/exit/restart evidence.
+The current closure checklist is maintained in
+[issue #150](https://github.com/helenananaa/CandleScope/issues/150); its original
+requirements and expanded matrix remain preserved as history. Source/browser and
+installed runtime evidence qualify only their recorded revisions. Remaining
+closure gates are a minimal actual desktop flow on the final candidate (including
+settings save, exit and reopen/rebuild), a short same-input single/four-chart
+performance check, and successful final integration. This scope update does not
+mark those gates complete.
+
+Basic bounds, cancellation, shared leases, revision fences, no future reads and
+real-price execution remain required. A display cache may be rebuilt from its
+pinned trusted source; user configuration, strategy execution state and committed
+receipts must still survive. Matching results are compared within the same
+semantic mode and fidelity. Display-window ATR, causal close-source and actual
+price-event histories have explicitly distinct contracts.
+
+Independent follow-ups are
+[persistence/rebuild acceleration #380](https://github.com/helenananaa/CandleScope/issues/380),
+[output-cursor UI navigation #381](https://github.com/helenananaa/CandleScope/issues/381),
+[capacity/mixed-load/endurance #382](https://github.com/helenananaa/CandleScope/issues/382),
+and [cross-platform expanded release acceptance #383](https://github.com/helenananaa/CandleScope/issues/383).
+General executor and scheduling work remains with #120; this feature does not
+require a particular process/thread implementation if its correctness, bounds and
+basic response checks pass. Current UI source-window navigation remains valid
+when output is complete within declared limits. Additional plugin/language
+contracts require explicit qualification and do not expand #150 indefinitely.
+
 Retained frontend algorithms remain offline migration oracles and the explicitly
-selected rollback path. They
-are not an automatic fallback for live backend failures.
+selected rollback path. They are not an automatic fallback for live backend
+failures. Historical QA files are unchanged and do not imply acceptance of the
+new scope or final installed package.
 
 
 ## Strategy signals follow chart type by default
