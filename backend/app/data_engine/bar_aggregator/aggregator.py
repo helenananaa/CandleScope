@@ -1280,21 +1280,16 @@ class BarAggregator:
                 bar = buffer.pop(0)
                 token = object()
                 pipeline.eviction_claims[token] = bar
-                handed_off = False
-
-                def transferred():
-                    nonlocal handed_off
-                    handed_off = True
-
+                handoff = None
                 try:
-                    with self._publisher._observe_source_handoff(bar, transferred):
+                    with self._publisher._observe_source_handoff(bar) as handoff:
                         await emit(bar)
                 except BaseException:
                     # Source-backed failures/cancellation already belong to the
                     # publisher's original-ID retry snapshot, possibly even
                     # acknowledged by a concurrent retry. Never enqueue raw
                     # data a second time. Otherwise preserve the original item.
-                    if not handed_off:
+                    if handoff is None or not handoff.transferred:
                         buffer.insert(0, bar)
                     raise
                 finally:

@@ -185,3 +185,27 @@ def test_actual_engine_capacity_eviction_transfers_once_to_source_retry(expired)
         assert accepted[0][1]==('bar.expired' if expired else 'bar.closed')
         assert not pipeline.eviction_claims
     asyncio.run(run())
+
+
+@pytest.mark.parametrize('source_refs',[False,True])
+def test_background_callback_context_does_not_retain_completed_raw_payload(source_refs):
+    async def run():
+        import gc,weakref
+        class Index(dict):pass
+        agg,state=await populated(source_refs=source_refs)
+        state.source_snapshots=Index(state.source_snapshots)
+        held=weakref.ref(state.source_snapshots)
+        pipeline=agg.get_pipeline('97m');pipeline.bar_state.evicted_closed.append(state)
+        agg.remove_target('BTCUSDT','97m')
+        released=asyncio.Event();children=[]
+        async def background():await released.wait()
+        async def callback(event):children.append(asyncio.create_task(background()))
+        agg.publisher.on_bar_closed(callback)
+        try:
+            await agg._drain_eviction_buffers(pipeline)
+            del state
+            gc.collect()
+            assert held() is None
+        finally:
+            released.set();await asyncio.gather(*children)
+    asyncio.run(run())
