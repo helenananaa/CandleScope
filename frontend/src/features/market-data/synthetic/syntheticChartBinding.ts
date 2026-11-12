@@ -1,8 +1,7 @@
 import type { DisplayRow } from "../../chart-representation/chartRepresentationTypes.js";
-import type { MarketSeries } from "../marketDataTypes.js";
 import type { SeriesWindowView } from "../window/seriesWindowView.js";
 import { buildSeriesWindowKey } from "../window/seriesWindowKey.js";
-import { EMPTY_SYNTHETIC, syntheticRequest, type SyntheticSnapshot, type SyntheticSettings, type SyntheticTransform } from "./syntheticSeries.js";
+import { EMPTY_SYNTHETIC, syntheticRequest, type SyntheticSnapshot, type SyntheticSettings, type SyntheticTransform, type BackendSyntheticSource } from "./syntheticSeries.js";
 import type { SyntheticSeriesManager, SyntheticView } from "./syntheticSeriesManager.js";
 
 let nextBindingId = 1;
@@ -16,8 +15,10 @@ export class SyntheticChartBinding {
   private listeners = new Set<() => void>();
   private rangeKey = "";
   private error: string | null = null;
+  private captureAbort: AbortController | null = null;
+  private epoch = 0;
 
-  constructor(private manager: SyntheticSeriesManager, private source: MarketSeries,
+  constructor(private manager: SyntheticSeriesManager, private source: BackendSyntheticSource,
     private reader: SeriesWindowView, private transform: SyntheticTransform,
     private settings: SyntheticSettings) {}
 
@@ -26,7 +27,7 @@ export class SyntheticChartBinding {
     this.releaseSource = this.reader.subscribe(() => this.refreshRange());
   }
   private refreshRange() {
-    if (this.reader.seriesKey !== buildSeriesWindowKey(this.source)) {
+    if (this.reader.seriesKey !== (this.source.syntheticSeriesKey ?? buildSeriesWindowKey(this.source))) {
       this.detach();
       this.rangeKey = "";
       this.error = "preparing";
@@ -34,15 +35,27 @@ export class SyntheticChartBinding {
       return;
     }
     const first = this.reader.first(), last = this.reader.last();
-    const key = first && last ? `${first.time}:${last.time}` : "";
+    const key = first && last ? `${first.time}:${last.time}${this.source.syntheticCapture ? `:${this.reader.version}` : ""}` : "";
     if (key === this.rangeKey) return;
     this.detach();
     this.rangeKey = key;
     this.error = null;
     if (first && last) {
       try {
-        this.view = this.manager.acquire(syntheticRequest(this.source, this.transform, this.settings, first.time, last.time));
-        this.releaseView = this.view.subscribe(() => this.notify());
+        const request = syntheticRequest(this.source, this.transform, this.settings, first.time, last.time);
+        const capture = this.source.syntheticCapture;
+        if (capture) {
+          const controller = new AbortController(), epoch = this.epoch; this.captureAbort = controller;
+          void this.manager.acquireCaptured(request, this.reader.snapshot(), capture.scope, capture.cutoff_ms, controller.signal).then(view => {
+            if (controller.signal.aborted || epoch !== this.epoch) { view.release(); return; }
+            this.view = view; this.releaseView = view.subscribe(() => this.notify()); this.notify();
+          }).catch(error => {
+            if (!controller.signal.aborted && epoch === this.epoch) { this.error = String(error); this.notify(); }
+          });
+        } else {
+          this.view = this.manager.acquire(request);
+          this.releaseView = this.view.subscribe(() => this.notify());
+        }
       } catch (error) {
         this.error = error instanceof Error ? error.message : String(error);
       }
@@ -50,6 +63,7 @@ export class SyntheticChartBinding {
     this.notify();
   }
   private detach() {
+    this.epoch++; this.captureAbort?.abort(); this.captureAbort = null;
     this.releaseView?.(); this.releaseView = null;
     this.view?.release(); this.view = null;
   }

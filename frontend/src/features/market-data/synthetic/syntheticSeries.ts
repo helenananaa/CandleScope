@@ -10,6 +10,18 @@ export function isSyntheticTransform(value: string): value is SyntheticTransform
 export interface SyntheticSettings {
   mode?: string; boxSize?: number; atrLength?: number; reversalAmount?: number; numberOfLines?: number;
 }
+export type SyntheticOrigin =
+  | { kind: "CAPTURED_WINDOW"; capture_id: string; cutoff_ms: number }
+  | { kind: "RUN_RESULT"; run_id: string; config_hash: string; report_hash: string; chart_hash: string }
+  | { kind: "FROZEN_SNAPSHOT"; dataset_id: string; data_epoch: string; snapshot_hash: string; run_id: string; chart_hash: string }
+  | { kind: "LOCAL_DATASET"; dataset_id: string; data_epoch: string }
+  | { kind: "REPLAY"; session_id: string; track_id: string; data_epoch: string;
+      revealed_boundary_ms: number; source_sequence: number; history_epoch?: string };
+export type BackendSyntheticSource = MarketSeries & {
+  syntheticOrigin?: SyntheticOrigin;
+  syntheticSeriesKey?: string;
+  syntheticCapture?: { scope: string; cutoff_ms: number };
+};
 export interface SyntheticRequest {
   source: Record<string, string>;
   config: { transform: SyntheticTransform; semantics: "display-window/1";
@@ -19,6 +31,7 @@ export interface SyntheticRequest {
   through: number;
   limit: number;
   complete_window: boolean;
+  origin?: SyntheticOrigin;
 }
 
 export interface SyntheticRow extends DisplayRow {
@@ -50,7 +63,7 @@ function positiveSetting(value: number | undefined, fallback: number): number {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : fallback;
 }
-export function syntheticRequest(source: MarketSeries, transform: SyntheticTransform,
+export function syntheticRequest(source: BackendSyntheticSource, transform: SyntheticTransform,
   settings: SyntheticSettings, anchor: number, through: number): SyntheticRequest {
   const identity = resolveKlineSeriesIdentity(source.exchange, source);
   return {
@@ -66,6 +79,7 @@ export function syntheticRequest(source: MarketSeries, transform: SyntheticTrans
         : boundedInteger(settings.reversalAmount, 3, 1, 100),
       number_of_lines: boundedInteger(settings.numberOfLines, 3, 1, 50) },
     anchor, through, limit: 5000, complete_window: true,
+    ...(source.syntheticOrigin ? { origin: source.syntheticOrigin } : {}),
   };
 }
 
@@ -129,6 +143,11 @@ export function adoptSynthetic(previous: SyntheticSnapshot, raw: unknown, reques
   if (message["protocol"] !== "candlescope.synthetic/1") throw new Error("Unsupported synthetic protocol");
   const definition = record(message["definition"]);
   const source = record(definition["source"]), config = record(definition["config"]);
+  const origin = definition["origin"];
+  if (request.origin ? (!origin || typeof origin !== "object" || Array.isArray(origin)
+    || Object.keys(origin).length !== Object.keys(request.origin).length
+    || Object.entries(request.origin).some(([key, value]) => (origin as Record<string, unknown>)[key] !== value))
+    : origin != null) throw new Error("Synthetic source origin changed");
   if (config["algorithm"] !== "close-source/1") throw new Error("Unsupported synthetic algorithm");
   if (Object.entries(request.source).some(([key, value]) => source[key] !== value)
     || Object.entries(request.config).some(([key, value]) => config[key] !== value)

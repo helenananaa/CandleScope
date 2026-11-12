@@ -3,6 +3,7 @@ import { ChartErrorBoundary } from "../../app/AppProviders.js";
 import { createPriceLineSource } from "../../chart-adapter/externalPriceLineSource.js";
 import { useChartSurfaceRuntime } from "../../chart-adapter/useChartSurfaceRuntime.js";
 import SingleChartPanes from "../../components/SingleChartPanes.js";
+import { capturedSyntheticSource } from "../market-data/synthetic/capturedSyntheticSource.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { normalizeMainChartType } from "../../shared/mainChartTypes.js";
@@ -437,6 +438,8 @@ export default function QuickReplayOverlay({
               ref={chartSurface.ref}
               drawingsEnabled={false}
               seriesStore={store}
+              backendSyntheticSource={capturedSyntheticSource({ ...instrument, interval: request.interval },
+                store.seriesKey, `quick:${request.accountId}:${trade.id}`, cursor * 1000)}
               symbol={trade.symbol}
               interval={request.interval}
               loading={loading}

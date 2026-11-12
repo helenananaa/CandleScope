@@ -23,6 +23,7 @@ import {
 } from "../chart-session/visibleRangeStorage.js";
 import { t } from "../../i18n/index.js";
 import type { LocalDatasetManifest } from "../local-data/localDataTypes.js";
+import { BACKEND_SYNTHETIC_SERIES_ENABLED } from "../market-data/synthetic/backendSyntheticFeature.js";
 import {
   formatResearchRows,
 } from "../research-data/researchDataFormat.js";
@@ -178,6 +179,11 @@ function StrategyResearchChartPanes({
         <SingleChartPanes
           ref={chartSurfaceRef}
           seriesStore={runtime.seriesStore}
+          backendSyntheticSource={BACKEND_SYNTHETIC_SERIES_ENABLED ? {
+            symbol: manifest.symbol, interval, exchange: "local", marketType: "local_dataset",
+            syntheticSeriesKey: String(runtime.seriesStore.seriesKey ?? "unavailable"),
+            syntheticOrigin: { kind: "LOCAL_DATASET", dataset_id: manifest.dataset_id, data_epoch: manifest.data_epoch },
+          } : null}
           symbol={manifest.symbol}
           drawingKeyBase={importedDrawingKeyBase(manifest)}
           interval={interval}

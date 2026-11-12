@@ -5,6 +5,7 @@ import { indicatorSignature, type ControlCellObservation } from "../app-control/
 import { historyStudyCommands } from "./historyStudyCommands.js";
 import { ChartErrorBoundary } from "../../app/AppProviders.js";
 import SingleChartPanes from "../../components/SingleChartPanes.js";
+import { capturedSyntheticSource } from "../market-data/synthetic/capturedSyntheticSource.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { normalizeMainChartType } from "../../shared/mainChartTypes.js";
@@ -163,6 +164,7 @@ export default function HistoryStudyOverlay({ cellId, revision, workspaceId, lin
       {(error || notesError) ? <p className="trading-error" role="alert">{t("study.error")}</p> : null}
       {error ? <button className="trading-button" type="button" onClick={onRetry}>{t("study.retry")}</button> : null}
       <ChartErrorBoundary><SingleChartPanes ref={surface.ref} seriesStore={store} symbol={series.symbol} interval={series.interval}
+        backendSyntheticSource={capturedSyntheticSource(series, store.seriesKey, `study:${input.id}`, cursorMs)}
         drawingKeyBase={`history-study:${input.id}`} drawingReadOnly drawingsHidden={drawingsHidden ?? false}
         loading={false} dataMeta={dataMeta} datasetKey={input.id} upColor={style.upColor} downColor={style.downColor}
         {...(style.chartType === undefined ? {} : { chartType: normalizeMainChartType(style.chartType) })}

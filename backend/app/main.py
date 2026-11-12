@@ -961,6 +961,7 @@ async def shutdown_event() -> None:
 async def _shutdown_components() -> None:
     replay_core = getattr(app.state, "data_manager_core", None)
     if replay_core is not None:
+        await replay_core.synthetic.close()
         await replay_core.shutdown_strategy()
         await replay_core.shutdown_replay(step_timeout=5)
     await stop_extensions(app)

@@ -1,0 +1,191 @@
+{
+  "scope": "Real Chromium, production-minified browser fixture and real React lifecycle; not native application qualification",
+  "browser": "Chrome/157.0.8103.40",
+  "result": {
+    "result": {
+      "type": "object",
+      "value": {
+        "live": {
+          "status": "PASS",
+          "scope": "default MarketChartSurface + workspace data center + real DataManager HTTP/WS; all five transforms",
+          "initialBricks": 9,
+          "updatedBricks": 11,
+          "haPreviewClose": 118,
+          "extra": [
+            {
+              "transform": "point-and-figure",
+              "initial": 3,
+              "extendedClose": 118,
+              "retracted": 3
+            },
+            {
+              "transform": "kagi",
+              "initial": 3,
+              "extendedClose": 118,
+              "retracted": 3
+            },
+            {
+              "transform": "line-break",
+              "initial": 3,
+              "extendedClose": 118,
+              "retracted": 2
+            }
+          ],
+          "reconnect": true,
+          "shared": {
+            "instances": 1,
+            "leases": 1
+          },
+          "browserComputation": 0,
+          "state": {
+            "instances": 0,
+            "leases": 0
+          }
+        },
+        "pinned": {
+          "status": "PASS",
+          "cases": [
+            {
+              "kind": "FROZEN_SNAPSHOT",
+              "transform": "heikin-ashi",
+              "outputs": 5
+            },
+            {
+              "kind": "FROZEN_SNAPSHOT",
+              "transform": "renko",
+              "outputs": 218
+            },
+            {
+              "kind": "FROZEN_SNAPSHOT",
+              "transform": "point-and-figure",
+              "outputs": 3
+            },
+            {
+              "kind": "FROZEN_SNAPSHOT",
+              "transform": "kagi",
+              "outputs": 3
+            },
+            {
+              "kind": "FROZEN_SNAPSHOT",
+              "transform": "line-break",
+              "outputs": 3
+            },
+            {
+              "kind": "RUN_RESULT",
+              "transform": "heikin-ashi",
+              "outputs": 5
+            },
+            {
+              "kind": "RUN_RESULT",
+              "transform": "renko",
+              "outputs": 218
+            },
+            {
+              "kind": "RUN_RESULT",
+              "transform": "point-and-figure",
+              "outputs": 3
+            },
+            {
+              "kind": "RUN_RESULT",
+              "transform": "kagi",
+              "outputs": 3
+            },
+            {
+              "kind": "RUN_RESULT",
+              "transform": "line-break",
+              "outputs": 3
+            },
+            {
+              "kind": "LOCAL_DATASET",
+              "transform": "heikin-ashi",
+              "outputs": 5
+            },
+            {
+              "kind": "LOCAL_DATASET",
+              "transform": "renko",
+              "outputs": 218
+            },
+            {
+              "kind": "LOCAL_DATASET",
+              "transform": "point-and-figure",
+              "outputs": 3
+            },
+            {
+              "kind": "LOCAL_DATASET",
+              "transform": "kagi",
+              "outputs": 3
+            },
+            {
+              "kind": "LOCAL_DATASET",
+              "transform": "line-break",
+              "outputs": 3
+            },
+            {
+              "kind": "CAPTURED_WINDOW",
+              "transform": "heikin-ashi",
+              "outputs": 5
+            },
+            {
+              "kind": "CAPTURED_WINDOW",
+              "transform": "renko",
+              "outputs": 218
+            },
+            {
+              "kind": "CAPTURED_WINDOW",
+              "transform": "point-and-figure",
+              "outputs": 3
+            },
+            {
+              "kind": "CAPTURED_WINDOW",
+              "transform": "kagi",
+              "outputs": 3
+            },
+            {
+              "kind": "CAPTURED_WINDOW",
+              "transform": "line-break",
+              "outputs": 3
+            },
+            {
+              "kind": "REPLAY",
+              "transform": "heikin-ashi",
+              "outputs": 2
+            },
+            {
+              "kind": "REPLAY",
+              "transform": "renko",
+              "outputs": 10
+            },
+            {
+              "kind": "REPLAY",
+              "transform": "point-and-figure",
+              "outputs": 1
+            },
+            {
+              "kind": "REPLAY",
+              "transform": "kagi",
+              "outputs": 1
+            },
+            {
+              "kind": "REPLAY",
+              "transform": "line-break",
+              "outputs": 1
+            }
+          ],
+          "forwardReplay": true,
+          "capturedRewind": true,
+          "browserComputation": 0,
+          "state": {
+            "instances": 0,
+            "leases": 0
+          },
+          "scope": "default frozen/result surfaces and replay/imported chart bindings; real saved/local/replay backend owners"
+        }
+      }
+    }
+  },
+  "immediateWorkerCount": 0,
+  "remainingWorkers": [],
+  "exceptions": [],
+  "passed": true,
+  "browserExitCode": 0
+}

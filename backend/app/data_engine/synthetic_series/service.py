@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from copy import copy, deepcopy
+from collections import OrderedDict
 from dataclasses import asdict, dataclass
 import hashlib
 import json
@@ -14,7 +15,7 @@ from app.core.async_cleanup import finish_cleanup
 from app.core.bounded_executor import ExecutorBusyError
 from app.data_engine.data_manager.models import DataEventType, SeriesKey
 from app.data_engine.history.calendar import AlwaysOpenCalendar
-from .core import MAX_SOURCE_ROWS, TRANSFORMS, SyntheticConfig, SyntheticError, SyntheticKernel
+from .core import MAX_SOURCE_ROWS, TRANSFORMS, SyntheticConfig, SyntheticError, SyntheticKernel, normalize_source
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,7 @@ class SyntheticDefinition:
     config: SyntheticConfig
     anchor: int
     through: int | None = None
+    origin: str | None = None  # canonical JSON of a pinned, non-live source reference
 
     def __post_init__(self):
         if self.anchor < 0 or (self.through is not None and self.through < self.anchor):
@@ -44,7 +46,8 @@ class SyntheticDefinition:
 
     def to_dict(self):
         return {"source": asdict(self.source), "config": self.config.to_dict(),
-            "anchor": self.anchor, "through": self.through}
+            "anchor": self.anchor, "through": self.through,
+            **({"origin": json.loads(self.origin)} if self.origin is not None else {})}
 
     @property
     def key(self):
@@ -325,6 +328,36 @@ class _Instance:
                 await self.service.source.release_stream(**self.source_options(), consumer_id=self.consumer_id)
 
 
+class _SnapshotInstance(_Instance):
+    """A captured source prefix; never acquires a live market subscription."""
+
+    def __init__(self, service, definition, loader):
+        super().__init__(service, definition)
+        self.loader = loader
+
+    async def start(self):
+        async with self.lock:
+            rows, source_revision = await self.loader()
+            self.loader = None
+            if (not rows or len(rows) > MAX_SOURCE_ROWS
+                    or rows[0]["time"] != self.definition.anchor
+                    or rows[-1]["time"] != self.definition.through
+                    or any(not self.definition.anchor <= row["time"] <= self.definition.through for row in rows)):
+                raise SyntheticError("pinned source window incomplete or outside its requested prefix")
+            candidate = SyntheticKernel(self.definition.config)
+            await run_preparation(candidate.replace_snapshot, rows)
+            self.service.check_capacity(self, candidate)
+            self.kernel = candidate
+            self.source_revision = source_revision
+            self.version = {"stable": True, "origin": json.loads(self.definition.origin)}
+            self.generation = hashlib.sha256(json.dumps(
+                [self.key, source_revision], sort_keys=True).encode()).hexdigest()[:32]
+            self.status, self.reason, self.revision = "ready", None, 1
+
+    async def recover_subscription(self):
+        raise SyntheticError("pinned source unavailable")
+
+
 class SyntheticSeriesService:
     """One owner per full identity; no per-chart transforms or exchange I/O."""
 
@@ -334,14 +367,17 @@ class SyntheticSeriesService:
         self.lock = asyncio.Lock()
         self.max_instances, self.max_bytes = max_instances, max_bytes
         self.closed = False
+        self.captures = OrderedDict()
 
     def memory_usage(self):
         instances = tuple(self.instances.values())
         rows = sum(len(instance.kernel.source) + len(instance.kernel.output) for instance in instances)
+        rows += sum(len(capture[1]) for capture in self.captures.values())
         return {"estimated_bytes": (rows + self.pending_rows()) * 1536, "instances": len(self.instances)}
 
     def diagnostics(self):
         return {**self.memory_usage(), "max_instances": self.max_instances, "max_bytes": self.max_bytes,
+            "captured_sources": len(self.captures),
             "consumers": sum(len(instance.leases) for instance in self.instances.values()),
             "status": "closed" if self.closed else "available",
             "supported_transforms": list(TRANSFORMS), "strategy_qualified": False}
@@ -352,16 +388,67 @@ class SyntheticSeriesService:
 
     def _memory_roots(self):
         # Do not expose source ports/bound DM methods as owned cache roots.
-        return [root for instance in tuple(self.instances.values())
+        roots = [root for instance in tuple(self.instances.values())
             for root in (instance.kernel, *(lease.queue._queue for lease in tuple(instance.leases.values())))]
+        return [self.captures, *roots]
 
     def check_capacity(self, target, candidate):
         rows = sum(len(instance.kernel.source) + len(instance.kernel.output)
             for instance in self.instances.values() if instance is not target)
+        rows += sum(len(capture[1]) for capture in self.captures.values())
         if (rows + len(candidate.source) + len(candidate.output)) * 1536 > self.max_bytes:
             raise SyntheticError("shared synthetic memory budget exceeded")
 
-    async def attach(self, definition):
+    async def register_capture(self, source, rows, scope, cutoff_ms):
+        """Admit a browser-owned displayed prefix as an ephemeral source copy.
+
+        This is explicit client-captured display data, never a trusted market
+        revision or strategy input. Bounded LRU copies can be re-registered by
+        active consumers after eviction or backend restart.
+        """
+        def prepare():
+            if not 1 <= len(rows) <= MAX_SOURCE_ROWS:
+                raise SyntheticError("captured source budget exceeded")
+            normalized = [normalize_source(row) for row in rows]
+            if (any(a["time"] >= b["time"] for a, b in zip(normalized, normalized[1:]))
+                    or any(row["time"] * 1000 > cutoff_ms for row in normalized)):
+                raise SyntheticError("captured prefix order or boundary invalid")
+            identity = {"source": asdict(source), "scope": scope, "cutoff_ms": cutoff_ms}
+            key = hashlib.sha256(json.dumps([identity, normalized], sort_keys=True).encode()).hexdigest()
+            return key, (identity, normalized)
+        key, capture = await run_preparation(prepare)
+        async with self.lock:
+            if self.closed:
+                raise SyntheticError("synthetic service closed")
+            if key in self.captures:
+                self.captures.move_to_end(key)
+                return key
+            needed = len(capture[1]) * 1536
+            while self.captures and (len(self.captures) >= 32
+                    or self.memory_usage()["estimated_bytes"] + needed > self.max_bytes):
+                self.captures.popitem(last=False)
+            if self.memory_usage()["estimated_bytes"] + needed > self.max_bytes:
+                raise SyntheticError("captured source memory budget exceeded")
+            self.captures[key] = capture
+            return key
+
+    async def captured_seed(self, definition):
+        origin = json.loads(definition.origin)
+        async with self.lock:
+            capture = self.captures.get(origin["capture_id"])
+            if capture is None:
+                raise SyntheticError("captured source expired; register the displayed prefix again")
+            identity, rows = capture
+            if identity["source"] != asdict(definition.source) or identity["cutoff_ms"] != origin["cutoff_ms"]:
+                raise SyntheticError("captured source identity changed")
+            self.captures.move_to_end(origin["capture_id"])
+            return [row for row in rows if definition.anchor <= row["time"] <= definition.through], origin["capture_id"]
+
+    async def attach(self, definition, *, seed_loader=None):
+        if definition.origin is None and self.source is None:
+            raise SyntheticError("live market source unavailable in this runtime")
+        if definition.origin is not None and not callable(seed_loader):
+            raise SyntheticError("pinned source reader unavailable")
         async with self.lock:
             if self.closed:
                 raise SyntheticError("synthetic service closed")
@@ -372,7 +459,8 @@ class SyntheticSeriesService:
             if instance is None:
                 if len(self.instances) >= self.max_instances:
                     raise SyntheticError("synthetic instance budget exceeded")
-                instance = _Instance(self, definition)
+                instance = (_SnapshotInstance(self, definition, seed_loader)
+                    if definition.origin is not None else _Instance(self, definition))
                 self.instances[definition.key] = instance
                 instance.start_task = asyncio.create_task(instance.start())
             lease = SyntheticLease(self, instance)
@@ -406,6 +494,7 @@ class SyntheticSeriesService:
     async def close(self):
         async with self.lock:
             self.closed = True
+            self.captures.clear()
             instances = list(self.instances.values())
             self.instances.clear()
             for instance in instances:

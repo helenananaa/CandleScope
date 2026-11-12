@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { adoptSynthetic, EMPTY_SYNTHETIC, syntheticRequest } from "./syntheticSeries.js";
+import { adoptSynthetic, EMPTY_SYNTHETIC, syntheticRequest, type SyntheticRequest } from "./syntheticSeries.js";
 import { SyntheticSeriesManager, type SyntheticSocket } from "./syntheticSeriesManager.js";
 import { SyntheticChartBinding } from "./syntheticChartBinding.js";
 import { BackendProjectionStore } from "../../chart-representation/backendProjectionStore.js";
 import { SeriesWindowStore } from "../window/seriesWindowStore.js";
 import { buildSeriesWindowKey } from "../window/seriesWindowKey.js";
 import { resolveBackendSyntheticEnabled } from "./backendSyntheticFeature.js";
+import { backendSyntheticSourceFor } from "../../market-chart-platform/marketChartSurfaceModel.js";
+import { createFrozenSnapshotSource, createRunResultSource } from "../../market-chart-platform/marketChartSourceRuntime.js";
+import { replaySyntheticSource } from "../../replay/replaySyntheticSource.js";
+import { capturedSyntheticSource } from "./capturedSyntheticSource.js";
 
 const source = { exchange: "binance", marketType: "spot", symbol: "BTCUSDT", interval: "1m" };
 const request = syntheticRequest(source, "renko", { mode: "traditional", boxSize: 2 }, 60, 120);
@@ -136,4 +140,98 @@ test("backend renderer adapter consumes supplied prices without a local transfor
   sockets[0]!.receive(snapshot(99));
   assert.equal(binding.rows().length, 0);
   binding.close(); manager.closeAll();
+});
+
+test("frozen and saved-result charts select backend references without sending browser prices", () => {
+  const bars = [{ time: 60, open: 100, high: 100, low: 100, close: 100 },
+    { time: 120, open: 106, high: 106, low: 106, close: 106 }];
+  const frozen = createFrozenSnapshotSource({ session: source, datasetId: "dataset", dataEpoch: "epoch",
+    snapshotHash: "snapshot", runId: "run", chartHash: "chart", bars });
+  const result = createRunResultSource({ session: source, runId: "run", configHash: "config",
+    reportHash: "report", chartHash: "chart", bars });
+  const sockets: Socket[] = [], manager = new SyntheticSeriesManager(() => {
+    const socket = new Socket(); sockets.push(socket); return socket;
+  });
+  const bindings = [frozen, result].map(chart => {
+    const backend = backendSyntheticSourceFor(chart);
+    assert.ok(backend);
+    const binding = new SyntheticChartBinding(manager, backend, chart.marketData.view.seriesStore!, "renko", { boxSize: 2 });
+    binding.start(); return binding;
+  });
+  assert.equal(sockets.length, 2, "different frozen/result contracts cannot share a live-series identity");
+  for (const socket of sockets) socket.onopen?.();
+  const requests = sockets.map(socket => JSON.parse(socket.sent[0]!) as SyntheticRequest & { bars?: unknown; rows?: unknown; ohlcv?: unknown });
+  assert.deepEqual(requests.map(request => request.origin?.kind), ["FROZEN_SNAPSHOT", "RUN_RESULT"]);
+  assert.deepEqual(requests[0]!.origin, frozen.syntheticOrigin);
+  assert.deepEqual(requests[1]!.origin, result.syntheticOrigin);
+  assert.ok(requests.every(request => !request.bars && !request.rows && !request.ohlcv));
+  assert.throws(() => adoptSynthetic(EMPTY_SYNTHETIC, snapshot(), requests[0]!), /origin/);
+  const message = { ...snapshot(), definition: { ...snapshot().definition, origin: requests[0]!.origin } };
+  assert.equal(adoptSynthetic(EMPTY_SYNTHETIC, message, requests[0]!).rows.length, 3);
+  assert.throws(() => adoptSynthetic(EMPTY_SYNTHETIC, message, requests[1]!), /origin/);
+  bindings.forEach(binding => binding.close()); frozen.dispose(); result.dispose(); manager.closeAll();
+});
+
+test("replay cursor changes invalidate same-window series and unavailable prefixes never select local math", () => {
+  const input = { market: source, seriesKey: "replay-window", sessionId: "session", trackId: "track",
+    dataEpoch: "revision", revealedBoundaryMs: 120_000, sourceSequence: 1 };
+  const first = replaySyntheticSource(input)!;
+  const later = replaySyntheticSource({ ...input, sourceSequence: 2 })!;
+  const earlier = replaySyntheticSource({ ...input, revealedBoundaryMs: 119_999, sourceSequence: 0 })!;
+  const definitions = [first, later, earlier].map(source => syntheticRequest(source, "renko", {}, 60, 120));
+  assert.equal(new Set(definitions.map(request => JSON.stringify(request))).size, 3);
+  assert.deepEqual(definitions.map(request => request.origin?.kind), ["REPLAY", "REPLAY", "REPLAY"]);
+  const unavailable = replaySyntheticSource({ ...input, revealedBoundaryMs: null })!;
+  assert.ok(unavailable, "loading replay must still choose the backend renderer path");
+  const reader = new SeriesWindowStore({ seriesKey: input.seriesKey });
+  reader.replace([{ time: 60, open: 100, high: 100, low: 100, close: 100 }]);
+  let opened = 0;
+  const manager = new SyntheticSeriesManager(() => { opened++; return new Socket(); });
+  const binding = new SyntheticChartBinding(manager, unavailable, reader, "renko", {});
+  binding.start();
+  assert.equal(opened, 0); assert.equal(binding.status(), "preparing");
+  binding.close(); manager.closeAll();
+});
+
+test("browser-owned historical prefixes register once, re-register on reconnect and fence rewinds", async () => {
+  const requests: Array<{ rows: unknown[]; cutoff_ms: number }> = [];
+  const sockets: Socket[] = [];
+  const fetcher: typeof fetch = async (_url, options) => {
+    const body = JSON.parse(String(options?.body)) as { rows: unknown[]; cutoff_ms: number };
+    requests.push(body);
+    return new Response(JSON.stringify({ kind: "CAPTURED_WINDOW", capture_id: String(body.rows.length).repeat(64), cutoff_ms: body.cutoff_ms }));
+  };
+  const manager = new SyntheticSeriesManager(() => { const socket = new Socket(); sockets.push(socket); return socket; }, fetcher);
+  const reader = new SeriesWindowStore({ seriesKey: "study" });
+  const rows = [{ time: 60, open: 100, high: 100, low: 100, close: 100 }, { time: 120, open: 106, high: 106, low: 106, close: 106 }];
+  reader.replace(rows);
+  const binding = new SyntheticChartBinding(manager, capturedSyntheticSource(source, "study", "study:input", 120_000)!, reader, "renko", {});
+  const settle = () => new Promise(resolve => setTimeout(resolve, 10));
+  binding.start(); await settle();
+  assert.equal(requests.length, 1); assert.equal(requests[0]?.rows.length, 2);
+  sockets[0]!.onopen?.();
+  const wire = JSON.parse(sockets[0]!.sent[0]!) as SyntheticRequest;
+  assert.equal(wire.origin?.kind, "CAPTURED_WINDOW"); assert.equal(Object.hasOwn(wire, "rows"), false);
+  sockets[0]!.close(); await new Promise(resolve => setTimeout(resolve, 550));
+  assert.equal(requests.length, 2, "reconnect restores an evicted or restarted backend capture");
+  assert.equal(sockets.length, 2);
+  reader.replace(rows.slice(0, 1)); await settle();
+  assert.equal(requests.at(-1)?.rows.length, 1, "rewind cannot register hidden future rows");
+  assert.equal(sockets[1]!.closed, true);
+  sockets[1]!.receive(snapshot()); assert.equal(binding.rows().length, 0);
+  binding.close(); manager.closeAll(); assert.equal(manager.diagnostics().sharedSeries, 0);
+});
+
+test("disposal during captured-prefix registration cannot acquire a late transport", async () => {
+  let resolve!: (response: Response) => void;
+  const fetcher: typeof fetch = () => new Promise<Response>(done => { resolve = done; });
+  let sockets = 0;
+  const manager = new SyntheticSeriesManager(() => { sockets++; return new Socket(); }, fetcher);
+  const reader = new SeriesWindowStore({ seriesKey: "study" });
+  reader.replace([{ time: 60, open: 100, high: 100, low: 100, close: 100 }]);
+  const binding = new SyntheticChartBinding(manager, capturedSyntheticSource(source, "study", "study:input", 60_000)!, reader, "renko", {});
+  binding.start(); binding.close(); manager.closeAll();
+  resolve(new Response(JSON.stringify({ kind: "CAPTURED_WINDOW", capture_id: "a".repeat(64), cutoff_ms: 60_000 })));
+  await new Promise(done => setTimeout(done, 10));
+  assert.equal(sockets, 0); assert.equal(manager.diagnostics().sharedSeries, 0);
 });

@@ -281,7 +281,8 @@ import type {
 import type { ChartDataCommitMeta } from "../features/market-data/useChartDataRuntime.js";
 import type { LoadMoreLeft } from "../features/market-data/useChartLoadMoreLeft.js";
 import { TransferredViewportHistory } from "./transferredViewportHistory";
-import type { KlineBar, MarketSeries } from "../features/market-data/marketDataTypes.js";
+import type { KlineBar } from "../features/market-data/marketDataTypes.js";
+import type { BackendSyntheticSource } from "../features/market-data/synthetic/syntheticSeries.js";
 import type { SeriesWindowView } from "../features/market-data/window/seriesWindowView.js";
 import type { PriceBoxSizeMode } from "../features/settings/chartAppearanceSettings.js";
 import type { MainChartType } from "../shared/mainChartTypes.js";
@@ -293,7 +294,7 @@ export interface SingleChartPanesProps {
   suspended?: boolean;
   displayScheduler?: ChartDisplayScheduler;
   seriesStore?: SeriesWindowView | null;
-  backendSyntheticSource?: MarketSeries | null;
+  backendSyntheticSource?: BackendSyntheticSource | null;
   contractVolume?: boolean;
   symbol: string;
   drawingKeyBase?: string;

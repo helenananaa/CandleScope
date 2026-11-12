@@ -147,6 +147,8 @@ export default function ResearchMarketChart({ runtime }: { runtime: BacktestRese
         datasetId: frozenIdentity.dataset_id,
         dataEpoch: frozenIdentity.data_epoch,
         snapshotHash: frozenIdentity.snapshot_hash,
+        runId: run.run_id,
+        chartHash: chart.chart_hash,
         bars: chart.bars.map((bar) => ({ ...bar })),
       });
     }

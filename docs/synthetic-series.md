@@ -1,7 +1,7 @@
 # Backend synthetic chart series — issue #150
 
-Live-reference charts default to backend computation for Heikin Ashi, Renko,
-Point & Figure, Kagi and Line Break. Fixed and existing display-window ATR
+Live-reference, frozen/result, imported-data and replay charts default to backend
+computation for Heikin Ashi, Renko, Point & Figure, Kagi and Line Break. Fixed and existing display-window ATR
 settings retain their previous semantics. Issue #150 remains open for the
 separate shared indicator/strategy, durable checkpoint and scale qualifications.
 
@@ -29,6 +29,11 @@ exchange data, write ordinary K-line buckets, or call HTTP routes. Computation
 uses the existing bounded preparation executor; storage reads use the existing
 bounded storage executor. Work for each instance is serial. These are thread
 executors; this slice does not establish process-level CPU isolation.
+
+`DataManagerCore.synthetic` also exists in `LOCAL_OFFLINE` mode without a live
+market source. The live DataManager supplies its admitted bar port; the offline
+core accepts only captured/pinned seeds. Both owners close their leases during
+application shutdown.
 
 Backend consumers use `await dm.synthetic.attach(definition)`, then
 `lease.snapshot(...)`, `lease.next()` and `await lease.close()`. Identical full
@@ -67,7 +72,9 @@ mapping. Real-price execution and supported language contracts are unchanged.
 * `WS /api/v1/synthetic/stream`: one immutable definition per connection.
   Send the same request body as the first frame. Receive a snapshot followed by
   ordered patches, status changes and explicit resnapshots.
-* The request contains source identity/configuration/range, never browser OHLCV.
+* Transform query/stream requests contain source identity/configuration/range,
+  never browser OHLCV. Browser-owned historical views explicitly register a
+  bounded displayed prefix through the separate capture endpoint described below.
 * Output IDs are series ID + generation + ordinal. Equal source timestamps do
   not deduplicate bricks. Snapshot/page cursors refer to output ordinals and
   validate the generation.
@@ -91,15 +98,52 @@ during transfer follow that snapshot. Small fixed boxes therefore do not silentl
 lose the first 5,000+ bricks. Independent output-cursor paging remains available
 to backend/HTTP consumers; the UI still navigates through its source-window demand.
 
+## Frozen and replay sources
+
+The optional immutable `origin` is part of the complete series identity:
+
+* `RUN_RESULT` reads the completed run's saved chart and verifies config, report
+  and chart receipts. `FROZEN_SNAPSHOT` also binds dataset/epoch/snapshot identity
+  to the saved chart that supplied the existing frozen view.
+* `LOCAL_DATASET` reads the pinned imported candle revision, not its current
+  revision pointer. Resampling stays with the local-data owner.
+* `REPLAY` reads only through the training service's history, source-bucket and
+  tape-projection boundaries. Identity includes session, track, dataset/history
+  epochs, captured public time and source sequence. Tape reads remain sequence
+  bound even within the same timestamp/bucket. Forward playback does not change
+  an older captured request. Querying a display prefix never mutates an account.
+* `CAPTURED_WINDOW` covers browser-owned frozen sources, history study and quick
+  trade review. `POST /api/v1/synthetic/captures` admits their already displayed
+  prefix, validates OHLC/order/bounds and returns a content identity. Subsequent
+  transform requests use that identity. This is explicitly client-captured
+  display data, not a trusted exchange revision or strategy input. Hidden future
+  rows are not registered. Local-origin policy applies to registration and every
+  consumer, including consumers attaching to an existing shared instance.
+
+Immutable owners acquire no live bar subscriptions, stream leases or backfill.
+They reuse the normal chunked snapshot protocol, shared frontend replicas and
+renderer mapping. Changing a replay cursor or input revision selects another
+identity; cancellation and late-response fences prevent adopting the old result.
+Historical partial coarse buckets retain their partial flags. Immutable kernels
+calculate their complete captured window and reject live mutation, rather than
+dropping a partial oldest bucket or promoting it to a trusted close.
+
+Captured copies use a 32-entry LRU within the shared backend memory budget.
+They are temporary: active consumers re-register on reconnect after eviction or
+backend restart. Pending uploads cancel with their chart; registered input rows
+also count against the frontend shared-row budget. This is bounded window work,
+not a claim of constant-time stepping or durable synthetic checkpoints.
+
 ## Default computation and explicit rollback
 
-`LIVE_REFERENCE` market chart surfaces, including strategy-research live charts,
+Market chart surfaces, including frozen/result and strategy-research charts,
+replay training/review, imported candles, history study and quick trade review,
 use the backend by default for all five synthetic types. No environment opt-in
 is needed. `VITE_BACKEND_SYNTHETIC_SERIES=0` is an explicit build-time rollback
 to the old display owner. Backend failure in the normal default never invokes a
-browser transform. Pure renderer styles still use original bars. Offline/frozen
-sources and replay retain their source-specific owners, so a historical view is
-not silently redirected to current market data.
+browser transform. Pure renderer styles still use original bars. Historical
+views retain their source-specific owners and captured clocks while computation
+runs on the backend; they are never redirected to current market data.
 
 The chart binding uses the explicit loaded source range to preserve the old
 display mode. A source-window prepend/trim/new right edge can therefore require
@@ -112,17 +156,18 @@ Limits are explicit: 10,000 source rows (also subject to the DM query limit),
 50,000 generated outputs, 10,000 bricks per input, 32 shared backend instances,
 128 backend consumer leases, 64 MiB estimated shared backend retention, and
 bounded consumer queues. The frontend allows 32 shared subscriptions and 100,000
-total retained/staged output rows. Budget exhaustion reports unavailable/resync rather
+total retained/staged output and captured-input rows. Budget exhaustion reports unavailable/resync rather
 than silently truncating a calculation into a complete result.
 
 ## Validation and remaining acceptance
 
-See [default-path qualification](qa/synthetic-series-default-20261112/README.md)
+See [pinned-source qualification](qa/synthetic-series-pinned-20261112/README.md),
+[default-path qualification](qa/synthetic-series-default-20261112/README.md)
 and the retained [first-slice record](qa/synthetic-series-150-20261112/README.md).
 The remaining issue scope includes durable
-checkpoint/restart qualification, pinned immutable replay inputs, indicator and
+checkpoint/restart qualification, indicator and
 strategy adapters, full execution/resource scheduling, independent output-cursor UI paging,
 multi-chart performance and native macOS/Windows save/exit/restart evidence.
-Retained frontend algorithms remain offline migration oracles, source-specific
-offline/replay implementations and the explicitly selected rollback path. They
+Retained frontend algorithms remain offline migration oracles and the explicitly
+selected rollback path. They
 are not an automatic fallback for live backend failures.

@@ -141,6 +141,7 @@ class SyntheticKernel:
         self._state = {}
         self._confirmed_output = []
         self._confirmed_count = 0
+        self._snapshot_only = False
 
     def _initial(self):
         return {"last": None, "direction": None, "pending": None, "order": 0,
@@ -377,6 +378,33 @@ class SyntheticKernel:
             raise SyntheticError("synthetic output budget exceeded")
         return state, confirmed, count, output
 
+    def replace_snapshot(self, rows):
+        """Project a frozen display window, including historical partial buckets.
+
+        A partial oldest tape bucket is immutable source data, not an unfinished
+        live candle to discard or silently promote to a trusted close. This
+        owner cannot subsequently accept live updates.
+        """
+        if len(rows) > MAX_SOURCE_ROWS:
+            raise SyntheticError("synthetic source budget exceeded")
+        source = [normalize_source(row) for row in rows]
+        if any(left["time"] >= right["time"] for left, right in zip(source, source[1:])):
+            raise SyntheticError("source times must be strictly increasing")
+        options, previous_options = resolve_options(self.config, source), self.options
+        self.options = options
+        output, state = [], self._initial()
+        try:
+            for row in source:
+                self._merge(output, self._step(state, row, not row["is_closed"]))
+                if len(output) > MAX_OUTPUT_ROWS:
+                    raise SyntheticError("synthetic output budget exceeded")
+        except BaseException:
+            self.options = previous_options
+            raise
+        self.source, self.output, self._snapshot_only = source, output, True
+        self._state, self._confirmed_output, self._confirmed_count = {}, [], 0
+        return output
+
     def replace(self, rows):
         if len(rows) > MAX_SOURCE_ROWS:
             raise SyntheticError("synthetic source budget exceeded")
@@ -395,9 +423,12 @@ class SyntheticKernel:
             raise
         self.source, self.output = source, result[3]
         self._state, self._confirmed_output, self._confirmed_count = result[:3]
+        self._snapshot_only = False
         return self.output
 
     def apply(self, row):
+        if self._snapshot_only:
+            raise SyntheticError("immutable snapshot kernel cannot accept live updates")
         row = normalize_source(row)
         source = list(self.source)
         if not source or row["time"] > source[-1]["time"]:
