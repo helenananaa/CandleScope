@@ -1091,6 +1091,10 @@ class DataManager(DataManagerCore):
         """
         return self.query_engine.read_history_blocks(source, start_ms, end_ms, **options)
 
+    def read_mixed_history_blocks(self, target: SeriesKey, start_ms: int, end_ms: int, sources, **options):
+        """Read a composition-qualified target through the shared H127 owner."""
+        return self.query_engine.read_mixed_history_blocks(target, start_ms, end_ms, sources, **options)
+
     @property
     def query_row_limit(self) -> int:
         """Maximum rows returned by one bounded history query."""
