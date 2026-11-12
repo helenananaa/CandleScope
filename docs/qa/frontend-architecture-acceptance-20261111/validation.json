@@ -1,0 +1,51 @@
+{
+  "schema": "candlescope.frontend-architecture-incremental-acceptance/1",
+  "date": "2026-11-12",
+  "productionCommit": "5c1a3cab6c61c8f8f7b78085db8cb211e784c056",
+  "base": "12514a92fb4cc8745e3564538dd68247316e019d",
+  "strategy": "Preserve unchanged-layer evidence; rerun affected tests only after each fix, as requested. No full-suite rerun after final backend-only repair.",
+  "frontend": {
+    "testedCommit": "8defe72d4a7484113ea6b5ae108e471f79f693e1",
+    "functionalPassed": 5087,
+    "performancePassed": 1,
+    "desktopPassed": 134,
+    "wholeRepositoryLintCommit": "8d588134093843dd1caf49216119b1aab53b19f9",
+    "subsequentChangedFrontendFilesLinted": true,
+    "unchangedSinceTestedCommit": true
+  },
+  "backend": {
+    "closedRuntimeAdapterPassed": 93,
+    "finalBackfillStorageApiStreamPassed": 380,
+    "canonicalIdentityBeforeRepairFailures": 6,
+    "canonicalIdentityAfterRepairPassed": 62
+  },
+  "nativeCore": {
+    "measuredCommit": "77358341a0c1e668b54de6634c90653128bae584",
+    "summary": "native-core-77358341a-summary.json",
+    "originalFullRunPassed": false,
+    "failureAfterCompletedCore": "Subsequent OKX startup deadline; retained raw receipt remains failed",
+    "frontendAndIndicatorRuntimeUnchanged": true
+  },
+  "finalNativeIncrement": {
+    "sourceRestartPassed": true,
+    "sourceLaunches": 2,
+    "sources": [
+      "binance",
+      "okx"
+    ],
+    "closedPointsPerRuntimePerChart": 60,
+    "warmRendererRollbackPassed": true,
+    "rollbackLaunches": 3,
+    "withoutWarmupBaselinePassed": false,
+    "sameBackendRuntimeFiles": 10133,
+    "sourcePackageManifest": "native-final-5c1a3cab6-package-source-package-manifest.json.gz"
+  },
+  "limits": [
+    "Local macOS arm64 ad-hoc functional package with automation --no-sandbox; not public notarization/Gatekeeper qualification",
+    "INGESTION_HTTP_TIMEOUT=120; cold trials rebuild renderer/frontend pools while backend/catalog/history persist",
+    "Native ten hot trials cover BTC/ETH 1m; 1m/5m are covered by cold/runtime matrix, not a claimed full Cartesian hot matrix",
+    "No new 30-minute full run at final backfill-only commit; unchanged-layer 77358341a evidence is reused explicitly",
+    "Unprepared old baseline startup timed out; only warm-data renderer/schema/transport rollback passed",
+    "Windows, OS sleep/multi-hour endurance, 16\u201364 charts, fresh fixed-input P0/P3 comparison, full retained heap/allocation/GC and GPU qualification remain outside this run; #123 is not globally closed"
+  ]
+}

@@ -14,11 +14,11 @@ export async function captureRendered(q) {
      if(Array.isArray(value)&&value.length&&value.every(e=>e?.lineConfig&&typeof e.series?.data==='function'))entries=value;
      if(value&&typeof value.data==='function'&&typeof value.seriesType==='function'&&value.seriesType()==='Candlestick')candles=value.data();
     }
-    if(entries&&candles){
+    if(candles){
      seen.add(p.seriesStore);let parent=node,cellId;
      while(parent){cellId??=parent.memoizedProps?.['data-chart-cell-id'];parent=parent.return;}
      charts.push({cellId,symbol:p.symbol,interval:p.interval,candles,
-      lines:entries.map(e=>({id:e.lineConfig.indicatorId,data:e.series.data()}))});
+      lines:(entries??[]).map(e=>({id:e.lineConfig.indicatorId,data:e.series.data()}))});
     }
    }
    visit(node.child);visit(node.sibling);

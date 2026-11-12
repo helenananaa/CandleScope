@@ -1,0 +1,54 @@
+{
+  "scope": "Real Chromium, production-minified browser fixture and real React lifecycle; not native application qualification",
+  "output": "/tmp/cs-frontend-architecture-initial-owner-after",
+  "browser": "Chrome/157.0.8103.40",
+  "result": {
+    "result": {
+      "type": "object",
+      "value": {
+        "passed": true,
+        "checks": [
+          "actual initial-load hook switches BTC → warm ETH with zero HTTP/physical subscribe, 500 final bars plus forming tail, sibling unchanged",
+          "lost critical barrier triggers one bounded read; shared HTTP correction updates the actual candle window",
+          "unstable HTTP read is retryable and leaves the corrected candle intact",
+          "durable correction rejects an older storage snapshot and reloads the affected idle chart before another tick",
+          "after reconnect only a stable read linked to a real stream event restores healthy reuse",
+          "a failed interval rejects queued frames until re-acknowledgement and a verified cutover",
+          "pending source repair preserves disjoint evidence and resolution reads the exact corrected candle",
+          "a generation rollover requires a current tail event even after a linked historical amendment",
+          "tail polling preserves health and an unseen HTTP barrier requires a new matching event",
+          "terminal historical range reaches only the owning status bar; repeat scans and ACK do not change it; verified readback and market switch clear it",
+          "the chart keeps the broker-recovered physical socket and sends one subscription",
+          "a completed bounded cold retry releases the original nonblocking probe's indicator window owner"
+        ],
+        "requests": [
+          "history:BTCUSDT",
+          "history:ETHUSDT",
+          "history:ETHUSDT",
+          "range:ETHUSDT",
+          "range:ETHUSDT",
+          "range:ETHUSDT",
+          "history:ETHUSDT",
+          "history:ETHUSDT",
+          "range:ETHUSDT",
+          "history:ETHUSDT",
+          "latest:ETHUSDT",
+          "history:ETHUSDT",
+          "range:ETHUSDT",
+          "range:ETHUSDT",
+          "history:BTCUSDT",
+          "history:BTCUSDT",
+          "latest:BTCUSDT",
+          "latest:BTCUSDT"
+        ],
+        "physicalStreamsCreated": 2,
+        "scope": "Production-minified Chromium fixture with real React, initial-load hook and candle renderer; controlled market transport, not installed release acceptance"
+      }
+    }
+  },
+  "immediateWorkerCount": 0,
+  "remainingWorkers": [],
+  "exceptions": [],
+  "passed": true,
+  "browserExitCode": null
+}
