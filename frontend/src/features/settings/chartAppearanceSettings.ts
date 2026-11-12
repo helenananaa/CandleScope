@@ -238,6 +238,23 @@ export function settingsFromStorageChange(
   return parseStoredSettings(newValue);
 }
 
+/** Remembers that the first launch with per-chart appearance was checked for the app theme offer. */
+export const CHART_APPEARANCE_OFFER_KEY = "candlescope-chart-appearance-offer-v1";
+
+/**
+ * Whether the app theme offer was already considered on this profile, and marks it considered.
+ * Unreadable storage counts as considered, so the offer never repeats.
+ */
+export function takeChartAppearanceOfferCheck(): boolean {
+  try {
+    if (localStorage.getItem(CHART_APPEARANCE_OFFER_KEY) !== null) return true;
+    localStorage.setItem(CHART_APPEARANCE_OFFER_KEY, new Date().toISOString());
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 function loadSettings(): ChartSettings {
   if (typeof localStorage === "undefined") return normalizeSettings();
   try {
@@ -277,6 +294,16 @@ export interface AppearanceTargets {
   chart: {
     override: ChartAppearanceOverride;
     set(override: ChartAppearanceOverride | null): void;
+    /** Other charts that take this chart's appearance through chart style linking. */
+    linkedCharts?: number;
+  };
+  /**
+   * Present where each chart edits its own appearance in its header menu: Settings then only says
+   * how many charts have their own appearance and can return them all to the app theme.
+   */
+  workspace?: {
+    overrides: number;
+    resetAll(): void;
   };
 }
 

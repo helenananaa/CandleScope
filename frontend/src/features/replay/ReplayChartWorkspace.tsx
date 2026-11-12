@@ -1,7 +1,9 @@
 import { Button, InlineAlert } from "../../components/ui/index.js";
 import ChartNoteFilterFields from "../chart-workspace/ChartNoteFilterFields.js";
 import { normalizeChartAccountOverlay } from "../chart-workspace/chartAccountOverlaySettings.js";
-import { applicationSettingsPatch, buildAppearanceTargets, nextCellChartSettings } from "../chart-workspace/chartWorkspaceChartSettings.js";
+import { applicationSettingsPatch, buildAppearanceTargets, cellsWithAppearanceOverride, hasCellAppearanceOverride, nextCellChartSettings } from "../chart-workspace/chartWorkspaceChartSettings.js";
+import { resolveChartLinkTargetsForChannel } from "../chart-workspace/chartWorkspaceLinkModel.js";
+import ChartAppearanceSection from "../../components/settings/ChartAppearanceSection.js";
 import { normalizeSettings, useCellChartTheme } from "../settings/chartAppearanceSettings.js";
 import { useReplayOperations } from "./useReplayOperations.js";
 import { PageDrawingExportRegistry } from "../export/pageDrawingExport.js";
@@ -167,6 +169,11 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
       setApplication: globalSettings.setSettings,
       cell: cell.chartSettings,
       setCell: (next) => workspace.actions.updateCellChartSettings(cell.id, next),
+      // Each chart sets its own appearance in its header menu; Settings only counts and resets them.
+      workspace: {
+        overrides: cellsWithAppearanceOverride(workspace.view.document, workspace.view.layoutCellIds).length,
+        resetAll: workspace.actions.resetCellAppearance,
+      },
     }),
     inheritApplicationTheme: cell.chartSettings.theme === undefined,
     settings: { ...globalSettings.settings, ...cell.chartSettings },
@@ -178,7 +185,7 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
       const applicationPatch = applicationSettingsPatch(current, next);
       if (Object.keys(applicationPatch).length) globalSettings.setSettings(previous => ({ ...previous, ...applicationPatch }));
     },
-  }), [cell.chartSettings, cell.id, globalSettings, workspace.actions, resolvedTheme]);
+  }), [cell.chartSettings, cell.id, globalSettings, workspace.actions, workspace.view.document, workspace.view.layoutCellIds, resolvedTheme]);
   const cellIntegrity = useMemo<ReplayIntegrityRuntime>(() => integrity.review === null ? integrity : ({
     ...integrity,
     review: {
@@ -450,6 +457,14 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
                 </button>
                 <button type="button" onClick={() => workspace.actions.toggleMaximize(id)} aria-label={t("workspace.tab.layout")}><Icon name="maximize" size={14} /></button>
                 <WorkspaceCellLayoutMenu portal cellId={id} layoutCellIds={workspace.view.layoutCellIds}
+                  appearance={<ChartAppearanceSection targets={buildAppearanceTargets({
+                    application: chartSettingsRuntime.settings,
+                    setApplication: chartSettingsRuntime.setSettings,
+                    cell: cell.chartSettings,
+                    setCell: (next) => workspace.actions.updateCellChartSettings(id, next),
+                    linkedCharts: resolveChartLinkTargetsForChannel(workspace.view.document, id, "chartStyle").length,
+                  })} />}
+                  customized={hasCellAppearanceOverride(cell.chartSettings)}
                   maxCellsPerWindow={workspace.view.maxCellsPerWindow} disabled={workspace.view.layoutLocked}
                   onSplit={workspace.actions.splitCell} onClose={workspace.actions.closeCell} onSwap={workspace.actions.swapCells}>
                   <fieldset>

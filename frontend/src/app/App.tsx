@@ -30,6 +30,9 @@ import {
 } from "../features/chart-workspace/chartLinkCoordinator.js";
 import { chartCellDrawingScopeBase } from "../features/chart-workspace/chartWorkspaceDrawingLink.js";
 import { chartWorkspaceCell } from "../features/chart-workspace/chartWorkspaceDocument.js";
+import { cellsWithAppearanceOverride, sharedCellAppearanceTheme } from "../features/chart-workspace/chartWorkspaceChartSettings.js";
+import { resolveChartLinkTargetsForChannel } from "../features/chart-workspace/chartWorkspaceLinkModel.js";
+import { useChartAppearanceOffer } from "./useChartAppearanceOffer.js";
 import WorkspaceLayoutTree from "../features/chart-workspace/WorkspaceLayoutTree.js";
 import WorkspaceLayoutPicker from "../features/chart-workspace/WorkspaceLayoutPicker.js";
 import { CHART_WORKSPACE_FEATURE_FLAGS } from "../features/chart-workspace/chartWorkspaceCapacity.js";
@@ -597,6 +600,24 @@ function LiveWorkspaceApp() {
     workspace.view.ready,
     workspace.view.window.layoutTree,
   ]);
+  // Charts that set their own appearance in their header menu; Settings counts them and can reset all.
+  const appearanceOverrides = cellsWithAppearanceOverride(workspace.view.document, workspace.view.layoutCellIds).length;
+  const resetCellAppearance = workspace.actions.resetCellAppearance;
+  const appearanceWorkspace = useMemo(
+    () => ({ overrides: appearanceOverrides, resetAll: resetCellAppearance }),
+    [appearanceOverrides, resetCellAppearance],
+  );
+  useChartAppearanceOffer({
+    ready: workspace.view.ready,
+    charts: workspace.view.layoutCellIds.length,
+    shared: sharedCellAppearanceTheme(workspace.view.document, workspace.view.layoutCellIds),
+    appTheme: settings.settings.theme,
+    adopt: (theme) => {
+      settings.setSettings((previous) => ({ ...previous, theme }));
+      resetCellAppearance();
+    },
+  });
+
   const gridClassName = [
     "multi-chart-grid",
     `layout-${workspace.view.layout}`,
@@ -673,6 +694,8 @@ function LiveWorkspaceApp() {
                       onToggleMaximize={workspace.actions.toggleMaximize}
                       onSessionChange={workspace.actions.updateCellSession}
                       onChartSettingsChange={workspace.actions.updateCellChartSettings}
+                      appearanceWorkspace={appearanceWorkspace}
+                      styleLinkedCharts={resolveChartLinkTargetsForChannel(workspace.view.document, cellId, "chartStyle").length}
                       onQuickReplayChange={workspace.actions.updateCellQuickReplay}
                       onAccountOverlayChange={workspace.actions.updateCellAccountOverlay}
                       onDrawingsHiddenChange={workspace.actions.setCellDrawingsHidden}
