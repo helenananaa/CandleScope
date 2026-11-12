@@ -99,6 +99,13 @@
   --radius-lg: 12px;      /* dialogs */
   --radius-full: 999px;
 
+  /* Controls and motion (DESIGN.md: 120ms hover and press, 180ms open and close, one ease-out) */
+  --control-height-sm: 28px;
+  --control-height-md: 32px;
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+
   /* Select chevron; an SVG url cannot read CSS variables, so each theme sets its own */
   --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23a6a9b0' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 

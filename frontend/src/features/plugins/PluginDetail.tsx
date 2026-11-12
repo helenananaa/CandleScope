@@ -1,3 +1,4 @@
+import { Button } from "../../components/ui/Button.js";
 import { useState } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -35,8 +36,8 @@ export default function PluginDetail({ selected, detail, loading, error, runtime
       {selected.state === "active"
         ? <button type="button" disabled={pending || !runtime.view.managementAvailable} onClick={() => void mutate("disable")}>{t("plugin.disable")}</button>
         : selected.permissions.activationReady
-          ? <button type="button" className="pc-primary" disabled={pending || !runtime.view.managementAvailable} onClick={() => void mutate("enable")}>{t("plugin.enable")}</button>
-          : <button type="button" className="pc-primary" onClick={() => setPage("permissions")}>{t("plugin.permissions")}</button>}
+          ? <Button variant="primary" disabled={pending || !runtime.view.managementAvailable} onClick={() => void mutate("enable")}>{t("plugin.enable")}</Button>
+          : <Button variant="primary" onClick={() => setPage("permissions")}>{t("plugin.permissions")}</Button>}
       {pending && <span role="status">{t("pc.working")}</span>}
       <details className="pc-more"><summary>{t("pc.more")}</summary><div>
         <button type="button" disabled={pending || !runtime.view.managementAvailable || !detail?.rollback.available} onClick={() => setConfirmation("rollback")}>{t("plugin.rollback")}</button>

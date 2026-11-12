@@ -1,0 +1,245 @@
+/* Fields, text inputs, selects, checkboxes and switches (primitives layer). */
+
+.ui-field {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ui-field-label {
+  color: var(--text-primary);
+  font: 500 var(--font-size-sm)/1.4 var(--font-sans);
+}
+
+.ui-field-required {
+  margin-left: 2px;
+  color: var(--text-danger);
+}
+
+.ui-field-hint,
+.ui-field-error {
+  margin: 0;
+  font: var(--font-size-xs)/1.5 var(--font-sans);
+}
+
+.ui-field-hint {
+  color: var(--text-muted);
+}
+
+.ui-field-error {
+  color: var(--text-danger);
+}
+
+.ui-input {
+  width: 100%;
+  min-width: 0;
+  height: var(--control-height-md);
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-0);
+  color: var(--text-primary);
+  font: var(--font-size-md)/1.4 var(--font-sans);
+  transition: border-color var(--motion-fast) var(--ease-out);
+}
+
+.ui-input-sm {
+  height: var(--control-height-sm);
+  padding: 0 8px;
+  font-size: var(--font-size-sm);
+}
+
+.ui-input::placeholder {
+  color: var(--text-muted);
+}
+
+.ui-input:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--text-muted) 60%, var(--border-strong));
+}
+
+.ui-input:focus-visible {
+  border-color: var(--accent-blue);
+  outline: 2px solid color-mix(in srgb, var(--accent-blue) 35%, transparent);
+  outline-offset: 0;
+}
+
+.ui-input[aria-invalid='true'] {
+  border-color: var(--text-danger);
+}
+
+.ui-input:disabled {
+  background: var(--surface-1);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.ui-textarea {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+/* Select with a fixed-size chevron, so compact selects keep their text width.
+ * Native arrows add space outside the padding and clip short labels. */
+.ui-select {
+  appearance: none;
+  padding-right: 24px;
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 10px 6px;
+}
+
+.ui-datetime {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ui-datetime-zone {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font: 500 var(--font-size-xs)/1 var(--font-sans);
+}
+
+/* Checkbox and switch rows */
+.ui-check,
+.ui-switch {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-primary);
+  font: var(--font-size-md)/1.4 var(--font-sans);
+  cursor: pointer;
+}
+
+.ui-check-input {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin: 1px 0 0;
+  accent-color: var(--accent-solid);
+  cursor: inherit;
+}
+
+.ui-check-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  text-align: left;
+}
+
+.ui-check-description {
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+
+.ui-check:has(.ui-check-input:disabled),
+.ui-switch:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.ui-switch {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.ui-switch-track {
+  position: relative;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 18px;
+  margin-top: 1px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  background: var(--surface-2);
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out);
+}
+
+.ui-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-full);
+  background: var(--text-secondary);
+  transition: transform var(--motion-fast) var(--ease-out), background-color var(--motion-fast) var(--ease-out);
+}
+
+.ui-switch[aria-checked='true'] .ui-switch-track {
+  border-color: var(--accent-solid);
+  background: var(--accent-solid);
+}
+
+.ui-switch[aria-checked='true'] .ui-switch-thumb {
+  background: var(--text-on-accent);
+  transform: translateX(12px);
+}
+
+.ui-switch:focus-visible {
+  outline: none;
+}
+
+.ui-switch:focus-visible .ui-switch-track,
+.ui-check-input:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
+/* File drop zone */
+.ui-file-drop {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: var(--space-6) var(--space-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease-out), background-color var(--motion-fast) var(--ease-out);
+}
+
+.ui-file-drop:hover,
+.ui-file-drop[data-dragging='true'] {
+  border-color: var(--accent-blue);
+  background: color-mix(in srgb, var(--accent-blue) 6%, var(--surface-1));
+}
+
+.ui-file-drop:focus-within {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
+.ui-file-drop[data-disabled='true'] {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.ui-file-drop-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.ui-file-drop-label {
+  color: var(--text-primary);
+  font: 600 var(--font-size-md)/1.4 var(--font-sans);
+}
+
+.ui-file-drop-hint {
+  color: var(--text-muted);
+  font: var(--font-size-xs)/1.5 var(--font-sans);
+}

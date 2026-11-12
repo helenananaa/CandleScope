@@ -1,3 +1,4 @@
+import { Button } from "../ui/Button.js";
 import type { ReactNode } from "react";
 import { getLocale, t, type MessageKey } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -304,16 +305,15 @@ export default function CacheDiagnosticsPanel({
         </div>
         <TopEntries entries={[...(chart.entries || []), ...(market.entries || [])]} metric="bars" />
         <div className="st-actions-row">
-          <button className="st-btn st-btn-secondary" onClick={() => onPlanFrontendGc?.()}>
+          <Button onClick={() => onPlanFrontendGc?.()}>
             {t("settings.diag.planFrontend")}
-          </button>
-          <button
-            className="st-btn st-btn-accent"
+          </Button>
+          <Button
             onClick={() => onRunFrontendGc?.()}
             disabled={!canRunFrontendGc}
           >
             {t("settings.diag.runFrontend")}
-          </button>
+          </Button>
         </div>
         {frontendGcPlan ? (
           <div className="st-diagnostics-plan">
@@ -346,16 +346,15 @@ export default function CacheDiagnosticsPanel({
           <StatCard label="Script cache" value={formatNumber(scriptCache.size ?? scriptCache.items ?? 0)} detail={t("settings.diag.cap", { count: formatNumber(scriptCache.max_items ?? scriptCache.maxItems ?? 0) })} />
         </div>
         <div className="st-actions-row">
-          <button className="st-btn st-btn-secondary" onClick={() => onPlanBackendMemoryGc?.()} disabled={loading}>
+          <Button onClick={() => onPlanBackendMemoryGc?.()} disabled={loading}>
             {t("settings.diag.planBackend")}
-          </button>
-          <button
-            className="st-btn st-btn-accent"
+          </Button>
+          <Button
             onClick={() => onRunBackendMemoryGc?.()}
             disabled={loading || !canRunBackendMemoryGc}
           >
             {t("settings.diag.runBackend")}
-          </button>
+          </Button>
         </div>
         {backendMemoryGcPlan ? (
           <div className="st-diagnostics-plan">
@@ -393,23 +392,21 @@ export default function CacheDiagnosticsPanel({
           />
         </div>
         <div className="st-actions-row">
-          <button className="st-btn st-btn-secondary" onClick={() => onPlanStorageGc?.()} disabled={loading}>
+          <Button onClick={() => onPlanStorageGc?.()} disabled={loading}>
             {t("settings.diag.planStorage")}
-          </button>
-          <button
-            className="st-btn st-btn-warn"
+          </Button>
+          <Button variant="danger"
             onClick={() => onRunStorageGc?.()}
             disabled={loading || !canRunStorageGc}
           >
             {t("settings.diag.runStorage")}
-          </button>
-          <button
-            className="st-btn st-btn-accent"
+          </Button>
+          <Button
             onClick={() => onVacuumStorage?.()}
             disabled={loading || !canVacuumStorage}
           >
             {t("settings.diag.vacuum")}
-          </button>
+          </Button>
         </div>
         {storageGcPlan ? (
           <div className="st-diagnostics-plan">

@@ -1,3 +1,5 @@
+import { Button } from "../ui/Button.js";
+import { buttonClassName } from "../ui/helpers.js";
 import { useEffect, useState } from "react";
 import { shortcutModifier } from "../../shared/shortcutModifier.js";
 import { t } from "../../i18n/index.js";
@@ -55,8 +57,8 @@ export default function AboutSettingsPanel(props: AboutSettingsPanelProps) {
             <h3 id="support-heading" className="st-group-title">{t("settings.support.title")}</h3>
             <p className="st-support-description">{t("settings.support.description")}</p>
             <div className="st-support-actions">
-                <a className="st-btn st-btn-primary" href={issueUrl(environment)} target="_blank" rel="noopener noreferrer">{t("settings.support.issue")}</a>
-                <button className="st-btn st-btn-secondary" onClick={() => void copyEnvironment()}>{t("settings.support.copy")}</button>
+                <a className={buttonClassName({ variant: "primary" })} href={issueUrl(environment)} target="_blank" rel="noopener noreferrer">{t("settings.support.issue")}</a>
+                <Button onClick={() => void copyEnvironment()}>{t("settings.support.copy")}</Button>
             </div>
             <p className="st-support-hint">{t("settings.support.issueHint")}</p>
             <details className="st-support-export">
@@ -67,9 +69,9 @@ export default function AboutSettingsPanel(props: AboutSettingsPanelProps) {
                     <label>{t("settings.support.range")} <select value={minutes} disabled={exporting} onChange={event => setMinutes(Number(event.target.value))}>
                         {[5, 15, 60].map(value => <option key={value} value={value}>{t("settings.support.minutes", { count: value })}</option>)}
                     </select></label>
-                    <button className="st-btn st-btn-primary" disabled={exporting} onClick={() => void exportDiagnostics()}>
+                    <Button variant="primary" disabled={exporting} onClick={() => void exportDiagnostics()}>
                         {t(exporting ? "settings.support.exporting" : "settings.support.download")}
-                    </button>
+                    </Button>
                 </div>
             </details>
             <p className="st-support-hint" role="status" aria-live="polite">{feedback ? t(`settings.support.${feedback}`) : ""}</p>

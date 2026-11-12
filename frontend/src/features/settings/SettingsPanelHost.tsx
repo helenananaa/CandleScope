@@ -1,3 +1,4 @@
+import { buttonClassName } from "../../components/ui/helpers.js";
 import AiControlSettingsPanel from "../ai-control/AiControlSettingsPanel.js";
 import { useState } from "react";
 import AboutSettingsPanel from "./panels/AboutSettingsPanel.js";
@@ -45,7 +46,7 @@ export default function SettingsPanelHost({
             <button type="button" aria-pressed={dataView === "maintenance"} onClick={() => setDataView("maintenance")}>{t("settings.maint.title")}</button>
           </nav>
           <section hidden={dataView !== "library"}>
-            <a className="st-btn st-btn-primary" href="/strategy.html?action=import">{t("research.source.openLibrary")}</a>
+            <a className={buttonClassName({ variant: "primary" })} href="/strategy.html?action=import">{t("research.source.openLibrary")}</a>
             <DataWorkbenchLaunchPanel onOpen={onOpenDataWorkbench} />
           </section>
           <section hidden={dataView !== "maintenance"}>

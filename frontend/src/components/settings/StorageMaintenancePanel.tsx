@@ -1,3 +1,4 @@
+import { Button } from "../ui/Button.js";
 import type { ReactNode } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -137,8 +138,7 @@ export default function StorageMaintenancePanel({
                     </div>
                 </div>
                 <div className="st-actions-row">
-                    <button
-                        className="st-btn st-btn-warn"
+                    <Button variant="danger"
                         onClick={() => onStorageRepair('current')}
                         disabled={storageRepairLoading || gapScanLoading || currentScopeSymbols.length === 0}
                         style={{ flex: 1 }}
@@ -146,9 +146,8 @@ export default function StorageMaintenancePanel({
                         {storageRepairLoading && maintenanceScope === 'current'
                             ? t("settings.maint.checking")
                             : t("settings.maint.currentChart", { symbol: currentSymbol || '-' })}
-                    </button>
-                    <button
-                        className="st-btn st-btn-secondary"
+                    </Button>
+                    <Button
                         onClick={() => onStorageRepair('watchlist')}
                         disabled={storageRepairLoading || gapScanLoading || watchlistScopeSymbols.length === 0}
                         style={{ flex: 1 }}
@@ -156,7 +155,7 @@ export default function StorageMaintenancePanel({
                         {storageRepairLoading && maintenanceScope === 'watchlist'
                             ? t("settings.maint.checking")
                             : t("settings.maint.watchlistCurrent", { count: watchlistScopeSymbols.length })}
-                    </button>
+                    </Button>
                 </div>
             </div>
 
@@ -196,8 +195,7 @@ export default function StorageMaintenancePanel({
                     </div>
                 </div>
                 <div className="st-actions-row">
-                    <button
-                        className="st-btn st-btn-accent"
+                    <Button
                         onClick={() => onGapScan('current')}
                         disabled={gapScanLoading || storageRepairLoading || currentScopeSymbols.length === 0}
                         style={{ flex: 1 }}
@@ -207,9 +205,8 @@ export default function StorageMaintenancePanel({
                             : gapScanResult?.has_more && maintenanceScope === 'current'
                             ? t("settings.maint.continueScan")
                             : t("settings.maint.currentChart", { symbol: currentSymbol || '-' })}
-                    </button>
-                    <button
-                        className="st-btn st-btn-secondary"
+                    </Button>
+                    <Button
                         onClick={() => onGapScan('watchlist')}
                         disabled={gapScanLoading || storageRepairLoading || watchlistScopeSymbols.length === 0}
                         style={{ flex: 1 }}
@@ -219,7 +216,7 @@ export default function StorageMaintenancePanel({
                             : gapScanResult?.has_more && maintenanceScope === 'watchlist'
                             ? t("settings.maint.continueScan")
                             : t("settings.maint.watchlistCurrent", { count: watchlistScopeSymbols.length })}
-                    </button>
+                    </Button>
                 </div>
             </div>
 
@@ -257,14 +254,13 @@ export default function StorageMaintenancePanel({
                         </div>
                     </div>
                 </div>
-                <button
-                    className="st-btn st-btn-accent"
+                <Button
                     onClick={onExchangeRefresh}
                     disabled={exchangeRefreshLoading}
                     style={{ width: '100%' }}
                 >
                     {exchangeRefreshLoading ? t("settings.maint.refreshingPairs") : t("settings.maint.refreshBtn")}
-                </button>
+                </Button>
             </div>
 
             {exchangeRefreshResult && (

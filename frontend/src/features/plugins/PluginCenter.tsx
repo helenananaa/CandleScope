@@ -1,3 +1,4 @@
+import { Button } from "../../components/ui/Button.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
@@ -84,9 +85,9 @@ export function PluginSettingsPanel({ runtime, onClose, initialSection = "instal
     }}>
     <header className="pc-header">
       <div>{onClose && <button className="pc-return" type="button" disabled={installBusy} onClick={onClose}>{t("pc.back")}</button>}<h2>{t("plugin.title")}</h2></div>
-      <div className="pc-header-actions"><button type="button" disabled={runtime.view.loading || installBusy} onClick={() => void runtime.actions.refresh().then(() => detailState.reload()).catch(() => undefined)}>{t("alert.refresh")}</button>
-        {platformEnabled && management && <button type="button" className="pc-primary" disabled={installBusy} onClick={() => navigate("install")}>{t("pc.install")}</button>}
-        {onClose && <button type="button" disabled={installBusy} onClick={onClose}>{t("export.closeBtn")}</button>}
+      <div className="pc-header-actions"><Button disabled={runtime.view.loading || installBusy} onClick={() => void runtime.actions.refresh().then(() => detailState.reload()).catch(() => undefined)}>{t("alert.refresh")}</Button>
+        {platformEnabled && management && <Button variant="primary" disabled={installBusy} onClick={() => navigate("install")}>{t("pc.install")}</Button>}
+        {onClose && <Button disabled={installBusy} onClick={onClose}>{t("export.closeBtn")}</Button>}
       </div>
     </header>
     <nav className="pc-navigation" aria-label={t("plugin.title")}>{(["installed", "discover", "advanced"] as const).map((item) => <button type="button" disabled={installBusy} key={item} aria-current={section === item ? "page" : undefined} onClick={() => navigate(item)}>{t(`pc.${item}`)}{item === "installed" && <span>{plugins.length}</span>}</button>)}<button type="button" disabled={installBusy} aria-current={section === "extensions" ? "page" : undefined} onClick={() => navigate("extensions")}>{extensionText("可信扩展", "Trusted extensions")}</button></nav>
@@ -109,7 +110,7 @@ export function PluginSettingsPanel({ runtime, onClose, initialSection = "instal
             {selected && <PluginDetail key={selected.id} selected={selected} {...detailState} runtime={runtime} onBack={() => setMobileDetail(false)} onDiscover={() => navigate("discover")} />}
           </> : <div className="pc-empty"><h3>{query || filter !== "all" ? t("pc.noResults") : t("plugin.empty")}</h3>
             <p>{query || filter !== "all" ? t("pc.search") : t("pc.emptyHint")}</p>
-            {query || filter !== "all" ? <button type="button" onClick={() => { setQuery(""); setFilter("all"); }}>{t("interval.clear")}</button> : platformEnabled && management && <button type="button" onClick={() => navigate("install")}>{t("pc.install")}</button>}
+            {query || filter !== "all" ? <Button onClick={() => { setQuery(""); setFilter("all"); }}>{t("interval.clear")}</Button> : platformEnabled && management && <Button variant="primary" onClick={() => navigate("install")}>{t("pc.install")}</Button>}
           </div>}
         </div>
         {engines.length > 0 && filter === "all" && <section className="pc-engines"><header><div><h3>{t("plugin.scriptRuntimes")}</h3><p>{t("pc.enginesHint")}</p></div><span>{engines.length}</span></header>

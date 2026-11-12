@@ -143,11 +143,6 @@ export default function SettingsModalStyles(props: SettingsModalStylesProps) {
   border-top: 1px solid var(--border-color);
 }
 
-.st-btn-close {
-  width: 100%;
-  justify-content: center;
-}
-
 /* ── Content area ───────────────────────────────────────── */
 .st-content {
   flex: 1;
@@ -471,72 +466,8 @@ input[type="color"] {
   margin-top: 14px;
 }
 
-.st-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 9px 16px;
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  border: 1px solid transparent;
-  transition: all 0.18s ease;
-  flex: 1;
-}
-
-a.st-btn {
-  text-decoration: none;
-}
-
-.st-content-body section > a.st-btn:first-child {
+.st-content-body section > a.ui-btn:first-child {
   margin-bottom: 16px;
-}
-
-.st-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.st-btn-primary {
-  background: var(--accent-solid);
-  color: white;
-  border-color: var(--accent-blue);
-}
-.st-btn-primary:hover:not(:disabled) {
-  opacity: 0.9;
-  transform: translateY(-1px);
-}
-
-.st-btn-secondary {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-  border-color: var(--border-color);
-}
-.st-btn-secondary:hover:not(:disabled) {
-  border-color: var(--accent-blue);
-  color: var(--text-accent);
-}
-
-.st-btn-warn {
-  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
-  color: var(--text-warning);
-  border-color: color-mix(in srgb, var(--color-warning) 30%, transparent);
-}
-.st-btn-warn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--color-warning) 16%, transparent);
-  border-color: color-mix(in srgb, var(--color-warning) 50%, transparent);
-}
-
-.st-btn-accent {
-  background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
-  color: var(--text-accent);
-  border-color: color-mix(in srgb, var(--accent-blue) 30%, transparent);
-}
-.st-btn-accent:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent-blue) 16%, transparent);
-  border-color: color-mix(in srgb, var(--accent-blue) 50%, transparent);
 }
 
 /* ── Preset cards (storage strategy) ────────────────────── */
@@ -631,17 +562,6 @@ a.st-btn {
   background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
   color: var(--text-accent);
   border: 1px solid color-mix(in srgb, var(--accent-blue) 25%, transparent);
-}
-
-[data-theme='light'] .st-btn-accent {
-  background: var(--accent-solid);
-  color: var(--text-on-accent);
-  border-color: var(--accent-solid);
-}
-
-[data-theme='light'] .st-btn-accent:hover:not(:disabled) {
-  background: var(--accent-solid-hover);
-  border-color: var(--accent-solid-hover);
 }
 
 /* ── Ephemeral cache option cards ───────────────────────── */
@@ -1987,10 +1907,6 @@ a.st-btn {
   color: var(--text-muted);
 }
 
-.st-db-scope-actions .st-btn {
-  min-width: 0;
-}
-
 .st-db-list {
   display: flex;
   flex-direction: column;
@@ -2079,10 +1995,6 @@ a.st-btn {
   padding: 2px 2px 8px;
   color: var(--text-muted);
   font-size: 11px;
-}
-
-.st-db-symbol-toolbar .st-btn {
-  margin-left: auto;
 }
 
 .st-db-series-row {

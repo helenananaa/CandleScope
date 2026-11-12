@@ -4,7 +4,7 @@ This file is the design contract for the CandleScope interface. Design tools and
 
 - Product: an open-source desktop and web charting terminal for crypto and futures markets, with replay training and strategy research.
 - Users: active traders and quant researchers who keep it open for hours. The default interface language is Simplified Chinese; English and other locales are supported.
-- Implementation: tokens in `frontend/src/styles/tokens.css`, shared primitives in `frontend/src/styles/components.css` and `frontend/src/components/ui/`.
+- Implementation: tokens in `frontend/src/styles/tokens.css`, primitives in `frontend/src/components/ui/` (components and their CSS).
 
 ## Principles
 
@@ -68,6 +68,27 @@ Brand marks (`public/brand/`) use ink `#07182b`, blue `#1473e6` and teal `#12bfa
 - Never show raw error codes or English backend messages in another locale; map them through `describeError` in `frontend/src/i18n/serverErrors.ts`.
 - Keep internal QA, runtime and contract terms out of default views.
 
+## Components
+
+Build surfaces from the primitives in `frontend/src/components/ui` (import from `components/ui/index.js`); see them in both themes at `/ui-gallery.html` on the Vite dev server.
+
+| Need | Use |
+|---|---|
+| An action | `Button`: `primary` for the one main action in a view, `secondary` (default), `ghost` for low emphasis, `danger` for destructive actions; `size="sm"` in dense panels. `IconButton` when there is no room for text; it always has a label. |
+| A toolbar pill or picker | `.ui-control` (with `.is-active` or `aria-expanded`) |
+| Text, number, choice or time input | `Field` around `Input`, `Select`, `Textarea` or `DateTimeInput` (always shows its zone, UTC by default) |
+| On/off | `Switch` for settings that apply at once; `Checkbox` in forms that are submitted |
+| One of two to five options | `SegmentedControl` |
+| Switching views | `Tabs` with `TabPanel` |
+| A status word or count | `Badge` with a tone |
+| A titled group | `Section` |
+| A key figure | `Stat` |
+| Secondary detail, diagnostics | `Disclosure` (closed by default) |
+| A message inside a panel | `InlineAlert`; `EmptyState` when the panel has nothing to show |
+| Choosing a file | `FileDrop` |
+
+Dialogs, drawers, menus, popovers, tooltips and toasts arrive with the overlay manager (design refactor Phase 2c).
+
 ## Stylesheets and cascade layers
 
 Every app stylesheet sits in a cascade layer. The order is set once, in `frontend/src/styles/layers.css`, which every entry page imports first:
@@ -76,8 +97,8 @@ Every app stylesheet sits in a cascade layer. The order is set once, in `fronten
 |---|---|
 | `reset` | Element defaults and scrollbars (`styles/reset.css`) |
 | `tokens` | Design tokens and themes (`styles/tokens.css`) |
-| `primitives` | Shared components in `src/components/ui` (empty until Phase 2b) |
-| `patterns` | Layouts built from primitives (empty until Phase 2b) |
+| `primitives` | Shared components in `src/components/ui` (`button.css`, `field.css`, `choice.css`, `display.css`) |
+| `patterns` | Layouts built from primitives (empty for now) |
 | `features` | Feature CSS, plus Monaco's CSS and extension stylesheets, which compete with it by specificity |
 | `overrides` | Deliberate cross-cutting overrides (empty for now) |
 
