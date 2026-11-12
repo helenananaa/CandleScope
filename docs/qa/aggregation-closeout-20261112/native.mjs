@@ -114,26 +114,39 @@ async function verify(intervals, anchors = []) {
       start_ms: String(closed[0].time * 1000), end_ms: String(closed.at(-1).time * 1000),
       repair: 'none', wait_ms: '0', strict: 'true', limit: '2000',
     });
-    const readback = await api('/api/v1/klines/range?' + params);
-    assert.equal(readback.complete, true);
+    let readback;
+    let pendingRecorded = false;
+    await q.until(async () => {
+      readback = await api('/api/v1/klines/range?' + params);
+      if (!readback.complete && !pendingRecorded) {
+        pendingRecorded = true;
+        await q.record('strict-read-waiting-for-consistent-history', {
+          interval: view.interval, complete: readback.complete,
+          historyState: readback.history_state, metadata: readback.metadata,
+          requested: { start: closed[0].time, end: closed.at(-1).time },
+          rows: readback.data?.length,
+        });
+      }
+      return readback.complete === true;
+    }, 120_000);
     const rows = new Map(readback.data.map(bar => [bar.time, bar]));
     for (const bar of closed) {
       const stored = rows.get(bar.time);
       assert.ok(stored, 'missing canonical bar ' + bar.time);
-      for (const field of ['open', 'high', 'low', 'close', 'volume']) {
-        assert.equal(bar[field], stored[field], view.interval + ':' + field);
+      for (const field of ['open', 'high', 'low', 'close', 'volume', 'quote_volume', 'trades', 'taker_buy_base', 'taker_buy_quote']) {
+        assert.equal(bar[field] ?? null, stored[field] ?? null, view.interval + ':' + field);
       }
     }
     const anchor = anchors[index];
     if (anchor) {
       const restored = closed.find(bar => bar.time === anchor.time);
       assert.ok(restored, 'saved historical anchor missing');
-      for (const field of ['open', 'high', 'low', 'close', 'volume']) {
-        assert.equal(restored[field], anchor[field], 'restored ' + view.interval + ':' + field);
+      for (const field of ['open', 'high', 'low', 'close', 'volume', 'quote_volume', 'trades', 'taker_buy_base', 'taker_buy_quote']) {
+        assert.equal(restored[field] ?? null, anchor[field] ?? null, 'restored ' + view.interval + ':' + field);
       }
     }
     result.push({ interval: view.interval, compared: closed.length,
-      first: closed[0], last: closed.at(-1) });
+      first: closed[0], last: closed.at(-1), anchor: closed.at(-Math.min(128, closed.length)) });
   }
   assert.deepEqual(q.s.receipt.errors, []);
   return { values: result, workspace: await q.inspect(), diagnostics: await api('/api/v1/settings/cache-diagnostics') };
@@ -161,7 +174,7 @@ try {
   await q.ready(2, 120_000);
   await q.record('released-derived-targets', await api('/api/v1/settings/cache-diagnostics'));
   await q.configure(charts(['45m', '90m']), 'split-vertical');
-  const anchors = initial.values.map(value => value.first);
+  const anchors = initial.values.map(value => value.anchor);
   const reopened = await verify(['45m', '90m'], anchors);
   await q.record('recreated-within-same-bucket', reopened);
   await q.screenshot('recreated');

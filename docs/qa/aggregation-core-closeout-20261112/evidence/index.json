@@ -1,0 +1,134 @@
+{
+  "files": [
+    {
+      "path": "BTCUSDT-15m-2026-10.zip.CHECKSUM",
+      "bytes": 90,
+      "sha256": "d1f85b78aaafa1b56817b0b838d6894ae7741cad1d43546a1ccb5b10d7770f5b"
+    },
+    {
+      "path": "BTCUSDT-1h-2026-10.zip.CHECKSUM",
+      "bytes": 89,
+      "sha256": "dbf34df19741f4a1992816f026df7032f5d1b86bafb9336eafd4df58e7bfd45e"
+    },
+    {
+      "path": "BTCUSDT-1m-2026-10.zip.CHECKSUM",
+      "bytes": 89,
+      "sha256": "ad0a91b877ef70e71c58bb1c23f74c589d4bb8a13bd3243c270491b1c74f07f0"
+    },
+    {
+      "path": "BTCUSDT-5m-2026-10.zip.CHECKSUM",
+      "bytes": 89,
+      "sha256": "5cf29b8fa552a768f0c53008b05a6462071f5def7ebf22e30c2ed543ee3a6c03"
+    },
+    {
+      "path": "backend-final.log.gz",
+      "bytes": 846,
+      "sha256": "7d2987352f8f4fec91bca233d27b04acfd482df47d8fc3f4c19fcb07fc94adc1"
+    },
+    {
+      "path": "backend-final.xml.gz",
+      "bytes": 11555,
+      "sha256": "32bb839a920551d2dcd2aff8d2d76f83956a766362f3763eb011ac8e6a39d709"
+    },
+    {
+      "path": "baseline-final.log.gz",
+      "bytes": 4715,
+      "sha256": "28d8f967c98833435e258948836a8edce971cef5a3b54ae25067d17f9e73e08c"
+    },
+    {
+      "path": "failed-attempts.json",
+      "bytes": 3288,
+      "sha256": "89dbd65ecb7c3ed37d55bcdc9d0ba361e9b964fd8f7d8f4bb92b05892cd49946"
+    },
+    {
+      "path": "history-seed-final-tests.log.gz",
+      "bytes": 67,
+      "sha256": "fb4ad044200bd299a3ff49de9dffd2da84bdb30c300a04de29d2ff6917531921"
+    },
+    {
+      "path": "initial.png",
+      "bytes": 350817,
+      "sha256": "8980bf742b5ddc4fbb8ff03cd2210ffd6c78ac66ac16e4415b2ac3bc76633722"
+    },
+    {
+      "path": "inputs.json",
+      "bytes": 966,
+      "sha256": "e22b756e2d37047515d22d8df895adddfcaf004260d7a0e55f24f3440593b819"
+    },
+    {
+      "path": "native-cold4-acceptance.json.gz",
+      "bytes": 39747,
+      "sha256": "0f624f067a8c3dec685fe4152ebfa126f8c56d3c6c5811bb4c851865e7f5d244"
+    },
+    {
+      "path": "native-version2-failed-acceptance.json.gz",
+      "bytes": 8042,
+      "sha256": "1f66cb34fda834403c9dac6524acb58d046969fcecc2b0804feb59e1a8ba1811"
+    },
+    {
+      "path": "native-version3-acceptance.json.gz",
+      "bytes": 3330,
+      "sha256": "1ba9a471397c37617c00cc84d4b5d237eb7bdcb38bf98104cbd9ea7af1f10f89"
+    },
+    {
+      "path": "native-version3-generations.jsonl.gz",
+      "bytes": 197,
+      "sha256": "e7c357c72efab216cab653cf65beb785c70c248cd8ef0529d7db656eafdc74eb"
+    },
+    {
+      "path": "native-version3-physical-kline-requests.jsonl.gz",
+      "bytes": 2232,
+      "sha256": "273e2ccf70516c90981d5aa39af4a8076a872afadb4c2e3e7efd77d2d87aacc4"
+    },
+    {
+      "path": "native-version3-sockets.json.gz",
+      "bytes": 2156,
+      "sha256": "5b01b483c1a58765473c72dd7a144da6b0fbbdc0f475f727278a6a6f0c286c48"
+    },
+    {
+      "path": "package-assembly-final.json.gz",
+      "bytes": 472,
+      "sha256": "0f889d278a89863c884450483b322dfb4f5c7e330fe44fc91dd4046599537013"
+    },
+    {
+      "path": "package-source-manifest-final.json.gz",
+      "bytes": 48346,
+      "sha256": "b72c5296c549f4fa77202a2c550aa8b4c4554f37c550ce6bee97637c2d975b52"
+    },
+    {
+      "path": "recreated.png",
+      "bytes": 307380,
+      "sha256": "5823a35b13ff83e83deea952f900b06199230c885fea086c6092b1248c569393"
+    },
+    {
+      "path": "restored.png",
+      "bytes": 303512,
+      "sha256": "2ad255fc96a0cb3bee8d31293d52d9a1be9c24c32dde152a2c2f5c38b8813f80"
+    },
+    {
+      "path": "sign-final.log.gz",
+      "bytes": 94,
+      "sha256": "f79d6365e1cae4d3bf2109b6dd2f6cca2054644c368533f663ce9c08fe54255b"
+    },
+    {
+      "path": "sign-verified-after.log.gz",
+      "bytes": 20,
+      "sha256": "f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837"
+    },
+    {
+      "path": "source-code-equivalence.json",
+      "bytes": 1302,
+      "sha256": "2b5139b4184206740a53e3d653c0094a710bdef152fe3e93962b30a878abad93"
+    },
+    {
+      "path": "source-mixed.json.gz",
+      "bytes": 7237,
+      "sha256": "590d1f4d9051ce752959da381547f089f2ce7ba60acd0d901d9dd9460c01832f"
+    },
+    {
+      "path": "summary.json",
+      "bytes": 4827,
+      "sha256": "fc025994a107c0923baf4f5bc78813fb6f3e46d09a3d9e4ef04582e2ef4b20d2"
+    }
+  ]
+}
