@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
+
+import pytest
+
+from app.data_engine.series_identity import KlineSeriesIdentity
 
 from app.data_engine.backfill import BackfillEngine
 from app.data_engine.backfill.config import BackfillConfig
@@ -16,6 +21,62 @@ from app.data_engine.backfill.models import (
     IntervalComponent,
     IntervalDecomposition,
 )
+
+
+@pytest.mark.parametrize('interval', ['6h', '1M'])
+@pytest.mark.parametrize('archive_first', [True, False])
+def test_archive_and_rest_default_identity_aliases_reconcile_together(interval, archive_first):
+    async def run():
+        t0 = 1_793_491_200_000  # 2026-11-01 00:00 UTC
+        t1 = t0 + (21_600_000 if interval == '6h' else 30 * 86_400_000)
+        t2 = t1 + (21_600_000 if interval == '6h' else 31 * 86_400_000)
+        gap = GapInfo(symbol='ETHUSDT', interval=interval, gap_type=GapType.INTERIOR,
+            start_ms=t0, end_ms=t1, missing_bars=2, exchange='binance', market_type='spot')
+        task = BackfillTask(symbol='ETHUSDT', interval=interval, start_ms=t0,
+            end_ms=t1, parent_gap=gap)
+        first = FetchedBar(symbol='ETHUSDT', interval=interval, open_time=t0,
+            close_time=t1 - 1, open=10, high=20, low=1, close=10, volume=1,
+            source='backfill_archive_verified')
+        second = replace(first, open_time=t1, close_time=t2 - 1, source='backfill',
+            series_identity=KlineSeriesIdentity.for_exchange('binance'))
+        bars = [first, second] if archive_first else [
+            replace(second, open_time=t0, close_time=t1 - 1),
+            replace(first, open_time=t1, close_time=t2 - 1),
+        ]
+        writes = []
+
+        class Storage:
+            async def get_existing_open_times(self, *args, **kwargs):
+                return set()
+
+            async def upsert_bars(self, symbol, interval, rows, **kwargs):
+                writes.extend(rows)
+                return len(rows)
+
+        reconciler = Reconciler(BackfillConfig(reconcile_generate_custom=False,
+            reconcile_enable_cache_push=False), Storage())
+        result = await reconciler.reconcile([FetchResult(task=task, bars=bars,
+            status=BackfillStatus.COMPLETED)], BackfillPlan(gaps=[gap], tasks=[task]))
+        assert result.errors == []
+        assert result.bars_written == 2
+        assert [row['open_time'] for row in writes] == [t0, t1]
+        assert first.series_identity is None, 'normalization must not mutate fetched evidence'
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('overlap', [False, True])
+def test_reconcile_rejects_foreign_identity_before_timestamp_deduplication(overlap):
+    bar = FetchedBar(symbol='ETHUSDT', interval='1m', open_time=60_000,
+        close_time=119_999, open=10, high=20, low=1, close=10, volume=1)
+    foreign = replace(bar, open_time=60_000 if overlap else 120_000,
+        series_identity=KlineSeriesIdentity.for_exchange('binance', price_adjustment='split_adjusted'))
+    gap = GapInfo(symbol='ETHUSDT', interval='1m', gap_type=GapType.INTERIOR,
+        start_ms=60_000, end_ms=120_000, missing_bars=2)
+    task = BackfillTask(symbol='ETHUSDT', interval='1m', start_ms=60_000,
+        end_ms=120_000, parent_gap=gap)
+    with pytest.raises(ValueError, match='multiple K-line series identities'):
+        Reconciler._group_bars([FetchResult(task=task, bars=[bar, foreign],
+            status=BackfillStatus.COMPLETED)])
 
 
 def test_reconciler_records_written_ranges_for_successful_batches() -> None:
