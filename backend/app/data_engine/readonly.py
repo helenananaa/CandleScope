@@ -6,10 +6,10 @@ maps and sequences are frozen as well; no caller-owned container is retained.
 from collections.abc import Mapping
 from decimal import Decimal
 from fractions import Fraction
-from numbers import Number
+from numbers import Number, Integral, Real, Complex
 from types import MappingProxyType
 
-_SCALARS = (str, bytes, Number, bool, type(None), Decimal, Fraction)
+_SCALARS = (str, bytes, int, float, complex, bool, type(None), Decimal, Fraction)
 
 
 def _mapping(values, active):
@@ -24,8 +24,28 @@ def _mapping(values, active):
 
 
 def _freeze(value, active):
-    if isinstance(value, ReadonlyFields) or isinstance(value, _SCALARS):
+    if isinstance(value, ReadonlyFields) or type(value) in _SCALARS:
         return value
+    # Keep the precision of immutable NumPy scalar values. Mutable arrays are
+    # not Numbers and do not enter this path. Other numeric/string subclasses
+    # are captured as base values, so caller-owned attributes cannot change
+    # an accepted field's subsequent comparison/conversion behavior.
+    if type(value).__module__ == "numpy" and isinstance(value, Number):
+        return value
+    if isinstance(value, str):
+        return str.__str__(value)
+    if isinstance(value, bytes):
+        return bytes(value)
+    if isinstance(value, Decimal):
+        return Decimal(value)
+    if isinstance(value, Fraction):
+        return Fraction(value)
+    if isinstance(value, Integral):
+        return int(value)
+    if isinstance(value, Real):
+        return float(value)
+    if isinstance(value, Complex):
+        return complex(value)
     if isinstance(value, Mapping):
         result = object.__new__(ReadonlyFields)
         object.__setattr__(result, '_values', MappingProxyType(_mapping(value, active)))

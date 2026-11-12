@@ -482,3 +482,18 @@ def test_replaced_router_callback_keeps_independent_preparation_even_when_forwar
         assert agg.memory_usage()['preparation_builds'] == 0
         assert not agg._active_preparations
     asyncio.run(run())
+
+
+def test_mutable_numeric_subclass_is_captured_as_an_owned_scalar_value():
+    from app.data_engine.readonly import ReadonlyFields
+    class MutableFloat(float):
+        def __new__(cls,value):
+            result=super().__new__(cls,value)
+            result.current=value
+            return result
+        def __float__(self):
+            return float(self.current)
+    value=MutableFloat(1)
+    record=ReadonlyFields({'value':value})
+    value.current=9
+    assert type(record['value']) is float and record['value'] == 1
