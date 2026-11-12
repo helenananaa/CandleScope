@@ -92,7 +92,7 @@ The TypeScript contract is `frontend/src/features/extensions/contracts.ts`:
   `rightRail`, or `exportOverlay`. The component receives `fallback`; `shell` also
   receives the host's `slots`. Two active replacements for the same slot fail
   explicitly; there is no installation-order winner.
-- `ui.stylesheet(css)`: add an owned stylesheet that is removed on disposal.
+- `ui.stylesheet(css)`: add an owned stylesheet that is removed on disposal. The host places it in the app's `features` cascade layer, so it competes with feature CSS by specificity and order. `@import` is not supported inside it.
 - `commands.register(localName, handler)` / `commands.execute(fullName, payload)`:
   command names are prefixed with the extension ID.
 - `services.register(localName, value)` / `services.get(name)`: plugin services

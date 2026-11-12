@@ -1,5 +1,6 @@
 export default function DataWorkbenchStyles() {
   return <style>{`
+@layer features {
 .dw-overlay {
   --dw-ink: var(--text-primary);
   --dw-label: color-mix(in srgb, var(--text-primary) 50%, var(--text-secondary));
@@ -867,5 +868,6 @@ export default function DataWorkbenchStyles() {
   .dw-actions { flex-direction: column-reverse; }
   .dw-button { width: 100%; }
 }
-  `}</style>;
+}
+`}</style>;
 }

@@ -1,0 +1,64 @@
+/* Order book range controls, stale state and narrow rail.
+ * Loads later than features/order-book/orderBook.css on purpose: these rules depend on files
+ * imported in between (cascade order). They move into that file when this surface is rebuilt
+ * (design refactor Phase 5). */
+
+.ob-range-controls {
+  display: flex;
+  flex: 0 0 28px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 0 8px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid var(--border-color);
+}
+.ob-range-controls label { display: inline-flex; align-items: center; gap: 4px; }
+.ob-range-controls select {
+  max-width: 100px;
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font: inherit;
+}
+
+.ob-stale-bar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 4px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-warning) 40%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 10%, var(--surface-1));
+  color: var(--text-warning);
+  font-size: var(--font-size-xs);
+}
+
+.ob-stale-bar button {
+  flex-shrink: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Order book in a narrow rail: keep the title on one line, drop the delivery
+ * label, and put the four controls on two rows instead of truncating them. */
+.ob-title,
+.ob-status {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+@container rail (max-width: 280px) {
+  .ob-delivery-mode { display: none; }
+  .ob-controls {
+    flex-basis: auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

@@ -1,3 +1,4 @@
+@layer features {
 .history-study .quick-replay-side { width: 290px; min-width: 220px; }
 .history-study { container-type: inline-size; }
 .history-study .trading-quick-notes p { white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -13,3 +14,4 @@
 .study-recovery-message { position: absolute; top: 8px; left: 8px; z-index: var(--z-overlay); max-width: 460px; padding: 8px; background: var(--surface-1); color: var(--text-warning); }
 @media (max-width: 800px) { .history-study .quick-replay-side { width: 220px; } }
 @container (max-width: 600px) { .history-study .quick-replay-side { width: 180px; min-width: 160px; } }
+}

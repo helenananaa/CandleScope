@@ -14,7 +14,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-const SETTINGS_KEY = "candlescope-settings";
+export const SETTINGS_KEY = "candlescope-settings";
 
 /** Named states. A step clicks the first visible control matching a message key, a literal text or a selector. */
 export const STATES = [
@@ -101,7 +101,7 @@ export function labelPrefix(label) {
   return label.split(/[({]/)[0].trim();
 }
 
-function findChrome(explicitPath) {
+export function findChrome(explicitPath) {
   return [
     explicitPath,
     "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
@@ -118,7 +118,7 @@ function findChrome(explicitPath) {
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function openBrowser(chromePath) {
+export async function openBrowser(chromePath) {
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), "candlescope-design-snapshots-"));
   const port = 9400 + Math.floor(Math.random() * 400);
   const chrome = spawn(chromePath, [
@@ -170,7 +170,7 @@ async function openBrowser(chromePath) {
 }
 
 // Runs in the page: resolves a step against the app's own i18n module and clicks the match.
-const CLICK_STEP = `async (step) => {
+export const CLICK_STEP = `async (step) => {
   const { t } = await import("/src/i18n/index.ts");
   const resolveParams = (params = {}) => Object.fromEntries(Object.entries(params)
     .map(([name, value]) => [name, value && typeof value === "object" ? t(value.key) : value]));
@@ -193,6 +193,22 @@ const CLICK_STEP = `async (step) => {
   return "ok";
 }`;
 
+/** Loads a state's page and runs its steps; returns the steps that did not succeed. */
+export async function visitState(browser, args, state) {
+  await browser.send("Page.navigate", { url: args.url + state.page });
+  await wait(state.page === "/" ? args.loadWaitMs : Math.round(args.loadWaitMs * 0.75));
+  const problems = [];
+  for (const step of state.steps ?? []) {
+    const result = await browser.send("Runtime.evaluate", {
+      expression: `(${CLICK_STEP})(${JSON.stringify(step)})`, awaitPromise: true, returnByValue: true,
+    });
+    const outcome = result.result?.exceptionDetails ? `error: ${result.result.exceptionDetails.text}` : result.result?.result?.value;
+    if (outcome !== "ok") problems.push(String(outcome));
+    await wait(args.settleMs);
+  }
+  return problems;
+}
+
 async function capture(args) {
   const chromePath = findChrome(args.chromePath);
   if (!chromePath) throw new Error("Chrome or Edge was not found. Set CHROME_PATH or pass --chrome.");
@@ -211,17 +227,7 @@ async function capture(args) {
       for (const viewport of args.viewports) {
         await browser.send("Emulation.setDeviceMetricsOverride", { ...viewport, deviceScaleFactor: 1, mobile: false });
         for (const state of states) {
-          await browser.send("Page.navigate", { url: args.url + state.page });
-          await wait(state.page === "/" ? args.loadWaitMs : Math.round(args.loadWaitMs * 0.75));
-          const problems = [];
-          for (const step of state.steps ?? []) {
-            const result = await browser.send("Runtime.evaluate", {
-              expression: `(${CLICK_STEP})(${JSON.stringify(step)})`, awaitPromise: true, returnByValue: true,
-            });
-            const outcome = result.result?.exceptionDetails ? `error: ${result.result.exceptionDetails.text}` : result.result?.result?.value;
-            if (outcome !== "ok") problems.push(String(outcome));
-            await wait(args.settleMs);
-          }
+          const problems = await visitState(browser, args, state);
           const shot = await browser.send("Page.captureScreenshot", { format: "png" });
           const file = snapshotFileName(state.name, theme, viewport);
           fs.writeFileSync(path.join(args.out, file), Buffer.from(shot.result.data, "base64"));

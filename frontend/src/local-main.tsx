@@ -1,3 +1,4 @@
+import "./styles/layers.css";
 import "./styles/fonts.js";
 import "./index.css";
 import { mountStrategyResearchPage } from "./features/strategy-research/strategyResearchBootstrap.js";

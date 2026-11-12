@@ -1,0 +1,9 @@
+/* Indicator editor toolbar buttons.
+ * Loads later than features/indicators/indicators.css on purpose: these rules depend on files
+ * imported in between (cascade order). They move into that file when this surface is rebuilt
+ * (design refactor Phase 5). */
+
+.indicator-editor-toolbar-actions > button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}

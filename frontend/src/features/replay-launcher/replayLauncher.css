@@ -1,0 +1,9 @@
+/* Replay launcher dialog and return-to-hub button. */
+
+/* Box and color come from .ui-control */
+.replay-return-hub { flex: 0 0 auto; }
+.replay-return-hub:disabled { opacity: .55; cursor: wait; }
+.replay-launcher-overlay { position: fixed; inset: 0; z-index: calc(var(--z-menu) + 40); display: grid; place-items: center; overflow: hidden; padding: 24px; background: color-mix(in srgb, var(--surface-0) 78%, transparent); backdrop-filter: blur(8px); }
+.replay-launcher-overlay:focus { outline: none; }
+.replay-launcher-popup-blocked { position: absolute; z-index: 1; top: 34px; right: 42px; display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid color-mix(in srgb, var(--color-warning) 60%, transparent); border-radius: var(--radius-md); color: var(--text-warning); background: color-mix(in srgb, var(--color-warning) 18%, var(--surface-1)); box-shadow: 0 12px 30px rgba(0, 0, 0, .35); }
+.replay-launcher-popup-blocked a { color: var(--text-info); }

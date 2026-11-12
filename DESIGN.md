@@ -68,9 +68,30 @@ Brand marks (`public/brand/`) use ink `#07182b`, blue `#1473e6` and teal `#12bfa
 - Never show raw error codes or English backend messages in another locale; map them through `describeError` in `frontend/src/i18n/serverErrors.ts`.
 - Keep internal QA, runtime and contract terms out of default views.
 
+## Stylesheets and cascade layers
+
+Every app stylesheet sits in a cascade layer. The order is set once, in `frontend/src/styles/layers.css`, which every entry page imports first:
+
+| Layer | Holds |
+|---|---|
+| `reset` | Element defaults and scrollbars (`styles/reset.css`) |
+| `tokens` | Design tokens and themes (`styles/tokens.css`) |
+| `primitives` | Shared components in `src/components/ui` (empty until Phase 2b) |
+| `patterns` | Layouts built from primitives (empty until Phase 2b) |
+| `features` | Feature CSS, plus Monaco's CSS and extension stylesheets, which compete with it by specificity |
+| `overrides` | Deliberate cross-cutting overrides (empty for now) |
+
+A later layer wins regardless of selector specificity, so no `html` prefixes or `!important` are needed to beat feature rules.
+
+- **Feature CSS lives next to its feature.** `src/index.css` only lists files, each with `layer(…)`; within a layer, the listed order still breaks ties.
+- **CSS imported from a lazy module wraps itself** in `@layer features { … }`.
+- **`npm run check:css-layers`** fails on any stylesheet outside a layer.
+- **Moving rules between files or layers:** run `npm run css:cascade -- --base <ref>`. It lists every pair of declarations whose winner would change, and should report none for a pure move.
+
 ## Do not
 
 - Introduce colours, fonts, radii or shadows outside the tokens.
 - Add a new `*-btn`, `*-badge`, `*-overlay` or `*-modal` class family; extend the primitive instead.
-- Use `!important`, static `style={{…}}`, `window.confirm` or `window.alert`.
+- Use `!important`, static `style={{…}}`, `window.confirm` or `window.alert`. If a rule must win, put it in the right layer.
+- Add rules to `src/index.css`, or a stylesheet outside a cascade layer.
 - Use the generic template look: eyebrow plus giant headline plus numbered cards, gradient glows, a second accent colour, or identical rounded cards for everything.

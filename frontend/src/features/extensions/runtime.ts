@@ -56,7 +56,9 @@ export function createExtensionContext(item: ExtensionRecord): { context: Extens
       stylesheet(css) {
         const element = document.createElement("style");
         element.dataset.extensionOwner = id;
-        element.textContent = css;
+        // Extension CSS joins the app's features layer, so it competes with feature CSS by
+        // specificity and order exactly as it did before cascade layers.
+        element.textContent = `@layer features {\n${css}\n}`;
         document.head.append(element);
         track(() => element.remove());
       },

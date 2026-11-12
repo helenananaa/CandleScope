@@ -1,3 +1,4 @@
+@layer features {
 .strategy-research-shell {
   min-height: 100%;
 }
@@ -430,4 +431,5 @@
 .strategy-result-replay-notes article p {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
 }

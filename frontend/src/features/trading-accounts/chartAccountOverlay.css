@@ -1,3 +1,4 @@
+@layer features {
 .chart-account-overlay-trigger { border: 1px solid var(--border-color); border-radius: 5px; background: var(--bg-secondary); color: var(--text-secondary); padding: 3px 6px; white-space: nowrap; font-size: 11px; cursor: pointer; }
 .chart-account-overlay-trigger[aria-expanded="true"] { color: var(--text-primary); border-color: var(--accent-blue); }
 .chart-account-overlay-trigger[data-error="true"] { border-color: var(--color-danger); }
@@ -7,3 +8,4 @@
 .chart-account-overlay-menu > .chart-account-overlay-toggle { display: flex; align-items: center; gap: 8px; }
 .chart-account-overlay-menu > button { justify-self: end; padding: 4px 10px; }
 .chart-account-overlay-menu > p { margin: 0; overflow-wrap: anywhere; }
+}
