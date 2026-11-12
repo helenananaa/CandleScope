@@ -8,6 +8,7 @@ from contextlib import nullcontext
 from collections import deque
 from dataclasses import dataclass
 import threading
+import sys
 import time
 
 from .models import BarData, QueryResult, QuerySource, SeriesKey
@@ -24,6 +25,13 @@ class HistoryReadback:
     key: SeriesKey
     revision: int
     bounds: tuple[int, int] | None
+
+
+def _key_estimated_bytes(key):
+    # Conservative value estimate, including full variable-length identity.
+    # Shared string/key references may be counted repeatedly here; opt-in heap
+    # diagnostics deduplicate the actual values instead.
+    return sys.getsizeof(key) + sum(sys.getsizeof(getattr(key, name)) for name in key.__slots__)
 
 
 class CacheRevisionConsumer:
@@ -44,6 +52,8 @@ class CacheRevisionConsumer:
         self._lock = threading.RLock()
         self._recent = deque(maxlen=4096)
         self._history_floor = 0
+        self._recent_bytes = 0
+        self._readback_bytes = 0
         self.on_rewind = None
         self.readbacks_enabled = False
         self._readbacks: dict[SeriesKey, HistoryReadback] = {}
@@ -59,6 +69,7 @@ class CacheRevisionConsumer:
                     self.cache.clear()
                     self.resets += 1
                     self._recent.clear()
+                    self._recent_bytes = 0
                     self._history_floor = int(batch["revision"])
                     if self.readbacks_enabled:
                         self._reset_readbacks()
@@ -76,7 +87,9 @@ class CacheRevisionConsumer:
                             self._queue_readback(key, change)
                         if len(self._recent) == self._recent.maxlen:
                             self._history_floor = max(self._history_floor, self._recent[0][0])
+                            self._recent_bytes -= 512 + _key_estimated_bytes(self._recent[0][1])
                         self._recent.append((int(change["revision"]), key))
+                        self._recent_bytes += 512 + _key_estimated_bytes(key)
                         self.invalidations += 1
                 self.revision = int(batch["revision"])
                 self.checked_at = time.monotonic()
@@ -87,6 +100,7 @@ class CacheRevisionConsumer:
 
     def _reset_readbacks(self):
         self._readbacks.clear()
+        self._readback_bytes = 0
         self._readback_reset = object()
 
     def _queue_readback(self, key, change):
@@ -108,6 +122,8 @@ class CacheRevisionConsumer:
                 (min(bounds[0], previous.bounds[0]), max(bounds[1], previous.bounds[1]))
                 if bounds is not None and previous.bounds is not None else None
             )
+        if previous is None:
+            self._readback_bytes += 512 + _key_estimated_bytes(key)
         self._readbacks[key] = HistoryReadback(key, change["readback_revision"], bounds)
 
     def readback_pending(self, key):
@@ -127,6 +143,7 @@ class CacheRevisionConsumer:
                 self._readback_reset = None
             elif isinstance(receipt, HistoryReadback) and self._readbacks.get(receipt.key) is receipt:
                 del self._readbacks[receipt.key]
+                self._readback_bytes -= 512 + _key_estimated_bytes(receipt.key)
 
     def conflicts(self, revision, key, accepted=None):
         accepted = accepted or {}
@@ -135,6 +152,19 @@ class CacheRevisionConsumer:
                 changed > max(revision, accepted.get((other.exchange, other.market_type,
                     other.symbol, other.interval, *other.identity.storage_values), 0))
                 and _family(other) == _family(key) for changed, other in self._recent)
+
+    def memory_usage(self):
+        with self._lock:
+            return {"revision_recent_entries": len(self._recent),
+                    "revision_pending_readbacks": len(self._readbacks),
+                    "revision_reset_pending": self._readback_reset is not None,
+                    "revision_estimated_bytes": self._recent_bytes + self._readback_bytes
+                        + (64 if self._readback_reset is not None else 0)}
+
+    def _memory_roots(self):
+        # Private diagnostic roots only; do not expose mutable queue containers.
+        with self._lock:
+            return [list(self._recent), list(self._readbacks.values()), self._readback_reset]
 
     def snapshot(self):
         with self._lock:
