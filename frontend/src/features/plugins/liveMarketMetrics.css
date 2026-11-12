@@ -19,12 +19,4 @@
   background: var(--bg-tertiary);
 }
 
-@media (max-width: 1600px) {
-  .live-market-metrics-inline {
-    display: none;
-  }
-
-  .live-market-metrics-compact {
-    display: block;
-  }
-}
+/* Inline or compact is decided by the header's compaction steps (app/topBar.css). */

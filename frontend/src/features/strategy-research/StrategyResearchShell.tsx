@@ -92,7 +92,6 @@ export function StrategyResearchShell({
           <AppHeader
             source="research"
             offline={runtimeMode === "LOCAL_OFFLINE"}
-            brandText={t("strategy.brand")}
             context={(
               <ResearchDataSourceBar
                 source={source}

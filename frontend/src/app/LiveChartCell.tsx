@@ -401,7 +401,7 @@ function LiveChartCell({
       onClick={() => onStrategyPanelOpenChange(!strategyPanelOpen)}
     >
       <i className="chart-strategy-entry-dot" aria-hidden="true" />
-      {t("chartTester.entry")}
+      <b className="chart-strategy-entry-label">{t("chartTester.entry")}</b>
       {strategyEntryLabel && <span>{strategyEntryLabel}</span>}
     </button>
   ) : null;

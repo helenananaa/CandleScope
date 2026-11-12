@@ -8,13 +8,62 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
   height: 24px;
   padding: 0 12px;
+  overflow: hidden;
   background: var(--bg-secondary);
   border-top: 1px solid var(--border-color);
   font-size: var(--font-size-xs);
   color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
   flex-shrink: 0;
+}
+
+/* Items give way whole, never cut: when a side runs out of room, its later items wrap onto a
+   second line that is clipped. Each side lists its items most important first; on the right
+   the version is last, so it goes first. */
+.status-bar .status-left,
+.status-bar .status-right {
+  flex-wrap: wrap;
+  align-content: flex-start;
+  height: 23px;
+  min-width: 0;
+  overflow: hidden;
+  row-gap: 0;
+}
+
+.status-bar .status-left {
+  flex: 1 1 auto;
+}
+
+.status-bar .status-right {
+  flex: 0 1 auto;
+  justify-content: flex-end;
+}
+
+.status-bar :is(.status-left, .status-right) > * {
+  display: inline-flex;
+  align-items: center;
+  height: 23px;
+  white-space: nowrap;
+}
+
+/* A thin rule between items on each side. */
+.status-bar :is(.status-left, .status-right) > * + *::before {
+  content: "";
+  width: 1px;
+  height: 10px;
+  margin-right: 12px;
+  background: var(--border-subtle);
+}
+
+.status-warning {
+  color: var(--text-warning);
+}
+
+.status-accent {
+  color: var(--text-accent);
 }
 
 .status-dot {

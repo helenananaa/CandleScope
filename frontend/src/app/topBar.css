@@ -24,6 +24,52 @@
   align-items: center;
   gap: 12px;
   min-width: 0;
+  overflow: clip;
+  overflow-clip-margin: 4px;
+}
+
+/* The page's own part of the header starts after a divider from the brand and navigation. */
+.app-header-main:not(:empty) {
+  padding-left: 12px;
+  border-left: 1px solid var(--border-subtle);
+}
+
+/* Nothing on the left shrinks until the last step, so AppHeader can measure what it needs. */
+.app-header-main > * {
+  flex-shrink: 0;
+}
+
+/* ── Compaction steps (AppHeader sets data-compact from measurement, not the window width) ──
+ * 1, 2: before any page action moves into 更多.  3, 4: only once the left side still does not fit. */
+.app-header[data-compact~="1"] .live-market-metrics-inline,
+.app-header[data-compact~="1"] .advanced-market-summary:not(.live-market-metrics-compact *) {
+  display: none;
+}
+
+.app-header[data-compact~="1"] .live-market-metrics-compact {
+  display: block;
+}
+
+.app-header[data-compact~="2"] .logo-text,
+.app-header[data-compact~="2"] .symbol-shortcut-badge,
+.app-header[data-compact~="2"] .price-change {
+  display: none;
+}
+
+.app-header[data-compact~="3"] .symbol-exchange,
+.app-header[data-compact~="3"] .chart-strategy-entry-label,
+.app-header[data-compact~="3"] .chart-strategy-entry-button span {
+  display: none;
+}
+
+/* Last: intervals scroll and long names truncate. */
+.app-header[data-compact~="4"] .app-header-main > * {
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.app-header[data-compact~="4"] .app-header-main > .symbol-selector {
+  flex-shrink: 0;
 }
 
 .app-header-end {
@@ -44,6 +90,13 @@
   min-width: var(--control-height-md);
   overflow: clip;
   overflow-clip-margin: 4px;
+  /* Its content must not set the header's minimum width: actions give way to 更多 instead. */
+  contain: inline-size;
+}
+
+/* Actions keep their full width; the ones that do not fit go into 更多 instead of shrinking. */
+.app-header-actions > * {
+  flex-shrink: 0;
 }
 
 /* Measured but not shown: actions in the 更多 menu, and 更多 itself when everything fits. */
@@ -93,9 +146,8 @@
   border-radius: var(--radius-sm);
 }
 
+/* The interval strip shrinks (and scrolls) only at the header's last compaction step. */
 .top-bar .interval-toolbar-wrap {
-  flex-shrink: 1;
-  min-width: 0;
   z-index: auto;
 }
 

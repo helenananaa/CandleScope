@@ -94,24 +94,24 @@ function StatusBar({ status, extensions }: StatusBarProps) {
         <span data-live-bar-count={barCount}>{tPlural("status.barCount", barCount)}</span>
         {status.historyPreparing && <span role="status" data-history-preparing="true">{t("preparation.title")}</span>}
         {historyGapLabel && (
-          <span role="status" data-history-gap="terminal" title={historyGapLabel}
-            aria-label={historyGapLabel} style={{ color: "var(--text-warning)" }}>
+          <span role="status" className="status-warning" data-history-gap="terminal" title={historyGapLabel}
+            aria-label={historyGapLabel}>
             {t("status.historyGap")}
           </span>
         )}
         {status.indicatorComputing && <span role="status">{t("indicator.title")} {t("indicator.computing")}</span>}
-        {loadingMoreLeft && <span style={{ color: "var(--text-accent)" }}>{t("status.loadingOlder")}</span>}
-        {!hasMoreLeft && !loadingMoreLeft && <span style={{ color: "var(--text-muted)" }}>{t("status.noMoreHistory")}</span>}
+        {loadingMoreLeft && <span className="status-accent">{t("status.loadingOlder")}</span>}
+        {!hasMoreLeft && !loadingMoreLeft && <span>{t("status.noMoreHistory")}</span>}
         {dataSource === "mock" && (
-          <span style={{ color: "var(--text-warning)" }}>
+          <span className="status-warning">
             {t("status.mockUnavailable", { exchange: exchangeLabel })}
           </span>
         )}
         {exchangeCatalogStatus === "fallback" && (
-          <span style={{ color: "var(--text-warning)" }}>{t("status.exchangeCapabilitiesFallback")}</span>
+          <span className="status-warning">{t("status.exchangeCapabilitiesFallback")}</span>
         )}
         {exchangeLimitations.length > 0 && (
-          <span title={exchangeLimitations.join(" | ")} style={{ color: "var(--text-muted)" }}>
+          <span title={exchangeLimitations.join(" | ")}>
             {tPlural("status.exchangeLimitationCount", exchangeLimitations.length)}
           </span>
         )}
