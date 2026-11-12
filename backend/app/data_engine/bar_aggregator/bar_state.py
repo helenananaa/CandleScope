@@ -29,6 +29,8 @@ from app.data_engine.aggregation.semantics import sum_additive
 from app.data_engine.interval_policy import IntervalAlignment, parse_interval_spec
 from . import component_accumulator
 
+from copy import deepcopy
+
 import logging
 import time
 from collections import OrderedDict
@@ -665,7 +667,7 @@ class BarStateEngine:
                 return state, BarStateChange.NO_CHANGE
             # Move to end (most recently updated)
             if source_ref is not None:
-                state.source_refs[bar_input.input_key] = dict(source_ref)
+                state.source_refs[bar_input.input_key] = deepcopy(dict(source_ref))
             self._active.move_to_end(key)
             return state, BarStateChange.UPDATED
 
@@ -707,7 +709,7 @@ class BarStateEngine:
                 ):
                     return state, BarStateChange.NO_CHANGE
                 if source_ref is not None:
-                    state.source_refs[bar_input.input_key] = dict(source_ref)
+                    state.source_refs[bar_input.input_key] = deepcopy(dict(source_ref))
                 return state, BarStateChange.AMENDED
             # Realtime data for an already-closed bar — ignore
             return old_state, BarStateChange.NO_CHANGE
@@ -732,7 +734,7 @@ class BarStateEngine:
         self._mark_authoritative_close_policy(state, bar_input)
         self._active[key] = state
         if source_ref is not None:
-            state.source_refs[bar_input.input_key] = dict(source_ref)
+            state.source_refs[bar_input.input_key] = deepcopy(dict(source_ref))
 
         # Evict oldest active bars if limit exceeded
         self._enforce_active_limit(exchange, market_type, symbol)
