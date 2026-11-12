@@ -26,6 +26,9 @@ Usage::
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass
 from copy import deepcopy
 
 import asyncio
@@ -49,6 +52,15 @@ logger = logging.getLogger("bar_aggregator.L5_Publisher")
 
 # Type alias
 BarEventCallback = Callable[[BarEvent], Awaitable[None]]
+
+
+@dataclass(slots=True)
+class _SourceHandoff:
+    # A spawned callback task inherits ContextVars. Keep no payload/callback
+    # references here, and deactivate on scope exit to prevent stale observers.
+    bar_id: int
+    transferred: bool = False
+    active: bool = True
 
 
 class BarAggregatorPublisher:
@@ -86,6 +98,18 @@ class BarAggregatorPublisher:
         # References to payloads already held by suspended publisher frames.
         # Registration adds no new snapshot and ends on success/error/cancel.
         self._inflight_payloads: dict[object, tuple[str, object]] = {}
+        self._source_handoff_observer = ContextVar("source_handoff_observer", default=None)
+
+    @contextmanager
+    def _observe_source_handoff(self, bar):
+        """Observe transfer to the existing retry owner in this call context."""
+        observer = _SourceHandoff(id(bar))
+        token = self._source_handoff_observer.set(observer)
+        try:
+            yield observer
+        finally:
+            observer.active = False
+            self._source_handoff_observer.reset(token)
 
     def _hold_payload(self, kind, payload):
         token = object()
@@ -245,6 +269,7 @@ class BarAggregatorPublisher:
 
         # Snapshot the single emitted state before the first await. Later
         # ticks may mutate its builder while callbacks are suspended.
+        original_bar = event.bar
         event = deepcopy(event)
         self._events_emitted += 1
         token = self._hold_payload("dispatch", event)
@@ -253,6 +278,12 @@ class BarAggregatorPublisher:
             # version without constructing a discarded duplicate snapshot.
             if event.bar.source_refs and event.delivery_id not in self._pending_source_events:
                 self._pending_source_events[event.delivery_id] = copy.deepcopy(event)
+            observer = self._source_handoff_observer.get()
+            if (event.bar.source_refs and observer is not None and observer.active
+                    and observer.bar_id == id(original_bar)):
+                # This is synchronous with registration, before any callback can
+                # suspend or a concurrent retry can acknowledge the snapshot.
+                observer.transferred = True
             await self._fire_callbacks(event)
             if (self._pending_source_events.pop(event.delivery_id, None) is not None
                     and not self._pending_source_events):
