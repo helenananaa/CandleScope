@@ -1,0 +1,8 @@
+/* Workspace link member rows.
+ * Loads later than features/chart-workspace/chartWorkspace.css on purpose: these rules depend
+ * on files imported in between (cascade order). They move into that file when this surface is
+ * rebuilt (design refactor Phase 5). */
+
+.workspace-member-row small { color: var(--text-muted); font-size: var(--font-size-xs); }
+
+.workspace-member-row strong { font-size: var(--font-size-sm); font-weight: 600; }

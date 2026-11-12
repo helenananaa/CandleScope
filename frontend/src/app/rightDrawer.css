@@ -1,0 +1,41 @@
+/* Right drawer resize handle. */
+
+.right-drawer-resize-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  padding: 0;
+  border: 0;
+  cursor: col-resize;
+  z-index: 10;
+  background: transparent;
+  touch-action: none;
+}
+.right-drawer-resize-handle::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: var(--accent-blue);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.right-drawer-resize-handle:hover::after,
+.right-drawer-resize-handle:focus-visible::after,
+.right-drawer-overlay.is-resizing .right-drawer-resize-handle::after {
+  opacity: 1;
+}
+.right-drawer-resize-handle:focus-visible {
+  outline: none;
+}
+.right-drawer-overlay.is-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+/* Drawers open below the top bar, so its toggle buttons stay clickable
+ * (element-qualified to win over each drawer's own inset: 0) */
+div.right-drawer-overlay {
+  top: 48px;
+}

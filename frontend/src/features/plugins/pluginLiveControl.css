@@ -1,0 +1,179 @@
+/* Plugin live-control strip and intents. */
+
+/* Full-width strip above the status bar: it takes its own row in .app-layout
+ * (the feature-surface host is display: contents), so it never covers chart controls. */
+.live-control-banner {
+  --live-banner-tone: var(--color-warning);
+  --live-banner-text: var(--text-warning);
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 28px;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--live-banner-tone) 70%, transparent);
+  padding: 4px 12px;
+  background: color-mix(in srgb, var(--live-banner-tone) 14%, var(--surface-1));
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.live-control-banner:hover {
+  background: color-mix(in srgb, var(--live-banner-tone) 20%, var(--surface-1));
+}
+.live-control-banner:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: -2px;
+}
+.live-control-banner strong {
+  flex: 0 0 auto;
+  color: var(--live-banner-text);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.08em;
+}
+.live-control-banner span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-control-banner:is(.live-control-armed, .live-control-killed, .live-control-unavailable) {
+  --live-banner-tone: var(--color-danger);
+  --live-banner-text: var(--text-danger);
+}
+.live-control-banner.live-control-unavailable {
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-danger) 10%, var(--surface-1)) 0 10px,
+    color-mix(in srgb, var(--color-danger) 16%, var(--surface-1)) 10px 20px
+  );
+}
+.live-control-toolbar {
+  border-color: color-mix(in srgb, var(--color-warning) 72%, transparent) !important;
+  color: #fbbf24 !important;
+}
+.live-control-toolbar.live-control-armed,
+.live-control-toolbar.live-control-killed,
+.live-control-toolbar.live-control-unavailable {
+  border-color: color-mix(in srgb, var(--color-danger) 80%, transparent) !important;
+  color: #f87171 !important;
+}
+.live-host-modal-overlay { z-index: calc(var(--z-toast) + 800); }
+.live-host-modal { width: min(880px, 94vw); }
+.live-control-summary,
+.live-control-section {
+  margin-bottom: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  background: color-mix(in srgb, var(--surface-0) 24%, transparent);
+}
+.live-control-summary > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.live-control-summary strong {
+  border: 1px solid currentColor;
+  border-radius: var(--radius-full);
+  padding: 3px 9px;
+  color: var(--text-warning);
+  letter-spacing: 0.08em;
+}
+.live-control-summary.live-control-armed strong,
+.live-control-summary.live-control-killed strong,
+.live-control-summary.live-control-unavailable strong { color: var(--text-danger); }
+.live-control-summary p,
+.live-control-section p { margin: 8px 0; color: var(--text-secondary); }
+.live-control-section h3 { margin: 0 0 8px; }
+.live-control-field {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+  color: var(--text-secondary);
+}
+.live-control-field input,
+.live-control-field select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font: inherit;
+}
+.live-warning-callout {
+  margin-bottom: 14px;
+  border: 1px solid color-mix(in srgb, var(--color-danger) 72%, transparent);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  background: color-mix(in srgb, var(--color-danger) 18%, transparent);
+  color: var(--text-danger);
+}
+.live-intent-facts {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) minmax(0, 1fr);
+  gap: 8px 14px;
+  margin: 0 0 16px;
+}
+.live-intent-facts dt { color: var(--text-muted); }
+.live-intent-facts dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+}
+
+.live-control-primary-actions { align-items: center; }
+.live-revoke-grid {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.5fr) minmax(180px, 1fr) minmax(180px, 1fr);
+  gap: 10px;
+}
+.live-receipt-summary {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  border: 1px solid color-mix(in srgb, var(--color-success) 55%, transparent);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
+}
+.live-receipt-summary span {
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.live-market-metrics-compact > summary:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+.live-market-metrics-compact > .advanced-market-summary {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  flex-direction: column;
+  align-items: stretch;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  box-shadow: 0 6px 20px #0003;
+}
+
+@media (max-width: 900px) {
+  .plugin-command-layout,
+  .plugin-manager-layout { grid-template-columns: 1fr; }
+  .plugin-command-layout nav,
+  .plugin-manager-layout nav { max-height: 180px; border-right: 0; border-bottom: 1px solid var(--border-color); padding: 0 0 10px; }
+  .plugin-toolbar { max-width: 32vw; }
+  .live-revoke-grid { grid-template-columns: 1fr; }
+  .live-intent-facts { grid-template-columns: 1fr; }
+  .live-intent-facts dd { margin-bottom: 5px; }
+}

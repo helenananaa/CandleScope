@@ -1,3 +1,4 @@
+@layer features {
 .plugin-trust-install-card {
   border-color: color-mix(in srgb, var(--color-warning) 42%, var(--border-color));
 }
@@ -112,4 +113,5 @@
   .plugin-trust-diffs {
     grid-template-columns: 1fr;
   }
+}
 }

@@ -1,0 +1,11 @@
+/* Synthetic-chart notice and chart error details.
+ * Loads later than components/chartPanes.css on purpose: these rules depend on files imported
+ * in between (cascade order). They move into that file when this surface is rebuilt (design
+ * refactor Phase 5). */
+
+.synthetic-chart-notice p {
+  margin: 6px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.error-message small { display: block; margin-top: 8px; color: var(--text-muted); }

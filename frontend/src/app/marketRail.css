@@ -1,0 +1,432 @@
+/* Right market rail: activity bar, views, splitters and docks. */
+
+/* ═══════════════════════════════════════════════════════════════
+   Right market rail — activity bar + free multi-open scroll accordion
+   ═══════════════════════════════════════════════════════════════ */
+
+.right-market-rail {
+  --market-activity-bar-width: 44px;
+  display: flex;
+  flex-direction: row;
+  flex-shrink: 0;
+  min-height: 0;
+  height: 100%;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border-color);
+  z-index: var(--z-rail);
+  position: relative;
+  --wl-up-color: var(--candle-up);
+  --wl-down-color: var(--candle-down);
+  --wl-up-text: var(--wl-up-color);
+  --wl-down-text: var(--wl-down-color);
+}
+.right-market-rail.resizing {
+  transition: none;
+}
+.right-market-rail.panel-collapsed {
+  border-left-color: var(--border-color);
+}
+.market-rail-loading {
+  width: calc(320px + var(--market-activity-bar-width, 44px));
+  opacity: 0.65;
+}
+.market-rail-panel {
+  container: rail / inline-size;
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  overscroll-behavior-y: contain;
+  box-shadow:
+    inset 0 10px 12px -14px rgba(15, 23, 42, 0.7),
+    inset 0 -10px 12px -14px rgba(15, 23, 42, 0.7);
+  background: var(--bg-secondary);
+}
+.market-rail-panel::-webkit-scrollbar {
+  width: 8px;
+}
+.market-rail-panel::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--text-muted) 55%, transparent);
+  background-clip: padding-box;
+}
+.market-rail-accordion-section {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-secondary);
+}
+.market-rail-accordion-section + .market-rail-accordion-section {
+  border-top: 1px solid var(--border-color);
+}
+.market-rail-accordion-trigger {
+  display: grid;
+  grid-template-columns: 20px auto minmax(0, 1fr) auto;
+  align-items: center;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 8px 0 6px;
+  gap: 6px;
+  border: 0;
+  background: color-mix(in srgb, var(--bg-secondary) 94%, var(--text-primary) 6%);
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+}
+.market-rail-accordion-trigger:hover,
+.market-rail-accordion-trigger:focus-visible {
+  background: var(--bg-hover);
+  outline: none;
+}
+.market-rail-accordion-trigger:focus-visible {
+  box-shadow: inset 3px 0 var(--accent-blue);
+}
+.market-rail-accordion-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+.market-rail-accordion-trigger strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+html[lang="ru"] .market-rail-accordion-trigger strong {
+  white-space: normal;
+  line-height: 1.25;
+}
+.market-rail-accordion-summary {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.market-rail-accordion-badge {
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
+  color: var(--text-accent);
+  font-size: var(--font-size-2xs);
+  font-weight: 700;
+  text-align: center;
+}
+.market-rail-view-host {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.market-rail-view-host > * {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+/* Single-view rail: one titled view fills the panel; each view owns its scroll. */
+.market-rail-panel.market-rail-single {
+  overflow: hidden;
+  scrollbar-gutter: auto;
+  box-shadow: none;
+}
+.market-rail-single-header {
+  display: flex;
+  flex: 0 0 40px;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px 0 14px;
+  border-bottom: 1px solid var(--border-color);
+}
+.market-rail-single-header strong {
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.market-rail-single-header span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.market-rail-single-hide {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-sm, 6px);
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+.market-rail-single-hide:hover,
+.market-rail-single-hide:focus-visible {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  outline: none;
+}
+.market-rail-single-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+.market-rail-single-body[hidden] { display: none; }
+.market-rail-single-body > * {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.market-rail-single .replay-market-dock {
+  border-top: 0;
+}
+.market-rail-single .replay-market-dock-body {
+  display: flex;
+  flex-direction: column;
+}
+.market-rail-single .replay-market-dock-body > * {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.replay-watchlist-pane[data-embedded="true"] .replay-market-search {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+/* Activity bar — always-visible icon strip on the outer right edge */
+.market-activity-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 0 0 var(--market-activity-bar-width);
+  width: var(--market-activity-bar-width);
+  min-height: 0;
+  height: 100%;
+  padding: 6px 0;
+  gap: 2px;
+  background: var(--bg-tertiary, rgba(0, 0, 0, 0.12));
+  border-left: 1px solid var(--border-color);
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.market-activity-bar::-webkit-scrollbar {
+  display: none;
+}
+.market-activity-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  min-height: 46px;
+  padding: 4px 0 3px;
+  gap: 3px;
+  border: 0;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+.right-market-rail[data-runtime-source="replay"] .market-activity-item {
+  /* Replay recovery can replace this rail while a background tab has frozen
+     its CSS timeline. A pending transition then retains the removed button and
+     its complete order-ticket subtree until that timeline advances. */
+  transition: none;
+}
+.market-activity-item:hover,
+.market-activity-item:focus-visible {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  outline: none;
+}
+.market-activity-item.active {
+  color: var(--text-accent);
+  background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
+}
+.market-activity-item.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent-blue);
+}
+.market-activity-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+.market-activity-label {
+  display: block;
+  max-width: 34px;
+  overflow: hidden;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.market-activity-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: var(--radius-md);
+  background: var(--accent-solid);
+  color: var(--text-on-accent);
+  font-size: var(--font-size-2xs);
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+}
+/* Hide/show whole panel without clearing open views (pinned to bar bottom). */
+.market-activity-collapse {
+  margin-top: auto;
+}
+.market-activity-collapse:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.market-activity-collapse:disabled:hover,
+.market-activity-collapse:disabled:focus-visible {
+  color: var(--text-muted);
+  background: transparent;
+}
+
+.right-market-rail.collapsed .watchlist-pane {
+  min-height: 0;
+}
+
+.right-market-rail > .wl-resize-handle {
+  margin-right: -2px;
+}
+
+/* ── Right market rail: independent accordion height handles ── */
+.market-rail-splitter {
+  position: relative;
+  display: flex;
+  flex: 0 0 5px;
+  align-items: center;
+  justify-content: center;
+  height: 5px;
+  cursor: row-resize;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  outline: none;
+  z-index: 2;
+}
+.market-rail-view-resizer {
+  flex-basis: 7px;
+  height: 7px !important;
+  border-top-color: color-mix(in srgb, var(--border-color) 75%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--border-color) 75%, transparent);
+}
+.market-rail-view-resizer::before {
+  inset: -4px 0;
+}
+.market-rail-view-resizer > span {
+  width: 42px;
+}
+.right-market-rail :is(
+  .wl-accordion-scroll,
+  .ob-levels,
+  .tf-tape-list,
+  .tf-profile-list,
+  .replay-market-dock-body
+) {
+  overscroll-behavior-y: auto;
+}
+.market-rail-splitter::before {
+  content: '';
+  position: absolute;
+  inset: -3px 0;
+}
+.market-rail-splitter > span {
+  width: 34px;
+  height: 2px;
+  border-radius: var(--radius-full);
+  background: var(--text-muted);
+  opacity: 0.45;
+  transition: width 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+}
+.market-rail-splitter:hover > span,
+.market-rail-splitter:focus-visible > span,
+.market-rail-splitter.active > span {
+  width: 52px;
+  background: var(--accent-blue);
+  opacity: 1;
+}
+
+/* Short docks lay the empty state out as one row so title, detail and retry stay visible. */
+@container rail-dock (max-height: 300px) {
+  .ui-empty-compact { flex-direction: row; justify-content: flex-start; gap: 8px; padding: 8px 12px; text-align: left; }
+  .ui-empty-compact .ui-empty-icon { display: none; }
+  .ui-empty-compact .ui-empty-title { flex: 0 0 auto; }
+  .ui-empty-compact .ui-empty-description { flex: 1 1 auto; min-width: 0; max-width: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ui-empty-compact .ui-empty-action { flex: 0 0 auto; margin: 0; }
+}
+
+.market-dock-tabs {
+  display: inline-flex;
+  min-width: 0;
+  padding: 2px;
+  gap: 1px;
+  border-radius: var(--radius-control);
+  background: var(--bg-tertiary);
+}
+.market-dock-tabs button {
+  height: 24px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.market-dock-tabs button:hover,
+.market-dock-tabs button:focus-visible {
+  color: var(--text-primary);
+  outline: none;
+}
+.market-dock-tabs button.active {
+  background: var(--bg-secondary);
+  color: var(--text-accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+
+/* ── Replay desktop trading workstation ───────────────────── */
+.right-market-rail[data-runtime-source="replay"] .replay-watchlist-pane {
+  min-height: 90px;
+}

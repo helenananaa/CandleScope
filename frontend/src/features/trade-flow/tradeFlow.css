@@ -1,0 +1,268 @@
+/* Trade flow dock. */
+
+/* ── TradeFlow: bounded tape and throttled profile ── */
+.trade-flow-dock {
+  --tf-buy: var(--wl-up-color);
+  --tf-sell: var(--wl-down-color);
+  --tf-buy-text: var(--wl-up-text);
+  --tf-sell-text: var(--wl-down-text);
+  container: trade-flow rail-dock / size;
+}
+.tf-header .market-dock-tabs {
+  flex-shrink: 0;
+}
+.tf-status {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  margin-left: auto;
+  gap: 4px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tf-status-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.tf-status-quiet { color: var(--text-secondary); }
+.tf-status-live { color: var(--tf-buy-text); }
+.tf-status-connecting,
+.tf-status-reconnecting { color: var(--text-accent); }
+.tf-status-connecting .tf-status-dot,
+.tf-status-reconnecting .tf-status-dot { animation: ob-status-pulse 1.2s ease-in-out infinite; }
+.tf-status-gap,
+.tf-status-error { color: var(--text-warning); }
+.tf-controls {
+  display: grid;
+  flex: 0 0 auto;
+  /* Narrow rails stack the side switch above the two filters so option text is never clipped. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  min-width: 0;
+  padding: 5px 6px;
+  gap: 5px;
+  border-bottom: 1px solid var(--border-color);
+}
+.tf-side-switch {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  min-width: 0;
+  padding: 2px;
+  border-radius: var(--radius-control);
+  background: var(--bg-tertiary);
+}
+.tf-side-switch button {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0 3px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tf-side-switch button.active {
+  background: var(--bg-secondary);
+  color: var(--text-accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+  font-weight: 700;
+}
+.tf-controls label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  min-width: 0;
+  gap: 3px;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+}
+.tf-controls select {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 0 16px 0 6px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-control);
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--font-size-xs);
+}
+@container trade-flow (min-width: 340px) {
+  .tf-controls { grid-template-columns: minmax(126px, 1.25fr) repeat(2, minmax(92px, 1fr)); }
+  .tf-side-switch { grid-column: auto; }
+}
+.tf-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  contain: strict;
+}
+.tf-history {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  font-size: var(--font-size-xs);
+}
+.tf-history-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 4px 8px;
+}
+.tf-history-status {
+  padding: 2px 8px 5px;
+  color: var(--text-muted);
+}
+.tf-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.tf-history-table th,
+.tf-history-table td {
+  padding: 3px 5px;
+  border-bottom: 1px solid var(--border-color);
+  text-align: start;
+}
+.tf-summary {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  min-height: 38px;
+  padding: 3px 8px;
+  gap: 2px 8px;
+  border-bottom: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-tertiary) 82%, transparent);
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+}
+.tf-summary span:nth-child(even) { text-align: right; }
+.tf-summary-buy { color: var(--tf-buy-text); }
+.tf-summary-sell { color: var(--tf-sell-text); }
+.tf-tape-header,
+.tf-tape-row {
+  display: grid;
+  grid-template-columns: 28px minmax(72px, 1fr) minmax(48px, 0.65fr) minmax(58px, 0.8fr) minmax(78px, 0.9fr);
+  align-items: center;
+  min-width: 0;
+  padding: 0 7px;
+  gap: 5px;
+}
+.tf-tape-header {
+  flex: 0 0 24px;
+  height: 24px;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  user-select: none;
+}
+.tf-tape-header span:not(:first-child),
+.tf-tape-row > span:not(:first-child),
+.tf-tape-row time { text-align: right; }
+.tf-tape-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  contain: strict;
+}
+.tf-tape-row {
+  height: 22px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  line-height: 22px;
+  contain: layout paint style;
+}
+.tf-tape-row:hover { background: var(--bg-hover); }
+.tf-tape-row time { color: var(--text-muted); font-size: var(--font-size-xs); }
+.tf-tape-side { font-weight: 700; text-align: center !important; }
+.tf-tape-row.tf-buy .tf-tape-side,
+.tf-tape-row.tf-buy > span:nth-child(2) { color: var(--tf-buy-text); }
+.tf-tape-row.tf-sell .tf-tape-side,
+.tf-tape-row.tf-sell > span:nth-child(2) { color: var(--tf-sell-text); }
+.tf-tape-row.tf-large {
+  background: color-mix(in srgb, var(--color-warning) 8%, transparent);
+  box-shadow: inset 2px 0 var(--color-warning);
+  font-weight: 700;
+}
+/* Box and type come from .ui-empty (src/components/ui/EmptyState) */
+.tf-empty {
+  flex: 1 1 auto;
+}
+.tf-profile-caption {
+  display: flex;
+  flex: 0 0 27px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+.tf-profile-caption span:last-child { color: var(--text-muted); }
+.tf-profile-header,
+.tf-profile-row {
+  display: grid;
+  grid-template-columns: minmax(72px, 1fr) minmax(53px, 0.72fr) minmax(53px, 0.72fr) minmax(56px, 0.76fr) minmax(44px, 0.58fr);
+  align-items: center;
+  min-width: 0;
+  padding: 0 7px;
+  gap: 4px;
+}
+.tf-profile-header {
+  flex: 0 0 23px;
+  height: 23px;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  user-select: none;
+}
+.tf-profile-header span:not(:first-child),
+.tf-profile-row > span:not(:first-child) { text-align: right; }
+.tf-profile-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  contain: strict;
+}
+.tf-profile-row {
+  position: relative;
+  height: 22px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  contain: layout paint style;
+}
+.tf-profile-row > span:not(.tf-profile-bars) { position: relative; z-index: 1; }
+.tf-profile-bars { position: absolute; inset: 1px 0; z-index: 0; }
+.tf-profile-bars i { position: absolute; right: 0; height: 50%; opacity: 0.11; }
+.tf-profile-buy-bar { top: 0; background: var(--tf-buy); }
+.tf-profile-sell-bar { bottom: 0; background: var(--tf-sell); }
+.tf-profile-buy { color: var(--tf-buy-text); }
+.tf-profile-sell { color: var(--tf-sell-text); }
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}

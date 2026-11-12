@@ -1,0 +1,36 @@
+/* Status bar.
+ * Loads later than app/appShell.css on purpose: these rules depend on files imported in
+ * between (cascade order). They move into that file when this surface is rebuilt (design
+ * refactor Phase 5). */
+
+/* ── 底部状态栏 ──────────────────────────────────────────── */
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 24px;
+  padding: 0 12px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 4px;
+}
+.status-dot.connected {
+  background: var(--candle-up);
+}
+.status-dot.disconnected {
+  background: var(--candle-down);
+}
+.status-dot.loading {
+  background: var(--color-warning);
+  animation: pulse 1.5s infinite;
+}

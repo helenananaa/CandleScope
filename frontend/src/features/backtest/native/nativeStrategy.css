@@ -1,3 +1,4 @@
+@layer features {
 .native-mode-switch { display:flex; flex-shrink:0; flex-wrap:wrap; gap:8px; padding:8px 16px; background:var(--bg-secondary); color:var(--text-primary); border-top:1px solid var(--border-color); }
 .native-mode-switch button,
 .native-strategy-panel :is(button, select, input) {
@@ -200,3 +201,4 @@
 .native-error-help pre { max-height: 160px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .native-strategy-name { display: flex; align-items: center; gap: 12px; padding: 6px 0; }
 .native-strategy-name input { color: var(--text-primary); background: var(--bg-primary); border: 1px solid var(--border-color); padding: 4px 8px; }
+}

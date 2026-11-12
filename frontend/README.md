@@ -91,6 +91,17 @@ node scripts/design-snapshots.mjs --compare ../output/design-snapshots/before ..
 Snapshots go to `../output/design-snapshots/<label>/` (ignored by git). Steps name
 i18n message keys, so `--locale en` captures the English interface.
 
+Stylesheets live in cascade layers (see [DESIGN.md](../DESIGN.md#stylesheets-and-cascade-layers)).
+`npm run check:css-layers` (part of `npm run check`) fails on CSS outside a layer.
+Before moving rules between files or layers, compare with the base branch:
+
+```bash
+npm run css:cascade -- --base main
+```
+
+It lists declarations that were added or removed, and every pair of declarations
+that can style the same element and would change winner. A pure move reports none.
+
 ### Browser smoke check
 
 With the backend and Vite running, use the browser smoke check to verify the
