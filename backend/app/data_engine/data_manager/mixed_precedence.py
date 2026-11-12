@@ -27,9 +27,10 @@ class MixedPrecedence:
                 continue
             lo, hi = max(0, span.start_ms - width + 1), span.end_ms
             change = self.mutations[fine]
-            # The pinned durable envelope includes all canonical rows and
-            # withdrawals, so untouched/disjoint sources require no SQL probe.
-            if change is None or change["start_ms"] >= hi or change["end_ms"] < lo:
+            # The pinned minimum open covers rows and withdrawals. Do not use
+            # the close-based upper envelope to skip probes: a malformed finer
+            # close may precede its open, including in historical deletions.
+            if change is None or change["start_ms"] >= hi:
                 continue
             yield fine, lo, hi, change["delete_revision"] > 0
 

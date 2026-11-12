@@ -2,6 +2,7 @@
 import pytest
 
 from app.data_engine.series_identity import KlineSeriesIdentity
+from app.data_engine.storage import klines_repo
 from tests.test_default_mixed_history_query import mixed_query, seed
 from tests.test_mixed_history_reader import row, MINUTE
 
@@ -102,4 +103,23 @@ def test_failed_or_malformed_presence_probe_cannot_qualify_native_coarse(mixed_q
     if fault == "io":
         assert result.metadata["mixed_presence_failures"] == 1
         assert result.metadata["storage_failures"] >= 1
+    assert engine.storage.count_bars("BTCUSDT", "89m", 0, stop - 1, market_type="futures") == 0
+
+
+@pytest.mark.parametrize("deleted", [False, True])
+def test_bad_finer_close_bounds_cannot_make_presence_or_deletion_disappear(mixed_query, deleted):
+    engine = mixed_query
+    _, stop, _ = seed(engine, count=2)
+    engine.storage.upsert_bars("BTCUSDT", "3m", [{**row(99 * MINUTE, 3 * MINUTE), "close_time": 0}],
+                              source="data_manager_closed", market_type="futures")
+    if deleted:
+        # Exercise the durable trigger contract of an offline physical writer,
+        # including a legacy malformed close, rather than a forgiving adapter.
+        with klines_repo._connect() as conn:
+            conn.execute("DELETE FROM klines WHERE interval='3m' AND open_time=? AND market_type='futures'",
+                         (99 * MINUTE,))
+    result = engine.query("BTCUSDT", "89m", start_ms=89 * MINUTE, end_ms=stop - 1, limit=1,
+        market_type="futures", min_revision=engine.storage.revision_store.head())
+    assert not result.complete and not any(bar.trusted_final for bar in result.bars)
+    assert result.metadata["mixed_fallback_reason"]
     assert engine.storage.count_bars("BTCUSDT", "89m", 0, stop - 1, market_type="futures") == 0
