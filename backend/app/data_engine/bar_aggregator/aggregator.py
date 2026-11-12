@@ -72,6 +72,7 @@ from app.data_engine.series_identity import (
 
 import asyncio
 import logging
+import sys
 import time
 from dataclasses import replace
 from typing import Any, Awaitable, Callable
@@ -155,6 +156,8 @@ class IntervalPipeline:
         )
         self.bar_state = BarStateEngine(config, self.time_bucket, interval)
         self.finalizer = Finalizer(config, self.time_bucket, interval)
+        # Raw buffer items claimed by suspended drains; references only.
+        self.eviction_claims: dict[object, BarState] = {}
 
     def snapshot(self) -> dict:
         return {
@@ -943,7 +946,8 @@ class BarAggregator:
             active += len(engine._active)
             closed += len(engine._closed)
             resident.extend([*engine._active.values(), *engine._closed.values()])
-            buffered.extend([*engine.evicted_closed, *engine.evicted_expired])
+            buffered.extend([*engine.evicted_closed, *engine.evicted_expired,
+                             *pipeline.eviction_claims.values()])
         events = [event for queue, _ in list(self._publisher._subscribers)
                   for event in list(queue._queue) if isinstance(event, BarEvent)]
         publications, inputs, publisher_counts = self._publisher._retained_payloads()
@@ -967,11 +971,15 @@ class BarAggregator:
                                 for state in (event.bar, event.previous_bar) if state is not None)
         retained_components = sum(len(state.source_snapshots) for state in retained.values())
         retained_prefixes = sum(state._history_prefix is not None for state in retained.values())
+        claim_metadata_bytes = sum(sys.getsizeof(p.eviction_claims) + len(p.eviction_claims) * 16
+                                   for p in self._pipelines.values())
         handoff = self.history_prefix_runtime
         handoff_bytes = len(handoff.targets) * 1024 + len(handoff.tasks) * 8192 if handoff else 0
         return {"active_bars": active, "closed_bars": closed, "components": components,
                 "queued_snapshots": len(events), "queued_components": queued_components,
                 "buffered_handoff_states": len(buffered),
+                "eviction_claims": sum(len(p.eviction_claims) for p in self._pipelines.values()),
+                "eviction_claim_metadata_bytes": claim_metadata_bytes,
                 "retained_payload_states": len(payload_states),
                 "retained_states": len(retained),
                 "retained_components": retained_components,
@@ -991,7 +999,7 @@ class BarAggregator:
                 "estimated_bytes": (len(retained) * 1024 + retained_components * 1024
                     + sum(index_bytes.values()) + retained_prefixes * 32 * 1024
                     + len(retained_events) * 256 + publisher_counts["publisher_metadata_bytes"]
-                    + handoff_bytes + len(self._active_preparations) * SCOPE_BYTES
+                    + claim_metadata_bytes + handoff_bytes + len(self._active_preparations) * SCOPE_BYTES
                     + self._preparation_capacity.capacity * PREPARATION_BYTES),
                 "estimate_basis": "unique retained state containers; component references may overcount shared immutable values",
                 "protection": "active/correction state and pending publications stay with realtime owner"}
@@ -1003,6 +1011,7 @@ class BarAggregator:
                   + list(engine.evicted_closed) + list(engine.evicted_expired)
                   for pipeline in list(self._pipelines.values()) for engine in [pipeline.bar_state]],
                 *[list(queue._queue) for queue, _ in list(self._publisher._subscribers)],
+                *[pipeline.eviction_claims for pipeline in self._pipelines.values()],
                 self._publisher._memory_roots(),
                 list(self.history_prefix_runtime.targets.values()) if self.history_prefix_runtime else [],
                 [preparation.memory_roots() for preparation in list(self._active_preparations)]]
@@ -1258,19 +1267,41 @@ class BarAggregator:
         buffers when bars are force-closed or expired during apply()/close_bar().
         This method drains those buffers and emits the appropriate events.
         """
-        # Emit CLOSED events for force-closed bars (active limit exceeded)
-        if pipeline.bar_state.evicted_closed:
-            if emit_events:
-                for bar in pipeline.bar_state.evicted_closed:
-                    await self._publisher.emit_closed(bar)
-            pipeline.bar_state.evicted_closed.clear()
+        for buffer, emit in (
+            (pipeline.bar_state.evicted_closed, self._publisher.emit_closed),
+            (pipeline.bar_state.evicted_expired, self._publisher.emit_expired),
+        ):
+            if not emit_events:
+                buffer.clear()
+                continue
+            while buffer:
+                # Claim synchronously before callbacks await. Another drain
+                # can process later items but cannot publish this item again.
+                bar = buffer.pop(0)
+                token = object()
+                pipeline.eviction_claims[token] = bar
+                handed_off = False
 
-        # Emit EXPIRED events for expired bars (closed limit exceeded)
-        if pipeline.bar_state.evicted_expired:
-            if emit_events:
-                for bar in pipeline.bar_state.evicted_expired:
-                    await self._publisher.emit_expired(bar)
-            pipeline.bar_state.evicted_expired.clear()
+                def transferred():
+                    nonlocal handed_off
+                    handed_off = True
+
+                try:
+                    with self._publisher._observe_source_handoff(bar, transferred):
+                        await emit(bar)
+                except BaseException:
+                    # Source-backed failures/cancellation already belong to the
+                    # publisher's original-ID retry snapshot, possibly even
+                    # acknowledged by a concurrent retry. Never enqueue raw
+                    # data a second time. Otherwise preserve the original item.
+                    if not handed_off:
+                        buffer.insert(0, bar)
+                    raise
+                finally:
+                    pipeline.eviction_claims.pop(token, None)
+                    if not pipeline.eviction_claims:
+                        pipeline.eviction_claims.clear()
+                    del bar
 
     @asynccontextmanager
     async def _validated_active_state(self, pipeline, state):

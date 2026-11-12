@@ -26,6 +26,8 @@ Usage::
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 from copy import deepcopy
 
 import asyncio
@@ -86,6 +88,16 @@ class BarAggregatorPublisher:
         # References to payloads already held by suspended publisher frames.
         # Registration adds no new snapshot and ends on success/error/cancel.
         self._inflight_payloads: dict[object, tuple[str, object]] = {}
+        self._source_handoff_observer = ContextVar("source_handoff_observer", default=None)
+
+    @contextmanager
+    def _observe_source_handoff(self, bar, acknowledged):
+        """Observe transfer to the existing retry owner in this call context."""
+        token = self._source_handoff_observer.set((bar, acknowledged))
+        try:
+            yield
+        finally:
+            self._source_handoff_observer.reset(token)
 
     def _hold_payload(self, kind, payload):
         token = object()
@@ -245,6 +257,7 @@ class BarAggregatorPublisher:
 
         # Snapshot the single emitted state before the first await. Later
         # ticks may mutate its builder while callbacks are suspended.
+        original_bar = event.bar
         event = deepcopy(event)
         self._events_emitted += 1
         token = self._hold_payload("dispatch", event)
@@ -253,6 +266,11 @@ class BarAggregatorPublisher:
             # version without constructing a discarded duplicate snapshot.
             if event.bar.source_refs and event.delivery_id not in self._pending_source_events:
                 self._pending_source_events[event.delivery_id] = copy.deepcopy(event)
+            observer = self._source_handoff_observer.get()
+            if event.bar.source_refs and observer is not None and observer[0] is original_bar:
+                # This is synchronous with registration, before any callback can
+                # suspend or a concurrent retry can acknowledge the snapshot.
+                observer[1]()
             await self._fire_callbacks(event)
             if (self._pending_source_events.pop(event.delivery_id, None) is not None
                     and not self._pending_source_events):
