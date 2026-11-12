@@ -255,3 +255,39 @@ def test_default_data_manager_budget_reports_its_own_suspended_publisher(storage
         assert dm.memory_budget.snapshot()['reserved_bytes']==0
         assert agg.memory_usage()['retained_payload_states']==0
     asyncio.run(run())
+
+
+def test_source_retry_releases_acknowledged_payload_before_next_callback_awaits():
+    import gc
+    import weakref
+    async def run():
+        agg,state=await populated(source_refs=True)
+        failing=True;calls=0
+        entered,released=asyncio.Event(),asyncio.Event()
+        async def callback(event):
+            nonlocal calls
+            if failing:raise BarDeliveryUnavailable('controlled outage')
+            calls+=1
+            if calls==2:entered.set();await released.wait()
+        agg.publisher.on_bar_closed(callback)
+        for _ in range(2):
+            try:await agg.publisher.emit_closed(state)
+            except BarDeliveryUnavailable:pass
+        assert len(agg.publisher._pending_source_events)==2
+        first=next(iter(agg.publisher._pending_source_events.values()))
+        retired=weakref.ref(first.bar);del first
+        agg.remove_target('BTCUSDT','97m')
+        failing=False
+        task=asyncio.create_task(agg.publisher.retry_source_deliveries())
+        try:
+            await asyncio.wait_for(entered.wait(),2)
+            gc.collect()
+            assert retired() is None,'acknowledged payload remains in a whole retry snapshot'
+            usage=agg.memory_usage()
+            assert usage['pending_source_snapshots']==1
+            assert usage['inflight_retry_keys_frames']==1
+            assert usage['retained_payload_states']==3
+        finally:released.set();await task
+        assert calls==2 and not agg.publisher._pending_source_events
+        assert not agg.publisher._inflight_payloads
+    asyncio.run(run())

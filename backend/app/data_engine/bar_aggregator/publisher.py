@@ -100,15 +100,17 @@ class BarAggregatorPublisher:
     def _retained_payloads(self):
         frames = list(self._inflight_payloads.values())
         events = [*list(self._pending_source_events.values()),
-                  *(payload for kind, payload in frames if kind != "input")]
+                  *(payload for _, payload in frames if isinstance(payload, BarEvent))]
         inputs = [bar for kind, payload in frames if kind == "input"
                   for bar in payload if bar is not None]
         counts = {f"inflight_{kind}_frames": sum(k == kind for k, _ in frames)
-                  for kind in ("input", "dispatch", "callback")}
+                  for kind in ("input", "dispatch", "callback", "retry_input", "retry_keys")}
         counts["pending_source_snapshots"] = len(self._pending_source_events)
         counts["publisher_metadata_bytes"] = (
             sys.getsizeof(self._pending_source_events) + sys.getsizeof(self._inflight_payloads)
             + (len(frames) + len(self._pending_source_events)) * 128
+            + sum(sys.getsizeof(payload) + sum(sys.getsizeof(key) for key in payload)
+                  for kind, payload in frames if kind == "retry_keys")
         )
         return events, inputs, counts
 
@@ -366,8 +368,23 @@ class BarAggregatorPublisher:
     # ── Internal: Callback Dispatch ──────────────────────────
 
     async def retry_source_deliveries(self) -> None:
-        for event in list(self._pending_source_events.values()):
-            await self.emit(event)
+        keys = tuple(self._pending_source_events)
+        if not keys:
+            return
+        keys_token = self._hold_payload("retry_keys", keys)
+        try:
+            for key in keys:
+                event = self._pending_source_events.get(key)
+                if event is None:
+                    continue  # Another retry already acknowledged this record.
+                token = self._hold_payload("retry_input", event)
+                try:
+                    await self.emit(event)
+                finally:
+                    self._release_payload(token)
+                    del event
+        finally:
+            self._release_payload(keys_token)
 
     async def _fire_callbacks(self, event: BarEvent) -> None:
         """Fire all matching callbacks for this event."""
