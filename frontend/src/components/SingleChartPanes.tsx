@@ -1,6 +1,7 @@
 import { PineObjectPrimitive } from "../chart-adapter/pineObjectPrimitive.js";
 import type { IndicatorDrawing } from "../features/indicators/indicatorTypes.js";
 import { useChartDisplaySubscription } from "../features/market-data/useChartDisplaySubscription.js";
+import { useBackendSyntheticSeries } from "../features/market-data/synthetic/useBackendSyntheticSeries.js";
 import { createProjectionCommitGate } from "../chart-adapter/projectionCommitGate.js";
 import type { ChartDisplayScheduler } from "../features/market-data/chartDisplaySubscription.js";
 import { drawingDocumentSessionRegistry } from "../features/drawings/core/drawingDocumentStore.js";
@@ -280,7 +281,7 @@ import type {
 import type { ChartDataCommitMeta } from "../features/market-data/useChartDataRuntime.js";
 import type { LoadMoreLeft } from "../features/market-data/useChartLoadMoreLeft.js";
 import { TransferredViewportHistory } from "./transferredViewportHistory";
-import type { KlineBar } from "../features/market-data/marketDataTypes.js";
+import type { KlineBar, MarketSeries } from "../features/market-data/marketDataTypes.js";
 import type { SeriesWindowView } from "../features/market-data/window/seriesWindowView.js";
 import type { PriceBoxSizeMode } from "../features/settings/chartAppearanceSettings.js";
 import type { MainChartType } from "../shared/mainChartTypes.js";
@@ -292,6 +293,7 @@ export interface SingleChartPanesProps {
   suspended?: boolean;
   displayScheduler?: ChartDisplayScheduler;
   seriesStore?: SeriesWindowView | null;
+  backendSyntheticSource?: MarketSeries | null;
   contractVolume?: boolean;
   symbol: string;
   drawingKeyBase?: string;
@@ -819,6 +821,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   suspended = false,
   displayScheduler,
   seriesStore = null,
+  backendSyntheticSource = null,
   contractVolume = false,
   symbol,
   drawingKeyBase = "",
@@ -903,7 +906,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   onPriceScaleModeChange,
   onAddAlertAtPrice = null,
 }: SingleChartPanesProps, ref) {
-  const displaySubscription = useChartDisplaySubscription(seriesStore, suspended, displayScheduler);
+  const sourceDisplaySubscription = useChartDisplaySubscription(seriesStore, suspended, displayScheduler);
   const extensionTheme = useSyncExternalStore(subscribeExtensions, () => getExtensionState().theme, () => null);
   const locale = useLocale();
   const drawingFontMetricRevision = useDrawingFontMetricRevision();
@@ -1413,6 +1416,13 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     resolvedChartType,
   ]);
   const syntheticChartNotice = buildSyntheticChartNotice(resolvedChartType, projectionSettings, locale);
+  const backendSynthetic = useBackendSyntheticSeries({
+    source: backendSyntheticSource, reader: seriesStore, chartType: resolvedChartType,
+    settings: projectionSettings, display: sourceDisplaySubscription,
+  });
+  const displaySubscription = backendSynthetic.display;
+  const backendBindingRef = useRef(backendSynthetic.binding);
+  backendBindingRef.current = backendSynthetic.binding;
   const projectionSettingsKey = JSON.stringify(projectionSettings);
   const surfaceConfigKey = resolvedAxisMode === "derived-ordinal"
     ? `${resolvedAxisMode}:${resolvedChartType}:${projectionSettingsKey}`
@@ -2727,6 +2737,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       initialChartType,
       initialRows,
       requestedProjectionSettingsRef.current || {},
+      backendBindingRef.current,
     );
     initialProjectionStore.reset(initialRows);
     publishDrawingProjectionStore(initialProjectionStore);
@@ -3530,6 +3541,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         resolvedChartType,
         rows,
         projectionSettings,
+        backendBindingRef.current,
       );
       const projectionPatch = nextProjectionStore.reset(rows);
       const displayRows = nextProjectionStore.displaySnapshot();
@@ -3962,6 +3974,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       activeChartType,
       rows,
       projectionSettings,
+      backendBindingRef.current,
     );
     const existingProjectionStore = projectionStoreRef.current;
     const canReuseProjection = existingProjectionStore?.configurationKey
@@ -5637,6 +5650,11 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
 
       {indicatorStatusText && !loading && (
         <div className="chart-indicator-status" role="status">{indicatorStatusText}</div>
+      )}
+      {backendSynthetic.binding && backendSynthetic.status !== "ready" && !loading && (
+        <div className="chart-indicator-status" role="status">
+          {t(backendSynthetic.status === "preparing" ? "chart.syntheticPreparing" : "chart.syntheticUnavailable", {}, locale)}
+        </div>
       )}
       {loading && (
         <div className="loading-overlay">

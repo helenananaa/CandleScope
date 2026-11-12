@@ -78,6 +78,7 @@ from app.core.support_diagnostics import install_support_logging, router as supp
 from app.core.runtime_metrics import EventLoopLagMonitor, ws_runtime_metrics
 from app.local_data.runtime import LocalOfflineProfileMiddleware
 from app.history_studies.api import router as history_studies_router
+from app.api.v1.synthetic import router as synthetic_router
 from app.api.v1.replay import router as replay_router
 from app.api.v1.stream import replay_router as replay_stream_router
 
@@ -152,6 +153,7 @@ if RUNTIME_MODE == "LOCAL_OFFLINE":
     app.include_router(local_data_router, prefix="/api/v1")
     app.include_router(replay_stream_router, prefix="/api/v1")
 else:
+    app.include_router(synthetic_router, prefix="/api/v1")
     app.include_router(klines_router, prefix="/api/v1")
     app.include_router(market_router, prefix="/api/v1")
     app.include_router(trade_flow_router, prefix="/api/v1")

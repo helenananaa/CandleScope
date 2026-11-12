@@ -4289,6 +4289,8 @@ export const en = {
   "local.kicker.dataOps": "DATA OPS",
   "local.status.ready": "LOCAL DATASET · ANALYSIS READY",
   "chart.loadingKlines": "Loading {symbol} {interval} candles…",
+  "chart.syntheticPreparing": "Preparing chart data…",
+  "chart.syntheticUnavailable": "Chart data is temporarily unavailable. Reconnecting…",
   "backtest.decisionFillHashes": "Decision / fill hashes: {left} ↔ {right}",
   "backtest.bundleHash": "Bundle {hash}",
   "backtest.sourceManifestHashes": "Source {source} · manifest {manifest}",

@@ -4524,6 +4524,8 @@ export const zhCN = {
   "local.kicker.dataOps": "数据操作",
   "local.status.ready": "本地数据集 · 分析就绪",
   "chart.loadingKlines": "正在加载 {symbol} {interval} K 线…",
+  "chart.syntheticPreparing": "正在准备图表数据…",
+  "chart.syntheticUnavailable": "图表数据暂不可用，正在重新连接…",
   "backtest.decisionFillHashes": "决策 / 成交哈希：{left} ↔ {right}",
   "backtest.bundleHash": "包哈希 {hash}",
   "backtest.sourceManifestHashes": "源码 {source} · 清单 {manifest}",

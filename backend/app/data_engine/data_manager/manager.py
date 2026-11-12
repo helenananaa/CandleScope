@@ -424,6 +424,11 @@ class DataManager(DataManagerCore):
             source_clock=lambda:self.event_bus.stream_versions,
         )
         self.market_state = MarketStateFacade(self._require_market_data_service)
+        from app.data_engine.synthetic_series.service import SyntheticSeriesService, SyntheticSourcePort
+        self.synthetic = SyntheticSeriesService(SyntheticSourcePort(
+            self.bars.query, self.subscribe, self.unsubscribe, self.bars.ensure_stream,
+            self.release_stream, self.event_bus.stream_versions, self.query_row_limit),
+            max_bytes=self._cfg.memory_owner_budgets.get("synthetic-series", 64 * 1024 * 1024))
         self.trades = TradeDataFacade(self._require_trade_flow_service)
         self.liquidations = LiquidationDataFacade(self._require_liquidation_service)
         self.books = OrderBookFacades(
@@ -445,7 +450,8 @@ class DataManager(DataManagerCore):
         for owner, service, limit in (("bar-cache", self.cache, 128 * 1024 * 1024),
                                       ("realtime-state", self.bar_aggregator, 128 * 1024 * 1024),
                                       ("event-delivery", self.event_bus, 32 * 1024 * 1024),
-                                      ("durable-delivery", self.aggregator_bridge.delivery, 16 * 1024 * 1024)):
+                                      ("durable-delivery", self.aggregator_bridge.delivery, 16 * 1024 * 1024),
+                                      ("synthetic-series", self.synthetic, 64 * 1024 * 1024)):
             self.memory_budget.register(owner, limit_bytes=self._cfg.memory_owner_budgets.get(owner, limit), usage=service.memory_usage,
                                         roots=service._memory_roots)
         self.memory_budget.register("history-query", limit_bytes=self._cfg.memory_owner_budgets.get("history-query", 64 * 1024 * 1024),
@@ -995,6 +1001,7 @@ class DataManager(DataManagerCore):
 
     async def shutdown(self) -> None:
         """Gracefully shut down everything."""
+        await self.synthetic.close()
         await self.shutdown_strategy()
         self.close_readonly_account()
         self.close_trading()
@@ -3503,6 +3510,7 @@ class DataManager(DataManagerCore):
         return {
             "schema": "candlescope.market-data-control/1",
             "source_continuity": self.source_gaps.snapshot(),
+            "synthetic_series": self.synthetic.diagnostics(),
             "physical_unification": False,
             "cross_backend_atomicity": False,
             "access_namespaces": {

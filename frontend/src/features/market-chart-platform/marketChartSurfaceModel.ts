@@ -2,6 +2,7 @@ import type { RefAttributes } from "react";
 import type { ChartSurfaceHandle } from "../../chart-adapter/useChartSurfaceRuntime.js";
 import type { SingleChartPanesProps } from "../../components/SingleChartPanes.js";
 import type { MarketChartSourceRuntime } from "./marketChartSourceRuntime.js";
+import { BACKEND_SYNTHETIC_SERIES_ENABLED } from "../market-data/synthetic/backendSyntheticFeature.js";
 
 export type MarketChartSurfaceChartProps = SingleChartPanesProps & RefAttributes<ChartSurfaceHandle>;
 
@@ -20,6 +21,7 @@ export function bindMarketChartSurfaceProps(input: {
     interval: source.session.interval,
     datasetKey: source.datasetKey,
     seriesStore: source.marketData.view.seriesStore,
+    backendSyntheticSource: BACKEND_SYNTHETIC_SERIES_ENABLED && source.mode === "LIVE_REFERENCE" ? source.session : null,
     loading: source.marketData.view.loading,
     dataMeta: source.marketData.view.meta,
     onNeedMoreLeft: source.marketData.actions.loadMoreLeft,
