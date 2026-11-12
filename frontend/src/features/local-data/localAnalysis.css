@@ -1,0 +1,58 @@
+@layer features {
+/* Event markers on an imported dataset. Controls come from the kit; this file only lays them out. */
+.local-analysis-panel > .ui-disclosure-body { display: grid; gap: var(--space-4); padding: 4px 12px 12px; }
+.local-analysis-summary { display: flex; flex: 1 1 auto; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
+.local-analysis-summary strong { color: var(--text-primary); font: 600 var(--font-size-md)/1.4 var(--font-sans); }
+.local-analysis-summary small { color: var(--text-muted); font: var(--font-size-xs)/1.4 var(--font-sans); font-variant-numeric: tabular-nums; }
+
+/* Where the next marker goes: the crosshair candle, or the marker being edited. */
+.local-analysis-anchor { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 10px 12px; border: 1px dashed var(--border-strong); border-radius: var(--radius-control); background: var(--surface-0); }
+.local-analysis-anchor[data-ready='true'] { border-style: solid; border-color: color-mix(in srgb, var(--accent-blue) 45%, var(--border-subtle)); }
+.local-analysis-anchor > span { grid-column: 1; color: var(--text-muted); font: 500 var(--font-size-xs)/1.4 var(--font-sans); }
+.local-analysis-anchor > strong { grid-column: 1; color: var(--text-primary); font: 600 var(--font-size-sm)/1.4 var(--font-sans); font-variant-numeric: tabular-nums; }
+.local-analysis-anchor[data-ready='false'] > strong { color: var(--text-secondary); font-weight: 500; }
+.local-analysis-anchor > small { grid-column: 1; color: var(--text-muted); font: var(--font-size-xs)/1.5 var(--font-sans); font-variant-numeric: tabular-nums; }
+.local-analysis-anchor > .ui-btn { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
+
+.local-analysis-form { display: grid; gap: var(--space-3); }
+.local-analysis-form-grid { display: grid; grid-template-columns: minmax(0, 1fr) 88px; gap: var(--space-3); }
+.local-analysis-color-field .ui-input { padding: 3px; cursor: pointer; }
+.local-analysis-form-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* The CSV import sits inside the panel, one step deeper. */
+.local-analysis-csv-import { background: var(--surface-0); }
+.local-analysis-csv-import > .ui-disclosure-body { display: grid; gap: var(--space-3); padding: 0 12px 12px; }
+.local-analysis-csv-hint { margin: 0; color: var(--text-muted); font: var(--font-size-xs)/1.6 var(--font-sans); }
+.local-analysis-csv-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.local-analysis-csv-preview { overflow: auto; max-height: 160px; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); }
+.local-analysis-csv-preview:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
+.local-analysis-csv-preview table { width: 100%; border-collapse: collapse; font: var(--font-size-xs)/1.5 var(--font-sans); font-variant-numeric: tabular-nums; }
+.local-analysis-csv-preview :is(th, td) { padding: 6px 8px; border-bottom: 1px solid var(--border-subtle); text-align: left; white-space: nowrap; }
+.local-analysis-csv-preview th { position: sticky; top: 0; background: var(--surface-1); color: var(--text-secondary); font-weight: 600; }
+.local-analysis-csv-preview td { color: var(--text-primary); }
+.local-analysis-csv-preview tr:last-child td { border-bottom: 0; }
+.local-analysis-csv-submit { justify-self: end; }
+.local-analysis-csv-rejected { max-height: 120px; margin: 6px 0 0; padding-left: 16px; overflow: auto; }
+
+.local-analysis-list-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.local-analysis-list-head h4 { margin: 0; color: var(--text-primary); font: 600 var(--font-size-sm)/1.4 var(--font-sans); }
+.local-analysis-list-head .ui-select { width: auto; max-width: 50%; }
+.local-analysis-event-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.local-analysis-event-list > li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 8px; padding: 8px 6px 8px 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); background: var(--surface-0); }
+.local-analysis-event-list > li[data-editing='true'] { border-color: var(--accent-blue); }
+.local-analysis-event-main { display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 0; border: 0; border-radius: var(--radius-sm); background: none; color: inherit; text-align: left; cursor: pointer; }
+.local-analysis-event-main > i { flex: 0 0 auto; width: 10px; height: 10px; margin-top: 4px; border-radius: 50%; box-shadow: 0 0 0 1px color-mix(in srgb, var(--text-primary) 20%, transparent); }
+.local-analysis-event-main > span { display: grid; gap: 2px; min-width: 0; }
+.local-analysis-event-main strong { color: var(--text-primary); font: 600 var(--font-size-sm)/1.4 var(--font-sans); overflow-wrap: anywhere; }
+.local-analysis-event-main small { color: var(--text-muted); font: var(--font-size-xs)/1.4 var(--font-sans); font-variant-numeric: tabular-nums; }
+.local-analysis-event-main em { display: -webkit-box; overflow: hidden; color: var(--text-secondary); font: normal var(--font-size-xs)/1.5 var(--font-sans); white-space: pre-wrap; overflow-wrap: anywhere; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+.local-analysis-event-main:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
+.local-analysis-event-actions { display: flex; gap: 0; margin-top: -2px; }
+.local-analysis-event-actions .ui-btn { padding-inline: 8px; }
+.local-analysis-delete { color: var(--text-danger); }
+
+/* In the strategy rail the panel is a rail section, not a card. */
+.strategy-research-analysis > .local-analysis-panel { border: 0; background: none; }
+.strategy-research-analysis > .local-analysis-panel > .ui-disclosure-summary { padding: 0; }
+.strategy-research-analysis > .local-analysis-panel > .ui-disclosure-body { padding: var(--space-4) 0 0; }
+}

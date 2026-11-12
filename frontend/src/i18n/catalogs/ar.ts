@@ -4469,6 +4469,8 @@ export const ar = {
   "common.cancel": "إلغاء",
   "common.close": "إغلاق",
   "common.notifications": "الإشعارات",
+  "common.working": "جارٍ المعالجة…",
+  "common.pickDateTime": "اختيار التاريخ والوقت",
   "status.barCount.zero": "{count} شموع",
   "status.barCount.two": "{count} شمعتان",
   "status.barCount.few": "{count} شموع",

@@ -4469,6 +4469,8 @@ export const it = {
   "common.cancel": "Annulla",
   "common.close": "Chiudi",
   "common.notifications": "Notifiche",
+  "common.working": "Elaborazione…",
+  "common.pickDateTime": "Scegli data e ora",
   "pane.flow.gaps.many": "{count} gap temporali",
   "pane.flow.missing.many": "{count} barre non disponibili",
   "status.barCount.many": "{count} barre",

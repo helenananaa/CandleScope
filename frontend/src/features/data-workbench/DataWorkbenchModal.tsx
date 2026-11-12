@@ -435,7 +435,7 @@ export default function DataWorkbenchModal({
                       const expandable = group.gaps.length > 1;
                       const gapIntervals = [...new Set(group.gaps.map((gap) => gap.interval))];
                       return (
-                        <article className={`dw-instrument dw-gap-group${open ? " expanded" : ""}`} key={group.key}>
+                        <article className={`dw-instrument${open ? " expanded" : ""}`} key={group.key}>
                           {expandable ? (
                             <button
                               aria-expanded={open}
@@ -492,7 +492,7 @@ export default function DataWorkbenchModal({
             ) : null}
           </FoldSection>
 
-          <section className="dw-section dw-series-section">
+          <section className="dw-section">
             <div className="dw-section-heading">
               <h3>{t("workbench.storedSeries", {}, locale)}</h3>
               {payload ? (

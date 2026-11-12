@@ -4469,6 +4469,8 @@ export const he = {
   "common.cancel": "ביטול",
   "common.close": "סגירה",
   "common.notifications": "התראות",
+  "common.working": "מעבד…",
+  "common.pickDateTime": "בחירת תאריך ושעה",
   "status.barCount.two": "{count} נרות",
   "status.exchangeLimitationCount.two": "{count} מגבלות בורסה",
   "workbench.intervalCount.two": "{count} מחזורים",

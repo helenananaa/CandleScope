@@ -4,7 +4,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   Badge, Button, Checkbox, DateTimeInput, Disclosure, Field, FileDrop, IconButton, InlineAlert, Input, Section, SegmentedControl,
-  Select, Stat, Switch, TabPanel, Tabs, buttonClassName, choiceKeyTarget, fromDateTimeInputValue, toDateTimeInputValue,
+  Select, Stat, Switch, TabPanel, Tabs, buttonClassName, choiceKeyTarget, fromDateTimeInputValue, fromDateTimeText, toDateTimeInputValue, toDateTimeText,
 } from "../index.js";
 
 test("buttons compose variant, size and width classes", () => {
@@ -100,11 +100,26 @@ test("date-time values round-trip in UTC and reject impossible dates", () => {
   assert.equal(toDateTimeInputValue(local, false), "2026-11-12T08:05");
 });
 
-test("the date-time input always shows its zone", () => {
+test("the date-time input writes the time the same way in every locale and always shows its zone", () => {
   const html = renderToStaticMarkup(<DateTimeInput value={Date.UTC(2026, 0, 2, 3, 4)} onChange={() => undefined} />);
-  assert.match(html, /type="datetime-local"/);
-  assert.match(html, /value="2026-01-02T03:04"/);
+  assert.match(html, /<input class="ui-input" type="text" inputMode="numeric"[^>]*value="2026-01-02 03:04"/);
+  // The browser's control only anchors the calendar picker.
+  assert.match(html, /<input type="datetime-local" class="ui-datetime-native" tabindex="-1" aria-hidden="true"[^>]*value="2026-01-02T03:04"/);
+  assert.match(html, /<button type="button" class="ui-datetime-picker" aria-label="[^"]+"/);
   assert.match(html, /<span class="ui-datetime-zone">UTC<\/span>/);
+});
+
+test("typed date-time text parses in any common spelling", () => {
+  const epoch = Date.UTC(2026, 10, 12, 8, 5, 9);
+  assert.equal(toDateTimeText(epoch, true), "2026-11-12 08:05");
+  assert.equal(toDateTimeText(epoch, true, true), "2026-11-12 08:05:09");
+  assert.equal(fromDateTimeText("2026-11-12 08:05:09", true), epoch);
+  assert.equal(fromDateTimeText("2026/11/12 8:05:09", true), epoch);
+  assert.equal(fromDateTimeText("2026-11-12T08:05:09", true), epoch);
+  assert.equal(fromDateTimeText(" 2026-11-12 ", true), Date.UTC(2026, 10, 12));
+  for (const bad of ["", "2026-11-12 08", "2026-11-31 00:00", "2026-11-12 24:00", "2026-11-12 08:60", "12/11/2026 08:05"]) {
+    assert.equal(fromDateTimeText(bad, true), null, bad);
+  }
 });
 
 test("the file drop is a labelled file input", () => {

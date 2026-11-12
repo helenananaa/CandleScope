@@ -45,7 +45,7 @@ export function PluginNativeField({
       <div className="plugin-native-field">
         <span>{label}</span>
         {schema.description && <small>{schema.description}</small>}
-        <div className="plugin-native-array">
+        <div>
           {current.map((item, index) => (
             <div className="plugin-native-array-row" key={`${name}-${index}`}>
               <PluginNativeField

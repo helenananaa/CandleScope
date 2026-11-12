@@ -11,7 +11,7 @@ export default function ResearchReplayPanel({ runtime }: { runtime: BacktestRese
   const href = researchReplayHref(reviewBridge);
   const bridgeState = typeof reviewBridge?.state === "string" ? reviewBridge.state : null;
   return (
-    <ResearchPanelFrame eyebrow={t("research.replay.eyebrow")} title={typeof reviewBridge?.bridgeId === "string" ? reviewBridge.bridgeId : t("research.replay.none")} className="research-replay-panel">
+    <ResearchPanelFrame eyebrow={t("research.replay.eyebrow")} title={typeof reviewBridge?.bridgeId === "string" ? reviewBridge.bridgeId : t("research.replay.none")}>
       <p className="research-panel-copy">{t("research.replay.copy")}</p>
       <dl className="research-facts">
         <div><dt>{t("research.replay.sourceRun")}</dt><dd>{activeRun?.run_id ?? "—"}</dd></div>

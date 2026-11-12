@@ -56,7 +56,7 @@ export default function PanePriceScaleMenu({
         <>
           <button
             type="button"
-            className="price-scale-menu-item price-scale-menu-alert"
+            className="price-scale-menu-item"
             onClick={() => {
               // Same precision as the label, not the raw pointer coordinate.
               onAddAlertAtPrice(Number(formatPriceDiff(contextMenu.price)));

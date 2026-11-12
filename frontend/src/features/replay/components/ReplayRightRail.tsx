@@ -1394,7 +1394,7 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
             <div><dt>{t("replay.paper.feeCap")}</dt><dd>{formatDecimal(preview?.estimated_fee, 8)} {settlementAsset}</dd></div>
           </dl>
 
-          <details className="replay-trade-plan replay-disclosure" open={tradePlanEnabled && tradePlanEligible}>
+          <details className="replay-trade-plan" open={tradePlanEnabled && tradePlanEligible}>
             <summary>
               <label onClick={(event) => event.stopPropagation()}>
                 <input
@@ -1429,7 +1429,7 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
                 <label>{t("replay.paper.targetPx")}
                   <span><input value={targetPrice} inputMode="decimal" onChange={(event) => setTargetPrice(event.target.value)} /><b>{settlementAsset}</b></span>
                 </label>
-                <label className="replay-trade-plan-reason">{t("replay.paper.reason")}
+                <label>{t("replay.paper.reason")}
                   <textarea value={tradeReason} maxLength={500} onChange={(event) => setTradeReason(event.target.value)} placeholder={t("replay.paper.reasonPh")} />
                 </label>
                 <dl className="replay-order-preview" aria-label={t("replay.paper.planPreview")}>
@@ -2181,7 +2181,7 @@ export function ReplayTradingWorkbench({ runtime, viewer, formatTime }: Pick<Rep
               <button type="button" className="replay-pill-btn" data-replay-action="audit-account" disabled={viewer.viewerPending} onClick={() => void viewer.actions.auditAccount().catch(() => undefined)}>{t("replay.wb.audit")}</button>
             </section>
             {contract !== null && (
-              <details className="replay-risk-card replay-ledger-records" open={contract.history.ledger_entries_total > 0}>
+              <details className="replay-risk-card" open={contract.history.ledger_entries_total > 0}>
                 <summary>
                   <strong>{t("replay.wb.ledger")}</strong>
                   <span>{contract.history.ledger_entries_total}</span>

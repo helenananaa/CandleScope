@@ -5077,6 +5077,8 @@ export const zhCN = {
   "common.cancel": "取消",
   "common.close": "关闭",
   "common.notifications": "通知",
+  "common.working": "正在处理…",
+  "common.pickDateTime": "选择日期和时间",
   "strategyReview.navigation": "交易复盘",
   "strategyReview.previous": "上一笔",
   "strategyReview.select": "选择一笔交易",

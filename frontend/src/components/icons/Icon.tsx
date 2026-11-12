@@ -49,7 +49,9 @@ export type IconName =
   | "maximize"
   | "minimize"
   | "play"
-  | "stop";
+  | "stop"
+  | "calendar"
+  | "upload";
 
 const PATHS: Record<IconName, ReactNode> = {
   palette: (
@@ -266,6 +268,13 @@ const PATHS: Record<IconName, ReactNode> = {
   minimize: <path d="M4 14h6v6M20 10h-6V4M10 14l-7 7M14 10l7-7" />,
   play: <path d="M7 5v14l11-7-11-7Z" />,
   stop: <rect x="6" y="6" width="12" height="12" rx="1.5" />,
+  calendar: (
+    <>
+      <rect x="4" y="5" width="16" height="15" rx="2" />
+      <path d="M4 10h16M8.5 3v4M15.5 3v4" />
+    </>
+  ),
+  upload: <path d="M12 15V4m0 0L7.5 8.5M12 4l4.5 4.5M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3" />,
 };
 
 export function Icon({ name, size = 18, filled = false }: { name: IconName; size?: number; filled?: boolean }): ReactNode {

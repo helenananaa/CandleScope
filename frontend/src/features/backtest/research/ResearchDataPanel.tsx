@@ -20,7 +20,6 @@ export default function ResearchDataPanel({ runtime }: { runtime: BacktestResear
     <ResearchPanelFrame
       eyebrow={t("research.panel.data")}
       title={dataset?.name ?? t("research.data.noContext")}
-      className="research-data-panel"
     >
       {advancedEnabled ? (
         <>

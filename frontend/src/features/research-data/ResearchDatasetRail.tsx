@@ -56,7 +56,7 @@ export function ResearchDatasetRail({
         onImport={onImport}
       />
       </div>
-      <section className="local-dataset-library" hidden={view !== "library"} role="tabpanel" aria-label={t("local.datasets")}>
+      <section hidden={view !== "library"} role="tabpanel" aria-label={t("local.datasets")}>
         <header>
           <div>
             <span>{t("local.kicker.library")}</span>

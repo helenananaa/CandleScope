@@ -4469,6 +4469,8 @@ export const ro = {
   "common.cancel": "Anulează",
   "common.close": "Închide",
   "common.notifications": "Notificări",
+  "common.working": "Se procesează…",
+  "common.pickDateTime": "Alege data și ora",
   "status.barCount.few": "{count} bare",
   "status.exchangeLimitationCount.few": "{count} limitări ale bursei",
   "workbench.intervalCount.few": "{count} intervale",

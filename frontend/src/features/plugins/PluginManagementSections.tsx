@@ -532,7 +532,7 @@ export function LocalTrustInstallPanel({ runtime, onPendingChange }: { runtime: 
   };
 
   return (
-    <section className="plugin-settings-card plugin-install-card plugin-trust-install-card" data-plugin-trust-flow="itemized-double-confirmation">
+    <section className="plugin-settings-card plugin-trust-install-card" data-plugin-trust-flow="itemized-double-confirmation">
       <header className="plugin-settings-card-header">
         <div>
           <h3>{t("plugin.localInstall")}</h3>

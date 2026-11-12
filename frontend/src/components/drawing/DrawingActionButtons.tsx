@@ -47,7 +47,7 @@ export default function DrawingActionButtons({
     <>
       <div style={{ flex: 1 }} />
       <button
-        className={`drawing-tool-btn drawing-export-btn ${exportPanelOpen ? "active" : ""}`}
+        className={`drawing-tool-btn ${exportPanelOpen ? "active" : ""}`}
         data-drawing-action="export"
         onClick={onToggleExportPanel}
         disabled={exportInProgress}
@@ -56,7 +56,7 @@ export default function DrawingActionButtons({
         {ExportIcon}
       </button>
       <button
-        className={`drawing-tool-btn drawing-hide-btn ${drawingsHidden ? "active" : ""}`}
+        className={`drawing-tool-btn ${drawingsHidden ? "active" : ""}`}
         data-drawing-action="toggle-hidden"
         onClick={onToggleDrawingsHidden}
         title={drawingsHidden ? t("drawing.showAll") : t("drawing.hideAll")}

@@ -108,7 +108,8 @@
   outline: 2px solid var(--hub-accent);
   outline-offset: 2px;
 }
-.training-hub-page button:disabled {
+/* Kit buttons (components/ui) have their own disabled look. */
+.training-hub-page button:where(:not(.ui-btn, .ui-icon-btn)):disabled {
   opacity: .45;
   cursor: not-allowed;
 }
