@@ -1,0 +1,60 @@
+{
+  "redaction": "ephemeral action contextToken only; original profile/control files retained privately in output",
+  "files": [
+    {
+      "path": "initial.png",
+      "bytes": 165491,
+      "sha256": "2e4a85dd492f8f0c8611645c42ed3597a195abb1eb0522d7cd4d57ceef28e8b7"
+    },
+    {
+      "path": "native-acceptance.json.gz",
+      "bytes": 32003,
+      "sha256": "83ab9a4d91d7a85231f96ec5cb810d85afe270b528f7c211f19b3e6635f7a20a"
+    },
+    {
+      "path": "native-cold1.log.gz",
+      "bytes": 36,
+      "sha256": "aea47a42ff64560027bd8fd3716254360336f09e0443ef8d27d6c1c8cc4baa23"
+    },
+    {
+      "path": "native-summary.json.gz",
+      "bytes": 703,
+      "sha256": "e84c1f702f4dd1d1a279aa90641570137db2298f2673784516010f067cb4c7c1"
+    },
+    {
+      "path": "package-source-manifest.json.gz",
+      "bytes": 47468,
+      "sha256": "1208da9c518a6b3205dbf370036922a6904a3b5a2d0a7c5d37a256707920e6cc"
+    },
+    {
+      "path": "recreated.png",
+      "bytes": 145707,
+      "sha256": "33f4dd3aca4be967ecfcdc0e4463b3b87627686f28ea44835dbf79fe64b29978"
+    },
+    {
+      "path": "restored.png",
+      "bytes": 140306,
+      "sha256": "93e8e450c0b1c869cac9690c23534a65d5d5cca87f04088beffab09814bbed40"
+    },
+    {
+      "path": "sign-after.log.gz",
+      "bytes": 20,
+      "sha256": "f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837"
+    },
+    {
+      "path": "sign-before.log.gz",
+      "bytes": 20,
+      "sha256": "f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837"
+    },
+    {
+      "path": "sign.log.gz",
+      "bytes": 94,
+      "sha256": "f79d6365e1cae4d3bf2109b6dd2f6cca2054644c368533f663ce9c08fe54255b"
+    },
+    {
+      "path": "tooling.log.gz",
+      "bytes": 44,
+      "sha256": "917d716efbc1766c76e54e58286c4acfe696f1557d9a6b70f9f08aeb55ddaf04"
+    }
+  ]
+}
