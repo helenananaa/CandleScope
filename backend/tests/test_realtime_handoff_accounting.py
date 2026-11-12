@@ -295,3 +295,32 @@ def test_source_retry_releases_acknowledged_payload_before_next_callback_awaits(
         assert calls==2 and not agg.publisher._pending_source_events
         assert not agg.publisher._inflight_payloads
     asyncio.run(run())
+
+
+@pytest.mark.parametrize('source_refs',[False,True])
+def test_callback_snapshot_failure_keeps_existing_error_and_retry_contract(monkeypatch,source_refs):
+    from app.data_engine.bar_aggregator import publisher as module
+    async def run():
+        agg,state=await populated(source_refs=source_refs)
+        original=module.deepcopy
+        copies=0;seen=[]
+        def copy_with_fault(value):
+            nonlocal copies
+            copies+=1
+            if copies==2:raise OSError('controlled callback snapshot failure')
+            return original(value)
+        monkeypatch.setattr(module,'deepcopy',copy_with_fault)
+        async def first(event):seen.append('first')
+        async def second(event):seen.append('second')
+        agg.publisher.on_bar_closed(first);agg.publisher.on_bar_closed(second)
+        if source_refs:
+            with pytest.raises(BarDeliveryUnavailable):await agg.publisher.emit_closed(state)
+            assert not seen and len(agg.publisher._pending_source_events)==1
+            await agg.publisher.retry_source_deliveries()
+            assert seen==['first','second']
+        else:
+            await agg.publisher.emit_closed(state)
+            assert seen==['second']
+        assert not agg.publisher._pending_source_events
+        assert not agg.publisher._inflight_payloads
+    asyncio.run(run())

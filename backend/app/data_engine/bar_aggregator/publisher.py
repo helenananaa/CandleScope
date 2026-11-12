@@ -405,9 +405,10 @@ class BarAggregatorPublisher:
 
         # Fire type-specific + all-events callbacks
         for cb in specific + self._all_callbacks:
-            callback_event = deepcopy(event)
-            token = self._hold_payload("callback", callback_event)
+            callback_event = token = None
             try:
+                callback_event = deepcopy(event)
+                token = self._hold_payload("callback", callback_event)
                 await cb(callback_event)
             except BarDeliveryUnavailable:
                 self._callback_errors += 1
@@ -421,7 +422,8 @@ class BarAggregatorPublisher:
                 if event.bar.source_refs:
                     raise BarDeliveryUnavailable(str(exc)) from exc
             finally:
-                self._release_payload(token)
+                if token is not None:
+                    self._release_payload(token)
                 del callback_event
 
     # ── Internal: Queue Dispatch ─────────────────────────────
