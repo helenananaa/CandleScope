@@ -2751,6 +2751,7 @@ class BacktestService:
                     "outputMode": config.get("output_mode") or "TARGET_POSITION",
                     "tradeExplanationEnabled": self.settings.trade_explanation_effective,
                     "pineChartMetadata": config.get("pine_chart_metadata") or ({"priceTickSize": str(config["price_tick"])} if config.get("price_tick") is not None else None),
+                    **({"signalChart": config["signal_chart"]} if config.get("signal_chart") else {}),
                     "pineChartInterval": config.get("signal_interval") or config.get("interval"),
                     "pineChartMarketType": config.get("market_type"),
                     "pineRequestedContexts": config.get("pine_contexts", []),
@@ -2805,6 +2806,17 @@ class BacktestService:
                 configure_legacy_account(getattr(kernel, "execution", kernel), {
                     "account_model": config.get("account_model"), "context": {"metadata": config.get("pine_chart_metadata")}})
             planner.bind_kernel(kernel)
+            chart_clock = None
+            if config.get("signal_chart"):
+                self._assert_frame_inputs(provider, bar={}, trade=None)
+                from .strategy.chart_signals import ChartSignalClock
+                chart_clock = ChartSignalClock(config["signal_chart"], adapter, planner,
+                    market=observation_market or {"venue": "local", "symbol": str(record["dataset_id"])},
+                    warmup=warmup_events,
+                    features=lambda bar: self._observation_features(provider, bar=bar, trade=None),
+                    context=lambda event: None if planner.config is None else _planning_context(getattr(kernel, "execution", kernel), event),
+                    account=(lambda: _pine_account_view(kernel)) if config.get("pine_runtime_identity") else None,
+                    control=lambda: self._assert_execution_control(run_id, deadline=deadline, expected_generation=expected_generation))
             checkpoint = self.repository.latest_checkpoint(run_id)
             if checkpoint is not None:
                 payload = self._verified_checkpoint_payload(record, checkpoint)
@@ -2857,7 +2869,7 @@ class BacktestService:
                         expected_generation=expected_generation))
             python_batch = None
             generic_bar = None
-            if getattr(self, "_colocated_worker", False) and historical_callbacks is None:
+            if getattr(self, "_colocated_worker", False) and historical_callbacks is None and chart_clock is None:
                 from .strategy.python_market_batch import PythonMarketBatchProvider
                 if type(getattr(provider, "provider", None)) is PythonMarketBatchProvider:
                     python_batch = provider.provider
@@ -2885,6 +2897,8 @@ class BacktestService:
                     )
                 phase = "WARMUP" if observed < warmup_events else "EVALUATION"
                 observed += 1
+                if chart_clock is not None:
+                    return chart_clock.observe(event)
                 if historical_callbacks is not None:
                     return historical_callbacks.observe(event)
                 if generic_bar is not None:
@@ -3174,6 +3188,7 @@ class BacktestService:
                     "executionClock": EXECUTION_CLOCK,
                     "tradeExplanationEnabled": self.settings.trade_explanation_effective,
                     "pineChartMetadata": config.get("pine_chart_metadata") or ({"priceTickSize": str(config["price_tick"])} if config.get("price_tick") is not None else None),
+                    **({"signalChart": config["signal_chart"]} if config.get("signal_chart") else {}),
                     "pineChartInterval": config.get("signal_interval") or config.get("interval"),
                     "pineChartMarketType": config.get("market_type"),
                     "pineRequestedContexts": config.get("pine_contexts", []),
@@ -3220,6 +3235,17 @@ class BacktestService:
                 configure_legacy_account(getattr(kernel, "execution", kernel), {
                     "account_model": config.get("account_model"), "context": {"metadata": config.get("pine_chart_metadata")}})
             planner.bind_kernel(kernel)
+            chart_clock = None
+            if config.get("signal_chart"):
+                self._assert_frame_inputs(provider, bar={}, trade=None)
+                from .strategy.chart_signals import ChartSignalClock
+                chart_clock = ChartSignalClock(config["signal_chart"], adapter, planner,
+                    market=observation_market or {"venue": "local", "symbol": str(record["dataset_id"])},
+                    warmup=warmup_events,
+                    features=lambda bar: self._observation_features(provider, bar=bar, trade=None),
+                    context=lambda event: None if planner.config is None else _planning_context(getattr(kernel, "execution", kernel), event),
+                    account=(lambda: _pine_account_view(kernel)) if config.get("pine_runtime_identity") else None,
+                    control=lambda: self._assert_execution_control(run_id, deadline=deadline, expected_generation=expected_generation))
             checkpoint = self.repository.latest_checkpoint(run_id)
             if checkpoint is not None:
                 payload = self._verified_checkpoint_payload(record, checkpoint)
@@ -3284,6 +3310,8 @@ class BacktestService:
                 self._maybe_inject_fault(
                     "before_decision", run_id=run_id, sequence=bar.sequence
                 )
+                if chart_clock is not None:
+                    return chart_clock.observe(bar)
                 phase = "WARMUP" if bar.sequence <= warmup_events else "EVALUATION"
                 bar_payload = dict(bar.payload)
                 self._assert_frame_inputs(provider, bar=bar_payload, trade=None)
@@ -3547,6 +3575,7 @@ class BacktestService:
                     "outputMode": config.get("output_mode") or "TARGET_POSITION",
                     "tradeExplanationEnabled": self.settings.trade_explanation_effective,
                     "pineChartMetadata": config.get("pine_chart_metadata") or ({"priceTickSize": str(config["price_tick"])} if config.get("price_tick") is not None else None),
+                    **({"signalChart": config["signal_chart"]} if config.get("signal_chart") else {}),
                     "pineChartInterval": config.get("signal_interval") or config.get("interval"),
                     "pineChartMarketType": config.get("market_type"),
                     "pineRequestedContexts": config.get("pine_contexts", []),
@@ -4736,6 +4765,19 @@ class BacktestService:
             execution_config["contract_data_mode"] = contract_data_mode
         execution_config.update(execution_realism.identity(fidelity_mode=fidelity))
         execution_config.update(metrics_identity)
+        if payload.get("signal_chart") is not None:
+            from app.data_engine.synthetic_series.signals import normalize_signal_chart, SyntheticError
+            try:
+                signal_chart = normalize_signal_chart(payload["signal_chart"])
+            except SyntheticError as exc:
+                raise BacktestError("SCHEMA_UNKNOWN_FIELD", str(exc)) from exc
+            if fidelity not in {"BAR_APPROX", *DUAL_MODES}:
+                raise BacktestError("FIDELITY_UNSUPPORTED", "Chart signals require a closed BAR source clock")
+            if any(execution_config.get(name) for name in ("pine_fill_callbacks", "pine_history_ticks", "pine_realtime_ticks", "pine_bar_path_contract")):
+                raise BacktestError("FIDELITY_UNSUPPORTED", "Chart signals require close-only Pine evaluation")
+            if execution_config.get("python_execution_protocol") == "MARKET_BATCH_V1":
+                raise BacktestError("FIDELITY_UNSUPPORTED", "Chart signals require sequential provider observations")
+            execution_config["signal_chart"] = signal_chart
         return account_model, execution_config, signal_identity
 
     def _audit(self, run_id: str, action: str, details: Mapping[str, object]) -> None:

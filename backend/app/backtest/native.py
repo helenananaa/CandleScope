@@ -227,6 +227,12 @@ class NativeBacktests:
     def create(self, payload, key):
         if not self.runtime.settings.bar_effective:
             raise BacktestError("FLAG_DISABLED", "BAR backtests are disabled")
+        if payload.get("signal_chart") is not None:
+            from app.data_engine.synthetic_series.signals import normalize_signal_chart
+            try:payload = {**payload, "signal_chart": normalize_signal_chart(payload["signal_chart"])}
+            except ValueError as exc:raise BacktestError("NATIVE_INPUT_INVALID",str(exc)) from exc
+            if payload.get("execution_mode") != "CANDLESCOPE":
+                raise BacktestError("EXTERNAL_UNSUPPORTED", "Chart strategy signals require Host matching with real market prices")
         fingerprint = digest(payload)
         with self.lock:
             existing = self.db.execute("SELECT hash,record FROM runs WHERE key=?", (key,)).fetchone()
@@ -310,6 +316,10 @@ class NativeBacktests:
                     "parameters": payload.get("parameters", {}), "bars": bars, "contexts": contexts,
                     "interval": parse_interval_spec(payload["interval"]).canonical,
                     "libraries": payload.get("libraries", {}), "context": payload["context"], "magnifier": magnifier}
+            if payload.get("signal_chart"):
+                if identity.get("ordered_chart_strategy") != "ordered-chart-strategy/1":
+                    raise BacktestError("EXTERNAL_UNSUPPORTED", "Install an ordered chart strategy runtime")
+                wire.update(signal_chart=payload["signal_chart"], chart_signal_contract="ordered-chart-strategy/1")
             if payload.get("currency_rates") is not None:
                 wire["currency_rates"] = payload["currency_rates"]
             if payload["language"] == "pine":
@@ -370,6 +380,9 @@ class NativeBacktests:
                                 cost_sensitivity_mode=account_settings.cost_sensitivity_mode)
                     from .pine_workbench import freeze_control
                     freeze_control(self, plugin, wire, payload)
+                if wire.get("signal_chart") and (wire.get("fill_recalculation") or any(wire.get(name) for name in
+                        ("pine_bar_path_contract", "pine_print_tick_contract", "pine_history_tick_contract", "fixed_history_contract"))):
+                    raise BacktestError("EXTERNAL_UNSUPPORTED", "Chart signals require causal close-only Pine evaluation")
                 from .pine_workbench_v2 import freeze_account
                 freeze_account(wire, payload, settings=account_settings if payload["language"] == "pine" else None)
                 wire["execution_events"] = freeze_execution(self, payload, bars,

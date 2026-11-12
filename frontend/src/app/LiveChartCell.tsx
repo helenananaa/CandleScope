@@ -1227,6 +1227,7 @@ function LiveChartCell({
               session={liveSourceSession}
               attachment={cell.strategyAttachment}
               nativeStrategies={cell.nativeStrategies}
+              appearance={combinedSettings}
               strategyTesterMode={cell.strategyTesterMode}
               onStrategyTesterModeChange={(value) => onStrategyTesterModeChange(cell.id, value)}
               onNativeStrategiesChange={(value) => onNativeStrategiesChange(cell.id, value)}

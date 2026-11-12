@@ -187,6 +187,7 @@ export interface BacktestApiClient {
     parameters: Record<string, unknown>;
     pine_contexts?: unknown[];
       output_mode?: "SIGNAL" | "TARGET_POSITION" | "ORDER_INTENT";
+    signal_chart?: import("../../shared/strategyRunSettings.js").ChartSignalDefinition;
     python_bar_execution?: import("../../shared/strategyRunSettings.js").PythonBarExecution;
     execution_overrides?: import("../../shared/strategyRunSettings.js").StrategyExecutionOverrides;
     chart_cell_scope: string;

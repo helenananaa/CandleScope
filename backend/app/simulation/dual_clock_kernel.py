@@ -232,36 +232,38 @@ class DualClockSimulationKernel:
                     intents = strategy((bar,), bar)
                     if bar.sequence <= warmup_events:
                         intents = []
-                    decision = _decision_record(
-                        intents,
-                        sequence=(getattr(intents, "decision", None) or {}).get("sequence", bar.sequence) if fill_callback or tick_callback else bar.sequence,
-                        watermark_ms=bar.event_time_ms,
-                    )
-                    if fill_callback is not None or tick_callback is not None:
-                        decision.update(trigger="BAR_CLOSE", signal_sequence=bar.sequence)
-                    if self.capture_result_replay and self.replay_signal_trace_complete:
-                        self.replay_signal_trace_complete = record_result_replay_signal(
-                            self.replay_closed_bar_signals, decision, bar, source.sequence,
+                    from .chart_decisions import decision_plans
+                    for plan in decision_plans(intents):
+                        decision = _decision_record(
+                            plan,
+                            sequence=(getattr(plan, "decision", None) or {}).get("sequence", bar.sequence) if fill_callback or tick_callback else bar.sequence,
+                            watermark_ms=bar.event_time_ms,
                         )
-                    if self.scale_stream_decisions:
-                        self._decision_chain_hash = "sha256:" + sha256_hex(
-                            {"previous": self._decision_chain_hash, "decision": decision}
+                        if fill_callback is not None or tick_callback is not None:
+                            decision.update(trigger="BAR_CLOSE", signal_sequence=bar.sequence)
+                        if self.capture_result_replay and self.replay_signal_trace_complete:
+                            self.replay_signal_trace_complete = record_result_replay_signal(
+                                self.replay_closed_bar_signals, decision, bar, source.sequence,
+                            )
+                        if self.scale_stream_decisions:
+                            self._decision_chain_hash = "sha256:" + sha256_hex(
+                                {"previous": self._decision_chain_hash, "decision": decision}
+                            )
+                            self._decision_count += 1
+                        else:
+                            self.decisions.append(decision)
+                        if self.execution_model_revision is not None and plan:
+                            self.frozen_intents.append(
+                                {
+                                    "sequence": bar.sequence,
+                                    "intents": [dict(intent) for intent in plan],
+                                }
+                            )
+                        # The signal precedes this boundary source event. Admission
+                        # happens before its account updates; fills require a trade.
+                        self.execution._enqueue_many(
+                            plan, current_sequence=source.sequence - (2 if self.process_orders_on_close else 1)
                         )
-                        self._decision_count += 1
-                    else:
-                        self.decisions.append(decision)
-                    if self.execution_model_revision is not None and intents:
-                        self.frozen_intents.append(
-                            {
-                                "sequence": bar.sequence,
-                                "intents": [dict(intent) for intent in intents],
-                            }
-                        )
-                    # The signal precedes this boundary source event. Admission
-                    # happens before its account updates; fills require a trade.
-                    self.execution._enqueue_many(
-                        intents, current_sequence=source.sequence - (2 if self.process_orders_on_close else 1)
-                    )
                     if self.process_orders_on_close:
                         close_callback(bar, source.sequence - 1)
                 finally:

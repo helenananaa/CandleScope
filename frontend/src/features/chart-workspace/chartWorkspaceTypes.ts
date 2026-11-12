@@ -94,6 +94,7 @@ export interface ChartCellPriceScale {
 }
 
 export interface ChartStrategyAttachmentRecord {
+  signalChart?: import("../../shared/strategyRunSettings.js").ChartSignalDefinition | undefined;
   initialization?: import("../../shared/strategyRunSettings.js").StrategyInitializationSettings;
   pythonBarExecution?: import("../../shared/strategyRunSettings.js").PythonBarExecution;
   executionOverrides?: import("../../shared/strategyRunSettings.js").StrategyExecutionOverrides;

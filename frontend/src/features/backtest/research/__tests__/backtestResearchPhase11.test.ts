@@ -169,3 +169,16 @@ test("advanced JSON and lifecycle helpers fail closed", () => {
   assert.equal(researchStudyIsActive("RUNNING"), true);
   assert.equal(researchStudyIsActive("COMPLETED"), false);
 });
+
+test("advanced research handoff retains chart signal type and settings through final Run normalization", async () => {
+  const { buildBacktestResearchLaunchContext } = await import("../backtestResearchLaunch.js");
+  const session = { exchange: "local", marketType: "spot", symbol: "BTCUSDT", interval: "1m" };
+  const signalChart = { transform: "renko" as const, box_size: 4 };
+  const launch = buildBacktestResearchLaunchContext({ workspaceId: "w", cellId: "c", session,
+    attachment: { schemaVersion: 1, strategyDraftId: "draft-12345678", strategyRevisionId: null, displayName: "S", language: "python",
+      parameters: {}, rangeMode: "ALL_AVAILABLE", customRange: null, fidelityPreference: "FAST", quickPresetId: "CRYPTO_SPOT_STANDARD_V1", autoRun: false, signalChart },
+    result: null, resolution: null, activeRunId: null, baselineRunId: null });
+  const draft = composeResearchRunDraft({ context: { ...launch, schema_version: "candlescope.backtest-research-launch-context/1", context_id: "brc_chart", context_hash: "hash", created_at_ms: 1 },
+    run: null, dataset, snapshot, revisionId: "rev-chart", session, startTimeMs: 1000, endTimeMs: 2000 });
+  assert.deepEqual(normalizeResearchRunDraft({ draft, dataset, snapshot, revisionId: "rev-chart", session, startTimeMs: 1000, endTimeMs: 2000 }).signal_chart, signalChart);
+});

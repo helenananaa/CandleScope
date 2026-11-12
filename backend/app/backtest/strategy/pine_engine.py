@@ -187,6 +187,9 @@ class PineEngineProvider:
             raise StrategyProviderError(
                 "PROVIDER_PROTOCOL_VIOLATION", "compiled Pine source envelope required"
             ) from exc
+        self.signal_chart = context.get("signalChart")
+        if self.signal_chart and (self.runtime_identity.get("ordered_chart_strategy") != "ordered-chart-strategy/1" or self.fill_callbacks or frozen.get("historyTicks") or frozen.get("realtimeTicks")):
+            raise StrategyProviderError("FIDELITY_UNSUPPORTED", "Chart signals require a close-only ordered chart strategy runtime")
         schedule_contract = context.get("pineExecutionScheduleContract")
         self.scheduled = schedule_contract is not None
         self.streaming = context.get("pineStreamContract") is not None
@@ -227,6 +230,7 @@ class PineEngineProvider:
             "source": self.source,
             "libraries": self.libraries,
             "parameters": dict(context.get("parameters") or {}),
+            **({"chart_signal_contract": "ordered-chart-strategy/1", "signal_chart": self.signal_chart} if self.signal_chart else {}),
             **({"execution_schedule_contract": SCHEDULE_CONTRACT} if self.scheduled else {}),
             **({"closing_ticks": True} if self.process_on_close else {}),
             **({"order_metadata_contract": self.runtime_identity["order_metadata_contract"]}

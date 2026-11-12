@@ -1,6 +1,7 @@
 """External broker adapter. Never evaluates the native broker ledger."""
 
 import re
+import json
 from functools import lru_cache
 
 import pine_compat
@@ -34,6 +35,7 @@ def describe():
             "candlescope-plugin-pine-compat", "pine-compat-runtime", adapter="pine-external/13"
         ),
         "workbench_control": "candlescope.pine-workbench-control/1",
+        "ordered_chart_strategy": ("ordered-chart-strategy/1" if getattr(pine_compat, "EXTERNAL_ORDERED_CHART_SCHEMA_VERSION", 0) == 1 else None),
         "external_replay": "candlescope.external-replay/1",
         "fixed_history_contract": "candlescope.pine-fixed-history/1",
         **schedule_capabilities(),
@@ -141,7 +143,24 @@ def _execute(request):
                 request_bars=environment or None)} if risk else {})}
     # Growing historical prefixes change dataset-end builtins retroactively.
     # Only prefix-stable programs can reuse committed execution state.
+    chart_contract = request.get("chart_signal_contract")
+    if chart_contract is not None and (chart_contract != "ordered-chart-strategy/1" or getattr(pine_compat, "EXTERNAL_ORDERED_CHART_SCHEMA_VERSION", 0) != 1):
+        raise ValueError("EXTERNAL_UNSUPPORTED: ordered chart strategy runtime required")
+    if chart_contract is not None:
+        config = request.get("signal_chart") or {}
+        transform = config.get("transform")
+        chart = {"heikin-ashi": "heikinashi", "line-break": "linebreak", "point-and-figure": "pointfigure"}.get(transform, transform)
+        if chart not in {"heikinashi", "renko", "kagi", "linebreak", "pointfigure"}:
+            raise ValueError("EXTERNAL_UNSUPPORTED: chart signal definition required")
+        descriptor = dict(chart=chart, symbol=request["context"]["symbol"])
+        if chart == "linebreak":descriptor["lines"] = config.get("number_of_lines", 3)
+        elif chart != "heikinashi":
+            descriptor.update(style="ATR" if config.get("mode") == "atr" else "Traditional",
+                param=config.get("atr_length",14) if config.get("mode") == "atr" else config.get("reversal_amount",3) if chart == "kagi" else config.get("box_size",1))
+            if chart == "pointfigure":descriptor.update(source="close",reversal=config.get("reversal_amount",3))
+        request = {**request, "context": {**request["context"], "symbol": json.dumps(descriptor, separators=(",", ":"))}}
     incremental = (
+        chart_contract is None and
         callable(getattr(program, "external_session", None))
         and not endpoint_sensitive
         and not any(feature.startswith("ticker.") for feature in features)
@@ -165,7 +184,7 @@ def _execute(request):
             raise ValueError("EXTERNAL_UNSUPPORTED: unknown order metadata contract")
         annotations = {"order_metadata": True}
     try:
-        if endpoint_sensitive and request.get("fixed_history_contract") == "candlescope.pine-fixed-history/1":
+        if chart_contract is None and endpoint_sensitive and request.get("fixed_history_contract") == "candlescope.pine-fixed-history/1":
             from .fixed_history import FixedHistory
             if _fixed_history is None:
                 _fixed_history = FixedHistory(program, request, dict(
@@ -207,6 +226,7 @@ def _execute(request):
                 lambda request_bars: program.run_external(
                     engine_bars(request["bars"]),
                     accounts,
+                    **({"ordered_chart": True} if chart_contract else {}),
                     input_overrides=parameters or None,
                     chart_symbol=request["context"]["symbol"],
                     chart_timeframe=request["context"]["timeframe"],

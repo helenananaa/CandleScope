@@ -45,6 +45,7 @@ class RunCreateRequest(BaseModel):
     pine_contexts: list[RequestedNativeData] = Field(default_factory=list, max_length=16)
     pine_chart_metadata: PineChartMetadata | None = None
     strategy_source: str | None = Field(default=None, max_length=2_000)
+    signal_chart: dict[str, Any] | None = None
     signal_trace_mode: str = Field(default="LEGACY_INLINE_V1", max_length=32)
     output_mode: str = Field(default="TARGET_POSITION", max_length=32)
     initial_balance: str = Field(default="10000", max_length=64)
@@ -330,6 +331,7 @@ class ResearchExecutionOverrides(BaseModel):
 
 
 class ResearchLaunchContextRequest(BaseModel):
+    signal_chart: dict[str, Any] | None = None
     model_config = ConfigDict(extra="forbid")
     source_workspace_id: str | None = Field(default=None, min_length=1, max_length=160)
     source_cell_id: str | None = Field(default=None, min_length=1, max_length=160)

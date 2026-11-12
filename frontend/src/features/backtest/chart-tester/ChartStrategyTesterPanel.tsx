@@ -183,6 +183,7 @@ function autoRunPauseKey(reason: ChartStrategyAutoRunPauseReason) {
 }
 
 export interface ChartStrategyTesterPanelProps {
+  signalChart?: import("../../../shared/strategyRunSettings.js").ChartSignalDefinition | undefined;
   cellScope: string;
   session: ChartSession;
   attachment: ChartStrategyAttachmentRecord | null;
@@ -1116,6 +1117,7 @@ export function CandleScopeStrategyTesterPanel({
       )}
       </> : <Suspense fallback={<p>{t("continuous.loading")}</p>}>
         <ContinuousStrategyPanel key={JSON.stringify([cellScope, activeDraft?.id, session, runMode])}
+          signalChart={currentAttachment?.signalChart}
           scope={JSON.stringify([cellScope, activeDraft?.id])} session={session} mode={runMode} source={source}
           language={activeDraft?.language ?? ""} parameters={currentAttachment?.parameters ?? {}} trusted={pythonTrustedConfirmed} active={active}
           chartActive={!!continuousChartActive} marketWindow={continuousMarketWindow ?? null} onLocateTrade={onLocateTrade}

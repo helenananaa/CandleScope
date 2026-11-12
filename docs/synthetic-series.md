@@ -198,8 +198,8 @@ The chart binding uses the explicit loaded source range to preserve the old
 display mode. A source-window prepend/trim/new right edge can therefore require
 a new bounded seed. The kernel incrementally advances mathematical state for
 eligible tails, but retained array copies, parameter scans and output diffing
-still have history-dependent cost. This is not the final performance or shared
-causal strategy-input implementation.
+still have history-dependent cost. This display-window owner has history-dependent costs. Strategies use the
+separate causal cursor described below.
 
 Limits are explicit: 10,000 source rows (also subject to the DM query limit),
 50,000 generated outputs, 10,000 bricks per input, 32 shared backend instances,
@@ -215,8 +215,71 @@ See [pinned-source qualification](qa/synthetic-series-pinned-20261112/README.md)
 and the retained [first-slice record](qa/synthetic-series-150-20261112/README.md).
 The remaining issue scope includes durable
 checkpoint/restart qualification, additional plugin chart-clock contracts and
-strategy adapters, full execution/resource scheduling, independent output-cursor UI paging,
+additional strategy execution modes, full execution/resource scheduling, independent output-cursor UI paging,
 multi-chart performance and native macOS/Windows save/exit/restart evidence.
 Retained frontend algorithms remain offline migration oracles and the explicitly
 selected rollback path. They
 are not an automatic fallback for live backend failures.
+
+
+## Strategy signals follow chart type by default
+
+The chart tester, research page (including imported/frozen sources), and continuing
+Python strategies freeze the current chart appearance into `signal_chart` for
+HA, Renko, Point & Figure, Kagi and Line Break. Ordinary candle/line/bar renderer
+styles omit this optional field and retain market BAR inputs. Changing chart type
+or transform parameters invalidates the current result and automatic-run key.
+An already running account retains its frozen definition; it is never switched
+mid-run. Special-chart Pine instances select Host matching automatically, with
+the native broker option disabled while that chart type is active.
+
+`candlescope.chart-signal-input/1`, algorithm `causal-close-source/1`, reuses the
+backend transform price steps against chronological, already closed source bars.
+Each confirmed chart row is one provider observation. Provider sequence and Pine
+`bar_index` advance per chart row; source timestamps and availability timestamps
+remain real clocks. Several bricks may share one timestamp. Warmup counts chart
+rows. No generated brick becomes a market event.
+
+The market loop iterates the lazy signal plans in order: evaluate one chart row,
+admit its orders, then evaluate the next. Sizing and pyramiding can therefore see
+pending orders from earlier bricks at the same close. Existing BAR/tape/book
+matching, account marks, fees, slippage, capacity and order eligibility continue
+using real prices and market sequence numbers. A source bar without a new brick
+still matches working orders. `process_orders_on_close` uses the existing real
+closing-price owner, never a synthetic close. Cost scenarios preserve all accepted
+orders at a shared market sequence; Pine scenarios recompute the chart signal
+clock against independent real accounts.
+
+Causality differs from repaintable display-window output:
+
+- ATR is updated from the known source prefix (initial running mean, then Wilder
+  recurrence). A new box size applies to subsequent steps without rewriting past
+  decisions. Tick precision is explicit when supplied, otherwise fixed from the
+  first known bar and parameters. A display-window ATR recalibration can redraw
+  chart history; it cannot reproduce or alter this historical decision trace.
+- The unfinished P&F column / Kagi leg is retained as state and becomes a strategy
+  close only when a reversal confirms it. Reaching the end of a backtest does not
+  confirm an unfinished column. HA, Renko and Line Break emit their confirmed
+  source-close outputs. Output volume retains the documented close-source
+  allocation estimate.
+- Pine `request.security` contexts retain their separately frozen real datasets
+  and revealed bounds. The root ticker describes the selected nonstandard chart;
+  explicitly requesting the standard symbol does not alias the root bricks.
+
+Pine's explicit `ordered-chart-strategy/1` contract accepts repeated main source
+clocks only through the external-account engine entry point. Ordinary candle
+entry points still reject duplicate times. Pine indicators retain their separate
+ordered-chart input contract. Fill/every-tick execution schedules, fixed-history
+endpoint-sensitive Workbench programs and whole-market Python batch execution
+are not qualified with chart signals and fail explicitly instead of computing
+on raw candles or permitting synthetic-price fills.
+
+The Host planner checkpoint owns the bounded transform cursor (ATR, tick, pending
+volume/column and ordinals). Native external replay separately persists the raw
+market cursor and chart cursor/transcript, including checkpoints before any brick
+exists. Ordinary runs do not acquire synthetic checkpoint fields. Existing
+provider/account checksums and commit fences remain the recovery owners.
+
+See [strategy signal qualification](qa/chart-strategy-signals-20261112/README.md).
+This qualifies source/local runtime behavior; native macOS save/exit/restart,
+Windows, endurance and large-history performance remain separate acceptance work.

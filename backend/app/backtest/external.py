@@ -25,6 +25,8 @@ from .external_support import persistent_evaluator
 def host_identity():
     import app.simulation.kernel as kernel_module
     files = [Path(__file__), Path(__file__).with_name("native_session.py"), Path(__file__).with_name("external_orders.py"), Path(__file__).with_name("external_report.py"), Path(__file__).with_name("external_market.py"), Path(__file__).with_name("external_feedback.py"), Path(__file__).with_name("external_replay.py"), *sorted(Path(kernel_module.__file__).parent.rglob("*.py"))]
+    from app.data_engine.synthetic_series import signals as chart_signals, core as chart_math
+    files.extend([Path(chart_signals.__file__), Path(chart_math.__file__)])
     checksum = hashlib.sha256()
     files.extend(Path(__file__).with_name(name) for name in ("native_replay.py","native_replay_storage.py","native_replay_views.py","native_checkpoint.py"))
     files.append(Path(__file__).with_name("pine_entry_risk.py"))
@@ -199,7 +201,7 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
         clock,last_request=resume["clock"],resume["last_request"]
         # Rebuild only the evaluator transcript. Restored fills, fees, depth and
         # ownership stay in the Host kernel and must never be matched again.
-        if _pine_stream is None:
+        if _pine_stream is None and last_request is not None:
             reproduced=runner(plugin,last_request,cancelled=cancelled,timeout=120)
             from .native_replay_storage import same_json
             if not same_json(reproduced,latest):
@@ -239,7 +241,17 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
         for item in wire.get("contexts", [])])
         if wire.get("fixed_history_contract") == "candlescope.pine-fixed-history/1" else None)
 
-    def strategy(_window, event):
+    signal_series = None
+    signal_bars, signal_clocks = [], []
+    if wire.get("signal_chart"):
+        from app.data_engine.synthetic_series.signals import ChartSignalSeries
+        signal_series = ChartSignalSeries(wire["signal_chart"])
+        if resume is not None:
+            signal_series.restore(clock.get("signal_input"))
+            signal_bars = deepcopy(clock.get("signal_bars", []))
+            signal_clocks = list(clock.get("signal_clocks", []))
+
+    def evaluate_bar(event, signal=None):
         nonlocal latest
         if cancelled.is_set():
             raise BacktestError("NATIVE_CANCELLED", "host matching cancelled")
@@ -248,22 +260,25 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
         orders.feedback()
         account = kernel.account
         count = len(accounts) + 1
-        accounts.append({"time": wire["bars"][count - 1]["time"], "position_size": float(account.position_qty),
+        bars = signal_bars if signal is not None else wire["bars"]
+        accounts.append({"time": bars[count - 1]["time"], "position_size": float(account.position_qty),
                          "position_avg_price": None if account.entry_price is None else float(account.entry_price),
                          "equity": float(account.equity()), "initial_capital": float(kernel.initial_balance),
                          "netprofit": float(account_feedback_profit(account, kernel.initial_balance)), "openprofit": float(account.unrealized())})
-        request = {**{key: value for key, value in wire.items() if key not in {"execution_events", "account_events", "account_provenance", "pine_v2_settings"}}, "bars": wire["bars"][:count], "accounts": accounts}
+        request = {**{key: value for key, value in wire.items() if key not in {"execution_events", "account_events", "account_provenance", "pine_v2_settings"}}, "bars": bars[:count], "accounts": accounts}
         if fixed_history is not None:
             request.update(fixed_history)
-        if "execution_times" in wire:
+        if signal is not None:
+            request["execution_times"] = signal_clocks[:count]
+        elif "execution_times" in wire:
             request["execution_times"] = wire["execution_times"][:count]
-        boundary = interval.next_ms(wire["bars"][count - 1]["time"] * 1000)
+        boundary = event.event_time_ms + 1 if signal is not None else interval.next_ms(wire["bars"][count - 1]["time"] * 1000)
         if request_feed is not None:
             request_groups.append(dict(observed_at_ms=boundary - 1, updates=request_feed.advance(boundary - 1)))
             request.update(contexts=request_feed.empty_contexts(), request_updates=request_groups)
         else:
             request["contexts"] = visible_contexts(wire, boundary)
-        reply = compact and count < target
+        reply = compact and signal is None and count < target
         latest = evaluate(plugin, request, intent_base=len(history) if reply else None,
                           cancelled=cancelled, timeout=max(0.1, deadline - time.monotonic()))
         if request_feed is not None:
@@ -291,6 +306,29 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
         orders.configure(latest.get("pyramiding", 1))
         check_risk_response(orders, wire, latest)
         return orders.translate(current, event.sequence)
+
+    def strategy(_window, event):
+        if signal_series is None:
+            return evaluate_bar(event)
+        from app.simulation.chart_decisions import ChartDecisionBatch
+        from .strategy.host_planner import HostPlan
+        index = clock.get("signal_source_cursor", 0)
+        bar = wire["bars"][index]
+        source = {"open_time_ms": int(bar["time"] * 1000),
+            "close_time_ms": interval.next_ms(int(bar["time"] * 1000)) - 1,
+            **{key: bar[key] for key in ("open", "high", "low", "close", "volume")}, "is_closed": True}
+        rows = signal_series.observe(source, event.event_time_ms)
+        clock["signal_source_cursor"] = index + 1
+        def plans():
+            for row in rows:
+                signal_bars.append({"time": row["source_time_ms"] // 1000,
+                    **{key: float(row["bar"][key]) for key in ("open", "high", "low", "close", "volume")}})
+                signal_clocks.append(row["available_time_ms"])
+                plan = evaluate_bar(event, row)
+                yield HostPlan(plan, decision={"kind": "ORDER_INTENT", "payload": {"intents": plan},
+                    "chart_signal": {key: row[key] for key in ("ordinal", "source_time_ms", "available_time_ms", "source_count")}})
+            clock.update(signal_input=signal_series.snapshot(), signal_bars=signal_bars, signal_clocks=signal_clocks)
+        return ChartDecisionBatch(plans())
 
     execution_passes = None
     if wire.get("pine_print_tick_contract"):

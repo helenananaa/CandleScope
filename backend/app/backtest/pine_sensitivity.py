@@ -71,6 +71,15 @@ def build_matrix(service, config, kernel, events, primary, *, provider, planner,
                 from .pine_closing import ChartClosingTicks
                 closing = ChartClosingTicks(replay, callbacks if not config.get("pine_realtime_ticks") or config.get("pine_fill_callbacks") else None)
 
+            chart_clock = None
+            if config.get("signal_chart"):
+                from .strategy.chart_signals import ChartSignalClock
+                chart_clock = ChartSignalClock(config["signal_chart"], adapter, shadow_planner,
+                    market=market, warmup=warmup, features=features,
+                    context=lambda event: None if shadow_planner.config is None else _planning_context(account_kernel,event),
+                    account=lambda: _pine_account_view(replay),
+                    control=lambda: (check_deadline(deadline), control()))
+
             def strategy(_visible, event):
                 nonlocal observed
                 check_deadline(deadline)
@@ -78,6 +87,8 @@ def build_matrix(service, config, kernel, events, primary, *, provider, planner,
                     control()
                 index = event.sequence - 1 if isinstance(replay, DualClockSimulationKernel) else observed
                 observed += 1
+                if chart_clock is not None:
+                    return chart_clock.observe(event)
                 if historical_callbacks is not None:
                     return historical_callbacks.observe(event)
                 if callbacks is not None:

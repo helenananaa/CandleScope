@@ -22,6 +22,7 @@ export type ChartStrategyTesterStaleReason =
   | "DRAFT_CONTENT_CHANGED"
   | "LANGUAGE_CHANGED"
   | "STRATEGY_REVISION_CHANGED"
+  | "CHART_INPUT_CHANGED"
   | "PARAMETERS_CHANGED"
   | "RANGE_CHANGED"
   | "FIDELITY_CHANGED"
@@ -127,6 +128,7 @@ function cloneInputs(inputs: ChartStrategyTesterInputs): ChartStrategyTesterInpu
       ...inputs.attachment,
       ...(inputs.attachment.pythonBarExecution ? { pythonBarExecution: { ...inputs.attachment.pythonBarExecution } } : {}),
       ...(inputs.attachment.executionOverrides ? { executionOverrides: { ...inputs.attachment.executionOverrides } } : {}),
+      ...(inputs.attachment.signalChart ? { signalChart: { ...inputs.attachment.signalChart } } : {}),
       parameters: JSON.parse(canonicalJson(inputs.attachment.parameters)) as Record<string, unknown>,
       customRange: inputs.attachment.customRange
         ? { ...inputs.attachment.customRange }
@@ -154,6 +156,7 @@ export function chartStrategyTesterStaleReasons(
   if (previous.draftContentRevision !== next.draftContentRevision) {
     reasons.push("DRAFT_CONTENT_CHANGED");
   }
+  if (canonicalJson(left.signalChart ?? null) !== canonicalJson(right.signalChart ?? null)) reasons.push("CHART_INPUT_CHANGED");
   if (left.language !== right.language) reasons.push("LANGUAGE_CHANGED");
   if (left.strategyRevisionId !== right.strategyRevisionId) {
     reasons.push("STRATEGY_REVISION_CHANGED");

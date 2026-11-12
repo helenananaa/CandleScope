@@ -1,3 +1,4 @@
+import { chartStrategySignalInput, withChartSignalInput } from "../backtest/chart-tester/chartStrategySignalInput.js";
 import { useNativeAvailability } from "../backtest/native/useNativeAvailability.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import {
@@ -392,6 +393,7 @@ export default function StrategyResearchApp({
       setSavingTemplate(false);
     });
   }, [dispatch, library]);
+  const signalConfiguration = useMemo(() => withChartSignalInput(state.script.configuration ?? DEFAULT_STRATEGY_RUN_SETTINGS, settings), [state.script.configuration, settings]);
   const researchRun = useStrategyResearchRun({
     source,
     imported: importedManifest,
@@ -399,7 +401,7 @@ export default function StrategyResearchApp({
     runtimeMode: hostReady ? runtime.runtimeMode : "LOCAL_OFFLINE",
     draftId: state.script.draftId,
     draftContentRevision: state.script.contentRevision,
-    configuration: state.script.configuration,
+    configuration: signalConfiguration,
     restoreRunId: state.result.replay ? null : state.result.runId,
     onRunId: handleRunId,
   });
@@ -449,13 +451,13 @@ export default function StrategyResearchApp({
       session: researchRun.session,
       draftId: state.script.draftId,
       result: researchRun.sourceResult,
-      configuration: state.script.configuration,
+      configuration: signalConfiguration,
     }).then((href) => {
       window.location.assign(href);
     }).catch((reason: unknown) => {
       setAdvancedError(reason instanceof Error ? describeError(reason, reason.message) : String(reason));
     });
-  }, [researchRun.session, researchRun.sourceResult, source, state.script.draftId, state.script.configuration]);
+  }, [researchRun.session, researchRun.sourceResult, source, state.script.draftId, signalConfiguration]);
 
   useControlCommands(() => ({ id: "research-panels", title: "Strategy research panels", context: () => ({ chartUiScope, settingsOpen, indicatorPanel, historyOpen }), snapshot: () => ({ settingsOpen, indicatorPanel, historyOpen, advancedError }), commands: [
     command("settings", "Open/close research settings.", object({ open: bool }), ({ open }) => setSettingsOpen(open)),
@@ -508,7 +510,7 @@ export default function StrategyResearchApp({
       {!nativeMode && availability === "error" && <p role="status">{t("indicator.editor.runtimeUnavailableHelp")}</p>}
       {!nativeMode && availability === "unavailable" && <p role="status">{t("native.platformHelp")}</p>}
       {nativeMode ? researchRun.session ? <Suspense fallback={<p>{t("native.loading")}</p>}>
-        <NativeStrategyPanel session={researchRun.session} cellScope="strategy-research-native" onClose={() => setNativeMode(false)}
+        <NativeStrategyPanel signalChart={chartStrategySignalInput(settings)} session={researchRun.session} cellScope="strategy-research-native" onClose={() => setNativeMode(false)}
           onSelectPython={() => {
             void openPythonStrategyDraft(getChartStrategyDraftStore(), scriptDraft).then((draft) => {
               dispatch({ type: "script/setDraft", draftId: draft.id });
