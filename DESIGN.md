@@ -103,6 +103,22 @@ Overlays share one stack (`components/ui/overlay`): drawers, then modals, then p
 - **Focus** moves into a layer when it opens (its first control, skipping close buttons marked `data-overlay-close` and resize handles) and returns to the control that opened it.
 - **A modal** makes everything beneath it inert and keeps Tab inside. A layer with unsaved work can refuse Escape (`closeOnEscape`), as the indicator editor does.
 
+## Page header
+
+Every page uses `AppHeader` (`frontend/src/app/AppHeader.tsx`), so the brand, the workspace navigation and Settings are always in the same place. Its regions, left to right:
+
+| Region | Holds |
+|---|---|
+| Brand and navigation | The logo and 行情 · 策略研究 · 回放训练. A page may add a `badge` after them (the replay training badge, research's way back to its task list). |
+| `context` | What the page is about: the symbol, the data source, the replay run. |
+| `tools` | Controls for that context: intervals, prices, the chart source. They narrow through their own rules. |
+| `actions` | Page actions as data (`HeaderAction`: label, handler, open state, link). Right-aligned; when space runs out the last ones move into the 更多 menu. A popover opened by an action anchors through `anchorRef`, which points to 更多 while the action is in the menu. |
+| `extras` | Controls that cannot go into a menu (the layout picker, plugin toolbar items). |
+| `panels` | Panel toggles such as indicators and alerts, as icon buttons. |
+| `settings` | Settings, always the last control. |
+
+Put a new page button in `actions`, not in `tools` or `extras`, so it collapses with the others at narrow widths.
+
 ## Stylesheets and cascade layers
 
 Every app stylesheet sits in a cascade layer. The order is set once, in `frontend/src/styles/layers.css`, which every entry page imports first:

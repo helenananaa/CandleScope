@@ -906,7 +906,7 @@ function LiveChartCell({
     if (!studyMaskedRef.current) openSavedReplay(request);
   }, [openSavedReplay]);
   const [studySetup, setStudySetup] = useState(false);
-  const studyButtonRef = useRef<HTMLButtonElement>(null);
+  const studyButtonRef = useRef<HTMLElement | null>(null);
   const timeNavigation = useChartTimeNavigation({ active, enabled: !obscured && !replay.key && !study.masked,
     cellId: cell.id, workspaceId, sessionKey: chartSession.view.sessionKey,
     marketData: sourceMarketData, surface: chartSurface.actions, links: linkCoordinator });
@@ -1262,16 +1262,22 @@ function LiveChartCell({
           extensionControls={(
             <>
               {workspaceControls}
-              {!study.active && <button ref={studyButtonRef} type="button" className="ui-control" disabled={study.pending || study.busy || !!replay.key}
-                aria-haspopup="dialog" aria-expanded={studySetup}
-                onClick={() => { if (!study.view) study.retry(); else setStudySetup(open => !open); }}>{t("study.title")}</button>}
-              {timeNavigation.available && <button type="button" className="ui-control"
-                title={t("chartTime.shortcut")} onClick={() => timeNavigation.setOpen(true)}>{t("chartTime.title")}</button>}
               <PluginUiErrorBoundary>
                 <PluginPlatformToolbar runtime={plugins} />
               </PluginUiErrorBoundary>
             </>
           )}
+          actions={[
+            ...(!study.active ? [{
+              id: "history-study", label: t("study.title"), hasPopup: "dialog" as const, expanded: studySetup, anchorRef: studyButtonRef,
+              disabled: study.pending || study.busy || !!replay.key,
+              onSelect: () => { if (!study.view) study.retry(); else setStudySetup(open => !open); },
+            }] : []),
+            ...(timeNavigation.available ? [{
+              id: "chart-time", label: t("chartTime.title"), title: t("chartTime.shortcut"), hasPopup: "dialog" as const,
+              onSelect: () => timeNavigation.setOpen(true),
+            }] : []),
+          ]}
         />,
         portalHosts.topBar,
       )}

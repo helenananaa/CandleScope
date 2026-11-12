@@ -4469,6 +4469,7 @@ export const ro = {
   "common.cancel": "Anulează",
   "common.close": "Închide",
   "common.notifications": "Notificări",
+  "shell.moreActions": "Mai multe acțiuni",
   "serverError.code.historyOriginUnavailable": "Nu s-a putut citi începutul istoricului bursei. Încearcă din nou în curând.",
   "serverError.code.subscribeFailed": "Abonarea la datele în timp real a eșuat",
   "local.qualityStatus.accepted": "Acceptat",

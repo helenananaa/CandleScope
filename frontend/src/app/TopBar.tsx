@@ -14,8 +14,8 @@ import { isBacktestEntryEnabled } from "../features/backtest/backtestFlags.js";
 import { useAdvancedMarketSummary } from "../features/advanced-market-data/useAdvancedMarketSnapshots.js";
 import { t } from "../i18n/index.js";
 import { useLocale } from "../i18n/useLocale.js";
-import MarketTopBarFrame from "./MarketTopBarFrame.js";
-import { AlertRailIcon, CapabilityRailIcon, ProfileRailIcon } from "./marketRailIcons.js";
+import AppHeader, { type HeaderAction } from "./AppHeader.js";
+import { AlertRailIcon, ProfileRailIcon } from "./marketRailIcons.js";
 import WorkspaceNavigation from "./WorkspaceNavigation.js";
 
 export interface TopBarSymbolSearchModel extends Omit<SymbolSearchProps, "onSelect"> {
@@ -39,7 +39,10 @@ export interface TopBarProps {
   onOpenReplayLauncher(): void;
   identityAccessory?: ReactNode;
   intervalControl?: ReactNode;
+  /** Inline controls at the right of the header: the layout picker and plugin toolbar items. */
   extensionControls?: ReactNode;
+  /** Page actions that collapse into the 更多 menu when space runs out. */
+  actions?: readonly HeaderAction[];
   studyContext?: { symbol: string; interval: string };
   researchEnabled?: boolean;
 }
@@ -53,6 +56,7 @@ function TopBar({
   identityAccessory,
   intervalControl,
   extensionControls,
+  actions = [],
   studyContext,
   researchEnabled,
 }: TopBarProps) {
@@ -108,10 +112,10 @@ function TopBar({
   );
 
   return (
-    <MarketTopBarFrame
+    <AppHeader
       source="live"
-      taskNavigation={<WorkspaceNavigation active="live" onReplay={() => { void loadReplayLauncherDialog(); onOpenReplayLauncher(); }} replayDisabled={replayEntry.state !== "enabled"} replayReason={replayEntry.state === "enabled" ? undefined : replayEntry.reason} researchEnabled={backtestEntryEnabled} />}
-      identity={studyContext ? <span className="history-study-identity" data-study-context="true">
+      navigation={<WorkspaceNavigation active="live" onReplay={() => { void loadReplayLauncherDialog(); onOpenReplayLauncher(); }} replayDisabled={replayEntry.state !== "enabled"} replayReason={replayEntry.state === "enabled" ? undefined : replayEntry.reason} researchEnabled={backtestEntryEnabled} />}
+      context={studyContext ? <span className="history-study-identity" data-study-context="true">
         <strong>{studyContext.symbol}</strong><span>{t("study.title")}</span>
       </span> : <>
         <SymbolSearch
@@ -127,68 +131,61 @@ function TopBar({
         />
         {identityAccessory}
       </>}
-      intervals={studyContext ? <span className="history-study-interval">{studyContext.interval}</span> : intervalControl}
-      controls={<>
+      tools={<>
+        {studyContext ? <span className="history-study-interval">{studyContext.interval}</span> : intervalControl}
+        {!studyContext && advancedMarketData.summaryEnabled && (
+          <>
+            <div className="live-market-metrics-inline">{marketMetrics}</div>
+            <details
+              className="live-market-metrics-compact"
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.currentTarget.open = false;
+                  event.stopPropagation();
+                }
+              }}
+              onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
+              }}
+            >
+              <summary>{t("shell.derivativesSummary")}</summary>
+              {marketMetrics}
+            </details>
+          </>
+        )}
+      </>}
+      extras={extensionControls}
+      actions={actions}
+      panels={<>
         <button
-        className="settings-btn indicator-toggle-btn"
-        title={t("shell.settings")}
-        aria-label={t("shell.settings")}
-        onPointerEnter={loadSettingsModal}
-        onMouseOver={loadSettingsModal}
-        onMouseEnter={loadSettingsModal}
-        onFocus={loadSettingsModal}
-        onClick={() => {
+          className={`indicator-toggle-btn ${indicatorPanelOpen ? "active" : ""}`}
+          onClick={onToggleIndicatorPanel}
+          title={t("shell.indicators")}
+          aria-label={`${t("shell.indicators")} ${activeIndicatorCount}`}
+          aria-expanded={indicatorPanelOpen}
+        >
+          <span aria-hidden="true" style={{ display: "flex" }}><ProfileRailIcon /></span>
+          {activeIndicatorCount > 0 && (
+            <span className="indicator-badge">{activeIndicatorCount}</span>
+          )}
+        </button>
+        {!studyContext && <button
+          className={`indicator-toggle-btn alert-toggle-btn ${alertPanelOpen ? "active" : ""}`}
+          onClick={onToggleAlertPanel}
+          title={t("shell.alerts")}
+          aria-label={t("shell.alerts")}
+          aria-expanded={alertPanelOpen}
+        >
+          <span aria-hidden="true" style={{ display: "flex" }}><AlertRailIcon /></span>
+        </button>}
+      </>}
+      settings={{
+        onPrepare: loadSettingsModal,
+        onOpen: () => {
           markPerf("lazy.settings.open.start", { trigger: "button" });
           onOpenSettings();
-        }}
-      >
-        <span aria-hidden="true" style={{ display: "flex" }}><CapabilityRailIcon /></span>
-        </button>
-
-        <button
-        className={`indicator-toggle-btn ${indicatorPanelOpen ? "active" : ""}`}
-        onClick={onToggleIndicatorPanel}
-        title={t("shell.indicators")}
-        aria-label={`${t("shell.indicators")} ${activeIndicatorCount}`}
-        aria-expanded={indicatorPanelOpen}
-      >
-        <span aria-hidden="true" style={{ display: "flex" }}><ProfileRailIcon /></span>
-        {activeIndicatorCount > 0 && (
-          <span className="indicator-badge">{activeIndicatorCount}</span>
-        )}
-        </button>
-
-        {!studyContext && <button
-        className={`indicator-toggle-btn alert-toggle-btn ${alertPanelOpen ? "active" : ""}`}
-        onClick={onToggleAlertPanel}
-        title={t("shell.alerts")}
-        aria-label={t("shell.alerts")}
-        aria-expanded={alertPanelOpen}
-      >
-        <span aria-hidden="true" style={{ display: "flex" }}><AlertRailIcon /></span>
-        </button>}
-        {extensionControls}
-      </>}
-      marketMetrics={!studyContext && advancedMarketData.summaryEnabled && (
-        <>
-          <div className="live-market-metrics-inline">{marketMetrics}</div>
-          <details
-            className="live-market-metrics-compact"
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                event.currentTarget.open = false;
-                event.stopPropagation();
-              }
-            }}
-            onBlur={(event) => {
-              if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
-            }}
-          >
-            <summary>{t("shell.derivativesSummary")}</summary>
-            {marketMetrics}
-          </details>
-        </>
-      )}
+        },
+      }}
     />
   );
 }

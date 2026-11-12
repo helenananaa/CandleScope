@@ -1,7 +1,7 @@
 import type { ReactNode, Ref } from "react";
 
 import MarketPageFrame from "../../app/MarketPageFrame.js";
-import MarketTopBarFrame from "../../app/MarketTopBarFrame.js";
+import AppHeader, { type AppHeaderProps } from "../../app/AppHeader.js";
 import MarketWorkspaceFrame from "../../app/MarketWorkspaceFrame.js";
 import { t } from "../../i18n/index.js";
 import { ResearchDataSourceBar } from "../research-data/ResearchDataSourceBar.js";
@@ -23,7 +23,7 @@ export function StrategyResearchShell({
   onOpenLibrary,
   onSelectCurrentChart,
   pageExportRef,
-  controls,
+  header,
   runtimeMode,
   intervalSelector,
   toolbar,
@@ -47,7 +47,8 @@ export function StrategyResearchShell({
   onOpenLibrary(): void;
   onSelectCurrentChart(): void;
   pageExportRef: Ref<HTMLDivElement>;
-  controls: ReactNode;
+  /** The page's header actions, panel toggles and Settings. */
+  header: Pick<AppHeaderProps, "actions" | "panels" | "settings">;
   runtimeMode: "LIVE" | "LOCAL_OFFLINE";
   intervalSelector: ReactNode;
   toolbar: ReactNode;
@@ -88,11 +89,11 @@ export function StrategyResearchShell({
       <MarketPageFrame
         rootRef={pageExportRef}
         topBar={(
-          <MarketTopBarFrame
+          <AppHeader
             source="research"
             offline={runtimeMode === "LOCAL_OFFLINE"}
             brandText={t("strategy.brand")}
-            identity={(
+            context={(
               <ResearchDataSourceBar
                 source={source}
                 {...(sourceLabel ? { sourceLabel } : {})}
@@ -102,7 +103,7 @@ export function StrategyResearchShell({
                 onSelectCurrentChart={onSelectCurrentChart}
               />
             )}
-            controls={controls}
+            {...header}
           />
         )}
         intervalSelector={intervalSelector}

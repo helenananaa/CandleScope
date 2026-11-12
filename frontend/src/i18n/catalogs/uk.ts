@@ -4469,6 +4469,7 @@ export const uk = {
   "common.cancel": "Скасувати",
   "common.close": "Закрити",
   "common.notifications": "Сповіщення",
+  "shell.moreActions": "Інші дії",
   "serverError.code.historyOriginUnavailable": "Не вдалося прочитати початок історії біржі. Спробуйте трохи пізніше.",
   "serverError.code.subscribeFailed": "Не вдалося підписатися на дані в реальному часі",
   "local.qualityStatus.accepted": "Прийнято",

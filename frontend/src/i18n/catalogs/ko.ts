@@ -5015,6 +5015,7 @@ export const ko = {
   "common.cancel": "취소",
   "common.close": "닫기",
   "common.notifications": "알림 방식",
+  "shell.moreActions": "추가 작업",
   "serverError.code.historyOriginUnavailable": "거래소 기록의 시작 지점을 읽을 수 없습니다. 잠시 후 다시 시도하세요.",
   "serverError.code.subscribeFailed": "실시간 데이터 구독에 실패했습니다",
   "local.qualityStatus.accepted": "통과",

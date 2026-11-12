@@ -5,7 +5,7 @@ import { useLocale } from "../../i18n/useLocale.js";
 import type { MainSeriesCrosshairValue } from "../../chart-adapter/chartAdapterTypes.js";
 import MarketPageFrame from "../../app/MarketPageFrame.js";
 import MarketStatusBar from "../../app/MarketStatusBar.js";
-import MarketTopBarFrame from "../../app/MarketTopBarFrame.js";
+import AppHeader from "../../app/AppHeader.js";
 import MarketWorkspaceFrame from "../../app/MarketWorkspaceFrame.js";
 import type { LocalDatasetManifest } from "./localDataTypes.js";
 import { ResearchDatasetManagement } from "../research-data/ResearchDatasetManagement.js";
@@ -154,26 +154,17 @@ export default function LocalApp() {
     <MarketPageFrame
       rootRef={pageExportRef}
       topBar={(
-        <MarketTopBarFrame
+        <AppHeader
           source="local"
-          brandIcon="◫"
-          brandText="CandleScope Analyze"
-          identity={selected ? (
+          context={selected ? (
             <div className="local-top-identity">
               <strong>{selected.symbol}</strong>
               <span>{selected.name}</span>
             </div>
           ) : null}
-          controls={<>
-            <button
-              type="button"
-              className="settings-btn indicator-toggle-btn"
-              onClick={() => setSettingsOpen(true)}
-              title={t("shell.settings")}
-              aria-label={t("shell.settings")}
-            >
-              <span aria-hidden="true" style={{ display: "flex" }}><CapabilityRailIcon /></span>
-            </button>
+          tools={<span className="local-offline-badge">{t("local.badge")}</span>}
+          extras={<span className="local-network-truth">{t("local.trailing")}</span>}
+          panels={(
             <button
               type="button"
               className={`indicator-toggle-btn ${indicatorPanelOpen ? "active" : ""}`}
@@ -181,15 +172,15 @@ export default function LocalApp() {
               onClick={() => setIndicatorPanelOpen((open) => !open)}
               title={t("shell.indicators")}
               aria-label={t("shell.indicators")}
+              aria-expanded={indicatorPanelOpen}
             >
               <span aria-hidden="true" style={{ display: "flex" }}><ProfileRailIcon /></span>
               {activeIndicatorCount > 0 && (
                 <span className="indicator-badge">{activeIndicatorCount}</span>
               )}
             </button>
-            <span className="local-offline-badge">{t("local.badge")}</span>
-          </>}
-          trailing={<span className="local-network-truth">{t("local.trailing")}</span>}
+          )}
+          settings={{ onOpen: () => setSettingsOpen(true) }}
         />
       )}
       intervalSelector={

@@ -12,7 +12,7 @@ function footer(nativeStatus?: NativeFeedbackStatus, hasData = true, hostStatus?
   const html = renderToStaticMarkup(<StrategyResearchShell visualState="completed" nativeStatus={nativeStatus} hostStatus={hostStatus}
     source={hasData ? { schemaVersion: "candlescope.research-source/1", kind: "IMPORTED_DATASET", datasetId: "fixture", dataEpoch: "sha256:fixture", interval: "1m" } : null}
     libraryEnabled libraryOpen={false} currentChartEnabled={false} onOpenLibrary={() => {}} onSelectCurrentChart={() => {}}
-    pageExportRef={null} controls={null} runtimeMode="LIVE" intervalSelector={null} toolbar={null} exportOverlay={null}
+    pageExportRef={null} header={{}} runtimeMode="LIVE" intervalSelector={null} toolbar={null} exportOverlay={null}
     drawer={null} chart={null} analysis={null} script={null} result={null} extraSurfaces={null} />);
   return html.match(/<footer[^>]*data-testid="strategy-research-status"[^>]*>(.*?)<\/footer>/)?.[1];
 }

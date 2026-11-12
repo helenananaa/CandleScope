@@ -4469,6 +4469,7 @@ export const hu = {
   "common.cancel": "Mégse",
   "common.close": "Bezárás",
   "common.notifications": "Értesítések",
+  "shell.moreActions": "További műveletek",
   "serverError.code.historyOriginUnavailable": "Nem sikerült beolvasni a tőzsdei előzmények kezdetét. Próbálja újra hamarosan.",
   "serverError.code.subscribeFailed": "Nem sikerült feliratkozni a valós idejű adatokra",
   "local.qualityStatus.accepted": "Elfogadva",

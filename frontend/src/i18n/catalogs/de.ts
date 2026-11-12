@@ -4469,6 +4469,7 @@ export const de = {
   "common.cancel": "Abbrechen",
   "common.close": "Schließen",
   "common.notifications": "Benachrichtigungen",
+  "shell.moreActions": "Weitere Aktionen",
   "serverError.code.historyOriginUnavailable": "Der Beginn der Börsenhistorie konnte nicht gelesen werden. Bitte gleich erneut versuchen.",
   "serverError.code.subscribeFailed": "Echtzeitdaten konnten nicht abonniert werden",
   "local.qualityStatus.accepted": "Akzeptiert",

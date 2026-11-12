@@ -16,6 +16,67 @@
   z-index: var(--z-topbar);
 }
 
+/* Regions shared by every page (AppHeader): the context and its tools keep their width; the
+   end region takes what is left, and its actions give way first, into the 更多 menu. */
+.app-header-main {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.app-header-end {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.app-header-actions {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: var(--control-height-md);
+  overflow: clip;
+  overflow-clip-margin: 4px;
+}
+
+/* Measured but not shown: actions in the 更多 menu, and 更多 itself when everything fits. */
+.app-header-actions > [data-overflow] {
+  position: absolute;
+  top: 0;
+  right: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.app-header-actions > a.ui-control {
+  text-decoration: none;
+}
+
+.app-header-more {
+  flex: 0 0 auto;
+  justify-content: center;
+  width: var(--control-height-md);
+  padding: 0;
+}
+
+.app-header-panels {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.app-header-icon {
+  display: flex;
+}
+
 .brand-mark {
   display: block;
   flex: 0 0 auto;

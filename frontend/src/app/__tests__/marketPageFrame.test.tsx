@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import MarketPageFrame from "../MarketPageFrame.js";
 import MarketWorkspaceFrame from "../MarketWorkspaceFrame.js";
-import MarketTopBarFrame from "../MarketTopBarFrame.js";
+import AppHeader from "../AppHeader.js";
 import MarketStatusBar from "../MarketStatusBar.js";
 import MarketRightRailFrame from "../MarketRightRailFrame.js";
 import type { MarketRailViewDescriptor } from "../marketRailTypes.js";
@@ -68,21 +68,26 @@ test("MarketWorkspaceFrame preserves chart-with-toolbar and right-rail ownership
 test("live and replay top/status adapters share exact source-neutral DOM owners", () => {
   for (const source of ["live", "replay"] as const) {
     const top = renderToStaticMarkup(
-      <MarketTopBarFrame
+      <AppHeader
         source={source}
         navigation={<span data-slot="navigation" />}
-        identity={<span data-slot="identity" />}
-        controls={<span data-slot="controls" />}
-        quote={<span data-slot="quote" />}
-        marketMetrics={<span data-slot="metrics" />}
-        ohlcv={<span data-slot="ohlcv" />}
+        badge={<span data-slot="badge" />}
+        context={<span data-slot="context" />}
+        tools={<span data-slot="tools" />}
+        actions={[{ id: "action", label: "Action", onSelect: () => undefined }]}
+        extras={<span data-slot="extras" />}
+        panels={<span data-slot="panels" />}
+        settings={{ onOpen: () => undefined }}
       />,
     );
-    assert.match(top, /class="top-bar"/);
+    assert.match(top, /class="top-bar app-header"/);
     assert.match(top, /data-market-shell-owner="top-bar"/);
     assert.match(top, new RegExp(`data-runtime-source="${source}"`));
-    const order = ["navigation", "identity", "controls", "quote", "metrics", "ohlcv"]
-      .map((slot) => top.indexOf(`data-slot="${slot}"`));
+    // Context and tools on the left; actions, extras, panels and Settings (always last) on the right.
+    const order = ['data-slot="navigation"', 'data-slot="badge"', 'data-slot="context"', 'data-slot="tools"',
+      'data-header-action="action"', 'data-slot="extras"', 'data-slot="panels"', 'class="settings-btn']
+      .map((marker) => top.indexOf(marker));
+    assert.ok(order.every((index) => index >= 0), String(order));
     assert.deepEqual(order, [...order].sort((left, right) => left - right));
 
     const status = renderToStaticMarkup(

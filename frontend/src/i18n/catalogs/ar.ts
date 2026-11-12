@@ -4469,6 +4469,7 @@ export const ar = {
   "common.cancel": "إلغاء",
   "common.close": "إغلاق",
   "common.notifications": "الإشعارات",
+  "shell.moreActions": "إجراءات أخرى",
   "serverError.code.historyOriginUnavailable": "تعذّرت قراءة بداية سجل البورصة. حاول مرة أخرى بعد قليل.",
   "serverError.code.subscribeFailed": "تعذّر الاشتراك في البيانات الفورية",
   "local.qualityStatus.accepted": "مقبول",

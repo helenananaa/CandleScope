@@ -1,4 +1,5 @@
 import { t } from "../../../i18n/index.js";
+import AppPageShell from "../../../app/AppPageShell.js";
 import ResearchMarketChart from "./ResearchMarketChart.js";
 import ResearchTaskPicker from "./ResearchTaskPicker.js";
 import { useBacktestResearchRuntime } from "./useBacktestResearchRuntime.js";
@@ -33,15 +34,18 @@ export default function BacktestResearchApp({
   const runtime = useBacktestResearchRuntime(search === undefined ? {} : { search });
   usePageControlBridge();
   useControlCommands(() => backtestCommands(runtime));
+  // Pages without a chart share the app header like every other page.
   if (runtime.view.phase !== "READY") {
-    return <ResearchStatus error={runtime.view.phase === "ERROR" ? runtime.view.error : null} onRetry={runtime.actions.refresh} />;
+    return <AppPageShell source="research"><ResearchStatus error={runtime.view.phase === "ERROR" ? runtime.view.error : null} onRetry={runtime.actions.refresh} /></AppPageShell>;
   }
   if (runtime.view.selectedTask === null) {
     return (
-      <ResearchTaskPicker
-        returnHref={runtime.view.returnHref}
-        onSelect={runtime.actions.selectTask}
-      />
+      <AppPageShell source="research">
+        <ResearchTaskPicker
+          returnHref={runtime.view.returnHref}
+          onSelect={runtime.actions.selectTask}
+        />
+      </AppPageShell>
     );
   }
   const workspaceKey = runtime.view.activeRun?.run_id

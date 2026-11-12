@@ -4469,6 +4469,7 @@ export const he = {
   "common.cancel": "ביטול",
   "common.close": "סגירה",
   "common.notifications": "התראות",
+  "shell.moreActions": "פעולות נוספות",
   "serverError.code.historyOriginUnavailable": "לא ניתן לקרוא את תחילת ההיסטוריה של הבורסה. נסו שוב בעוד רגע.",
   "serverError.code.subscribeFailed": "ההרשמה לנתונים בזמן אמת נכשלה",
   "local.qualityStatus.accepted": "התקבל",
