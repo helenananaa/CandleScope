@@ -233,3 +233,15 @@ def test_large_fine_only_target_uses_bounded_h127_pages_instead_of_large_base_wi
     assert result.bars[0].volume == result.bars[0].trades == 10007
     assert result.metadata["mixed_accepted_rows"] == 10007
     assert max(limits) <= 257 and len(limits) > 1
+
+
+def test_precedence_evidence_failure_is_pending_and_never_materialized(mixed_query, monkeypatch):
+    engine = mixed_query
+    _, stop, _ = seed(engine, count=1)
+    def failed(_):
+        raise OSError("controlled revision read failure")
+    monkeypatch.setattr(engine.storage.revision_store, "read_series_changes", failed)
+    result = engine.query("BTCUSDT", "89m", start_ms=0, end_ms=stop - 1, limit=1,
+        market_type="futures", min_revision=engine.storage.revision_store.head())
+    assert not result.bars and result.retryable and not result.complete
+    assert engine.storage.count_bars("BTCUSDT", "89m", 0, stop - 1, market_type="futures") == 0

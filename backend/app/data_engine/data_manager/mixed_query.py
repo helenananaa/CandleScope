@@ -130,7 +130,10 @@ def query_closed_mixed(engine, key, *, start_ms=None, end_ms=None, before_ms=Non
                 binding()
                 values = [(source.exchange, source.market_type, source.symbol, source.interval,
                            *source.identity.storage_values) for source in keys]
-                _, changes = store.read_series_changes(values)
+                try:
+                    _, changes = store.read_series_changes(values)
+                except Exception as exc:
+                    raise StaleAcquisition("mixed precedence evidence unavailable") from exc
                 versions = {revision.series: revision.version for revision in view.revisions}
                 if any((change["revision"] if change else 0) != versions[source]
                        for source, change in zip(keys, changes)):
