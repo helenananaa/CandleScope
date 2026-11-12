@@ -1,0 +1,59 @@
+{
+  "baseline": "9487b1c6ec657b726b204e1ab3a973c996ef8ce6",
+  "product": "acc4ddabdec8eef0d5a1f0a45bbf490beb6dffce",
+  "tests": 705,
+  "failures": 0,
+  "skips": 0,
+  "source_query_calls_per_side": 48,
+  "files": [
+    {
+      "path": "tests.log.gz",
+      "bytes": 656,
+      "sha256": "2c6ef04d4913194a8b4aff916e70edf536609c278251194c9755f511c8dbd98a",
+      "raw_sha256": "b6d661f9aa9cc5abf47b9adf51ba549ab586d8affcae49a209bdf9753ac4b351"
+    },
+    {
+      "path": "tests.xml.gz",
+      "bytes": 12009,
+      "sha256": "16f4050dc5b3dbc90025ce8d965a0bd6d91d85c5256bddcb62b841db93c99d78",
+      "raw_sha256": "50e24946b72b8512b5f40ea01733a1290b631dd9834b817b754e7a278efe6d22"
+    },
+    {
+      "path": "source-baseline.json.gz",
+      "bytes": 9624,
+      "sha256": "f4b1b7bb67b65be5cc437fc548dd4134b1e42682d6553210e09f2b76848f14e0",
+      "raw_sha256": "5adcd3200de30b8d8542f1b4c91311609eaa373df332c0209564b91dd80ef6d3"
+    },
+    {
+      "path": "source-candidate.json.gz",
+      "bytes": 10597,
+      "sha256": "df8efc15af40269c0f88f8086643e006ea48ccddf2a2043353542d0ccac4c9d7",
+      "raw_sha256": "5350714e3b23753f616f171e2dd3ce851b094e88d86cbf303d5b5e07a5552b84"
+    },
+    {
+      "path": "architecture.log.gz",
+      "bytes": 121,
+      "sha256": "2821c011ea1599274782b3a127db697454da970e1da989c56c4d812037393b16",
+      "raw_sha256": "547c159b06d361e5d8e8f90f1388f08bb96897d557771347b9f19aee67e444fc"
+    },
+    {
+      "path": "capability-main-baseline.log.gz",
+      "bytes": 1039,
+      "sha256": "009ec95e6b11ee9ed947fe87be9a65c0f9bf5e864d21ebcd0df476e72b71f276",
+      "raw_sha256": "b09eaed78b9c7d5399262f38e91f87339eee7da2600ca7ce65bdec43223c9d20"
+    },
+    {
+      "path": "source-harness-initial.log.gz",
+      "bytes": 284,
+      "sha256": "98271262f27c0d21ed9f3258b507454fc183e9407800b9c343e8db77baf18dd8",
+      "raw_sha256": "9b468edae04cd073a00275644df406f0a240dc74777f6eab26a351c76c31bf40"
+    },
+    {
+      "path": "source-harness-budget.log.gz",
+      "bytes": 295,
+      "sha256": "2059c9e9450bc1159bfa8117cb24d3b0407b6e0e015fb40791bd339c5fc23291",
+      "raw_sha256": "ca8ab734f271d56ecb8abe979d0d5af3b22ceebc3bcc8bc676fec06998c6d766"
+    }
+  ],
+  "candidate_final_bars": 444
+}

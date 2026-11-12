@@ -400,6 +400,21 @@ class RevisionStore:
         with closing(self.connect()) as conn:
             return self._read_versions(conn, tuple(series))
 
+    def read_series_changes(self, series):
+        """Bounded current per-series mutation/deletion evidence, one snapshot.
+
+        The coalesced range is conservative. Consumers must not interpret it
+        as exact per-row history or compare revision numbers across series.
+        """
+        values = tuple(series)
+        if not 1 <= len(values) <= 32:
+            raise ValueError("one to 32 source dependencies required")
+        with closing(self.connect()) as conn, conn:
+            conn.execute("BEGIN")
+            return current_revision(conn), tuple(
+                dict(row) if (row := series_change(conn, key)) is not None else None
+                for key in values)
+
     def scoped_version_reader(self):
         return ScopedRevisionRead(self)
 

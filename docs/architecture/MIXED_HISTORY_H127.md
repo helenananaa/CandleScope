@@ -71,6 +71,50 @@ rows, pages, shared hits, source qualification references, source revisions
 and acquisition floor. Abandoned coarse-page reads remain in physical totals.
 These estimates do not constitute measured wall-clock or network savings.
 
+## Default closed-query integration
+
+`QueryEngine` now offers the mixed executor to ordinary **closed** range and
+`query_before` pages after the existing target-materialization probe. Provider
+`MarketChannelCapability.history_composition` owns a typed, immutable policy;
+the optional capability-schema-v3 property names native grids, fields, identity,
+boundary/finality scope and evidence. It grants no new chart interval admission.
+Initially only Binance USD-M default trade/base K-lines select 1m/5m/15m/1h,
+using the official archive nine-field qualification in the linked QA report.
+Spot, other providers, calendar/session and forming/latest pages keep their
+existing executor. Native sources are read from canonical storage, not fetched
+by a new downloader.
+
+Independent native coarse candles cannot conceal known finer canonical input.
+Before a span is accepted, the consumer checks all finer native grids, including
+grids which are not selectable by the composition policy. Any existing finer
+row (including partial/untrusted input) forces strictly finer replanning. A
+coalesced D126 deletion footprint also prevents using coarse data to reconstruct
+withdrawn fine history. An absent finer row alone is insufficient after deletion.
+The current conservative policy may reject more work than mathematically needed;
+it does not compare revision counters across sources or use wall-clock freshness.
+
+One outer B130 view covers the page's candidate and precedence sources. Inner
+target revisions and the bounded D126 `read_series_changes` evidence must match
+it. Storage, policy/resolver and rollout configuration are checked again at the
+final fence. Stale/unavailable revision evidence returns retryable pending, not
+a source gap or a new-generation fallback. Only afterwards do the existing
+materialization registry/writer and cache adopt the targets. Source revisions
+continue to invalidate family materializations through the existing D126 owner.
+
+The original single-base route is preferred when it is at least as coarse as
+the qualified sources, or a count probe finds its complete bounded one-page
+input range already local. Counts only select an executor: they never prove
+grid, fields, finality or coverage. Larger fine-only targets can use H127's
+bounded pages instead of reserving a large base window. Query diagnostics retain
+discarded mixed work, scalar count-result rows, raw precedence probes, H127
+storage reads/rows and block hits. A scalar count is one SQL result row, not one
+additional candle. Revision polls/SQLite internal I/O are separate from these
+canonical query counters.
+
+`QueryConfig.mixed_custom_history=False` restores single-base reads. In-flight
+mixed work is fenced if the switch changes; valid target materialization and
+all source data/revisions remain. No migration or second writer is involved.
+
 ## Qualified scope and remaining integration
 
 The executor inherits H127's canonical fixed-grid source admission. Its target
@@ -85,8 +129,10 @@ enhancements, revision/deletion, rebinding, cancellation and resource release.
 Synthetic coarse/fine parity is deliberately separate from real venue
 qualification.
 
-Ordinary chart queries and replay do not gain new mixed capability from this
-interface alone. Automatic source qualification/selection, chart/history-task
-adoption, mixed calendar sources, request scheduling and real cold-load/
-multi-chart performance remain #127 work. The chart picker continues to use
-its existing admitted routes until those consumers are integrated.
+The default integration above does not yet choose/download native components
+for a truly empty store, combine a closed mixed prefix with a live forming tail,
+or broaden replay/calendar admission. History-task planning, network/request
+cost selection, batched precedence probes, first-screen/warmup scheduling and
+real cold-load/multi-chart/native performance remain #127 work. The measured
+SQL-probe overhead is explicitly retained in the QA report; fewer source candles
+is not a claim of lower wall-clock latency.

@@ -127,6 +127,54 @@ class IntervalResolver:
     def __init__(self, registry: CapabilityRegistry | None = None) -> None:
         self._registry = registry
 
+    def history_composition_routes(self, *, exchange: str, market_type: str,
+                                   interval: str):
+        """Return a provider's composition contract and qualified native grids.
+
+        This does not admit any new chart interval or prove data availability.
+        Missing/legacy contracts keep the existing single-base route. Consumers
+        must enforce the policy's default identity scope and final read fences.
+        """
+        from app.exchanges.models import HistoryCompositionPolicy
+
+        target = self.resolve(exchange=exchange, market_type=market_type,
+                              interval=interval, purpose=IntervalPurpose.HISTORY)
+        if (target.kind is not IntervalRouteKind.DERIVED
+                or target.spec.alignment is not IntervalAlignment.FIXED_EPOCH):
+            return None
+        capabilities = self._get_capabilities(target.exchange,
+            market_type=target.market_type, interval=target.canonical_interval,
+            purpose=IntervalPurpose.HISTORY)
+        channel_for = getattr(capabilities, "channel_capability", None)
+        channel = channel_for(MarketChannel.KLINE, target.market_type) if callable(channel_for) else None
+        policy = getattr(channel, "history_composition", None)
+        if not isinstance(policy, HistoryCompositionPolicy) or not channel.history:
+            return None
+        natives = self._native_intervals(capabilities, exchange=target.exchange,
+            market_type=target.market_type, interval=target.canonical_interval,
+            purpose=IntervalPurpose.HISTORY)
+        routes, precedence_routes = [], []
+        for value in natives:
+            spec = parse_interval_spec(value)
+            if (spec is None or spec.alignment is not IntervalAlignment.FIXED_EPOCH
+                    or spec.phase_ms or not policy.min_width_ms <= spec.nominal_ms <= policy.max_width_ms
+                    or spec.nominal_ms >= target.spec.nominal_ms):
+                continue
+            try:
+                source = self.resolve(exchange=target.exchange, market_type=target.market_type,
+                                      interval=value, purpose=IntervalPurpose.HISTORY)
+            except IntervalResolutionError:
+                # An unrelated native declaration cannot broaden admission or
+                # prevent a supported source from being used.
+                continue
+            if source.kind is IntervalRouteKind.NATIVE and source.required_identity is None:
+                precedence_routes.append(source)
+                if value in policy.native_intervals:
+                    routes.append(source)
+        if not routes or len(precedence_routes) > 16:
+            return None
+        return policy, tuple(routes), tuple(precedence_routes)
+
     def resolve(
         self,
         *,
