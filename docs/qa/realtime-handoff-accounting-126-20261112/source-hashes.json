@@ -1,0 +1,10 @@
+{
+  "base": "55edd33856476f7c3a191d05ed9b951207b31d11",
+  "product_head": "b3564b16f4ac63dd26dd7c2942c26a1dcc17a806",
+  "files": {
+    "backend/app/data_engine/bar_aggregator/aggregator.py": "5f337e21580fdcc5654614d781332cd7c79f5f756b0dda5fb3ecd482dc5ba9ab",
+    "backend/app/data_engine/bar_aggregator/publisher.py": "f8fc2c5e2f44376bd46ec4279c04d4d27657785f97f5e9cdb035b6e1911be4d4",
+    "backend/scripts/ccxt_contracts/integration.py": "ed9b545a924a2a4adfde38add2b86d21436ac6163034f53e0a7062baf7d7f55f",
+    "backend/tests/test_realtime_handoff_accounting.py": "597d4063f8b9cdf1036bd33abdbe09beaf9824471cf998914add97eec5ad3fb0"
+  }
+}

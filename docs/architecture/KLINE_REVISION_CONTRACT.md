@@ -168,9 +168,21 @@ and revision fixes. Custom extension routes remain independent.
 
 Heap diagnostics retain temporary root views across all owners so identity-based
 deduplication cannot hide a later owner's graph through recycled container IDs.
-Ordinary budget estimates remain conservative target-reference counts and may
-overcount shared immutable values. See [source preparation evidence and limits](../qa/realtime-shared-input-129-20261112/README.md);
+Ordinary budget estimates count target component references and may
+overcount shared immutable values; fixed component weights can also undercount
+large source-proof payloads and are not a proven heap/admission upper bound. See [source preparation evidence and limits](../qa/realtime-shared-input-129-20261112/README.md);
 this does not establish whole-runtime resource or native acceptance.
+
+Realtime-state also owns closed/expired engine eviction buffers, pending source
+publication snapshots and suspended publisher input/dispatch/callback/retry frames.
+The publisher tracks existing payload references until the frame finishes; normal
+completion, failure and cancellation release registrations. Retry snapshots retain
+the existing delivery IDs; retries enumerate IDs and release each acknowledged
+payload before advancing. Per-state identity deduplication avoids alias double
+charging; opt-in roots include the actual private dictionaries and buffers.
+This accounting does not discard data or raise budgets. Fixed component byte
+weights still require calibration, particularly for source proofs. See
+[handoff accounting evidence and limits](../qa/realtime-handoff-accounting-126-20261112/README.md).
 
 ## Migration and operational rollback
 
