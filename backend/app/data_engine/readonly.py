@@ -6,9 +6,10 @@ maps and sequences are frozen as well; no caller-owned container is retained.
 from collections.abc import Mapping
 from decimal import Decimal
 from fractions import Fraction
+from numbers import Number
 from types import MappingProxyType
 
-_SCALARS = (str, bytes, int, float, complex, bool, type(None), Decimal, Fraction)
+_SCALARS = (str, bytes, Number, bool, type(None), Decimal, Fraction)
 
 
 def _mapping(values, active):

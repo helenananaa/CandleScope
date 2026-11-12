@@ -62,6 +62,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 
 import json
 from app.data_engine.series_identity import (
@@ -75,8 +76,8 @@ import time
 from dataclasses import replace
 from typing import Any, Awaitable, Callable
 
-from app.data_engine.interval_policy import parse_interval_spec
-from app.data_engine.interval_resolution import IntervalResolver
+from app.data_engine.interval_policy import parse_interval_spec, intervals_equivalent
+from app.data_engine.interval_resolution import IntervalResolver, IntervalPurpose, IntervalRouteKind, IntervalResolutionError
 
 from .config import BarAggregatorConfig
 from .models import (
@@ -95,6 +96,7 @@ from .models import (
 from .router import EventRouter
 from .time_bucket import TimeBucketEngine, MonthlyBucketCalculator, WeeklyBucketCalculator, ScheduleBucketCalculator
 from .bar_state import BarStateEngine
+from .component_inputs import SourceComponentPreparation, SourcePreparationCapacity, PREPARATION_BYTES, SCOPE_BYTES, MAX_PREPARATION_TARGETS
 from .finalizer import Finalizer
 from .publisher import BarAggregatorPublisher
 
@@ -203,6 +205,13 @@ class BarAggregator:
         # identity even when the interval pipeline itself remains resident.
         self._target_epochs: dict[tuple, object] = {}
         self.history_prefix_runtime = None
+        self.memory_budget = None
+        self._source_preparation = ContextVar("bar_aggregator_source_preparation", default=None)
+        self._active_preparations = set()
+        self._preparation_capacity = SourcePreparationCapacity()
+        self._preparation_targets_revision = 0
+        self._source_preparation_metrics = dict(preparation_scopes=0, preparation_builds=0,
+            preparation_hits=0, preparation_declines=0, preparation_budget_deferred=0)
 
         # Timeout checker task
         self._timeout_task: asyncio.Task | None = None
@@ -230,6 +239,7 @@ class BarAggregator:
         # Flush all active bars
         await self._flush_all()
         self._target_epochs.clear()
+        self._preparation_capacity.close()
         await self._publisher.close_all_subscribers()
         logger.info("BarAggregator stopped")
 
@@ -281,10 +291,13 @@ class BarAggregator:
                 interval_ms,
                 self._cfg,
             )
+            self._pipelines[pipeline_key].bar_state._component_merge_strategy.prepare_input = self._prepare_component_input
             logger.info(
                 "Created pipeline for interval %s (%d ms)", interval, interval_ms,
             )
 
+        self._preparation_capacity.closing = False
+        self._preparation_targets_revision += 1
         # Register with router
         self._router.register_target(
             symbol,
@@ -327,8 +340,11 @@ class BarAggregator:
         spec = parse_interval_spec(interval)
         if spec is not None:
             interval = spec.canonical
+        self._preparation_targets_revision += 1
         self._target_epochs.pop((exchange, market_type, symbol, interval,
                                  resolve_kline_series_identity(exchange, series_identity)), None)
+        if len(self._target_epochs) < 2:
+            self._preparation_capacity.trim_idle()
         if self.history_prefix_runtime is not None:
             self.history_prefix_runtime.detach((exchange, market_type, symbol, interval,
                 resolve_kline_series_identity(exchange, series_identity)))
@@ -425,19 +441,85 @@ class BarAggregator:
 
     # ── Public: Data Ingestion ───────────────────────────────
 
-    async def on_market_event(self, event: Any) -> None:
-        """Feed a MarketEvent from the ingestion layer.
+    def _uses_builtin_dispatch(self):
+        callback = self._router._on_bar_input
+        return (getattr(callback,"__self__",None) is self
+                and getattr(callback,"__func__",None) is BarAggregator._handle_bar_input)
 
-        The event is normalized to BarInput by the Router and dispatched
-        to all matching interval pipelines.
-        """
+    @asynccontextmanager
+    async def _component_input_scope(self, *, enabled=True):
+        if not enabled or not self._cfg.shared_component_inputs or len(self._target_epochs) < 2 or not self._uses_builtin_dispatch():
+            if not self._cfg.shared_component_inputs or len(self._target_epochs) < 2 or not self._uses_builtin_dispatch():
+                self._preparation_capacity.trim_idle()
+            yield
+            return
+        preparation = SourceComponentPreparation(self._source_preparation_metrics, self.memory_budget, self._preparation_capacity)
+        token = self._source_preparation.set((asyncio.current_task(), preparation))
+        self._active_preparations.add(preparation)
+        self._source_preparation_metrics['preparation_scopes'] += 1
+        try:
+            yield
+        finally:
+            self._source_preparation.reset(token)
+            self._active_preparations.discard(preparation)
+            preparation.close(keep_capacity=self._cfg.shared_component_inputs and len(self._target_epochs) >= 2 and self._uses_builtin_dispatch())
+
+    def _prepare_component_input(self, value):
+        scope = self._source_preparation.get()
+        if scope is None or not self._cfg.shared_component_inputs or not self._uses_builtin_dispatch():
+            return None
+        try:
+            if scope[0] is not asyncio.current_task():
+                return None  # Child tasks never borrow an inherited source dispatch.
+        except RuntimeError:
+            return None
+        purpose = IntervalPurpose.HISTORY if value.source == BarInputSource.BACKFILL else IntervalPurpose.REALTIME
+        key = (value.exchange,value.market_type,value.symbol,value.source_interval,value.series_identity,purpose,self._preparation_targets_revision)
+        def inspect_targets():
+            identity = value.identity
+            intervals = self._symbol_intervals.get((value.exchange,value.market_type,value.symbol,identity), ())
+            if len(intervals) > MAX_PREPARATION_TARGETS:
+                self._source_preparation_metrics['preparation_declines'] += 1
+                return False, ()
+            count = 0
+            for interval in intervals:
+                try:
+                    route = self._router._route_for(value.exchange,value.market_type,interval,purpose)
+                except IntervalResolutionError:
+                    continue
+                if (route.kind is IntervalRouteKind.DERIVED and route.base_interval is not None
+                        and intervals_equivalent(route.base_interval,value.source_interval)):
+                    count += 1
+                    if count >= 2:
+                        break
+            engines = (tuple(self._pipelines[self._pipeline_key(interval,value.exchange,identity)].bar_state
+                             for interval in intervals) if count >= 2 else ())
+            return count >= 2, engines
+        if not scope[1].qualifies(key,inspect_targets):
+            self._preparation_capacity.trim_idle()
+            return None
+        if any(engine._merge_strategy_overridden for engine in scope[1].engines):
+            # Saved owner handles are refreshed on target generation changes;
+            # extension flags remain live across awaits within one dispatch.
+            scope[1].invalidate()
+            scope[1].eligible = False
+            scope[1].engines = ()
+            self._source_preparation_metrics['preparation_declines'] += 1
+            self._preparation_capacity.trim_idle()
+            return None
+        return scope[1].get(value)
+
+    async def on_market_event(self, event: Any) -> None:
+        """Normalize and dispatch one source frame to independently admitted targets."""
         await self._publisher.retry_source_deliveries()
-        runtime = self.history_prefix_runtime
-        if runtime is None:
-            await self._router.on_market_event(event)
-        else:
-            async with runtime.forming_input_scope(event):
+        kind = getattr(event, 'event_type', None)
+        async with self._component_input_scope(enabled=getattr(kind,'value',kind) == 'kline'):
+            runtime = self.history_prefix_runtime
+            if runtime is None:
                 await self._router.on_market_event(event)
+            else:
+                async with runtime.forming_input_scope(event):
+                    await self._router.on_market_event(event)
 
     async def on_backfill_bars(
         self,
@@ -453,14 +535,11 @@ class BarAggregator:
         Each bar is converted to BarInput and processed through the
         full pipeline.
         """
-        await self._router.on_backfill_bars(
-            symbol,
-            interval,
-            bars,
-            exchange=exchange,
-            market_type=market_type,
-            series_identity=series_identity,
-        )
+        async with self._component_input_scope(enabled=interval != "tick"):
+            await self._router.on_backfill_bars(
+                symbol, interval, bars, exchange=exchange, market_type=market_type,
+                series_identity=series_identity,
+            )
 
     async def on_custom_data(self, adapter_name: str, raw_data: Any) -> None:
         """Feed data through a registered custom adapter."""
@@ -477,14 +556,14 @@ class BarAggregator:
         emit_events: bool = True,
     ) -> None:
         """Public wrapper for feeding an already-normalized BarInput."""
-        await self._handle_bar_input(
-            exchange.lower().strip(),
-            market_type.lower().strip(),
-            symbol.upper().strip(),
-            interval,
-            bar_input,
-            emit_events=emit_events,
-        )
+        token = self._source_preparation.set(None)
+        try:
+            await self._handle_bar_input(
+                exchange.lower().strip(), market_type.lower().strip(), symbol.upper().strip(),
+                interval, bar_input, emit_events=emit_events,
+            )
+        finally:
+            self._source_preparation.reset(token)
 
     def compute_bucket(
         self,
@@ -879,7 +958,13 @@ class BarAggregator:
                 "component_index_bytes": component_index_bytes,
                 "history_prefixes": history_prefixes,
                 "history_handoff_bytes": handoff_bytes,
-                "estimated_bytes": (active + closed + len(events)) * 1024 + (components + queued_components) * 1024 + component_index_bytes + (history_prefixes + queued_prefixes) * 32 * 1024 + handoff_bytes,
+                "source_preparation_scopes": len(self._active_preparations),
+                "source_preparation_capacity_slots": self._preparation_capacity.capacity,
+                "source_preparation_max_targets": MAX_PREPARATION_TARGETS,
+                "source_preparation_in_use": self._preparation_capacity.in_use,
+                "source_preparation_capacity_bytes": self._preparation_capacity.capacity * PREPARATION_BYTES,
+                **self._source_preparation_metrics,
+                "estimated_bytes": (active + closed + len(events)) * 1024 + (components + queued_components) * 1024 + component_index_bytes + (history_prefixes + queued_prefixes) * 32 * 1024 + handoff_bytes + len(self._active_preparations) * SCOPE_BYTES + self._preparation_capacity.capacity * PREPARATION_BYTES,
                 "protection": "active and correction state owned by realtime executor"}
 
     def _memory_roots(self):
@@ -888,7 +973,8 @@ class BarAggregator:
         return [*[list(engine._active.values()) + list(engine._closed.values())
                   for pipeline in list(self._pipelines.values()) for engine in [pipeline.bar_state]],
                 *[list(queue._queue) for queue, _ in list(self._publisher._subscribers)],
-                list(self.history_prefix_runtime.targets.values()) if self.history_prefix_runtime else []]
+                list(self.history_prefix_runtime.targets.values()) if self.history_prefix_runtime else [],
+                [preparation.memory_roots() for preparation in list(self._active_preparations)]]
 
     def snapshot(self) -> dict:
         """Full diagnostic snapshot of the entire aggregator."""

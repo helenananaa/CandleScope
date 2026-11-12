@@ -266,30 +266,15 @@ class ComponentSnapshotOHLCVMerge:
         specs = (parse_interval_spec(state.interval), parse_interval_spec(bar_input.source_interval))
         return all(spec is not None and spec.alignment is IntervalAlignment.FIXED_EPOCH for spec in specs)
 
+    INPUT_FIELDS = ("open_time_ms", "close_time_ms", "open", "high", "low", "close",
+                    "volume", "quote_volume", "trades", "taker_buy_base", "taker_buy_quote",
+                    "enhanced_fields", "is_closed", "sequence")
+
     @staticmethod
     def _snapshot_from_input(bar_input: BarInput) -> ReadonlyFields:
-        snapshot = {
-            "source_ref": bar_input.extra.get("source_ref"),
-            "open_time_ms": bar_input.open_time_ms,
-            "close_time_ms": bar_input.close_time_ms,
-            "open": bar_input.open,
-            "high": bar_input.high,
-            "low": bar_input.low,
-            "close": bar_input.close,
-            "volume": bar_input.volume,
-            "quote_volume": bar_input.quote_volume,
-            "trades": bar_input.trades,
-            "taker_buy_base": bar_input.taker_buy_base,
-            "taker_buy_quote": bar_input.taker_buy_quote,
-            "enhanced_fields": bar_input.enhanced_fields,
-            "is_closed": bar_input.is_closed,
-            # ``open_time_ms`` identifies the component; it says nothing about
-            # which of two cumulative snapshots for that component is newer.
-            # Keep an unavailable freshness sequence explicit so replacement
-            # can fall back to monotonic cumulative evidence instead of
-            # silently treating every update as equally fresh.
-            "sequence": bar_input.sequence,
-        }
+        snapshot = {name:getattr(bar_input,name) for name in ComponentSnapshotOHLCVMerge.INPUT_FIELDS}
+        snapshot["is_closed"] = bool(snapshot["is_closed"])
+        snapshot["source_ref"] = bar_input.extra.get("source_ref")
         if bar_input.extra.get("warm_start_seed"):
             snapshot["warm_start_seed"] = True
         snapshot["aggregation_values"] = snapshot_aggregation_values(snapshot)
@@ -418,7 +403,10 @@ class ComponentSnapshotOHLCVMerge:
             pass
 
         input_key = bar_input.input_key
-        candidate = self._snapshot_from_input(bar_input)
+        prepare = getattr(self, "prepare_input", None)
+        candidate = prepare(bar_input) if prepare is not None else None
+        if candidate is None:
+            candidate = self._snapshot_from_input(bar_input)
         existing = snapshots.get(input_key)
         if existing is not None and not self._should_replace(
             existing,
