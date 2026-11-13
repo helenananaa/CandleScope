@@ -99,6 +99,10 @@ class BarAggregatorPublisher:
         # Registration adds no new snapshot and ends on success/error/cancel.
         self._inflight_payloads: dict[object, tuple[str, object]] = {}
         self._source_handoff_observer = ContextVar("source_handoff_observer", default=None)
+        self._update_requirement: Callable[[BarState], bool] | None = None
+        self._update_requirement_errors = 0
+        self._update_requirement_warned = False
+        self._required_updates_unthrottled = 0
 
     @contextmanager
     def _observe_source_handoff(self, bar):
@@ -343,6 +347,35 @@ class BarAggregatorPublisher:
         self._cfg.update_throttle_ms = ms
         logger.info("Update throttle changed to %d ms", ms)
 
+    def set_update_requirement(self, provider: Callable[[BarState], bool] | None) -> None:
+        """Bind synchronous consumer demand without changing producer flags.
+
+        True requires every enabled update. None restores the ordinary throttle.
+        A failed demand lookup processes the update rather than losing input.
+        """
+        if provider is not None and (not callable(provider) or asyncio.iscoroutinefunction(provider)):
+            raise TypeError("update requirement must be a synchronous callable or None")
+        self._update_requirement = provider
+        self._update_requirement_warned = False
+
+    def _requires_every_update(self, state: BarState) -> bool:
+        if self._update_requirement is None:
+            return False
+        try:
+            required = self._update_requirement(state)
+            if type(required) is not bool:
+                if asyncio.iscoroutine(required):
+                    required.close()
+                raise TypeError("update requirement must return a boolean")
+            self._update_requirement_warned = False
+            return required
+        except Exception:
+            self._update_requirement_errors += 1
+            if not self._update_requirement_warned:
+                logger.warning("Update demand lookup failed; preserving enabled updates", exc_info=True)
+                self._update_requirement_warned = True
+            return True
+
     # ── Public: Snapshot ─────────────────────────────────────
 
     def snapshot(self) -> dict:
@@ -362,6 +395,8 @@ class BarAggregatorPublisher:
             "expired_callbacks": len(self._expired_callbacks),
             "active_subscribers": len(self._subscribers),
             "update_throttle_ms": self._cfg.update_throttle_ms,
+            "required_updates_unthrottled": self._required_updates_unthrottled,
+            "update_requirement_errors": self._update_requirement_errors,
             **payload_counts,
         }
 
@@ -384,6 +419,9 @@ class BarAggregatorPublisher:
         """Return True if this UPDATED event should pass throttle."""
         throttle_ms = self._cfg.update_throttle_ms
         if throttle_ms <= 0:
+            return True
+        if self._requires_every_update(event.bar):
+            self._required_updates_unthrottled += 1
             return True
 
         bar_key = event.bar_key

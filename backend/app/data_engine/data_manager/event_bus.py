@@ -525,6 +525,19 @@ class DataEventBus:
             if event_types is None or subscribed is None or subscribed & event_types:
                 self._require_recovery(sub, reason, None)
 
+    def requires_every_update(self, key: SeriesKey) -> bool:
+        """Current exact/wildcard demand, using the existing routing index.
+
+        A terminal queue is waiting for a new subscription, not more input.
+        Closed-only consumers do not require intrabar previews.
+        """
+        callbacks, queues = self._matching_subscriptions(key)
+        return any(sub.queue.preserve_updates and not sub.queue._closed
+                   and sub.queue.recovery_error is None
+                   and (sub.handle.event_types is None
+                        or DataEventType.BAR_UPDATED in sub.handle.event_types)
+                   for _, sub in (*callbacks, *queues))
+
     async def emit(self, event: DataEvent) -> None:
         ticket = self.stream_versions.begin(event)
         try:
