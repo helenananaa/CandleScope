@@ -442,6 +442,7 @@ class DataManager(DataManagerCore):
 
         from app.data_engine.memory_budget import MemoryBudget
         self.memory_budget = MemoryBudget(self._cfg.memory_budget_bytes)
+        self.aggregator_bridge.preview_memory_budget = self.memory_budget
         self.bar_aggregator.memory_budget = self.memory_budget
         for owner, service, limit in (("bar-cache", self.cache, 128 * 1024 * 1024),
                                       ("realtime-state", self.bar_aggregator, 128 * 1024 * 1024),
@@ -472,6 +473,9 @@ class DataManager(DataManagerCore):
 
         # Wire BarAggregator output → DataManager → Cache + EventBus
         self.bar_aggregator.set_source_component_reader(self.aggregator_bridge.read_source_components)
+        self.bar_aggregator.set_preview_source_validator(
+            self.aggregator_bridge.validate_component_preview,
+            self.aggregator_bridge.preview_source_binding)
         self.bar_aggregator.publisher.on_bar_event(self.aggregator_bridge.on_bar_event)
         self.bar_aggregator.publisher.set_update_requirement(
             lambda state: self.event_bus.requires_every_update(SeriesKey(

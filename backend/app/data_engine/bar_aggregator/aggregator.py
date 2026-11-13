@@ -223,6 +223,7 @@ class BarAggregator:
         self._timeout_task: asyncio.Task | None = None
         self._previews = ComponentPreviewScheduler(self)
         self._publisher._preview_wakeup = self._previews.publication_finished
+        self._preview_source_validator = self._preview_source_binding = None
 
     # ── Public: Lifecycle ────────────────────────────────────
 
@@ -1102,6 +1103,11 @@ class BarAggregator:
     ) -> None:
         """Bind the owner's source readback without importing a storage backend."""
         self._source_component_reader = reader
+
+    def set_preview_source_validator(self, validator, binding):
+        """Bind the existing source/storage owner, without importing storage."""
+        self._preview_source_validator = validator
+        self._preview_source_binding = binding
 
     # ── Internal: Core Processing ────────────────────────────
 

@@ -528,7 +528,11 @@ class ComponentSnapshotOHLCVMerge:
                 and type(previous) is ReadonlyFields and type(candidate) is ReadonlyFields
                 and previous.estimated_bytes <= 8192 and candidate.estimated_bytes <= 8192
                 and valid_ohlcv(candidate['aggregation_values'][:5])
-                and not previous.get('source_ref') and not candidate.get('source_ref')
+                and ((previous.get('source_ref') is None and candidate.get('source_ref') is None)
+                     or (previous.get('source_ref') is not None and candidate.get('source_ref') is not None
+                         and set(previous['source_ref']) == set(candidate['source_ref']) == {'series','open_time','revision'}
+                         and previous['source_ref']['series'] == candidate['source_ref']['series']
+                         and previous['source_ref']['open_time'] == candidate['source_ref']['open_time']))
                 and previous['enhanced_fields'] == candidate['enhanced_fields']
                 and previous['open_time_ms'] == candidate['open_time_ms'] == accumulator.tail.last
                 and previous['close_time_ms'] == candidate['close_time_ms'] == accumulator.tail.end - 1)

@@ -32,6 +32,7 @@ class _Pending:
     due: float
     scope: object
     binding: tuple
+    revision_floor: int | None
 
 
 class ComponentPreviewScheduler:
@@ -42,7 +43,8 @@ class ComponentPreviewScheduler:
         self.timer = self.task = None
         self.running = False
         self.metrics = dict(admitted=0, budget_fallbacks=0, capacity_fallbacks=0,
-                            published=0, failures=0, detached=0, peak_pending=0)
+                            published=0, failures=0, detached=0, peak_pending=0,
+                            source_checks=0,source_superseded=0,source_fallbacks=0)
 
     def start(self):
         self.running = True
@@ -53,8 +55,10 @@ class ComponentPreviewScheduler:
         source = getattr(getattr(getattr(runtime,'reader',None),'engine',None),'storage',None)
         strategies = tuple((name,type(strategy),getattr(strategy.should_close,'__func__',strategy.should_close))
                            for name,strategy in pipeline.finalizer._strategies)
+        source_owner = agg._preview_source_binding() if agg._preview_source_binding is not None else None
         return (agg._cfg,agg.memory_budget,runtime,source,
                 pipeline.bar_state._component_merge_strategy,pipeline.finalizer,
+                source_owner,agg._preview_source_validator,
                 pipeline.bar_state._merge_strategy_overridden,
                 pipeline.bar_state._component_merge_strategy.incremental,
                 agg._cfg.deferred_component_previews,agg._cfg.incremental_components,strategies)
@@ -82,13 +86,24 @@ class ComponentPreviewScheduler:
                 or not agg._cfg.deferred_component_previews or not agg._cfg.incremental_components
                 or state is None or state.status != BarStatus.FORMING
                 or incoming.merge_mode != MergeMode.COMPONENT or incoming.is_closed
-                or incoming.source != BarInputSource.REALTIME or incoming.extra.get('source_ref')
+                or incoming.source != BarInputSource.REALTIME
                 or not agg.has_series_target(state.symbol,state.interval,state.exchange,state.market_type,state.identity)
                 or pipeline.bar_state._merge_strategy_overridden
                 or not pipeline.bar_state._component_merge_strategy.incremental
                 or getattr(pipeline.bar_state._component_merge_strategy.apply,'__func__',None)
                     is not ComponentSnapshotOHLCVMerge.apply):
             return False
+        if state.source_refs or incoming.extra.get('source_ref'):
+            ref = incoming.extra.get('source_ref')
+            provider = getattr(agg,'acquisition_revision_provider',None)
+            if (agg._preview_source_validator is None or agg._preview_source_binding is None
+                    or agg._preview_source_binding() is None or provider is None
+                    or type(provider()) is not int or len(state.source_snapshots)>256
+                    or not state.identity.is_legacy_default_for(state.exchange)
+                    or ref is None or set(ref) != {'series','open_time','revision'}):
+                state.preview_fallback_reason = 'source_reference_window'
+                self.metrics['source_fallbacks'] += 1
+                return False
         # Custom strategies may close on forming input or inspect projected
         # fields. Preserve their eager contract, including instance overrides.
         for _, strategy in pipeline.finalizer._strategies:
@@ -102,7 +117,6 @@ class ComponentPreviewScheduler:
         accumulator = state._component_accumulator
         return (accumulator is not None and accumulator.tail_unique
                 and accumulator.tail_snapshot is not None
-                and accumulator.tail_snapshot.get('source_ref') is None
                 and getattr(accumulator.tail_snapshot,'estimated_bytes',ENTRY_BYTES) <= 8192
                 and merge._can_accumulate(state,incoming))
 
@@ -125,7 +139,9 @@ class ComponentPreviewScheduler:
             state.preview_fallback_reason = 'memory_admission'
             return False
         due = float('inf') if delay is None else asyncio.get_running_loop().time() + delay/1000
-        self.pending[id(state)] = _Pending(state,pipeline,token,due,scope,self._binding(pipeline))
+        provider = getattr(self.aggregator,'acquisition_revision_provider',None)
+        floor = provider() if provider is not None else None
+        self.pending[id(state)] = _Pending(state,pipeline,token,due,scope,self._binding(pipeline),floor)
         state.preview_fallback_reason = ''
         self.metrics['admitted'] += 1
         self.metrics['peak_pending'] = max(self.metrics['peak_pending'],len(self.pending))
@@ -153,8 +169,8 @@ class ComponentPreviewScheduler:
         agg = self.aggregator
         state = entry.state
         current = self._binding(entry.pipeline)
-        binding_matches = (all(a is b for a,b in zip(current[:6],entry.binding[:6]))
-                           and current[6:] == entry.binding[6:])
+        binding_matches = (all(a is b for a,b in zip(current[:8],entry.binding[:8]))
+                           and current[8:] == entry.binding[8:])
         return (agg._target_epochs.get(entry.token[0]) is entry.token[1]
                 and agg._pipelines.get(agg._pipeline_key(state.interval,state.exchange,state.identity)) is entry.pipeline
                 and entry.pipeline.bar_state.get_active(state.exchange,state.market_type,state.symbol,
@@ -227,6 +243,17 @@ class ComponentPreviewScheduler:
                     async with self.aggregator._validated_active_state(entry.pipeline,entry.state) as current:
                         if current is not entry.state or not self._current(entry):
                             continue
+                        if current.source_refs:
+                            version = current.preview_input_version
+                            self.metrics['source_checks'] += 1
+                            status = await self.aggregator._preview_source_validator(current,entry.revision_floor,
+                                is_current=lambda: self._current(entry))
+                            if (status != 'current' or not self._current(entry)
+                                    or current.preview_input_version != version):
+                                current.preview_fallback_reason = ('source_superseded'
+                                    if status=='superseded' else 'source_view_unavailable')
+                                self.metrics['source_superseded'] += 1
+                                continue
                         current.materialize_preview()
                         if current.preview_published_version < current.preview_computed_version:
                             await self.aggregator.publisher.emit_updated(current)

@@ -64,6 +64,9 @@ def test_many_accepted_updates_do_one_summary_at_deadline_without_a_new_input(mo
             assert held.preview_input_version == 102
             assert held.preview_computed_version == held.preview_published_version == 2
             assert held._preview_dirty and held._preview_calculations == 2
+            diagnostics=agg.snapshot()['previews']
+            assert diagnostics['watermarks'][0]['input']==102
+            assert diagnostics['watermarks'][0]['computed']==2 and held._preview_dirty
             assert held.source_snapshots[item(102).input_key]['volume'] == 102
             assert len(agg._previews.pending) == 1
             assert budget.snapshot()['reserved_bytes'] == scheduling.ENTRY_BYTES
