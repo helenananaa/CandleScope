@@ -1,0 +1,28 @@
+{
+  "base": "2e39b7e17ecd0a8e7d7abeaf347c674a2588a2c7",
+  "product_head": "cfabd84370cb5250bccdd420a90c6d82cf961dee",
+  "files": {
+    ".github/workflows/pine-host-contracts.yml": "571b632c6de5654315b351c2d6723e6413d06539a288bb899d1c656dc99c840e",
+    "backend/app/data_engine/aggregation/source_window.py": "654745253385f461e46bbe7c2ed2ab4488d8a236f2006c1a97d19748485669c3",
+    "backend/app/data_engine/bar_aggregator/aggregator.py": "c60c9b1db741cb09e5510532ad5db57a30cecfeea7d49934f8e24a412cbe2d54",
+    "backend/app/data_engine/bar_aggregator/bar_state.py": "efcb7d6265c3ccd45f88a6d426e04d8129f8cbc5274495657e0c1d9623b168d5",
+    "backend/app/data_engine/bar_aggregator/component_accumulator.py": "f1bdd9aaadc3cb1a417d2f3e2f9f14ea73c02e8f08c238f0dcf77318019f672a",
+    "backend/app/data_engine/bar_aggregator/history_prefix_runtime.py": "201b108f727e06fe815001e815cb9b6e423e90b23a1fca1cff81ef62743fb0f9",
+    "backend/app/data_engine/bar_aggregator/models.py": "8ba9228fcd6c1664463e821b741cec8832150b84fda6d7c4422591ddc58844eb",
+    "backend/app/data_engine/bar_aggregator/router.py": "9982db828eb7d283dce6f7cb79bb5462df8fa440d1b4ae0a01be144fea4862ec",
+    "backend/app/data_engine/data_manager/aggregator_bridge.py": "f9ff1af5fd3f401ae57b5f1bd7b3ea40f93e236508b66cf8309ebc490efd8d37",
+    "backend/app/data_engine/data_manager/bar_delivery.py": "e7977c8908902ffa6e6f36d96405167edba946fdaa703491e7492b961c0dc5d3",
+    "backend/app/data_engine/data_manager/manager.py": "c88397288b134e5ab8443a39b9368b23e7b96766e3032a615a503236c000cb2c",
+    "backend/app/data_engine/data_manager/source_recovery.py": "ecac693cb6b30a3113836972b30724eb4f24c5385ef3f4fe5757f71766f28fb1",
+    "backend/app/data_engine/data_manager/warm_start.py": "b4c648572fa9f113c822768aa8c3f00a60535d3c3d8630180f2a89e627129d92",
+    "backend/app/data_engine/storage/bar_delivery.py": "b8167c18a8e2e5b58058c3ea5aac3257abbdccf542639157b68f810be7c1fafd",
+    "backend/app/data_engine/storage/kline_sources.py": "24e3ea148bbd4f6607f3a396a0d82acc37b5feffbd968bca8125fe949c2d61cc",
+    "backend/app/data_engine/storage/klines_repo.py": "22904b432ac026bbedba670183ad6f3291c73fec83d42c1132df1c523174ddb3",
+    "backend/app/data_engine/storage/source_window_summary.py": "9bc5fcb7af11a63dddcb1ea2d235ea01dc193edb476fe46d058ae06b3071674a",
+    "backend/app/exchanges/ccxt_ext/fork_kline.py": "b19a953d1a5e1538a94232657097f4749a6248a91d6069e7ea2c5d880735c35a",
+    "backend/scripts/ccxt_contracts/integration.py": "8d88ec6d93255973cfb4caf1412abf20d4da3032c3679f5639e2e1eac0ce24bc",
+    "backend/tests/test_source_window_recovery.py": "c52e9ee7e3f25101a7acce030e324529e99f725aa703168f2388befc7cce234d",
+    "backend/tests/test_source_window_recovery_sources.py": "9fdee97744475ee9b039b39cb38b6a257903543e77f91b2755b4b1e8cb2d8530",
+    "packages/candlescope-plugin-pine-compat/scripts/qualify_host_contracts.py": "fb14d9b235ac809b42796f04dc82e37f8446468f94522c6dc0d56e2a032536aa"
+  }
+}

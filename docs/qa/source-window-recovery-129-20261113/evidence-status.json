@@ -1,0 +1,36 @@
+{
+  "product_head": "cfabd84370cb5250bccdd420a90c6d82cf961dee",
+  "baseline": "2e39b7e17ecd0a8e7d7abeaf347c674a2588a2c7",
+  "complete_integration": {
+    "passed": 2319,
+    "warnings": 66,
+    "seconds": 473.68
+  },
+  "focused_passed": 164,
+  "new_contracts": {
+    "plain": 70,
+    "pinned_fork": 2
+  },
+  "cost": {
+    "paired_trials": 15,
+    "canonical_event_watermarks_equal": true,
+    "scope": "bounded cold recovery; subsequent historical correction CPU cost higher"
+  },
+  "current_native": {
+    "clean_qualification": false,
+    "failed_profiles": [
+      "native-final/ordinary",
+      "native-final/ordinary-retry1"
+    ],
+    "reason": "120s gate: source metadata pending, no source frames, empty charts; isolated transport probes slow/partial"
+  },
+  "candidate_native": {
+    "clean_qualification": false,
+    "reason": "bc9da6 concurrent migration HTTP500; candidates retained"
+  },
+  "issues_remain_open": [
+    126,
+    127,
+    129
+  ]
+}
