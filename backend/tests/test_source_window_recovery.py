@@ -444,6 +444,12 @@ def test_default_manager_cold_rebuild_has_no_native_rows_and_compact_durable_pro
         interval = str(count) + "m"
         aggregator.add_target("BTCUSDT", interval, market_type="futures")
         events = []
+        consumer_events = []
+
+        async def consumer(event):
+            consumer_events.append((event.event_type.value, event.detail))
+
+        manager.event_bus.subscribe(consumer)
 
         async def collect(event):
             events.append(event.event_type.value)
@@ -469,6 +475,8 @@ def test_default_manager_cold_rebuild_has_no_native_rows_and_compact_durable_pro
                 state.preview_input_version == state.preview_computed_version == count
             )
             assert events == ["bar.updated", "bar.closed"]
+            assert [event[0] for event in consumer_events] == events
+            assert consumer_events[-1][1]["canonical_reconciled"] is False
             assert (
                 state.status.value == "closed"
                 and state.finality.value == "authoritative"
@@ -506,6 +514,8 @@ def test_default_manager_cold_rebuild_has_no_native_rows_and_compact_durable_pro
                 == count + 1
             )
             assert events == ["bar.updated", "bar.closed", "bar.amended"]
+            assert [event[0] for event in consumer_events] == events
+            assert consumer_events[-1][1]["canonical_reconciled"] is False
             assert len(state.source_refs) == len(state.source_snapshots) == 1
             stored = klines_repo.query_klines(
                 "BTCUSDT", interval, market_type="futures"
