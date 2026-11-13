@@ -155,13 +155,13 @@ export async function runExportMatrix({
   const waitSelector = requireDependency("waitForSelector", waitForSelector);
   const timeoutMs = Number(args?.timeoutMs) || 45_000;
 
-  async function setExportChoice(attribute, value) {
-    const selector = `[${attribute}=${JSON.stringify(value)}]`;
+  async function setExportChoice(choice, value) {
+    const selector = `[data-export-choice=${JSON.stringify(choice)}] [data-value=${JSON.stringify(value)}]`;
     const clicked = await click(cdp, selector);
     if (!clicked) return false;
     return waitExpression(
       cdp,
-      `document.querySelector(${JSON.stringify(selector)})?.classList.contains('active') === true`,
+      `document.querySelector(${JSON.stringify(selector)})?.getAttribute('aria-checked') === 'true'`,
       2_000,
       25,
     );
@@ -218,7 +218,7 @@ export async function runExportMatrix({
         const frame = document.querySelector('.export-preview-frame');
         const save = document.querySelector('[data-export-action="save"]');
         const previewError = document.querySelector('.export-preview-error')?.textContent?.trim() || '';
-        const panelError = document.querySelector('.export-panel-message.error')?.textContent?.trim() || '';
+        const panelError = document.querySelector('.export-panel-message[data-tone=danger]')?.textContent?.trim() || '';
         const previewIdle = Boolean(
           frame
           && save
@@ -285,7 +285,7 @@ export async function runExportMatrix({
       expression: `(async () => {
         const image = document.querySelector('.export-preview-image');
         const save = document.querySelector('[data-export-action="save"]');
-        const panelError = document.querySelector('.export-panel-message.error')?.textContent?.trim() || '';
+        const panelError = document.querySelector('.export-panel-message[data-tone=danger]')?.textContent?.trim() || '';
         const previewError = document.querySelector('.export-preview-error')?.textContent?.trim() || '';
         if (!image?.src) {
           return {
@@ -309,9 +309,9 @@ export async function runExportMatrix({
             saveDisabled: save?.disabled ?? true,
             loading: Boolean(document.querySelector('.export-preview-frame.loading')),
           error: panelError || previewError,
-          filename: document.querySelector('.export-preview-filename')?.textContent?.trim() || '',
-          activeFormat: document.querySelector('[data-export-format].active')?.dataset?.exportFormat || '',
-          activeScope: document.querySelector('[data-export-scope].active')?.dataset?.exportScope || '',
+          filename: document.querySelector('.export-filename')?.textContent?.trim() || '',
+          activeFormat: document.querySelector('[data-export-choice=format] [aria-checked=true]')?.dataset?.value || '',
+          activeScope: document.querySelector('[data-export-choice=scope] [aria-checked=true]')?.dataset?.value || '',
           mimeType: blob.type,
             size: blob.size,
             signature,
@@ -410,8 +410,8 @@ export async function runExportMatrix({
   }
 
   async function configureExportCase({ scope, format, hideDrawings, watermarkEnabled, watermarkText }) {
-    const scopeSelected = await setExportChoice("data-export-scope", scope);
-    const formatSelected = await setExportChoice("data-export-format", format);
+    const scopeSelected = await setExportChoice("scope", scope);
+    const formatSelected = await setExportChoice("format", format);
     const hideDrawingsSelected = await setExportCheckbox("hide-drawings", hideDrawings);
     const watermarkSelected = await setExportCheckbox("watermark-enabled", watermarkEnabled);
     const watermarkTextSet = watermarkEnabled && watermarkText != null
@@ -469,9 +469,9 @@ export async function runExportMatrix({
   });
   runtimeIssueCount = pngRuntimeIssueCount;
 
-  const jpegScopeSelected = await setExportChoice("data-export-scope", "main-pane");
+  const jpegScopeSelected = await setExportChoice("scope", "main-pane");
   const jpegInvalidated = await observeExportPreviewInvalidation();
-  const jpegFormatSelected = await setExportChoice("data-export-format", "jpeg");
+  const jpegFormatSelected = await setExportChoice("format", "jpeg");
   const jpegTransparentDisabled = await waitExpression(
     cdp,
     `document.querySelector('[data-export-option="background"] option[value="transparent"]')?.disabled === true`,
@@ -659,11 +659,11 @@ export async function runExportMatrix({
       > Number(chartPreview?.width) * Number(chartPreview?.height),
   };
   const panelError = await cdp.send("Runtime.evaluate", {
-    expression: "document.querySelector('.export-panel-message.error')?.textContent?.trim() || ''",
+    expression: "document.querySelector('.export-panel-message[data-tone=danger]')?.textContent?.trim() || ''",
     returnByValue: true,
   });
   const error = panelError.result?.value || "";
-  const panelCloseClicked = await click(cdp, ".export-panel-close");
+  const panelCloseClicked = await click(cdp, ".export-panel [data-overlay-close]");
   const panelClosed = panelCloseClicked && await waitExpression(
     cdp,
     "!document.querySelector('.export-workspace')",

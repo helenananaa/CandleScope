@@ -32,6 +32,8 @@ export interface DialogProps {
   role?: "dialog" | "alertdialog";
   initialFocusRef?: RefObject<HTMLElement | null>;
   className?: string;
+  /** Keys pressed inside the dialog, for example to keep them from page shortcuts. */
+  onKeyDown?: (event: KeyboardEvent<HTMLElement>) => void;
 }
 
 /** Modal dialog: above drawers, traps focus, returns focus on close, makes the page inert. */
@@ -40,7 +42,7 @@ export function Dialog(props: DialogProps) {
   return createPortal(<DialogLayer {...props} />, overlayHost());
 }
 
-function DialogLayer({ open, onClose, title, description, children, footer, size = "md", dismissible = true, role = "dialog", initialFocusRef, className }: DialogProps) {
+function DialogLayer({ open, onClose, title, description, children, footer, size = "md", dismissible = true, role = "dialog", initialFocusRef, className, onKeyDown }: DialogProps) {
   const layerRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
   const titleId = useId();
@@ -51,6 +53,7 @@ function DialogLayer({ open, onClose, title, description, children, footer, size
       <div className="ui-dialog-backdrop" aria-hidden="true" onMouseDown={dismissible ? onClose : undefined} />
       <DialogSurface ref={panelRef} role={role} titleId={titleId} descriptionId={description ? descriptionId : undefined}
         title={title} description={description} footer={footer} size={size} className={className}
+        {...(onKeyDown ? { onKeyDown } : {})}
         {...(dismissible ? { onClose } : {})}>
         {children}
       </DialogSurface>
@@ -69,13 +72,14 @@ export interface DialogSurfaceProps {
   size: "sm" | "md" | "lg";
   className: string | undefined;
   onClose?: () => void;
+  onKeyDown?: (event: KeyboardEvent<HTMLElement>) => void;
   children?: ReactNode;
 }
 
 /** The dialog box itself (rendered by Dialog; exported for tests and static previews). */
-export function DialogSurface({ ref, role, titleId, descriptionId, title, description, footer, size, className, onClose, children }: DialogSurfaceProps) {
+export function DialogSurface({ ref, role, titleId, descriptionId, title, description, footer, size, className, onClose, onKeyDown, children }: DialogSurfaceProps) {
   return (
-    <section ref={ref} role={role} aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} tabIndex={-1}
+    <section ref={ref} role={role} aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} tabIndex={-1} onKeyDown={onKeyDown}
       className={["ui-dialog", `ui-dialog-${size}`, className].filter(Boolean).join(" ")}>
       <header className="ui-dialog-head">
         <div className="ui-dialog-heading">
