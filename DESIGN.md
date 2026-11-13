@@ -156,6 +156,11 @@ The alerts drawer sets the pattern for a long form in a narrow panel:
 - **Lists are rows**: a title (with the symbol as a `Badge`), one line of what it does, one line of status, then small ghost buttons. An unread item has a dot, not a coloured card.
 - **Events that arrive in the background** (a fired alert) go through `notify()` with an action that opens their surface, so they appear above dialogs instead of under them.
 
+The indicator drawer adds two more:
+
+- **A library to add from** is rows: the name, one line of description and where it goes (主图, 副图), and a small `IconButton` toggle with `pressed` (+, then ✓). Badges only mark exceptions (自定义, 行情数据, unavailable); what every row has in common is not a badge.
+- **An editor in a drawer** has one toolbar: the title with what is being edited under it, then the actions (the primary one last), a divider and the close button. Advanced inputs are closed `Disclosure`s; the run status is the last line, toned and announced. Labels are never uppercased by CSS, since they can contain code.
+
 ## Stylesheets and cascade layers
 
 Every app stylesheet sits in a cascade layer. The order is set once, in `frontend/src/styles/layers.css`, which every entry page imports first:
