@@ -101,6 +101,7 @@ from .component_inputs import SourceComponentPreparation, SourcePreparationCapac
 from .finalizer import Finalizer
 from .publisher import BarAggregatorPublisher
 from .component_memory import ComponentSnapshots
+from .preview_scheduler import ComponentPreviewScheduler
 from app.data_engine.memory_budget import retained_size
 
 logger = logging.getLogger("bar_aggregator")
@@ -220,11 +221,14 @@ class BarAggregator:
 
         # Timeout checker task
         self._timeout_task: asyncio.Task | None = None
+        self._previews = ComponentPreviewScheduler(self)
+        self._publisher._preview_wakeup = self._previews.publication_finished
 
     # ── Public: Lifecycle ────────────────────────────────────
 
     async def start(self) -> None:
         """Start background tasks (e.g. timeout checker)."""
+        self._previews.start()
         if self._timeout_task is None:
             self._timeout_task = asyncio.create_task(
                 self._timeout_loop(), name="bar_agg_timeout",
@@ -240,6 +244,8 @@ class BarAggregator:
             except asyncio.CancelledError:
                 pass
             self._timeout_task = None
+
+        await self._previews.stop()
 
         # Flush all active bars
         await self._flush_all()
@@ -350,6 +356,8 @@ class BarAggregator:
         self._preparation_targets_revision += 1
         self._target_epochs.pop((exchange, market_type, symbol, interval,
                                  resolve_kline_series_identity(exchange, series_identity)), None)
+        self._previews.detach((exchange, market_type, symbol, interval,
+                               resolve_kline_series_identity(exchange, series_identity)))
         if len(self._target_epochs) < 2:
             self._preparation_capacity.trim_idle()
         if self.history_prefix_runtime is not None:
@@ -643,12 +651,15 @@ class BarAggregator:
         )
         if pipeline is None:
             return None
-        return pipeline.bar_state.expire_bar(
+        state = pipeline.bar_state.expire_bar(
             exchange.lower().strip(),
             market_type.lower().strip(),
             symbol.upper().strip(),
             bucket_start_ms,
         )
+        if state is not None:
+            self._previews.discard(state)
+        return state
 
     async def seed_active_bar(
         self,
@@ -953,10 +964,12 @@ class BarAggregator:
         events = [event for queue, _ in list(self._publisher._subscribers)
                   for event in list(queue._queue) if isinstance(event, BarEvent)]
         publications, inputs, publisher_counts = self._publisher._retained_payloads()
+        preview_states = [entry.state for entry in
+                          (*self._previews.pending.values(),*self._previews.inflight)]
         mutable_callback_states = self._publisher._mutable_callback_state_ids()
         retained_events = {id(event): event for event in [*events, *publications]}
         payload_states = {id(state): state for state in [
-            *buffered, *inputs,
+            *buffered, *inputs, *preview_states,
             *(state for event in retained_events.values()
               for state in (event.bar, event.previous_bar) if state is not None),
         ]}
@@ -1024,6 +1037,10 @@ class BarAggregator:
                 "source_preparation_max_targets": MAX_PREPARATION_TARGETS,
                 "source_preparation_in_use": self._preparation_capacity.in_use,
                 "source_preparation_capacity_bytes": self._preparation_capacity.capacity * PREPARATION_BYTES,
+                "preview_pending": len(self._previews.pending),
+                "preview_inflight": len(self._previews.inflight),
+                "preview_payload_states": len({id(state) for state in preview_states}),
+                "preview_reserved_bytes": self._previews.snapshot()['reserved_bytes'],
                 **self._source_preparation_metrics,
                 "estimated_bytes": (len(retained) * 1024 + component_payload_bytes + source_ref_bytes
                     + sum(index_bytes.values()) + retained_prefixes * 32 * 1024
@@ -1042,6 +1059,7 @@ class BarAggregator:
                 *[list(queue._queue) for queue, _ in list(self._publisher._subscribers)],
                 *[pipeline.eviction_claims for pipeline in self._pipelines.values()],
                 self._publisher._memory_roots(),
+                self._previews.roots(),
                 list(self.history_prefix_runtime.targets.values()) if self.history_prefix_runtime else [],
                 [preparation.memory_roots() for preparation in list(self._active_preparations)]]
 
@@ -1051,11 +1069,33 @@ class BarAggregator:
             "config": self._cfg.snapshot(),
             "router": self._router.snapshot(),
             "publisher": self._publisher.snapshot(),
+            "previews": self.preview_diagnostics(),
             "pipelines": {
                 interval: p.snapshot()
                 for interval, p in self._pipelines.items()
             },
         }
+
+    def preview_diagnostics(self):
+        """Bounded scalar observations; diagnostics never force calculation."""
+        watermarks = []
+        active = deferred = calculations = 0
+        for pipeline in self._pipelines.values():
+            for state in (*pipeline.bar_state._active.values(),*pipeline.bar_state._closed.values()):
+                deferred += state._preview_deferred_inputs
+                calculations += state._preview_calculations
+            for state in pipeline.bar_state._active.values():
+                active += 1
+                if len(watermarks) < 128:
+                    watermarks.append(dict(symbol=state.symbol,interval=state.interval,
+                        exchange=state.exchange,market_type=state.market_type,identity=state.identity.to_dict(),
+                        bucket_start_ms=state.bucket_start_ms,input=state.preview_input_version,
+                        computed=state.preview_computed_version,published=state.preview_published_version,
+                        dirty=state._preview_dirty,fallback_reason=state.preview_fallback_reason))
+        return dict(self._previews.snapshot(),resident_deferred_inputs=deferred,
+                    resident_calculations=calculations,active_states=active,
+                    watermarks=watermarks,watermark_limit=128,watermarks_truncated=active>128,
+                    publication_scope='successful publisher fanout; not consumer acknowledgment')
 
     def set_source_component_reader(
         self, reader: Callable[[str, int, int], Awaitable[list[dict]]],
@@ -1173,8 +1213,12 @@ class BarAggregator:
         check_target()
 
         # L3: Apply input to bar state
+        previous = pipeline.bar_state.get_active(exchange,market_type,symbol,bucket_start_ms)
+        delay_preview = (self._previews.qualifies(pipeline,previous,bar_input,target_token,emit_events)
+                         and self._previews.admit(pipeline,previous,target_token))
         state, change = pipeline.bar_state.apply(
             exchange, market_type, symbol, bucket_start_ms, bar_input,
+            **({'defer_preview': True} if delay_preview else {}),
         )
 
         if state.acquisition_revision is None:
@@ -1192,6 +1236,11 @@ class BarAggregator:
         await self._drain_eviction_buffers(pipeline, emit_events=emit_events)
         check_target()
 
+        if state._preview_dirty:
+            # Qualified forming tails cannot close on this input. Accepted
+            # versions already advanced; the bounded deadline owns calculation.
+            return
+
         # L5: Emit lifecycle events
         if emit_events:
             if change == BarStateChange.CREATED:
@@ -1201,6 +1250,9 @@ class BarAggregator:
             elif change == BarStateChange.AMENDED:
                 await self._publisher.emit_amended(state)
         check_target()
+
+        if state.preview_published_version >= state.preview_input_version:
+            self._previews.discard(state)
 
         runtime = self.history_prefix_runtime
         if (emit_events and runtime is not None and bar_input.merge_mode == MergeMode.COMPONENT
@@ -1226,6 +1278,7 @@ class BarAggregator:
                 exchange, market_type, symbol, bucket_start_ms,
             )
             if closed is not None:
+                self._previews.discard(closed)
                 if emit_events:
                     await self._publisher.emit_closed(closed)
                 # Drain eviction buffers after close_bar() — closing a bar
@@ -1266,6 +1319,7 @@ class BarAggregator:
                         exchange, market_type, symbol, state.bucket_start_ms,
                     )
                     if closed is not None:
+                        self._previews.discard(closed)
                         if emit_events:
                             await self._publisher.emit_closed(closed)
                         await self._drain_eviction_buffers(pipeline, emit_events=emit_events)
@@ -1279,6 +1333,7 @@ class BarAggregator:
                         state.bucket_start_ms,
                     )
                     if expired is not None and emit_events:
+                        self._previews.discard(expired)
                         await self._publisher.emit_expired(expired)
                         check_target()
 
@@ -1307,6 +1362,7 @@ class BarAggregator:
                 # Claim synchronously before callbacks await. Another drain
                 # can process later items but cannot publish this item again.
                 bar = buffer.pop(0)
+                self._previews.discard(bar)
                 token = object()
                 pipeline.eviction_claims[token] = bar
                 handoff = None
@@ -1387,6 +1443,7 @@ class BarAggregator:
                             state.exchange, state.market_type, state.symbol, state.bucket_start_ms,
                         )
                         if closed is not None:
+                            self._previews.discard(closed)
                             await self._publisher.emit_closed(closed)
                     elif pipeline.finalizer.should_expire_unconfirmed(state, trigger):
                         state.close_reason = "timeout_unconfirmed"
@@ -1397,6 +1454,7 @@ class BarAggregator:
                             state.bucket_start_ms,
                         )
                         if expired is not None:
+                            self._previews.discard(expired)
                             await self._publisher.emit_expired(expired)
 
     # ── Internal: Flush ──────────────────────────────────────

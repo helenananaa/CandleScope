@@ -185,6 +185,9 @@ class BarAggregatorConfig:
     shared_component_inputs: bool = field(
         default_factory=lambda: _env_bool("BAR_AGG_SHARED_COMPONENT_INPUTS", True),
     )
+    deferred_component_previews: bool = field(
+        default_factory=lambda: _env_bool("BAR_AGG_DEFERRED_COMPONENT_PREVIEWS", True),
+    )
 
     # ── Methods ──────────────────────────────────────────────
 

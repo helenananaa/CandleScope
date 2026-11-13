@@ -520,6 +520,8 @@ class BarData:
     @classmethod
     def from_bar_state(cls, bar_state: Any, is_closed: bool | None = None) -> BarData:
         """Create from a ``bar_aggregator.BarState`` instance."""
+        if getattr(bar_state,'_preview_dirty',False):
+            bar_state.materialize_preview()
         if is_closed is None:
             status = getattr(bar_state, "status", None)
             is_closed = getattr(status, "value", status) == "closed"
