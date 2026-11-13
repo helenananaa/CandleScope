@@ -168,10 +168,12 @@ and revision fixes. Custom extension routes remain independent.
 
 Heap diagnostics retain temporary root views across all owners so identity-based
 deduplication cannot hide a later owner's graph through recycled container IDs.
-Ordinary budget estimates count target component references and may
-overcount shared immutable values; fixed component weights can also undercount
-large source-proof payloads and are not a proven heap/admission upper bound. See [source preparation evidence and limits](../qa/realtime-shared-input-129-20261112/README.md);
-this does not establish whole-runtime resource or native acceptance.
+Ordinary estimates count accepted immutable component/proof reference weights
+and may overcount shared values. Foreign mutable entries use live traversal;
+consumer-mutable callback proofs are measured while their frame owns them.
+These estimates remain distinct from allocator/RSS bounds. See
+[component weights](../qa/component-byte-accounting-126-20261113/README.md) and
+[callback proof accounting](../qa/callback-proof-accounting-126-20261113/README.md).
 
 Realtime-state also owns closed/expired engine eviction buffers, pending source
 publication snapshots and suspended publisher input/dispatch/callback/retry frames.
@@ -180,8 +182,7 @@ completion, failure and cancellation release registrations. Retry snapshots reta
 the existing delivery IDs; retries enumerate IDs and release each acknowledged
 payload before advancing. Per-state identity deduplication avoids alias double
 charging; opt-in roots include the actual private dictionaries and buffers.
-This accounting does not discard data or raise budgets. Fixed component byte
-weights still require calibration, particularly for source proofs. See
+This accounting does not discard data or raise budgets. See
 [handoff accounting evidence and limits](../qa/realtime-handoff-accounting-126-20261112/README.md).
 
 Eviction drains claim one raw buffer item synchronously before awaiting the
@@ -195,6 +196,78 @@ No-source/pre-transfer failures retain their original retryable buffer item.
 Silent drains cannot discard another task's claim. Successful items release
 before later callbacks; no callback lock or independent delivery ledger is added.
 See [eviction handoff proof and costs](../qa/realtime-eviction-handoff-129-20261113/README.md).
+
+### H127 page receipts
+
+The default coordinator uses an explicit `run_receipt()` contract for qualified
+native REST plans. The fetcher awaits the existing reconciler/writer per page
+before dropping the page. A receipt counts unique fetched rows, not successful
+commits; `ReconcileResult` owns committed counts/ranges. Mixed plans then consume
+the existing canonical H127 stream/K130/D126 path. Ordinary `run()/fetch()`,
+payload observers, preview, archives and unqualified/custom routes retain their
+complete payload contracts. Register new payload observers between active receipt
+runs; the explicit receipt API rejects registrations while its payload contract
+is frozen. Ordinary calls retain dynamic registration.
+
+Page/dedup/output diagnostics have bounds, use the existing history-backfill
+budget, and retain source, deletion, revision and owner fences. The conservative
+whole-window forecast remains and page reservations are additional. Archive
+objects retain their atomic import contract; this is not universal archive
+streaming or whole-application constant memory. See
+[receipt scope, failure evidence and costs](../qa/history-fetch-stream-127-20261113/README.md).
+
+### R129 deferred component previews
+
+An accepted fixed-grid forming tail can advance the existing immutable component
+index before its K130 summary/projection is calculated. Every input still passes
+freshness admission against the immediately preceding accepted value. Only
+repeated replacements of the same eligible forming tail coalesce; close,
+correction, new-component/bucket and custom execution paths calculate eagerly.
+Native snapshots, price-only and trade/tick inputs retain their execution modes.
+
+One aggregation-loop scheduler owns at most 128 pending/in-flight references,
+with a single deadline handle and at most 16 entries per drain. Each entry reserves
+16 KiB under realtime-state, covering metadata and its extra prior immutable
+tail (qualified at <=8 KiB). It copies no source history. The original publisher
+still owns fanout, throttling, source retry and delivery. Existing publications
+wake delayed work on completion, avoiding concurrent duplicate previews and
+retention of finished builders across later awaits. Detached in-flight builders
+remain visible to the same memory owner. Failure/cancel/detach/stop drain leases;
+capacity/admission failure uses eager calculation with explicit fallback diagnostics.
+
+Effective `preserve_updates` demand bypasses calculation coalescing, as it already
+bypasses producer throttling. Producer flags remain authoritative. Disabled
+UPDATED output may retain dirty state without a timer; reads and mandatory
+barriers still materialize it. Public state copies, scalar adapters and storage
+conversion calculate the latest accepted value before returning. Diagnostics do
+not force calculation. Deadline publication reuses the target token and existing
+H127 source validation/owner locking; it cannot revive deleted or rebound work.
+
+Native source receipts use the existing storage owner to recheck at most 256
+accepted leaves in one read transaction before a delayed publication. Each
+immutable leaf is at most 8 KiB; history-query reserves its retained bytes plus
+16 KiB until the physical read finishes. Current journal heads and canonical
+closed values (including warm-start leaves without receipts), deletion floors
+and the target revision must agree. Normal superseding source observations skip
+the old preview without requesting repair; canonical changes use existing
+recovery. Input-version, target-generation and owner checks reject late reads.
+Larger/unqualified receipt windows retain eager execution. This is a bounded
+read view, not another journal, writer or source cache.
+
+The watermarks are builder-local ordinals: `preview_input_version` counts accepted
+target observations (including prefix adoption), `preview_computed_version` marks
+their projected values, and `preview_published_version` marks successful publisher
+fanout for that builder. They are not transport sequences, database revisions,
+nor consumer acknowledgments. Accepted/computed/published lag and fallback reasons
+are exposed in bounded read-only diagnostics. Journal retries retain their existing
+payload/delivery ownership; these counters do not replace durable delivery receipts.
+
+`BAR_AGG_DEFERRED_COMPONENT_PREVIEWS=false` selects eager calculation. Pending
+work remains fenced and can be drained; rollback does not remove canonical rows,
+receipts, revisions, recovery evidence or supported runtimes. Started default
+component pipelines consume this stage; unsupported grids/strategies retain
+their original algorithms. Whole-runtime load, closed/no-prefix state retention,
+all consumer policies and the remaining #129 matrix require separate qualification.
 
 ## Migration and operational rollback
 
