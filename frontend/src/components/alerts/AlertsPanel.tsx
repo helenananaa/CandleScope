@@ -1,4 +1,10 @@
-import { Button } from "../ui/Button.js";
+import { Button, IconButton } from "../ui/Button.js";
+import { TabPanel, Tabs } from "../ui/Choice.js";
+import { Badge, Disclosure, InlineAlert } from "../ui/Display.js";
+import { EmptyState } from "../ui/EmptyState.js";
+import { Checkbox, Field, Input, Select, Textarea } from "../ui/Field.js";
+import { DateTimeInput } from "../ui/Inputs.js";
+import { fromDateTimeInputValue, toDateTimeInputValue } from "../ui/helpers.js";
 import { confirmAction } from "../ui/overlay/overlayApi.js";
 import { OverlayLayer } from "../ui/Overlays.js";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
@@ -6,7 +12,7 @@ import { useControlCommands } from "../../features/app-control/useControlCommand
 import { command } from "../../features/app-control/commandRegistry.js";
 import { bool, choice, empty, object, optional, text } from "../../features/app-control/commandSchema.js";
 import { alertDraftPatchSchema } from "../../features/app-control/alertCommandSchema.js";
-import { getLocale, t, tKey, translateMarketType } from "../../i18n/index.js";
+import { getLocale, t, translateMarketType } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { watchlistDisplayName } from "../../features/watchlist/watchlistDisplayName.js";
 import { useRightDrawerResize } from "../../shared/useRightDrawerResize.js";
@@ -180,46 +186,24 @@ function buildWatchlistProducts(watchlists: WatchlistGroup[] = [], locale = getL
   return Array.from(productMap.values()).sort((a, b) => a.symbol.localeCompare(b.symbol));
 }
 
-interface ContextMetricProps {
-  label: string;
-  value: ReactNode;
-  tone?: string;
-}
-
-function ContextMetric({ label, value, tone }: ContextMetricProps) {
-  return (
-    <div className={`alert-context-metric ${tone ? `tone-${tone}` : ""}`}>
-      <span className="alert-context-label">{label}</span>
-      <span className="alert-context-value">{value}</span>
-    </div>
-  );
-}
-
-interface SectionHeaderProps {
-  kicker?: string;
+interface StepProps {
+  n: number;
   title: string;
-  desc?: string;
   action?: ReactNode;
+  children: ReactNode;
 }
 
-function SectionHeader({ kicker, title, desc, action }: SectionHeaderProps) {
+/** One numbered part of the alert form: a heading and its fields, no card around it. */
+function Step({ n, title, action, children }: StepProps) {
   return (
-    <div className="alert-section-header">
-      <div>
-        {kicker && <div className="alert-section-kicker">{kicker}</div>}
-        <div className="alert-section-title">{title}</div>
-        {desc && <div className="alert-section-desc">{desc}</div>}
+    <section className="alert-step" aria-label={title}>
+      <div className="alert-step-head">
+        <h4 className="alert-step-title"><span className="alert-step-number" aria-hidden="true">{n}</span>{title}</h4>
+        {action}
       </div>
-      {action}
-    </div>
+      {children}
+    </section>
   );
-}
-
-interface ProductSummaryProps {
-  product: WatchlistAlertProduct | null;
-  fallbackSymbol?: string;
-  fallbackMarketType?: string;
-  fallbackExchange?: string;
 }
 
 function alertRuntimeRuleStateLabel(state: string | undefined, enabled: boolean): string {
@@ -234,29 +218,6 @@ function alertRuntimeRuleStateLabel(state: string | undefined, enabled: boolean)
   };
   if (state && labels[state]) return t(labels[state]);
   return enabled ? t("alert.state.waiting") : t("alert.state.disabled");
-}
-
-function ProductSummary({ product, fallbackSymbol, fallbackMarketType, fallbackExchange }: ProductSummaryProps) {
-  const symbol = product?.symbol || fallbackSymbol || "--";
-  const marketType = product?.marketType || fallbackMarketType || "spot";
-  const exchange = product?.exchange || fallbackExchange || "binance";
-
-  return (
-    <div className="alert-selected-product">
-      <div className="alert-selected-product-main">
-        <span className="alert-product-avatar">{symbol.slice(0, 1) || "?"}</span>
-        <div>
-          <div className="alert-product-symbol">{symbol}</div>
-          <div className="alert-product-meta">{formatMarket(exchange, marketType)}</div>
-        </div>
-      </div>
-      <div className="alert-product-tags">
-        {product?.listNames?.slice(0, 2).map((name) => (
-          <span key={name} className="alert-mini-tag">{name}</span>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 interface ConditionCardProps {
@@ -286,65 +247,55 @@ function ConditionCard({ node, index, onAction, canDelete }: ConditionCardProps)
   };
 
   return (
-    <div className="alert-condition-card tone-blue">
-      <div className="alert-condition-topline">
+    <div className="alert-condition">
+      <div className="alert-condition-head">
         <span className="alert-condition-index">{t("alert.condition", { index: String(index) })}</span>
         <div className="alert-inline-actions">
-          <label className="alert-not-toggle">
-            <input type="checkbox" checked={Boolean(node.not)} onChange={(event) => update({ not: event.target.checked })} />
-            <span>NOT</span>
-          </label>
-          <button type="button" onClick={() => onAction({ type: "duplicate-node", nodeId: node.id })}>{t("alert.copy")}</button>
-          <button type="button" onClick={() => onAction({ type: "delete-node", nodeId: node.id })} disabled={!canDelete}>{t("alert.delete")}</button>
+          <Checkbox label="NOT" checked={Boolean(node.not)} onChange={(event) => update({ not: event.target.checked })} />
+          <Button size="sm" variant="ghost" onClick={() => onAction({ type: "duplicate-node", nodeId: node.id })}>{t("alert.copy")}</Button>
+          <Button size="sm" variant="ghost" onClick={() => onAction({ type: "delete-node", nodeId: node.id })} disabled={!canDelete}>{t("alert.delete")}</Button>
         </div>
       </div>
-      <div className="alert-condition-grid">
-        <label className="alert-field compact">
-          <span>{t("alert.left")}</span>
-          <select value={node.left} onChange={(event) => update({ left: event.target.value })}>
+      <div className="alert-field-grid">
+        <Field label={t("alert.left")}>
+          <Select size="sm" value={node.left} onChange={(event) => update({ left: event.target.value })}>
             {ALERT_SOURCE_OPTIONS.map((item) => <option key={item.value} value={item.value}>{labelForSource(item.value)}</option>)}
-          </select>
-        </label>
-        <label className="alert-field compact">
-          <span>{t("alert.operator")}</span>
-          <select value={node.comparator} onChange={(event) => updateComparator(event.target.value as AlertComparator)}>
+          </Select>
+        </Field>
+        <Field label={t("alert.operator")}>
+          <Select size="sm" value={node.comparator} onChange={(event) => updateComparator(event.target.value as AlertComparator)}>
             {ALERT_COMPARATOR_OPTIONS.map((item) => <option key={item.value} value={item.value}>{labelForComparator(item.value)}</option>)}
-          </select>
-        </label>
+          </Select>
+        </Field>
         {isRangeComparator ? (
           <>
-            <label className="alert-field compact">
-              <span>{t("alert.rangeMin")}</span>
-              <input type="number" value={node.rangeMin} onChange={(event) => update({ rangeMin: event.target.value })} />
-            </label>
-            <label className="alert-field compact">
-              <span>{t("alert.rangeMax")}</span>
-              <input type="number" value={node.rangeMax} onChange={(event) => update({ rangeMax: event.target.value })} />
-            </label>
+            <Field label={t("alert.rangeMin")}>
+              <Input size="sm" type="number" value={node.rangeMin} onChange={(event) => update({ rangeMin: event.target.value })} />
+            </Field>
+            <Field label={t("alert.rangeMax")}>
+              <Input size="sm" type="number" value={node.rangeMax} onChange={(event) => update({ rangeMax: event.target.value })} />
+            </Field>
           </>
         ) : isPercentComparator ? (
-          <label className="alert-field compact alert-field-wide">
-            <span>{t("alert.changePct")}</span>
-            <input type="number" value={node.percentValue} onChange={(event) => update({ percentValue: event.target.value })} />
-          </label>
+          <Field label={t("alert.changePct")} className="alert-field-wide">
+            <Input size="sm" type="number" value={node.percentValue} onChange={(event) => update({ percentValue: event.target.value })} />
+          </Field>
         ) : (
           <>
-            <label className="alert-field compact">
-              <span>{t("alert.rightType")}</span>
-              <select value={node.rightType} onChange={(event) => update({ rightType: event.target.value as AlertConditionDraft["rightType"], rightValue: event.target.value === "number" ? node.rightValue : "close" })}>
+            <Field label={t("alert.rightType")}>
+              <Select size="sm" value={node.rightType} onChange={(event) => update({ rightType: event.target.value as AlertConditionDraft["rightType"], rightValue: event.target.value === "number" ? node.rightValue : "close" })}>
                 {ALERT_RIGHT_TYPE_OPTIONS.map((item) => <option key={item.value} value={item.value}>{labelForRightType(item.value)}</option>)}
-              </select>
-            </label>
-            <label className="alert-field compact">
-              <span>{t("alert.right")}</span>
+              </Select>
+            </Field>
+            <Field label={t("alert.right")}>
               {node.rightType === "number" ? (
-                <input type="number" value={node.rightValue} onChange={(event) => update({ rightValue: event.target.value })} />
+                <Input size="sm" type="number" value={node.rightValue} onChange={(event) => update({ rightValue: event.target.value })} />
               ) : (
-                <select value={node.rightValue || "close"} onChange={(event) => update({ rightValue: event.target.value })}>
+                <Select size="sm" value={node.rightValue || "close"} onChange={(event) => update({ rightValue: event.target.value })}>
                   {sourceChoices.map((item) => <option key={item.value} value={item.value}>{labelForSource(item.value)}</option>)}
-                </select>
+                </Select>
               )}
-            </label>
+            </Field>
           </>
         )}
       </div>
@@ -422,22 +373,19 @@ function LogicGroupEditor({ node, onAction, depth = 0, path, canDelete = false }
 
   return (
     <div className={`alert-logic-group ${depth === 0 ? "root" : "nested"}`}>
-      <div className={`alert-logic-group-header ${depth > 0 ? "compact" : ""}`}>
+      <div className="alert-logic-head">
         <div>
           <div className="alert-logic-title">{t("alert.logicTitle", { path: displayPath })}</div>
           <div className="alert-logic-desc">{t("alert.logicDesc", { count: children.length, op: node.op || "AND" })}</div>
         </div>
-        <div className="alert-logic-actions">
-          <label className="alert-not-toggle">
-            <input type="checkbox" checked={Boolean(node.not)} onChange={(event) => update({ not: event.target.checked })} />
-            <span>NOT</span>
-          </label>
-          <select value={node.op || "AND"} onChange={(event) => update({ op: event.target.value as AlertLogicalOperator })} className="alert-logic-select">
+        <div className="alert-inline-actions">
+          <Checkbox label="NOT" checked={Boolean(node.not)} onChange={(event) => update({ not: event.target.checked })} />
+          <Select size="sm" aria-label={t("alert.logicTitle", { path: displayPath })} value={node.op || "AND"} onChange={(event) => update({ op: event.target.value as AlertLogicalOperator })}>
             <option value="AND">AND</option>
             <option value="OR">OR</option>
-          </select>
-          <button type="button" onClick={() => onAction({ type: "duplicate-node", nodeId: node.id })} disabled={depth === 0}>{t("alert.copyGroup")}</button>
-          <button type="button" onClick={() => onAction({ type: "delete-node", nodeId: node.id })} disabled={!canDelete}>{t("alert.deleteGroup")}</button>
+          </Select>
+          <Button size="sm" variant="ghost" onClick={() => onAction({ type: "duplicate-node", nodeId: node.id })} disabled={depth === 0}>{t("alert.copyGroup")}</Button>
+          <Button size="sm" variant="ghost" onClick={() => onAction({ type: "delete-node", nodeId: node.id })} disabled={!canDelete}>{t("alert.deleteGroup")}</Button>
         </div>
       </div>
 
@@ -464,8 +412,8 @@ function LogicGroupEditor({ node, onAction, depth = 0, path, canDelete = false }
       ))}
 
       <div className="alert-logic-footer">
-        <Button onClick={() => onAction({ type: "add-condition", nodeId: node.id })}>{t("alert.addCondition")}</Button>
-        <Button onClick={() => onAction({ type: "add-group", nodeId: node.id })}>{t("alert.addGroup")}</Button>
+        <Button size="sm" onClick={() => onAction({ type: "add-condition", nodeId: node.id })}>{t("alert.addCondition")}</Button>
+        <Button size="sm" onClick={() => onAction({ type: "add-group", nodeId: node.id })}>{t("alert.addGroup")}</Button>
       </div>
     </div>
   );
@@ -488,7 +436,7 @@ function NestedLogicBuilder({ expression, onAction }: NestedLogicBuilderProps) {
       <div className="alert-logic-builder">
         <ConditionCard node={single} index="1" onAction={onAction} canDelete={false} />
         <div className="alert-logic-footer">
-          <Button onClick={() => onAction({ type: "add-condition", nodeId: expression.id })}>{t("alert.addCondition")}</Button>
+          <Button size="sm" onClick={() => onAction({ type: "add-condition", nodeId: expression.id })}>{t("alert.addCondition")}</Button>
         </div>
       </div>
     );
@@ -504,13 +452,81 @@ function NestedLogicBuilder({ expression, onAction }: NestedLogicBuilderProps) {
   );
 }
 
-interface ExpirationAndNotificationProps {
+interface ExpiryStepProps {
+  draft: AlertDraft;
+  onDraftChange: Dispatch<SetStateAction<AlertDraft>>;
+}
+
+function ExpiryStep({ draft, onDraftChange }: ExpiryStepProps) {
+  const update = (patch: Partial<AlertDraft>) => onDraftChange((prev) => ({ ...prev, ...patch }));
+  const updateAfterTrigger = (value: AlertDraft["afterTrigger"]) => {
+    update({
+      afterTrigger: value,
+      ...(value === "keep" ? { maxTriggerMode: "unlimited" as const } : {}),
+      ...(value === "pause" ? { maxTriggerMode: "once" as const } : {}),
+    });
+  };
+  // The draft keeps the expiry as a local `datetime-local` value; the kit field works in epoch ms.
+  const customExpiresMs = draft.customExpiresAt ? fromDateTimeInputValue(draft.customExpiresAt, false) : null;
+
+  return (
+    <Step n={3} title={t("alert.stepExpiry")}>
+      <div className="alert-field-grid">
+        <Field label={t("alert.when")}>
+          <Select value={draft.triggerOn} onChange={(event) => update({ triggerOn: event.target.value as AlertTriggerOn })}>
+            {TRIGGER_OPTIONS.map((item) => <option key={item.value} value={item.value}>{t(item.labelKey)}</option>)}
+          </Select>
+        </Field>
+        <Field label={t("alert.afterTrigger")}>
+          <Select value={draft.afterTrigger} onChange={(event) => updateAfterTrigger(event.target.value as AlertDraft["afterTrigger"])}>
+            <option value="auto-disable">{t("alert.autoDisable")}</option>
+            <option value="keep">{t("alert.keepEnabled")}</option>
+            <option value="pause">{t("alert.pauseAfter")}</option>
+          </Select>
+        </Field>
+        <Field label={t("alert.triggerCount")}>
+          <Select value={draft.maxTriggerMode} disabled={draft.afterTrigger !== "auto-disable"} onChange={(event) => update({ maxTriggerMode: event.target.value as AlertDraft["maxTriggerMode"] })}>
+            <option value="once">{t("alert.once")}</option>
+            <option value="3">{t("alert.threeTimes")}</option>
+            <option value="custom">{t("alert.customCount")}</option>
+            <option value="unlimited">{t("alert.unlimited")}</option>
+          </Select>
+        </Field>
+        {draft.maxTriggerMode === "custom" && (
+          <Field label={t("alert.customTimes")}>
+            <Input type="number" min="1" step="1" value={draft.customMaxTriggers} onChange={(event) => update({ customMaxTriggers: event.target.value })} />
+          </Field>
+        )}
+        <Field label={t("alert.timeExpiry")}>
+          <Select value={draft.expiresMode} onChange={(event) => update({ expiresMode: event.target.value as AlertDraft["expiresMode"] })}>
+            <option value="1h">{t("alert.in1h")}</option>
+            <option value="today">{t("alert.endOfDay")}</option>
+            <option value="7d">{t("alert.in7d")}</option>
+            <option value="custom">{t("alert.customDatetime")}</option>
+            <option value="never">{t("alert.never")}</option>
+          </Select>
+        </Field>
+        {draft.expiresMode === "custom" && (
+          <Field label={t("alert.expiryTime")} className="alert-field-wide">
+            <DateTimeInput
+              utc={false}
+              value={customExpiresMs}
+              onChange={(ms) => update({ customExpiresAt: ms === null ? "" : toDateTimeInputValue(ms, false, false) })}
+            />
+          </Field>
+        )}
+      </div>
+    </Step>
+  );
+}
+
+interface NotifyStepProps {
   draft: AlertDraft;
   onDraftChange: Dispatch<SetStateAction<AlertDraft>>;
   availableChannels: string[];
 }
 
-function ExpirationAndNotification({ draft, onDraftChange, availableChannels }: ExpirationAndNotificationProps) {
+function NotifyStep({ draft, onDraftChange, availableChannels }: NotifyStepProps) {
   const [channelSetupMessage, setChannelSetupMessage] = useState("");
   const webhookAvailable = availableChannels.includes("webhook");
   const update = (patch: Partial<AlertDraft>) => onDraftChange((prev) => ({ ...prev, ...patch }));
@@ -534,127 +550,52 @@ function ExpirationAndNotification({ draft, onDraftChange, availableChannels }: 
       }));
     })();
   };
-  const updateAfterTrigger = (value: AlertDraft["afterTrigger"]) => {
-    update({
-      afterTrigger: value,
-      ...(value === "keep" ? { maxTriggerMode: "unlimited" as const } : {}),
-      ...(value === "pause" ? { maxTriggerMode: "once" as const } : {}),
-    });
-  };
 
   return (
-    <div className="alert-two-column">
-      <section className="alert-settings-card">
-        <SectionHeader
-          kicker={t("alert.step", { n: 3 })}
-          title={t("alert.stepExpiry")}
-          desc={t("alert.stepExpiryDesc")}
-        />
-        <div className="alert-form-grid single">
-          <label className="alert-field">
-            <span>{t("alert.when")}</span>
-            <select value={draft.triggerOn} onChange={(event) => update({ triggerOn: event.target.value as AlertTriggerOn })}>
-              {TRIGGER_OPTIONS.map((item) => <option key={item.value} value={item.value}>{t(item.labelKey)}</option>)}
-            </select>
-          </label>
-          <label className="alert-field">
-            <span>{t("alert.triggerCount")}</span>
-            <select value={draft.maxTriggerMode} disabled={draft.afterTrigger !== "auto-disable"} onChange={(event) => update({ maxTriggerMode: event.target.value as AlertDraft["maxTriggerMode"] })}>
-              <option value="once">{t("alert.once")}</option>
-              <option value="3">{t("alert.threeTimes")}</option>
-              <option value="custom">{t("alert.customCount")}</option>
-              <option value="unlimited">{t("alert.unlimited")}</option>
-            </select>
-          </label>
-          {draft.maxTriggerMode === "custom" && (
-            <label className="alert-field">
-              <span>{t("alert.customTimes")}</span>
-              <input type="number" min="1" step="1" value={draft.customMaxTriggers} onChange={(event) => update({ customMaxTriggers: event.target.value })} />
-            </label>
-          )}
-          <label className="alert-field">
-            <span>{t("alert.timeExpiry")}</span>
-            <select value={draft.expiresMode} onChange={(event) => update({ expiresMode: event.target.value as AlertDraft["expiresMode"] })}>
-              <option value="1h">{t("alert.in1h")}</option>
-              <option value="today">{t("alert.endOfDay")}</option>
-              <option value="7d">{t("alert.in7d")}</option>
-              <option value="custom">{t("alert.customDatetime")}</option>
-              <option value="never">{t("alert.never")}</option>
-            </select>
-          </label>
-          {draft.expiresMode === "custom" && (
-            <label className="alert-field">
-              <span>{t("alert.expiryTime")}</span>
-              <input type="datetime-local" value={draft.customExpiresAt} onChange={(event) => update({ customExpiresAt: event.target.value })} />
-            </label>
-          )}
-          <label className="alert-field">
-            <span>{t("alert.afterTrigger")}</span>
-            <select value={draft.afterTrigger} onChange={(event) => updateAfterTrigger(event.target.value as AlertDraft["afterTrigger"])}>
-              <option value="auto-disable">{t("alert.autoDisable")}</option>
-              <option value="keep">{t("alert.keepEnabled")}</option>
-              <option value="pause">{t("alert.pauseAfter")}</option>
-            </select>
-          </label>
-        </div>
-      </section>
-
-      <section className="alert-settings-card">
-        <SectionHeader
-          kicker={t("alert.step", { n: 4 })}
-          title={t("alert.stepNotify")}
-          desc={t("alert.stepNotifyDesc")}
-        />
-        <div className="alert-channel-grid">
-          {CHANNEL_OPTIONS.map(({ key, titleKey, descKey }) => (
-            <label key={key} className="alert-channel-card">
-              <input
-                type="checkbox"
-                checked={Boolean(draft.channels?.[key])}
-                disabled={key === "history" || (key === "webhook" && !webhookAvailable)}
-                onChange={(event) => updateChannel(key, event.target.checked)}
-              />
-              <span>
-                <strong>{t(titleKey)}</strong>
-                <small>{key === "webhook" && !webhookAvailable ? t("alert.webhookDisabled") : t(descKey)}</small>
-              </span>
-            </label>
-          ))}
-        </div>
-        {draft.channels.webhook && (
-          <label className="alert-field alert-message-template">
-            <span>{t("alert.webhookUrl")}</span>
-            <input
-              type="url"
-              value={draft.webhookUrl}
-              disabled={!webhookAvailable}
-              placeholder="https://example.com/candlescope-alerts"
-              onChange={(event) => update({ webhookUrl: event.target.value })}
-            />
-          </label>
-        )}
-        {channelSetupMessage && <div className="alert-channel-setup-message">{channelSetupMessage}</div>}
-        <label className="alert-field alert-message-template">
-          <span>{t("alert.messageTemplate")}</span>
-          <textarea value={draft.messageTemplate} onChange={(event) => update({ messageTemplate: event.target.value })} rows={3} />
-        </label>
-        <label className="alert-field">
-          <span>{t("alert.cooldown")}</span>
-          <select value={draft.cooldownMode} onChange={(event) => update({ cooldownMode: event.target.value as AlertDraft["cooldownMode"] })}>
+    <Step n={4} title={t("alert.stepNotify")}>
+      <div className="alert-channels">
+        {CHANNEL_OPTIONS.map(({ key, titleKey, descKey }) => (
+          <Checkbox
+            key={key}
+            label={t(titleKey)}
+            description={key === "webhook" && !webhookAvailable ? t("alert.webhookDisabled") : t(descKey)}
+            checked={Boolean(draft.channels?.[key])}
+            disabled={key === "history" || (key === "webhook" && !webhookAvailable)}
+            onChange={(event) => updateChannel(key, event.target.checked)}
+          />
+        ))}
+      </div>
+      {draft.channels.webhook && (
+        <Field label={t("alert.webhookUrl")}>
+          <Input
+            type="url"
+            value={draft.webhookUrl}
+            disabled={!webhookAvailable}
+            placeholder="https://example.com/candlescope-alerts"
+            onChange={(event) => update({ webhookUrl: event.target.value })}
+          />
+        </Field>
+      )}
+      {channelSetupMessage && <InlineAlert>{channelSetupMessage}</InlineAlert>}
+      <Field label={t("alert.messageTemplate")}>
+        <Textarea value={draft.messageTemplate} onChange={(event) => update({ messageTemplate: event.target.value })} rows={2} />
+      </Field>
+      <div className="alert-field-grid">
+        <Field label={t("alert.cooldown")}>
+          <Select value={draft.cooldownMode} onChange={(event) => update({ cooldownMode: event.target.value as AlertDraft["cooldownMode"] })}>
             <option value="always">{t("alert.notifyAlways")}</option>
             <option value="30s">{t("alert.cooldown30s")}</option>
             <option value="5m">{t("alert.cooldown5m")}</option>
             <option value="custom">{t("alert.custom")}</option>
-          </select>
-        </label>
+          </Select>
+        </Field>
         {draft.cooldownMode === "custom" && (
-          <label className="alert-field">
-            <span>{t("alert.cooldownSeconds")}</span>
-            <input type="number" min="0" step="1" value={draft.customCooldownSeconds} onChange={(event) => update({ customCooldownSeconds: event.target.value })} />
-          </label>
+          <Field label={t("alert.cooldownSeconds")}>
+            <Input type="number" min="0" step="1" value={draft.customCooldownSeconds} onChange={(event) => update({ customCooldownSeconds: event.target.value })} />
+          </Field>
         )}
-      </section>
-    </div>
+      </div>
+    </Step>
   );
 }
 
@@ -671,18 +612,15 @@ function RulePreview({ draft, product, fallbackSymbol, interval }: RulePreviewPr
     ? t("alert.unlimitedTriggers")
     : t("alert.maxTriggers", { count: draft.maxTriggerMode === "custom" ? draft.customMaxTriggers : (draft.maxTriggerMode === "3" ? 3 : 1) });
   return (
-    <div className="alert-rule-preview-box">
-      <div className="alert-preview-label">{t("alert.preview")}</div>
-      <div className="alert-preview-text">
-        {t("alert.previewBody", {
-          symbol,
-          interval,
-          expression: describeAlertDraftExpression(draft.expression),
-          maxTriggers,
-          cooldown: draft.cooldownMode,
-        })}
-      </div>
-    </div>
+    <InlineAlert title={t("alert.preview")}>
+      {t("alert.previewBody", {
+        symbol,
+        interval,
+        expression: describeAlertDraftExpression(draft.expression),
+        maxTriggers,
+        cooldown: draft.cooldownMode,
+      })}
+    </InlineAlert>
   );
 }
 
@@ -708,13 +646,13 @@ function AlertTraceNode({ node, depth = 0 }: AlertTraceNodeProps) {
   const details = node.details || {};
   const hasDetails = Object.keys(details).length > 0;
   return (
-    <div className={`alert-test-trace-node depth-${Math.min(depth, 3)} ${node.result ? "is-true" : "is-false"}`}>
-      <div className="alert-test-trace-main">
-        <span className="alert-test-result-dot" />
+    <div className="alert-trace-node" data-depth={Math.min(depth, 3)} data-result={node.result ? "true" : "false"}>
+      <div className="alert-trace-main">
+        <span className="alert-trace-dot" aria-hidden="true" />
         <div>
-          <div className="alert-test-trace-title">{node.summary || t("alert.trace.condition")}</div>
+          <div className="alert-trace-title">{node.summary || t("alert.trace.condition")}</div>
           {hasDetails && (
-            <div className="alert-test-trace-details">
+            <div className="alert-trace-details">
               {t("alert.trace.details", { left: String(details.left ?? "--"), right: String(details.right ?? "--") })}
               {details.previousLeft !== undefined && t("alert.trace.prevLeft", { value: String(details.previousLeft ?? "--") })}
               {details.previousRight !== undefined && t("alert.trace.prevRight", { value: String(details.previousRight ?? "--") })}
@@ -723,10 +661,10 @@ function AlertTraceNode({ node, depth = 0 }: AlertTraceNodeProps) {
             </div>
           )}
         </div>
-        <span className="alert-test-status">{statusLabel}</span>
+        <Badge tone={node.result ? "success" : "neutral"}>{statusLabel}</Badge>
       </div>
       {Array.isArray(node.children) && node.children.length > 0 && (
-        <div className="alert-test-trace-children">
+        <div className="alert-trace-children">
           {node.children.map((child) => (
             <AlertTraceNode key={child.path} node={child} depth={depth + 1} />
           ))}
@@ -745,6 +683,7 @@ interface RuleTestPanelProps {
   onRunTest(): void;
 }
 
+/** A dry run against sample values, folded away: most alerts are saved without it. */
 function RuleTestPanel({
   testContext,
   testResult,
@@ -753,58 +692,41 @@ function RuleTestPanel({
   onResetContext,
   onRunTest,
 }: RuleTestPanelProps) {
+  const status = testResult ? (testResult.result ? t("alert.testHit") : t("alert.testMiss")) : t("alert.untested");
   return (
-    <section className="alert-editor-card alert-test-card">
-      <SectionHeader
-        kicker={t("alert.step", { n: 5 })}
-        title={t("alert.stepTest")}
-        desc={t("alert.stepTestDesc")}
-        action={<span className={`alert-chip ${testResult?.result ? "success" : ""}`}>{testResult ? (testResult.result ? t("alert.testHit") : t("alert.testMiss")) : t("alert.untested")}</span>}
-      />
+    <Disclosure summary={<span className="alert-test-summary">{t("alert.stepTest")}<Badge tone={testResult?.result ? "success" : "neutral"}>{status}</Badge></span>}>
       <div className="alert-test-grid">
-        <div className="alert-test-column">
-          <div className="alert-test-column-title">{t("alert.prevSample")}</div>
-          {TEST_VALUE_FIELDS.map((field) => (
-            <label key={`previous-${field.key}`} className="alert-field compact">
-              <span>{field.labelKey ? t(field.labelKey) : field.label}</span>
-              <input
-                type="number"
-                value={testContext.previous[field.key] ?? ""}
-                onChange={(event) => onContextChange("previous", field.key, event.target.value)}
-              />
-            </label>
-          ))}
-        </div>
-        <div className="alert-test-column">
-          <div className="alert-test-column-title">{t("alert.currSample")}</div>
-          {TEST_VALUE_FIELDS.map((field) => (
-            <label key={`values-${field.key}`} className="alert-field compact">
-              <span>{field.labelKey ? t(field.labelKey) : field.label}</span>
-              <input
-                type="number"
-                value={testContext.values[field.key] ?? ""}
-                onChange={(event) => onContextChange("values", field.key, event.target.value)}
-              />
-            </label>
-          ))}
-        </div>
+        {(["previous", "values"] as const).map((bucket) => (
+          <fieldset key={bucket} className="alert-test-column">
+            <legend>{bucket === "previous" ? t("alert.prevSample") : t("alert.currSample")}</legend>
+            {TEST_VALUE_FIELDS.map((field) => (
+              <Field key={`${bucket}-${field.key}`} label={field.labelKey ? t(field.labelKey) : field.label}>
+                <Input
+                  size="sm"
+                  type="number"
+                  value={testContext[bucket][field.key] ?? ""}
+                  onChange={(event) => onContextChange(bucket, field.key, event.target.value)}
+                />
+              </Field>
+            ))}
+          </fieldset>
+        ))}
       </div>
       <div className="alert-test-actions">
-        <Button onClick={onResetContext} disabled={testLoading}>{t("alert.resetChart")}</Button>
-        <Button variant="primary" onClick={onRunTest} disabled={testLoading}>
+        <Button size="sm" variant="ghost" onClick={onResetContext} disabled={testLoading}>{t("alert.resetChart")}</Button>
+        <Button size="sm" onClick={onRunTest} disabled={testLoading}>
           {testLoading ? t("alert.testing") : t("alert.testRule")}
         </Button>
       </div>
       {testResult && (
         <div className="alert-test-result">
-          <div className="alert-test-summary">
-            <strong>{testResult.result ? t("alert.testWouldFire") : t("alert.testWouldNotFire")}</strong>
-            <span>{t("alert.testShared")}</span>
-          </div>
+          <InlineAlert tone={testResult.result ? "success" : "warning"} title={testResult.result ? t("alert.testWouldFire") : t("alert.testWouldNotFire")}>
+            {t("alert.testShared")}
+          </InlineAlert>
           <AlertTraceNode node={testResult.trace} />
         </div>
       )}
-    </section>
+    </Disclosure>
   );
 }
 
@@ -825,26 +747,22 @@ interface RuleListCardProps {
 
 function RuleListCard({ title, symbol, summary, status, expiry, channels, enabled, onToggle, onDelete, onDuplicate, onEdit, busy }: RuleListCardProps) {
   return (
-    <div className="alert-rule-card detailed">
-      <div className="alert-rule-main">
-        <span className="alert-rule-icon" aria-hidden="true" />
-        <div className="alert-rule-copy">
-          <div className="alert-rule-title">{title}</div>
-          <div className="alert-rule-desc">{symbol} · {summary}</div>
-          <div className="alert-rule-meta-row">
-            <span>{status}</span>
-            <span>{expiry}</span>
-            <span>{channels}</span>
-          </div>
+    <li className="alert-row" data-enabled={enabled ? "true" : "false"}>
+      <div className="alert-row-main">
+        <div className="alert-row-title">
+          <strong>{title}</strong>
+          <Badge>{symbol}</Badge>
         </div>
+        <span className="alert-row-summary">{summary}</span>
+        <span className="alert-row-meta">{[status, expiry, channels].filter(Boolean).join(" · ")}</span>
       </div>
-      <div className="alert-card-actions">
-        <button type="button" onClick={onEdit} disabled={busy}>{t("alert.edit")}</button>
-        <button type="button" onClick={onDuplicate} disabled={busy}>{t("alert.duplicate")}</button>
-        <button type="button" onClick={onToggle} disabled={busy}>{enabled ? t("alert.disable") : t("alert.enable")}</button>
-        <button type="button" onClick={onDelete} disabled={busy}>{t("alert.delete")}</button>
+      <div className="alert-row-actions">
+        <Button size="sm" variant="ghost" onClick={onEdit} disabled={busy}>{t("alert.edit")}</Button>
+        <Button size="sm" variant="ghost" onClick={onDuplicate} disabled={busy}>{t("alert.duplicate")}</Button>
+        <Button size="sm" variant="ghost" onClick={onToggle} disabled={busy}>{enabled ? t("alert.disable") : t("alert.enable")}</Button>
+        <Button size="sm" variant="ghost" onClick={onDelete} disabled={busy}>{t("alert.delete")}</Button>
       </div>
-    </div>
+    </li>
   );
 }
 
@@ -872,20 +790,22 @@ function HistoryItem({
   onViewRule,
 }: HistoryItemProps) {
   return (
-    <div className="alert-history-item">
-      <div className="alert-timeline-dot" />
-      <div className="alert-timeline-card">
-        <div className="alert-timeline-title">{title}</div>
-        <div className="alert-timeline-desc">{t("alert.firedValue", { symbol, value })}</div>
-        <div className="alert-timeline-time">{time} · {channels}</div>
-        <div className="alert-history-actions">
-          <button type="button" onClick={onAcknowledge} disabled={busy}>
-            {acknowledged ? t("alert.unack") : t("alert.ack")}
-          </button>
-          <button type="button" onClick={onViewRule} disabled={!onViewRule}>{t("alert.viewRule")}</button>
+    <li className="alert-row" data-unread={acknowledged ? undefined : "true"}>
+      <div className="alert-row-main">
+        <div className="alert-row-title">
+          {!acknowledged && <span className="alert-unread-dot" aria-hidden="true" />}
+          <strong>{title}</strong>
         </div>
+        <span className="alert-row-summary">{t("alert.firedValue", { symbol, value })}</span>
+        <span className="alert-row-meta">{time} · {channels}</span>
       </div>
-    </div>
+      <div className="alert-row-actions">
+        <Button size="sm" variant="ghost" onClick={onAcknowledge} disabled={busy}>
+          {acknowledged ? t("alert.unack") : t("alert.ack")}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onViewRule} disabled={!onViewRule}>{t("alert.viewRule")}</Button>
+      </div>
+    </li>
   );
 }
 
@@ -897,6 +817,7 @@ export interface AlertsPanelProps {
   currentExchange?: string;
   currentInterval?: string;
   displayPrice?: number | null;
+  /** Accepted for callers; the drawer no longer repeats the chart's connection state. */
   wsStatus?: string;
   watchlists?: WatchlistGroup[];
 }
@@ -918,11 +839,11 @@ export default function AlertsPanel({
   currentExchange,
   currentInterval,
   displayPrice,
-  wsStatus,
   watchlists = [],
 }: AlertsPanelProps) {
   const locale = useLocale();
   const [tab, setTab] = useState<AlertTab>("add");
+  const tabsId = useId();
   const {
     width: panelWidth,
     isResizing,
@@ -954,7 +875,6 @@ export default function AlertsPanel({
   const [testLoading, setTestLoading] = useState(false);
   const [testResult, setTestResult] = useState<AlertEvaluateResult | null>(null);
 
-  const marketLabel = alertMarketLabel(currentMarketType) || "--";
   const formattedPrice = formatPrice(displayPrice);
   const normalizedExchange = currentExchange || "binance";
   const symbolLabel = currentSymbol || "--";
@@ -1386,6 +1306,14 @@ export default function AlertsPanel({
     ] }), isOpen);
   if (!isOpen) return null;
 
+  const productNote = selectedProduct
+    ? [
+        formatMarket(selectedProduct.exchange, selectedProduct.marketType),
+        selectedProduct.listNames.join(" / "),
+        ...(selectedProduct.key === currentProductKey && formattedPrice !== "--" ? [`${t("alert.price")} ${formattedPrice}`] : []),
+      ].filter(Boolean).join(" · ")
+    : "";
+
   return (
     <OverlayLayer kind="drawer" side="right" onClose={onClose}>
     <div className={`alert-panel-overlay right-drawer-overlay ${isResizing ? "is-resizing" : ""}`}
@@ -1393,6 +1321,7 @@ export default function AlertsPanel({
     >
       <aside
         className="alert-panel"
+        aria-label={t("alert.center")}
         style={{ width: `${panelWidth}px` }}
       >
         <div
@@ -1402,133 +1331,88 @@ export default function AlertsPanel({
         />
 
         <div className="alert-panel-header">
-          <div>
-            <h3 className="alert-panel-title">
-              {t("alert.center")}
-              <span className="alert-layout-pill">{t("alert.ruleCount", { count: rules.length })}</span>
-            </h3>
-            <div className={`alert-runtime-status status-${systemStatus?.runtime.status || "unknown"}`} title={deliveryStatusLabel}>
+          <div className="alert-panel-heading">
+            <h3 className="alert-panel-title">{t("alert.center")}</h3>
+            <span className={`alert-runtime-status status-${systemStatus?.runtime.status || "unknown"}`} title={deliveryStatusLabel}>
               {runtimeStatusLabel}
-            </div>
+            </span>
           </div>
-          <button
-            className="alert-panel-close"
-            data-overlay-close=""
-            onClick={onClose}
-            type="button"
-            aria-label={t("alert.closePanel")}
-          >
-            <Icon name="close" size={14} />
-          </button>
+          <IconButton label={t("alert.closePanel")} icon={<Icon name="close" size={16} />} onClick={onClose} data-overlay-close="" />
         </div>
 
-        <div className="alert-context-card">
-          <div className="alert-context-heading">
-            <span>{symbolLabel}</span>
-            <span className="alert-context-market">{marketLabel}</span>
-          </div>
-          <div className="alert-context-grid">
-            <ContextMetric label={t("alert.exchange")} value={normalizedExchange.toUpperCase()} />
-            <ContextMetric label={t("alert.interval")} value={intervalLabel} />
-            <ContextMetric label={t("alert.price")} value={formattedPrice} tone="price" />
-            <ContextMetric label={t("alert.realtime")} value={tKey(`status.ws.${wsStatus || "idle"}`)} />
-          </div>
-        </div>
-
-        <div className="alert-tab-bar">
-          {TAB_OPTIONS.map((item) => (
-            <button
-              key={item.key}
-              className={`alert-tab ${tab === item.key ? "active" : ""}`}
-              onClick={() => setTab(item.key)}
-              type="button"
-            >
-              {t(item.labelKey)}
-            </button>
-          ))}
-        </div>
+        <Tabs<AlertTab>
+          id={tabsId}
+          className="alert-tabs"
+          label={t("alert.center")}
+          value={tab}
+          onChange={setTab}
+          tabs={TAB_OPTIONS.map((item) => ({
+            value: item.key,
+            label: t(item.labelKey),
+            ...(item.key === "all" && rules.length > 0 ? { badge: rules.length } : {}),
+          }))}
+        />
 
         {(alertError || alertLoading) && (
-          <div className="alert-guidance-box">
-            <div>
-              <strong>{alertError ? t("alert.systemHint") : t("alert.syncing")}</strong>
-              <span>{alertError || t("alert.syncingDesc")}</span>
-            </div>
-            <Button onClick={() => loadAlerts()} disabled={alertLoading}>
-              {t("alert.refresh")}
-            </Button>
-          </div>
+          <InlineAlert
+            className="alert-panel-notice"
+            tone={alertError ? "danger" : "info"}
+            title={alertError ? t("alert.systemHint") : t("alert.syncing")}
+            action={<Button size="sm" onClick={() => loadAlerts()} disabled={alertLoading}>{t("alert.refresh")}</Button>}
+          >
+            {alertError || t("alert.syncingDesc")}
+          </InlineAlert>
         )}
 
-        <div className="alert-panel-content">
+        <TabPanel tabsId={tabsId} value={tab} className="alert-panel-content">
           {tab === "add" && (
-            <div className="alert-section-stack">
-              <section className="alert-editor-card alert-product-section">
-                <SectionHeader
-                  kicker={t("alert.step", { n: 1 })}
-                  title={t("alert.stepSymbol")}
-                  desc={t("alert.stepSymbolDesc")}
-                  action={<span className="alert-chip">{t("alert.currentOrWatchlist")}</span>}
-                />
-
-                <ProductSummary
-                  product={selectedProduct}
-                  fallbackSymbol={symbolLabel}
-                  {...(currentMarketType === undefined ? {} : { fallbackMarketType: currentMarketType })}
-                  fallbackExchange={normalizedExchange}
-                />
-
+            <div className="alert-form">
+              <Step n={1} title={t("alert.stepSymbol")}>
                 {alertProducts.length > 0 ? (
-                  <div className="alert-product-picker-row">
-                    <label className="alert-field">
-                      <span>{t("alert.product")}</span>
-                      <select value={effectiveSelectedProductKey} onChange={(event) => setSelectedProductKey(event.target.value)}>
-                        {alertProducts.map((item) => (
-                          <option key={item.key} value={item.key}>
-                            {item.symbol} · {formatMarket(item.exchange, item.marketType)} · {item.listNames.join(" / ")}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="alert-field small">
-                      <span>{t("alert.interval")}</span>
-                      <select value={effectiveInterval} onChange={(event) => setSelectedInterval(event.target.value)}>
-                        {Array.from(new Set([intervalLabel, "1m", "5m", "15m", "1h", "4h", "1d"].filter(Boolean))).map((item) => (
-                          <option key={item}>{item}</option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
+                  <>
+                    <div className="alert-field-row">
+                      <Field label={t("alert.product")}>
+                        <Select value={effectiveSelectedProductKey} onChange={(event) => setSelectedProductKey(event.target.value)}>
+                          {alertProducts.map((item) => (
+                            <option key={item.key} value={item.key}>
+                              {item.symbol} · {formatMarket(item.exchange, item.marketType)}
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+                      <Field label={t("alert.interval")}>
+                        <Select value={effectiveInterval} onChange={(event) => setSelectedInterval(event.target.value)}>
+                          {Array.from(new Set([intervalLabel, "1m", "5m", "15m", "1h", "4h", "1d"].filter(Boolean))).map((item) => (
+                            <option key={item}>{item}</option>
+                          ))}
+                        </Select>
+                      </Field>
+                    </div>
+                    {productNote && <p className="alert-step-note">{productNote}</p>}
+                  </>
                 ) : (
-                  <div className="alert-empty-state compact">
-                    <div className="alert-empty-icon"><Icon name="star" size={22} /></div>
-                    <div className="alert-empty-title">{t("alert.noProducts")}</div>
-                    <div className="alert-empty-desc">{t("alert.noProductsDesc")}</div>
-                  </div>
+                  <EmptyState
+                    compact
+                    icon={<Icon name="star" size={20} />}
+                    title={t("alert.noProducts")}
+                    description={t("alert.noProductsDesc")}
+                  />
                 )}
+                <Field label={t("alert.ruleName")}>
+                  <Input value={draft.name} onChange={(event) => setDraft((prev) => ({ ...prev, name: event.target.value }))} />
+                </Field>
+                <Field label={t("alert.ruleDesc")}>
+                  <Textarea value={draft.description} onChange={(event) => setDraft((prev) => ({ ...prev, description: event.target.value }))} rows={2} />
+                </Field>
+              </Step>
 
-                <div className="alert-form-grid single alert-draft-meta">
-                  <label className="alert-field">
-                    <span>{t("alert.ruleName")}</span>
-                    <input value={draft.name} onChange={(event) => setDraft((prev) => ({ ...prev, name: event.target.value }))} />
-                  </label>
-                  <label className="alert-field">
-                    <span>{t("alert.ruleDesc")}</span>
-                    <textarea value={draft.description} onChange={(event) => setDraft((prev) => ({ ...prev, description: event.target.value }))} rows={2} />
-                  </label>
-                </div>
-              </section>
-
-              <section className="alert-editor-card">
-                <SectionHeader
-                  kicker={t("alert.step", { n: 2 })}
-                  title={t("alert.stepLogic")}
-                  desc={t("alert.stepLogicDesc")}
-                />
+              <Step n={2} title={t("alert.stepLogic")}>
                 <NestedLogicBuilder expression={draft.expression} onAction={applyExpressionAction} />
-              </section>
+              </Step>
 
-              <ExpirationAndNotification
+              <ExpiryStep draft={draft} onDraftChange={setDraft} />
+
+              <NotifyStep
                 draft={draft}
                 onDraftChange={setDraft}
                 availableChannels={systemStatus?.registeredChannels || []}
@@ -1549,133 +1433,132 @@ export default function AlertsPanel({
                 onResetContext={resetTestContext}
                 onRunTest={runRuleTest}
               />
-
-              <div className="alert-editor-actions sticky-actions">
-                <Button onClick={resetDraft} disabled={alertSaving}>{t("alert.newDraft")}</Button>
-                <Button variant="primary" onClick={createCurrentAlert} disabled={!canCreateAlert}>
-                  {alertSaving ? t("alert.saving") : editorModeLabel}
-                </Button>
-              </div>
             </div>
           )}
 
           {tab === "all" && (
-            <div className="alert-section-stack">
-              <div className="alert-toolbar-row no-margin">
-                <input
-                  className="alert-search"
+            <div className="alert-list-view">
+              <div className="alert-toolbar">
+                <Input
+                  type="search"
+                  size="sm"
+                  aria-label={t("alert.searchPlaceholder")}
                   placeholder={t("alert.searchPlaceholder")}
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
                 />
-                <select className="alert-filter-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as AlertStatusFilter)}>
+                <Select size="sm" aria-label={t("alert.statusAll")} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as AlertStatusFilter)}>
                   <option value="all">{t("alert.statusAll")}</option>
                   <option value="enabled">{t("alert.statusEnabled")}</option>
                   <option value="paused">{t("alert.statusPaused")}</option>
                   <option value="expired">{t("alert.statusExpired")}</option>
-                </select>
-                <Button onClick={() => loadAlerts()} disabled={alertLoading}>{t("alert.refresh")}</Button>
-                <Button variant="primary" onClick={resetDraft}>{t("alert.addAlert")}</Button>
+                </Select>
+                <IconButton size="sm" label={t("alert.refresh")} icon={<Icon name="refresh" size={14} />} onClick={() => loadAlerts()} disabled={alertLoading} />
+                <Button size="sm" variant="primary" onClick={resetDraft}>{t("alert.addAlert")}</Button>
               </div>
 
-              <div className="alert-filter-chip-row">
-                <span>{t("alert.colWatchlist")}</span>
-                <span>{t("alert.colSymbol")}</span>
-                <span>{t("alert.colCondition")}</span>
-                <span>{t("alert.colExpiry")}</span>
-                <span>{t("alert.colChannel")}</span>
-              </div>
-
-              {filteredRules.map((rule) => (
-                <RuleListCard
-                  key={rule.id}
-                  title={rule.name}
-                  symbol={rule.target?.symbol || "--"}
-                  summary={describeAlertRule(rule)}
-                  status={`${alertRuntimeRuleStateLabel(runtimeRuleStateById.get(rule.id)?.state, rule.enabled)} · ${t("alert.triggeredTimes", { count: rule.triggerCount || 0 })}`}
-                  expiry={rule.maxTriggers ? t("alert.maxN", { count: rule.maxTriggers }) : t("alert.noLimit")}
-                  channels={describeAlertChannels(rule)}
-                  enabled={rule.enabled}
-                  busy={alertSaving}
-                  onEdit={() => editRule(rule)}
-                  onToggle={() => toggleRule(rule)}
-                  onDuplicate={() => duplicateRule(rule)}
-                  onDelete={() => void (async () => {
-                    if (await confirmAction({ title: t("alert.deleteConfirm", { name: rule.name }), confirmLabel: t("alert.delete"), tone: "danger" })) void removeRule(rule);
-                  })()}
+              {filteredRules.length > 0 ? (
+                <ul className="alert-list">
+                  {filteredRules.map((rule) => (
+                    <RuleListCard
+                      key={rule.id}
+                      title={rule.name}
+                      symbol={rule.target?.symbol || "--"}
+                      summary={describeAlertRule(rule)}
+                      status={`${alertRuntimeRuleStateLabel(runtimeRuleStateById.get(rule.id)?.state, rule.enabled)} · ${t("alert.triggeredTimes", { count: rule.triggerCount || 0 })}`}
+                      expiry={rule.maxTriggers ? t("alert.maxN", { count: rule.maxTriggers }) : t("alert.noLimit")}
+                      channels={describeAlertChannels(rule)}
+                      enabled={rule.enabled}
+                      busy={alertSaving}
+                      onEdit={() => editRule(rule)}
+                      onToggle={() => toggleRule(rule)}
+                      onDuplicate={() => duplicateRule(rule)}
+                      onDelete={() => void (async () => {
+                        if (await confirmAction({ title: t("alert.deleteConfirm", { name: rule.name }), confirmLabel: t("alert.delete"), tone: "danger" })) void removeRule(rule);
+                      })()}
+                    />
+                  ))}
+                </ul>
+              ) : (
+                <EmptyState
+                  title={rules.length === 0 ? t("alert.empty") : t("alert.noMatch")}
+                  description={t("alert.emptyDesc")}
+                  icon={<Icon name="bell" size={20} />}
+                  {...(rules.length === 0 ? { action: <Button size="sm" variant="primary" onClick={resetDraft}>{t("alert.addAlert")}</Button> } : {})}
                 />
-              ))}
-
-              {filteredRules.length === 0 && (
-                <div className="alert-empty-state compact">
-                  <div className="alert-empty-title">{rules.length === 0 ? t("alert.empty") : t("alert.noMatch")}</div>
-                  <div className="alert-empty-desc">{t("alert.emptyDesc")}</div>
-                </div>
               )}
             </div>
           )}
 
           {tab === "history" && (
-            <div className="alert-section-stack">
-              <div className="alert-toolbar-row no-margin">
-                <input
-                  className="alert-search"
+            <div className="alert-list-view">
+              <div className="alert-toolbar">
+                <Input
+                  type="search"
+                  size="sm"
+                  aria-label={t("alert.filterPlaceholder")}
                   placeholder={t("alert.filterPlaceholder")}
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
                 />
-                <select className="alert-filter-select" value={historyRange} onChange={(event) => setHistoryRange(event.target.value as AlertHistoryRange)}>
+                <Select size="sm" aria-label={t("alert.last7d")} value={historyRange} onChange={(event) => setHistoryRange(event.target.value as AlertHistoryRange)}>
                   <option value="today">{t("alert.today")}</option>
                   <option value="7d">{t("alert.last7d")}</option>
                   <option value="30d">{t("alert.last30d")}</option>
-                </select>
-                <select className="alert-filter-select" value={acknowledgementFilter} onChange={(event) => setAcknowledgementFilter(event.target.value as AlertAcknowledgementFilter)}>
+                </Select>
+                <Select size="sm" aria-label={t("alert.allRecords")} value={acknowledgementFilter} onChange={(event) => setAcknowledgementFilter(event.target.value as AlertAcknowledgementFilter)}>
                   <option value="all">{t("alert.allRecords")}</option>
                   <option value="unread">{t("alert.unread")}</option>
                   <option value="ack">{t("alert.acked")}</option>
-                </select>
-                <Button onClick={() => loadAlerts()} disabled={alertLoading}>{t("alert.refreshHistory")}</Button>
+                </Select>
+                <IconButton size="sm" label={t("alert.refreshHistory")} icon={<Icon name="refresh" size={14} />} onClick={() => loadAlerts()} disabled={alertLoading} />
               </div>
 
-              <div className="alert-history-list">
-                {filteredHistory.map((event) => {
-                  const rule = ruleById.get(event.ruleId);
-                  const target = event.target || rule?.target || {};
-                  const values = event.values || {};
-                  const valueText = values.close ?? values.value ?? Object.values(values)[0] ?? "--";
-                  return (
-                    <HistoryItem
-                      key={event.id}
-                      time={formatAlertTime(event.createdAt)}
-                      symbol={target.symbol || rule?.target?.symbol || "--"}
-                      title={event.message || t("alert.hitTitle", { name: rule?.name || t("alert.fallbackName") })}
-                      value={String(valueText)}
-                      channels={describeAlertDispatch(event)}
-                      acknowledged={event.acknowledgedAt !== null}
-                      busy={alertSaving}
-                      onAcknowledge={() => { void acknowledgeEvent(event); }}
-                      {...(rule
-                        ? {
-                            onViewRule: () => {
-                              setSearchTerm(rule.name || rule.id);
-                              setTab("all");
-                            },
-                          }
-                        : {})}
-                    />
-                  );
-                })}
-              </div>
-
-              {filteredHistory.length === 0 && (
-                <div className="alert-empty-state compact">
-                  <div className="alert-empty-title">{t("alert.noHistory")}</div>
-                  <div className="alert-empty-desc">{t("alert.noHistoryDesc")}</div>
-                </div>
+              {filteredHistory.length > 0 ? (
+                <ul className="alert-list">
+                  {filteredHistory.map((event) => {
+                    const rule = ruleById.get(event.ruleId);
+                    const target = event.target || rule?.target || {};
+                    const values = event.values || {};
+                    const valueText = values.close ?? values.value ?? Object.values(values)[0] ?? "--";
+                    return (
+                      <HistoryItem
+                        key={event.id}
+                        time={formatAlertTime(event.createdAt)}
+                        symbol={target.symbol || rule?.target?.symbol || "--"}
+                        title={event.message || t("alert.hitTitle", { name: rule?.name || t("alert.fallbackName") })}
+                        value={String(valueText)}
+                        channels={describeAlertDispatch(event)}
+                        acknowledged={event.acknowledgedAt !== null}
+                        busy={alertSaving}
+                        onAcknowledge={() => { void acknowledgeEvent(event); }}
+                        {...(rule
+                          ? {
+                              onViewRule: () => {
+                                setSearchTerm(rule.name || rule.id);
+                                setTab("all");
+                              },
+                            }
+                          : {})}
+                      />
+                    );
+                  })}
+                </ul>
+              ) : (
+                <EmptyState title={t("alert.noHistory")} description={t("alert.noHistoryDesc")} icon={<Icon name="inbox" size={20} />} />
               )}
             </div>
           )}
-        </div>
+        </TabPanel>
+
+        {tab === "add" && (
+          <div className="alert-panel-footer">
+            <Button variant="ghost" onClick={resetDraft} disabled={alertSaving}>{t("alert.newDraft")}</Button>
+            <Button variant="primary" onClick={createCurrentAlert} disabled={!canCreateAlert}>
+              {alertSaving ? t("alert.saving") : editorModeLabel}
+            </Button>
+          </div>
+        )}
       </aside>
     </div>
     </OverlayLayer>

@@ -14,6 +14,7 @@ import {
   buildAlertPayloadFromDraft,
   createDefaultAlertDraft,
   createDraftFromRule,
+  describeAlertChannels,
   describeAlertDraftExpression,
   describeExpression,
 } from "../alertRuleModel.js";
@@ -286,4 +287,14 @@ test("alert notification parser and in-app delivery fail closed", async () => {
     () => parseAlertNotificationMessage({ ...notification, action: { type: "email", config: {} } }),
     AlertPayloadError,
   );
+});
+
+test("a rule's channel summary leaves out the history record every alert keeps", () => {
+  const rule = { actions: [
+    { type: "in_app", enabled: true, config: {} },
+    { type: "history", enabled: true, config: {} },
+    { type: "sound", enabled: false, config: {} },
+  ] } as unknown as AlertRule;
+  assert.doesNotMatch(describeAlertChannels(rule), /history/i);
+  assert.equal(describeAlertChannels(rule).split(" / ").length, 1);
 });
