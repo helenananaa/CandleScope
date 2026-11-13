@@ -141,6 +141,13 @@ class BarAggregatorPublisher:
     def _memory_roots(self):
         return [self._pending_source_events, self._inflight_payloads]
 
+    def _mutable_callback_state_ids(self):
+        # Callback snapshots retain their public mutation contract. Only IDs
+        # escape this transient lookup; the existing frame is their owner.
+        return {id(state) for kind, event in self._inflight_payloads.values()
+                if kind == "callback" and isinstance(event, BarEvent)
+                for state in (event.bar, event.previous_bar) if state is not None}
+
     # ── Public: Callback Registration ────────────────────────
 
     def on_bar_event(self, callback: BarEventCallback) -> None:
