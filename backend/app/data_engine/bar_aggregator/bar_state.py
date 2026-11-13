@@ -634,7 +634,8 @@ class BarStateEngine:
 
     # ── Public: Core Operation ───────────────────────────────
 
-    def adopt_history_prefix(self, prefix, *, refresh=False, replace_provisional=False) -> BarState:
+    def adopt_history_prefix(self, prefix, *, refresh=False, replace_provisional=False,
+                             compact_closed=False) -> BarState:
         """Install a qualified prefix while retaining the current live overlay."""
         source = prefix.summary.target
         key = (source.exchange, source.market_type, source.symbol, prefix.start_ms)
@@ -642,9 +643,12 @@ class BarStateEngine:
         state = self._active.get(key) or self._closed.get(key)
         replacing = (replace_provisional and was_closed and state.finality == BarFinality.PROVISIONAL
                      and prefix.complete and prefix.through_ms == state.bucket_end_ms)
-        if (was_closed and not (refresh or replacing)) or self._merge_strategy_overridden:
+        if compact_closed and (not was_closed or state.finality != BarFinality.AUTHORITATIVE
+                or not prefix.complete or prefix.through_ms != state.bucket_end_ms):
+            raise ValueError('closed compaction requires complete authoritative coverage')
+        if (was_closed and not (refresh or replacing or compact_closed)) or self._merge_strategy_overridden:
             raise ValueError('history initialization requires a forming or recoverable target')
-        if refresh and (state is None or state._history_prefix is None):
+        if refresh and not compact_closed and (state is None or state._history_prefix is None):
             raise ValueError('history refresh requires an existing compact prefix')
         if state is None:
             start, end = self._time_bucket.compute_bucket_range(prefix.start_ms)

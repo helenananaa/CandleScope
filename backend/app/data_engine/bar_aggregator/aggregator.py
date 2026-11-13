@@ -82,6 +82,7 @@ from app.data_engine.interval_resolution import IntervalResolver, IntervalPurpos
 
 from .config import BarAggregatorConfig
 from .models import (
+    BarStatus,
     AlignmentMode,
     BarInput,
     BarInputSource,
@@ -419,7 +420,7 @@ class BarAggregator:
         return (key, epoch) if epoch is not None else None
 
     def adopt_history_prefix(self, prefix, token, *, acquisition_revision=None, refresh=False,
-                             replace_provisional=False):
+                             replace_provisional=False, compact_closed=False):
         """Loop-owned, synchronous last step after the durable read fence.
 
         No await separates the target-generation check and builder adoption.
@@ -441,6 +442,7 @@ class BarAggregator:
         overlay_floor = previous.acquisition_revision if previous is not None else None
         state = pipeline.bar_state.adopt_history_prefix(
             prefix, refresh=refresh, replace_provisional=replace_provisional,
+            compact_closed=compact_closed,
         )
         state.acquisition_revision = (prefix.acquisition_revision if acquisition_revision is None
                                       else min(acquisition_revision, prefix.acquisition_revision))
@@ -1014,7 +1016,8 @@ class BarAggregator:
         claim_metadata_bytes = sum(sys.getsizeof(p.eviction_claims) + len(p.eviction_claims) * 16
                                    for p in self._pipelines.values())
         handoff = self.history_prefix_runtime
-        handoff_bytes = len(handoff.targets) * 1024 + len(handoff.tasks) * 8192 if handoff else 0
+        handoff_bytes = (len(handoff.targets)*1024 + len(handoff.tasks)*8192
+                         + len(handoff.closed_jobs)*1024) if handoff else 0
         return {"active_bars": active, "closed_bars": closed, "components": components,
                 "queued_snapshots": len(events), "queued_components": queued_components,
                 "buffered_handoff_states": len(buffered),
@@ -1062,6 +1065,7 @@ class BarAggregator:
                 self._publisher._memory_roots(),
                 self._previews.roots(),
                 list(self.history_prefix_runtime.targets.values()) if self.history_prefix_runtime else [],
+                self.history_prefix_runtime.closed_jobs if self.history_prefix_runtime else {},
                 [preparation.memory_roots() for preparation in list(self._active_preparations)]]
 
     def snapshot(self) -> dict:
@@ -1291,6 +1295,9 @@ class BarAggregator:
                 # may trigger expired evictions from the closed bars cache.
                 await self._drain_eviction_buffers(pipeline, emit_events=emit_events)
 
+        if emit_events and runtime is not None and state.status == BarStatus.CLOSED:
+            runtime.schedule_closed(state,bar_input)
+
     async def _check_event_driven_close(
         self,
         exchange: str,
@@ -1425,6 +1432,8 @@ class BarAggregator:
             try:
                 await asyncio.sleep(1.0)  # check every second
                 await self._check_timeouts()
+                if self.history_prefix_runtime is not None:
+                    await self.history_prefix_runtime.drain_closed()
             except asyncio.CancelledError:
                 break
             except Exception as exc:

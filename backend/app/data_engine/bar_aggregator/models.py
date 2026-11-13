@@ -271,6 +271,7 @@ class BarState:
     _preview_dirty: bool = field(default=False, repr=False, compare=False)
     _preview_deferred_inputs: int = field(default=0, repr=False, compare=False)
     _preview_calculations: int = field(default=0, repr=False, compare=False)
+    _closed_compaction_attempt_version: int = field(default=-1, repr=False, compare=False)
 
     def materialize_preview(self):
         """Owner-side read/barrier: never publish scalars behind accepted inputs."""
