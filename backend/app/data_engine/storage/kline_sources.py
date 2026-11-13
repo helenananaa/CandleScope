@@ -82,20 +82,38 @@ def _schema(conn) -> None:
         observation_hash TEXT NOT NULL, value_hash TEXT NOT NULL, envelope_json TEXT NOT NULL,
         data_json TEXT NOT NULL, source TEXT NOT NULL, event_time INTEGER NOT NULL,
         received_at INTEGER NOT NULL, rest_watermark INTEGER, decision TEXT NOT NULL,
+        permission_floor INTEGER NOT NULL DEFAULT 0,
         UNIQUE(series, open_time, observation_hash))""")
     conn.execute("""CREATE TABLE IF NOT EXISTS kline_source_heads (
         series TEXT NOT NULL, open_time INTEGER NOT NULL, observation_id INTEGER NOT NULL,
         revision INTEGER NOT NULL, value_hash TEXT NOT NULL, is_closed INTEGER NOT NULL,
         source TEXT NOT NULL, ws_event_time INTEGER, delivered_revision INTEGER NOT NULL DEFAULT 0,
+        permission_floor INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY(series, open_time))""")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS kline_source_history ON kline_source_observations(series, open_time, id)"
     )
     # This is metadata of the original selected-source owner, not a second
     # revision ledger. Legacy content has no newer deletion permission.
-    for table in ('kline_source_heads', 'kline_source_observations'):
-        if 'permission_floor' not in {row[1] for row in conn.execute(f'PRAGMA table_info({table})')}:
-            conn.execute(f'ALTER TABLE {table} ADD COLUMN permission_floor INTEGER NOT NULL DEFAULT 0')
+    tables = ('kline_source_heads', 'kline_source_observations')
+    if all('permission_floor' in {row[1] for row in conn.execute(f'PRAGMA table_info({table})')}
+           for table in tables):
+        return
+    # Multiple original ingestion owners may open an old journal concurrently.
+    # Recheck after SQLite's existing writer lock; never commit caller work.
+    owned = not conn.in_transaction
+    if owned:
+        conn.execute('BEGIN IMMEDIATE')
+    try:
+        for table in tables:
+            if 'permission_floor' not in {row[1] for row in conn.execute(f'PRAGMA table_info({table})')}:
+                conn.execute(f'ALTER TABLE {table} ADD COLUMN permission_floor INTEGER NOT NULL DEFAULT 0')
+        if owned:
+            conn.commit()
+    except BaseException:
+        if owned:
+            conn.rollback()
+        raise
 
 
 def rest_watermark() -> int:

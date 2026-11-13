@@ -1435,3 +1435,58 @@ def test_canonical_warm_start_cannot_discard_source_only_history_or_block_next_i
             await manager.shutdown()
 
     asyncio.run(run())
+
+
+def test_concurrent_legacy_permission_migration_rechecks_under_writer_lock(database):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    from contextlib import closing
+
+    record(0)
+    with closing(klines_repo._connect()) as conn, conn:
+        for table in ('kline_source_heads', 'kline_source_observations'):
+            conn.execute(f'ALTER TABLE {table} DROP COLUMN permission_floor')
+        before = dict(conn.execute('SELECT * FROM kline_source_heads').fetchone())
+    barrier = Barrier(2)
+
+    def upgrade():
+        with closing(klines_repo._connect()) as conn:
+            class SimultaneousRead:
+                waited = False
+
+                def __getattr__(self, name):
+                    return getattr(conn, name)
+
+                def execute(self, sql, *args):
+                    result = conn.execute(sql, *args)
+                    if sql == 'PRAGMA table_info(kline_source_heads)' and not self.waited:
+                        self.waited = True
+                        rows = result.fetchall()
+                        barrier.wait(timeout=5)
+                        return rows
+                    return result
+
+            kline_sources._schema(SimultaneousRead())
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(upgrade) for _ in range(2)]
+        for future in futures:
+            future.result(timeout=10)
+    with closing(klines_repo._connect()) as conn:
+        after = dict(conn.execute('SELECT * FROM kline_source_heads').fetchone())
+        assert after.pop('permission_floor') == 0 and after == before
+        assert conn.execute('SELECT permission_floor FROM kline_source_observations').fetchone()[0] == 0
+
+
+def test_permission_migration_does_not_commit_callers_transaction(database):
+    from contextlib import closing
+
+    record(0)
+    with closing(klines_repo._connect()) as conn:
+        conn.execute('ALTER TABLE kline_source_heads DROP COLUMN permission_floor')
+        conn.commit()
+        conn.execute('BEGIN IMMEDIATE')
+        kline_sources._schema(conn)
+        assert 'permission_floor' in {r[1] for r in conn.execute('PRAGMA table_info(kline_source_heads)')}
+        conn.rollback()
+        assert 'permission_floor' not in {r[1] for r in conn.execute('PRAGMA table_info(kline_source_heads)')}
