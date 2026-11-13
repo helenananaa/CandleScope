@@ -131,9 +131,23 @@ def test_only_exact_current_closed_rest_receipts_receive_range_permission(store,
             await fetched(close='101')
         elif kind == 'numeric-mismatch':
             row['volume'] += 1
+        _, live = await fetched(3600000, ws=True)
+        assert write(live, 'data_manager_exchange_closed') == 1
         with acquisition_scope(scope), pytest.raises(StaleAcquisition):
             klines_repo.upsert_klines('BTC-USDT', '1m', [row], exchange='okx', source='backfill')
-        assert store.query_bars('BTC-USDT', '1m', exchange='okx') == []
+        assert [r['open_time'] for r in store.query_bars('BTC-USDT', '1m', exchange='okx')] == [3600000]
+        assert kline_sources.latest(descriptor(), 600000)['delivered_revision'] == 0
+    asyncio.run(run())
+
+
+def test_unreceipted_legacy_writer_remains_supported_without_concurrent_change(store):
+    async def run():
+        scope = capture(store)
+        _, bar = await fetched()
+        row = bar.to_storage_dict()
+        row.pop('source_refs')
+        with acquisition_scope(scope):
+            assert klines_repo.upsert_klines('BTC-USDT', '1m', [row], exchange='okx', source='backfill') == 1
         assert kline_sources.latest(descriptor(), 600000)['delivered_revision'] == 0
     asyncio.run(run())
 
