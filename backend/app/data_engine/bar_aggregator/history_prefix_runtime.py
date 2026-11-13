@@ -14,6 +14,8 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 from copy import deepcopy
 import time
+import heapq
+import sys
 
 from app.core.async_cleanup import finish_cleanup
 from app.core.bounded_executor import ExecutorBusyError
@@ -23,7 +25,7 @@ from app.data_engine.bar_aggregator.bar_state import has_complete_closed_compone
 from app.data_engine.bar_aggregator.models import BarFinality, BarStatus
 from app.data_engine.bar_delivery_errors import BarDeliveryUnavailable
 from app.data_engine.interval_policy import IntervalAlignment, parse_interval_spec
-from app.data_engine.memory_budget import MemoryBudgetExceeded
+from app.data_engine.memory_budget import MemoryBudgetExceeded, retained_size
 from app.data_engine.aggregation.history_prefix import EmptyHistoryPrefix, PREFIX_BYTES, MAX_PREFIX_ROWS
 
 
@@ -42,6 +44,7 @@ class HistoryPrefixRuntime:
     # Measurements favor compact retention/loop responsiveness for large
     # prefixes. Small histories keep the lower-cost existing component path.
     MIN_ROWS = 2048
+    COMPACT_ROWS = 128
 
     def __init__(self, reader, aggregator, require_recovery, *, flush_delivery=None):
         self.aggregator = aggregator
@@ -55,7 +58,8 @@ class HistoryPrefixRuntime:
         self.last_adoption = None
         self._input_read_scope = ContextVar("history_prefix_input_read_scope", default=None)
         self.metrics = dict(adoptions=0, validations=0, refreshes=0, empty=0, failures=0,
-                            adopted_pages=0, adopted_storage_rows=0, adopted_cache_hits=0)
+                            adopted_pages=0, adopted_storage_rows=0, adopted_cache_hits=0,
+                            compactions=0, compacted_components=0, compaction_deferred=0)
 
     def snapshot(self):
         return {**self.metrics, 'targets': len(self.targets), 'tasks': len(self.tasks),
@@ -359,6 +363,74 @@ class HistoryPrefixRuntime:
                 await self.aggregator.publisher.emit_updated(adopted)
         return pipeline.bar_state.get_state(state.exchange, state.market_type, state.symbol, state.bucket_start_ms)
 
+    async def _compact_tail(self, slot, pipeline, state, incoming):
+        """Retire one confirmed seam, without publishing a synthetic update.
+
+        This is optional retention work. Unavailable, different or stale
+        canonical input leaves the accepted prefix and overlay untouched.
+        """
+        prefix = state._history_prefix
+        count = self.COMPACT_ROWS
+        if (prefix is None or not prefix.complete or state.status != BarStatus.FORMING
+                or not incoming.is_closed or len(state.source_snapshots) < count
+                or incoming.open_time_ms < state._history_compaction_retry_ms):
+            return
+        try:
+            # Finite leaf references / selection metadata remain charged across
+            # worker awaits. All larger read/projection work reserves separately.
+            with self.reader.memory_budget.reserve('realtime-state', 16 * 1024):
+                await self._compact_tail_reserved(slot, pipeline, state, incoming, prefix, count)
+        except MemoryBudgetExceeded:
+            state._history_compaction_retry_ms = incoming.open_time_ms + count * prefix.source_width_ms
+            self.metrics['compaction_deferred'] += 1
+
+    async def _compact_tail_reserved(self, slot, pipeline, state, incoming, prefix, count):
+        width = prefix.source_width_ms
+        # At most 128 leaf references, even if a legacy overlay is large.
+        leaves = heapq.nsmallest(count, state.source_snapshots.values(),
+                                 key=lambda row: row['open_time_ms'])
+        if any(not row['is_closed']
+               or row['open_time_ms'] != prefix.through_ms + index * width
+               or row['close_time_ms'] + 1 != row['open_time_ms'] + width
+               for index, row in enumerate(leaves)):
+            return
+        through = prefix.through_ms + count * width
+        # Rate-limit failed optional reads by source progress, not wall time.
+        state._history_compaction_retry_ms = incoming.open_time_ms + count * width
+        try:
+            async with self.reader.stage(slot.source, prefix.start_ms, through) as fresh:
+                if not await run_storage(self.reader.matches_closed_overlay, slot.source, fresh, leaves):
+                    self.metrics['compaction_deferred'] += 1
+                    return
+                if (not self._current(slot) or pipeline.bar_state.get_state(state.exchange,
+                        state.market_type, state.symbol, state.bucket_start_ms) is not state
+                        or state._history_prefix is not prefix):
+                    raise BlockRevisionChanged('history target changed during compaction')
+                # Check the exact public projection before mutating its owner.
+                # replace shares the immutable leaves; adoption assigns new
+                # indexes and never mutates these original index containers.
+                work = (retained_size((state.source_snapshots, state.source_refs))[0]
+                        + 2 * (sys.getsizeof(state.source_snapshots) + sys.getsizeof(state.source_refs))
+                        + PREFIX_BYTES)
+                with self.reader.memory_budget.reserve('realtime-state', work):
+                    probe = replace(state, _component_accumulator=None)
+                    pipeline.bar_state._component_merge_strategy.adopt_history_prefix(probe, fresh)
+                    fields = ('open', 'high', 'low', 'close', 'volume', 'quote_volume',
+                              'trades', 'taker_buy_base', 'taker_buy_quote', 'enhanced_fields',
+                              'tick_count', 'first_input_at_ms', 'last_input_at_ms', 'last_close_received')
+                    if any(getattr(probe, name) != getattr(state, name) for name in fields):
+                        self.metrics['compaction_deferred'] += 1
+                        return
+                    updated = state.updated_at_ms
+                    self._adopt(slot, fresh, refresh=True)
+                    state.updated_at_ms = updated
+                    state._history_compaction_retry_ms = 0
+                    self.metrics['compactions'] += 1
+                    self.metrics['compacted_components'] += count
+        except (ValueError, BlockUnavailable, BlockRevisionChanged, MemoryBudgetExceeded,
+                ExecutorBusyError):
+            self.metrics['compaction_deferred'] += 1
+
     @asynccontextmanager
     async def hold(self, exchange, market_type, symbol, interval, identity):
         key = (exchange, market_type, symbol, interval, identity)
@@ -375,12 +447,13 @@ class HistoryPrefixRuntime:
         """Called under hold; returns whether the fine input remains applicable."""
         start = pipeline.time_bucket.compute_bucket(incoming.open_time_ms)
         state = pipeline.bar_state.get_state(incoming.exchange, incoming.market_type, incoming.symbol, start)
-        covered = state is not None and state._history_prefix is not None and incoming.open_time_ms < state._history_prefix.through_ms
         states = pipeline.bar_state.get_all_active(incoming.exchange, incoming.market_type, incoming.symbol)
         if state is not None and all(item is not state for item in states):
             states.append(state)
         for item in states:
-            await self._refresh(slot, pipeline, item, emit_events=emit_events)
+            current = await self._refresh(slot, pipeline, item, emit_events=emit_events)
+            if current is not None:
+                await self._compact_tail(slot, pipeline, current, incoming)
         if not self._current(slot):
             raise BlockRevisionChanged('history target detached during refresh')
         if slot.recovering:
@@ -408,4 +481,6 @@ class HistoryPrefixRuntime:
                 return False
         # Only a compact history input is skipped. The current cumulative live
         # tail remains a normal replaceable component, never a second prefix.
-        return not covered
+        state = pipeline.bar_state.get_state(incoming.exchange, incoming.market_type, incoming.symbol, start)
+        return not (state is not None and state._history_prefix is not None
+                    and incoming.open_time_ms < state._history_prefix.through_ms)

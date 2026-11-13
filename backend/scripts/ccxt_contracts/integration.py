@@ -43,6 +43,7 @@ def main() -> int:
         "test_trade_preparation.py", "test_replay_trade_import.py", "test_trade_flow_api.py",
         "test_shared_aggregation_blocks.py", "test_shared_blocks_integration.py",
         "test_history_block_reader.py",
+        "test_history_prefix*.py",
         "test_history_cover_plan.py", "test_mixed_history_reader.py", "test_default_mixed_history_query.py",
         "test_mixed_history_precedence.py",
         "test_history_cover_batch.py", "test_backfill_canonical_planning_reads.py",
