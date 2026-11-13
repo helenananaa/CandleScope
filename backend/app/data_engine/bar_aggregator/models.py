@@ -259,6 +259,9 @@ class BarState:
     # Immutable canonical H127 prefix. Publication retains its coverage proof;
     # the mutable accumulator above remains private to the live builder.
     _history_prefix: Any = field(default=None, repr=False, compare=False)
+    # Failed optional compaction retries after more source progress, rather
+    # than rereading the same unavailable seam on every preview or duplicate.
+    _history_compaction_retry_ms: int = field(default=0, repr=False, compare=False)
 
     def __post_init__(self):
         if not isinstance(self.source_snapshots, ComponentSnapshots):
