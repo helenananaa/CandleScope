@@ -1,0 +1,12 @@
+{
+  "base": "dd5002d38eb3e1b6c1ddbe3713b90f5ae665d750",
+  "measurement_head": "c67d2a2d5ce9978b4937a9aa5225f8bb2ec8769d",
+  "product_head": "ef03074d8e94936c5fe662b9ce2f226fc33e9e7a",
+  "files": {
+    "backend/app/data_engine/storage/kline_sources.py": "8c16033a9a3032a7b3ab065bf9ebdb6ae396dd9fc89a447d0441dc78b8bfedd3",
+    "backend/app/data_engine/storage/native_history_fence.py": "3661ef1a826c95f5c88b97bd7c3014e1b5e82ffb6e8904a68927629472f0f77f",
+    "backend/app/data_engine/storage/revisions.py": "aea05a6085dfdcbd290f2c96f60b1f5a2fb12167f5307de9a25b876499500313",
+    "backend/scripts/ccxt_contracts/integration.py": "bb341e0f2ff2c4818a0151f7fdc20b950ce6c8f4dfb79cc43f3e1bb5aae1ecd0",
+    "backend/tests/test_okx_history_range_fence.py": "cfcfb27665d8914c1cb95a38ff32bf9ce83eda71d72a7147135e6d54415a3b70"
+  }
+}

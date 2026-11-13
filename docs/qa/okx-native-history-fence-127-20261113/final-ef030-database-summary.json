@@ -1,0 +1,108 @@
+{
+  "canonical": [
+    {
+      "interval": "15m",
+      "rows": 1892,
+      "first": 1792827000000,
+      "last": 1794528900000
+    },
+    {
+      "interval": "1m",
+      "rows": 501,
+      "first": 1794500460000,
+      "last": 1794530460000
+    },
+    {
+      "interval": "30m",
+      "rows": 3337,
+      "first": 1788523200000,
+      "last": 1794528000000
+    },
+    {
+      "interval": "45m",
+      "rows": 628,
+      "first": 1792832400000,
+      "last": 1794525300000
+    },
+    {
+      "interval": "5m",
+      "rows": 500,
+      "first": 1794380400000,
+      "last": 1794530100000
+    },
+    {
+      "interval": "90m",
+      "rows": 1112,
+      "first": 1788523200000,
+      "last": 1794522600000
+    }
+  ],
+  "pending_history": [],
+  "ledger": [
+    {
+      "interval": "15m",
+      "status": "filled",
+      "rows": 1
+    },
+    {
+      "interval": "1m",
+      "status": "filled",
+      "rows": 8
+    },
+    {
+      "interval": "1m",
+      "status": "partial",
+      "rows": 1
+    },
+    {
+      "interval": "1m",
+      "status": "queued",
+      "rows": 2
+    },
+    {
+      "interval": "1m",
+      "status": "repairing",
+      "rows": 1
+    },
+    {
+      "interval": "30m",
+      "status": "filled",
+      "rows": 1
+    },
+    {
+      "interval": "45m",
+      "status": "filled",
+      "rows": 3
+    },
+    {
+      "interval": "45m",
+      "status": "superseded",
+      "rows": 1
+    },
+    {
+      "interval": "5m",
+      "status": "filled",
+      "rows": 2
+    },
+    {
+      "interval": "90m",
+      "status": "filled",
+      "rows": 2
+    },
+    {
+      "interval": "90m",
+      "status": "queued",
+      "rows": 1
+    },
+    {
+      "interval": "90m",
+      "status": "repairing",
+      "rows": 1
+    },
+    {
+      "interval": "90m",
+      "status": "superseded",
+      "rows": 1
+    }
+  ]
+}
