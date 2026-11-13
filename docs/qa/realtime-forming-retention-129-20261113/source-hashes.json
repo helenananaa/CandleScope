@@ -1,0 +1,16 @@
+{
+  "base": "00be4ce845134b11154633b1f0e258f2bce4ccd4",
+  "product_head": "8f9089dd803c751cc0b437c430d6603582395980",
+  "files": {
+    ".github/workflows/pine-host-contracts.yml": "55cdf8493a49ff4471ffd8c8e26bbc0ce65f1dac9d9577c030e6799aa92757f1",
+    "backend/app/data_engine/bar_aggregator/aggregator.py": "3be9058719f4c10d3b072dbdd2a314f3682fdbdb404df6f5375475d6184a5a25",
+    "backend/app/data_engine/bar_aggregator/config.py": "95545b354b8f52e8b498d96a0157f25ef5833d02b369c161c6b815caac6b3102",
+    "backend/app/data_engine/bar_aggregator/history_prefix_runtime.py": "8ae7d9d5e08402b377fde5d83b3dfe45c59b1ae5006df2ff849bd2b59c69553c",
+    "backend/scripts/ccxt_contracts/integration.py": "2253d73c0dc1f50c41fa8c592bea704677394044e243ec68b37d6b1e2ddab1ca",
+    "backend/tests/test_closed_component_retention.py": "8a0f7b54a3b8a1e85f1b9af087194faa335f2cced84cd6ae30aa5862877bb8e3",
+    "backend/tests/test_closed_component_retention_sources.py": "ea754d010b3f4a5ca7dcd56c77034e1434a7fd709340f4bcb2cfbb48d0602239",
+    "backend/tests/test_forming_component_retention.py": "b42197a50ad1ca4f6cc4706f3dca7cb5ec32e181ce12a940dacce41c2431bcd8",
+    "backend/tests/test_forming_component_retention_sources.py": "214fbf5ad5f5a2f92e460f703ac59f91c1360558ba567ed0c46e2ab2b69d7e5a",
+    "packages/candlescope-plugin-pine-compat/scripts/qualify_host_contracts.py": "4f38f5294b5b87dc8efb2b5428f15b375edfa7b0409e10e3441ad4710e59e7bd"
+  }
+}

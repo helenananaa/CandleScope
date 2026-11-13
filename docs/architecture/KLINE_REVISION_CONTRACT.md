@@ -327,3 +327,9 @@ these bounds are not a claim that all application memory or RSS is bounded.
    desktop restart acceptance are not claimed by the component tests.
 
 See [verification and measurements](../qa/issue126/D126_BACKEND_VERIFICATION.md).
+
+### First live prefixes and deletion permission
+
+A qualified default fixed-grid forming target with at least 2048 source slots may retire its first 128 confirmed live components through the existing H127/B130/D126 owner, even when startup admitted no history prefix. Closed and first-forming maintenance share the existing bounded metadata queue and timeout loop. Canonical staging runs outside the target lock; final validation must fence the exact retired immutable leaves, target generation, strategy/configuration/storage/budget bindings, and latest target projection. Concurrent forming-tail progress is allowed. Missing or changed evidence retains raw components with bounded diagnostics and progress-based retry; it does not establish a hard retention bound under failures.
+
+Every history-prefix adoption preserves the builder's oldest explicit-delete permission floor separately from fresh canonical acquisition provenance. This includes warm re-adoption and retiring the last raw seam, not just source-revision recovery. A fresh source view cannot grant permission to recreate a target or base series explicitly deleted during the builder's lifetime. Existing D126 transaction checks enforce this distinction. See `docs/qa/realtime-forming-retention-129-20261113` for three full-old-backend SQLite resurrection regressions, bounded live handoff contracts, current native qualification, and retained costs/failures.

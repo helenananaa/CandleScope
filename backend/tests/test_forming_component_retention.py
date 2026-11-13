@@ -128,7 +128,7 @@ def test_unproved_first_prefix_keeps_live_inputs_and_bounds_failed_retries(dm,mo
     asyncio.run(run())
 
 
-@pytest.mark.parametrize('action',['tail','leaf','detach','rebind','cancel','close','disable','storage','config','strategy','method'])
+@pytest.mark.parametrize('action',['tail','dirty-tail','leaf','detach','rebind','cancel','close','disable','storage','config','strategy','method'])
 def test_first_prefix_physical_read_lifetime_and_live_concurrency(dm,monkeypatch,action):
     clock=[1000]
     monkeypatch.setattr('time.time',lambda:clock[0]/1000)
@@ -154,11 +154,15 @@ def test_first_prefix_physical_read_lifetime_and_live_concurrency(dm,monkeypatch
             assert entered.is_set(),dm.history_prefix_runtime.last_forming_compaction
             reserved=dm.memory_budget.snapshot()['reserved_bytes']
             assert reserved>128*1024
-            if action=='tail':
+            if action in {'tail','dirty-tail'}:
                 # No native close commit changes the canonical read view.
                 # The ordinary forming cumulative tail can keep advancing.
                 async with asyncio.timeout(1): await send(values[128],closed=False)
                 assert len(state.source_snapshots)==129
+                if action=='dirty-tail':
+                    await send(dict(values[128],volume=130.,quote_volume=260.,trades=130),closed=False)
+                    assert state._preview_dirty
+                    assert state.preview_input_version>state.preview_computed_version
             elif action=='leaf':
                 changed=dict(values[0],volume=0.,quote_volume=0.)
                 # Change accepted evidence without modifying storage, proving
@@ -190,10 +194,18 @@ def test_first_prefix_physical_read_lifetime_and_live_concurrency(dm,monkeypatch
                 with pytest.raises(asyncio.CancelledError): await task
             else: await task
             if closing is not None: await closing
-            if action=='tail':
+            if action in {'tail','dirty-tail'}:
                 assert state._history_prefix is not None,dm.history_prefix_runtime.last_forming_compaction
-                assert len(state.source_snapshots)==1 and state.volume==sum(r['volume'] for r in values)
+                expected=sum(r['volume'] for r in values)+(action=='dirty-tail')
+                assert len(state.source_snapshots)==1 and state.volume==expected
                 assert state.preview_input_version==state.preview_computed_version
+                if action=='dirty-tail':
+                    assert state.preview_published_version<state.preview_computed_version
+                    clock[0]+=1000
+                    async with asyncio.timeout(2):
+                        while state.preview_published_version<state.preview_computed_version: await asyncio.sleep(.01)
+                    assert ('bar.updated',expected) in events
+                    assert not dm.bar_aggregator._previews.pending
             else:
                 assert state._history_prefix is None and len(state.source_snapshots)==128
                 assert dm.history_prefix_runtime.metrics['forming_compactions']==0
