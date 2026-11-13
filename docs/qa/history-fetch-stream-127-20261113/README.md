@@ -47,7 +47,7 @@
 
 保留前端/runtime/plugins build `ef8f0e0fa6df299a823f4460b701eb1c3c98361f`，覆盖全部 **1001** 个 tracked backend app 文件，前后逐文件哈希、asar 哈希及严格签名通过；是全后端组装包，不是新 release build。
 
-全新 profile、真实公开 OKX REST/WS，无市场库 seed、无响应替换；仅隔离进程使用既有本地 HTTP proxy，未改用户网络配置。45m/90m 首开及显式左翻页 → 1m/5m（每图 500 根）→ 释放/重建 45m/90m → 保存、完整退出、重启恢复。累计 **4483 根已收盘 K 线九字段**与 strict canonical range 比对通过；三个阶段记录实际来源帧，两个完整退出记录分别包含 9/10 个进程。截图已直接检查，图表已绘制；右侧其他行情面板仍有连接/准备状态，未将其计为本批验收。
+全新 profile、真实公开 OKX REST/WS，无市场库 seed、无响应替换；仅隔离进程使用既有本地 HTTP proxy，未改用户网络配置。45m/90m 首开及显式左翻页 → 1m/5m（每图 500 根）→ 释放/重建 45m/90m → 保存、完整退出、重启恢复。累计 **4450 根已收盘 K 线九字段**与 strict canonical range 比对通过；三个阶段记录实际来源帧，两个完整退出记录分别包含 10/10 个进程。截图已直接检查，图表已绘制；右侧其他行情面板仍有连接/准备状态，未将其计为本批验收。
 
 `native-stream-receipt-path` 从既有 storage health 读取到真实 fetcher `payload_kind=receipt`，证明默认生产路径采用新 API；当时最后任务为 1 行，不把它当作大页内存资格。大页/多页由受控和真实 CCXT loopback 分别证明。
 
