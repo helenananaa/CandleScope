@@ -236,3 +236,72 @@ def test_compaction_does_not_add_a_public_event_or_materialize_on_a_preview(dm, 
         assert not recovery
         await runtime.close()
     asyncio.run(check())
+
+
+def test_default_data_manager_router_and_durable_native_delivery_compact_the_live_tail(dm, setup, monkeypatch):
+    from app.data_engine.data_manager.models import DataEventType
+    from app.data_engine.ingestion.models import DataSource, MarketEvent, StreamType
+    rows, _agg, _runtime, _recovery, _current, _feed = setup
+    monkeypatch.setattr(HistoryPrefixRuntime, 'MIN_ROWS', 2048)
+    monkeypatch.setattr(HistoryPrefixRuntime, 'COMPACT_ROWS', 128)
+    dm.query_engine.storage.delete_bars(KEY.symbol, KEY.interval, start_ms=2048 * WIDTH,
+        end_ms=2400 * WIDTH, market_type=KEY.market_type)
+    clock = [2048 * WIDTH + 1000]
+    monkeypatch.setattr('time.time', lambda: clock[0] / 1000)
+    class Ingestion:
+        async def start(self, *, interval, on_market_event, **_identity):
+            assert interval == '1m'
+            self.send = on_market_event
+            return self
+        async def stop(self):
+            pass
+    ingestion = Ingestion()
+    dm.set_ingestion_factory(ingestion)
+    observed = []
+    async def observe(event):
+        observed.append(event.bar.volume)
+    async def check():
+        try:
+            await dm.start()
+            await dm.subscribe_async(observe, symbol=KEY.symbol, interval=TARGET,
+                market_type=KEY.market_type, event_types={DataEventType.BAR_UPDATED},
+                continuity='gap_aware', preserve_updates=True)
+            await dm.ensure_stream(KEY.symbol, TARGET, market_type=KEY.market_type)
+            runtime = dm.history_prefix_runtime
+            assert runtime.snapshot()['last_adoption']['accepted_slots'] == 2048
+            for index in range(2048, 2180):
+                row = rows[index]
+                clock[0] = (index + 1) * WIDTH + 1000
+                event = MarketEvent(event_type=StreamType.KLINE, symbol=KEY.symbol,
+                    exchange=KEY.exchange, market_type=KEY.market_type,
+                    event_time_ms=clock[0], received_at_ms=clock[0], sequence=clock[0],
+                    source=DataSource.WEBSOCKET, data=dict(interval=KEY.interval,
+                        open_time=row.time_ms, close_time=row.time_ms + WIDTH - 1,
+                        is_closed=True, **{name:getattr(row, name) for name in
+                            ('open', 'high', 'low', 'close', 'volume', 'quote_volume',
+                             'trades', 'taker_buy_base', 'taker_buy_quote')}))
+                await ingestion.send(event)
+            current = dm.bar_aggregator.get_bucket_state(KEY.symbol, TARGET, 0, market_type=KEY.market_type)
+            assert runtime.metrics['compactions'] == 1
+            assert current._history_prefix.through_ms == 2176 * WIDTH
+            assert len(current.source_snapshots) == 4
+            assert current.volume == sum(row.volume for row in rows[:2180])
+            async with asyncio.timeout(5):
+                while not observed or observed[-1] != current.volume:
+                    await asyncio.sleep(.01)
+            assert all(a <= b for a, b in zip(observed, observed[1:])), observed
+            # The existing warm-start refresh may publish the unchanged prior
+            # projection before a new source close. Require every new source
+            # result in order, without mistaking those for additional inputs.
+            expected = [sum(row.volume for row in rows[:index + 1]) for index in range(2048, 2180)]
+            progress = [value for index, value in enumerate(observed)
+                        if index == 0 or value != observed[index - 1]]
+            assert progress[-132:] == expected, observed
+            # Every completed native source input went through the default
+            # bridge/persistence path rather than a second source writer here.
+            assert dm.query_engine.storage.count_bars(KEY.symbol, KEY.interval,
+                start_ms=2048 * WIDTH, end_ms=2180 * WIDTH - 1,
+                market_type=KEY.market_type) == 132
+        finally:
+            await dm.shutdown()
+    asyncio.run(check())
