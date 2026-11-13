@@ -10,6 +10,11 @@
       "/steps/2/evidence/action/contextToken",
       "/steps/3/evidence/action/contextToken",
       "/steps/11/evidence/action/contextToken"
+    ],
+    "legacy-0bba": [
+      "/steps/2/evidence/action/contextToken",
+      "/steps/3/evidence/action/contextToken",
+      "/steps/11/evidence/action/contextToken"
     ]
   }
 }

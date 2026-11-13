@@ -22,7 +22,8 @@ for p in sorted(out.iterdir()):
         archive_file(p, ev/(p.name+'.gz'))
 
 redactions = {}
-for name, location in [('initial-c67', out), ('final-ef030', out/'final-native')]:
+for name, location in [('initial-c67', out), ('final-ef030', out/'final-native'),
+                       ('legacy-0bba', out/'legacy-native')]:
     app = location/'CandleScope.app'
     resources = app/'Contents/Resources'
     manifest = json.loads((location/'package-source-manifest.json').read_text())
