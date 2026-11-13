@@ -1017,7 +1017,7 @@ class BarAggregator:
                                    for p in self._pipelines.values())
         handoff = self.history_prefix_runtime
         handoff_bytes = (len(handoff.targets)*1024 + len(handoff.tasks)*8192
-                         + len(handoff.closed_jobs)*1024) if handoff else 0
+                         + len(handoff.component_jobs)*1024) if handoff else 0
         return {"active_bars": active, "closed_bars": closed, "components": components,
                 "queued_snapshots": len(events), "queued_components": queued_components,
                 "buffered_handoff_states": len(buffered),
@@ -1065,7 +1065,7 @@ class BarAggregator:
                 self._publisher._memory_roots(),
                 self._previews.roots(),
                 list(self.history_prefix_runtime.targets.values()) if self.history_prefix_runtime else [],
-                self.history_prefix_runtime.closed_jobs if self.history_prefix_runtime else {},
+                self.history_prefix_runtime.component_jobs if self.history_prefix_runtime else {},
                 [preparation.memory_roots() for preparation in list(self._active_preparations)]]
 
     def snapshot(self) -> dict:
@@ -1295,8 +1295,8 @@ class BarAggregator:
                 # may trigger expired evictions from the closed bars cache.
                 await self._drain_eviction_buffers(pipeline, emit_events=emit_events)
 
-        if emit_events and runtime is not None and state.status == BarStatus.CLOSED:
-            runtime.schedule_closed(state,bar_input)
+        if emit_events and runtime is not None:
+            runtime.schedule_components(state,bar_input)
 
     async def _check_event_driven_close(
         self,
@@ -1433,7 +1433,7 @@ class BarAggregator:
                 await asyncio.sleep(1.0)  # check every second
                 await self._check_timeouts()
                 if self.history_prefix_runtime is not None:
-                    await self.history_prefix_runtime.drain_closed()
+                    await self.history_prefix_runtime.drain_components()
             except asyncio.CancelledError:
                 break
             except Exception as exc:
