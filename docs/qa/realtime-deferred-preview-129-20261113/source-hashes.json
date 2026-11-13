@@ -1,0 +1,26 @@
+{
+  "base": "8a85612d107dae02c733b4416241c901e9252735",
+  "product_head": "b70d7924e3761ea5295c66d6ca59bb703edd6932",
+  "files": {
+    ".github/workflows/pine-host-contracts.yml": "ba1634695fc02800c4ee76a03e3ad966871c7916a741ab1212d06c5652a49325",
+    "backend/app/api/v1/settings.py": "453e1101989335b073cb27d292dc5a0cc9de99cb9cf25ae2ea938598b343856e",
+    "backend/app/data_engine/bar_aggregator/aggregator.py": "2c01077e00b62acecbe67b5eeebddbe9bdf6769130d3007f7e734d77d1ad4498",
+    "backend/app/data_engine/bar_aggregator/bar_state.py": "6168a5ab8a91b381b5183e5ba73dc225cd80b1f0f9f1975582e6c2f04e505816",
+    "backend/app/data_engine/bar_aggregator/config.py": "4af2d490631aad1e8617edbf5955ac7c739a8060d66c974b4a1a0aedb5e1adbd",
+    "backend/app/data_engine/bar_aggregator/finalizer.py": "f51ab7e9e1cf7387144a9ca1466693252e7c649af7a547317422ec8ed3583d1c",
+    "backend/app/data_engine/bar_aggregator/models.py": "20d355fcc224a0c0a6709f4ab821583b5698cccd15adae3c91baf6c7393a7665",
+    "backend/app/data_engine/bar_aggregator/preview_scheduler.py": "1992ee1fcf9c9697eec42440d7eadc17e57a7c5846eb09f11087cdb3a88d3361",
+    "backend/app/data_engine/bar_aggregator/publisher.py": "929df8b0ea5fb6fe009c5f12b5bdf3a89727a1602321a6a74f4936c07172a9a1",
+    "backend/app/data_engine/data_manager/aggregator_bridge.py": "37e26c7e70fc56cc0a7f0a4ad61e58edd844dd6286d4657bf233bbece1bf0084",
+    "backend/app/data_engine/data_manager/manager.py": "583dda2e625c5739165bdd3e79bfed67f84db910972a8cd1cf7a5fa751f25485",
+    "backend/app/data_engine/data_manager/models.py": "4e951c4edf0c7466f6888807ff8d6ccc2a591f7146d132747fcf93e0668f7d39",
+    "backend/app/data_engine/storage/kline_sources.py": "6809e538cce26885648bd6fce95e41a4a3adb5f5538b47dfe2fe08650b2bad1e",
+    "backend/app/data_engine/storage/klines_repo.py": "1082ae860f65f62e42d07029da182c5cb397090e5dc4896c9d811534e48149ac",
+    "backend/scripts/ccxt_contracts/integration.py": "77f69a257ba937483cfcfc3285ab3295fdd68555dcff4ce03536bb90d48c8f09",
+    "backend/tests/test_deferred_component_preview.py": "7557a971007b93f8fae085ca13ce5279d36dd30ae37e8f49bf511e4b05c0cd4f",
+    "backend/tests/test_deferred_component_preview_pipeline.py": "a6fe270deddc90b5c893c3007346fa2b78db74a448f2eedb5331c2db277d220e",
+    "backend/tests/test_deferred_component_preview_prefix.py": "4898ae37336fb1de92cc51c28950b8aaf91d5eed1ac49d9aa6c127e0750cfcfe",
+    "backend/tests/test_deferred_component_preview_sources.py": "98517c3f55f31bdec5c6eae0c9de109b708a6312143267263d4d430d40fd38e4",
+    "packages/candlescope-plugin-pine-compat/scripts/qualify_host_contracts.py": "44d339bd7f2654a4cce7a71ab900e179c04a2e272b0f6ad1186973b0c01c54e1"
+  }
+}

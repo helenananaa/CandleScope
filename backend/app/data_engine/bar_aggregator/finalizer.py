@@ -308,6 +308,16 @@ class Finalizer:
         if state.status != BarStatus.FORMING:
             return None
 
+        # Builtin timer predicates use boundaries/close authority only. An
+        # ordinary timer poll must not eagerly calculate an undemanded tail.
+        builtin = {BatchFinalizer,SourceCloseFinalizer,CompositeCloseFinalizer,
+                   EventDrivenFinalizer,TimeBasedFinalizer}
+        if trigger.trigger_type != 'timer' or any(
+                type(strategy) not in builtin
+                or getattr(strategy.should_close,'__func__',None) is not type(strategy).should_close
+                for _,strategy in self._strategies):
+            state.materialize_preview()
+
         for name, strategy in self._strategies:
             # Backfill is a finite component set. Only BatchFinalizer may
             # decide when that set proves a complete target bucket; letting an
@@ -317,6 +327,7 @@ class Finalizer:
                 continue
             try:
                 if strategy.should_close(state, trigger):
+                    state.materialize_preview()
                     state.close_reason = name
                     state.finality = (
                         BarFinality.AUTHORITATIVE
@@ -360,6 +371,7 @@ class Finalizer:
         Returns:
             BarEvent(CLOSED or EXPIRED)
         """
+        state.materialize_preview()
         unconfirmed = self.requires_authoritative_close(state)
         state.close_reason = (
             "shutdown_unconfirmed" if unconfirmed else "shutdown_fallback"

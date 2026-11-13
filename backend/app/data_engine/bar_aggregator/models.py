@@ -262,6 +262,21 @@ class BarState:
     # Failed optional compaction retries after more source progress, rather
     # than rereading the same unavailable seam on every preview or duplicate.
     _history_compaction_retry_ms: int = field(default=0, repr=False, compare=False)
+    # Loop-owned execution watermarks, separate from durable data revisions.
+    preview_input_version: int = field(default=0, repr=False, compare=False)
+    preview_computed_version: int = field(default=0, repr=False, compare=False)
+    preview_published_version: int = field(default=0, repr=False, compare=False)
+    _preview_publications: int = field(default=0, repr=False, compare=False)
+    preview_fallback_reason: str = field(default='', repr=False, compare=False)
+    _preview_dirty: bool = field(default=False, repr=False, compare=False)
+    _preview_deferred_inputs: int = field(default=0, repr=False, compare=False)
+    _preview_calculations: int = field(default=0, repr=False, compare=False)
+
+    def materialize_preview(self):
+        """Owner-side read/barrier: never publish scalars behind accepted inputs."""
+        if self._preview_dirty:
+            from .bar_state import materialize_component_preview
+            materialize_component_preview(self)
 
     def __post_init__(self):
         if not isinstance(self.source_snapshots, ComponentSnapshots):
@@ -313,6 +328,7 @@ class BarState:
         return 0 < len(matched) == len(self.source_snapshots)
 
     def __deepcopy__(self, memo):
+        self.materialize_preview()
         # Builder scalars are immutable. Share immutable component values and
         # copy only their index; foreign mutable components retain isolation.
         snapshots = (self.source_snapshots.publication_copy(memo)
@@ -321,7 +337,8 @@ class BarState:
                          for key, value in self.source_snapshots.items()
                      })
         result = replace(self, source_snapshots=snapshots,
-                         source_refs=deepcopy(self.source_refs, memo), _component_accumulator=None)
+                         source_refs=deepcopy(self.source_refs, memo), _component_accumulator=None,
+                         _preview_publications=0)
         memo[id(self)] = result
         return result
 
@@ -347,7 +364,13 @@ class BarState:
         if not isinstance(self.finality, BarFinality):
             self.finality = BarFinality(str(self.finality))
 
+    @property
+    def bar_key(self):
+        return (f"{self.identity_prefix}{self.exchange}:{self.market_type}:{self.symbol}"
+                f"@{self.interval}:{self.bucket_start_ms}")
+
     def to_dict(self) -> dict:
+        self.materialize_preview()
         return {
             "symbol": self.symbol,
             "exchange": self.exchange,
@@ -384,6 +407,7 @@ class BarState:
 
     def to_ohlcv(self) -> dict:
         """Lightweight OHLCV dict for charting / storage."""
+        self.materialize_preview()
         return {
             "time": self.bucket_start_ms // 1000,  # seconds for lightweight-charts
             "open": self.open,
@@ -395,6 +419,7 @@ class BarState:
 
     def to_storage_dict(self) -> dict:
         """Full dict for database storage."""
+        self.materialize_preview()
         return {
             **({"source_refs": [dict(ref) for ref in self.source_refs.values()]} if self.source_refs else {}),
             "open_time": self.bucket_start_ms,
@@ -454,10 +479,7 @@ class BarEvent:
     @property
     def bar_key(self) -> str:
         """Unique key for this bar: symbol@interval:bucket_start."""
-        return (
-            f"{self.bar.identity_prefix}{self.bar.exchange}:{self.bar.market_type}:{self.bar.symbol}"
-            f"@{self.bar.interval}:{self.bar.bucket_start_ms}"
-        )
+        return self.bar.bar_key
 
 
 # ═══════════════════════════════════════════════════════════════

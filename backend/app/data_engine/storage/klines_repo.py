@@ -1600,6 +1600,14 @@ class KlinesRepoAdapter:
         from .kline_sources import closed_components
         return closed_components(series, start_ms, end_ms)
 
+    def validate_component_preview(self, components, **target) -> str:
+        """Read source proofs and canonical invalidation in one bounded view."""
+        from contextlib import closing
+        from .kline_sources import validate_component_preview
+        with closing(self.revision_store.connect()) as conn,conn:
+            conn.execute('BEGIN')
+            return validate_component_preview(conn,components,**target)
+
     def __init__(
         self,
         exchange: str = DEFAULT_EXCHANGE,

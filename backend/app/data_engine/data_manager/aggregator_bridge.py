@@ -41,6 +41,7 @@ class AggregatorBridge:
         self._storage_provider = storage_provider
         self._mark_bar_received = mark_bar_received
         self._is_started = is_started
+        self.preview_memory_budget = None
         self.delivery = DurableBarDelivery(storage_provider, self._publish,
                                            require_recovery=self._require_recovery,
                                            recovery_lookback_bars=recovery_lookback_bars,
@@ -51,6 +52,41 @@ class AggregatorBridge:
         if not callable(reader):
             raise BarDeliveryUnavailable("storage cannot restore source components")
         return await run_storage(reader, series, start_ms, end_ms)
+
+    def preview_source_binding(self):
+        storage = self._storage_provider()
+        if (callable(getattr(storage,'validate_component_preview',None))
+                and getattr(storage,'revision_store',None) is not None
+                and self.preview_memory_budget is not None):
+            return storage
+        return None
+
+    async def validate_component_preview(self, state, revision_floor, *, is_current=lambda: True):
+        storage = self.preview_source_binding()
+        if storage is None or type(revision_floor) is not int or not 0<len(state.source_snapshots)<=256:
+            return 'unavailable'
+        components = tuple(state.source_snapshots.values())
+        if any(row is None or getattr(row,'estimated_bytes',8193)>8192 for row in components):
+            return 'unavailable'
+        budget = self.preview_memory_budget
+        version = state.preview_input_version
+        # References can outlive replacements while physical reads await.
+        # Charge their full frozen values, not only the tuple container.
+        with budget.reserve('history-query',16384+sum(row.estimated_bytes for row in components)):
+            try:
+                status = await run_storage(storage.validate_component_preview,components,
+                    symbol=state.symbol,interval=state.interval,exchange=state.exchange,
+                    market_type=state.market_type,series_identity=state.identity,
+                    revision_floor=revision_floor)
+            finally:
+                components = ()
+        if (self._storage_provider() is not storage or state.preview_input_version != version
+                or not is_current()):
+            return 'superseded'
+        if status == 'canonical_changed':
+            self._require_recovery(SeriesKey.create(state.symbol,state.interval,exchange=state.exchange,
+                                                    market_type=state.market_type,identity=state.identity))
+        return status
 
     async def on_bar_event(self, event: BarEvent) -> str | None:
         """Convert an aggregator event into cache updates and DataEvents."""

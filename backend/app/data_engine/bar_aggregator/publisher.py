@@ -103,6 +103,7 @@ class BarAggregatorPublisher:
         self._update_requirement_errors = 0
         self._update_requirement_warned = False
         self._required_updates_unthrottled = 0
+        self._preview_wakeup = None
 
     @contextmanager
     def _observe_source_handoff(self, bar):
@@ -282,6 +283,7 @@ class BarAggregatorPublisher:
         # ticks may mutate its builder while callbacks are suspended.
         original_bar = event.bar
         event = deepcopy(event)
+        original_bar._preview_publications += 1
         self._events_emitted += 1
         token = self._hold_payload("dispatch", event)
         try:
@@ -301,8 +303,13 @@ class BarAggregatorPublisher:
                 self._pending_source_events.clear()
             # Push to subscriber queues
             self._enqueue(event)
+            original_bar.preview_published_version = max(original_bar.preview_published_version,
+                                                        event.bar.preview_computed_version)
         finally:
             self._release_payload(token)
+            original_bar._preview_publications -= 1
+            if self._preview_wakeup is not None and not original_bar._preview_publications:
+                self._preview_wakeup(original_bar)
 
     async def _emit_bar_event(self, event_type, bar, previous=None):
         # Convenience-call arguments are real retained builder references even

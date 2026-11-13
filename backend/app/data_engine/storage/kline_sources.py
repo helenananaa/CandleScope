@@ -379,6 +379,93 @@ def references_current(conn, refs: list[dict]) -> bool:
     return True
 
 
+def validate_component_preview(conn, components, *, symbol, interval, exchange,
+                               market_type, series_identity, revision_floor) -> str:
+    """No writes/acknowledgments: validate at most 256 immutable source leaves.
+
+    A superseding observation is normal source progress, not a repair request.
+    Canonical deletion/amendment requires the existing snapshot recovery path.
+    Unknown enhancements remain unknown, not a comparison against diagnostic zero.
+    """
+    from .revisions import current_revision,series_change,series_values
+    from app.data_engine.kline_quality import kline_source_quality
+    from app.data_engine.market_data.kline_metrics import declared_enhanced_fields
+    from app.data_engine.interval_policy import parse_interval_spec
+    if (not 0<len(components)<=256 or type(revision_floor) is not int
+            or not series_identity.is_legacy_default_for(exchange)):
+        return 'unavailable'
+    if revision_floor>current_revision(conn):
+        return 'canonical_changed'
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='kline_source_heads'").fetchone() is None:
+        return 'unavailable'
+    source_values=set()
+    # References and all scalar comparisons share this transaction. Decode one
+    # bounded normalized row at a time; never retain all envelopes or source rows.
+    for held in components:
+        ref=held.get('source_ref')
+        if ref is None:
+            # A warm-start canonical leaf may predate source-journal receipts.
+            # It still needs an exact current canonical comparison below.
+            width=held['close_time_ms']+1-held['open_time_ms']
+            if not held['is_closed'] or width<=0 or width%60000:
+                return 'unavailable'
+            spec=parse_interval_spec(str(width//60000)+'m')
+            if spec is None:
+                return 'unavailable'
+            source_interval=spec.canonical
+            mask=held['enhanced_fields']
+        else:
+            if (set(ref)!={'series','open_time','revision'} or not isinstance(ref['series'],str)
+                    or len(ref['series'])>1024 or type(ref['open_time']) is not int
+                    or type(ref['revision']) is not int):
+                return 'unavailable'
+            try:
+                source=json.loads(ref['series'])
+            except ValueError:
+                return 'unavailable'
+            if (not isinstance(source,list) or len(source)!=4
+                    or source[:3]!=[exchange,market_type,symbol] or not isinstance(source[3],str)
+                    or ref['open_time']!=held['open_time_ms']):
+                return 'unavailable'
+            source_interval=source[3]
+            row=conn.execute('''SELECT h.revision,h.is_closed,
+                CASE WHEN length(o.data_json)<=8192 THEN o.data_json ELSE NULL END AS data_json
+                FROM kline_source_heads h JOIN kline_source_observations o ON o.id=h.observation_id
+                WHERE h.series=? AND h.open_time=?''',(ref['series'],ref['open_time'])).fetchone()
+            if row is None or row['revision']!=ref['revision']:
+                return 'superseded'
+            if row['data_json'] is None:
+                return 'unavailable'
+            data=json.loads(row['data_json'])
+            mask=declared_enhanced_fields(exchange,market_type,data)
+            if (data.get('open_time')!=held['open_time_ms'] or data.get('close_time')!=held['close_time_ms']
+                    or bool(row['is_closed'])!=held['is_closed'] or mask!=held['enhanced_fields']
+                    or any(data.get(name)!=held[name] for name in ('open','high','low','close','volume',*mask))):
+                return 'unavailable'
+        values=series_values(symbol,source_interval,exchange,market_type,series_identity)
+        source_values.add(values)
+        if len(source_values)>31:
+            return 'unavailable'
+        change=series_change(conn,values)
+        if change is not None and change['delete_revision']>revision_floor:
+            return 'canonical_changed'
+        where,params,_=klines_repo._series_where(exchange=exchange,market_type=market_type,
+            symbol=symbol,interval=source_interval,series_identity=series_identity)
+        canonical=conn.execute('SELECT '+','.join((*_VALUES,'source'))+' FROM klines WHERE '
+            +' AND '.join(where)+' AND open_time=?',(*params,held['open_time_ms'])).fetchone()
+        if held['is_closed']:
+            if (canonical is None or any(canonical[name]!=held[name] for name in
+                    ('open','high','low','close','volume',*mask))
+                    or canonical['close_time']!=held['close_time_ms']):
+                return 'canonical_changed'
+        elif canonical is not None and kline_source_quality(canonical['source']).trusted_final:
+            return 'canonical_changed'
+    target=series_change(conn,series_values(symbol,interval,exchange,market_type,series_identity))
+    if target is not None and target['revision']>revision_floor:
+        return 'canonical_changed'
+    return 'current'
+
+
 def closed_components(key: str, start: int, end: int) -> list[dict]:
     """Rebuild a cold derived bucket from its durable native components."""
     with closing(klines_repo._connect()) as conn:

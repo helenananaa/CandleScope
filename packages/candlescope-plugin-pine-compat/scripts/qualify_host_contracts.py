@@ -48,6 +48,8 @@ def main():
         "test_native_calendar_basis.py", "test_native_fixed_anchor.py",
         "test_pine_prefix_reply.py", "test_pyne_removal.py",
         "test_preview_update_requirements.py", "test_event_bus_routing_index.py",
+        "test_deferred_component_preview.py", "test_deferred_component_preview_pipeline.py",
+        "test_deferred_component_preview_prefix.py",
         "test_history_prefix.py", "test_history_prefix_overlay.py",
         "test_history_prefix_runtime.py", "test_history_prefix_retention.py",
         "test_history_fetch_stream.py", "test_history_fetch_stream_engine.py",
