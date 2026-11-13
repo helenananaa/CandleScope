@@ -65,7 +65,7 @@ async def prepare(dm, clock, count, *, prefix=False):
         await ingestion.send(MarketEvent(event_type=StreamType.KLINE,symbol='BTCUSDT',exchange='binance',
             market_type='futures',event_time_ms=clock[0],received_at_ms=clock[0],sequence=clock[0],
             source=DataSource.WEBSOCKET,data=dict(interval='1m',is_closed=True,**last)))
-        if drain: await dm.history_prefix_runtime.drain_closed()
+        if drain: await dm.history_prefix_runtime.drain_components()
     return values,interval,state,observed,close
 
 
@@ -263,7 +263,7 @@ def test_existing_timer_drains_closed_work_without_blocking_the_next_forming_buc
             await close(drain=False)
             async with asyncio.timeout(5):
                 while not entered.is_set(): await asyncio.sleep(.01)
-            assert runtime.snapshot()['closed_job_inflight']
+            assert runtime.snapshot()['component_job_inflight']
             value=rows(8)[-1]
             forming=replace(component(value),is_closed=False)
             async with asyncio.timeout(1):
@@ -311,7 +311,7 @@ def test_bounded_maintenance_jobs_drain_one_and_detach_without_deleting_history(
     clock=[1000]
     monkeypatch.setattr('time.time',lambda:clock[0]/1000)
     runtime=dm.history_prefix_runtime
-    monkeypatch.setattr(runtime,'MAX_CLOSED_JOBS',2)
+    monkeypatch.setattr(runtime,'MAX_COMPONENT_JOBS',2)
     async def run():
         try:
             _,interval,first,_,close=await prepare(dm,clock,7)
@@ -323,7 +323,7 @@ def test_bounded_maintenance_jobs_drain_one_and_detach_without_deleting_history(
             dm.bar_aggregator._timeout_task=None
             await close(drain=False)
             for value in rows(21)[7:]: await close(drain=False,last=value)
-            assert len(runtime.closed_jobs)==2 and runtime.metrics['closed_jobs_refused']==1
+            assert len(runtime.component_jobs)==2 and runtime.metrics['component_jobs_refused']==1
             async with asyncio.timeout(5):
                 while True:
                     await dm.aggregator_bridge.delivery.flush()
@@ -331,20 +331,20 @@ def test_bounded_maintenance_jobs_drain_one_and_detach_without_deleting_history(
                     if len(stored)==3: break
                     await asyncio.sleep(.01)
             assert [row['volume'] for row in stored]==[28,77,126]
-            await runtime.drain_closed()
-            assert runtime.metrics['closed_compactions']==1 and len(runtime.closed_jobs)==1
+            await runtime.drain_components()
+            assert runtime.metrics['closed_compactions']==1 and len(runtime.component_jobs)==1
             assert not first.source_snapshots
             engine=dm.bar_aggregator.get_pipeline(interval).bar_state
             assert len(engine.get_closed('binance','futures','BTCUSDT',7*WIDTH).source_snapshots)==7
             dm.bar_aggregator.remove_target('BTCUSDT',interval,market_type='futures')
-            assert not runtime.closed_jobs
+            assert not runtime.component_jobs
             assert len(dm.query_engine.storage.query_bars('BTCUSDT',interval,market_type='futures'))==3
         finally: await dm.shutdown()
         assert dm.memory_budget.snapshot()['reserved_bytes']==0
     asyncio.run(run())
 
 
-def test_obsolete_readback_preserves_newer_closed_jobs_for_the_same_target(dm,monkeypatch):
+def test_obsolete_readback_preserves_newer_component_jobs_for_the_same_target(dm,monkeypatch):
     clock=[1000]
     monkeypatch.setattr('time.time',lambda:clock[0]/1000)
     runtime=dm.history_prefix_runtime
@@ -365,12 +365,12 @@ def test_obsolete_readback_preserves_newer_closed_jobs_for_the_same_target(dm,mo
             async with asyncio.timeout(5):
                 while not entered.is_set(): await asyncio.sleep(.01)
             for value in rows(14)[7:]: await close(drain=False,last=value)
-            assert len(runtime.closed_jobs)==1
+            assert len(runtime.component_jobs)==1
             blocked[0]=False;released.set()
             await task
             assert first._history_prefix is None and len(first.source_snapshots)==7
-            assert len(runtime.closed_jobs)==1
-            await runtime.drain_closed()
+            assert len(runtime.component_jobs)==1
+            await runtime.drain_components()
             second=dm.bar_aggregator.get_pipeline(interval).bar_state.get_closed('binance','futures','BTCUSDT',7*WIDTH)
             assert second._history_prefix.complete and not second.source_snapshots
         finally:

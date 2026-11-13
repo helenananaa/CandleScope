@@ -59,7 +59,7 @@ def test_real_source_correction_waits_for_original_native_commit_before_refresh(
                 event=await source(index*60000,100)
                 await ingestion.send(event)
                 kline_sources.acknowledge(event.data['source_ref'])
-            if retire: await dm.history_prefix_runtime.drain_closed()
+            if retire: await dm.history_prefix_runtime.drain_components()
             engine=dm.bar_aggregator.get_pipeline('7m',exchange='okx').bar_state
             state=engine.get_closed('okx','spot','BTC-USDT',0)
             assert state._history_prefix.complete

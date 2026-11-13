@@ -465,7 +465,7 @@ class DataManager(DataManagerCore):
         self.history_prefix_runtime = (
             HistoryPrefixRuntime(
                 HistoryPrefixReader(self.query_engine), self.bar_aggregator,
-                self.aggregator_bridge._require_recovery, flush_delivery=self.aggregator_bridge.delivery.flush,
+                self.aggregator_bridge._require_recovery, flush_delivery=self.aggregator_bridge.delivery.flush_pending,
             ) if HISTORY_PREFIX_ENABLED else None
         )
         self.bar_aggregator.history_prefix_runtime = self.history_prefix_runtime

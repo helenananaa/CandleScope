@@ -48,7 +48,7 @@ class HistoryPrefixRuntime:
     # prefixes. Small histories keep the lower-cost existing component path.
     MIN_ROWS = 2048
     COMPACT_ROWS = 128
-    MAX_CLOSED_JOBS = 128
+    MAX_COMPONENT_JOBS = 128
 
     def __init__(self, reader, aggregator, require_recovery, *, flush_delivery=None):
         self.aggregator = aggregator
@@ -56,30 +56,33 @@ class HistoryPrefixRuntime:
         self.require_recovery = require_recovery
         self.flush_delivery = flush_delivery
         self.targets = {}
-        # IDs/epoch/source spelling only; the existing closed-state index owns
+        # IDs/epoch/source spelling only; the existing builder indexes own
         # payloads. The existing timeout loop drains one job, without a new timer.
-        self.closed_jobs = OrderedDict()
-        self._closed_draining = False
+        self.component_jobs = OrderedDict()
+        self._component_draining = False
         self.tasks = set()
         self.seeding = set()
         self.closing = False
         self.last_adoption = None
         self.last_closed_compaction = None
+        self.last_forming_compaction = None
         self._input_read_scope = ContextVar("history_prefix_input_read_scope", default=None)
         self.metrics = dict(adoptions=0, validations=0, refreshes=0, empty=0, failures=0,
                             adopted_pages=0, adopted_storage_rows=0, adopted_cache_hits=0,
                             compactions=0, compacted_components=0, compaction_deferred=0,
                             closed_compactions=0, closed_compacted_components=0,
                             closed_compaction_deferred=0, closed_compaction_pages=0,
-                            closed_jobs_scheduled=0, closed_jobs_refused=0, closed_jobs_peak=0)
+                            forming_compactions=0, forming_compacted_components=0, forming_compaction_deferred=0,
+                            component_jobs_scheduled=0, component_jobs_refused=0, component_jobs_peak=0)
 
     def snapshot(self):
         return {**self.metrics, 'targets': len(self.targets), 'tasks': len(self.tasks),
                 'seeding': len(self.seeding), 'max_targets': self.MAX_TARGETS,
                 'max_tasks': self.MAX_TASKS, 'minimum_prefix_rows': self.MIN_ROWS, 'closing': self.closing,
                 'last_adoption': dict(self.last_adoption) if self.last_adoption else None,
-                'closed_jobs': len(self.closed_jobs), 'max_closed_jobs': self.MAX_CLOSED_JOBS,
-                'closed_job_inflight': self._closed_draining,
+                'component_jobs': len(self.component_jobs), 'max_component_jobs': self.MAX_COMPONENT_JOBS,
+                'component_job_inflight': self._component_draining,
+                'last_forming_compaction': dict(self.last_forming_compaction) if self.last_forming_compaction else None,
                 'last_closed_compaction': dict(self.last_closed_compaction) if self.last_closed_compaction else None}
 
     def _current(self, slot):
@@ -88,9 +91,9 @@ class HistoryPrefixRuntime:
 
     def detach(self, key):
         self.targets.pop(key, None)
-        for job in tuple(self.closed_jobs):
-            if job[0] == key: self.closed_jobs.pop(job,None)
-        if not self.closed_jobs: self.closed_jobs.clear()
+        for job in tuple(self.component_jobs):
+            if job[0] == key: self.component_jobs.pop(job,None)
+        if not self.component_jobs: self.component_jobs.clear()
 
     def owns_target(self, source, interval):
         token = self.aggregator.history_target_token(source, interval)
@@ -129,7 +132,7 @@ class HistoryPrefixRuntime:
             except asyncio.CancelledError:
                 cancelled = True
         self.targets.clear()
-        self.closed_jobs.clear()
+        self.component_jobs.clear()
         if cancelled:
             raise asyncio.CancelledError
 
@@ -362,8 +365,6 @@ class HistoryPrefixRuntime:
         closed_rebuild = (self.flush_delivery is not None and state.status == BarStatus.CLOSED
                           and state.finality == BarFinality.AUTHORITATIVE)
         through = state.bucket_end_ms if closed_rebuild else prefix.through_ms
-        delete_floor = (state.canonical_recovery_delete_floor if state.canonical_recovery_delete_floor is not None
-                        else state.acquisition_revision)
         try:
             async with self.reader.stage(slot.source, prefix.start_ms, through,
                                          require_complete=False) as fresh:
@@ -371,10 +372,6 @@ class HistoryPrefixRuntime:
                                                 state.symbol, state.bucket_start_ms) is not state:
                     raise BlockRevisionChanged('history builder replaced during refresh')
                 adopted = self._adopt(slot, fresh, refresh=True)
-                if closed_rebuild and fresh.complete:
-                    current = pipeline.bar_state.get_state(state.exchange,state.market_type,state.symbol,state.bucket_start_ms)
-                    current.canonical_recovery_delete_floor = delete_floor
-                    adopted.canonical_recovery_delete_floor = delete_floor
         except EmptyHistoryPrefix:
             if not self._current(slot):
                 raise BlockRevisionChanged('empty history target detached')
@@ -417,14 +414,19 @@ class HistoryPrefixRuntime:
             state._history_compaction_retry_ms = incoming.open_time_ms + count * prefix.source_width_ms
             self.metrics['compaction_deferred'] += 1
 
-    def schedule_closed(self, state, incoming):
+    def schedule_components(self, state, incoming):
         """Admit bounded metadata after publication; never retain raw payloads."""
         agg = self.aggregator
-        if (self.closing or not agg._previews.running or not agg.config.compact_closed_components
+        forming = state.status == BarStatus.FORMING
+        if (self.closing or not agg._previews.running
                 or agg.memory_budget is not self.reader.memory_budget
                 or incoming.merge_mode != MergeMode.COMPONENT or not state.source_snapshots
-                or state.status != BarStatus.CLOSED or state.finality != BarFinality.AUTHORITATIVE
-                or state._closed_compaction_attempt_version == state.preview_input_version):
+                or (not forming and (not agg.config.compact_closed_components
+                    or state.status != BarStatus.CLOSED or state.finality != BarFinality.AUTHORITATIVE
+                    or state._closed_compaction_attempt_version == state.preview_input_version))
+                or (forming and (not agg.config.compact_forming_components or not incoming.is_closed
+                    or state._history_prefix is not None or len(state.source_snapshots) < self.COMPACT_ROWS
+                    or incoming.open_time_ms < state._history_compaction_retry_ms))):
             return
         base,target = parse_interval_spec(incoming.source_interval),parse_interval_spec(state.interval)
         if (base is None or target is None or base.alignment is not IntervalAlignment.FIXED_EPOCH
@@ -432,6 +434,8 @@ class HistoryPrefixRuntime:
                 or not 60000 <= base.nominal_ms <= 86400000 or target.nominal_ms % base.nominal_ms
                 or not 2 <= target.nominal_ms//base.nominal_ms <= MAX_PREFIX_ROWS
                 or not state.identity.is_legacy_default_for(state.exchange)):
+            return
+        if forming and target.nominal_ms//base.nominal_ms < self.MIN_ROWS:
             return
         from app.data_engine.data_manager.models import SeriesKey
         source = SeriesKey.create(state.symbol,base.canonical,exchange=state.exchange,
@@ -441,40 +445,177 @@ class HistoryPrefixRuntime:
             return
         key = (token[0],state.bucket_start_ms)
         try:
-            if key not in self.closed_jobs:
-                if len(self.closed_jobs) >= self.MAX_CLOSED_JOBS:
-                    raise MemoryBudgetExceeded('closed maintenance capacity')
+            if key not in self.component_jobs:
+                if len(self.component_jobs) >= self.MAX_COMPONENT_JOBS:
+                    raise MemoryBudgetExceeded('component maintenance capacity')
                 with self.reader.memory_budget.reserve('realtime-state',1024) as lease:
-                    lease.retain(1024,lambda:self.closed_jobs.__setitem__(key,(token[1],base.canonical)))
-                self.metrics['closed_jobs_scheduled'] += 1
-                self.metrics['closed_jobs_peak'] = max(self.metrics['closed_jobs_peak'],len(self.closed_jobs))
+                    lease.retain(1024,lambda:self.component_jobs.__setitem__(key,(token[1],base.canonical)))
+                self.metrics['component_jobs_scheduled'] += 1
+                self.metrics['component_jobs_peak'] = max(self.metrics['component_jobs_peak'],len(self.component_jobs))
             else:
-                self.closed_jobs[key] = (token[1],base.canonical)
+                self.component_jobs[key] = (token[1],base.canonical)
         except MemoryBudgetExceeded:
-            self.metrics['closed_jobs_refused'] += 1
-            self.last_closed_compaction = dict(symbol=state.symbol,interval=state.interval,
+            self.metrics['component_jobs_refused'] += 1
+            detail = dict(symbol=state.symbol,interval=state.interval,
                 exchange=state.exchange,market_type=state.market_type,bucket_start_ms=state.bucket_start_ms,
                 components=len(state.source_snapshots),reason='admission_refused')
+            if forming: self.last_forming_compaction = detail
+            else: self.last_closed_compaction = detail
 
-    async def drain_closed(self):
+    async def drain_components(self):
         """One bounded maintenance job on the original timeout/owner lifecycle."""
-        if (self.closing or self._closed_draining or not self.closed_jobs
+        if (self.closing or self._component_draining or not self.component_jobs
                 or asyncio.current_task() in self.tasks):
             return
-        self._closed_draining = True
+        self._component_draining = True
         try:
-            (key,start),(epoch,source_interval) = self.closed_jobs.popitem(last=False)
-            if not self.closed_jobs: self.closed_jobs.clear()
+            (key,start),(epoch,source_interval) = self.component_jobs.popitem(last=False)
+            if not self.component_jobs: self.component_jobs.clear()
             agg = self.aggregator
             if agg._target_epochs.get(key) is not epoch:
                 return
             exchange,market_type,symbol,interval,identity = key
             pipeline = agg._pipelines.get(agg._pipeline_key(interval,exchange,identity))
-            state = pipeline.bar_state.get_closed(exchange,market_type,symbol,start) if pipeline else None
+            state = pipeline.bar_state.get_state(exchange,market_type,symbol,start) if pipeline else None
             if state is not None:
-                await self.compact_closed(pipeline,state,source_interval)
+                if state.status == BarStatus.CLOSED:
+                    await self.compact_closed(pipeline,state,source_interval)
+                else:
+                    await self.compact_forming(pipeline,state,source_interval)
         finally:
-            self._closed_draining = False
+            self._component_draining = False
+
+    async def compact_forming(self, pipeline, state, source_interval):
+        """Create the first prefix from a bounded confirmed live seam.
+
+        Optional work runs outside the target lock. A new forming tail is free
+        to advance; the exact retired leaves, not the whole preview version,
+        must remain unchanged. Final adoption compares the current projection.
+        """
+        agg, reader = self.aggregator, self.reader
+        cfg, budget = agg.config, reader.memory_budget
+        snapshots, refs = state.source_snapshots, state.source_refs
+        strategy = pipeline.bar_state._component_merge_strategy
+        if (self.closing or not agg._previews.running or not cfg.compact_forming_components
+                or budget is not agg.memory_budget or state.status != BarStatus.FORMING
+                or state._history_prefix is not None or type(snapshots) is not ComponentSnapshots
+                or snapshots.foreign_entries or len(snapshots) < self.COMPACT_ROWS
+                or pipeline.bar_state._merge_strategy_overridden
+                or getattr(strategy.apply,'__func__',None) is not ComponentSnapshotOHLCVMerge.apply):
+            return
+        from app.data_engine.data_manager.models import SeriesKey
+        source = SeriesKey.create(state.symbol,source_interval,exchange=state.exchange,
+                                  market_type=state.market_type,identity=state.identity)
+        base,target = parse_interval_spec(source.interval),parse_interval_spec(state.interval)
+        if (base is None or target is None or base.alignment is not IntervalAlignment.FIXED_EPOCH
+                or target.alignment is not IntervalAlignment.FIXED_EPOCH or base.phase_ms or target.phase_ms
+                or target.nominal_ms % base.nominal_ms
+                or not self.MIN_ROWS <= target.nominal_ms//base.nominal_ms <= MAX_PREFIX_ROWS):
+            return
+        token = agg.history_target_token(source,state.interval)
+        if token is None:
+            return
+        width,count = base.nominal_ms,self.COMPACT_ROWS
+        through = state.bucket_start_ms + count*width
+        if through >= state.bucket_end_ms:
+            return
+        # One failed attempt per confirmed batch of progress, rather than each
+        # forming tick or a duplicate close. No permanent fallback marker.
+        state._history_compaction_retry_ms = state.last_input_at_ms + count*width
+        engine = reader.engine
+        storage,manager,policy = engine.storage,engine.shared_blocks,engine.history_policy
+        slot = self.targets.get(token[0])
+        created = success = False
+        retained = agg.publisher._hold_payload('input',(state,))
+        def current():
+            return (slot is not None and self._current(slot) and agg.history_prefix_runtime is self
+                and agg.config is cfg and cfg.compact_forming_components
+                and agg.memory_budget is budget and reader.memory_budget is budget
+                and engine.storage is storage and engine.shared_blocks is manager and engine.history_policy is policy
+                and agg._pipelines.get(agg._pipeline_key(state.interval,state.exchange,state.identity)) is pipeline
+                and pipeline.bar_state.get_active(state.exchange,state.market_type,state.symbol,state.bucket_start_ms) is state
+                and state.status == BarStatus.FORMING and state._history_prefix is None
+                and state.source_snapshots is snapshots and state.source_refs is refs
+                and not snapshots.foreign_entries and not pipeline.bar_state._merge_strategy_overridden
+                and pipeline.bar_state._component_merge_strategy is strategy
+                and getattr(strategy.apply,'__func__',None) is ComponentSnapshotOHLCVMerge.apply)
+        try:
+            if slot is None:
+                if len(self.targets) >= self.MAX_TARGETS:
+                    raise BlockUnavailable('history target capacity')
+                slot = _Target(source,token)
+                with budget.reserve('realtime-state',1024) as lease:
+                    lease.retain(1024,lambda:self.targets.__setitem__(token[0],slot))
+                created = True
+            if slot.source != source or slot.token != token or not current():
+                raise BlockRevisionChanged('forming source owner changed')
+            # Full accepted index/proof graph stays protected through physical
+            # reads and cancellation; selection is at most 128 immutable leaves.
+            work = snapshots.estimated_bytes + snapshots.source_proof_bytes + sys.getsizeof(refs) + 16384
+            async with self._task():
+                with budget.reserve('realtime-state',work):
+                    key_prefix = f'{state.exchange}:{state.market_type}:{state.symbol}@{source.interval}:'
+                    keys = tuple(key_prefix+str(opened) for opened in range(state.bucket_start_ms,through,width))
+                    leaves = tuple(snapshots.get(key) for key in keys)
+                    if any(row is None or not row['is_closed']
+                           or row['open_time_ms'] != state.bucket_start_ms+i*width
+                           or row['close_time_ms']+1 != state.bucket_start_ms+(i+1)*width
+                           for i,row in enumerate(leaves)):
+                        raise BlockUnavailable('forming seam is not completely confirmed')
+                    if self.flush_delivery is not None:
+                        async with asyncio.timeout(1.5):
+                            await self.flush_delivery()
+                    if not current():
+                        raise BlockRevisionChanged('forming owner changed during delivery drain')
+                    await run_storage(reader.qualify,source)
+                    async with reader.stage(source,state.bucket_start_ms,through,page_rows=128) as fresh:
+                        if not current() or not await run_storage(reader.matches_closed_overlay,source,fresh,leaves):
+                            raise BlockUnavailable('forming canonical components differ')
+                        async with slot.lock:
+                            await run_storage(reader.validate_bound,fresh)
+                            if not current() or any(snapshots.get(key) is not leaf for key,leaf in zip(keys,leaves)):
+                                raise BlockRevisionChanged('forming retired leaves changed')
+                            # The tail may advance while pages are staged. Use
+                            # its latest accepted value; any pending deadline
+                            # still owns publication after this materialization.
+                            state.materialize_preview()
+                            projection_work = 2*(snapshots.estimated_bytes + snapshots.source_proof_bytes
+                                                + sys.getsizeof(refs)) + 2*PREFIX_BYTES
+                            with budget.reserve('realtime-state',projection_work):
+                                probe = replace(state,_component_accumulator=None)
+                                strategy.adopt_history_prefix(probe,fresh)
+                                fields = ('open','high','low','close','volume','quote_volume','trades',
+                                    'taker_buy_base','taker_buy_quote','enhanced_fields','tick_count',
+                                    'first_input_at_ms','last_input_at_ms','last_close_received')
+                                if any(getattr(probe,name) != getattr(state,name) for name in fields):
+                                    raise BlockUnavailable('forming projection differs')
+                                preserve = ('status','finality','close_reason','quality_source','created_at_ms',
+                                    'updated_at_ms','acquisition_revision','canonical_recovery_delete_floor',
+                                    'preview_input_version','preview_computed_version','preview_published_version')
+                                values = tuple(getattr(state,name) for name in preserve)
+                                self._adopt(slot,fresh)
+                                for name,value in zip(preserve,values): setattr(state,name,value)
+                                slot.recovering = False
+                                state._history_compaction_retry_ms = 0
+                                success = True
+                                self.metrics['forming_compactions'] += 1
+                                self.metrics['forming_compacted_components'] += count
+                                self.last_forming_compaction = dict(symbol=state.symbol,interval=state.interval,
+                                    exchange=state.exchange,market_type=state.market_type,
+                                    bucket_start_ms=state.bucket_start_ms,components=count,reason='compacted')
+        except Exception as error:
+            self.metrics['forming_compaction_deferred'] += 1
+            self.last_forming_compaction = dict(symbol=state.symbol,interval=state.interval,
+                exchange=state.exchange,market_type=state.market_type,bucket_start_ms=state.bucket_start_ms,
+                components=count,reason=type(error).__name__,detail=str(error)[:160])
+        finally:
+            if created and not success and self.targets.get(token[0]) is slot:
+                needed = slot.lock.locked() or any(
+                    other._history_prefix is not None
+                    and (other.exchange,other.market_type,other.symbol)==(state.exchange,state.market_type,state.symbol)
+                    for other in chain(pipeline.bar_state._active.values(),pipeline.bar_state._closed.values()))
+                if not needed: self.targets.pop(token[0],None)
+            agg.publisher._release_payload(retained)
 
     async def compact_closed(self, pipeline, state, source_interval):
         """Retire closed input indexes only after exact, fenced canonical readback.
@@ -696,11 +837,11 @@ class HistoryPrefixRuntime:
         if state is not None and all(item is not state for item in states):
             states.append(state)
         if (self.flush_delivery is not None and incoming.is_closed
-                and any(item._history_prefix is not None
-                        and incoming.open_time_ms < item._history_prefix.through_ms for item in states)):
-            # Native-first dispatch promises durable admission, not necessarily
-            # completion. A covered correction must observe that commit before
-            # deciding its unchanged prefix can ignore the fine input.
+                and any(item._history_prefix is not None for item in states)):
+            # Native-first dispatch promises admission, not commit. Even a new
+            # tail outside the prefix changes its source-series revision. Drain
+            # that predecessor before validating/refreshing any retained prefix,
+            # including a covered correction which would otherwise be ignored.
             async with asyncio.timeout(1.5):
                 await self.flush_delivery()
             if not self._current(slot):
