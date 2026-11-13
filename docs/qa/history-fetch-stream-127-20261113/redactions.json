@@ -1,0 +1,10 @@
+{
+  "policy": "only ephemeral contextToken strings; numeric active_read_tokens retained",
+  "paths": [
+    "/steps/2/evidence/action/contextToken",
+    "/steps/3/evidence/action/contextToken",
+    "/steps/12/evidence/action/contextToken",
+    "ordinary-attempt1/steps/2/evidence/action/contextToken",
+    "ordinary-attempt1/steps/3/evidence/action/contextToken"
+  ]
+}

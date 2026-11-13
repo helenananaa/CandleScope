@@ -1,0 +1,23 @@
+{
+  "base": "4520f8f725108a94af9205956572d037d4009464",
+  "product_head": "df098035ba948026eeb6b6621a5b16d14b4eaa02",
+  "files": {
+    ".github/workflows/pine-host-contracts.yml": "54ad07b9007bcfad5a507ced15ebe590ba979bb16d6d3048af04a12bf60fb8c6",
+    "backend/app/data_engine/backfill/__init__.py": "a5480c33c0e16d9c9c6b58648e9e7cb99eca4671648c8cf7fb9d5170eb4b7e1a",
+    "backend/app/data_engine/backfill/fetch_stream.py": "208404eddb3244ad5b694597d1703da10fb552d98c426013207456a5b2473d99",
+    "backend/app/data_engine/backfill/fetcher.py": "db59bda799af8f4aae77b229d40d3ccad32921764abde85a593f65d9a2912c78",
+    "backend/app/data_engine/backfill/models.py": "badcf46591919549a64528af19a0bc7674b85bb849741d146cbab3d76d767492",
+    "backend/app/data_engine/backfill/publisher.py": "11b60daf57a2a00a4fd66cb34a9d98c6dc315230149870462e83f44a570ef645",
+    "backend/app/data_engine/backfill/reconciler.py": "0f40fd842df4ddb7d30b0f7daeab275010c59b38b874b39103e2fb4940e46c05",
+    "backend/app/data_engine/data_manager/backfill_coordinator.py": "286b98f5d9b0ce2d1c668feab5980f90f95ff44ea5d71b80ff1175b990332d7b",
+    "backend/scripts/ccxt_contracts/integration.py": "26ac6e85aa777cc9f291f0d588f959430875091cfa7ff49aa896b92e44b68370",
+    "backend/tests/history_stream_transport.py": "1586b1f888d1828c66efca5762559e8b4d90b98d0276609395cbb1e6e73768d2",
+    "backend/tests/test_history_archive_routing.py": "52c132f889dcfad5a36f7fe86174af192fa9e36942bcde00097f41be6925683c",
+    "backend/tests/test_history_fetch_stream.py": "ac84c9c3da2cbd143f303bd489dda029237376b3ad85d710c815705fc22b4bf8",
+    "backend/tests/test_history_fetch_stream_engine.py": "4dc64d941520d17cb58b1e8ac749cce54c2d6b60cc51f8524516caed9473415a",
+    "backend/tests/test_history_fetch_stream_okx.py": "9c693b5a559d2b2fbe9e050aa6e2f44d9c1e2d166bf9c645a6f0e4109cef734e",
+    "backend/tests/test_mixed_backfill_query_demand.py": "bb2e3a97cfedd6d814bd0022549efca8218c60ecc1f48498b38d66b85aea652b",
+    "backend/tests/test_mixed_backfill_transport.py": "cd14dc153a268aa72c8d8dcc0c0517d853504204e8ee7747d635994dafb71b2b",
+    "packages/candlescope-plugin-pine-compat/scripts/qualify_host_contracts.py": "1e38643fceb009d01c792fd92a7f68670faf51974ef24e356c71d1932dca470c"
+  }
+}

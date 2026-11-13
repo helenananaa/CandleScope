@@ -53,6 +53,7 @@ from .models import (
     DeduplicationStrategy,
     FetchedBar,
     FetchResult,
+    FetchReceipt,
     IntervalDecomposition,
     ReconcileResult,
     StorageBackend,
@@ -162,6 +163,7 @@ class Reconciler:
         self,
         fetch_results: list[FetchResult],
         plan: BackfillPlan,
+        *, native_receipts=(),
     ) -> ReconcileResult:
         """Run the full reconciliation pipeline.
 
@@ -273,9 +275,10 @@ class Reconciler:
                             decomp, grouped, plan.derived_source_windows,
                             **({"binding_check": plan.mixed_binding.validate if plan.mixed_binding is not None else None,
                                 "owner_check": plan.mixed_binding.validate_owner if plan.mixed_binding is not None else None,
-                                "confirmed_empty": bool(fetch_results) and all(
-                                r.source_complete is True and not r.retryable and not r.errors and not r.bars and bool(r.empty_reason)
-                                for r in fetch_results)} if getattr(decomp, "composition_policy", None) is not None else {}),
+                                "confirmed_empty": bool(fetch_results or native_receipts) and all(
+                                r.source_complete is True and not r.retryable and not r.errors
+                                and (r.bars_count == 0 if isinstance(r,FetchReceipt) else not r.bars) and bool(r.empty_reason)
+                                for r in (*fetch_results,*native_receipts))} if getattr(decomp, "composition_policy", None) is not None else {}),
                         )
                     result.custom_bars_generated += gen
                     result.custom_bars_written += wrt

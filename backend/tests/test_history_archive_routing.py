@@ -308,7 +308,8 @@ def test_archive_routed_rest_deferral_is_not_downgraded_to_partial(tmp_path) -> 
     assert caught.reason == "circuit_open"
 
 
-def test_parent_range_routes_page_chunks_to_one_archive_import(tmp_path) -> None:
+@pytest.mark.parametrize('payload_mode', ['full', 'receipt'])
+def test_parent_range_routes_page_chunks_to_one_archive_import(tmp_path, payload_mode) -> None:
     async def _run() -> None:
         ref = _january_ref()
         payload = _archive_payload(ref, 4)
@@ -344,7 +345,10 @@ def test_parent_range_routes_page_chunks_to_one_archive_import(tmp_path) -> None
                 break
             await asyncio.sleep(0.01)
 
-        results = await fetcher.fetch(tasks)
+        async def reject_streamed_archive(_page):
+            pytest.fail('archive object transactions must retain their complete result contract')
+        results = await fetcher.fetch(tasks, **(
+            {'on_native_page': reject_streamed_archive} if payload_mode == 'receipt' else {}))
 
         assert archive_http.downloads == 1
         assert len(rest.requests) == 2

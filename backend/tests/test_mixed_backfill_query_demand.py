@@ -44,7 +44,8 @@ def test_planning_budget_is_not_a_market_gap_or_a_new_download_demand(mixed_quer
     assert result.retryable and not result.complete and not result.missing_ranges and not calls
 
 
-def test_default_facade_scheduler_ledger_and_canonical_adoption_complete_cold_target(tmp_path, monkeypatch):
+@pytest.mark.parametrize('source', ['fetch_result','native_pages'])
+def test_default_facade_scheduler_ledger_and_canonical_adoption_complete_cold_target(tmp_path, monkeypatch, source):
     from app.core import config as core_config
     database = tmp_path / "cold-default.sqlite"
     monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", database)
@@ -55,8 +56,26 @@ def test_default_facade_scheduler_ledger_and_canonical_adoption_complete_cold_ta
     storage = klines_repo.KlinesRepoAdapter()
     dm.set_storage(storage)
     engine = engine_for(dm.query_engine)
-    upstream = Upstream()
-    engine._fetcher = upstream
+    receipt_modes = []
+    if source == 'fetch_result':
+        upstream = Upstream()
+        engine._fetcher = upstream
+    else:
+        from tests.history_stream_transport import IntervalTransport
+        from app.data_engine.backfill.fetcher import HistoricalFetcher
+        from app.data_engine.ingestion.config import IngestionConfig
+        from app.data_engine.backfill.models import FetchReceipt
+        upstream = IntervalTransport()
+        engine.config.fetch_batch_size = 32
+        engine.config.fetch_binance_futures_rate_limit_delay = 0
+        engine._fetcher = HistoricalFetcher(engine.config,upstream,IngestionConfig())
+        original = engine.run_receipt
+        async def record(*args,**kwargs):
+            report = await original(*args,**kwargs)
+            receipt_modes.append((report.metadata.get('fetch_payload_mode'),
+                                  all(isinstance(item,FetchReceipt) for item in report.fetch_results)))
+            return report
+        monkeypatch.setattr(engine,'run_receipt',record)
     ledger = GapLedger(database)
     async def run():
         coordinator = BackfillCoordinator(storage=storage, bars_backfilled=dm.on_bars_backfilled,
@@ -78,7 +97,11 @@ def test_default_facade_scheduler_ledger_and_canonical_adoption_complete_cold_ta
             ready = dm.query("BTCUSDT", "10007m", start_ms=0, end_ms=10007 * MINUTE - 1,
                 limit=1, market_type="futures", auto_backfill=False, min_revision=storage.revision_store.head())
             assert ready.complete and ready.bars[0].volume == 10007
-            assert len(upstream.calls) < 11 and "1h" in {task.interval for task in upstream.calls}
+            observed = {task.interval for task in upstream.calls} if source == 'fetch_result' else {
+                call.descriptor.interval for call in upstream.calls}
+            assert len(upstream.calls) < 11 and '1h' in observed
+            if source == 'native_pages':
+                assert receipt_modes == [('receipt',True)]
             assert storage.count_bars("BTCUSDT", "1m", 0, 10007 * MINUTE - 1, market_type="futures") == 2
             status = await asyncio.to_thread(ledger.get_status, outcome.request)
             assert status["status"] == "filled" and status["missing_count"] == 0
