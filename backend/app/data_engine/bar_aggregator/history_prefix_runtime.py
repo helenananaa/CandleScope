@@ -17,6 +17,7 @@ import time
 import heapq
 import sys
 from collections import OrderedDict
+from itertools import chain
 
 from app.core.async_cleanup import finish_cleanup
 from app.core.bounded_executor import ExecutorBusyError
@@ -539,7 +540,14 @@ class HistoryPrefixRuntime:
                 components=len(snapshots),reason=type(error).__name__,detail=str(error)[:160])
         finally:
             if created and not success and self.targets.get(token[0]) is slot:
-                self.detach(token[0])
+                # This was an optional slot allocation, not target detachment.
+                # New buckets may have queued work or adopted a prefix while
+                # staging ran outside the lock. Keep their dependencies/jobs.
+                needed = slot.lock.locked() or any(
+                    other._history_prefix is not None
+                    and (other.exchange,other.market_type,other.symbol)==(state.exchange,state.market_type,state.symbol)
+                    for other in chain(pipeline.bar_state._active.values(),pipeline.bar_state._closed.values()))
+                if not needed: self.targets.pop(token[0],None)
             agg.publisher._release_payload(retained)
 
     async def _compact_closed_owned(self, slot, pipeline, state, start, width):

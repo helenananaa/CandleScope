@@ -342,3 +342,40 @@ def test_bounded_maintenance_jobs_drain_one_and_detach_without_deleting_history(
         finally: await dm.shutdown()
         assert dm.memory_budget.snapshot()['reserved_bytes']==0
     asyncio.run(run())
+
+
+def test_obsolete_readback_preserves_newer_closed_jobs_for_the_same_target(dm,monkeypatch):
+    clock=[1000]
+    monkeypatch.setattr('time.time',lambda:clock[0]/1000)
+    runtime=dm.history_prefix_runtime
+    entered,released=threading.Event(),threading.Event()
+    original=runtime.reader.matches_closed_overlay
+    blocked=[True]
+    def held(*args,**kwargs):
+        if blocked[0]:
+            entered.set()
+            assert released.wait(10)
+        return original(*args,**kwargs)
+    monkeypatch.setattr(runtime.reader,'matches_closed_overlay',held)
+    async def run():
+        task=None
+        try:
+            _,interval,first,_,close=await prepare(dm,clock,7)
+            task=asyncio.create_task(close())
+            async with asyncio.timeout(5):
+                while not entered.is_set(): await asyncio.sleep(.01)
+            for value in rows(14)[7:]: await close(drain=False,last=value)
+            assert len(runtime.closed_jobs)==1
+            blocked[0]=False;released.set()
+            await task
+            assert first._history_prefix is None and len(first.source_snapshots)==7
+            assert len(runtime.closed_jobs)==1
+            await runtime.drain_closed()
+            second=dm.bar_aggregator.get_pipeline(interval).bar_state.get_closed('binance','futures','BTCUSDT',7*WIDTH)
+            assert second._history_prefix.complete and not second.source_snapshots
+        finally:
+            released.set()
+            if task is not None: await asyncio.gather(task,return_exceptions=True)
+            await dm.shutdown()
+        assert dm.memory_budget.snapshot()['reserved_bytes']==0
+    asyncio.run(run())
