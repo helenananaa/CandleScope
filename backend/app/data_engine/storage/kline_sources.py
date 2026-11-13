@@ -433,6 +433,9 @@ def filter_projection_rows(
                 continue
             refs = [_ref(head)]
         verified = dict(row, _source_verified=bool(refs))
+        # This marker is a result of the transaction's source-head validation,
+        # never authority supplied by a caller or a previously filtered row.
+        verified.pop("_history_source_ref", None)
         if (
             head is not None
             and head["source"] in {DataSource.HTTP.value, DataSource.HTTP_BACKFILL.value}

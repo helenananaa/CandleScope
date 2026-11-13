@@ -547,6 +547,7 @@ def guarded_write(conn, values, *, commit=True, native_rows=None, source=None, n
             if warmup_head is None:
                 scope.check(conn, values)
         else:
+            view.check_history_receipts(conn, native_rows)
             view.check(conn, scope)
             for target in targets:
                 target.check(conn, scope)
