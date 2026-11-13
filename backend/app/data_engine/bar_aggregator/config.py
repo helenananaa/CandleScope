@@ -188,6 +188,9 @@ class BarAggregatorConfig:
     deferred_component_previews: bool = field(
         default_factory=lambda: _env_bool("BAR_AGG_DEFERRED_COMPONENT_PREVIEWS", True),
     )
+    compact_closed_components: bool = field(
+        default_factory=lambda: _env_bool("BAR_AGG_COMPACT_CLOSED_COMPONENTS", True),
+    )
 
     # ── Methods ──────────────────────────────────────────────
 

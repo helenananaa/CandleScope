@@ -269,6 +269,43 @@ component pipelines consume this stage; unsupported grids/strategies retain
 their original algorithms. Whole-runtime load, closed/no-prefix state retention,
 all consumer policies and the remaining #129 matrix require separate qualification.
 
+### R129 closed component retention and canonical recovery
+
+Closed authoritative default COMPONENT buckets can replace their raw indexes
+with the existing immutable H127 prefix, including buckets that never had a
+warm-start prefix. Fixed native source grids, complete elapsed coverage and the
+existing 65536-source-slot bound remain required. Every retiring leaf is compared
+against trusted canonical data in pages of at most 128, followed by the original
+K130 projection check. Equal aggregate totals cannot hide opposite leaf changes.
+Status, finality, close reason, timestamps, watermarks and deletion permission
+floors survive optional compaction. No synthetic event or canonical write occurs.
+
+The existing H127 runtime owns at most 128 maintenance IDs/epochs/source names,
+charged at 1 KiB each to realtime-state. Its existing timeout loop drains one
+job per pass, without a new timer or background task. Payloads stay in the closed
+state index; physical work registers them with the existing publisher retention
+owner and reserves the old frozen index/proof graph plus bounded staging work.
+Pages stage outside the target lock. A final durable/source/strategy/config/
+builder/version/generation check and adoption use the existing target lock, so
+new forming buckets can proceed during the expensive readback. Cancellation
+waits for physical reads; detach clears queued metadata. Rejecting an obsolete
+optional read must preserve newer jobs and prefixes for the same target.
+
+Publisher completion can mean durable admission while the original dispatcher
+still owns a native commit. Maintenance drains that dispatcher before canonical
+staging. Covered closed inputs also drain it before deciding that a prefix is
+unchanged. A changed, already-closed bucket rebuilds its complete canonical
+window, consuming D126's existing canonical-recovery permission protocol: the
+fresh read revision never replaces the old explicit-delete floor. Missing or
+untrusted coverage revokes the old close instead of resurrecting accepted data.
+
+`BAR_AGG_COMPACT_CLOSED_COMPONENTS=false` disables new optional maintenance;
+existing compact prefixes retain mandatory revision validation and recovery.
+Capacity, budget, field/grid/identity mismatch and stale reads preserve the old
+indexes with bounded diagnostics. This decline path and the remaining state,
+consumer/source, resource and long-running matrix still need qualification;
+these bounds are not a claim that all application memory or RSS is bounded.
+
 ## Migration and operational rollback
 
 1. Stop old writers and back up the SQLite database (including WAL through a
