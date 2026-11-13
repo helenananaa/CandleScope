@@ -70,18 +70,17 @@ class NativeHistoryView:
     end: int
     digest: bytes
 
-    def check_history_receipts(self, conn, rows):
+    def accepts_history_receipts(self, conn, rows):
         # OKX's qualified fork journals exact native closed inputs. Only those
         # current REST heads may use range permission instead of the family
         # fence. Legacy/unreceipted, websocket, stale and derived writes cannot.
         if self.key[0] != "okx":
-            return
+            return True
         from .kline_sources import filter_projection_rows
         accepted = filter_projection_rows(
             conn, rows, exchange=self.key[0], market_type=self.key[1],
             symbol=self.key[2], interval=self.key[3], native_identity=True)
-        if len(accepted) != len(rows) or any(not row.get("_history_source_ref") for row in accepted):
-            raise StaleAcquisition("native history range requires current closed REST source receipts")
+        return len(accepted) == len(rows) and all(row.get("_history_source_ref") for row in accepted)
 
     def check(self, conn, scope):
         row = series_change(conn, self.key)

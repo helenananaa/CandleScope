@@ -533,6 +533,10 @@ def guarded_write(conn, values, *, commit=True, native_rows=None, source=None, n
         from .native_history_fence import matching_view, matching_empty_view, fingerprint
         from .derived_history_fence import matching_computation, affected_targets
         view = matching_view(scope, values, native_rows, source) if commit else None
+        if view is not None and not view.accepts_history_receipts(conn, native_rows):
+            # Unqualified rows retain their original strict acquisition path.
+            # Missing receipts deny range permission, not the legacy writer.
+            view = None
         if view is None and commit and native_empty_ranges is not None:
             view = matching_empty_view(scope, values, native_empty_ranges)
         computation = matching_computation(scope, values, native_rows, source) if commit else None
@@ -550,7 +554,6 @@ def guarded_write(conn, values, *, commit=True, native_rows=None, source=None, n
             if warmup_head is None:
                 scope.check(conn, values)
         else:
-            view.check_history_receipts(conn, native_rows)
             view.check(conn, scope)
             for target in targets:
                 target.check(conn, scope)
