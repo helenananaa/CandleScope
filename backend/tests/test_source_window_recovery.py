@@ -164,3 +164,79 @@ def test_missing_source_journal_is_unavailable_without_creating_schema(database)
     with pytest.raises(BlockUnavailable):kline_sources.capture_source_window(KEY,0,W,W)
     with klines_repo._connect() as conn:
         assert conn.execute("SELECT 1 FROM sqlite_master WHERE name='kline_source_heads'").fetchone() is None
+
+
+def incoming(index, *, quote=2., closed=True, ref=None):
+    from app.data_engine.bar_aggregator.models import BarInput, BarInputSource, MergeMode
+    from app.data_engine.market_data.kline_metrics import declared_enhanced_fields
+    values=dict(open=10., high=20., low=5., close=11., volume=1., quote_volume=quote,
+                trades=1, taker_buy_base=.5, taker_buy_quote=1.)
+    return BarInput(symbol='BTCUSDT', exchange='binance', market_type='futures',
+        source_interval='1m', source=BarInputSource.CORRECTION, merge_mode=MergeMode.COMPONENT,
+        open_time_ms=index*W, close_time_ms=(index+1)*W-1, is_closed=closed,
+        enhanced_fields=declared_enhanced_fields('binance','futures',values),
+        extra={'source_ref':ref or dict(series=KEY,open_time=index*W,revision=1)}, **values)
+
+
+def fold(count, index=0, *, cancel=None, source=None):
+    from threading import Event
+    from app.data_engine.storage.source_window_summary import fold_source_window
+    return fold_source_window(KEY,0,count*W,W,source or incoming(index),cancel or Event())
+
+
+def test_folding_large_source_only_window_keeps_summary_and_one_leaf(database):
+    from app.data_engine.bar_aggregator.bar_state import ComponentSnapshotOHLCVMerge
+    with klines_repo._connect() as conn:
+        kline_sources._schema(conn); conn.execute('BEGIN IMMEDIATE')
+        for i in range(2048): record(i,conn=conn)
+        conn.commit()
+    summary=fold(2048)
+    assert len(summary.parts)==1 and summary.pages==16
+    assert summary.estimated_bytes<32768
+    assert not summary.covers(0) and summary.covers(W) and summary.covers(2047*W)
+    result=summary.merge([ComponentSnapshotOHLCVMerge._snapshot_from_input(incoming(0))])
+    assert result.count==2048 and result.values.quote_volume==4096
+    assert result.coverage(0,2048*W).closed
+    assert not klines_repo.query_klines('BTCUSDT','1m',market_type='futures')
+
+
+def test_sparse_closed_runs_merge_interior_forming_hole_in_time_order(database):
+    from app.data_engine.bar_aggregator.bar_state import ComponentSnapshotOHLCVMerge
+    record(0); record(1,closed=False); record(2); record(3)
+    summary=fold(4,index=3)
+    assert [part.first for part in summary.parts]==[0,2*W]
+    hole=replace(incoming(1,closed=False),close=19.)
+    latest=replace(incoming(3),close=12.)
+    rows=[ComponentSnapshotOHLCVMerge._snapshot_from_input(v) for v in (hole,latest)]
+    result=summary.merge(rows)
+    assert result.values.open==10. and result.values.close==12.
+    assert result.count==4 and result.values.volume==4
+    assert not result.coverage(0,4*W).closed
+    assert not summary.covers(W)
+    with pytest.raises(ValueError):summary.merge([ComponentSnapshotOHLCVMerge._snapshot_from_input(incoming(2))])
+
+
+def test_folding_rejects_correction_after_final_page_and_cancel(database,monkeypatch):
+    from threading import Event
+    record(0);record(1)
+    read=kline_sources.read_source_window_page
+    def changed(*a,**kw):
+        page=read(*a,**kw)
+        record(1,quote=1.,sequence=4*W)
+        return page
+    monkeypatch.setattr(kline_sources,'read_source_window_page',changed)
+    with pytest.raises(BlockRevisionChanged):fold(2)
+    cancel=Event();cancel.set()
+    with pytest.raises(BlockUnavailable,match='cancelled'):fold(2,cancel=cancel)
+
+
+def test_excessive_source_fragmentation_has_explicit_bounded_failure(database):
+    from app.data_engine.memory_budget import MemoryBudgetExceeded
+    for i in range(0,70,2):record(i)
+    with pytest.raises(MemoryBudgetExceeded,match='fragmented'):fold(70)
+
+
+def test_source_summary_rejects_stale_incoming_ref_or_mismatched_value(database):
+    record(0);record(1)
+    with pytest.raises(BlockRevisionChanged):fold(2,source=incoming(0,ref=dict(series=KEY,open_time=0,revision=9)))
+    with pytest.raises(BlockUnavailable):fold(2,source=incoming(0,quote=999))
