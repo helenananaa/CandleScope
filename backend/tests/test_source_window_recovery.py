@@ -31,7 +31,17 @@ def database(tmp_path, monkeypatch):
     klines_repo.init_klines_storage()
 
 
-def record(index, *, quote=2.0, closed=True, sequence=None, conn=None, high=20.0):
+def record(
+    index,
+    *,
+    quote=2.0,
+    closed=True,
+    sequence=None,
+    conn=None,
+    high=20.0,
+    source=DataSource.WEBSOCKET,
+    watermark=None,
+):
     opened = index * W
     seq = opened + W + 1 if sequence is None else sequence
     envelope = dict(
@@ -68,12 +78,12 @@ def record(index, *, quote=2.0, closed=True, sequence=None, conn=None, high=20.0
         symbol="BTCUSDT",
         event_time_ms=seq,
         received_at_ms=seq + 1,
-        source=DataSource.WEBSOCKET,
+        source=source,
         exchange="binance",
         market_type="futures",
         data=data,
     )
-    return kline_sources.record(event, DESC, _connection=conn)
+    return kline_sources.record(event, DESC, _connection=conn, rest_watermark=watermark)
 
 
 def test_large_source_only_window_reads_finite_immutable_pages_and_no_canonical_rows(
@@ -433,6 +443,12 @@ def test_default_manager_cold_rebuild_has_no_native_rows_and_compact_durable_pro
         aggregator = manager.bar_aggregator
         interval = str(count) + "m"
         aggregator.add_target("BTCUSDT", interval, market_type="futures")
+        events = []
+
+        async def collect(event):
+            events.append(event.event_type.value)
+
+        aggregator.publisher.on_bar_event(collect)
         try:
             ref = record(0, quote=1.0, sequence=2 * count * W)["ref"]
             await aggregator.ingest_bar_input(
@@ -449,6 +465,10 @@ def test_default_manager_cold_rebuild_has_no_native_rows_and_compact_durable_pro
             assert state._source_recovery is not None and state._history_prefix is None
             assert len(state.source_snapshots) == len(state.source_refs) == 1
             assert state.quote_volume == 2 * count - 1 and state.tick_count == count
+            assert (
+                state.preview_input_version == state.preview_computed_version == count
+            )
+            assert events == ["bar.updated", "bar.closed"]
             assert (
                 state.status.value == "closed"
                 and state.finality.value == "authoritative"
@@ -480,6 +500,12 @@ def test_default_manager_cold_rebuild_has_no_native_rows_and_compact_durable_pro
             )
             await manager.aggregator_bridge.delivery.flush_pending()
             assert state.quote_volume == 2 * count + 1 and state.tick_count == count
+            assert (
+                state.preview_input_version
+                == state.preview_computed_version
+                == count + 1
+            )
+            assert events == ["bar.updated", "bar.closed", "bar.amended"]
             assert len(state.source_refs) == len(state.source_snapshots) == 1
             stored = klines_repo.query_klines(
                 "BTCUSDT", interval, market_type="futures"
@@ -615,7 +641,7 @@ def test_original_writer_rejects_expired_compact_source_proof_after_enqueue(
                 ).fetchone()
             assert receipt["phase"] == "rejected"
             assert recoveries
-            assert recoveries[0].to_dict()['reason'] == 'source_revision_superseded'
+            assert recoveries[0].to_dict()["reason"] == "source_revision_superseded"
             assert not any(
                 e.event_type.value in ("bar.closed", "bar.amended") for e in events
             )
@@ -852,8 +878,559 @@ def test_cold_builder_compacts_confirmed_live_tail_at_original_128_quantum(
                 and state._source_recovery.version.through_ms == 130 * W
             )
             assert len(state.source_snapshots) == len(state.source_refs) == 2
-            assert events == ["bar.created"] + ["bar.updated"] * 129
+            assert events == ["bar.updated"] * 130
             assert manager.memory_budget.snapshot()["reserved_bytes"] == 0
+        finally:
+            await manager.shutdown()
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("change", ["journal", "canonical"])
+def test_forming_input_cannot_publish_a_stale_selected_source_summary(
+    database, monkeypatch, change
+):
+    import asyncio
+
+    clock = [2 * W + 1000]
+    monkeypatch.setattr("time.time", lambda: clock[0] / 1000)
+
+    async def run():
+        record(0)
+        record(1)
+        if change == "canonical":
+            page = kline_sources.read_source_window_page(
+                kline_sources.capture_source_window(KEY, 0, 2 * W, W)
+            )
+            klines_repo.upsert_klines(
+                "BTCUSDT",
+                "1m",
+                [dict(c["data"]) for c in page.components],
+                source="backfill",
+                market_type="futures",
+            )
+        manager = manager_for("5m")
+        events = []
+
+        async def collect(event):
+            events.append((event.event_type.value, event.bar.high))
+
+        manager.bar_aggregator.publisher.on_bar_event(collect)
+        try:
+            await feed(manager, "5m", incoming(0))
+            state = manager.bar_aggregator.get_pipeline("5m").bar_state.get_state(
+                "binance", "futures", "BTCUSDT", 0
+            )
+            assert state.high == 20.0 and state._source_recovery is not None
+            if change == "journal":
+                record(1, high=100.0, sequence=2 * W + 800)
+            else:
+                with klines_repo._connect() as conn:
+                    conn.execute(
+                        "UPDATE klines SET high=100 WHERE interval='1m' AND open_time=?",
+                        (W,),
+                    )
+                    conn.commit()
+            ref = record(2, closed=False, sequence=2 * W + 900)["ref"]
+            value = incoming(2, closed=False, ref=ref)
+            clock[0] += 1000  # Preserve the original 50ms update throttle.
+            before = list(events)
+            if change == "journal":
+                await feed(manager, "5m", value)
+                assert state.high == 100.0 and state.tick_count == 3
+                assert len(events) == len(before) + 1 and events[-1] == (
+                    "bar.updated",
+                    100.0,
+                )
+            else:
+                with pytest.raises(BlockRevisionChanged):
+                    await feed(manager, "5m", value)
+                assert state.high == 20.0 and events == before
+            assert not klines_repo.query_klines("BTCUSDT", "5m", market_type="futures")
+            assert manager.memory_budget.snapshot()["reserved_bytes"] == 0
+        finally:
+            await manager.shutdown()
+
+    asyncio.run(run())
+
+
+def test_canonical_changes_outside_selected_source_seam_do_not_expire_content(database):
+    record(0)
+    record(1)
+    record(3)
+    version = kline_sources.capture_source_window(KEY, 0, 2 * W, W)
+    later = kline_sources.latest(DESC, 3 * W)["data"]
+    klines_repo.upsert_klines(
+        "BTCUSDT", "1m", [later], source="backfill", market_type="futures"
+    )
+    with klines_repo._connect() as conn:
+        assert kline_sources.source_window_current(conn, version)
+        conn.execute(
+            "UPDATE klines SET high=100 WHERE interval='1m' AND open_time=?", (3 * W,)
+        )
+        conn.commit()
+        assert kline_sources.source_window_current(conn, version)
+    inside = kline_sources.latest(DESC, W)["data"]
+    klines_repo.upsert_klines(
+        "BTCUSDT", "1m", [inside], source="backfill", market_type="futures"
+    )
+    with klines_repo._connect() as conn:
+        assert not kline_sources.source_window_current(conn, version)
+
+
+def test_rebinding_between_inputs_does_not_reuse_an_old_storage_summary(
+    database, monkeypatch
+):
+    import asyncio
+
+    clock = [2 * W + 1000]
+    monkeypatch.setattr("time.time", lambda: clock[0] / 1000)
+
+    async def run():
+        record(0)
+        record(1)
+        manager = manager_for("5m")
+        try:
+            await feed(manager, "5m", incoming(0))
+            state = manager.bar_aggregator.get_pipeline("5m").bar_state.get_state(
+                "binance", "futures", "BTCUSDT", 0
+            )
+            old = state._source_recovery
+            replacement = klines_repo.KlinesRepoAdapter()
+            called = []
+            original = replacement.fold_source_window
+
+            def traced(*args):
+                called.append(1)
+                return original(*args)
+
+            monkeypatch.setattr(replacement, "fold_source_window", traced)
+            manager.set_storage(replacement)
+            ref = record(2, closed=False, sequence=2 * W + 500)["ref"]
+            await feed(manager, "5m", incoming(2, closed=False, ref=ref))
+            assert called == [1] and state._source_recovery is not old
+            assert (
+                state._source_recovery.binding
+                is manager.bar_aggregator.source_recovery_reader.binding
+            )
+            assert state._source_recovery.binding is not old.binding
+            assert state.tick_count == 3 and state.volume == 3
+        finally:
+            await manager.shutdown()
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("complete", [False, True])
+def test_source_fallback_hands_back_to_h127_only_with_complete_matching_coverage(
+    database, monkeypatch, complete
+):
+    import asyncio
+    from app.data_engine.data_manager.models import SeriesKey
+
+    clock = [2 * W + 1000]
+    monkeypatch.setattr("time.time", lambda: clock[0] / 1000)
+
+    async def run():
+        record(0)
+        record(1)
+        manager = manager_for("5m")
+        source = SeriesKey("BTCUSDT", "1m", market_type="futures")
+        try:
+            await feed(manager, "5m", incoming(0))
+            state = manager.bar_aggregator.get_pipeline("5m").bar_state.get_state(
+                "binance", "futures", "BTCUSDT", 0
+            )
+            old = state._source_recovery
+            count = 2 if complete else 1
+            native = [kline_sources.latest(DESC, i * W)["data"] for i in range(count)]
+            klines_repo.upsert_klines(
+                "BTCUSDT", "1m", native, source="backfill", market_type="futures"
+            )
+            token = manager.bar_aggregator.history_target_token(source, "5m")
+            async with manager.history_prefix_runtime.reader.stage(
+                source, 0, 2 * W, require_complete=complete
+            ) as prefix:
+                if complete:
+                    manager.bar_aggregator.adopt_history_prefix(prefix, token)
+                    assert (
+                        state._history_prefix is prefix
+                        and state._source_recovery is None
+                    )
+                    assert not state.source_snapshots and not state.source_refs
+                    assert state.volume == 2 and state.tick_count == 2
+                    assert state.canonical_recovery_delete_floor == 0
+                else:
+                    with pytest.raises(ValueError, match="complete matching"):
+                        manager.bar_aggregator.adopt_history_prefix(prefix, token)
+                    assert (
+                        state._source_recovery is old and state._history_prefix is None
+                    )
+                    assert len(state.source_snapshots) == 1 and state.volume == 2
+            assert manager.memory_budget.snapshot()["reserved_bytes"] == 0
+        finally:
+            await manager.shutdown()
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("permission", [None, 0, 1])
+def test_rest_original_scope_controls_same_value_recovery_permission(
+    database, permission
+):
+    from contextlib import nullcontext
+    from app.data_engine.storage.revisions import Acquisition, acquisition_scope
+
+    record(0)
+    record(1)
+    watermark = kline_sources.rest_watermark()
+    klines_repo.delete_klines("BTCUSDT", "2m", market_type="futures")
+    scope = (
+        nullcontext()
+        if permission is None
+        else acquisition_scope(Acquisition(1, delete_revision=permission))
+    )
+    with scope:
+        for i in range(2):
+            record(
+                i, source=DataSource.HTTP_BACKFILL, watermark=watermark, sequence=9 * W
+            )
+    version = kline_sources.capture_source_window(KEY, 0, 2 * W, W)
+    assert version.closed_count == version.revision_sum == 2
+    assert version.permission_floor == (permission or 0)
+    with klines_repo._connect() as conn:
+        assert kline_sources.source_window_allows_target(conn, version, "2m") == (
+            permission == 1
+        )
+        floors = [
+            r[0]
+            for r in conn.execute(
+                "SELECT permission_floor FROM kline_source_observations ORDER BY id DESC LIMIT 2"
+            )
+        ]
+        assert floors == [permission or 0] * 2
+
+
+def test_concurrent_fresh_rest_same_value_grants_permission_without_reselecting_old_data(
+    database,
+):
+    import asyncio
+    from app.data_engine.storage.revisions import Acquisition, acquisition_scope
+
+    record(0)
+    record(1)
+    watermark = kline_sources.rest_watermark()
+    klines_repo.delete_klines("BTCUSDT", "2m", market_type="futures")
+    # Both original requests saw the same source watermark, on opposite sides
+    # of deletion. The old request's response wins selection first.
+    with acquisition_scope(Acquisition(0)):
+        for i in range(2):
+            record(
+                i, source=DataSource.HTTP_BACKFILL, watermark=watermark, sequence=9 * W
+            )
+    old_ids = [kline_sources.latest(DESC, i * W)["observation_id"] for i in range(2)]
+    with acquisition_scope(Acquisition(1)):
+        receipts = [
+            record(
+                i, source=DataSource.HTTP_BACKFILL, watermark=watermark, sequence=9 * W
+            )
+            for i in range(2)
+        ]
+    assert all(r["status"] == "stale" and r["ref"] is None for r in receipts)
+    assert [
+        kline_sources.latest(DESC, i * W)["observation_id"] for i in range(2)
+    ] == old_ids
+    version = kline_sources.capture_source_window(KEY, 0, 2 * W, W)
+    assert (
+        version.closed_count == version.revision_sum == 2
+        and version.permission_floor == 1
+    )
+    with klines_repo._connect() as conn:
+        assert kline_sources.source_window_allows_target(conn, version, "2m")
+        assert [
+            r[0]
+            for r in conn.execute(
+                "SELECT permission_floor FROM kline_source_observations ORDER BY id DESC LIMIT 2"
+            )
+        ] == [1, 1]
+
+    async def run():
+        manager = manager_for("2m")
+        try:
+            await feed(manager, "2m", incoming(0))
+            rows = klines_repo.query_klines("BTCUSDT", "2m", market_type="futures")
+            assert len(rows) == 1 and rows[0]["quote_volume"] == 4
+            assert rows[0]["source"] == "source_snapshot_verified"
+            assert not klines_repo.query_klines("BTCUSDT", "1m", market_type="futures")
+        finally:
+            await manager.shutdown()
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("history", [0, 1, 2048])
+def test_first_forming_receipt_recovers_confirmed_history_without_native_canonical(
+    database, monkeypatch, history
+):
+    import asyncio
+
+    clock = [history * W + 1000]
+    monkeypatch.setattr("time.time", lambda: clock[0] / 1000)
+
+    async def run():
+        with klines_repo._connect() as conn:
+            kline_sources._schema(conn)
+            conn.execute("BEGIN IMMEDIATE")
+            for i in range(history):
+                record(i, conn=conn)
+            conn.commit()
+        ref = record(history, closed=False, sequence=clock[0])["ref"]
+        manager = manager_for("10007m")
+        try:
+            await feed(manager, "10007m", incoming(history, closed=False, ref=ref))
+            state = manager.bar_aggregator.get_pipeline("10007m").bar_state.get_state(
+                "binance", "futures", "BTCUSDT", 0
+            )
+            assert (
+                state.volume == state.tick_count == history + 1
+                and state.status.value == "forming"
+            )
+            assert len(state.source_snapshots) == 1
+            assert (state._source_recovery is not None) == bool(history)
+            assert (
+                state.preview_input_version
+                == state.preview_computed_version
+                == history + 1
+            )
+            assert not klines_repo.query_klines("BTCUSDT", "1m", market_type="futures")
+        finally:
+            await manager.shutdown()
+
+    asyncio.run(run())
+
+
+def test_duplicate_tail_receipt_still_publishes_a_changed_recovered_prefix(
+    database, monkeypatch
+):
+    import asyncio
+
+    clock = [2 * W + 1000]
+    monkeypatch.setattr("time.time", lambda: clock[0] / 1000)
+
+    async def run():
+        record(0)
+        record(1)
+        ref = record(2, closed=False, sequence=clock[0])["ref"]
+        manager = manager_for("5m")
+        events = []
+
+        async def collect(event):
+            events.append(event.bar.high)
+
+        manager.bar_aggregator.publisher.on_bar_event(collect)
+        try:
+            value = incoming(2, closed=False, ref=ref)
+            await feed(manager, "5m", value)
+            state = manager.bar_aggregator.get_pipeline("5m").bar_state.get_state(
+                "binance", "futures", "BTCUSDT", 0
+            )
+            before = state.preview_input_version
+            record(1, high=100.0, sequence=2 * W + 1500)
+            clock[0] += 2000
+            await feed(manager, "5m", value)
+            assert state.high == 100.0 and state.volume == 3 and events == [20.0, 100.0]
+            assert (
+                state.preview_input_version
+                == state.preview_computed_version
+                == before + 1
+            )
+            clock[0] += 1000
+            await feed(manager, "5m", value)
+            assert events == [20.0, 100.0] and state.preview_input_version == before + 1
+        finally:
+            await manager.shutdown()
+
+    asyncio.run(run())
+
+
+def test_missing_confirmations_hit_bounded_overlay_then_recover_without_losing_sources(
+    database, monkeypatch
+):
+    import asyncio
+    from app.data_engine.memory_budget import MemoryBudgetExceeded
+
+    clock = [2 * W + 1000]
+    monkeypatch.setattr("time.time", lambda: clock[0] / 1000)
+
+    async def run():
+        record(0)
+        record(1)
+        manager = manager_for("10007m")
+        try:
+            await feed(manager, "10007m", incoming(0))
+            state = manager.bar_aggregator.get_pipeline("10007m").bar_state.get_state(
+                "binance", "futures", "BTCUSDT", 0
+            )
+            for i in range(2, 130):
+                clock[0] = (i + 1) * W + 1000
+                ref = record(i, closed=False, sequence=clock[0])["ref"]
+                await feed(manager, "10007m", incoming(i, closed=False, ref=ref))
+            assert len(state.source_snapshots) == 128
+            old = (
+                state._source_recovery,
+                state.source_snapshots,
+                state.source_refs,
+                state.preview_input_version,
+                state.volume,
+            )
+            clock[0] += W
+            ref = record(130, closed=False, sequence=clock[0])["ref"]
+            with pytest.raises(MemoryBudgetExceeded):
+                await feed(manager, "10007m", incoming(130, closed=False, ref=ref))
+            assert (
+                state._source_recovery,
+                state.source_snapshots,
+                state.source_refs,
+                state.preview_input_version,
+                state.volume,
+            ) == old
+            assert (
+                state.source_snapshots is old[1]
+                and manager.memory_budget.snapshot()["reserved_bytes"] == 0
+            )
+            assert len(kline_sources.pending(DESC)) == 131
+            clock[0] = 200 * W + 1000
+            with klines_repo._connect() as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                for i in range(2, 131):
+                    record(i, closed=True, sequence=200 * W + i, conn=conn)
+                conn.commit()
+            latest = kline_sources.latest(DESC, 2 * W)
+            await feed(
+                manager,
+                "10007m",
+                incoming(
+                    2,
+                    ref=dict(series=KEY, open_time=2 * W, revision=latest["revision"]),
+                ),
+            )
+            assert (
+                len(state.source_snapshots) == 1
+                and state.tick_count == state.volume == 131
+            )
+            assert state.quote_volume == 262 and state.status.value == "forming"
+        finally:
+            await manager.shutdown()
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("change", ["unreceipted", "snapshot", "source-grid"])
+def test_selected_source_builder_does_not_silently_mix_input_owners(
+    database, monkeypatch, change
+):
+    import asyncio
+    from app.data_engine.bar_aggregator.models import MergeMode
+
+    clock = [2 * W + 1000]
+    monkeypatch.setattr("time.time", lambda: clock[0] / 1000)
+
+    async def run():
+        record(0)
+        record(1)
+        manager = manager_for("6m")
+        try:
+            await feed(manager, "6m", incoming(0))
+            state = manager.bar_aggregator.get_pipeline("6m").bar_state.get_state(
+                "binance", "futures", "BTCUSDT", 0
+            )
+            old = (state._source_recovery, state.preview_input_version, state.volume)
+            value = incoming(2)
+            if change == "unreceipted":
+                value = replace(value, extra={})
+            elif change == "snapshot":
+                value = replace(value, merge_mode=MergeMode.SNAPSHOT)
+            else:
+                value = replace(
+                    value,
+                    source_interval="3m",
+                    open_time_ms=3 * W,
+                    close_time_ms=6 * W - 1,
+                )
+            with pytest.raises(BlockUnavailable):
+                await feed(manager, "6m", value)
+            assert (
+                state._source_recovery,
+                state.preview_input_version,
+                state.volume,
+            ) == old
+            assert manager.memory_budget.snapshot()["reserved_bytes"] == 0
+        finally:
+            await manager.shutdown()
+
+    asyncio.run(run())
+
+
+def test_standalone_source_journal_keeps_unknown_permission_without_canonical_schema(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", tmp_path / "standalone.sqlite")
+    receipt = record(0)
+    assert receipt["permission_floor"] == 0
+    assert kline_sources.latest(DESC, 0)["permission_floor"] == 0
+    with klines_repo._connect() as conn:
+        assert (
+            conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE name='kline_revision_clock'"
+            ).fetchone()
+            is None
+        )
+
+
+@pytest.mark.parametrize("history", [2, 2048])
+def test_canonical_warm_start_cannot_discard_source_only_history_or_block_next_input(
+    database, monkeypatch, history
+):
+    import asyncio
+
+    clock = [history * W + 1000]
+    monkeypatch.setattr("time.time", lambda: clock[0] / 1000)
+
+    async def run():
+        with klines_repo._connect() as conn:
+            kline_sources._schema(conn)
+            conn.execute("BEGIN IMMEDIATE")
+            for i in range(history):
+                record(i, conn=conn)
+            conn.commit()
+        manager = manager_for("10007m")
+        repairs = []
+        monkeypatch.setattr(
+            manager.warm_start,
+            "_call_backfill_trigger",
+            lambda **kwargs: repairs.append(kwargs),
+        )
+        try:
+            await feed(manager, "10007m", incoming(0))
+            state = manager.bar_aggregator.get_pipeline("10007m").bar_state.get_state(
+                "binance", "futures", "BTCUSDT", 0
+            )
+            old = state._source_recovery
+            await manager.warm_start._seed_custom_interval(
+                "BTCUSDT", "10007m", market_type="futures"
+            )
+            assert (
+                state._source_recovery is old
+                and state.tick_count == history
+                and not repairs
+            )
+            ref = record(history, closed=False, sequence=clock[0])["ref"]
+            await feed(manager, "10007m", incoming(history, closed=False, ref=ref))
+            assert (
+                state.tick_count == state.volume == history + 1
+                and state.status.value == "forming"
+            )
+            assert not klines_repo.query_klines("BTCUSDT", "1m", market_type="futures")
         finally:
             await manager.shutdown()
 

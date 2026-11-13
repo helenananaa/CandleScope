@@ -55,3 +55,43 @@ def test_default_manager_restart_preserves_source_journal_only_fork_correction(
             await manager.shutdown()
 
     asyncio.run(run())
+
+
+def test_native_pending_replay_preserves_original_delete_permission(database):
+    from contextlib import closing
+    from app.data_engine.storage import kline_sources
+    from app.data_engine.data_manager.models import DataEventType
+
+    async def run():
+        first = Harness("1m")
+        try:
+            await first.ingest(message())
+        finally:
+            await first.close()
+        assert len(klines_repo.query_klines("BTCUSDT", "1m", market_type="futures")) == 1
+        with closing(klines_repo._connect()) as conn, conn:
+            conn.execute("UPDATE kline_source_heads SET delivered_revision=0")
+        klines_repo.delete_klines("BTCUSDT", "1m", market_type="futures")
+        pending = kline_sources.pending(DESC)
+        assert len(pending) == 1
+        assert pending[0].payload["_source_receipt"]["permission_floor"] == 0
+        manager = manager_for("1m")
+        pipeline = StreamPipeline(IngestionConfig(ccxt_fork_kline_enabled=True), None, DESC)
+        pipeline.delivery.on_market_event(manager.bar_aggregator.on_market_event)
+        events = []
+
+        async def collect(event):
+            events.append(event)
+
+        manager.event_bus.subscribe(collect)
+        try:
+            await pipeline.normalize.ingest(pending[0])
+            await manager.aggregator_bridge.delivery.flush_pending()
+            assert not klines_repo.query_klines("BTCUSDT", "1m", market_type="futures")
+            assert not any(event.event_type in (DataEventType.BAR_CLOSED, DataEventType.BAR_AMENDED)
+                           for event in events)
+        finally:
+            await pipeline.recovery.stop()
+            await manager.shutdown()
+
+    asyncio.run(run())

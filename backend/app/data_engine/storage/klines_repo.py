@@ -1611,7 +1611,8 @@ class KlinesRepoAdapter:
     def validate_source_window(self, version, *, target_interval=None):
         from contextlib import closing
         from .kline_sources import source_window_current, source_window_allows_target
-        with closing(self.revision_store.connect()) as conn:
+        with closing(self.revision_store.connect()) as conn, conn:
+            conn.execute('BEGIN')
             return (source_window_allows_target(conn, version, target_interval)
                     if target_interval is not None else source_window_current(conn, version))
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 from contextlib import closing, nullcontext
 from decimal import Decimal
 from typing import Any
@@ -92,8 +93,9 @@ def _schema(conn) -> None:
     )
     # This is metadata of the original selected-source owner, not a second
     # revision ledger. Legacy content has no newer deletion permission.
-    if 'permission_floor' not in {row[1] for row in conn.execute('PRAGMA table_info(kline_source_heads)')}:
-        conn.execute('ALTER TABLE kline_source_heads ADD COLUMN permission_floor INTEGER NOT NULL DEFAULT 0')
+    for table in ('kline_source_heads', 'kline_source_observations'):
+        if 'permission_floor' not in {row[1] for row in conn.execute(f'PRAGMA table_info({table})')}:
+            conn.execute(f'ALTER TABLE {table} ADD COLUMN permission_floor INTEGER NOT NULL DEFAULT 0')
 
 
 def rest_watermark() -> int:
@@ -193,8 +195,15 @@ def record(
         if name in envelope:
             semantic[name] = envelope[name]
     value_hash = hashlib.sha256(_json(semantic).encode()).hexdigest()
+    from .revisions import acquisition_delete_floor, current_revision, StaleAcquisition
+    requested_permission = acquisition_delete_floor(None)
+    observation_identity = [envelope, event.source.value, rest_watermark]
+    if event.source != DataSource.WEBSOCKET and requested_permission is not None:
+        # Original pre-I/O D126 permission is part of a REST observation's
+        # audit identity. Concurrent old/fresh requests must not alias one row.
+        observation_identity.append({'permission_floor': requested_permission})
     observation_hash = hashlib.sha256(
-        _json([envelope, event.source.value, rest_watermark]).encode()
+        _json(observation_identity).encode()
     ).hexdigest()
     data = {key: value for key, value in event.data.items() if key != "source_candle"}
     with (
@@ -207,6 +216,26 @@ def record(
                 _schema(conn)
                 conn.execute("BEGIN IMMEDIATE")
             previous = _head(conn, key, opened)
+            try:
+                head_revision = current_revision(conn)
+            except sqlite3.OperationalError as error:
+                if 'no such table: kline_revision_clock' not in str(error):
+                    raise
+                # Standalone legacy journals have no D126 permission owner.
+                head_revision = 0
+            permission = (requested_permission if requested_permission is not None else
+                          head_revision if event.source == DataSource.WEBSOCKET else 0)
+            if type(permission) is not int or not 0 <= permission <= head_revision:
+                raise StaleAcquisition('source observation has invalid original deletion permission')
+            if (previous is not None and previous['value_hash'] == value_hash
+                    and event.source != DataSource.WEBSOCKET and requested_permission is not None
+                    and permission > previous['permission_floor']):
+                # A real fresh request can confirm the SAME semantic content,
+                # even when its value selection loses a concurrent watermark
+                # race. Do not reselect an old value or change its revision.
+                conn.execute('UPDATE kline_source_heads SET permission_floor=MAX(permission_floor,?) '
+                             'WHERE series=? AND open_time=? AND value_hash=?',
+                             (permission,key,opened,value_hash))
             existing = conn.execute(
                 "SELECT * FROM kline_source_observations WHERE series=? AND open_time=? AND observation_hash=?",
                 (key, opened, observation_hash),
@@ -227,12 +256,15 @@ def record(
                     "status": status,
                     "observation_id": existing["id"],
                     "ref": _ref(previous) if selected else None,
+                    "permission_floor": (max(previous['permission_floor'], permission)
+                        if selected and event.source != DataSource.WEBSOCKET and requested_permission is not None
+                        else previous['permission_floor'] if selected else 0),
                 }
             decision = _decision(previous, event, value_hash, rest_watermark)
             cursor = conn.execute(
                 """INSERT INTO kline_source_observations
-                (series,open_time,observation_hash,value_hash,envelope_json,data_json,source,event_time,received_at,rest_watermark,decision)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                (series,open_time,observation_hash,value_hash,envelope_json,data_json,source,event_time,received_at,rest_watermark,decision,permission_floor)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     key,
                     opened,
@@ -245,6 +277,7 @@ def record(
                     event.received_at_ms,
                     rest_watermark,
                     decision,
+                    permission,
                 ),
             )
             observation_id = cursor.lastrowid
@@ -264,11 +297,12 @@ def record(
                 if event.source == DataSource.WEBSOCKET
                 else (previous["ws_event_time"] if previous else None)
             )
-            from .revisions import current_revision
             permission_floor = (
-                previous['permission_floor']
+                (max(previous['permission_floor'], permission)
+                 if event.source != DataSource.WEBSOCKET and requested_permission is not None
+                 else previous['permission_floor'])
                 if previous is not None and previous['value_hash'] == value_hash
-                else current_revision(conn) if event.source == DataSource.WEBSOCKET else 0
+                else permission
             )
             conn.execute(
                 """INSERT INTO kline_source_heads(series,open_time,observation_id,revision,value_hash,is_closed,source,ws_event_time,permission_floor)
@@ -292,6 +326,7 @@ def record(
                 "status": decision,
                 "observation_id": observation_id,
                 "ref": {"series": key, "open_time": opened, "revision": revision},
+                "permission_floor": permission_floor,
             }
 
 
@@ -367,6 +402,7 @@ def pending(descriptor: StreamDescriptor, limit: int = 500, *, include_history=F
                 "status": "selected",
                 "observation_id": row["observation_id"],
                 "ref": _ref(row),
+                "permission_floor": row['permission_floor'],
             }
             result.append(
                 RawMessage(
@@ -482,7 +518,8 @@ def closed_components(key: str, start: int, end: int) -> list[dict]:
     """Rebuild a cold derived bucket from its durable native components."""
     with closing(klines_repo._connect()) as conn:
         return [
-            {"ref": _ref(row), "data": json.loads(row["data_json"])}
+            {"ref": _ref(row), "data": json.loads(row["data_json"]),
+             "permission_floor": row['permission_floor'] if 'permission_floor' in row.keys() else 0}
             for row in conn.execute(
                 """SELECT h.*,o.data_json FROM kline_source_heads h
                 JOIN kline_source_observations o ON h.observation_id=o.id
@@ -652,22 +689,60 @@ def _source_window_counts(conn, key, start, end, width):
 def source_window_current(conn, version):
     """Transaction-local content fence; original D126 permissions stay separate."""
     from app.data_engine.aggregation.source_window import SourceWindowVersion
-    from .revisions import current_revision
+    from .revisions import (
+        current_revision,
+        series_change,
+        series_values,
+        IDENTITY_COLUMNS,
+        BLOCK_CHANGE_WINDOW,
+    )
 
     if type(version) is not SourceWindowVersion:
         raise ValueError("selected-source version required")
     _source_window_args(
         version.series, version.start_ms, version.through_ms, version.source_width_ms
     )
-    return current_revision(
-        conn
-    ) >= version.acquisition_revision and _source_window_counts(
+    head = current_revision(conn)
+    if head < version.acquisition_revision or _source_window_counts(
         conn,
         version.series,
         version.start_ms,
         version.through_ms,
         version.source_width_ms,
-    ) == (version.closed_count, version.revision_sum, version.permission_floor)
+    ) != (version.closed_count, version.revision_sum, version.permission_floor):
+        return False
+    exchange, market_type, symbol, interval = json.loads(version.series)
+    key = series_values(symbol, interval, exchange, market_type)
+    change = series_change(conn, key)
+    if change is None or change["revision"] <= version.acquisition_revision:
+        return True
+    if change["revision"] > head:
+        return False
+    # Reuse D126's finite mutation footprints. Native closes beyond the source
+    # seam do not invalidate this read; a correction within it does. Query only
+    # scalar metadata, never materialize unrelated payloads/identity strings.
+    gap = head - version.acquisition_revision
+    if not 0 < gap <= BLOCK_CHANGE_WINDOW:
+        return False
+    count = conn.execute(
+        "SELECT COUNT(*) FROM kline_block_changes WHERE revision>? AND revision<=?",
+        (version.acquisition_revision, head),
+    ).fetchone()[0]
+    if count != gap:
+        return False
+    changed = conn.execute(
+        "SELECT 1 FROM kline_block_changes WHERE revision>? AND revision<=? AND "
+        + " AND ".join(name + "=?" for name in IDENTITY_COLUMNS)
+        + " AND start_ms<? AND end_ms>=? LIMIT 1",
+        (
+            version.acquisition_revision,
+            head,
+            *key,
+            version.through_ms,
+            version.start_ms,
+        ),
+    ).fetchone()
+    return changed is None
 
 
 def source_window_allows_target(conn, version, interval, *, expected=None):
@@ -720,6 +795,7 @@ def capture_source_window(key, start, end, width):
 
     _source_window_args(key, start, end, width)
     with closing(klines_repo._connect()) as conn:
+        conn.execute("BEGIN")
         acquired = current_revision(conn)
         expected = _source_window_counts(conn, key, start, end, width)
         row = conn.execute(
@@ -728,7 +804,8 @@ def capture_source_window(key, start, end, width):
             (key, start, end),
         ).fetchone()
         if row is None:
-            raise BlockUnavailable("selected-source window has no confirmed components")
+            from app.data_engine.aggregation.source_window import EmptySourceWindow
+            raise EmptySourceWindow("selected-source window has no confirmed components")
         through = row["open_time"] + width
         if (row["open_time"] - start) % width or through > end:
             raise BlockUnavailable("selected-source seam is off grid")

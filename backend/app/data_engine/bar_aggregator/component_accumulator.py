@@ -210,6 +210,8 @@ class SourceWindowSummary:
     excluded_open_ms: int
     pages: int
     estimated_bytes: int
+    binding: Any = None
+    capabilities: frozenset[str] = frozenset()
 
     def covers(self, opened):
         return any(part.first <= opened < part.end for part in self.parts)

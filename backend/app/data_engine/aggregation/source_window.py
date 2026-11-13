@@ -6,10 +6,17 @@ owns source/storage binding, target generation, and durable-commit fences.
 
 from dataclasses import dataclass
 from typing import Any
+from .blocks import BlockUnavailable
+
+
+class EmptySourceWindow(BlockUnavailable):
+    """No selected closed history; ordinary first forming input stays valid."""
+
 
 MAX_SOURCE_WINDOW_ROWS = 65536
 MAX_SOURCE_PAGE_ROWS = 128
 MAX_SOURCE_DATA_BYTES = 8192
+MAX_SOURCE_OVERLAY_ROWS = 128
 MAX_SOURCE_SUMMARY_PARTS = 32
 SOURCE_SUMMARY_BYTES = 32 * 1024
 

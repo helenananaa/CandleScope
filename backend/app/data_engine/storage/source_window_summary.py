@@ -98,6 +98,10 @@ def fold_source_window(key, start, end, width, incoming, cancel):
                         "canonical source differs from selected-source content"
                     )
                 if data["open_time"] == incoming.open_time_ms:
+                    if not incoming.is_closed:
+                        raise BlockRevisionChanged(
+                            "a forming input cannot replace a selected closed component"
+                        )
                     if dict(component["ref"]) != dict(incoming.extra["source_ref"]):
                         raise BlockRevisionChanged(
                             "incoming source version was superseded"
@@ -154,7 +158,7 @@ def fold_source_window(key, start, end, width, incoming, cancel):
                 raise MemoryBudgetExceeded(
                     "selected-source summaries exceed staging allowance"
                 )
-    if not found or count != version.closed_count:
+    if (incoming.is_closed and not found) or count != version.closed_count:
         raise BlockRevisionChanged("selected-source read view is incomplete")
     with closing(klines_repo._connect()) as conn:
         if not kline_sources.source_window_current(conn, version):

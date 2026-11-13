@@ -7,7 +7,15 @@ from dataclasses import replace
 
 from app.core.executors import run_storage
 from app.data_engine.aggregation.blocks import BlockRevisionChanged, BlockUnavailable
-from app.data_engine.aggregation.source_window import SOURCE_SUMMARY_BYTES
+from app.data_engine.aggregation.source_window import (
+    SOURCE_SUMMARY_BYTES,
+    EmptySourceWindow,
+)
+from app.data_engine.market_data.kline_metrics import (
+    kline_available_fields,
+    KLINE_ENHANCED_FIELDS,
+)
+from app.data_engine.memory_budget import retained_size, MemoryBudgetExceeded
 
 # Raw JSON pages are byte bounded. Only scalar candle fields survive decode;
 # include the encoded page, one temporary decoded tree and all summary work.
@@ -18,6 +26,11 @@ class SourceRecoveryReader:
     def __init__(self, bridge, aggregator):
         self.bridge = bridge
         self.aggregator = aggregator
+        self.binding = object()
+
+    def reset_binding(self):
+        # One epoch of the existing storage owner, not a source revision ledger.
+        self.binding = object()
 
     def available(self):
         storage = self.bridge._storage_provider()
@@ -37,7 +50,17 @@ class SourceRecoveryReader:
         )
 
     @asynccontextmanager
-    async def stage(self, incoming, start, end, *, target_interval, is_current):
+    async def stage(
+        self,
+        incoming,
+        start,
+        end,
+        *,
+        target_interval,
+        is_current,
+        previous=None,
+        force=False,
+    ):
         bridge = self.bridge
         storage = bridge._storage_provider()
         budget = bridge.preview_memory_budget
@@ -50,17 +73,31 @@ class SourceRecoveryReader:
         if runtime is None or runtime.closing:
             raise BlockUnavailable("original source recovery lifetime is unavailable")
         store, journal = storage.revision_store, bridge.delivery.journal
+        epoch = self.binding
 
-        def bound():
+        def capabilities():
+            return frozenset(
+                kline_available_fields(
+                    incoming.exchange, incoming.market_type
+                ).intersection(KLINE_ENHANCED_FIELDS)
+            )
+
+        capability = capabilities()
+
+        def owner_bound():
             return (
-                is_current()
-                and bridge._storage_provider() is storage
+                bridge._storage_provider() is storage
                 and storage.revision_store is store
                 and bridge.delivery.journal is journal
                 and self.aggregator.history_prefix_runtime is runtime
                 and not runtime.closing
                 and bridge.preview_memory_budget is budget
+                and self.binding is epoch
+                and capabilities() == capability
             )
+
+        def bound():
+            return is_current() and owner_bound()
 
         # Reuse the existing handoff task capacity/lifetime. A registered H127
         # target already entered it through hold(); do not reenter that owner.
@@ -70,9 +107,7 @@ class SourceRecoveryReader:
             else runtime._task()
         )
         async with lifetime:
-            with budget.reserve(
-                "history-query", SOURCE_PAGE_WORK_BYTES + SOURCE_SUMMARY_BYTES * 2
-            ):
+            with budget.reserve("history-query", SOURCE_SUMMARY_BYTES * 2 + 16384):
                 try:
                     # The worker receives a private scalar input/reference,
                     # never the producer's mutable extra mapping.
@@ -80,14 +115,39 @@ class SourceRecoveryReader:
                         incoming,
                         extra={"source_ref": dict(incoming.extra["source_ref"])},
                     )
-                    version = await run_storage(
-                        storage.capture_source_window,
-                        incoming.extra["source_ref"]["series"],
-                        start,
-                        end,
-                        incoming.close_time_ms + 1 - incoming.open_time_ms,
-                    )
-                    if version.closed_count == 1:
+                    if (
+                        previous is not None
+                        and not force
+                        and previous.binding is epoch
+                        and previous.capabilities == capability
+                        and await run_storage(
+                            validate, previous.version, target_interval=target_interval
+                        )
+                    ):
+                        if not bound():
+                            raise BlockRevisionChanged(
+                                "source recovery binding changed during preview validation"
+                            )
+                        yield None, owner_bound
+                        return
+                    try:
+                        version = await run_storage(
+                            storage.capture_source_window,
+                            incoming.extra["source_ref"]["series"],
+                            start,
+                            end,
+                            incoming.close_time_ms + 1 - incoming.open_time_ms,
+                        )
+                    except EmptySourceWindow:
+                        if previous is not None or incoming.is_closed or not bound():
+                            raise
+                        yield None, owner_bound
+                        return
+                    if (
+                        previous is None
+                        and version.closed_count == 1
+                        and incoming.is_closed
+                    ):
                         # No siblings means ordinary live admission. In
                         # particular, do not wait for this input's native write
                         # while the original dispatcher is intentionally busy.
@@ -100,7 +160,7 @@ class SourceRecoveryReader:
                             raise BlockRevisionChanged(
                                 "single-source admission view expired"
                             )
-                        yield None
+                        yield None, owner_bound
                         return
                     # Original dispatcher only; do not read a half-committed native
                     # source and mistake the expected transient mismatch for proof.
@@ -110,15 +170,16 @@ class SourceRecoveryReader:
                         raise BlockRevisionChanged(
                             "source recovery binding changed during drain"
                         )
-                    summary = await run_storage(
-                        fold,
-                        incoming.extra["source_ref"]["series"],
-                        start,
-                        end,
-                        incoming.close_time_ms + 1 - incoming.open_time_ms,
-                        incoming,
-                        cancel,
-                    )
+                    with budget.reserve("history-query", SOURCE_PAGE_WORK_BYTES):
+                        summary = await run_storage(
+                            fold,
+                            incoming.extra["source_ref"]["series"],
+                            start,
+                            end,
+                            incoming.close_time_ms + 1 - incoming.open_time_ms,
+                            incoming,
+                            cancel,
+                        )
                     if not await run_storage(
                         validate, summary.version, target_interval=target_interval
                     ):
@@ -129,7 +190,18 @@ class SourceRecoveryReader:
                         raise BlockRevisionChanged(
                             "source recovery binding changed before adoption"
                         )
-                    yield summary
+                    summary = replace(
+                        summary,
+                        binding=epoch,
+                        capabilities=capability,
+                        estimated_bytes=0,
+                    )
+                    size = retained_size((summary,))[0] + 64
+                    if size > SOURCE_SUMMARY_BYTES:
+                        raise MemoryBudgetExceeded(
+                            "bound source summary exceeds staging allowance"
+                        )
+                    yield replace(summary, estimated_bytes=size), owner_bound
                 finally:
                     # run_storage retains ownership until a running thread has
                     # physically drained even when the awaiting task is cancelled.

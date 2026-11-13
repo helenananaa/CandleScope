@@ -520,6 +520,9 @@ class DataManager(DataManagerCore):
             dm.set_storage(KlinesRepoAdapter())
         """
         self.query_engine.set_storage(storage)
+        source_reader = getattr(self.bar_aggregator, 'source_recovery_reader', None)
+        if source_reader is not None:
+            source_reader.reset_binding()
         self.coordinator.set_storage(storage)
         self.warm_start.reset_tail_repairs()
         store = getattr(storage, "revision_store", None)

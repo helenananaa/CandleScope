@@ -186,6 +186,12 @@ class AggregatorWarmStartService:
                 # better canonical cached bar through ordinary arbitration.
                 current = self._bar_aggregator.get_bucket_state(symbol, interval, bucket_start_ms,
                     exchange=exchange, market_type=market_type, series_identity=series_identity)
+                if current is not None and current._source_recovery is not None:
+                    # The live bridge already owns this accepted source view.
+                    # A partial/empty canonical warm read cannot replace it.
+                    self._keep_source_recovery(current, base_interval, base_seconds, now_ms,
+                        focus_scope, subscription_tier)
+                    return
                 if current is not None:
                     key = SeriesKey.create(symbol, interval, exchange=exchange,
                                            market_type=market_type, identity=series_identity)
@@ -193,6 +199,12 @@ class AggregatorWarmStartService:
                     if self._cache.get_latest(key, 1) != [bar]:
                         await self._cache.apply_protected(self._cache.upsert_if_accepted, key, bar)
                 return
+        current = self._bar_aggregator.get_bucket_state(symbol, interval, bucket_start_ms,
+            exchange=exchange, market_type=market_type, series_identity=series_identity)
+        if current is not None and current._source_recovery is not None:
+            self._keep_source_recovery(current, base_interval, base_seconds, now_ms,
+                focus_scope, subscription_tier)
+            return
         prev_bucket_start_ms = self._bar_aggregator.previous_bucket(
             interval, bucket_start_ms, exchange=exchange, series_identity=series_identity,
         )
@@ -423,6 +435,32 @@ class AggregatorWarmStartService:
             cached = self._cache.get_latest(key, 1)
             if not cached or cached[-1] != rebuilt_bar:
                 await self._cache.apply_protected(self._cache.upsert, key, rebuilt_bar)
+
+    def _keep_source_recovery(self, state, base_interval, base_seconds, now_ms,
+                              focus_scope, subscription_tier):
+        """Keep accepted source data; missing confirmations still request repair."""
+        receipt = state._source_recovery
+        reader = self._bar_aggregator.source_recovery_reader
+        owned = (reader is not None and receipt.binding is reader.binding
+                 and receipt.version.source_width_ms == base_seconds * 1000)
+        received = (receipt.version.closed_count + sum(
+            row['is_closed'] and row['open_time_ms'] >= receipt.version.through_ms
+            for row in state.source_snapshots.values())) if owned else 0
+        expected = max(0, (now_ms-state.bucket_start_ms)//(base_seconds*1000))
+        if received >= expected:
+            return
+        try:
+            self._call_backfill_trigger(symbol=state.symbol, interval=base_interval,
+                start_ms=state.bucket_start_ms, end_ms=now_ms, exchange=state.exchange,
+                market_type=state.market_type,
+                reason=self._warmup_reason(focus_scope, subscription_tier),
+                requester='warm_start_custom_seed', metadata={
+                    'focus_scope':focus_scope, 'subscription_tier':subscription_tier,
+                    'requested_interval':state.interval, 'base_interval':base_interval,
+                    'had_stream':True, 'requires_trusted_finality':True},
+                series_identity=state.identity)
+        except Exception as exc:
+            logger.warning('Failed to request source fallback warm repair: %s', exc)
 
     async def _seed_standard_interval(
         self,

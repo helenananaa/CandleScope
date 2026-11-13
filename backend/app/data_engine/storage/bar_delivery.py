@@ -225,6 +225,21 @@ class BarDeliveryJournal:
             else:
                 change = series_change(conn, values)
                 changes = [change] if change is not None else []
+            source_floor = payload.get("source_permission_floor")
+            if source_floor is not None:
+                # Preserve the original source receipt's delete permission;
+                # content revision checks below retain their original clock.
+                permissions = (family if derived else list(zip(IDENTITY_COLUMNS, values)))
+                deletion = conn.execute(
+                    "SELECT MAX(revision) FROM kline_delete_permissions WHERE "
+                    + " AND ".join(f"{name}=?" for name, _ in permissions),
+                    tuple(value for _, value in permissions),
+                ).fetchone()[0]
+                if (type(source_floor) is not int or not 0 <= source_floor <= current_revision(conn)
+                        or (deletion is not None and deletion > source_floor)):
+                    conn.execute("UPDATE bar_delivery SET phase='rejected',recovery_required=1 WHERE event_id=?", (event_id,))
+                    record["phase"], record["recovery_required"] = "rejected", 1
+                    return self._canonical(conn, record)
             start = payload["storage_row"]["open_time"]
             end = payload["storage_row"].get("close_time")
             valid_window = end is not None and end >= start

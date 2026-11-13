@@ -253,6 +253,8 @@ class BarState:
 
     acquisition_revision: int | None = None
     canonical_recovery_delete_floor: int | None = None
+    # Original selected-source permission is independent of content freshness.
+    source_permission_floor: int | None = None
     # Mutable execution metadata belongs only to this builder. Publication
     # copies carry immutable inputs and scalars, never the live accumulator.
     _component_accumulator: Any = field(default=None, repr=False, compare=False)

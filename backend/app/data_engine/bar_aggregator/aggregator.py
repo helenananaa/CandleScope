@@ -1166,6 +1166,8 @@ class BarAggregator:
         target_token=None,
         _source_recovery=None,
         _cold_prepared=False,
+        _source_fence=None,
+        _source_adoption_fence=None,
     ) -> None:
         """Core processing callback: L1 → L2 → L3 → L4 → L5.
 
@@ -1180,6 +1182,9 @@ class BarAggregator:
             return
 
         def check_target():
+            if _source_fence is not None and not _source_fence():
+                from app.data_engine.aggregation.blocks import BlockRevisionChanged
+                raise BlockRevisionChanged('source recovery binding changed before handoff')
             if target_token is not None and self._target_epochs.get(target_token[0]) is not target_token[1]:
                 from app.data_engine.aggregation.blocks import BlockRevisionChanged
                 raise BlockRevisionChanged('aggregation target detached during input')
@@ -1188,26 +1193,37 @@ class BarAggregator:
 
         revision_provider = getattr(self, "acquisition_revision_provider", None)
         acquisition_revision = revision_provider() if revision_provider is not None else None
+        source_floor = bar_input.extra.get('source_permission_floor')
+        if source_floor is not None and (type(source_floor) is not int or source_floor < 0):
+            raise ValueError('source deletion permission must be a nonnegative revision')
 
         # L2: Compute which bucket this input belongs to
         bucket_start_ms = pipeline.time_bucket.compute_bucket(bar_input.open_time_ms)
 
         existing = pipeline.bar_state.get_state(exchange, market_type, symbol, bucket_start_ms)
+        if (existing is not None and existing._source_recovery is not None
+                and (bar_input.merge_mode != MergeMode.COMPONENT or not bar_input.extra.get('source_ref')
+                     or bar_input.source_interval != json.loads(existing._source_recovery.version.series)[3])):
+            from app.data_engine.aggregation.blocks import BlockUnavailable
+            raise BlockUnavailable('selected-source builder requires its receipted source grid or canonical handoff')
         reader = self.source_recovery_reader
         if (not _cold_prepared and reader is not None and bar_input.extra.get('source_ref')
-                and bar_input.is_closed and bar_input.merge_mode == MergeMode.COMPONENT
-                and (existing is None or (existing._source_recovery is not None
-                     and (bar_input.open_time_ms < existing._source_recovery.version.through_ms
-                          or len(existing.source_snapshots) >= 128)))
-                and (existing is None or existing.source_refs.get(bar_input.input_key)
-                     != bar_input.extra['source_ref'])):
+                and bar_input.merge_mode == MergeMode.COMPONENT
+                and ((existing is None)
+                     or (existing is not None and existing._source_recovery is not None))):
             from app.data_engine.bar_aggregator.bar_state import ComponentSnapshotOHLCVMerge
             from app.data_engine.aggregation.blocks import BlockRevisionChanged, BlockUnavailable
             from app.data_engine.aggregation.source_window import MAX_SOURCE_WINDOW_ROWS
             from app.data_engine.interval_policy import IntervalAlignment
             strategy = pipeline.bar_state._component_merge_strategy
+            source_ref = bar_input.extra['source_ref']
             target_spec, source_spec = parse_interval_spec(interval), parse_interval_spec(bar_input.source_interval)
             qualified = (target_spec is not None and source_spec is not None
+                and len(source_ref) == 3 and set(source_ref) == {'series','open_time','revision'}
+                and isinstance(source_ref['series'],str) and len(source_ref['series'])<=1024
+                and type(source_ref['open_time']) is int and type(source_ref['revision']) is int
+                and source_ref['revision']>0 and source_ref['open_time']==bar_input.open_time_ms
+                and type(bar_input.open_time_ms) is int and type(bar_input.close_time_ms) is int
                 and target_spec.alignment is source_spec.alignment is IntervalAlignment.FIXED_EPOCH
                 and not target_spec.phase_ms and not source_spec.phase_ms
                 and target_spec.nominal_ms % source_spec.nominal_ms == 0
@@ -1218,6 +1234,8 @@ class BarAggregator:
                 and type(strategy) is ComponentSnapshotOHLCVMerge
                 and getattr(strategy.apply, '__func__', None) is ComponentSnapshotOHLCVMerge.apply
                 and reader.available())
+            if not qualified and existing is not None and existing._source_recovery is not None:
+                raise BlockUnavailable('selected-source builder lost its qualified owner')
             if qualified:
                 if target_token is None or self.memory_budget is None:
                     raise BlockUnavailable('bounded cold recovery requires a registered budgeted target')
@@ -1230,7 +1248,8 @@ class BarAggregator:
                                 bar_input.source_interval,bar_input.source,bar_input.merge_mode)
                 prepare = getattr(strategy, 'prepare_input', None)
                 component_reader = self._source_component_reader
-                def current():
+                lifecycle = (existing.status, existing.finality) if existing is not None else None
+                def compatible():
                     check_target()
                     return (self.source_recovery_reader is reader and self.config is cfg
                         and self._source_component_reader is component_reader
@@ -1242,9 +1261,12 @@ class BarAggregator:
                         and getattr(strategy, 'prepare_input', None) == prepare
                         and (bar_input.symbol,bar_input.exchange,bar_input.market_type,
                              bar_input.source_interval,bar_input.source,bar_input.merge_mode) == incoming_key
-                        and ComponentSnapshotOHLCVMerge._snapshot_from_input(bar_input) == accepted
+                        and ComponentSnapshotOHLCVMerge._snapshot_from_input(bar_input) == accepted)
+                def current():
+                    return (compatible()
                         and engine.get_state(exchange, market_type, symbol, bucket_start_ms) is existing
                         and (existing is None or (existing.preview_input_version == version
+                            and (existing.status, existing.finality) == lifecycle
                             and existing.source_snapshots is snapshots and existing.source_refs is refs)))
                 held = self.publisher._hold_payload('input', (existing,)) if existing is not None else None
                 work = retained_size((existing,accepted))[0] + 16384
@@ -1254,14 +1276,24 @@ class BarAggregator:
                     with budget.reserve('history-query', work):
                         _, end = pipeline.time_bucket.compute_bucket_range(bucket_start_ms)
                         async with reader.stage(bar_input, bucket_start_ms, end,
-                                                target_interval=interval, is_current=current) as receipt:
+                                                target_interval=interval, is_current=current,
+                                                previous=existing._source_recovery if existing is not None else None,
+                                                force=(existing is not None and len(existing.source_snapshots)>=128
+                                                    and (bar_input.input_key not in existing.source_snapshots
+                                                        or (bar_input.is_closed and existing.source_refs.get(bar_input.input_key)
+                                                            != bar_input.extra['source_ref'])))) as staged:
+                            receipt, owner_bound = staged
                             if not current():
                                 raise BlockRevisionChanged('builder changed during source reconstruction')
+                            if (receipt is None and existing is not None and existing._source_recovery is not None
+                                    and existing._source_recovery.covers(bar_input.open_time_ms)):
+                                return
                             # The first ordinary live leaf has no siblings to
                             # reconstruct. Keep the existing raw/live-prefix
                             # path rather than creating a cold owner for it.
                             return await self._apply_bar_input(exchange, market_type, symbol, interval,
-                                bar_input, emit_events, target_token, receipt, True)
+                                bar_input, emit_events, target_token, receipt, True,
+                                lambda: compatible() and owner_bound(), current)
                 finally:
                     if held is not None:
                         self.publisher._release_payload(held)
@@ -1295,6 +1327,10 @@ class BarAggregator:
                     extra={"source_ref": component["ref"]},
                 )
                 pipeline.bar_state.apply(exchange, market_type, symbol, bucket_start_ms, sibling)
+            restored = pipeline.bar_state.get_state(exchange, market_type, symbol, bucket_start_ms)
+            floors = [component['permission_floor'] for component in components if 'permission_floor' in component]
+            if restored is not None and floors:
+                restored.source_permission_floor = min(floors)
 
         # Check for event-driven close: if this input starts a new bucket,
         # close previous active bars for this symbol
@@ -1312,6 +1348,9 @@ class BarAggregator:
         check_target()
 
         # L3: Apply input to bar state
+        if _source_adoption_fence is not None and not _source_adoption_fence():
+            from app.data_engine.aggregation.blocks import BlockRevisionChanged
+            raise BlockRevisionChanged('source builder changed before synchronous adoption')
         previous = pipeline.bar_state.get_active(exchange,market_type,symbol,bucket_start_ms)
         delay_preview = (self._previews.qualifies(pipeline,previous,bar_input,target_token,emit_events)
                          and self._previews.admit(pipeline,previous,target_token))
@@ -1332,6 +1371,10 @@ class BarAggregator:
 
         if state.acquisition_revision is None:
             state.acquisition_revision = acquisition_revision
+        if source_floor is not None:
+            state.source_permission_floor = min(
+                source_floor, state.source_permission_floor
+                if state.source_permission_floor is not None else source_floor)
         warm_floor = bar_input.extra.get("warm_start_acquisition_floor")
         if warm_floor is not None:
             # A replayed forming input keeps its original delete fence.
