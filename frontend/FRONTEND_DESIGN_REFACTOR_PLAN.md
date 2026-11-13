@@ -411,6 +411,14 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - 高级维护 uses the row pattern; results are alerts with per-series detail in a disclosure. 关于与支持 and 外观显示 use kit disclosures, selects and a segmented colour preset.
 - Settings has no raw `<select>` or text field left; the raw buttons that remain are the choice cards (themes, proxy modes, storage presets), the sidebar and the exchange rows, plus native colour inputs, which the kit has no equivalent for. `settings.css` is 1,289 lines (2,364 at the start of 5a), and 46 unused message keys are gone.
 
+**Phase 5c is done (branch `design/phase-5c-alerts`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_5C.md`](../docs/FRONTEND_DESIGN_QA_PHASE_5C.md).
+
+- The alerts drawer drops its context card (four tiles repeating the chart header) and uses kit tabs, with the rule count as the 全部警报 badge.
+- 添加警报 is four numbered sections instead of five tinted cards with more cards inside; 到期 and 通知 stack instead of sharing a 520 px row; channels are checkboxes with descriptions; the rule test is a closed disclosure; 新建草稿 / 创建警报 stay in a footer. Step descriptions are gone. A custom expiry uses `DateTimeInput`, so it no longer shows the browser's date format.
+- Rules and history are rows with ghost actions; the column-label chips that looked like filters are gone; empty states use `EmptyState`.
+- Fired alerts go through `notify()`: they show above dialogs and can be clicked while one is open (the 3a known gap), with 打开警报 as the action.
+- `alerts.css` went from 1,500 lines to about 370; the late-loading `alertToasts.css` is merged and deleted; 21 unused keys are gone.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.

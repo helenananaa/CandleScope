@@ -329,7 +329,8 @@ export function describeExpression(expression: AlertExpression | unknown): strin
 
 export function describeAlertChannels(rule: AlertRule | null | undefined): string {
   const channels = (rule?.actions || [])
-    .filter((action) => action.enabled !== false)
+    // Every hit is recorded in 触发历史, so the history action is not listed as a channel.
+    .filter((action) => action.enabled !== false && action.type !== "history")
     .map((action) => {
       if (action.type === "in_app") return t("alert.channelShort.inApp");
       if (action.type === "browser") return t("alert.channelShort.browser");
