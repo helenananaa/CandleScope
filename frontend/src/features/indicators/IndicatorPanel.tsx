@@ -7,6 +7,11 @@
  * - Open code editor for custom indicators
  */
 import { OverlayLayer } from "../../components/ui/Overlays.js";
+import { Button, IconButton } from "../../components/ui/Button.js";
+import { TabPanel, Tabs } from "../../components/ui/Choice.js";
+import { Badge, InlineAlert } from "../../components/ui/Display.js";
+import { EmptyState } from "../../components/ui/EmptyState.js";
+import { Checkbox, Field, Input, Select, Textarea } from "../../components/ui/Field.js";
 import { confirmAction, notify } from "../../components/ui/overlay/overlayApi.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import { Icon } from "../../components/icons/Icon.js";
@@ -22,7 +27,6 @@ import {
   useIndicatorCatalogRuntime,
 } from "./useIndicatorCatalogRuntime";
 import { indicatorDisplayName, indicatorDisplayPanes } from "./indicatorDisplayName.js";
-import { ProfileRailIcon } from "../../app/marketRailIcons.js";
 import { IndicatorCategoryIcon } from "./IndicatorCategoryIcon.js";
 import { IndicatorNumberInput } from "./IndicatorNumberInput.js";
 import { indicatorParamLabel, indicatorSourceLabel } from "./indicatorParamLabels.js";
@@ -126,11 +130,6 @@ type UiParamSchema = IndicatorParameterSchema & {
   tooltip?: string;
 };
 
-interface IndicatorBadgeProps {
-  children: ReactNode;
-  tone?: IndicatorBadgeTone;
-}
-
 interface CustomIndicatorDraft extends IndicatorDefinition {
   id: string;
   name: string;
@@ -199,46 +198,6 @@ function isBuiltinIndicator(indicator: IndicatorBuiltinLike | null | undefined):
 function stripEngineMarker(script = ""): string {
   if (!script.startsWith(ENGINE_SCRIPT_MARKER)) return script;
   return script.split("\n").slice(1).join("\n").replace(/^\s*\n/, "");
-}
-
-function IndicatorBadge({ children, tone = "neutral" }: IndicatorBadgeProps) {
-  const palette = {
-    builtin: {
-      background: "color-mix(in srgb, var(--accent-blue) 15%, transparent)",
-      color: "var(--text-accent)",
-    },
-    custom: {
-      background: "color-mix(in srgb, var(--accent-cyan) 14%, transparent)",
-      color: "var(--text-info)",
-    },
-    main: {
-      background: "color-mix(in srgb, var(--color-success) 15%, transparent)",
-      color: "var(--text-success)",
-    },
-    sub: {
-      background: "color-mix(in srgb, var(--accent-purple) 15%, transparent)",
-      color: "var(--text-purple)",
-    },
-    neutral: {
-      background: "color-mix(in srgb, var(--text-secondary) 15%, transparent)",
-      color: "var(--text-secondary)",
-    },
-  };
-  return (
-    <span style={{
-      fontSize: "var(--font-size-2xs)",
-      marginLeft: 6,
-      padding: "1px 5px",
-      borderRadius: 3,
-      background: palette[tone]?.background || palette.neutral.background,
-      color: palette[tone]?.color || palette.neutral.color,
-      fontWeight: 600,
-      verticalAlign: "middle",
-      whiteSpace: "nowrap",
-    }}>
-      {children}
-    </span>
-  );
 }
 
 function normalizeParamSchema(schema: IndicatorParameterSchema[] | null | undefined): UiParamSchema[] {
@@ -329,6 +288,7 @@ export default function IndicatorPanel({
 }: IndicatorPanelProps) {
   useLocale();
   const [tab, setTab] = useState<IndicatorPanelTab>("presets");
+  const tabsId = useId();
   const {
     customIndicators,
     deleteCustomIndicator,
@@ -385,17 +345,15 @@ export default function IndicatorPanel({
   const renderParamControl = useCallback((indicator: IndicatorDefinition, schema: UiParamSchema) => {
     const type = schema.type || "string";
     const value = getParamValue(indicator.params || {}, schema);
-    const common = {
-      className: "indicator-param-input",
-      title: schema.tooltip || "",
-      disabled: schema.active === false,
-    };
+    const title = schema.tooltip || "";
+    const disabled = schema.active === false;
 
     if (type === "bool") {
       return (
-        <input
-          {...common}
-          type="checkbox"
+        <Checkbox
+          label={indicatorParamLabel(schema.key, schema.label || schema.title || schema.key, isBuiltinIndicator(indicator))}
+          title={title}
+          disabled={disabled}
           checked={Boolean(value)}
           onBlur={() => onRecompute?.(true)}
           onChange={(e) => handleParamChange(indicator, schema.key, e.target.checked, true)}
@@ -408,8 +366,10 @@ export default function IndicatorPanel({
       : schema.options;
     if (Array.isArray(options) && options.length > 0) {
       return (
-        <select
-          {...common}
+        <Select
+          size="sm"
+          title={title}
+          disabled={disabled}
           value={String(value)}
           onBlur={() => onRecompute?.(true)}
           onChange={(e) => {
@@ -421,7 +381,7 @@ export default function IndicatorPanel({
               {isBuiltinIndicator(indicator) && schema.key === "source" ? indicatorSourceLabel(option) : option}
             </option>
           ))}
-        </select>
+        </Select>
       );
     }
 
@@ -430,8 +390,8 @@ export default function IndicatorPanel({
         <IndicatorNumberInput
           key={`${indicator.id}:${schema.key}:${String(value)}`}
           value={String(value)}
-          title={common.title}
-          disabled={common.disabled}
+          title={title}
+          disabled={disabled}
           min={schema.min ?? schema.minval}
           max={schema.max ?? schema.maxval}
           step={schema.step ?? (type === "int" ? 1 : 0.1)}
@@ -442,8 +402,9 @@ export default function IndicatorPanel({
 
     if (type === "text_area") {
       return (
-        <textarea
-          {...common}
+        <Textarea
+          title={title}
+          disabled={disabled}
           value={renderInputValue(value)}
           onBlur={() => onRecompute?.(true)}
           onChange={(e) => {
@@ -454,16 +415,13 @@ export default function IndicatorPanel({
     }
 
     return (
-      <input
-        {...common}
+      <Input
+        size="sm"
+        title={title}
+        disabled={disabled}
         type={type === "color" ? "color" : "text"}
         value={renderInputValue(value)}
         onBlur={() => onRecompute?.(true)}
-        min={schema.min ?? schema.minval}
-        max={schema.max ?? schema.maxval}
-        step={schema.step ?? (
-          type === "float" || type === "price" ? 0.1 : type === "int" ? 1 : undefined
-        )}
         onChange={(e) => {
           handleParamChange(indicator, schema.key, parseParamValue(e.target.value, type));
         }}
@@ -728,6 +686,9 @@ export default function IndicatorPanel({
     ] }), isOpen);
   if (!isOpen) return null;
 
+  const paneText = (panes: readonly string[]) => panes.map((pane) => (pane === "main" ? t("indicator.mainPane") : t("indicator.subPane"))).join(" · ");
+  const libraryTab: "presets" | "active" = tab === "active" ? "active" : "presets";
+
   return (
     <OverlayLayer kind="drawer" side="right" onClose={onClose} closeOnEscape={!(tab === "editor" && editingIndicator)}>
     <div className={`indicator-panel-overlay right-drawer-overlay ${isResizing ? "is-resizing" : ""}`}
@@ -735,6 +696,7 @@ export default function IndicatorPanel({
     >
       <div
         className="indicator-panel"
+        aria-label={t("indicator.title")}
         style={{ width: `${panelWidth}px` }}
       >
         <div
@@ -760,439 +722,331 @@ export default function IndicatorPanel({
           />
         ) : (
           <>
-            {/* Header */}
             <div className="indicator-panel-header">
-              <h3 className="indicator-panel-title">
-                <span aria-hidden="true" style={{ display: "flex" }}><ProfileRailIcon /></span> {t("indicator.title")}
-                {computing && <span className="indicator-computing-badge">{t("indicator.computing")}</span>}
+              <div className="indicator-panel-heading">
+                <h3 className="indicator-panel-title">{t("indicator.title")}</h3>
+                {computing && <Badge tone="accent">{t("indicator.computing")}</Badge>}
                 {realtimeMode === "historical-only" && (
-                  <span
-                    className="indicator-computing-badge"
-                    title={t("indicator.historicalOnlyTitle")}
-                  >
-                    {t("indicator.historicalOnly")}
-                  </span>
+                  <Badge tone="warning" title={t("indicator.historicalOnlyTitle")}>{t("indicator.historicalOnly")}</Badge>
                 )}
                 {realtimeMode === "degraded" && (
-                  <span
-                    className="indicator-computing-badge"
-                    title={t("indicator.degradedTitle")}
-                  >
-                    {t("indicator.degraded")}
-                  </span>
+                  <Badge tone="warning" title={t("indicator.degradedTitle")}>{t("indicator.degraded")}</Badge>
                 )}
-                {modeNotice && (
-                  <span
-                    className="indicator-computing-badge"
-                    title={modeNotice.description}
-                  >
-                    {modeNotice.label}
-                  </span>
-                )}
-              </h3>
-              <button
+                {modeNotice && <Badge title={modeNotice.description}>{modeNotice.label}</Badge>}
+              </div>
+              <IconButton
                 className="indicator-panel-close"
-                data-overlay-close=""
+                label={t("indicator.closePanel")}
+                icon={<Icon name="close" size={16} />}
                 onClick={onClose}
-                type="button"
-                aria-label={t("indicator.closePanel")}
-              >
-                <Icon name="close" size={14} />
-              </button>
+                data-overlay-close=""
+              />
             </div>
 
-            {/* Tab bar */}
-            <div className="indicator-tab-bar">
-              <button
-                className={`indicator-tab ${tab === "presets" ? "active" : ""}`}
-                onClick={() => setTab("presets")}
-              >
-                {t("indicator.library")}
-              </button>
-              <button
-                className={`indicator-tab ${tab === "active" ? "active" : ""}`}
-                onClick={() => setTab("active")}
-              >
-                {activeItemCount > 0 ? t("indicator.addedCount", { count: activeItemCount }) : t("indicator.added")}
-              </button>
+            <div className="indicator-toolbar">
+              <Tabs<"presets" | "active">
+                id={tabsId}
+                className="indicator-tab-bar"
+                label={t("indicator.title")}
+                value={libraryTab}
+                onChange={(next) => setTab(next)}
+                tabs={[
+                  { value: "presets", label: t("indicator.library") },
+                  { value: "active", label: t("indicator.added"), ...(activeItemCount > 0 ? { badge: activeItemCount } : {}) },
+                ]}
+              />
               {allowCustomIndicators ? (
-                <button
-                  className="indicator-tab indicator-tab-create"
-                  onClick={handleCreateCustom}
-                  title={t("indicator.createCustom")}
-                >
+                <Button size="sm" className="indicator-tab-create" onClick={handleCreateCustom} title={t("indicator.createCustom")}>
                   {t("indicator.custom")}
-                </button>
+                </Button>
               ) : (
-                <span
-                  className="indicator-tab indicator-tab-create"
-                  title={customIndicatorsUnavailableReason}
-                >
+                <span className="indicator-builtin-only" title={customIndicatorsUnavailableReason}>
                   {t("indicator.builtinOnly")}
                 </span>
               )}
             </div>
 
-            {/* Content */}
-            <div className="indicator-panel-content">
-              {/* ── Presets tab ── */}
-              {tab === "presets" && (
-                <div>
-                  <div className="indicator-search-wrapper">
-                    <input
-                      className="indicator-search"
-                      type="text"
-                      placeholder={t("indicator.search")}
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                  </div>
+            <TabPanel tabsId={tabsId} value={libraryTab} className="indicator-panel-content">
+              {libraryTab === "presets" && (
+                <div className="indicator-library">
+                  <Input
+                    type="search"
+                    aria-label={t("indicator.search")}
+                    placeholder={t("indicator.search")}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
 
-                  {catalogLoading && (
-                    <div className="indicator-loading">{t("indicator.loading")}</div>
-                  )}
+                  {catalogLoading && <EmptyState compact title={t("indicator.loading")} />}
 
                   {groupedCategoryOrder.map((cat) => {
                     const items = groupedPresets[cat] || [];
                     const studies = groupedMarketStudies[cat] || [];
                     return (
-                      <div key={cat} className="indicator-category-group">
-                        <div className="indicator-category-label">
-                          <span style={{ display: "flex" }}><IndicatorCategoryIcon category={cat} /></span>
+                      <section key={cat} className="indicator-category-group" aria-label={categoryDisplayLabel(cat)}>
+                        <h4 className="indicator-category-label">
+                          <IndicatorCategoryIcon category={cat} />
                           <span>{categoryDisplayLabel(cat)}</span>
-                        </div>
-                        {items.map((preset) => {
-                          const support = resolveIndicatorSupport?.(preset) ?? {
-                            supported: true,
-                            reason: null,
-                          };
-                          const addDisabled = !isActive(preset.id) && !support.supported;
-                          return (
-                          <div
-                            key={preset.id}
-                            data-indicator-id={preset.id}
-                            className={`indicator-preset-item ${isActive(preset.id) ? "is-active" : ""}`}
-                          >
-                            <div className="indicator-preset-info">
-                              <span className="indicator-preset-name">
-                                {indicatorDisplayName(preset)}
-                                <IndicatorBadge tone={isBuiltinIndicator(preset) ? "builtin" : "custom"}>
-                                  {isBuiltinIndicator(preset) ? t("indicator.builtin") : t("indicator.customBadge")}
-                                </IndicatorBadge>
-                                {("defaultEnabled" in preset && preset.defaultEnabled) && (
-                                  <IndicatorBadge tone="neutral">{t("indicator.default")}</IndicatorBadge>
-                                )}
-                                {indicatorDisplayPanes(preset, isBuiltinIndicator(preset)).map((pane) => (
-                              <IndicatorBadge key={pane} tone={pane}>
-                                {pane === "main" ? t("indicator.mainPane") : t("indicator.subPane")}
-                              </IndicatorBadge>
-                            ))}
-                                {!support.supported && (
-                                  <IndicatorBadge tone="neutral">{t("indicator.replayUnavailable")}</IndicatorBadge>
-                                )}
-                              </span>
-                              <span className="indicator-preset-desc">
-                                {preset.description}
-                                {!support.supported && support.reason && (
-                                  <span style={{ display: "block", color: "var(--text-warning)", marginTop: 3 }}>
-                                    {support.reason}
+                        </h4>
+                        <ul className="indicator-list">
+                          {items.map((preset) => {
+                            const support = resolveIndicatorSupport?.(preset) ?? { supported: true, reason: null };
+                            const active = isActive(preset.id);
+                            const addDisabled = !active && !support.supported;
+                            const builtin = isBuiltinIndicator(preset);
+                            const meta = [
+                              paneText(indicatorDisplayPanes(preset, builtin)),
+                              ...(("defaultEnabled" in preset && preset.defaultEnabled) ? [t("indicator.default")] : []),
+                            ].filter(Boolean).join(" · ");
+                            return (
+                              <li key={preset.id} data-indicator-id={preset.id} className="indicator-preset-item" data-active={active ? "true" : undefined}>
+                                <div className="indicator-row-main">
+                                  <span className="indicator-preset-name">
+                                    <strong>{indicatorDisplayName(preset)}</strong>
+                                    {!builtin && <Badge tone="accent">{t("indicator.customBadge")}</Badge>}
+                                    {!support.supported && <Badge>{t("indicator.replayUnavailable")}</Badge>}
                                   </span>
-                                )}
-                              </span>
-                            </div>
-                            <div className="indicator-preset-actions">
-                              <button
-                                className={`indicator-add-btn ${isActive(preset.id) ? "added" : ""}`}
-                                onClick={() => isActive(preset.id) ? onRemoveIndicator(preset.id) : handleAddPreset(preset)}
-                                disabled={addDisabled}
-                                title={isActive(preset.id)
-                                  ? t("indicator.removeFromChart")
-                                  : support.reason || t("indicator.addToChart")}
-                              >
-                                <Icon name={isActive(preset.id) ? "check" : "plus"} size={14} />
-                              </button>
-                              {allowCustomIndicators && !isBuiltinIndicator(preset) && (
-                                <button
-                                  className="indicator-preset-delete-btn"
-                                  onClick={() => handleDeleteCustomPreset(preset)}
-                                  title={t("indicator.deleteCustom")}
-                                  aria-label={t("indicator.deleteCustom")}
-                                >
-                                  <Icon name="trash" size={14} />
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                          );
-                        })}
-                        {studies.map((study) => {
-                          const callback = study.added ? onRemoveMarketStudy : onAddMarketStudy;
-                          const disabled = !study.supported || !callback;
-                          const disabledReason = study.supported
-                            ? t("indicator.actionUnavailable")
-                            : study.unsupportedReason || t("indicator.unsupported");
-                          return (
-                            <div
-                              key={study.id}
-                              data-market-study-id={study.id}
-                              className={`indicator-preset-item ${study.added ? "is-active" : ""}`}
-                            >
-                              <div className="indicator-preset-info">
-                                <span className="indicator-preset-name">
-                                  {study.name}
-                                  <IndicatorBadge tone="neutral">{t("indicator.marketDataBadge")}</IndicatorBadge>
-                                  <IndicatorBadge tone="sub">{t("indicator.subPane")}</IndicatorBadge>
-                                  {!study.supported && (
-                                    <IndicatorBadge tone="neutral">{t("indicator.unavailable")}</IndicatorBadge>
+                                  <span className="indicator-row-desc">
+                                    {[preset.description, meta].filter(Boolean).join(" · ")}
+                                  </span>
+                                  {!support.supported && support.reason && (
+                                    <span className="indicator-row-warning">{support.reason}</span>
                                   )}
-                                </span>
-                                <span className="indicator-preset-desc">
-                                  {study.description}
-                                  {!study.supported && (
-                                    <span style={{ display: "block", color: "var(--text-warning)", marginTop: 3 }}>
-                                      {disabledReason}
-                                    </span>
+                                </div>
+                                <div className="indicator-row-actions">
+                                  {allowCustomIndicators && !builtin && (
+                                    <IconButton
+                                      size="sm"
+                                      label={t("indicator.deleteCustom")}
+                                      icon={<Icon name="trash" size={14} />}
+                                      onClick={() => handleDeleteCustomPreset(preset)}
+                                    />
                                   )}
-                                </span>
-                              </div>
-                              <div className="indicator-preset-actions">
-                                <button
-                                  className={`indicator-add-btn ${study.added ? "added" : ""}`}
-                                  onClick={() => callback?.(study.id)}
-                                  disabled={disabled}
-                                  title={disabled
-                                    ? disabledReason
-                                    : study.added ? t("indicator.removeFromChart") : t("indicator.addToChart")}
-                                  style={disabled ? { cursor: "not-allowed", opacity: 0.45 } : undefined}
-                                >
-                                  <Icon name={study.added ? "check" : "plus"} size={14} />
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
+                                  <IconButton
+                                    size="sm"
+                                    variant={active ? "secondary" : "ghost"}
+                                    className={`indicator-add-btn ${active ? "added" : ""}`}
+                                    label={active ? t("indicator.removeFromChart") : support.reason || t("indicator.addToChart")}
+                                    pressed={active}
+                                    icon={<Icon name={active ? "check" : "plus"} size={14} />}
+                                    onClick={() => active ? onRemoveIndicator(preset.id) : handleAddPreset(preset)}
+                                    disabled={addDisabled}
+                                  />
+                                </div>
+                              </li>
+                            );
+                          })}
+                          {studies.map((study) => {
+                            const callback = study.added ? onRemoveMarketStudy : onAddMarketStudy;
+                            const disabled = !study.supported || !callback;
+                            const disabledReason = study.supported
+                              ? t("indicator.actionUnavailable")
+                              : study.unsupportedReason || t("indicator.unsupported");
+                            return (
+                              <li key={study.id} data-market-study-id={study.id} className="indicator-preset-item" data-active={study.added ? "true" : undefined}>
+                                <div className="indicator-row-main">
+                                  <span className="indicator-preset-name">
+                                    <strong>{study.name}</strong>
+                                    <Badge>{t("indicator.marketDataBadge")}</Badge>
+                                    {!study.supported && <Badge>{t("indicator.unavailable")}</Badge>}
+                                  </span>
+                                  <span className="indicator-row-desc">
+                                    {[study.description, t("indicator.subPane")].filter(Boolean).join(" · ")}
+                                  </span>
+                                  {!study.supported && <span className="indicator-row-warning">{disabledReason}</span>}
+                                </div>
+                                <div className="indicator-row-actions">
+                                  <IconButton
+                                    size="sm"
+                                    variant={study.added ? "secondary" : "ghost"}
+                                    className={`indicator-add-btn ${study.added ? "added" : ""}`}
+                                    label={disabled
+                                      ? disabledReason
+                                      : study.added ? t("indicator.removeFromChart") : t("indicator.addToChart")}
+                                    pressed={study.added}
+                                    icon={<Icon name={study.added ? "check" : "plus"} size={14} />}
+                                    onClick={() => callback?.(study.id)}
+                                    disabled={disabled}
+                                  />
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </section>
                     );
                   })}
 
                   {!catalogLoading
                     && filteredPresets.length === 0
                     && filteredMarketStudies.length === 0 && (
-                    <div className="indicator-empty">{t("indicator.noMatch")}</div>
+                    <EmptyState compact title={t("indicator.noMatch")} />
                   )}
                 </div>
               )}
 
-              {/* ── Active tab ── */}
-              {tab === "active" && (
+              {libraryTab === "active" && (
                 <div className="indicator-active-list">
                   {activeItemCount === 0 ? (
-                    <div className="indicator-empty">
-                      <div style={{ display: "flex", justifyContent: "center", marginBottom: 8, color: "var(--text-muted)" }}><Icon name="inbox" size={32} /></div>
-                      <div>{t("indicator.emptyActive")}</div>
-                      <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
-                        {t("indicator.emptyActiveHint")}
-                      </div>
-                    </div>
+                    <EmptyState
+                      icon={<Icon name="inbox" size={22} />}
+                      title={t("indicator.emptyActive")}
+                      description={t("indicator.emptyActiveHint")}
+                    />
                   ) : (
-                    <>
-                      {activeIndicators.map((ind) => (
-                        <div key={ind.id} className="indicator-active-item">
-                        <div className="indicator-active-header">
-                          <button
-                            className={`indicator-visibility-btn ${ind.visible ? "" : "hidden"}`}
-                            onClick={() => onToggleVisibility(ind.id)}
-                            title={ind.visible ? t("indicator.hide") : t("indicator.show")}
-                            aria-label={ind.visible ? t("indicator.hide") : t("indicator.show")}
-                          >
-                            <Icon name={ind.visible ? "eye" : "eye-off"} size={14} />
-                          </button>
-                          <span className="indicator-active-name">
-                            {indicatorDisplayName(ind)}
-                            <IndicatorBadge tone={isBuiltinIndicator(ind) ? "builtin" : "custom"}>
-                              {isBuiltinIndicator(ind) ? t("indicator.builtin") : t("indicator.customBadge")}
-                            </IndicatorBadge>
-                            {indicatorDisplayPanes(ind, isBuiltinIndicator(ind)).map((pane) => (
-                              <IndicatorBadge key={pane} tone={pane}>
-                                {pane === "main" ? t("indicator.mainPane") : t("indicator.subPane")}
-                              </IndicatorBadge>
-                            ))}
-                          </span>
-                          {ind.error && (
-                            <span className="indicator-error-badge" title={ind.error} role="img" aria-label={ind.error}><Icon name="warning" size={14} /></span>
-                          )}
-                          <div className="indicator-active-actions">
-                            <button
-                              className="indicator-action-btn"
-                              onClick={() => handleEditIndicator(ind)}
-                              title={isBuiltinIndicator(ind) ? t("indicator.viewReference") : t("indicator.editCode")}
-                              aria-label={isBuiltinIndicator(ind) ? t("indicator.viewReference") : t("indicator.editCode")}
-                            >
-                              <Icon name={isBuiltinIndicator(ind) ? "book" : "pencil"} size={14} />
-                            </button>
-                            <button
-                              className="indicator-action-btn indicator-remove-btn"
-                              onClick={() => onRemoveIndicator(ind.id)}
-                              title={t("indicator.remove")}
-                              aria-label={t("indicator.remove")}
-                            >
-                              <Icon name="trash" size={14} />
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Param editors */}
-                        {(getSchemaForIndicator(ind).length > 0 || (ind.params && Object.keys(ind.params).length > 0)) && (
-                          <div className="indicator-params">
-                            {(() => {
-                              const schema = getSchemaForIndicator(ind);
-                              if (schema.length > 0) {
-                                return schema.map((item) => (
-                                  <div key={item.key} className="indicator-param-row">
-                                    <label className="indicator-param-label" title={item.key}>
-                                      {indicatorParamLabel(item.key, item.label || item.title || item.key, isBuiltinIndicator(ind))}
-                                    </label>
-                                    {renderParamControl(ind, item)}
-                                  </div>
-                                ));
-                              }
-
-                              return Object.entries(ind.params || {}).map(([key, value]) => {
-                                const isColor = typeof value === "string" && /^#[0-9a-fA-F]{3,8}$/.test(value);
-                                const isNumber = typeof value === "number";
-                                const inputType = isColor ? "color" : isNumber ? "number" : "text";
-
-                                return (
-                                  <div key={key} className="indicator-param-row">
-                                    <label className="indicator-param-label" title={key}>{indicatorParamLabel(key, key, isBuiltinIndicator(ind))}</label>
-                                    <input
-                                      className="indicator-param-input"
-                                      type={inputType}
-                                      value={renderInputValue(value)}
-                                      step={isNumber && !Number.isInteger(value) ? "0.1" : undefined}
-                                      onChange={(e) => {
-                                        const newVal = isNumber
-                                          ? Number(e.target.value)
-                                          : e.target.value;
-                                        onUpdateParams(ind.id, { ...ind.params, [key]: newVal });
-                                      }}
-                                      onBlur={() => onRecompute?.(true)}
-                                    />
-                                  </div>
-                                );
-                              });
-                            })()}
-                          </div>
-                        )}
-
-                        {activeControls?.(ind)}
-                        {ind.error && (
-                          <div className="indicator-error-msg">{ind.error}</div>
-                        )}
-                        {ind.runtimeNotice && <div role="status">{t(ind.runtimeNotice)}</div>}
-
-                        {/* Line legend */}
-                        {ind.lines && ind.lines.length > 0 && (
-                          <div className="indicator-lines-legend">
-                            {ind.lines.map((line, idx) => (
-                              <span key={idx} className="indicator-line-badge">
-                                <span
-                                  className="indicator-line-dot"
-                                  style={{ background: line.color || "#f59e0b" }}
-                                />
-                                {line.title || `Line ${idx + 1}`}
+                    <ul className="indicator-list">
+                      {activeIndicators.map((ind) => {
+                        const builtin = isBuiltinIndicator(ind);
+                        const schema = getSchemaForIndicator(ind);
+                        const freeParams = schema.length === 0 ? Object.entries(ind.params || {}) : [];
+                        return (
+                          <li key={ind.id} className="indicator-active-item" data-hidden={ind.visible ? undefined : "true"}>
+                            <div className="indicator-active-header">
+                              <IconButton
+                                size="sm"
+                                className={`indicator-visibility-btn ${ind.visible ? "" : "hidden"}`}
+                                label={ind.visible ? t("indicator.hide") : t("indicator.show")}
+                                icon={<Icon name={ind.visible ? "eye" : "eye-off"} size={14} />}
+                                onClick={() => onToggleVisibility(ind.id)}
+                              />
+                              <span className="indicator-active-name">
+                                <strong>{indicatorDisplayName(ind)}</strong>
+                                {!builtin && <Badge tone="accent">{t("indicator.customBadge")}</Badge>}
+                                <span className="indicator-row-tag">{paneText(indicatorDisplayPanes(ind, builtin))}</span>
                               </span>
-                            ))}
-                          </div>
-                        )}
-                        </div>
-                      ))}
+                              {ind.error && (
+                                <span className="indicator-error-badge" title={ind.error} role="img" aria-label={ind.error}><Icon name="warning" size={14} /></span>
+                              )}
+                              <div className="indicator-row-actions">
+                                <IconButton
+                                  size="sm"
+                                  label={builtin ? t("indicator.viewReference") : t("indicator.editCode")}
+                                  icon={<Icon name={builtin ? "book" : "pencil"} size={14} />}
+                                  onClick={() => handleEditIndicator(ind)}
+                                />
+                                <IconButton
+                                  size="sm"
+                                  label={t("indicator.remove")}
+                                  icon={<Icon name="trash" size={14} />}
+                                  onClick={() => onRemoveIndicator(ind.id)}
+                                />
+                              </div>
+                            </div>
+
+                            {(schema.length > 0 || freeParams.length > 0) && (
+                              <div className="indicator-params">
+                                {schema.map((item) => (
+                                  (item.type || "string") === "bool"
+                                    ? <div key={item.key} className="indicator-param-row">{renderParamControl(ind, item)}</div>
+                                    : (
+                                      <Field key={item.key} className="indicator-param-row" label={indicatorParamLabel(item.key, item.label || item.title || item.key, builtin)}>
+                                        {renderParamControl(ind, item)}
+                                      </Field>
+                                    )
+                                ))}
+                                {freeParams.map(([key, value]) => {
+                                  const isColor = typeof value === "string" && /^#[0-9a-fA-F]{3,8}$/.test(value);
+                                  const isNumber = typeof value === "number";
+                                  return (
+                                    <Field key={key} className="indicator-param-row" label={indicatorParamLabel(key, key, builtin)}>
+                                      <Input
+                                        size="sm"
+                                        type={isColor ? "color" : isNumber ? "number" : "text"}
+                                        value={renderInputValue(value)}
+                                        step={isNumber && !Number.isInteger(value) ? "0.1" : undefined}
+                                        onChange={(e) => {
+                                          const newVal = isNumber ? Number(e.target.value) : e.target.value;
+                                          onUpdateParams(ind.id, { ...ind.params, [key]: newVal });
+                                        }}
+                                        onBlur={() => onRecompute?.(true)}
+                                      />
+                                    </Field>
+                                  );
+                                })}
+                              </div>
+                            )}
+
+                            {activeControls?.(ind)}
+                            {ind.error && <InlineAlert tone="danger">{ind.error}</InlineAlert>}
+                            {ind.runtimeNotice && <InlineAlert>{t(ind.runtimeNotice)}</InlineAlert>}
+
+                            {ind.lines && ind.lines.length > 0 && (
+                              <div className="indicator-lines-legend">
+                                {ind.lines.map((line, idx) => (
+                                  <span key={idx} className="indicator-line-badge">
+                                    <span className="indicator-line-dot" style={{ background: line.color || "#f59e0b" }} />
+                                    {line.title || `Line ${idx + 1}`}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </li>
+                        );
+                      })}
 
                       {activeMarketStudies.map((study) => {
                         const statusLabel = marketStudyStatusLabel(study);
                         const statusMessage = marketStudyStatusMessage(study);
-                        const hasError = study.supported
-                          && Boolean(study.error || study.status === "error");
+                        const hasError = study.supported && Boolean(study.error || study.status === "error");
                         return (
-                          <div key={study.id} className="indicator-active-item">
+                          <li key={study.id} className="indicator-active-item" data-hidden={study.visible ? undefined : "true"}>
                             <div className="indicator-active-header">
-                              <button
+                              <IconButton
+                                size="sm"
                                 className={`indicator-visibility-btn ${study.visible ? "" : "hidden"}`}
+                                label={study.visible ? t("indicator.hide") : t("indicator.show")}
+                                icon={<Icon name={study.visible ? "eye" : "eye-off"} size={14} />}
                                 onClick={() => onToggleMarketStudyVisibility?.(study.id)}
                                 disabled={!onToggleMarketStudyVisibility}
-                                title={study.visible ? t("indicator.hide") : t("indicator.show")}
-                                aria-label={study.visible ? t("indicator.hide") : t("indicator.show")}
-                              >
-                                <Icon name={study.visible ? "eye" : "eye-off"} size={14} />
-                              </button>
+                              />
                               <span className="indicator-active-name">
-                                {study.name}
-                                <IndicatorBadge tone="neutral">{t("indicator.marketDataBadge")}</IndicatorBadge>
-                                <IndicatorBadge tone="sub">{t("indicator.subPane")}</IndicatorBadge>
-                                {statusLabel && (
-                                  <IndicatorBadge tone="neutral">{statusLabel}</IndicatorBadge>
-                                )}
+                                <strong>{study.name}</strong>
+                                <Badge>{t("indicator.marketDataBadge")}</Badge>
+                                {statusLabel && <Badge>{statusLabel}</Badge>}
+                                <span className="indicator-row-tag">{t("indicator.subPane")}</span>
                               </span>
                               {hasError && (
                                 <span className="indicator-error-badge" title={statusMessage || t("indicator.marketError")} role="img" aria-label={statusMessage || t("indicator.marketError")}>
                                   <Icon name="warning" size={14} />
                                 </span>
                               )}
-                              <div className="indicator-active-actions">
+                              <div className="indicator-row-actions">
                                 {study.canRefreshHistory && study.supported && study.visible && onRefreshMarketStudyHistory && (
-                                  <button
-                                    type="button"
-                                    className="indicator-action-btn"
+                                  <IconButton
+                                    size="sm"
+                                    label={t("alert.refreshHistory")}
+                                    icon={<Icon name="refresh" size={14} />}
                                     onClick={() => onRefreshMarketStudyHistory(study.id)}
-                                    title={t("alert.refreshHistory")}
-                                    aria-label={t("alert.refreshHistory")}
-                                  >
-                                    <Icon name="refresh" size={14} />
-                                  </button>
+                                  />
                                 )}
-                                <button
-                                  className="indicator-action-btn indicator-remove-btn"
+                                <IconButton
+                                  size="sm"
+                                  label={t("indicator.remove")}
+                                  icon={<Icon name="trash" size={14} />}
                                   onClick={() => onRemoveMarketStudy?.(study.id)}
                                   disabled={!onRemoveMarketStudy}
-                                  title={t("indicator.remove")}
-                                  aria-label={t("indicator.remove")}
-                                >
-                                  <Icon name="trash" size={14} />
-                                </button>
+                                />
                               </div>
                             </div>
-
-                            {statusMessage && (
-                              <div
-                                className={hasError ? "indicator-error-msg" : undefined}
-                                style={hasError ? undefined : {
-                                  color: "var(--text-muted)",
-                                  fontSize: 11,
-                                  margin: "4px 10px 8px 38px",
-                                }}
-                              >
-                                {statusMessage}
-                              </div>
-                            )}
-                          </div>
+                            {statusMessage && (hasError
+                              ? <InlineAlert tone="danger">{statusMessage}</InlineAlert>
+                              : <p className="indicator-row-desc indicator-study-status">{statusMessage}</p>)}
+                          </li>
                         );
                       })}
-                    </>
+                    </ul>
                   )}
 
                   {activeIndicators.length > 0 && (
-                    <button
-                      className="indicator-recompute-btn"
-                      onClick={() => onRecompute?.(true)}
-                      disabled={computing}
-                    >
-                      {computing ? t("indicator.computing") : t("indicator.recalculate")}
-                    </button>
+                    <div className="indicator-active-footer">
+                      <Button size="sm" onClick={() => onRecompute?.(true)} disabled={computing}>
+                        {computing ? t("indicator.computing") : t("indicator.recalculate")}
+                      </Button>
+                    </div>
                   )}
                 </div>
               )}
-
-            </div>
+            </TabPanel>
           </>
         )}
       </div>

@@ -647,7 +647,7 @@ async function openAddedMarketStudies(cdp) {
   const activeTabClick = indicatorPanelOpened
     ? await cdp.send("Runtime.evaluate", {
         expression: `(() => {
-          const tab = Array.from(document.querySelectorAll('.indicator-tab')).find(
+          const tab = Array.from(document.querySelectorAll('.indicator-tab-bar [role="tab"]')).find(
             (element) => element.textContent?.includes('已添加')
           );
           if (!(tab instanceof HTMLButtonElement)) return false;

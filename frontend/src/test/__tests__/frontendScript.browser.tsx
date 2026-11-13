@@ -10,6 +10,7 @@ import { createActiveIndicatorPersistence } from "../../features/indicators/acti
 import type { IndicatorRuntime } from "../../features/indicators/indicatorRuntimeContract.js";
 import { epochSeconds } from "../testHelpers.js";
 import IndicatorPanel from "../../features/indicators/IndicatorPanel.js";
+import { toastStore } from "../../components/ui/overlay/toastStore.js";
 import type { IndicatorDefinition } from "../../features/indicators/indicatorTypes.js";
 import { useIndicatorRuntime } from "../../features/indicators/useIndicatorRuntime.js";
 import { MarketWindowRegistry } from "../../features/market-data/window/marketWindowSession.js";
@@ -117,7 +118,7 @@ async function checkLiveWindowTicks(): Promise<string[]> {
   const tick = (close: number) => owner.transact(selection, () => owner.apply("live-js-ticks", { type: "tick", row: { ...bars.at(-1)!, close, high: close + 1, is_closed: false } }));
   async function until(predicate: () => boolean) {
     for (let i = 0; i < 150; i++) { if (predicate()) return; await new Promise(resolve => setTimeout(resolve, 20)); }
-    throw new Error(`Live stable-window tick failed: ${host.textContent}`);
+    throw new Error(`Live stable-window tick failed: ${document.body.textContent}`);
   }
   try {
     flushSync(() => root.render(<View />));
@@ -199,7 +200,7 @@ async function checkReactReplayLifecycle(): Promise<string[]> {
   const current = () => { assert(latest, "runtime not mounted"); return latest; };
   async function until(predicate: () => boolean) {
     for (let i = 0; i < 150; i++) { if (predicate()) return; await new Promise(resolve => setTimeout(resolve, 20)); }
-    throw new Error(`React condition did not converge: ${host.textContent}`);
+    throw new Error(`React condition did not converge: ${document.body.textContent}`);
   }
   const last = () => current().view.activeIndicators[0]?.lines?.[0]?.data.at(-1)?.value;
   try {
@@ -273,33 +274,34 @@ export async function checkFrontendScriptEditor() {
   }
   async function until(predicate: () => boolean) {
     for (let i = 0; i < 150; i++) { if (predicate()) return; await new Promise(resolve => setTimeout(resolve, 20)); }
-    throw new Error(`Editor condition did not converge: ${host.textContent?.slice(-1000)}`);
+    throw new Error(`Editor condition did not converge: ${document.body.textContent?.slice(-1000)}`);
   }
   try {
     flushSync(() => root.render(<View />));
-    (host.querySelector(".indicator-tab-create") as HTMLButtonElement).click();
-    await until(() => Boolean(host.querySelector<HTMLButtonElement>(".indicator-editor-run")?.disabled === false));
-    assert(host.querySelector<HTMLSelectElement>("select")?.value === "frontend-js", "frontend language unavailable after catalog failure");
-    (host.querySelector(".indicator-editor-run") as HTMLButtonElement).click();
+    (document.querySelector(".indicator-tab-create") as HTMLButtonElement).click();
+    await until(() => Boolean(document.querySelector<HTMLButtonElement>(".indicator-editor-run")?.disabled === false));
+    assert(document.querySelector<HTMLSelectElement>("select")?.value === "frontend-js", "frontend language unavailable after catalog failure");
+    (document.querySelector(".indicator-editor-run") as HTMLButtonElement).click();
     await until(() => added.length === 1);
     assert(added[0]?.language === "frontend-js" && added[0]?.script === FRONTEND_SCRIPT_STARTER, "editor did not preview JS starter");
-    const consoleText = () => host.querySelector(".indicator-editor-console")?.textContent;
+    const consoleText = () => document.querySelector(".indicator-editor-console")?.textContent;
     assert(consoleText() === t("indicator.editor.computingData"), "new preview claimed success before worker output");
     await finishPreview!();
     await until(() => consoleText() === t("indicator.editor.runOk"));
     previewBars = bars.slice(0, 2); // A valid all-null SMA warm-up still finishes.
     finishPreview = undefined;
-    (host.querySelector(".indicator-editor-run") as HTMLButtonElement).click();
+    (document.querySelector(".indicator-editor-run") as HTMLButtonElement).click();
     await until(() => Boolean(finishPreview));
     assert(consoleText() === t("indicator.editor.computingData"), "updated preview reused old success before worker output");
     await finishPreview!();
     await until(() => consoleText() === t("indicator.editor.runOk"));
-    (host.querySelector(".indicator-editor-save") as HTMLButtonElement).click();
-    await until(() => alerts.length === 1);
-    assert(Boolean(host.querySelector(".indicator-editor")) && added.length === 1 && saved.length === 0, "failed save closed/lost draft or claimed persistence");
+    (document.querySelector(".indicator-editor-save") as HTMLButtonElement).click();
+    // A failed save is reported on the shared toast stack (Phase 2c replaced window.alert).
+    await until(() => toastStore.list().some((toast) => toast.tone === "danger"));
+    assert(Boolean(document.querySelector(".indicator-editor")) && added.length === 1 && saved.length === 0, "failed save closed/lost draft or claimed persistence");
     rejectSave = false;
-    (host.querySelector(".indicator-editor-save") as HTMLButtonElement).click();
-    await until(() => saved.length === 1 && !host.querySelector(".indicator-editor"));
+    (document.querySelector(".indicator-editor-save") as HTMLButtonElement).click();
+    await until(() => saved.length === 1 && !document.querySelector(".indicator-editor"));
     assert(saved[0]?.language === "frontend-js" && saved[0]?.script === FRONTEND_SCRIPT_STARTER, "retry changed saved source/language");
     return { checks: ["real panel/editor offers frontend JS when plugin catalog fails", "new and updated previews stay pending until worker output; all-null warm-up completes", "preview retains exact starter, failed HTTP save keeps draft open, successful retry preserves source/language"] };
   } finally {
