@@ -1,6 +1,6 @@
 # R129 首个实时前缀、删除权限与当前包证据
 
-基线 main `00be4ce845134b11154633b1f0e258f2bce4ccd4`；首候选 `0a986b723096f481c50da5843c1b6010fc0314e8`；最终产品 `8f9089dd803c751cc0b437c430d6603582395980`。后补 dirty-tail 合同和证据归档不改变 app 源码。工作在独立 worktree，未修改用户的前端/设计工作区。#126/#127/#129 保持开放，#130 已有的关闭状态不变。
+基线 main `00be4ce845134b11154633b1f0e258f2bce4ccd4`；首候选 `0a986b723096f481c50da5843c1b6010fc0314e8`；最终产品 `06ffa00f2be647b97e077d60a99b630145fb4b93`。第二候选为8f9089；Intel失败后补足原生提交屏障，重新组装最终产品并复跑。工作在独立 worktree，未修改用户的前端/设计工作区。#126/#127/#129 保持开放，#130 已有的关闭状态不变。
 
 ## 产品行为与边界
 
@@ -16,7 +16,7 @@
 
 ## 验证与保留失败
 
-新增26项合同：25项无需 fork，四平台 host 选集纳入；1项真实 pinned CCXT OKX 来源回执，纳入完整后端集成。
+新增29项合同：25项 forming/owner合同纳入四平台host；2项真实 pinned CCXT OKX来源回执，以及2项原持久dispatcher多页/错误合同纳入完整后端集成。
 
 - 生产2048门槛/128接缝/10007m目标：从空桶建立首个128前缀，261次真实默认 DataManager callback/router/bridge/SQLite 接纳后继续推进到256，保留5条尾部；旧首叶减量/极值修正正确。
 - 失证、相抵修正、字段能力、缺失、未收盘、预算/开关、重复输入不逐次重试；保留原值和原事件。
@@ -26,8 +26,13 @@
 - 三个权限回归在完整旧后端 `00be4ce` 均实际观察到被删除目标重新存在于 SQLite；修订后拒绝重建。源删除保留 gap/provisional，不伪装完整。
 - 真实 pinned OKX WS/REST 解析、SourceJournal 回执、原持久 dispatcher：首个 prefix 和旧叶修正均等待 native commit；不是仅用 fake storage 证明接线。
 
-最终 app 的本地完整 CCXT integration：2243 passed / 66 warnings，随后仅补 dirty-tail 合同，单项通过。架构检查通过；最后26项会在最终远端 head 全部纳入完整集成。首轮云端 Linux/ARM 的新正向测试在原 native dispatcher 尚未排空时断言必须成功（Linux 为读视图失效，ARM 同一断言 detail 为空）；生产正确保留原组成，Windows 同 head 386项通过。修正测试前置条件：等待原 native canonical 数量和 durable pending=0，再要求可选维护成功；没有删除/放宽断言、重跑失败head或修改生产deadline。修正后26项本地全部通过，原始云端失败日志保留。产品 app 仍完全等于8f9089，无需把测试夹具修正冒充产品或原生重跑。首次较早完整选集2237项通过，不冒充最终完整集合。首候选52项相关合同通过；扩大到全部prefix时95通过/1失败为测试仅取新 acquisition、未取更旧 permission floor，已纠正比较定义，保留实际防复活断言。
+最终产品本地完整 CCXT integration：**2247 passed / 66 warnings**，架构检查通过。提交屏障及原确认单项选集18项通过，forming/真实回执/原接缝选集40项通过。较早的2243/2244集合不是最终产品资格。
 
+早期云端 `feb65f08` 的新正向用例未等原 native dispatcher 排空即要求可选维护成功，Linux/ARM失败而生产正确保留raw；夹具补了pending=0。随后 `b3272232` 的后端2244及前端、Linux/ARM/Windows host通过（各386/1 skip/1 warning），但 **Intel失败22项**：21项新用例一次突发128条真实SQLite提交后等5秒排空超时，另有原接缝测试修订冲突。完整原日志保留，未宣称Intel通过，未合入该head。
+
+修订明确分开两个原因：正向维护夹具现在逐项等待原native交付边界，保留5秒单项等待及所有值/事件/状态断言，不把128事务的突发吞吐当维护准入门槛。另以真实pinned回执+原dispatcher gate，在完整旧候选复现**新收盘tail位于前缀外时未等待native commit**；该提交仍会改变前缀依赖的source-series revision并使读回失效。生产现在对已有prefix的任何closed输入先在原1.5秒期限内等待原owner边界。原flush只处理64条，新增的flush_pending复用同一dispatcher循环处理有限页面直至pending=0，错误/重绑明确失败，原持久回执保留；没有新timer、writer、队列或限额上调。130项真实SQLite多页与失败保留分别验证，非吞吐基准；形成中输入不新增该收盘屏障。
+
+本批最终27项forming/回执合同和2项原dispatcher合同共29项；完整2247覆盖它们。直接从repo根运行旧ack子进程用例曾遇import app路径错误，改回其规定backend cwd，18项通过；夹具count_bars调用缺少范围参数的本地错误同样保留。
 所有失败保留：initial 的同步 callback 被 await、原 timer 与手动 drain 抢同一维护任务；controlled 的物理读取启动前原 native dispatcher 尚未处理完受控积压；focused 的未收盘 fixture 却等待128根已收盘规范行（应127），以及形成中原 floor 缺口；首版6m fixture实际默认选3m，改为与输入1m相符的7m。首候选虽修复恢复路径，后补 rollover/warm-refresh 两项仍准确复现 SQLite 重建，最终移到统一采用入口。没有移除断言、提高生产限额或调整生产恢复超时。
 
 ## 同输入成本
@@ -36,23 +41,23 @@
 
 | 指标 | 旧2048m | 新禁用2048m | 新启用2048m | 旧10007m | 新禁用10007m | 新启用10007m |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 输入回调 CPU 中位 ms | 24.951 | 34.858 | 32.007 | 25.442 | 29.335 | 35.771 |
-| 独立维护 CPU 中位 ms | 0.005 | 0.005 | 46.992 | 0.007 | 0.005 | 43.479 |
+| 输入回调 CPU 中位 ms | 24.951 | 35.365 | 31.158 | 25.442 | 30.546 | 30.487 |
+| 独立维护 CPU 中位 ms | 0.005 | 0.006 | 52.766 | 0.007 | 0.005 | 55.751 |
 | 原组成数量 | 128 | 128 | 0 | 128 | 128 | 0 |
 | 状态可达图字节 | 154050 | 154050 | 3869 | 154051 | 154051 | 3870 |
 | 所有登记 owners 去重可达图字节 | 172512 | 172512 | 31499 | 172513 | 172513 | 31460 |
 | B130 entries | 0 | 0 | 8 | 0 | 0 | 8 |
-| 分配 peak 字节 | 104315 | 97863 | 612362 | 104323 | 101139 | 612082 |
+| 分配 peak 字节 | 104315 | 104315 | 612530 | 104323 | 104323 | 619158 |
 
-包含新增公共块、owner 元数据和全部登记根，去重保留图约降82%；维护另付43–47ms CPU，分配峰值约5.9倍。输入回调也有额外开销，未宣称总CPU下降。原状态在 tracemalloc 开始前已驻留，分配peak不含它；也不包括所有SQLite/分配器/plugin进程内存。机器有并行CI/原生/成本进程，未冻结负载，不能据此通过RSS、稳定P95/P99、长稳态或整体性能验收。source hashes 在测量前后冻结；candidate1 成本亦保留。
+包含新增公共块、owner 元数据和全部登记根，去重保留图约降82%；维护另付53–56ms CPU，分配峰值约5.9倍。输入回调也有额外开销，未宣称总CPU下降。原状态在 tracemalloc 开始前已驻留，分配peak不含它；也不包括所有SQLite/分配器/plugin进程内存。机器有并行CI/原生/成本进程，未冻结负载，不能据此通过RSS、稳定P95/P99、长稳态或整体性能验收。source hashes 在测量前后冻结；candidate1/candidate2 成本亦保留。
 
 ## 最终原生包
 
-最终 app `8f9089dd803c751cc0b437c430d6603582395980`，保留 frontend/runtime/plugins build `ef8f0e0fa6df299a823f4460b701eb1c3c98361f`，覆盖全部1002个 tracked backend app 文件；源码/asar/前后 strict signature 通过。这是全后端覆盖的 macOS arm64 组装资格，不冒充重新构建前端的 release build。
+最终 app `06ffa00f2be647b97e077d60a99b630145fb4b93`，保留 frontend/runtime/plugins build `ef8f0e0fa6df299a823f4460b701eb1c3c98361f`，覆盖全部1002个 tracked backend app 文件；源码/asar/前后 strict signature 通过。这是全后端覆盖的 macOS arm64 组装资格，不冒充重新构建前端的 release build。
 
-两独立空profile、真实公开OKX，无seed、响应替换、bootstrap hook或额外消费者；仅隔离进程使用既有本地proxy。45m/90m首开→显式左翻页各至少500→1m/5m各500→释放/重建→保存/完整退出/重启。ordinary 累计4578根闭合九字段，witness累计5739根；后者还捕获真实2m收盘、原timer退休2个组成并独立比较闭合图表/canonical九字段，再恢复45m/90m。四次10/10进程树退出，七张最终截图直接检查。截图中部分实时/盘口仍处连接或等待状态，未计为全行情稳定无断线通过。
+两独立空profile、真实公开OKX，无seed、响应替换、bootstrap hook或额外消费者；仅隔离进程使用既有本地proxy。45m/90m首开→显式左翻页各至少500→1m/5m各500→释放/重建→保存/完整退出/重启。ordinary 累计4578根闭合九字段，witness累计5742根；后者还捕获真实2m收盘、原timer退休2个组成并独立比较闭合图表/canonical九字段，再恢复45m/90m。四次10/10进程树退出，七张最终截图直接检查。截图中部分实时/盘口仍处连接或等待状态，未计为全行情稳定无断线通过。
 
-首候选 ordinary 通过，witness 首次显式左翻页收到 applied 后仍停129根，120秒门槛失败；截图、traffic/diagnostics、进程日志和完整 profile/app 保留，退出已确认。此仍属 #127 冷历史/翻页与长期稳定待核销范围，未声称统一权限修正解决该翻页问题。随后因另外发现并修复权限 bug，最终产品重新组装，两套全新profile独立复跑通过；没有用失败profile暖库继续算冷启动通过。
+首候选 ordinary 通过，witness 首次显式左翻页收到 applied 后仍停129根，120秒门槛失败；截图、traffic/diagnostics、进程日志和完整 profile/app 保留，退出已确认。此仍属 #127 冷历史/翻页与长期稳定待核销范围，未声称统一权限修正解决该翻页问题。随后权限修正的candidate2两套空profile也通过；Intel暴露问题后新增原提交屏障，最终06ffa再次全量组装、两套全新profile通过。三代包/回执均保留，没有用失败profile暖库继续算冷启动通过。一次driver工具路径日期拼写错误在app启动前失败，修正路径后仍用未创建profile的新运行，原bootstrap日志保留。
 
 原生小周期没有触发2048/128首次 forming 退休，其本体由受控生产接线、真实fork回执、并发和成本层分别证明；不替代长大桶原生/独立forming oracle/指标策略/所有来源与消费者/Windows与Intel桌面/长期资源矩阵。
 
@@ -72,4 +77,4 @@ CANDLESCOPE_PLAYWRIGHT_PACKAGE=/absolute/tooling/package.json CANDLESCOPE_QA_HTT
 
 #129 的 builder 已逐出后的有界完整窗口恢复仍未交付，尤其 SourceJournal-only、没有原生canonical的有效输入必须保留；不能拿H127代替该恢复合同。其他来源/网格/消费者、全部语义屏障、独立forming/指标/策略、长期CPU/RSS/延迟及退化/恢复矩阵继续。#126 全writer/read/归档与共同预算覆盖、#127 自动首屏与冷历史/调度/完整资源验收仍按各自原始标准推进。本批不关闭这些issue。
 
-当前产品的独立 SourceJournal-only 冷恢复探针也已通过：2m目标重启后首叶 quote 修正1010→1008，native 1m规范行0、2m行1、quote_volume=2018、source_snapshot_verified。原生canonical不是这项现有恢复合同的必要条件；未来有界化必须保留它。该受控探针无网络，不计新的有界恢复实现完成。
+此前产品的独立 SourceJournal-only 冷恢复探针已通过：2m目标重启后首叶 quote 修正1010→1008，native 1m规范行0、2m行1、quote_volume=2018、source_snapshot_verified。原生canonical不是这项现有恢复合同的必要条件；未来有界化必须保留它。该受控探针无网络，不计新的有界恢复实现完成。
