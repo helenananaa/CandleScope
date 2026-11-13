@@ -473,6 +473,10 @@ class DataManager(DataManagerCore):
         # Wire BarAggregator output → DataManager → Cache + EventBus
         self.bar_aggregator.set_source_component_reader(self.aggregator_bridge.read_source_components)
         self.bar_aggregator.publisher.on_bar_event(self.aggregator_bridge.on_bar_event)
+        self.bar_aggregator.publisher.set_update_requirement(
+            lambda state: self.event_bus.requires_every_update(SeriesKey(
+                state.symbol, state.interval, exchange=state.exchange,
+                market_type=state.market_type, **state.identity.to_dict())))
         self.query_engine.set_bar_aggregator(self.bar_aggregator)
 
         # Tell Coordinator to route ingestion data through BarAggregator
@@ -1977,7 +1981,8 @@ class DataManager(DataManagerCore):
         ``continuity`` defaults to strict (10 seconds from gap detection).
         Pass a ContinuityPolicy to set the wait budget, or "gap_aware" to
         receive live events, mandatory gap controls, and historical corrections.
-        ``preserve_updates`` retains distinct pending intrabar observations;
+        ``preserve_updates`` retains each enabled intrabar observation through
+        the aggregator throttle and this consumer's queue;
         exhaustion requires recovery instead of coalescing or dropping them.
 
         Args:

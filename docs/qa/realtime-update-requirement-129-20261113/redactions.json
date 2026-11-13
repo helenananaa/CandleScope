@@ -1,0 +1,20 @@
+{
+  "policy": "only ephemeral contextToken strings; active_read_tokens counts retained",
+  "paths": {
+    "ordinary": [
+      "/steps/2/evidence/action/contextToken",
+      "/steps/3/evidence/action/contextToken",
+      "/steps/11/evidence/action/contextToken"
+    ],
+    "witness-profile": [
+      "/steps/2/evidence/action/contextToken",
+      "/steps/3/evidence/action/contextToken",
+      "/steps/11/evidence/action/contextToken"
+    ],
+    "witness-profile2": [
+      "/steps/2/evidence/action/contextToken",
+      "/steps/3/evidence/action/contextToken",
+      "/steps/11/evidence/action/contextToken"
+    ]
+  }
+}

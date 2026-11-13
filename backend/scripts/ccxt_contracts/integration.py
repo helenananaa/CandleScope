@@ -51,6 +51,7 @@ def main() -> int:
         "test_mixed_backfill_*.py",
         "test_component_incremental.py", "test_shared_component_input.py", "test_realtime_target_lifecycle.py",
         "test_realtime_handoff_accounting.py", "test_realtime_eviction_handoff.py",
+        "test_preview_update_requirements.py", "test_event_bus_routing_index.py",
         "test_component_payload_accounting.py", "test_component_index_memory.py", "test_readonly_payload_weight.py",
         "test_interval_policy_consistency.py", "test_bar_aggregator_contracts.py",
         "test_kline_order_flow_metrics.py", "test_history_calendar.py",
