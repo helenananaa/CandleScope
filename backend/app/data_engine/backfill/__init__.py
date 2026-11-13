@@ -46,9 +46,9 @@ Usage::
 """
 from __future__ import annotations
 
-from app.data_engine.storage.revisions import (fenced_acquisition, prepare_native_history_views,
+from app.data_engine.storage.revisions import (fenced_acquisition, prepare_native_history_views, StaleAcquisition,
                                                prepare_derived_targets, prepare_warmup_view)
-from app.data_engine.memory_budget import budgeted_work, reserve_work
+from app.data_engine.memory_budget import budgeted_work, reserve_work, MemoryBudgetExceeded
 
 import logging
 import time
@@ -78,6 +78,7 @@ from .models import (
     BackfillStatus,
     CacheBackend,
     FetchResult,
+    FetchReceipt,
     GapInfo,
     GapType,
     ReconcileResult,
@@ -91,6 +92,7 @@ from .fetcher import FetchBatchDeferred, HistoricalFetcher
 from .native_progress import NativeBackfillDeferred, NativeBackfillProgress
 from .reconciler import Reconciler
 from .publisher import RepairPublisher
+from .fetch_stream import stream_plan, StreamReconcile, StreamBackfillDeferred
 
 logger = logging.getLogger("backfill.Engine")
 
@@ -123,6 +125,7 @@ __all__ = [
     "BackfillStatus",
     "CacheBackend",
     "FetchResult",
+    "FetchReceipt",
     "GapInfo",
     "ReconcileResult",
     "RepairReport",
@@ -207,6 +210,7 @@ class BackfillEngine:
                 self._cfg, self._transport, self._ingestion_cfg,
                 import_proof_lookup=getattr(self._storage, "get_history_archive_import_proofs", None),
             )
+            self._fetcher.memory_budget = getattr(self,'memory_budget',None)
         return self._fetcher
 
     @property
@@ -256,6 +260,21 @@ class BackfillEngine:
         if self._fetcher is not None:
             await self._fetcher.close()
 
+    async def run_receipt(self, *args, **kwargs) -> RepairReport:
+        """Explicit coordinator API: accept bounded pages and return receipts.
+
+        Ordinary run() retains its complete fetched-bar payload contract.
+        Existing payload extensions/preview or overridden run implementations
+        select that ordinary path. Payload registrations must happen between
+        active receipt runs, before their fetch contract has been selected.
+        """
+        if getattr(self.run,'__func__',None) is not BackfillEngine.run:
+            return await self.run(*args,**kwargs)
+        if type(self.publisher) is not RepairPublisher:
+            return await self.run(*args,**kwargs)
+        with self.publisher.receipt_scope() as enabled:
+            return await self.run(*args,**kwargs, _receipt_mode=enabled)
+
     @fenced_acquisition
     @budgeted_work
     async def run(
@@ -269,6 +288,7 @@ class BackfillEngine:
         market_type: str = "spot",
         *,
         native_progress: NativeBackfillProgress | None = None,
+        _receipt_mode: bool = False,
     ) -> RepairReport:
         """Execute a complete backfill run.
 
@@ -302,9 +322,36 @@ class BackfillEngine:
 
         errors: list[str] = []
         plan: BackfillPlan | None = None
-        fetch_results: list[FetchResult] = []
+        fetch_results: list[FetchResult | FetchReceipt] = []
         reconcile_result: ReconcileResult | None = None
         status = BackfillStatus.PENDING
+        streamed = StreamReconcile() if _receipt_mode else None
+        page_binding = None
+
+        def check_page_binding():
+            if page_binding is None:
+                return
+            refs, flags = page_binding
+            current = (self._storage,self._cfg,self._reconciler,self._fetcher,
+                getattr(self,'memory_budget',None),getattr(self._reconciler,'_custom_dedup_fn',None),
+                getattr(self._reconciler,'_custom_aggregator',None))
+            if (any(a is not b for a,b in zip(current,refs))
+                    or flags != (getattr(self._cfg,'reconcile_dedup_strategy',None),
+                                 getattr(self._cfg,'reconcile_generate_custom',None))):
+                raise StaleAcquisition('paged backfill owner/config binding changed')
+
+        async def consume_native_page(page):
+            nonlocal reconcile_result
+            check_page_binding()
+            if streamed.clipped_ranges:
+                raise MemoryBudgetExceeded('stream output range budget is exhausted')
+            part = await self.reconciler.reconcile([page],BackfillPlan(gaps=[]))
+            streamed.pages += 1
+            streamed.add(part)
+            reconcile_result = streamed.result
+            check_page_binding()
+            if part.errors:
+                raise RuntimeError('native page reconciliation failed: '+str(part.errors[0])[:500])
 
         try:
             if native_progress is not None:
@@ -405,12 +452,25 @@ class BackfillEngine:
                     and (bybit_derived_gap or metadata.get("requester") == "warm_start_custom_tail"
                          or _is_read_repair(metadata))):
                 await self._reuse_derived_components(plan, metadata, bybit_gap=bybit_derived_gap)
+            page_mode = (_receipt_mode and native_progress is None and stream_plan(plan,self._cfg.fetch_batch_size)
+                         and getattr(self._storage,'revision_store',None) is not None
+                         and getattr(self.fetcher.fetch,'__func__',None) is HistoricalFetcher.fetch
+                         and getattr(self.reconciler.reconcile,'__func__',None) is Reconciler.reconcile
+                         and self.reconciler._custom_dedup_fn is None
+                         and self.reconciler._custom_aggregator is None)
+            page_options = {'on_native_page':consume_native_page} if page_mode else {}
+            if page_mode:
+                self.fetcher.memory_budget = getattr(self,'memory_budget',None)
+                page_binding = ((self._storage,self._cfg,self._reconciler,self._fetcher,
+                    getattr(self,'memory_budget',None),self._reconciler._custom_dedup_fn,
+                    self._reconciler._custom_aggregator),
+                    (self._cfg.reconcile_dedup_strategy,self._cfg.reconcile_generate_custom))
             status = BackfillStatus.FETCHING
             await prepare_native_history_views(self._storage, plan.tasks)
             await prepare_derived_targets(self._storage, plan)
             if plan.derived_source_windows:
                 prepare_warmup_view(plan.derived_source_windows)
-                fetch_results = await self.fetcher.fetch(plan.tasks, on_deferred=self._commit_warmup_progress)
+                fetch_results = await self.fetcher.fetch(plan.tasks, on_deferred=self._commit_warmup_progress, **page_options)
             elif (exchange == "bybit" and not plan.decompositions
                     and metadata.get("chunk_sequence") is not None
                     and callable(getattr(self._storage, "query_time_range", None))):
@@ -424,9 +484,10 @@ class BackfillEngine:
                     raise NativeBackfillDeferred(exc, native_progress, committed) from exc
             else:
                 native_progress = None
-                fetch_results = await self.fetcher.fetch(plan.tasks)
+                fetch_results = await self.fetcher.fetch(plan.tasks, **page_options)
 
             fetch_error_summaries: list[str] = []
+            check_page_binding()
             for result in fetch_results:
                 if not result.errors and result.status not in {
                     BackfillStatus.FAILED,
@@ -466,9 +527,18 @@ class BackfillEngine:
                 errors.extend(fetch_error_summaries)
                 # ── Phase 4: Reconcile ──
                 status = BackfillStatus.RECONCILING
-                reconcile_result = await self.reconciler.reconcile(
-                    fetch_results, plan,
-                )
+                receipts = tuple(item for item in fetch_results if isinstance(item,FetchReceipt))
+                if receipts:
+                    # A failed native commit must not regenerate targets from
+                    # an older canonical value that merely still has coverage.
+                    final_plan = BackfillPlan(gaps=[]) if streamed.result.errors else plan
+                    final = await self.reconciler.reconcile(
+                        [item for item in fetch_results if isinstance(item,FetchResult)],
+                        final_plan,native_receipts=receipts)
+                    streamed.add(final)
+                    reconcile_result = streamed.result
+                else:
+                    reconcile_result = await self.reconciler.reconcile(fetch_results,plan)
                 if native_progress is not None:
                     native_progress.include_writes(reconcile_result)
                 # Successful object transactions remain eligible even if a
@@ -497,7 +567,8 @@ class BackfillEngine:
 
                 # Determine final status
                 any_failed = any(
-                    fr.status == BackfillStatus.FAILED for fr in fetch_results
+                    fr.status in {BackfillStatus.FAILED, BackfillStatus.PARTIAL}
+                    for fr in fetch_results
                 )
                 if all_failed and fetch_results and not reconcile_result.custom_bars_written:
                     status = BackfillStatus.FAILED
@@ -506,8 +577,12 @@ class BackfillEngine:
                 else:
                     status = BackfillStatus.COMPLETED
 
-        except RateLimitDeferred:
+        except RateLimitDeferred as exc:
             # Quota deferral never publishes a terminal report for the batch.
+            if plan is not None:
+                plan.mixed_binding = None
+            if streamed is not None and streamed.pages:
+                raise StreamBackfillDeferred(exc,streamed.result) from exc
             raise
         except Exception as exc:
             status = BackfillStatus.FAILED
@@ -521,6 +596,11 @@ class BackfillEngine:
         # retained reports after this run has completed.
         if plan is not None:
             plan.mixed_binding = None
+        if _receipt_mode:
+            count = sum(isinstance(item,FetchReceipt) for item in fetch_results)
+            metadata['fetch_payload_mode'] = ('receipt' if count == len(fetch_results) and count
+                                               else 'mixed' if count else 'full')
+            metadata['stream_reconciliation'] = streamed.snapshot()
         # ── Phase 5: Publish ──
         report = self.publisher.build_report(
             symbol=symbol,
@@ -532,6 +612,7 @@ class BackfillEngine:
             started_at_ms=started_at_ms,
             errors=errors,
             metadata=metadata,
+            receipt_mode=_receipt_mode,
         )
 
         try:

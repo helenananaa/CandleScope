@@ -65,7 +65,9 @@ from .models import (
     BackfillStatus,
     FetchedBar,
     FetchResult,
+    FetchReceipt,
 )
+from .fetch_stream import PageConsumer, PAGE_BYTES_PER_ROW, stream_grid, disjoint_source_spans
 from .source_router import ArchiveRoutePlan, HistoricalSourceRouter
 
 logger = logging.getLogger("backfill.Fetcher")
@@ -81,7 +83,7 @@ RateLimiter = Callable[[], Awaitable[None]]  # async sleep / token-bucket
 class FetchBatchDeferred(RateLimitDeferred):
     """Quota control flow with completed siblings available to the caller."""
 
-    def __init__(self, deferred: RateLimitDeferred, completed: list[FetchResult]) -> None:
+    def __init__(self, deferred: RateLimitDeferred, completed: list[FetchResult | FetchReceipt]) -> None:
         super().__init__(deferred.admission)
         self.completed = completed
 
@@ -127,6 +129,7 @@ class HistoricalFetcher:
         self._progress_callbacks: list[ProgressCallback] = []
         self._error_callbacks: list[ErrorCallback] = []
         self._custom_rate_limiter: RateLimiter | None = None
+        self.memory_budget = None
 
     # ── Public: Metrics / Snapshot ───────────────────────────
 
@@ -251,13 +254,19 @@ class HistoricalFetcher:
         self, tasks: list[BackfillTask], *,
         keep_completed: bool = False,
         on_deferred: Callable[[list[FetchResult]], Awaitable[None]] | None = None,
-    ) -> list[FetchResult]:
+        on_native_page: Callable[[FetchResult], Awaitable[None]] | None = None,
+        on_full_task: Callable[[BackfillTask], None] | None = None,
+    ) -> list[FetchResult | FetchReceipt]:
         """Execute all fetch tasks, respecting concurrency limits.
 
         Args:
             tasks: Ordered list of ``BackfillTask`` from the Planner.
             on_deferred: Optionally commit admitted results before yielding to quota.
             keep_completed: Attach successful siblings to a quota deferral.
+            on_native_page: Explicitly consume qualified REST pages with
+                backpressure and receive FetchReceipt instead of payloads.
+                Archive/unqualified/overridden routes retain FetchResult.
+            on_full_task: Admit a fallback task before its payload is fetched.
 
         Returns:
             A list of ``FetchResult``, one per task, in the same order.
@@ -279,7 +288,24 @@ class HistoricalFetcher:
         # REST requests keep the existing bounded semaphore. Archive downloads
         # use their own two-wide semaphore and are already running here, so
         # partial/current REST tails can progress in parallel.
-        coros = [self._fetch_task(task, route_plan) for task in tasks]
+        streaming = []
+        builtin = (getattr(self._fetch_task, '__func__', None) is HistoricalFetcher._fetch_task
+                   and getattr(self._fetch_rest_task, '__func__', None) is HistoricalFetcher._fetch_rest_task
+                   and getattr(self._fetch_rest_task_inner, '__func__', None) is HistoricalFetcher._fetch_rest_task_inner)
+        for task in tasks:
+            stream = (on_native_page is not None and builtin and not route_plan.refs_for(task)
+                      and stream_grid(task, self._cfg.fetch_batch_size) is not None)
+            streaming.append(stream)
+        # Archive object commits and overlapping raw results retain the batch
+        # precedence/transaction contract for the complete plan.
+        if on_native_page is not None and (not all(streaming) or not disjoint_source_spans(tasks)):
+            streaming = [False] * len(tasks)
+        if on_native_page is not None and on_full_task is not None:
+            for task, stream in zip(tasks, streaming):
+                if not stream:
+                    on_full_task(task)
+        coros = [self._fetch_rest_task(task, consume=on_native_page) if stream
+                 else self._fetch_task(task, route_plan) for task, stream in zip(tasks, streaming)]
         raw_results = await asyncio.gather(*coros, return_exceptions=True)
 
         deferred = [
@@ -296,7 +322,7 @@ class HistoricalFetcher:
             # it does not immediately re-enter and churn the queue again.
             latest = max(deferred, key=lambda exc: int(exc.retry_at_ms or 0))
             if keep_completed:
-                completed = [item for item in raw_results if isinstance(item, FetchResult)
+                completed = [item for item in raw_results if isinstance(item, (FetchResult,FetchReceipt))
                              and item.status == BackfillStatus.COMPLETED and not item.errors]
                 if completed:
                     raise FetchBatchDeferred(latest, completed)
@@ -357,12 +383,20 @@ class HistoricalFetcher:
             return await self._fetch_routed_task(task, refs, route_plan)
         return await self._fetch_rest_task(task)
 
-    async def _fetch_rest_task(self, task: BackfillTask) -> FetchResult:
+    async def _fetch_rest_task(self, task: BackfillTask, *, consume=None) -> FetchResult | FetchReceipt:
         """Fetch all REST pages for a single task."""
         async with self._semaphore:
-            return await self._fetch_rest_task_inner(task)
+            if consume is None:
+                return await self._fetch_rest_task_inner(task)
+            width, slots = stream_grid(task, self._cfg.fetch_batch_size)
+            allowance = self._cfg.fetch_batch_size * PAGE_BYTES_PER_ROW + (slots+7)//8 + 32*1024
+            scope = (self.memory_budget.reserve('history-backfill', allowance)
+                     if self.memory_budget is not None else nullcontext())
+            with scope:
+                return await self._fetch_rest_task_inner(task, collector=PageConsumer(
+                    task, self._cfg.fetch_batch_size, consume))
 
-    async def _fetch_rest_task_inner(self, task: BackfillTask) -> FetchResult:
+    async def _fetch_rest_task_inner(self, task: BackfillTask, *, collector=None) -> FetchResult | FetchReceipt:
         """Inner fetch logic with pagination and retry."""
         start_time = time.monotonic()
         all_bars: list[FetchedBar] = []
@@ -415,15 +449,19 @@ class HistoricalFetcher:
 
         while current_request is not None:
             # Safety: cap total bars
-            if len(all_bars) >= max_total:
+            if (collector.raw_count if collector is not None else len(all_bars)) >= max_total:
                 logger.warning(
                     "Task %s hit max total bars (%d), stopping",
                     task.task_key,
                     max_total,
                 )
+                if collector is not None:
+                    errors.append('fetch_work_budget_exhausted')
                 break
 
             req = current_request
+            if collector is not None:
+                req = replace(req, limit=min(req.limit or batch_size, max_total-collector.raw_count))
             req.history_projection = True
 
             # Fetch with retry
@@ -616,15 +654,42 @@ class HistoricalFetcher:
                 empty_reason = "unusable_page"
                 break
 
-            all_bars.extend(page_bars)
-            await self._fire_progress(task, len(all_bars), estimated_total)
+            if collector is None:
+                all_bars.extend(page_bars)
+            else:
+                try:
+                    await collector.accept(page_bars)
+                except RateLimitDeferred:
+                    raise
+                except Exception as exc:
+                    errors.append(f'page_consumption_failed: {exc}')
+                    break
+                collector.absorb_errors(errors)
+                errors = []
+            await self._fire_progress(task, collector.raw_count if collector is not None else len(all_bars), estimated_total)
 
             current_request = pagination_policy.next_request(
                 task,
                 req,
                 page_bars,
-                batch_size=batch_size,
+                batch_size=req.limit if collector is not None else batch_size,
             )
+            if collector is not None:
+                # No fetched page/result survives to the next physical read.
+                page_bars = []
+                raw_messages = []
+
+        if collector is not None:
+            receipt = collector.finish(errors=errors, pages=pages_fetched,
+                elapsed_ms=self._elapsed_ms(start_time), source_complete=source_complete,
+                empty_reason=empty_reason)
+            self._last_history_diagnostics = dict(selected_sources=receipt.metadata['history_sources'],
+                history_lane=receipt.metadata['history_lane'], rest_pages=pages_fetched,
+                payload_kind='receipt', fetched_bars=receipt.bars_count,
+                archive_object_count=0,archive_cache_hits=0,archive_download_bytes=0,
+                archive_download_elapsed_ms=0,archive_verify_elapsed_ms=0,archive_parse_elapsed_ms=0,
+                rest_tail_ranges=1,rest_fallback_ranges=0)
+            return receipt
 
         # Deduplicate by open_time and sort ascending
         seen: set[int] = set()

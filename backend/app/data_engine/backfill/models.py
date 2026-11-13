@@ -450,6 +450,33 @@ class FetchResult:
 # ═══════════════════════════════════════════════════════════════
 
 
+@dataclass(frozen=True, slots=True)
+class FetchReceipt:
+    """No-payload progress, deliberately distinct from an emptied FetchResult.
+
+    bars_count counts unique fetched in-range values, not committed rows or
+    durable delivery acknowledgments; ReconcileResult owns those write counts.
+    """
+    task: BackfillTask
+    bars_count: int
+    status: BackfillStatus = BackfillStatus.COMPLETED
+    elapsed_ms: int = 0
+    pages_fetched: int = 0
+    errors: tuple[str, ...] = ()
+    source_complete: bool = False
+    exhausted_before_ms: int | None = None
+    empty_reason: str | None = None
+    retryable: bool = False
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self):
+        return dict(task=self.task.to_dict(), bars_count=self.bars_count,
+            status=self.status.value, elapsed_ms=self.elapsed_ms, pages_fetched=self.pages_fetched,
+            errors=list(self.errors), source_complete=self.source_complete,
+            exhausted_before_ms=self.exhausted_before_ms, empty_reason=self.empty_reason,
+            retryable=self.retryable, metadata=self.metadata, payload_kind='receipt')
+
+
 @dataclass(slots=True)
 class WrittenRange:
     """Storage range successfully written by reconciliation."""
@@ -561,7 +588,7 @@ class RepairReport:
     exchange: str = "binance"
     status: BackfillStatus = BackfillStatus.PENDING
     plan: BackfillPlan | None = None
-    fetch_results: list[FetchResult] = field(default_factory=list)
+    fetch_results: list[FetchResult | FetchReceipt] = field(default_factory=list)
     reconcile_result: ReconcileResult | None = None
     started_at_ms: int = field(default_factory=lambda: int(time.time() * 1000))
     completed_at_ms: int = 0
