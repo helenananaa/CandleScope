@@ -9,7 +9,7 @@
     "backend/scripts/ccxt_contracts/integration.py": "2253d73c0dc1f50c41fa8c592bea704677394044e243ec68b37d6b1e2ddab1ca",
     "backend/tests/test_closed_component_retention.py": "8a0f7b54a3b8a1e85f1b9af087194faa335f2cced84cd6ae30aa5862877bb8e3",
     "backend/tests/test_closed_component_retention_sources.py": "ea754d010b3f4a5ca7dcd56c77034e1434a7fd709340f4bcb2cfbb48d0602239",
-    "backend/tests/test_forming_component_retention.py": "b42197a50ad1ca4f6cc4706f3dca7cb5ec32e181ce12a940dacce41c2431bcd8",
+    "backend/tests/test_forming_component_retention.py": "8d890be0ac6b366474f5d9662de1f46f23518dd41302250d09f68ec489c75f29",
     "backend/tests/test_forming_component_retention_sources.py": "214fbf5ad5f5a2f92e460f703ac59f91c1360558ba567ed0c46e2ab2b69d7e5a",
     "packages/candlescope-plugin-pine-compat/scripts/qualify_host_contracts.py": "4f38f5294b5b87dc8efb2b5428f15b375edfa7b0409e10e3441ad4710e59e7bd"
   }

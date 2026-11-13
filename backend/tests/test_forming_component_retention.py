@@ -5,6 +5,7 @@ import threading
 
 import pytest
 
+from app.core.executors import run_storage
 from app.data_engine.bar_aggregator.models import BarInputSource
 from app.data_engine.ingestion.models import DataSource, MarketEvent, StreamType
 from app.data_engine.storage import klines_repo
@@ -24,7 +25,8 @@ async def flush_native(dm,count):
         while True:
             await dm.aggregator_bridge.delivery.flush()
             stored=dm.query_engine.storage.query_bars('BTCUSDT','1m',market_type='futures',limit=count)
-            if len(stored)==count: return
+            pending=await run_storage(dm.aggregator_bridge.delivery.journal.pending_count)
+            if len(stored)==count and pending==0: return
             await asyncio.sleep(.01)
 
 
@@ -64,6 +66,7 @@ def test_empty_live_bucket_establishes_prefix_then_uses_existing_rollover(dm,mon
             state=current()
             assert state._history_prefix is None and len(state.source_snapshots)==128
             assert len(dm.history_prefix_runtime.component_jobs)==1
+            await flush_native(dm,128)
             fields=(*FIELDS,'enhanced_fields','status','finality','created_at_ms','updated_at_ms',
                     'acquisition_revision','preview_input_version','preview_computed_version','preview_published_version')
             before=tuple(getattr(state,f) for f in fields)

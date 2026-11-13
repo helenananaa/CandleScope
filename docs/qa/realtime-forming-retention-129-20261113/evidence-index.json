@@ -27,6 +27,18 @@
     "bytes": 20,
     "sha256": "f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837"
   },
+  "evidence/ci-cloud-arm-first.log.gz": {
+    "bytes": 22413,
+    "sha256": "00e764e78c0b2278ec577478c2267be16888a40556ec4b8ab7890792db3c9b7f"
+  },
+  "evidence/ci-cloud-linux-first.log.gz": {
+    "bytes": 22930,
+    "sha256": "6014177c57790d578d37e862d60f4bfd3dd9b567cd6479e76896ccb48bdacd30"
+  },
+  "evidence/ci-cloud-windows-first.log.gz": {
+    "bytes": 21052,
+    "sha256": "39fef2ba7d5c949a31f5cc7810d76f8d9e45408136ed88155131bbb1a7d23cbe"
+  },
   "evidence/ci-final.log.gz": {
     "bytes": 1018,
     "sha256": "21866343522940630f62604dc2c51bf11c1983f93e41220ffabfca97d6a5d2cf"
@@ -50,6 +62,14 @@
   "evidence/closing-race.xml.gz": {
     "bytes": 264,
     "sha256": "11205275ece575cfd35f02224a905db95203d825f38a855fe407486e29ab454f"
+  },
+  "evidence/cloud-fixture-fixed.log.gz": {
+    "bytes": 171,
+    "sha256": "d6a7882d2158ed1da6d375a6c96449e47e3a58c783a8fc22a4d9d912a5bd4fdc"
+  },
+  "evidence/cloud-fixture-fixed.xml.gz": {
+    "bytes": 779,
+    "sha256": "323a17689bf4e584c8d6b9a8d4a415da73813143b11683eef83f910238eae7a2"
   },
   "evidence/controlled.log.gz": {
     "bytes": 2651,
@@ -278,6 +298,10 @@
   "evidence/prepare-native.log.gz": {
     "bytes": 70,
     "sha256": "c7cc2127c47ad05d4efdb8bf1cd5050d1216e4a69054f1162e63f64108ffb01a"
+  },
+  "evidence/source-only-cold-probe.log.gz": {
+    "bytes": 199,
+    "sha256": "7804acf5a3df33eedd23b1547d665370cc2ad187b0a6ecedf96e9d223128ed21"
   },
   "evidence/sources.log.gz": {
     "bytes": 160,

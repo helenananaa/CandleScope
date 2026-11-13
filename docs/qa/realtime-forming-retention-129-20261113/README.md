@@ -26,7 +26,7 @@
 - 三个权限回归在完整旧后端 `00be4ce` 均实际观察到被删除目标重新存在于 SQLite；修订后拒绝重建。源删除保留 gap/provisional，不伪装完整。
 - 真实 pinned OKX WS/REST 解析、SourceJournal 回执、原持久 dispatcher：首个 prefix 和旧叶修正均等待 native commit；不是仅用 fake storage 证明接线。
 
-最终 app 的本地完整 CCXT integration：2243 passed / 66 warnings，随后仅补 dirty-tail 合同，单项通过。架构检查通过；最后26项会在最终远端 head 全部纳入完整集成。首次较早完整选集2237项通过，不冒充最终完整集合。首候选52项相关合同通过；扩大到全部prefix时95通过/1失败为测试仅取新 acquisition、未取更旧 permission floor，已纠正比较定义，保留实际防复活断言。
+最终 app 的本地完整 CCXT integration：2243 passed / 66 warnings，随后仅补 dirty-tail 合同，单项通过。架构检查通过；最后26项会在最终远端 head 全部纳入完整集成。首轮云端 Linux/ARM 的新正向测试在原 native dispatcher 尚未排空时断言必须成功（Linux 为读视图失效，ARM 同一断言 detail 为空）；生产正确保留原组成，Windows 同 head 386项通过。修正测试前置条件：等待原 native canonical 数量和 durable pending=0，再要求可选维护成功；没有删除/放宽断言、重跑失败head或修改生产deadline。修正后26项本地全部通过，原始云端失败日志保留。产品 app 仍完全等于8f9089，无需把测试夹具修正冒充产品或原生重跑。首次较早完整选集2237项通过，不冒充最终完整集合。首候选52项相关合同通过；扩大到全部prefix时95通过/1失败为测试仅取新 acquisition、未取更旧 permission floor，已纠正比较定义，保留实际防复活断言。
 
 所有失败保留：initial 的同步 callback 被 await、原 timer 与手动 drain 抢同一维护任务；controlled 的物理读取启动前原 native dispatcher 尚未处理完受控积压；focused 的未收盘 fixture 却等待128根已收盘规范行（应127），以及形成中原 floor 缺口；首版6m fixture实际默认选3m，改为与输入1m相符的7m。首候选虽修复恢复路径，后补 rollover/warm-refresh 两项仍准确复现 SQLite 重建，最终移到统一采用入口。没有移除断言、提高生产限额或调整生产恢复超时。
 
@@ -71,3 +71,5 @@ CANDLESCOPE_PLAYWRIGHT_PACKAGE=/absolute/tooling/package.json CANDLESCOPE_QA_HTT
 `prepare-native.py` 的保留底包位置需指向已验证包；witness额外设置 `CANDLESCOPE_CLOSED_RETENTION_WITNESS=true`。输出目录必须是新profile，保留原失败与SQLite。`archive.py`校验最终1002文件/asar/签名，压缩回执与失败，只遮蔽临时字符串contextToken，不删除数值active_read_tokens；evidence-index列出SHA256。
 
 #129 的 builder 已逐出后的有界完整窗口恢复仍未交付，尤其 SourceJournal-only、没有原生canonical的有效输入必须保留；不能拿H127代替该恢复合同。其他来源/网格/消费者、全部语义屏障、独立forming/指标/策略、长期CPU/RSS/延迟及退化/恢复矩阵继续。#126 全writer/read/归档与共同预算覆盖、#127 自动首屏与冷历史/调度/完整资源验收仍按各自原始标准推进。本批不关闭这些issue。
+
+当前产品的独立 SourceJournal-only 冷恢复探针也已通过：2m目标重启后首叶 quote 修正1010→1008，native 1m规范行0、2m行1、quote_volume=2018、source_snapshot_verified。原生canonical不是这项现有恢复合同的必要条件；未来有界化必须保留它。该受控探针无网络，不计新的有界恢复实现完成。
