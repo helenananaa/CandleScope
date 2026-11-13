@@ -84,14 +84,14 @@ async function close(verifyCleanup = true) {
   await previous.close();
   if (verifyCleanup) for (const realm of ["backend", "desktop"]) verifyRealmCleanup(realm);
 }
-// Extensions are managed in Settings → 插件与扩展 (the plugin center) → 可信扩展. The recovery notice only
+// Extensions are managed in Settings → 插件与扩展 → 可信扩展 (a tab of the plugin center). The recovery notice only
 // appears after a failure or in recovery mode, so the smoke always takes the Settings route.
 const managerPanel = () => page.locator(".extension-manager");
 async function manager() {
   if (await managerPanel().isVisible()) return;
   await page.getByRole("button", { name: zhEn("设置", "Settings") }).first().click();
   await page.getByRole("button", { name: zhEn("插件与扩展", "Plugins") }).click();
-  await page.locator(".pc-navigation").getByRole("button", { name: zhEn("可信扩展", "Trusted extensions") }).click();
+  await page.locator(".pc-navigation").getByRole("tab", { name: zhEn("可信扩展", "Trusted extensions") }).click();
   await managerPanel().waitFor();
 }
 async function confirm() {

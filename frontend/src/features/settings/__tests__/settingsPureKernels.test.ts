@@ -4,6 +4,7 @@ import test from "node:test";
 import { SETTINGS_ACTION_TYPES } from "../settingsActionTypes.js";
 import { buildSettingsPanelViewModel } from "../settingsPanelViewModel.js";
 import { SETTINGS_CATEGORIES, resolveSettingsTab } from "../settingsTabRegistry.js";
+import { proxyConfigChanged, type ProxyConfig } from "../proxySettingsRuntime.js";
 import type {
   SettingsRuntimeActions,
   SettingsRuntimeView,
@@ -16,6 +17,22 @@ test("settings registry owns the complete ordered category contract", () => {
     ["appearance", "network", "exchanges", "data", "plugins", "ai", "about"],
   );
   assert.equal(resolveSettingsTab("missing"), SETTINGS_CATEGORIES[0]);
+});
+
+test("every settings category has its own icon", () => {
+  const icons = SETTINGS_CATEGORIES.map((category) => category.icon);
+  assert.equal(new Set(icons).size, icons.length);
+});
+
+test("proxy edits count as unsaved until they match what the backend saved", () => {
+  const saved: ProxyConfig = { mode: "custom", customProxy: "http://127.0.0.1:7890", routes: [], strategy: "failover" };
+  assert.equal(proxyConfigChanged(null, saved), false, "nothing loaded yet");
+  assert.equal(proxyConfigChanged(saved, { ...saved }), false);
+  assert.equal(proxyConfigChanged(saved, { ...saved, customProxy: " http://127.0.0.1:7890 " }), false, "surrounding spaces");
+  assert.equal(proxyConfigChanged(saved, { ...saved, mode: "none" }), true);
+  assert.equal(proxyConfigChanged(saved, { ...saved, customProxy: "socks5://127.0.0.1:1080" }), true);
+  assert.equal(proxyConfigChanged(saved, { ...saved, strategy: "balanced" }), true);
+  assert.equal(proxyConfigChanged(saved, { ...saved, routes: [{ id: "a", name: "", url: "", egress_group: "shared", enabled: true, exchanges: [], max_concurrency: 4 }] }), true);
 });
 
 test("settings action descriptors distinguish local and backend behavior", () => {

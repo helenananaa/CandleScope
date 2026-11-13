@@ -380,6 +380,30 @@ Still outside the stack, and moved when each is rebuilt:
 - The menu is named 图 N 外观与布局 (was 图 N 布局操作) and renders outside the chart cell on the market page too, so small charts in a grid no longer cut it off; it sits under modals and toasts.
 - `SegmentedControl` labels wrap (hyphenated where the language allows) instead of running under the next option.
 
+**Phase 5 lands surface by surface** (split decided 2026-11-14), each PR with its own QA note:
+
+| PR | Surfaces |
+|---|---|
+| 5a | Settings frame: the Plugin Center inside Settings, the save model, 网络连接, 数据管理's library, AI MCP |
+| 5b | The rest of Settings: 交易所 (internal terms, pills, tiles onto tokens), 存储与维护, 高级维护, 关于与支持 |
+| 5c | Alerts (cards in cards, notifications through `notify()`) |
+| 5d | Indicators and the indicator editor |
+| 5e | Symbol search and Export (native `<dialog>` onto the kit) |
+| 5f | Replay hub and session |
+| 5g | Strategy research merged with backtest (§6.1), local data, CSV import |
+| 5h | Data workbench |
+| 5i | Order book, trade flow and account docks; panel toggles and Settings on `IconButton` |
+
+Each PR also merges its surface's late-loading CSS file into the main one and removes its `!important` rules.
+
+**Phase 5a is done (branch `design/phase-5a-settings`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_5A.md`](../docs/FRONTEND_DESIGN_QA_PHASE_5A.md).
+
+- Settings is one dialog (1080 × 760 at most). The Plugin Center opens inside it as 插件与扩展 instead of replacing it with a differently styled window; its sections are kit tabs with 刷新 and 安装插件 beside them.
+- The save model: changes apply as they are made, so 保存并关闭 is gone. The proxy is the one form with its own save, enabled only when there are unsaved edits; 网络连接 shows a dot while they wait, and closing asks before discarding them. Settings stays open while a plugin installs.
+- 数据管理 uses kit tabs; the library section lists the local library and the data workbench as two rows, with the workbench text distilled ("SQLite", "VACUUM" removed).
+- AI MCP has its own icon; in a browser it is an empty state, and the desktop panel is rebuilt from the kit (it was the last unstyled class name).
+- The Settings CSS moved from a 2,364-line `<style>` string, re-injected on every open, into `features/settings/settings.css`.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.
