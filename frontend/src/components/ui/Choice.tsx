@@ -59,6 +59,7 @@ export function SegmentedControl<T extends string>({ label, value, options, onCh
           tabIndex={tabIndexFor(option)}
           disabled={option.disabled}
           className="ui-segment"
+          data-value={option.value}
           onClick={() => onChange(option.value)}
           onKeyDown={(event) => onKeyDown(event, index)}
         >
@@ -100,6 +101,7 @@ export function Tabs<T extends string>({ label, value, tabs, onChange, id, class
           tabIndex={tabIndexFor(tab)}
           disabled={tab.disabled}
           className="ui-tab"
+          data-value={tab.value}
           onClick={() => onChange(tab.value)}
           onKeyDown={(event) => onKeyDown(event, index)}
         >

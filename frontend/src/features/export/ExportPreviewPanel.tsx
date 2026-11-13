@@ -1,8 +1,11 @@
-import { memo, useMemo, useState } from "react";
+import { memo, useState } from "react";
 import { Icon } from "../../components/icons/Icon.js";
+import { Button, IconButton } from "../../components/ui/Button.js";
+import { SegmentedControl } from "../../components/ui/Choice.js";
+import { InlineAlert } from "../../components/ui/Display.js";
+import { EmptyState } from "../../components/ui/EmptyState.js";
 import { getDateTimeLocale, t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
-import type { CSSProperties } from "react";
 
 type PreviewZoomMode = "fit" | "50" | "100";
 
@@ -11,6 +14,8 @@ const ZOOM_OPTIONS: ReadonlyArray<{ value: PreviewZoomMode; labelKey?: "export.f
   { value: "50", label: "50%" },
   { value: "100", label: "100%" },
 ];
+
+type PreviewTone = "muted" | "accent" | "success" | "warning";
 
 export interface ExportPreviewPanelProps {
   previewUrl?: string | null;
@@ -55,93 +60,54 @@ const ExportPreviewPanel = memo(function ExportPreviewPanel({
   useLocale();
   const [zoomMode, setZoomMode] = useState<PreviewZoomMode>("fit");
   const hasPreview = Boolean(previewUrl);
-  const imageStyle = useMemo<CSSProperties | undefined>(() => {
-    if (zoomMode === "fit") return undefined;
-    return {
-      width: `${zoomMode}%`,
-      maxWidth: "none",
-      maxHeight: "none",
-    };
-  }, [zoomMode]);
   const formatLabel = formatMime(mimeType, filename);
-  const statusText = loading
-    ? hasPreview ? t("export.updating") : t("export.creating")
-    : hasPreview && isCurrent ? t("export.saveIsThis") : hasPreview ? t("export.configChanged") : t("export.waitPreview");
+  const [statusText, statusTone]: [string, PreviewTone] = loading
+    ? [hasPreview ? t("export.updating") : t("export.creating"), "accent"]
+    : hasPreview && isCurrent ? [t("export.saveIsThis"), "success"]
+      : hasPreview ? [t("export.configChanged"), "warning"] : [t("export.waitPreview"), "muted"];
+  const details = hasPreview
+    ? [formatLabel, width && height ? `${width} × ${height}` : null, `${t("export.generated")} ${formatGeneratedAt(generatedAt)}`].filter(Boolean)
+    : [];
 
   return (
-    <aside className="export-preview-panel export-exclude" aria-label={t("export.previewAria")}>
+    <section className="export-preview-panel export-exclude" aria-label={t("export.previewAria")}>
       <div className="export-preview-header">
-        <div>
-          <div className="export-preview-title">{t("export.previewTitle")}</div>
-          <div className="export-preview-subtitle">{t("export.previewSubtitle")}</div>
+        <div className="export-preview-heading">
+          <h3 className="export-preview-title">{t("export.previewTitle")}</h3>
+          <p className="export-preview-meta">
+            <span className="export-preview-status" data-tone={statusTone}>{statusText}</span>
+            {details.map((detail) => <span key={detail}>{detail}</span>)}
+          </p>
         </div>
-        <button
-          type="button"
+        <SegmentedControl size="sm" label={t("export.zoom")} value={zoomMode}
+          options={ZOOM_OPTIONS.map((item) => ({ value: item.value, label: item.labelKey ? t(item.labelKey) : item.label }))}
+          onChange={setZoomMode} />
+        <IconButton
+          size="sm"
+          variant="secondary"
           className="export-preview-refresh"
           onClick={onRefresh}
           disabled={loading}
-          title={t("export.refreshPreview")}
-        >
-          {t("export.refresh")}
-        </button>
+          label={t("export.refreshPreview")}
+          icon={<Icon name="refresh" size={14} />}
+        />
       </div>
 
-      <div className="export-preview-meta-grid">
-        <div>
-          <span>{t("export.status")}</span>
-          <strong>{statusText}</strong>
-        </div>
-        <div>
-          <span>{t("export.format")}</span>
-          <strong>{formatLabel}</strong>
-        </div>
-        <div>
-          <span>{t("export.size")}</span>
-          <strong>{width && height ? `${width} × ${height}` : "--"}</strong>
-        </div>
-        <div>
-          <span>{t("export.generated")}</span>
-          <strong>{formatGeneratedAt(generatedAt)}</strong>
-        </div>
-      </div>
-
-      <div className="export-preview-toolbar">
-        <div className="export-preview-zoom">
-          {ZOOM_OPTIONS.map((item) => (
-            <button
-              key={item.value}
-              type="button"
-              className={zoomMode === item.value ? "active" : ""}
-              onClick={() => setZoomMode(item.value)}
-            >
-              {item.labelKey ? t(item.labelKey) : item.label}
-            </button>
-          ))}
-        </div>
-        {filename && <div className="export-preview-filename" title={filename}>{filename}</div>}
-      </div>
-
-      <div className={`export-preview-frame ${loading ? "loading" : ""} ${!isCurrent && hasPreview ? "stale" : ""}`}>
+      <div className={`export-preview-frame ${loading ? "loading" : ""} ${!isCurrent && hasPreview ? "stale" : ""}`} data-zoom={zoomMode}>
         {hasPreview && (
           <img
             src={previewUrl || undefined}
             alt={t("export.previewAlt")}
             className="export-preview-image"
-            style={imageStyle}
           />
         )}
 
         {!hasPreview && loading && (
-          <div className="export-preview-skeleton">
-            <div className="export-preview-skeleton-icon" aria-hidden="true"><Icon name="camera" size={28} /></div>
-            <div>{t("export.firstPreview")}</div>
-          </div>
+          <EmptyState compact icon={<Icon name="camera" size={24} />} title={t("export.firstPreview")} />
         )}
 
         {!hasPreview && !loading && !error && (
-          <div className="export-preview-empty">
-            <div>{t("export.clickRefresh")}</div>
-          </div>
+          <EmptyState compact icon={<Icon name="camera" size={24} />} title={t("export.clickRefresh")} />
         )}
 
         {loading && hasPreview && (
@@ -149,14 +115,13 @@ const ExportPreviewPanel = memo(function ExportPreviewPanel({
         )}
 
         {error && !loading && (
-          <div className="export-preview-error">
-            <strong>{t("export.previewFailed")}</strong>
-            <span>{error}</span>
-            <button type="button" onClick={onRefresh}>{t("export.regenerate")}</button>
-          </div>
+          <InlineAlert tone="danger" className="export-preview-error" title={t("export.previewFailed")}
+            action={<Button size="sm" onClick={onRefresh}>{t("export.regenerate")}</Button>}>
+            {error}
+          </InlineAlert>
         )}
       </div>
-    </aside>
+    </section>
   );
 });
 

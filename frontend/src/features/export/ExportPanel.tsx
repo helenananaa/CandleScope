@@ -1,12 +1,15 @@
-import { memo, useEffect, useMemo, useRef } from "react";
-import { createPortal } from "react-dom";
+import { memo, useId, useMemo, type KeyboardEvent, type ReactNode } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import ExportPreviewPanel from "./ExportPreviewPanel";
 import { buildExportFilename } from "../../utils/exportFilename.js";
 import type { ExportPreviewRuntime } from "./exportPreviewRuntime.js";
 import type { ExportMetadata, ExportOptions } from "./exportTypes.js";
-import { Icon } from "../../components/icons/Icon.js";
+import { Button } from "../../components/ui/Button.js";
+import { SegmentedControl } from "../../components/ui/Choice.js";
+import { InlineAlert } from "../../components/ui/Display.js";
+import { Checkbox, Field, Input, Select, Textarea } from "../../components/ui/Field.js";
+import { Dialog } from "../../components/ui/Overlays.js";
 
 const SCOPE_OPTIONS: ReadonlyArray<{
   value: ExportOptions["scope"];
@@ -28,7 +31,7 @@ const FORMAT_OPTIONS: ReadonlyArray<{
   { value: "webp", label: "WebP", descKey: "export.format.webpDesc" },
 ];
 
-const SCALE_OPTIONS = [1, 2, 3];
+const SCALE_OPTIONS = ["1", "2", "3"] as const;
 
 export interface ExportPanelProps {
   isOpen: boolean;
@@ -57,6 +60,146 @@ function patchOptions(
   onChange(nextOptions);
 }
 
+/** A labelled choice with the selected option's description under it. Scripts find it by data-export-choice. */
+function ExportChoice({ choice, label, hint, children }: { choice: string; label: string; hint?: ReactNode; children: ReactNode }) {
+  return (
+    <div className="export-choice" data-export-choice={choice}>
+      <span className="ui-field-label">{label}</span>
+      {children}
+      {hint ? <p className="ui-field-hint">{hint}</p> : null}
+    </div>
+  );
+}
+
+/** Keys typed in the dialog stay out of the page's shortcuts; Escape still reaches the overlay stack. */
+function keepKeysInDialog(event: KeyboardEvent<HTMLElement>): void {
+  if (event.key !== "Escape") event.stopPropagation();
+}
+
+export interface ExportSettingsProps {
+  options: ExportOptions;
+  onOptionsChange(options: ExportOptions): void;
+  filename: string;
+  error?: string | null;
+  notice?: string | null;
+  loading?: boolean;
+  indicatorComputing?: boolean;
+}
+
+/** The settings column (exported for tests: the dialog itself renders in the overlay host). */
+export function ExportSettings({ options, onOptionsChange, filename, error = null, notice = null, loading = false, indicatorComputing = false }: ExportSettingsProps) {
+  const qualityId = useId();
+  const patch = (next: Partial<ExportOptions>) => patchOptions(options, onOptionsChange, next);
+  const scope = SCOPE_OPTIONS.find((item) => item.value === options.scope) ?? SCOPE_OPTIONS[0]!;
+  const format = FORMAT_OPTIONS.find((item) => item.value === options.format) ?? FORMAT_OPTIONS[0]!;
+  const quality = options.quality || 0.92;
+  return (
+    <div className="export-settings-panel">
+      {(loading || indicatorComputing) && (
+        <InlineAlert tone="warning">
+          {loading ? t("export.chartLoading") : t("export.indicatorComputing")} {t("export.canContinue")}
+        </InlineAlert>
+      )}
+
+      <ExportChoice choice="scope" label={t("export.scope")} hint={t(scope.descKey)}>
+        <SegmentedControl fullWidth label={t("export.scope")} value={options.scope}
+          options={SCOPE_OPTIONS.map((item) => ({ value: item.value, label: t(item.labelKey) }))}
+          onChange={(value) => patch({ scope: value })} />
+      </ExportChoice>
+
+      <ExportChoice choice="format" label={t("export.format")} hint={t(format.descKey)}>
+        <SegmentedControl fullWidth label={t("export.format")} value={options.format}
+          options={FORMAT_OPTIONS.map((item) => ({ value: item.value, label: item.label }))}
+          onChange={(value) => patch({ format: value })} />
+      </ExportChoice>
+
+      <div className="export-settings-row">
+        <ExportChoice choice="scale" label={t("export.scale")}>
+          <SegmentedControl label={t("export.scale")} value={String(options.scale)}
+            options={SCALE_OPTIONS.map((scale) => ({ value: scale, label: `${scale}x` }))}
+            onChange={(value) => patch({ scale: Number(value) })} />
+        </ExportChoice>
+        <Field label={t("export.background")}>
+          <Select
+            data-export-option="background"
+            value={options.backgroundColor || "auto"}
+            onChange={(event) => patch({ backgroundColor: event.target.value })}
+          >
+            <option value="auto">{t("export.bg.auto")}</option>
+            <option value="transparent" disabled={options.format === "jpeg"}>{t("export.bg.transparent")}</option>
+            <option value="#0f172a">{t("export.bg.dark")}</option>
+            <option value="#ffffff">{t("export.bg.white")}</option>
+          </Select>
+        </Field>
+      </div>
+
+      {options.format !== "png" && (
+        <div className="ui-field">
+          <label className="ui-field-label" htmlFor={qualityId}>{t("export.quality", { percent: Math.round(quality * 100) })}</label>
+          <input
+            id={qualityId}
+            type="range"
+            min="0.5"
+            max="1"
+            step="0.01"
+            value={quality}
+            className="export-range"
+            onChange={(event) => patch({ quality: Number(event.target.value) })}
+          />
+        </div>
+      )}
+
+      <div className="export-checks">
+        {options.scope !== "page" && (
+          <Checkbox
+            data-export-option="include-context"
+            checked={options.includeContext}
+            onChange={(event) => patch({ includeContext: event.target.checked })}
+            label={t("export.includeContext")}
+            description={t("export.includeContextDesc")}
+          />
+        )}
+        <Checkbox
+          data-export-option="hide-drawings"
+          checked={!!options.hideDrawings}
+          onChange={(event) => patch({ hideDrawings: event.target.checked })}
+          label={t("export.hideDrawings")}
+          description={t("export.hideDrawingsDesc")}
+        />
+        <Checkbox
+          data-export-option="watermark-enabled"
+          checked={!!options.watermarkEnabled}
+          onChange={(event) => patch({ watermarkEnabled: event.target.checked })}
+          label={t("export.watermark")}
+          description={t("export.watermarkDesc")}
+        />
+      </div>
+
+      {options.watermarkEnabled && (
+        <Field label={t("export.watermarkText")}>
+          <Textarea
+            data-export-option="watermark-text"
+            rows={2}
+            placeholder={t("export.watermarkPlaceholder")}
+            value={options.watermarkText || ""}
+            onChange={(event) => patch({ watermarkText: event.target.value })}
+          />
+        </Field>
+      )}
+
+      <Field label={t("export.filename")} hint={<span className="export-filename">{filename}</span>}>
+        <Input
+          value={options.filenamePrefix || "candlescope"}
+          onChange={(event) => patch({ filenamePrefix: event.target.value })}
+        />
+      </Field>
+
+      {error && <InlineAlert tone="danger" className="export-panel-message">{error}</InlineAlert>}
+      {notice && !error && <InlineAlert tone="success" className="export-panel-message">{notice}</InlineAlert>}
+    </div>
+  );
+}
+
 const ExportPanel = memo(function ExportPanel({
   isOpen,
   options,
@@ -72,13 +215,6 @@ const ExportPanel = memo(function ExportPanel({
   preview = null,
 }: ExportPanelProps) {
   useLocale();
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!isOpen || !dialog) return;
-    dialog.showModal();
-    return () => dialog.close();
-  }, [isOpen]);
   const filenamePreview = useMemo(() => buildExportFilename({
     prefix: options.filenamePrefix || "candlescope",
     ...(metadata.exchange === undefined ? {} : { exchange: metadata.exchange }),
@@ -92,180 +228,31 @@ const ExportPanel = memo(function ExportPanel({
   const canSavePreview = Boolean(preview?.blob && previewIsCurrent && !preview?.loading && !preview?.error);
   const saveDisabled = inProgress || preview?.loading || !canSavePreview;
 
-  if (!isOpen) return null;
-
-  return createPortal(
-    <dialog ref={dialogRef} className="export-panel export-workspace export-exclude" aria-label={t("export.aria")}
-      onCancel={(event) => { event.preventDefault(); onClose(); }}
-      onKeyDown={(event) => event.stopPropagation()}
+  return (
+    <Dialog
+      open={isOpen}
+      onClose={onClose}
+      title={t("export.title")}
+      size="lg"
+      dismissible={!inProgress}
+      className="export-panel export-workspace export-exclude"
+      onKeyDown={keepKeysInDialog}
+      footer={<>
+        <Button onClick={onClose} disabled={inProgress}>{t("export.closeBtn")}</Button>
+        <Button
+          variant="primary"
+          data-export-action="save"
+          onClick={() => onExport(options)}
+          disabled={saveDisabled}
+          title={preview?.loading ? t("export.previewLoadingTitle") : canSavePreview ? t("export.savePreview") : t("export.needPreview")}
+        >
+          {inProgress ? t("export.saving") : preview?.loading ? t("export.generating") : t("export.saveCurrent")}
+        </Button>
+      </>}
     >
-      <div className="export-panel-header">
-        <div>
-          <div className="export-panel-title">{t("export.title")}</div>
-          <div className="export-panel-subtitle">{t("export.subtitle")}</div>
-        </div>
-        <button type="button" className="export-panel-close" onClick={onClose} aria-label={t("export.close")}><Icon name="close" size={14} /></button>
-      </div>
-
       <div className="export-workspace-body">
-        <div className="export-settings-panel">
-          {(loading || indicatorComputing) && (
-            <div className="export-panel-warning">
-              {loading ? t("export.chartLoading") : t("export.indicatorComputing")} {t("export.canContinue")}
-            </div>
-          )}
-
-          <section className="export-panel-section">
-            <div className="export-section-label">{t("export.scope")}</div>
-            <div className="export-option-grid scope-grid">
-              {SCOPE_OPTIONS.map((item) => (
-                <button
-                  key={item.value}
-                  type="button"
-                  data-export-scope={item.value}
-                  className={`export-option-card ${options.scope === item.value ? "active" : ""}`}
-                  onClick={() => patchOptions(options, onOptionsChange, { scope: item.value })}
-                >
-                  <span>{t(item.labelKey)}</span>
-                  <small>{t(item.descKey)}</small>
-                </button>
-              ))}
-            </div>
-          </section>
-
-          <section className="export-panel-section">
-            <div className="export-section-label">{t("export.format")}</div>
-            <div className="export-option-grid format-grid">
-              {FORMAT_OPTIONS.map((item) => (
-                <button
-                  key={item.value}
-                  type="button"
-                  data-export-format={item.value}
-                  className={`export-option-card ${options.format === item.value ? "active" : ""}`}
-                  onClick={() => patchOptions(options, onOptionsChange, { format: item.value })}
-                >
-                  <span>{item.label}</span>
-                  <small>{t(item.descKey)}</small>
-                </button>
-              ))}
-            </div>
-          </section>
-
-          <section className="export-panel-section export-inline-row">
-            <div>
-              <div className="export-section-label">{t("export.scale")}</div>
-              <div className="export-segmented">
-                {SCALE_OPTIONS.map((scale) => (
-                  <button
-                    key={scale}
-                    type="button"
-                    className={Number(options.scale) === scale ? "active" : ""}
-                    onClick={() => patchOptions(options, onOptionsChange, { scale })}
-                  >
-                    {scale}x
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <div className="export-section-label">{t("export.background")}</div>
-              <select
-                className="export-select"
-                data-export-option="background"
-                value={options.backgroundColor || "auto"}
-                onChange={(event) => patchOptions(options, onOptionsChange, { backgroundColor: event.target.value })}
-              >
-                <option value="auto">{t("export.bg.auto")}</option>
-                <option value="transparent" disabled={options.format === "jpeg"}>{t("export.bg.transparent")}</option>
-                <option value="#0f172a">{t("export.bg.dark")}</option>
-                <option value="#ffffff">{t("export.bg.white")}</option>
-              </select>
-            </div>
-          </section>
-
-          {options.format !== "png" && (
-            <section className="export-panel-section">
-              <div className="export-section-label">{t("export.quality", { percent: Math.round((options.quality || 0.92) * 100) })}</div>
-              <input
-                type="range"
-                min="0.5"
-                max="1"
-                step="0.01"
-                value={options.quality || 0.92}
-                className="export-range"
-                onChange={(event) => patchOptions(options, onOptionsChange, { quality: Number(event.target.value) })}
-              />
-            </section>
-          )}
-
-          <section className="export-panel-section export-check-list">
-            {options.scope !== "page" && <label className="export-checkbox-row">
-              <input
-                type="checkbox"
-                data-export-option="include-context"
-                checked={options.includeContext}
-                onChange={(event) => patchOptions(options, onOptionsChange, { includeContext: event.target.checked })}
-              />
-              <span>
-                <strong>{t("export.includeContext")}</strong>
-                <small>{t("export.includeContextDesc")}</small>
-              </span>
-            </label>}
-            <label className="export-checkbox-row">
-              <input
-                type="checkbox"
-                data-export-option="hide-drawings"
-                checked={!!options.hideDrawings}
-                onChange={(event) => patchOptions(options, onOptionsChange, { hideDrawings: event.target.checked })}
-              />
-              <span>
-                <strong>{t("export.hideDrawings")}</strong>
-                <small>{t("export.hideDrawingsDesc")}</small>
-              </span>
-            </label>
-            <label className="export-checkbox-row">
-              <input
-                type="checkbox"
-                data-export-option="watermark-enabled"
-                checked={!!options.watermarkEnabled}
-                onChange={(event) => patchOptions(options, onOptionsChange, { watermarkEnabled: event.target.checked })}
-              />
-              <span>
-                <strong>{t("export.watermark")}</strong>
-                <small>{t("export.watermarkDesc")}</small>
-              </span>
-            </label>
-          </section>
-
-          {options.watermarkEnabled && (
-            <section className="export-panel-section">
-              <div className="export-section-label">{t("export.watermarkText")}</div>
-              <textarea
-                className="export-textarea"
-                data-export-option="watermark-text"
-                rows={2}
-                placeholder={t("export.watermarkPlaceholder")}
-                value={options.watermarkText || ""}
-                onChange={(event) => patchOptions(options, onOptionsChange, { watermarkText: event.target.value })}
-              />
-            </section>
-          )}
-
-          <section className="export-panel-section">
-            <div className="export-section-label">{t("export.filename")}</div>
-            <input
-              className="export-input"
-              value={options.filenamePrefix || "candlescope"}
-              onChange={(event) => patchOptions(options, onOptionsChange, { filenamePrefix: event.target.value })}
-            />
-            <div className="export-filename-preview">{preview?.filename || filenamePreview}</div>
-          </section>
-
-          {error && <div className="export-panel-message error">{error}</div>}
-          {notice && !error && <div className="export-panel-message success">{notice}</div>}
-
-
-        </div>
+        <ExportSettings options={options} onOptionsChange={onOptionsChange} filename={preview?.filename || filenamePreview}
+          error={error} notice={notice} loading={loading} indicatorComputing={indicatorComputing} />
 
         <ExportPreviewPanel
           filename={preview?.filename || filenamePreview}
@@ -282,21 +269,7 @@ const ExportPanel = memo(function ExportPanel({
           })}
         />
       </div>
-      <div className="export-panel-actions">
-        <button type="button" className="export-secondary-btn" onClick={onClose} disabled={inProgress}>{t("export.closeBtn")}</button>
-        <button
-          type="button"
-          data-export-action="save"
-          className="export-primary-btn"
-          onClick={() => onExport(options)}
-          disabled={saveDisabled}
-          title={preview?.loading ? t("export.previewLoadingTitle") : canSavePreview ? t("export.savePreview") : t("export.needPreview")}
-        >
-          {inProgress ? t("export.saving") : preview?.loading ? t("export.generating") : t("export.saveCurrent")}
-        </button>
-      </div>
-    </dialog>,
-    document.body,
+    </Dialog>
   );
 });
 

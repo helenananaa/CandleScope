@@ -98,8 +98,7 @@ function exportBrowserStateExpression() {
     const perf = window.__CANDLESCOPE_DRAWING_PERF__;
     const controlled = window.__CANDLESCOPE_CONTROLLED_ROLLBACK_DRILL__;
     const image = document.querySelector('.export-preview-image');
-    const scale = Array.from(document.querySelectorAll('.export-segmented button'))
-      .find((button) => button.classList.contains('active'))?.textContent?.trim() || null;
+    const scale = document.querySelector('[data-export-choice=scale] [aria-checked=true]')?.textContent?.trim() || null;
     return {
       observedAt: new Date().toISOString(),
       controlled: controlled && typeof controlled.snapshot === 'function'
@@ -123,16 +122,16 @@ function exportBrowserStateExpression() {
       panel: {
         open: Boolean(document.querySelector('.export-panel')),
         loading: document.querySelector('.export-preview-frame')?.classList.contains('loading') === true,
-        error: document.querySelector('.export-preview-error span')?.textContent?.trim()
-          || document.querySelector('.export-panel-message.error')?.textContent?.trim()
+        error: document.querySelector('.export-preview-error .ui-alert-body')?.textContent?.trim()
+          || document.querySelector('.export-panel-message[data-tone=danger]')?.textContent?.trim()
           || null,
         imagePresent: image instanceof HTMLImageElement,
         imageSrc: image instanceof HTMLImageElement ? image.currentSrc || image.src : null,
         imageComplete: image instanceof HTMLImageElement ? image.complete && image.naturalWidth > 0 : false,
         hideDrawings: document.querySelector('[data-export-option="hide-drawings"]')?.checked === true,
         watermarkEnabled: document.querySelector('[data-export-option="watermark-enabled"]')?.checked === true,
-        scope: document.querySelector('[data-export-scope].active')?.dataset?.exportScope || null,
-        format: document.querySelector('[data-export-format].active')?.dataset?.exportFormat || null,
+        scope: document.querySelector('[data-export-choice=scope] [aria-checked=true]')?.dataset?.value || null,
+        format: document.querySelector('[data-export-choice=format] [aria-checked=true]')?.dataset?.value || null,
         scale,
         background: document.querySelector('[data-export-option="background"]')?.value || null
       }
@@ -257,7 +256,7 @@ async function releaseOldCaptureGate(session, controlled) {
 
 async function closeExportPanelAndClearCache(session, timeoutMs) {
   await session.cdp.evaluate(`(() => {
-    const close = document.querySelector('.export-panel-close');
+    const close = document.querySelector('.export-panel [data-overlay-close]');
     if (close instanceof HTMLButtonElement && !close.disabled) close.click();
     return true;
   })()`);
