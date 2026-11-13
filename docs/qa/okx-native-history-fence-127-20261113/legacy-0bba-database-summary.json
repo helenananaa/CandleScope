@@ -1,0 +1,83 @@
+{
+  "canonical": [
+    {
+      "interval": "15m",
+      "rows": 1891,
+      "first": 1792829700000,
+      "last": 1794530700000
+    },
+    {
+      "interval": "1m",
+      "rows": 500,
+      "first": 1794501540000,
+      "last": 1794531480000
+    },
+    {
+      "interval": "30m",
+      "rows": 3047,
+      "first": 1788523200000,
+      "last": 1794529800000
+    },
+    {
+      "interval": "45m",
+      "rows": 628,
+      "first": 1792835100000,
+      "last": 1794528000000
+    },
+    {
+      "interval": "5m",
+      "rows": 500,
+      "first": 1794381300000,
+      "last": 1794531000000
+    },
+    {
+      "interval": "90m",
+      "rows": 1015,
+      "first": 1788523200000,
+      "last": 1794522600000
+    }
+  ],
+  "pending_history": [],
+  "ledger": [
+    {
+      "interval": "15m",
+      "status": "filled",
+      "rows": 1
+    },
+    {
+      "interval": "1m",
+      "status": "filled",
+      "rows": 12
+    },
+    {
+      "interval": "30m",
+      "status": "filled",
+      "rows": 2
+    },
+    {
+      "interval": "45m",
+      "status": "filled",
+      "rows": 4
+    },
+    {
+      "interval": "5m",
+      "status": "filled",
+      "rows": 3
+    },
+    {
+      "interval": "90m",
+      "status": "filled",
+      "rows": 4
+    },
+    {
+      "interval": "90m",
+      "status": "queued",
+      "rows": 1
+    },
+    {
+      "interval": "90m",
+      "status": "repairing",
+      "rows": 2
+    }
+  ]
+}
