@@ -538,8 +538,11 @@ def guarded_write(conn, values, *, commit=True, native_rows=None, source=None, n
         computation = matching_computation(scope, values, native_rows, source) if commit else None
         targets = affected_targets(scope, values, native_rows) if view is not None else ()
         warmup = scope.warmup_view
+        # Native range permission still belongs to this warmup acquisition.
+        # Record its own source commits so subsequent derived writes do not
+        # mistake them for intervening external corrections.
         warmup_head = (warmup.check_write(conn, scope, values, native_rows, source)
-                       if commit and warmup is not None and view is None and computation is None else None)
+                       if commit and warmup is not None and computation is None else None)
         if computation is not None:
             computation.check(conn, scope)
             targets = (computation.target,)

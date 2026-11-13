@@ -10,7 +10,7 @@ from app.data_engine.backfill.models import BackfillTask
 from app.data_engine.ingestion.models import DataSource, RawMessage, StreamDescriptor, StreamType
 from app.data_engine.storage import klines_repo, kline_sources
 from app.data_engine.storage.native_history_fence import capture_native_history_views
-from app.data_engine.storage.revisions import acquisition_scope, StaleAcquisition
+from app.data_engine.storage.revisions import acquisition_scope, StaleAcquisition, prepare_warmup_view
 from app.data_engine.series_identity import KlineSeriesIdentity
 from app.exchanges.ccxt_ext.fork_kline import normalize_fork_kline, prepare_source_messages
 from tests.test_ccxt_source_extensions import SPOT
@@ -208,3 +208,31 @@ def test_persisted_permission_cannot_be_renewed_after_delete(store):
     with pytest.raises(StaleAcquisition):
         capture_native_history_views(store.revision_store, scope, [task()])
     assert scope.native_history_views == []
+
+
+@pytest.mark.parametrize('intervening', [None, 'correction', 'deletion'])
+def test_range_commits_transfer_own_write_receipts_to_existing_warmup_owner(store, intervening):
+    async def run():
+        request = task('15m', 0, 1800000, metadata={'custom_interval': '45m'})
+        scope = store.revision_store.acquisition()
+        capture_native_history_views(store.revision_store, scope, [request])
+        with acquisition_scope(scope):
+            prepare_warmup_view([request])
+            bars = [(await fetched(opened, '15m'))[1] for opened in [0, 900000, 1800000]]
+            for bar in bars:
+                assert write(bar) == 1
+            target = dict(bars[0].to_storage_dict(), close_time=2699999, volume=300,
+                          quote_volume=303, source_refs=[bar.source_ref for bar in bars])
+            if intervening:
+                with acquisition_scope(None):
+                    if intervening == 'deletion':
+                        store.delete_bars('BTC-USDT', '15m', 0, 0, exchange='okx')
+                    else:
+                        _, correction = await fetched(0, '15m', close='101')
+                        assert write(correction) == 1
+                with pytest.raises(StaleAcquisition):
+                    klines_repo.upsert_klines('BTC-USDT', '45m', [target], exchange='okx', source='backfill_aggregated')
+            else:
+                assert klines_repo.upsert_klines('BTC-USDT', '45m', [target], exchange='okx', source='backfill_aggregated') == 1
+                assert scope.warmup_view.owned
+    asyncio.run(run())
