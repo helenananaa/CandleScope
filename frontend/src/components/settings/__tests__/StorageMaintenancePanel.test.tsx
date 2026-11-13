@@ -36,8 +36,9 @@ test("gap inspection shows symbols, actual UTC bounds, unknown coverage and cont
     assert.ok(html.includes("Remaining gaps: Unknown"));
     assert.ok(html.includes("source unavailable"));
     assert.ok(html.includes("inventory warning"));
-    assert.ok(html.includes("st-result-warn"));
-    assert.ok(!html.includes("st-result-ok"));
+    assert.ok(html.includes('class="ui-alert" data-tone="warning"'));
+    assert.ok(!html.includes('data-tone="success"'));
+    assert.match(html, /<details class="ui-disclosure"[^>]*>.*BTCUSDT/s, "per-series results sit in a disclosure");
   } finally { setLocale(previous); }
 });
 
@@ -46,8 +47,8 @@ test("empty inspection has no success styling or invented gap count", () => {
   try {
     setLocale("en");
     const html = render({ status: "empty", results: [] });
-    assert.ok(html.includes("st-result-warn"));
-    assert.ok(!html.includes("st-result-ok"));
+    assert.ok(html.includes('class="ui-alert" data-tone="warning"'));
+    assert.ok(!html.includes('data-tone="success"'));
     assert.ok(!html.includes("Remaining gaps: 0"));
   } finally { setLocale(previous); }
 });

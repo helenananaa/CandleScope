@@ -1,5 +1,8 @@
 import { useRef, useState } from "react";
 import { Button } from "../ui/Button.js";
+import { SegmentedControl } from "../ui/Choice.js";
+import { InlineAlert } from "../ui/Display.js";
+import { Field, Input, Select } from "../ui/Field.js";
 import { Icon } from "../icons/Icon.js";
 import type { IconName } from "../icons/Icon.js";
 import type {
@@ -89,8 +92,7 @@ export default function ChartAppearancePanel({ settings, onUpdate, appearanceSco
             <div className="st-group">
                 <div className="st-group-title">{t("settings.language.title")}</div>
                 <div className="st-group-desc">{t("settings.language.description")}</div>
-                <select
-                    className="st-select"
+                <Select
                     value={normalizeLocale(settings.locale)}
                     disabled={loadingLocale}
                     aria-busy={loadingLocale}
@@ -101,13 +103,10 @@ export default function ChartAppearancePanel({ settings, onUpdate, appearanceSco
                     {LOCALE_OPTIONS.map((option) => (
                         <option key={option.id} value={option.id}>{option.nativeLabel}</option>
                     ))}
-                </select>
-                {localeError && <div role="alert">
-                    <p>{t("settings.language.loadFailed")}</p>
-                    <button type="button" onClick={() => window.location.reload()}>
-                        {t("settings.language.reload")}
-                    </button>
-                </div>}
+                </Select>
+                {localeError && <InlineAlert tone="danger" action={<Button size="sm" onClick={() => window.location.reload()}>{t("settings.language.reload")}</Button>}>
+                    {t("settings.language.loadFailed")}
+                </InlineAlert>}
             </div>
 
             <div className="st-group">
@@ -156,26 +155,15 @@ export default function ChartAppearancePanel({ settings, onUpdate, appearanceSco
             <div className="st-group">
                 <div className="st-group-title">{t("settings.appearance.colorScheme")}</div>
                 <div className="st-group-desc">{t("settings.appearance.colorSchemeDescription")}</div>
-                <div className="st-preset-row">
-                    <button
-                        type="button"
-                        className={`st-preset-btn ${greenUpActive ? 'active' : ''}`}
-                        aria-pressed={greenUpActive}
-                        onClick={() => setAppColors({ upColor: GREEN, downColor: RED })}
-                    >
-                        <span style={{ color: 'var(--text-success)', fontWeight: 700 }}>● {t("settings.appearance.greenUp")}</span>
-                        <span style={{ color: 'var(--text-danger)', fontWeight: 700 }}>● {t("settings.appearance.redDown")}</span>
-                    </button>
-                    <button
-                        type="button"
-                        className={`st-preset-btn ${redUpActive ? 'active' : ''}`}
-                        aria-pressed={redUpActive}
-                        onClick={() => setAppColors({ upColor: RED, downColor: GREEN })}
-                    >
-                        <span style={{ color: 'var(--text-danger)', fontWeight: 700 }}>● {t("settings.appearance.redUp")}</span>
-                        <span style={{ color: 'var(--text-success)', fontWeight: 700 }}>● {t("settings.appearance.greenDown")}</span>
-                    </button>
-                </div>
+                <SegmentedControl
+                    label={t("settings.appearance.colorScheme")}
+                    value={greenUpActive ? "green-up" : redUpActive ? "red-up" : "custom"}
+                    onChange={(next) => setAppColors(next === "red-up" ? { upColor: RED, downColor: GREEN } : { upColor: GREEN, downColor: RED })}
+                    options={[
+                        { value: "green-up", label: <span className="st-color-pair"><span className="st-dot-green">{t("settings.appearance.greenUp")}</span><span className="st-dot-red">{t("settings.appearance.redDown")}</span></span> },
+                        { value: "red-up", label: <span className="st-color-pair"><span className="st-dot-red">{t("settings.appearance.redUp")}</span><span className="st-dot-green">{t("settings.appearance.greenDown")}</span></span> },
+                    ]}
+                />
                 <div className="st-custom-colors">
                     <div className="st-color-item">
                         <span>{t("settings.appearance.upColor")}</span>
@@ -208,22 +196,18 @@ export default function ChartAppearancePanel({ settings, onUpdate, appearanceSco
                     <div className="st-group-desc">
                         {t("settings.appearance.renkoDescription")}
                     </div>
-                    <label className="st-field">
-                        <span>{t("settings.appearance.boxSizeMode")}</span>
-                        <select
-                            className="st-select"
+                    <Field label={t("settings.appearance.boxSizeMode")}>
+                        <Select
                             value={settings.renkoBoxSizeMode || 'atr'}
                             onChange={(event) => handleUpdate('renkoBoxSizeMode', priceBoxSizeMode(event.target.value))}
                         >
                             <option value="atr">{t("settings.appearance.atrAuto")}</option>
                             <option value="traditional">{t("settings.appearance.traditionalBox")}</option>
-                        </select>
-                    </label>
+                        </Select>
+                    </Field>
                     {(settings.renkoBoxSizeMode || 'atr') === 'atr' ? (
-                        <label className="st-field">
-                            <span>{t("settings.appearance.atrLength")}</span>
-                            <input
-                                className="st-input"
+                        <Field label={t("settings.appearance.atrLength")}>
+                            <Input
                                 type="number"
                                 min="2"
                                 max="500"
@@ -231,19 +215,17 @@ export default function ChartAppearancePanel({ settings, onUpdate, appearanceSco
                                 value={settings.renkoAtrLength || 14}
                                 onChange={(event) => handleUpdate('renkoAtrLength', Number(event.target.value))}
                             />
-                        </label>
+                        </Field>
                     ) : (
-                        <label className="st-field">
-                            <span>{t("settings.appearance.fixedBox")}</span>
-                            <input
-                                className="st-input"
+                        <Field label={t("settings.appearance.fixedBox")}>
+                            <Input
                                 type="number"
                                 min="0"
                                 step="any"
                                 value={settings.renkoBoxSize || 1}
                                 onChange={(event) => handleUpdate('renkoBoxSize', Number(event.target.value))}
                             />
-                        </label>
+                        </Field>
                     )}
                     <div className="st-group-desc">
                         {t("settings.appearance.renkoFooter")}
@@ -257,22 +239,18 @@ export default function ChartAppearancePanel({ settings, onUpdate, appearanceSco
                     <div className="st-group-desc">
                         {t("settings.appearance.pointFigureDescription")}
                     </div>
-                    <label className="st-field">
-                        <span>{t("settings.appearance.pointFigureBoxMode")}</span>
-                        <select
-                            className="st-select"
+                    <Field label={t("settings.appearance.pointFigureBoxMode")}>
+                        <Select
                             value={settings.pointFigureBoxSizeMode || 'atr'}
                             onChange={(event) => handleUpdate('pointFigureBoxSizeMode', priceBoxSizeMode(event.target.value))}
                         >
                             <option value="atr">{t("settings.appearance.atrAuto")}</option>
                             <option value="traditional">{t("settings.appearance.traditionalPointFigureBox")}</option>
-                        </select>
-                    </label>
+                        </Select>
+                    </Field>
                     {(settings.pointFigureBoxSizeMode || 'atr') === 'atr' ? (
-                        <label className="st-field">
-                            <span>{t("settings.appearance.atrLength")}</span>
-                            <input
-                                className="st-input"
+                        <Field label={t("settings.appearance.atrLength")}>
+                            <Input
                                 type="number"
                                 min="2"
                                 max="500"
@@ -280,24 +258,20 @@ export default function ChartAppearancePanel({ settings, onUpdate, appearanceSco
                                 value={settings.pointFigureAtrLength || 14}
                                 onChange={(event) => handleUpdate('pointFigureAtrLength', Number(event.target.value))}
                             />
-                        </label>
+                        </Field>
                     ) : (
-                        <label className="st-field">
-                            <span>{t("settings.appearance.fixedPointFigureBox")}</span>
-                            <input
-                                className="st-input"
+                        <Field label={t("settings.appearance.fixedPointFigureBox")}>
+                            <Input
                                 type="number"
                                 min="0"
                                 step="any"
                                 value={settings.pointFigureBoxSize || 1}
                                 onChange={(event) => handleUpdate('pointFigureBoxSize', Number(event.target.value))}
                             />
-                        </label>
+                        </Field>
                     )}
-                    <label className="st-field">
-                        <span>{t("settings.appearance.reversalBoxes")}</span>
-                        <input
-                            className="st-input"
+                    <Field label={t("settings.appearance.reversalBoxes")}>
+                        <Input
                             type="number"
                             min="1"
                             max="100"
@@ -305,7 +279,7 @@ export default function ChartAppearancePanel({ settings, onUpdate, appearanceSco
                             value={settings.pointFigureReversalAmount || 3}
                             onChange={(event) => handleUpdate('pointFigureReversalAmount', Number(event.target.value))}
                         />
-                    </label>
+                    </Field>
                     <div className="st-group-desc">
                         {t("settings.appearance.pointFigureFooter")}
                     </div>
@@ -318,22 +292,18 @@ export default function ChartAppearancePanel({ settings, onUpdate, appearanceSco
                     <div className="st-group-desc">
                         {t("settings.appearance.kagiDescription")}
                     </div>
-                    <label className="st-field">
-                        <span>{t("settings.appearance.reversalDistance")}</span>
-                        <select
-                            className="st-select"
+                    <Field label={t("settings.appearance.reversalDistance")}>
+                        <Select
                             value={settings.kagiReversalMode || 'atr'}
                             onChange={(event) => handleUpdate('kagiReversalMode', priceBoxSizeMode(event.target.value))}
                         >
                             <option value="atr">{t("settings.appearance.atrAuto")}</option>
                             <option value="traditional">{t("settings.appearance.traditionalDistance")}</option>
-                        </select>
-                    </label>
+                        </Select>
+                    </Field>
                     {(settings.kagiReversalMode || 'atr') === 'atr' ? (
-                        <label className="st-field">
-                            <span>{t("settings.appearance.atrLength")}</span>
-                            <input
-                                className="st-input"
+                        <Field label={t("settings.appearance.atrLength")}>
+                            <Input
                                 type="number"
                                 min="2"
                                 max="500"
@@ -341,19 +311,17 @@ export default function ChartAppearancePanel({ settings, onUpdate, appearanceSco
                                 value={settings.kagiAtrLength || 14}
                                 onChange={(event) => handleUpdate('kagiAtrLength', Number(event.target.value))}
                             />
-                        </label>
+                        </Field>
                     ) : (
-                        <label className="st-field">
-                            <span>{t("settings.appearance.fixedReversalDistance")}</span>
-                            <input
-                                className="st-input"
+                        <Field label={t("settings.appearance.fixedReversalDistance")}>
+                            <Input
                                 type="number"
                                 min="0"
                                 step="any"
                                 value={settings.kagiReversalAmount || 1}
                                 onChange={(event) => handleUpdate('kagiReversalAmount', Number(event.target.value))}
                             />
-                        </label>
+                        </Field>
                     )}
                     <div className="st-group-desc">
                         {t("settings.appearance.kagiFooter")}
@@ -367,10 +335,8 @@ export default function ChartAppearancePanel({ settings, onUpdate, appearanceSco
                     <div className="st-group-desc">
                         {t("settings.appearance.lineBreakDescription")}
                     </div>
-                    <label className="st-field">
-                        <span>{t("settings.appearance.lineBreakCount")}</span>
-                        <input
-                            className="st-input"
+                    <Field label={t("settings.appearance.lineBreakCount")}>
+                        <Input
                             type="number"
                             min="1"
                             max="50"
@@ -378,7 +344,7 @@ export default function ChartAppearancePanel({ settings, onUpdate, appearanceSco
                             value={settings.lineBreakNumberOfLines || 3}
                             onChange={(event) => handleUpdate('lineBreakNumberOfLines', Number(event.target.value))}
                         />
-                    </label>
+                    </Field>
                     <div className="st-group-desc">
                         {t("settings.appearance.lineBreakFooter")}
                     </div>
@@ -388,8 +354,8 @@ export default function ChartAppearancePanel({ settings, onUpdate, appearanceSco
             <div className="st-group">
                 <div className="st-group-title">{t("settings.appearance.timezoneTitle")}</div>
                 <div className="st-group-desc">{t("settings.appearance.timezoneDescription")}</div>
-                <select
-                    className="st-select"
+                <Select
+                    aria-label={t("settings.appearance.timezoneTitle")}
                     value={settings.timezone || 'Local'}
                     onChange={(event) => handleUpdate('timezone', event.target.value)}
                 >
@@ -408,7 +374,7 @@ export default function ChartAppearancePanel({ settings, onUpdate, appearanceSco
                             <option key={timezone} value={timezone}>{timezone.replace('_', ' ')}</option>
                         ))}
                     </optgroup>
-                </select>
+                </Select>
             </div>
         </>
     );
