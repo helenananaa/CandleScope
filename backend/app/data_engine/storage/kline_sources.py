@@ -510,7 +510,7 @@ def filter_projection_rows(
         ).fetchone()
         is None
     ):
-        return rows
+        return [row for row in rows if 'source_window' not in row]
     key = series(
         StreamDescriptor(
             symbol,
@@ -522,6 +522,21 @@ def filter_projection_rows(
     )
     result = []
     for row in rows:
+        source_window_verified = False
+        if 'source_window' in row:
+            from app.data_engine.aggregation.source_window import SourceWindowVersion
+            from app.data_engine.aggregation.blocks import BlockUnavailable
+            try:
+                version = SourceWindowVersion.from_dict(row['source_window'])
+                if (native_identity and version.start_ms == row['open_time']
+                        and version.through_ms <= row['close_time'] + 1
+                        and source_window_allows_target(conn, version, interval,
+                            expected=(exchange, market_type, symbol))):
+                    source_window_verified = True
+            except (ValueError, TypeError, BlockUnavailable):
+                pass
+            if not source_window_verified:
+                continue
         refs = row.get("source_refs", [])
         if refs and not references_current(conn, refs):
             continue
@@ -531,7 +546,7 @@ def filter_projection_rows(
             if not head["is_closed"] or any(row.get(k) != data[k] for k in _VALUES):
                 continue
             refs = [_ref(head)]
-        verified = dict(row, _source_verified=bool(refs))
+        verified = dict(row, _source_verified=bool(refs) or source_window_verified)
         # This marker is a result of the transaction's source-head validation,
         # never authority supplied by a caller or a previously filtered row.
         verified.pop("_history_source_ref", None)
@@ -568,142 +583,297 @@ def acknowledge_history_projection(conn, rows: list[dict]) -> None:
 # hot through source-retention and their semantic revisions only advance.
 def _source_window_args(key, start, end, width):
     from app.data_engine.aggregation.source_window import MAX_SOURCE_WINDOW_ROWS
-    from app.data_engine.interval_policy import parse_interval_spec,IntervalAlignment
-    if not isinstance(key,str) or not 0<len(key)<=1024:
-        raise ValueError('selected-source series required')
+    from app.data_engine.interval_policy import parse_interval_spec, IntervalAlignment
+
+    if not isinstance(key, str) or not 0 < len(key) <= 1024:
+        raise ValueError("selected-source series required")
     try:
-        identity=json.loads(key)
-    except (ValueError,TypeError):
-        raise ValueError('selected-source series required') from None
-    if (not isinstance(key,str) or len(key)>1024 or not isinstance(identity,list) or len(identity)!=4
-            or any(not isinstance(v,str) or not v for v in identity)):
-        raise ValueError('selected-source series required')
-    spec=parse_interval_spec(identity[3])
-    if (spec is None or spec.alignment is not IntervalAlignment.FIXED_EPOCH or spec.phase_ms
-            or any(type(v) is not int for v in (start,end,width)) or width!=spec.nominal_ms
-            or not 0<=start<end<2**63 or start%width or end%width
-            or not 1<=(end-start)//width<=MAX_SOURCE_WINDOW_ROWS):
-        raise ValueError('bounded fixed selected-source window required')
+        identity = json.loads(key)
+    except (ValueError, TypeError):
+        raise ValueError("selected-source series required") from None
+    if (
+        not isinstance(key, str)
+        or len(key) > 1024
+        or not isinstance(identity, list)
+        or len(identity) != 4
+        or any(not isinstance(v, str) or not v for v in identity)
+    ):
+        raise ValueError("selected-source series required")
+    spec = parse_interval_spec(identity[3])
+    if (
+        spec is None
+        or spec.alignment is not IntervalAlignment.FIXED_EPOCH
+        or spec.phase_ms
+        or any(type(v) is not int for v in (start, end, width))
+        or width != spec.nominal_ms
+        or not 0 <= start < end < 2**63
+        or start % width
+        or end % width
+        or not 1 <= (end - start) // width <= MAX_SOURCE_WINDOW_ROWS
+    ):
+        raise ValueError("bounded fixed selected-source window required")
 
 
-def _source_window_counts(conn,key,start,end,width):
+def _source_window_counts(conn, key, start, end, width):
     from app.data_engine.aggregation.blocks import BlockUnavailable
-    slots=(end-start)//width
-    if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='kline_source_heads'").fetchone() is None:
-        raise BlockUnavailable('selected-source heads are unavailable')
+
+    slots = (end - start) // width
+    if (
+        conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='kline_source_heads'"
+        ).fetchone()
+        is None
+    ):
+        raise BlockUnavailable("selected-source heads are unavailable")
     # Bound physical metadata work too: malformed/off-grid extra heads cannot
     # turn a finite requested grid into an unlimited scan or Python collection.
-    floor_column = 'permission_floor' if 'permission_floor' in {
-        row[1] for row in conn.execute('PRAGMA table_info(kline_source_heads)')
-    } else '0 AS permission_floor'
-    row=conn.execute('''SELECT COUNT(*) AS total,
+    floor_column = (
+        "permission_floor"
+        if "permission_floor"
+        in {row[1] for row in conn.execute("PRAGMA table_info(kline_source_heads)")}
+        else "0 AS permission_floor"
+    )
+    row = conn.execute(
+        """SELECT COUNT(*) AS total,
         COALESCE(SUM(CASE WHEN is_closed=1 THEN 1 ELSE 0 END),0) AS closed,
         COALESCE(SUM(CASE WHEN is_closed=1 THEN revision ELSE 0 END),0) AS revisions,
         COALESCE(MIN(CASE WHEN is_closed=1 THEN permission_floor END),0) AS floor
-        FROM (SELECT is_closed,revision,''' + floor_column + ''' FROM kline_source_heads
-        WHERE series=? AND open_time>=? AND open_time<? ORDER BY open_time LIMIT ?)''',
-        (key,start,end,slots+1)).fetchone()
-    if row['total']>slots or row['revisions']<row['closed']:
-        raise BlockUnavailable('selected-source heads exceed the qualified grid')
-    return row['closed'],row['revisions'],row['floor']
+        FROM (SELECT is_closed,revision,"""
+        + floor_column
+        + """ FROM kline_source_heads
+        WHERE series=? AND open_time>=? AND open_time<? ORDER BY open_time LIMIT ?)""",
+        (key, start, end, slots + 1),
+    ).fetchone()
+    if row["total"] > slots or row["revisions"] < row["closed"]:
+        raise BlockUnavailable("selected-source heads exceed the qualified grid")
+    return row["closed"], row["revisions"], row["floor"]
 
 
-def source_window_current(conn,version):
+def source_window_current(conn, version):
     """Transaction-local content fence; original D126 permissions stay separate."""
     from app.data_engine.aggregation.source_window import SourceWindowVersion
     from .revisions import current_revision
+
     if type(version) is not SourceWindowVersion:
-        raise ValueError('selected-source version required')
-    _source_window_args(version.series,version.start_ms,version.through_ms,version.source_width_ms)
-    return (current_revision(conn)>=version.acquisition_revision
-        and _source_window_counts(conn,version.series,version.start_ms,version.through_ms,version.source_width_ms)
-            ==(version.closed_count,version.revision_sum,version.permission_floor))
+        raise ValueError("selected-source version required")
+    _source_window_args(
+        version.series, version.start_ms, version.through_ms, version.source_width_ms
+    )
+    return current_revision(
+        conn
+    ) >= version.acquisition_revision and _source_window_counts(
+        conn,
+        version.series,
+        version.start_ms,
+        version.through_ms,
+        version.source_width_ms,
+    ) == (version.closed_count, version.revision_sum, version.permission_floor)
 
 
-def capture_source_window(key,start,end,width):
+def source_window_allows_target(conn, version, interval, *, expected=None):
+    """Current source content and original deletion permission, kept separate."""
+    from app.data_engine.interval_policy import parse_interval_spec, IntervalAlignment
+    from .revisions import Acquisition, StaleAcquisition, series_values
+    from .derived_history_fence import check_deletions
+
+    if not source_window_current(conn, version):
+        return False
+    exchange, market_type, symbol, source_interval = json.loads(version.series)
+    if expected is not None and (exchange, market_type, symbol) != expected:
+        return False
+    spec = parse_interval_spec(interval)
+    if (
+        spec is None
+        or spec.alignment is not IntervalAlignment.FIXED_EPOCH
+        or spec.phase_ms
+        or spec.floor_ms(version.start_ms) != version.start_ms
+        or version.through_ms > spec.next_ms(version.start_ms)
+        or spec.nominal_ms % version.source_width_ms
+        or version.closed_count <= 0
+    ):
+        return False
+    try:
+        check_deletions(
+            conn,
+            Acquisition(version.permission_floor),
+            series_values(symbol, interval, exchange, market_type),
+            series_values(symbol, source_interval, exchange, market_type),
+        )
+    except StaleAcquisition:
+        return False
+    return True
+
+
+def capture_source_window(key, start, end, width):
     """Capture a bounded closed-value range; no schema/write/cache side effect.
 
     The last selected close defines the seam. A future forming tail is outside
     this receipt. Missing/unclosed interior slots remain explicit partial data.
     Consumers must not assume this range is a contiguous temporal prefix.
     """
-    from app.data_engine.aggregation.blocks import BlockUnavailable,BlockRevisionChanged
+    from app.data_engine.aggregation.blocks import (
+        BlockUnavailable,
+        BlockRevisionChanged,
+    )
     from app.data_engine.aggregation.source_window import SourceWindowVersion
     from .revisions import current_revision
-    _source_window_args(key,start,end,width)
+
+    _source_window_args(key, start, end, width)
     with closing(klines_repo._connect()) as conn:
-        acquired=current_revision(conn)
-        expected=_source_window_counts(conn,key,start,end,width)
-        row=conn.execute('''SELECT open_time FROM kline_source_heads WHERE series=?
-            AND open_time>=? AND open_time<? AND is_closed=1 ORDER BY open_time DESC LIMIT 1''',
-            (key,start,end)).fetchone()
+        acquired = current_revision(conn)
+        expected = _source_window_counts(conn, key, start, end, width)
+        row = conn.execute(
+            """SELECT open_time FROM kline_source_heads WHERE series=?
+            AND open_time>=? AND open_time<? AND is_closed=1 ORDER BY open_time DESC LIMIT 1""",
+            (key, start, end),
+        ).fetchone()
         if row is None:
-            raise BlockUnavailable('selected-source window has no confirmed components')
-        through=row['open_time']+width
-        if (row['open_time']-start)%width or through>end:
-            raise BlockUnavailable('selected-source seam is off grid')
-        actual=_source_window_counts(conn,key,start,through,width)
-        if actual!=expected:
-            raise BlockRevisionChanged('selected-source window changed during capture')
-        return SourceWindowVersion(key,start,through,width,*actual[:2],acquired,actual[2])
+            raise BlockUnavailable("selected-source window has no confirmed components")
+        through = row["open_time"] + width
+        if (row["open_time"] - start) % width or through > end:
+            raise BlockUnavailable("selected-source seam is off grid")
+        actual = _source_window_counts(conn, key, start, through, width)
+        if actual != expected:
+            raise BlockRevisionChanged("selected-source window changed during capture")
+        return SourceWindowVersion(
+            key, start, through, width, *actual[:2], acquired, actual[2]
+        )
 
 
-def read_source_window_page(version,position_ms=None,*,max_rows=128,_connection=None,_pinned=False):
+def read_source_window_page(
+    version, position_ms=None, *, max_rows=128, _connection=None, _pinned=False
+):
     """Read at most 128 bounded normalized source values with fresh fences.
 
     No complete-window list is created. Caller reserves decode work before
     scheduling this worker and must validate again before adopting/publishing.
     This low-level receipt alone is not a cold-recovery implementation.
     """
-    from app.data_engine.aggregation.blocks import BlockUnavailable,BlockRevisionChanged
-    from app.data_engine.aggregation.source_window import SourceWindowVersion,SourceWindowPage,MAX_SOURCE_PAGE_ROWS,MAX_SOURCE_DATA_BYTES
+    from app.data_engine.aggregation.blocks import (
+        BlockUnavailable,
+        BlockRevisionChanged,
+    )
+    from app.data_engine.aggregation.source_window import (
+        SourceWindowVersion,
+        SourceWindowPage,
+        MAX_SOURCE_PAGE_ROWS,
+        MAX_SOURCE_DATA_BYTES,
+    )
     from app.data_engine.readonly import ReadonlyFields
+
     if type(version) is not SourceWindowVersion:
-        raise ValueError('selected-source version required')
-    position=version.start_ms if position_ms is None else position_ms
-    if (type(position) is not int or not version.start_ms<=position<version.through_ms
-            or (position-version.start_ms)%version.source_width_ms
-            or type(max_rows) is not int or not 1<=max_rows<=MAX_SOURCE_PAGE_ROWS):
-        raise ValueError('bounded selected-source page required')
+        raise ValueError("selected-source version required")
+    position = version.start_ms if position_ms is None else position_ms
+    if (
+        type(position) is not int
+        or not version.start_ms <= position < version.through_ms
+        or (position - version.start_ms) % version.source_width_ms
+        or type(max_rows) is not int
+        or not 1 <= max_rows <= MAX_SOURCE_PAGE_ROWS
+    ):
+        raise ValueError("bounded selected-source page required")
     if _pinned and (_connection is None or not _connection.in_transaction):
-        raise ValueError('pinned source pages require an existing read transaction')
-    with (closing(klines_repo._connect()) if _connection is None else nullcontext(_connection)) as conn:
-        if not _pinned and not source_window_current(conn,version):
-            raise BlockRevisionChanged('selected-source window expired before page')
-        rows=conn.execute('''SELECT h.open_time,h.revision,
+        raise ValueError("pinned source pages require an existing read transaction")
+    with (
+        closing(klines_repo._connect())
+        if _connection is None
+        else nullcontext(_connection)
+    ) as conn:
+        if not _pinned and not source_window_current(conn, version):
+            raise BlockRevisionChanged("selected-source window expired before page")
+        rows = conn.execute(
+            """SELECT h.open_time,h.revision,
             CASE WHEN length(CAST(o.data_json AS BLOB))<=? THEN o.data_json ELSE NULL END AS data_json
             FROM kline_source_heads h JOIN kline_source_observations o ON o.id=h.observation_id
             WHERE h.series=? AND h.is_closed=1 AND h.open_time>=? AND h.open_time<?
-            ORDER BY h.open_time LIMIT ?''',
-            (MAX_SOURCE_DATA_BYTES,version.series,position,version.through_ms,max_rows)).fetchall()
-        values=[]
+            ORDER BY h.open_time LIMIT ?""",
+            (
+                MAX_SOURCE_DATA_BYTES,
+                version.series,
+                position,
+                version.through_ms,
+                max_rows,
+            ),
+        ).fetchall()
+        values = []
         for row in rows:
-            if row['data_json'] is None:
-                raise BlockUnavailable('selected-source component exceeds decode allowance')
+            if row["data_json"] is None:
+                raise BlockUnavailable(
+                    "selected-source component exceeds decode allowance"
+                )
             try:
-                data=json.loads(row['data_json'])
-            except (ValueError,TypeError,RecursionError):
-                raise BlockUnavailable('selected-source component is malformed') from None
-            if (not isinstance(data,dict) or type(data.get('open_time')) is not int
-                    or type(data.get('close_time')) is not int or data.get('is_closed') is not True
-                    or data['open_time']!=row['open_time']
-                    or (row['open_time']-version.start_ms)%version.source_width_ms
-                    or data['close_time']+1!=row['open_time']+version.source_width_ms):
-                raise BlockUnavailable('selected-source component is not on the qualified closed grid')
+                data = json.loads(row["data_json"])
+            except (ValueError, TypeError, RecursionError):
+                raise BlockUnavailable(
+                    "selected-source component is malformed"
+                ) from None
+            if (
+                type(row["revision"]) is not int
+                or row["revision"] < 1
+                or not isinstance(data, dict)
+                or type(data.get("open_time")) is not int
+                or type(data.get("close_time")) is not int
+                or data.get("is_closed") is not True
+                or data["open_time"] != row["open_time"]
+                or (row["open_time"] - version.start_ms) % version.source_width_ms
+                or data["close_time"] + 1 != row["open_time"] + version.source_width_ms
+            ):
+                raise BlockUnavailable(
+                    "selected-source component is not on the qualified closed grid"
+                )
             from math import isfinite
             from app.data_engine.aggregation.semantics import valid_ohlcv
-            if (any(type(data.get(name)) not in (int,float) for name in ('open','high','low','close','volume'))
-                    or not valid_ohlcv(tuple(data[name] for name in ('open','high','low','close','volume')))
-                    or any(data.get(name) is not None and (type(data[name]) not in (int,float)
-                        or not isfinite(data[name])) for name in ('quote_volume','trades','taker_buy_base','taker_buy_quote'))):
-                raise BlockUnavailable('selected-source component has malformed normalized values')
+
+            if (
+                any(
+                    type(data.get(name)) not in (int, float)
+                    for name in ("open", "high", "low", "close", "volume")
+                )
+                or not valid_ohlcv(
+                    tuple(
+                        data[name]
+                        for name in ("open", "high", "low", "close", "volume")
+                    )
+                )
+                or any(
+                    data.get(name) is not None
+                    and (
+                        type(data[name]) not in (int, float) or not isfinite(data[name])
+                    )
+                    for name in (
+                        "quote_volume",
+                        "trades",
+                        "taker_buy_base",
+                        "taker_buy_quote",
+                    )
+                )
+            ):
+                raise BlockUnavailable(
+                    "selected-source component has malformed normalized values"
+                )
             # Original unknown payloads remain in the journal. Recovery needs
             # only scalar candle fields; do not retain arbitrary decoded trees
             # in every value of a page.
-            data={name:data.get(name) for name in (*_VALUES,'is_closed')}
-            values.append(ReadonlyFields(dict(ref=dict(series=version.series,open_time=row['open_time'],revision=row['revision']),data=data)))
-        rows=()
-        if not values or (not _pinned and not source_window_current(conn,version)):
-            raise BlockRevisionChanged('selected-source window expired during page')
-        next_position=values[-1]['data']['close_time']+1
-        return SourceWindowPage(version,position,None if next_position==version.through_ms else next_position,tuple(values))
+            data = {name: data.get(name) for name in (*_VALUES, "is_closed")}
+            values.append(
+                ReadonlyFields(
+                    dict(
+                        ref=dict(
+                            series=version.series,
+                            open_time=row["open_time"],
+                            revision=row["revision"],
+                        ),
+                        data=data,
+                    )
+                )
+            )
+        rows = ()
+        if not values or (not _pinned and not source_window_current(conn, version)):
+            raise BlockRevisionChanged("selected-source window expired during page")
+        next_position = values[-1]["data"]["close_time"] + 1
+        return SourceWindowPage(
+            version,
+            position,
+            None if next_position == version.through_ms else next_position,
+            tuple(values),
+        )

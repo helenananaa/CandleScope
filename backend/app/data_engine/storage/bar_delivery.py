@@ -167,15 +167,40 @@ class BarDeliveryJournal:
                 raise ValueError('history prefix requires bounded source revisions')
             observed_revision = record["observed_revision"]
             recovery_revision = payload.get("canonical_recovery_revision")
+            source_window = payload['storage_row'].get('source_window')
+            source_version = None
+            if 'source_window' in payload['storage_row']:
+                from app.data_engine.aggregation.source_window import SourceWindowVersion
+                from app.data_engine.aggregation.blocks import BlockUnavailable
+                from .kline_sources import source_window_allows_target
+                try:
+                    source_version = SourceWindowVersion.from_dict(source_window)
+                    if (prefix_revisions or not identity.is_legacy_default_for(payload['exchange'])
+                            or recovery_revision != source_version.acquisition_revision
+                            or observed_revision > source_version.permission_floor
+                            or source_version.start_ms != payload['storage_row']['open_time']
+                            or source_version.through_ms > payload['storage_row']['close_time'] + 1
+                            or not source_window_allows_target(conn, source_version, payload['interval'],
+                                expected=(payload['exchange'],payload['market_type'],payload['symbol']))):
+                        raise ValueError('source recovery content or permission expired')
+                except (ValueError, TypeError, BlockUnavailable):
+                    conn.execute("UPDATE bar_delivery SET phase='rejected',recovery_required=1 WHERE event_id=?", (event_id,))
+                    record['phase'], record['recovery_required'] = 'rejected', 1
+                    return self._canonical(conn, record)
             if recovery_revision is not None:
                 try:
-                    if (len(prefix_revisions) != 1 or type(recovery_revision) is not int
+                    if ((len(prefix_revisions) != 1 and source_version is None) or type(recovery_revision) is not int
+                            or (source_version is not None and recovery_revision != source_version.acquisition_revision)
                             or not observed_revision <= recovery_revision <= current_revision(conn)):
                         raise StaleAcquisition("invalid canonical recovery revision")
                     check_deletions(conn, Acquisition(observed_revision), values, *(
                         series_values(payload["symbol"], interval, payload["exchange"], payload["market_type"], identity)
                         for interval, _ in prefix_revisions
                     ))
+                    if source_version is not None:
+                        source_interval = json.loads(source_version.series)[3]
+                        check_deletions(conn, Acquisition(observed_revision),
+                            series_values(payload['symbol'], source_interval, payload['exchange'], payload['market_type'], identity))
                 except StaleAcquisition:
                     conn.execute("UPDATE bar_delivery SET phase='rejected',recovery_required=1 WHERE event_id=?", (event_id,))
                     record["phase"], record["recovery_required"] = "rejected", 1

@@ -192,6 +192,7 @@ class BarAggregator:
     ) -> None:
         self._cfg = config or BarAggregatorConfig()
         self._source_component_reader: Callable[[str, int, int], Awaitable[list[dict]]] | None = None
+        self.source_recovery_reader = None
 
         # L1: Event Router
         self._router = EventRouter(self._cfg, interval_resolver=interval_resolver)
@@ -1021,6 +1022,8 @@ class BarAggregator:
                 source_ref_bytes += retained_size([state.source_refs])[0]
         retained_components = sum(len(state.source_snapshots) for state in retained.values())
         retained_prefixes = sum(state._history_prefix is not None for state in retained.values())
+        source_recovery_bytes = sum(state._source_recovery.estimated_bytes + 1024
+                                    for state in retained.values() if state._source_recovery is not None)
         claim_metadata_bytes = sum(sys.getsizeof(p.eviction_claims) + len(p.eviction_claims) * 16
                                    for p in self._pipelines.values())
         handoff = self.history_prefix_runtime
@@ -1043,6 +1046,7 @@ class BarAggregator:
                 "retained_component_index_bytes": sum(index_bytes.values()),
                 "history_prefixes": history_prefixes,
                 "retained_history_prefixes": retained_prefixes,
+                "source_recovery_bytes": source_recovery_bytes,
                 "history_handoff_bytes": handoff_bytes,
                 "source_preparation_scopes": len(self._active_preparations),
                 "source_preparation_capacity_slots": self._preparation_capacity.capacity,
@@ -1055,7 +1059,7 @@ class BarAggregator:
                 "preview_reserved_bytes": self._previews.snapshot()['reserved_bytes'],
                 **self._source_preparation_metrics,
                 "estimated_bytes": (len(retained) * 1024 + component_payload_bytes + source_ref_bytes
-                    + sum(index_bytes.values()) + retained_prefixes * 32 * 1024
+                    + sum(index_bytes.values()) + retained_prefixes * 32 * 1024 + source_recovery_bytes
                     + len(retained_events) * 256 + publisher_counts["publisher_metadata_bytes"]
                     + claim_metadata_bytes + handoff_bytes + len(self._active_preparations) * SCOPE_BYTES
                     + self._preparation_capacity.capacity * PREPARATION_BYTES),
@@ -1160,6 +1164,8 @@ class BarAggregator:
         bar_input: BarInput,
         emit_events: bool = True,
         target_token=None,
+        _source_recovery=None,
+        _cold_prepared=False,
     ) -> None:
         """Core processing callback: L1 → L2 → L3 → L4 → L5.
 
@@ -1186,11 +1192,86 @@ class BarAggregator:
         # L2: Compute which bucket this input belongs to
         bucket_start_ms = pipeline.time_bucket.compute_bucket(bar_input.open_time_ms)
 
+        existing = pipeline.bar_state.get_state(exchange, market_type, symbol, bucket_start_ms)
+        reader = self.source_recovery_reader
+        if (not _cold_prepared and reader is not None and bar_input.extra.get('source_ref')
+                and bar_input.is_closed and bar_input.merge_mode == MergeMode.COMPONENT
+                and (existing is None or (existing._source_recovery is not None
+                     and (bar_input.open_time_ms < existing._source_recovery.version.through_ms
+                          or len(existing.source_snapshots) >= 128)))
+                and (existing is None or existing.source_refs.get(bar_input.input_key)
+                     != bar_input.extra['source_ref'])):
+            from app.data_engine.bar_aggregator.bar_state import ComponentSnapshotOHLCVMerge
+            from app.data_engine.aggregation.blocks import BlockRevisionChanged, BlockUnavailable
+            from app.data_engine.aggregation.source_window import MAX_SOURCE_WINDOW_ROWS
+            from app.data_engine.interval_policy import IntervalAlignment
+            strategy = pipeline.bar_state._component_merge_strategy
+            target_spec, source_spec = parse_interval_spec(interval), parse_interval_spec(bar_input.source_interval)
+            qualified = (target_spec is not None and source_spec is not None
+                and target_spec.alignment is source_spec.alignment is IntervalAlignment.FIXED_EPOCH
+                and not target_spec.phase_ms and not source_spec.phase_ms
+                and target_spec.nominal_ms % source_spec.nominal_ms == 0
+                and target_spec.nominal_ms // source_spec.nominal_ms <= MAX_SOURCE_WINDOW_ROWS
+                and bar_input.close_time_ms + 1 - bar_input.open_time_ms == source_spec.nominal_ms
+                and bar_input.identity.is_legacy_default_for(exchange)
+                and not pipeline.bar_state._merge_strategy_overridden
+                and type(strategy) is ComponentSnapshotOHLCVMerge
+                and getattr(strategy.apply, '__func__', None) is ComponentSnapshotOHLCVMerge.apply
+                and reader.available())
+            if qualified:
+                if target_token is None or self.memory_budget is None:
+                    raise BlockUnavailable('bounded cold recovery requires a registered budgeted target')
+                cfg, budget, engine = self.config, self.memory_budget, pipeline.bar_state
+                version = existing.preview_input_version if existing is not None else None
+                snapshots = existing.source_snapshots if existing is not None else None
+                refs = existing.source_refs if existing is not None else None
+                accepted = ComponentSnapshotOHLCVMerge._snapshot_from_input(bar_input)
+                incoming_key = (bar_input.symbol,bar_input.exchange,bar_input.market_type,
+                                bar_input.source_interval,bar_input.source,bar_input.merge_mode)
+                prepare = getattr(strategy, 'prepare_input', None)
+                component_reader = self._source_component_reader
+                def current():
+                    check_target()
+                    return (self.source_recovery_reader is reader and self.config is cfg
+                        and self._source_component_reader is component_reader
+                        and self.memory_budget is budget
+                        and self._pipelines.get(self._pipeline_key(interval, exchange, bar_input.identity)) is pipeline
+                        and pipeline.bar_state is engine and engine._component_merge_strategy is strategy
+                        and not engine._merge_strategy_overridden
+                        and getattr(strategy.apply, '__func__', None) is ComponentSnapshotOHLCVMerge.apply
+                        and getattr(strategy, 'prepare_input', None) == prepare
+                        and (bar_input.symbol,bar_input.exchange,bar_input.market_type,
+                             bar_input.source_interval,bar_input.source,bar_input.merge_mode) == incoming_key
+                        and ComponentSnapshotOHLCVMerge._snapshot_from_input(bar_input) == accepted
+                        and engine.get_state(exchange, market_type, symbol, bucket_start_ms) is existing
+                        and (existing is None or (existing.preview_input_version == version
+                            and existing.source_snapshots is snapshots and existing.source_refs is refs)))
+                held = self.publisher._hold_payload('input', (existing,)) if existing is not None else None
+                work = retained_size((existing,accepted))[0] + 16384
+                try:
+                    # Old immutable indexes can outlive a concurrent eviction or
+                    # replacement while the physical reader is running.
+                    with budget.reserve('history-query', work):
+                        _, end = pipeline.time_bucket.compute_bucket_range(bucket_start_ms)
+                        async with reader.stage(bar_input, bucket_start_ms, end,
+                                                target_interval=interval, is_current=current) as receipt:
+                            if not current():
+                                raise BlockRevisionChanged('builder changed during source reconstruction')
+                            # The first ordinary live leaf has no siblings to
+                            # reconstruct. Keep the existing raw/live-prefix
+                            # path rather than creating a cold owner for it.
+                            return await self._apply_bar_input(exchange, market_type, symbol, interval,
+                                bar_input, emit_events, target_token, receipt, True)
+                finally:
+                    if held is not None:
+                        self.publisher._release_payload(held)
+
         if (
             bar_input.extra.get("source_ref")
             and bar_input.is_closed
             and bar_input.merge_mode == MergeMode.COMPONENT
             and pipeline.bar_state.get_state(exchange, market_type, symbol, bucket_start_ms) is None
+            and not _cold_prepared
         ):
             # After restart/eviction a historical correction is only one
             # component. Restore its siblings before recalculating the bucket.
@@ -1234,10 +1315,20 @@ class BarAggregator:
         previous = pipeline.bar_state.get_active(exchange,market_type,symbol,bucket_start_ms)
         delay_preview = (self._previews.qualifies(pipeline,previous,bar_input,target_token,emit_events)
                          and self._previews.admit(pipeline,previous,target_token))
-        state, change = pipeline.bar_state.apply(
-            exchange, market_type, symbol, bucket_start_ms, bar_input,
-            **({'defer_preview': True} if delay_preview else {}),
-        )
+        if _source_recovery is not None:
+            from app.data_engine.aggregation.source_window import SOURCE_SUMMARY_BYTES
+            with self.memory_budget.reserve('realtime-state', SOURCE_SUMMARY_BYTES + 16384) as lease:
+                def adopt():
+                    return pipeline.bar_state.apply(exchange, market_type, symbol, bucket_start_ms,
+                                                    bar_input, source_recovery=_source_recovery)
+                result = []
+                lease.retain(SOURCE_SUMMARY_BYTES + 16384, lambda: result.append(adopt()))
+                state, change = result[0]
+        else:
+            state, change = pipeline.bar_state.apply(
+                exchange, market_type, symbol, bucket_start_ms, bar_input,
+                **({'defer_preview': True} if delay_preview else {}),
+            )
 
         if state.acquisition_revision is None:
             state.acquisition_revision = acquisition_revision

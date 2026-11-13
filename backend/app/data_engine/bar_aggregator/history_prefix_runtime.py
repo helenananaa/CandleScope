@@ -419,6 +419,7 @@ class HistoryPrefixRuntime:
         agg = self.aggregator
         forming = state.status == BarStatus.FORMING
         if (self.closing or not agg._previews.running
+                or state._source_recovery is not None
                 or agg.memory_budget is not self.reader.memory_budget
                 or incoming.merge_mode != MergeMode.COMPONENT or not state.source_snapshots
                 or (not forming and (not agg.config.compact_closed_components
@@ -628,6 +629,7 @@ class HistoryPrefixRuntime:
         cfg, budget = agg.config, self.reader.memory_budget
         snapshots, prefix = state.source_snapshots, state._history_prefix
         if (self.closing or not agg._previews.running or not cfg.compact_closed_components
+                or state._source_recovery is not None
                 or budget is not agg.memory_budget
                 or state.status != BarStatus.CLOSED or state.finality != BarFinality.AUTHORITATIVE
                 or state._preview_dirty or state._preview_publications or not snapshots

@@ -60,6 +60,9 @@ logger = logging.getLogger("bar_aggregator.L3_BarState")
 def has_complete_closed_component_coverage(state: BarState) -> bool:
     """Return whether component snapshots authoritatively cover the bucket."""
     state.materialize_preview()
+    if state._source_recovery is not None:
+        result = state._source_recovery.merge(state.source_snapshots.values())
+        return result is not None and result.coverage(state.bucket_start_ms, state.bucket_end_ms).closed
     accumulator = state._component_accumulator
     if accumulator is not None and accumulator.current(state.source_snapshots):
         return accumulator.result.coverage(state.bucket_start_ms, state.bucket_end_ms).closed
@@ -205,6 +208,30 @@ class ComponentSnapshotOHLCVMerge:
     def __init__(self, *, incremental=True):
         self.incremental = incremental
 
+    def adopt_source_recovery(self, state, receipt):
+        """Replace only covered closed runs; preserve every interior live hole."""
+        if (state._history_prefix is not None or receipt.version.start_ms != state.bucket_start_ms
+                or receipt.version.through_ms > state.bucket_end_ms):
+            raise ValueError('selected-source recovery does not belong to this builder')
+        snapshots = ComponentSnapshots((key, row) for key, row in state.source_snapshots.items()
+                                       if not receipt.covers(row['open_time_ms']))
+        # Validate all chronological overlaps before touching the original state.
+        result = receipt.merge(snapshots.values())
+        floor = state.canonical_recovery_delete_floor
+        if floor is None:
+            floor = state.acquisition_revision
+        state.source_snapshots = snapshots
+        state.source_refs = {key: ref for key, ref in state.source_refs.items() if key in snapshots}
+        state._component_accumulator = None
+        state._source_recovery = receipt
+        state.acquisition_revision = receipt.version.acquisition_revision
+        state.canonical_recovery_delete_floor = min(
+            receipt.version.permission_floor,
+            floor if floor is not None else receipt.version.permission_floor,
+        )
+        if result is not None:
+            self._project(state, result, is_new=False)
+
     def adopt_history_prefix(self, state, prefix):
         """Synchronous owner operation, after durable and target fences pass.
 
@@ -213,6 +240,8 @@ class ComponentSnapshotOHLCVMerge:
         an input inside the prefix is rejected here instead of double counted.
         """
         state.materialize_preview()
+        if state._source_recovery is not None:
+            raise ValueError('selected-source runs require their original source refresh')
         source = prefix.summary.target
         if ((source.exchange, source.market_type, source.symbol, source.identity)
                 != (state.exchange, state.market_type, state.symbol, state.identity)
@@ -403,6 +432,8 @@ class ComponentSnapshotOHLCVMerge:
 
         if state._history_prefix is not None and bar_input.open_time_ms < state._history_prefix.through_ms:
             raise ValueError('covered history input requires prefix revision refresh')
+        if state._source_recovery is not None and state._source_recovery.covers(bar_input.open_time_ms):
+            raise ValueError('covered selected-source input requires source revision refresh')
 
         if is_new and snapshots:
             # Closed custom bars may be amended by late backfill components.
@@ -438,6 +469,9 @@ class ComponentSnapshotOHLCVMerge:
 
         snapshots[input_key] = candidate
         state.preview_input_version += 1
+        if state._source_recovery is not None:
+            state._component_accumulator = None
+            return self._project(state, state._source_recovery.merge(snapshots.values()), is_new=is_new)
         if delay:
             # Every candidate was admitted against the immediately preceding
             # accepted value above. Only K130 summary/projection work is delayed.
@@ -519,6 +553,7 @@ class ComponentSnapshotOHLCVMerge:
     def _can_defer(self, state, incoming, previous, candidate):
         accumulator = state._component_accumulator
         return (not incoming.is_closed and incoming.source == BarInputSource.REALTIME
+                and state._source_recovery is None
                 and state.status == BarStatus.FORMING and self._can_accumulate(state, incoming)
                 and accumulator is not None and accumulator.tail_unique
                 and accumulator.container_id == id(state.source_snapshots)
@@ -680,7 +715,7 @@ class BarStateEngine:
         symbol: str,
         bucket_start_ms: int,
         bar_input: BarInput,
-        *, defer_preview: bool = False,
+        *, defer_preview: bool = False, source_recovery=None,
     ) -> tuple[BarState, BarStateChange]:
         """Apply a BarInput to the appropriate bucket state.
 
@@ -700,6 +735,10 @@ class BarStateEngine:
         key = (exchange, market_type, symbol, bucket_start_ms)
         merge_strategy = self._strategy_for(bar_input)
         existing_state = self._active.get(key) or self._closed.get(key)
+        if source_recovery is not None and existing_state is not None:
+            if merge_strategy is not self._component_merge_strategy:
+                raise ValueError('source reconstruction requires the default component owner')
+            merge_strategy.adopt_source_recovery(existing_state, source_recovery)
         builtin_component = (merge_strategy is self._component_merge_strategy
             and getattr(merge_strategy.apply,'__func__',None) is ComponentSnapshotOHLCVMerge.apply)
         if existing_state is not None and not (defer_preview and builtin_component):
@@ -793,6 +832,10 @@ class BarStateEngine:
             close=0.0,
             volume=0.0,
         )
+        if source_recovery is not None:
+            if merge_strategy is not self._component_merge_strategy:
+                raise ValueError('source reconstruction requires the default component owner')
+            merge_strategy.adopt_source_recovery(state, source_recovery)
         state = merge_strategy.apply(state, bar_input, is_new=True)
         self._mark_authoritative_close_policy(state, bar_input)
         self._active[key] = state
