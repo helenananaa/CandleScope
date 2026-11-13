@@ -49,6 +49,19 @@ because the ordinary CCXT job lacks a Pine binary. Cloud checks are separate
 merge gates; receipts from each platform remain host-contract evidence rather
 than native desktop UI acceptance.
 
+The initial Windows host job ran all test bodies successfully (222 passed, one
+skipped) but reported 47 teardown errors: the newly included transport fixture
+used POSIX `os.kill(pid, 0)` as a process-absence probe. Windows can retain a
+terminated process PID while its handle is open, and this signal API is not an
+appropriate read-only termination probe there. The fixture now checks a Windows
+SYNCHRONIZE handle with a zero-timeout wait, closes that handle, and still requires
+every runtime's normal exit code to be zero. POSIX retains its absence check.
+A real child-process regression distinguishes a live process from a terminated
+one while retaining the Popen object/Windows handle. The corrected transport and
+demand suites pass 74 cases locally; that additional process-probe regression
+also passes independently. This is a test-observation correction, with no product
+or packaged backend change. The original Windows log is retained.
+
 ```sh
 CANDLE_DATA_DIR="$PWD/output/requirement-tests" PYTHONPATH=backend python -m pytest -q backend/tests/test_preview_update_requirements.py backend/tests/test_event_bus_routing_index.py
 # With the qualified core installed, also run test_chart_calculation_*.py.

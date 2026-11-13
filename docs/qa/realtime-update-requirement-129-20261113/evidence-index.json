@@ -187,6 +187,14 @@
     "sha256": "45c2be43cc24dd5f3fb94382a19c3a0e7b10b2e76fcffbd1ac82eb719b2c301a",
     "bytes": 3256
   },
+  "evidence/portable-process.log.gz": {
+    "sha256": "130daa5d7170999c011ad9e9823af67d7126727d4c436105639fdef5715f2134",
+    "bytes": 427
+  },
+  "evidence/portable-process.xml.gz": {
+    "sha256": "25ab646753bf684488c85696a705873d94db1fea6d4a742c3e1de5557f23eaf4",
+    "bytes": 2316
+  },
   "evidence/qualified-focused.log.gz": {
     "sha256": "86b10283eec60ec172a93512f9aedeeb041039b8f17643bbc5bcf57502bae330",
     "bytes": 430
@@ -206,5 +214,9 @@
   "evidence/runtime-debug.log.gz": {
     "sha256": "16bda3f01c1db26652f12422b20c82ca5afbab5b4b9647f0cfad4787c3990eb9",
     "bytes": 432
+  },
+  "evidence/windows-initial-ci.log.gz": {
+    "sha256": "b3444e8f32f782a92cb5d9a2e94f061c746297da1b07a47dfa546ae7be12a8bb",
+    "bytes": 69917
   }
 }
