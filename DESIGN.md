@@ -142,6 +142,8 @@ Settings is one dialog: categories on the left, the selected category on the rig
 - **A form that must be saved explicitly** (today only the network proxy) enables its 保存 only when there are unsaved edits and says so beside it, marks its category with a dot, and has closing ask before discarding them (`confirmAction`, tone danger).
 - **Work that must not be interrupted** (a plugin install) disables closing and the other categories until it ends.
 - **Tabs inside a category** are kit `Tabs`; a tool opened from a category is a row with a title, one line of description and its button.
+- **Figures.** Show the one figure a person acts on (a layer's size, a count) beside its section's title; the rest go into a 详细数据 disclosure. Estimates and results are one-line `InlineAlert`s, not more tiles.
+- **Lists of things** (exchanges) are rows: the name, one line of plain text, and a badge only for an exception (当前, 不可路由). Verification levels, field lists and transport tables belong in disclosures inside the expanded row.
 
 ## Stylesheets and cascade layers
 

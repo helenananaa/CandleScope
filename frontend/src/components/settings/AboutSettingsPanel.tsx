@@ -1,4 +1,6 @@
 import { Button } from "../ui/Button.js";
+import { Disclosure } from "../ui/Display.js";
+import { Field, Select, Textarea } from "../ui/Field.js";
 import { buttonClassName } from "../ui/helpers.js";
 import { useEffect, useState } from "react";
 import { shortcutModifier } from "../../shared/shortcutModifier.js";
@@ -61,21 +63,22 @@ export default function AboutSettingsPanel(props: AboutSettingsPanelProps) {
                 <Button onClick={() => void copyEnvironment()}>{t("settings.support.copy")}</Button>
             </div>
             <p className="st-support-hint">{t("settings.support.issueHint")}</p>
-            <details className="st-support-export">
-                <summary>{t("settings.support.export")}</summary>
+            <Disclosure summary={t("settings.support.export")} className="st-support-export">
                 <p className="st-support-description">{t("settings.support.exportHint")}</p>
                 <p className="st-support-hint">{t("settings.support.privacy")}</p>
                 <div className="st-support-actions">
-                    <label>{t("settings.support.range")} <select value={minutes} disabled={exporting} onChange={event => setMinutes(Number(event.target.value))}>
-                        {[5, 15, 60].map(value => <option key={value} value={value}>{t("settings.support.minutes", { count: value })}</option>)}
-                    </select></label>
+                    <Field label={t("settings.support.range")} className="st-inline-field">
+                        <Select size="sm" value={minutes} disabled={exporting} onChange={event => setMinutes(Number(event.target.value))}>
+                            {[5, 15, 60].map(value => <option key={value} value={value}>{t("settings.support.minutes", { count: value })}</option>)}
+                        </Select>
+                    </Field>
                     <Button variant="primary" disabled={exporting} onClick={() => void exportDiagnostics()}>
                         {t(exporting ? "settings.support.exporting" : "settings.support.download")}
                     </Button>
                 </div>
-            </details>
+            </Disclosure>
             <p className="st-support-hint" role="status" aria-live="polite">{feedback ? t(`settings.support.${feedback}`) : ""}</p>
-            {manualCopy && <textarea className="st-support-manual" aria-label={t("settings.support.environment")} readOnly value={manualCopy} onFocus={event => event.target.select()} />}
+            {manualCopy && <Textarea className="st-code" rows={6} aria-label={t("settings.support.environment")} readOnly value={manualCopy} onFocus={event => event.target.select()} />}
         </section>
         <section className="st-group" aria-labelledby="support-environment">
             <h3 id="support-environment" className="st-group-title">{t("settings.support.environment")}</h3>
@@ -97,8 +100,7 @@ export default function AboutSettingsPanel(props: AboutSettingsPanelProps) {
                     ["", t("settings.support.source")], ["/blob/main/LICENSE", t("settings.support.license")],
                 ].map(([path, label]) => <a key={label} href={`${SUPPORT_REPOSITORY}${path}`} target="_blank" rel="noopener noreferrer">{label}<span aria-hidden="true" className="st-external-icon"><Icon name="external" size={12} /></span></a>)}
             </div>
-            <details className="st-support-export">
-                <summary>{t("settings.support.help")}</summary>
+            <Disclosure summary={t("settings.support.help")} className="st-support-export">
                 <p className="st-support-hint">{t("settings.support.credits")}</p>
                 <div className="st-about-stack">
                     {[
@@ -109,7 +111,7 @@ export default function AboutSettingsPanel(props: AboutSettingsPanelProps) {
                         [`${modifier} + Shift + Z`, t("settings.about.shortcutWorkspaceRedo")],
                     ].map(([keys, description]) => <div className="st-stack-item st-shortcut-item" key={keys}><kbd className="st-stack-value">{keys}</kbd><span className="st-stack-label">{description}</span></div>)}
                 </div>
-            </details>
+            </Disclosure>
         </section>
     </>;
 }
