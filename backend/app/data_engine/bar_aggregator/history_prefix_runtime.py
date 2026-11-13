@@ -837,11 +837,11 @@ class HistoryPrefixRuntime:
         if state is not None and all(item is not state for item in states):
             states.append(state)
         if (self.flush_delivery is not None and incoming.is_closed
-                and any(item._history_prefix is not None
-                        and incoming.open_time_ms < item._history_prefix.through_ms for item in states)):
-            # Native-first dispatch promises durable admission, not necessarily
-            # completion. A covered correction must observe that commit before
-            # deciding its unchanged prefix can ignore the fine input.
+                and any(item._history_prefix is not None for item in states)):
+            # Native-first dispatch promises admission, not commit. Even a new
+            # tail outside the prefix changes its source-series revision. Drain
+            # that predecessor before validating/refreshing any retained prefix,
+            # including a covered correction which would otherwise be ignored.
             async with asyncio.timeout(1.5):
                 await self.flush_delivery()
             if not self._current(slot):

@@ -184,6 +184,28 @@ class DurableBarDelivery:
             await self.flush()
         return "accepted"
 
+    async def flush_pending(self):
+        """Reach the original dispatcher's empty boundary for a fenced reader.
+
+        One flush handles at most 64 receipts. History callers already own a
+        finite deadline; admission alone or one page cannot prove their native
+        predecessor has committed. No new worker, queue or writer is created.
+        Errors/rebinding remain explicit and durable receipts stay recoverable.
+        """
+        journal=self.journal
+        if journal is None:
+            return
+        while True:
+            if self._closing or self.journal is not journal:
+                raise BarDeliveryUnavailable('native delivery barrier owner changed')
+            await self.flush()
+            if self._closing or self.journal is not journal:
+                raise BarDeliveryUnavailable('native delivery barrier owner changed')
+            if self._last_error:
+                raise BarDeliveryUnavailable('native delivery barrier could not drain: '+self._last_error)
+            if await self._retry(journal.pending_count)==0:
+                return
+
     async def flush(self):
         journal = self.journal
         if journal is None:

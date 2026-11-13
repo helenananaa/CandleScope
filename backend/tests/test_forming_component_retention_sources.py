@@ -1,6 +1,7 @@
 """First live prefix with real pinned source receipts and native commit owner."""
 import asyncio
 
+import pytest
 import ccxt.async_support as ccxt
 
 from app.core.executors import run_storage
@@ -13,7 +14,8 @@ from tests.test_closed_component_retention import Ingestion
 from tests.test_shared_blocks_integration import dm
 
 
-def test_source_receipts_first_live_prefix_and_covered_correction_use_native_commit(dm,monkeypatch):
+@pytest.mark.parametrize('tail_closed',[False,True])
+def test_source_receipts_first_live_prefix_and_covered_correction_use_native_commit(dm,monkeypatch,tail_closed):
     clock=[1000]
     monkeypatch.setattr('time.time',lambda:clock[0]/1000)
     monkeypatch.setattr(HistoryPrefixRuntime,'MIN_ROWS',64)
@@ -66,7 +68,21 @@ def test_source_receipts_first_live_prefix_and_covered_correction_use_native_com
             assert state.volume==400 and state.status.value=='forming'
             for receipt in receipts: kline_sources.acknowledge(receipt)
             clock[0]=301000
-            await ingestion.send(await source(240000,100,closed=False))
+            tail=await source(240000,100,closed=tail_closed)
+            entered.clear()
+            if tail_closed:
+                # A new closed tail is outside the existing prefix, but its
+                # native commit still changes the prefix's source revision.
+                # It must not race the refresh/compaction read view.
+                async with delivery._dispatcher:
+                    task=asyncio.create_task(ingestion.send(tail))
+                    async with asyncio.timeout(5):
+                        while not entered.is_set() and not task.done(): await asyncio.sleep(.01)
+                    assert entered.is_set() and not task.done() and state.volume==400
+                await task
+                kline_sources.acknowledge(tail.data['source_ref'])
+            else:
+                await ingestion.send(tail)
             state.materialize_preview()
             assert state.volume==500 and len(state.source_snapshots)==1
             entered.clear()

@@ -20,13 +20,14 @@ def permission_floor(state):
     return state.acquisition_revision if floor is None else floor
 
 
-async def flush_native(dm,count):
+async def flush_native(dm,count=None):
     async with asyncio.timeout(5):
         while True:
             await dm.aggregator_bridge.delivery.flush()
-            stored=dm.query_engine.storage.query_bars('BTCUSDT','1m',market_type='futures',limit=count)
+            stored=(None if count is None else dm.query_engine.storage.count_bars(
+                'BTCUSDT','1m',0,2**63-1,market_type='futures'))
             pending=await run_storage(dm.aggregator_bridge.delivery.journal.pending_count)
-            if len(stored)==count and pending==0: return
+            if (count is None or stored==count) and pending==0: return
             await asyncio.sleep(.01)
 
 
@@ -50,6 +51,11 @@ async def start(dm,clock,*,timer=False):
         await ingestion.send(MarketEvent(event_type=StreamType.KLINE,symbol='BTCUSDT',exchange='binance',
             market_type='futures',event_time_ms=clock[0],received_at_ms=clock[0],sequence=clock[0],
             source=DataSource.WEBSOCKET,data=dict(interval='1m',is_closed=closed,**value)))
+        if closed:
+            # Positive maintenance fixtures model individually confirmed source
+            # closes. Durable burst/slow-writer behavior has separate barriers;
+            # do not require 128 real SQLite commits to fit one 5s assertion.
+            await flush_native(dm)
     def current():
         return dm.bar_aggregator.get_pipeline(TARGET).bar_state.get_active('binance','futures','BTCUSDT',0)
     return send,current,events
