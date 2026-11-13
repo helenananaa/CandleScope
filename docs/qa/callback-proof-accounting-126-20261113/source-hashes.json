@@ -1,0 +1,13 @@
+{
+  "base": "b36f9ade239432133eaee76919a9b5720106c0ec",
+  "measurement_head": "31067190ba784e2b9e30ccba5f02e8a42970839f",
+  "product_head": "b13b069d074f3b37a8db8cedaeaa7d328ee795a3",
+  "files": {
+    "backend/app/data_engine/bar_aggregator/aggregator.py": "6e8d82a9a52d378e7b45deb11b069d6416e74c4bad98f7264a7ae495f8176a29",
+    "backend/app/data_engine/bar_aggregator/publisher.py": "6ab868b9c859a11fa5872bb64c9ed11a1c262168d56e3099f637c1de53d80898",
+    "backend/app/data_engine/storage/native_history_fence.py": "76a61f554ab78843fb79751d79647607ec88a3caa9118feb968dc443aabf9183",
+    "backend/app/data_engine/storage/revisions.py": "38906a8bbe2cbed289f5998cfe8e6d01391d4a1e7a2ca5ca6046c0e1a6cfa6a3",
+    "backend/tests/test_component_payload_accounting.py": "a8f34de2b73f32b7b71f1df9fa0d8b6efe7a717e06ee430690c2d5479889a72a",
+    "backend/tests/test_okx_history_range_fence.py": "e60cd962b06171c706fc1c315f7a630b8a71b90599e6c3574a308eafbb66f1b6"
+  }
+}

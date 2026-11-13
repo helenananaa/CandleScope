@@ -953,6 +953,7 @@ class BarAggregator:
         events = [event for queue, _ in list(self._publisher._subscribers)
                   for event in list(queue._queue) if isinstance(event, BarEvent)]
         publications, inputs, publisher_counts = self._publisher._retained_payloads()
+        mutable_callback_states = self._publisher._mutable_callback_state_ids()
         retained_events = {id(event): event for event in [*events, *publications]}
         payload_states = {id(state): state for state in [
             *buffered, *inputs,
@@ -976,11 +977,16 @@ class BarAggregator:
             snapshots = state.source_snapshots
             if isinstance(snapshots, ComponentSnapshots):
                 component_payload_bytes += snapshots.estimated_bytes
-                if snapshots and not snapshots.foreign_entries and len(state.source_refs) <= len(snapshots):
+                if id(state) in mutable_callback_states:
+                    # Consumers may grow a nested proof without adding index
+                    # keys. Accepted component hints cannot cover that mutable
+                    # callback graph; measure it while this owner holds it.
+                    source_ref_bytes += retained_size([state.source_refs])[0]
+                elif snapshots and not snapshots.foreign_entries and len(state.source_refs) <= len(snapshots):
                     # Accepted proof weights cover the ordinary cloned source
                     # dictionaries conservatively; they may overcount leaves
-                    # shared with immutable components. Arbitrary consumer
-                    # mutation is not a hard bound; heap roots remain diagnostic.
+                    # shared with immutable components. Callback-exposed copies
+                    # use the live path above instead of this accepted hint.
                     source_ref_bytes += sys.getsizeof(state.source_refs)
                     if state.source_refs:
                         source_ref_bytes += snapshots.source_proof_bytes
@@ -1005,6 +1011,7 @@ class BarAggregator:
                 "retained_components": retained_components,
                 "retained_component_payload_bytes": component_payload_bytes,
                 "source_ref_estimated_bytes": source_ref_bytes,
+                "mutable_callback_states": len(mutable_callback_states),
                 "retained_events": len(retained_events),
                 **publisher_counts,
                 "component_index_bytes": component_index_bytes,
@@ -1023,7 +1030,7 @@ class BarAggregator:
                     + len(retained_events) * 256 + publisher_counts["publisher_metadata_bytes"]
                     + claim_metadata_bytes + handoff_bytes + len(self._active_preparations) * SCOPE_BYTES
                     + self._preparation_capacity.capacity * PREPARATION_BYTES),
-                "estimate_basis": "accepted component/proof reference weights; shared values may be overcounted; mutable consumer changes are not a heap cap",
+                "estimate_basis": "accepted component/proof reference weights with live callback proof graphs; shared values may be overcounted; not an allocator/RSS cap",
                 "protection": "active/correction state and pending publications stay with realtime owner"}
 
     def _memory_roots(self):
