@@ -440,6 +440,9 @@ class BarAggregator:
         pipeline = self._pipelines[self._pipeline_key(interval, exchange, identity)]
         previous = pipeline.bar_state.get_state(exchange, market_type, symbol, prefix.start_ms)
         overlay_floor = previous.acquisition_revision if previous is not None else None
+        delete_floor = ((previous.canonical_recovery_delete_floor
+                         if previous.canonical_recovery_delete_floor is not None else overlay_floor)
+                        if previous is not None else None)
         state = pipeline.bar_state.adopt_history_prefix(
             prefix, refresh=refresh, replace_provisional=replace_provisional,
             compact_closed=compact_closed,
@@ -450,6 +453,11 @@ class BarAggregator:
             # A fresh historical prefix cannot relabel a retained live tail
             # acquired before a deletion. Preserve the oldest acquisition.
             state.acquisition_revision = min(state.acquisition_revision, overlay_floor or 0)
+        if delete_floor is not None:
+            # Canonical content can acquire a newer revision when the last raw
+            # leaves retire or a warm prefix is adopted again. That never grants
+            # permission to recreate a target/source deleted during its lifetime.
+            state.canonical_recovery_delete_floor = delete_floor
         return deepcopy(state)
 
     def get_series_targets(self):

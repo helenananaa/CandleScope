@@ -14,6 +14,11 @@ from tests.test_shared_blocks_integration import dm
 TARGET='10007m'
 
 
+def permission_floor(state):
+    floor=state.canonical_recovery_delete_floor
+    return state.acquisition_revision if floor is None else floor
+
+
 async def flush_native(dm,count):
     async with asyncio.timeout(5):
         while True:
@@ -235,7 +240,7 @@ def test_source_delete_after_first_live_prefix_preserves_gap_and_delete_floor(dm
             await flush_native(dm,128)
             await dm.history_prefix_runtime.drain_components()
             assert current()._history_prefix is not None
-            floor=current().acquisition_revision
+            floor=permission_floor(current())
             dm.query_engine.storage.delete_bars('BTCUSDT','1m',0,0,market_type='futures')
             await send(values[128],closed=False)
             assert not current()._history_prefix.complete
@@ -270,7 +275,7 @@ def test_forming_prefix_refresh_cannot_recreate_explicitly_deleted_target(dm,mon
             key=SeriesKey('BTCUSDT','1m',market_type='futures')
             assert await dm.history_prefix_runtime.seed(key,TARGET,0,2*WIDTH)
             state=current()
-            floor=state.acquisition_revision
+            floor=permission_floor(state)
             historical=dict(values[0],close_time=7*WIDTH-1,volume=28.,quote_volume=56.,trades=28)
             klines_repo.upsert_klines('BTCUSDT',TARGET,[historical],source='backfill',market_type='futures')
             dm.query_engine.storage.delete_bars('BTCUSDT',TARGET,0,0,market_type='futures')
@@ -285,5 +290,95 @@ def test_forming_prefix_refresh_cannot_recreate_explicitly_deleted_target(dm,mon
             assert state.canonical_recovery_delete_floor==floor
             assert dm.aggregator_bridge.delivery.snapshot()['rejected']>=1
         finally: await dm.shutdown()
+        assert dm.memory_budget.snapshot()['reserved_bytes']==0
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('path',['rollover','warm-refresh'])
+def test_prefix_adoption_never_advances_permission_past_explicit_target_delete(dm,monkeypatch,path):
+    import sys
+    from app.data_engine.bar_aggregator.history_prefix_runtime import HistoryPrefixRuntime
+    from app.data_engine.data_manager.models import SeriesKey
+    monkeypatch.setattr(sys.modules[__name__],'TARGET','7m')
+    monkeypatch.setattr(HistoryPrefixRuntime,'MIN_ROWS',2)
+    monkeypatch.setattr(HistoryPrefixRuntime,'COMPACT_ROWS',2)
+    clock=[1000]
+    monkeypatch.setattr('time.time',lambda:clock[0]/1000)
+    async def run():
+        try:
+            send,current,_=await start(dm,clock)
+            values=rows(7)
+            persist(values)
+            clock[0]=7*WIDTH+1000
+            key=SeriesKey('BTCUSDT','1m',market_type='futures')
+            runtime=dm.history_prefix_runtime
+            assert await runtime.seed(key,TARGET,0,2*WIDTH)
+            state=current()
+            floor=permission_floor(state)
+            for row in values[2:4]:
+                await dm.bar_aggregator.ingest_bar_input('binance','futures','BTCUSDT',TARGET,component(row))
+            historical=dict(values[0],close_time=7*WIDTH-1,volume=28.,quote_volume=56.,trades=28)
+            klines_repo.upsert_klines('BTCUSDT',TARGET,[historical],source='backfill',market_type='futures')
+            dm.query_engine.storage.delete_bars('BTCUSDT',TARGET,0,0,market_type='futures')
+            if path=='warm-refresh': assert await runtime.seed(key,TARGET,0,2*WIDTH)
+            # Source revision has not changed: _refresh is valid and never
+            # runs a recovery. Retiring the last two raw leaves is sufficient
+            # to lose the permission floor unless adoption itself preserves it.
+            for row in values[4:]:
+                await dm.bar_aggregator.ingest_bar_input('binance','futures','BTCUSDT',TARGET,component(row))
+            await dm.aggregator_bridge.delivery.flush()
+            assert state.volume==28 and state.status.value=='closed'
+            assert runtime.metrics['compactions']>=1
+            assert not dm.query_engine.storage.query_bars('BTCUSDT',TARGET,0,0,market_type='futures')
+            assert state.canonical_recovery_delete_floor==floor
+            assert dm.aggregator_bridge.delivery.snapshot()['rejected']>=1
+        finally: await dm.shutdown()
+        assert dm.memory_budget.snapshot()['reserved_bytes']==0
+    asyncio.run(run())
+
+
+def test_closing_during_first_prefix_read_preserves_closed_maintenance_job(dm,monkeypatch):
+    import sys
+    from app.data_engine.bar_aggregator.history_prefix_runtime import HistoryPrefixRuntime
+    monkeypatch.setattr(sys.modules[__name__],'TARGET','7m')
+    monkeypatch.setattr(HistoryPrefixRuntime,'MIN_ROWS',2)
+    monkeypatch.setattr(HistoryPrefixRuntime,'COMPACT_ROWS',2)
+    clock=[1000]
+    monkeypatch.setattr('time.time',lambda:clock[0]/1000)
+    entered,released=threading.Event(),threading.Event()
+    reader=dm.history_prefix_runtime.reader
+    original=reader.matches_closed_overlay
+    def held(*args,**kwargs):
+        entered.set()
+        assert released.wait(10)
+        return original(*args,**kwargs)
+    monkeypatch.setattr(reader,'matches_closed_overlay',held)
+    async def run():
+        task=None
+        try:
+            send,current,_=await start(dm,clock)
+            values=rows(7)
+            for row in values[:2]: await send(row)
+            await flush_native(dm,2)
+            state=current()
+            task=asyncio.create_task(dm.history_prefix_runtime.drain_components())
+            async with asyncio.timeout(5):
+                while not entered.is_set() and not task.done(): await asyncio.sleep(.01)
+            assert entered.is_set(),dm.history_prefix_runtime.last_forming_compaction
+            for row in values[2:]: await send(row)
+            assert state.status.value=='closed' and len(dm.history_prefix_runtime.component_jobs)==1
+            released.set()
+            await task
+            assert state._history_prefix is None and len(dm.history_prefix_runtime.component_jobs)==1
+            await flush_native(dm,7)
+            await dm.history_prefix_runtime.drain_components()
+            assert state._history_prefix is not None,dm.history_prefix_runtime.last_closed_compaction
+            assert not state.source_snapshots and state.volume==28
+            assert dm.history_prefix_runtime.metrics['forming_compactions']==0
+            assert dm.history_prefix_runtime.metrics['closed_compactions']==1
+        finally:
+            released.set()
+            if task is not None: await asyncio.gather(task,return_exceptions=True)
+            await dm.shutdown()
         assert dm.memory_budget.snapshot()['reserved_bytes']==0
     asyncio.run(run())

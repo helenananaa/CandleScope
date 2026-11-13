@@ -365,8 +365,6 @@ class HistoryPrefixRuntime:
         closed_rebuild = (self.flush_delivery is not None and state.status == BarStatus.CLOSED
                           and state.finality == BarFinality.AUTHORITATIVE)
         through = state.bucket_end_ms if closed_rebuild else prefix.through_ms
-        delete_floor = (state.canonical_recovery_delete_floor if state.canonical_recovery_delete_floor is not None
-                        else state.acquisition_revision)
         try:
             async with self.reader.stage(slot.source, prefix.start_ms, through,
                                          require_complete=False) as fresh:
@@ -374,12 +372,6 @@ class HistoryPrefixRuntime:
                                                 state.symbol, state.bucket_start_ms) is not state:
                     raise BlockRevisionChanged('history builder replaced during refresh')
                 adopted = self._adopt(slot, fresh, refresh=True)
-                # A forming bucket can also outlive an explicit target/base
-                # deletion. A fresh read advances content provenance, never
-                # the original permission to recreate deleted history.
-                current = pipeline.bar_state.get_state(state.exchange,state.market_type,state.symbol,state.bucket_start_ms)
-                current.canonical_recovery_delete_floor = delete_floor
-                adopted.canonical_recovery_delete_floor = delete_floor
         except EmptyHistoryPrefix:
             if not self._current(slot):
                 raise BlockRevisionChanged('empty history target detached')
