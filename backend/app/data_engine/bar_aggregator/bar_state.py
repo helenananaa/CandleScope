@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from app.data_engine.kline_quality import BYBIT_WS_CONFIRMED_SOURCE
 from app.data_engine.readonly import ReadonlyFields
+from .component_memory import ComponentSnapshots
 from app.data_engine.aggregation.adapters import (
     snapshot_aggregation_values, snapshot_coverage, snapshot_field_summary,
 )
@@ -229,7 +230,7 @@ class ComponentSnapshotOHLCVMerge:
         ordered = sorted(snapshots.values(), key=lambda row: row['open_time_ms'])
         tail = component_accumulator._Summary.batch(ordered) if ordered else None
         result = component_accumulator._combine(head, tail)
-        state.source_snapshots = snapshots
+        state.source_snapshots = ComponentSnapshots(snapshots)
         state.source_refs = {key: value for key, value in state.source_refs.items() if key in snapshots}
         state._component_accumulator = None
         state._history_prefix = prefix

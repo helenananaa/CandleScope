@@ -1,0 +1,10 @@
+{
+  "raw_receipt": "retained in isolated worktree output",
+  "paths": [
+    "/steps/1/evidence/action/contextToken",
+    "/steps/2/evidence/action/contextToken",
+    "/steps/8/evidence/action/contextToken",
+    "/steps/9/evidence/action/contextToken"
+  ],
+  "policy": "only ephemeral app control context strings; numeric active_read_tokens preserved"
+}

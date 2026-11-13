@@ -23,6 +23,7 @@ from typing import Any, Mapping, Protocol, runtime_checkable
 
 from app.data_engine.market_data.kline_metrics import declared_enhanced_fields
 from app.data_engine.readonly import ReadonlyFields
+from .component_memory import ComponentSnapshots
 from app.data_engine.series_identity import KlineSeriesIdentity, resolve_kline_series_identity
 
 
@@ -243,7 +244,7 @@ class BarState:
     finality: BarFinality = BarFinality.PROVISIONAL
     close_reason: str | None = None
     quality_source: str = ""
-    source_snapshots: dict[str, Mapping[str, Any]] = field(default_factory=dict)
+    source_snapshots: dict[str, Mapping[str, Any]] = field(default_factory=ComponentSnapshots)
     source_refs: dict[str, dict[str, Any]] = field(default_factory=dict)
     status: BarStatus = BarStatus.FORMING
     created_at_ms: int = field(default_factory=lambda: int(time.time() * 1000))
@@ -258,6 +259,10 @@ class BarState:
     # Immutable canonical H127 prefix. Publication retains its coverage proof;
     # the mutable accumulator above remains private to the live builder.
     _history_prefix: Any = field(default=None, repr=False, compare=False)
+
+    def __post_init__(self):
+        if not isinstance(self.source_snapshots, ComponentSnapshots):
+            self.source_snapshots = ComponentSnapshots(self.source_snapshots)
 
     def with_accepted_forming_components(
         self, components: list[BarInput], source_interval: str,
@@ -307,10 +312,13 @@ class BarState:
     def __deepcopy__(self, memo):
         # Builder scalars are immutable. Share immutable component values and
         # copy only their index; foreign mutable components retain isolation.
-        result = replace(self, source_snapshots={
-            key: value if isinstance(value, ReadonlyFields) else deepcopy(value, memo)
-            for key, value in self.source_snapshots.items()
-        }, source_refs=deepcopy(self.source_refs, memo), _component_accumulator=None)
+        snapshots = (self.source_snapshots.publication_copy(memo)
+                     if isinstance(self.source_snapshots, ComponentSnapshots) else {
+                         key: value if type(value) is ReadonlyFields else deepcopy(value, memo)
+                         for key, value in self.source_snapshots.items()
+                     })
+        result = replace(self, source_snapshots=snapshots,
+                         source_refs=deepcopy(self.source_refs, memo), _component_accumulator=None)
         memo[id(self)] = result
         return result
 
