@@ -134,6 +134,15 @@ A window resize recomputes the steps; content changes (a new symbol, a ticking p
 
 **Status bar.** Each side lists its items most important first. When a side runs out of room its later items drop out whole, never cut; on the right, the version goes first.
 
+## Settings
+
+Settings is one dialog: categories on the left, the selected category on the right, the close button in its header. A category holds its tools inline; nothing replaces the dialog with a window of its own (the Plugin Center is the 插件与扩展 category).
+
+- **Changes apply as they are made.** There is no 保存并关闭.
+- **A form that must be saved explicitly** (today only the network proxy) enables its 保存 only when there are unsaved edits and says so beside it, marks its category with a dot, and has closing ask before discarding them (`confirmAction`, tone danger).
+- **Work that must not be interrupted** (a plugin install) disables closing and the other categories until it ends.
+- **Tabs inside a category** are kit `Tabs`; a tool opened from a category is a row with a title, one line of description and its button.
+
 ## Stylesheets and cascade layers
 
 Every app stylesheet sits in a cascade layer. The order is set once, in `frontend/src/styles/layers.css`, which every entry page imports first:

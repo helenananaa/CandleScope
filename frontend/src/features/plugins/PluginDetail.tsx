@@ -1,4 +1,5 @@
 import { Button } from "../../components/ui/Button.js";
+import { Badge, InlineAlert } from "../../components/ui/Display.js";
 import { useState } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -30,7 +31,7 @@ export default function PluginDetail({ selected, detail, loading, error, runtime
     <header className="pc-detail-header">
       <div className="pc-monogram" aria-hidden="true">{selected.name.slice(0, 1).toUpperCase()}</div>
       <div><h3>{selected.name}</h3><p>{selected.publisher} · {selected.version}</p></div>
-      <span className={`plugin-state-pill ${status === "active" ? "is-ready" : "is-muted"}`}>{t(`pc.${status}`)}</span>
+      <Badge tone={status === "active" ? "success" : status === "attention" ? "warning" : "neutral"}>{t(`pc.${status}`)}</Badge>
     </header>
     <div className="plugin-action-row pc-detail-actions">
       {selected.state === "active"
@@ -54,11 +55,11 @@ export default function PluginDetail({ selected, detail, loading, error, runtime
       {(["overview", ...(settings.length ? ["configure"] : []), "permissions", "diagnostics"] as const).map((key) => <button type="button" key={key} aria-current={page === key ? "page" : undefined} onClick={() => setPage(key)}>{t(key === "permissions" ? "plugin.trustRuntime" : key === "diagnostics" ? "pc.diagnostics" : key === "configure" ? "pc.configure" : "pc.overview")}</button>)}
     </nav>
     {loading && <p role="status">{t("plugin.loadingDetail")}</p>}
-    {error && <div className="pc-message" role="alert"><p>{error}</p><button type="button" onClick={() => void reload()}>{t("shell.retry")}</button></div>}
+    {error && <InlineAlert tone="danger" action={<Button size="sm" onClick={() => void reload()}>{t("shell.retry")}</Button>}>{error}</InlineAlert>}
     {page === "overview" && <div className="pc-detail-body">
-      <h4>{t("pc.overview")}</h4>
-      <p>{detail && selected.state === "active" ? (detail.health.available ? t("plugin.available") : t("plugin.unavailableReason", { reason: detail.health.unavailableReason ?? t("plugin.unknownReason") })) : t(`pc.${status}`)}</p>
-      {!selected.permissions.activationReady && <p className="pc-message">{t("plugin.host.grantEveryPermission")}</p>}
+      {/* The badge above states the plugin's status; the overview adds only an active plugin's health. */}
+      {detail && selected.state === "active" && <p>{detail.health.available ? t("plugin.available") : t("plugin.unavailableReason", { reason: detail.health.unavailableReason ?? t("plugin.unknownReason") })}</p>}
+      {!selected.permissions.activationReady && <InlineAlert tone="warning">{t("plugin.host.grantEveryPermission")}</InlineAlert>}
       <div className="pc-contributions">{selected.contributions.map((item) => <article key={item.id}><strong>{item.title}</strong><small>{item.kind === "command/1" ? t("plugin.host.commands") : item.kind === "settings/1" ? t("pc.configure") : item.kind}</small></article>)}</div>
                     <ProviderRows providers={selected.contributions.filter(
                       (item): item is PluginProviderContribution => (

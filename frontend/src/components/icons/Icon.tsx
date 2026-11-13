@@ -37,6 +37,7 @@ export type IconName =
   | "inbox"
   | "star"
   | "lightbulb"
+  | "bot"
   | "chevron-down"
   | "chevron-right"
   | "close"
@@ -228,6 +229,13 @@ const PATHS: Record<IconName, ReactNode> = {
     </>
   ),
   star: <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9Z" />,
+  bot: (
+    <>
+      <path d="M12 8V4H8" />
+      <rect x="4" y="8" width="16" height="12" rx="2" />
+      <path d="M2 14h2M20 14h2M15 13v2M9 13v2" />
+    </>
+  ),
   lightbulb: (
     <>
       <path d="M9 18h6M10 21h4" />

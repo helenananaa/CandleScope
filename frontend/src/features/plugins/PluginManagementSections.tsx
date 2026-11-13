@@ -1,5 +1,6 @@
 import { describeError } from "../../i18n/serverErrors.js";
 import { confirmAction } from "../../components/ui/overlay/overlayApi.js";
+import { Badge } from "../../components/ui/Display.js";
 import { useEffect, useMemo, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -404,7 +405,7 @@ export function RuntimeRegistryPanel({ status }: { status: PluginRuntimeRegistry
             {t("plugin.host.registryRevision", { id: status.active.registryId, revision: status.active.revision })} · {t("plugin.runtime.autoUpdateOff")}
           </p>
         </div>
-        <span className="plugin-state-pill is-muted">{t("plugin.count", { count: status.runtimes.length })}</span>
+        <Badge>{t("plugin.count", { count: status.runtimes.length })}</Badge>
       </header>
       {status.runtimes.map((item) => (
         <article key={`${item.runtimeId}:${item.kind}:${item.os}:${item.arch}`} className="plugin-runtime-registry-row">
@@ -538,7 +539,7 @@ export function LocalTrustInstallPanel({ runtime, onPendingChange }: { runtime: 
           <h3>{t("plugin.localInstall")}</h3>
           <p>{t("plugin.trust.localHint")}</p>
         </div>
-        <span className="plugin-state-pill is-warn">{t("plugin.trust.localCode")}</span>
+        <Badge tone="warning">{t("plugin.trust.localCode")}</Badge>
       </header>
       <ol className="pc-install-steps" aria-label={t("pc.install")}>
         <li aria-current={!candidate && !installed ? "step" : undefined}>{t("plugin.localInstall")}</li>

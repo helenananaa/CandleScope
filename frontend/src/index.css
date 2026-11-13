@@ -14,7 +14,6 @@
 @import "./features/plugins/pluginCenter.css" layer(features);
 @import "./features/extensions/extensions.css" layer(features);
 @import "./app/appShell.css" layer(features);
-@import "./features/settings/settingsDataNavigation.css" layer(features);
 @import "./features/replay/trainingHub.css" layer(features);
 @import "./app/marketRail.css" layer(features);
 @import "./features/watchlist/watchlist.css" layer(features);
@@ -50,3 +49,4 @@
 @import "./features/drawings/drawingObjectPanel.css" layer(features);
 @import "./features/data-preparation/dataPreparation.css" layer(features);
 @import "./styles/lateFixes.css" layer(features);
+@import "./features/settings/settings.css" layer(features);

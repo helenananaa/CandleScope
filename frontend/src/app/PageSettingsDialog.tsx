@@ -1,9 +1,9 @@
 import { useRef } from "react";
+import { IconButton } from "../components/ui/Button.js";
 import { OverlayLayer } from "../components/ui/Overlays.js";
 import type { MouseEvent } from "react";
 import ChartAppearancePanel from "../components/settings/ChartAppearancePanel.js";
 import { Icon } from "../components/icons/Icon.js";
-import SettingsModalStyles from "../features/settings/SettingsModalStyles.js";
 import { t } from "../i18n/index.js";
 import { useLocale } from "../i18n/useLocale.js";
 import type { ChartSettingsRuntime } from "../features/settings/chartAppearanceSettings.js";
@@ -41,16 +41,13 @@ export default function PageSettingsDialog({
               <span className="st-content-title-icon" aria-hidden="true"><Icon name="palette" size={20} /></span>
               {t("settings.title")}
             </h2>
-            <button type="button" className="st-close-x" aria-label={t("settings.close")} onClick={onClose}>
-              <Icon name="close" size={14} />
-            </button>
+            <IconButton label={t("settings.close")} icon={<Icon name="close" size={16} />} onClick={onClose} />
           </div>
           <div className="st-content-body">
             <ChartAppearancePanel appearanceScope={runtime.appearanceScope ?? "application"} {...(runtime.appearanceTargets ? { appearanceTargets: runtime.appearanceTargets } : {})} settings={runtime.settings} onUpdate={runtime.setSettings} />
           </div>
         </main>
       </div>
-      <SettingsModalStyles />
     </div>
     </OverlayLayer>
   );
