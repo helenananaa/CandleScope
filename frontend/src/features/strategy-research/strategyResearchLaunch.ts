@@ -71,16 +71,6 @@ export function strategyResearchDeepLinkSearch(intent: StrategyResearchLaunchInt
   return `?study=${encodeURIComponent(intent.entry.studyId)}`;
 }
 
-export function resolveStrategyResearchBootstrap(input: {
-  libraryEnabled: boolean;
-  page: StrategyResearchPage;
-}): "unified" | "local-legacy" | "backtest-legacy" {
-  if (input.libraryEnabled) return "unified";
-  if (input.page === "local") return "local-legacy";
-  if (input.page === "backtest") return "backtest-legacy";
-  return "unified";
-}
-
 export function strategyResearchLaunchActions(
   intent: StrategyResearchLaunchIntent,
 ): Array<

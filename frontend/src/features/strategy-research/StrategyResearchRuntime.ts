@@ -7,7 +7,6 @@ import type {
   ResearchRuntimeMode,
   ResearchSourceKind,
 } from "../research-data/researchDataTypes.js";
-import { RESEARCH_DATA_LIBRARY_ENABLED } from "../research-data/researchDataFlags.js";
 import {
   EMPTY_STRATEGY_RESEARCH_STATE,
   loadStrategyResearchWorkspace,
@@ -19,15 +18,12 @@ import {
 
 export class StrategyResearchRuntime {
   state: StrategyResearchState;
-  readonly libraryEnabled: boolean;
   runtimeMode: ResearchRuntimeMode;
 
   constructor(options: {
-    libraryEnabled?: boolean;
     runtimeMode?: ResearchRuntimeMode;
     restoreWorkspace?: boolean;
   } = {}) {
-    this.libraryEnabled = options.libraryEnabled ?? RESEARCH_DATA_LIBRARY_ENABLED;
     this.runtimeMode = options.runtimeMode ?? "LIVE";
     this.state = options.restoreWorkspace === false
       ? EMPTY_STRATEGY_RESEARCH_STATE

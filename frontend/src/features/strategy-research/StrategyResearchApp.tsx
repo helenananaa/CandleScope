@@ -28,7 +28,6 @@ import { ResearchBatchResults, ResearchBatchSources } from "./ResearchBatchPanel
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { ResearchDataDrawer } from "../research-data/ResearchDataDrawer.js";
-import { RESEARCH_DATA_LIBRARY_ENABLED } from "../research-data/researchDataFlags.js";
 import type { ResearchSourceKind } from "../research-data/researchDataTypes.js";
 import { useResearchDataLibrary } from "../research-data/useResearchDataLibrary.js";
 import {
@@ -142,10 +141,8 @@ import { bool, object, text } from "../app-control/commandSchema.js";
 
 export default function StrategyResearchApp({
   intent,
-  libraryEnabled = RESEARCH_DATA_LIBRARY_ENABLED,
 }: {
   intent: StrategyResearchLaunchIntent;
-  libraryEnabled?: boolean;
 }) {
   const locale = useLocale();
   const availability = useNativeAvailability();
@@ -162,7 +159,6 @@ export default function StrategyResearchApp({
   const handoff = useMemo(() => intent.kind === "handoff" ? readResearchHandoff(intent.id) : null, [intent]);
   const [runtime] = useState(() => {
     const created = new StrategyResearchRuntime({
-      libraryEnabled,
       restoreWorkspace: intent.kind === "restore",
     });
     for (const action of strategyResearchLaunchActions(intent)) {
@@ -472,7 +468,6 @@ export default function StrategyResearchApp({
         availableKinds={["IMPORTED_DATASET"]}
         runtimeMode={runtime.runtimeMode}
         capabilities={capabilities}
-        libraryEnabled={runtime.libraryEnabled}
         library={library}
         settings={settings}
         events={analysisEvents}
@@ -705,7 +700,6 @@ export default function StrategyResearchApp({
     source,
     ...(importedManifest ? { sourceLabel: `${importedManifest.name} · ${importedManifest.symbol}` }
       : source?.kind === "CURRENT_CHART" ? { sourceLabel: `${source.symbol} · ${source.interval} · ${source.exchange}` } : {}),
-    libraryEnabled: runtime.libraryEnabled,
     libraryOpen: state.source.libraryOpen,
     currentChartEnabled: false,
     marketBatchAvailable,
@@ -840,7 +834,6 @@ export default function StrategyResearchApp({
             : <StrategyResearchCurrentChart />
           : (
             <StrategyResearchFirstOpen
-              libraryEnabled={runtime.libraryEnabled}
               runtimeMode={runtime.runtimeMode}
               draftId={state.script.draftId}
               saving={savingTemplate}

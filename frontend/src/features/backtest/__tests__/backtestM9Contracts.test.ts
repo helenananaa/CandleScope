@@ -11,7 +11,6 @@ const chart = readFileSync(new URL("../BacktestResultChart.tsx", import.meta.url
 const equity = readFileSync(new URL("../BacktestEquityCurve.tsx", import.meta.url), "utf8");
 const projection = readFileSync(new URL("../chart-tester/chartStrategyResultProjection.ts", import.meta.url), "utf8");
 const legacyMap = readFileSync(new URL("../../strategy-research/strategyResearchLegacyMap.ts", import.meta.url), "utf8");
-const backtestApp = readFileSync(new URL("../BacktestApp.tsx", import.meta.url), "utf8");
 
 test("M9 workspace exposes immutable revision compile, smoke, compare and clone paths", () => {
   for (const token of ["research.strategy.compile", "research.strategy.smoke", "PythonStudioPanel"]) {
@@ -25,7 +24,6 @@ test("M9 workspace exposes immutable revision compile, smoke, compare and clone 
   }
   assert.match(legacyMap, /rsi-trace-pane/);
   assert.match(legacyMap, /status: "deferred"/);
-  assert.doesNotMatch(backtestApp, /rsi-trace-pane|boundedRows\(report\.fills\)/);
 });
 
 test("M9 long curves and tables have explicit render bounds", () => {
