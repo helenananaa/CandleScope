@@ -3636,9 +3636,7 @@ export const zhCN = {
   "settings.diag.sharedMarketCache": "共享行情缓存",
   "settings.diag.indicatorCache": "指标结果缓存",
 
-  "workbench.kicker": "库存检查与历史下载",
   "workbench.subtitle": "库存与缺口查询只读；手动历史下载会写入本地用户数据集。",
-  "workbench.close": "关闭数据工作台",
   "workbench.filterTitle": "库存筛选",
   "workbench.filterDesc": "筛选在后端执行，当前结果最多返回 500 个序列。",
   "workbench.readonly": "库存查询只读",
@@ -3656,8 +3654,6 @@ export const zhCN = {
   "workbench.summarySeries": "序列",
   "workbench.summaryGaps": "缺口",
   "workbench.summaryNoGaps": "无缺口",
-  "workbench.expandSection": "展开",
-  "workbench.collapseSection": "收起",
   "workbench.snapshot": "SQLite 快照",
   "workbench.capturedAt": "采集于 {time}",
   "workbench.readingSnapshot": "正在向后端读取快照",

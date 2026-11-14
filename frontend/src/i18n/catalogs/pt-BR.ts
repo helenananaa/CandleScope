@@ -3640,9 +3640,7 @@ export const ptBR = {
   "settings.diag.sharedMarketCache": "Cache compartilhado de dados de mercado",
   "settings.diag.indicatorCache": "Cache de resultado do indicador",
 
-  "workbench.kicker": "Consulta de dados e download de histórico",
   "workbench.subtitle": "As consultas aos dados armazenados e às lacunas não alteram os dados. Ao baixar o histórico manualmente, os dados são gravados nos conjuntos locais do usuário.",
-  "workbench.close": "Fechar bancada de dados",
   "workbench.filterTitle": "Filtros de inventário",
   "workbench.filterDesc": "Os filtros rodam no backend. Os resultados são limitados a 500 séries.",
   "workbench.readonly": "Consulta somente leitura",
@@ -3660,8 +3658,6 @@ export const ptBR = {
   "workbench.summarySeries": "Séries",
   "workbench.summaryGaps": "Lacunas",
   "workbench.summaryNoGaps": "Sem lacunas",
-  "workbench.expandSection": "Expandir",
-  "workbench.collapseSection": "Recolher",
   "workbench.snapshot": "Snapshot SQLite",
   "workbench.capturedAt": "Capturado em {time}",
   "workbench.readingSnapshot": "Lendo snapshot no backend",
