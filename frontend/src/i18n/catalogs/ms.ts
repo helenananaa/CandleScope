@@ -3981,7 +3981,6 @@ export const ms = {
   "chartTester.run": "Jalankan",
   "chartTester.close": "Tutup",
   "chartTester.language.pine": "Pine",
-  "chartTester.startEyebrow": "MULAKAN UJIAN CARTA PANTAS",
   "chartTester.startTitle": "Pilih cara untuk bermula",
   "chartTester.startLead": "Skrip akan dilampirkan pada {symbol} · {interval}; editor dimuatkan selepas pilihan.",
   "chartTester.openAdvanced": "Buka dalam Penyelidikan Lanjutan",

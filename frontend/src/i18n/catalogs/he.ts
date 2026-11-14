@@ -3981,7 +3981,6 @@ export const he = {
   "chartTester.run": "הרצה",
   "chartTester.close": "סגירה",
   "chartTester.language.pine": "Pine",
-  "chartTester.startEyebrow": "START A QUICK CHART TEST",
   "chartTester.startTitle": "בחרו איך להתחיל",
   "chartTester.startLead": "הסקריפט יתחבר ל־{symbol} · {interval}; העורך נטען אחרי הבחירה.",
   "chartTester.openAdvanced": "פתיחה במחקר מתקדם",

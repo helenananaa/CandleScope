@@ -3981,7 +3981,6 @@ export const ar = {
   "chartTester.run": "تشغيل",
   "chartTester.close": "إغلاق",
   "chartTester.language.pine": "Pine",
-  "chartTester.startEyebrow": "ابدأ اختبار رسم سريع",
   "chartTester.startTitle": "اختر كيف تبدأ",
   "chartTester.startLead": "سيُرفق النص بـ {symbol} · {interval}؛ يُحمَّل المحرر بعد اختيارك.",
   "chartTester.openAdvanced": "فتح في البحث المتقدم",

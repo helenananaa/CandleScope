@@ -3981,7 +3981,6 @@ export const it = {
   "chartTester.run": "Esegui",
   "chartTester.close": "Chiudi",
   "chartTester.language.pine": "Pine",
-  "chartTester.startEyebrow": "AVVIA UN TEST RAPIDO SUL GRAFICO",
   "chartTester.startTitle": "Scegli come iniziare",
   "chartTester.startLead": "Lo script verrà collegato a {symbol} · {interval}; l'editor si carica dopo la tua scelta.",
   "chartTester.openAdvanced": "Apri in Ricerca avanzata",

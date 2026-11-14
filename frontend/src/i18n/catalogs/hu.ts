@@ -3981,7 +3981,6 @@ export const hu = {
   "chartTester.run": "Futtatás",
   "chartTester.close": "Bezárás",
   "chartTester.language.pine": "Pine",
-  "chartTester.startEyebrow": "GYORS GRAFIKONTESZT INDÍTÁSA",
   "chartTester.startTitle": "Válassza ki, hogyan kezd",
   "chartTester.startLead": "A szkript a(z) {symbol} · {interval} grafikonhoz csatlakozik; a szerkesztő a választás után töltődik.",
   "chartTester.openAdvanced": "Megnyitás a speciális kutatásban",

@@ -4596,7 +4596,6 @@ export const ptBR = {
   "chartTester.run": "Run",
   "chartTester.close": "Fechar",
   "chartTester.language.pine": "Pine",
-  "chartTester.startEyebrow": "INICIAR UM TESTE RÁPIDO DO GRÁFICO",
   "chartTester.startTitle": "Escolha como começar",
   "chartTester.startLead": "O script será anexado a {symbol} · {interval}; o editor carrega depois da sua escolha.",
   "chartTester.openAdvanced": "Abrir na pesquisa avançada",

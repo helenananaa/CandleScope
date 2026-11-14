@@ -3991,7 +3991,6 @@ export const es = {
   "chartTester.run": "Ejecutar",
   "chartTester.close": "Cerrar",
   "chartTester.language.pine": "Pine",
-  "chartTester.startEyebrow": "INICIAR UNA PRUEBA RÁPIDA DEL GRÁFICO",
   "chartTester.startTitle": "Elige cómo empezar",
   "chartTester.startLead": "El script se asociará a {symbol} · {interval}; el editor se carga después de tu elección.",
   "chartTester.openAdvanced": "Abrir en Investigación avanzada",

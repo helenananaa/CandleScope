@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Badge, Button, EmptyState, Field, InlineAlert, Select } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { describeError } from "../../i18n/serverErrors.js";
@@ -7,6 +8,7 @@ import { getChartStrategyDraftStore } from "../backtest/chart-tester/chartStrate
 import type { StrategyDataManager } from "../market-data/manager/strategyDataManager.js";
 import { formatChartStrategyNumber, sampledReportDrawdown } from "../backtest/chart-tester/chartStrategyResultModel.js";
 import { formatDecimal } from "../../shared/formatDecimal.js";
+import { researchStateTone } from "../backtest/research/researchStateTone.js";
 
 function researchRunConfig(run: BacktestRunRecord): Record<string, unknown> {
   try {
@@ -114,39 +116,51 @@ export default function StrategyRunHistory({ manager, draftId, currentRunId, onO
   const openComparison = (pair: Pair) => { setSelected(pair); setRequested(pair); };
   const metric = (value: unknown) => formatDecimal(typeof value === "number" || typeof value === "string" ? String(value) : "—");
 
-  return <section aria-label={t("ux.history")}>
-    {historyError && <p role="alert">{historyError}</p>}
-    {!history.length && <p>{t("ux.historyEmpty")}</p>}
-    <div className="strategy-history-list">{history.map(({ run, config }) => <article key={run.run_id}>
-      <div><strong>{String(config.symbol ?? "—")} · {String(config.interval ?? "—")}</strong><p>{date(config.start_time_ms)} — {date(config.end_time_ms)}</p><small>{typeof config.external_connection_id === "string" && `${t("research.external.title")} · `}{run.state} · {run.run_id.slice(-8)}</small></div>
-      <button type="button" disabled={run.state !== "COMPLETED"} onClick={() => onOpen(run.run_id)}>{t("ux.openResult")}</button>
-      <button type="button" disabled={run.state !== "COMPLETED" || !currentAvailable || run.run_id === currentRunId}
-        onClick={() => { if (currentRunId) openComparison([run.run_id, currentRunId]); }}>{t("ux.compare")}</button>
-    </article>)}</div>
-    {completed.length >= 2 && <fieldset>
-      <legend>{t("ux.compare")}</legend>
-      {([0, 1] as const).map(position => <label key={position}>
-        {t(position === 0 ? "researchBatch.compareFirst" : "researchBatch.compareSecond")}
-        <select aria-label={t(position === 0 ? "researchBatch.compareFirst" : "researchBatch.compareSecond")} value={selected[position]} onChange={(event) => pick(position, event.target.value)}>
+  const shortId = (runId: string) => runId.slice(-8);
+  return <section className="strategy-history" aria-label={t("ux.history")}>
+    {historyError && <InlineAlert tone="danger">{historyError}</InlineAlert>}
+    {!history.length && <EmptyState compact title={t("ux.historyEmpty")} />}
+    {history.length > 0 && <ul className="strategy-history-list">{history.map(({ run, config }) => <li key={run.run_id}
+      className="strategy-history-row" data-active={run.run_id === currentRunId ? "true" : undefined}>
+      <div className="strategy-history-run">
+        <strong>{String(config.symbol ?? "—")} · {String(config.interval ?? "—")}</strong>
+        <span>{date(config.start_time_ms)} — {date(config.end_time_ms)}</span>
+        <small>{typeof config.external_connection_id === "string" && `${t("research.external.title")} · `}{shortId(run.run_id)}</small>
+      </div>
+      <Badge tone={researchStateTone(run.state)}>{run.state}</Badge>
+      <div className="strategy-history-actions">
+        <Button size="sm" disabled={run.state !== "COMPLETED"} onClick={() => onOpen(run.run_id)}>{t("ux.openResult")}</Button>
+        <Button size="sm" variant="ghost" disabled={run.state !== "COMPLETED" || !currentAvailable || run.run_id === currentRunId}
+          onClick={() => { if (currentRunId) openComparison([run.run_id, currentRunId]); }}>{t("ux.compare")}</Button>
+      </div>
+    </li>)}</ul>}
+    {completed.length >= 2 && <section className="strategy-history-compare" aria-label={t("ux.compare")}>
+      <h3>{t("ux.compare")}</h3>
+      {([0, 1] as const).map(position => <Field key={position} label={t(position === 0 ? "researchBatch.compareFirst" : "researchBatch.compareSecond")}>
+        <Select size="sm" value={selected[position]} onChange={(event) => pick(position, event.target.value)}>
           <option value="">{t("research.run.select")}</option>
           {completed.map(entry => <option key={entry.run.run_id} value={entry.run.run_id} disabled={entry.run.run_id === selected[1 - position]}>
             {optionLabel(entry)}
           </option>)}
-        </select>
-      </label>)}
-      <button type="button" disabled={!canCompare} onClick={() => openComparison([...selected])}>{t("ux.compare")}</button>
-    </fieldset>}
-    {requested && !activeResponse && <p role="status">{t("researchBatch.compareLoading")}</p>}
-    {activeResponse?.error && <p role="alert">{activeResponse.error}</p>}
+        </Select>
+      </Field>)}
+      <Button size="sm" variant="primary" disabled={!canCompare} onClick={() => openComparison([...selected])}>{t("ux.compare")}</Button>
+    </section>}
+    {requested && !activeResponse && <p className="strategy-research-note" role="status">{t("researchBatch.compareLoading")}</p>}
+    {activeResponse?.error && <InlineAlert tone="danger">{activeResponse.error}</InlineAlert>}
     {comparison && left && right && <div className="strategy-history-comparison" data-testid="strategy-history-comparison">
       <h3>{t("ux.compare")}</h3>
-      <p>{t(comparison.directComparisonAllowed ? "chartTester.compare.compatible" : "chartTester.compare.incompatible")}</p>
-      {!comparison.directComparisonAllowed && <p>{comparison.incompatibleFields.join(" · ")} {comparison.precisionExplanation}</p>}
-      <table><thead><tr><th scope="col">{t("chartTester.tab.settings")}</th><th scope="col">{optionLabel(left)}</th><th scope="col">{optionLabel(right)}</th></tr></thead><tbody>
-        {conditionFields.map(([key, label]) => <tr key={key}><th>{t(label)}</th><td>{key.endsWith("_ms") ? date(left.config[key]) : String(left.config[key] ?? "—")}</td><td>{key.endsWith("_ms") ? date(right.config[key]) : String(right.config[key] ?? "—")}</td></tr>)}
-        {Object.entries(comparison.parameterDiff).map(([key, values]) => <tr key={key}><th>{key}</th><td>{JSON.stringify(values.left)}</td><td>{JSON.stringify(values.right)}</td></tr>)}
+      {comparison.directComparisonAllowed
+        ? <p className="strategy-research-note">{t("chartTester.compare.compatible")}</p>
+        : <InlineAlert tone="warning" title={t("chartTester.compare.incompatible")}>
+          {comparison.incompatibleFields.join(" · ")} {comparison.precisionExplanation}
+        </InlineAlert>}
+      <table className="strategy-history-table"><thead><tr><th scope="col">{t("chartTester.tab.settings")}</th>
+        <th scope="col" title={optionLabel(left)}>{shortId(left.run.run_id)}</th><th scope="col" title={optionLabel(right)}>{shortId(right.run.run_id)}</th></tr></thead><tbody>
+        {conditionFields.map(([key, label]) => <tr key={key}><th scope="row">{t(label)}</th><td>{key.endsWith("_ms") ? date(left.config[key]) : String(left.config[key] ?? "—")}</td><td>{key.endsWith("_ms") ? date(right.config[key]) : String(right.config[key] ?? "—")}</td></tr>)}
+        {Object.entries(comparison.parameterDiff).map(([key, values]) => <tr key={key}><th scope="row">{key}</th><td>{JSON.stringify(values.left)}</td><td>{JSON.stringify(values.right)}</td></tr>)}
       </tbody></table>
-      <table><thead><tr><th scope="col">{t("chartTester.tab.overview")}</th><th scope="col">{left.run.run_id.slice(-8)}</th><th scope="col">{right.run.run_id.slice(-8)}</th>
+      <table className="strategy-history-table"><thead><tr><th scope="col">{t("chartTester.tab.overview")}</th><th scope="col">{shortId(left.run.run_id)}</th><th scope="col">{shortId(right.run.run_id)}</th>
         {comparison.directComparisonAllowed && <th scope="col">{t("researchBatch.compareDelta")}</th>}</tr></thead><tbody>
         {metrics.map(([key, label]) => {
           const values = key === "maxDrawdown" && sampled ? sampled : comparison.tradeDiff[key];
@@ -155,12 +169,14 @@ export default function StrategyRunHistory({ manager, draftId, currentRunId, onO
             {comparison.directComparisonAllowed && <td>{format(values?.delta)}</td>}</tr>;
         })}
       </tbody></table>
-      {comparison.fingerprintDiff.available && comparison.directComparisonAllowed && <p>{t("chartTester.compare.tradeChanges")} · {t("chartTester.compare.addRemove", {
+      {comparison.fingerprintDiff.available && comparison.directComparisonAllowed && <p className="strategy-research-note">{t("chartTester.compare.tradeChanges")} · {t("chartTester.compare.addRemove", {
         added: comparison.fingerprintDiff.addedCount ?? 0, removed: comparison.fingerprintDiff.removedCount ?? 0,
       })}</p>}
-      {[left, right].map(({ run }) => <button type="button" key={run.run_id} onClick={() => onOpen(run.run_id)}>
-        {t("ux.openResult")} · {run.run_id.slice(-8)}
-      </button>)}
+      <div className="strategy-history-actions">
+        {[left, right].map(({ run }) => <Button size="sm" key={run.run_id} onClick={() => onOpen(run.run_id)}>
+          {t("ux.openResult")} · {shortId(run.run_id)}
+        </Button>)}
+      </div>
     </div>}
   </section>;
 }

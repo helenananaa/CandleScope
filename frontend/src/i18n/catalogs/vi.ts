@@ -3981,7 +3981,6 @@ export const vi = {
   "chartTester.run": "Chạy",
   "chartTester.close": "Đóng",
   "chartTester.language.pine": "Pine",
-  "chartTester.startEyebrow": "BẮT ĐẦU KIỂM THỬ BIỂU ĐỒ NHANH",
   "chartTester.startTitle": "Chọn cách bắt đầu",
   "chartTester.startLead": "Script sẽ gắn vào {symbol} · {interval}; trình soạn thảo tải sau khi bạn chọn.",
   "chartTester.openAdvanced": "Mở trong Nghiên cứu nâng cao",

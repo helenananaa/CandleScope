@@ -4344,7 +4344,6 @@ export const en = {
   "chartTester.run": "Run",
   "chartTester.close": "Close",
   "chartTester.language.pine": "Pine",
-  "chartTester.startEyebrow": "START A QUICK CHART TEST",
   "chartTester.startTitle": "Choose how to start",
   "chartTester.startLead": "The script will attach to {symbol} · {interval}; the editor loads after your choice.",
   "chartTester.openAdvanced": "Open in Advanced Research",

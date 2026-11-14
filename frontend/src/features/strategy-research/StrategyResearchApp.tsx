@@ -1,4 +1,4 @@
-import { Button, InlineAlert, OverlayLayer } from "../../components/ui/index.js";
+import { Button, Disclosure, Drawer, InlineAlert, SegmentedControl } from "../../components/ui/index.js";
 import { useNativeAvailability } from "../backtest/native/useNativeAvailability.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import {
@@ -491,7 +491,7 @@ export default function StrategyResearchApp({
   ] }));
   const drawer = (
     <StrategyResearchDrawerBoundary
-      fallback={<p className="strategy-research-error" role="alert">{t("strategy.drawerFailed")}</p>}
+      fallback={<InlineAlert tone="danger" className="strategy-research-page-alert">{t("strategy.drawerFailed")}</InlineAlert>}
     >
       <ResearchDataDrawer
         open={state.source.libraryOpen}
@@ -527,13 +527,21 @@ export default function StrategyResearchApp({
   const [externalOpen, setExternalOpen] = useState(false);
   const script = (
     <div data-strategy-draft={scriptDraft ?? ""}>
-      <nav className="native-mode-switch" aria-label={t("native.mode")}>
-        <button aria-pressed={nativeMode} onClick={() => setNativeMode(true)}>{t("native.fullStrategies")}</button>
-        <button aria-pressed={!nativeMode} onClick={() => setNativeMode(false)}>{t("native.hostMode")}</button>
-      </nav>
-      {!nativeMode && availability === "error" && <p role="status">{t("indicator.editor.runtimeUnavailableHelp")}</p>}
-      {!nativeMode && availability === "unavailable" && <p role="status">{t("native.platformHelp")}</p>}
-      {nativeMode ? researchRun.session ? <Suspense fallback={<p>{t("native.loading")}</p>}>
+      <SegmentedControl
+        className="strategy-research-engine-switch"
+        size="sm"
+        fullWidth
+        label={t("native.mode")}
+        value={nativeMode ? "native" : "host"}
+        onChange={(value) => setNativeMode(value === "native")}
+        options={[
+          { value: "native", label: t("native.fullStrategies") },
+          { value: "host", label: t("native.hostMode") },
+        ]}
+      />
+      {!nativeMode && availability === "error" && <p className="strategy-research-note" role="status">{t("indicator.editor.runtimeUnavailableHelp")}</p>}
+      {!nativeMode && availability === "unavailable" && <p className="strategy-research-note" role="status">{t("native.platformHelp")}</p>}
+      {nativeMode ? researchRun.session ? <Suspense fallback={<p className="strategy-research-note">{t("native.loading")}</p>}>
         <NativeStrategyPanel session={researchRun.session} cellScope="strategy-research-native" onClose={() => setNativeMode(false)}
           onSelectPython={() => {
             void openPythonStrategyDraft(getChartStrategyDraftStore(), scriptDraft).then((draft) => {
@@ -546,7 +554,7 @@ export default function StrategyResearchApp({
           onLocateTrade={(timeMs) => setFocusedAnalysis((current) => ({ scope: chartUiScope, value: {
             requestId: (current.scope === chartUiScope ? current.value?.requestId ?? 0 : 0) + 1, time: Math.floor(timeMs / 1000),
           } }))} />
-      </Suspense> : <p>{t("research.source.none")}</p> :
+      </Suspense> : <p className="strategy-research-note">{t("research.source.none")}</p> :
       <StrategyResearchScriptPanel
         cellScope="strategy-research"
         session={researchRun.session}
@@ -563,17 +571,19 @@ export default function StrategyResearchApp({
         batchSession={marketBatchAvailable ? marketInputs[0]?.session ?? null : null}
         batchControls={(request) => <ResearchBatchSources datasets={libraryDatasets} precise={state.script.configuration?.fidelityPreference === "PRECISE"}
           marketEnabled={marketBatchAvailable} markets={marketInputs} onMarkets={setMarketInputs}>{(selected, exchange) => <>
-          <button type="button" className="research-primary" disabled={!request || (!exchange.length && selected.length < 2) || batchState.storageFailed}
-            onClick={() => {
-              if (!request) return;
-              setBatchError(false);
-              void researchRun.batch.submit(request, selected, exchange).catch(() => setBatchError(true));
-            }}>{t("researchBatch.run")}</button>
-          {batchState.jobs.length > 0 && <button type="button" onClick={() => setHistoryOpen(true)}>
-            {t("researchBatch.jobs")} · {batchState.jobs.length}
-          </button>}
-          {batchState.storageFailed ? <p role="alert">{t("researchBatch.storage")}</p>
-            : batchError && <p role="alert">{t("researchBatch.submitFailed")}</p>}
+          <div className="strategy-research-batch-actions">
+            <Button variant="primary" size="sm" disabled={!request || (!exchange.length && selected.length < 2) || batchState.storageFailed}
+              onClick={() => {
+                if (!request) return;
+                setBatchError(false);
+                void researchRun.batch.submit(request, selected, exchange).catch(() => setBatchError(true));
+              }}>{t("researchBatch.run")}</Button>
+            {batchState.jobs.length > 0 && <Button size="sm" variant="ghost" onClick={() => setHistoryOpen(true)}>
+              {t("researchBatch.jobs")} · {batchState.jobs.length}
+            </Button>}
+          </div>
+          {batchState.storageFailed ? <InlineAlert tone="danger">{t("researchBatch.storage")}</InlineAlert>
+            : batchError && <InlineAlert tone="danger">{t("researchBatch.submitFailed")}</InlineAlert>}
         </>}</ResearchBatchSources>}
         onConfirmNeedsData={researchRun.onConfirmNeedsData}
         onOpenAdvanced={openAdvanced}
@@ -581,15 +591,13 @@ export default function StrategyResearchApp({
         onConfigure={(configuration) => dispatch({ type: "script/configure", configuration })}
       />}
       {hostReady && importedManifest && !importedManifest.market_trade_input && selectedInterval && (
-        <details open={externalOpen} onToggle={event => {
-          if (event.target !== event.currentTarget) return;
-          setExternalOpen(event.currentTarget.open);
-          if (event.currentTarget.open) {
+        <Disclosure className="strategy-research-external" summary={t("research.external.title")} open={externalOpen} onToggle={(open) => {
+          setExternalOpen(open);
+          if (open) {
             setExternalVisited(true);
             setNativeMode(false);
           }
         }}>
-          <summary>{t("research.external.title")}</summary>
           {externalVisited && <ResearchExternalModel
             key={chartUiScope}
             manager={researchRun.historyManager}
@@ -601,13 +609,13 @@ export default function StrategyResearchApp({
             runBusy={["RESOLVING", "QUEUED", "RUNNING"].includes(researchRun.runStatus)}
             onRunCreated={handleRunId}
           />}
-        </details>
+        </Disclosure>
       )}
     </div>
   );
-  const result = nativeMode ? researchRun.session && nativeRun?.result ? <Suspense fallback={<p>{t("native.loading")}</p>}>
+  const result = nativeMode ? researchRun.session && nativeRun?.result ? <Suspense fallback={<p className="strategy-research-note">{t("native.loading")}</p>}>
     <div className="native-strategy-report">
-      <details><summary>{t("native.source")}</summary><pre>{nativeRun.config?.source}</pre></details>
+      <Disclosure summary={t("native.source")}><pre className="strategy-research-source">{nativeRun.config?.source}</pre></Disclosure>
       <NativeStrategyReport key={nativeRun.run_id} run={nativeRun}
         stale={datasetIdentityChanged(nativeRun.config, importedManifest ? { datasetId: importedManifest.dataset_id, dataEpoch: importedManifest.data_epoch } : undefined)}
         onLocate={(timeMs) => setFocusedAnalysis((current) => ({ scope: chartUiScope, value: {
@@ -667,16 +675,11 @@ export default function StrategyResearchApp({
   const extraSurfaces = (
     <>
       {/* Right-hand drawers on the overlay stack: opening one closes the others. */}
-      {accountsOpen && <OverlayLayer kind="drawer" side="right" onClose={() => setAccountsOpen(false)}>
-      <aside className="research-data-drawer continuous-reader-drawer" role="dialog" aria-label={t("reader.title")}>
-        <header><strong>{t("reader.title")}</strong><button type="button" onClick={() => setAccountsOpen(false)} data-overlay-close="">{t("backtest.close")}</button></header>
-        <Suspense fallback={<p>{t("reader.loading")}</p>}><SavedContinuousAccounts /></Suspense>
-      </aside>
-      </OverlayLayer>}
-      {historyOpen && <OverlayLayer kind="drawer" side="right" onClose={() => setHistoryOpen(false)}>
-      <aside className="research-data-drawer" role="dialog" aria-label={t("ux.history")}>
-        <header><strong>{t("ux.history")}</strong><button type="button" onClick={() => setHistoryOpen(false)} data-overlay-close="">{t("backtest.close")}</button></header>
-        <Suspense fallback={<p>{t("research.loading")}</p>}><StrategyRunHistory manager={researchRun.historyManager} draftId={state.script.draftId} currentRunId={researchRun.result?.run.run_id ?? null} onOpen={(runId) => { dispatch({ type: "result/viewHistory", runId }); setNativeMode(false); setHistoryOpen(false); }} /></Suspense>
+      <Drawer open={accountsOpen} onClose={() => setAccountsOpen(false)} title={t("reader.title")} className="strategy-research-drawer continuous-reader-drawer">
+        <Suspense fallback={<p className="strategy-research-note">{t("reader.loading")}</p>}><SavedContinuousAccounts /></Suspense>
+      </Drawer>
+      <Drawer open={historyOpen} onClose={() => setHistoryOpen(false)} title={t("ux.history")} className="strategy-research-drawer">
+        <Suspense fallback={<p className="strategy-research-note">{t("research.loading")}</p>}><StrategyRunHistory manager={researchRun.historyManager} draftId={state.script.draftId} currentRunId={researchRun.result?.run.run_id ?? null} onOpen={(runId) => { dispatch({ type: "result/viewHistory", runId }); setNativeMode(false); setHistoryOpen(false); }} /></Suspense>
         <ResearchBatchResults jobs={batchState.jobs} storageFailed={batchState.storageFailed}
           onResume={(id, retry) => researchRun.batch.resume(id, retry)}
           onOpen={job => {
@@ -689,8 +692,7 @@ export default function StrategyResearchApp({
             setHistoryOpen(false);
           }} />
         <Suspense fallback={null}><PreparationJobsPanel /></Suspense>
-      </aside>
-      </OverlayLayer>}
+      </Drawer>
       {intent.kind === "handoff" && !handoff && <InlineAlert tone="danger" className="strategy-research-page-alert">{t("ux.handoffMissing")}</InlineAlert>}
       {(intent.page === "local" || intent.page === "backtest") ? (
         <StrategyResearchCompatNotice page={intent.page} />
@@ -746,7 +748,7 @@ export default function StrategyResearchApp({
   const view = (() => {
     if (state.result.replay) {
       const displayKey = replayDisplayKey(state.result.replay);
-      return <Suspense fallback={<p role="status">{t("research.loading")}</p>}>
+      return <Suspense fallback={<p className="strategy-research-note" role="status">{t("research.loading")}</p>}>
         <StrategyResultReplay key={displayKey} initial={state.result.replay}
           manager={researchRun.historyManager} datasets={libraryDatasets} onCommit={saveResultReplay} onClose={closeResultReplay}
           display={state.replayDisplays?.[displayKey] ?? DEFAULT_REPLAY_DISPLAY} onDisplay={saveReplayDisplay} />
@@ -761,9 +763,9 @@ export default function StrategyResearchApp({
           toolbar={null}
           exportOverlay={null}
           chart={(
-            <p className="strategy-research-error" role="alert" data-testid="strategy-research-deep-link-error">
-              {intent.message}
-            </p>
+            <InlineAlert tone="danger" className="strategy-research-page-alert">
+              <span data-testid="strategy-research-deep-link-error">{intent.message}</span>
+            </InlineAlert>
           )}
           analysis={null}
         />
@@ -861,7 +863,7 @@ export default function StrategyResearchApp({
         chart={
           source?.kind === "CURRENT_CHART"
             ? hostReady && runtime.runtimeMode === "LIVE" && researchRun.session
-              ? <MarketDataWorkspaceProvider><Suspense fallback={<p>{t("research.loading")}</p>}><StrategyResearchLiveChart session={researchRun.session} result={nativeMode ? null : researchRun.sourceResult} focusRequest={focusRequest} /></Suspense></MarketDataWorkspaceProvider>
+              ? <MarketDataWorkspaceProvider><Suspense fallback={<p className="strategy-research-note">{t("research.loading")}</p>}><StrategyResearchLiveChart session={researchRun.session} result={nativeMode ? null : researchRun.sourceResult} focusRequest={focusRequest} /></Suspense></MarketDataWorkspaceProvider>
               : <StrategyResearchCurrentChart />
             : (
               <StrategyResearchFirstOpen
