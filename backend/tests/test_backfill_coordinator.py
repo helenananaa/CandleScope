@@ -5526,3 +5526,95 @@ def test_each_equal_priority_chart_gets_a_turn_before_an_older_chart_repeats(own
             await asyncio.gather(*tasks, return_exceptions=True)
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize("explicit_first", [False, True])
+def test_default_identity_aliases_join_one_active_warm_and_history_repair(explicit_first) -> None:
+    """The WS default identity and HTTP shorthand have one physical owner."""
+    from app.data_engine.series_identity import KlineSeriesIdentity
+
+    async def run():
+        started, release = asyncio.Event(), asyncio.Event()
+        calls = []
+
+        class Engine:
+            async def run(self, **kwargs):
+                calls.append(kwargs)
+                started.set()
+                await release.wait()
+                return _RepairReport(status="completed")
+
+        dm = _DataManager()
+        coord = BackfillCoordinator(storage=_Storage(), bars_backfilled=dm.on_bars_backfilled,
+            emit_event=dm.event_bus.emit, engine=Engine(), loop=asyncio.get_running_loop(),
+            max_concurrency=2, base_delay_seconds=0)
+        explicit = _request(0, 0, request_id="explicit-warm")
+        explicit.reason, explicit.requester = "visible_seed_gap", "warm_start_custom_tail"
+        explicit.metadata["series_identity"] = KlineSeriesIdentity.for_exchange("binance").to_dict()
+        ordinary = _request(0, 0, request_id="ordinary-history")
+        ordinary.reason, ordinary.requester = "initial_history", "chart"
+        first, second = (explicit, ordinary) if explicit_first else (ordinary, explicit)
+        try:
+            first_id = coord.request(first)
+            await started.wait()
+            second_id = coord.request(second)
+            assert second_id == first_id
+            snapshot = coord.snapshot()
+            assert len(snapshot["active"]) == 1
+            assert snapshot["pending"] == []
+            assert snapshot["deduped"] == 1
+            release.set()
+            first_result, second_result = await asyncio.wait_for(asyncio.gather(
+                coord.wait_for_request(first_id), coord.wait_for_request(second_id)), 1)
+            assert first_result is second_result
+            assert first_result.status == "completed"
+            assert len(calls) == 1
+        finally:
+            release.set()
+            await coord.shutdown()
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("changed", [
+    {"provider_id": "another-provider"}, {"venue": "another-venue"},
+    {"asset_class": "equity"}, {"series_variant": "synthetic"},
+    {"price_adjustment": "split_adjusted"}, {"session_variant": "regular"},
+    {"volume_semantics": "contracts"},
+])
+def test_repair_identity_alias_normalization_keeps_each_semantic_dimension_isolated(changed) -> None:
+    from app.data_engine.series_identity import KlineSeriesIdentity
+
+    async def run():
+        release = asyncio.Event()
+        calls = []
+
+        class Engine:
+            async def run(self, **kwargs):
+                calls.append(kwargs)
+                await release.wait()
+                return _RepairReport(status="completed")
+
+        dm = _DataManager()
+        coord = BackfillCoordinator(storage=_Storage(), bars_backfilled=dm.on_bars_backfilled,
+            emit_event=dm.event_bus.emit, engine=Engine(), loop=asyncio.get_running_loop(),
+            max_concurrency=2, base_delay_seconds=0)
+        ordinary, distinct = _request(0, 0), _request(0, 0)
+        distinct.metadata["series_identity"] = {
+            **KlineSeriesIdentity.for_exchange("binance").to_dict(), **changed,
+        }
+        try:
+            first_id, second_id = coord.request(ordinary), coord.request(distinct)
+            assert first_id != second_id
+            await _wait_until(lambda: len(calls) == 2)
+            assert len(coord.snapshot()["active"]) == 2
+            assert coord.snapshot()["deduped"] == 0
+            release.set()
+            outcomes = await asyncio.wait_for(asyncio.gather(
+                coord.wait_for_request(first_id), coord.wait_for_request(second_id)), 1)
+            assert all(outcome.status == "completed" for outcome in outcomes)
+        finally:
+            release.set()
+            await coord.shutdown()
+
+    asyncio.run(run())
