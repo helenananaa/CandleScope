@@ -869,7 +869,7 @@ test("replay watchlist searches the Run catalog and adds products through track 
     resolve(testDirectory, "../components/ReplayIntegrityReviewPanel.tsx"),
     "utf8",
   );
-  assert.match(integrity, /replay\.integrity\.kicker/);
+  assert.match(integrity, /replay\.integrity\.title/);
   assert.match(integrity, /replay\.integrity\.rules/);
   assert.match(integrity, /replay\.integrity\.review/);
   assert.doesNotMatch(integrity, /REPLAY_POLICY_UNSUPPORTED/);
