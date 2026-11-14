@@ -389,7 +389,9 @@ Still outside the stack, and moved when each is rebuilt:
 | 5c | Alerts (cards in cards, notifications through `notify()`) |
 | 5d | Indicators and the indicator editor |
 | 5e | Symbol search and Export (native `<dialog>` onto the kit) |
-| 5f | Replay hub and session |
+| 5f | Replay hub: the run list, the create dialog, deleting a run |
+| 5f2 | Replay storage management and the initial market picker |
+| 5f3 | Replay session: control bar, right rail, review and integrity, notes |
 | 5g | Strategy research merged with backtest (§6.1), local data, CSV import |
 | 5h | Data workbench |
 | 5i | Order book, trade flow and account docks; panel toggles and Settings on `IconButton` |
@@ -431,6 +433,12 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - Symbol search: the scope is a segmented control and the five filters one row of labelled kit selects; rows show the market type as text instead of a pill on every line; the 名称 and 数据来源 columns have their own labels instead of borrowed ones; loading, empty and error states use the kit; the footer actions are ghost buttons.
 - Export is a kit `Dialog` on the overlay stack instead of a native `<dialog>`. Scope and format are segmented controls with the chosen option's description, the options kit checkboxes, the file name shown once, and the preview's four tiles one line.
 - `symbolSearch.css` 700 → 444 lines and `exportPanel.css` 517 → 169, with no hard-coded colours. The kit `Dialog` takes `onKeyDown`, and segments and tabs carry `data-value` for scripts and tests.
+
+**Phase 5f is done (branch `design/phase-5f-replay`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_5F.md`](../docs/FRONTEND_DESIGN_QA_PHASE_5F.md). The replay row was split in three (5f, 5f2, 5f3) when it started: the hub, storage and the session are each the size of an earlier sub-phase.
+
+- The replay hub lists runs as rows (name with a state badge, one line of details, equity, small actions) instead of cards with seven label/value tiles each; the counts strip that repeated the filters is gone; the state filter is a segmented control. A filter that matches nothing offers to clear it.
+- 新建训练 is a kit `Dialog` on the overlay stack: numbered sections, choices as segmented controls with the chosen description (no BAR / AGG_TRADE / RANDOM / MANUAL codes as labels), kit fields, UTC dates as `DateTimeInput` text, the advanced part a `Disclosure`, and a summary column. Deleting a run uses the kit `ConfirmDialog`.
+- The two hub stylesheets are merged into `trainingHub.css` (582 → 534 lines; it still carries the frame the market picker, storage and status pages use); the old rules that styled bare buttons and inputs no longer reach kit controls. Kit: `Dialog` renders in place without a DOM (like `OverlayLayer`), `Disclosure` can be controlled and take an `id`, `DateTimeInput` takes `earliest`. 12 unused keys are gone.
 
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 

@@ -13,6 +13,8 @@ export interface DateTimeInputProps extends Omit<InputProps, "type" | "value" | 
   seconds?: boolean;
   /** Visible zone label after the control; false only when the field's label already names the zone. */
   zoneLabel?: string | false;
+  /** Earliest accepted instant (epoch ms). Earlier text counts as unfinished: null is emitted and the text stays. */
+  earliest?: number;
 }
 
 /**
@@ -21,8 +23,9 @@ export interface DateTimeInputProps extends Omit<InputProps, "type" | "value" | 
  * the control and the calendar button opens the browser's picker. The zone is always shown.
  * While the text does not parse, `onChange` receives null and the typed text stays as it is.
  */
-export function DateTimeInput({ value, onChange, utc = true, seconds = false, zoneLabel, className, disabled, onBlur, ...rest }: DateTimeInputProps) {
+export function DateTimeInput({ value, onChange, utc = true, seconds = false, zoneLabel, earliest, className, disabled, onBlur, ...rest }: DateTimeInputProps) {
   const zone = zoneLabel ?? (utc ? "UTC" : Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const accept = (epochMs: number | null) => (epochMs !== null && earliest !== undefined && epochMs < earliest ? null : epochMs);
   const pickerRef = useRef<HTMLInputElement>(null);
   // Text the user is typing, kept until it parses and the field loses focus, or the value changes from outside.
   const [draft, setDraft] = useState<{ text: string; emitted: number | null } | null>(null);
@@ -48,7 +51,7 @@ export function DateTimeInput({ value, onChange, utc = true, seconds = false, zo
           disabled={disabled}
           value={text}
           onChange={(event) => {
-            const next = fromDateTimeText(event.target.value, utc);
+            const next = accept(fromDateTimeText(event.target.value, utc));
             setDraft({ text: event.target.value, emitted: next });
             onChange(next);
           }}
@@ -65,7 +68,7 @@ export function DateTimeInput({ value, onChange, utc = true, seconds = false, zo
           step={seconds ? 1 : 60} disabled={disabled} value={toDateTimeInputValue(value, utc, seconds)}
           onChange={(event) => {
             setDraft(null);
-            onChange(fromDateTimeInputValue(event.target.value, utc));
+            onChange(accept(fromDateTimeInputValue(event.target.value, utc)));
           }} />
       </span>
       {zone === false ? null : <span className="ui-datetime-zone">{zone}</span>}
