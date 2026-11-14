@@ -9,6 +9,7 @@ import subprocess
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--candidates-only', action='store_true', help='preserve evidence without claiming native success')
+parser.add_argument('--candidate', default='native-final')
 parser.add_argument('--ordinary-profile', default='ordinary-retry1')
 parser.add_argument('--witness-profile', default='witness')
 args = parser.parse_args()
@@ -37,7 +38,8 @@ def archive(source):
         payload=(json.dumps(data,indent=2)+'\n').encode()
     destination.write_bytes(gzip.compress(payload,mtime=0))
 
-native=out/'native-final'
+assert args.candidate.startswith('native-') and Path(args.candidate).name == args.candidate
+native=out/args.candidate
 resources=native/'CandleScope.app/Contents/Resources'
 manifest=json.loads((native/'package-source-manifest.json').read_text())
 for name,digest in manifest['files'].items():

@@ -1,12 +1,17 @@
 """Assemble a retained runtime/frontend with every current backend app file."""
+import argparse
 import hashlib
 import json
 from pathlib import Path
 import shutil
 import subprocess
 
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--candidate', default='native-final')
+args = parser.parse_args()
+assert args.candidate.startswith('native-') and Path(args.candidate).name == args.candidate
 root = Path(__file__).resolve().parents[3]
-out = root / 'output/source-window-recovery-129-20261113/native-final'
+out = root / 'output/source-window-recovery-129-20261113' / args.candidate
 out.mkdir(parents=True, exist_ok=True)
 source = Path('/Users/ryanliang/.codex/worktrees/realtime-forming-retention-129-20261113/CandleScope/output/realtime-forming-retention-129-20261113/native/CandleScope.app')
 app = out / 'CandleScope.app'

@@ -1,33 +1,34 @@
 {
-  "product_head": "cfabd84370cb5250bccdd420a90c6d82cf961dee",
-  "baseline": "2e39b7e17ecd0a8e7d7abeaf347c674a2588a2c7",
+  "product_code_head": "9ff174179",
+  "packaged_product_head": "10b0251b3",
   "complete_integration": {
-    "passed": 2319,
+    "passed": 2343,
     "warnings": 66,
-    "seconds": 473.68
+    "seconds": 340.39
   },
-  "focused_passed": 164,
   "new_contracts": {
-    "plain": 70,
+    "plain": 94,
     "pinned_fork": 2
   },
-  "cost": {
-    "paired_trials": 15,
-    "canonical_event_watermarks_equal": true,
-    "scope": "bounded cold recovery; subsequent historical correction CPU cost higher"
-  },
+  "cold_cost_pairs": 15,
+  "hot_cost_alternating_pairs": 6,
+  "canonical_event_watermarks_equal": true,
   "current_native": {
-    "clean_qualification": false,
-    "failed_profiles": [
-      "native-final/ordinary",
-      "native-final/ordinary-retry1"
+    "clean_qualification": true,
+    "status": "two fresh current-package bounded desktop profiles passed",
+    "ordinary_closed_comparisons": 4545,
+    "witness_closed_comparisons": 7674,
+    "owned_processes_per_exit": [
+      10,
+      10,
+      10,
+      10
     ],
-    "reason": "120s gate: source metadata pending, no source frames, empty charts; isolated transport probes slow/partial"
+    "observed_api_5xx": 0,
+    "source_window_durable_receipts": 0,
+    "scope": "desktop live/history/lifecycle; source-only branch separately verified by SQLite/default-manager/pinned-fork contracts"
   },
-  "candidate_native": {
-    "clean_qualification": false,
-    "reason": "bc9da6 concurrent migration HTTP500; candidates retained"
-  },
+  "cpu_qualification_complete": false,
   "issues_remain_open": [
     126,
     127,
