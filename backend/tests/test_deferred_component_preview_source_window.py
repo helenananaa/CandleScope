@@ -52,7 +52,9 @@ def test_recovered_source_prefix_coalesces_previews_and_preserves_close(
             state = agg.get_pipeline('7m').bar_state.get_active('binance', 'futures', 'BTCUSDT', 0)
             assert state._source_recovery is not None
             assert not klines_repo.query_klines('BTCUSDT', '1m', market_type='futures')
-            assert len(planes) <= 2
+            # Two acquisitions can occur during cold recursive preparation;
+            # the pending deadline captures one. Do not reacquire per update.
+            assert len(planes) <= 3
             if preserve_updates:
                 assert not state._preview_dirty
                 assert state.preview_computed_version == state.preview_input_version
