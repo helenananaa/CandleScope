@@ -5576,6 +5576,67 @@ def test_default_identity_aliases_join_one_active_warm_and_history_repair(explic
     asyncio.run(run())
 
 
+@pytest.mark.parametrize("max_concurrency", [1, 2])
+@pytest.mark.parametrize("pending_requests", [16, 64])
+def test_full_foreground_capacity_does_not_rescan_every_waiting_chunk(
+    monkeypatch, max_concurrency, pending_requests,
+) -> None:
+    """Blocked admissions have bounded queue work as chart demands arrive."""
+    async def run():
+        release = asyncio.Event()
+        calls = []
+
+        class Engine:
+            async def run(self, **kwargs):
+                calls.append(kwargs["symbol"])
+                if len(calls) <= max_concurrency:
+                    await release.wait()
+                return _RepairReport(status="completed")
+
+        dm = _DataManager()
+        coord = BackfillCoordinator(storage=_Storage(), bars_backfilled=dm.on_bars_backfilled,
+            emit_event=dm.event_bus.emit, engine=Engine(), loop=asyncio.get_running_loop(),
+            max_concurrency=max_concurrency, base_delay_seconds=0)
+        ids = []
+        inspections = 0
+        original = coord._scheduler._pop_ready
+
+        def pop_ready():
+            nonlocal inspections
+            inspections += 1
+            return original()
+
+        def submit(index):
+            request = _request(0, 0)
+            request.symbol = f"SYMBOL{index}USDT"
+            request.reason, request.priority = "initial_history", 10
+            return coord.request(request)
+
+        try:
+            ids.extend(submit(index) for index in range(max_concurrency))
+            await _wait_until(lambda: len(calls) == max_concurrency)
+            monkeypatch.setattr(coord._scheduler, "_pop_ready", pop_ready)
+            ids.extend(submit(index + max_concurrency) for index in range(pending_requests))
+            assert len(calls) == max_concurrency
+            assert coord.snapshot()["running_chunks"] == max_concurrency
+            assert coord.snapshot()["ready_chunks"] == pending_requests
+            # A linear decision-work budget permits different implementations;
+            # repeatedly cycling all N queued chunks after every enqueue does not.
+            assert inspections <= 2 * pending_requests, {
+                "queue_inspections": inspections, "pending": pending_requests,
+            }
+            release.set()
+            outcomes = await asyncio.wait_for(asyncio.gather(
+                *(coord.wait_for_request(identifier) for identifier in ids)), 3)
+            assert all(outcome.status == "completed" for outcome in outcomes)
+            assert len(calls) == max_concurrency + pending_requests
+        finally:
+            release.set()
+            await coord.shutdown()
+
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize("changed", [
     {"provider_id": "another-provider"}, {"venue": "another-venue"},
     {"asset_class": "equity"}, {"series_variant": "synthetic"},
