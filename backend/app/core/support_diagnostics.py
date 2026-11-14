@@ -3,6 +3,7 @@ from collections import deque
 from datetime import datetime, timezone
 import logging
 from pathlib import Path
+import sys
 import time
 
 from fastapi import APIRouter, Query, Request, Response
@@ -56,14 +57,37 @@ class SupportLogHandler(logging.Handler):
             self.release()
 
 
+class LocalWarningHandler(logging.StreamHandler):
+    """Warnings and errors on the process's current stderr, with their text.
+
+    This is what ``logging.lastResort`` printed before the root logger had a
+    handler. The desktop shell appends stderr to the local sidecar log; the
+    support export above still carries metadata only.
+    """
+
+    def __init__(self):
+        logging.Handler.__init__(self, logging.WARNING)
+        self.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+
+    @property
+    def stream(self):
+        return sys.stderr
+
+
 support_logs = SupportLogHandler()
+local_warnings = LocalWarningHandler()
 router = APIRouter(prefix="/api/v1/support", tags=["system"])
 
 
 def install_support_logging() -> None:
     root = logging.getLogger()
-    if support_logs not in root.handlers:
-        root.addHandler(support_logs)
+    if support_logs in root.handlers:
+        return
+    # Any root handler turns logging.lastResort off. In a process that
+    # configured no logging, keep the local output it provided.
+    if not root.handlers:
+        root.addHandler(local_warnings)
+    root.addHandler(support_logs)
 
 
 @router.get("/diagnostics")
