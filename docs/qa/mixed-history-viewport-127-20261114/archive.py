@@ -11,6 +11,7 @@ qa = Path(__file__).resolve().parent
 root = qa.parents[2]
 output = root / 'output/mixed-history-viewport-127-20261114'
 prior = Path('/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114')
+baseline = Path('/Users/ryanliang/.codex/worktrees/composed-cover-baseline-127-20261114/CandleScope')
 index, redactions = [], []
 
 def redact(value, location):
@@ -40,7 +41,8 @@ def archive(source, label):
     index.append(dict(source=str(source), archive=str(destination.relative_to(qa)),
         original_sha256=original, archived_payload_sha256=hashlib.sha256(payload).hexdigest(), bytes=len(payload)))
 
-for base, label in ((prior, 'planning-development'), (output, 'viewport-development')):
+for base, label in ((prior, 'planning-development'), (output, 'viewport-development'),
+        (baseline / 'output/composed-cover-baseline-127-20261114', 'cover-baseline')):
     for source in sorted(base.iterdir()):
         if not source.is_file() or source.suffix not in {'.log', '.xml', '.jsonl'} or source.name == 'archive.log':
             continue
@@ -55,6 +57,9 @@ for base, label in ((prior, 'planning-development'), (output, 'viewport-developm
         archive(source, label + '/' + source.name)
     for source in sorted(base.glob('plan-*/results.json')):
         archive(source, label + '/' + str(source.relative_to(base)))
+    for source in sorted(base.glob('query-*/results.json')):
+        archive(source, label + '/' + str(source.relative_to(base)))
+archive(baseline / 'backend/tests/test_mixed_backfill_composed_admission.py', 'cover-baseline/test-source.py')
 
 native = []
 for run in sorted(output.glob('native-*')):

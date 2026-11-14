@@ -1,5 +1,5 @@
 {
-  "archive_head": "9cfd903a711bcf9e48224dc2d1301f6c7168512b",
+  "archive_head": "02b49b89970d0c894d6df7af9af654ccc9e680c0",
   "native": [
     {
       "run": "native-cold",
@@ -7,6 +7,13 @@
       "source": "d78c7d46a3186c045fbbe89e417da8f40a018d4d",
       "diagnostic": false,
       "failure": "Error: Timed out waiting for acceptance state\n    at Module.until (file:///Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/docs/qa/backend-batch1-20261101/driver.mjs:29:9)\n    at async verify (file:///Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/docs/qa/mixed-history-viewport-127-20261114/native.mjs:168:5)\n    at async file:///Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/docs/qa/mixed-history-viewport-127-20261114/native.mjs:324:17"
+    },
+    {
+      "run": "native-cover-cold",
+      "passed": false,
+      "source": "47ce5e5eaa55fb03f72734a98ecf778d2b4ae496",
+      "diagnostic": false,
+      "failure": "Error: Timed out waiting for acceptance state\n    at Module.until (file:///Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/docs/qa/backend-batch1-20261101/driver.mjs:29:9)\n    at async verify (file:///Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/docs/qa/mixed-history-viewport-127-20261114/native.mjs:174:5)\n    at async file:///Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/docs/qa/mixed-history-viewport-127-20261114/native.mjs:330:17"
     },
     {
       "run": "native-diagnostic",
@@ -28,9 +35,44 @@
       "source": "9cfd903a711bcf9e48224dc2d1301f6c7168512b",
       "diagnostic": false,
       "failure": "Error: Timed out waiting for acceptance state\n    at Module.until (file:///Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/docs/qa/backend-batch1-20261101/driver.mjs:29:9)\n    at async verify (file:///Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/docs/qa/mixed-history-viewport-127-20261114/native.mjs:168:5)\n    at async file:///Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/docs/qa/mixed-history-viewport-127-20261114/native.mjs:324:17"
+    },
+    {
+      "run": "native-final-cold",
+      "passed": false,
+      "source": "4e10784948b8b73404b18947bc3b31ce177142fa",
+      "diagnostic": false,
+      "failure": "Error: Timed out waiting for acceptance state\n    at Module.until (file:///Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/docs/qa/backend-batch1-20261101/driver.mjs:29:9)\n    at runNextTicks (node:internal/process/task_queues:65:5)\n    at process.processTimers (node:internal/timers:615:9)\n    at async verify (file:///Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/docs/qa/mixed-history-viewport-127-20261114/native.mjs:174:5)\n    at async file:///Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/docs/qa/mixed-history-viewport-127-20261114/native.mjs:330:17"
+    },
+    {
+      "run": "native-single-cold",
+      "passed": false,
+      "source": "9cfd903a711bcf9e48224dc2d1301f6c7168512b",
+      "diagnostic": null,
+      "failure": "Error: Timed out waiting for acceptance state\n    at Module.until (file:///Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/docs/qa/backend-batch1-20261101/driver.mjs:29:9)\n    at async file:///Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/docs/qa/mixed-history-viewport-127-20261114/native-single.mjs:60:3"
     }
   ],
   "tests": {
+    "all-read-admission-final": {
+      "tests": 115.0,
+      "failures": 0.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 16.451
+    },
+    "backend-current-full": {
+      "tests": 2448.0,
+      "failures": 1.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 370.051
+    },
+    "backend-dispatch-full": {
+      "tests": 2425.0,
+      "failures": 0.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 512.839
+    },
     "backend-full": {
       "tests": 2423.0,
       "failures": 0.0,
@@ -66,6 +108,13 @@
       "skipped": 0.0,
       "time": 18.36
     },
+    "cover-demand-final": {
+      "tests": 36.0,
+      "failures": 0.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 11.628
+    },
     "dispatch-baseline": {
       "tests": 1.0,
       "failures": 1.0,
@@ -86,6 +135,118 @@
       "errors": 0.0,
       "skipped": 0.0,
       "time": 12.57
+    },
+    "latest-stream-candidate": {
+      "tests": 4.0,
+      "failures": 0.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 4.059
+    },
+    "local-cover-all-modes": {
+      "tests": 102.0,
+      "failures": 0.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 32.742
+    },
+    "local-cover-and-admission": {
+      "tests": 142.0,
+      "failures": 0.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 20.098
+    },
+    "local-cover-http-counts": {
+      "tests": 2.0,
+      "failures": 1.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 4.125
+    },
+    "local-cover-http-fixture": {
+      "tests": 2.0,
+      "failures": 0.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 3.825
+    },
+    "local-cover-http-outlet": {
+      "tests": 2.0,
+      "failures": 1.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 4.088
+    },
+    "local-cover-http-query": {
+      "tests": 2.0,
+      "failures": 1.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 3.879
+    },
+    "local-cover-http-trace": {
+      "tests": 2.0,
+      "failures": 1.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 3.813
+    },
+    "local-cover-initial": {
+      "tests": 59.0,
+      "failures": 4.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 15.887
+    },
+    "local-cover-resident": {
+      "tests": 151.0,
+      "failures": 0.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 23.201
+    },
+    "local-cover-shared": {
+      "tests": 1.0,
+      "failures": 0.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 4.046
+    },
+    "owner-fairness-baseline": {
+      "tests": 2.0,
+      "failures": 2.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 4.166
+    },
+    "owner-fairness-final": {
+      "tests": 157.0,
+      "failures": 0.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 12.556
+    },
+    "owner-fairness-regressions": {
+      "tests": 157.0,
+      "failures": 1.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 13.218
+    },
+    "read-admission-baseline": {
+      "tests": 4.0,
+      "failures": 4.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 4.127
+    },
+    "stream-read-regressions": {
+      "tests": 136.0,
+      "failures": 0.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 14.832
     }
   }
 }

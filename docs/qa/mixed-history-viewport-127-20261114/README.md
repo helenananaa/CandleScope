@@ -71,3 +71,72 @@ explicitly loaded failure observation, not a paired/native performance result.
 One later read-only repeat of a failed latest URL returned 200 before shutdown;
 it does not explain or erase the original 500 responses. Error-body capture and
 an independently loaded follow-up are required before product qualification.
+
+Runtime `4e1078494` adds a conservative resident/inflight-input existence query
+on the original B130 owner; canonical counts may prune an impossible local
+cover only when this shared input path has no relevant retained work. Ordinary
+and explicit mixed reads use the same optimization. Counts never certify
+finality, field coverage, actual grid tiling or a write. The real SQLite/shared
+reader regression preserves a resident coarse-summary cache hit.
+
+The 23 HTTP500 responses in the `47ce5e5ea` four-chart run were captured as
+`prerequisite stream futures:BTCUSDT@1m is error`. The new typed lifecycle failure
+still rolls back the start's leases and intents. The two latest-read endpoints
+can then read only bounded existing targets and report retryable pending;
+repair=wait cannot turn the failed live prerequisite into another historical
+repair. A requested revision floor remains enforced. Unexpected runtime errors
+remain errors. The shared target-only method now permits an omitted time range
+while still requiring a finite limit; no base read is introduced.
+
+Current-source verification: 136 stream/read/GC checks passed, including default
+SQLite, empty/stored targets, both latest routes, revision floor and unexpected
+error behavior. Original source fails all four initial latest-start regressions.
+The complete integration collected 2,448 tests: 2,447 passed, one older empty
+work-budget fixture missed its injection point after the new negative preflight.
+The fixture now supplies real cross-boundary daily rows and asserts entry into
+the budget fault; the original no-repair assertions remain. Its complete demand/
+composed files then passed 36 checks. This is a preserved failed full run, not a
+claim that a later complete CI run has passed. Architecture checks passed.
+
+Three alternating fresh-process pairs (`query-*-2/3/4`) use byte-matching copies
+of the retained single-chart public database. Provider declaration bootstrap is
+outside the query timer; no other local test runner was active. All six return
+the same 19 targets and all nine raw fields/source/finality, equal their actual
+materialized read, keep the source database bytes/revision unchanged and write
+zero targets. Baseline CPU is 66.573/65.570/67.743ms; candidate is
+55.811/57.848/57.432ms. This one small retained-data case does not establish
+product latency percentiles or total CPU/RSS/GC improvement. Initial exploratory
+trials 1 ran under a concurrent full integration and remain separately retained.
+
+The single-chart `9cfd903a7` run with no other local test runner also missed its
+180-second gate: internal bar count 20, marketReady false and EMA point counts
+1/0. Its directly inspected screenshot still shows a loading overlay; this is
+not visible-chart or indicator-warmup qualification. The final health snapshot
+retains 70 recent kline attempts, all HTTP200, and local admission deferrals;
+the UI's rate-limit count is not proof of upstream HTTP429. Nineteen background
+chunks had completed. Four-chart `47ce5e5ea` ended at 222/148/118/6, only 89m
+ready; it had a 33-second focused test run during part of the observation and
+is not a strict isolated performance sample. All failures and exits remain.
+A final ordinary native observation of `4e1078494` is tracked independently.
+
+Final assembled-native observation: runtime `4e1078494`, frontend dist unchanged
+from the checked build, no concurrent local test/benchmark runner. The original
+first viewport gate failed at 22/51/196/3 internal bars; all four marketReady
+flags remained false and no chart is qualified. No observed API response was
+HTTP5xx. This does not itself prove that every controlled stream-deferral branch
+was exercised live. The attempted later JavaScript indicator probe, ten-minute
+soak, hide/restore, switch/recreation and restart sequence was not reached.
+Full process exit, source/ASAR hashes and after-run strict signature are retained.
+The original first-ready gate was not relaxed. #126/#127/#129 remain open;
+#130 remains closed. Next work retains the cold batching, current large-bucket
+initialization, partial visibility, full resource/correctness and original issue
+acceptance obligations. A passing narrow read/dispatch fix is not joint closure.
+
+The last ordinary-history verification guard is tested after the assembled
+`4e1078494` native observation: all read-admission/contract/materialized tests
+passed 115 checks. Both ordinary and explicitly composed history/range reads now
+require a stable admitted read before verification can submit new repair work.
+Real source gaps still use the original demand owner. These final guard lines
+were not overlaid into that earlier native app and carry component/API evidence
+only; final PR CI must run the delivered source. No passing full product/native
+qualification is claimed for this batch.

@@ -122,7 +122,13 @@ async function launch() {
       socket.on('close',()=>{row.closedAt=Date.now();});
     });
     q.s.page.on('requestfailed', request => q.s.traffic.failures.push({url:request.url(),error:request.failure()?.errorText}));
-    q.s.page.on('response', response => { if(response.url().includes('/api/')) q.s.traffic.responses.push({url:response.url(),status:response.status()}); });
+    q.s.page.on('response', response => {
+      if(response.url().includes('/api/')) q.s.traffic.responses.push({url:response.url(),status:response.status()});
+      if(response.status()>=400 && response.url().includes('/api/v1/klines/')) {
+        response.text().then(body=>fs.appendFile(path.join(q.s.root,'http-errors.jsonl'),JSON.stringify({
+          at:new Date().toISOString(),url:response.url(),status:response.status(),body:body.slice(0,16384)})+'\n')).catch(()=>{});
+      }
+    });
     q.s.page.on('pageerror' , error => q.s.receipt.errors.push({ message: error.message }));
     await q.s.page.waitForFunction(() => Boolean(window.candlescopeDesktop), null, { timeout: 30_000 });
     q.s.identity = await q.s.app.evaluate(({ app }) => ({ packaged: app.isPackaged,
