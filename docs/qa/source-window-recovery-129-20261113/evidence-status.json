@@ -1,13 +1,13 @@
 {
-  "product_code_head": "9ff174179",
-  "packaged_product_head": "10b0251b3",
+  "product_code_head": "f3c3d5ff407ceb8c19243b3f56167536175f37ec",
+  "packaged_product_head": "f3c3d5ff407ceb8c19243b3f56167536175f37ec",
   "complete_integration": {
-    "passed": 2343,
+    "passed": 2347,
     "warnings": 66,
-    "seconds": 340.39
+    "seconds": 359.15
   },
   "new_contracts": {
-    "plain": 94,
+    "plain": 98,
     "pinned_fork": 2
   },
   "cold_cost_pairs": 15,
@@ -16,8 +16,8 @@
   "current_native": {
     "clean_qualification": true,
     "status": "two fresh current-package bounded desktop profiles passed",
-    "ordinary_closed_comparisons": 4545,
-    "witness_closed_comparisons": 7674,
+    "ordinary_closed_comparisons": 5545,
+    "witness_closed_comparisons": 5801,
     "owned_processes_per_exit": [
       10,
       10,
@@ -26,12 +26,21 @@
     ],
     "observed_api_5xx": 0,
     "source_window_durable_receipts": 0,
-    "scope": "desktop live/history/lifecycle; source-only branch separately verified by SQLite/default-manager/pinned-fork contracts"
+    "scope": "desktop live/history/lifecycle; source-only branch separately verified by SQLite/default-manager/pinned-fork contracts",
+    "candidate": "native-close",
+    "ordinary_profile": "ordinary-control1",
+    "witness_profile": "witness"
   },
   "cpu_qualification_complete": false,
   "issues_remain_open": [
     126,
     127,
     129
-  ]
+  ],
+  "cost_measured_code_head": "9ff174179",
+  "first_forming_close_regression": {
+    "baseline": "410da876b",
+    "actual_consumer_close_failed": 4,
+    "current_passed": 4
+  }
 }

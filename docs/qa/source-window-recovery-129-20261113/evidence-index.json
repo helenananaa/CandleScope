@@ -75,6 +75,26 @@
     "bytes": 21308,
     "sha256": "8d5d0ae7d4012fa1b7a40d43269760159d25fa2355d321188dd358e1c5b2170c"
   },
+  "evidence/closure-architecture.log.gz": {
+    "bytes": 121,
+    "sha256": "2821c011ea1599274782b3a127db697454da970e1da989c56c4d812037393b16"
+  },
+  "evidence/closure-full-integration.log.gz": {
+    "bytes": 1037,
+    "sha256": "e1e59c93ec943c3e71c5ca7d21c4f8f13c0cfa631f5e90fe49b642b6a25983fb"
+  },
+  "evidence/closure-full-integration.xml.gz": {
+    "bytes": 46545,
+    "sha256": "352d5084de4e734125b9c95cc36e0a0810f5c607b3a2d93f1f3e38986058251f"
+  },
+  "evidence/closure-ruff.log.gz": {
+    "bytes": 362,
+    "sha256": "5ed023c1a869510b1522ac31dc5e9323736bd88ecd36e6923a4074a3f77d9388"
+  },
+  "evidence/closure-undefined.log.gz": {
+    "bytes": 122,
+    "sha256": "b21b2f8fe035def3cda45743317c6de109cae12169ac02b18379171714b345cc"
+  },
   "evidence/cold-base-refresh.json.gz": {
     "bytes": 51147,
     "sha256": "446bf8e8e6073a6ed81e0df70c4aff4a7defc8a7831765f42543ff3350e15fa4"
@@ -202,6 +222,34 @@
   "evidence/fences-initial.xml.gz": {
     "bytes": 2723,
     "sha256": "7312c7d9aaecceef144e2dfeeaef4a6d199ba9b9a7f556024b7ec3c4d248a114"
+  },
+  "evidence/first-forming-close-baseline-manifest.json.gz": {
+    "bytes": 274,
+    "sha256": "26c38672cd04eb24f3ce9856a5b507ef01fe061a6bbe06fe96d150b4fb0222a3"
+  },
+  "evidence/first-forming-close-fixed.log.gz": {
+    "bytes": 182,
+    "sha256": "869c10081f2e4deaf375c0c61562deb94b4173d425a25f4c273fb870c2aa2fe1"
+  },
+  "evidence/first-forming-close-fixed.xml.gz": {
+    "bytes": 308,
+    "sha256": "e34820834dd33002f0c76817715a9f220078e988985fb5abd401bb6417126f33"
+  },
+  "evidence/first-forming-close-original-consumer.log.gz": {
+    "bytes": 1945,
+    "sha256": "baca3025cf31e93ac5a9af39682b7dca0661cc584728adfc2208925ea70c6ca5"
+  },
+  "evidence/first-forming-close-original-consumer.xml.gz": {
+    "bytes": 1872,
+    "sha256": "f68e529c17fe28494dde47d71251194d66d9f903fbd2257afd09e104d1d2ef35"
+  },
+  "evidence/first-forming-close-original.log.gz": {
+    "bytes": 2003,
+    "sha256": "fd0e3bd393ea15a299a5d7c96ceb11a3d43527bcea047651dfb69a63eb6880bf"
+  },
+  "evidence/first-forming-close-original.xml.gz": {
+    "bytes": 1932,
+    "sha256": "d04f64464831c1e1e4d2dffdd268bedf6c620e69f249a53cd5fbc8f00aa0af8b"
   },
   "evidence/forming-barrier-baseline.log.gz": {
     "bytes": 1858,
@@ -507,6 +555,94 @@
     "bytes": 3808,
     "sha256": "ae39647f662ed3ee28145473a63f703d791222978eb2fa16e5a398a99ea4fbe3"
   },
+  "evidence/native-close/branch-scope-audit.json.gz": {
+    "bytes": 206,
+    "sha256": "f6a838c74d06f3ede922aa2cef924fcd25b71dfa54cd202bafdc3275d080e129"
+  },
+  "evidence/native-close/ordinary/acceptance.json.gz": {
+    "bytes": 26665,
+    "sha256": "e9bcd72358919e686f2e9133d8855a1746ccf7084f8a34074138f818bffebf68"
+  },
+  "evidence/native-close/ordinary/failure.png": {
+    "bytes": 321716,
+    "sha256": "fa8b3f682843ccf6606df325f9f963d6119934853fc9c6fc45f473605c307167"
+  },
+  "evidence/native-close/ordinary/process.log.gz": {
+    "bytes": 250,
+    "sha256": "26770a2c769b92042a72e0d719d6abb4e72923b8eb500a75adc012ea3d955142"
+  },
+  "evidence/native-close/ordinary/profile/logs/backend-sidecar.log.gz": {
+    "bytes": 2167,
+    "sha256": "2c162f1c8e94e95425c702a97ed5fa8d21e52d278449ba978c078f8051b3af11"
+  },
+  "evidence/native-close/ordinary/traffic.json.gz": {
+    "bytes": 1154,
+    "sha256": "97f32f3e6f207db0962a33bae7ed621d95285582714130618d85950cea9b52f2"
+  },
+  "evidence/native-close/ordinary-control1/acceptance.json.gz": {
+    "bytes": 51385,
+    "sha256": "026ecfce0fa9e706c75fd51ba23f791db1758ab97185f12baf5deaf61b2aa4d4"
+  },
+  "evidence/native-close/ordinary-control1/process.log.gz": {
+    "bytes": 290,
+    "sha256": "03c11426005d48052c796d7776971ee16052bfd9c08c9f29434c63c3e86e8123"
+  },
+  "evidence/native-close/ordinary-control1/profile/logs/backend-sidecar.log.gz": {
+    "bytes": 4944,
+    "sha256": "6519117c192ab9d96b00979fed108331fbd664224137e03203d2394d3a53e4ad"
+  },
+  "evidence/native-close/ordinary-control1/traffic.json.gz": {
+    "bytes": 2963,
+    "sha256": "32c58a268bee670048dc0f5f99bc4979eb1f25983832443feaf1262f11f9905c"
+  },
+  "evidence/native-close/package-after.json.gz": {
+    "bytes": 112,
+    "sha256": "1423e381d2669de937eb16e506cd1e5599fcdb99c479b79972fd0b9c8313c909"
+  },
+  "evidence/native-close/package-source-manifest.json.gz": {
+    "bytes": 47814,
+    "sha256": "f495361341d4295accdcad5bbcc5ddf6ad4a8cf9ab37e1d4c5b96b9740fff027"
+  },
+  "evidence/native-close/sign-after.log.gz": {
+    "bytes": 20,
+    "sha256": "f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837"
+  },
+  "evidence/native-close/sign-before.log.gz": {
+    "bytes": 20,
+    "sha256": "f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837"
+  },
+  "evidence/native-close/sign.log.gz": {
+    "bytes": 142,
+    "sha256": "8a8b7fcb443c3b269b8f2bf673727f4718db09a5c6ad67a37a348cfd0f601290"
+  },
+  "evidence/native-close/witness/acceptance.json.gz": {
+    "bytes": 98539,
+    "sha256": "f0084c89e7e180d78cd88ad0780852ecff0d5a5995a1b2f24e420c5e581ab34b"
+  },
+  "evidence/native-close/witness/process.log.gz": {
+    "bytes": 290,
+    "sha256": "24eed408d4d7e8a652395062e2b7a3f7b09d67283b7ed72c6ceffdfce563b9a9"
+  },
+  "evidence/native-close/witness/profile/logs/backend-sidecar.log.gz": {
+    "bytes": 6189,
+    "sha256": "9fb91c6aecc7e85dd108f9807c124b883624c6f48b0c49e5af4556a95c4da372"
+  },
+  "evidence/native-close/witness/traffic.json.gz": {
+    "bytes": 4104,
+    "sha256": "8b147ee8455407d2d4f72f5db1ad9fbbadad6b386185df4a0ec4c95d71b020e6"
+  },
+  "evidence/native-close-ordinary-control1.log.gz": {
+    "bytes": 36,
+    "sha256": "aea47a42ff64560027bd8fd3716254360336f09e0443ef8d27d6c1c8cc4baa23"
+  },
+  "evidence/native-close-ordinary.log.gz": {
+    "bytes": 254,
+    "sha256": "1fb1a4f574cc8b26063fe633de54a7004462e0ef087e2019f975f4134303ba16"
+  },
+  "evidence/native-close-witness.log.gz": {
+    "bytes": 36,
+    "sha256": "aea47a42ff64560027bd8fd3716254360336f09e0443ef8d27d6c1c8cc4baa23"
+  },
   "evidence/native-current/branch-scope-audit.json.gz": {
     "bytes": 110,
     "sha256": "0291a60081f3aa09e1d3e3c2dc991cb9e013de555d6084dd538f9b2105e50063"
@@ -726,6 +862,10 @@
   "evidence/permission-upgrade-fixed.xml.gz": {
     "bytes": 4201,
     "sha256": "9c0f8f95c98505aa0385f9dbf04d2a70bdca205b8704e1f2085c6c280814fe22"
+  },
+  "evidence/prepare-native-close.log.gz": {
+    "bytes": 70,
+    "sha256": "beb328ea9317159a57662b4e7b4d07d34ee1d0402c312d273cd13f490b3c1c77"
   },
   "evidence/prepare-native-current.log.gz": {
     "bytes": 70,

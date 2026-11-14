@@ -66,6 +66,13 @@ q.s.receipt.previewConfiguration = { throttleMs: Number(process.env.BAR_AGG_UPDA
 q.s.receipt.closedRetentionWitness = process.env.CANDLESCOPE_CLOSED_RETENTION_WITNESS === 'true';
 const session = interval => ({ exchange: 'okx', marketType: 'spot', symbol: 'BTC-USDT', interval });
 const charts = intervals => intervals.map(interval => ({ session: session(interval), indicators: [] }));
+async function configure(charts, layout) {
+  const configured = await q.configure(charts, layout);
+  await q.record('workspace-configure', configured);
+  assert.ok(['ready','applied'].includes(configured.result.state), JSON.stringify(configured.result));
+  assert.deepEqual(configured.snapshot.cells.map(cell => cell.session), charts.map(chart => chart.session));
+  return configured;
+}
 let running = false;
 
 async function api(route) {
@@ -240,7 +247,7 @@ async function witnessClosed(anchors) {
   if (!q.s.receipt.closedRetentionWitness) return;
   const began = Date.now();
   const floor = Math.floor(began/120000)*120000;
-  await q.configure(charts(['2m','7m']), 'split-vertical');
+  await configure(charts(['2m','7m']), 'split-vertical');
   await q.until(async () => {
     const view = await q.inspect();
     return view.cells.every(cell => cell.runtime.marketReady && !cell.runtime.loading && cell.runtime.barCount >= 128);
@@ -271,27 +278,27 @@ async function witnessClosed(anchors) {
   await q.record('closed-retention-real-timer', { began,selected,bar,stored,diagnostics,
     scope:'real source close and original timer; read-only diagnostics plus closed chart/canonical comparison; no injected data or maintenance calls' });
   await q.screenshot('closed-witness');
-  await q.configure(charts(['45m','90m']), 'split-vertical');
+  await configure(charts(['45m','90m']), 'split-vertical');
   await waitForLiveFrames('after-closed-witness');
   await q.record('after-closed-witness',await verify(['45m','90m'],anchors));
 }
 
 try {
   await launch();
-  await q.configure(charts(['45m', '90m']), 'split-vertical');
+  await configure(charts(['45m', '90m']), 'split-vertical');
   await waitForLiveFrames('initial');
   const initial = await verify(['45m', '90m']);
   await q.record('initial-derived-targets', initial);
   await witnessPreview('initial');
   await q.screenshot('initial');
-  await q.configure(charts(['1m', '5m']), 'split-vertical');
+  await configure(charts(['1m', '5m']), 'split-vertical');
   const native = await verify(['1m', '5m']);
   const streamHealth = await api('/api/v1/settings/storage/health');
   const fetcher = streamHealth.backfill_engine?.fetcher;
   assert.equal(fetcher?.last_history_request?.payload_kind, 'receipt', JSON.stringify(fetcher));
   await q.record('native-stream-receipt-path', { ...native, streamHealth });
   await q.record('released-derived-targets', await api('/api/v1/settings/cache-diagnostics'));
-  await q.configure(charts(['45m', '90m']), 'split-vertical');
+  await configure(charts(['45m', '90m']), 'split-vertical');
   const anchors = initial.values.map(value => value.anchor);
   await waitForLiveFrames('recreated');
   const reopened = await verify(['45m', '90m'], anchors);

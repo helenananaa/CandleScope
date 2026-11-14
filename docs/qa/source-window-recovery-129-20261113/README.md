@@ -1,5 +1,8 @@
 # SourceJournal-only cold recovery and permissions
 
+Latest product: **`f3c3d5ff407ceb8c19243b3f56167536175f37ec`**. Complete integration: **2347 passed / 66 warnings, 359.15s**. New contracts versus #397: **98 plain + two pinned fork**. Current package `native-close` passes ordinary-control1 / witness with **5545 / 5801** closed nine-field comparisons, all four **10/10** process exits and empty observed API-5xx audits. All 1005 backend file hashes, app.asar and post-run strict/deep signature match. The later QA commit changes no runtime application files. Earlier sections below retain candidate history; their counts/heads are not current qualification.
+
+
 Product baseline: `2e39b7e17ecd0a8e7d7abeaf347c674a2588a2c7` (#397). Product head is recorded in the final package/source manifests. This batch implements part of R129 window reconstruction and consumes the existing D126 permissions/budget/writer and H127 lifecycle; #126/#127/#129 remain open under their original acceptance criteria.
 
 ## Behavior and ownership
@@ -83,7 +86,7 @@ A separate actual SQLite regression found that stronger same-value REST permissi
 
 The final source-only numeric checks span 129/2048 rows, including zero trades and fractional fields over multiple magnitudes. All nine fields agree with independent first/last/extrema and math.fsum references under the K130 precision contract (relative 1e-12 / absolute 1e-9 for additive floats). These checks do not claim bit-for-bit equivalence for arbitrary floating reductions.
 
-## Current immutable product validation
+## Pre-closure candidate validation
 
 Runtime application files are frozen at `9ff174179` and the packaged product/test head is `10b0251b3`. The complete backend suite passed **2343 tests / 66 warnings** in **340.39s**. There are **94 new plain contracts and two pinned-fork contracts** versus #397. Current package contains all **1005** source-matched backend app files with strict pre-run signature verification. Two fresh current-package profiles in `native-current` now pass the bounded desktop workflow; prior candidates remain retained separately.
 
@@ -91,7 +94,7 @@ The permission upgrade case is verified at the actual durable enqueue/commit bou
 
 Fresh cold-recovery comparison again matches all 15 paired canonical/event/watermark hashes. At 10007 rows, old/new cold CPU medians are **1852.247/1198.206ms**, next correction **132.090/1011.085ms**, retained state **19422747/6639 bytes**, durable payload **929611/1156 bytes**. At 2048 rows: cold **336.142/267.321ms**, next correction **44.105/288.918ms**, state **3998989/6638 bytes**. The two-row case costs **23.254/55.285ms** cold and **22.967/52.665ms** next correction. These costs and the approximately 30% total hot-input CPU premium are explicit tradeoffs, not a claim of complete #129 CPU/RSS acceptance.
 
-## Current package qualification and delivery
+## Pre-closure package qualification
 
 Both current macOS arm64 profiles passed with real OKX market data and the original 500-bar deep-history threshold. Ordinary: **4545** closed chart/canonical nine-field comparisons. Real-close/timer witness: **7674** comparisons, including an actual closed 2m bar and the original timer compacting its two components. Both profiles cover 45m/90m deep history, 1m/5m switching, release/recreation, save/quit/restart, and dirty-to-computed/published preview observations. All seven current screenshots were directly inspected. Four exits each confirm all **10** owned processes gone. Both observed API-5xx audits are empty, and neither backend-sidecar log contains ERROR, WARNING or Traceback.
 
@@ -100,3 +103,15 @@ Scope audit queries the real durable delivery table read-only: ordinary has two 
 After both runs, all **1005** backend app hashes still match checkout and package, app.asar matches its retained manifest, and strict/deep signature verification passes. This is an assembled backend qualification using the retained frontend/runtime/plugins, not a fresh release build. Reproduce archive with `archive.py --candidate native-current --ordinary-profile ordinary --witness-profile witness`; failed candidates, original profiles/apps/databases and old-head CI remain preserved. CI records named `ci-702df-*` belong to the previous remote head and do not qualify the later product.
 
 The original native gate and repeated whole-prefix forming scan have been addressed. Current source checks remain more expensive than #397: approximately 30% total hot-input CPU premium in this controlled sample, and historical corrections refold. This batch can be reviewed as bounded/correct source-only reconstruction with explicit costs; **#126/#127/#129 remain open**, including full resource/CPU and original cross-path acceptance. Exact delivered-head/base CI must pass before merging.
+
+## First-forming reconstruction finality correction
+
+A later independent default-manager scenario found a real defect in product 410da876b: selected closed siblings inherited is_closed=False from the first forming trigger while folding. Values/coverage looked complete, but the later actual final input could not authoritatively close the target. The final fold explicitly preserves selected siblings as closed; the incoming leaf retains its own finality. No source version/deletion permission, budget, writer or publication order is changed.
+
+Four contracts span 6/129 closed source-only rows and realtime/correction closes. They assert closed historical summary metadata, a genuinely forming active tail, absent native canonical rows, later authoritative close, exact canonical values and exactly one consumer close with no amendment. A complete git-archive backend at 410da876b fails all four at the actual final close even after removing the internal-summary assertion; the final product passes all four. Original/new logs, XML and baseline source/test hashes are archived. The refreshed complete 2347-test integration, architecture and undefined-name checks pass. A missing ruff module in the inherited venv is retained as a tooling failure; the existing offline uvx ruff succeeds.
+
+Both fresh final-product native profiles pass the same bounded real OKX deep-history/recreation/save/restart flow. Ordinary-control1 compares 5545 closed rows; witness compares 5801, including actual 2m close and original timer compaction. Both observe dirty-to-computed/published previews at initial/recreated/restarted stages. Four exits each drain ten owned processes. Both sidecar logs have no ERROR/WARNING/Traceback lines and both API-5xx audits are empty. Seven current screenshots were directly inspected. Real durable delivery counts are five/five; source_window proof count remains **zero** in both, so the dedicated SQLite/default-manager/pinned-fork tests, not these desktop flows, qualify source-only reconstruction.
+
+The first final-product ordinary attempt is retained as failed: the visible workspace remained default Binance single-chart and the required OKX configuration was absent, while actual Binance frames continued. Its old helper discarded the configuration result, so the reason for that absent configuration is unproven. The driver now records and checks the original command’s terminal state and exact configured sessions before waiting for frames. No product behavior, source data, gate, timeout or threshold was relaxed. A separate untouched fresh profile then passed. Previous successful native-current profiles are also retained and are explicitly earlier-product evidence.
+
+Reproduce final archive: `archive.py --candidate native-close --ordinary-profile ordinary-control1 --witness-profile witness`. Cost tables above refer to their explicit measured revisions: the finality correction is not newly benchmarked as an overall performance win. The known approximately 30% total hot-input premium, expensive historical refolds and source-only preview coalescing gap remain part of #129’s original unfinished CPU/resource/preview qualification. #126/#127/#129 stay open. Final delivered-head/base CI is still mandatory before merging.
