@@ -205,7 +205,10 @@ class DataManagerConfig:
     memory_budget_bytes: int = 256 * 1024 * 1024
     memory_owner_budgets: dict[str, int] = field(default_factory=lambda: {
         "bar-cache": 128 * 1024 * 1024, "realtime-state": 128 * 1024 * 1024,
-        "event-delivery": 32 * 1024 * 1024, "history-query": 64 * 1024 * 1024,
+        # History reads reserve worst-case ceilings, not what they use: about
+        # 20 MiB for each custom-interval read, and about 125 MiB for one read
+        # that builds a visible range from base bars. A window has four cells.
+        "event-delivery": 32 * 1024 * 1024, "history-query": 192 * 1024 * 1024,
         "history-backfill": 64 * 1024 * 1024,
         "durable-delivery": 16 * 1024 * 1024,
         "aggregation-blocks": 16 * 1024 * 1024,
