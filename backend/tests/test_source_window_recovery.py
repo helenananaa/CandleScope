@@ -602,8 +602,8 @@ def test_sparse_cold_builder_keeps_and_then_replaces_interior_forming_hole(
     asyncio.run(run())
 
 
-@pytest.mark.parametrize("mutation", ["opposite", "target-delete", "source-delete"])
-def test_original_writer_rejects_expired_compact_source_proof_after_enqueue(
+@pytest.mark.parametrize("mutation", ["opposite", "target-delete", "source-delete", "permission-upgrade", "permission-upgrade-delete"])
+def test_original_writer_rechecks_compact_source_content_and_original_permission_after_enqueue(
     database, monkeypatch, mutation
 ):
     import asyncio
@@ -611,6 +611,8 @@ def test_original_writer_rejects_expired_compact_source_proof_after_enqueue(
     async def run():
         for i in range(3):
             record(i)
+        if mutation.startswith('permission-upgrade'):
+            klines_repo.upsert_klines('ETHUSDT','1m',[dict(open_time=0,close_time=W-1,open=10.,high=20.,low=5.,close=11.,volume=1.,quote_volume=2.,trades=1,taker_buy_base=.5,taker_buy_quote=1.)],market_type='futures')
         manager = manager_for("3m")
         journal = manager.aggregator_bridge.delivery.journal
         enqueue = journal.enqueue
@@ -620,6 +622,16 @@ def test_original_writer_rejects_expired_compact_source_proof_after_enqueue(
             if mutation == "opposite":
                 record(1, quote=1.0, sequence=9 * W)
                 record(2, quote=3.0, sequence=9 * W)
+            elif mutation.startswith('permission-upgrade'):
+                from app.data_engine.storage.revisions import Acquisition, acquisition_scope, current_revision
+                if mutation.endswith('-delete'):
+                    klines_repo.delete_klines('BTCUSDT','3m',market_type='futures')
+                watermark = kline_sources.rest_watermark()
+                with klines_repo._connect() as conn:
+                    head = current_revision(conn)
+                with acquisition_scope(Acquisition(head,delete_revision=head)):
+                    for index in range(3):
+                        record(index,source=DataSource.HTTP_BACKFILL,watermark=watermark,sequence=9*W)
             else:
                 klines_repo.delete_klines(
                     "BTCUSDT",
@@ -644,6 +656,16 @@ def test_original_writer_rejects_expired_compact_source_proof_after_enqueue(
                 "binance", "futures", "BTCUSDT", "3m", incoming(0)
             )
             await manager.aggregator_bridge.delivery.flush()
+            if mutation == 'permission-upgrade':
+                rows = klines_repo.query_klines('BTCUSDT','3m',market_type='futures')
+                assert len(rows) == 1 and rows[0]['quote_volume'] == 6
+                with klines_repo._connect() as conn:
+                    item = conn.execute('SELECT phase,payload FROM bar_delivery').fetchone()
+                assert item['phase'] == 'published'
+                assert json.loads(item['payload'])['storage_row']['source_window']['permission_floor'] == 0
+                assert not recoveries
+                assert sum(e.event_type.value == 'bar.closed' for e in events) == 1
+                return
             assert not klines_repo.query_klines("BTCUSDT", "3m", market_type="futures")
             with klines_repo._connect() as conn:
                 receipt = conn.execute(
