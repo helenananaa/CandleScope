@@ -7,12 +7,15 @@ import {
   type LocaleId,
 } from "../../i18n/index.js";
 import { normalizeMainChartType } from "../../shared/mainChartTypes.js";
+import { CHART_THEME_COLORS, chartSchemeForBackground } from "../../chart-adapter/chartPalette.js";
 import type { Dispatch, SetStateAction } from "react";
 import type { MainChartType } from "../../shared/mainChartTypes.js";
 
 const SETTINGS_STORAGE_KEY = "candlescope-settings";
 const PRICE_BOX_SIZE_MODES = new Set(["atr", "traditional"]);
 export type ChartTheme = "dark" | "light" | "system" | "custom";
+/** The app theme never takes "custom"; custom backgrounds belong to individual charts. */
+export type ApplicationTheme = Exclude<ChartTheme, "custom">;
 export type PriceBoxSizeMode = "atr" | "traditional";
 
 export interface CacheRowLimits {
@@ -51,7 +54,7 @@ export interface ChartSettings extends Record<string, unknown> {
 
 export const DEFAULT_SETTINGS: ChartSettings = {
   theme: "dark",
-  customBg: "#0f172a",
+  customBg: CHART_THEME_COLORS.dark.background,
   upColor: "#22c55e",
   downColor: "#ef4444",
   chartType: "candlestick",
@@ -206,10 +209,19 @@ export function useCellChartTheme(theme: ChartTheme | undefined, inheritedTheme:
   return theme === undefined ? inheritedTheme : theme === "system" ? systemTheme : theme;
 }
 
+/**
+ * Application settings only. Older versions allowed a custom app background; it now
+ * becomes dark or light by brightness, and the colour stays as the starting value for
+ * charts that get their own background.
+ */
+export function migrateApplicationSettings(settings: ChartSettings): ChartSettings {
+  return settings.theme === "custom" ? { ...settings, theme: chartSchemeForBackground(settings.customBg) } : settings;
+}
+
 export function parseStoredSettings(saved: string | null | undefined): ChartSettings {
   if (!saved) return normalizeSettings();
   try {
-    return normalizeSettings(JSON.parse(saved));
+    return migrateApplicationSettings(normalizeSettings(JSON.parse(saved)));
   } catch {
     return normalizeSettings();
   }
@@ -235,12 +247,42 @@ function loadSettings(): ChartSettings {
   }
 }
 
+/** Lets the desktop shell fill new and resizing windows with the app background instead of dark. */
+function reportDesktopAppearance(root: HTMLElement): void {
+  const bridge = typeof window === "undefined" ? undefined : window.candlescopeDesktop;
+  if (!bridge?.setAppearance) return;
+  const background = getComputedStyle(root).getPropertyValue("--surface-0").trim().toLowerCase();
+  if (/^#[0-9a-f]{6}$/.test(background)) bridge.setAppearance({ background });
+}
+
 export function readPersistedLocale(): LocaleId {
   return loadSettings().locale;
 }
 
+/** A chart's own appearance; keys that are absent follow the application. */
+export type ChartAppearanceOverride = Partial<Pick<ChartSettings, "theme" | "customBg" | "upColor" | "downColor">>;
+
+/**
+ * Where appearance edits go when Settings is opened from a chart: the app theme and
+ * colours always go to the application; the chart's own appearance goes to that chart.
+ */
+export interface AppearanceTargets {
+  application: {
+    theme: ChartTheme;
+    customBg: string;
+    upColor: string;
+    downColor: string;
+    update(patch: Partial<Pick<ChartSettings, "theme" | "upColor" | "downColor">>): void;
+  };
+  chart: {
+    override: ChartAppearanceOverride;
+    set(override: ChartAppearanceOverride | null): void;
+  };
+}
+
 export interface ChartSettingsRuntime {
   appearanceScope?: "chart" | "application";
+  appearanceTargets?: AppearanceTargets;
   inheritApplicationTheme?: boolean;
   settings: ChartSettings;
   setSettings: Dispatch<SetStateAction<ChartSettings>>;
@@ -293,13 +335,10 @@ export function useChartSettingsRuntime(): ChartSettingsRuntime {
   useEffect(() => {
     const root = document.documentElement;
     root.setAttribute("data-theme", resolvedTheme);
-    if (settings.theme === "custom") {
-      root.style.setProperty("--surface-0", settings.customBg);
-      root.style.setProperty("--surface-1", settings.customBg);
-    } else {
-      root.style.removeProperty("--surface-0");
-      root.style.removeProperty("--surface-1");
-    }
+    // Older builds painted a custom app background into the chrome; custom backgrounds are chart-only now.
+    root.style.removeProperty("--surface-0");
+    root.style.removeProperty("--surface-1");
+    reportDesktopAppearance(root);
     root.style.setProperty("--candle-up", settings.upColor);
     root.style.setProperty("--candle-down", settings.downColor);
     try {

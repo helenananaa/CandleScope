@@ -7,6 +7,7 @@ import type {
   TickMarkType,
 } from "lightweight-charts";
 import type { ChartTime } from "./chartAdapterTypes.js";
+import { CHART_CROSSHAIR_COLORS, CHART_FONT_FAMILY, CHART_THEME_COLORS, chartSchemeForBackground } from "./chartPalette.js";
 import { getDateTimeLocale } from "../i18n/index.js";
 import { getExtensionState } from "../features/extensions/state.js";
 
@@ -163,14 +164,14 @@ export function buildCrosshairOptions(visible = true): DeepPartial<CrosshairOpti
   return {
     mode: 0,
     vertLine: {
-      color: "rgba(59, 130, 246, 0.4)", width: 1, style: 2,
-      labelBackgroundColor: "#3b82f6",
+      color: CHART_CROSSHAIR_COLORS.line, width: 1, style: 2,
+      labelBackgroundColor: CHART_CROSSHAIR_COLORS.label,
       visible,
       labelVisible: visible,
     },
     horzLine: {
-      color: "rgba(59, 130, 246, 0.4)", width: 1, style: 2,
-      labelBackgroundColor: "#3b82f6",
+      color: CHART_CROSSHAIR_COLORS.line, width: 1, style: 2,
+      labelBackgroundColor: CHART_CROSSHAIR_COLORS.label,
       visible,
       labelVisible: visible,
     },
@@ -186,13 +187,15 @@ export function getPaneThemeColors({ theme, customBg, inheritApplicationTheme = 
   const extension = inheritApplicationTheme ? getExtensionState().theme : null;
   const tokens = extension?.tokens;
   theme = extension?.base ?? theme;
+  const customBackground = theme === "custom" && customBg ? customBg : null;
+  // Text and grid follow the background actually shown, so a light custom background stays readable.
+  const scheme = customBackground ? chartSchemeForBackground(customBackground) : theme === "light" ? "light" : "dark";
+  const colors = CHART_THEME_COLORS[scheme];
   return {
-    bgColor: tokens?.["bg-primary"] ?? (theme === "light"
-      ? "#ffffff"
-      : (theme === "custom" ? customBg || "#0a0e17" : "#0a0e17")),
-    textColor: tokens?.["text-secondary"] ?? (theme === "light" ? "#1e293b" : "#94a3b8"),
-    gridColor: tokens?.["border-color"] ?? (theme === "light" ? "rgba(0,0,0,0.05)" : "rgba(30, 41, 59, 0.5)"),
-    borderColor: tokens?.["border-color"] ?? (theme === "light" ? "#e2e8f0" : "#1e293b"),
+    bgColor: tokens?.["bg-primary"] ?? customBackground ?? colors.background,
+    textColor: tokens?.["text-secondary"] ?? colors.text,
+    gridColor: tokens?.["border-color"] ?? colors.grid,
+    borderColor: tokens?.["border-color"] ?? colors.border,
   };
 }
 
@@ -248,7 +251,7 @@ export function buildChartPaneOptions({
     layout: {
       background: { color: bgColor },
       textColor,
-      fontFamily: "'Inter', sans-serif",
+      fontFamily: CHART_FONT_FAMILY,
       fontSize: 12,
       attributionLogo: false,
     },

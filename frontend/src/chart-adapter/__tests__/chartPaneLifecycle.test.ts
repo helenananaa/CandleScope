@@ -74,7 +74,7 @@ test("explicit chart themes override extension tokens while inherited charts fol
     assert.equal(getPaneThemeColors({ theme: "light" }).bgColor, "#123456");
     const independent = { theme: "light", inheritApplicationTheme: false };
     assert.equal(getPaneThemeColors(independent).bgColor, "#ffffff");
-    assert.equal(getPaneThemeColors(independent).textColor, "#1e293b");
+    assert.equal(getPaneThemeColors(independent).textColor, "#4a4d55");
     const options = buildChartPaneOptions({ ...independent,
       container: structuralMock<HTMLElement>({ clientWidth: 900, clientHeight: 500 }),
     });
@@ -96,9 +96,20 @@ test("per-chart DOM legend colors match candles and explicit pane themes", () =>
     upColor: "#ff0000", downColor: "#00ff00" });
   assert.equal(palette["--text-up"], "#ff0000");
   assert.equal(palette["--text-down"], "#00ff00");
-  assert.equal(palette["--text-muted"], "#1e293b");
+  assert.equal(palette["--text-muted"], "#4a4d55");
   assert.equal(palette["--surface-0"], "#ffffff");
   assert.deepEqual(chartPaneCssVariables({ theme: "dark", upColor: "#123456", downColor: "#654321" }), {
     "--text-up": "#123456", "--text-down": "#654321",
   });
+});
+
+
+test("custom chart backgrounds pick readable text and grid colours", () => {
+  const lightCustom = getPaneThemeColors({ theme: "custom", customBg: "#f4efe2", inheritApplicationTheme: false });
+  assert.equal(lightCustom.bgColor, "#f4efe2");
+  assert.equal(lightCustom.textColor, "#4a4d55");
+  assert.equal(lightCustom.gridColor, "rgba(0, 0, 0, 0.06)");
+  const darkCustom = getPaneThemeColors({ theme: "custom", customBg: "#102030", inheritApplicationTheme: false });
+  assert.equal(darkCustom.textColor, "#a6a9b0");
+  assert.equal(getPaneThemeColors({ theme: "dark", inheritApplicationTheme: false }).bgColor, "#0d0e10");
 });

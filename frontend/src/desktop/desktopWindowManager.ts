@@ -90,6 +90,7 @@ interface NativeDesktopBridge extends Partial<AiControlBridge> {
   readSeriesSnapshot(key: string): unknown;
   publishSeriesSnapshot(payload: { key: string; rows: readonly KlineBar[] }): void;
   getSeriesSnapshotDiagnostics(): Promise<unknown>;
+  setAppearance?(appearance: { background: string }): void;
 }
 
 declare global {

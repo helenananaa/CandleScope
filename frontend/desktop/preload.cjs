@@ -37,6 +37,7 @@ const channels = {
   seriesSnapshotRead: "candlescope:series-snapshot:read",
   seriesSnapshotPublish: "candlescope:series-snapshot:publish",
   seriesSnapshotDiagnostics: "candlescope:series-snapshot:diagnostics",
+  appearance: "candlescope:desktop:appearance",
 };
 
 function subscribe(channel, listener) {
@@ -98,4 +99,5 @@ contextBridge.exposeInMainWorld("candlescopeDesktop", Object.freeze({
   readSeriesSnapshot: (key) => ipcRenderer.sendSync(channels.seriesSnapshotRead, key),
   publishSeriesSnapshot: (payload) => ipcRenderer.send(channels.seriesSnapshotPublish, payload),
   getSeriesSnapshotDiagnostics: () => ipcRenderer.invoke(channels.seriesSnapshotDiagnostics),
+  setAppearance: (appearance) => ipcRenderer.send(channels.appearance, appearance),
 }));

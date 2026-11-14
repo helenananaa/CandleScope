@@ -17,6 +17,15 @@ export class ElectronWindowManager {
     this.boundTimers = new Map();
     this.quitting = false;
     this.reconcileQueue = Promise.resolve();
+    // Native fill shown before the page paints and while resizing; follows the app theme.
+    this.backgroundColor = options.backgroundColor ?? "#0d0e10";
+  }
+
+  setAppearance(sender, background) {
+    this.backgroundColor = background;
+    const id = this.windowIdForContents(sender);
+    const window = id ? this.windows.get(id) ?? this.appWindows.get(id) : null;
+    if (window && !window.isDestroyed()) window.setBackgroundColor(background);
   }
 
   diagnostics() {
@@ -87,7 +96,7 @@ export class ElectronWindowManager {
     const id = `app-window-${this.nextAppWindow++}`;
     target.searchParams.set("windowId", id);
     const window = new this.options.BrowserWindow({
-      width: 1280, height: 850, show: false, title: "CandleScope",
+      width: 1280, height: 850, show: false, title: "CandleScope", backgroundColor: this.backgroundColor,
       webPreferences: { preload: this.options.preloadPath, contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false,
         additionalArguments: [`--candlescope-backend-port=${this.options.backendPort}`, `--candlescope-window-id=${id}`, ...(this.options.controlEnabled ? ["--candlescope-control-enabled", ...(this.options.controlScopes ? [`--candlescope-control-scopes=${this.options.controlScopes.join(",")}`] : [])] : [])] },
     });
@@ -154,7 +163,7 @@ export class ElectronWindowManager {
       minWidth: 640,
       minHeight: 480,
       show: false,
-      backgroundColor: "#0b0f14",
+      backgroundColor: this.backgroundColor,
       title: saved.id === "main-window" ? "CandleScope" : `CandleScope — ${saved.id}`,
       webPreferences: {
         preload: this.options.preloadPath,

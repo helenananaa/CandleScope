@@ -1,6 +1,6 @@
 import ChartNoteFilterFields from "../chart-workspace/ChartNoteFilterFields.js";
 import { normalizeChartAccountOverlay } from "../chart-workspace/chartAccountOverlaySettings.js";
-import { applicationSettingsPatch, nextCellChartSettings } from "../chart-workspace/chartWorkspaceChartSettings.js";
+import { applicationSettingsPatch, buildAppearanceTargets, nextCellChartSettings } from "../chart-workspace/chartWorkspaceChartSettings.js";
 import { normalizeSettings, useCellChartTheme } from "../settings/chartAppearanceSettings.js";
 import { useReplayOperations } from "./useReplayOperations.js";
 import { PageDrawingExportRegistry } from "../export/pageDrawingExport.js";
@@ -161,6 +161,12 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
   const settings = useMemo<ChartSettingsRuntime>(() => ({
     ...globalSettings,
     appearanceScope: "chart",
+    appearanceTargets: buildAppearanceTargets({
+      application: globalSettings.settings,
+      setApplication: globalSettings.setSettings,
+      cell: cell.chartSettings,
+      setCell: (next) => workspace.actions.updateCellChartSettings(cell.id, next),
+    }),
     inheritApplicationTheme: cell.chartSettings.theme === undefined,
     settings: { ...globalSettings.settings, ...cell.chartSettings },
     resolvedTheme,

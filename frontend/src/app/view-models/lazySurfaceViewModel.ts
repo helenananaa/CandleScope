@@ -149,6 +149,7 @@ export function buildLazySurfaceViewModel({
       settings: chartSettings,
       onUpdate: settingsActions.update,
       appearanceScope: settingsView.appearanceScope ?? "application",
+      ...(settingsView.appearanceTargets ? { appearanceTargets: settingsView.appearanceTargets } : {}),
       currentSymbol: symbol,
       currentMarketType: marketType,
       currentExchange: exchange,
