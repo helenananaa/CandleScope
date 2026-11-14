@@ -342,11 +342,12 @@ def test_coverage_count_failure_cannot_authorize_a_new_repair(composed_dm, monke
 
 
 @pytest.mark.parametrize('fault', ['revision_unavailable', 'memory_budget_deferred'])
+@pytest.mark.parametrize('explicit', [False, True])
 @pytest.mark.parametrize('endpoint,parameters', [
     ('/history/composed', {'count_back': 2, 'max_wait_ms': 1500}),
     ('/range/composed', {'start_ms': 0, 'end_ms': 2 * WIDTH - 1, 'repair': 'async'}),
 ])
-def test_durable_or_memory_read_deferral_never_becomes_verification_repair(composed_dm, monkeypatch, fault, endpoint, parameters):
+def test_durable_or_memory_read_deferral_never_becomes_verification_repair(composed_dm, monkeypatch, fault, endpoint, parameters, explicit):
     from app.data_engine.memory_budget import MemoryBudgetExceeded
     manager = composed_dm
     if fault == 'revision_unavailable':
@@ -369,8 +370,9 @@ def test_durable_or_memory_read_deferral_never_becomes_verification_repair(compo
     app.state.data_manager = manager
     app.include_router(api.router, prefix='/api/v1')
     with TestClient(app) as client:
-        response = client.get('/api/v1/klines'+endpoint, params={**parameters,
-            'symbol':'BTCUSDT','interval':'10007m','market_type':'futures','composition_contract':CONTRACT})
+        response = client.get('/api/v1/klines'+(endpoint if explicit else endpoint.removesuffix('/composed')),
+            params={**parameters, 'symbol':'BTCUSDT','interval':'10007m','market_type':'futures',
+                **({'composition_contract':CONTRACT} if explicit else {})})
     assert response.status_code == 200, response.text
     result = response.json()
     assert result['cache'][fault] and not result['complete'] and result['retryable']

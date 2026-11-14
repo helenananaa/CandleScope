@@ -2471,8 +2471,8 @@ async def get_klines_history(
             interval=interval,
             calendar=calendar,
         )
-        if read_only_viewport_probe or result.metadata.get('history_composition_deferred') or (
-                composition_contract is not None and not _snapshot_is_stable(result)):
+        if (read_only_viewport_probe or result.metadata.get('history_composition_deferred')
+                or not _snapshot_is_stable(result)):
             submitted, request_ids, suppressions = False, [], []
         else:
             submitted, request_ids, suppressions = _submit_verification_repairs(
@@ -2997,8 +2997,8 @@ async def get_klines_range(
             interval=interval,
             calendar=calendar,
         )
-        if repair_mode != "none" and not result.metadata.get('history_composition_deferred') and (
-                composition_contract is None or _snapshot_is_stable(result)):
+        if (repair_mode != "none" and not result.metadata.get('history_composition_deferred')
+                and _snapshot_is_stable(result)):
             submitted, request_ids, suppressions = _submit_verification_repairs(
                 dm,
                 verification_only,
