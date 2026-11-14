@@ -60,12 +60,8 @@ class ComponentPreviewScheduler:
         if state._source_recovery is not None:
             from app.data_engine.market_data.kline_metrics import kline_available_fields
             reader = agg.source_recovery_reader
-            bridge = getattr(reader, 'bridge', None)
-            source_context = (reader, getattr(reader, 'binding', None),
-                              getattr(source_owner, 'revision_store', None),
-                              getattr(getattr(bridge, 'delivery', None), 'journal', None),
-                              getattr(getattr(source_owner, 'validate_component_preview', None), '__func__', None),
-                              getattr(getattr(source_owner, 'validate_source_window', None), '__func__', None),
+            binding = getattr(reader, 'preview_binding', None)
+            source_context = (reader, binding() if callable(binding) else None,
                               frozenset(kline_available_fields(state.exchange, state.market_type)))
         return (agg._cfg,agg.memory_budget,runtime,source,
                 pipeline.bar_state._component_merge_strategy,pipeline.finalizer,
@@ -127,16 +123,10 @@ class ComponentPreviewScheduler:
                 return False
         merge = pipeline.bar_state._component_merge_strategy
         if state._source_recovery is not None:
-            from app.data_engine.storage.klines_repo import KlinesRepoAdapter
-            from app.data_engine.data_manager.aggregator_bridge import AggregatorBridge
             reader = agg.source_recovery_reader
-            storage = agg._preview_source_binding()
+            binding = getattr(reader, 'preview_binding', None)
             previous = state.source_snapshots.get(incoming.input_key)
-            return (reader is not None and reader.available()
-                    and getattr(agg._preview_source_validator, '__self__', None) is reader.bridge
-                    and getattr(agg._preview_source_validator, '__func__', None) is AggregatorBridge.validate_component_preview
-                    and getattr(storage.validate_component_preview, '__func__', None) is KlinesRepoAdapter.validate_component_preview
-                    and getattr(storage.validate_source_window, '__func__', None) is KlinesRepoAdapter.validate_source_window
+            return (callable(binding) and binding() is not None
                     and merge._can_defer_source_tail(state, incoming, previous, previous))
         accumulator = state._component_accumulator
         return (accumulator is not None and accumulator.tail_unique
