@@ -133,6 +133,8 @@ test("Phase 13 workspace projects ViewerState and exposes capability-driven adva
   assert.match(controls, /globalClock\?\.playback_bases/);
   assert.match(controls, /data-replay-action="advance-display"/);
   assert.match(controls, /data-replay-action="advance-base"/);
+  // "Next base bar" only shows when it differs from "next display bar".
+  assert.match(controls, /displayInterval === config\?\.base_interval/);
   assert.match(controls, /data-replay-action="advance-source-event"/);
   assert.match(controls, /phase3Command\("advance"/);
   assert.match(controls, /replay\.control\.nextAgg/);
@@ -181,6 +183,11 @@ test("capability surface never renders unsupported history as numeric zero or st
   const html = renderToStaticMarkup(<ReplayCapabilitySurface capabilities={model} />);
   assert.match(html, /UNSUPPORTED_NO_HISTORY/);
   assert.doesNotMatch(html, />0(?:\.0+)?</);
+  // One row per capability: the state is a short badge; the code stays in data-capability-state.
+  assert.match(html, /<li data-replay-capability="ORDER_BOOK" data-capability-state="UNSUPPORTED_NO_HISTORY">/);
+  assert.match(html, /<span class="ui-badge"[^>]*data-tone="success"[^>]*>精确<\/span>/);
+  assert.match(html, /<span class="ui-badge"[^>]*>不可用<\/span>/);
+  assert.doesNotMatch(html, /<code>(AVAILABLE|UNSUPPORTED)_/, "state codes are not shown as text");
 
   const tape = buildReplayCapabilityModel("AGG_TRADE");
   assert.equal(tape.OHLCV.state, "AVAILABLE_APPROX");
@@ -723,11 +730,12 @@ test("Phase 10 release surface exposes soak telemetry and an accessible danger d
 
   assert.match(workspace, /data-replay-order-count/);
   assert.match(workspace, /data-replay-fill-count/);
-  assert.match(controls, /data-replay-focus-trap="active"/);
-  assert.match(controls, /aria-describedby="replay-end-description"/);
-  assert.match(controls, /event\.key === "Escape"/);
-  assert.match(controls, /event\.key !== "Tab"/);
-  assert.match(controls, /requestAnimationFrame\(\(\) => restore\?\.focus\(\)\)/);
+  // The end dialog is the kit Dialog: it traps focus, closes on Escape and returns focus; Cancel takes focus first.
+  assert.match(controls, /<Dialog\s+open=\{showEnd\}[\s\S]*?className="replay-end-dialog"/);
+  assert.match(controls, /description=\{t\("replay\.control\.endHint"\)\}/);
+  assert.match(controls, /initialFocusRef=\{endCancelRef\}/);
+  assert.match(controls, /<Button variant="danger" data-replay-action="confirm-end"/);
+  assert.doesNotMatch(controls, /replay-modal-backdrop|data-replay-focus-trap/);
   assert.match(integrity, /data-replay-panel="report"/);
   assert.match(integrity, /downloadReplayTrainingReport\(report, "json"\)/);
   assert.match(integrity, /downloadReplayTrainingReport\(report, "csv"\)/);

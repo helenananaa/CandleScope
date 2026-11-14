@@ -43,7 +43,7 @@
 @media (max-width: 760px) {
   .replay-right-rail { display: none; }
   .right-market-rail[data-runtime-source="replay"] { display: none; }
-  .replay-bottom-control-dock .replay-fidelity-chips { display: none; }
+
   .replay-identity-readonly { max-width: 38vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .replay-launcher-overlay { padding: 8px; }
   .replay-launcher-popup-blocked { top: 14px; right: 14px; left: 14px; flex-wrap: wrap; }
