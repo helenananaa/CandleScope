@@ -30,7 +30,7 @@ import asyncio
 import logging
 import time
 from contextlib import nullcontext
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Callable, Awaitable, Any
 
 from app.data_engine.market_data.kline_metrics import declared_enhanced_fields
@@ -256,6 +256,7 @@ class HistoricalFetcher:
         on_deferred: Callable[[list[FetchResult]], Awaitable[None]] | None = None,
         on_native_page: Callable[[FetchResult], Awaitable[None]] | None = None,
         on_full_task: Callable[[BackfillTask], None] | None = None,
+        on_write_windows: Callable[[list[PlannedWriteWindow]], Awaitable[None]] | None = None,
     ) -> list[FetchResult | FetchReceipt]:
         """Execute all fetch tasks, respecting concurrency limits.
 
@@ -267,6 +268,8 @@ class HistoricalFetcher:
                 backpressure and receive FetchReceipt instead of payloads.
                 Archive/unqualified/overridden routes retain FetchResult.
             on_full_task: Admit a fallback task before its payload is fetched.
+            on_write_windows: Receive the windows archive-routed tasks will
+                write, after routing and before any of their data is used.
 
         Returns:
             A list of ``FetchResult``, one per task, in the same order.
@@ -284,6 +287,10 @@ class HistoricalFetcher:
             if self._source_router is not None
             else ArchiveRoutePlan({}, {}, {})
         )
+        if on_write_windows is not None:
+            windows = planned_write_windows(tasks, route_plan)
+            if windows:
+                await on_write_windows(windows)
 
         # REST requests keep the existing bounded semaphore. Archive downloads
         # use their own two-wide semaphore and are already running here, so
@@ -774,26 +781,7 @@ class HistoricalFetcher:
         if interval_spec is None:
             return await self._fetch_rest_task(task)
 
-        coverage_refs = [
-            ref
-            for ref in refs
-            if _ranges_intersect(
-                task.start_ms,
-                task.end_ms,
-                ref.start_ms,
-                ref.end_ms,
-            )
-        ]
-        archive_ranges = [
-            (max(task.start_ms, ref.start_ms), min(task.end_ms, ref.end_ms))
-            for ref in coverage_refs
-        ]
-        uncovered = _subtract_ranges(
-            task.start_ms,
-            task.end_ms,
-            archive_ranges,
-            interval_spec,
-        )
+        coverage_refs, uncovered = _routed_coverage(task, refs, interval_spec)
         rest_tail_tasks = [
             asyncio.create_task(
                 self._fetch_rest_task(
@@ -978,6 +966,8 @@ class HistoricalFetcher:
             "archive_import_rows": len(archive_bars),
             "rest_tail_ranges": len(uncovered),
             "rest_fallback_ranges": len(fallback_ranges),
+            # Lets the reconciler commit each REST edge as its own batch.
+            "rest_ranges": [[int(start), int(end)] for start, end in uncovered],
             "rest_pages": pages_fetched,
         }
         self._metrics.inc("archive_objects_selected", len(owned_archive_values))
@@ -1400,6 +1390,56 @@ class HistoricalFetcher:
     @staticmethod
     def _elapsed_ms(start: float) -> int:
         return int((time.monotonic() - start) * 1000)
+
+
+@dataclass(frozen=True, slots=True)
+class PlannedWriteWindow:
+    """One window a routed task will write: an owned archive object or a REST edge."""
+
+    exchange: str
+    market_type: str
+    symbol: str
+    interval: str
+    start_ms: int
+    end_ms: int
+    archive: bool
+    metadata: dict[str, Any]
+
+
+def _routed_coverage(task: BackfillTask, refs, interval_spec):
+    """Archive objects covering part of the task, and the REST ranges they leave."""
+    coverage_refs = [
+        ref
+        for ref in refs
+        if _ranges_intersect(task.start_ms, task.end_ms, ref.start_ms, ref.end_ms)
+    ]
+    archive_ranges = [
+        (max(task.start_ms, ref.start_ms), min(task.end_ms, ref.end_ms))
+        for ref in coverage_refs
+    ]
+    return coverage_refs, _subtract_ranges(task.start_ms, task.end_ms, archive_ranges, interval_spec)
+
+
+def planned_write_windows(
+    tasks: list[BackfillTask],
+    route_plan: ArchiveRoutePlan,
+) -> list[PlannedWriteWindow]:
+    """The windows archive-routed tasks will write, known before their data arrives."""
+    windows: list[PlannedWriteWindow] = []
+    for task in tasks:
+        refs = route_plan.refs_for(task)
+        interval_spec = parse_interval_spec(task.interval)
+        if not refs or interval_spec is None:
+            continue
+        _, uncovered = _routed_coverage(task, refs, interval_spec)
+        spans = [(start, end, False) for start, end in uncovered]
+        spans += [(ref.start_ms, ref.end_ms, True) for ref in refs if route_plan.owns_object(task, ref)]
+        windows.extend(
+            PlannedWriteWindow(task.exchange, task.market_type, task.symbol, task.interval,
+                               int(start), int(end), archive, task.metadata)
+            for start, end, archive in spans
+        )
+    return windows
 
 
 def _slice_task(

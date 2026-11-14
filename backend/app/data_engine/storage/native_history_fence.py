@@ -2,7 +2,9 @@
 
 This is an optimistic range read, not a relaxation for derived calculations.
 The existing native 1s sources, trusted Binance spot gap repairs and
-source-receipted OKX spot native repairs qualify.
+source-receipted OKX spot native repairs qualify. So do the exact windows a
+routed Binance USD-M history run writes: its daily archive objects and the
+REST edges around them.
 There is no new durable mutation log: canonical rows and the existing durable
 deletion watermark remain the authority, including writers in other processes.
 """
@@ -14,6 +16,9 @@ from .revisions import IDENTITY_COLUMNS, series_values, series_change, StaleAcqu
 
 MAX_WINDOWS = 32
 MAX_SLOTS = 8192
+# One routed run imports whole daily archive objects for its parent demand.
+MAX_PLANNED_WINDOWS = 64
+MAX_PLANNED_SLOTS = 4 * MAX_SLOTS
 FIELDS = ("open_time", "close_time", "open", "high", "low", "close", "volume",
           "quote_volume", "trades", "taker_buy_base", "taker_buy_quote", "source")
 
@@ -27,6 +32,11 @@ def _window_slots(task):
             task.exchange == "okx" or (task.exchange == "binance"
             and metadata.get("requires_trusted_finality") is True))):
         return None
+    return _native_grid_slots(task, metadata)
+
+
+def _native_grid_slots(task, metadata):
+    """Slots of a default-identity native window that starts on its grid."""
     from app.data_engine.interval_resolution import IntervalResolver, IntervalPurpose, IntervalResolutionError
     from app.data_engine.series_identity import identity_from_metadata
 
@@ -69,6 +79,8 @@ class NativeHistoryView:
     start: int
     end: int
     digest: bytes
+    # Granted to one official archive object import, not to REST rows.
+    archive: bool = False
 
     def accepts_history_receipts(self, conn, rows):
         # OKX's qualified fork journals exact native closed inputs. Only those
@@ -121,13 +133,57 @@ def capture_native_history_views(store, scope, tasks):
         scope.native_history_views.extend(views)
 
 
+def capture_planned_write_views(store, scope, windows):
+    """Views for the windows a routed Binance USD-M history run will write.
+
+    Archive routing replaces a page-bounded task with whole daily archive
+    objects and REST edges, so the task's own window does not describe what is
+    written. The fetcher reports those windows once routing is known and before
+    any of their data is used. Each keeps the proof of every native view:
+    unchanged content and no deletion since capture. Other markets, custom
+    identities, derived intervals and oversized windows stay strict.
+    """
+    if store is None or scope is None:
+        return
+    known = {(view.key, view.start, view.end, view.archive) for view in scope.native_history_views}
+    selected, slots = [], 0
+    for window in windows:
+        start, end = window.start_ms, window.end_ms
+        if (window.exchange != "binance" or window.market_type != "futures"
+                or not isinstance(start, int) or not isinstance(end, int) or start > end):
+            continue
+        count = _native_grid_slots(window, getattr(window, "metadata", {}))
+        if count is None or count > MAX_SLOTS:
+            continue
+        item = (series_values(window.symbol, window.interval, window.exchange, window.market_type),
+                start, end, bool(window.archive))
+        if item in known or len(selected) >= MAX_PLANNED_WINDOWS or slots + count > MAX_PLANNED_SLOTS:
+            continue
+        known.add(item)
+        selected.append(item)
+        slots += count
+    if not selected:
+        return
+    with scope.lock, closing(store.connect()) as conn, conn:
+        conn.execute("BEGIN")
+        views = [NativeHistoryView(key, start, end, fingerprint(conn, key, start, end), archive)
+                 for key, start, end, archive in selected]
+        # Do not renew a persisted/manual request's deletion permission here.
+        for view in views:
+            view.check(conn, scope)
+        scope.native_history_views.extend(views)
+
+
 def matching_view(scope, key, rows, source):
-    if source != "backfill" or not rows:
+    archive = str(source).startswith("backfill_archive_")
+    if (source != "backfill" and not archive) or not rows:
         return None
     start = min(row["open_time"] for row in rows)
     end = max(row["open_time"] for row in rows)
+    # REST rows and archive objects each use only the permission captured for them.
     return next((view for view in scope.native_history_views
-                 if view.key == key and view.start <= start <= end <= view.end), None)
+                 if view.archive == archive and view.key == key
+                 and view.start <= start <= end <= view.end), None)
 
 
 def matching_empty_view(scope, key, ranges):
