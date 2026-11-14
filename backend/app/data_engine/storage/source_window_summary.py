@@ -122,6 +122,9 @@ def fold_source_window(key, start, end, width, incoming, cancel):
                     incoming,
                     open_time_ms=data["open_time"],
                     close_time_ms=data["close_time"],
+                    # The selected page contains closed history regardless
+                    # of whether the triggering live input is still forming.
+                    is_closed=True,
                     enhanced_fields=declared_enhanced_fields(
                         incoming.exchange, incoming.market_type, data
                     ),

@@ -1802,6 +1802,59 @@ def test_forming_metadata_admission_uses_existing_work_reservation_without_fold_
     asyncio.run(run())
 
 
+@pytest.mark.parametrize('history', [6, 129])
+@pytest.mark.parametrize('close_source', ['realtime', 'correction'])
+def test_first_forming_recovery_keeps_closed_siblings_final_and_later_closes(
+    database, monkeypatch, history, close_source,
+):
+    import asyncio
+    from app.data_engine.bar_aggregator.models import BarInputSource
+
+    clock = [history * W + 1000]
+    monkeypatch.setattr('time.time', lambda: clock[0] / 1000)
+
+    async def run():
+        with klines_repo._connect() as conn:
+            kline_sources._schema(conn)
+            conn.execute('BEGIN IMMEDIATE')
+            for index in range(history):
+                record(index, conn=conn)
+            conn.commit()
+        interval = f'{history + 1}m'
+        manager = manager_for(interval)
+        events = []
+        async def observe(event):
+            events.append((event.event_type.value, event.bar.quote_volume))
+        manager.event_bus.subscribe(observe)
+        try:
+            ref = record(history, closed=False, sequence=clock[0])['ref']
+            await feed(manager, interval, replace(incoming(history, closed=False, ref=ref),
+                                                  source=BarInputSource.REALTIME))
+            state = manager.bar_aggregator.get_pipeline(interval).bar_state.get_active(
+                'binance', 'futures', 'BTCUSDT', 0)
+            summary = state._source_recovery
+            assert summary is not None and summary.version.closed_count == history
+            assert all(part.all_closed and part.last_closed for part in summary.parts)
+            assert state.status.value == 'forming'
+            assert not klines_repo.query_klines('BTCUSDT', '1m', market_type='futures')
+            clock[0] = (history + 1) * W + 1000
+            ref = record(history, quote=3.0, sequence=clock[0])['ref']
+            await feed(manager, interval, replace(incoming(history, quote=3.0, ref=ref),
+                source=BarInputSource.REALTIME if close_source == 'realtime' else BarInputSource.CORRECTION))
+            assert state.status.value == 'closed' and state.finality.value == 'authoritative'
+            assert state.quote_volume == history * 2 + 3
+            stored = klines_repo.query_klines('BTCUSDT', interval, market_type='futures')
+            assert len(stored) == 1 and stored[0]['quote_volume'] == history * 2 + 3
+            assert [kind for kind, _ in events].count('bar.closed') == 1
+            assert events[-1] == ('bar.closed', history * 2 + 3)
+            assert not any(kind == 'bar.amended' for kind, _ in events)
+        finally:
+            await manager.shutdown()
+        assert manager.memory_budget.snapshot()['reserved_bytes'] == 0
+
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize('deleted', [False, True])
 def test_same_content_permission_upgrade_keeps_old_content_proof_conservative(database, deleted):
     import asyncio
