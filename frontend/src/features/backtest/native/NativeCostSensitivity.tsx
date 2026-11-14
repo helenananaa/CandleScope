@@ -1,3 +1,4 @@
+import { Disclosure } from "../../../components/ui/index.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 
@@ -17,8 +18,8 @@ export function NativeCostSensitivity({ matrix }: { matrix: NativeCostMatrix | u
     COSTS_PLUS_50_PERCENT: "native.cost.plus50", LATENCY_PLUS_ONE_TIER: "native.cost.latency", PARTICIPATION_DOWN_ONE_TIER: "native.cost.participation" };
   const number = new Intl.NumberFormat(locale, { maximumFractionDigits: 8 });
   const display = (value: unknown) => value == null || value === "" || !Number.isFinite(Number(value)) ? "—" : number.format(Number(value));
-  return <details className="native-report-disclosure" open>
-    <summary>{t("native.cost.title")}</summary><p>{t("native.cost.help")}</p>
+  return <Disclosure className="native-report-disclosure" defaultOpen summary={t("native.cost.title")}>
+    <p className="native-report-caption">{t("native.cost.help")}</p>
     <div className="native-table"><table><thead><tr><th>{t("backtest.scenario")}</th><th>{t("native.cost.fills")}</th>
       <th>{t("native.cost.fees")}</th><th>{t("native.cost.equity")}</th><th>{t("native.cost.position")}</th><th>{t("native.cost.status")}</th></tr></thead>
       <tbody>{matrix.scenarios.map((row) => { const complete = row.status === "COMPLETED" && row.executed;
@@ -26,5 +27,5 @@ export function NativeCostSensitivity({ matrix }: { matrix: NativeCostMatrix | u
           <td>{complete ? display(row.metrics?.fill_count) : "—"}</td><td>{complete ? display(row.metrics?.fee_total) : "—"}</td>
           <td>{complete ? display(row.metrics?.ending_equity) : "—"}</td><td>{complete ? display(row.metrics?.ending_position) : "—"}</td>
           <td>{t(complete ? "native.cost.executed" : "native.cost.notApplicable")}</td></tr>; })}</tbody></table></div>
-  </details>;
+  </Disclosure>;
 }
