@@ -209,9 +209,12 @@ class HistoryPrefixRuntime:
                     return True
         except EmptyHistoryPrefix:
             if self._current(slot):
-                slot.recovering = True
                 pipeline = self.aggregator._pipelines[self.aggregator._pipeline_key(interval, source.exchange, source.identity)]
                 current = pipeline.bar_state.get_state(source.exchange, source.market_type, source.symbol, start_ms)
+                if current is not None and current._source_recovery is not None:
+                    self.detach(key)
+                    return True
+                slot.recovering = True
                 if current is not None and current._history_prefix is not None:
                     pipeline.bar_state.expire_bar(source.exchange, source.market_type, source.symbol, start_ms)
                     self.require_recovery(replace(source, interval=interval))
@@ -224,6 +227,9 @@ class HistoryPrefixRuntime:
             # must not replace that state with an unfenced full-range replay.
             pipeline = self.aggregator._pipelines.get(self.aggregator._pipeline_key(interval, source.exchange, source.identity))
             state = pipeline.bar_state.get_state(source.exchange, source.market_type, source.symbol, start_ms) if pipeline else None
+            if state is not None and state._source_recovery is not None:
+                self.detach(key)
+                return True
             if state is not None and state._history_prefix is not None:
                 self.require_recovery(replace(source, interval=interval))
                 return True
@@ -419,6 +425,7 @@ class HistoryPrefixRuntime:
         agg = self.aggregator
         forming = state.status == BarStatus.FORMING
         if (self.closing or not agg._previews.running
+                or state._source_recovery is not None
                 or agg.memory_budget is not self.reader.memory_budget
                 or incoming.merge_mode != MergeMode.COMPONENT or not state.source_snapshots
                 or (not forming and (not agg.config.compact_closed_components
@@ -628,6 +635,7 @@ class HistoryPrefixRuntime:
         cfg, budget = agg.config, self.reader.memory_budget
         snapshots, prefix = state.source_snapshots, state._history_prefix
         if (self.closing or not agg._previews.running or not cfg.compact_closed_components
+                or state._source_recovery is not None
                 or budget is not agg.memory_budget
                 or state.status != BarStatus.CLOSED or state.finality != BarFinality.AUTHORITATIVE
                 or state._preview_dirty or state._preview_publications or not snapshots
@@ -866,6 +874,14 @@ class HistoryPrefixRuntime:
                         adopted = self._adopt(slot, prefix, refresh=bool(current and current._history_prefix))
                         slot.recovering = False
                 except EmptyHistoryPrefix:
+                    reader = self.aggregator.source_recovery_reader
+                    if (incoming.merge_mode == MergeMode.COMPONENT and incoming.extra.get('source_ref')
+                            and reader is not None and reader.available()):
+                        # H127 is optional for a valid SourceJournal-only
+                        # window. Its original permission is checked by that
+                        # owner before any source fallback is adopted.
+                        slot.recovering = False
+                        return True
                     return False
                 if emit_events:
                     if has_complete_closed_component_coverage(adopted):

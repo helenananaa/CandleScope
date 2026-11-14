@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from collections.abc import Mapping
+from typing import Any
+from app.data_engine.aggregation.source_window import SourceWindowVersion
 
 from app.data_engine.aggregation.adapters import snapshot_aggregation_values, snapshot_field_summary
 from app.data_engine.aggregation.semantics import (
@@ -193,3 +195,35 @@ class ComponentAccumulator:
                     rebuilds=self.rebuilds, rebuilt_components=self.rebuilt_components,
                     prefix_levels=len(self.prefixes), summary_nodes=nodes,
                     estimated_bytes=2048 + nodes * 1024)
+
+
+@dataclass(frozen=True, slots=True)
+class SourceWindowSummary:
+    """Closed runs, with exact holes; never a canonical H127 prefix.
+
+    One incoming component is excluded from these runs and remains in the
+    existing replaceable leaf index. Runs can surround an interior forming
+    leaf, so combining all runs before the overlay would be incorrect.
+    """
+    version: SourceWindowVersion
+    parts: tuple[Any, ...]
+    excluded_open_ms: int
+    pages: int
+    estimated_bytes: int
+    binding: Any = None
+    capabilities: frozenset[str] = frozenset()
+    # Ephemeral read work hint from the existing journal; not durable authority.
+    observation_watermark: int | None = None
+
+    def covers(self, opened):
+        return any(part.first <= opened < part.end for part in self.parts)
+
+    def merge(self, rows):
+        parts = [*self.parts, *(_Summary.leaf(row) for row in rows)]
+        parts.sort(key=lambda part: part.first)
+        result = None
+        for part in parts:
+            if result is not None and result.end > part.first:
+                raise ValueError('selected-source runs overlap live components')
+            result = _combine(result, part)
+        return result

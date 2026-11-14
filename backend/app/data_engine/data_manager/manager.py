@@ -473,6 +473,8 @@ class DataManager(DataManagerCore):
 
         # Wire BarAggregator output → DataManager → Cache + EventBus
         self.bar_aggregator.set_source_component_reader(self.aggregator_bridge.read_source_components)
+        from .source_recovery import SourceRecoveryReader
+        self.bar_aggregator.source_recovery_reader = SourceRecoveryReader(self.aggregator_bridge, self.bar_aggregator)
         self.bar_aggregator.set_preview_source_validator(
             self.aggregator_bridge.validate_component_preview,
             self.aggregator_bridge.preview_source_binding)
@@ -518,6 +520,9 @@ class DataManager(DataManagerCore):
             dm.set_storage(KlinesRepoAdapter())
         """
         self.query_engine.set_storage(storage)
+        source_reader = getattr(self.bar_aggregator, 'source_recovery_reader', None)
+        if source_reader is not None:
+            source_reader.reset_binding()
         self.coordinator.set_storage(storage)
         self.warm_start.reset_tail_repairs()
         store = getattr(storage, "revision_store", None)

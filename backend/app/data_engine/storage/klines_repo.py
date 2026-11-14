@@ -1600,6 +1600,32 @@ class KlinesRepoAdapter:
         from .kline_sources import closed_components
         return closed_components(series, start_ms, end_ms)
 
+    def fold_source_window(self, *args):
+        from .source_window_summary import fold_source_window
+        return fold_source_window(*args)
+
+    def capture_source_window(self, *args):
+        from .kline_sources import capture_source_window
+        return capture_source_window(*args)
+
+    def validate_source_window(self, version, *, target_interval=None):
+        from contextlib import closing
+        from .kline_sources import source_window_current, source_window_allows_target
+        with closing(self.revision_store.connect()) as conn, conn:
+            conn.execute('BEGIN')
+            return (source_window_allows_target(conn, version, target_interval)
+                    if target_interval is not None else source_window_current(conn, version))
+
+    def validate_source_preview(self, version, watermark, *, target_interval):
+        # Preserve explicit/custom validators and their barriers.
+        if getattr(self.validate_source_window, '__func__', None) is not KlinesRepoAdapter.validate_source_window:
+            return self.validate_source_window(version, target_interval=target_interval), None
+        from contextlib import closing
+        from .kline_sources import source_preview_current
+        with closing(self.revision_store.connect()) as conn, conn:
+            conn.execute('BEGIN')
+            return source_preview_current(conn, version, watermark, target_interval)
+
     def validate_component_preview(self, components, **target) -> str:
         """Read source proofs and canonical invalidation in one bounded view."""
         from contextlib import closing

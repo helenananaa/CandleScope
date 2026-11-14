@@ -164,7 +164,9 @@ class AggregatorBridge:
             if dm_event.previous_bar is not None:
                 payload["previous_bar"] = {name: getattr(dm_event.previous_bar, name) for name in fields}
             payload["storage_row"] = bar_state.to_storage_dict()
-            payload["derived"] = bool(bar_state.source_snapshots or bar_state._history_prefix)
+            if bar_state.source_permission_floor is not None:
+                payload["source_permission_floor"] = bar_state.source_permission_floor
+            payload["derived"] = bool(bar_state.source_snapshots or bar_state._history_prefix or bar_state._source_recovery)
             if bar_state._history_prefix is not None:
                 # Recheck the acquired source version in the eventual SQLite
                 # commit transaction. An external write can happen after the
@@ -281,7 +283,7 @@ class AggregatorBridge:
         finality = getattr(bar_state, "finality", None)
         if getattr(finality, "value", finality) != BarFinality.AUTHORITATIVE.value:
             return None
-        if bar_state.source_refs:
+        if bar_state.source_refs or bar_state._source_recovery is not None:
             return "source_snapshot_verified"
         if bar_state.quality_source == "trade_history_verified":
             return "trade_history_verified"

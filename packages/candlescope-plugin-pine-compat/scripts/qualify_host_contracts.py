@@ -52,6 +52,7 @@ def main():
         "test_deferred_component_preview_prefix.py",
         "test_closed_component_retention.py",
         "test_forming_component_retention.py",
+        "test_source_window_recovery.py",
         "test_history_prefix.py", "test_history_prefix_overlay.py",
         "test_history_prefix_runtime.py", "test_history_prefix_retention.py",
         "test_history_fetch_stream.py", "test_history_fetch_stream_engine.py",

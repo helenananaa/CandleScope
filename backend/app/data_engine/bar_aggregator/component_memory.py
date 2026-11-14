@@ -132,3 +132,19 @@ class ComponentSnapshots(dict, RetainedMetadata):
 
     def _memory_metadata(self):
         return (self._payload_bytes, self._proof_bytes, self._foreign)
+
+
+def source_recovery_work_bytes(state, accepted):
+    """Keep the held graph budget without walking immutable summaries again.
+
+    The existing index caches accepted immutable child weights. Mutable proof
+    dictionaries and any other state fields still use their actual graph.
+    Sharing can be overcounted, as in the original realtime budget owner.
+    """
+    if (state is None or state._source_recovery is None
+            or not isinstance(state.source_snapshots, ComponentSnapshots)):
+        return retained_size((state, accepted))[0]
+    snapshots, refs, summary = state.source_snapshots, state.source_refs, state._source_recovery
+    base = retained_size((state,), seen={id(snapshots), id(refs), id(summary)})[0]
+    return (base + snapshots.estimated_bytes + retained_size((refs,))[0]
+            + summary.estimated_bytes + accepted.estimated_bytes)

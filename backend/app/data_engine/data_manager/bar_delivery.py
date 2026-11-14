@@ -294,7 +294,7 @@ class DurableBarDelivery:
         value = record["payload"]
         key = cls._key(record)
         current = record["canonical_row"]
-        superseded = any(current.get(k) != v for k, v in value["storage_row"].items() if k != "source_refs") or current["source"] != value["bar"]["source"]
+        superseded = any(current.get(k) != v for k, v in value["storage_row"].items() if k not in {"source_refs", "source_window"}) or current["source"] != value["bar"]["source"]
         return DataEvent(DataEventType.BAR_AMENDED if superseded else DataEventType(value["event_type"]), key,
                          BarData.from_storage_row(current) if superseded else BarData.from_dict(value["bar"]),
                          BarData.from_dict(value["previous_bar"]) if value.get("previous_bar") and not superseded else None,

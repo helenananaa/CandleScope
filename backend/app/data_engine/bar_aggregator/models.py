@@ -253,12 +253,17 @@ class BarState:
 
     acquisition_revision: int | None = None
     canonical_recovery_delete_floor: int | None = None
+    # Original selected-source permission is independent of content freshness.
+    source_permission_floor: int | None = None
     # Mutable execution metadata belongs only to this builder. Publication
     # copies carry immutable inputs and scalars, never the live accumulator.
     _component_accumulator: Any = field(default=None, repr=False, compare=False)
     # Immutable canonical H127 prefix. Publication retains its coverage proof;
     # the mutable accumulator above remains private to the live builder.
     _history_prefix: Any = field(default=None, repr=False, compare=False)
+    # Bounded SourceJournal runs have their own revision domain and exact
+    # interior holes. They are not canonical H127 history.
+    _source_recovery: Any = field(default=None, repr=False, compare=False)
     # Failed optional compaction retries after more source progress, rather
     # than rereading the same unavailable seam on every preview or duplicate.
     _history_compaction_retry_ms: int = field(default=0, repr=False, compare=False)
@@ -310,7 +315,7 @@ class BarState:
 
     def matches_source_components(self, components: list[BarInput]) -> bool:
         """Compare accepted leaves rather than an aggregate of their values."""
-        if self._history_prefix is not None:
+        if self._history_prefix is not None or self._source_recovery is not None:
             return False
         fields = (
             "open_time_ms", "close_time_ms", "open", "high", "low", "close",
@@ -423,6 +428,8 @@ class BarState:
         self.materialize_preview()
         return {
             **({"source_refs": [dict(ref) for ref in self.source_refs.values()]} if self.source_refs else {}),
+            **({'source_window': self._source_recovery.version.to_dict()}
+               if self._source_recovery is not None else {}),
             "open_time": self.bucket_start_ms,
             "close_time": self.bucket_end_ms - 1,  # inclusive end
             "open": self.open,
