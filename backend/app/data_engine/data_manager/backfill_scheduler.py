@@ -160,6 +160,7 @@ class _RequestState:
     cancel_requested: bool = False
     cancel_reason: str | None = None
     progress_revision: int = 0
+    last_dispatch_sequence: int = 0
 
     @property
     def total(self) -> int:
@@ -367,6 +368,9 @@ class BackfillScheduler:
             demand_leases=demand_leases,
             persistent_interest=not bool(demand_leases),
             persistent_scheduling=([] if demand_leases else [_SchedulingInterest.from_request(request)]),
+            last_dispatch_sequence=max((other.last_dispatch_sequence
+                for other in self._requests.values()
+                if self._same_fairness_owner(other.request, request)), default=0),
         )
         self._requests[request.request_id] = state
         series.pending.append(request.request_id)
@@ -1101,12 +1105,22 @@ class BackfillScheduler:
         aged = [item for item in self._ready
                 if (chunk := self._chunks.get(item[3])) is not None
                 and chunk.dispatch_bypasses >= self.max_dispatch_bypass]
+        def turn(row):
+            chunk = self._chunks.get(row[3])
+            state = self._requests.get(chunk.parent_id) if chunk is not None else None
+            return state.last_dispatch_sequence if state is not None else 0
         if aged:
             item = min(aged, key=lambda row: row[2])
-            self._ready.remove(item)
-            heapq.heapify(self._ready)
-            return item
-        return heapq.heappop(self._ready)
+        else:
+            # Avoiding only the immediately previous owner alternates the
+            # first two large requests forever ahead of a third/fourth chart.
+            # Store one turn on the existing request owner, not another queue.
+            item = min(self._ready, key=lambda row: (row[0], turn(row), row[1], row[2]))
+            if item != self._ready[0]:
+                self.fairness_rotations += 1
+        self._ready.remove(item)
+        heapq.heapify(self._ready)
+        return item
 
     @staticmethod
     def _shared_gap_input(request: RepairRequest) -> tuple[tuple[str, ...], int, int] | None:
@@ -1231,6 +1245,10 @@ class BackfillScheduler:
                         waiting.dispatch_bypasses = (0 if aged_dispatch else
                             min(self.max_dispatch_bypass, waiting.dispatch_bypasses + 1))
                 self._last_dispatch_owner[fairness_lane] = fairness_owner
+                self._seq += 1
+                for owner_state in self._requests.values():
+                    if self._same_fairness_owner(owner_state.request, chunk.request):
+                        owner_state.last_dispatch_sequence = self._seq
                 if self._is_background(chunk.request):
                     self._active_background_chunks.add(chunk.chunk_id)
                     self.background_dispatches += 1
@@ -1328,6 +1346,12 @@ class BackfillScheduler:
         if demand_scope:
             return demand_scope
         return f"{request.requester}:{':'.join(request.series_key)}"
+
+    @classmethod
+    def _same_fairness_owner(cls, first: RepairRequest, second: RepairRequest) -> bool:
+        return (int(first.priority or 100) == int(second.priority or 100)
+            and cls._is_background(first) == cls._is_background(second)
+            and cls._fairness_owner(first) == cls._fairness_owner(second))
 
     def _has_fairness_alternative(
         self,

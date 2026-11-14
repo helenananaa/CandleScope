@@ -5482,3 +5482,47 @@ def test_deferred_other_series_cannot_fence_the_occupied_global_dispatch_slot(ma
             await asyncio.gather(*tasks, return_exceptions=True)
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize('owners', [3, 4])
+def test_each_equal_priority_chart_gets_a_turn_before_an_older_chart_repeats(owners) -> None:
+    async def run() -> None:
+        calls = []
+        first_started, release_first = asyncio.Event(), asyncio.Event()
+
+        class Engine:
+            async def run(self, **kwargs):
+                calls.append(kwargs['symbol'])
+                if len(calls) == 1:
+                    first_started.set()
+                    await release_first.wait()
+                return _RepairReport(status='completed')
+
+        dm = _DataManager()
+        coord = BackfillCoordinator(storage=_Storage(), bars_backfilled=dm.on_bars_backfilled,
+            emit_event=dm.event_bus.emit, engine=Engine(), loop=asyncio.get_running_loop(),
+            base_delay_seconds=0, max_concurrency=1, chunk_bars=1)
+        symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT'][:owners]
+        tasks = []
+        try:
+            for index, symbol in enumerate(symbols):
+                request = _request(0, 9 * 60_000, request_id='chart-' + str(index))
+                request.symbol, request.reason, request.priority = symbol, 'initial_history', 10
+                request.metadata['demand_scope'] = 'chart:' + str(index)
+                tasks.append(asyncio.create_task(coord.request_and_wait(request)))
+                if index == 0:
+                    await first_started.wait()
+            await _wait_until(lambda: coord.snapshot()['submitted'] == owners)
+            release_first.set()
+            outcomes = await asyncio.wait_for(asyncio.gather(*tasks), 3)
+            assert all(outcome.status == 'completed' for outcome in outcomes)
+            assert calls[:owners] == symbols
+            assert all(calls.count(symbol) == 10 for symbol in symbols)
+        finally:
+            release_first.set()
+            for task in tasks:
+                task.cancel()
+            await coord.shutdown()
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    asyncio.run(run())
