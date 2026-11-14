@@ -1,11 +1,10 @@
-import { OverlayLayer } from "../../components/ui/Overlays.js";
+import { Badge, Button, Dialog, Disclosure, EmptyState, Field, InlineAlert, Input, Select, Stat } from "../../components/ui/index.js";
 import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { useControlCommands } from "../app-control/useControlCommands.js";
 import { command } from "../app-control/commandRegistry.js";
 import { bool, choice, empty, object, text } from "../app-control/commandSchema.js";
 import { t, tPlural, type LocaleId } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
-import DataWorkbenchStyles from "./DataWorkbenchStyles.js";
 import {
   fetchStorageInventory,
   type StorageInventoryFilters,
@@ -103,29 +102,22 @@ function FoldSection({
   children: ReactNode;
 }) {
   return (
-    <section className={`dw-section${open ? " expanded" : " collapsed"}`}>
-      <button
-        aria-expanded={open}
-        className="dw-fold-head"
-        onClick={onToggle}
-        type="button"
-      >
-        <span aria-hidden="true" className="dw-fold-disclosure">
-          <span className="dw-fold-chevron"><Icon name="chevron-right" size={12} /></span>
-        </span>
-        <span className="dw-fold-copy">
-          <h3>{title}</h3>
-          {description ? <p>{description}</p> : null}
-        </span>
-        <span className="dw-fold-meta">
-          {badge}
-          <span className="dw-fold-hint">
-            {open ? t("workbench.collapseSection") : t("workbench.expandSection")}
+    <Disclosure
+      className="dw-section"
+      open={open}
+      onToggle={(next) => { if (next !== open) onToggle(); }}
+      summary={(
+        <span className="dw-fold-summary">
+          <span className="dw-fold-copy">
+            <strong>{title}</strong>
+            {description ? <small>{description}</small> : null}
           </span>
+          {badge}
         </span>
-      </button>
-      {open ? <div className="dw-fold-body">{children}</div> : null}
-    </section>
+      )}
+    >
+      <div className="dw-fold-body">{children}</div>
+    </Disclosure>
   );
 }
 
@@ -280,10 +272,10 @@ export default function DataWorkbenchModal({
   const gapBadge = !integrity
     ? null
     : !integrity.available
-      ? <span className="dw-badge dw-badge-error">{t("workbench.statusUnavailable", {}, locale)}</span>
+      ? <Badge tone="danger">{t("workbench.statusUnavailable", {}, locale)}</Badge>
       : hasGaps
-        ? <span className="dw-badge dw-badge-warning">{t("workbench.openGaps", { count: integrity.openGapCount.toLocaleString(locale) }, locale)}</span>
-        : <span className="dw-badge dw-badge-ok">{t("workbench.summaryNoGaps", {}, locale)}</span>;
+        ? <Badge tone="warning">{t("workbench.openGaps", { count: integrity.openGapCount.toLocaleString(locale) }, locale)}</Badge>
+        : <Badge tone="success">{t("workbench.summaryNoGaps", {}, locale)}</Badge>;
   const fileChipValue = payload
     ? (payload.snapshot.fileSetStable ? t("workbench.fileStable", {}, locale) : t("workbench.fileWriting", {}, locale))
     : "--";
@@ -295,114 +287,91 @@ export default function DataWorkbenchModal({
         ? String(integrity.openGapCount.toLocaleString(locale))
         : t("workbench.summaryNoGaps", {}, locale);
 
-  return (
-    <OverlayLayer kind="modal" onClose={onClose}>
-    <div className="dw-overlay" onClick={onClose}>
-      <section
-        aria-label={t("settings.workbench.name", {}, locale)}
-        aria-modal="true"
-        className="dw-panel"
-        onClick={(event) => event.stopPropagation()}
-        role="dialog"
-      >
-        <header className="dw-header">
-          <div>
-            <div className="dw-kicker">{t("workbench.kicker", {}, locale)}</div>
-            <h2 className="dw-title">{t("settings.workbench.name", {}, locale)}</h2>
-            <p className="dw-subtitle">{t("workbench.subtitle", {}, locale)}</p>
-          </div>
-          <button aria-label={t("workbench.close", {}, locale)} className="dw-close" onClick={onClose} type="button" data-overlay-close=""><Icon name="close" size={14} /></button>
-        </header>
+  const instrumentHead = (open: boolean, onToggle: (() => void) | null, name: ReactNode, chips: ReactNode, stats: ReactNode) => onToggle ? (
+    <button aria-expanded={open} className="dw-instrument-head" onClick={onToggle} type="button">
+      <span aria-hidden="true" className="dw-fold-chevron"><Icon name="chevron-right" size={12} /></span>
+      {name}{chips}{stats}
+    </button>
+  ) : (
+    <div className="dw-instrument-head static">
+      <span className="dw-fold-chevron spacer" aria-hidden="true" />
+      {name}{chips}{stats}
+    </div>
+  );
 
+  return (
+    <Dialog open onClose={onClose} size="lg" className="data-workbench"
+      title={t("settings.workbench.name", {}, locale)} description={t("workbench.subtitle", {}, locale)}>
         <div className="dw-body">
-          <section className="dw-filter-card">
+          <section className="dw-filter-card" aria-label={t("workbench.filterTitle", {}, locale)}>
             <div className="dw-filter-title-row">
               <h3>{t("workbench.filterTitle", {}, locale)}</h3>
               <div className="dw-live-badges">
-                <span className="dw-badge dw-badge-live">LIVE</span>
-                <span className="dw-badge dw-badge-readonly">{t("workbench.readonly", {}, locale)}</span>
+                <Badge tone="success">LIVE</Badge>
+                <Badge tone="accent">{t("workbench.readonly", {}, locale)}</Badge>
               </div>
             </div>
             <div className="dw-filter-grid">
-              <label>
-                <span>{t("workbench.exchange", {}, locale)}</span>
-                <select value={draftFilters.exchange} onChange={(event) => setDraftFilters((current) => ({ ...current, exchange: event.target.value }))}>
+              <Field label={t("workbench.exchange", {}, locale)}>
+                <Select size="sm" value={draftFilters.exchange} onChange={(event) => setDraftFilters((current) => ({ ...current, exchange: event.target.value }))}>
                   <option value="">{t("workbench.allExchanges", {}, locale)}</option>
                   {exchangeOptions.map((exchange) => <option key={exchange} value={exchange}>{exchange}</option>)}
-                </select>
-              </label>
-              <label>
-                <span>{t("workbench.market", {}, locale)}</span>
-                <select value={draftFilters.marketType} onChange={(event) => setDraftFilters((current) => ({ ...current, marketType: event.target.value }))}>
+                </Select>
+              </Field>
+              <Field label={t("workbench.market", {}, locale)}>
+                <Select size="sm" value={draftFilters.marketType} onChange={(event) => setDraftFilters((current) => ({ ...current, marketType: event.target.value }))}>
                   <option value="">{t("workbench.allMarkets", {}, locale)}</option>
                   {marketTypeOptions.map((marketType) => <option key={marketType} value={marketType}>{formatMarketType(marketType, locale)}</option>)}
-                </select>
-              </label>
-              <label>
-                <span>{t("workbench.instrument", {}, locale)}</span>
-                <input value={draftFilters.symbol} onChange={(event) => setDraftFilters((current) => ({ ...current, symbol: event.target.value }))} placeholder="BTCUSDT" />
-              </label>
-              <label>
-                <span>{t("interval.label", {}, locale)}</span>
-                <select value={draftFilters.interval} onChange={(event) => setDraftFilters((current) => ({ ...current, interval: event.target.value }))}>
+                </Select>
+              </Field>
+              <Field label={t("workbench.instrument", {}, locale)}>
+                <Input size="sm" value={draftFilters.symbol} onChange={(event) => setDraftFilters((current) => ({ ...current, symbol: event.target.value }))} placeholder="BTCUSDT" />
+              </Field>
+              <Field label={t("interval.label", {}, locale)}>
+                <Select size="sm" value={draftFilters.interval} onChange={(event) => setDraftFilters((current) => ({ ...current, interval: event.target.value }))}>
                   <option value="">{t("workbench.allIntervals", {}, locale)}</option>
                   {intervalOptions.map((interval) => <option key={interval} value={interval}>{interval}</option>)}
-                </select>
-              </label>
+                </Select>
+              </Field>
             </div>
             <div className="dw-actions">
-              <button className="dw-button dw-button-secondary" onClick={resetFilters} type="button">{t("workbench.reset", {}, locale)}</button>
-              <button className="dw-button dw-button-secondary" disabled={!hasCurrentSymbol} onClick={focusCurrentSeries} type="button">{t("workbench.currentChart", {}, locale)}</button>
-              <button className="dw-button dw-button-primary" disabled={loading} onClick={applyFilters} type="button">{loading ? t("workbench.reading", {}, locale) : t("workbench.apply", {}, locale)}</button>
+              <Button size="sm" variant="ghost" onClick={resetFilters}>{t("workbench.reset", {}, locale)}</Button>
+              <Button size="sm" disabled={!hasCurrentSymbol} onClick={focusCurrentSeries}>{t("workbench.currentChart", {}, locale)}</Button>
+              <Button size="sm" variant="primary" disabled={loading} onClick={applyFilters}>{loading ? t("workbench.reading", {}, locale) : t("workbench.apply", {}, locale)}</Button>
             </div>
           </section>
 
-          <ManualHistoryDownloadPanel
-            exchange={currentExchange}
-            marketType={currentMarketType}
-            symbols={currentSymbol.trim() ? [currentSymbol.trim().toUpperCase()] : []}
-          />
-
           <div className="dw-summary">
-            <div className="dw-summary-chip">
-              <span>{t("workbench.physical", {}, locale)}</span>
-              <strong>{payload ? formatBytes(payload.snapshot.physicalSizeBytes) : "--"}</strong>
-            </div>
-            <div className="dw-summary-chip">
-              <span>{t("workbench.summarySeries", {}, locale)}</span>
-              <strong>{payload ? payload.inventory.matchingSeries.toLocaleString(locale) : "--"}</strong>
-            </div>
-            <div className={`dw-summary-chip${hasGaps ? " warning" : ""}`}>
-              <span>{t("workbench.summaryGaps", {}, locale)}</span>
-              <strong>{gapChipValue}</strong>
-            </div>
-            <div className={`dw-summary-chip${payload && !payload.snapshot.fileSetStable ? " warning" : ""}`}>
-              <span>{t("workbench.fileStatus", {}, locale)}</span>
-              <strong>{fileChipValue}</strong>
-            </div>
+            <Stat label={t("workbench.physical", {}, locale)} value={payload ? formatBytes(payload.snapshot.physicalSizeBytes) : "--"} />
+            <Stat label={t("workbench.summarySeries", {}, locale)} value={payload ? payload.inventory.matchingSeries.toLocaleString(locale) : "--"} />
+            <Stat label={t("workbench.summaryGaps", {}, locale)} value={gapChipValue} tone={hasGaps ? "warning" : "neutral"} />
+            <Stat label={t("workbench.fileStatus", {}, locale)} value={fileChipValue} tone={payload && !payload.snapshot.fileSetStable ? "warning" : "neutral"} />
           </div>
 
-          {error ? <div className="dw-notice dw-notice-error">{error}</div> : null}
+          {error ? <InlineAlert tone="danger">{error}</InlineAlert> : null}
 
           <FoldSection
             title={t("workbench.snapshot", {}, locale)}
             description={payload ? t("workbench.capturedAt", { time: formatDateTime(payload.capturedAtMs, locale) }, locale) : t("workbench.readingSnapshot", {}, locale)}
             badge={payload ? (
-              <span className={`dw-badge ${payload.snapshot.fileSetStable ? "dw-badge-ok" : "dw-badge-warning"}`}>
+              <Badge tone={payload.snapshot.fileSetStable ? "success" : "warning"}>
                 {payload.snapshot.fileSetStable ? t("workbench.fileStable", {}, locale) : t("workbench.fileWriting", {}, locale)}
-              </span>
+              </Badge>
             ) : null}
             open={snapshotOpen}
             onToggle={() => setSnapshotOpen((value) => !value)}
           >
             <div className="dw-stat-grid">
-              <div className="dw-stat-card"><span>{t("workbench.physical", {}, locale)}</span><strong>{payload ? formatBytes(payload.snapshot.physicalSizeBytes) : "--"}</strong><small>DB + WAL</small></div>
-              <div className="dw-stat-card"><span>{t("workbench.allSeries", {}, locale)}</span><strong>{payload ? payload.inventory.totalSeries.toLocaleString(locale) : "--"}</strong><small>{payload ? t("settings.diag.rows", { count: payload.inventory.totalRows.toLocaleString(locale) }, locale) : t("workbench.realSummary", {}, locale)}</small></div>
-              <div className="dw-stat-card"><span>{t("workbench.currentFilter", {}, locale)}</span><strong>{payload ? payload.inventory.matchingSeries.toLocaleString(locale) : "--"}</strong><small>{payload ? t("settings.diag.rows", { count: payload.inventory.matchingRows.toLocaleString(locale) }, locale) : "--"}</small></div>
-              <div className="dw-stat-card"><span>{t("workbench.fileStatus", {}, locale)}</span><strong>{payload?.snapshot.exists ? t("workbench.found", {}, locale) : payload ? t("workbench.notCreated", {}, locale) : "--"}</strong><small>{payload ? t("workbench.totalSize", { size: formatBytes(payload.snapshot.totalSizeBytes) }, locale) : "--"}</small></div>
+              <Stat label={t("workbench.physical", {}, locale)} value={payload ? formatBytes(payload.snapshot.physicalSizeBytes) : "--"} hint="DB + WAL" />
+              <Stat label={t("workbench.allSeries", {}, locale)} value={payload ? payload.inventory.totalSeries.toLocaleString(locale) : "--"}
+                hint={payload ? t("settings.diag.rows", { count: payload.inventory.totalRows.toLocaleString(locale) }, locale) : t("workbench.realSummary", {}, locale)} />
+              <Stat label={t("workbench.currentFilter", {}, locale)} value={payload ? payload.inventory.matchingSeries.toLocaleString(locale) : "--"}
+                hint={payload ? t("settings.diag.rows", { count: payload.inventory.matchingRows.toLocaleString(locale) }, locale) : "--"} />
+              <Stat label={t("workbench.fileStatus", {}, locale)} value={payload?.snapshot.exists ? t("workbench.found", {}, locale) : payload ? t("workbench.notCreated", {}, locale) : "--"}
+                hint={payload ? t("workbench.totalSize", { size: formatBytes(payload.snapshot.totalSizeBytes) }, locale) : "--"} />
             </div>
             {payload && !payload.snapshot.fileSetStable ? (
-              <div className="dw-notice dw-notice-warning">{t("workbench.writeDuringCapture", {}, locale)}</div>
+              <InlineAlert tone="warning">{t("workbench.writeDuringCapture", {}, locale)}</InlineAlert>
             ) : null}
           </FoldSection>
 
@@ -415,59 +384,40 @@ export default function DataWorkbenchModal({
               setIntegrityOpen(!integrityExpanded);
             }}
           >
-            {!integrity && loading ? <div className="dw-empty">{t("workbench.readingIntegrity", {}, locale)}</div> : null}
+            {!integrity && loading ? <EmptyState compact title={t("workbench.readingIntegrity", {}, locale)} /> : null}
             {integrity && !integrity.available ? (
-              <div className="dw-notice dw-notice-error">{integrity.reason}</div>
+              <InlineAlert tone="danger">{integrity.reason}</InlineAlert>
             ) : null}
             {integrity?.available ? (
               <>
                 <div className="dw-integrity-grid">
-                  <div><span>{t("workbench.statusDist", {}, locale)}</span><strong>{formatCountMap(integrity.openGapByStatus, locale)}</strong></div>
-                  <div><span>{t("workbench.gapAge", {}, locale)}</span><strong>{formatCountMap(integrity.openGapAgeBuckets, locale)}</strong></div>
-                  <div><span>{t("workbench.oldest", {}, locale)}</span><strong>{formatDateTime(integrity.oldestOpenGapAtMs, locale)}</strong></div>
+                  <Stat label={t("workbench.statusDist", {}, locale)} value={formatCountMap(integrity.openGapByStatus, locale)} />
+                  <Stat label={t("workbench.gapAge", {}, locale)} value={formatCountMap(integrity.openGapAgeBuckets, locale)} />
+                  <Stat label={t("workbench.oldest", {}, locale)} value={formatDateTime(integrity.oldestOpenGapAtMs, locale)} />
                 </div>
                 {!integrity.openGapCount ? (
-                  <div className="dw-empty">{t("workbench.noGaps", {}, locale)}</div>
+                  <EmptyState compact title={t("workbench.noGaps", {}, locale)} />
                 ) : (
-                  <div className="dw-gap-list">
+                  <div className="dw-instrument-list">
                     {gapGroups.map((group) => {
                       const open = openGapGroups.has(group.key);
                       const expandable = group.gaps.length > 1;
                       const gapIntervals = [...new Set(group.gaps.map((gap) => gap.interval))];
                       return (
-                        <article className={`dw-instrument${open ? " expanded" : ""}`} key={group.key}>
-                          {expandable ? (
-                            <button
-                              aria-expanded={open}
-                              className="dw-instrument-head"
-                              onClick={() => toggleGapGroup(group.key)}
-                              type="button"
-                            >
-                              <span aria-hidden="true" className="dw-fold-disclosure"><span className="dw-fold-chevron"><Icon name="chevron-right" size={12} /></span></span>
-                              <span className="dw-series-name">
-                                <strong>{group.symbol || t("workbench.unknownSymbol", {}, locale)}</strong>
-                                <small>{group.exchange || "--"} · {formatMarketType(group.marketType, locale)}</small>
-                              </span>
-                              <span className="dw-interval-chips">
-                                {gapIntervals.map((interval) => <span className="dw-chip" key={interval}>{interval}</span>)}
-                              </span>
+                        <article className="dw-instrument" data-open={open ? "true" : undefined} key={group.key}>
+                          {expandable
+                            ? instrumentHead(open, () => toggleGapGroup(group.key),
+                              <span className="dw-series-name"><strong>{group.symbol || t("workbench.unknownSymbol", {}, locale)}</strong><small>{group.exchange || "--"} · {formatMarketType(group.marketType, locale)}</small></span>,
+                              <span className="dw-interval-chips">{gapIntervals.map((interval) => <Badge key={interval}>{interval}</Badge>)}</span>,
                               <span className="dw-instrument-stats">
                                 {tPlural("workbench.intervalCount", gapIntervals.length, {}, locale)}
                                 {" · "}
                                 {t("workbench.gapBars", { count: group.missingBars.toLocaleString(locale) }, locale)}
-                              </span>
-                            </button>
-                          ) : (
-                            <div className="dw-instrument-head static">
-                              <span className="dw-fold-disclosure spacer" aria-hidden="true" />
-                              <span className="dw-series-name">
-                                <strong>{group.symbol || t("workbench.unknownSymbol", {}, locale)}</strong>
-                                <small>{group.exchange || "--"} · {formatMarketType(group.marketType, locale)} · {group.gaps[0]?.interval}</small>
-                              </span>
-                              <span className="dw-instrument-stats">{group.gaps[0]?.status}</span>
-                              <span className="dw-instrument-stats">{t("workbench.missingBars", { count: group.missingBars.toLocaleString(locale) }, locale)}</span>
-                            </div>
-                          )}
+                              </span>)
+                            : instrumentHead(false, null,
+                              <span className="dw-series-name"><strong>{group.symbol || t("workbench.unknownSymbol", {}, locale)}</strong><small>{group.exchange || "--"} · {formatMarketType(group.marketType, locale)} · {group.gaps[0]?.interval}</small></span>,
+                              <span className="dw-interval-chips"><Badge tone="warning">{group.gaps[0]?.status}</Badge></span>,
+                              <span className="dw-instrument-stats">{t("workbench.missingBars", { count: group.missingBars.toLocaleString(locale) }, locale)}</span>)}
                           {expandable && open ? (
                             <div className="dw-instrument-detail">
                               {group.gaps.map((gap, index) => (
@@ -484,7 +434,7 @@ export default function DataWorkbenchModal({
                       );
                     })}
                     {integrity.openGapCount > integrity.gapSamples.length ? (
-                      <div className="dw-gap-more">{t("workbench.gapSamples", { shown: integrity.gapSamples.length.toLocaleString(locale), limit: integrity.sampleLimit.toLocaleString(locale) }, locale)}</div>
+                      <p className="dw-note">{t("workbench.gapSamples", { shown: integrity.gapSamples.length.toLocaleString(locale), limit: integrity.sampleLimit.toLocaleString(locale) }, locale)}</p>
                     ) : null}
                   </div>
                 )}
@@ -492,7 +442,7 @@ export default function DataWorkbenchModal({
             ) : null}
           </FoldSection>
 
-          <section className="dw-section">
+          <section className="dw-stored" aria-label={t("workbench.storedSeries", {}, locale)}>
             <div className="dw-section-heading">
               <h3>{t("workbench.storedSeries", {}, locale)}</h3>
               {payload ? (
@@ -505,57 +455,37 @@ export default function DataWorkbenchModal({
               ) : null}
             </div>
             {payload?.inventory.truncated ? (
-              <div className="dw-notice dw-notice-warning">{t("workbench.truncated", { matching: payload.inventory.matchingSeries.toLocaleString(locale), shown: payload.inventory.returnedSeries.toLocaleString(locale) }, locale)}</div>
+              <InlineAlert tone="warning">{t("workbench.truncated", { matching: payload.inventory.matchingSeries.toLocaleString(locale), shown: payload.inventory.returnedSeries.toLocaleString(locale) }, locale)}</InlineAlert>
             ) : null}
             <div className="dw-instrument-list">
-              {loading && !payload ? <div className="dw-empty">{t("workbench.readingInventory", {}, locale)}</div> : null}
-              {!loading && payload?.series.length === 0 ? <div className="dw-empty">{t("workbench.emptySeries", {}, locale)}</div> : null}
+              {loading && !payload ? <EmptyState compact title={t("workbench.readingInventory", {}, locale)} /> : null}
+              {!loading && payload?.series.length === 0 ? <EmptyState compact title={t("workbench.emptySeries", {}, locale)} /> : null}
               {seriesGroups.map((group) => {
                 const open = openSeriesGroups.has(group.key);
                 const expandable = group.series.length > 1;
                 const intervals = group.series.map((item) => item.interval);
                 const visibleIntervals = intervals.slice(0, 8);
+                const name = <span className="dw-series-name"><strong>{group.symbol}</strong><small>{group.exchange} · {formatMarketType(group.marketType, locale)}</small></span>;
                 return (
-                  <article className={`dw-instrument${open ? " expanded" : ""}`} key={group.key}>
-                    {expandable ? (
-                      <button
-                        aria-expanded={open}
-                        className="dw-instrument-head"
-                        onClick={() => toggleSeriesGroup(group.key)}
-                        type="button"
-                      >
-                        <span aria-hidden="true" className="dw-fold-disclosure"><span className="dw-fold-chevron"><Icon name="chevron-right" size={12} /></span></span>
-                        <span className="dw-series-name">
-                          <strong>{group.symbol}</strong>
-                          <small>{group.exchange} · {formatMarketType(group.marketType, locale)}</small>
-                        </span>
+                  <article className="dw-instrument" data-open={open ? "true" : undefined} key={group.key}>
+                    {expandable
+                      ? instrumentHead(open, () => toggleSeriesGroup(group.key), name,
                         <span className="dw-interval-chips">
-                          {visibleIntervals.map((interval) => <span className="dw-chip" key={interval}>{interval}</span>)}
-                          {intervals.length > visibleIntervals.length ? <span className="dw-chip muted">+{intervals.length - visibleIntervals.length}</span> : null}
-                        </span>
+                          {visibleIntervals.map((interval) => <Badge tone="accent" key={interval}>{interval}</Badge>)}
+                          {intervals.length > visibleIntervals.length ? <Badge>+{intervals.length - visibleIntervals.length}</Badge> : null}
+                        </span>,
                         <span className="dw-instrument-stats">
                           {tPlural("workbench.intervalCount", group.series.length, {}, locale)}
                           {" · "}
                           {t("settings.diag.rows", { count: group.totalCount.toLocaleString(locale) }, locale)}
-                        </span>
-                      </button>
-                    ) : (
-                      <div className="dw-instrument-head static">
-                        <span className="dw-fold-disclosure spacer" aria-hidden="true" />
-                        <span className="dw-series-name">
-                          <strong>{group.symbol}</strong>
-                          <small>{group.exchange} · {formatMarketType(group.marketType, locale)}</small>
-                        </span>
-                        <span className="dw-interval-chips">
-                          <span className="dw-chip">{group.series[0]?.interval}</span>
-                        </span>
+                        </span>)
+                      : instrumentHead(false, null, name,
+                        <span className="dw-interval-chips"><Badge tone="accent">{group.series[0]?.interval}</Badge></span>,
                         <span className="dw-instrument-stats">
                           {t("settings.diag.rows", { count: group.totalCount.toLocaleString(locale) }, locale)}
                           {" · "}
                           {formatDateTime(group.earliestOpenMs, locale)} → {formatDateTime(group.latestOpenMs, locale)}
-                        </span>
-                      </div>
-                    )}
+                        </span>)}
                     {expandable && open ? (
                       <div className="dw-instrument-detail">
                         {group.series.map((item) => (
@@ -573,10 +503,13 @@ export default function DataWorkbenchModal({
               })}
             </div>
           </section>
+
+          <ManualHistoryDownloadPanel
+            exchange={currentExchange}
+            marketType={currentMarketType}
+            symbols={currentSymbol.trim() ? [currentSymbol.trim().toUpperCase()] : []}
+          />
         </div>
-      </section>
-      <DataWorkbenchStyles />
-    </div>
-    </OverlayLayer>
+    </Dialog>
   );
 }
