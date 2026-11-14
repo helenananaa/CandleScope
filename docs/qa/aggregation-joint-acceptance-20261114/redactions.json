@@ -1,0 +1,4 @@
+{
+  "policy": "only credential/context token strings; numeric tokens and market values retained",
+  "paths": []
+}

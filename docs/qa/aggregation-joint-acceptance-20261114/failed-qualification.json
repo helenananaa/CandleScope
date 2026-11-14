@@ -1,0 +1,60 @@
+{
+  "source_head": "9b207f85a1df3a3fde6b78a0bc279037edaae967",
+  "backend_files": 1005,
+  "all_backend_and_asar_hashes_match": true,
+  "strict_signature_status": 0,
+  "cases": [
+    {
+      "case": "prime-cold",
+      "passed": false,
+      "source_head": "9b207f85a1df3a3fde6b78a0bc279037edaae967",
+      "bars": [
+        47,
+        44,
+        42,
+        0
+      ],
+      "errors": [
+        null,
+        null,
+        null,
+        "Error: No complete stored history is available for 10007m; preparing it exceeds the current history limit"
+      ],
+      "owned_exits": 10,
+      "resources": {
+        "samples": 104,
+        "peak_sum_rss_KiB": 1694848,
+        "last_observed_cpu_seconds": 359.0599999999999,
+        "first": "2026-11-14T04:47:59.365Z",
+        "last": "2026-11-14T04:51:25.491Z",
+        "scope": "unpaired failed cold profile; sum of owned process RSS, not unique physical memory; no allocation/GC claim"
+      }
+    },
+    {
+      "case": "usdm-prime-cold-baseline",
+      "passed": false,
+      "source_head": "9b207f85a1df3a3fde6b78a0bc279037edaae967",
+      "bars": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "errors": [
+        null,
+        null,
+        null,
+        "Error: No complete stored history is available for 10007m; preparing it exceeds the current history limit"
+      ],
+      "owned_exits": 10,
+      "resources": {
+        "samples": 107,
+        "peak_sum_rss_KiB": 1852896,
+        "last_observed_cpu_seconds": 236.82000000000002,
+        "first": "2026-11-14T05:01:18.716Z",
+        "last": "2026-11-14T05:04:50.792Z",
+        "scope": "unpaired failed cold profile; sum of owned process RSS, not unique physical memory; no allocation/GC claim"
+      }
+    }
+  ]
+}
