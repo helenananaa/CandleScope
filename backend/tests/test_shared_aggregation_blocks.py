@@ -67,6 +67,48 @@ def consume(m, k=None, builder=None, cancel=None):
             return block
 
 
+def test_resident_input_probe_preserves_shared_summaries_and_source_range_isolation():
+    m = manager()
+    try:
+        consume(m)
+        with m.view((SOURCE,)) as view:
+            assert m.has_resident_inputs(view, 0, 86400000)
+            assert not m.has_resident_inputs(view, 2*86400000, 3*86400000)
+            with pytest.raises(ValueError):
+                m.has_resident_inputs(view, 0, 0)
+        with pytest.raises(BlockRevisionChanged):
+            m.has_resident_inputs(view, 0, 86400000)
+        with m.view((replace(SOURCE, market_type='futures'),)) as other:
+            assert not m.has_resident_inputs(other, 0, 86400000)
+        m.invalidate(SOURCE, 'test-source')
+        with m.view((SOURCE,)) as empty:
+            assert not m.has_resident_inputs(empty, 0, 86400000)
+    finally:
+        m.close()
+
+
+def test_resident_input_probe_observes_inflight_builds_without_waiting():
+    m = manager()
+    started, release = threading.Event(), threading.Event()
+    def slow(view, block_key):
+        started.set()
+        assert release.wait(3)
+        return build(view, block_key)
+    try:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            work = executor.submit(lambda: consume(m, builder=slow))
+            try:
+                assert started.wait(3)
+                with m.view((SOURCE,)) as view:
+                    assert m.has_resident_inputs(view, 0, 86400000)
+                    assert not m.has_resident_inputs(view, 2*86400000, 3*86400000)
+            finally:
+                release.set()
+            work.result(timeout=3)
+    finally:
+        m.close()
+
+
 def eventually(predicate):
     until = time.monotonic() + 5
     while time.monotonic() < until:

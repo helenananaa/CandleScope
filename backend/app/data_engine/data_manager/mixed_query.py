@@ -151,7 +151,9 @@ def query_closed_mixed(engine, key, *, start_ms=None, end_ms=None, before_ms=Non
                     raise BlockRevisionChanged("mixed precedence evidence changed")
                 mutations = dict(zip(keys, changes))
 
-                if composition_contract is not None and callable(getattr(storage, 'count_bars', None)):
+                resident = getattr(manager, 'has_resident_inputs', None)
+                if (callable(getattr(storage, 'count_bars', None)) and callable(resident)
+                        and not resident(view, first, stop)):
                     # Even counting every row (including untrusted, overlapping
                     # or cross-boundary inputs) cannot cover more than this
                     # duration. A shortage can skip an expensive exact-cover

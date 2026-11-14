@@ -28,6 +28,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.executors import run_storage
 from app.core.bounded_executor import ExecutorBusyError
+from app.data_engine.data_manager.models import StreamNotReady
 from app.exchanges import (
     bootstrap_default_adapters,
     get_exchange_registry,
@@ -1033,11 +1034,27 @@ def _snapshot_is_stable(result: Any) -> bool:
     metadata = getattr(result, 'metadata', None) or {}
     if any(metadata.get(reason) is True for reason in (
         'revision_unavailable', 'revision_unsupported', 'min_revision_pending',
-        'storage_revision_conflict', 'memory_budget_deferred',
+        'storage_revision_conflict', 'memory_budget_deferred', 'latest_stream_pending',
     )):
         return False
     version = metadata.get("stream_version")
     return version is None or version.get("stable") is True
+
+
+async def _materialized_stream_pending(dm, unavailable, symbol, interval, *,
+                                       limit, exchange, market_type, identity_kwargs, min_revision=None):
+    materialized = getattr(dm, 'query_materialized', None)
+    if not callable(materialized):
+        raise HTTPException(status_code=503, detail='Materialized latest read unavailable')
+    result = await run_storage(_call_data_manager_method, materialized, symbol, interval,
+        limit=limit, exchange=exchange, market_type=market_type, **identity_kwargs,
+        **({'min_revision': min_revision} if min_revision is not None else {}))
+    result.complete, result.retryable, result.history_state = False, True, 'pending'
+    result.has_tail_gap, result.backfill_triggered, result.missing_ranges = True, False, []
+    result.terminal_reason, result.has_more = None, True
+    result.metadata.update(latest_stream_pending=True, latest_stream_state=unavailable.status.value,
+        latest_stream_role=unavailable.role, latest_stream_interval=unavailable.key.interval)
+    return result
 
 
 def _history_contract_payload(
@@ -1983,6 +2000,10 @@ async def get_klines(
             **identity_kwargs,
             **({"min_revision": min_revision} if isinstance(min_revision, int) else {}),
         )
+    except StreamNotReady as exc:
+        result = await _materialized_stream_pending(dm, exc, symbol, interval,
+            limit=limit, exchange=exchange, market_type=market_type, identity_kwargs=identity_kwargs,
+            min_revision=min_revision if isinstance(min_revision, int) else None)
     except Exception as exc:
         raise _query_http_exception(exc, "DataManager query failed") from exc
     finally:
@@ -2010,6 +2031,10 @@ async def get_klines(
         "count": len(data),
         "source": result.source.value,
         "fetched": result.total,
+        **_history_contract_payload(result),
+        "backfill_triggered": result.backfill_triggered,
+        "has_tail_gap": result.has_tail_gap,
+        "missing_ranges": [item.to_dict() for item in result.missing_ranges],
         "cache": result.metadata,
         "data": data,
         "base_interval": None,
@@ -2099,19 +2124,28 @@ async def get_latest_klines(
             )
     consumer_id = f"rest:klines_latest:{exchange}:{market_type}:{symbol}:{interval}:{id(request)}"
     stream_ensured = False
+    stream_pending = None
     try:
         if not identity_kwargs:
-            await dm.ensure_stream(
-                symbol,
-                interval,
-                exchange=exchange,
-                market_type=market_type,
-                focus_scope="rest",
-                consumer_id=consumer_id,
-            )
-            stream_ensured = True
+            try:
+                await dm.ensure_stream(
+                    symbol,
+                    interval,
+                    exchange=exchange,
+                    market_type=market_type,
+                    focus_scope="rest",
+                    consumer_id=consumer_id,
+                )
+                stream_ensured = True
+            except StreamNotReady as exc:
+                # The failed start already rolled back its own leases. A
+                # transient live prerequisite is not missing historical data.
+                stream_pending = exc
 
         async def _run_latest_query(auto_backfill: bool):
+            if stream_pending is not None:
+                return await _materialized_stream_pending(dm, stream_pending, symbol, interval,
+                    limit=limit, exchange=exchange, market_type=market_type, identity_kwargs=identity_kwargs)
             query_method = dm.query if bounded_tail_repair else dm.query_latest
             query_args = (
                 (symbol, interval)
@@ -2161,6 +2195,7 @@ async def get_latest_klines(
         )
         if (
             bounded_tail_repair
+            and stream_pending is None
             and max_wait_ms > 0
             and _should_wait_for_backfill(result)
         ):

@@ -145,6 +145,7 @@ from .models import (
     SeriesKey,
     StorageBackend,
     StreamInfo,
+    StreamNotReady,
     StreamStatus,
     SubscriptionHandle,
     audience_for_backfill_reason,
@@ -1191,12 +1192,13 @@ class DataManager(DataManagerCore):
         symbol: str,
         interval: str,
         *,
-        start_ms: int,
-        end_ms: int,
+        start_ms: int | None = None,
+        end_ms: int | None = None,
         limit: int,
         exchange: str = "binance",
         market_type: str = "spot",
         series_identity: KlineSeriesIdentity | None = None,
+        min_revision: int | None = None,
     ) -> QueryResult:
         """Probe target cache/storage without deriving or admitting repairs.
 
@@ -1218,6 +1220,7 @@ class DataManager(DataManagerCore):
             exchange=exchange, market_type=market_type,
             series_identity=series_identity, auto_backfill=False,
             _materialized_only=True,
+            **({'min_revision': min_revision} if min_revision is not None else {}),
         )
         self._finish_query_snapshot(version_key, version_before, result, start_ms=start_ms, end_ms=end_ms)
         result.metadata["target_materialized_only"] = True
@@ -2242,10 +2245,7 @@ class DataManager(DataManagerCore):
         """Fail closed when a coordinator start attempt did not become active."""
         if info.status is StreamStatus.ACTIVE:
             return
-        detail = f"{role} stream {info.key} is {info.status.value}"
-        if info.error:
-            detail = f"{detail}: {info.error}"
-        raise RuntimeError(detail)
+        raise StreamNotReady(info.key, info.status, role=role, error=info.error)
 
     async def release_stream(
         self,

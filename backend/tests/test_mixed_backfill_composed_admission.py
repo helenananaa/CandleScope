@@ -18,7 +18,7 @@ from app.data_engine.history.service import HistoryAvailabilityService
 from app.data_engine.storage import klines_repo
 from tests.test_mixed_backfill_plan import engine_for
 from tests.test_mixed_backfill_pipeline import Upstream, META
-from tests.test_mixed_history_reader import row, MINUTE
+from tests.test_mixed_history_reader import row, MINUTE, FIELDS
 
 CONTRACT = 'binance.usdm.trade-klines/base-utc/1'
 WIDTH = 10007 * MINUTE
@@ -261,7 +261,8 @@ def test_required_composition_reuses_complete_fine_inputs_without_fetch(composed
 
 
 @pytest.mark.parametrize('partial_targets', [0, 20])
-def test_obvious_local_coverage_shortage_skips_cover_planning_without_losing_partial(composed_dm, monkeypatch, partial_targets):
+@pytest.mark.parametrize('explicit', [False, True])
+def test_obvious_local_coverage_shortage_skips_cover_planning_without_losing_partial(composed_dm, monkeypatch, partial_targets, explicit):
     manager = composed_dm
     if partial_targets:
         manager.query_engine.storage.upsert_bars('BTCUSDT', '10007m',
@@ -269,8 +270,10 @@ def test_obvious_local_coverage_shortage_skips_cover_planning_without_losing_par
             source='backfill_aggregated', market_type='futures')
     monkeypatch.setattr(manager.query_engine, 'read_mixed_history_blocks', forbidden)
     monkeypatch.setattr(manager.query_engine.custom_intervals, '_base_query', forbidden)
-    result = manager.query_composed('BTCUSDT', '10007m', **{
-        **options(manager), 'end_ms': 128 * WIDTH - 1, 'limit': 128})
+    arguments = {**options(manager), 'end_ms': 128 * WIDTH - 1, 'limit': 128}
+    if not explicit:
+        arguments.pop('composition_contract')
+    result = manager.query('BTCUSDT', '10007m', **arguments)
     assert not result.complete and result.retryable and result.history_state == 'pending'
     assert len(result.bars) == partial_targets
     assert all(bar.trusted_final and bar.volume == 10007 for bar in result.bars)
@@ -295,6 +298,28 @@ def test_overlapping_or_cross_boundary_counts_never_prove_a_complete_cover(compo
     assert calls and result.metadata['mixed_local_coverage_upper_ms'] >= WIDTH
     assert not result.complete and result.history_state == 'pending' and not result.bars
     assert not result.metadata.get('mixed_impossible_local_cover')
+    assert result.metadata['target_materialized_written'] == 0
+
+
+def test_resident_coarse_summary_keeps_its_original_read_chance(composed_dm, monkeypatch):
+    from app.data_engine.data_manager.models import SeriesKey
+    from app.data_engine.history.cover_plan import FixedHistorySource
+    manager = composed_dm
+    enough_count_to_reach_cover(manager)
+    day = 1440 * MINUTE
+    native = SeriesKey('BTCUSDT', '1d', market_type='futures')
+    target = SeriesKey('BTCUSDT', '6d', market_type='futures')
+    source = FixedHistorySource(native, day, 0, ((0, 6*day),), FIELDS, CONTRACT)
+    with manager.read_mixed_history_blocks(target, 0, 6*day, (source,), required_fields=FIELDS) as read:
+        pass
+    assert read.summary.is_authoritative(0, 6*day)
+    assert manager.shared_blocks.memory_usage()['entries'] > 0
+    monkeypatch.setattr(manager.query_engine.custom_intervals, '_base_query', forbidden)
+    result = manager.query_composed('BTCUSDT', '10007m', **{
+        **options(manager), 'end_ms': 128*WIDTH-1, 'limit':128})
+    assert not result.complete and result.history_state == 'pending'
+    assert not result.metadata.get('mixed_impossible_local_cover')
+    assert result.metadata['mixed_cache_hits'] >= 1
     assert result.metadata['target_materialized_written'] == 0
 
 
@@ -350,3 +375,72 @@ def test_durable_or_memory_read_deferral_never_becomes_verification_repair(compo
     result = response.json()
     assert result['cache'][fault] and not result['complete'] and result['retryable']
     assert not result['backfill_triggered']
+
+
+@pytest.mark.parametrize('endpoint,parameters', [
+    ('/', {}), ('/latest', {'repair':'none'}), ('/latest', {'repair':'wait','max_wait_ms':1500}),
+])
+@pytest.mark.parametrize('stored_targets', [0, 2])
+def test_latest_stream_start_failure_preserves_bounded_targets_without_repair(composed_dm, monkeypatch, endpoint, parameters, stored_targets):
+    from tests.test_data_manager_gc import _ErrorStatusCoordinator
+    manager = composed_dm
+    manager.coordinator = _ErrorStatusCoordinator()
+    width = 89 * MINUTE
+    if stored_targets:
+        manager.query_engine.storage.upsert_bars('BTCUSDT', '89m',
+            [row(index*width, width) for index in range(stored_targets)],
+            source='backfill_aggregated', market_type='futures')
+    monkeypatch.setattr(manager.query_engine.custom_intervals, '_base_query', forbidden)
+    monkeypatch.setattr(manager.query_engine.custom_intervals, '_base_query_before', forbidden)
+    manager.set_backfill_trigger(forbidden)
+    app = FastAPI()
+    app.state.data_manager = manager
+    app.include_router(api.router, prefix='/api/v1')
+    with TestClient(app) as client:
+        response = client.get('/api/v1/klines'+endpoint, params=dict(symbol='BTCUSDT', interval='89m',
+            market_type='futures', limit=2, **parameters))
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert len(result['data']) == stored_targets
+    assert all(bar['is_closed'] for bar in result['data'])
+    assert not result['complete'] and result['retryable'] and result['history_state'] == 'pending'
+    assert result['cache']['latest_stream_pending'] and result['cache']['latest_stream_interval'] == '1m'
+    assert not result['backfill_triggered'] and not result['missing_ranges']
+    assert manager._stream_leases == {} and manager.storage_intents.snapshot()['intent_count'] == 0
+    assert manager.coordinator.stopped
+
+
+def test_pending_stream_target_probe_preserves_the_requested_revision_floor(composed_dm):
+    from tests.test_data_manager_gc import _ErrorStatusCoordinator
+    manager = composed_dm
+    manager.coordinator = _ErrorStatusCoordinator()
+    width = 89 * MINUTE
+    manager.query_engine.storage.upsert_bars('BTCUSDT','89m',[row(0,width)],
+        source='backfill_aggregated',market_type='futures')
+    required = manager.query_engine.storage.revision_store.head()+1
+    app = FastAPI()
+    app.state.data_manager = manager
+    app.include_router(api.router,prefix='/api/v1')
+    with TestClient(app) as client:
+        response = client.get('/api/v1/klines/',params=dict(symbol='BTCUSDT',interval='89m',
+            market_type='futures',limit=2,min_revision=required))
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert not result['data'] and result['cache']['min_revision_pending']
+    assert result['cache']['required_revision'] == required
+    assert not result['complete'] and result['retryable'] and not result['backfill_triggered']
+
+
+def test_unexpected_stream_start_errors_remain_visible(composed_dm, monkeypatch):
+    async def broken(*args, **kwargs):
+        raise RuntimeError('controlled unexpected failure')
+    manager = composed_dm
+    monkeypatch.setattr(manager, 'ensure_stream', broken)
+    monkeypatch.setattr(manager, 'query_materialized', forbidden)
+    app = FastAPI()
+    app.state.data_manager = manager
+    app.include_router(api.router,prefix='/api/v1')
+    with TestClient(app) as client:
+        response = client.get('/api/v1/klines/latest',params={'symbol':'BTCUSDT','interval':'89m','market_type':'futures'})
+    assert response.status_code == 500
+    assert 'controlled unexpected failure' in response.json()['detail']
