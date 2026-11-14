@@ -89,6 +89,7 @@ interface RequestBeforePageOptions {
 }
 
 interface GetBarsOptions {
+  compositionContract?: string;
   cacheMode?: KlineRequestContext["cacheMode"];
   from?: unknown;
   to?: unknown;
@@ -109,6 +110,7 @@ interface GetBarsOptions {
 }
 
 interface GetHistoryOptions {
+  compositionContract?: string;
   cacheMode?: KlineRequestContext["cacheMode"];
   days?: number | null;
   countBack?: number | null;
@@ -124,6 +126,7 @@ interface GetHistoryOptions {
 }
 
 interface GetBeforeOptions {
+  compositionContract?: string;
   cacheMode?: KlineRequestContext["cacheMode"];
   before?: EpochSeconds;
   bars?: number;
@@ -137,6 +140,7 @@ interface GetBeforeOptions {
 }
 
 interface GetRangeOptions extends Pick<KlineRangeRequestOptions, "storageRevisionFloor"> {
+  compositionContract?: string;
   cacheMode?: KlineRequestContext["cacheMode"];
   start?: unknown;
   end?: unknown;
@@ -680,6 +684,7 @@ export class SeriesDataFeed {
   excludedRangesBySeries: Map<SeriesKey, ExcludedRangeState>;
   api: KlineApi | null;
   canRequestSeries: (series: Partial<MarketSeries>) => boolean;
+  private historyCompositionContractFor: (series: MarketSeries) => string | null | undefined = () => undefined;
   getActiveSeries: () => MarketSeries | null;
   isActiveSeries: (series: MarketSeries, activeSeries: MarketSeries | null) => boolean;
   mergeCacheData: MergeCacheData;
@@ -759,6 +764,7 @@ export class SeriesDataFeed {
       this.chartWorkSchedulerCellId = config.chartWorkSchedulerCellId;
     }
     this.canRequestSeries = config.canRequestSeries || this.canRequestSeries || (() => true);
+    if (config.historyCompositionContractFor) this.historyCompositionContractFor = config.historyCompositionContractFor;
     this.getActiveSeries = config.getActiveSeries || this.getActiveSeries || (() => null);
     this.isActiveSeries = config.isActiveSeries || this.isActiveSeries || defaultIsActiveSeries;
     this.mergeCacheData = config.mergeCacheData || this.mergeCacheData || noopMergeCacheData;
@@ -2488,6 +2494,7 @@ export class SeriesDataFeed {
       from,
       to,
       countBack,
+      compositionContract,
       days,
       fallbackDays,
       source = "bars",
@@ -2512,9 +2519,9 @@ export class SeriesDataFeed {
       ...(fallbackDays === undefined ? {} : { fallbackDays }),
       intervalSeconds: parseIntervalSeconds(series.interval),
     });
-
     if (plan.type === "range") {
       const result = await this.getRange(series, {
+        ...(compositionContract === undefined ? {} : { compositionContract }),
         start: plan.range.start,
         end: plan.range.end,
         repair,
@@ -2533,6 +2540,7 @@ export class SeriesDataFeed {
 
     if (plan.type === "before") {
       const result = await this.getBefore(series, {
+        ...(compositionContract === undefined ? {} : { compositionContract }),
         before: plan.before,
         bars: plan.bars,
         source,
@@ -2548,6 +2556,7 @@ export class SeriesDataFeed {
     }
 
     const result = await this.getHistory(series, {
+      ...(compositionContract === undefined ? {} : { compositionContract }),
       days: plan.days,
       countBack: plan.countBack,
       source,
@@ -2592,6 +2601,7 @@ export class SeriesDataFeed {
       days,
       countBack,
       materializedOnly,
+      compositionContract,
       source = "history",
       signal,
       commit = "active",
@@ -2604,12 +2614,21 @@ export class SeriesDataFeed {
     }: GetHistoryOptions = {},
   ): Promise<AppliedKlineResult> {
     if (!this.isSeriesRequestAllowed(series)) return dataPlaneDisabledResult();
+    if (!materializedOnly) {
+      const required = compositionContract ?? this.historyCompositionContractFor(series);
+      if (required === null) {
+        materializedOnly = true;
+        maxWaitMs = 0;
+        intent = "viewport";
+      } else compositionContract = required;
+    }
     const epoch = this.currentEpoch(series);
     const indicatorWindowOwner = requestedIndicatorWindowOwner || this.indicatorWindowOwner(
       "history",
       series,
       epoch,
-      [days, countBack, requestScope, maxWaitMs, intent, ...(materializedOnly ? ["materialized-only"] : [])],
+      [days, countBack, requestScope, maxWaitMs, intent, ...(materializedOnly ? ["materialized-only"] : []),
+        ...(compositionContract !== undefined ? ["composed-history", compositionContract] : [])],
     );
     const transportDemand = this.transportDemandOptions(series);
     const clientContext = this.transportContext(series, epoch, requestScope, priority, `kline-history:${source}`);
@@ -2633,6 +2652,7 @@ export class SeriesDataFeed {
           seriesIdentity: series,
           ...(countBack === undefined ? {} : { countBack }),
           ...(materializedOnly === undefined ? {} : { materializedOnly }),
+          ...(compositionContract === undefined ? {} : { compositionContract }),
           ...(signal === undefined ? {} : { signal }),
           ...(maxWaitMs === undefined ? {} : { maxWaitMs }),
           ...(intent === undefined ? {} : { intent }),
@@ -2660,6 +2680,7 @@ export class SeriesDataFeed {
     {
       before,
       bars = 500,
+      compositionContract,
       source = "before",
       signal,
       commit = "active",
@@ -2671,12 +2692,15 @@ export class SeriesDataFeed {
     }: GetBeforeOptions = {},
   ): Promise<AppliedKlineResult> {
     if (!this.isSeriesRequestAllowed(series)) return dataPlaneDisabledResult();
+    const required = compositionContract ?? this.historyCompositionContractFor(series);
+    if (required === null) throw new Error("History is unavailable for this interval");
+    compositionContract = required;
     const epoch = this.currentEpoch(series);
     const indicatorWindowOwner = requestedIndicatorWindowOwner || this.indicatorWindowOwner(
       "before",
       series,
       epoch,
-      [before, bars, requestScope],
+      [before, bars, requestScope, ...(compositionContract !== undefined ? ["composed-history", compositionContract] : [])],
     );
     const transportDemand = this.transportDemandOptions(series);
     const clientContext = this.transportContext(series, epoch, requestScope, priority, `kline-before:${source}`);
@@ -2701,6 +2725,7 @@ export class SeriesDataFeed {
           seriesIdentity: series,
           ...(signal === undefined ? {} : { signal }),
           ...(maxWaitMs === undefined ? {} : { maxWaitMs }),
+          ...(compositionContract === undefined ? {} : { compositionContract }),
           ...transportDemand,
         },
       );
@@ -2741,6 +2766,7 @@ export class SeriesDataFeed {
       priority = "foreground",
       cacheMode = "network-only",
       storageRevisionFloor,
+      compositionContract,
     }: GetRangeOptions = {},
   ): Promise<FeedResult> {
     const range = normalizeRangeSec({ start, end, startSec, endSec });
@@ -2748,13 +2774,15 @@ export class SeriesDataFeed {
       return { data: [], rows: [], skipped: true, reason: "invalid-range" };
     }
     if (!this.isSeriesRequestAllowed(series)) return dataPlaneDisabledResult();
-
+    const required = compositionContract ?? this.historyCompositionContractFor(series);
+    if (required === null) throw new Error("History is unavailable for this interval");
+    compositionContract = required;
     const epoch = this.currentEpoch(series);
     const indicatorWindowOwner = requestedIndicatorWindowOwner || this.indicatorWindowOwner(
       "range",
       series,
       epoch,
-      [range.start, range.end, requestScope],
+      [range.start, range.end, requestScope, ...(compositionContract !== undefined ? ["composed-history", compositionContract] : [])],
     );
     const transportDemand = this.transportDemandOptions(series);
     const clientContext = this.transportContext(series, epoch, requestScope, priority, `kline-range:${source}`);
@@ -2790,6 +2818,7 @@ export class SeriesDataFeed {
             waitMs,
             strict,
             ...(storageRevisionFloor ? { storageRevisionFloor } : {}),
+            ...(compositionContract === undefined ? {} : { compositionContract }),
             ...(signal === undefined ? {} : { signal }),
             ...transportDemand,
           },

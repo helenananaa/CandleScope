@@ -64,15 +64,18 @@ export interface RequestSignalOptions {
 export interface KlineHistoryOptions extends RequestSignalOptions {
   countBack?: number | null;
   materializedOnly?: boolean;
+  compositionContract?: string;
   maxWaitMs?: number;
   intent?: "viewport" | "active_hydration";
 }
 
 export interface KlineBeforeOptions extends RequestSignalOptions {
+  compositionContract?: string;
   maxWaitMs?: number;
 }
 
 export interface KlineRangeOptions extends RequestSignalOptions {
+  compositionContract?: string;
   storageRevisionFloor?: StorageRevisionFloor;
   repair?: string;
   waitMs?: number;
@@ -212,13 +215,16 @@ export async function fetchKlinesHistory(
 ): Promise<TransportKlineResponse> {
   // A distinct URL fails closed on older servers, which may ignore an unknown
   // query flag on /history and accidentally expand the expensive base route.
-  const endpoint = options.materializedOnly ? "/klines/history/materialized" : "/klines/history";
+  if (options.materializedOnly && options.compositionContract !== undefined) throw new TypeError("History execution modes cannot be combined");
+  const endpoint = options.compositionContract !== undefined ? "/klines/history/composed"
+    : options.materializedOnly ? "/klines/history/materialized" : "/klines/history";
   const payload = await request(buildUrl(endpoint, {
     symbol,
     interval,
     days: options.countBack == null ? days : undefined,
     count_back: options.countBack,
     materialized_only: options.materializedOnly,
+    composition_contract: options.compositionContract,
     exchange,
     market_type: marketType,
     max_wait_ms: options.maxWaitMs,
@@ -249,6 +255,7 @@ export async function fetchKlinesHistoryBatch(
         days: item.days ?? 7,
         count_back: item.options.countBack,
         materialized_only: item.options.materializedOnly,
+        composition_contract: item.options.compositionContract,
         exchange: item.exchange,
         market_type: item.marketType,
         max_wait_ms: item.options.maxWaitMs,
@@ -302,7 +309,8 @@ export async function fetchKlinesBefore(
   exchange = "binance",
   options: KlineBeforeOptions = {},
 ): Promise<TransportKlineResponse> {
-  const payload = await request(buildUrl("/klines/history/before", {
+  const payload = await request(buildUrl(options.compositionContract !== undefined ? "/klines/history/before/composed" : "/klines/history/before", {
+    composition_contract: options.compositionContract,
     symbol,
     interval,
     before,
@@ -352,7 +360,8 @@ export async function fetchKlinesRange(
   exchange = "binance",
   options: KlineRangeOptions = {},
 ): Promise<TransportKlineResponse> {
-  const payload = await request(buildUrl("/klines/range", {
+  const payload = await request(buildUrl(options.compositionContract !== undefined ? "/klines/range/composed" : "/klines/range", {
+    composition_contract: options.compositionContract,
     symbol,
     interval,
     start_ms: Math.max(0, Math.floor(startSec * 1000)),

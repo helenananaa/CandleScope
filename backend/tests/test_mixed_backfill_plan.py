@@ -40,10 +40,11 @@ def test_cold_large_prime_proposes_exact_mixed_inputs_and_component_scoped_routi
     engine = engine_for(query)
     plan, report = propose(engine, query, gap())
     assert plan is not None and report["mixed_history"]
-    assert plan.metadata["mixed_source_rows"] < 200
+    assert plan.metadata["mixed_source_rows"] == 669
     assert plan.estimated_requests < plan.metadata["single_base_estimated_rest_requests"]
     intervals = {task.interval for task in plan.tasks}
-    assert "1h" in intervals and "1m" in intervals
+    assert intervals == {"15m", "1m"}
+    assert plan.estimated_requests == 2
     at = 0
     for task in sorted(plan.derived_source_windows, key=lambda task: task.start_ms):
         width = parse_interval_ms(task.interval)
@@ -60,6 +61,22 @@ def test_cold_large_prime_proposes_exact_mixed_inputs_and_component_scoped_routi
     assert plan.decompositions[0].to_dict()["component_count_scope"] == "requested_target_range"
     assert sum(c.count * c.duration_ms for c in plan.decompositions[0].components) == 10007 * MINUTE
     assert sum(w["rows"] for w in plan.to_dict()["mixed_source_windows"]) == report["mixed_source_rows"]
+
+
+def test_cold_prime_viewport_fits_existing_budget_with_proven_coarse_grids(mixed_query):
+    query = mixed_query
+    requested = gap(count=128)
+    plan, report = propose(engine_for(query), query, requested)
+    assert plan is not None, report
+    assert {'4h', '1d'} & {task.interval for task in plan.tasks}
+    assert report['mixed_source_rows'] <= 16_384
+    assert plan.estimated_requests <= report['single_base_estimated_rest_requests']
+    assert plan.estimated_requests < 973  # Earlier six-grid greedy proposal.
+    assert plan.decompositions[0].composition_target_range == (0, 128 * 10007 * MINUTE)
+    assert sum(component.count * component.duration_ms
+               for component in plan.decompositions[0].components) == 128 * 10007 * MINUTE
+    assert query.storage.count_bars('BTCUSDT', '1m', 0, 128 * 10007 * MINUTE - 1,
+                                   market_type='futures') == 0
 
 
 def test_cold_small_query_keeps_single_rest_page_instead_of_fanning_out(mixed_query):

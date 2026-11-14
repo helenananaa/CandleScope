@@ -71,6 +71,7 @@ from ..kline_quality import (
     source_is_trusted_final,
 )
 from ..series_identity import identity_from_metadata
+from ..interval_resolution import IntervalPurpose, IntervalResolutionError, IntervalResolutionErrorCode
 
 from .config import BackfillConfig
 from .models import (
@@ -414,8 +415,22 @@ class BackfillEngine:
             status = BackfillStatus.PLANNING
             from .mixed_plan import build_mixed_backfill_plan
             mixed_diagnostics = {}
+            required_contract = metadata.get('required_history_composition')
+            if required_contract is not None:
+                for gap in gaps:
+                    self.planner._interval_resolver.require_history_composition(
+                        exchange=gap.exchange, market_type=gap.market_type, interval=gap.interval,
+                        contract_id=required_contract, identity=identity_from_metadata(gap.exchange, metadata),
+                        enabled=self._cfg.mixed_custom_history and self._cfg.reconcile_generate_custom
+                            and self._cfg.custom_alignment_mode == 'epoch' and not self._cfg.alignment_epoch_ms)
             plan = await build_mixed_backfill_plan(self, gaps, metadata, mixed_diagnostics)
             if plan is None:
+                if required_contract is not None:
+                    raise IntervalResolutionError(
+                        IntervalResolutionErrorCode.HISTORY_COMPOSITION_UNAVAILABLE,
+                        'Qualified composed history could not admit this bounded repair',
+                        exchange=exchange, market_type=market_type, interval=gaps[0].interval,
+                        purpose=IntervalPurpose.HISTORY)
                 plan = self.planner.plan(gaps)
             plan.metadata.update(mixed_diagnostics)
             metadata.update(mixed_diagnostics)

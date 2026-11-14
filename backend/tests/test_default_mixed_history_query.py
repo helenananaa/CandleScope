@@ -348,7 +348,7 @@ def test_composition_routes_are_qualified_by_market_and_boundary(market, interva
 def test_qualification_selects_only_proven_grids_but_fences_other_native_finer_grids():
     policy, selected, precedences = IntervalResolver().history_composition_routes(
         exchange="binance", market_type="futures", interval="10007m")
-    assert {r.canonical_interval for r in selected} == {"1m", "5m", "15m", "1h"}
+    assert {r.canonical_interval for r in selected} == {"1m", "5m", "15m", "1h", "4h", "1d"}
     assert "3m" in {r.canonical_interval for r in precedences}
     assert policy.to_dict()["identity_scope"] == "default-trade-base"
 

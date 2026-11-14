@@ -74,8 +74,9 @@ def test_cold_mixed_pipeline_uses_real_ccxt_transport_and_preserves_all_fields(m
             assert report.status == BackfillStatus.COMPLETED, report.errors
             assert report.reconcile_result.custom_bars_written == 1
             pages = [query for path, query in calls if path == '/fapi/v1/klines']
-            assert len(pages) == (3 if batch == 1000 else 8)
-            assert {q['interval'] for q in pages} == {'1h', '15m', '1m'}
+            assert len(pages) == (2 if batch == 1000 else 4)
+            assert {q['interval'] for q in pages} == (
+                {'15m', '1m'} if batch == 1000 else {'1d', '1h', '1m'})
             assert sum(path.endswith('/exchangeInfo') for path, _ in calls) == 1
             if mode == 'receipt':
                 assert report.metadata['fetch_payload_mode'] == 'receipt'
@@ -92,7 +93,7 @@ def test_cold_mixed_pipeline_uses_real_ccxt_transport_and_preserves_all_fields(m
                 bar.trades, bar.taker_buy_base, bar.taker_buy_quote) == (
                     100, 102, 99, 101, 10007, 20014, 10007, 10007, 20014)
             assert mixed_query.storage.count_bars('BTCUSDT', '1m', 0, 10007 * 60000 - 1,
-                market_type='futures') == 2
+                market_type='futures') == (2 if batch == 1000 else 47)
         finally:
             await engine.close()
             await transport.stop()

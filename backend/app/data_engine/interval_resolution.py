@@ -43,6 +43,7 @@ class IntervalResolutionErrorCode(str, Enum):
     NO_EXACT_BASE = "no_exact_base"
     SERIES_IDENTITY_UNSUPPORTED = "series_identity_unsupported"
     NATIVE_BASIS_UNKNOWN = "native_bar_basis_unknown"
+    HISTORY_COMPOSITION_UNAVAILABLE = "history_composition_unavailable"
 
 
 class IntervalResolutionError(ValueError):
@@ -126,6 +127,22 @@ class IntervalResolver:
 
     def __init__(self, registry: CapabilityRegistry | None = None) -> None:
         self._registry = registry
+
+    def require_history_composition(self, *, exchange, market_type, interval,
+                                    contract_id, identity=None, enabled=True):
+        declaration = self.history_composition_routes(exchange=exchange,
+            market_type=market_type, interval=interval)
+        spec = parse_interval_spec(interval)
+        if (not enabled or not isinstance(contract_id, str) or not contract_id
+                or declaration is None or declaration[0].contract_id != contract_id
+                or spec is None or spec.phase_ms
+                or (identity is not None and not identity.is_legacy_default_for(exchange))):
+            raise IntervalResolutionError(
+                IntervalResolutionErrorCode.HISTORY_COMPOSITION_UNAVAILABLE,
+                'Qualified composed history is unavailable for this request',
+                exchange=exchange, market_type=market_type, interval=interval,
+                purpose=IntervalPurpose.HISTORY)
+        return declaration
 
     def history_composition_routes(self, *, exchange: str, market_type: str,
                                    interval: str):

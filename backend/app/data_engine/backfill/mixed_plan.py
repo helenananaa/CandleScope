@@ -7,6 +7,7 @@ from collections import deque
 from contextlib import nullcontext
 from dataclasses import dataclass, replace
 import math
+import sys
 import time
 
 from app.core.executors import run_preparation, run_storage
@@ -27,6 +28,7 @@ from app.data_engine.storage.revisions import acquisition_revision, StaleAcquisi
 from app.data_engine.market_data.models import MarketChannel
 from app.exchanges import get_exchange_registry
 from .models import BackfillPlan, IntervalComponent, IntervalDecomposition
+from .cold_cover import choose_cold_sources
 
 MAX_SOURCE_ROWS = 16_384
 MAX_TARGETS = 512
@@ -138,7 +140,8 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
     if target_route.kind is not IntervalRouteKind.DERIVED or spec.phase_ms:
         return None
     base = parse_interval_spec(target_route.base_interval)
-    if base is None or base.nominal_ms >= max(route.spec.nominal_ms for route in routes):
+    required_contract = metadata.get('required_history_composition')
+    if base is None or (not required_contract and base.nominal_ms >= max(route.spec.nominal_ms for route in routes)):
         return None
     first, stop = spec.floor_ms(gap.start_ms), spec.next_ms(spec.floor_ms(gap.end_ms))
     now_ms = int(time.time() * 1000)
@@ -171,7 +174,7 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
     planner.metrics.inc("mixed_proposals")
     count = await storage.count_bars(target.symbol, base.canonical, first, stop - 1,
         exchange=target.exchange, market_type=target.market_type)
-    if count >= (stop - first) // base.nominal_ms:
+    if count >= (stop - first) // base.nominal_ms and not required_contract:
         diagnostics["mixed_plan_fallback"] = "local_single_base_preferred"
         return None
     _, changes = await run_storage(store.read_series_changes, keys)
@@ -185,12 +188,29 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
                                     mutations, now_ms, diagnostics, budget)
     try:
         with work:
+            cold = all(change is None or change['start_ms'] >= stop for change in changes)
+            if cold:
+                planning = budget.reserve("history-backfill", PLAN_BYTES) if budget else nullcontext()
+                with planning:
+                    choice = await run_preparation(choose_cold_sources, target, first, stop, sources,
+                        required_fields=frozenset(policy.fields), target_width=spec.nominal_ms,
+                        base_width=0 if required_contract else base.nominal_ms, page_size=page_size,
+                        task_page_size=max(1, cfg.fetch_batch_size), max_rows=MAX_SOURCE_ROWS,
+                        max_tasks=MAX_TASKS, max_positions=MAX_POSITION_WORK // 2)
+                builder.positions(choice.positions)
+                diagnostics.update(mixed_cold_candidates=choice.candidates,
+                    mixed_cold_estimated_requests=choice.requests, mixed_cold_source_rows=choice.rows)
+                binding.validate()
+                if choice.sources is None:
+                    raise _DeclineMixed(choice.reason)
+                sources = choice.sources
             covers, cursor = [], first
             while cursor < stop:
                 planning = budget.reserve("history-backfill", PLAN_BYTES) if budget else nullcontext()
                 with planning:
                     batch = await run_preparation(plan_fixed_batch, target, cursor, stop, sources,
-                        required_fields=frozenset(policy.fields), max_source_rows=MAX_SOURCE_ROWS)
+                        required_fields=frozenset(policy.fields), max_source_rows=MAX_SOURCE_ROWS,
+                        max_positions=builder.remaining_positions())
                 covers.extend(batch.covers)
                 builder.positions(batch.explored_positions)
                 if sum(c.planned_rows for c in covers) > MAX_SOURCE_ROWS:
@@ -198,7 +218,7 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
                 cursor = batch.planned_range[1]
             baseline_requests = math.ceil(((stop - first) // base.nominal_ms) / page_size)
             initial_requests = sum(math.ceil(span.rows / page_size) for cover in covers for span in cover.spans)
-            if all(change is None for change in changes) and initial_requests > baseline_requests:
+            if cold and initial_requests > baseline_requests:
                 raise _DeclineMixed("cold_rest_request_cost")
             for offset in range(0, len(covers), 32):
                 batch = covers[offset:offset + 32]
@@ -247,11 +267,36 @@ class _MixedBackfillBuilder:
         self.storage = engine._storage
         self.presence, self.tasks, self.windows = {}, [], []
         self.rows = 0
+        # Task records/metadata are finalized before admission and remain
+        # reachable until this builder exits. Count each once; never retain an
+        # ID for a temporary root container or the transient presence map.
+        self._task_seen = {id(gap)}
+        self._task_bytes = 0
+
+    def _check_work(self, windows=(), tasks=()):
+        self._task_bytes += retained_size(windows, self._task_seen)[0]
+        self._task_bytes += retained_size(tasks, self._task_seen)[0]
+        # The shared parent gap and current batch can contain mutable metadata;
+        # remeasure them independently rather than accepting a stale ID hit.
+        transient = retained_size((self.gap, self.presence))[0]
+        accounting = sys.getsizeof(self._task_seen) + len(self._task_seen) * sys.getsizeof(sys.maxsize * 2 + 1)
+        total = self._task_bytes + transient + accounting + sys.getsizeof(self.tasks) + sys.getsizeof(self.windows)
+        self.report['mixed_plan_work_bytes'] = total
+        self.report['mixed_plan_work_high_water_bytes'] = max(total,
+            self.report.get('mixed_plan_work_high_water_bytes', 0))
+        if len(self.tasks) + len(self.windows) > MAX_TASKS or total > WORK_BYTES:
+            raise _DeclineMixed('task_work_budget')
 
     def positions(self, count):
         self.report["mixed_plan_positions"] += count
         if self.report["mixed_plan_positions"] > MAX_POSITION_WORK:
             raise _DeclineMixed("planning_work_budget")
+
+    def remaining_positions(self):
+        remaining = MAX_POSITION_WORK - self.report["mixed_plan_positions"]
+        if remaining <= 0:
+            raise _DeclineMixed("planning_work_budget")
+        return min(32_768, remaining)
 
     async def prefetch(self, covers):
         self.presence.clear()
@@ -325,7 +370,8 @@ class _MixedBackfillBuilder:
                 planning = self.budget.reserve("history-backfill", PLAN_BYTES) if self.budget else nullcontext()
                 with planning:
                     replacement = await run_preparation(plan_fixed_range, self.target, span.start_ms, span.end_ms,
-                        finer, required_fields=frozenset(self.policy.fields))
+                        finer, required_fields=frozenset(self.policy.fields),
+                        max_positions=self.remaining_positions())
                 self.positions(replacement.explored_positions)
                 self.report["mixed_plan_refinements"] += 1
                 pending.extendleft(reversed(replacement.spans))
@@ -342,6 +388,7 @@ class _MixedBackfillBuilder:
                     history_composition_contract=self.policy.contract_id,
                     ledger_range={"start_ms": span.start_ms, "end_ms": span.end_ms - span.source.width_ms})
             self.windows.extend(windows)
+            self._check_work(windows=windows)
             # Existing paging owner splits each missing contiguous source run.
             at = span.start_ms
             while at < span.end_ms:
@@ -357,8 +404,7 @@ class _MixedBackfillBuilder:
                     task.parent_gap = self.gap
                     task.metadata = dict(windows[0].metadata)
                     self.tasks.append(task)
-            if len(self.tasks) + len(self.windows) > MAX_TASKS or retained_size((self.tasks, self.windows, self.presence))[0] > WORK_BYTES:
-                raise _DeclineMixed("task_work_budget")
+                    self._check_work(tasks=(task,))
 
 
 async def checked_mixed_windows(storage, target, policy, windows):

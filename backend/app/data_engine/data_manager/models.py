@@ -968,6 +968,15 @@ class StreamStatus(str, enum.Enum):
     ERROR = "error"
 
 
+class StreamNotReady(RuntimeError):
+    """An attempted stream start did not acquire an active prerequisite."""
+
+    def __init__(self, key, status, *, role, error=None):
+        self.key, self.status, self.role = key, status, role
+        detail = f'{role} stream {key} is {status.value}'
+        super().__init__(f'{detail}: {error}' if error else detail)
+
+
 @dataclass(slots=True)
 class StreamInfo:
     """Runtime information about an active data stream.

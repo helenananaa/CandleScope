@@ -22,7 +22,8 @@ from .mixed_precedence import MixedPrecedence, BATCH_TARGETS, WORK_BYTES
 
 
 def query_closed_mixed(engine, key, *, start_ms=None, end_ms=None, before_ms=None,
-                       limit, report, auto_backfill=None, materialized_result=None):
+                       limit, report, auto_backfill=None, materialized_result=None,
+                       composition_contract=None):
     """Try a bounded closed page; unavailable inputs keep the original route.
 
     A stale view never falls back into a new generation. ``report`` contains
@@ -31,6 +32,12 @@ def query_closed_mixed(engine, key, *, start_ms=None, end_ms=None, before_ms=Non
     existing single-base executor.
     """
     config = engine._cfg
+    if composition_contract is not None:
+        engine._interval_resolver.require_history_composition(exchange=key.exchange,
+            market_type=key.market_type, interval=key.interval, contract_id=composition_contract,
+            identity=key.identity, enabled=config.mixed_custom_history
+                and (engine.history_policy is None
+                     or isinstance(engine._calendar_for(key), AlwaysOpenCalendar)))
     if not config.mixed_custom_history:
         return None
     spec = parse_interval_spec(key.interval)
@@ -67,7 +74,8 @@ def query_closed_mixed(engine, key, *, start_ms=None, end_ms=None, before_ms=Non
     single = resolver.resolve(exchange=key.exchange, market_type=key.market_type,
                               interval=key.interval, purpose=IntervalPurpose.HISTORY)
     base_spec = parse_interval_spec(single.base_interval)
-    if base_spec is not None and base_spec.nominal_ms >= max(route.spec.nominal_ms for route in routes):
+    if (composition_contract is None and base_spec is not None
+            and base_spec.nominal_ms >= max(route.spec.nominal_ms for route in routes)):
         # Preserve the cheaper existing coarse-source route when the qualified
         # mixed grids cannot reduce its input count (e.g. 45m from 15m).
         return None
@@ -104,7 +112,7 @@ def query_closed_mixed(engine, key, *, start_ms=None, end_ms=None, before_ms=Non
             report.update(mixed_count_failures=1, mixed_fallback_reason="local_cost_probe_failed")
             return None
         report["mixed_count_rows"] = 1
-        if count >= expected_base_rows:
+        if count >= expected_base_rows and composition_contract is None:
             # Only a cost preference: the original executor still validates
             # every actual row, gap, field, grid, finality and acquisition.
             report["mixed_fallback_reason"] = "local_single_base_preferred"
@@ -143,6 +151,35 @@ def query_closed_mixed(engine, key, *, start_ms=None, end_ms=None, before_ms=Non
                     raise BlockRevisionChanged("mixed precedence evidence changed")
                 mutations = dict(zip(keys, changes))
 
+                resident = getattr(manager, 'has_resident_inputs', None)
+                if (callable(getattr(storage, 'count_bars', None)) and callable(resident)
+                        and not resident(view, first, stop)):
+                    # Even counting every row (including untrusted, overlapping
+                    # or cross-boundary inputs) cannot cover more than this
+                    # duration. A shortage can skip an expensive exact-cover
+                    # attempt, but a sufficient count grants no authority.
+                    upper = 0
+                    for source in sources:
+                        report['mixed_count_reads'] += 1
+                        try:
+                            count = engine._count_canonical_history_rows(storage, source.series, first, stop)
+                        except StaleAcquisition:
+                            raise
+                        except Exception as exc:
+                            report['mixed_count_failures'] += 1
+                            raise BlockUnavailable('mixed local coverage count unavailable') from exc
+                        report['mixed_count_rows'] += 1
+                        if type(count) is not int or count < 0:
+                            raise BlockUnavailable('mixed local coverage count unavailable') from ValueError('invalid count')
+                        upper += count * source.width_ms
+                        if upper >= stop - first:
+                            break
+                    report['mixed_local_coverage_upper_ms'] = upper
+                    if upper < stop - first:
+                        binding()
+                        report['mixed_impossible_local_cover'] = True
+                        raise BlockUnavailable('mixed history source has unavailable coverage or fields')
+
                 probes = MixedPrecedence(engine, storage, key, sources, precedences, mutations, report)
                 for batch_start in range(first, stop, spec.nominal_ms * BATCH_TARGETS):
                     opens = range(batch_start, min(stop, batch_start + spec.nominal_ms * BATCH_TARGETS),
@@ -173,7 +210,8 @@ def query_closed_mixed(engine, key, *, start_ms=None, end_ms=None, before_ms=Non
         if (isinstance(exc, BlockUnavailable) and exc.__cause__ is None
                 and str(exc) in {"mixed history source has unavailable coverage or fields",
                                  "mixed history cannot prove complete authoritative coverage"}
-                and base_spec is not None and (stop - first) // base_spec.nominal_ms > config.max_limit):
+                and base_spec is not None and (composition_contract is not None
+                    or (stop - first) // base_spec.nominal_ms > config.max_limit)):
             # A large legacy base-window reservation can defer before it ever
             # reports a gap. Surface the actual closed target demand to the
             # existing DataManager scheduler instead of silently starving it.

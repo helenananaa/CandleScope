@@ -34,6 +34,35 @@ function fakeApi(
 
 const result: KlineFetchResult = { data: [] };
 
+test("composed contracts cannot join legacy or different-contract work", async () => {
+  const work = deferred<KlineFetchResult>();
+  const calls = { value: 0 };
+  const coordinator = new SharedKlineRequestCoordinator(fakeApi(() => work.promise, calls));
+  const requests = [undefined, "qualified-v1", "qualified-v1", "qualified-v2"].map(compositionContract =>
+    coordinator.fetchKlinesHistory("BTCUSDT", "10007m", null, "futures", "binance", {
+      countBack: 128, maxWaitMs: 0, ...(compositionContract === undefined ? {} : { compositionContract }),
+    }));
+  await Promise.resolve();
+  assert.equal(calls.value, 3);
+  work.resolve(result);
+  await Promise.all(requests);
+});
+
+test("a history batch preserves the composed contract for its own item", async () => {
+  const singles = { value: 0 };
+  const api = fakeApi(async () => result, singles);
+  api.fetchKlinesHistoryBatch = async requests => {
+    assert.deepEqual(requests.map(request => request.options.compositionContract), [undefined, "qualified-v1"]);
+    return requests.map(() => ({ ok: true, result }));
+  };
+  const coordinator = new SharedKlineRequestCoordinator(api);
+  await Promise.all([undefined, "qualified-v1"].map(compositionContract => coordinator.fetchKlinesHistory(
+    "BTCUSDT", "10007m", null, "futures", "binance", {
+      countBack: 128, ...(compositionContract === undefined ? {} : { compositionContract }),
+    })));
+  assert.equal(singles.value, 0);
+});
+
 test("target-only probes never join a history request that can derive or repair", async () => {
   const work = deferred<KlineFetchResult>();
   const calls = { value: 0 };

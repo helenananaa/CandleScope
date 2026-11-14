@@ -214,11 +214,13 @@ def _channel_capabilities() -> list[MarketChannelCapability]:
             history_policy=_history_policy(HistoryCadence.REGULAR),
             history_composition=HistoryCompositionPolicy(
                 contract_id="binance.usdm.trade-klines/base-utc/1",
-                native_intervals=("1m", "5m", "15m", "1h"),
+                native_intervals=("1m", "5m", "15m", "1h", "4h", "1d"),
                 fields=("open", "high", "low", "close", "volume", "quote_volume",
                         "trades", "taker_buy_base", "taker_buy_quote"),
                 evidence=("docs/qa/aggregation-core-closeout-20261112/evidence/inputs.json",
-                          "docs/qa/aggregation-core-closeout-20261112/evidence/source-mixed.json.gz"),
+                          "docs/qa/aggregation-core-closeout-20261112/evidence/source-mixed.json.gz",
+                          "docs/qa/mixed-history-admission-127-20261114/evidence/inputs.json",
+                          "docs/qa/mixed-history-admission-127-20261114/evidence/source-mixed.json.gz"),
             ),
         ),
         MarketChannelCapability(

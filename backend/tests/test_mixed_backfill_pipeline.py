@@ -16,8 +16,8 @@ META = dict(requires_trusted_finality=True, requester="klines_range", history_ca
 
 
 class Upstream:
-    def __init__(self, *, unknown_hour=False, import_extra_fine=False):
-        self.unknown_hour = unknown_hour
+    def __init__(self, *, unknown_interval=None, import_extra_fine=False):
+        self.unknown_interval = unknown_interval
         self.import_extra_fine = import_extra_fine
         self.calls = []
 
@@ -39,7 +39,7 @@ class Upstream:
                 data = row(opened, width)
                 values.append(FetchedBar(symbol=task.symbol, interval=task.interval,
                     exchange=task.exchange, market_type=task.market_type,
-                    **data, enhanced_fields=frozenset() if self.unknown_hour and task.interval == "1h" else ENHANCED))
+                    **data, enhanced_fields=frozenset() if task.interval == self.unknown_interval else ENHANCED))
             results.append(FetchResult(task, values))
         return results
 
@@ -58,7 +58,7 @@ def test_default_cold_pipeline_fetches_native_mixed_inputs_and_materializes_only
     assert report.metadata["mixed_history"] and report.plan.estimated_requests < 11
     assert report.plan.mixed_binding is None
     assert report.reconcile_result.custom_bars_written == 1
-    assert {task.interval for task in upstream.calls} == {"1h", "15m", "1m"}
+    assert {task.interval for task in upstream.calls} == {"15m", "1m"}
     result = mixed_query.query("BTCUSDT", "10007m", start_ms=0, end_ms=10007 * MINUTE - 1,
         limit=1, market_type="futures", min_revision=mixed_query.storage.revision_store.head())
     assert result.complete and result.bars[0].trusted_final
@@ -72,7 +72,7 @@ def test_default_cold_pipeline_fetches_native_mixed_inputs_and_materializes_only
 
 def test_unknown_coarse_fields_remain_pending_then_retry_refines_from_canonical(mixed_query):
     engine = engine_for(mixed_query)
-    upstream = Upstream(unknown_hour=True)
+    upstream = Upstream(unknown_interval="15m")
     engine._fetcher = upstream
     async def run():
         first = await repair(engine)
@@ -85,7 +85,7 @@ def test_unknown_coarse_fields_remain_pending_then_retry_refines_from_canonical(
         second = await repair(engine)
         assert second.status == BackfillStatus.COMPLETED, second.errors
         assert second.reconcile_result.custom_bars_written == 1
-        assert "1h" not in {task.interval for task in upstream.calls[previous:]}
+        assert "15m" not in {task.interval for task in upstream.calls[previous:]}
     asyncio.run(run())
 
 

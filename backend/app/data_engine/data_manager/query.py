@@ -322,6 +322,7 @@ class QueryEngine:
         series_identity: KlineSeriesIdentity | None = None,
         auto_backfill: bool | None = None,
         _materialized_only: bool = False,
+        composition_contract: str | None = None,
     ) -> QueryResult:
         """Query bars for a (symbol, interval) with flexible parameters.
 
@@ -362,6 +363,10 @@ class QueryEngine:
         interval = route.canonical_interval
         identity = resolve_kline_series_identity(exchange, series_identity)
         route.require_series_identity(identity)
+        if composition_contract is not None and route.kind is not IntervalRouteKind.DERIVED:
+            self._interval_resolver.require_history_composition(exchange=exchange,
+                market_type=market_type, interval=interval, contract_id=composition_contract,
+                identity=identity, enabled=False)
         if route.kind is IntervalRouteKind.TRADE and not identity.is_legacy_default_for(exchange):
             raise IntervalResolutionError(
                 IntervalResolutionErrorCode.SERIES_IDENTITY_UNSUPPORTED,
@@ -391,6 +396,7 @@ class QueryEngine:
                 market_type=market_type,
                 auto_backfill=auto_backfill,
                 route=route,
+                composition_contract=composition_contract,
             )
             key = SeriesKey(symbol, interval, exchange=exchange, market_type=market_type)
             return self._apply_custom_finality_contract(result, key, end_ms=end_ms)
@@ -747,6 +753,7 @@ class QueryEngine:
         series_identity: KlineSeriesIdentity | None = None,
         auto_backfill: bool | None = None,
         _materialized_only: bool = False,
+        composition_contract: str | None = None,
     ) -> QueryResult:
         """Query bars strictly before a timestamp (for pagination)."""
         io_metrics = _QueryIOMetrics()
@@ -764,6 +771,10 @@ class QueryEngine:
         interval = route.canonical_interval
         identity = resolve_kline_series_identity(exchange, series_identity)
         route.require_series_identity(identity)
+        if composition_contract is not None and route.kind is not IntervalRouteKind.DERIVED:
+            self._interval_resolver.require_history_composition(exchange=exchange,
+                market_type=market_type, interval=interval, contract_id=composition_contract,
+                identity=identity, enabled=False)
         if route.kind is IntervalRouteKind.TRADE and not identity.is_legacy_default_for(exchange):
             raise IntervalResolutionError(
                 IntervalResolutionErrorCode.SERIES_IDENTITY_UNSUPPORTED,
@@ -790,6 +801,7 @@ class QueryEngine:
                 market_type=market_type,
                 auto_backfill=auto_backfill,
                 route=route,
+                composition_contract=composition_contract,
             )
             key = SeriesKey(symbol, interval, exchange=exchange, market_type=market_type)
             return self._apply_custom_finality_contract(

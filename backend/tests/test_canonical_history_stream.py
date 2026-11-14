@@ -112,8 +112,8 @@ def test_stream_preserves_anchored_and_calendar_boundaries(interval,source,start
         for field in FIELDS:assert a[field]==pytest.approx(b[field],rel=1e-12,abs=1e-8)
 
 
-def run_repair(engine):
-    return engine.run('BTCUSDT',intervals=['20011m'],range_start_ms=0,range_end_ms=0,
+def run_repair(engine, interval='20011m'):
+    return engine.run('BTCUSDT',intervals=[interval],range_start_ms=0,range_end_ms=0,
                       exchange='binance',market_type='futures',metadata=META)
 
 
@@ -141,13 +141,15 @@ def test_default_mixed_pipeline_folds_and_releases_each_page_before_next_read(mi
         counts.append(len(page))
         return page
     monkeypatch.setattr(engine._storage,'query_canonical_page',observed)
-    report=asyncio.run(run_repair(engine))
+    # Proven daily inputs shrink the old 20011m page below 256. Keep a real
+    # full-page release witness rather than weakening that assertion.
+    report=asyncio.run(run_repair(engine, '500007m'))
     assert report.status==BackfillStatus.COMPLETED,report.errors
     assert report.reconcile_result.custom_bars_written==1
     assert max(counts)==256 and len(counts)>=2
     assert all(ref() is None for ref in refs)
-    values=mixed_query.storage.query_bars('BTCUSDT','20011m',market_type='futures')
-    assert len(values)==1 and values[0]['volume']==values[0]['trades']==20011
+    values=mixed_query.storage.query_bars('BTCUSDT','500007m',market_type='futures')
+    assert len(values)==1 and values[0]['volume']==values[0]['trades']==500007
     assert mixed_query.memory_budget.snapshot()['reserved_bytes']==0
     assert engine.reconciler.metrics.get_counter('custom_canonical_stream_rows')==sum(counts)
 
