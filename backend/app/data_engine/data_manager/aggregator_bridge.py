@@ -71,7 +71,9 @@ class AggregatorBridge:
         budget = self.preview_memory_budget
         version = state.preview_input_version
         source_receipt = state._source_recovery
-        extra = {'source_window': source_receipt.version} if source_receipt is not None else {}
+        permission = self._source_preview_permission(state) if source_receipt is not None else None
+        extra = ({'source_window': source_receipt.version, 'source_permission_floor': permission}
+                 if source_receipt is not None else {})
         receipt_bytes = source_receipt.estimated_bytes if source_receipt is not None else 0
         # References can outlive replacements while physical reads await.
         # Charge their full frozen values, not only the tuple container.
@@ -85,12 +87,21 @@ class AggregatorBridge:
                 components = ()
         if (self._storage_provider() is not storage or state.preview_input_version != version
                 or state._source_recovery is not source_receipt
+                or (source_receipt is not None and self._source_preview_permission(state) != permission)
                 or not is_current()):
             return 'superseded'
         if status == 'canonical_changed':
             self._require_recovery(SeriesKey.create(state.symbol,state.interval,exchange=state.exchange,
                                                     market_type=state.market_type,identity=state.identity))
         return status
+
+    @staticmethod
+    def _source_preview_permission(state):
+        # Source permission is independent of the pending read acquisition.
+        # Missing original leaf permission remains conservatively unknown.
+        return min(state._source_recovery.version.permission_floor,
+                   state.source_permission_floor if state.source_permission_floor is not None else 0,
+                   state.canonical_recovery_delete_floor if state.canonical_recovery_delete_floor is not None else 0)
 
     async def on_bar_event(self, event: BarEvent) -> str | None:
         """Convert an aggregator event into cache updates and DataEvents."""
