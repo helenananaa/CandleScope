@@ -1253,9 +1253,11 @@ class BarAggregator:
                 version = existing.preview_input_version if existing is not None else None
                 snapshots = existing.source_snapshots if existing is not None else None
                 refs = existing.source_refs if existing is not None else None
-                accepted = ComponentSnapshotOHLCVMerge._snapshot_from_input(bar_input)
+                snapshotter = ComponentSnapshotOHLCVMerge._snapshot_from_input
+                input_fields = ComponentSnapshotOHLCVMerge.INPUT_FIELDS
+                accepted = snapshotter(bar_input)
                 incoming_key = (bar_input.symbol,bar_input.exchange,bar_input.market_type,
-                                bar_input.source_interval,bar_input.source,bar_input.merge_mode)
+                                bar_input.source_interval,bar_input.source,bar_input.merge_mode,bar_input.identity,source_floor)
                 prepare = getattr(strategy, 'prepare_input', None)
                 component_reader = self._source_component_reader
                 lifecycle = (existing.status, existing.finality) if existing is not None else None
@@ -1270,8 +1272,13 @@ class BarAggregator:
                         and getattr(strategy.apply, '__func__', None) is ComponentSnapshotOHLCVMerge.apply
                         and getattr(strategy, 'prepare_input', None) == prepare
                         and (bar_input.symbol,bar_input.exchange,bar_input.market_type,
-                             bar_input.source_interval,bar_input.source,bar_input.merge_mode) == incoming_key
-                        and ComponentSnapshotOHLCVMerge._snapshot_from_input(bar_input) == accepted)
+                             bar_input.source_interval,bar_input.source,bar_input.merge_mode,bar_input.identity,bar_input.extra.get("source_permission_floor")) == incoming_key
+                        and ComponentSnapshotOHLCVMerge._snapshot_from_input is snapshotter
+                        and ComponentSnapshotOHLCVMerge.INPUT_FIELDS is input_fields
+                        and all((bool(bar_input.is_closed) if name == 'is_closed' else getattr(bar_input,name))
+                                == accepted[name] for name in input_fields)
+                        and bar_input.extra.get('source_ref') == accepted['source_ref']
+                        and bool(bar_input.extra.get('warm_start_seed')) == bool(accepted.get('warm_start_seed')))
                 def current():
                     return (compatible()
                         and engine.get_state(exchange, market_type, symbol, bucket_start_ms) is existing
@@ -1279,7 +1286,8 @@ class BarAggregator:
                             and (existing.status, existing.finality) == lifecycle
                             and existing.source_snapshots is snapshots and existing.source_refs is refs)))
                 held = self.publisher._hold_payload('input', (existing,)) if existing is not None else None
-                work = retained_size((existing,accepted))[0] + 16384
+                from .component_memory import source_recovery_work_bytes
+                work = source_recovery_work_bytes(existing, accepted) + 16384
                 try:
                     # Old immutable indexes can outlive a concurrent eviction or
                     # replacement while the physical reader is running.

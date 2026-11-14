@@ -691,7 +691,7 @@ def test_source_content_permission_is_not_renewed_by_identical_replay(database):
 
 
 @pytest.mark.parametrize(
-    "action", ["cancel", "detach", "rebind", "config", "strategy", "input", "close"]
+    "action", ["cancel", "detach", "rebind", "config", "strategy", "input", "permission", "identity", "close"]
 )
 def test_cold_source_worker_keeps_budget_and_cannot_adopt_after_lifetime_change(
     database, monkeypatch, action
@@ -744,6 +744,10 @@ def test_cold_source_worker_keeps_budget_and_cannot_adopt_after_lifetime_change(
                 ).bar_state._component_merge_strategy.apply = lambda *a, **kw: None
             elif action == "input":
                 value.volume = 999
+            elif action == "permission":
+                value.extra['source_permission_floor'] = 0
+            elif action == "identity":
+                value.series_identity = replace(value.identity, provider_id='other')
             else:
                 closing = asyncio.create_task(manager.history_prefix_runtime.close())
             await asyncio.sleep(0.02)
@@ -1708,6 +1712,36 @@ def test_source_summary_refuses_updates_after_its_validation_owner_disappears(da
             with pytest.raises(BlockUnavailable, match='validation owner'):
                 await feed(manager, '5m', incoming(2, closed=False, ref=ref))
             assert (state._source_recovery, state.preview_input_version, state.quote_volume) == before
+        finally:
+            await manager.shutdown()
+
+    monkeypatch.setattr('time.time', lambda: (2 * W + 1000) / 1000)
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('mutable_proof', [False, True])
+def test_source_recovery_cached_work_weight_covers_actual_held_graph(database, monkeypatch, mutable_proof):
+    import asyncio
+    from copy import deepcopy
+    from app.data_engine.bar_aggregator.component_memory import source_recovery_work_bytes
+    from app.data_engine.bar_aggregator.bar_state import ComponentSnapshotOHLCVMerge
+    from app.data_engine.memory_budget import retained_size
+
+    async def run():
+        record(0)
+        record(1)
+        manager = manager_for('5m')
+        try:
+            await feed(manager, '5m', incoming(0))
+            state = deepcopy(manager.bar_aggregator.get_pipeline('5m').bar_state.get_state('binance','futures','BTCUSDT',0))
+            if mutable_proof:
+                next(iter(state.source_refs.values()))['custom'] = {'nested': ['x' * 1000000]}
+            accepted = ComponentSnapshotOHLCVMerge._snapshot_from_input(incoming(2, closed=False))
+            cached = source_recovery_work_bytes(state, accepted)
+            actual = retained_size((state, accepted))[0]
+            assert cached >= actual
+            if mutable_proof:
+                assert cached > 1000000
         finally:
             await manager.shutdown()
 
