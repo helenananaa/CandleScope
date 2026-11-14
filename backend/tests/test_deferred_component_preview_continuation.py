@@ -68,6 +68,67 @@ def test_source_minute_close_keeps_next_quiet_preview_delivery(database, monkeyp
     asyncio.run(run())
 
 
+def test_source_continuation_crosses_original_overlay_compaction_and_target_boundary(database, monkeypatch):
+    clock = [6 * W + 1000]
+    monkeypatch.setattr('time.time', lambda: clock[0] / 1000)
+
+    async def run():
+        for index in range(6):
+            record(index)
+        manager = manager_for('137m')
+        agg = manager.bar_aggregator
+        agg.publisher.set_update_throttle_ms(1000)
+        agg.publisher.set_update_requirement(lambda state: False)
+        agg._previews.start()
+        observed = []
+        async def receive(event):
+            observed.append((event.event_type.value, event.bar.time * 1000, event.bar.quote_volume))
+        manager.event_bus.subscribe(receive)
+        async def send(index, quote, closed=False):
+            ref = record(index, quote=quote, closed=closed, sequence=clock[0])['ref']
+            await feed(manager, '137m', replace(incoming(index, quote=quote, closed=closed, ref=ref),
+                                               source=BarInputSource.REALTIME))
+            clock[0] += 1
+        async def wait_latest(state):
+            clock[0] += 2000
+            async with asyncio.timeout(5):
+                while state.preview_published_version < state.preview_input_version:
+                    await asyncio.sleep(.01)
+        try:
+            for index in range(6, 136):
+                clock[0] = index * W + 1000
+                await send(index, 2.0)
+                await send(index, 3.0)
+                clock[0] = (index + 1) * W + 1000
+                await send(index, 4.0, True)
+            await send(136, 2.0)
+            await send(136, 3.0)
+            state = agg.get_pipeline('137m').bar_state.get_active('binance', 'futures', 'BTCUSDT', 0)
+            assert state._source_recovery.version.through_ms > 6 * W
+            assert len(state.source_snapshots) <= 128
+            await wait_latest(state)
+            assert observed[-1] == ('bar.updated', 0, 535.0)
+            clock[0] = 137 * W + 1000
+            await send(136, 4.0, True)
+            stored = klines_repo.query_klines('BTCUSDT', '137m', market_type='futures')
+            assert len(stored) == 1
+            assert [stored[0][name] for name in ('open', 'high', 'low', 'close', 'volume',
+                    'quote_volume', 'trades', 'taker_buy_base', 'taker_buy_quote')] == (
+                    [10., 20., 5., 11., 137., 536., 137, 68.5, 137.])
+            assert observed[-1] == ('bar.closed', 0, 536.0)
+            await send(137, 2.0)
+            await send(137, 3.0)
+            next_state = agg.get_pipeline('137m').bar_state.get_active('binance', 'futures', 'BTCUSDT', 137 * W)
+            await wait_latest(next_state)
+            assert observed[-1] == ('bar.updated', 137 * W, 3.0)
+            assert stored == klines_repo.query_klines('BTCUSDT', '137m', market_type='futures')
+        finally:
+            await manager.shutdown()
+        assert manager.memory_budget.snapshot()['reserved_bytes'] == 0
+
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize('permission', [None, 0, 1])
 @pytest.mark.parametrize('deleted_symbol', ['BTCUSDT', 'ETHUSDT'])
 def test_preview_read_does_not_lend_fresh_prefix_permission_to_old_tail(database, monkeypatch, permission, deleted_symbol):
