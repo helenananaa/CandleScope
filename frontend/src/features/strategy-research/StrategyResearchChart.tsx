@@ -60,16 +60,6 @@ import {
 } from "./importedDatasetSource.js";
 
 
-export function EmptyImportedChart() {
-  return (
-    <div className="local-chart-empty" data-testid="strategy-research-empty-chart">
-      <div className="local-empty-icon">CSV</div>
-      <h1>{t("local.emptyTitle")}</h1>
-      <p>{t("local.emptyHint")}</p>
-    </div>
-  );
-}
-
 export function ImportedDatasetIntervalStrip({
   manifest,
   interval,

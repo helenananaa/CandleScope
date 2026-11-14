@@ -56,10 +56,10 @@ export default function LocalIntervalSelector({
         {common.map((value) => {
           const support = resolveLocalIntervalSupport(manifest, value);
           return (
-            <button
-              type="button"
+            <Button
+              size="sm"
               key={value}
-              className={support.target === interval ? "active" : ""}
+              aria-pressed={support.target === interval}
               onClick={() => {
                 onSelect(support.target);
                 setFeedback(support.message);
@@ -68,7 +68,7 @@ export default function LocalIntervalSelector({
             >
               {formatIntervalLabel(value)}
               {support.derived && !value.includes("~c1~") && <small>{support.factor}×</small>}
-            </button>
+            </Button>
           );
         })}
       </div>

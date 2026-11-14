@@ -449,57 +449,44 @@
   font: var(--font-size-xs)/1.5 var(--font-mono);
 }
 
-/* Imported data: interval strip, chart states (the data library is Phase 5g5). */
+/* Imported data: the interval strip above the chart (Phase 5g5). */
 .local-interval-strip {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 16px;
   align-items: center;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--border-color);
+  gap: var(--space-2) var(--space-4);
+  padding: 6px var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
 }
-
 .local-dataset-truthbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 16px;
+  gap: var(--space-2) var(--space-4);
   color: var(--text-secondary);
-  font-size: 12px;
+  font: var(--font-size-sm)/1.4 var(--font-sans);
 }
-
-.local-chart-error { flex: 0 0 auto; margin: 8px; }
-.local-empty-icon { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; height: 28px; padding: 0 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-full); color: var(--text-muted); font: 600 var(--font-size-xs)/1 var(--font-mono); letter-spacing: .04em; }
-.local-chart-empty {
-  min-height: 240px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: var(--text-secondary);
+.local-dataset-truthbar span[title] { font-family: var(--font-mono); }
+.local-interval-selector { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.local-interval-buttons { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.local-interval-buttons .ui-btn { font-weight: 500; }
+.local-interval-buttons small {
+  color: var(--text-muted);
+  font: var(--font-size-2xs)/1 var(--font-mono);
 }
+.local-interval-buttons .ui-btn[aria-pressed='true'] small { color: inherit; }
+.local-custom-interval { display: flex; flex-wrap: wrap; align-items: center; gap: 6px var(--space-3); }
+.local-custom-interval-field { display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: var(--font-size-sm); white-space: nowrap; }
+.local-custom-interval-field > .ui-input { width: 72px; }
+.local-custom-interval .ui-check { font-size: var(--font-size-sm); white-space: nowrap; }
+.local-custom-interval .ui-select { width: auto; }
+.local-interval-feedback { color: var(--text-secondary); font-size: var(--font-size-sm); }
+.local-interval-feedback.error { color: var(--text-danger); }
+.local-interval-feedback:empty { display: none; }
+.local-chart-error { flex: 0 0 auto; margin: var(--space-2); }
+.local-chart-empty { margin: auto; }
 
-/* The data library drawer and import (Phase 5g5). Element rules skip kit controls,
-   which style themselves; the shell rule covers the chart tester's own controls in the rail. */
-.research-data-drawer {
-  position: fixed;
-  inset: 12px 12px 12px auto;
-  z-index: calc(var(--z-modal) + 200);
-  width: min(560px, calc(100vw - 24px));
-  max-width: none;
-  max-height: none;
-  overflow: auto;
-  padding: 24px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  background: var(--bg-secondary);
-  box-shadow: 0 12px 48px #0003;
-}
-
-.strategy-research-shell :where(.strategy-research-script, .strategy-research-result-slot) :where(button:not(.ui-btn, .ui-icon-btn, .ui-segment, .ui-tab, .ui-datetime-picker)),
-.research-data-drawer button:where(:not(.ui-btn, .ui-icon-btn, .ui-segment, .ui-tab, .ui-datetime-picker)),
-.research-data-drawer input:where(:not(.ui-input, .ui-file-drop-input, .ui-datetime-native)),
-.research-data-drawer select:where(:not(.ui-input, .ui-file-drop-input, .ui-datetime-native)) {
+/* The strategy tester's own raw controls in the rail and results (until 5g6). Kit controls style themselves. */
+.strategy-research-shell :where(.strategy-research-script, .strategy-research-result-slot) :where(button:not(.ui-btn, .ui-icon-btn, .ui-segment, .ui-tab, .ui-datetime-picker)) {
   min-height: 34px;
   padding: 7px 12px;
   border: 1px solid var(--border-color);
@@ -508,104 +495,179 @@
   color: var(--text-primary);
   font: 500 13px/1.4 var(--font-sans);
 }
-.strategy-research-shell button, .research-data-drawer button { cursor: pointer; }
-.strategy-research-shell button:not(.ui-control):where(:not(.ui-btn, .ui-icon-btn, .ui-segment, .ui-tab, .ui-datetime-picker, .strategy-template-card)):hover:not(:disabled), .research-data-drawer button:where(:not(.ui-btn, .ui-icon-btn, .ui-segment, .ui-tab, .ui-datetime-picker)):hover:not(:disabled) { background: var(--bg-hover); border-color: var(--strategy-link); }
-.strategy-research-shell button:where(:not(.ui-btn, .ui-icon-btn, .ui-segment, .ui-tab, .ui-datetime-picker)):disabled, .research-data-drawer button:where(:not(.ui-btn, .ui-icon-btn, .ui-segment, .ui-tab, .ui-datetime-picker)):disabled { opacity: .55; cursor: not-allowed; }
-/* The drawer takes focus on open for keyboard users; it is a container, not a control. */
-.research-data-drawer:focus { outline: none; }
-.strategy-research-shell :is(button, a, input, select, summary):where(:not(.ui-btn, .ui-icon-btn, .ui-segment, .ui-tab, .ui-datetime-picker, .ui-input, .ui-disclosure-summary, .strategy-template-card)):focus-visible,
-.research-data-drawer :is(button, a, input, select, summary):where(:not(.ui-btn, .ui-icon-btn, .ui-segment, .ui-tab, .ui-datetime-picker, .ui-input, .ui-disclosure-summary)):focus-visible { outline: 2px solid var(--strategy-link); outline-offset: 3px; }
+.strategy-research-shell button { cursor: pointer; }
+.strategy-research-shell button:not(.ui-control):where(:not(.ui-btn, .ui-icon-btn, .ui-segment, .ui-tab, .ui-datetime-picker, .strategy-template-card)):hover:not(:disabled) { background: var(--bg-hover); border-color: var(--strategy-link); }
+.strategy-research-shell button:where(:not(.ui-btn, .ui-icon-btn, .ui-segment, .ui-tab, .ui-datetime-picker)):disabled { opacity: .55; cursor: not-allowed; }
+.strategy-research-shell :is(button, a, input, select, summary):where(:not(.ui-btn, .ui-icon-btn, .ui-segment, .ui-tab, .ui-datetime-picker, .ui-input, .ui-disclosure-summary, .strategy-template-card)):focus-visible { outline: 2px solid var(--strategy-link); outline-offset: 3px; }
 /* Content links only; the shared top bar keeps its own navigation colors, kit link-buttons their own. */
 .strategy-research-shell a:not(.top-bar a, .ui-btn) { color: var(--strategy-link); font-size: 13px; }
-.research-data-drawer button[type='submit']:where(:not(.ui-btn, .ui-icon-btn, .ui-segment, .ui-tab, .ui-datetime-picker)) { background: var(--accent-solid); color: white; border-color: var(--accent-solid); }
-.research-data-drawer button[type='submit']:where(:not(.ui-btn, .ui-icon-btn, .ui-segment, .ui-tab, .ui-datetime-picker)):hover:not(:disabled) { background: var(--accent-solid-hover); color: white; }
-/* A dimmed blue still reads as clickable; disabled primaries go neutral instead. */
-.research-data-drawer button[type='submit']:where(:not(.ui-btn, .ui-icon-btn, .ui-segment, .ui-tab, .ui-datetime-picker)):disabled { opacity: 1; background: var(--bg-tertiary); border-color: var(--border-color); color: var(--text-muted); }
-.research-data-source-bar { display: flex; gap: 12px; align-items: center; color: var(--text-secondary); font-size: 13px; }
+/* The data source in the page header. */
+.research-data-source-bar { display: flex; align-items: center; gap: var(--space-2); color: var(--text-secondary); font-size: var(--font-size-md); }
 .research-data-source-bar > span { max-width: min(32vw, 420px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* A status value, not a tab: the header's divider sets it off from the navigation */
 .research-data-source-value { color: var(--text-primary); }
 .research-data-source-value[data-empty] { color: var(--text-muted); }
 .research-data-source-value small { margin-right: 6px; color: var(--text-muted); font-size: var(--font-size-xs); }
-.research-preview-table { overflow: auto; max-height: 200px; margin-top: 12px; }
-.research-preview-table table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.research-preview-table :is(td, th) { padding: 8px; text-align: left; border-bottom: 1px solid var(--border-color); white-space: nowrap; }
-.research-csv-preview h3 { font-size: 14px; }
-/* Library and import share controls, but each task has its own visual section. */
-.research-data-drawer > header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 20px; }
-.research-data-drawer > header strong { font-size: 20px; }
-.research-source-cards { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
-.research-source-cards button { text-align: left; }
-.research-source-cards small { display: block; margin-top: 4px; font-weight: 400; line-height: 1.6; }
-.local-data-rail { display: flex; flex-direction: column; gap: 20px; }
-.local-data-rail > section, .local-import-form { padding: 18px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-primary); }
-.local-data-rail header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 16px; }
-.local-data-rail header strong { display: block; margin-top: 4px; font-size: 15px; }
-.local-data-rail header span, .local-data-rail header small { font-size: 12px; color: var(--text-secondary); }
-.local-import-form { display: flex; flex-direction: column; gap: 16px; }
-.local-import-form header { margin-bottom: 0; }
-.local-import-form label { display: flex; flex-direction: column; gap: 7px; font-size: 13px; }
-.local-import-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.local-import-grid label:last-child { grid-column: 1 / -1; }
-.local-import-form input, .local-import-form select { width: 100%; min-width: 0; }
-.local-import-form p { font-size: 12px; line-height: 1.65; color: var(--text-secondary); }
-.local-file-picker { position: relative; align-items: center; padding: 20px 16px; border: 1px dashed var(--border-color); border-radius: var(--radius-md); background: var(--bg-secondary); color: var(--text-secondary); text-align: center; cursor: pointer; }
-.local-file-picker:hover { border-color: var(--strategy-link); color: var(--text-primary); }
-.local-file-picker:focus-within { outline: 2px solid var(--strategy-link); outline-offset: 2px; }
-/* Keep the native input focusable and screen-reader visible, but hide its unlocalized "Choose File" chrome. */
-.local-import-form .local-file-picker input[type='file'] { position: absolute; width: 1px; height: 1px; min-height: 0; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
-.local-import-form .local-revision-choice { flex-direction: row; align-items: center; }
-.local-revision-choice input { width: auto; min-height: 0; }
-.local-dataset-list { display: grid; gap: 8px; }
-.local-dataset-list button { display: flex; justify-content: space-between; gap: 12px; width: 100%; padding: 12px; text-align: left; }
-.local-dataset-list button.active { border-color: var(--strategy-link); background: var(--bg-hover); }
-.local-dataset-list em, .local-dataset-list small { display: block; margin-top: 5px; font-size: 12px; font-weight: 400; font-style: normal; color: var(--text-secondary); }
-.local-dataset-empty { padding: 14px 0; color: var(--text-secondary); font-size: 13px; line-height: 1.7; }
-/* Dataset management: controls come from the kit; these rules lay them out. */
-.local-dataset-management { display: grid; gap: var(--space-4); padding-bottom: 8px; }
+
+/* The data library drawer (Phase 5g5): datasets, import, and the selected dataset's maintenance. */
+.research-data-drawer { --ui-drawer-width: 560px; }
+.research-data-drawer-content,
+.research-dataset-rail,
+.research-dataset-panel { display: grid; gap: var(--space-4); min-width: 0; }
+.research-dataset-panel:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
+.research-source-cards { display: grid; gap: var(--space-2); }
+.research-source-card,
+.research-dataset-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-inline-start: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  background: var(--surface-0);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.research-source-card { flex-direction: column; align-items: flex-start; gap: 2px; }
+.research-source-card small { color: var(--text-secondary); font-size: var(--font-size-xs); line-height: 1.5; }
+:is(.research-source-card, .research-dataset-row):hover:not(:disabled) { background: var(--surface-2); }
+:is(.research-source-card, .research-dataset-row):focus-visible { outline: 2px solid var(--accent-blue); outline-offset: -2px; }
+.research-source-card:disabled { color: var(--text-muted); cursor: not-allowed; }
+.research-dataset-row[data-active='true'] {
+  border-inline-start-color: var(--accent-blue);
+  background: color-mix(in srgb, var(--accent-blue) 8%, var(--surface-0));
+}
+.research-dataset-list { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.research-dataset-row > span { display: grid; gap: 2px; min-width: 0; }
+.research-dataset-row strong {
+  overflow: hidden;
+  font: 600 var(--font-size-md)/1.4 var(--font-sans);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.research-dataset-row small { color: var(--text-muted); font: var(--font-size-xs)/1.4 var(--font-sans); }
+.research-dataset-rows { flex: 0 0 auto; justify-items: end; }
+.research-dataset-rows b { font: 600 var(--font-size-md)/1.4 var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.research-import-form { display: grid; gap: var(--space-3); min-width: 0; }
+.research-import-head { display: grid; gap: 2px; }
+.research-import-head h3,
+.research-csv-preview h4 {
+  margin: 0;
+  color: var(--text-primary);
+  font: 600 var(--font-size-base)/1.4 var(--font-sans);
+}
+.research-csv-preview h4 { font-size: var(--font-size-md); }
+.research-import-head p,
+.research-import-note {
+  margin: 0;
+  color: var(--text-muted);
+  font: var(--font-size-xs)/1.6 var(--font-sans);
+}
+.research-import-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.research-import-columns {
+  padding: 6px var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  background: var(--surface-0);
+  font: var(--font-size-xs)/1.4 var(--font-mono);
+  overflow-wrap: anywhere;
+}
+.research-import-submit { justify-self: start; }
+.research-csv-preview {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+.research-preview-table {
+  max-height: 200px;
+  overflow: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+}
+.research-preview-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font: var(--font-size-xs)/1.5 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.research-preview-table :is(td, th) {
+  padding: 6px var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: start;
+  white-space: nowrap;
+}
+.research-preview-table th { position: sticky; top: 0; background: var(--surface-1); color: var(--text-secondary); font-weight: 600; }
+.research-preview-table td { color: var(--text-primary); }
+.research-preview-table tr:last-child td { border-bottom: 0; }
+.research-trade-import .ui-disclosure-body { display: grid; gap: var(--space-3); }
+.local-import-progress { display: grid; gap: var(--space-2); font-size: var(--font-size-md); }
+.local-import-progress > div { display: flex; justify-content: space-between; color: var(--text-secondary); }
+.local-import-progress b { color: var(--text-primary); font-family: var(--font-mono); }
+.local-import-progress progress { width: 100%; accent-color: var(--accent-blue); }
+.local-import-progress > .ui-btn { justify-self: start; }
+
+/* Maintenance of the selected dataset: name, quality, revisions, project files, archive and trash. */
+.research-dataset-ops .ui-disclosure-body { padding-top: var(--space-3); }
+.local-dataset-management { display: grid; gap: var(--space-4); }
 .local-dataset-busy { margin: 0; color: var(--text-muted); font-size: var(--font-size-xs); }
 .local-library-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .local-library-actions .ui-input { flex: 1 1 160px; width: auto; }
 .local-dataset-trash { color: var(--text-danger); }
-.local-quality-card { padding: 12px; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); background: var(--surface-0); font-size: var(--font-size-sm); }
-.local-quality-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.local-quality-head span { color: var(--text-secondary); }
-.local-quality-head strong { color: var(--text-primary); font-weight: 600; }
-.local-quality-card dl { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0 0; }
-.local-quality-card dl > div { display: grid; gap: 2px; }
-.local-quality-card dt { color: var(--text-muted); font-size: var(--font-size-xs); }
-.local-quality-card dd { margin: 0; color: var(--text-primary); font-variant-numeric: tabular-nums; }
-.local-quality-card ul { margin: 10px 0 0; padding-left: 16px; color: var(--text-secondary); font-size: var(--font-size-xs); }
+.research-dataset-quality {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.research-dataset-quality-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.research-dataset-quality-head h4,
+.local-revisions h4,
+.local-trash-list h4 {
+  margin: 0;
+  color: var(--text-secondary);
+  font: 600 var(--font-size-xs)/1.4 var(--font-sans);
+}
+.research-dataset-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: var(--space-3); }
+.research-dataset-gaps { margin: 0; padding-left: var(--space-4); color: var(--text-secondary); font-size: var(--font-size-xs); }
 .local-revisions, .local-trash-list { display: grid; gap: 6px; }
-.local-revisions h4, .local-trash-list h4 { margin: 0; color: var(--text-secondary); font: 600 var(--font-size-xs)/1.4 var(--font-sans); }
-.local-revision-list, .local-trash-list ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
-.local-revision-list li, .local-trash-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; padding: 6px 6px 6px 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); background: var(--surface-0); }
+.local-revision-list, .local-trash-list ul { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.local-revision-list li, .local-trash-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 40px;
+  padding: 6px 6px 6px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--surface-0);
+}
 .local-revision-list li[data-current='true'] { border-color: color-mix(in srgb, var(--accent-blue) 45%, var(--border-subtle)); }
 .local-revision-list li > span:first-child, .local-trash-list li > span { display: grid; gap: 2px; min-width: 0; }
 .local-revision-list code { color: var(--text-primary); font: 600 var(--font-size-sm)/1.4 var(--font-mono); }
 .local-revision-list small, .local-trash-list small { overflow: hidden; color: var(--text-muted); font-size: var(--font-size-xs); text-overflow: ellipsis; white-space: nowrap; }
 .local-trash-list strong { overflow: hidden; color: var(--text-primary); font: 600 var(--font-size-sm)/1.4 var(--font-sans); text-overflow: ellipsis; white-space: nowrap; }
-.local-revision-actions { display: flex; flex: 0 0 auto; gap: 4px; }
+.local-revision-actions { display: flex; flex: 0 0 auto; gap: var(--space-1); }
 .local-project-export { justify-self: start; }
-.local-import-progress { display: grid; gap: 8px; font-size: 13px; }
-.local-import-progress > div { display: flex; justify-content: space-between; }
-.local-import-progress progress { width: 100%; }
-.local-management-details { font-size: 13px; }
-.local-management-details > summary { padding: 10px 0; cursor: pointer; color: var(--text-secondary); }
-.research-library-tabs { display: flex; gap: 8px; margin-bottom: 18px; }
-.research-library-tabs button[aria-selected='true'] { color: var(--strategy-link); border-color: var(--strategy-link); }
-.local-interval-selector { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.local-interval-buttons { display: flex; gap: 4px; flex-wrap: wrap; }
-.local-interval-buttons button { padding: 6px 9px; border: 1px solid var(--border-color); border-radius: var(--radius-control); color: var(--text-primary); background: var(--bg-secondary); font: 12px var(--font-sans); }
-.local-interval-buttons button.active { color: var(--strategy-link); border-color: var(--strategy-link); }
-.local-interval-buttons small { margin-left: 4px; color: var(--text-secondary); font-size: var(--font-size-xs); }
-.local-custom-interval { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
-.local-custom-interval-field { display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: var(--font-size-sm); white-space: nowrap; }
-.local-custom-interval-field > .ui-input { width: 72px; }
-.local-custom-interval .ui-check { font-size: var(--font-size-sm); white-space: nowrap; }
-.local-custom-interval .ui-select { width: auto; }
-.local-interval-feedback { font-size: 12px; color: var(--text-secondary); }
-.local-interval-feedback:empty { display: none; }
+
 @media (max-width: 850px) {
   .strategy-research-first-open { margin: var(--space-3) auto; padding: var(--space-3); }
   .strategy-research-shell .main-content-area { flex-direction: column; overflow: auto; }

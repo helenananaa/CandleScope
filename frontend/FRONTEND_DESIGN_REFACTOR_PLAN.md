@@ -507,6 +507,12 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - The dialog that hands a research run back to a market chart is the kit dialog (it rendered unstyled before); `researchReturn.css` is deleted. `strategyResearch.css` is rewritten on tokens for the page, with the library and import rules left for 5g5; its element rules skip kit segments, tabs and link-buttons.
 - Left: the shared strategy tester (5g6), imported data's interval strip and event markers (5g5), copy such as run states as codes (Phase 6).
 
+**Phase 5g5 is done (branch `design/phase-5g5-local-data`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_5G5.md`](../docs/FRONTEND_DESIGN_QA_PHASE_5G5.md).
+
+- The data library is the kit drawer: datasets and CSV import as kit tabs (the count as a badge), dataset rows with an accent edge for the selected one, the CSV import and trade import on kit fields, file drops, selects and alerts, the maintenance disclosure with quality as a badge and kit stats.
+- The header's 打开本地资料库 and the interval chips above an imported chart are kit buttons; the kit button has a pressed style for toggles, and the kit drawer renders in place without a DOM (like the dialog).
+- The drawer's element rules are gone; the unused imported-chart empty state and 7 unused strings are deleted. Left: the shared strategy tester (5g6), copy such as raw column names and stage codes (Phase 6).
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.

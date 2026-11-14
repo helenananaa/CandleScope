@@ -68,6 +68,13 @@
   background: color-mix(in srgb, var(--color-danger) 10%, transparent);
 }
 
+/* Toggle buttons (aria-pressed): the pressed one is tinted, like a pressed icon button. */
+.ui-btn[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--accent-blue) 55%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent-blue) 14%, transparent);
+  color: var(--text-accent);
+}
+
 .ui-btn:disabled {
   border-color: var(--border-subtle);
   background: var(--surface-2);
