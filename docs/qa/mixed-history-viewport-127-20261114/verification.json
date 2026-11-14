@@ -1,0 +1,91 @@
+{
+  "archive_head": "9cfd903a711bcf9e48224dc2d1301f6c7168512b",
+  "native": [
+    {
+      "run": "native-cold",
+      "passed": false,
+      "source": "d78c7d46a3186c045fbbe89e417da8f40a018d4d",
+      "diagnostic": false,
+      "failure": "Error: Timed out waiting for acceptance state\n    at Module.until (file:///Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/docs/qa/backend-batch1-20261101/driver.mjs:29:9)\n    at async verify (file:///Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/docs/qa/mixed-history-viewport-127-20261114/native.mjs:168:5)\n    at async file:///Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/docs/qa/mixed-history-viewport-127-20261114/native.mjs:324:17"
+    },
+    {
+      "run": "native-diagnostic",
+      "passed": false,
+      "source": "d78c7d46a3186c045fbbe89e417da8f40a018d4d",
+      "diagnostic": true,
+      "failure": "Error: Timed out waiting for acceptance state\n    at Module.until (file:///Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/docs/qa/backend-batch1-20261101/driver.mjs:29:9)\n    at async verify (file:///Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/docs/qa/mixed-history-viewport-127-20261114/native.mjs:168:5)\n    at async file:///Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/docs/qa/mixed-history-viewport-127-20261114/native.mjs:324:17"
+    },
+    {
+      "run": "native-diagnostic-v2",
+      "passed": false,
+      "source": "d78c7d46a3186c045fbbe89e417da8f40a018d4d",
+      "diagnostic": true,
+      "failure": "Error: Timed out waiting for acceptance state\n    at Module.until (file:///Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/docs/qa/backend-batch1-20261101/driver.mjs:29:9)\n    at async verify (file:///Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/docs/qa/mixed-history-viewport-127-20261114/native.mjs:168:5)\n    at async file:///Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/docs/qa/mixed-history-viewport-127-20261114/native.mjs:324:17"
+    },
+    {
+      "run": "native-dispatch-cold",
+      "passed": false,
+      "source": "9cfd903a711bcf9e48224dc2d1301f6c7168512b",
+      "diagnostic": false,
+      "failure": "Error: Timed out waiting for acceptance state\n    at Module.until (file:///Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/docs/qa/backend-batch1-20261101/driver.mjs:29:9)\n    at async verify (file:///Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/docs/qa/mixed-history-viewport-127-20261114/native.mjs:168:5)\n    at async file:///Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/docs/qa/mixed-history-viewport-127-20261114/native.mjs:324:17"
+    }
+  ],
+  "tests": {
+    "backend-full": {
+      "tests": 2423.0,
+      "failures": 0.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 587.571
+    },
+    "composed-all-outlets": {
+      "tests": 13.0,
+      "failures": 0.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 10.193
+    },
+    "composed-fixture-fixed": {
+      "tests": 9.0,
+      "failures": 0.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 5.359
+    },
+    "composed-initial": {
+      "tests": 9.0,
+      "failures": 7.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 6.509
+    },
+    "composed-regressions": {
+      "tests": 65.0,
+      "failures": 0.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 18.36
+    },
+    "dispatch-baseline": {
+      "tests": 1.0,
+      "failures": 1.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 9.195
+    },
+    "dispatch-candidate": {
+      "tests": 3.0,
+      "failures": 1.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 6.333
+    },
+    "dispatch-regressions": {
+      "tests": 155.0,
+      "failures": 0.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 12.57
+    }
+  }
+}

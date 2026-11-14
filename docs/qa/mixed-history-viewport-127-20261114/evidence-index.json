@@ -1,0 +1,772 @@
+[
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/architecture.log",
+    "archive": "evidence/planning-development/architecture.log.gz",
+    "original_sha256": "547c159b06d361e5d8e8f90f1388f08bb96897d557771347b9f19aee67e444fc",
+    "archived_payload_sha256": "547c159b06d361e5d8e8f90f1388f08bb96897d557771347b9f19aee67e444fc",
+    "bytes": 119
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/backend-runtime.log",
+    "archive": "evidence/planning-development/backend-runtime.log.gz",
+    "original_sha256": "b7cb0322d7516034d63d089363ddd39c3c30829553725900b23d3aa89b8b2919",
+    "archived_payload_sha256": "b7cb0322d7516034d63d089363ddd39c3c30829553725900b23d3aa89b8b2919",
+    "bytes": 5690
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/backend-runtime.xml",
+    "archive": "evidence/planning-development/backend-runtime.xml.gz",
+    "original_sha256": "c8fb57c6b175ea7d897d3f6940ed29d65ba9159f2ee7281b7ae6d6d0e6bea2ff",
+    "archived_payload_sha256": "c8fb57c6b175ea7d897d3f6940ed29d65ba9159f2ee7281b7ae6d6d0e6bea2ff",
+    "bytes": 354323
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/budget-work-final.log",
+    "archive": "evidence/planning-development/budget-work-final.log.gz",
+    "original_sha256": "5975c3b16ee59752d0e3da5139dc07a73bb1e3353eca7c3f96cfa6caa70ecbde",
+    "archived_payload_sha256": "5975c3b16ee59752d0e3da5139dc07a73bb1e3353eca7c3f96cfa6caa70ecbde",
+    "bytes": 901
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/budget-work-final.xml",
+    "archive": "evidence/planning-development/budget-work-final.xml.gz",
+    "original_sha256": "5c2e94250785aa1ee57c96af331f70adbfcfc96e8dbc58a678f1fd10afd52d86",
+    "archived_payload_sha256": "5c2e94250785aa1ee57c96af331f70adbfcfc96e8dbc58a678f1fd10afd52d86",
+    "bytes": 1866
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/coarse-baseline.log",
+    "archive": "evidence/planning-development/coarse-baseline.log.gz",
+    "original_sha256": "98e7595d1368197e5e35be724bf688cb8e48cf7ed58185ba6aea249ebc700f70",
+    "archived_payload_sha256": "98e7595d1368197e5e35be724bf688cb8e48cf7ed58185ba6aea249ebc700f70",
+    "bytes": 1901
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/coarse-baseline.xml",
+    "archive": "evidence/planning-development/coarse-baseline.xml.gz",
+    "original_sha256": "02dd41ab84d4fd0ac65d8270b73f458dba343927d24df4d9019c8da33ad962fc",
+    "archived_payload_sha256": "02dd41ab84d4fd0ac65d8270b73f458dba343927d24df4d9019c8da33ad962fc",
+    "bytes": 1273
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/coarse-candidate.log",
+    "archive": "evidence/planning-development/coarse-candidate.log.gz",
+    "original_sha256": "0513c718392e47a13de921dd05cfcefb47d8f1ae46071b33ef1f4802c4422c31",
+    "archived_payload_sha256": "0513c718392e47a13de921dd05cfcefb47d8f1ae46071b33ef1f4802c4422c31",
+    "bytes": 901
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/coarse-candidate.xml",
+    "archive": "evidence/planning-development/coarse-candidate.xml.gz",
+    "original_sha256": "1a3052ab6d9b31ea169ffb14df94292352e87e493d98c2378b14dadef29b5c5b",
+    "archived_payload_sha256": "1a3052ab6d9b31ea169ffb14df94292352e87e493d98c2378b14dadef29b5c5b",
+    "bytes": 8251
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/cold-choice-initial.log",
+    "archive": "evidence/planning-development/cold-choice-initial.log.gz",
+    "original_sha256": "762a0e456da464c2a1efa76fad8ffb58a839f118972927bafa557319b39afc0d",
+    "archived_payload_sha256": "762a0e456da464c2a1efa76fad8ffb58a839f118972927bafa557319b39afc0d",
+    "bytes": 2526
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/cold-choice-initial.xml",
+    "archive": "evidence/planning-development/cold-choice-initial.xml.gz",
+    "original_sha256": "5fbd58587b8c6c8841cd38bbf701f1832580e63634cb745e6681b2abd7b7a35a",
+    "archived_payload_sha256": "5fbd58587b8c6c8841cd38bbf701f1832580e63634cb745e6681b2abd7b7a35a",
+    "bytes": 2971
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/cold-choice-pipeline.log",
+    "archive": "evidence/planning-development/cold-choice-pipeline.log.gz",
+    "original_sha256": "cdb39f380bb37e813870c23ae418ad4d5894d2545abbefd6a2b89dbabe654821",
+    "archived_payload_sha256": "cdb39f380bb37e813870c23ae418ad4d5894d2545abbefd6a2b89dbabe654821",
+    "bytes": 2658
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/cold-choice-pipeline.xml",
+    "archive": "evidence/planning-development/cold-choice-pipeline.xml.gz",
+    "original_sha256": "30782f89955b064100b06ee469969901879e1239140993483771a6a47b042167",
+    "archived_payload_sha256": "30782f89955b064100b06ee469969901879e1239140993483771a6a47b042167",
+    "bytes": 11550
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/cold-frontier-contracts.log",
+    "archive": "evidence/planning-development/cold-frontier-contracts.log.gz",
+    "original_sha256": "1b5b99a257adf61c5613c6d417d7d7ccf7fa1dea53bda2ec3e96a60666a41a8e",
+    "archived_payload_sha256": "1b5b99a257adf61c5613c6d417d7d7ccf7fa1dea53bda2ec3e96a60666a41a8e",
+    "bytes": 1876
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/cold-frontier-contracts.xml",
+    "archive": "evidence/planning-development/cold-frontier-contracts.xml.gz",
+    "original_sha256": "ef3f3e4866eed9ca6cea224033a571ef0b753b72e264120361ca62bf21aab716",
+    "archived_payload_sha256": "ef3f3e4866eed9ca6cea224033a571ef0b753b72e264120361ca62bf21aab716",
+    "bytes": 12191
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/cold-frontier-pipeline.log",
+    "archive": "evidence/planning-development/cold-frontier-pipeline.log.gz",
+    "original_sha256": "b752aa1a260aef7d9e7e69bb184e7fdb0de03fecd3b62c6dd47e1eb3c9d97693",
+    "archived_payload_sha256": "b752aa1a260aef7d9e7e69bb184e7fdb0de03fecd3b62c6dd47e1eb3c9d97693",
+    "bytes": 31621
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/cold-frontier-pipeline.xml",
+    "archive": "evidence/planning-development/cold-frontier-pipeline.xml.gz",
+    "original_sha256": "7c945a6fb4cf25a72b2180554039720c3ce9d7124f101d372ccdd72822168f5e",
+    "archived_payload_sha256": "7c945a6fb4cf25a72b2180554039720c3ce9d7124f101d372ccdd72822168f5e",
+    "bytes": 41277
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/download.log",
+    "archive": "evidence/planning-development/download.log.gz",
+    "original_sha256": "864d30edcab24bd6e4b60d9ba4187597b7ad2d5847d4b98b140764c0fe88dd31",
+    "archived_payload_sha256": "864d30edcab24bd6e4b60d9ba4187597b7ad2d5847d4b98b140764c0fe88dd31",
+    "bytes": 1795
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/focused-final.log",
+    "archive": "evidence/planning-development/focused-final.log.gz",
+    "original_sha256": "3484006305964f9c2ccd0033e7196ae0610dc54db83d28af449923ed38244a08",
+    "archived_payload_sha256": "3484006305964f9c2ccd0033e7196ae0610dc54db83d28af449923ed38244a08",
+    "bytes": 1937
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/focused-final.xml",
+    "archive": "evidence/planning-development/focused-final.xml.gz",
+    "original_sha256": "6f4dae0c225e30b2e6111f41357880770cf292e9994d9c69610f9a276881b32a",
+    "archived_payload_sha256": "6f4dae0c225e30b2e6111f41357880770cf292e9994d9c69610f9a276881b32a",
+    "bytes": 24613
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/incremental-work-contracts.log",
+    "archive": "evidence/planning-development/incremental-work-contracts.log.gz",
+    "original_sha256": "7078b7931af63ec74a85d49557580e69c1c9de3cf5a2fb7c67b5291420454d07",
+    "archived_payload_sha256": "7078b7931af63ec74a85d49557580e69c1c9de3cf5a2fb7c67b5291420454d07",
+    "bytes": 1869
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/incremental-work-contracts.xml",
+    "archive": "evidence/planning-development/incremental-work-contracts.xml.gz",
+    "original_sha256": "5502ef3fb8ae42798c2abef325810f2be471afa8afc67ddaa5c1cbe816537cda",
+    "archived_payload_sha256": "5502ef3fb8ae42798c2abef325810f2be471afa8afc67ddaa5c1cbe816537cda",
+    "bytes": 12190
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/pipeline-correct-path.log",
+    "archive": "evidence/planning-development/pipeline-correct-path.log.gz",
+    "original_sha256": "438f14489e54dfc64115501cc397c9c65170c1bd854382397936624067be6301",
+    "archived_payload_sha256": "438f14489e54dfc64115501cc397c9c65170c1bd854382397936624067be6301",
+    "bytes": 44767
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/pipeline-correct-path.xml",
+    "archive": "evidence/planning-development/pipeline-correct-path.xml.gz",
+    "original_sha256": "59f5f40418a85a1324f392654bf2b5f2c68beecf12374368294f7ed3641c9dca",
+    "archived_payload_sha256": "59f5f40418a85a1324f392654bf2b5f2c68beecf12374368294f7ed3641c9dca",
+    "bytes": 54803
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/pipeline-probe.log",
+    "archive": "evidence/planning-development/pipeline-probe.log.gz",
+    "original_sha256": "50bfa7339e5d68f3b8acf89e1103ea4ccf31fe30124dad39a7d81728804018ba",
+    "archived_payload_sha256": "50bfa7339e5d68f3b8acf89e1103ea4ccf31fe30124dad39a7d81728804018ba",
+    "bytes": 267
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/pipeline-probe.xml",
+    "archive": "evidence/planning-development/pipeline-probe.xml.gz",
+    "original_sha256": "5e8c2cc1a44f90fd3aa52242caf199d54ed9bcda9d04e36f8b2677b1b40c20b3",
+    "archived_payload_sha256": "5e8c2cc1a44f90fd3aa52242caf199d54ed9bcda9d04e36f8b2677b1b40c20b3",
+    "bytes": 223
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/plan-accounted-frontier.log",
+    "archive": "evidence/planning-development/plan-accounted-frontier.log.gz",
+    "original_sha256": "6928195d21daa84dee4945b286df4bba85317d82e8ade4b9324a69daebdbeca6",
+    "archived_payload_sha256": "6928195d21daa84dee4945b286df4bba85317d82e8ade4b9324a69daebdbeca6",
+    "bytes": 3061
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/plan-baseline.log",
+    "archive": "evidence/planning-development/plan-baseline.log.gz",
+    "original_sha256": "747154a20be09da0512c97312b3ccf08b40a28ac827289e7546be5ddd0a422d1",
+    "archived_payload_sha256": "747154a20be09da0512c97312b3ccf08b40a28ac827289e7546be5ddd0a422d1",
+    "bytes": 2357
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/plan-candidate.log",
+    "archive": "evidence/planning-development/plan-candidate.log.gz",
+    "original_sha256": "5b5200d112367c52cdc81956cd1e807ba304b3dc5fc761283ac888d5bc70531c",
+    "archived_payload_sha256": "5b5200d112367c52cdc81956cd1e807ba304b3dc5fc761283ac888d5bc70531c",
+    "bytes": 2503
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/plan-cold-frontier.log",
+    "archive": "evidence/planning-development/plan-cold-frontier.log.gz",
+    "original_sha256": "faa03288969e1d37cad0ebd278932a41076a2671836832a0930a66eca0428cf1",
+    "archived_payload_sha256": "faa03288969e1d37cad0ebd278932a41076a2671836832a0930a66eca0428cf1",
+    "bytes": 2842
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/source-mixed.log",
+    "archive": "evidence/planning-development/source-mixed.log.gz",
+    "original_sha256": "7c137ab59839138ee11f52442f22662c5b690f41c7424f21ce7a8224dbd65354",
+    "archived_payload_sha256": "7c137ab59839138ee11f52442f22662c5b690f41c7424f21ce7a8224dbd65354",
+    "bytes": 1539
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/plan-accounted-frontier/results.json",
+    "archive": "evidence/planning-development/plan-accounted-frontier/results.json.gz",
+    "original_sha256": "ebcae06b151434586662ec8101cf88039a103a50521b9700ee25c595764e3b87",
+    "archived_payload_sha256": "ebcae06b151434586662ec8101cf88039a103a50521b9700ee25c595764e3b87",
+    "bytes": 3907
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/plan-baseline/results.json",
+    "archive": "evidence/planning-development/plan-baseline/results.json.gz",
+    "original_sha256": "b8bc08460fca2dea68056b22d18df0603bf1545fa170ce6176f89ab54dc6ed92",
+    "archived_payload_sha256": "b8bc08460fca2dea68056b22d18df0603bf1545fa170ce6176f89ab54dc6ed92",
+    "bytes": 3019
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/plan-candidate/results.json",
+    "archive": "evidence/planning-development/plan-candidate/results.json.gz",
+    "original_sha256": "c04d74e496f99edf7b8a2673010c1e03cf0263ab1232c70503b795f7b72b21c7",
+    "archived_payload_sha256": "c04d74e496f99edf7b8a2673010c1e03cf0263ab1232c70503b795f7b72b21c7",
+    "bytes": 3277
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-admission-127-20261114/CandleScope/output/mixed-history-admission-127-20261114/plan-cold-frontier/results.json",
+    "archive": "evidence/planning-development/plan-cold-frontier/results.json.gz",
+    "original_sha256": "81ffbf0cf4b0f29d1331a19ac95124a56f903f167717df160a782df01c667d57",
+    "archived_payload_sha256": "81ffbf0cf4b0f29d1331a19ac95124a56f903f167717df160a782df01c667d57",
+    "bytes": 3640
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/api-all-pages-fixed.log",
+    "archive": "evidence/viewport-development/api-all-pages-fixed.log.gz",
+    "original_sha256": "c141514d9ab6406c42975f5c0eae77d1211ed958532229f9259b8b2d0ddbe081",
+    "archived_payload_sha256": "c141514d9ab6406c42975f5c0eae77d1211ed958532229f9259b8b2d0ddbe081",
+    "bytes": 1461
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/api-all-pages.log",
+    "archive": "evidence/viewport-development/api-all-pages.log.gz",
+    "original_sha256": "aee7a1f7d0136e367df7982069239f0ecc64ae1e65e6b3c678628cb2235e280c",
+    "archived_payload_sha256": "aee7a1f7d0136e367df7982069239f0ecc64ae1e65e6b3c678628cb2235e280c",
+    "bytes": 2177
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/backend-full.log",
+    "archive": "evidence/viewport-development/backend-full.log.gz",
+    "original_sha256": "728dde37b55efafd18a0d5209bb0929d7535e3d9a99e8135920372e5ee6f1ef5",
+    "archived_payload_sha256": "728dde37b55efafd18a0d5209bb0929d7535e3d9a99e8135920372e5ee6f1ef5",
+    "bytes": 5683
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/backend-full.xml",
+    "archive": "evidence/viewport-development/backend-full.xml.gz",
+    "original_sha256": "16a6cf230223569c65e49bd6ab2292d6f75671d7141dd3c33090eae16284a4ff",
+    "archived_payload_sha256": "16a6cf230223569c65e49bd6ab2292d6f75671d7141dd3c33090eae16284a4ff",
+    "bytes": 358187
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/composed-all-outlets.log",
+    "archive": "evidence/viewport-development/composed-all-outlets.log.gz",
+    "original_sha256": "826e1204646748ad5378348ceaa029f37cedfabf841ac8cce773dc7794c71b37",
+    "archived_payload_sha256": "826e1204646748ad5378348ceaa029f37cedfabf841ac8cce773dc7794c71b37",
+    "bytes": 903
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/composed-all-outlets.xml",
+    "archive": "evidence/viewport-development/composed-all-outlets.xml.gz",
+    "original_sha256": "03a59354ed7fe705e95aef5f827f1ed0f42e4b2110efabfefd42534590d6b2ce",
+    "archived_payload_sha256": "03a59354ed7fe705e95aef5f827f1ed0f42e4b2110efabfefd42534590d6b2ce",
+    "bytes": 2366
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/composed-fixture-fixed.log",
+    "archive": "evidence/viewport-development/composed-fixture-fixed.log.gz",
+    "original_sha256": "2d3cefbeabd163c57e306b6056556e860d24a3e33927d19ce019403f635f76f4",
+    "archived_payload_sha256": "2d3cefbeabd163c57e306b6056556e860d24a3e33927d19ce019403f635f76f4",
+    "bytes": 903
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/composed-fixture-fixed.xml",
+    "archive": "evidence/viewport-development/composed-fixture-fixed.xml.gz",
+    "original_sha256": "da73ab0ac51a718a9d0de5b979a3d0a44f76dead1fdfc3d1b28adaf8fc0089bb",
+    "archived_payload_sha256": "da73ab0ac51a718a9d0de5b979a3d0a44f76dead1fdfc3d1b28adaf8fc0089bb",
+    "bytes": 1665
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/composed-initial.log",
+    "archive": "evidence/viewport-development/composed-initial.log.gz",
+    "original_sha256": "21f097632a51ef86b1cf7eb9e6e1e15caa512be747d44c17424e5406dcc7f244",
+    "archived_payload_sha256": "21f097632a51ef86b1cf7eb9e6e1e15caa512be747d44c17424e5406dcc7f244",
+    "bytes": 19672
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/composed-initial.xml",
+    "archive": "evidence/viewport-development/composed-initial.xml.gz",
+    "original_sha256": "40218a4e2697ee15e1ed5deb820be59e1fdeab0336adef608b02dd863b1df20f",
+    "archived_payload_sha256": "40218a4e2697ee15e1ed5deb820be59e1fdeab0336adef608b02dd863b1df20f",
+    "bytes": 19325
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/composed-regressions.log",
+    "archive": "evidence/viewport-development/composed-regressions.log.gz",
+    "original_sha256": "1f78158406570dad95b89577f2e655e776ba2b64831d2eb989b0ca384d3e6701",
+    "archived_payload_sha256": "1f78158406570dad95b89577f2e655e776ba2b64831d2eb989b0ca384d3e6701",
+    "bytes": 903
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/composed-regressions.xml",
+    "archive": "evidence/viewport-development/composed-regressions.xml.gz",
+    "original_sha256": "b9c9a613cae7fa7ef23addb9af1e2becf5794fcf5f84209617d799e944ffe5aa",
+    "archived_payload_sha256": "b9c9a613cae7fa7ef23addb9af1e2becf5794fcf5f84209617d799e944ffe5aa",
+    "bytes": 10468
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/diagnostic-tasks-60536.jsonl",
+    "archive": "evidence/viewport-development/diagnostic-tasks-60536.jsonl.gz",
+    "original_sha256": "1b98c95782be4f521b45fb0ae0164e0864c6e960d8863ef6e63ae5637be2e41b",
+    "archived_payload_sha256": "1b98c95782be4f521b45fb0ae0164e0864c6e960d8863ef6e63ae5637be2e41b",
+    "bytes": 9739
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/diagnostic-tasks-64086.jsonl",
+    "archive": "evidence/viewport-development/diagnostic-tasks-64086.jsonl.gz",
+    "original_sha256": "7c5412b363886ac02de90ea843cdb22b2e654eb96173519001fe3aaee7980657",
+    "archived_payload_sha256": "7c5412b363886ac02de90ea843cdb22b2e654eb96173519001fe3aaee7980657",
+    "bytes": 2895106
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/diagnostic-tasks-64261.jsonl",
+    "archive": "evidence/viewport-development/diagnostic-tasks-64261.jsonl.gz",
+    "original_sha256": "1c52551c5e9cd853ec6a418651642f37f07f8279761a36d8b53cffb1b5841d55",
+    "archived_payload_sha256": "1c52551c5e9cd853ec6a418651642f37f07f8279761a36d8b53cffb1b5841d55",
+    "bytes": 10366
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/dispatch-baseline.log",
+    "archive": "evidence/viewport-development/dispatch-baseline.log.gz",
+    "original_sha256": "a20cc950bcc875cf1d9c32d55e04c6ad706efd1e2f147d9b36731e9eef71040c",
+    "archived_payload_sha256": "a20cc950bcc875cf1d9c32d55e04c6ad706efd1e2f147d9b36731e9eef71040c",
+    "bytes": 15470
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/dispatch-baseline.xml",
+    "archive": "evidence/viewport-development/dispatch-baseline.xml.gz",
+    "original_sha256": "56f721b87602b96b2570de136503de87861a98f4b76d502c702d0dfeb2d36c89",
+    "archived_payload_sha256": "56f721b87602b96b2570de136503de87861a98f4b76d502c702d0dfeb2d36c89",
+    "bytes": 18074
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/dispatch-candidate.log",
+    "archive": "evidence/viewport-development/dispatch-candidate.log.gz",
+    "original_sha256": "3d2c3b7cecad2d337baaa9241c104af944cdda8def939e15b0c7ac9487fcf487",
+    "archived_payload_sha256": "3d2c3b7cecad2d337baaa9241c104af944cdda8def939e15b0c7ac9487fcf487",
+    "bytes": 14590
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/dispatch-candidate.xml",
+    "archive": "evidence/viewport-development/dispatch-candidate.xml.gz",
+    "original_sha256": "8e64d4582cfbb67c8d73d65294592890049ad65b40eadd5019a81747cc28c34f",
+    "archived_payload_sha256": "8e64d4582cfbb67c8d73d65294592890049ad65b40eadd5019a81747cc28c34f",
+    "bytes": 17513
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/dispatch-regressions.log",
+    "archive": "evidence/viewport-development/dispatch-regressions.log.gz",
+    "original_sha256": "d01f8e560af1b464dd3d7c07101eea80cb36b715479a9e3c142150f20cc11ac8",
+    "archived_payload_sha256": "d01f8e560af1b464dd3d7c07101eea80cb36b715479a9e3c142150f20cc11ac8",
+    "bytes": 435
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/dispatch-regressions.xml",
+    "archive": "evidence/viewport-development/dispatch-regressions.xml.gz",
+    "original_sha256": "0c86c251cdc2ce67dfad0a3215bc8d78c10ba9df16ee407d5e049fdad9d9af69",
+    "archived_payload_sha256": "0c86c251cdc2ce67dfad0a3215bc8d78c10ba9df16ee407d5e049fdad9d9af69",
+    "bytes": 24152
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/frontend-admission-initial.log",
+    "archive": "evidence/viewport-development/frontend-admission-initial.log.gz",
+    "original_sha256": "b29cb163b09fe25758b6e48a28df0aa96b4fa50c3181676cec340f141991d1fe",
+    "archived_payload_sha256": "b29cb163b09fe25758b6e48a28df0aa96b4fa50c3181676cec340f141991d1fe",
+    "bytes": 4947
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/frontend-build.log",
+    "archive": "evidence/viewport-development/frontend-build.log.gz",
+    "original_sha256": "3e738367878e93474a88c8e0bb11c2de50f21e6b49c03d563cc66c818b7c9b30",
+    "archived_payload_sha256": "3e738367878e93474a88c8e0bb11c2de50f21e6b49c03d563cc66c818b7c9b30",
+    "bytes": 14993
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/frontend-check.log",
+    "archive": "evidence/viewport-development/frontend-check.log.gz",
+    "original_sha256": "d2a4c1e7e1cb4e869e76bd41cf007bbdc2d790196081e01610d99296bfc3b9be",
+    "archived_payload_sha256": "d2a4c1e7e1cb4e869e76bd41cf007bbdc2d790196081e01610d99296bfc3b9be",
+    "bytes": 506323
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/frontend-connected.log",
+    "archive": "evidence/viewport-development/frontend-connected.log.gz",
+    "original_sha256": "1259bdb0ecd0daa73d835566a7654c0ba612b6d2214801079d3ba36336502578",
+    "archived_payload_sha256": "1259bdb0ecd0daa73d835566a7654c0ba612b6d2214801079d3ba36336502578",
+    "bytes": 7688
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/frontend-lint-fixed.log",
+    "archive": "evidence/viewport-development/frontend-lint-fixed.log.gz",
+    "original_sha256": "04f69fa9b4f07c2499d5116181ca00a302db12de7c37b7b6373e94a474513dba",
+    "archived_payload_sha256": "04f69fa9b4f07c2499d5116181ca00a302db12de7c37b7b6373e94a474513dba",
+    "bytes": 540
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/frontend-lint.log",
+    "archive": "evidence/viewport-development/frontend-lint.log.gz",
+    "original_sha256": "0d9a99b7214800c3a7f7cea76ad11f6b13bb28f859245b9779e4c0114ed859e4",
+    "archived_payload_sha256": "0d9a99b7214800c3a7f7cea76ad11f6b13bb28f859245b9779e4c0114ed859e4",
+    "bytes": 2590
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-cold-driver.log",
+    "archive": "evidence/viewport-development/native-cold-driver.log.gz",
+    "original_sha256": "c86831ab13430c74801a9f569ec88d31d58254d03611361d8a9038c48cfd1774",
+    "archived_payload_sha256": "c86831ab13430c74801a9f569ec88d31d58254d03611361d8a9038c48cfd1774",
+    "bytes": 599
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-diagnostic-driver.log",
+    "archive": "evidence/viewport-development/native-diagnostic-driver.log.gz",
+    "original_sha256": "c86831ab13430c74801a9f569ec88d31d58254d03611361d8a9038c48cfd1774",
+    "archived_payload_sha256": "c86831ab13430c74801a9f569ec88d31d58254d03611361d8a9038c48cfd1774",
+    "bytes": 599
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-diagnostic-v2-driver.log",
+    "archive": "evidence/viewport-development/native-diagnostic-v2-driver.log.gz",
+    "original_sha256": "c86831ab13430c74801a9f569ec88d31d58254d03611361d8a9038c48cfd1774",
+    "archived_payload_sha256": "c86831ab13430c74801a9f569ec88d31d58254d03611361d8a9038c48cfd1774",
+    "bytes": 599
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-dispatch-cold-driver.log",
+    "archive": "evidence/viewport-development/native-dispatch-cold-driver.log.gz",
+    "original_sha256": "c86831ab13430c74801a9f569ec88d31d58254d03611361d8a9038c48cfd1774",
+    "archived_payload_sha256": "c86831ab13430c74801a9f569ec88d31d58254d03611361d8a9038c48cfd1774",
+    "bytes": 599
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/npm-ci.log",
+    "archive": "evidence/viewport-development/npm-ci.log.gz",
+    "original_sha256": "e71aa8ccf2da56e375c8ef434e1fe04642f3b2110eca2129c502c54419742531",
+    "archived_payload_sha256": "e71aa8ccf2da56e375c8ef434e1fe04642f3b2110eca2129c502c54419742531",
+    "bytes": 1236
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/plan-current.log",
+    "archive": "evidence/viewport-development/plan-current.log.gz",
+    "original_sha256": "2ac69ff0ade290e0672387f2d0bdfed7ad4ddb313e0a22d65a0200598b5c819f",
+    "archived_payload_sha256": "2ac69ff0ade290e0672387f2d0bdfed7ad4ddb313e0a22d65a0200598b5c819f",
+    "bytes": 119213
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/prepare-native-dispatch.log",
+    "archive": "evidence/viewport-development/prepare-native-dispatch.log.gz",
+    "original_sha256": "bba68fc178cdaa5578a3b2f30a44bef29d92c32f4b4651a2d63a786e77f7060f",
+    "archived_payload_sha256": "bba68fc178cdaa5578a3b2f30a44bef29d92c32f4b4651a2d63a786e77f7060f",
+    "bytes": 71
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/prepare-native.log",
+    "archive": "evidence/viewport-development/prepare-native.log.gz",
+    "original_sha256": "bba68fc178cdaa5578a3b2f30a44bef29d92c32f4b4651a2d63a786e77f7060f",
+    "archived_payload_sha256": "bba68fc178cdaa5578a3b2f30a44bef29d92c32f4b4651a2d63a786e77f7060f",
+    "bytes": 71
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/typecheck-all-pages.log",
+    "archive": "evidence/viewport-development/typecheck-all-pages.log.gz",
+    "original_sha256": "e2d15869bfb9c7746332e48d31246ef05dbf15488aa0ccbbd415fa22929f5135",
+    "archived_payload_sha256": "e2d15869bfb9c7746332e48d31246ef05dbf15488aa0ccbbd415fa22929f5135",
+    "bytes": 99
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/typecheck-connected.log",
+    "archive": "evidence/viewport-development/typecheck-connected.log.gz",
+    "original_sha256": "e2d15869bfb9c7746332e48d31246ef05dbf15488aa0ccbbd415fa22929f5135",
+    "archived_payload_sha256": "e2d15869bfb9c7746332e48d31246ef05dbf15488aa0ccbbd415fa22929f5135",
+    "bytes": 99
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/typecheck-feed-policy.log",
+    "archive": "evidence/viewport-development/typecheck-feed-policy.log.gz",
+    "original_sha256": "e2d15869bfb9c7746332e48d31246ef05dbf15488aa0ccbbd415fa22929f5135",
+    "archived_payload_sha256": "e2d15869bfb9c7746332e48d31246ef05dbf15488aa0ccbbd415fa22929f5135",
+    "bytes": 99
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/typecheck-final.log",
+    "archive": "evidence/viewport-development/typecheck-final.log.gz",
+    "original_sha256": "e2d15869bfb9c7746332e48d31246ef05dbf15488aa0ccbbd415fa22929f5135",
+    "archived_payload_sha256": "e2d15869bfb9c7746332e48d31246ef05dbf15488aa0ccbbd415fa22929f5135",
+    "bytes": 99
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/typecheck-initial.log",
+    "archive": "evidence/viewport-development/typecheck-initial.log.gz",
+    "original_sha256": "524680d585cb8e7b4e82a4ae680178f6f9e72cecd9cfa1d87a9b6c6c9ac915de",
+    "archived_payload_sha256": "524680d585cb8e7b4e82a4ae680178f6f9e72cecd9cfa1d87a9b6c6c9ac915de",
+    "bytes": 384
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/plan-current/results.json",
+    "archive": "evidence/viewport-development/plan-current/results.json.gz",
+    "original_sha256": "2ff04070587f201ed30989bd0707bdcbc91037dde2af27ef01ad3c29fdbb35db",
+    "archived_payload_sha256": "2ff04070587f201ed30989bd0707bdcbc91037dde2af27ef01ad3c29fdbb35db",
+    "bytes": 124093
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-cold/acceptance.json",
+    "archive": "evidence/native-cold/acceptance.json.gz",
+    "original_sha256": "9c8f362c98d67247c37f98fa525b86d41c011f732cd0bdd66eec888f300cc090",
+    "archived_payload_sha256": "2ec4b570068d356d55d748c577b6fcf2ec1969040781c0062ea41fd4fdb195a2",
+    "bytes": 445065
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-cold/live-diagnostics-1.json",
+    "archive": "evidence/native-cold/live-diagnostics-1.json.gz",
+    "original_sha256": "42d5e214de0e571a362a34f5582a6004763dc7658eee00be9fed31a8f3005e67",
+    "archived_payload_sha256": "da9337b3fba41e8ca1f74d4e29e528b4ebcce5f47aa84fb96cfb6e6eb8ebfa88",
+    "bytes": 120050
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-cold/live-storage-health-1.json",
+    "archive": "evidence/native-cold/live-storage-health-1.json.gz",
+    "original_sha256": "5c86885865837d565de7612d80e2ba797af6b530c9cb0f1332eff01adac3cabd",
+    "archived_payload_sha256": "f1a7e34f5e344ce92fe239c103fa16ee30c247b6e1e4ad71de494bc7dbba65ad",
+    "bytes": 191095
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-cold/process.log",
+    "archive": "evidence/native-cold/process.log.gz",
+    "original_sha256": "b99103657dce0be29ce24531ef601fe0e38938c0746c529fd82612c3687e33fa",
+    "archived_payload_sha256": "b99103657dce0be29ce24531ef601fe0e38938c0746c529fd82612c3687e33fa",
+    "bytes": 304
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-cold/resource-samples.jsonl",
+    "archive": "evidence/native-cold/resource-samples.jsonl.gz",
+    "original_sha256": "68927b0809dbac2b8859737e571c7bdfc73284f98a550858d0f2f125e5e58688",
+    "archived_payload_sha256": "68927b0809dbac2b8859737e571c7bdfc73284f98a550858d0f2f125e5e58688",
+    "bytes": 92914
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-cold/traffic.json",
+    "archive": "evidence/native-cold/traffic.json.gz",
+    "original_sha256": "918b39b40081bc9de8d29796882f266fe2cbaffd2cb06cd00bb8023b0dc7f662",
+    "archived_payload_sha256": "b4b0449f6e3f8e795cc930725639b135a1aba144bb48f4b51aceda4f8989e69f",
+    "bytes": 6542968
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-cold/profile/logs/backend-sidecar.log",
+    "archive": "evidence/native-cold/backend-sidecar.log.gz",
+    "original_sha256": "2ce6fdd99259669e97bc45d04460013fb86d823c21b2710871e0bbd480ebc216",
+    "archived_payload_sha256": "2ce6fdd99259669e97bc45d04460013fb86d823c21b2710871e0bbd480ebc216",
+    "bytes": 280896
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-diagnostic/acceptance.json",
+    "archive": "evidence/native-diagnostic/acceptance.json.gz",
+    "original_sha256": "823ff00b593ce97cb8a90d1ad8f8e9e8499e675e79724dae2ff7ba118e3c6445",
+    "archived_payload_sha256": "5aa446576445873f781ff9fedec97f185124ee483334adb11acf8ae7db520a1b",
+    "bytes": 439144
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-diagnostic/process.log",
+    "archive": "evidence/native-diagnostic/process.log.gz",
+    "original_sha256": "d025ba174410cc23e1ec9f02058e2a815d5868de007986d9008dca2d9b65882a",
+    "archived_payload_sha256": "d025ba174410cc23e1ec9f02058e2a815d5868de007986d9008dca2d9b65882a",
+    "bytes": 304
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-diagnostic/resource-samples.jsonl",
+    "archive": "evidence/native-diagnostic/resource-samples.jsonl.gz",
+    "original_sha256": "f419a14fb4a11ca400e991804132947db7fe500e7680698c70c2980271d28a86",
+    "archived_payload_sha256": "f419a14fb4a11ca400e991804132947db7fe500e7680698c70c2980271d28a86",
+    "bytes": 92685
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-diagnostic/traffic.json",
+    "archive": "evidence/native-diagnostic/traffic.json.gz",
+    "original_sha256": "a522062a81ec2e86e892322c4706b93c924b6bd3b29fcaf290cec8bcd47c9780",
+    "archived_payload_sha256": "bcddaa9e3bee0b739dc80b4a3d977e1ca41f7f6fffc10c89720691c825faed8e",
+    "bytes": 5223244
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-diagnostic/profile/logs/backend-sidecar.log",
+    "archive": "evidence/native-diagnostic/backend-sidecar.log.gz",
+    "original_sha256": "12b664c56629d66283dcff9371b4cd652d5d7638543e59cb6c7963daf3d89a89",
+    "archived_payload_sha256": "12b664c56629d66283dcff9371b4cd652d5d7638543e59cb6c7963daf3d89a89",
+    "bytes": 273200
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-diagnostic-v2/acceptance.json",
+    "archive": "evidence/native-diagnostic-v2/acceptance.json.gz",
+    "original_sha256": "ab9dc54ad00e1c49b951664a4098f453fd70b317bc29c1c24e3461349e093020",
+    "archived_payload_sha256": "e1b9c9321634e56dd987e2c72d7f33cd194c53a754bd2bd753b9fad5e721f263",
+    "bytes": 441210
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-diagnostic-v2/process.log",
+    "archive": "evidence/native-diagnostic-v2/process.log.gz",
+    "original_sha256": "15cd6d69235aa83938080f944433068db3159b2a928d8289bb3e04e025039833",
+    "archived_payload_sha256": "15cd6d69235aa83938080f944433068db3159b2a928d8289bb3e04e025039833",
+    "bytes": 440
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-diagnostic-v2/resource-samples.jsonl",
+    "archive": "evidence/native-diagnostic-v2/resource-samples.jsonl.gz",
+    "original_sha256": "4a1496631a29df864839a863b7023cec6ec36c09dca5b5d038d756a68801d9a0",
+    "archived_payload_sha256": "4a1496631a29df864839a863b7023cec6ec36c09dca5b5d038d756a68801d9a0",
+    "bytes": 103616
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-diagnostic-v2/traffic.json",
+    "archive": "evidence/native-diagnostic-v2/traffic.json.gz",
+    "original_sha256": "cecefedf38458f150fe9486b9ca05053df792b962f1c7fa12b3de28bb5bd36fa",
+    "archived_payload_sha256": "cecefedf38458f150fe9486b9ca05053df792b962f1c7fa12b3de28bb5bd36fa",
+    "bytes": 7389951
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-diagnostic-v2/profile/logs/backend-sidecar.log",
+    "archive": "evidence/native-diagnostic-v2/backend-sidecar.log.gz",
+    "original_sha256": "40dd9b8cfbf0e9a275a6ea40df5f81d075ae79b26a8515cc2ceeb25da4e6049a",
+    "archived_payload_sha256": "40dd9b8cfbf0e9a275a6ea40df5f81d075ae79b26a8515cc2ceeb25da4e6049a",
+    "bytes": 270800
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-dispatch-cold/acceptance.json",
+    "archive": "evidence/native-dispatch-cold/acceptance.json.gz",
+    "original_sha256": "ac50df178aad073191701c3f6a68bc84b634b81856e477d2dc086be00cc8da5d",
+    "archived_payload_sha256": "086a614f2b850fce0c764c3d6ff394d28b828c9e506732b465fd2f6f165e278b",
+    "bytes": 468608
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-dispatch-cold/live-storage-health-1.json",
+    "archive": "evidence/native-dispatch-cold/live-storage-health-1.json.gz",
+    "original_sha256": "1ecc16aa4546f20609de0b93c9102bca4b987b23b190e76287abc49bb9cc2d6e",
+    "archived_payload_sha256": "7026bd0df0ccf99ba291a3c4338e4b2f623bfadd05a3138aabc465553ee313ca",
+    "bytes": 204244
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-dispatch-cold/process.log",
+    "archive": "evidence/native-dispatch-cold/process.log.gz",
+    "original_sha256": "d99873bf765723df24849875b8b7b43aa7748297852359db90c13d5146ffdb06",
+    "archived_payload_sha256": "d99873bf765723df24849875b8b7b43aa7748297852359db90c13d5146ffdb06",
+    "bytes": 304
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-dispatch-cold/read-only-error-bodies.jsonl",
+    "archive": "evidence/native-dispatch-cold/read-only-error-bodies.jsonl.gz",
+    "original_sha256": "5ac2df29b63ff7f2b97bca2d92f2cc0b30da29e341eede5e5122ac0d854c5ae9",
+    "archived_payload_sha256": "5ac2df29b63ff7f2b97bca2d92f2cc0b30da29e341eede5e5122ac0d854c5ae9",
+    "bytes": 5682
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-dispatch-cold/resource-samples.jsonl",
+    "archive": "evidence/native-dispatch-cold/resource-samples.jsonl.gz",
+    "original_sha256": "fe9d1aa798587efb8b478c03767687a4ab4465022af3c454c01915d0601a0674",
+    "archived_payload_sha256": "fe9d1aa798587efb8b478c03767687a4ab4465022af3c454c01915d0601a0674",
+    "bytes": 94621
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-dispatch-cold/traffic.json",
+    "archive": "evidence/native-dispatch-cold/traffic.json.gz",
+    "original_sha256": "9dab98de6fee4462a11173116836edf0daed4146ceecdc847d8a3bfdc6bfcf1a",
+    "archived_payload_sha256": "9dab98de6fee4462a11173116836edf0daed4146ceecdc847d8a3bfdc6bfcf1a",
+    "bytes": 6652761
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-dispatch-cold/profile/logs/backend-sidecar.log",
+    "archive": "evidence/native-dispatch-cold/backend-sidecar.log.gz",
+    "original_sha256": "4e3c2cbf73b1def8a29d198b5a4d1bc6f48c57d79316ae3f14684c01361c95dd",
+    "archived_payload_sha256": "4e3c2cbf73b1def8a29d198b5a4d1bc6f48c57d79316ae3f14684c01361c95dd",
+    "bytes": 190955
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-candidate/package-source-manifest.json",
+    "archive": "evidence/native-candidate/package-source-manifest.json.gz",
+    "original_sha256": "9a56ae36117078c4ff96136c7076b118561832c821b1c328fa4d67ff5ad4cec8",
+    "archived_payload_sha256": "9a56ae36117078c4ff96136c7076b118561832c821b1c328fa4d67ff5ad4cec8",
+    "bytes": 140213
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-candidate/sign-after-first.log",
+    "archive": "evidence/native-candidate/sign-after-first.log.gz",
+    "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "archived_payload_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-candidate/sign-before.log",
+    "archive": "evidence/native-candidate/sign-before.log.gz",
+    "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "archived_payload_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-candidate/sign.log",
+    "archive": "evidence/native-candidate/sign.log.gz",
+    "original_sha256": "1ae7d1ec356dabfe20ec6bd09bea1548c45cf2af61f6384c4a800e13a26b5bfd",
+    "archived_payload_sha256": "1ae7d1ec356dabfe20ec6bd09bea1548c45cf2af61f6384c4a800e13a26b5bfd",
+    "bytes": 188
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-dispatch-candidate/package-source-manifest.json",
+    "archive": "evidence/native-dispatch-candidate/package-source-manifest.json.gz",
+    "original_sha256": "f7ea97774981ddb735c96426b48afe5f8991c8ead6e11db1fd1545bd6af0484b",
+    "archived_payload_sha256": "f7ea97774981ddb735c96426b48afe5f8991c8ead6e11db1fd1545bd6af0484b",
+    "bytes": 140213
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-dispatch-candidate/sign-after.log",
+    "archive": "evidence/native-dispatch-candidate/sign-after.log.gz",
+    "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "archived_payload_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-dispatch-candidate/sign-before.log",
+    "archive": "evidence/native-dispatch-candidate/sign-before.log.gz",
+    "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "archived_payload_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/native-dispatch-candidate/sign.log",
+    "archive": "evidence/native-dispatch-candidate/sign.log.gz",
+    "original_sha256": "ea961b89efd848374605f2696f72a287c0b0f9729a8e991e19701639f1676456",
+    "archived_payload_sha256": "ea961b89efd848374605f2696f72a287c0b0f9729a8e991e19701639f1676456",
+    "bytes": 197
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/task-diagnostic-bootstrap/sitecustomize-v1.py",
+    "archive": "evidence/diagnostic-bootstrap/sitecustomize-v1.py.gz",
+    "original_sha256": "3762292638ed8a7592c87e11b986e79339aa65a383e8e77868ee4c76b7de4c06",
+    "archived_payload_sha256": "3762292638ed8a7592c87e11b986e79339aa65a383e8e77868ee4c76b7de4c06",
+    "bytes": 1340
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-history-viewport-127-20261114/CandleScope/output/mixed-history-viewport-127-20261114/task-diagnostic-bootstrap/sitecustomize.py",
+    "archive": "evidence/diagnostic-bootstrap/sitecustomize.py.gz",
+    "original_sha256": "2b4a05b30b2a9578cf12ee9c954e60f10b2dd35c27c8869031e72333e92fba3b",
+    "archived_payload_sha256": "2b4a05b30b2a9578cf12ee9c954e60f10b2dd35c27c8869031e72333e92fba3b",
+    "bytes": 1668
+  }
+]
