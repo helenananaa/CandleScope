@@ -1500,3 +1500,179 @@ def test_permission_migration_does_not_commit_callers_transaction(database):
         assert 'permission_floor' in {r[1] for r in conn.execute('PRAGMA table_info(kline_source_heads)')}
         conn.rollback()
         assert 'permission_floor' not in {r[1] for r in conn.execute('PRAGMA table_info(kline_source_heads)')}
+
+
+def test_forming_read_hint_advances_without_reaggregating_unchanged_source_heads(database, monkeypatch):
+    import asyncio
+    from app.data_engine.bar_aggregator.models import BarInputSource
+
+    async def run():
+        with klines_repo._connect() as conn:
+            kline_sources._schema(conn)
+            conn.execute('BEGIN IMMEDIATE')
+            for index in range(256):
+                record(index, conn=conn)
+            conn.commit()
+        manager = manager_for('2048m')
+        try:
+            ref = record(0, quote=1.0, sequence=1000 * W)['ref']
+            await feed(manager, '2048m', incoming(0, quote=1.0, ref=ref))
+            state = manager.bar_aggregator.get_pipeline('2048m').bar_state.get_state('binance', 'futures', 'BTCUSDT', 0)
+            version = state._source_recovery.version
+            calls = []
+            counts = kline_sources._source_window_counts
+
+            def counted(*args):
+                calls.append(args[1:])
+                return counts(*args)
+
+            monkeypatch.setattr(kline_sources, '_source_window_counts', counted)
+            for index in range(300):
+                quote = 2.0 + (index + 1) / 1000
+                ref = record(256, quote=quote, closed=False, sequence=1001 * W + index)['ref']
+                value = replace(incoming(256, quote=quote, closed=False, ref=ref), source=BarInputSource.REALTIME)
+                await feed(manager, '2048m', value)
+                assert state.quote_volume == 511 + quote
+            assert calls == []
+            assert state._source_recovery.version == version
+            assert state._source_recovery.observation_watermark == kline_sources.rest_watermark()
+            assert len(state.source_snapshots) == len(state.source_refs) == 2
+            assert manager.memory_budget.snapshot()['reserved_bytes'] == 0
+        finally:
+            await manager.shutdown()
+
+    # Keep the synthetic current bucket forming; no wall-clock expiry/finalizer.
+    monkeypatch.setattr('time.time', lambda: (256 * W + 1000) / 1000)
+    asyncio.run(run())
+
+
+def test_source_read_hint_falls_back_after_large_unrelated_journal_progress(database, monkeypatch):
+    record(0)
+    record(1)
+    version = kline_sources.capture_source_window(KEY, 0, 2 * W, W)
+    watermark = kline_sources.rest_watermark()
+    for index in range(200):
+        record(50, quote=3.0 + index, sequence=1000 * W + index)
+    calls = []
+    original = kline_sources._source_window_counts
+
+    def counted(*args):
+        calls.append(True)
+        return original(*args)
+
+    monkeypatch.setattr(kline_sources, '_source_window_counts', counted)
+    storage = klines_repo.KlinesRepoAdapter()
+    valid, latest = storage.validate_source_preview(version, watermark, target_interval='2m')
+    assert valid and len(calls) == 1 and latest > watermark + 128
+    calls.clear()
+    valid, same = storage.validate_source_preview(version, latest, target_interval='2m')
+    assert valid and same == latest and not calls
+
+
+@pytest.mark.parametrize('invalid', [None, True, -1, 100000])
+def test_invalid_or_future_source_read_hint_uses_full_proof(database, invalid, monkeypatch):
+    record(0)
+    record(1)
+    version = kline_sources.capture_source_window(KEY, 0, 2 * W, W)
+    calls = []
+    original = kline_sources._source_window_counts
+
+    def counted(*args):
+        calls.append(True)
+        return original(*args)
+
+    monkeypatch.setattr(kline_sources, '_source_window_counts', counted)
+    valid, latest = klines_repo.KlinesRepoAdapter().validate_source_preview(version, invalid, target_interval='2m')
+    assert valid and latest == 2 and calls == [True]
+
+
+@pytest.mark.parametrize('deleted', ['1m', '2m'])
+def test_fast_source_read_hint_cannot_renew_target_or_source_deletion_permission(database, deleted):
+    record(0)
+    record(1)
+    version = kline_sources.capture_source_window(KEY, 0, 2 * W, W)
+    watermark = kline_sources.rest_watermark()
+    klines_repo.delete_klines('BTCUSDT', deleted, market_type='futures')
+    valid, latest = klines_repo.KlinesRepoAdapter().validate_source_preview(version, watermark, target_interval='2m')
+    assert not valid and latest == watermark and version.permission_floor == 0
+
+
+def test_source_read_hint_detects_opposite_corrections_and_ignores_identical_metadata(database):
+    record(0)
+    record(1)
+    storage = klines_repo.KlinesRepoAdapter()
+    version = kline_sources.capture_source_window(KEY, 0, 2 * W, W)
+    watermark = kline_sources.rest_watermark()
+    record(0, sequence=8 * W)
+    valid, latest = storage.validate_source_preview(version, watermark, target_interval='2m')
+    assert valid and latest > watermark
+    record(0, quote=1.0, sequence=9 * W)
+    record(1, quote=3.0, sequence=9 * W)
+    assert not storage.validate_source_preview(version, latest, target_interval='2m')[0]
+
+
+def test_source_read_hint_recounts_after_retention_removes_newer_stale_audit(database):
+    record(0)
+    record(1)
+    version = kline_sources.capture_source_window(KEY, 0, 2 * W, W)
+    record(0, quote=999, sequence=1)  # audited stale value, never selected
+    watermark = kline_sources.rest_watermark()
+    with klines_repo._connect() as conn:
+        # Same preservation boundary as retention: current heads stay hot.
+        conn.execute('DELETE FROM kline_source_observations WHERE id NOT IN (SELECT observation_id FROM kline_source_heads)')
+        conn.commit()
+    valid, latest = klines_repo.KlinesRepoAdapter().validate_source_preview(version, watermark, target_interval='2m')
+    assert valid and latest < watermark
+
+
+@pytest.mark.parametrize('action', ['cancel', 'rebind'])
+def test_source_read_hint_waits_for_physical_read_and_rejects_old_owner(database, monkeypatch, action):
+    import asyncio, threading
+    from app.data_engine.bar_aggregator.models import BarInputSource
+
+    async def run():
+        record(0)
+        record(1)
+        manager = manager_for('5m')
+        task = None
+        entered, released = threading.Event(), threading.Event()
+        try:
+            await feed(manager, '5m', incoming(0))
+            state = manager.bar_aggregator.get_pipeline('5m').bar_state.get_state('binance', 'futures', 'BTCUSDT', 0)
+            previous = state._source_recovery
+            storage = manager.query_engine.storage
+            validate = storage.validate_source_preview
+
+            def blocked(*args, **kwargs):
+                entered.set()
+                assert released.wait(10)
+                return validate(*args, **kwargs)
+
+            monkeypatch.setattr(storage, 'validate_source_preview', blocked)
+            ref = record(2, closed=False, sequence=8 * W)['ref']
+            value = replace(incoming(2, closed=False, ref=ref), source=BarInputSource.REALTIME)
+            task = asyncio.create_task(manager.bar_aggregator.ingest_bar_input('binance', 'futures', 'BTCUSDT', '5m', value))
+            async with asyncio.timeout(5):
+                while not entered.is_set() and not task.done():
+                    await asyncio.sleep(.01)
+            assert entered.is_set() and not task.done()
+            if action == 'cancel':
+                task.cancel()
+            else:
+                manager.set_storage(klines_repo.KlinesRepoAdapter())
+            await asyncio.sleep(.03)
+            assert not task.done() and manager.memory_budget.snapshot()['reserved_bytes'] > 0
+            released.set()
+            result = (await asyncio.gather(task, return_exceptions=True))[0]
+            assert isinstance(result, (asyncio.CancelledError, BlockRevisionChanged))
+            assert state._source_recovery is previous
+            assert state.tick_count == 2 and len(state.source_snapshots) == 1
+            assert manager.memory_budget.snapshot()['reserved_bytes'] == 0
+        finally:
+            released.set()
+            if task is not None:
+                await asyncio.gather(task, return_exceptions=True)
+            await manager.shutdown()
+
+    monkeypatch.setattr('time.time', lambda: (2 * W + 1000) / 1000)
+    asyncio.run(run())

@@ -1616,6 +1616,16 @@ class KlinesRepoAdapter:
             return (source_window_allows_target(conn, version, target_interval)
                     if target_interval is not None else source_window_current(conn, version))
 
+    def validate_source_preview(self, version, watermark, *, target_interval):
+        # Preserve explicit/custom validators and their barriers.
+        if getattr(self.validate_source_window, '__func__', None) is not KlinesRepoAdapter.validate_source_window:
+            return self.validate_source_window(version, target_interval=target_interval), None
+        from contextlib import closing
+        from .kline_sources import source_preview_current
+        with closing(self.revision_store.connect()) as conn, conn:
+            conn.execute('BEGIN')
+            return source_preview_current(conn, version, watermark, target_interval)
+
     def validate_component_preview(self, components, **target) -> str:
         """Read source proofs and canonical invalidation in one bounded view."""
         from contextlib import closing

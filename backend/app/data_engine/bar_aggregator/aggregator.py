@@ -1282,9 +1282,14 @@ class BarAggregator:
                                                     and (bar_input.input_key not in existing.source_snapshots
                                                         or (bar_input.is_closed and existing.source_refs.get(bar_input.input_key)
                                                             != bar_input.extra['source_ref'])))) as staged:
-                            receipt, owner_bound = staged
+                            receipt, owner_bound, watermark = staged
                             if not current():
                                 raise BlockRevisionChanged('builder changed during source reconstruction')
+                            if receipt is None and watermark is not None and existing is not None:
+                                # Only the original loop-owned builder advances a read hint.
+                                # Immutable runs and durable content proof stay shared/unchanged.
+                                existing._source_recovery = replace(existing._source_recovery,
+                                    observation_watermark=watermark)
                             if (receipt is None and existing is not None and existing._source_recovery is not None
                                     and existing._source_recovery.covers(bar_input.open_time_ms)):
                                 return

@@ -212,6 +212,8 @@ class SourceWindowSummary:
     estimated_bytes: int
     binding: Any = None
     capabilities: frozenset[str] = frozenset()
+    # Ephemeral read work hint from the existing journal; not durable authority.
+    observation_watermark: int | None = None
 
     def covers(self, opened):
         return any(part.first <= opened < part.end for part in self.parts)

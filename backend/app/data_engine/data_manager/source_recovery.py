@@ -115,21 +115,20 @@ class SourceRecoveryReader:
                         incoming,
                         extra={"source_ref": dict(incoming.extra["source_ref"])},
                     )
-                    if (
-                        previous is not None
-                        and not force
-                        and previous.binding is epoch
-                        and previous.capabilities == capability
-                        and await run_storage(
-                            validate, previous.version, target_interval=target_interval
-                        )
-                    ):
-                        if not bound():
-                            raise BlockRevisionChanged(
-                                "source recovery binding changed during preview validation"
-                            )
-                        yield None, owner_bound
-                        return
+                    if (previous is not None and not force and previous.binding is epoch
+                            and previous.capabilities == capability):
+                        preview = getattr(storage, 'validate_source_preview', None)
+                        if callable(preview) and not incoming.is_closed:
+                            valid, watermark = await run_storage(preview, previous.version,
+                                previous.observation_watermark, target_interval=target_interval)
+                        else:
+                            valid = await run_storage(validate, previous.version, target_interval=target_interval)
+                            watermark = None
+                        if valid:
+                            if not bound():
+                                raise BlockRevisionChanged('source recovery binding changed during preview validation')
+                            yield None, owner_bound, watermark
+                            return
                     try:
                         version = await run_storage(
                             storage.capture_source_window,
@@ -141,7 +140,7 @@ class SourceRecoveryReader:
                     except EmptySourceWindow:
                         if previous is not None or incoming.is_closed or not bound():
                             raise
-                        yield None, owner_bound
+                        yield None, owner_bound, None
                         return
                     if (
                         previous is None
@@ -160,7 +159,7 @@ class SourceRecoveryReader:
                             raise BlockRevisionChanged(
                                 "single-source admission view expired"
                             )
-                        yield None, owner_bound
+                        yield None, owner_bound, None
                         return
                     # Original dispatcher only; do not read a half-committed native
                     # source and mistake the expected transient mismatch for proof.
@@ -201,7 +200,7 @@ class SourceRecoveryReader:
                         raise MemoryBudgetExceeded(
                             "bound source summary exceeds staging allowance"
                         )
-                    yield replace(summary, estimated_bytes=size), owner_bound
+                    yield replace(summary, estimated_bytes=size), owner_bound, None
                 finally:
                     # run_storage retains ownership until a running thread has
                     # physically drained even when the awaiting task is cancelled.

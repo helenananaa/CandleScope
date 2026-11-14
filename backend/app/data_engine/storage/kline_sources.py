@@ -707,13 +707,7 @@ def _source_window_counts(conn, key, start, end, width):
 def source_window_current(conn, version):
     """Transaction-local content fence; original D126 permissions stay separate."""
     from app.data_engine.aggregation.source_window import SourceWindowVersion
-    from .revisions import (
-        current_revision,
-        series_change,
-        series_values,
-        IDENTITY_COLUMNS,
-        BLOCK_CHANGE_WINDOW,
-    )
+    from .revisions import current_revision
 
     if type(version) is not SourceWindowVersion:
         raise ValueError("selected-source version required")
@@ -728,6 +722,14 @@ def source_window_current(conn, version):
         version.through_ms,
         version.source_width_ms,
     ) != (version.closed_count, version.revision_sum, version.permission_floor):
+        return False
+    return _source_window_canonical_current(conn, version)
+
+
+def _source_window_canonical_current(conn, version):
+    from .revisions import current_revision, series_change, series_values, IDENTITY_COLUMNS, BLOCK_CHANGE_WINDOW
+    head = current_revision(conn)
+    if head < version.acquisition_revision:
         return False
     exchange, market_type, symbol, interval = json.loads(version.series)
     key = series_values(symbol, interval, exchange, market_type)
@@ -765,12 +767,15 @@ def source_window_current(conn, version):
 
 def source_window_allows_target(conn, version, interval, *, expected=None):
     """Current source content and original deletion permission, kept separate."""
+    if not source_window_current(conn, version):
+        return False
+    return _source_window_target_permissions(conn, version, interval, expected=expected)
+
+
+def _source_window_target_permissions(conn, version, interval, *, expected=None):
     from app.data_engine.interval_policy import parse_interval_spec, IntervalAlignment
     from .revisions import Acquisition, StaleAcquisition, series_values
     from .derived_history_fence import check_deletions
-
-    if not source_window_current(conn, version):
-        return False
     exchange, market_type, symbol, source_interval = json.loads(version.series)
     if expected is not None and (exchange, market_type, symbol) != expected:
         return False
@@ -795,6 +800,33 @@ def source_window_allows_target(conn, version, interval, *, expected=None):
     except StaleAcquisition:
         return False
     return True
+
+
+def source_preview_current(conn, version, watermark, interval):
+    """Read hint within the original builder; durable proof remains unchanged.
+
+    Current selected heads always keep their observations hot. A selected
+    content change necessarily admits a newer observation; the original
+    observation ID therefore bounds the recent work, without a second ledger.
+    Old identical REST re-confirmation can only raise permission, so the old
+    proof remains conservative; explicit deletes are checked independently.
+    """
+    from app.data_engine.aggregation.source_window import SourceWindowVersion
+    if type(version) is not SourceWindowVersion:
+        raise ValueError('selected-source version required')
+    _source_window_args(version.series, version.start_ms, version.through_ms, version.source_width_ms)
+    current = conn.execute('SELECT COALESCE(MAX(id),0) FROM kline_source_observations').fetchone()[0]
+    if type(watermark) is int and 0 <= current - watermark <= 128 and watermark >= 0:
+        changed = conn.execute(
+            'SELECT 1 FROM (SELECT series,open_time FROM kline_source_observations '
+            'WHERE id>? AND id<=? ORDER BY id LIMIT 128) '
+            'WHERE series=? AND open_time>=? AND open_time<? LIMIT 1',
+            (watermark,current,version.series,version.start_ms,version.through_ms),
+        ).fetchone()
+        if changed is None:
+            return (_source_window_canonical_current(conn, version)
+                    and _source_window_target_permissions(conn, version, interval)), current
+    return source_window_allows_target(conn, version, interval), current
 
 
 def capture_source_window(key, start, end, width):

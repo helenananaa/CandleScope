@@ -161,9 +161,11 @@ def fold_source_window(key, start, end, width, incoming, cancel):
     if (incoming.is_closed and not found) or count != version.closed_count:
         raise BlockRevisionChanged("selected-source read view is incomplete")
     with closing(klines_repo._connect()) as conn:
+        conn.execute("BEGIN")
         if not kline_sources.source_window_current(conn, version):
             raise BlockRevisionChanged("source changed during bounded reconstruction")
-    result = SourceWindowSummary(version, tuple(parts), incoming.open_time_ms, pages, 0)
+        watermark = conn.execute("SELECT COALESCE(MAX(id),0) FROM kline_source_observations").fetchone()[0]
+    result = SourceWindowSummary(version, tuple(parts), incoming.open_time_ms, pages, 0, observation_watermark=watermark)
     size = retained_size((result,))[0] + 64
     if size > SOURCE_SUMMARY_BYTES:
         raise MemoryBudgetExceeded("selected-source receipt exceeds staging allowance")
