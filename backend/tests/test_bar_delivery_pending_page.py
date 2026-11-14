@@ -126,6 +126,36 @@ def test_custom_pending_readers_keep_their_original_dispatch_contract(database, 
     asyncio.run(run())
 
 
+def test_empty_page_does_not_hide_receipt_enqueued_before_completion_check(database, monkeypatch):
+    async def run():
+        manager = manager_for('2m')
+        delivery = manager.aggregator_bridge.delivery
+        journal = delivery.journal
+        original = journal.pending_page
+        pages, observed = [], []
+        def after_snapshot():
+            result = original()
+            pages.append(result[1])
+            if len(pages) == 1:
+                assert result == ([], 0)
+                journal.enqueue('after-empty-page', payload())
+            return result
+        monkeypatch.setattr(journal, 'pending_page', after_snapshot)
+        async def receive(event):
+            observed.append(event.detail['delivery_id'])
+        manager.event_bus.subscribe(receive)
+        try:
+            await delivery.flush_pending()
+            assert pages == [0, 1] and observed == ['after-empty-page']
+            assert journal.pending_count() == 0
+            assert len(klines_repo.query_klines('BTCUSDT', '1m')) == 1
+        finally:
+            await manager.shutdown()
+        assert manager.memory_budget.snapshot()['reserved_bytes'] == 0
+
+    asyncio.run(run())
+
+
 def test_failed_page_decode_retains_durable_receipt_for_exactly_one_later_delivery(database, monkeypatch):
     async def run():
         manager = manager_for('2m')
