@@ -49,33 +49,7 @@
   gap: 5px;
   border-bottom: 1px solid var(--border-color);
 }
-.tf-side-switch {
-  grid-column: 1 / -1;
-  display: inline-flex;
-  min-width: 0;
-  padding: 2px;
-  border-radius: var(--radius-control);
-  background: var(--bg-tertiary);
-}
-.tf-side-switch button {
-  flex: 1;
-  min-width: 0;
-  height: 24px;
-  padding: 0 3px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-  white-space: nowrap;
-}
-.tf-side-switch button.active {
-  background: var(--bg-secondary);
-  color: var(--text-accent);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
-  font-weight: 700;
-}
+.tf-side-switch { grid-column: 1 / -1; }
 .tf-controls label {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -85,18 +59,7 @@
   color: var(--text-muted);
   font-size: var(--font-size-xs);
 }
-.tf-controls select {
-  width: 100%;
-  min-width: 0;
-  height: 28px;
-  padding: 0 16px 0 6px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-control);
-  background-color: var(--bg-tertiary);
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: var(--font-size-xs);
-}
+.tf-controls .ui-select { width: 100%; font-size: var(--font-size-xs); }
 @container trade-flow (min-width: 340px) {
   .tf-controls { grid-template-columns: minmax(126px, 1.25fr) repeat(2, minmax(92px, 1fr)); }
   .tf-side-switch { grid-column: auto; }

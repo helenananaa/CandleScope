@@ -1,3 +1,4 @@
+import { PanelToggle } from "./PanelToggle.js";
 import { memo } from "react";
 import type { ReactNode } from "react";
 import SymbolSearch from "../features/symbol-search/SymbolSearch.js";
@@ -157,27 +158,22 @@ function TopBar({
       extras={extensionControls}
       actions={actions}
       panels={<>
-        <button
-          className={`indicator-toggle-btn ${indicatorPanelOpen ? "active" : ""}`}
-          onClick={onToggleIndicatorPanel}
+        <PanelToggle
+          className="indicator-toggle-btn"
+          label={`${t("shell.indicators")} ${activeIndicatorCount}`}
           title={t("shell.indicators")}
-          aria-label={`${t("shell.indicators")} ${activeIndicatorCount}`}
-          aria-expanded={indicatorPanelOpen}
-        >
-          <span aria-hidden="true" style={{ display: "flex" }}><ProfileRailIcon /></span>
-          {activeIndicatorCount > 0 && (
-            <span className="indicator-badge">{activeIndicatorCount}</span>
-          )}
-        </button>
-        {!studyContext && <button
-          className={`indicator-toggle-btn alert-toggle-btn ${alertPanelOpen ? "active" : ""}`}
-          onClick={onToggleAlertPanel}
-          title={t("shell.alerts")}
-          aria-label={t("shell.alerts")}
-          aria-expanded={alertPanelOpen}
-        >
-          <span aria-hidden="true" style={{ display: "flex" }}><AlertRailIcon /></span>
-        </button>}
+          icon={<ProfileRailIcon />}
+          badge={activeIndicatorCount}
+          open={indicatorPanelOpen}
+          onToggle={onToggleIndicatorPanel}
+        />
+        {!studyContext && <PanelToggle
+          className="indicator-toggle-btn alert-toggle-btn"
+          label={t("shell.alerts")}
+          icon={<AlertRailIcon />}
+          open={alertPanelOpen}
+          onToggle={onToggleAlertPanel}
+        />}
       </>}
       settings={{
         onPrepare: loadSettingsModal,

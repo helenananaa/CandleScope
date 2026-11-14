@@ -2,18 +2,6 @@
  * The primitives (.ui-*) live in src/components/ui/*.css in the primitives layer.
  * ──────────────────────────────────────────────────────────── */
 
-/* Compact feature selects share the fixed-size chevron (see .ui-select in components/ui/field.css). */
-.ob-controls select,
-.ob-range-controls select,
-.tf-controls select {
-  appearance: none;
-  padding-right: 16px;
-  background-image: var(--select-chevron);
-  background-repeat: no-repeat;
-  background-position: right 5px center;
-  background-size: 10px 6px;
-}
-
 /* App page: shared header above a scrolling body (pages without a chart workspace) */
 .app-page {
   display: flex;

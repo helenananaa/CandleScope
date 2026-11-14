@@ -18,6 +18,7 @@ export const HOOK_CLASSES = new Set([
   "pane-overlay-anchor", // positioning anchor read by pane overlays
   "drawing-text-style-bar", // drawingModel.ts keeps pointer events inside the text toolbar
   "settings-btn", // scripts/smoke.mjs finds the Settings button on every page
+  "indicator-toggle-btn", // scripts/smoke.mjs and multi-chart-capacity.mjs find the indicators toggle (a kit icon button)
   "export-workspace", // scripts/export-matrix.mjs finds the export dialog
   "indicator-editor-console", // frontendScript browser test reads script output
   "indicator-editor-run", // frontendScript browser test runs the script

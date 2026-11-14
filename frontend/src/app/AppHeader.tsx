@@ -1,3 +1,4 @@
+import { IconButton } from "../components/ui/index.js";
 import { useLayoutEffect, useRef, type ReactNode, type RefObject } from "react";
 import BrandMark, { BrandWordmark } from "../components/brand/BrandMark.js";
 import { t } from "../i18n/index.js";
@@ -88,17 +89,14 @@ export default function AppHeader({
         {extras}
         {panels ? <div className="app-header-panels">{panels}</div> : null}
         {settings ? (
-          <button
-            type="button"
-            className="settings-btn indicator-toggle-btn"
-            title={t("shell.settings")}
-            aria-label={t("shell.settings")}
+          <IconButton
+            className="settings-btn"
+            label={t("shell.settings")}
+            icon={<CapabilityRailIcon />}
             onPointerEnter={settings.onPrepare}
             onFocus={settings.onPrepare}
             onClick={settings.onOpen}
-          >
-            <span aria-hidden="true" className="app-header-icon"><CapabilityRailIcon /></span>
-          </button>
+          />
         ) : null}
       </div>
     </header>

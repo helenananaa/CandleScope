@@ -1,3 +1,4 @@
+import { PanelToggle } from "../../app/PanelToggle.js";
 import { Button, Disclosure, Drawer, InlineAlert, SegmentedControl } from "../../components/ui/index.js";
 import { useNativeAvailability } from "../backtest/native/useNativeAvailability.js";
 import { describeError } from "../../i18n/serverErrors.js";
@@ -655,20 +656,15 @@ export default function StrategyResearchApp({
       { id: "run-history", label: t("ux.history"), hasPopup: "dialog" as const, expanded: historyOpen, onSelect: () => setHistoryOpen((open) => !open) },
     ],
     panels: (
-      <button
-        type="button"
-        className={`indicator-toggle-btn ${indicatorPanelOpen ? "active" : ""}`}
+      <PanelToggle
+        className="indicator-toggle-btn"
         disabled={importedManifest === null}
-        onClick={() => setIndicatorPanel({ scope: chartUiScope, open: !indicatorPanelOpen })}
-        title={t("shell.indicators")}
-        aria-label={t("shell.indicators")}
-        aria-expanded={indicatorPanelOpen}
-      >
-        <span aria-hidden="true" style={{ display: "flex" }}><ProfileRailIcon /></span>
-        {activeIndicatorCount > 0 && (
-          <span className="indicator-badge">{activeIndicatorCount}</span>
-        )}
-      </button>
+        open={indicatorPanelOpen}
+        onToggle={() => setIndicatorPanel({ scope: chartUiScope, open: !indicatorPanelOpen })}
+        label={t("shell.indicators")}
+        icon={<ProfileRailIcon />}
+        badge={activeIndicatorCount}
+      />
     ),
     settings: { onOpen: () => setSettingsOpen(true) },
   };

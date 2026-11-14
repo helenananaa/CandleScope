@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState, type MutableRefObject } from "react";
-import { Menu } from "../components/ui/index.js";
+import { IconButton, Menu } from "../components/ui/index.js";
 import { Icon } from "../components/icons/Icon.js";
 import { t } from "../i18n/index.js";
 import { fitHeaderActions } from "./headerActionsModel.js";
@@ -89,19 +89,17 @@ export default function HeaderActions({ actions }: { actions: readonly HeaderAct
             </button>
           );
       })}
-      <button
+      <IconButton
         ref={moreRef}
-        type="button"
-        className="ui-control app-header-more"
+        variant="secondary"
+        className="app-header-more"
         data-overflow={overflow.length ? undefined : "true"}
-        aria-label={t("shell.moreActions")}
-        title={t("shell.moreActions")}
+        label={t("shell.moreActions")}
         aria-haspopup="menu"
         aria-expanded={menuOpen}
         onClick={() => setMenuOpen((open) => !open)}
-      >
-        <Icon name="more" size={16} />
-      </button>
+        icon={<Icon name="more" size={16} />}
+      />
       <Menu
         open={menuOpen && overflow.length > 0}
         onClose={() => setMenuOpen(false)}

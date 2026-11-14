@@ -32,25 +32,6 @@
 .order-book-dock.collapsed .ob-header {
   border-bottom: 0;
 }
-.ob-collapse-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-}
-.ob-collapse-button:hover,
-.ob-collapse-button:focus-visible {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-  outline: none;
-}
 .ob-title {
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
@@ -111,65 +92,35 @@
   0%, 100% { opacity: 0.35; }
   50% { opacity: 1; }
 }
+/* Narrow rails put the mode switch on its own row so no select value is clipped in any
+   language; a wide rail fits all four controls on one row. */
 .ob-controls {
   display: grid;
-  flex: 0 0 38px;
-  grid-template-columns: minmax(76px, auto) repeat(3, minmax(0, 1fr));
+  flex: 0 0 auto;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: center;
   min-width: 0;
   padding: 4px 6px;
   gap: 5px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.ob-controls > .ui-segmented { grid-column: 1 / -1; }
+@container rail (min-width: 380px) {
+  .ob-controls { grid-template-columns: minmax(120px, auto) repeat(3, minmax(0, 1fr)); }
+  .ob-controls > .ui-segmented { grid-column: auto; }
 }
 .ob-history-note {
   padding: 2px 6px;
   color: var(--text-secondary);
   font-size: 11px;
 }
-.ob-mode-switch {
-  display: inline-flex;
-  min-width: 0;
-  padding: 2px;
-  border-radius: var(--radius-control);
-  background: var(--bg-tertiary);
-}
-.ob-mode-switch button {
-  flex: 1;
-  height: 24px;
-  padding: 0 4px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-}
-.ob-mode-switch button:hover { color: var(--text-primary); }
-.ob-mode-switch button.active {
-  background: var(--bg-secondary);
-  color: var(--text-accent);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
-  font-weight: 700;
-}
 .ob-controls label {
   min-width: 0;
 }
-.ob-controls select {
-  width: 100%;
-  height: 28px;
-  padding: 0 16px 0 6px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-control);
-  background-color: var(--bg-tertiary);
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-}
-.ob-controls select:focus-visible {
-  border-color: var(--accent-blue);
-  outline: none;
-}
+.ob-controls .ui-select { width: 100%; font-size: var(--font-size-xs); }
+/* Dock selects are compact: values such as "自动 0.1" and "1000 ms" stay whole in a 300 px rail. */
+:is(.ob-controls, .ob-range-controls, .tf-controls) .ui-select { padding-left: 6px; padding-right: 18px; background-position: right 5px center; }
+
 .ob-column-header,
 .ob-level-row {
   display: grid;
@@ -287,4 +238,48 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Range controls, the stale bar and the narrow rail (merged from orderBookControls.css in Phase 5i). */
+.ob-range-controls {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px 4px;
+  min-height: 28px;
+  padding: 2px 8px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid var(--border-color);
+}
+.ob-range-controls label { display: inline-flex; align-items: center; gap: 4px; }
+.ob-range-controls .ui-select { width: auto; max-width: 110px; font-size: var(--font-size-xs); }
+.ob-range-controls > span { margin-left: auto; white-space: nowrap; }
+
+.ob-stale-bar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 4px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-warning) 40%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 10%, var(--surface-1));
+  color: var(--text-warning);
+  font-size: var(--font-size-xs);
+}
+
+
+/* Order book in a narrow rail: keep the title on one line, drop the delivery
+ * label, and put the four controls on two rows instead of truncating them. */
+.ob-title,
+.ob-status {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+@container rail (max-width: 280px) {
+  .ob-delivery-mode { display: none; }
 }

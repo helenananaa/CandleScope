@@ -1,3 +1,4 @@
+import { PanelToggle } from "../../app/PanelToggle.js";
 import { OverlayLayer } from "../../components/ui/Overlays.js";
 import PageSettingsDialog from "../../app/PageSettingsDialog.js";
 import { useReplayOperations } from "./useReplayOperations.js";
@@ -1235,25 +1236,19 @@ export default function ReplayTrainingPageShell({
             </button>
           )}
           panels={<>
-            <button
-              className={`indicator-toggle-btn ${indicatorPanelOpen ? "active" : ""}`}
-              type="button"
+            <PanelToggle
+              className="indicator-toggle-btn"
               disabled={review !== null}
-              aria-expanded={indicatorPanelOpen}
-              aria-controls="replay-indicator-panel"
-              aria-label={`${t("shell.indicators")} ${review === null ? indicators.status.activeIndicatorCount : "R/O"}`}
-              onClick={() => setIndicatorPanelOpen((open) => !open)}
+              open={indicatorPanelOpen}
+              controls="replay-indicator-panel"
+              label={`${t("shell.indicators")} ${review === null ? indicators.status.activeIndicatorCount : "R/O"}`}
               title={review === null ? t("replay.shell.manageIndicators") : t("replay.shell.reviewBlocksIndicators")}
-            >
-              <span aria-hidden="true" style={{ display: "flex" }}><ProfileRailIcon /></span>
-              <span className="indicator-badge">
-                {review === null ? indicators.status.activeIndicatorCount : "R/O"}
-              </span>
-            </button>
-            <button className="indicator-toggle-btn alert-toggle-btn" type="button" disabled
-              aria-label={t("shell.alerts")} title={capabilities.ALERTS.state}>
-              <span aria-hidden="true" style={{ display: "flex" }}><AlertRailIcon /></span>
-            </button>
+              icon={<ProfileRailIcon />}
+              badge={review === null ? indicators.status.activeIndicatorCount : "R/O"}
+              onToggle={() => setIndicatorPanelOpen((open) => !open)}
+            />
+            <PanelToggle className="indicator-toggle-btn alert-toggle-btn" disabled open={false} onToggle={() => undefined}
+              label={t("shell.alerts")} title={capabilities.ALERTS.state} icon={<AlertRailIcon />} />
           </>}
           settings={{ onOpen: () => setChartSettingsOpen(true) }}
           extras={cell?.controls}
