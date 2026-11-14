@@ -151,6 +151,33 @@ def query_closed_mixed(engine, key, *, start_ms=None, end_ms=None, before_ms=Non
                     raise BlockRevisionChanged("mixed precedence evidence changed")
                 mutations = dict(zip(keys, changes))
 
+                if composition_contract is not None and callable(getattr(storage, 'count_bars', None)):
+                    # Even counting every row (including untrusted, overlapping
+                    # or cross-boundary inputs) cannot cover more than this
+                    # duration. A shortage can skip an expensive exact-cover
+                    # attempt, but a sufficient count grants no authority.
+                    upper = 0
+                    for source in sources:
+                        report['mixed_count_reads'] += 1
+                        try:
+                            count = engine._count_canonical_history_rows(storage, source.series, first, stop)
+                        except StaleAcquisition:
+                            raise
+                        except Exception as exc:
+                            report['mixed_count_failures'] += 1
+                            raise BlockUnavailable('mixed local coverage count unavailable') from exc
+                        report['mixed_count_rows'] += 1
+                        if type(count) is not int or count < 0:
+                            raise BlockUnavailable('mixed local coverage count unavailable') from ValueError('invalid count')
+                        upper += count * source.width_ms
+                        if upper >= stop - first:
+                            break
+                    report['mixed_local_coverage_upper_ms'] = upper
+                    if upper < stop - first:
+                        binding()
+                        report['mixed_impossible_local_cover'] = True
+                        raise BlockUnavailable('mixed history source has unavailable coverage or fields')
+
                 probes = MixedPrecedence(engine, storage, key, sources, precedences, mutations, report)
                 for batch_start in range(first, stop, spec.nominal_ms * BATCH_TARGETS):
                     opens = range(batch_start, min(stop, batch_start + spec.nominal_ms * BATCH_TARGETS),

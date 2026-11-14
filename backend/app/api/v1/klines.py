@@ -1029,8 +1029,14 @@ def _resolve_history_calendar(
 
 
 def _snapshot_is_stable(result: Any) -> bool:
-    """A versioned read racing publication cannot certify a snapshot."""
-    version = (getattr(result, "metadata", None) or {}).get("stream_version")
+    """Both durable read admission and publication must certify a snapshot."""
+    metadata = getattr(result, 'metadata', None) or {}
+    if any(metadata.get(reason) is True for reason in (
+        'revision_unavailable', 'revision_unsupported', 'min_revision_pending',
+        'storage_revision_conflict', 'memory_budget_deferred',
+    )):
+        return False
+    version = metadata.get("stream_version")
     return version is None or version.get("stable") is True
 
 

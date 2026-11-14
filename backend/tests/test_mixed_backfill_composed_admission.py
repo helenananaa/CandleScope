@@ -1,5 +1,6 @@
 """Composed-history permissions through real DM, HTTP and the old scheduler."""
 import asyncio
+import sys
 from contextlib import contextmanager
 
 import pytest
@@ -44,12 +45,22 @@ def composed_dm(tmp_path, monkeypatch):
 
 
 def forbidden(*args, **kwargs):
-    raise AssertionError('composed demand fell through to an unbudgeted base route')
+    raise AssertionError('forbidden composed-history outlet: ' + sys._getframe(1).f_code.co_name)
 
 
 def options(manager):
     return dict(start_ms=0, end_ms=WIDTH - 1, limit=1, market_type='futures',
         composition_contract=CONTRACT, min_revision=manager.query_engine.storage.revision_store.head())
+
+
+def enough_count_to_reach_cover(manager):
+    # Counts deliberately include the last day crossing a target boundary.
+    # Their upper bound must never replace the actual exact-cover checks.
+    day = 1440 * MINUTE
+    manager.query_engine.storage.upsert_bars('BTCUSDT', '1d',
+        [row(opened, day) for opened in range(0, 21 * day, day)],
+        source='backfill', market_type='futures')
+    manager.query_engine._cache.revision_consumer.sync(force=True)
 
 
 def test_missing_composed_sources_submit_the_target_with_the_same_contract(composed_dm, monkeypatch):
@@ -83,6 +94,7 @@ def test_unsupported_composed_mode_never_enters_the_legacy_reader(composed_dm, m
 
 def test_planning_work_limit_retains_stored_partial_without_new_repair(composed_dm, monkeypatch):
     manager = composed_dm
+    enough_count_to_reach_cover(manager)
     manager.query_engine.storage.upsert_bars('BTCUSDT', '10007m', [row(0, WIDTH)],
         source='backfill_aggregated', market_type='futures')
     @contextmanager
@@ -104,9 +116,12 @@ def test_planning_work_limit_retains_stored_partial_without_new_repair(composed_
 @pytest.mark.parametrize('wait', [0, 1500])
 def test_real_http_work_deferral_cannot_become_a_verification_repair(composed_dm, monkeypatch, wait):
     manager = composed_dm
+    enough_count_to_reach_cover(manager)
     monkeypatch.setattr('time.time', lambda: (2 * WIDTH + 1000) / 1000)
+    entered = []
     @contextmanager
     def exhausted(*args, **kwargs):
+        entered.append(True)
         raise CoverBudgetExceeded('controlled work bound')
         yield
     monkeypatch.setattr(manager.query_engine, 'read_mixed_history_blocks', exhausted)
@@ -121,6 +136,7 @@ def test_real_http_work_deferral_cannot_become_a_verification_repair(composed_dm
         response = client.get('/api/v1/klines/history/composed', params=dict(symbol='BTCUSDT',
             interval='10007m', count_back=2, market_type='futures', max_wait_ms=wait,
             composition_contract=CONTRACT))
+    assert entered
     assert response.status_code == 200, response.text
     result = response.json()
     assert not result['complete'] and result['retryable'] and result['history_state'] == 'pending'
@@ -150,6 +166,7 @@ def test_required_composition_cannot_fall_back_when_engine_rollout_is_off(compos
 ])
 def test_pagination_and_range_http_work_limits_cannot_expand_legacy_sources(composed_dm, monkeypatch, endpoint, parameters):
     manager = composed_dm
+    enough_count_to_reach_cover(manager)
     monkeypatch.setattr('time.time', lambda: (3 * WIDTH + 1000) / 1000)
     @contextmanager
     def exhausted(*args, **kwargs):
@@ -241,3 +258,95 @@ def test_required_composition_reuses_complete_fine_inputs_without_fetch(composed
     assert not upstream.calls and report.reconcile_result.custom_bars_written == 1
     result = manager.query_composed('BTCUSDT', '10007m', **options(manager))
     assert result.complete and len(result.bars) == 1 and result.bars[0].volume == 10007
+
+
+@pytest.mark.parametrize('partial_targets', [0, 20])
+def test_obvious_local_coverage_shortage_skips_cover_planning_without_losing_partial(composed_dm, monkeypatch, partial_targets):
+    manager = composed_dm
+    if partial_targets:
+        manager.query_engine.storage.upsert_bars('BTCUSDT', '10007m',
+            [row(index * WIDTH, WIDTH) for index in range(128-partial_targets, 128)],
+            source='backfill_aggregated', market_type='futures')
+    monkeypatch.setattr(manager.query_engine, 'read_mixed_history_blocks', forbidden)
+    monkeypatch.setattr(manager.query_engine.custom_intervals, '_base_query', forbidden)
+    result = manager.query_composed('BTCUSDT', '10007m', **{
+        **options(manager), 'end_ms': 128 * WIDTH - 1, 'limit': 128})
+    assert not result.complete and result.retryable and result.history_state == 'pending'
+    assert len(result.bars) == partial_targets
+    assert all(bar.trusted_final and bar.volume == 10007 for bar in result.bars)
+    assert result.metadata['mixed_impossible_local_cover']
+    assert result.metadata['mixed_local_coverage_upper_ms'] == 0
+    assert result.metadata['mixed_count_reads'] == 6 and result.metadata['mixed_page_reads'] == 0
+    assert result.metadata['target_materialized_written'] == 0
+    assert [(gap.start_ms, gap.end_ms) for gap in result.missing_ranges] == [(0, (127-partial_targets)*WIDTH)]
+
+
+def test_overlapping_or_cross_boundary_counts_never_prove_a_complete_cover(composed_dm, monkeypatch):
+    manager = composed_dm
+    enough_count_to_reach_cover(manager)
+    original = manager.query_engine.read_mixed_history_blocks
+    calls = []
+    def read(*args, **kwargs):
+        calls.append(True)
+        return original(*args, **kwargs)
+    monkeypatch.setattr(manager.query_engine, 'read_mixed_history_blocks', read)
+    monkeypatch.setattr(manager.query_engine.custom_intervals, '_base_query', forbidden)
+    result = manager.query_composed('BTCUSDT', '10007m', **options(manager))
+    assert calls and result.metadata['mixed_local_coverage_upper_ms'] >= WIDTH
+    assert not result.complete and result.history_state == 'pending' and not result.bars
+    assert not result.metadata.get('mixed_impossible_local_cover')
+    assert result.metadata['target_materialized_written'] == 0
+
+
+def test_coverage_count_failure_cannot_authorize_a_new_repair(composed_dm, monkeypatch):
+    manager = composed_dm
+    storage = manager.query_engine.storage
+    original = storage.count_bars
+    def count(*args, **kwargs):
+        if kwargs.get('interval') == '4h':
+            raise OSError('controlled count failure')
+        return original(*args, **kwargs)
+    monkeypatch.setattr(storage, 'count_bars', count)
+    monkeypatch.setattr(manager.query_engine, 'read_mixed_history_blocks', forbidden)
+    monkeypatch.setattr(manager.query_engine.custom_intervals, '_base_query', forbidden)
+    manager.set_backfill_trigger(forbidden)
+    result = manager.query_composed('BTCUSDT', '10007m', **{**options(manager), 'auto_backfill': True})
+    assert not result.complete and result.retryable and not result.backfill_triggered
+    assert not result.missing_ranges and result.metadata['history_composition_deferred']
+    assert result.metadata['mixed_count_failures'] == 1
+
+
+@pytest.mark.parametrize('fault', ['revision_unavailable', 'memory_budget_deferred'])
+@pytest.mark.parametrize('endpoint,parameters', [
+    ('/history/composed', {'count_back': 2, 'max_wait_ms': 1500}),
+    ('/range/composed', {'start_ms': 0, 'end_ms': 2 * WIDTH - 1, 'repair': 'async'}),
+])
+def test_durable_or_memory_read_deferral_never_becomes_verification_repair(composed_dm, monkeypatch, fault, endpoint, parameters):
+    from app.data_engine.memory_budget import MemoryBudgetExceeded
+    manager = composed_dm
+    if fault == 'revision_unavailable':
+        # Keep the legitimate cache poll watermark behind a new SQLite commit.
+        consumer = manager.query_engine._cache.revision_consumer
+        consumer.sync(force=True)
+        consumer.poll_seconds = 60
+        manager.query_engine.storage.upsert_bars('BTCUSDT', '1d', [row(0, 1440*MINUTE)],
+            source='backfill', market_type='futures')
+    else:
+        original_reserve = manager.memory_budget.reserve
+        def reserve(owner, *args, **kwargs):
+            if owner == 'history-query':
+                raise MemoryBudgetExceeded('controlled history reservation refusal')
+            return original_reserve(owner, *args, **kwargs)
+        monkeypatch.setattr(manager.memory_budget, 'reserve', reserve)
+    monkeypatch.setattr(api, '_submit_verification_repairs', forbidden)
+    manager.set_backfill_trigger(forbidden)
+    app = FastAPI()
+    app.state.data_manager = manager
+    app.include_router(api.router, prefix='/api/v1')
+    with TestClient(app) as client:
+        response = client.get('/api/v1/klines'+endpoint, params={**parameters,
+            'symbol':'BTCUSDT','interval':'10007m','market_type':'futures','composition_contract':CONTRACT})
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result['cache'][fault] and not result['complete'] and result['retryable']
+    assert not result['backfill_triggered']
