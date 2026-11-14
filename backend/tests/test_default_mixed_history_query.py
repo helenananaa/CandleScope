@@ -2,8 +2,13 @@
 import asyncio
 from contextlib import contextmanager
 from dataclasses import replace
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+import app.api.v1.klines as api
 
 from app.data_engine.data_manager import DataManager
 from app.data_engine.data_manager.config import DataManagerConfig
@@ -13,6 +18,178 @@ from app.data_engine.interval_resolution import IntervalResolver
 from app.data_engine.storage import klines_repo
 from tests.test_mixed_history_reader import row, FIELDS, MINUTE
 from tests.test_shared_aggregation_blocks import assert_idle
+
+
+@pytest.mark.parametrize('mode', ['range', 'before'])
+def test_incomplete_mixed_request_keeps_committed_partial_target_history(mixed_query, mode):
+    engine = mixed_query
+    width, count = 89 * MINUTE, 200
+    opened = [*range(50), *range(180, count)]
+    rows = [row(index * width, width) for index in opened]
+    engine.storage.upsert_bars('BTCUSDT', '89m', rows,
+                              source='backfill_aggregated', market_type='futures')
+    # The admitted target page fits; a legacy full minute window does not.
+    assert count * 89 > engine._cfg.max_limit
+    options = dict(exchange='binance', market_type='futures', limit=count,
+                   auto_backfill=False, min_revision=engine.storage.revision_store.head())
+    result = (engine.query_before('BTCUSDT', '89m', before_ms=count * width, **options)
+              if mode == 'before' else engine.query('BTCUSDT', '89m',
+                  start_ms=0, end_ms=count * width - 1, **options))
+    stored = engine.query('BTCUSDT', '89m', start_ms=0, end_ms=count * width - 1,
+                          limit=count, market_type='futures', _materialized_only=True)
+    assert len(stored.bars) == len(rows)
+    assert result.bars == stored.bars
+    assert not result.complete and result.retryable and result.history_state == 'pending'
+    assert result.metadata['mixed_partial_materialized'] and not result.metadata['target_materialized']
+    assert result.metadata['target_materialized_written'] == 0
+    assert all(bar.trusted_final and bar.is_closed for bar in result.bars)
+    assert result.missing_ranges
+    assert not any(gap.start_ms <= value.time_ms <= gap.end_ms
+                   for gap in result.missing_ranges for value in result.bars)
+
+
+def test_partial_target_repair_submits_only_uncovered_span(mixed_query, monkeypatch):
+    engine = mixed_query
+    width, count = 89 * MINUTE, 200
+    rows = [row(index * width, width) for index in [*range(50), *range(180, count)]]
+    engine.storage.upsert_bars('BTCUSDT', '89m', rows,
+                              source='backfill_aggregated', market_type='futures')
+    submitted = []
+    monkeypatch.setattr(engine, '_backfill_trigger', lambda *args: submitted.append(args))
+    result = engine.query('BTCUSDT', '89m', start_ms=0, end_ms=count * width - 1,
+                          limit=count, market_type='futures', auto_backfill=True,
+                          min_revision=engine.storage.revision_store.head())
+    assert len(result.bars) == 70 and not result.complete and result.backfill_triggered
+    assert submitted == [('BTCUSDT', '89m', 50 * width, 179 * width, 'binance', 'futures')]
+    assert len(result.missing_ranges) == 1 and result.missing_ranges[0].missing_bars == 130
+    assert result.metadata['target_materialized_written'] == 0
+
+
+def test_before_keeps_sparse_older_canonical_targets_without_expanding_repair_window(mixed_query):
+    engine = mixed_query
+    width, count = 89 * MINUTE, 200
+    rows = [row(index * width, width) for index in range(100)]
+    engine.storage.upsert_bars('BTCUSDT', '89m', rows,
+                              source='backfill_aggregated', market_type='futures')
+    result = engine.query_before('BTCUSDT', '89m', before_ms=1000 * width, limit=count,
+                                 market_type='futures', auto_backfill=False,
+                                 min_revision=engine.storage.revision_store.head())
+    assert [bar.time_ms for bar in result.bars] == [value['open_time'] for value in rows]
+    assert not result.complete and result.retryable
+    assert all(800 * width <= gap.start_ms <= gap.end_ms < 1000 * width
+               for gap in result.missing_ranges)
+    bounded = engine.query('BTCUSDT', '89m', start_ms=800 * width, end_ms=1000 * width - 1,
+                           limit=count, market_type='futures', auto_backfill=False,
+                           min_revision=engine.storage.revision_store.head())
+    assert not bounded.bars and not bounded.complete
+
+
+@pytest.mark.parametrize('mutation', ['target_delete', 'source_delete', 'amend'])
+def test_partial_target_read_is_fenced_again_after_mixed_probe(mixed_query, monkeypatch, mutation):
+    engine = mixed_query
+    width, count = 89 * MINUTE, 200
+    rows = [row(index * width, width) for index in range(180, count)]
+    engine.storage.upsert_bars('BTCUSDT', '89m', rows,
+                              source='backfill_aggregated', market_type='futures')
+    original = engine.custom_intervals._mixed_query
+    changed = []
+    def interleaved(*args, **kwargs):
+        if not changed:
+            changed.append(True)
+            # A concurrent producer does not inherit the reader's acquisition
+            # scope, which permits its own intentional materialization writes.
+            def write():
+                if mutation == 'amend':
+                    replacement = {**row(190 * width, width), 'close': 100.5}
+                    engine.storage.upsert_bars('BTCUSDT', '89m', [replacement],
+                                              source='backfill_aggregated', market_type='futures')
+                else:
+                    engine.storage.delete_bars('BTCUSDT', '89m' if mutation == 'target_delete' else '1m',
+                                              190 * width, 190 * width, market_type='futures')
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                executor.submit(write).result(timeout=5)
+        return original(*args, **kwargs)
+    monkeypatch.setattr(engine.custom_intervals, '_mixed_query', interleaved)
+    result = engine.query('BTCUSDT', '89m', start_ms=0, end_ms=count * width - 1,
+                          limit=count, market_type='futures', auto_backfill=False,
+                          min_revision=engine.storage.revision_store.head())
+    assert changed == [True]
+    affected = [bar for bar in result.bars if bar.time_ms == 190 * width]
+    assert not affected or (mutation == 'amend' and affected[0].close == 100.5)
+    assert not result.complete
+    fresh = engine.query('BTCUSDT', '89m', start_ms=0, end_ms=count * width - 1,
+                         limit=count, market_type='futures', auto_backfill=False,
+                         min_revision=engine.storage.revision_store.head())
+    affected = [bar for bar in fresh.bars if bar.time_ms == 190 * width]
+    if mutation == 'source_delete':
+        # Clearing the fine series leaves the existing target canonical
+        # representation intact. Reading it must neither recreate fine
+        # coverage nor rewrite an old derived value after the deletion.
+        assert len(affected) == 1 and affected[0].close == 101
+        assert fresh.metadata['target_materialized_written'] == 0
+        assert engine.storage.count_bars('BTCUSDT', '1m', 0, count * width - 1,
+                                         market_type='futures') == 0
+    else:
+        assert not affected or (mutation == 'amend' and affected[0].close == 100.5)
+    assert not fresh.complete
+
+
+def test_untrusted_partial_target_is_not_promoted_by_a_missing_mixed_source(mixed_query):
+    engine = mixed_query
+    width, count = 89 * MINUTE, 200
+    rows = [row(index * width, width) for index in range(180, count)]
+    engine.storage.upsert_bars('BTCUSDT', '89m', rows,
+                              source='backfill_aggregated', market_type='futures')
+    with klines_repo._connect() as conn:
+        conn.execute("UPDATE klines SET source='unknown' WHERE interval='89m' AND open_time=?", (190 * width,))
+        conn.commit()
+    result = engine.query('BTCUSDT', '89m', start_ms=0, end_ms=count * width - 1,
+                          limit=count, market_type='futures', auto_backfill=False,
+                          min_revision=engine.storage.revision_store.head())
+    assert len(result.bars) == len(rows) - 1, result.metadata
+    assert all(bar.trusted_final and bar.time_ms != 190 * width for bar in result.bars)
+    assert any(gap.start_ms <= 190 * width <= gap.end_ms for gap in result.missing_ranges)
+    assert not result.complete and result.metadata['target_materialized_written'] == 0
+
+
+def test_history_http_probe_exposes_partial_targets_without_repairing(tmp_path, monkeypatch):
+    from app.core import config as core_config
+    database = tmp_path / 'partial-history-api.sqlite'
+    monkeypatch.setattr(klines_repo, 'KLINES_DB_PATH', database)
+    monkeypatch.setattr(core_config, 'KLINES_DB_PATH', database)
+    width, count = 89 * MINUTE, 200
+    monkeypatch.setattr('time.time', lambda: (count * width + 1000) / 1000)
+    klines_repo.init_klines_storage()
+    config = DataManagerConfig()
+    config.query.auto_backfill = False
+    manager = DataManager(config)
+    manager.set_storage(klines_repo.KlinesRepoAdapter())
+    rows = [row(index * width, width) for index in [*range(50), *range(180, count)]]
+    manager.query_engine.storage.upsert_bars('BTCUSDT', '89m', rows,
+                                            source='backfill_aggregated', market_type='futures')
+    manager.query_engine._cache.revision_consumer.sync(force=True)
+    def forbidden(*args, **kwargs):
+        raise AssertionError('a zero-wait viewport probe admitted new history work')
+    monkeypatch.setattr(api, '_submit_verification_repairs', forbidden)
+    monkeypatch.setattr(api, '_poll_backfill_storage', forbidden)
+    monkeypatch.setattr(api, '_schedule_related_interval_warmup', forbidden)
+    app = FastAPI()
+    app.state.data_manager = manager
+    app.include_router(api.router, prefix='/api/v1')
+    try:
+        with TestClient(app) as client:
+            response = client.get('/api/v1/klines/history', params=dict(
+                symbol='BTCUSDT', interval='89m', exchange='binance', market_type='futures',
+                count_back=count, max_wait_ms=0))
+        assert response.status_code == 200, response.text
+        result = response.json()
+        assert result['count'] == len(rows)
+        assert not result['complete'] and result['history_state'] == 'pending'
+        assert not result['verified_contiguous'] and not result['backfill_triggered']
+        assert all(bar['is_closed'] and bar['volume'] == 89 for bar in result['data'])
+    finally:
+        asyncio.run(manager.shutdown())
+    assert manager.memory_budget.snapshot()['reserved_bytes'] == 0
 
 
 @pytest.fixture

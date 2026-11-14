@@ -22,7 +22,7 @@ from .mixed_precedence import MixedPrecedence, BATCH_TARGETS, WORK_BYTES
 
 
 def query_closed_mixed(engine, key, *, start_ms=None, end_ms=None, before_ms=None,
-                       limit, report, auto_backfill=None):
+                       limit, report, auto_backfill=None, materialized_result=None):
     """Try a bounded closed page; unavailable inputs keep the original route.
 
     A stale view never falls back into a new generation. ``report`` contains
@@ -178,14 +178,34 @@ def query_closed_mixed(engine, key, *, start_ms=None, end_ms=None, before_ms=Non
             # reports a gap. Surface the actual closed target demand to the
             # existing DataManager scheduler instead of silently starving it.
             allow = config.auto_backfill if auto_backfill is None else bool(auto_backfill)
-            missing = engine._trigger_backfill(key, first, last, reason="query_empty",
-                missing_bars=(stop - first) // spec.nominal_ms, submit=allow)
-            if missing is not None:
-                return QueryResult(bars=[], symbol=key.symbol, interval=key.interval,
-                    exchange=key.exchange, market_type=key.market_type, source=QuerySource.EMPTY,
+            # The target probe precedes this optional mixed read under the
+            # original query acquisition fence. Missing source coverage must
+            # not discard already committed, individually final target rows.
+            target_lower = first if start_ms is not None else spec.phase_ms
+            partial = ([bar for bar in materialized_result.bars
+                        if bar.trusted_final and target_lower <= bar.time_ms < stop
+                        and spec.floor_ms(bar.time_ms) == bar.time_ms]
+                       if materialized_result is not None else [])
+            spans, cursor = [], first
+            for opened in sorted({bar.time_ms for bar in partial if bar.time_ms >= first}):
+                if cursor < opened:
+                    spans.append((cursor, opened - spec.nominal_ms))
+                cursor = opened + spec.nominal_ms
+            if cursor < stop:
+                spans.append((cursor, last))
+            missing = [gap for lo, hi in spans if (gap := engine._trigger_backfill(
+                key, lo, hi, reason="query_empty", missing_bars=(hi - lo) // spec.nominal_ms + 1,
+                submit=allow)) is not None]
+            if missing:
+                return QueryResult(bars=partial, symbol=key.symbol, interval=key.interval,
+                    exchange=key.exchange, market_type=key.market_type,
+                    source=materialized_result.source if partial else QuerySource.EMPTY,
+                    total=len(partial),
                     complete=False, retryable=True, history_state="pending", has_more=True,
-                    missing_ranges=[missing], backfill_triggered=bool(allow and engine._backfill_trigger),
+                    missing_ranges=missing, backfill_triggered=bool(allow and engine._backfill_trigger),
                     metadata={**report, "derived_from": "mixed", "mixed_target_repair": True,
+                        "mixed_partial_materialized": bool(partial),
+                        "target_partial_materialized_rows": len(partial),
                         "storage_reads": report["mixed_page_reads"] + report["mixed_probe_reads"]
                             + report["mixed_count_reads"] + report["mixed_presence_reads"],
                         "storage_rows": report["mixed_page_rows"] + report["mixed_probe_rows"]

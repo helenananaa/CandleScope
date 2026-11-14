@@ -475,11 +475,15 @@ class CustomIntervalQueryService:
                    materialized_probe_ms, report, auto_backfill=None, **bounds):
         if self._mixed_query is None:
             return None
-        result = self._mixed_query(key, limit=limit, report=report, auto_backfill=auto_backfill, **bounds)
+        result = self._mixed_query(key, limit=limit, report=report, auto_backfill=auto_backfill,
+                                   materialized_result=materialized_result, **bounds)
         if result is None:
             return None
-        written, role = self._persist_rebuilt_target(result.bars, result,
-            symbol=key.symbol, interval=key.interval, exchange=key.exchange, market_type=key.market_type)
+        if result.metadata.get('mixed_partial_materialized'):
+            written, role = 0, 'existing_partial'
+        else:
+            written, role = self._persist_rebuilt_target(result.bars, result,
+                symbol=key.symbol, interval=key.interval, exchange=key.exchange, market_type=key.market_type)
         self._cache.bulk_load(key, result.bars)
         result.metadata.update(self._combined_io_metadata(materialized_result, result))
         result.metadata.update(elapsed_ms=round((time.monotonic() - started_at) * 1000, 2),
