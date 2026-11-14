@@ -31,6 +31,7 @@ import {
   reconcileInitialRepairRetry,
 } from "./feed/initialRepairRetryPolicy.js";
 import { planTargetBarRequest } from "./intervalRequestBudget.js";
+import { planComposedHistoryPage, type ComposedHistoryCapability } from "./composedHistoryAdmission.js";
 import type { KlineSeriesIdentityInput } from "./klineSeriesIdentity.js";
 
 const INITIAL_BACKFILL_RETRY_MS = 3_000;
@@ -174,6 +175,7 @@ export interface UseChartInitialLoadOptions {
   seriesIdentity?: KlineSeriesIdentityInput;
   nativeIntervalValues: readonly IntervalString[];
   tradeCandlesAvailable?: boolean;
+  historyComposition?: ComposedHistoryCapability | null;
   initialViewportCountBackCap?: number;
   sharedCacheOwnsHealth?: boolean;
   getFromCache(symbol: SymbolCode, interval: IntervalString): KlineBar[];
@@ -258,22 +260,30 @@ export function planInitialHistoryCountBack(
   interval: IntervalString,
   nativeIntervalValues: readonly IntervalString[],
   tradeCandlesAvailable = false,
+  historyComposition?: ComposedHistoryCapability | null,
 ): number {
+  const admission = planInitialHistoryAdmission(interval, nativeIntervalValues, tradeCandlesAvailable, historyComposition);
+  return admission.materializedOnly ? 0 : admission.historyCountBack;
+}
+
+function initialTargetPlan(interval: IntervalString, nativeIntervalValues: readonly IntervalString[],
+  tradeCandlesAvailable: boolean) {
   return planTargetBarRequest({
     desiredTargetBars: INITIAL_HISTORY_COUNT_BACK,
     interval,
     nativeIntervals: nativeIntervalValues,
     tradeCandlesAvailable,
     sourceRowBudget: INITIAL_HISTORY_SOURCE_ROW_BUDGET,
-  })?.targetBars ?? INITIAL_HISTORY_COUNT_BACK;
+  });
 }
 
 export function planInitialViewportCountBack(
   interval: IntervalString,
   nativeIntervalValues: readonly IntervalString[],
   tradeCandlesAvailable = false,
+  historyComposition?: ComposedHistoryCapability | null,
 ): number {
-  const admission = planInitialHistoryAdmission(interval, nativeIntervalValues, tradeCandlesAvailable);
+  const admission = planInitialHistoryAdmission(interval, nativeIntervalValues, tradeCandlesAvailable, historyComposition);
   // Materialized probes cannot start the source-backed hydration lane.
   return admission.materializedOnly ? 0 : admission.viewportCountBack;
 }
@@ -282,14 +292,16 @@ export function planInitialHistoryAdmission(
   interval: IntervalString,
   nativeIntervalValues: readonly IntervalString[],
   tradeCandlesAvailable = false,
-): { historyCountBack: number; viewportCountBack: number; materializedOnly: boolean } {
-  const plan = planTargetBarRequest({
-    desiredTargetBars: INITIAL_HISTORY_COUNT_BACK,
-    interval,
-    nativeIntervals: nativeIntervalValues,
-    tradeCandlesAvailable,
-    sourceRowBudget: INITIAL_HISTORY_SOURCE_ROW_BUDGET,
-  });
+  historyComposition?: ComposedHistoryCapability | null,
+): { historyCountBack: number; viewportCountBack: number; materializedOnly: boolean; compositionContract?: string } {
+  const plan = initialTargetPlan(interval, nativeIntervalValues, tradeCandlesAvailable);
+  if (plan.blockedReason === null && plan.targetBars === 0) {
+    const composed = planComposedHistoryPage(interval, historyComposition, INITIAL_HISTORY_COUNT_BACK,
+      INITIAL_HISTORY_SOURCE_ROW_BUDGET);
+    if (composed) return { historyCountBack: composed.targetBars,
+      viewportCountBack: Math.min(STAGED_INITIAL_VIEWPORT_COUNT_BACK, composed.targetBars),
+      materializedOnly: false, compositionContract: composed.compositionContract };
+  }
   // Only a resolved route that exceeds the source budget may use this escape
   // hatch. It permits a bounded target read, never a larger base-history read.
   const materializedOnly = plan.blockedReason === null && plan.targetBars === 0;
@@ -382,6 +394,7 @@ export function useChartInitialLoad({
   seriesIdentity,
   nativeIntervalValues,
   tradeCandlesAvailable = false,
+  historyComposition,
   initialViewportCountBackCap,
   getFromCache,
   resolveInitialRows,
@@ -494,7 +507,8 @@ export function useChartInitialLoad({
       interval: intv,
       ...(ex === exchange && mt === marketType ? seriesIdentity : {}),
     };
-    const initialAdmission = planInitialHistoryAdmission(intv, nativeIntervalValues, tradeCandlesAvailable);
+    const initialAdmission = planInitialHistoryAdmission(intv, nativeIntervalValues, tradeCandlesAvailable,
+      ex === exchange && mt === marketType ? historyComposition : null);
     const initialHistoryCountBack = initialAdmission.historyCountBack;
     const plannedViewportCountBack = initialAdmission.viewportCountBack;
     const initialViewportCountBack = initialViewportCountBackCap == null
@@ -827,6 +841,7 @@ export function useChartInitialLoad({
         try {
           const retryResult = await seriesDataFeed.getBars(series, {
             countBack: initialViewportCountBack,
+            ...(initialAdmission.compositionContract ? { compositionContract: initialAdmission.compositionContract } : {}),
             maxWaitMs: INITIAL_VIEWPORT_MAX_WAIT_MS,
             intent: "viewport",
             source: "initial-history-retry",
@@ -945,6 +960,7 @@ export function useChartInitialLoad({
     try {
       const result = await seriesDataFeed.getBars(series, {
         countBack: initialViewportCountBack,
+        ...(initialAdmission.compositionContract ? { compositionContract: initialAdmission.compositionContract } : {}),
         maxWaitMs: INITIAL_VIEWPORT_PROBE_WAIT_MS,
         intent: "viewport",
         source: "initial-history",
@@ -1023,6 +1039,7 @@ export function useChartInitialLoad({
     marketType,
     nativeIntervalValues,
     tradeCandlesAvailable,
+    historyComposition,
     initialViewportCountBackCap,
     pendingInitialHistoryRef,
     replaceChartData,

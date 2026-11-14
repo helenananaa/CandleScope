@@ -59,6 +59,7 @@ export function activeHistoryHydrationContinuationDelayMs(
 }
 
 export interface RunActiveHistoryHydrationOptions {
+  compositionContract?: string;
   series: MarketSeries;
   sessionKey: string;
   targetCountBack: number;
@@ -91,6 +92,7 @@ export async function runActiveHistoryHydration({
   sessionKey,
   targetCountBack,
   validatedCountBack,
+  compositionContract,
   seriesDataFeed,
   priorityGate,
   commitMergedChartData,
@@ -123,6 +125,7 @@ export async function runActiveHistoryHydration({
       try {
         const result = await seriesDataFeed.getBars(series, {
           countBack: stageCountBack,
+          ...(compositionContract === undefined ? {} : { compositionContract }),
           maxWaitMs: 0,
           intent: "active_hydration",
           source: "active-history-hydration",
@@ -193,6 +196,7 @@ export async function runActiveHistoryHydration({
 }
 
 export interface UseActiveChartHistoryHydrationOptions {
+  compositionContract?: string;
   enabled: boolean;
   series: MarketSeries;
   sessionKey: string;
@@ -239,6 +243,7 @@ export function useActiveChartHistoryHydration({
   sessionKey,
   viewportCountBack,
   targetCountBack,
+  compositionContract,
   historyComplete,
   historyRepairPending,
   validatedCountBack,
@@ -279,6 +284,7 @@ export function useActiveChartHistoryHydration({
         series,
         sessionKey,
         targetCountBack,
+        ...(compositionContract === undefined ? {} : { compositionContract }),
         validatedCountBack,
         seriesDataFeed,
         priorityGate,
@@ -324,5 +330,6 @@ export function useActiveChartHistoryHydration({
     targetCountBack,
     validatedCountBack,
     viewportCountBack,
+    compositionContract,
   ]);
 }

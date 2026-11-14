@@ -1129,6 +1129,7 @@ class DataManager(DataManagerCore):
         backfill_metadata: dict[str, Any] | None = None,
         series_identity: KlineSeriesIdentity | None = None,
         min_revision: int | None = None,
+        composition_contract: str | None = None,
     ) -> QueryResult:
         """Query K-line bars.
 
@@ -1169,13 +1170,15 @@ class DataManager(DataManagerCore):
             series_identity=series_identity,
             auto_backfill=auto_backfill,
             **({"min_revision": min_revision} if min_revision is not None else {}),
+            **({'composition_contract': composition_contract} if composition_contract is not None else {}),
         )
         self._finish_query_snapshot(version_key, version_before, result, start_ms=start_ms, end_ms=end_ms)
         return self._submit_missing_ranges(
             result,
             reason=backfill_reason,
             requester=backfill_requester,
-            backfill_metadata=backfill_metadata,
+            backfill_metadata=({**(backfill_metadata or {}), 'required_history_composition': composition_contract}
+                               if composition_contract is not None else backfill_metadata),
             submit=(
                 self.query_engine.auto_backfill_default
                 if auto_backfill is None
@@ -1219,6 +1222,20 @@ class DataManager(DataManagerCore):
         self._finish_query_snapshot(version_key, version_before, result, start_ms=start_ms, end_ms=end_ms)
         result.metadata["target_materialized_only"] = True
         return result
+
+    def query_composed(self, symbol: str, interval: str, *, composition_contract: str,
+                       **options) -> QueryResult:
+        """Explicit composed-history entry point; never silently drops its mode."""
+        if not isinstance(composition_contract, str) or not composition_contract:
+            raise ValueError('a history composition contract is required')
+        return self.query(symbol, interval, composition_contract=composition_contract, **options)
+
+    def query_before_composed(self, symbol: str, interval: str, before_ms: int,
+                              limit: int = 500, *, composition_contract: str, **options) -> QueryResult:
+        if not isinstance(composition_contract, str) or not composition_contract:
+            raise ValueError('a history composition contract is required')
+        return self.query_before(symbol, interval, before_ms, limit,
+                                 composition_contract=composition_contract, **options)
 
     def query_latest(
         self,
@@ -1280,6 +1297,7 @@ class DataManager(DataManagerCore):
         backfill_metadata: dict[str, Any] | None = None,
         series_identity: KlineSeriesIdentity | None = None,
         min_revision: int | None = None,
+        composition_contract: str | None = None,
     ) -> QueryResult:
         """Get bars before a timestamp (for pagination / load-more)."""
         market_type = self._normalize_market_type(market_type)
@@ -1304,13 +1322,15 @@ class DataManager(DataManagerCore):
             series_identity=series_identity,
             auto_backfill=auto_backfill,
             **({"min_revision": min_revision} if min_revision is not None else {}),
+            **({'composition_contract': composition_contract} if composition_contract is not None else {}),
         )
         self._finish_query_snapshot(version_key, version_before, result, end_ms=before_ms - 1)
         return self._submit_missing_ranges(
             result,
             reason=backfill_reason,
             requester=backfill_requester,
-            backfill_metadata=backfill_metadata,
+            backfill_metadata=({**(backfill_metadata or {}), 'required_history_composition': composition_contract}
+                               if composition_contract is not None else backfill_metadata),
             submit=(
                 self.query_engine.auto_backfill_default
                 if auto_backfill is None

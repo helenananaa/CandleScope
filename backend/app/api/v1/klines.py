@@ -115,6 +115,7 @@ class KlineHistoryBatchItem(BaseModel):
     volume_semantics: str = Field(default=DEFAULT_VOLUME_SEMANTICS, min_length=1, max_length=64)
     intent: Literal["viewport", "active_hydration"] = "viewport"
     materialized_only: bool = False
+    composition_contract: str | None = Field(default=None, min_length=1, max_length=128)
     request_scope: str | None = Field(default=None, max_length=128)
     request_generation: int | None = Field(default=None, ge=0)
     max_wait_ms: int = Field(default=3500, ge=0, le=8000)
@@ -2239,6 +2240,7 @@ async def get_klines_history(
         bool,
         Query(description="Read target cache/storage only; never derive, repair or prewarm"),
     ] = False,
+    composition_contract: Annotated[str | None, Query(min_length=1, max_length=128)] = None,
     request_scope: str | None = Query(
         None,
         max_length=128,
@@ -2262,6 +2264,8 @@ async def get_klines_history(
     series_identity_query: KlineSeriesIdentityQuery = Depends(),
 ):
     """Get historical K-line bars for a time range."""
+    if materialized_only and composition_contract is not None:
+        raise HTTPException(status_code=400, detail='History execution modes cannot be combined')
     if count_back is None and days > 3650:
         raise HTTPException(
             status_code=422,
@@ -2298,6 +2302,8 @@ async def get_klines_history(
         demand_generation=request_generation,
         demand_owner_id=demand_owner_id,
     )
+    if composition_contract is not None:
+        demand_metadata = {**(demand_metadata or {}), 'required_history_composition': composition_contract}
     await _reject_stale_request_generation(
         request,
         demand_scope=request_scope,
@@ -2358,6 +2364,10 @@ async def get_klines_history(
             # A distinct method is intentional: the compatibility adapter must
             # never silently discard the no-base-read boundary on an older DM.
             query_method = dm.query
+            if composition_contract is not None:
+                query_method = getattr(dm, 'query_composed', None)
+                if not callable(query_method):
+                    raise HTTPException(status_code=503, detail='Composed history unavailable')
             if materialized_only:
                 query_method = getattr(dm, "query_materialized", None)
                 if not callable(query_method):
@@ -2373,6 +2383,7 @@ async def get_klines_history(
                 market_type=market_type,
                 **identity_kwargs,
                 auto_backfill=auto_backfill,
+                **({'composition_contract': composition_contract} if composition_contract is not None else {}),
                 backfill_reason=history_reason,
                 backfill_requester="klines_history",
                 **(
@@ -2419,7 +2430,8 @@ async def get_klines_history(
             interval=interval,
             calendar=calendar,
         )
-        if read_only_viewport_probe:
+        if read_only_viewport_probe or result.metadata.get('history_composition_deferred') or (
+                composition_contract is not None and not _snapshot_is_stable(result)):
             submitted, request_ids, suppressions = False, [], []
         else:
             submitted, request_ids, suppressions = _submit_verification_repairs(
@@ -2526,6 +2538,7 @@ async def get_klines_history(
     # disconnected. The scheduler still caps background work to one slot.
     if (
         not materialized_only
+        and composition_contract is None
         and bool(data)
         and bool(verification["verified_contiguous"])
         and _snapshot_is_stable(result)
@@ -2587,6 +2600,28 @@ async def get_klines_history(
     # wire contract while avoiding that redundant traversal and its resulting
     # event-loop stall.
     return ORJSONResponse(payload)
+
+
+@router.get('/history/composed')
+async def get_composed_klines_history(
+    request: Request,
+    composition_contract: str = Query(..., min_length=1, max_length=128),
+    symbol: str = Query('BTCUSDT'), interval: str = Query('1h'),
+    days: float = Query(7, ge=0.001),
+    count_back: int | None = Query(None, ge=1, le=MAX_RANGE_RESPONSE_BARS),
+    exchange: str = Query(DEFAULT_EXCHANGE), market_type: str = Query(DEFAULT_MARKET_TYPE),
+    intent: Literal['viewport', 'active_hydration'] = 'viewport',
+    max_wait_ms: int = Query(3500, ge=0, le=8000),
+    request_scope: str | None = Query(None, max_length=128),
+    request_generation: int | None = Query(None, ge=0),
+    series_identity_query: KlineSeriesIdentityQuery = Depends(),
+):
+    """An older server must reject this URL rather than drop its source constraint."""
+    return await get_klines_history(request=request, symbol=symbol, interval=interval,
+        days=days, count_back=count_back, exchange=exchange, market_type=market_type,
+        intent=intent, max_wait_ms=max_wait_ms, materialized_only=False,
+        composition_contract=composition_contract, request_scope=request_scope,
+        request_generation=request_generation, series_identity_query=series_identity_query)
 
 
 @router.get("/history/materialized")
@@ -2653,6 +2688,7 @@ async def post_klines_history_batch(
                 market_type=item.market_type,
                 intent=item.intent,
                 materialized_only=item.materialized_only,
+                composition_contract=item.composition_contract,
                 request_scope=item.request_scope,
                 request_generation=item.request_generation,
                 max_wait_ms=item.max_wait_ms,
@@ -2729,6 +2765,7 @@ async def get_klines_range(
     ),
     min_revision: int | None = Query(None, ge=0),
     min_revision_epoch: str | None = Query(None, min_length=1, max_length=128),
+    composition_contract: Annotated[str | None, Query(min_length=1, max_length=128)] = None,
     series_identity_query: KlineSeriesIdentityQuery = Depends(),
 ):
     """Get K-lines for an exact time range with continuity verification."""
@@ -2771,6 +2808,8 @@ async def get_klines_range(
         demand_generation=request_generation,
         demand_owner_id=demand_owner_id,
     )
+    if composition_contract is not None:
+        demand_metadata = {**(demand_metadata or {}), 'required_history_composition': composition_contract}
     await _reject_stale_request_generation(
         request,
         demand_scope=request_scope,
@@ -2843,9 +2882,14 @@ async def get_klines_range(
 
     try:
         async def _run_range_query(auto_backfill: bool):
+            query_method = dm.query
+            if composition_contract is not None:
+                query_method = getattr(dm, 'query_composed', None)
+                if not callable(query_method):
+                    raise HTTPException(status_code=503, detail='Composed history unavailable')
             return await run_storage(
                 _call_data_manager_method,
-                dm.query,
+                query_method,
                 symbol,
                 interval,
                 start_ms=query_start_ms,
@@ -2855,6 +2899,7 @@ async def get_klines_range(
                 market_type=market_type,
                 **identity_kwargs,
                 auto_backfill=auto_backfill,
+                **({'composition_contract': composition_contract} if composition_contract is not None else {}),
                 **({"min_revision": min_revision} if min_revision is not None else {}),
                 backfill_reason="visible_range_gap",
                 backfill_requester="klines_range",
@@ -2911,7 +2956,8 @@ async def get_klines_range(
             interval=interval,
             calendar=calendar,
         )
-        if repair_mode != "none":
+        if repair_mode != "none" and not result.metadata.get('history_composition_deferred') and (
+                composition_contract is None or _snapshot_is_stable(result)):
             submitted, request_ids, suppressions = _submit_verification_repairs(
                 dm,
                 verification_only,
@@ -3031,6 +3077,28 @@ async def get_klines_range(
     return ORJSONResponse(payload)
 
 
+@router.get('/range/composed')
+async def get_composed_klines_range(
+    request: Request,
+    composition_contract: str = Query(..., min_length=1, max_length=128),
+    start_ms: int = Query(..., ge=0), end_ms: int = Query(..., ge=0),
+    symbol: str = Query('BTCUSDT'), interval: str = Query('1m'),
+    repair: str = Query('async'), wait_ms: int = Query(0, ge=0, le=5000), strict: bool = True,
+    exchange: str = Query(DEFAULT_EXCHANGE), market_type: str = Query(DEFAULT_MARKET_TYPE),
+    request_scope: str | None = Query(None, max_length=128),
+    request_generation: int | None = Query(None, ge=0),
+    min_revision: int | None = Query(None, ge=0),
+    min_revision_epoch: str | None = Query(None, min_length=1, max_length=128),
+    series_identity_query: KlineSeriesIdentityQuery = Depends(),
+):
+    return await get_klines_range(request=request, symbol=symbol, interval=interval,
+        start_ms=start_ms, end_ms=end_ms, exchange=exchange, market_type=market_type,
+        repair=repair, wait_ms=wait_ms, strict=strict, composition_contract=composition_contract,
+        request_scope=request_scope, request_generation=request_generation,
+        min_revision=min_revision, min_revision_epoch=min_revision_epoch,
+        series_identity_query=series_identity_query)
+
+
 @router.get("/history/before")
 async def get_klines_before(
     request: Request,
@@ -3062,6 +3130,7 @@ async def get_klines_before(
             "otherwise paints indicators for bars the chart has not yet received."
         ),
     ),
+    composition_contract: Annotated[str | None, Query(min_length=1, max_length=128)] = None,
     series_identity_query: KlineSeriesIdentityQuery = Depends(),
 ):
     """Paginated historical data — load bars before a timestamp."""
@@ -3091,6 +3160,8 @@ async def get_klines_before(
         demand_generation=request_generation,
         demand_owner_id=demand_owner_id,
     )
+    if composition_contract is not None:
+        demand_metadata = {**(demand_metadata or {}), 'required_history_composition': composition_contract}
     await _reject_stale_request_generation(
         request,
         demand_scope=request_scope,
@@ -3110,14 +3181,20 @@ async def get_klines_before(
         before_ms = before * 1000
 
         async def _run_before_query(auto_backfill=None):
+            query_method = dm.query_before
+            if composition_contract is not None:
+                query_method = getattr(dm, 'query_before_composed', None)
+                if not callable(query_method):
+                    raise HTTPException(status_code=503, detail='Composed history unavailable')
             return await run_storage(
                 _call_data_manager_method,
-                dm.query_before,
+                query_method,
                 symbol, interval, before_ms, bars,
-                exchange,
+                exchange=exchange,
                 market_type=market_type,
                 **identity_kwargs,
                 auto_backfill=auto_backfill,
+                **({'composition_contract': composition_contract} if composition_contract is not None else {}),
                 backfill_reason="visible_load_more",
                 backfill_requester="klines_history_before",
                 **(
@@ -3228,6 +3305,25 @@ async def get_klines_before(
         "data": data,
         "base_interval": None,
     }
+
+
+@router.get('/history/before/composed')
+async def get_composed_klines_before(
+    request: Request,
+    composition_contract: str = Query(..., min_length=1, max_length=128),
+    symbol: str = Query('BTCUSDT'), interval: str = Query('1h'),
+    before: int = Query(...), bars: int = Query(500, ge=1, le=1000),
+    exchange: str = Query(DEFAULT_EXCHANGE), market_type: str = Query(DEFAULT_MARKET_TYPE),
+    max_wait_ms: int = Query(4500, ge=0, le=8000),
+    request_scope: str | None = Query(None, max_length=128),
+    request_generation: int | None = Query(None, ge=0),
+    series_identity_query: KlineSeriesIdentityQuery = Depends(),
+):
+    return await get_klines_before(request=request, symbol=symbol, interval=interval,
+        before=before, bars=bars, exchange=exchange, market_type=market_type,
+        max_wait_ms=max_wait_ms, composition_contract=composition_contract,
+        request_scope=request_scope, request_generation=request_generation,
+        series_identity_query=series_identity_query)
 
 
 @router.get("/resolve")

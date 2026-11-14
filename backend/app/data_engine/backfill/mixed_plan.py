@@ -140,7 +140,8 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
     if target_route.kind is not IntervalRouteKind.DERIVED or spec.phase_ms:
         return None
     base = parse_interval_spec(target_route.base_interval)
-    if base is None or base.nominal_ms >= max(route.spec.nominal_ms for route in routes):
+    required_contract = metadata.get('required_history_composition')
+    if base is None or (not required_contract and base.nominal_ms >= max(route.spec.nominal_ms for route in routes)):
         return None
     first, stop = spec.floor_ms(gap.start_ms), spec.next_ms(spec.floor_ms(gap.end_ms))
     now_ms = int(time.time() * 1000)
@@ -173,7 +174,7 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
     planner.metrics.inc("mixed_proposals")
     count = await storage.count_bars(target.symbol, base.canonical, first, stop - 1,
         exchange=target.exchange, market_type=target.market_type)
-    if count >= (stop - first) // base.nominal_ms:
+    if count >= (stop - first) // base.nominal_ms and not required_contract:
         diagnostics["mixed_plan_fallback"] = "local_single_base_preferred"
         return None
     _, changes = await run_storage(store.read_series_changes, keys)
@@ -187,12 +188,13 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
                                     mutations, now_ms, diagnostics, budget)
     try:
         with work:
-            if all(change is None for change in changes):
+            cold = all(change is None or change['start_ms'] >= stop for change in changes)
+            if cold:
                 planning = budget.reserve("history-backfill", PLAN_BYTES) if budget else nullcontext()
                 with planning:
                     choice = await run_preparation(choose_cold_sources, target, first, stop, sources,
                         required_fields=frozenset(policy.fields), target_width=spec.nominal_ms,
-                        base_width=base.nominal_ms, page_size=page_size,
+                        base_width=0 if required_contract else base.nominal_ms, page_size=page_size,
                         task_page_size=max(1, cfg.fetch_batch_size), max_rows=MAX_SOURCE_ROWS,
                         max_tasks=MAX_TASKS, max_positions=MAX_POSITION_WORK // 2)
                 builder.positions(choice.positions)
@@ -216,7 +218,7 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
                 cursor = batch.planned_range[1]
             baseline_requests = math.ceil(((stop - first) // base.nominal_ms) / page_size)
             initial_requests = sum(math.ceil(span.rows / page_size) for cover in covers for span in cover.spans)
-            if all(change is None for change in changes) and initial_requests > baseline_requests:
+            if cold and initial_requests > baseline_requests:
                 raise _DeclineMixed("cold_rest_request_cost")
             for offset in range(0, len(covers), 32):
                 batch = covers[offset:offset + 32]

@@ -472,12 +472,37 @@ class CustomIntervalQueryService:
         self._bar_aggregator = bar_aggregator
 
     def _try_mixed(self, key, *, limit, started_at, materialized_result,
-                   materialized_probe_ms, report, auto_backfill=None, **bounds):
-        if self._mixed_query is None:
-            return None
-        result = self._mixed_query(key, limit=limit, report=report, auto_backfill=auto_backfill,
-                                   materialized_result=materialized_result, **bounds)
+                   materialized_probe_ms, report, auto_backfill=None, composition_contract=None, **bounds):
+        result = None
+        if self._mixed_query is not None:
+            result = self._mixed_query(key, limit=limit, report=report, auto_backfill=auto_backfill,
+                                       materialized_result=materialized_result,
+                                       **({'composition_contract': composition_contract}
+                                          if composition_contract is not None else {}), **bounds)
         if result is None:
+            if composition_contract is not None:
+                # Failure/work limits do not authorize the larger legacy base
+                # route or a new network repair. Retain only stored final rows.
+                spec = parse_interval_spec(key.interval)
+                result = (self._clone_result(materialized_result) if materialized_result is not None
+                    else QueryResult(bars=[], symbol=key.symbol, interval=key.interval,
+                        exchange=key.exchange, market_type=key.market_type, source=QuerySource.EMPTY))
+                lower = bounds.get('start_ms')
+                upper = (bounds['before_ms'] - 1 if bounds.get('before_ms') is not None
+                         else bounds.get('end_ms'))
+                result.bars = [bar for bar in result.bars if bar.trusted_final
+                    and spec.floor_ms(bar.time_ms) == bar.time_ms
+                    and (lower is None or bar.time_ms >= lower)
+                    and (upper is None or bar.time_ms <= upper)]
+                result.total = len(result.bars)
+                if not result.bars:
+                    result.source = QuerySource.EMPTY
+                result.complete, result.retryable, result.history_state = False, True, 'pending'
+                result.has_more, result.backfill_triggered, result.missing_ranges = True, False, []
+                result.metadata.update(report, history_composition_deferred=True,
+                    required_history_composition=composition_contract, target_materialized=False,
+                    target_materialized_written=0)
+                return result
             return None
         if result.metadata.get('mixed_partial_materialized'):
             written, role = 0, 'existing_partial'
@@ -1659,6 +1684,7 @@ class CustomIntervalQueryService:
         market_type: str = "spot",
         auto_backfill: bool | None = None,
         route: IntervalRoute | None = None,
+        composition_contract: str | None = None,
     ) -> QueryResult:
         identity = (
             "range",
@@ -1671,6 +1697,7 @@ class CustomIntervalQueryService:
             limit,
             auto_backfill,
             route.base_interval if route is not None else None,
+            composition_contract,
         )
         return self._run_singleflight(
             identity,
@@ -1685,6 +1712,7 @@ class CustomIntervalQueryService:
                 market_type=market_type,
                 auto_backfill=auto_backfill,
                 route=route,
+                composition_contract=composition_contract,
             ),
         )
 
@@ -1701,6 +1729,7 @@ class CustomIntervalQueryService:
         market_type: str = "spot",
         auto_backfill: bool | None = None,
         route: IntervalRoute | None = None,
+        composition_contract: str | None = None,
     ) -> QueryResult:
         """Serve custom intervals by aggregating a standard interval on read."""
         custom_seconds = parse_custom_interval(interval)
@@ -1762,7 +1791,8 @@ class CustomIntervalQueryService:
         mixed_report = {}
         mixed = self._try_mixed(key, limit=effective_limit, started_at=started_at,
             materialized_result=materialized_result, materialized_probe_ms=materialized_probe_ms,
-            report=mixed_report, start_ms=start_ms, end_ms=end_ms, auto_backfill=auto_backfill)
+            report=mixed_report, start_ms=start_ms, end_ms=end_ms, auto_backfill=auto_backfill,
+            composition_contract=composition_contract)
         if mixed is not None:
             return mixed
 
@@ -2068,6 +2098,7 @@ class CustomIntervalQueryService:
         market_type: str = "spot",
         auto_backfill: bool | None = None,
         route: IntervalRoute | None = None,
+        composition_contract: str | None = None,
     ) -> QueryResult:
         identity = (
             "before",
@@ -2079,6 +2110,7 @@ class CustomIntervalQueryService:
             int(limit),
             auto_backfill,
             route.base_interval if route is not None else None,
+            composition_contract,
         )
         return self._run_singleflight(
             identity,
@@ -2091,6 +2123,7 @@ class CustomIntervalQueryService:
                 market_type=market_type,
                 auto_backfill=auto_backfill,
                 route=route,
+                composition_contract=composition_contract,
             ),
         )
 
@@ -2104,6 +2137,7 @@ class CustomIntervalQueryService:
         market_type: str = "spot",
         auto_backfill: bool | None = None,
         route: IntervalRoute | None = None,
+        composition_contract: str | None = None,
     ) -> QueryResult:
         """Paginate custom intervals by rebuilding them from base bars."""
         started_at = time.monotonic()
@@ -2164,7 +2198,8 @@ class CustomIntervalQueryService:
         mixed_report = {}
         mixed = self._try_mixed(key, limit=effective_limit, started_at=started_at,
             materialized_result=materialized_result, materialized_probe_ms=materialized_probe_ms,
-            report=mixed_report, before_ms=before_ms, auto_backfill=auto_backfill)
+            report=mixed_report, before_ms=before_ms, auto_backfill=auto_backfill,
+            composition_contract=composition_contract)
         if mixed is not None:
             return mixed
 
