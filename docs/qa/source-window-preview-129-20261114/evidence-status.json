@@ -1,0 +1,33 @@
+{
+  "base_main": "a21289fd027a7825e01b0fd54362ec03dde8c094",
+  "runtime_head": "3045325ca7630096e41694868e221d27aa255bf9",
+  "new_plain_contracts": 16,
+  "complete_runtime_integration": {
+    "passed": 2362,
+    "warnings": 66,
+    "seconds": 360.63,
+    "before_additional_actual_deadline_contract": true
+  },
+  "additional_actual_deadline_passed": 1,
+  "hot_pairs": 6,
+  "projection_event_watermarks_equal": true,
+  "overall_cpu_improvement_established": false,
+  "ordinary_closed_comparisons": 4360,
+  "current_witness": "passed",
+  "issues_remain_open": [
+    126,
+    127,
+    129
+  ],
+  "witness_closed_comparisons": 6620,
+  "owned_processes_per_exit": [
+    10,
+    10,
+    10,
+    10
+  ],
+  "observed_api_5xx": 0,
+  "source_window_durable_receipts": 0,
+  "backend_files_matching": 1005,
+  "post_run_strict_signature_passed": true
+}

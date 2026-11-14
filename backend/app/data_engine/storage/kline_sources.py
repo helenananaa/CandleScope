@@ -446,7 +446,7 @@ def references_current(conn, refs: list[dict]) -> bool:
 
 
 def validate_component_preview(conn, components, *, symbol, interval, exchange,
-                               market_type, series_identity, revision_floor) -> str:
+                               market_type, series_identity, revision_floor, source_window=None) -> str:
     """No writes/acknowledgments: validate at most 256 immutable source leaves.
 
     A superseding observation is normal source progress, not a repair request.
@@ -464,6 +464,22 @@ def validate_component_preview(conn, components, *, symbol, interval, exchange,
         return 'canonical_changed'
     if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='kline_source_heads'").fetchone() is None:
         return 'unavailable'
+    if source_window is not None:
+        from app.data_engine.aggregation.source_window import SourceWindowVersion
+        if (type(source_window) is not SourceWindowVersion or len(components) > 128
+                or json.loads(source_window.series)[:3] != [exchange, market_type, symbol]
+                or sum(not held['is_closed'] for held in components) != 1
+                or any(held.get('source_ref') is None
+                       or held['source_ref'].get('series') != source_window.series
+                       or (held['is_closed'] and not source_window.start_ms <= held['open_time_ms'] < source_window.through_ms)
+                       or (not held['is_closed'] and held['open_time_ms'] < source_window.through_ms)
+                       for held in components)):
+            return 'unavailable'
+        if (not _source_window_canonical_current(conn, source_window)
+                or not _source_window_target_permissions(conn, source_window, interval)):
+            return 'canonical_changed'
+        if not source_window_current(conn, source_window):
+            return 'superseded'
     source_values=set()
     # References and all scalar comparisons share this transaction. Decode one
     # bounded normalized row at a time; never retain all envelopes or source rows.
@@ -520,9 +536,13 @@ def validate_component_preview(conn, components, *, symbol, interval, exchange,
         canonical=conn.execute('SELECT '+','.join((*_VALUES,'source'))+' FROM klines WHERE '
             +' AND '.join(where)+' AND open_time=?',(*params,held['open_time_ms'])).fetchone()
         if held['is_closed']:
-            if (canonical is None or any(canonical[name]!=held[name] for name in
-                    ('open','high','low','close','volume',*mask))
-                    or canonical['close_time']!=held['close_time_ms']):
+            # Source-only closed leaves inside this exact selected proof need
+            # not have native canonical rows. Present canonical values still
+            # must agree; the selected head/value was checked above.
+            if ((canonical is None and source_window is None)
+                    or (canonical is not None and (
+                        any(canonical[name]!=held[name] for name in ('open','high','low','close','volume',*mask))
+                        or canonical['close_time']!=held['close_time_ms']))):
                 return 'canonical_changed'
         elif canonical is not None and kline_source_quality(canonical['source']).trusted_final:
             return 'canonical_changed'

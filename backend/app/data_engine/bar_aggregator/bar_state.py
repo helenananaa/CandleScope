@@ -480,7 +480,7 @@ class ComponentSnapshotOHLCVMerge:
 
         snapshots[input_key] = candidate
         state.preview_input_version += 1
-        if state._source_recovery is not None:
+        if state._source_recovery is not None and not delay:
             state._component_accumulator = None
             return self._project(state, state._source_recovery.merge(snapshots.values()), is_new=is_new)
         if delay:
@@ -562,6 +562,8 @@ class ComponentSnapshotOHLCVMerge:
         return state
 
     def _can_defer(self, state, incoming, previous, candidate):
+        if state._source_recovery is not None:
+            return self._can_defer_source_tail(state, incoming, previous, candidate)
         accumulator = state._component_accumulator
         return (not incoming.is_closed and incoming.source == BarInputSource.REALTIME
                 and state._source_recovery is None
@@ -583,10 +585,47 @@ class ComponentSnapshotOHLCVMerge:
                 and previous['open_time_ms'] == candidate['open_time_ms'] == accumulator.tail.last
                 and previous['close_time_ms'] == candidate['close_time_ms'] == accumulator.tail.end - 1)
 
+    @staticmethod
+    def _can_defer_source_tail(state, incoming, previous, candidate):
+        receipt = state._source_recovery
+        return (receipt is not None and 0 < len(state.source_snapshots) <= 128
+                and incoming.source == BarInputSource.REALTIME and not incoming.is_closed
+                and state.status == BarStatus.FORMING
+                and incoming.open_time_ms >= receipt.version.through_ms
+                and incoming.close_time_ms + 1 <= state.bucket_end_ms
+                and incoming.close_time_ms + 1 - incoming.open_time_ms == receipt.version.source_width_ms
+                and incoming.open_time_ms % receipt.version.source_width_ms == 0
+                and type(previous) is ReadonlyFields and type(candidate) is ReadonlyFields
+                and not previous['is_closed'] and not candidate['is_closed']
+                and previous.estimated_bytes <= 8192 and candidate.estimated_bytes <= 8192
+                and previous['open_time_ms'] == candidate['open_time_ms'] == incoming.open_time_ms
+                and previous['close_time_ms'] == candidate['close_time_ms'] == incoming.close_time_ms
+                and previous['enhanced_fields'] == candidate['enhanced_fields']
+                and valid_ohlcv(candidate['aggregation_values'][:5])
+                and previous.get('source_ref') is not None and candidate.get('source_ref') is not None
+                and set(previous['source_ref']) == set(candidate['source_ref']) == {'series','open_time','revision'}
+                and previous['source_ref']['series'] == candidate['source_ref']['series'] == receipt.version.series
+                and previous['source_ref']['open_time'] == candidate['source_ref']['open_time'] == incoming.open_time_ms
+                and all(row is previous or (
+                    type(row) is ReadonlyFields and row.estimated_bytes <= 8192 and row['is_closed']
+                    and receipt.version.start_ms <= row['open_time_ms'] < receipt.version.through_ms
+                    and row['close_time_ms'] + 1 - row['open_time_ms'] == receipt.version.source_width_ms
+                    and row.get('source_ref') is not None
+                    and set(row['source_ref']) == {'series','open_time','revision'}
+                    and row['source_ref']['series'] == receipt.version.series
+                    and row['source_ref']['open_time'] == row['open_time_ms'])
+                    for row in state.source_snapshots.values()))
+
 
 def materialize_component_preview(state):
     """Fold the latest accepted tail once, using the existing K130 index."""
     if not state._preview_dirty:
+        return
+    if state._source_recovery is not None:
+        accepted_at = state.updated_at_ms
+        result = state._source_recovery.merge(state.source_snapshots.values())
+        ComponentSnapshotOHLCVMerge._project(state, result, is_new=False)
+        state.updated_at_ms = accepted_at
         return
     accumulator = state._component_accumulator
     if accumulator is None:

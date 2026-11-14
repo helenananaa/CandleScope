@@ -49,6 +49,21 @@ class SourceRecoveryReader:
             )
         )
 
+    def preview_binding(self):
+        """Expose the existing qualified read owner without leaking its adapter."""
+        from .aggregator_bridge import AggregatorBridge
+        storage = self.bridge.preview_source_binding()
+        bind = getattr(storage, 'source_window_preview_binding', None)
+        validate = self.aggregator._preview_source_validator
+        if (not self.available() or not callable(bind)
+                or getattr(validate, '__self__', None) is not self.bridge
+                or getattr(validate, '__func__', None) is not AggregatorBridge.validate_component_preview):
+            return None
+        bound = bind()
+        if bound is None:
+            return None
+        return (self.binding, storage, bound, self.bridge.delivery.journal)
+
     @asynccontextmanager
     async def stage(
         self,

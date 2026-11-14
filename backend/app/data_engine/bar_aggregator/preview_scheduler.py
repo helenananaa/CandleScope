@@ -49,19 +49,26 @@ class ComponentPreviewScheduler:
     def start(self):
         self.running = True
 
-    def _binding(self, pipeline):
+    def _binding(self, pipeline, state):
         agg = self.aggregator
         runtime = agg.history_prefix_runtime
         source = getattr(getattr(getattr(runtime,'reader',None),'engine',None),'storage',None)
         strategies = tuple((name,type(strategy),getattr(strategy.should_close,'__func__',strategy.should_close))
                            for name,strategy in pipeline.finalizer._strategies)
         source_owner = agg._preview_source_binding() if agg._preview_source_binding is not None else None
+        source_context = None
+        if state._source_recovery is not None:
+            from app.data_engine.market_data.kline_metrics import kline_available_fields
+            reader = agg.source_recovery_reader
+            binding = getattr(reader, 'preview_binding', None)
+            source_context = (reader, binding() if callable(binding) else None,
+                              frozenset(kline_available_fields(state.exchange, state.market_type)))
         return (agg._cfg,agg.memory_budget,runtime,source,
                 pipeline.bar_state._component_merge_strategy,pipeline.finalizer,
                 source_owner,agg._preview_source_validator,
                 pipeline.bar_state._merge_strategy_overridden,
                 pipeline.bar_state._component_merge_strategy.incremental,
-                agg._cfg.deferred_component_previews,agg._cfg.incremental_components,strategies)
+                agg._cfg.deferred_component_previews,agg._cfg.incremental_components,strategies,source_context)
 
     def _delay(self, state):
         publisher = self.aggregator.publisher
@@ -98,7 +105,8 @@ class ComponentPreviewScheduler:
             provider = getattr(agg,'acquisition_revision_provider',None)
             if (agg._preview_source_validator is None or agg._preview_source_binding is None
                     or agg._preview_source_binding() is None or provider is None
-                    or type(provider()) is not int or len(state.source_snapshots)>256
+                    or type(state.acquisition_revision if state._source_recovery is not None else provider()) is not int
+                    or len(state.source_snapshots)>256
                     or not state.identity.is_legacy_default_for(state.exchange)
                     or ref is None or set(ref) != {'series','open_time','revision'}):
                 state.preview_fallback_reason = 'source_reference_window'
@@ -114,6 +122,12 @@ class ComponentPreviewScheduler:
                     int(time.time()*1000) >= state.bucket_end_ms + strategy._timeout_ms):
                 return False
         merge = pipeline.bar_state._component_merge_strategy
+        if state._source_recovery is not None:
+            reader = agg.source_recovery_reader
+            binding = getattr(reader, 'preview_binding', None)
+            previous = state.source_snapshots.get(incoming.input_key)
+            return (callable(binding) and binding() is not None
+                    and merge._can_defer_source_tail(state, incoming, previous, previous))
         accumulator = state._component_accumulator
         return (accumulator is not None and accumulator.tail_unique
                 and accumulator.tail_snapshot is not None
@@ -141,7 +155,7 @@ class ComponentPreviewScheduler:
         due = float('inf') if delay is None else asyncio.get_running_loop().time() + delay/1000
         provider = getattr(self.aggregator,'acquisition_revision_provider',None)
         floor = provider() if provider is not None else None
-        self.pending[id(state)] = _Pending(state,pipeline,token,due,scope,self._binding(pipeline),floor)
+        self.pending[id(state)] = _Pending(state,pipeline,token,due,scope,self._binding(pipeline,state),floor)
         state.preview_fallback_reason = ''
         self.metrics['admitted'] += 1
         self.metrics['peak_pending'] = max(self.metrics['peak_pending'],len(self.pending))
@@ -168,7 +182,7 @@ class ComponentPreviewScheduler:
     def _current(self, entry):
         agg = self.aggregator
         state = entry.state
-        current = self._binding(entry.pipeline)
+        current = self._binding(entry.pipeline,state)
         binding_matches = (all(a is b for a,b in zip(current[:8],entry.binding[:8]))
                            and current[8:] == entry.binding[8:])
         return (agg._target_epochs.get(entry.token[0]) is entry.token[1]
@@ -247,7 +261,7 @@ class ComponentPreviewScheduler:
                             version = current.preview_input_version
                             self.metrics['source_checks'] += 1
                             status = await self.aggregator._preview_source_validator(current,entry.revision_floor,
-                                is_current=lambda: self._current(entry))
+                                is_current=lambda pending=entry: self._current(pending))
                             if (status != 'current' or not self._current(entry)
                                     or current.preview_input_version != version):
                                 current.preview_fallback_reason = ('source_superseded'

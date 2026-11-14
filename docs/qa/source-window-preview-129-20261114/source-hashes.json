@@ -1,0 +1,14 @@
+{
+  "base": "a21289fd027a7825e01b0fd54362ec03dde8c094",
+  "product_head": "3045325ca7630096e41694868e221d27aa255bf9",
+  "files": {
+    "backend/app/data_engine/bar_aggregator/bar_state.py": "9cb3daa3dc53e07d2abbd4c79f0cc81e6ebb09c9e625eaa0c579473fac304826",
+    "backend/app/data_engine/bar_aggregator/preview_scheduler.py": "5ccc8fb714013ad548d7d066c84b593b2a2769c86d9dea23dbe18952a17cc6c5",
+    "backend/app/data_engine/data_manager/aggregator_bridge.py": "2aa8cba31d6f8e752c27fba1940e01066f4c11228d00f69fb0de74efaab29c83",
+    "backend/app/data_engine/data_manager/source_recovery.py": "aa6e0cfcae1cb20820a6e1f0cb19795e1a301723c44de31f50abb81a6cf4a892",
+    "backend/app/data_engine/storage/kline_sources.py": "21991a2a3f334cb0ce84251252d4b5414412aa844c7600973fa3528cdc1b72d4",
+    "backend/app/data_engine/storage/klines_repo.py": "e5515a69a5feae83a56bcba88aadc946d8215c53dc5078459cbdcb3412dcd78e",
+    "backend/tests/test_deferred_component_preview_source_window.py": "88ae41f02d7fb74d07429df619051fbbbf8ec91b42e3b2efcf46727141f1c8e6",
+    "packages/candlescope-plugin-pine-compat/scripts/qualify_host_contracts.py": "bbc7d22ba331f46d417e749feaa96bfcf4bff8ef2f9507f5c1287be58ad1b6db"
+  }
+}

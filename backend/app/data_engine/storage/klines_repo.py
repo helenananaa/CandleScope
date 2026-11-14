@@ -1634,6 +1634,14 @@ class KlinesRepoAdapter:
             conn.execute('BEGIN')
             return validate_component_preview(conn,components,**target)
 
+    def source_window_preview_binding(self):
+        """Opt in only the original source-window and leaf proof validators."""
+        if (getattr(self.validate_component_preview, '__func__', None) is not KlinesRepoAdapter.validate_component_preview
+                or getattr(self.validate_source_window, '__func__', None) is not KlinesRepoAdapter.validate_source_window):
+            return None
+        return (self.revision_store, KlinesRepoAdapter.validate_component_preview,
+                KlinesRepoAdapter.validate_source_window)
+
     def __init__(
         self,
         exchange: str = DEFAULT_EXCHANGE,
