@@ -1191,8 +1191,6 @@ class BarAggregator:
 
         check_target()
 
-        revision_provider = getattr(self, "acquisition_revision_provider", None)
-        acquisition_revision = revision_provider() if revision_provider is not None else None
         source_floor = bar_input.extra.get('source_permission_floor')
         if source_floor is not None and (type(source_floor) is not int or source_floor < 0):
             raise ValueError('source deletion permission must be a nonnegative revision')
@@ -1207,6 +1205,18 @@ class BarAggregator:
             from app.data_engine.aggregation.blocks import BlockUnavailable
             raise BlockUnavailable('selected-source builder requires its receipted source grid or canonical handoff')
         reader = self.source_recovery_reader
+        if existing is not None and existing._source_recovery is not None:
+            if reader is None:
+                from app.data_engine.aggregation.blocks import BlockUnavailable
+                raise BlockUnavailable('selected-source builder lost its validation owner')
+            # This builder already owns its content read plane. The mandatory
+            # source validation below reads current canonical/delete state;
+            # recursively reacquiring an unused generic plane adds DB reads
+            # and must not renew the original source permission.
+            acquisition_revision = existing.acquisition_revision
+        else:
+            revision_provider = getattr(self, "acquisition_revision_provider", None)
+            acquisition_revision = revision_provider() if revision_provider is not None else None
         if (not _cold_prepared and reader is not None and bar_input.extra.get('source_ref')
                 and bar_input.merge_mode == MergeMode.COMPONENT
                 and ((existing is None)

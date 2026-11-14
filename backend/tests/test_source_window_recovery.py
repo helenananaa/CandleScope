@@ -1520,6 +1520,20 @@ def test_forming_read_hint_advances_without_reaggregating_unchanged_source_heads
             state = manager.bar_aggregator.get_pipeline('2048m').bar_state.get_state('binance', 'futures', 'BTCUSDT', 0)
             version = state._source_recovery.version
             calls = []
+            planes, validations = [], []
+            provider = manager.bar_aggregator.acquisition_revision_provider
+            validator = manager.query_engine.storage.validate_source_preview
+
+            def plane():
+                planes.append(True)
+                return provider()
+
+            def validated(*args, **kwargs):
+                validations.append(True)
+                return validator(*args, **kwargs)
+
+            monkeypatch.setattr(manager.bar_aggregator, 'acquisition_revision_provider', plane)
+            monkeypatch.setattr(manager.query_engine.storage, 'validate_source_preview', validated)
             counts = kline_sources._source_window_counts
 
             def counted(*args):
@@ -1533,7 +1547,7 @@ def test_forming_read_hint_advances_without_reaggregating_unchanged_source_heads
                 value = replace(incoming(256, quote=quote, closed=False, ref=ref), source=BarInputSource.REALTIME)
                 await feed(manager, '2048m', value)
                 assert state.quote_volume == 511 + quote
-            assert calls == []
+            assert calls == [] and planes == [] and len(validations) == 300
             assert state._source_recovery.version == version
             assert state._source_recovery.observation_watermark == kline_sources.rest_watermark()
             assert len(state.source_snapshots) == len(state.source_refs) == 2
@@ -1672,6 +1686,29 @@ def test_source_read_hint_waits_for_physical_read_and_rejects_old_owner(database
             released.set()
             if task is not None:
                 await asyncio.gather(task, return_exceptions=True)
+            await manager.shutdown()
+
+    monkeypatch.setattr('time.time', lambda: (2 * W + 1000) / 1000)
+    asyncio.run(run())
+
+
+def test_source_summary_refuses_updates_after_its_validation_owner_disappears(database, monkeypatch):
+    import asyncio
+
+    async def run():
+        record(0)
+        record(1)
+        manager = manager_for('5m')
+        try:
+            await feed(manager, '5m', incoming(0))
+            state = manager.bar_aggregator.get_pipeline('5m').bar_state.get_state('binance', 'futures', 'BTCUSDT', 0)
+            before = state._source_recovery, state.preview_input_version, state.quote_volume
+            manager.bar_aggregator.source_recovery_reader = None
+            ref = record(2, closed=False, sequence=9 * W)['ref']
+            with pytest.raises(BlockUnavailable, match='validation owner'):
+                await feed(manager, '5m', incoming(2, closed=False, ref=ref))
+            assert (state._source_recovery, state.preview_input_version, state.quote_volume) == before
+        finally:
             await manager.shutdown()
 
     monkeypatch.setattr('time.time', lambda: (2 * W + 1000) / 1000)
