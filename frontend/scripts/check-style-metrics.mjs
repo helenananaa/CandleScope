@@ -31,6 +31,7 @@ export const HOOK_CLASSES = new Set([
   "export-panel-message", // export drill scripts read the panel's error message
   "export-preview-refresh", // export drill scripts regenerate the preview
   "sym-modal-close-btn", // smoke.mjs closes symbol search
+  "replay-market-picker", // replay tests and the soak script find the initial market picker page
 ]);
 
 function walk(dir) {

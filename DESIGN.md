@@ -144,6 +144,7 @@ Settings is one dialog: categories on the left, the selected category on the rig
 - **Tabs inside a category** are kit `Tabs`; a tool opened from a category is a row with a title, one line of description and its button.
 - **Figures.** Show the one figure a person acts on (a layer's size, a count) beside its section's title; the rest go into a 详细数据 disclosure. Estimates and results are one-line `InlineAlert`s, not more tiles.
 - **Lists of things** (exchanges) are rows: the name, one line of plain text, and a badge only for an exception (当前, 不可路由). Verification levels, field lists and transport tables belong in disclosures inside the expanded row.
+- **Anything that deletes data** (a storage cleanup) runs as a dry run first: the plan with what it will remove, a checkbox confirming it, then a `danger` button. The same goes for replay storage, which is a dialog of its own rather than a Settings category.
 
 ## Long forms and lists in drawers
 
