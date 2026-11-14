@@ -7,7 +7,7 @@ from app.data_engine.interval_policy import (
     compute_bucket_start_ms,
     parse_interval_ms,
 )
-from app.indicator.warmup import indicator_warmup_bars
+from app.indicator.warmup import replay_display_warmup_bars
 from app.replay.training.indicator_checkpoint import BUILTINS, IndicatorCheckpointStore
 from app.replay.training.indicator_history import IndicatorHistoryChunk
 from app.replay.training.indicator_viewport import ViewportReplayIndicators
@@ -66,7 +66,7 @@ def test_cold_display_reads_only_live_warmup_and_matches_live_formula(
     rows = [bar(i) for i in range(4000)]
     history = History(rows)
     result = compute(tmp_path / "math.db", history, rows[-128:], name, params)
-    count = indicator_warmup_bars(name, params)
+    count = replay_display_warmup_bars(name, params)
     assert result["prefix_rows_read"] == count
     assert all(start >= rows[-128 - count].open_time_ms for start, _ in history.reads)
     expected = reference(name, params, rows[-128 - count :])

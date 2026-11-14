@@ -313,9 +313,10 @@ def test_numeric_input_fingerprint_preserves_sub_wire_precision(dm, query):
 
 def test_numeric_process_rejects_unbounded_input_before_submission():
     from app.indicator.history_worker import run_builtin_history_numeric
+    from app.indicator.query_contracts import MAX_NUMERIC_SOURCE_SLOTS
     async def run():
         with pytest.raises(ValueError, match='bounded input'):
-            await run_builtin_history_numeric(OUTPUTS, {}, [None] * 251)
+            await run_builtin_history_numeric(OUTPUTS, {}, [None] * (MAX_NUMERIC_SOURCE_SLOTS + 1))
         with pytest.raises(ValueError, match='bounded input'):
             await run_builtin_history_numeric(OUTPUTS * 2, {}, [None])
     asyncio.run(run())

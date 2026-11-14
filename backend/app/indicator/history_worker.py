@@ -15,6 +15,7 @@ except ImportError:
 from app.core import config
 from app.core.bounded_executor import BoundedExecutor, ExecutorBusyError
 from app.core.process_lane import SerialProcessLane
+from app.indicator.query_contracts import MAX_NUMERIC_SOURCE_SLOTS
 
 
 def _dispatch(request):
@@ -149,7 +150,7 @@ async def run_builtin_history(name, meta, bars):
 
 
 async def run_builtin_history_numeric(outputs, meta, bars):
-    if not 1 <= len(outputs) <= 3 or not 1 <= len(bars) <= 250:
+    if not 1 <= len(outputs) <= 3 or not 1 <= len(bars) <= MAX_NUMERIC_SOURCE_SLOTS:
         raise ValueError('Numeric builtin request exceeds bounded input contract')
     return await _get_pool().run(('numeric', tuple(outputs), deepcopy(meta), tuple(bars)), len(bars))
 

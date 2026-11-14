@@ -20,6 +20,7 @@ from app.indicator.range_result_service import (
 )
 from app.indicator.series_revision import SeriesRevisionRegistry
 from app.indicator.types import IndicatorKey
+from app.indicator.warmup import indicator_warmup_bars
 
 
 class _CountingDataManager:
@@ -306,7 +307,7 @@ def test_repeated_89m_left_expansion_queries_new_prefix_not_growing_window():
             assert not isinstance(result[0], BaseException)
             previous_start_index = start_index
 
-        warmup = 26 * 5 + 9 * 3
+        warmup = indicator_warmup_bars("MACD", {"fast": 12, "slow": 26, "signal": 9})
         queried_rows = sum(
             (
                 int(call["end_ms"]) - int(call["start_ms"])

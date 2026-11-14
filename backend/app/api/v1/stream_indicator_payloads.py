@@ -77,6 +77,22 @@ def confirmed_indicator_seed_bars(bars: list[Any]) -> list[Any]:
     return [bar for bar in bars or [] if getattr(bar, "is_closed", True)]
 
 
+def builtin_indicator_seed_limit(
+    history_limit: int, name: str, params: dict[str, Any],
+) -> int:
+    """Closed bars that seed a realtime builtin instance.
+
+    ``historyLimit`` sizes the client's chart. The seed must also cover the
+    builtin's convergence warmup so live values continue the historical line
+    rather than depending on how many bars the chart had loaded
+    (ADR-INDICATOR-001).
+    """
+    return min(
+        max(int(history_limit), _indicator_warmup_bars(name, params) + 1),
+        max(int(config.SCRIPT_MAX_BARS), 1),
+    )
+
+
 def store_indicator_seed_cache(
     cache: dict[tuple[str, str, str, str, int], dict[str, Any]],
     key: tuple[str, str, str, str, int],
