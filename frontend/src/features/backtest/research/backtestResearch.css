@@ -1,5 +1,4 @@
 @layer features {
-.research-task-home,
 .research-status-page {
   min-height: 100vh;
   font-family: Inter, "Droid Sans Fallback", -apple-system, sans-serif;
@@ -9,27 +8,9 @@
     linear-gradient(180deg, var(--surface-1), var(--surface-0));
 }
 
-.research-task-home { padding: clamp(28px, 6vh, 72px) clamp(24px, 7vw, 112px); }
-.research-task-hero { display: flex; max-width: 1320px; margin: 0 auto 44px; align-items: end; justify-content: space-between; gap: 32px; }
-.research-task-hero > div { max-width: 760px; }
-.research-task-hero span,
 .research-status-page section > span { color: var(--accent-cyan); font: 600 11px/1 var(--font-mono); letter-spacing: .18em; text-transform: uppercase; }
-.research-task-hero h1 { margin: 12px 0 16px; max-width: 720px; font-size: clamp(26px, 3vw, 36px); font-weight: 600; line-height: 1.2; letter-spacing: -.01em; }
-.research-task-hero p { max-width: 680px; color: var(--text-secondary); font-size: 15px; line-height: 1.7; }
-.research-task-hero a,
+
 .research-status-page a { padding: 10px 14px; border: 1px solid var(--border-color); border-radius: var(--radius-md); color: var(--text-primary); text-decoration: none; white-space: nowrap; }
-.research-task-grid { display: grid; max-width: 1320px; margin: 0 auto; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; }
-.research-task-grid button { display: grid; min-height: 176px; padding: 22px; grid-column: span 2; grid-template-rows: auto auto 1fr auto; gap: 16px; border: 1px solid var(--border-color); border-radius: var(--radius-lg); color: var(--text-primary); background: color-mix(in srgb, var(--bg-secondary) 92%, transparent); text-align: left; cursor: pointer; transition: border-color .16s ease, transform .16s ease, background .16s ease; }
-.research-task-grid button:nth-child(4) { grid-column: 2 / span 2; }
-.research-task-grid button:hover,
-.research-task-grid button:focus-visible { border-color: color-mix(in srgb, var(--accent-cyan) 62%, var(--border-color)); background: color-mix(in srgb, var(--bg-tertiary) 92%, transparent); transform: translateY(-2px); outline: none; }
-.research-task-number { color: var(--accent-cyan); font: 500 11px/1 var(--font-mono); }
-.research-task-grid strong { font-size: 18px; letter-spacing: -.02em; }
-.research-task-grid p { color: var(--text-secondary); font-size: 12px; line-height: 1.65; }
-.research-task-grid small { color: var(--accent-cyan); font: 500 12px/1 var(--font-sans); }
-.research-task-grid small::after { content: ' →'; }
-[dir='rtl'] .research-task-grid small::after { content: ' ←'; }
-.research-task-foot { display: flex; max-width: 1320px; margin: 28px auto 0; gap: 24px; color: var(--text-muted); font: 12px/1.4 var(--font-sans); }
 
 .research-status-page { display: grid; place-items: center; padding: 32px; }
 .research-status-page section { display: grid; max-width: 620px; gap: 16px; text-align: center; }
@@ -39,7 +20,6 @@
 .research-status-page a { justify-self: center; }
 
 .research-top-bar { min-width: 0; flex-wrap: wrap; height: auto; min-height: 48px; padding-block: 8px; gap: 8px; }
-.research-task-home-button,
 .research-top-actions button,
 .research-top-actions a,
 .research-source-switch button { height: 30px; padding: 0 10px; border: 1px solid var(--border-color); border-radius: var(--radius-control); color: var(--text-secondary); background: var(--bg-tertiary); font-size: var(--font-size-xs); text-decoration: none; cursor: pointer; }
@@ -159,10 +139,7 @@
 }
 
 @media (max-width: 820px) {
-  .research-task-grid { grid-template-columns: 1fr; }
-  .research-task-grid button,
-  .research-task-grid button:nth-child(4) { grid-column: auto; }
-  .research-task-hero { align-items: start; flex-direction: column; }
+
   .research-left-rail { display: none; }
   .research-right-rail { width: 210px; min-width: 210px; }
   .research-source-switch button { padding: 0 6px; }
@@ -177,4 +154,85 @@
 .research-external-provider h3 { margin: 0 0 8px; font-size: 13px; }
 .research-external-provider p,
 .research-external-provider code { overflow-wrap: anywhere; }
+
+/* ── Strategy research modes (5g2): the left mode rail shared by 快速测试 and the research tools.
+   72 px so the longest single word of any language (about 62 px at 10 px) fits on a line. ── */
+.research-mode-layout {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+.research-mode-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.research-mode-body > .research-status-page { min-height: 100%; }
+.research-mode-rail {
+  display: flex;
+  flex: 0 0 72px;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 72px;
+  padding: 6px 0;
+  overflow-y: auto;
+  border-inline-end: 1px solid var(--border-subtle);
+  background: var(--surface-0);
+}
+.research-mode-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 68px;
+  min-height: 50px;
+  padding: 6px 2px 5px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+.research-mode-item > span {
+  display: -webkit-box;
+  max-width: 64px;
+  overflow: hidden;
+  font: 600 var(--font-size-2xs)/1.2 var(--font-sans);
+  text-align: center;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.research-mode-item:hover:enabled { color: var(--text-primary); background: var(--surface-2); }
+.research-mode-item:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: -2px;
+}
+.research-mode-item[aria-current="page"] {
+  color: var(--text-accent);
+  background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
+}
+.research-mode-item[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  inset-block: 8px;
+  inset-inline-start: 0;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent-blue);
+}
+.research-mode-item:disabled { cursor: progress; }
+.research-mode-rail-divider {
+  width: 32px;
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border-subtle);
+}
 }

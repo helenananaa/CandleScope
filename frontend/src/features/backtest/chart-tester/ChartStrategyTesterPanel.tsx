@@ -1,3 +1,4 @@
+import { strategyResearchModeHref } from "../research/backtestResearchModes.js";
 import { useNativeAvailability, resolveAvailableStrategyMode } from "../native/useNativeAvailability.js";
 import { resolveStrategyTesterMode } from "./chartStrategyMode.js";
 import { useControlCommands } from "../../app-control/useControlCommands.js";
@@ -908,7 +909,7 @@ export function CandleScopeStrategyTesterPanel({
               {onOpenAdvanced ? (
                 <button type="button" className="chart-strategy-advanced-link" onClick={onOpenAdvanced}>{t("chartTester.openAdvanced")}</button>
               ) : (
-                <a href="/backtest.html" className="chart-strategy-advanced-link">{t("chartTester.openAdvanced")}</a>
+                <a href={strategyResearchModeHref("precise")} className="chart-strategy-advanced-link">{t("chartTester.openAdvanced")}</a>
               )}
             </footer>
           </div>

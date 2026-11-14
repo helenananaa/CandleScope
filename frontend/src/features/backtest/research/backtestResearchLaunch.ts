@@ -3,6 +3,8 @@ import type { ChartStrategyAttachmentRecord } from "../../chart-workspace/chartW
 import type { ChartContextResolution } from "../backtestApi.js";
 import type { BacktestResearchLaunchContextInput } from "../backtestTypes.js";
 import type { ChartStrategyResultBundle } from "../chart-tester/chartStrategyResultCache.js";
+import { researchModeForTask, strategyResearchModeHref } from "./backtestResearchModes.js";
+import type { BacktestResearchTask } from "./backtestResearchTypes.js";
 
 export function buildBacktestResearchLaunchContext(input: {
   workspaceId: string;
@@ -65,9 +67,10 @@ export function buildBacktestResearchLaunchContext(input: {
   };
 }
 
-export function backtestResearchContextHref(contextId: string): string {
+/** The strategy research page in the research tool for `task` (精确成交验证 when absent), opened on a launch context. */
+export function backtestResearchContextHref(contextId: string, task?: BacktestResearchTask | null): string {
   if (!/^brc_[A-Za-z0-9_-]{8,128}$/.test(contextId)) {
     throw new Error("Invalid BacktestResearchLaunchContext ID");
   }
-  return `/backtest.html?context=${encodeURIComponent(contextId)}`;
+  return strategyResearchModeHref(task ? researchModeForTask(task) : "precise", { context: contextId });
 }
