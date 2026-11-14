@@ -1,4 +1,4 @@
-"""Cold comparison costs, hard work limits and actual owner cancellation."""
+"""Cold backfill costs, hard work limits and actual owner cancellation."""
 import asyncio
 import threading
 
