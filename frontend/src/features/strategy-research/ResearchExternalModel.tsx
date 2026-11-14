@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { Button, Disclosure, Field, InlineAlert, Input, Select, Textarea } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import type { StrategyRunSettings } from "../../shared/strategyRunSettings.js";
@@ -155,69 +156,72 @@ export function ResearchExternalModel({ manager, dataset, interval, settings, sa
   const connection = matching.find(row => row.connection_id === connectionId) ?? matching[0];
   const provider = revision?.external_provider;
   return <section className="research-external-provider" data-testid="strategy-research-external-model">
-    <p>{t("research.external.boundary")}</p>
-    <button type="button" disabled={busy} onClick={() => register(null)}>{t("research.external.registerExample")}</button>
-    <details>
-      <summary>{t("research.external.manifest")}</summary>
-      <label className="research-field">{t("research.strategy.name")}<input value={name} maxLength={128} disabled={busy} onChange={event => setName(event.target.value)} /></label>
-      <label className="research-field">{t("research.external.manifest")}<textarea rows={5} value={manifest} maxLength={16000} disabled={busy} onChange={event => setManifest(event.target.value)} /></label>
-      <button type="button" disabled={busy || !name.trim() || !manifest.trim()} onClick={() => register({ name: name.trim(), manifestText: manifest })}>
-        {t("research.external.registerManifest")}
-      </button>
-    </details>
+    <p className="research-panel-copy">{t("research.external.boundary")}</p>
+    <Button size="sm" disabled={busy} onClick={() => register(null)}>{t("research.external.registerExample")}</Button>
+    <Disclosure summary={t("research.external.manifest")}>
+      <div className="research-form">
+        <Field label={t("research.strategy.name")}><Input size="sm" value={name} maxLength={128} disabled={busy} onChange={event => setName(event.target.value)} /></Field>
+        <Field label={t("research.external.manifest")}><Textarea className="research-json-editor" rows={5} value={manifest} maxLength={16000} disabled={busy} onChange={event => setManifest(event.target.value)} /></Field>
+        <Button size="sm" disabled={busy || !name.trim() || !manifest.trim()} onClick={() => register({ name: name.trim(), manifestText: manifest })}>
+          {t("research.external.registerManifest")}
+        </Button>
+      </div>
+    </Disclosure>
     {revision && <>
-      <label className="research-field">{t("research.external.model")}
-        <select value={revision.revision_id} disabled={busy} onChange={event => selectRevision(event.target.value)}>
+      <Field label={t("research.external.model")}>
+        <Select size="sm" value={revision.revision_id} disabled={busy} onChange={event => selectRevision(event.target.value)}>
           {revisions.map(row => <option key={row.revision_id} value={row.revision_id}>{row.label} · {row.external_provider?.provider_revision}</option>)}
-        </select>
-      </label>
-      <p>{t("research.external.artifact")} · <code>{provider?.artifact_sha256}</code></p>
-      <p>{t("research.external.dataset")} · {dataset.name} · {interval}</p>
-      {prepared && <p>{t("research.external.snapshot", { epoch: dataset.data_epoch })}</p>}
-      <label className="research-field">{t("research.external.outputMode")}
-        <select value={mode} disabled={busy} onChange={event => { setDraft(null); changeSelection({ outputMode: event.target.value }); }}>
+        </Select>
+      </Field>
+      <dl className="research-facts">
+        <div><dt>{t("research.external.artifact")}</dt><dd title={provider?.artifact_sha256}><code>{provider?.artifact_sha256}</code></dd></div>
+        <div><dt>{t("research.external.dataset")}</dt><dd>{dataset.name} · {interval}</dd></div>
+      </dl>
+      {prepared && <p className="research-panel-copy">{t("research.external.snapshot", { epoch: dataset.data_epoch })}</p>}
+      <Field label={t("research.external.outputMode")}>
+        <Select size="sm" value={mode} disabled={busy} onChange={event => { setDraft(null); changeSelection({ outputMode: event.target.value }); }}>
           {revision.output_modes.map(value => <option key={value}>{value}</option>)}
-        </select>
-      </label>
-      <label className="research-field">{t("ux.parameters")}
-        <textarea value={parameters} maxLength={16000} rows={3} disabled={busy} onChange={event => changeSelection({ parameters: event.target.value })} />
-      </label>
+        </Select>
+      </Field>
+      <Field label={t("ux.parameters")}>
+        <Textarea className="research-json-editor" value={parameters} maxLength={16000} rows={3} disabled={busy} onChange={event => changeSelection({ parameters: event.target.value })} />
+      </Field>
       <div className="research-button-row">
-        <button type="button" disabled={busy || !prepared} onClick={() => prepared && void perform(async signal => {
+        <Button size="sm" disabled={busy || !prepared} onClick={() => prepared && void perform(async signal => {
           const created = await manager.createExternalModelConnection(prepared, signal);
           signal.throwIfAborted();
           setConnections(current => [created, ...current.filter(row => row.connection_id !== created.connection_id)]);
           changeSelection({ connectionId: created.connection_id });
           setRefresh(value => value + 1);
-        })}>{t("research.external.create")}</button>
-        <button type="button" disabled={busy || !connection} onClick={() => connection && void perform(async signal => {
+        })}>{t("research.external.create")}</Button>
+        <Button size="sm" variant="danger" disabled={busy || !connection} onClick={() => connection && void perform(async signal => {
           await manager.revokeExternalModelConnection(connection.connection_id, signal);
           signal.throwIfAborted();
           setConnections(current => current.filter(row => row.connection_id !== connection.connection_id));
           setRefresh(value => value + 1);
-        })}>{t("research.external.revoke")}</button>
+        })}>{t("research.external.revoke")}</Button>
       </div>
-      {matching.length > 1 && <label className="research-field">{t("research.external.connection")}
-        <select value={connection?.connection_id ?? ""} disabled={busy} onChange={event => changeSelection({ connectionId: event.target.value })}>
+      {matching.length > 1 && <Field label={t("research.external.connection")}>
+        <Select size="sm" value={connection?.connection_id ?? ""} disabled={busy} onChange={event => changeSelection({ connectionId: event.target.value })}>
           {matching.map(row => <option key={row.connection_id}>{row.connection_id}</option>)}
-        </select>
-      </label>}
+        </Select>
+      </Field>}
       {connection ? <>
-        <p role="status">{t(connection.ready ? "research.external.ready" : "research.external.waiting")}</p>
-        <label className="research-field">{t("research.external.file")}<input readOnly value={connection.connection_file} /></label>
-        {connection.example_command && <label className="research-field">{t("research.external.command")}
-          <textarea readOnly rows={3} value={connection.example_command} />
-        </label>}
-        <p>{t("research.external.smokeHelp")}</p>
-      </> : <p>{t("research.external.noConnection")}</p>}
-      <button type="button" className="research-primary" disabled={busy || runBusy || !prepared || !connection?.ready}
+        <p className="research-panel-copy" role="status">{t(connection.ready ? "research.external.ready" : "research.external.waiting")}</p>
+        <Field label={t("research.external.file")}><Input size="sm" readOnly value={connection.connection_file} /></Field>
+        {connection.example_command && <Field label={t("research.external.command")}>
+          <Textarea className="research-json-editor" readOnly rows={3} value={connection.example_command} />
+        </Field>}
+        <p className="research-empty">{t("research.external.smokeHelp")}</p>
+      </> : <p className="research-empty">{t("research.external.noConnection")}</p>}
+      <Button size="sm" variant="primary" disabled={busy || runBusy || !prepared || !connection?.ready}
         onClick={() => prepared && connection && void perform(async signal => {
           const parsed = parseResearchObjectJson(parameters, t("ux.parameters"));
           const run = await manager.startExternalModel(prepared, connection, parsed, signal);
           signal.throwIfAborted();
           onRunCreated(run.run_id);
-        })}>{t("research.external.checkAndRun")}</button>
+        })}>{t("research.external.checkAndRun")}</Button>
     </>}
-    {(error || bindingError) && <p role="alert">{error ?? bindingError}</p>}
+    {(error || bindingError) && <InlineAlert tone="danger">{error ?? bindingError}</InlineAlert>}
   </section>;
 }

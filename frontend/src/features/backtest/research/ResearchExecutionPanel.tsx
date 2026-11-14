@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { Badge, Button, Disclosure, Textarea } from "../../../components/ui/index.js";
+import { researchStateTone } from "./researchStateTone.js";
 import { t } from "../../../i18n/index.js";
 import type { BacktestResearchRuntime } from "./backtestResearchTypes.js";
 import ResearchPanelFrame from "./ResearchPanelFrame.js";
@@ -22,15 +24,15 @@ export default function ResearchExecutionPanel({ runtime }: { runtime: BacktestR
       <p className="research-panel-copy">{copy}</p>
       <dl className="research-facts">
         <div><dt>{t("research.execution.preset")}</dt><dd>{launchContext?.quick_preset_id ?? "—"}</dd></div>
-        <div><dt>{t("research.execution.state")}</dt><dd>{activeRun?.state ?? "DRAFT"}</dd></div>
+        <div><dt>{t("research.execution.state")}</dt><dd><Badge tone={researchStateTone(activeRun?.state ?? "DRAFT")}>{activeRun?.state ?? "DRAFT"}</Badge></dd></div>
         <div><dt>{t("research.execution.configHash")}</dt><dd title={activeRun?.config_hash}>{activeRun?.config_hash?.slice(0, 16) ?? "—"}</dd></div>
       </dl>
       <ResearchChartBookInputs runtime={runtime} onLoadingChange={setImporting} />
       {advancedEnabled && (
-        <details open className="research-advanced-details">
-          <summary>{t("research.execution.draft")}</summary>
+        <Disclosure defaultOpen summary={t("research.execution.draft")}>
           <p className="research-panel-copy">{t("research.execution.authority")}</p>
-          <textarea
+          <Textarea
+            className="research-json-editor"
             disabled={busy || importing}
             aria-label={t("research.execution.configAria")}
             rows={18}
@@ -39,10 +41,10 @@ export default function ResearchExecutionPanel({ runtime }: { runtime: BacktestR
             onChange={(event) => runtime.actions.setRunDraftText(event.target.value)}
           />
           <div className="research-button-row">
-            <button type="button" disabled={busy} onClick={runtime.actions.resetRunDraft}>{t("research.execution.reset")}</button>
-            <button type="button" disabled={busy || importing || !runtime.view.snapshot || !runtime.view.selectedRevisionId} onClick={() => void runtime.actions.createRun()}>{t("research.execution.create")}</button>
+            <Button size="sm" variant="ghost" disabled={busy} onClick={runtime.actions.resetRunDraft}>{t("research.execution.reset")}</Button>
+            <Button size="sm" variant="primary" disabled={busy || importing || !runtime.view.snapshot || !runtime.view.selectedRevisionId} onClick={() => void runtime.actions.createRun()}>{t("research.execution.create")}</Button>
           </div>
-        </details>
+        </Disclosure>
       )}
     </ResearchPanelFrame>
   );

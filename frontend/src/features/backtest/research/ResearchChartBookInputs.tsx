@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { Field, Select } from "../../../components/ui/index.js";
 import { t } from "../../../i18n/index.js";
 import { parseResearchObjectJson, researchObjectJson } from "./backtestResearchAdvancedModel.js";
 import { chartBookMode, chartBookModes, parseChartBookFile, selectChartExecutionMode } from "./chartBookInputs.js";
@@ -21,21 +22,20 @@ export default function ResearchChartBookInputs({ runtime, onLoadingChange }: {
   try { draft = parseResearchObjectJson(view.runDraftText, "Run draft"); } catch { draft = null; }
   const mode = String(draft?.fidelity_mode ?? "BAR_APPROX");
   const events = (draft?.execution_data as { events?: unknown[] } | null)?.events;
-  return <fieldset className="research-advanced-details research-chart-book-inputs" disabled={view.busy || loading || !draft}>
-    <label className="research-field">
-      <span>{t("native.external.fidelity")}</span>
-      <select value={mode} onChange={(event) => {
+  return <fieldset className="research-chart-book-inputs" disabled={view.busy || loading || !draft}>
+    <Field label={t("native.external.fidelity")}>
+      <Select size="sm" value={mode} onChange={(event) => {
         if (!draft) return;
         setError(null);
         runtime.actions.setRunDraftText(researchObjectJson(selectChartExecutionMode(draft, event.target.value)));
       }}>
         {["BAR_APPROX", "AGG_TRADE_EXECUTION", ...chartBookModes].map((item) => <option key={item} value={item}
           disabled={chartBookMode(item) && !view.capabilities?.fidelity_modes.includes(item)}>{item}</option>)}
-      </select>
-    </label>
+      </Select>
+    </Field>
     {chartBookMode(mode) && <>
       <p className="research-panel-copy">{t("research.book.help")}</p>
-      <label className="research-field"><span>{t("native.external.executionData")}</span>
+      <label className="research-file-field"><span>{t("native.external.executionData")}</span>
         <input type="file" accept=".json,application/json" onChange={(event) => {
           const input = event.currentTarget;
           const file = input.files?.[0];

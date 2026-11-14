@@ -24,8 +24,10 @@ test("advanced results format ratios and amounts and collapse raw diagnostics", 
     assert.match(html, />100%</);
     assert.match(html, />59.15</);
     assert.doesNotMatch(html, /59.147449520918/);
-    assert.match(html, /<details><summary>/);
-    assert.doesNotMatch(html, /<details open/);
+    // Raw diagnostics sit in a closed kit disclosure under 技术详情.
+    assert.match(html, /<details class="ui-disclosure"><summary class="ui-disclosure-summary">/);
+    assert.doesNotMatch(html, /<details[^>]* open/);
+    assert.match(html, /role="tablist"/);
     assert.doesNotMatch(renderMetrics(0, "0"), />0%</);
     assert.doesNotMatch(renderMetrics(6, null), />0%</);
   } finally { setLocale(previous); }
