@@ -5423,3 +5423,62 @@ def test_deferred_chunk_cannot_fence_metadata_needed_by_its_active_sibling() -> 
             await asyncio.gather(task, return_exceptions=True)
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize('max_concurrency', [1, 2])
+def test_deferred_other_series_cannot_fence_the_occupied_global_dispatch_slot(max_concurrency) -> None:
+    """Quota protection cannot prevent the only running business job finishing."""
+    from app.exchanges.public_admission import (
+        PublicDemand, TrafficClass, current_demand, get_public_admission, public_demand,
+    )
+    from app.exchanges.rate_limits import HistoricalRequest, RateLimitRule
+
+    async def run() -> None:
+        quota = RateLimitRule('cross-series-dispatch', 'cross-series-dispatch', 10, 60)
+        metadata_finished = asyncio.Event()
+        calls = []
+
+        class Engine:
+            async def run(self, **kwargs):
+                interval = kwargs['intervals'][0]
+                calls.append(interval)
+                if len(calls) == 1:
+                    raise _quota_deferral(0.08, bucket_key=quota.bucket_key)
+                if interval == '89m':
+                    metadata = PublicDemand(TrafficClass.BACKGROUND, purpose='market_metadata')
+                    metadata.inherit(current_demand())
+                    with public_demand(metadata):
+                        permit = await get_public_admission().acquire([quota],
+                            HistoricalRequest('binance', 'spot', '/markets', 'BTCUSDT'))
+                    permit.finish(status_code=200)
+                    metadata_finished.set()
+                return _RepairReport(status='completed')
+
+        dm = _DataManager()
+        coord = BackfillCoordinator(storage=_Storage(), bars_backfilled=dm.on_bars_backfilled,
+            emit_event=dm.event_bus.emit, engine=Engine(), loop=asyncio.get_running_loop(),
+            chunk_bars=1, max_concurrency=max_concurrency)
+        first = _request(0, 0, request_id='deferred-97m')
+        first.interval, first.reason, first.priority = '97m', 'visible_seed_gap', 25
+        second = _request(0, 0, request_id='active-89m')
+        second.interval, second.reason, second.priority = '89m', 'initial_history', 10
+        tasks = [asyncio.create_task(coord.request_and_wait(first))]
+        try:
+            await _wait_until(lambda: coord.snapshot()['deferred_chunks'] == 1)
+            tasks.append(asyncio.create_task(coord.request_and_wait(second)))
+            try:
+                await asyncio.wait_for(metadata_finished.wait(), 1)
+            except TimeoutError as error:
+                raise AssertionError({'calls': calls, 'business': coord.snapshot(),
+                    'physical': get_public_admission().snapshot()}) from error
+            outcomes = await asyncio.wait_for(asyncio.gather(*tasks), 1)
+            assert all(outcome.status == 'completed' for outcome in outcomes)
+            assert calls == ['97m', '89m', '97m']
+            assert get_public_admission().snapshot()['protected'] == 0
+        finally:
+            for task in tasks:
+                task.cancel()
+            await coord.shutdown()
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    asyncio.run(run())

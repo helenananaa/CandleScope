@@ -76,7 +76,7 @@ class _SeriesState:
 
 @dataclass(frozen=True, slots=True)
 class _DeferredSeriesLane:
-    """A deferred chunk protects quota only while its series can dispatch.
+    """A deferred chunk protects quota only while it can actually dispatch.
 
     A sibling occupying this lane may need metadata on the same endpoint.
     Retaining quota priority over that dependency would prevent the sibling
@@ -86,11 +86,12 @@ class _DeferredSeriesLane:
 
     series: dict[tuple[str, ...], _SeriesState]
     key: tuple[str, ...]
+    capacity_available: Callable[[], bool]
     keys: frozenset[str] = frozenset()
 
     def available(self) -> bool:
         state = self.series.get(self.key)
-        return state is None or state.active is None
+        return (state is None or state.active is None) and self.capacity_available()
 
 
 @dataclass(slots=True)
@@ -1300,6 +1301,16 @@ class BackfillScheduler:
         active_chunk = self._chunks.get(active_chunk_id or "")
         return active_chunk is not None and self._is_maintenance(active_chunk.request)
 
+    def _can_protect_deferred_quota(self, request: RepairRequest) -> bool:
+        # The business owner already chose the running jobs. A queued chunk
+        # cannot fence their physical dependencies while every slot it could
+        # use is occupied, including by a different series.
+        return (not self._shutdown
+            and (len(self._tasks) < self._max_concurrency
+                 or self._can_use_foreground_reserve(request))
+            and not self._shared_gap_input_active(request)
+            and (not self._is_background(request) or self._running_background_count() < 1))
+
     def _running_background_count(self) -> int:
         return len(self._active_background_chunks)
 
@@ -1465,7 +1476,8 @@ class BackfillScheduler:
                 if chunk.public_demand is not None:
                     get_public_admission().protect(
                         chunk.public_demand, exc.bucket_key,
-                        resource=_DeferredSeriesLane(self._series, chunk.request.series_key),
+                        resource=_DeferredSeriesLane(self._series, chunk.request.series_key,
+                            lambda: self._can_protect_deferred_quota(chunk.request)),
                     )
                 await self._defer_chunk(chunk, exc)
                 return
