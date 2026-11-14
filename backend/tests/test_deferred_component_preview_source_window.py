@@ -241,3 +241,39 @@ def test_custom_source_validators_keep_eager_contract(database, monkeypatch, cus
         assert manager.memory_budget.snapshot()['reserved_bytes'] == 0
 
     asyncio.run(run())
+
+
+def test_source_only_quiet_tail_is_published_by_original_deadline(database, monkeypatch):
+    clock = [6 * W + 1000]
+    monkeypatch.setattr('time.time', lambda: clock[0] / 1000)
+
+    async def run():
+        for index in range(6):
+            record(index)
+        manager = manager_for('7m')
+        agg = manager.bar_aggregator
+        agg.publisher.set_update_requirement(lambda state: False)
+        agg._previews.start()
+        observed = []
+        async def receive(event):
+            observed.append(event.bar.quote_volume)
+        manager.event_bus.subscribe(receive)
+        try:
+            for update in range(2):
+                ref = record(6, quote=2.0 + update, closed=False, sequence=clock[0] + update)['ref']
+                await feed(manager, '7m', replace(incoming(6, quote=2.0 + update, closed=False, ref=ref),
+                                                source=BarInputSource.REALTIME))
+            state = agg.get_pipeline('7m').bar_state.get_active('binance', 'futures', 'BTCUSDT', 0)
+            assert state._preview_dirty and agg._previews.timer is not None
+            clock[0] += 1000
+            # No explicit drain, wake, new input or alternate timer.
+            async with asyncio.timeout(5):
+                while state.preview_published_version < state.preview_input_version:
+                    await asyncio.sleep(.01)
+            assert not state._preview_dirty and observed == [14.0, 15.0]
+            assert agg._previews.metrics['published'] == 1
+        finally:
+            await manager.shutdown()
+        assert manager.memory_budget.snapshot()['reserved_bytes'] == 0
+
+    asyncio.run(run())
