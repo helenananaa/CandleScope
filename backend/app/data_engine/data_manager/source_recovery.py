@@ -106,29 +106,31 @@ class SourceRecoveryReader:
             if asyncio.current_task() in runtime.tasks
             else runtime._task()
         )
+        # The caller already reserves the held graph plus 16 KiB for this
+        # metadata-only read. Decode/summary staging is needed only on refold.
         async with lifetime:
-            with budget.reserve("history-query", SOURCE_SUMMARY_BYTES * 2 + 16384):
-                try:
+            try:
+                if (previous is not None and not force and previous.binding is epoch
+                        and previous.capabilities == capability):
+                    preview = getattr(storage, 'validate_source_preview', None)
+                    if callable(preview) and not incoming.is_closed:
+                        valid, watermark = await run_storage(preview, previous.version,
+                            previous.observation_watermark, target_interval=target_interval)
+                    else:
+                        valid = await run_storage(validate, previous.version, target_interval=target_interval)
+                        watermark = None
+                    if valid:
+                        if not bound():
+                            raise BlockRevisionChanged('source recovery binding changed during preview validation')
+                        yield None, owner_bound, watermark
+                        return
+                with budget.reserve("history-query", SOURCE_SUMMARY_BYTES * 2 + 16384):
                     # The worker receives a private scalar input/reference,
                     # never the producer's mutable extra mapping.
                     incoming = replace(
                         incoming,
                         extra={"source_ref": dict(incoming.extra["source_ref"])},
                     )
-                    if (previous is not None and not force and previous.binding is epoch
-                            and previous.capabilities == capability):
-                        preview = getattr(storage, 'validate_source_preview', None)
-                        if callable(preview) and not incoming.is_closed:
-                            valid, watermark = await run_storage(preview, previous.version,
-                                previous.observation_watermark, target_interval=target_interval)
-                        else:
-                            valid = await run_storage(validate, previous.version, target_interval=target_interval)
-                            watermark = None
-                        if valid:
-                            if not bound():
-                                raise BlockRevisionChanged('source recovery binding changed during preview validation')
-                            yield None, owner_bound, watermark
-                            return
                     try:
                         version = await run_storage(
                             storage.capture_source_window,
@@ -201,7 +203,7 @@ class SourceRecoveryReader:
                             "bound source summary exceeds staging allowance"
                         )
                     yield replace(summary, estimated_bytes=size), owner_bound, None
-                finally:
-                    # run_storage retains ownership until a running thread has
-                    # physically drained even when the awaiting task is cancelled.
-                    cancel.set()
+            finally:
+                # run_storage retains ownership until a running thread has
+                # physically drained even when the awaiting task is cancelled.
+                cancel.set()

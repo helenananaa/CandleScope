@@ -715,13 +715,14 @@ def source_window_current(conn, version):
         version.series, version.start_ms, version.through_ms, version.source_width_ms
     )
     head = current_revision(conn)
-    if head < version.acquisition_revision or _source_window_counts(
-        conn,
-        version.series,
-        version.start_ms,
-        version.through_ms,
-        version.source_width_ms,
-    ) != (version.closed_count, version.revision_sum, version.permission_floor):
+    selected = _source_window_counts(
+        conn, version.series, version.start_ms, version.through_ms, version.source_width_ms)
+    # Permission is an original lower bound, not selected content identity.
+    # A stronger same-value receipt cannot invalidate old canonical content or
+    # lend its newer permission to this older proof.
+    if (head < version.acquisition_revision
+            or selected[:2] != (version.closed_count, version.revision_sum)
+            or selected[2] < version.permission_floor):
         return False
     return _source_window_canonical_current(conn, version)
 

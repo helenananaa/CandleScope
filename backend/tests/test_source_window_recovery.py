@@ -1747,3 +1747,79 @@ def test_source_recovery_cached_work_weight_covers_actual_held_graph(database, m
 
     monkeypatch.setattr('time.time', lambda: (2 * W + 1000) / 1000)
     asyncio.run(run())
+
+
+def test_forming_metadata_admission_uses_existing_work_reservation_without_fold_staging(database, monkeypatch):
+    import asyncio
+    from app.data_engine.memory_budget import MemoryBudgetExceeded
+
+    async def run():
+        record(0)
+        record(1)
+        manager = manager_for('5m')
+        limit = manager.memory_budget.total_bytes
+        try:
+            await feed(manager, '5m', incoming(0))
+            state = manager.bar_aggregator.get_pipeline('5m').bar_state.get_state('binance','futures','BTCUSDT',0)
+            used = manager.memory_budget.snapshot()['estimated_bytes']
+            manager.memory_budget.total_bytes = used + 64 * 1024
+            ref = record(2, closed=False, sequence=9 * W)['ref']
+            await feed(manager, '5m', incoming(2, closed=False, ref=ref))
+            assert state.volume == 3 and state.tick_count == 3
+            before = state._source_recovery, state.preview_input_version, state.quote_volume
+            ref = record(0, quote=1.0, sequence=10 * W)['ref']
+            with pytest.raises(MemoryBudgetExceeded):
+                await feed(manager, '5m', incoming(0, quote=1.0, ref=ref))
+            assert (state._source_recovery, state.preview_input_version, state.quote_volume) == before
+            assert manager.memory_budget.snapshot()['reserved_bytes'] == 0
+        finally:
+            manager.memory_budget.total_bytes = limit
+            await manager.shutdown()
+
+    monkeypatch.setattr('time.time', lambda: (2 * W + 1000) / 1000)
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('deleted', [False, True])
+def test_same_content_permission_upgrade_keeps_old_content_proof_conservative(database, deleted):
+    import asyncio
+    from app.data_engine.storage.revisions import Acquisition, acquisition_scope, current_revision
+
+    async def run():
+        record(0)
+        record(1)
+        manager = manager_for('2m')
+        try:
+            await feed(manager, '2m', incoming(0))
+            state = manager.bar_aggregator.get_pipeline('2m').bar_state.get_state('binance','futures','BTCUSDT',0)
+            version = state._source_recovery.version
+            assert version.permission_floor == 0
+            before = klines_repo.query_klines('BTCUSDT', '2m', market_type='futures')
+            assert len(before) == 1
+            watermark = kline_sources.rest_watermark()
+            if deleted:
+                klines_repo.delete_klines('BTCUSDT', '2m', market_type='futures')
+            with klines_repo._connect() as conn:
+                head = current_revision(conn)
+            with acquisition_scope(Acquisition(head, delete_revision=head)):
+                for index in range(2):
+                    record(index, source=DataSource.HTTP_BACKFILL, watermark=watermark, sequence=9 * W)
+            after = kline_sources.capture_source_window(KEY, 0, 2 * W, W)
+            assert after.permission_floor == head and after.revision_sum == version.revision_sum
+            with klines_repo._connect() as conn:
+                assert kline_sources.source_window_current(conn, version)
+                assert kline_sources.source_window_allows_target(conn, version, '2m') == (not deleted)
+            rows = klines_repo.query_klines('BTCUSDT', '2m', market_type='futures')
+            assert bool(rows) == (not deleted)
+            if not deleted:
+                assert rows == before
+            assert version.permission_floor == 0
+            # A newer proof cannot borrow a permission later reduced to unknown.
+            with klines_repo._connect() as conn:
+                conn.execute('UPDATE kline_source_heads SET permission_floor=0')
+                conn.commit()
+                assert not kline_sources.source_window_current(conn, after)
+        finally:
+            await manager.shutdown()
+
+    asyncio.run(run())
