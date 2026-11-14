@@ -2,6 +2,7 @@ import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import { Icon } from "../../../components/icons/Icon.js";
+import { IconButton } from "../../../components/ui/index.js";
 import { strategyDockHeight } from "./strategyDockModel.js";
 import { StrategyDockSlotsProvider, type StrategyDockSlotName, type StrategyDockSlotTargets } from "./StrategyDockSlots.js";
 
@@ -85,18 +86,15 @@ export default function StrategyDock({ scope, identity, onClose, children }: {
       <div className="strategy-dock-tabs" ref={tabsRef} />
       <div className="strategy-dock-actions" ref={actionsRef} />
       <div className="strategy-dock-window">
-        <button type="button" className="strategy-dock-icon" aria-pressed={maximized}
+        <IconButton size="sm" pressed={maximized}
           onClick={() => { setPreferences((value) => ({ ...value, collapsed: false })); setMaximized(!maximized); }}
-          aria-label={t(maximized ? "strategyDock.restore" : "strategyDock.maximize")} title={t(maximized ? "strategyDock.restore" : "strategyDock.maximize")}>
-          <Icon name={maximized ? "minimize" : "maximize"} size={14} />
-        </button>
-        <button type="button" className="strategy-dock-icon" aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)}
-          aria-label={t(collapsed ? "pane.expand" : "pane.collapse")} title={t(collapsed ? "pane.expand" : "pane.collapse")}>
-          <Icon name={collapsed ? "chevron-up" : "chevron-down"} size={14} />
-        </button>
-        {onClose && <button type="button" className="strategy-dock-icon" onClick={onClose} aria-label={t("chartTester.close")} title={t("chartTester.close")}>
-          <Icon name="close" size={14} />
-        </button>}
+          label={t(maximized ? "strategyDock.restore" : "strategyDock.maximize")}
+          icon={<Icon name={maximized ? "minimize" : "maximize"} size={14} />} />
+        <IconButton size="sm" aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)}
+          label={t(collapsed ? "pane.expand" : "pane.collapse")}
+          icon={<Icon name={collapsed ? "chevron-up" : "chevron-down"} size={14} />} />
+        {onClose && <IconButton size="sm" onClick={onClose} label={t("chartTester.close")}
+          icon={<Icon name="close" size={14} />} />}
       </div>
     </header>
     <div className="strategy-dock-notice" ref={noticeRef} hidden={collapsed} />

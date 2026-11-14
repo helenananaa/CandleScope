@@ -1,4 +1,5 @@
 import React from "react";
+import { Button } from "../../../components/ui/index.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import { continuousFillTimeMs, type readContinuousAccountRows } from "./continuousAccountRows.js";
@@ -32,7 +33,7 @@ export default function ContinuousAccountView({ rows, view, onLocateTrade }: {
     <table><thead><tr>{(["continuous.time", "continuous.side", "continuous.quantity", "continuous.price"] as const).map((key) => <th key={key}>{t(key)}</th>)}</tr></thead>
       <tbody>{fills.map((value, index) => { const at = continuousFillTimeMs(value);
         return <tr key={index}><td>{at !== null && at <= view.identity.event_time_ms && onLocateTrade && !view.stale
-          ? <button type="button" className="strategy-dock-button" onClick={() => onLocateTrade(at)}>{time(at)}</button>
+          ? <Button size="sm" variant="ghost" onClick={() => onLocateTrade(at)}>{time(at)}</Button>
           : time(value.event_time_ms)}</td><td>{text(value.side)}</td><td>{text(value.qty)}</td><td>{text(value.price)}</td></tr>; })}</tbody></table>
   </section>;
 }

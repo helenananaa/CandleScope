@@ -5,6 +5,7 @@ import { useControlCommands } from "../../app-control/useControlCommands.js";
 import { command } from "../../app-control/commandRegistry.js";
 import { bool, choice, empty, number as numeric, object } from "../../app-control/commandSchema.js";
 import { publishControlFile } from "../../app-control/controlFiles.js";
+import { InlineAlert } from "../../../components/ui/index.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import { nativeExportUrl, type NativeRun } from "./nativeBacktestApi.js";
@@ -73,7 +74,7 @@ export function NativeStrategyReport({ run, onLocate, onReviewTrade, active = tr
     command("replayView", "Switch between analysis and native incremental replay.", object({ enabled: bool }), ({ enabled }) => setReplayView(enabled), { available: () => active && canReplay }),
   ] }));
   return <>
-    {stale && <div className="strategy-notice" data-tone="warning" role="status"><strong>{t("chartTester.result.stale")}</strong> · {t("chartTester.result.staleGuidanceTitle")}</div>}
+    {stale && <InlineAlert tone="warning" title={t("chartTester.result.stale")}>{t("chartTester.result.staleGuidanceTitle")}</InlineAlert>}
     {canReplay && <div className="native-report-view-switch"><button aria-pressed={replayView} onClick={() => setReplayView(!replayView)}>{t(replayView ? "report.analysis" : "report.replay")}</button>{replayView && <span>{t(run.execution_mode === "CANDLESCOPE" ? "report.replay" : "native.replay.title")}</span>}</div>}
     <NativeResultBody key={`${replayView ? replay?.replay_id ?? "replay" : "analysis"}:${run.run_id}`} run={replayView ? { ...run, result: replay?.result ?? null } : run} onLocate={stale ? undefined : onLocate} view={view} onReviewTrade={stale ? undefined : onReviewTrade} active={active && !stale}
       controls={replayView && canReplay ? <NativeReplayControls runId={run.run_id} replay={replay} onChange={setReplay} hostAccount={run.execution_mode === "CANDLESCOPE"} /> : null}
