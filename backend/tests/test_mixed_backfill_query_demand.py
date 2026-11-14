@@ -99,10 +99,13 @@ def test_default_facade_scheduler_ledger_and_canonical_adoption_complete_cold_ta
             assert ready.complete and ready.bars[0].volume == 10007
             observed = {task.interval for task in upstream.calls} if source == 'fetch_result' else {
                 call.descriptor.interval for call in upstream.calls}
-            assert len(upstream.calls) < 11 and '1h' in observed
+            assert len(upstream.calls) == (2 if source == 'fetch_result' else 4)
+            assert observed == ({'15m', '1m'} if source == 'fetch_result'
+                                else {'1d', '1h', '1m'})
             if source == 'native_pages':
                 assert receipt_modes == [('receipt',True)]
-            assert storage.count_bars("BTCUSDT", "1m", 0, 10007 * MINUTE - 1, market_type="futures") == 2
+            assert storage.count_bars("BTCUSDT", "1m", 0, 10007 * MINUTE - 1,
+                                      market_type="futures") == (2 if source == 'fetch_result' else 47)
             status = await asyncio.to_thread(ledger.get_status, outcome.request)
             assert status["status"] == "filled" and status["missing_count"] == 0
         finally:
