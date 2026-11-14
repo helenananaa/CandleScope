@@ -234,14 +234,17 @@ test("paper trading dock owns a complete readable surface in both app themes", (
   const marketRail = source("src/features/replay/components/ReplayRightMarketRail.tsx");
   const styles = readAppStyles();
   assert.match(rail, /className="replay-paper-trading"/);
-  assert.match(rail, /role="tablist"/);
-  assert.match(rail, /role="tabpanel"/);
-  assert.match(rail, /handleRailTabKeyDown/);
+  // The account records and the order type are kit tabs with their panels.
+  assert.match(rail, /<Tabs\s+id=\{recordTabsId\}/);
+  assert.match(rail, /<TabPanel tabsId=\{recordTabsId\}/);
+  assert.match(rail, /<Tabs\s+id=\{orderTypeTabsId\}/);
+  assert.match(rail, /<SegmentedControl[\s\S]*replay\.paper\.openClose/);
   assert.match(marketRail, /data-active-dock=\{dockAttr\}/);
-  assert.match(styles, /\[data-theme='light'\] \.replay-paper-trading/);
-  assert.match(styles, /grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
-  assert.match(styles, /--replay-rail-text-muted: var\(--trade-muted\)/);
+  // Both themes come from the global tokens; buy and sell follow the candle colours.
+  assert.match(styles, /--trade-positive: var\(--text-up\)/);
+  assert.match(styles, /--trade-negative: var\(--text-down\)/);
   assert.match(styles, /--trade-muted: var\(--text-muted\)/);
+  assert.doesNotMatch(styles, /--replay-rail-[a-z-]+:/);
 });
 
 test("order-size capacity is independent from draft preview failures", () => {
@@ -703,7 +706,7 @@ test("replay rail shows one full-height view chosen from the activity bar", () =
   assert.match(marketRail, /openViewIds=\{preferences\.openViewIds\}/);
   assert.match(marketRail, /panelCollapsed=\{preferences\.panelCollapsed\}/);
   assert.match(marketRail, /onTogglePanelCollapsed=\{actions\.togglePanelCollapsed\}/);
-  assert.match(styles, /\.replay-market-dock\[data-active-dock="paper"\] \.replay-market-dock-body \{\s*overflow: auto;/);
+  assert.match(styles, /\.replay-market-dock-body \{[^}]*min-height: 0;[^}]*overflow: auto;/);
 });
 
 test("archive cleanup removes only deleted replay workspace scopes", () => {

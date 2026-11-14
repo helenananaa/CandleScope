@@ -1,8 +1,8 @@
 import { useReplayOperations } from "../useReplayOperations.js";
 import { describeError } from "../../../i18n/serverErrors.js";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { Button, EmptyState, InlineAlert, Stat, TabPanel, Tabs } from "../../../components/ui/index.js";
-import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import { Badge, Button, Checkbox, Disclosure, EmptyState, Field, InlineAlert, Input, SegmentedControl, Select, Stat, TabPanel, Tabs, Textarea } from "../../../components/ui/index.js";
+import type { ReactNode } from "react";
 import { getNumberLocale, t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 
@@ -354,30 +354,6 @@ function useTradeNoticeAutoDismiss(
   }, [notice, setNotice]);
 }
 
-function handleTabKeyDown<T extends string>(
-  event: ReactKeyboardEvent<HTMLButtonElement>,
-  tabs: readonly T[],
-  current: T,
-  setCurrent: (value: T) => void,
-  attribute: string,
-) {
-  const currentIndex = tabs.indexOf(current);
-  let nextIndex: number | null = null;
-  if (event.key === "ArrowRight" || event.key === "ArrowDown") nextIndex = (currentIndex + 1) % tabs.length;
-  if (event.key === "ArrowLeft" || event.key === "ArrowUp") nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
-  if (event.key === "Home") nextIndex = 0;
-  if (event.key === "End") nextIndex = tabs.length - 1;
-  if (nextIndex === null) return;
-  event.preventDefault();
-  const next = tabs[nextIndex];
-  if (next === undefined) return;
-  setCurrent(next);
-  event.currentTarget
-    .closest('[role="tablist"]')
-    ?.querySelector<HTMLButtonElement>(`[${attribute}="${next}"]`)
-    ?.focus();
-}
-
 export interface ReplayRightRailProps {
   readonly runtime: ReplayRuntime;
   readonly viewer: ReplayViewerRuntime;
@@ -391,6 +367,8 @@ export interface ReplayRightRailProps {
 
 export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRailProps, "runtime" | "viewer">) {
   useLocale();
+  const orderTypeTabsId = useId();
+  const sizeUnitId = useId();
   type SizeMode = "QUANTITY" | "MARGIN" | "NOTIONAL";
   const [side, setSide] = useState<"BUY" | "SELL">("BUY");
   const [orderType, setOrderType] = useState<"MARKET" | "LIMIT" | "STOP_MARKET" | "TAKE_PROFIT_MARKET">("MARKET");
@@ -1215,6 +1193,10 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
     ?? null;
   const ticketMessageTone = notice?.tone ?? (ticketMessage === null ? "idle" : "error");
 
+  const unitInput = (input: ReactNode, unit: string) => (
+    <span className="replay-unit-input">{input}<span className="replay-unit-input-unit">{unit}</span></span>
+  );
+
   return (
     <div className="replay-paper-trading" data-replay-paper-surface="order-ticket">
     <div className="replay-order-surface">
@@ -1223,84 +1205,73 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
           <div className="replay-ticket-context">
             <strong>{symbol}</strong>
             <span>{isSpot ? t("replay.paper.spot") : t("replay.paper.futures")}</span>
-          </div>
-          <div className="replay-ticket-locks" aria-label={t("replay.paper.marginLev")}>
-            <span>
+            <span className="replay-ticket-locks">
               {contract?.margin_mode === "ISOLATED" ? t("replay.wb.isolated") : t("replay.wb.cross")}
               {" · "}
               {positionMode === "HEDGE" ? t("replay.paper.hedge") : t("replay.paper.oneWay")}
             </span>
-            <label className="replay-leverage-control" title={t("replay.paper.levCap")}>
-              <span className="sr-only">{t("replay.paper.leverage")}</span>
-              <select
-                value={String(leverage)}
-                aria-label={t("replay.paper.leverageMax", { max: maxLeverage })}
-                onChange={(event) => setLeverage(Math.min(maxLeverage, Math.max(1, Number(event.target.value) || 1)))}
-              >
-                {leverageOptions.map((value) => (
-                  <option key={value} value={value}>{value}x</option>
-                ))}
-              </select>
-            </label>
+            <Select
+              size="sm"
+              className="replay-leverage-control"
+              value={String(leverage)}
+              title={t("replay.paper.levCap")}
+              aria-label={t("replay.paper.leverageMax", { max: maxLeverage })}
+              onChange={(event) => setLeverage(Math.min(maxLeverage, Math.max(1, Number(event.target.value) || 1)))}
+            >
+              {leverageOptions.map((value) => (
+                <option key={value} value={value}>{value}x</option>
+              ))}
+            </Select>
           </div>
-          <dl className="replay-ticket-balance">
-            <div><dt>{t("replay.wb.equity")}</dt><dd>{formatDecimal(portfolio?.equity ?? store.account?.equity, 2)} <small>{settlementAsset}</small></dd></div>
-            <div><dt>{t("replay.wb.available")}</dt><dd>{formatDecimal(portfolio?.available_equity ?? store.account?.available_equity, 2)} <small>{settlementAsset}</small></dd></div>
-          </dl>
+          <div className="replay-ticket-balance">
+            <Stat label={t("replay.wb.equity")} value={<>{formatDecimal(portfolio?.equity ?? store.account?.equity, 2)} <small>{settlementAsset}</small></>} />
+            <Stat label={t("replay.wb.available")} value={<>{formatDecimal(portfolio?.available_equity ?? store.account?.available_equity, 2)} <small>{settlementAsset}</small></>} />
+          </div>
           {positionSide !== "flat" && (
             <p className="replay-ticket-position" data-position-side={positionSide}>
-              <span>{positionSide === "long" ? t("replay.wb.long") : t("replay.wb.short")} {formatDecimal(Math.abs(positionQty))} {quantityAsset}</span>
+              <Badge tone={positionSide === "long" ? "success" : "danger"}>{positionSide === "long" ? t("replay.wb.long") : t("replay.wb.short")}</Badge>
+              <span>{formatDecimal(Math.abs(positionQty))} {quantityAsset}</span>
               <span>{t("replay.wb.floatPnl")} <b data-value-tone={(positionPnl ?? 0) >= 0 ? "positive" : "negative"}>{formatDecimal(positionPnl, 2)}</b></span>
             </p>
           )}
         </header>
 
         <section className="replay-compact-ticket" data-replay-panel="order-ticket">
-          <div className="replay-mode-toggle" role="group" aria-label={t("replay.paper.openClose")}>
-            <button
-              type="button"
-              data-mode="open"
-              className={!reduceOnly ? "active" : ""}
-              aria-pressed={!reduceOnly}
-              onClick={() => {
-                if (reduceOnly) setSide(side === "BUY" ? "SELL" : "BUY");
-                setReduceOnly(false);
-              }}
-            >{t("replay.paper.open")}</button>
-            <button
-              type="button"
-              data-mode="close"
-              className={reduceOnly ? "active" : ""}
-              aria-pressed={reduceOnly}
-              onClick={() => {
-                if (!reduceOnly) setSide(side === "BUY" ? "SELL" : "BUY");
-                setReduceOnly(true);
-              }}
-            >{t("replay.paper.close")}</button>
-          </div>
+          <SegmentedControl
+            fullWidth
+            label={t("replay.paper.openClose")}
+            value={reduceOnly ? "close" : "open"}
+            options={[
+              { value: "open", label: t("replay.paper.open") },
+              { value: "close", label: t("replay.paper.close") },
+            ]}
+            onChange={(mode) => {
+              const nextReduceOnly = mode === "close";
+              if (nextReduceOnly !== reduceOnly) setSide(side === "BUY" ? "SELL" : "BUY");
+              setReduceOnly(nextReduceOnly);
+            }}
+          />
 
-          <div className="replay-ticket-type" role="group" aria-label={t("replay.paper.orderType")}>
-            {orderTypeTabs.map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                title={label}
-                className={orderType === value ? "active" : ""}
-                aria-pressed={orderType === value}
-                onClick={() => setOrderType(value)}
-              >{label}</button>
-            ))}
-          </div>
+          <Tabs
+            id={orderTypeTabsId}
+            label={t("replay.paper.orderType")}
+            value={orderType}
+            tabs={orderTypeTabs.map(([value, label]) => ({ value, label }))}
+            onChange={setOrderType}
+          />
 
-          <div className="replay-ticket-fields">
+          <TabPanel tabsId={orderTypeTabsId} value={orderType} className="replay-ticket-fields">
             {orderType !== "MARKET" && (
-              <label>{orderType === "LIMIT" ? t("replay.paper.limitPrice") : t("replay.paper.triggerPrice")}
-                <span><input data-replay-field="order-price" value={price} inputMode="decimal" onChange={(event) => setPrice(event.target.value)} /><b>{settlementAsset}</b></span>
-              </label>
+              <Field label={orderType === "LIMIT" ? t("replay.paper.limitPrice") : t("replay.paper.triggerPrice")}>
+                {unitInput(<Input size="sm" data-replay-field="order-price" value={price} inputMode="decimal" onChange={(event) => setPrice(event.target.value)} />, settlementAsset)}
+              </Field>
             )}
-            <label>{sizeModeLabel}
-              <span>
-                <input
+            <Field label={sizeModeLabel} hint={sizeMode !== "QUANTITY"
+              ? `${t("replay.paper.approxQty", { qty: quantity || "--", asset: quantityAsset })}${refForSize !== null ? t("replay.paper.refPrice", { price: formatDecimal(refForSize, 6) }) : ""}`
+              : undefined}>
+              <span className="replay-size-input">
+                <Input
+                  size="sm"
                   data-replay-field="order-quantity"
                   value={resolvedSizeInput}
                   inputMode="decimal"
@@ -1311,8 +1282,9 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
                     setSizeInput(event.target.value);
                   }}
                 />
-                <select
-                  className="replay-size-unit"
+                <Select
+                  size="sm"
+                  id={sizeUnitId}
                   aria-label={t("replay.paper.sizeMode")}
                   value={sizeMode}
                   onChange={(event) => setSizeMode(event.target.value as SizeMode)}
@@ -1320,74 +1292,70 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
                   <option value="QUANTITY">{quantityAsset}</option>
                   <option value="MARGIN">{t("replay.paper.margin")} · {settlementAsset}</option>
                   <option value="NOTIONAL">{t("replay.paper.notional")} · {settlementAsset}</option>
-                </select>
+                </Select>
               </span>
-            </label>
-          </div>
-          {sizeMode !== "QUANTITY" && (
-            <small className="replay-size-converted">
-              {t("replay.paper.approxQty", { qty: quantity || "--", asset: quantityAsset })}
-              {refForSize !== null ? t("replay.paper.refPrice", { price: formatDecimal(refForSize, 6) }) : ""}
-            </small>
-          )}
+            </Field>
 
-          <div
-            className="replay-size-slider"
-            aria-label={t("replay.paper.posShare")}
-            style={{ ["--replay-size-pct" as string]: `${displaySizeShare}%` }}
-          >
-            <input
-              type="range"
-              aria-label={t("replay.paper.sizeQuick")}
-              min={0}
-              max={100}
-              step={1}
-              value={displaySizeShare}
-              disabled={sizingAvailability.sliderDisabled || maxSizeValue === null}
-              onPointerDown={() => {
-                setSliderDragging(true);
-                setSliderPct(displaySizeShare);
-              }}
-              onPointerUp={() => setSliderDragging(false)}
-              onPointerCancel={() => setSliderDragging(false)}
-              onLostPointerCapture={() => setSliderDragging(false)}
-              onBlur={() => setSliderDragging(false)}
-              onKeyUp={() => setSliderDragging(false)}
-              onInput={(event) => {
-                const pct = Number((event.target as HTMLInputElement).value);
-                setSliderDragging(true);
-                setSliderPct(pct);
-                setSizeShare(pct / 100);
-              }}
-              onChange={(event) => {
-                const pct = Number(event.target.value);
-                setSliderPct(pct);
-                setSizeShare(pct / 100);
-              }}
-            />
-            <div className="replay-size-slider-ticks">
-              {[0.25, 0.5, 0.75, 1].map((share) => (
-                <button
-                  key={share}
-                  type="button"
-                  disabled={sizingAvailability.sliderDisabled || maxSizeValue === null}
-                  onClick={() => setSizeShare(share)}
-                >{share * 100}%</button>
-              ))}
+            <div
+              className="replay-size-slider"
+              role="group"
+              aria-label={t("replay.paper.posShare")}
+              style={{ ["--replay-size-pct" as string]: `${displaySizeShare}%` }}
+            >
+              <input
+                type="range"
+                aria-label={t("replay.paper.sizeQuick")}
+                min={0}
+                max={100}
+                step={1}
+                value={displaySizeShare}
+                disabled={sizingAvailability.sliderDisabled || maxSizeValue === null}
+                onPointerDown={() => {
+                  setSliderDragging(true);
+                  setSliderPct(displaySizeShare);
+                }}
+                onPointerUp={() => setSliderDragging(false)}
+                onPointerCancel={() => setSliderDragging(false)}
+                onLostPointerCapture={() => setSliderDragging(false)}
+                onBlur={() => setSliderDragging(false)}
+                onKeyUp={() => setSliderDragging(false)}
+                onInput={(event) => {
+                  const pct = Number((event.target as HTMLInputElement).value);
+                  setSliderDragging(true);
+                  setSliderPct(pct);
+                  setSizeShare(pct / 100);
+                }}
+                onChange={(event) => {
+                  const pct = Number(event.target.value);
+                  setSliderPct(pct);
+                  setSizeShare(pct / 100);
+                }}
+              />
+              <div className="replay-size-slider-ticks">
+                {[0.25, 0.5, 0.75, 1].map((share) => (
+                  <Button
+                    key={share}
+                    size="sm"
+                    variant="ghost"
+                    disabled={sizingAvailability.sliderDisabled || maxSizeValue === null}
+                    onClick={() => setSizeShare(share)}
+                  >{share * 100}%</Button>
+                ))}
+              </div>
+              <div className="replay-size-slider-meta">
+                <span>
+                  {t("replay.paper.refMax", {
+                    value: maxSizeValue === null ? "--" : formatDecimal(maxSizeValue, sizeMode === "QUANTITY" ? 8 : 2),
+                    unit: sizeUnit,
+                  })}
+                  {sizeMode !== "QUANTITY" && estimatedMaxQuantity !== null
+                    ? ` · ${formatDecimal(estimatedMaxQuantity)} ${quantityAsset}`
+                    : ""}
+                </span>
+                <span>{displaySizeShareLabel}%</span>
+              </div>
             </div>
-            <div className="replay-size-slider-meta">
-              <span>
-                {t("replay.paper.refMax", {
-                  value: maxSizeValue === null ? "--" : formatDecimal(maxSizeValue, sizeMode === "QUANTITY" ? 8 : 2),
-                  unit: sizeUnit,
-                })}
-                {sizeMode !== "QUANTITY" && estimatedMaxQuantity !== null
-                  ? ` · ${formatDecimal(estimatedMaxQuantity)} ${quantityAsset}`
-                  : ""}
-              </span>
-              <span>{displaySizeShareLabel}%</span>
-            </div>
-          </div>
+          </TabPanel>
 
           <dl className="replay-order-preview" aria-label={t("replay.paper.orderPreview")}>
             <div><dt>{t("replay.paper.notionalVal")}</dt><dd>{previewPending ? t("replay.paper.checking") : `${formatDecimal(preview?.estimated_notional, 2)} ${settlementAsset}`}</dd></div>
@@ -1395,53 +1363,45 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
             <div><dt>{t("replay.paper.feeCap")}</dt><dd>{formatDecimal(preview?.estimated_fee, 8)} {settlementAsset}</dd></div>
           </dl>
 
-          <details className="replay-trade-plan" open={tradePlanEnabled && tradePlanEligible}>
-            <summary>
-              <label onClick={(event) => event.stopPropagation()}>
-                <input
-                  type="checkbox"
-                  checked={tradePlanEnabled && tradePlanEligible}
-                  disabled={!tradePlanEligible}
-                  onChange={(event) => setTradePlanEnabled(event.target.checked)}
-                />
-                {t("replay.paper.riskPlan")}
-              </label>
-            </summary>
+          <div className="replay-trade-plan">
+            <Checkbox
+              label={t("replay.paper.riskPlan")}
+              checked={tradePlanEnabled && tradePlanEligible}
+              disabled={!tradePlanEligible}
+              onChange={(event) => setTradePlanEnabled(event.target.checked)}
+            />
             {tradePlanEnabled && tradePlanEligible && (
               <div className="replay-trade-plan-fields">
-                <label>{t("replay.paper.riskMode")}
-                  <select
+                <Field label={t("replay.paper.riskMode")}>
+                  <Select
+                    size="sm"
                     value={riskSizingMode}
                     onChange={(event) => setRiskSizingMode(event.target.value as typeof riskSizingMode)}
                   >
                     <option value="ACCOUNT_RISK_PERCENT">{t("replay.paper.accountRiskPct")}</option>
                     <option value="RISK_AMOUNT">{t("replay.paper.riskAmt")}</option>
-                  </select>
-                </label>
-                <label>{riskSizingMode === "RISK_AMOUNT" ? t("replay.paper.maxLoss") : t("replay.paper.accountRisk")}
-                  <span>
-                    <input value={riskValue} inputMode="decimal" onChange={(event) => setRiskValue(event.target.value)} />
-                    <b>{riskSizingMode === "RISK_AMOUNT" ? settlementAsset : "%"}</b>
-                  </span>
-                </label>
-                <label>{t("replay.paper.invalidPx")}
-                  <span><input value={invalidationPrice} inputMode="decimal" onChange={(event) => setInvalidationPrice(event.target.value)} /><b>{settlementAsset}</b></span>
-                </label>
-                <label>{t("replay.paper.targetPx")}
-                  <span><input value={targetPrice} inputMode="decimal" onChange={(event) => setTargetPrice(event.target.value)} /><b>{settlementAsset}</b></span>
-                </label>
-                <label>{t("replay.paper.reason")}
-                  <textarea value={tradeReason} maxLength={500} onChange={(event) => setTradeReason(event.target.value)} placeholder={t("replay.paper.reasonPh")} />
-                </label>
+                  </Select>
+                </Field>
+                <Field label={riskSizingMode === "RISK_AMOUNT" ? t("replay.paper.maxLoss") : t("replay.paper.accountRisk")}>
+                  {unitInput(<Input size="sm" value={riskValue} inputMode="decimal" onChange={(event) => setRiskValue(event.target.value)} />, riskSizingMode === "RISK_AMOUNT" ? settlementAsset : "%")}
+                </Field>
+                <Field label={t("replay.paper.invalidPx")}>
+                  {unitInput(<Input size="sm" value={invalidationPrice} inputMode="decimal" onChange={(event) => setInvalidationPrice(event.target.value)} />, settlementAsset)}
+                </Field>
+                <Field label={t("replay.paper.targetPx")}>
+                  {unitInput(<Input size="sm" value={targetPrice} inputMode="decimal" onChange={(event) => setTargetPrice(event.target.value)} />, settlementAsset)}
+                </Field>
+                <Field label={t("replay.paper.reason")} className="replay-trade-plan-reason" hint={t("replay.paper.planHint")}>
+                  <Textarea value={tradeReason} maxLength={500} rows={3} onChange={(event) => setTradeReason(event.target.value)} placeholder={t("replay.paper.reasonPh")} />
+                </Field>
                 <dl className="replay-order-preview" aria-label={t("replay.paper.planPreview")}>
                   <div><dt>{t("replay.paper.planQty")}</dt><dd>{preview?.trade_plan?.quantity ?? "--"} {quantityAsset}</dd></div>
                   <div><dt>{t("replay.paper.planRisk")}</dt><dd>{preview?.trade_plan?.risk_amount ?? "--"} {settlementAsset}</dd></div>
                   <div><dt>{t("replay.paper.planRR")}</dt><dd>{preview?.trade_plan?.reward_risk_ratio ?? "--"}</dd></div>
                 </dl>
-                <small>{t("replay.paper.planHint")}</small>
               </div>
             )}
-          </details>
+          </div>
         </section>
       </div>
 
@@ -1487,6 +1447,7 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
 export function ReplayTradingWorkbench({ runtime, viewer, formatTime }: Pick<ReplayRightRailProps, "runtime" | "viewer" | "formatTime">) {
   const { api } = useReplayOperations(viewer.viewerState?.run_id, "rail");
   useLocale();
+  const recordTabsId = useId();
   const [activeTab, setActiveTab] = useState<WorkbenchTab>("positions");
   const [orderSelection, setOrderSelection] = useState<Readonly<{
     trackId: string;
@@ -1722,75 +1683,69 @@ export function ReplayTradingWorkbench({ runtime, viewer, formatTime }: Pick<Rep
     "order-history": contract?.history.historical_orders ?? historicalOrders.length,
     fills: contract?.history.fills_total ?? structuredFills.length,
   };
-  const handleRailTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, value: WorkbenchTab) => {
-    handleTabKeyDown(event, WORKBENCH_TAB_IDS, value, setActiveTab, "data-replay-rail-tab");
-  };
+  const orderStatusTone = (status: string) => status === "FILLED" ? "success" as const
+    : status === "REJECTED" || status === "EXPIRED" ? "danger" as const
+      : TERMINAL_ORDER_STATES.has(status) ? "neutral" as const : "accent" as const;
+  const unitInput = (input: ReactNode, unit: string) => (
+    <span className="replay-unit-input">{input}<span className="replay-unit-input-unit">{unit}</span></span>
+  );
+  const loadMoreButton = (page: Readonly<{ nextCursor: string | null; loadingMore: boolean; items: readonly unknown[]; totalCount: number; loadMore: () => Promise<void> }>) => (
+    page.nextCursor !== null && (
+      <Button size="sm" variant="ghost" className="replay-record-more" disabled={page.loadingMore} onClick={() => void page.loadMore()}>
+        {page.loadingMore ? t("replay.wb.loading") : t("replay.wb.loadMore", { shown: page.items.length, total: page.totalCount })}
+      </Button>
+    )
+  );
 
   return (
     <section className="replay-trading-workbench" data-replay-workbench="rail" aria-label={t("replay.wb.accountAria")}>
       <header className="replay-workbench-header">
         <div className="replay-workbench-summary">
-          <span>
-            <small>{t("replay.wb.equity")}</small>
-            <strong>{formatDecimal(accountView?.equity, 2)} {settlementAsset}</strong>
-          </span>
-          <span>
-            <small>{t("replay.wb.available")}</small>
-            <strong>{formatDecimal(accountView?.available_equity, 2)}</strong>
-          </span>
-          <span>
-            <small>{t("replay.wb.floatPnl")}</small>
-            <strong data-value-tone={pnlTone}>{formatDecimal(accountView?.unrealized_pnl, 2)}</strong>
-          </span>
-          {warningCount > 0 && <span data-tone="warning">{t("replay.wb.execWarnings", { count: warningCount })}</span>}
+          <Stat label={settlementAsset ? `${t("replay.wb.equity")} · ${settlementAsset}` : t("replay.wb.equity")} value={formatDecimal(accountView?.equity, 2)} />
+          <Stat label={t("replay.wb.available")} value={formatDecimal(accountView?.available_equity, 2)} />
+          <Stat
+            label={t("replay.wb.floatPnl")}
+            value={formatDecimal(accountView?.unrealized_pnl, 2)}
+            tone={pnlTone === "positive" ? "success" : pnlTone === "negative" ? "danger" : "neutral"}
+          />
+          {warningCount > 0 && <Badge tone="warning">{t("replay.wb.execWarnings", { count: warningCount })}</Badge>}
         </div>
-        <nav className="replay-workbench-tabs" aria-label={t("replay.wb.recordsAria")} role="tablist">
-          {WORKBENCH_TAB_IDS.map((value) => (
-            <button
-              key={value}
-              type="button"
-              role="tab"
-              id={`replay-workbench-tab-${value}`}
-              className={activeTab === value ? "active" : ""}
-              aria-selected={activeTab === value}
-              aria-controls="replay-workbench-panel"
-              tabIndex={activeTab === value ? 0 : -1}
-              data-replay-rail-tab={value}
-              onClick={() => setActiveTab(value)}
-              onKeyDown={(event) => handleRailTabKeyDown(event, value)}
-            >
-              {workbenchTabLabel(value)}
-              {tabCounts[value] !== undefined && <span>{tabCounts[value]}</span>}
-            </button>
-          ))}
-        </nav>
+        <Tabs
+          id={recordTabsId}
+          label={t("replay.wb.recordsAria")}
+          value={activeTab}
+          tabs={WORKBENCH_TAB_IDS.map((value) => ({
+            value,
+            label: workbenchTabLabel(value),
+            ...(tabCounts[value] !== undefined ? { badge: tabCounts[value] } : {}),
+          }))}
+          onChange={setActiveTab}
+        />
       </header>
 
-      <div
-        id="replay-workbench-panel"
-        className="replay-workbench-panel"
-        role="tabpanel"
-        aria-labelledby={`replay-workbench-tab-${activeTab}`}
-      >
-        {notice !== null && <div className="replay-workbench-notice" role={notice.tone === "error" ? "alert" : "status"} aria-live="polite" data-tone={notice.tone}>{notice.message}</div>}
+      <TabPanel tabsId={recordTabsId} value={activeTab} className="replay-workbench-panel">
+        {notice !== null && (
+          <InlineAlert
+            tone={notice.tone === "error" ? "danger" : notice.tone === "success" ? "success" : "info"}
+          >{notice.message}</InlineAlert>
+        )}
 
         {activeTab === "positions" && (
           <div className="replay-rail-account-scroll" data-replay-panel="positions">
-            {positionTrackCount > 1 && <div className="replay-account-toolbar">
-              <label className="replay-checkbox-field">
-                <input
-                  type="checkbox"
+            {positionTrackCount > 1 && (
+              <div className="replay-account-toolbar">
+                <Checkbox
+                  label={t("replay.wb.currentSymbol")}
                   checked={filterSelectedTrackOnly}
                   onChange={(event) => setFilterSelectedTrackOnly(event.target.checked)}
                 />
-                {t("replay.wb.currentSymbol")}
-              </label>
-              <small>{selectedSymbol}</small>
-            </div>}
+                <small>{selectedSymbol}</small>
+              </div>
+            )}
             {portfolioPositions.length === 0 ? (
-              <div className="replay-account-empty calm"><strong>{t("replay.wb.noPos")}</strong><small>{t("replay.wb.noPosHint")}</small></div>
+              <EmptyState compact title={t("replay.wb.noPos")} description={t("replay.wb.noPosHint")} />
             ) : visiblePositions.length === 0 ? (
-              <div className="replay-account-empty calm"><strong>{t("replay.wb.noPosSymbol")}</strong><small>{t("replay.wb.noPosSymbolHint")}</small></div>
+              <EmptyState compact title={t("replay.wb.noPosSymbol")} description={t("replay.wb.noPosSymbolHint")} />
             ) : visiblePositions.map((item) => {
               const quantityValue = finiteNumber(item.position.quantity) ?? 0;
               const positionSide = quantityValue >= 0 ? "long" : "short";
@@ -1836,14 +1791,14 @@ export function ReplayTradingWorkbench({ runtime, viewer, formatTime }: Pick<Rep
                 : { position_side: hedgePositionSide };
               return (
                 <article className="replay-position-card" key={`${item.track_id}:${hedgePositionSide ?? "NET"}`} data-position-side={positionSide} data-selected-track={selected ? "true" : "false"}>
-                  <header>
-                    <div>
+                  <header className="replay-record-head">
+                    <div className="replay-record-title">
                       <strong>{item.symbol}</strong>
-                      <div className="replay-badge-row">
-                        <span className="replay-chip" data-side={positionSide}>{positionSide === "long" ? t("replay.wb.long") : t("replay.wb.short")}</span>
-                        <span className="replay-chip">{contract?.margin_mode === "ISOLATED" ? t("replay.wb.isolated") : t("replay.wb.cross")}</span>
-                        <span className="replay-chip" title={t("replay.wb.legLev")}>{item.leverage ?? config?.max_leverage ?? "--"}x</span>
-                      </div>
+                      <span className="replay-badge-row">
+                        <Badge tone={positionSide === "long" ? "success" : "danger"}>{positionSide === "long" ? t("replay.wb.long") : t("replay.wb.short")}</Badge>
+                        <Badge>{contract?.margin_mode === "ISOLATED" ? t("replay.wb.isolated") : t("replay.wb.cross")}</Badge>
+                        <Badge title={t("replay.wb.legLev")}>{item.leverage ?? config?.max_leverage ?? "--"}x</Badge>
+                      </span>
                     </div>
                     <div className="replay-position-pnl">
                       <small>{t("replay.wb.pnl", { asset: settlementAsset })}</small>
@@ -1852,18 +1807,18 @@ export function ReplayTradingWorkbench({ runtime, viewer, formatTime }: Pick<Rep
                   </header>
                   <dl className="replay-metric-flat">
                      <div><dt>{t("replay.wb.qty", { asset: itemQtyAsset })}</dt><dd>{formatDecimal(Math.abs(quantityValue))}</dd></div>
-                     <div><dt>{t("replay.wb.im")}</dt><dd>{formatDecimal(item.initial_margin, 4)}</dd></div>
-                     <div title={maintenanceProofTitle}><dt>{t("replay.wb.mm")}{maintenanceTierExtrapolated ? t("replay.wb.mmExtrap") : ""}</dt><dd>{formatDecimal(item.maintenance_margin, 4)}</dd></div>
-                     <div><dt>{t("replay.wb.riskCover")}</dt><dd>{item.risk_ratio == null ? "--" : `${formatDecimal(item.risk_ratio, 2)}×`}</dd></div>
                      <div><dt>{t("replay.wb.entry")}</dt><dd>{formatDecimal(item.position.entry_price, 6)}</dd></div>
                      <div>
                        <dt title={item.mark_fidelity ?? t("replay.wb.markUndeclared")}>{t("replay.wb.mark", { fidelity: replayMarkFidelityLabel(item.mark_fidelity) })}</dt>
                        <dd>{formatDecimal(replayPositiveModelPrice(item.position.mark_price), 6)}</dd>
                      </div>
-                     <div><dt>{t("replay.wb.lev")}</dt><dd>{formatDecimal(item.leverage, 2)}x</dd></div>
                      <div title={liquidationTierExtrapolated
                        ? t("replay.wb.liqSearchOver", { cap: item.maintenance_margin_proof?.last_tier_notional_cap ?? "--" })
                        : t("replay.wb.simRisk")}><dt>{t("replay.wb.liqPrice", { extra: liquidationTierExtrapolated ? t("replay.wb.liqExtrap") : "" })}</dt><dd>{formatDecimal(replayPositiveModelPrice(item.liquidation_price), 6)}</dd></div>
+                     <div><dt>{t("replay.wb.im")}</dt><dd>{formatDecimal(item.initial_margin, 4)}</dd></div>
+                     <div title={maintenanceProofTitle}><dt>{t("replay.wb.mm")}{maintenanceTierExtrapolated ? t("replay.wb.mmExtrap") : ""}</dt><dd>{formatDecimal(item.maintenance_margin, 4)}</dd></div>
+                     <div><dt>{t("replay.wb.riskCover")}</dt><dd>{item.risk_ratio == null ? "--" : `${formatDecimal(item.risk_ratio, 2)}×`}</dd></div>
+                     <div><dt>{t("replay.wb.lev")}</dt><dd>{formatDecimal(item.leverage, 2)}x</dd></div>
                      <div title={t("replay.wb.simRisk")}><dt>{t("replay.wb.bankruptcy")}</dt><dd>{formatDecimal(replayPositiveModelPrice(item.bankruptcy_price), 6)}</dd></div>
                      <div><dt>{t("replay.wb.fundingAcc")}</dt><dd>{formatDecimal(item.accumulated_funding, 8)}</dd></div>
                      <div className="wide"><dt>{t("replay.wb.protection")}</dt><dd>{protectionOrders.length === 0
@@ -1874,66 +1829,68 @@ export function ReplayTradingWorkbench({ runtime, viewer, formatTime }: Pick<Rep
                     )}
                   </dl>
                   {!selected && (
-                    <button type="button" disabled={viewer.viewerPending} onClick={() => {
+                    <Button size="sm" disabled={viewer.viewerPending} onClick={() => {
                       const activate = viewer.actions.openTrack
                         ? viewer.actions.openTrack(item.track_id, "current")
                         : viewer.actions.selectTrack(item.track_id);
                       void activate.catch(() => undefined);
                     }}>
                       {t("replay.wb.switchTrack")}
-                    </button>
+                    </Button>
                   )}
                   {selected && (
                     <>
                       <div className="replay-position-primary-actions">
                         {hedgePositionSide !== undefined && (
-                          <button
-                            type="button"
-                            className={`replay-pill-btn${showLeverage ? " active" : ""}`}
+                          <Button
+                            size="sm"
                             aria-expanded={showLeverage}
                             onClick={() => togglePositionPanel(item.track_id, "leverage", hedgePositionSide)}
-                          >{t("replay.wb.setLev")}</button>
+                          >{t("replay.wb.setLev")}</Button>
                         )}
-                        <button
-                          type="button"
-                          className={`replay-pill-btn${showProtection ? " active" : ""}`}
+                        <Button
+                          size="sm"
                           aria-expanded={showProtection}
                           onClick={() => togglePositionPanel(item.track_id, "protection", hedgePositionSide)}
-                        >{t("replay.wb.setProtect")}</button>
-                        <button
-                          type="button"
-                          className={`replay-pill-btn${showClose ? " active" : ""}`}
+                        >{t("replay.wb.setProtect")}</Button>
+                        <Button
+                          size="sm"
                           aria-expanded={showClose}
                           onClick={() => togglePositionPanel(item.track_id, "close", hedgePositionSide)}
-                        >{t("replay.wb.close")}</button>
-                        <button
-                          type="button"
-                          className="replay-pill-btn"
-                          data-variant="danger"
+                        >{t("replay.wb.close")}</Button>
+                        <Button
+                          size="sm"
+                          variant="danger"
                           data-replay-action="close-position"
                           disabled={!commandReady}
                           onClick={() => void runTrade("execute_position_intent", { intent: "CLOSE", side: null, quantity: null, ...legPayload }, t("replay.paper.closeAllPending"), t("replay.paper.closeAllOk"))}
-                        >{t("replay.wb.closeAll")}</button>
+                        >{t("replay.wb.closeAll")}</Button>
                       </div>
                       {showClose && (
                         <section className="replay-position-actions">
                           <header><strong>{t("replay.wb.closeQty")}</strong><small>{t("replay.wb.closeHint")}</small></header>
-                          <label>{t("replay.wb.qtyLabel")} <span><input ref={closeQtyInputRef} value={itemCloseQuantity} inputMode="decimal" onChange={(event) => setCloseDraft({ trackId: selectedTrackId, ...(hedgePositionSide === undefined ? {} : { positionSide: hedgePositionSide }), value: event.target.value })} aria-label={t("replay.wb.closeQty")} /><b>{itemQtyAsset}</b></span></label>
-                          <div>{[0.25, 0.5, 1].map((share) => <button type="button" key={share} onClick={() => setCloseDraft({ trackId: selectedTrackId, ...(hedgePositionSide === undefined ? {} : { positionSide: hedgePositionSide }), value: quantityForStep(Math.abs(quantityValue) * share, quantityStep) })}>{share * 100}%</button>)}</div>
-                          <button
-                            type="button"
+                          <Field label={t("replay.wb.qtyLabel")}>
+                            {unitInput(<Input size="sm" ref={closeQtyInputRef} value={itemCloseQuantity} inputMode="decimal" onChange={(event) => setCloseDraft({ trackId: selectedTrackId, ...(hedgePositionSide === undefined ? {} : { positionSide: hedgePositionSide }), value: event.target.value })} aria-label={t("replay.wb.closeQty")} />, itemQtyAsset)}
+                          </Field>
+                          <div className="replay-position-shares">{[0.25, 0.5, 1].map((share) => <Button size="sm" variant="ghost" key={share} onClick={() => setCloseDraft({ trackId: selectedTrackId, ...(hedgePositionSide === undefined ? {} : { positionSide: hedgePositionSide }), value: quantityForStep(Math.abs(quantityValue) * share, quantityStep) })}>{share * 100}%</Button>)}</div>
+                          <Button
+                            size="sm"
+                            variant="primary"
                             data-replay-action="close-partial"
                             disabled={!commandReady || !itemCloseQuantity.trim()}
                             onClick={() => void runTrade("execute_position_intent", { intent: "CLOSE", side: null, quantity: itemCloseQuantity, ...legPayload }, t("replay.paper.closePending"), t("replay.paper.closeOk"))}
-                          >{t("replay.wb.confirmClose")}</button>
+                          >{t("replay.wb.confirmClose")}</Button>
                         </section>
                       )}
                       {showLeverage && hedgePositionSide !== undefined && (
                         <section className="replay-position-actions">
                           <header><strong>{t("replay.wb.levHeader")}</strong><small>{t("replay.wb.levIndependent", { side: hedgePositionSide })}</small></header>
-                          <label>{t("replay.paper.leverage")} <span><input value={itemLeverage} inputMode="decimal" onChange={(event) => setLeverageDraft({ trackId: item.track_id, positionSide: hedgePositionSide, value: event.target.value })} aria-label={t("replay.wb.lev")} /><b>x</b></span></label>
-                          <button
-                            type="button"
+                          <Field label={t("replay.paper.leverage")}>
+                            {unitInput(<Input size="sm" value={itemLeverage} inputMode="decimal" onChange={(event) => setLeverageDraft({ trackId: item.track_id, positionSide: hedgePositionSide, value: event.target.value })} aria-label={t("replay.wb.lev")} />, "x")}
+                          </Field>
+                          <Button
+                            size="sm"
+                            variant="primary"
                             data-replay-action="set-position-leverage"
                             disabled={!commandReady || !itemLeverage.trim()}
                             onClick={() => void runTrade(
@@ -1942,48 +1899,55 @@ export function ReplayTradingWorkbench({ runtime, viewer, formatTime }: Pick<Rep
                               t("replay.paper.levPending", { side: hedgePositionSide }),
                               t("replay.paper.levOk", { side: hedgePositionSide }),
                             )}
-                          >{t("replay.wb.confirmLev")}</button>
+                          >{t("replay.wb.confirmLev")}</Button>
                         </section>
                       )}
                       {showProtection && (
                         <section className="replay-position-actions">
                           <header><strong>{t("replay.wb.protectHeader")}</strong><small>{t("replay.wb.protectHint")}</small></header>
-                          <label>{t("replay.wb.slPrice")} <span><input value={itemStopLossPrice} inputMode="decimal" onChange={(event) => setProtectionDraft({ trackId: selectedTrackId, ...(hedgePositionSide === undefined ? {} : { positionSide: hedgePositionSide }), stopLoss: event.target.value, takeProfit: itemTakeProfitPrice })} aria-label={t("replay.wb.slPrice")} /><b>{settlementAsset}</b></span></label>
-                          <label>{t("replay.wb.tpPrice")} <span><input value={itemTakeProfitPrice} inputMode="decimal" onChange={(event) => setProtectionDraft({ trackId: selectedTrackId, ...(hedgePositionSide === undefined ? {} : { positionSide: hedgePositionSide }), stopLoss: itemStopLossPrice, takeProfit: event.target.value })} aria-label={t("replay.wb.tpPrice")} /><b>{settlementAsset}</b></span></label>
-                          <button
-                            type="button"
-                            data-replay-action="set-position-protection"
-                            disabled={!commandReady || (!itemStopLossPrice.trim() && !itemTakeProfitPrice.trim())}
-                            onClick={() => void runTrade(
-                              "set_position_protection",
-                              {
-                                quantity: null,
-                                stop_loss_price: itemStopLossPrice.trim() || null,
-                                take_profit_price: itemTakeProfitPrice.trim() || null,
-                                ...legPayload,
-                              },
-                              t("replay.paper.protectPending"),
-                              t("replay.paper.protectOk"),
-                            )}
-                          >{t("replay.wb.setProtectBtn")}</button>
-                          <button
-                            type="button"
-                            data-replay-action="clear-position-protection"
-                            disabled={!commandReady}
-                            onClick={() => void runTrade(
-                              "set_position_protection",
-                              { quantity: null, stop_loss_price: null, take_profit_price: null, ...legPayload },
-                              t("replay.paper.clearPending"),
-                              t("replay.paper.clearOk"),
-                            )}
-                          >{t("replay.wb.clearProtect")}</button>
+                          <Field label={t("replay.wb.slPrice")}>
+                            {unitInput(<Input size="sm" value={itemStopLossPrice} inputMode="decimal" onChange={(event) => setProtectionDraft({ trackId: selectedTrackId, ...(hedgePositionSide === undefined ? {} : { positionSide: hedgePositionSide }), stopLoss: event.target.value, takeProfit: itemTakeProfitPrice })} />, settlementAsset)}
+                          </Field>
+                          <Field label={t("replay.wb.tpPrice")}>
+                            {unitInput(<Input size="sm" value={itemTakeProfitPrice} inputMode="decimal" onChange={(event) => setProtectionDraft({ trackId: selectedTrackId, ...(hedgePositionSide === undefined ? {} : { positionSide: hedgePositionSide }), stopLoss: itemStopLossPrice, takeProfit: event.target.value })} />, settlementAsset)}
+                          </Field>
+                          <div className="replay-position-shares">
+                            <Button
+                              size="sm"
+                              variant="primary"
+                              data-replay-action="set-position-protection"
+                              disabled={!commandReady || (!itemStopLossPrice.trim() && !itemTakeProfitPrice.trim())}
+                              onClick={() => void runTrade(
+                                "set_position_protection",
+                                {
+                                  quantity: null,
+                                  stop_loss_price: itemStopLossPrice.trim() || null,
+                                  take_profit_price: itemTakeProfitPrice.trim() || null,
+                                  ...legPayload,
+                                },
+                                t("replay.paper.protectPending"),
+                                t("replay.paper.protectOk"),
+                              )}
+                            >{t("replay.wb.setProtectBtn")}</Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              data-replay-action="clear-position-protection"
+                              disabled={!commandReady}
+                              onClick={() => void runTrade(
+                                "set_position_protection",
+                                { quantity: null, stop_loss_price: null, take_profit_price: null, ...legPayload },
+                                t("replay.paper.clearPending"),
+                                t("replay.paper.clearOk"),
+                              )}
+                            >{t("replay.wb.clearProtect")}</Button>
+                          </div>
                         </section>
                       )}
-                      {contract?.position_mode !== "HEDGE" && <details className="replay-position-disclosure">
-                        <summary>{t("replay.wb.more")}</summary>
-                        <section className="replay-position-actions">
-                          <button
-                            type="button"
+                      {contract?.position_mode !== "HEDGE" && (
+                        <Disclosure summary={t("replay.wb.more")}>
+                          <Button
+                            size="sm"
                             data-replay-action="reverse-position"
                             disabled={!commandReady || !closeQuantity.trim()}
                             onClick={() => void runTrade(
@@ -1996,30 +1960,27 @@ export function ReplayTradingWorkbench({ runtime, viewer, formatTime }: Pick<Rep
                               t("replay.paper.reversePending"),
                               t("replay.paper.reverseOk"),
                             )}
-                          >{t("replay.wb.reverseTo", { side: selectedPositionSignedQuantity > 0 ? t("replay.wb.short") : t("replay.wb.long") })}</button>
-                        </section>
-                      </details>}
+                          >{t("replay.wb.reverseTo", { side: selectedPositionSignedQuantity > 0 ? t("replay.wb.short") : t("replay.wb.long") })}</Button>
+                        </Disclosure>
+                      )}
                     </>
                   )}
                 </article>
               );
             })}
 
-            <details className="replay-closed-trades">
-              <summary>
-                <strong>{t("replay.wb.recentClosed")}</strong>
-                <span>{closedTrades.length}</span>
-                {reportState === "loading" && <small>{t("replay.wb.syncing")}</small>}
-              </summary>
+            <Disclosure
+              summary={<>{t("replay.wb.recentClosed")} · {closedTrades.length}{reportState === "loading" ? <small> {t("replay.wb.syncing")}</small> : null}</>}
+            >
               <div className="replay-rail-record-list">
-                {recentClosedTrades.length === 0 ? <div className="replay-account-empty compact calm">{t("replay.wb.noClosed")}</div> : recentClosedTrades.map((item) => (
+                {recentClosedTrades.length === 0 ? <p className="replay-record-note">{t("replay.wb.noClosed")}</p> : recentClosedTrades.map((item) => (
                   <article className="replay-compact-record" key={item.trade_id}>
-                    <header><span data-order-side={item.side}>{sideLabel(item.side)} · {formatDecimal(item.quantity)}</span><strong data-value-tone={(finiteNumber(item.realized_pnl) ?? 0) >= 0 ? "positive" : "negative"}>{formatDecimal(item.realized_pnl, 4)} {settlementAsset}</strong></header>
+                    <header className="replay-record-head"><span data-order-side={item.side}>{sideLabel(item.side)} · {formatDecimal(item.quantity)}</span><strong data-value-tone={(finiteNumber(item.realized_pnl) ?? 0) >= 0 ? "positive" : "negative"}>{formatDecimal(item.realized_pnl, 4)} {settlementAsset}</strong></header>
                     <dl className="replay-metric-flat"><div><dt>{t("replay.wb.openPx")}</dt><dd>{formatDecimal(item.entry_price, 6)}</dd></div><div><dt>{t("replay.wb.closePx")}</dt><dd>{formatDecimal(item.exit_price, 6)}</dd></div></dl>
                   </article>
                 ))}
               </div>
-            </details>
+            </Disclosure>
           </div>
         )}
 
@@ -2032,8 +1993,8 @@ export function ReplayTradingWorkbench({ runtime, viewer, formatTime }: Pick<Rep
             <div className="replay-rail-account-scroll replay-rail-record-list" data-replay-panel={activeTab}>
               {activeTab === "open-orders" && selectedTrackOpenOrders.length > 0 && (
                 <section className="replay-order-batch-actions" aria-label={t("replay.wb.batchCancel")}>
-                  <button
-                    type="button"
+                  <Button
+                    size="sm"
                     disabled={!commandReady || selectedOrderIds.length === 0}
                     onClick={() => void runTrade(
                       "cancel_orders",
@@ -2041,9 +2002,10 @@ export function ReplayTradingWorkbench({ runtime, viewer, formatTime }: Pick<Rep
                       t("replay.paper.cancelSelectedPending", { count: selectedOrderIds.length }),
                       t("replay.paper.cancelSelectedOk", { count: selectedOrderIds.length }),
                     )}
-                  >{t("replay.wb.cancelSelected", { count: selectedOrderIds.length })}</button>
-                  <button
-                    type="button"
+                  >{t("replay.wb.cancelSelected", { count: selectedOrderIds.length })}</Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
                     disabled={!commandReady}
                     onClick={() => void runTrade(
                       "cancel_orders",
@@ -2051,12 +2013,12 @@ export function ReplayTradingWorkbench({ runtime, viewer, formatTime }: Pick<Rep
                       t("replay.paper.cancelSymbolPending", { symbol: selectedSymbol }),
                       t("replay.paper.cancelSymbolOk", { symbol: selectedSymbol }),
                     )}
-                  >{t("replay.wb.cancelSymbol")}</button>
+                  >{t("replay.wb.cancelSymbol")}</Button>
                 </section>
               )}
-              {page?.loading === true && <div className="replay-account-empty calm">{t("replay.wb.loadingHistory")}</div>}
-              {page?.error !== null && page !== null && <div className="replay-account-empty calm" role="alert">{t("replay.wb.historyFailed", { error: page.error })}</div>}
-              {!page?.loading && orders.length === 0 ? <div className="replay-account-empty calm"><strong>{activeTab === "open-orders" ? t("replay.wb.noOrders") : t("replay.wb.noHistory")}</strong><small>{activeTab === "open-orders" ? t("replay.wb.noOrdersHint") : t("replay.wb.noHistoryHint")}</small></div> : orders.map((order, index) => {
+              {page?.loading === true && <p className="replay-record-note" role="status">{t("replay.wb.loadingHistory")}</p>}
+              {page?.error !== null && page !== null && <InlineAlert tone="danger">{t("replay.wb.historyFailed", { error: page.error })}</InlineAlert>}
+              {!page?.loading && orders.length === 0 ? <EmptyState compact title={activeTab === "open-orders" ? t("replay.wb.noOrders") : t("replay.wb.noHistory")} description={activeTab === "open-orders" ? t("replay.wb.noOrdersHint") : t("replay.wb.noHistoryHint")} /> : orders.map((order, index) => {
                 const orderId = recordText(order, "order_id", `order-${index}`);
                 const trackId = recordText(order, "track_id", selectedTrackId);
                 const status = recordText(order, "status", "OPEN");
@@ -2065,73 +2027,89 @@ export function ReplayTradingWorkbench({ runtime, viewer, formatTime }: Pick<Rep
                 const editing = replaceDraft?.trackId === trackId && replaceDraft.orderId === orderId;
                 const orderTypeValue = recordText(order, "order_type");
                 const orderSide = recordText(order, "side");
+                const reduceOnlyOrder = recordBoolean(order, "reduce_only");
                 return (
                   <article className="replay-compact-record" key={`${trackId}:${orderId}`} data-order-status={status}>
-                    <header>
-                      <div>
-                        {editable && <input type="checkbox" aria-label={t("replay.wb.selectOrder", { id: orderId })} checked={selectedOrderIds.includes(orderId)} onChange={(event) => toggleSelectedOrder(orderId, event.target.checked)} />}
-                        <strong>{symbolForTrack(trackId)}</strong>
-                        <div className="replay-badge-row">
-                          <span className="replay-chip">{orderTypeLabel(orderTypeValue)}</span>
-                          <span className="replay-chip" data-side={orderSide}>{orderSide === "BUY" ? (recordBoolean(order, "reduce_only") ? t("replay.wb.closeShort") : t("replay.wb.openLong")) : (recordBoolean(order, "reduce_only") ? t("replay.wb.closeLong") : t("replay.wb.openShort"))}</span>
-                          <span className="replay-chip">{contract?.margin_mode === "ISOLATED" ? t("replay.wb.isolated") : t("replay.wb.cross")}</span>
-                          <span className="replay-chip">{config?.max_leverage ?? "--"}x</span>
-                          {timestamp !== null && <span className="replay-chip">{time(timestamp)}</span>}
-                        </div>
+                    <header className="replay-record-head">
+                      <div className="replay-record-title">
+                        {editable
+                          ? <Checkbox label={<strong>{symbolForTrack(trackId)}</strong>} aria-label={t("replay.wb.selectOrder", { id: orderId })} checked={selectedOrderIds.includes(orderId)} onChange={(event) => toggleSelectedOrder(orderId, event.target.checked)} />
+                          : <strong>{symbolForTrack(trackId)}</strong>}
+                        <span className="replay-badge-row">
+                          <Badge tone={orderSide === "BUY" ? "success" : "danger"}>{orderSide === "BUY" ? (reduceOnlyOrder ? t("replay.wb.closeShort") : t("replay.wb.openLong")) : (reduceOnlyOrder ? t("replay.wb.closeLong") : t("replay.wb.openShort"))}</Badge>
+                          <Badge>{orderTypeLabel(orderTypeValue)}</Badge>
+                          <Badge>{contract?.margin_mode === "ISOLATED" ? t("replay.wb.isolated") : t("replay.wb.cross")} · {config?.max_leverage ?? "--"}x</Badge>
+                        </span>
                       </div>
-                      <span className="replay-order-status" data-status={status}>{orderStatusLabel(status)}</span>
+                      <Badge className="replay-order-status" tone={orderStatusTone(status)}>{orderStatusLabel(status)}</Badge>
                     </header>
                     <dl className="replay-metric-flat">
                       <div><dt>{t("replay.wb.orderQty")}</dt><dd>{formatDecimal(recordText(order, "quantity"))}</dd></div>
                       <div><dt>{t("replay.wb.filled")}</dt><dd>{formatDecimal(recordText(order, "filled_quantity", "0"))}</dd></div>
                       <div><dt>{t("replay.wb.orderPrice")}</dt><dd>{formatDecimal(orderPrice(order), 6)}</dd></div>
+                      {timestamp !== null && <div className="wide"><dt>{t("replay.wb.time")}</dt><dd>{time(timestamp)}</dd></div>}
                     </dl>
                     {editing && replaceDraft !== null && (
                       <div className="replay-order-replace-form">
-                        <label>{t("replay.wb.remainQty")}<input inputMode="decimal" value={replaceDraft.quantity} onChange={(event) => setReplaceDraft({ ...replaceDraft, quantity: event.target.value })} /></label>
-                        {orderTypeValue !== "MARKET" && <label>{t("replay.wb.newPrice")}<input inputMode="decimal" value={replaceDraft.price} onChange={(event) => setReplaceDraft({ ...replaceDraft, price: event.target.value })} /></label>}
-                        <button type="button" disabled={!commandReady || !replaceDraft.quantity.trim() || (orderTypeValue !== "MARKET" && !replaceDraft.price.trim())} onClick={() => replaceOrder(order)}>{t("replay.wb.confirmReplace")}</button>
-                        <button type="button" onClick={() => setReplaceDraft(null)}>{t("replay.wb.cancel")}</button>
+                        <Field label={t("replay.wb.remainQty")}><Input size="sm" inputMode="decimal" value={replaceDraft.quantity} onChange={(event) => setReplaceDraft({ ...replaceDraft, quantity: event.target.value })} /></Field>
+                        {orderTypeValue !== "MARKET" && <Field label={t("replay.wb.newPrice")}><Input size="sm" inputMode="decimal" value={replaceDraft.price} onChange={(event) => setReplaceDraft({ ...replaceDraft, price: event.target.value })} /></Field>}
+                        <div className="replay-position-shares">
+                          <Button size="sm" variant="primary" disabled={!commandReady || !replaceDraft.quantity.trim() || (orderTypeValue !== "MARKET" && !replaceDraft.price.trim())} onClick={() => replaceOrder(order)}>{t("replay.wb.confirmReplace")}</Button>
+                          <Button size="sm" variant="ghost" onClick={() => setReplaceDraft(null)}>{t("replay.wb.cancel")}</Button>
+                        </div>
                       </div>
                     )}
                     {editable && (
                       <div className="replay-order-card-actions">
                         {!editing && (
-                          <button type="button" disabled={!commandReady} onClick={() => setReplaceDraft({ trackId, orderId, quantity: recordText(order, "remaining_quantity", recordText(order, "quantity")), price: recordText(order, "limit_price", recordText(order, "stop_price", "")) })}>{t("replay.wb.replace")}</button>
+                          <Button size="sm" variant="ghost" disabled={!commandReady} onClick={() => setReplaceDraft({ trackId, orderId, quantity: recordText(order, "remaining_quantity", recordText(order, "quantity")), price: recordText(order, "limit_price", recordText(order, "stop_price", "")) })}>{t("replay.wb.replace")}</Button>
                         )}
-                        <button type="button" data-variant="danger" disabled={!commandReady} onClick={() => void runTrade("cancel_order", { order_id: orderId }, t("replay.paper.cancelPending"), t("replay.paper.cancelOk"))}>{t("replay.wb.cancelOrder")}</button>
+                        <Button size="sm" variant="danger" disabled={!commandReady} onClick={() => void runTrade("cancel_order", { order_id: orderId }, t("replay.paper.cancelPending"), t("replay.paper.cancelOk"))}>{t("replay.wb.cancelOrder")}</Button>
                       </div>
                     )}
                   </article>
                 );
               })}
-              {page?.nextCursor !== null && page !== null && <button type="button" disabled={page.loadingMore} onClick={() => void page.loadMore()}>{page.loadingMore ? t("replay.wb.loading") : t("replay.wb.loadMore", { shown: page.items.length, total: page.totalCount })}</button>}
+              {page !== null && loadMoreButton(page)}
             </div>
           );
         })()}
 
         {activeTab === "fills" && (
           <div className="replay-rail-account-scroll replay-rail-record-list" data-replay-panel="fills">
-            {fillPages.loading && contract !== null && <div className="replay-account-empty calm">{t("replay.wb.loadingFills")}</div>}
-            {fillPages.error !== null && contract !== null && <div className="replay-account-empty calm" role="alert">{t("replay.wb.fillsFailed", { error: fillPages.error })}</div>}
-            {!fillPages.loading && visibleFills.length === 0 ? <div className="replay-account-empty calm"><strong>{t("replay.wb.noFills")}</strong><small>{t("replay.wb.noFillsHint")}</small></div> : visibleFills.map((fill, index) => {
+            {fillPages.loading && contract !== null && <p className="replay-record-note" role="status">{t("replay.wb.loadingFills")}</p>}
+            {fillPages.error !== null && contract !== null && <InlineAlert tone="danger">{t("replay.wb.fillsFailed", { error: fillPages.error })}</InlineAlert>}
+            {!fillPages.loading && visibleFills.length === 0 ? <EmptyState compact title={t("replay.wb.noFills")} description={t("replay.wb.noFillsHint")} /> : visibleFills.map((fill, index) => {
               const timestamp = eventTime(fill);
+              const fillSide = recordText(fill, "side");
               return (
                 <article className="replay-compact-record" key={recordText(fill, "fill_id", `fill-${index}`)}>
-                  <header><div><strong>{symbolForTrack(recordText(fill, "track_id", selectedTrackId))}</strong><small title={recordText(fill, "reason")}>{recordText(fill, "fill_id", "--")}</small></div><span data-order-side={recordText(fill, "side")}>{sideLabel(recordText(fill, "side"))}</span></header>
-                  <div className="replay-record-primary"><b>{formatDecimal(recordText(fill, "quantity"))}</b><small>@ {formatDecimal(recordText(fill, "price"), 6)} · {recordText(fill, "liquidity") === "MAKER" ? t("replay.wb.maker") : t("replay.wb.taker")}</small></div>
-                  <dl className="replay-metric-flat"><div><dt>{t("replay.wb.fee")}</dt><dd>{formatDecimal(recordText(fill, "configured_fee", recordText(fill, "fee")), 6)} {settlementAsset}</dd></div><div><dt>{t("replay.wb.time")}</dt><dd>{timestamp === null ? "--" : time(timestamp)}</dd></div></dl>
+                  <header className="replay-record-head">
+                    <div className="replay-record-title">
+                      <strong>{symbolForTrack(recordText(fill, "track_id", selectedTrackId))}</strong>
+                      <span className="replay-badge-row">
+                        <Badge tone={fillSide === "BUY" ? "success" : "danger"}>{sideLabel(fillSide)}</Badge>
+                        <Badge>{recordText(fill, "liquidity") === "MAKER" ? t("replay.wb.maker") : t("replay.wb.taker")}</Badge>
+                      </span>
+                    </div>
+                    <span className="replay-record-amount">{formatDecimal(recordText(fill, "quantity"))} @ {formatDecimal(recordText(fill, "price"), 6)}</span>
+                  </header>
+                  <dl className="replay-metric-flat">
+                    <div><dt>{t("replay.wb.fee")}</dt><dd>{formatDecimal(recordText(fill, "configured_fee", recordText(fill, "fee")), 6)} {settlementAsset}</dd></div>
+                    <div className="wide"><dt>{t("replay.wb.time")}</dt><dd>{timestamp === null ? "--" : time(timestamp)}</dd></div>
+                  </dl>
+                  <small className="replay-record-id" title={recordText(fill, "reason")}>{recordText(fill, "fill_id", "--")}</small>
                 </article>
               );
             })}
-            {contract !== null && fillPages.nextCursor !== null && <button type="button" disabled={fillPages.loadingMore} onClick={() => void fillPages.loadMore()}>{fillPages.loadingMore ? t("replay.wb.loading") : t("replay.wb.loadMore", { shown: fillPages.items.length, total: fillPages.totalCount })}</button>}
+            {contract !== null && loadMoreButton(fillPages)}
           </div>
         )}
 
         {activeTab === "assets" && (
           <div className="replay-rail-account-scroll" data-replay-panel="account-assets">
             <section className="replay-asset-strip">
-              <header>
+              <header className="replay-record-head">
                 <strong><span className="replay-asset-icon" aria-hidden="true">{settlementAsset.slice(0, 1) || "U"}</span>{settlementAsset || t("replay.wb.assetFallback")}</strong>
                 <small>{t("replay.wb.initial", { value: formatDecimal(portfolio?.initial_equity, 2) })}</small>
               </header>
@@ -2153,7 +2131,7 @@ export function ReplayTradingWorkbench({ runtime, viewer, formatTime }: Pick<Rep
         {activeTab === "risk" && (
           <div className="replay-risk-dashboard replay-rail-account-scroll" data-replay-panel="account-risk">
             <section className="replay-risk-card">
-              <header><strong>{t("replay.wb.rules")}</strong><span className="replay-chip">{contract?.status ?? t("replay.wb.loadingStatus")}</span></header>
+              <header className="replay-record-head"><strong>{t("replay.wb.rules")}</strong><Badge>{contract?.status ?? t("replay.wb.loadingStatus")}</Badge></header>
               <dl className="replay-metric-flat">
                 <div><dt>{t("replay.wb.marginMode")}</dt><dd>{contract?.margin_mode === "ISOLATED" ? t("replay.wb.isolated") : t("replay.wb.cross")}</dd></div>
                 <div><dt>{t("replay.wb.execModel")}</dt><dd>{contract?.execution_fidelity === "BOOK_ASSISTED_CONTINUITY_GATED_NO_QUEUE" ? t("replay.wb.l2Assist") : t("replay.wb.touchApprox")}</dd></div>
@@ -2161,8 +2139,8 @@ export function ReplayTradingWorkbench({ runtime, viewer, formatTime }: Pick<Rep
                 <div className="wide"><dt>{t("replay.wb.histAccount")}</dt><dd>{contract?.account_history.mode === "HISTORICAL_EXACT" ? t("replay.wb.histExact") : t("replay.wb.priceProxy")}</dd></div>
               </dl>
             </section>
-            <section className="replay-risk-card replay-fidelity-panel">
-              <header><strong>{t("replay.wb.fidelityBound")}</strong><span className="replay-chip">{contract?.account_history.auditor.status ?? "NOT_RUN"}</span></header>
+            <section className="replay-risk-card">
+              <header className="replay-record-head"><strong>{t("replay.wb.fidelityBound")}</strong><Badge>{contract?.account_history.auditor.status ?? "NOT_RUN"}</Badge></header>
               <p>{contract?.execution_fidelity === "BOOK_ASSISTED_CONTINUITY_GATED_NO_QUEUE" ? t("replay.wb.modelL2") : t("replay.wb.modelNoQueue")}</p>
               <p>{t("replay.wb.markLabel", { value: contract === null ? "--" : recordText(contract.fidelity, "mark") })}</p>
               <p>{t("replay.wb.mmLabel", { value: contract === null
@@ -2179,77 +2157,71 @@ export function ReplayTradingWorkbench({ runtime, viewer, formatTime }: Pick<Rep
                   : recordText(contract.fidelity, "liquidation_projection") === "VERSIONED_MAINTENANCE_TIER_APPLIED"
                     ? t("replay.wb.liqInTier")
                     : t("replay.wb.mmUndeclared") })}</p>
-              <button type="button" className="replay-pill-btn" data-replay-action="audit-account" disabled={viewer.viewerPending} onClick={() => void viewer.actions.auditAccount().catch(() => undefined)}>{t("replay.wb.audit")}</button>
+              <Button size="sm" className="replay-risk-action" data-replay-action="audit-account" disabled={viewer.viewerPending} onClick={() => void viewer.actions.auditAccount().catch(() => undefined)}>{t("replay.wb.audit")}</Button>
             </section>
             {contract !== null && (
-              <details className="replay-risk-card" open={contract.history.ledger_entries_total > 0}>
-                <summary>
-                  <strong>{t("replay.wb.ledger")}</strong>
-                  <span>{contract.history.ledger_entries_total}</span>
-                </summary>
-                {ledgerPages.loading && <p>{t("replay.wb.loadingLedger")}</p>}
-                {ledgerPages.error !== null && <p role="alert">{t("replay.wb.ledgerFailed", { error: ledgerPages.error })}</p>}
+              <Disclosure
+                className="replay-risk-card"
+                defaultOpen={contract.history.ledger_entries_total > 0}
+                summary={<>{t("replay.wb.ledger")} · {contract.history.ledger_entries_total}</>}
+              >
+                {ledgerPages.loading && <p className="replay-record-note" role="status">{t("replay.wb.loadingLedger")}</p>}
+                {ledgerPages.error !== null && <InlineAlert tone="danger">{t("replay.wb.ledgerFailed", { error: ledgerPages.error })}</InlineAlert>}
                 <div className="replay-rail-record-list">
                   {ledgerPages.items.map((entry, index) => {
                     const timestamp = eventTime(entry) ?? recordNumber(entry, "virtual_time_ms");
                     return (
                       <article className="replay-compact-record" key={recordText(entry, "posting_id", `ledger-${index}`)}>
-                        <header><strong>{recordText(entry, "kind")}</strong><span data-value-tone={(finiteNumber(entry.cash_delta) ?? 0) >= 0 ? "positive" : "negative"}>{formatDecimal(entry.cash_delta, 8)} {recordText(entry, "asset", settlementAsset)}</span></header>
-                        <small>{recordText(entry, "reference_type")} · {recordText(entry, "reference_id")}</small>
-                        <small>{timestamp === null ? "--" : time(timestamp)}</small>
+                        <header className="replay-record-head"><strong>{recordText(entry, "kind")}</strong><span data-value-tone={(finiteNumber(entry.cash_delta) ?? 0) >= 0 ? "positive" : "negative"}>{formatDecimal(entry.cash_delta, 8)} {recordText(entry, "asset", settlementAsset)}</span></header>
+                        <small className="replay-record-id">{recordText(entry, "reference_type")} · {recordText(entry, "reference_id")} · {timestamp === null ? "--" : time(timestamp)}</small>
                       </article>
                     );
                   })}
                 </div>
-                {ledgerPages.nextCursor !== null && <button type="button" className="replay-pill-btn" disabled={ledgerPages.loadingMore} onClick={() => void ledgerPages.loadMore()}>{ledgerPages.loadingMore ? t("replay.wb.loading") : t("replay.wb.loadMore", { shown: ledgerPages.items.length, total: ledgerPages.totalCount })}</button>}
-              </details>
+                {loadMoreButton(ledgerPages)}
+              </Disclosure>
             )}
             {contract?.margin_mode === "ISOLATED" && (
-              <section className="replay-risk-card replay-isolated-allocation">
-                <header><strong>{t("replay.wb.isolatedAlloc")}</strong><small>{selectedSymbol}</small></header>
+              <section className="replay-risk-card">
+                <header className="replay-record-head"><strong>{t("replay.wb.isolatedAlloc")}</strong><small>{selectedSymbol}</small></header>
                 {contract.position_mode === "HEDGE" && (
-                  <label>{t("replay.wb.posLeg")}
-                    <select value={isolatedSide} onChange={(event) => setIsolatedSide(event.target.value as "LONG" | "SHORT")}>
+                  <Field label={t("replay.wb.posLeg")}>
+                    <Select size="sm" value={isolatedSide} onChange={(event) => setIsolatedSide(event.target.value as "LONG" | "SHORT")}>
                       <option value="LONG">LONG</option>
                       <option value="SHORT">SHORT</option>
-                    </select>
-                  </label>
+                    </Select>
+                  </Field>
                 )}
-                <label>{t("replay.wb.allocAmt")}
-                  <span>
-                    <input value={isolatedAmount} inputMode="decimal" onChange={(event) => setIsolatedAmount(event.target.value)} />
-                    <b>{settlementAsset}</b>
-                  </span>
-                </label>
-                <button type="button" className="replay-pill-btn" disabled={!commandReady || !isolatedAmount.trim()} onClick={() => void viewer.actions.submitTrade("allocate_isolated_margin", { track_id: selectedTrackId, position_side: contract.position_mode === "HEDGE" ? isolatedSide : null, amount: isolatedAmount }).catch(() => undefined)}>{t("replay.wb.setAlloc")}</button>
-                <small>{t("replay.wb.current", { value: String(contract.isolated_allocations[contract.position_mode === "HEDGE" ? `${selectedTrackId}:${isolatedSide}` : selectedTrackId] ?? "0"), asset: settlementAsset })}</small>
+                <Field label={t("replay.wb.allocAmt")} hint={t("replay.wb.current", { value: String(contract.isolated_allocations[contract.position_mode === "HEDGE" ? `${selectedTrackId}:${isolatedSide}` : selectedTrackId] ?? "0"), asset: settlementAsset })}>
+                  {unitInput(<Input size="sm" value={isolatedAmount} inputMode="decimal" onChange={(event) => setIsolatedAmount(event.target.value)} />, settlementAsset)}
+                </Field>
+                <Button size="sm" variant="primary" className="replay-risk-action" disabled={!commandReady || !isolatedAmount.trim()} onClick={() => void viewer.actions.submitTrade("allocate_isolated_margin", { track_id: selectedTrackId, position_side: contract.position_mode === "HEDGE" ? isolatedSide : null, amount: isolatedAmount }).catch(() => undefined)}>{t("replay.wb.setAlloc")}</Button>
               </section>
             )}
-            <section className="replay-risk-card replay-capability-boundary" data-replay-panel="historical-market-liquidations" data-replay-domain="historical-market-liquidation">
-              <header><strong>{t("replay.wb.mktLiq")}</strong><span className="replay-chip">{contract?.liquidation_channels.historical_market.fidelity ?? "UNSUPPORTED_NO_HISTORY"}</span></header>
+            <section className="replay-risk-card" data-replay-panel="historical-market-liquidations" data-replay-domain="historical-market-liquidation">
+              <header className="replay-record-head"><strong>{t("replay.wb.mktLiq")}</strong><Badge>{contract?.liquidation_channels.historical_market.fidelity ?? "UNSUPPORTED_NO_HISTORY"}</Badge></header>
               <p>{t("replay.wb.mktLiqHint")}</p>
             </section>
             <section className="replay-risk-card" data-replay-panel="simulated-liquidations" data-replay-domain="simulated-account-liquidation">
-              <header><strong>{t("replay.wb.simLiq")}</strong><span className="replay-chip">{contract?.liquidations.length ?? 0}</span></header>
+              <header className="replay-record-head"><strong>{t("replay.wb.simLiq")}</strong><Badge tone={(contract?.liquidations.length ?? 0) > 0 ? "warning" : "neutral"}>{contract?.liquidations.length ?? 0}</Badge></header>
               <p>{t("replay.wb.simLiqHint")}</p>
               <ReplayLiquidationTimeline
                 cases={contract?.liquidations ?? []}
                 formatVirtualTime={time}
               />
               {(contract?.liquidation_recoveries.length ?? 0) > 0 && (
-                <details className="replay-liquidation-recoveries">
-                  <summary>{t("replay.wb.recoveries", { count: contract?.liquidation_recoveries.length ?? 0 })}</summary>
+                <Disclosure summary={t("replay.wb.recoveries", { count: contract?.liquidation_recoveries.length ?? 0 })}>
                   <ReplayLiquidationTimeline
                     cases={contract?.liquidation_recoveries ?? []}
                     formatVirtualTime={time}
                     emptyLabel={t("replay.wb.recoverEmpty")}
                   />
-                </details>
+                </Disclosure>
               )}
             </section>
           </div>
         )}
-      </div>
+      </TabPanel>
     </section>
   );
 }
@@ -2359,9 +2331,4 @@ export function ReplayMarketDataDock({ runtime, viewer, indicatorStatus, formatT
       </TabPanel>
     </div>
   );
-}
-
-export default function ReplayRightRail(props: ReplayRightRailProps) {
-  useLocale();
-  return <aside className="replay-right-rail" aria-label={t("replay.dock.paperAria")}><ReplayPaperTradingDock {...props} /></aside>;
 }
