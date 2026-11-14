@@ -38,8 +38,23 @@ export interface DialogProps {
 
 /** Modal dialog: above drawers, traps focus, returns focus on close, makes the page inert. */
 export function Dialog(props: DialogProps) {
-  if (!props.open || typeof document === "undefined") return null;
+  if (!props.open) return null;
+  // Without a DOM (static rendering) the dialog box renders in place, unmanaged, like OverlayLayer.
+  if (typeof document === "undefined") return <DialogStatic {...props} />;
   return createPortal(<DialogLayer {...props} />, overlayHost());
+}
+
+function DialogStatic({ onClose, title, description, children, footer, size = "md", dismissible = true, role = "dialog", className, onKeyDown }: DialogProps) {
+  const titleId = useId();
+  const descriptionId = useId();
+  return (
+    <DialogSurface role={role} titleId={titleId} descriptionId={description ? descriptionId : undefined}
+      title={title} description={description} footer={footer} size={size} className={className}
+      {...(onKeyDown ? { onKeyDown } : {})}
+      {...(dismissible ? { onClose } : {})}>
+      {children}
+    </DialogSurface>
+  );
 }
 
 function DialogLayer({ open, onClose, title, description, children, footer, size = "md", dismissible = true, role = "dialog", initialFocusRef, className, onKeyDown }: DialogProps) {

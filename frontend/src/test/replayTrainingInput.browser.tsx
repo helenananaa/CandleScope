@@ -7,7 +7,7 @@ function assert(value: unknown, message: string): asserts value {
   if (!value) throw new Error(message);
 }
 
-/** Exercise native datetime-local sanitization and the actual React event lifecycle. */
+/** Exercise typed UTC text (partial years kept, pre-1970 unpublished) and the actual React event lifecycle. */
 export async function checkTrainingInput() {
   const host = document.createElement("div");
   document.body.append(host);
@@ -23,10 +23,10 @@ export async function checkTrainingInput() {
   }
   try {
     flushSync(() => root.render(<Form />));
-    const input = host.querySelector("input")!;
+    const input = host.querySelector<HTMLInputElement>("input[type=text]")!;
     input.focus();
     const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
-    const values = ["0002-01-02T03:04", "0020-01-02T03:04", "0202-01-02T03:04", "2024-01-02T03:04"];
+    const values = ["0002-01-02 03:04", "0020-01-02 03:04", "0202-01-02 03:04", "2024-01-02 03:04"];
     for (const value of values) {
       flushSync(() => {
         setValue.call(input, value);
@@ -39,7 +39,7 @@ export async function checkTrainingInput() {
     assert(controls.published[0] === null, "incomplete year must not publish a valid start");
     assert(controls.published.at(-1) === Date.UTC(2024, 0, 2, 3, 4), "completed year was not published");
     flushSync(() => controls.replace!(Date.UTC(2025, 1, 3, 4, 5)));
-    assert(input.value === "2025-02-03T04:05", "external preset was not applied");
+    assert(input.value === "2025-02-03 04:05", "external preset was not applied");
     flushSync(() => controls.replace!(null));
     assert(String(input.value) === "", "external clear was not applied");
     return { passed: true, checks: ["partial year preserved", "focus retained", "valid UTC published", "external preset applied", "external clear applied"] };
