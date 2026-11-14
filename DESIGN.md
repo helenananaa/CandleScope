@@ -180,6 +180,7 @@ The replay rail (回放笔记, 自选, 市场) sets the pattern for a view in a 
 - **The URL carries the mode** (`?mode=robust`), so every mode has a link; switching rewrites the address without reloading. Old URLs (`backtest.html`, `local.html`) rewrite themselves to the canonical page and mode.
 - **Switching keeps the work.** What one mode has (data source, strategy draft, latest result) is carried into the next; a mode that lacks an input opens with its own defaults rather than refusing.
 - **The view's interval bar and workspace sit beside the rail**, so the rail does not move when the view below the header changes.
+- **A tool's side panels are sections**, not cards: a plain heading (策略, 数据, 执行, 结果) with the object it shows under it in mono, then kit fields and small buttons (the step that creates something is primary). Run and study lists are rows with the state as a toned badge. Raw evidence (JSON readouts, hashes) sits in a closed 技术详情 disclosure; an editable JSON draft is a mono text area.
 
 ## Search and export dialogs
 

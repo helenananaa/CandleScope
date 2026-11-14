@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Badge, Button, Checkbox, Field, InlineAlert, Select, Textarea } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import type { BacktestApiClient, BacktestSnapshot, StrategyRevisionRecord } from "./backtestApi.js";
@@ -271,77 +272,73 @@ export default function PythonStudioPanel({
     ] }));
 
   return (
-    <div className="backtest-strategy-help python-studio" data-testid="python-strategy-studio">
-      <strong>{t("backtest.pythonStudio")}</strong>
-      <p data-testid="python-host-owns-report">{hostOwnsOrdersCopy()}</p>
-      <div className="backtest-form-row">
-        <label>
-          {t("backtest.template")}
-          <select value={templateId} onChange={(event) => setTemplateId(event.target.value as typeof templateId)}>
+    <div className="python-studio" data-testid="python-strategy-studio">
+      <h4>{t("backtest.pythonStudio")}</h4>
+      <p className="research-panel-copy" data-testid="python-host-owns-report">{hostOwnsOrdersCopy()}</p>
+      <div className="python-studio-row">
+        <Field label={t("backtest.template")}>
+          <Select size="sm" value={templateId} onChange={(event) => setTemplateId(event.target.value as typeof templateId)}>
             {PYTHON_TEMPLATES.map((item) => (
               <option key={item.id} value={item.id}>{item.label}</option>
             ))}
-          </select>
-        </label>
-        <button type="button" disabled={loading} onClick={handleTemplate} data-testid="python-template-create">
+          </Select>
+        </Field>
+        <Button size="sm" disabled={loading} onClick={handleTemplate} data-testid="python-template-create">
           {t("backtest.fromTemplate")}
-        </button>
+        </Button>
       </div>
-      {template && <p>{t(template.descriptionKey, {}, locale)}</p>}
-      <div className="backtest-form-row">
-        <label>
-          {t("backtest.importZip")}
-          <input
-            type="file"
-            accept=".zip,application/zip"
-            data-testid="python-import-zip"
-            onChange={(event) => void handleImport(event.target.files)}
-          />
-        </label>
-        <label>
-          {t("backtest.importDir")}
-          <input
-            type="file"
-            data-testid="python-import-directory"
-            multiple
-            ref={(node) => {
-              if (node) node.setAttribute("webkitdirectory", "");
-            }}
-            onChange={(event) => void handleImport(event.target.files)}
-          />
-        </label>
-      </div>
-      {missing.length > 0 && <p>{t("backtest.missingFiles", { list: missing.join("、") })}</p>}
-      <label className="backtest-checkbox">
-        <input type="checkbox" checked={showManifest} onChange={(event) => setShowManifest(event.target.checked)} />
-        {t("backtest.viewManifest")}
+      {template && <p className="research-panel-copy">{t(template.descriptionKey, {}, locale)}</p>}
+      <label className="research-file-field">
+        <span>{t("backtest.importZip")}</span>
+        <input
+          type="file"
+          accept=".zip,application/zip"
+          data-testid="python-import-zip"
+          onChange={(event) => void handleImport(event.target.files)}
+        />
       </label>
+      <label className="research-file-field">
+        <span>{t("backtest.importDir")}</span>
+        <input
+          type="file"
+          data-testid="python-import-directory"
+          multiple
+          ref={(node) => {
+            if (node) node.setAttribute("webkitdirectory", "");
+          }}
+          onChange={(event) => void handleImport(event.target.files)}
+        />
+      </label>
+      {missing.length > 0 && <InlineAlert tone="warning">{t("backtest.missingFiles", { list: missing.join("、") })}</InlineAlert>}
+      <Checkbox label={t("backtest.viewManifest")} checked={showManifest} onChange={(event) => setShowManifest(event.target.checked)} />
       {showManifest && (
-        <textarea
+        <Textarea
+          className="research-json-editor"
           rows={8}
           readOnly
           value={generatedManifestPreview(files)}
           data-testid="python-generated-manifest"
         />
       )}
-      <div className="backtest-form-row three">
-        <button type="button" disabled={loading || missing.length > 0} onClick={() => void handleInspect()}>
+      <div className="research-button-row">
+        <Button size="sm" disabled={loading || missing.length > 0} onClick={() => void handleInspect()}>
           {t("backtest.inspect")}
-        </button>
-        <button type="button" disabled={loading || !inspectResult} onClick={() => void handleFreeze()}>
+        </Button>
+        <Button size="sm" disabled={loading || !inspectResult} onClick={() => void handleFreeze()}>
           {t("backtest.freeze")}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          size="sm"
+          variant="primary"
           disabled={loading || !selectedRevisionId || !snapshot || !trustedReady}
           onClick={() => void handleSmoke()}
           data-testid="python-smoke"
         >
           {smokePassed ? t("backtest.smokeOk") : t("backtest.smokeRun")}
-        </button>
+        </Button>
       </div>
       {inspectHashes && (
-        <div className="backtest-strategy-evidence" data-testid="python-bundle-identity">
+        <div className="python-evidence" data-testid="python-bundle-identity">
           <strong>{t("backtest.bundleHash", { hash: `${inspectHashes.bundle.slice(0, 18)}…` })}</strong>
           <span>{t("backtest.sourceManifestHashes", {
             source: `${inspectHashes.source.slice(0, 18)}…`,
@@ -350,55 +347,51 @@ export default function PythonStudioPanel({
           <span>{t("backtest.unsupportedList", { list: PYTHON_UNSUPPORTED.join("；") })}</span>
         </div>
       )}
-      <div className="backtest-strategy-evidence" data-testid="python-runtime-mode">
+      <div className="python-evidence" data-testid="python-runtime-mode">
         <strong>{t("backtest.runtimeIso")}</strong>
-        <label className="backtest-checkbox">
-          <input
-            type="radio"
-            name="python-runtime-mode"
-            checked={runtimeMode === "SANDBOXED_LOCAL"}
-            onChange={() => { setRuntimeMode("SANDBOXED_LOCAL"); setTrustedConfirmed(false); }}
-          />
-          {t("backtest.sandboxed")}
-        </label>
-        <label className="backtest-checkbox">
-          <input
-            type="radio"
-            name="python-runtime-mode"
-            checked={runtimeMode === "TRUSTED_LOCAL"}
-            onChange={() => setRuntimeMode("TRUSTED_LOCAL")}
-          />
-          {t("backtest.trusted")}
-        </label>
-        {runtimeMode === "TRUSTED_LOCAL" && (
-          <div data-testid="python-trusted-facts">
-            {TRUSTED_LOCAL_FACT_KEYS.map((key) => <span key={key}>{t(key, {}, locale)}</span>)}
-            <small>{t("backtest.flagState", { state: trustedFlagEnabled ? t("backtest.flagOn") : t("backtest.flagOff") })}</small>
-            <label className="backtest-checkbox">
+        <div className="python-runtime-options" role="radiogroup" aria-label={t("backtest.runtimeIso")}>
+          {(["SANDBOXED_LOCAL", "TRUSTED_LOCAL"] as const).map((mode) => (
+            <label key={mode}>
               <input
-                type="checkbox"
-                checked={trustedConfirmed}
-                onChange={(event) => setTrustedConfirmed(event.target.checked)}
-                data-testid="python-trusted-confirm"
+                type="radio"
+                name="python-runtime-mode"
+                checked={runtimeMode === mode}
+                onChange={() => {
+                  setRuntimeMode(mode);
+                  if (mode === "SANDBOXED_LOCAL") setTrustedConfirmed(false);
+                }}
               />
-              {trustedLocalConfirmLabel()}
+              <span>{mode === "SANDBOXED_LOCAL" ? t("backtest.sandboxed") : t("backtest.trusted")}</span>
             </label>
+          ))}
+        </div>
+        {runtimeMode === "TRUSTED_LOCAL" && (
+          <div className="python-trusted-facts" data-testid="python-trusted-facts">
+            <ul>
+              {TRUSTED_LOCAL_FACT_KEYS.map((key) => <li key={key}>{t(key, {}, locale)}</li>)}
+            </ul>
+            <small>{t("backtest.flagState", { state: trustedFlagEnabled ? t("backtest.flagOn") : t("backtest.flagOff") })}</small>
+            <Checkbox
+              label={trustedLocalConfirmLabel()}
+              checked={trustedConfirmed}
+              onChange={(event) => setTrustedConfirmed(event.target.checked)}
+              data-testid="python-trusted-confirm"
+            />
           </div>
         )}
       </div>
-      <div className="backtest-snapshot" data-testid="python-coverage">
-        <span className={coverage.ready ? "ready" : "pending"}>{coverage.ready ? t("backtest.coverOk") : t("backtest.coverNo")}</span>
+      <div className="python-coverage" data-testid="python-coverage">
+        <Badge tone={coverage.ready ? "success" : "warning"}>{coverage.ready ? t("backtest.coverOk") : t("backtest.coverNo")}</Badge>
         <div>
           <strong>{t("backtest.coverageRows", { rows: coverage.snapshotRows, warmup: coverage.warmupRows })}</strong>
           <small>{coverage.reason}</small>
         </div>
       </div>
       {failure && (
-        <div className="backtest-strategy-evidence" data-testid="python-smoke-failure">
-          <strong>{failure.code}{failure.line ? ` · ${failure.line}:${failure.column}` : ""}</strong>
-          <span>{failure.message}</span>
-          <small>{t("backtest.nextStep", { step: failure.nextStep })}</small>
-        </div>
+        <InlineAlert tone="danger" title={`${failure.code}${failure.line ? ` · ${failure.line}:${failure.column}` : ""}`}>
+          <span data-testid="python-smoke-failure">{failure.message}</span>
+          <small className="python-next-step">{t("backtest.nextStep", { step: failure.nextStep })}</small>
+        </InlineAlert>
       )}
     </div>
   );
