@@ -5,7 +5,7 @@ import { useControlCommands } from "../../app-control/useControlCommands.js";
 import { command } from "../../app-control/commandRegistry.js";
 import { bool, choice, empty, number as numeric, object } from "../../app-control/commandSchema.js";
 import { publishControlFile } from "../../app-control/controlFiles.js";
-import { InlineAlert } from "../../../components/ui/index.js";
+import { Button, Disclosure, InlineAlert, Input, SegmentedControl, buttonClassName } from "../../../components/ui/index.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import { nativeExportUrl, type NativeRun } from "./nativeBacktestApi.js";
@@ -75,7 +75,7 @@ export function NativeStrategyReport({ run, onLocate, onReviewTrade, active = tr
   ] }));
   return <>
     {stale && <InlineAlert tone="warning" title={t("chartTester.result.stale")}>{t("chartTester.result.staleGuidanceTitle")}</InlineAlert>}
-    {canReplay && <div className="native-report-view-switch"><button aria-pressed={replayView} onClick={() => setReplayView(!replayView)}>{t(replayView ? "report.analysis" : "report.replay")}</button>{replayView && <span>{t(run.execution_mode === "CANDLESCOPE" ? "report.replay" : "native.replay.title")}</span>}</div>}
+    {canReplay && <div className="native-report-view-switch"><Button size="sm" variant="ghost" aria-pressed={replayView} onClick={() => setReplayView(!replayView)}>{t(replayView ? "report.analysis" : "report.replay")}</Button>{replayView && <span>{t(run.execution_mode === "CANDLESCOPE" ? "report.replay" : "native.replay.title")}</span>}</div>}
     <NativeResultBody key={`${replayView ? replay?.replay_id ?? "replay" : "analysis"}:${run.run_id}`} run={replayView ? { ...run, result: replay?.result ?? null } : run} onLocate={stale ? undefined : onLocate} view={view} onReviewTrade={stale ? undefined : onReviewTrade} active={active && !stale}
       controls={replayView && canReplay ? <NativeReplayControls runId={run.run_id} replay={replay} onChange={setReplay} hostAccount={run.execution_mode === "CANDLESCOPE"} /> : null}
       exportUrl={replayView && replay ? nativeExportUrl(run.run_id).replace(`/runs/${run.run_id}/`, `/replays/${replay.replay_id}/`) : nativeExportUrl(run.run_id, run.execution_mode)} /></>
@@ -127,7 +127,7 @@ function NativeResultBody({ run, onLocate, exportUrl, view, controls, onReviewTr
     ] }));
   if (!result) return <section className="native-report" data-view={view}>
     <div className="native-report-toolbar">{controls}</div>
-    <p role="status">{t("native.replay.empty")}</p>
+    <p className="native-report-caption" role="status">{t("native.replay.empty")}</p>
   </section>;
   const analytics = reportAnalytics(result, run.execution_mode === "CANDLESCOPE");
   const number = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
@@ -190,38 +190,41 @@ function NativeResultBody({ run, onLocate, exportUrl, view, controls, onReviewTr
     </div>
     <NativePerformanceChart result={result} />
     {run.execution_mode === "CANDLESCOPE" && <NativeCostSensitivity matrix={result.cost_sensitivity} />}
-    <details open={view === "all"}><summary>{t("native.price")}</summary>
+    <Disclosure className="native-report-disclosure" defaultOpen={view === "all"} summary={t("native.price")}>
     <NativeCurve points={result.bars.map((bar) => ({ time: bar.time, value: bar.close }))} title={t("native.price")} markers={markers} onLocate={onLocate} />
     {graphics.map((graphic, index) => <NativeCurve key={index} {...graphic} />)}
     <NativeDrawingScene result={result} />
     <NativeSeriesScene result={result} />
-    </details>
+    </Disclosure>
     </div>
     <div className="native-trade-view" hidden={view === "overview"}>
     {grouped && <p className="native-report-caption">{t("report.tradeBasis")}</p>}
     <div className="native-trade-controls">
-    <div className="native-trade-sections"><button aria-pressed={section === "trades"} onClick={() => setSection("trades")}>{t(run.execution_mode === "CANDLESCOPE" ? "native.external.fill" : "native.trades")} ({result.trades.length})</button>
-      {run.execution_mode === "CANDLESCOPE" && result.closed_trades && <button aria-pressed={section === "closed_trades"} onClick={() => setSection("closed_trades")}>{t("native.trades")} ({result.closed_trades.length})</button>}
-      <button aria-pressed={section === "orders"} onClick={() => setSection("orders")}>{t("native.orders")} ({result.orders.length})</button></div>
+    <SegmentedControl size="sm" label={t("strategyReview.navigation")} value={section} onChange={setSection}
+      options={[
+        { value: "trades" as const, label: `${t(run.execution_mode === "CANDLESCOPE" ? "native.external.fill" : "native.trades")} (${result.trades.length})` },
+        ...(run.execution_mode === "CANDLESCOPE" && result.closed_trades ? [{ value: "closed_trades" as const, label: `${t("native.trades")} (${result.closed_trades.length})` }] : []),
+        { value: "orders" as const, label: `${t("native.orders")} (${result.orders.length})` },
+      ]} />
     <div className="strategy-trade-navigation" aria-label={t("strategyReview.navigation")}>
-      <button disabled={!rows.length || selectedIndex === 0} onClick={() => selectRow(selectedIndex === null ? 0 : selectedIndex - 1)}>{t("strategyReview.previous")}</button>
+      <Button size="sm" disabled={!rows.length || selectedIndex === 0} onClick={() => selectRow(selectedIndex === null ? 0 : selectedIndex - 1)}>{t("strategyReview.previous")}</Button>
       <form className="native-trade-jump" onSubmit={(event) => {
         event.preventDefault();
         const value = Number(new FormData(event.currentTarget).get("trade"));
         if (Number.isInteger(value) && value >= 1 && value <= rows.length) selectRow(value - 1);
       }}>
-        <input key={`${section}:${selectedIndex}`} name="trade" type="number" min={1} max={rows.length || 1} step={1}
+        <Input size="sm" key={`${section}:${selectedIndex}`} name="trade" type="number" min={1} max={rows.length || 1} step={1}
           defaultValue={selectedIndex === null ? "" : selectedIndex + 1} placeholder="—" disabled={!rows.length}
           aria-label={t("strategyReview.jump")} title={t("strategyReview.jump")} />
         <span aria-hidden="true">/ {rows.length}</span>
-        <button type="submit" disabled={!rows.length}>{t("strategyReview.go")}</button>
+        <Button size="sm" type="submit" disabled={!rows.length}>{t("strategyReview.go")}</Button>
       </form>
-      <button disabled={!rows.length || selectedIndex === rows.length - 1} onClick={() => selectRow(selectedIndex === null ? 0 : selectedIndex + 1)}>{t("strategyReview.next")}</button>
+      <Button size="sm" disabled={!rows.length || selectedIndex === rows.length - 1} onClick={() => selectRow(selectedIndex === null ? 0 : selectedIndex + 1)}>{t("strategyReview.next")}</Button>
     </div>
     <div className="native-trade-pages">
-      <button aria-label={t("strategyReview.previousPage")} disabled={page === 0} onClick={() => setPage(page - 1)}>←</button>
+      <Button size="sm" variant="ghost" aria-label={t("strategyReview.previousPage")} disabled={page === 0} onClick={() => setPage(page - 1)}>←</Button>
       <span>{page + 1} / {Math.max(1, Math.ceil(rows.length / 50))}</span>
-      <button aria-label={t("strategyReview.nextPage")} disabled={(page + 1) * 50 >= rows.length} onClick={() => setPage(page + 1)}>→</button>
+      <Button size="sm" variant="ghost" aria-label={t("strategyReview.nextPage")} disabled={(page + 1) * 50 >= rows.length} onClick={() => setPage(page + 1)}>→</Button>
     </div>
     </div>
     <div className="native-table" ref={table} onScroll={(event) => { if (active && view !== "overview") scrollPositions.current[section] = event.currentTarget.scrollTop; }}><table><thead><tr>{grouped ? <><th>{t("report.trade")}</th><th>{t("report.entryExit")}</th><th>{t("trade.price")}</th><th>{t("plugin.live.quantity")}</th><th>{t("report.pnl")}</th><th>{t("report.duration")}</th></> : columns.map((column) => <th key={column}>{labels[column] ?? column}</th>)}</tr></thead>
@@ -244,8 +247,8 @@ function NativeResultBody({ run, onLocate, exportUrl, view, controls, onReviewTr
           </> : columns.map((column) => <td key={column} className={["profit", "net_pnl"].includes(column) ? Number(row[column]) < 0 ? "negative" : "positive" : undefined}>{formatCell(column, row[column])}</td>)}</tr>;
       })}</tbody></table></div>
     </div>
-    <details className="native-report-disclosure"><summary>{t("report.details")}</summary><div className="native-report-toolbar">
-    <details className="native-report-method"><summary>{t("native.mode")}</summary>
+    <Disclosure className="native-report-disclosure" summary={t("report.details")}><div className="native-report-toolbar">
+    <Disclosure className="native-report-method" summary={t("native.mode")}>
     <p><strong>{result.account_authority}</strong> · {run.execution_mode === "CANDLESCOPE" && run.runtime_identity.engine.package} {run.runtime_identity.engine.version} · {result.fill_model}{result.fidelity && <> · {result.fidelity}</>}</p>
     {result.evaluation_contract && <p><code>{result.evaluation_contract}</code></p>}
     {run.config?.context && <p>{run.config.context.symbol} · {formatIntervalLabel(run.config.interval ?? "")} · {JSON.stringify(run.config.parameters)}</p>}
@@ -253,10 +256,10 @@ function NativeResultBody({ run, onLocate, exportUrl, view, controls, onReviewTr
     {result.fidelity === "BOOK_DEPTH" && <p>{t("native.external.depthHint")}</p>}
     {result.fidelity === "BOOK_SAMPLED" && <p>{t("native.external.sampledHint")}</p>}
     {run.execution_mode === "CANDLESCOPE" && result.raw_output.entry_allocation != null && <p>{t("native.external.allocationHint")}</p>}
-    </details>
-    <a href={exportUrl} download>{t(run.execution_mode === "CANDLESCOPE" ? "native.external.export" : "native.export")}</a>
-    {result.diagnostics.length > 0 && <details className="native-report-diagnostics"><summary>{t("strategyDock.diagnostics")} ({result.diagnostics.length})</summary><pre>{JSON.stringify(result.diagnostics, null, 2)}</pre></details>}
-    </div></details>
-    <details hidden={view === "trades"}><summary>{t(run.execution_mode === "CANDLESCOPE" ? "native.external.raw" : "native.raw")}</summary><pre>{JSON.stringify(result.raw_output, null, 2)}</pre></details>
+    </Disclosure>
+    <a className={buttonClassName({ size: "sm" })} href={exportUrl} download>{t(run.execution_mode === "CANDLESCOPE" ? "native.external.export" : "native.export")}</a>
+    {result.diagnostics.length > 0 && <Disclosure className="native-report-diagnostics" summary={`${t("strategyDock.diagnostics")} (${result.diagnostics.length})`}><pre className="native-source">{JSON.stringify(result.diagnostics, null, 2)}</pre></Disclosure>}
+    </div></Disclosure>
+    <div hidden={view === "trades"}><Disclosure className="native-report-disclosure" summary={t(run.execution_mode === "CANDLESCOPE" ? "native.external.raw" : "native.raw")}><pre className="native-source">{JSON.stringify(result.raw_output, null, 2)}</pre></Disclosure></div>
   </section>;
 }

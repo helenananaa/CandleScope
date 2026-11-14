@@ -1,198 +1,191 @@
 @layer features {
-/* The native panel's own raw controls (until 5g7); kit controls style themselves. */
-.native-strategy-panel :is(button, select, input):where(:not(.ui-btn, .ui-icon-btn, .ui-tab, .ui-segment, .ui-input, .ui-check-input, .ui-file-drop-input)) {
-  box-sizing:border-box;
-  padding:6px 10px;
-  border:1px solid var(--border-color);
-  border-radius:var(--radius-control);
-  color:var(--text-primary);
-  background:var(--bg-primary);
-  font:inherit;
-}
-.native-strategy-panel button:where(:not(.ui-btn, .ui-icon-btn, .ui-tab, .ui-segment, .ui-input, .ui-check-input, .ui-file-drop-input)):hover:not(:disabled) { background:var(--bg-tertiary); }
-.native-strategy-panel :is(button, select, input):where(:not(.ui-btn, .ui-icon-btn, .ui-tab, .ui-segment, .ui-input, .ui-check-input, .ui-file-drop-input)):disabled { opacity:.55; cursor:not-allowed; }
-.native-strategy-panel button:where(:not(.ui-btn, .ui-icon-btn, .ui-tab, .ui-segment, .ui-input, .ui-check-input, .ui-file-drop-input))[aria-pressed=true] { color:var(--text-accent); border-color:currentColor; }
-.native-strategy-panel :is(button, select, input, textarea):where(:not(.ui-btn, .ui-icon-btn, .ui-tab, .ui-segment, .ui-input, .ui-check-input, .ui-file-drop-input)):focus-visible { outline:2px solid var(--accent-blue); outline-offset:2px; }
-.strategy-research-script > [data-strategy-draft] { flex-direction:column; }
-.strategy-research-script .native-strategy-panel { padding:8px 0; width:100%; box-sizing:border-box; }
-.strategy-research-script .native-code { grid-template-columns:1fr; }
-.native-toolbar { flex-wrap:wrap; }
-.native-replay-controls { padding:12px; margin-bottom:12px; border:1px solid var(--border-color); border-radius:var(--radius-control); }
-.native-replay-controls input { width:80px; }
-.native-strategy-report { padding:16px; overflow:auto; min-width:0; }
-.native-strategy-report pre { max-height:320px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; }
-.native-strategy-panel { padding:16px; height:min(65vh, 760px); overflow:auto; background:var(--bg-secondary); color:var(--text-primary); font-size:13px; }
-.native-strategy-panel header,.native-toolbar { display:flex; align-items:center; gap:12px; }
-.native-strategy-panel header button { margin-left:auto; }
-.native-strategy-panel p { color:var(--text-secondary); }
-.native-strategy-panel :is(button, select):where(:not(.ui-btn, .ui-icon-btn, .ui-tab, .ui-segment, .ui-input)) { padding:6px 10px; cursor:pointer; }
-.native-strategy-panel pre { max-height:320px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; }
-.native-strategy-panel [role=alert] { color:var(--strategy-error); }
-.native-curve { margin:16px 0; border:1px solid var(--border-color); padding:10px; border-radius:var(--radius-control); }
-.native-curve svg { width:100%; max-height:220px; }
-.native-table { overflow:auto; max-height:350px; margin:12px 0; }
-.native-table table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }
-.native-table td,.native-table th { padding:6px 10px; border-bottom:1px solid var(--border-color); white-space:nowrap; text-align:left; }
-.native-table tr:hover { background:var(--bg-tertiary); cursor:pointer; }
-.native-drawing-pane { margin:16px 0; padding:10px; border:1px solid var(--border-color); border-radius:var(--radius-control); }
-.native-drawing-pane svg { display:block; width:100%; min-height:180px; }
+/* The native Pine panel (Phase 5g7): controls come from the kit; these rules lay out the
+   panel, its code view, settings, report, history and comparison. */
+.native-strategy-panel { padding: var(--space-4); height: min(65vh, 760px); overflow: auto; background: var(--surface-1); color: var(--text-primary); font-size: var(--font-size-md); }
+.native-strategy-panel > header, .native-toolbar { display: flex; align-items: center; gap: var(--space-3); }
+.native-strategy-panel > header > .ui-icon-btn { margin-left: auto; }
+.native-strategy-panel p { color: var(--text-secondary); }
+.native-toolbar { flex-wrap: wrap; gap: var(--space-2); }
+.native-source { max-height: 320px; margin: 0; overflow: auto; color: var(--text-secondary); font: var(--font-size-xs)/1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.native-settings-note { margin: 0; color: var(--text-muted); font: var(--font-size-xs)/1.6 var(--font-sans); }
+.native-strategy-report { padding: var(--space-4); overflow: auto; min-width: 0; }
+.strategy-research-script > [data-strategy-draft] { flex-direction: column; }
+.strategy-research-script .native-strategy-panel { padding: var(--space-2) 0; width: 100%; box-sizing: border-box; }
+.strategy-research-script .native-code { grid-template-columns: 1fr; }
 
-.native-advanced-inputs { margin:12px 0; }
-.native-advanced-inputs :is(button, select, input) { padding:6px 10px; border:1px solid var(--border-color); border-radius:var(--radius-control); color:var(--text-primary); background:var(--bg-primary); font:inherit; }
-.native-advanced-inputs button { cursor:pointer; }
-.native-advanced-inputs :is(button, select, input):disabled { opacity:.55; cursor:not-allowed; }
-.native-advanced-inputs :is(button, select, input):focus-visible { outline:2px solid var(--accent-blue); outline-offset:2px; }
-.native-advanced-inputs label { display:block; margin:10px 0; }
-.native-advanced-inputs select,.native-advanced-inputs input,.native-advanced-inputs textarea { width:100%; box-sizing:border-box; }
-.native-advanced-inputs textarea { min-height:140px; padding:10px; color:inherit; background:var(--bg-primary); border:1px solid var(--border-color); font-family:monospace; }
-.native-advanced-inputs fieldset { margin:10px 0; border:1px solid var(--border-color); min-width:0; }
-
-.native-strategy-docked { display: flex; flex-direction: column; padding: 0; overflow: hidden; background: var(--bg-primary); }
+/* Docked in the strategy dock */
+.native-strategy-docked { display: flex; flex-direction: column; padding: 0; overflow: hidden; background: var(--surface-0); }
 .native-strategy-docked .native-dock-scroll { display: flex; flex-direction: column; min-height: 0; flex: 1; overflow: auto; padding: 0 14px 12px; }
 .native-strategy-docked .native-dock-scroll > :not([hidden]) { flex-shrink: 0; }
 .native-dock-scroll > [hidden] { display: none; }
 .native-strategy-docked .native-dock-scroll > .native-code:not([hidden]) { flex: 1 1 auto; }
 
-/* Code view: the editor gets the room; inputs sit beside it. */
-.native-code { display: grid; grid-template-columns: minmax(0, 1fr) minmax(200px, 260px); gap: 12px; min-height: 220px; padding-top: 10px; }
+/* Code view: the editor gets the room; language and inputs sit beside it. */
+.native-code { display: grid; grid-template-columns: minmax(0, 1fr) minmax(200px, 260px); gap: var(--space-3); min-height: 220px; padding-top: 10px; }
 .native-strategy-panel:not(.native-strategy-docked) .native-code { height: 360px; }
-.native-code-editor { min-width: 0; min-height: 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-secondary); }
+.native-code-editor { min-width: 0; min-height: 0; overflow: hidden; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--surface-1); }
 .native-code-editor .chart-strategy-editor { height: 100%; }
-.native-code-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; }
-.native-code-side label { display: flex; flex-direction: column; flex: 1; gap: 6px; min-height: 0; color: var(--text-secondary); font-size: 11px; }
-.native-code-side textarea { flex: 1; min-height: 80px; box-sizing: border-box; padding: 10px; resize: none; border: 1px solid var(--border-color); border-radius: var(--radius-md); color: var(--text-primary); background: var(--bg-secondary); font: 12px/1.6 var(--font-mono); }
-.native-dock-settings select, .native-dock-settings input:not([type=checkbox]) { box-sizing: border-box; width: 100%; }
+.native-code-side { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; min-height: 0; }
+.native-code-side > .ui-field { flex: 1; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
+.native-parameters { min-height: 80px; resize: none; font: var(--font-size-sm)/1.6 var(--font-mono); }
+
+/* Settings */
+.native-dock-settings { padding-top: var(--space-1); }
+.strategy-engine-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--space-3); }
+.strategy-engine-option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  background: var(--surface-0);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.strategy-engine-option:hover:not(:disabled) { border-color: var(--border-strong); background: var(--surface-2); }
+.strategy-engine-option:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
+.strategy-engine-option:disabled { opacity: .6; cursor: not-allowed; }
+.strategy-engine-option[aria-checked=true] { border-color: var(--accent-blue); background: color-mix(in srgb, var(--accent-blue) 8%, var(--surface-0)); }
+.strategy-engine-option strong { font: 600 var(--font-size-md)/1.4 var(--font-sans); }
+.strategy-engine-option[aria-checked=true] strong::before { content: "● "; color: var(--accent-blue); }
+.strategy-engine-option span { color: var(--text-secondary); font: var(--font-size-xs)/1.5 var(--font-sans); }
+.strategy-settings-advanced { margin: var(--space-3) 0; }
+.native-advanced-inputs { margin: var(--space-2) 0; }
+.native-advanced-inputs .ui-disclosure-body { display: grid; gap: var(--space-3); }
+.native-inputs-picker { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2); }
+.native-inputs-picker .ui-field { flex: 1 1 240px; }
+.native-context { display: grid; gap: var(--space-2); min-width: 0; margin: 0; padding: var(--space-3); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
+.native-context legend { padding: 0 var(--space-1); color: var(--text-secondary); font: 600 var(--font-size-xs)/1.4 var(--font-sans); }
+.native-json { min-height: 120px; font: var(--font-size-xs)/1.5 var(--font-mono); }
 
 /* Run history */
 .native-history { padding-top: 10px; }
-.native-history-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; padding-bottom: 8px; }
-.native-history-head p { margin: 0; flex: 1 1 280px; color: var(--text-secondary); font-size: 11px; }
-.native-history-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--border-color); }
-:is(.strategy-dock, .native-strategy-panel) .native-history-list button { display: grid; grid-template-columns: minmax(150px, auto) minmax(0, 1fr) auto; gap: 16px; align-items: center; width: 100%; padding: 8px 6px; border: 0; border-bottom: 1px solid var(--border-color); border-radius: 0; background: transparent; text-align: left; font-variant-numeric: tabular-nums; }
-:is(.strategy-dock, .native-strategy-panel) .native-history-list button:hover:not(:disabled) { background: var(--bg-hover); }
-:is(.strategy-dock, .native-strategy-panel) .native-history-list button[aria-current=true] { box-shadow: inset 2px 0 0 var(--accent-blue); }
-.native-history-list span:not(.strategy-run-status) { overflow: hidden; color: var(--text-secondary); text-overflow: ellipsis; white-space: nowrap; }
-.native-strategy-docked .native-replay-controls { padding: 8px 0; margin: 0; border: 0; border-bottom: 1px solid var(--border-color); border-radius: 0; }
-.native-strategy-docked .native-replay-controls p { margin: 6px 0; }
-.native-strategy-docked .native-curve { border: 0; border-radius: 0; padding: 10px 0; margin: 8px 0; }
-.native-strategy-docked .native-table { max-height: none; }
-.native-strategy-docked .native-table th { position: sticky; top: 0; background: var(--bg-secondary); }
-.native-report-method { margin: 8px 0; color: var(--text-secondary); }
-.native-report-diagnostics { margin: 8px 0; color: var(--strategy-error); }
-.native-report-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 8px 0; }
-.native-report-metrics > div { padding: 0 16px; border-right: 1px solid var(--border-color); min-width: 0; }
+.native-history-head { padding-bottom: var(--space-2); }
+.native-history-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--border-subtle); }
+.native-history-list button { display: grid; grid-template-columns: minmax(150px, auto) minmax(0, 1fr) auto; gap: var(--space-4); align-items: center; width: 100%; padding: var(--space-2) 6px; border: 0; border-bottom: 1px solid var(--border-subtle); color: var(--text-primary); background: transparent; font: inherit; text-align: start; cursor: pointer; }
+.native-history-list button:hover:not(:disabled) { background: var(--surface-2); }
+.native-history-list button:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: -2px; }
+.native-history-list button:disabled { cursor: not-allowed; opacity: .6; }
+.native-history-list button[aria-current=true] { box-shadow: inset 2px 0 0 var(--accent-blue); }
+.native-history-list time { font: var(--font-size-sm)/1.4 var(--font-mono); font-variant-numeric: tabular-nums; }
+.native-history-list span:not(.ui-badge) { overflow: hidden; color: var(--text-secondary); text-overflow: ellipsis; white-space: nowrap; }
+
+/* Report */
+.native-report .positive { color: var(--text-up); }
+.native-report .negative { color: var(--text-down); }
+.native-report-view-switch { float: right; position: relative; z-index: 2; display: flex; align-items: center; gap: var(--space-2); margin-left: var(--space-3); padding-top: var(--space-2); color: var(--text-secondary); font-size: var(--font-size-xs); }
+.native-report-context { display: flex; flex-wrap: wrap; gap: 6px var(--space-4); min-height: 20px; padding: var(--space-2) 0; border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary); font-size: var(--font-size-xs); }
+.native-report-toolbar { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-2) var(--space-4); font-size: var(--font-size-xs); }
+.native-report-toolbar > .ui-disclosure[open] { flex-basis: 100%; }
+.native-report-toolbar > a.ui-btn { margin-left: auto; }
+.native-report-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: var(--space-3) 0 var(--space-2); }
+.native-report-metrics > div { min-width: 0; padding: 0 var(--space-4); border-right: 1px solid var(--border-subtle); }
 .native-report-metrics > div:first-child { padding-left: 0; }
 .native-report-metrics > div:last-child { border: 0; }
-.native-report-metrics span { display: block; font-size: 12px; color: var(--text-secondary); }
-.native-report-metrics strong { display: block; font: 600 20px/1.5 var(--font-mono); font-variant-numeric: tabular-nums; }
-.native-report-metrics small { font-size: var(--font-size-xs); color: var(--text-secondary); }
-
-.native-report-toolbar { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 18px; font-size: 11px; }
-.native-report-toolbar details[open] { flex-basis: 100%; }
-.native-report-toolbar a { margin-left: auto; color: var(--text-accent); }
-.native-strategy-docked .native-replay-controls > strong { margin-right: 12px; }
-.native-strategy-docked .native-report-toolbar .native-replay-controls { border: 0; padding: 0; }
-.native-strategy-docked .native-report-toolbar { padding: 6px 0; }
-.native-strategy-docked .native-report-metrics > div { padding-top: 0; padding-bottom: 0; }
+.native-report-metrics span { display: block; color: var(--text-secondary); font-size: var(--font-size-sm); }
+.native-report-metrics strong { display: block; font: 600 23px/1.8 var(--font-sans); font-variant-numeric: tabular-nums; letter-spacing: -.5px; }
+.native-report-metrics strong em { font: 500 var(--font-size-sm) var(--font-sans); letter-spacing: 0; white-space: nowrap; }
+.native-report-metrics small { display: block; color: var(--text-secondary); font-size: var(--font-size-xs); line-height: 1.6; }
+.native-report-caption { margin: 6px 0; color: var(--text-secondary); font-size: var(--font-size-xs); line-height: 1.5; }
+.native-report-disclosure { clear: both; margin: var(--space-2) 0; font-size: var(--font-size-xs); color: var(--text-secondary); }
+.native-report-method { margin: var(--space-2) 0; color: var(--text-secondary); }
+.native-report-method p { margin: 0 0 4px; }
+.native-report-diagnostics { margin: var(--space-2) 0; }
+.native-report-diagnostics .native-source { color: var(--text-danger); }
+.native-curve { margin: var(--space-4) 0; padding: 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); }
+.native-curve svg { width: 100%; max-height: 220px; }
+.native-drawing-pane { margin: var(--space-4) 0; padding: 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); }
+.native-drawing-pane svg { display: block; width: 100%; min-height: 180px; }
+.native-strategy-docked .native-curve { border: 0; border-radius: 0; padding: 10px 0; margin: var(--space-2) 0; }
 .native-strategy-docked .native-curve svg { display: block; height: 120px; }
+.native-strategy-docked .native-report-toolbar { padding: 6px 0; }
 
-/* Keep review controls outside the table's scroll area, even in a short dock. */
-.native-trade-controls, .native-trade-sections, .native-trade-pages, .native-trade-jump { display: flex; align-items: center; gap: 6px; }
-.native-trade-controls { flex-wrap: wrap; gap: 6px 16px; padding: 6px 0; flex-shrink: 0; }
-.native-trade-sections button[aria-pressed=true] { color: var(--text-accent); border-color: var(--accent-blue); }
+/* Performance chart */
+.native-performance { min-width: 0; margin: var(--space-3) 0 10px; }
+.native-performance-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.native-performance-heading .ui-check { font-size: var(--font-size-xs); color: var(--text-secondary); }
+.native-performance-readout { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); min-height: 28px; color: var(--text-secondary); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
+.native-performance-readout strong { color: var(--text-primary); }
+.native-performance svg { display: block; width: 100%; height: auto; min-height: 150px; color: var(--text-primary); }
+.native-performance svg text { fill: var(--text-secondary); font: var(--font-size-xs) var(--font-sans); }
+.native-chart-grid { stroke: var(--border-color); stroke-width: .6; stroke-dasharray: 3 4; }
+.native-performance-line, .native-drawdown-line, .native-benchmark-line { fill: none; stroke-width: 1.8; vector-effect: non-scaling-stroke; }
+.native-performance-line { stroke: var(--candle-up); }
+.native-drawdown-line { stroke: var(--candle-down); }
+.native-benchmark-line { stroke: var(--text-muted); stroke-dasharray: 5 3; stroke-width: 1.3; }
+.native-benchmark-value { color: var(--text-muted); }
+.native-chart-cursor { stroke: var(--text-secondary); stroke-dasharray: 3 3; }
+
+/* Trades and orders */
+.native-table { overflow: auto; max-height: 350px; margin: var(--space-3) 0; }
+.native-table table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.native-table :is(td, th) { padding: 10px; border-bottom: 1px solid var(--border-subtle); white-space: nowrap; text-align: start; }
+.native-table td { padding: var(--space-3) 10px; font-size: var(--font-size-sm); }
+.native-table td small { display: block; margin-top: 5px; font-size: var(--font-size-xs); opacity: .8; }
+.native-table th { color: var(--text-secondary); font-size: var(--font-size-xs); font-weight: 500; }
+.native-table tr:hover { background: var(--surface-2); cursor: pointer; }
+.native-table tr[data-selected="true"] { background: color-mix(in srgb, var(--accent-blue) 14%, transparent); outline: 1px solid var(--accent-blue); outline-offset: -1px; }
+.native-table tr:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: -2px; }
+.native-strategy-docked .native-table { flex: 1; min-height: 0; max-height: none; margin: 0; overscroll-behavior: contain; }
+.native-strategy-docked .native-table th { position: sticky; top: 0; z-index: 1; background: var(--surface-1); }
+/* Review controls stay outside the table's scroll area, even in a short dock. */
+.native-trade-controls, .native-trade-pages, .native-trade-jump { display: flex; align-items: center; gap: 6px; }
+.native-trade-controls { flex-shrink: 0; flex-wrap: wrap; gap: 6px var(--space-4); padding: 6px 0; }
 .native-trade-controls .strategy-trade-navigation { padding: 0; gap: 6px; }
 .native-trade-pages { margin-left: auto; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
-.native-trade-jump input { width: 56px; box-sizing: border-box; padding: 5px; font: inherit; color: var(--text-primary); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-xs); }
+.native-trade-jump .ui-input { width: 64px; }
 .native-trade-jump span { min-width: 0; white-space: nowrap; }
-.native-trade-controls button { white-space: nowrap; }
 .native-strategy-docked .native-dock-scroll:has(> .native-dock-report[data-view=trades]:not([hidden])) { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 0; }
 .native-strategy-docked .native-dock-report[data-view=trades]:not([hidden]),
 .native-strategy-docked .native-report[data-view=trades],
 .native-strategy-docked .native-trade-view:not([hidden]) { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .native-strategy-docked .native-report[data-view=trades] > .native-report-toolbar { flex-shrink: 0; max-height: 40%; overflow: auto; }
-.native-strategy-docked .native-table { flex: 1; min-height: 0; overscroll-behavior: contain; margin: 0; }
-.native-strategy-docked .native-table th { z-index: 1; }
+
+/* Incremental replay */
+.native-replay-controls { display: grid; gap: var(--space-2); margin-bottom: var(--space-3); padding: var(--space-3); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
+.native-replay-controls p { margin: 0; }
+.native-replay-controls > .ui-btn { justify-self: start; }
+.native-replay-position { font: var(--font-size-sm)/1.4 var(--font-mono); font-variant-numeric: tabular-nums; }
+.native-replay-target { width: 88px; }
+.native-strategy-docked .native-replay-controls { margin: 0; padding: var(--space-2) 0; border: 0; border-bottom: 1px solid var(--border-subtle); border-radius: 0; }
+.native-strategy-docked .native-report-toolbar .native-replay-controls { border: 0; padding: 0; }
+
+/* Strategy comparison */
+.native-strategy-collection { display: flex; align-items: center; flex: 0 0 40px; min-width: 0; padding: 0 var(--space-2); border-bottom: 1px solid var(--border-subtle); background: var(--surface-1); }
+.native-comparison { display: grid; align-content: start; gap: var(--space-2); flex: 1; min-height: 0; overflow: auto; padding: 10px var(--space-3); color: var(--text-primary); }
+.native-strategy-name { max-width: 360px; }
+.native-comparison-picker { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); margin: 0; padding: 0; border: 0; }
+.native-comparison-picker legend { padding: 0 0 6px; font: 600 var(--font-size-sm)/1.4 var(--font-sans); }
+.native-comparison-note { margin: 0; color: var(--text-secondary); font-size: var(--font-size-xs); line-height: 1.5; }
+.native-comparison-run { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: 4px 0; font-size: var(--font-size-xs); }
+.native-comparison-run code { max-width: 240px; overflow: hidden; color: var(--text-secondary); text-overflow: ellipsis; }
+.native-comparison-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-1); margin-left: auto; }
+.native-comparison-table { overflow-x: auto; margin: 10px 0; }
+.native-comparison-table table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.native-comparison-table :is(th, td) { min-width: 120px; max-width: 280px; padding: 7px 10px; border-bottom: 1px solid var(--border-subtle); text-align: right; overflow-wrap: anywhere; }
+.native-comparison-table th:first-child { text-align: left; color: var(--text-secondary); }
+.native-comparison-chart-actions { justify-self: start; }
+.native-comparison-chart { display: block; width: 100%; min-width: 360px; height: 205px; color: var(--text-secondary); font: var(--font-size-xs) var(--font-sans); }
+
 @container strategy-dock (max-width: 720px) {
   .native-strategy-docked .native-dock-scroll { padding-left: 10px; padding-right: 10px; }
   .native-code { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(180px, 1fr) auto; }
-  .native-code-side textarea { min-height: 70px; }
-  .native-report-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 12px; }
+  .native-parameters { min-height: 70px; }
+  .native-report-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: var(--space-3); }
   .native-report-metrics > div:nth-child(3) { padding-left: 0; }
   .native-report-metrics > div:nth-child(2) { border: 0; }
+  .native-report-metrics strong { font-size: 20px; }
+  .native-report-context { gap: 6px 14px; }
   .native-trade-controls { gap: 4px 10px; }
-  .native-trade-controls button { padding: 4px 6px; }
   .native-report-toolbar { gap: 4px 10px; }
+  .native-performance { margin-top: 14px; }
 }
 
 /* Short windows take precedence over the normal report minimum. Keep all actions reachable. */
 .strategy-dock[data-compact=true] .native-dock-scroll:has(> .native-dock-report[data-view=trades]:not([hidden])) { overflow: auto; }
 .strategy-dock[data-compact=true] .native-dock-report[data-view=trades]:not([hidden]) { flex: none; }
 .strategy-dock[data-compact=true] .native-table { flex: none; min-height: 90px; max-height: 180px; }
-
-.native-strategy-collection { display: flex; align-items: center; flex: 0 0 40px; min-width: 0; padding: 0 8px; border-bottom: 1px solid var(--border-color); background: var(--bg-secondary); }
-
-.native-comparison { overflow: auto; flex: 1; min-height: 0; padding: 10px 12px; color: var(--text-primary); }
-.native-comparison-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; border: 0; padding: 0; margin: 0 0 8px; }
-.native-comparison-picker legend { padding: 0 0 6px; font-weight: 600; }
-.native-comparison-picker label { display: inline-flex; align-items: center; gap: 5px; }
-.native-comparison button { background: var(--bg-primary); color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 4px 8px; cursor: pointer; }
-.native-comparison button:disabled { opacity: .45; cursor: default; }
-.native-comparison button[aria-pressed="true"] { color: var(--text-accent); border-color: var(--accent-blue); }
-.native-comparison-note { color: var(--text-secondary); font-size: 11px; line-height: 1.5; margin: 6px 0; }
-.native-comparison-run { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 4px 0; font-size: 11px; }
-.native-comparison-run code { max-width: 240px; overflow: hidden; text-overflow: ellipsis; color: var(--text-secondary); }
-.native-comparison-table { overflow-x: auto; margin: 10px 0; }
-.native-comparison-table table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
-.native-comparison-table :is(th, td) { padding: 7px 10px; text-align: right; border-bottom: 1px solid var(--border-color); min-width: 120px; max-width: 280px; overflow-wrap: anywhere; }
-.native-comparison-table th:first-child { text-align: left; color: var(--text-secondary); }
-.native-comparison-chart-actions { display: flex; gap: 6px; }
-.native-comparison-chart { display: block; width: 100%; min-width: 360px; height: 205px; color: var(--text-secondary); font: var(--font-size-xs) var(--font-sans); }
-
-.native-report .positive { color: var(--text-up); }
-.native-report .negative { color: var(--text-down); }
-.native-report-view-switch { display:flex; align-items:center; gap:12px; padding:8px 0 0; color:var(--text-secondary); font-size:11px; }
-.native-report-view-switch button { font-size:11px; padding:3px 8px; }
-.native-report-context { display:flex; flex-wrap:wrap; gap:8px 24px; color:var(--text-secondary); padding:12px 0; font-size:11px; border-bottom:1px solid var(--border-color); }
-.native-report-disclosure { margin:8px 0; font-size:11px; color:var(--text-secondary); }
-.native-report-disclosure > summary { cursor:pointer; width:fit-content; }
-.native-report-metrics { margin:20px 0 12px; }
-.native-report-metrics strong { font:600 23px/1.8 var(--font-sans); letter-spacing:-.5px; }
-.native-report-metrics strong em { font:500 12px var(--font-sans); letter-spacing:0; white-space:nowrap; }
-.native-report-metrics small { display:block; line-height:1.6; font-size:var(--font-size-xs); }
-.native-performance { min-width:0; margin:20px 0 10px; }
-.native-performance-heading { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; }
-.native-performance-heading label { display:flex; gap:6px; align-items:center; font-size:11px; color:var(--text-secondary); }
-.native-performance-tabs { display:flex; gap:4px; }
-.native-performance-tabs button { background:transparent; border:0; font-size:12px; padding:5px 10px; }
-.native-performance-tabs button[aria-pressed=true] { background:var(--bg-tertiary); color:var(--text-primary); }
-.native-performance-readout { display:flex; flex-wrap:wrap; align-items:center; gap:16px; min-height:28px; font-size:11px; color:var(--text-secondary); font-variant-numeric:tabular-nums; }
-.native-performance-readout strong { color:var(--text-primary); }
-.native-performance svg { display:block; width:100%; height:auto; min-height:180px; color:var(--text-primary); }
-.native-performance svg text { fill:var(--text-secondary); font:var(--font-size-xs) var(--font-sans); }
-.native-chart-grid { stroke:var(--border-color); stroke-width:.6; stroke-dasharray:3 4; }
-.native-performance-line,.native-drawdown-line,.native-benchmark-line { fill:none; stroke-width:1.8; vector-effect:non-scaling-stroke; }
-.native-performance-line { stroke:var(--candle-up); }
-.native-drawdown-line { stroke:var(--candle-down); }
-.native-benchmark-line { stroke:var(--text-muted); stroke-dasharray:5 3; stroke-width:1.3; }
-.native-benchmark-value { color:var(--text-muted); }
-.native-chart-cursor { stroke:var(--text-secondary); stroke-dasharray:3 3; }
-.native-report-caption { color:var(--text-secondary); font-size:var(--font-size-xs); line-height:1.5; margin:6px 0; }
-.native-table td { padding:12px 10px; font-size:12px; }
-.native-table td small { display:block; margin-top:5px; font-size:11px; opacity:.8; }
-.native-table th { font-size:11px; color:var(--text-secondary); font-weight:500; padding:10px; }
-.native-table tr[data-selected=true] { background:color-mix(in srgb,var(--accent-blue) 12%,transparent); }
-@container strategy-dock (max-width:720px) { .native-report-metrics strong { font-size:20px; } .native-report-context { gap:6px 14px; } .native-performance { margin-top:14px; } }
-.native-report-view-switch { float:right; position:relative; z-index:2; margin-left:12px; }
-.native-report-context { min-height:20px; padding:8px 0; gap:6px 16px; }
-.native-report-metrics { margin:12px 0 8px; }
-.native-performance { margin-top:12px; }
-.native-performance svg { min-height:150px; }
-.native-report-disclosure { clear:both; }
-
-.native-error-help { padding: 10px; border: 1px solid var(--border-color); border-radius: 6px; }
-.native-error-help p { margin: 0 0 8px; line-height: 1.5; }
-.native-error-help details { margin-top: 8px; }
-.native-error-help pre { max-height: 160px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
-.native-strategy-name { display: flex; align-items: center; gap: 12px; padding: 6px 0; }
-.native-strategy-name input { color: var(--text-primary); background: var(--bg-primary); border: 1px solid var(--border-color); padding: 4px 8px; }
 }
