@@ -446,7 +446,8 @@ def references_current(conn, refs: list[dict]) -> bool:
 
 
 def validate_component_preview(conn, components, *, symbol, interval, exchange,
-                               market_type, series_identity, revision_floor, source_window=None) -> str:
+                               market_type, series_identity, revision_floor, source_window=None,
+                               source_permission_floor=None) -> str:
     """No writes/acknowledgments: validate at most 256 immutable source leaves.
 
     A superseding observation is normal source progress, not a repair request.
@@ -471,7 +472,6 @@ def validate_component_preview(conn, components, *, symbol, interval, exchange,
                 or sum(not held['is_closed'] for held in components) != 1
                 or any(held.get('source_ref') is None
                        or held['source_ref'].get('series') != source_window.series
-                       or (held['is_closed'] and not source_window.start_ms <= held['open_time_ms'] < source_window.through_ms)
                        or (not held['is_closed'] and held['open_time_ms'] < source_window.through_ms)
                        for held in components)):
             return 'unavailable'
@@ -480,6 +480,29 @@ def validate_component_preview(conn, components, *, symbol, interval, exchange,
             return 'canonical_changed'
         if not source_window_current(conn, source_window):
             return 'superseded'
+        tail = next(held for held in components if not held['is_closed'])
+        target_end = parse_interval_spec(interval).next_ms(source_window.start_ms)
+        if (len({held['open_time_ms'] for held in components}) != len(components)
+                or any(not source_window.start_ms <= held['open_time_ms'] < target_end
+                       or held['close_time_ms'] + 1 > target_end
+                       or held['close_time_ms'] + 1 - held['open_time_ms'] != source_window.source_width_ms
+                       or held['open_time_ms'] % source_window.source_width_ms
+                       or (held['is_closed'] and held['open_time_ms'] >= tail['open_time_ms'])
+                       for held in components)):
+            return 'unavailable'
+        if (type(source_permission_floor) is not int or source_permission_floor < 0
+                or source_permission_floor > source_window.acquisition_revision):
+            return 'unavailable'
+        from .revisions import Acquisition, StaleAcquisition
+        from .derived_history_fence import check_deletions
+        try:
+            check_deletions(conn, Acquisition(source_permission_floor),
+                            series_values(symbol, interval, exchange, market_type, series_identity),
+                            series_values(symbol, json.loads(source_window.series)[3], exchange, market_type, series_identity))
+        except StaleAcquisition:
+            return 'canonical_changed'
+    permission_sql = ('h.permission_floor' if source_window is not None and 'permission_floor' in
+                      {row[1] for row in conn.execute('PRAGMA table_info(kline_source_heads)')} else '0')
     source_values=set()
     # References and all scalar comparisons share this transaction. Decode one
     # bounded normalized row at a time; never retain all envelopes or source rows.
@@ -510,7 +533,7 @@ def validate_component_preview(conn, components, *, symbol, interval, exchange,
                     or ref['open_time']!=held['open_time_ms']):
                 return 'unavailable'
             source_interval=source[3]
-            row=conn.execute('''SELECT h.revision,h.is_closed,
+            row=conn.execute('''SELECT h.revision,h.is_closed,''' + permission_sql + ''' AS permission_floor,
                 CASE WHEN length(o.data_json)<=8192 THEN o.data_json ELSE NULL END AS data_json
                 FROM kline_source_heads h JOIN kline_source_observations o ON o.id=h.observation_id
                 WHERE h.series=? AND h.open_time=?''',(ref['series'],ref['open_time'])).fetchone()
@@ -519,6 +542,11 @@ def validate_component_preview(conn, components, *, symbol, interval, exchange,
             if row['data_json'] is None:
                 return 'unavailable'
             data=json.loads(row['data_json'])
+            if source_window is not None:
+                if type(row['permission_floor']) is not int or row['permission_floor'] < source_permission_floor:
+                    return 'canonical_changed'
+                if type(data.get('is_closed')) is not bool or data['is_closed'] != held['is_closed']:
+                    return 'unavailable'
             mask=declared_enhanced_fields(exchange,market_type,data)
             if (data.get('open_time')!=held['open_time_ms'] or data.get('close_time')!=held['close_time_ms']
                     or bool(row['is_closed'])!=held['is_closed'] or mask!=held['enhanced_fields']
@@ -536,9 +564,9 @@ def validate_component_preview(conn, components, *, symbol, interval, exchange,
         canonical=conn.execute('SELECT '+','.join((*_VALUES,'source'))+' FROM klines WHERE '
             +' AND '.join(where)+' AND open_time=?',(*params,held['open_time_ms'])).fetchone()
         if held['is_closed']:
-            # Source-only closed leaves inside this exact selected proof need
-            # not have native canonical rows. Present canonical values still
-            # must agree; the selected head/value was checked above.
+            # The finite source-only overlay can extend beyond the captured
+            # prefix. Each leaf keeps its selected value and original delete
+            # permission; present canonical values must still agree.
             if ((canonical is None and source_window is None)
                     or (canonical is not None and (
                         any(canonical[name]!=held[name] for name in ('open','high','low','close','volume',*mask))

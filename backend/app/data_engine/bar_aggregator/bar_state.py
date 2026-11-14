@@ -608,7 +608,7 @@ class ComponentSnapshotOHLCVMerge:
                 and previous['source_ref']['open_time'] == candidate['source_ref']['open_time'] == incoming.open_time_ms
                 and all(row is previous or (
                     type(row) is ReadonlyFields and row.estimated_bytes <= 8192 and row['is_closed']
-                    and receipt.version.start_ms <= row['open_time_ms'] < receipt.version.through_ms
+                    and receipt.version.start_ms <= row['open_time_ms'] < incoming.open_time_ms
                     and row['close_time_ms'] + 1 - row['open_time_ms'] == receipt.version.source_width_ms
                     and row.get('source_ref') is not None
                     and set(row['source_ref']) == {'series','open_time','revision'}

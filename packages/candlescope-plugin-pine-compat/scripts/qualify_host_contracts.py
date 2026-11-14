@@ -51,6 +51,7 @@ def main():
         "test_deferred_component_preview.py", "test_deferred_component_preview_pipeline.py",
         "test_deferred_component_preview_prefix.py",
         "test_deferred_component_preview_source_window.py",
+        "test_deferred_component_preview_continuation.py",
         "test_closed_component_retention.py",
         "test_forming_component_retention.py",
         "test_source_window_recovery.py",
