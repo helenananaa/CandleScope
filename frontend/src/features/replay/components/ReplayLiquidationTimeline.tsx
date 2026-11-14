@@ -1,3 +1,4 @@
+import { Badge, EmptyState } from "../../../components/ui/index.js";
 import { t, type LocaleId } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import type { ReplayLiquidationCase } from "../replayV2Types.js";
@@ -22,7 +23,7 @@ export default function ReplayLiquidationTimeline({
 }: ReplayLiquidationTimelineProps) {
   const locale = useLocale();
   if (cases.length === 0) {
-    return <div className="replay-account-empty compact calm">{emptyLabel ?? t("replay.liq.empty")}</div>;
+    return <EmptyState compact title={emptyLabel ?? t("replay.liq.empty")} />;
   }
   return (
     <div className="replay-liquidation-timeline" data-replay-timeline="liquidation">
@@ -30,7 +31,7 @@ export default function ReplayLiquidationTimeline({
         <details className="replay-liquidation-case" key={item.case_id} open={cases.length === 1}>
           <summary>
             <span><strong>{t("replay.liq.case", { sequence: item.case_sequence })}</strong><small>{item.reason}</small></span>
-            <span className="replay-chip" data-liquidation-state={item.state}>{item.state}</span>
+            <span data-liquidation-state={item.state}><Badge tone={item.state === "COMPLETED" ? "neutral" : "warning"}>{item.state}</Badge></span>
           </summary>
           <div className="replay-liquidation-case-body">
             <p className="replay-liquidation-disclosure">

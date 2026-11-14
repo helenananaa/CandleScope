@@ -180,5 +180,5 @@ test("Phase 7 entry and narrow-rail layout have no gray gate or horizontal overf
   assert.doesNotMatch(entrySource, /hidden/);
   assert.match(css, /\.replay-liquidation-case-body,[\s\S]*\{[^}]*min-width:\s*0[^}]*max-width:\s*100%/s);
   assert.match(css, /\.replay-liquidation-steps\s*\{[^}]*overflow-x:\s*hidden/s);
-  assert.match(css, /\.replay-right-rail[\s\S]*\.replay-liquidation-legs\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s);
+  assert.match(css, /\.replay-trading-workbench \.replay-liquidation-legs\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s);
 });
