@@ -117,7 +117,8 @@ try {
   assert.notEqual(submissions[1].idempotency_key, submissions[2].idempotency_key);
   record("recover-deleted-result-from-saved-draft", { firstRun, secondRun, submissions: submissions.length });
   const cursor = await page.locator('[data-replay-cursor-ms]').getAttribute('data-replay-cursor-ms');
-  await page.locator('[data-replay-action="advance-base"]').click();
+  // "Next base bar" is hidden when it would repeat "next display bar" (same interval).
+  await page.locator('[data-replay-action="advance-base"], [data-replay-action="advance-display"]').first().click();
   await page.waitForFunction(before => Number(document.querySelector('[data-replay-cursor-ms]')?.getAttribute('data-replay-cursor-ms')) > Number(before), cursor);
   await page.reload(); await ready();
   record("advance-and-reload", { runId: secondRun });

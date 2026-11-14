@@ -391,7 +391,9 @@ Still outside the stack, and moved when each is rebuilt:
 | 5e | Symbol search and Export (native `<dialog>` onto the kit) |
 | 5f | Replay hub: the run list, the create dialog, deleting a run |
 | 5f2 | Replay storage management and the initial market picker |
-| 5f3 | Replay session: control bar, right rail, review and integrity, notes |
+| 5f3 | Replay session controls: the bottom bar, its notices and diagnostics, the end dialog, the capabilities view |
+| 5f4 | Replay review and integrity drawer, training results |
+| 5f5 | Replay right rail: account, activity, watchlist, notes, market views |
 | 5g | Strategy research merged with backtest (§6.1), local data, CSV import |
 | 5h | Data workbench |
 | 5i | Order book, trade flow and account docks; panel toggles and Settings on `IconButton` |
@@ -445,6 +447,13 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - 存储管理 is a kit `Dialog` instead of a panel above the run list: the release decision and alerts are `InlineAlert`s, each storage category is one row with used / limit and its percentage, and the counts, objects and the source matrix sit in closed disclosures. The cleanup dry run, its confirmation and the verified trade days use kit fields, a checkbox and a danger button; the "keep until" time is UTC text.
 - The initial market picker drops its mark, eyebrow and tiles: the run's constraints are one line, the filters are a kit search field, a segmented market type and a checkbox, and markets are rows with venue · interval · coverage and 选择.
 - The storage and picker rules move from three stylesheets into `trainingHub.css`; the late-loading `trainingHubMarketPicker.css` is deleted.
+
+**Phase 5f3 is done (branch `design/phase-5f3-replay-session`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_5F3.md`](../docs/FRONTEND_DESIGN_QA_PHASE_5F3.md). The session was split again when it started (5f3, 5f4, 5f5): its review drawer and its right rail are each the size of a sub-phase.
+
+- The bottom control bar is kit buttons, selects and an input: 结束 is a quiet red button, the step buttons a group, 播放 the primary action, the time on the right. "Next base bar" is hidden when it would repeat "next display bar" (the same interval), which showed two identical 下一根 1m buttons.
+- The read-only, reconnecting and command-error notices are `InlineAlert`s with their actions; 高级诊断 is a kit `Disclosure` with the fidelity codes as badges.
+- Ending a run is a kit `Dialog` on the overlay stack (取消 focused, danger confirm), replacing a hand-built dialog with its own focus trap.
+- The capabilities view is one row per capability with a short state badge (精确, 近似, 不可用) instead of a grid of tiles whose state codes overflowed.
 
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
