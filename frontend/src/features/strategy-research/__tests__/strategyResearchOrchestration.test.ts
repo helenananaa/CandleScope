@@ -9,7 +9,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import StrategyResearchApp from "../StrategyResearchApp.js";
 import {
   parseStrategyResearchLaunch,
-  resolveStrategyResearchBootstrap,
 } from "../strategyResearchLaunch.js";
 import {
   STRATEGY_RESEARCH_LEGACY_MAP,
@@ -54,36 +53,24 @@ test("legacy-to-unified map covers migrated orchestration and names deferred M9 
 });
 
 test("import polling, dataset selection, and Run polling are not reimplemented in page apps", () => {
-  const localApp = source("../../local-data/LocalApp.tsx");
-  const backtestApp = source("../../backtest/BacktestApp.tsx");
+  const app = source("../StrategyResearchApp.tsx");
   const library = source("../../research-data/useResearchDataLibrary.ts");
   const researchRuntime = source("../../backtest/research/useBacktestResearchRuntime.ts");
   const runClient = source("../../backtest/backtestRunClient.ts");
   assert.match(library, /export async function pollResearchImportJob/);
-  assert.doesNotMatch(localApp, /pollResearchImportJob|setInterval\(/);
-  assert.doesNotMatch(backtestApp, /listDatasets|setInterval\(|pollResearchImportJob|pollBacktestRunToTerminal/);
-  assert.match(localApp, /useResearchDataLibrary/);
-  assert.match(backtestApp, /BacktestResearchApp/);
+  assert.doesNotMatch(app, /pollResearchImportJob|setInterval\(|pollBacktestRunToTerminal/);
+  assert.match(app, /useResearchDataLibrary/);
+  assert.match(app, /BacktestResearchApp/);
   assert.match(researchRuntime, /window\.setInterval/);
   assert.match(runClient, /export async function pollBacktestRunToTerminal/);
   assert.equal((library.match(/export async function pollResearchImportJob/g) ?? []).length, 1);
   assert.equal((runClient.match(/export async function pollBacktestRunToTerminal/g) ?? []).length, 1);
 });
 
-test("flag-off still restores the local compatibility shell without unified first-paint cost", () => {
-  assert.equal(resolveStrategyResearchBootstrap({ libraryEnabled: false, page: "local" }), "local-legacy");
-  assert.equal(resolveStrategyResearchBootstrap({ libraryEnabled: false, page: "backtest" }), "backtest-legacy");
-  const bootstrap = source("../strategyResearchBootstrap.tsx");
-  assert.match(bootstrap, /if \(mode === "local-legacy"\)/);
-  assert.match(bootstrap, /<LocalApp/);
-  assert.match(bootstrap, /<BacktestApp/);
-  const localApp = source("../../local-data/LocalApp.tsx");
-  assert.match(localApp, /local-app-compat-shell/);
-  assert.doesNotMatch(localApp, /pollResearchImportJob|window\.setInterval/);
+test("the unified page paints without the compatibility notice or Monaco", () => {
   const unified = renderToStaticMarkup(
     React.createElement(StrategyResearchApp, {
       intent: parseStrategyResearchLaunch({ pathname: "/strategy.html", search: "" }),
-      libraryEnabled: true,
     }),
   );
   assert.match(unified, /strategy-research-shell/);
@@ -95,7 +82,6 @@ test("compatibility URLs show a one-time notice and keep using the unified app",
   const local = renderToStaticMarkup(
     React.createElement(StrategyResearchApp, {
       intent: parseStrategyResearchLaunch({ pathname: "/local.html", search: "" }),
-      libraryEnabled: true,
     }),
   );
   assert.match(local, /strategy-research-compat-notice/);
@@ -103,7 +89,6 @@ test("compatibility URLs show a one-time notice and keep using the unified app",
   const backtest = renderToStaticMarkup(
     React.createElement(StrategyResearchApp, {
       intent: parseStrategyResearchLaunch({ pathname: "/backtest.html", search: "?run=bt_0123456789abcdef" }),
-      libraryEnabled: true,
     }),
   );
   assert.match(backtest, /strategy-research-compat-notice/);

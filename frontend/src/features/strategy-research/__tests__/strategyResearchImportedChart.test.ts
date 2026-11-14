@@ -68,7 +68,7 @@ test("library selection follows the restored source instead of the first dataset
 test("activating a revision refreshes the library before advancing source epoch and stales the old result", () => {
   const current = manifest();
   const activated = manifest({ data_epoch: `sha256:${"d".repeat(64)}` });
-  const runtime = new StrategyResearchRuntime({ restoreWorkspace: false, libraryEnabled: true });
+  const runtime = new StrategyResearchRuntime({ restoreWorkspace: false });
   runtime.dispatch({ type: "source/select", source: importedDatasetSourceFromManifest(current) });
   runtime.dispatch({ type: "result/setRun", runId: "bt_previous" });
   runtime.dispatch({
@@ -166,7 +166,6 @@ test("first open shows the Python template and import without hiding the script 
   const first = renderToStaticMarkup(
     React.createElement(StrategyResearchApp, {
       intent: parseStrategyResearchLaunch({ pathname: "/strategy.html", search: "" }),
-      libraryEnabled: true,
     }),
   );
   assert.match(first, /data-visual-state="first"/);
@@ -184,10 +183,8 @@ test("source=current does not invent a live chart session", () => {
   const html = renderToStaticMarkup(
     React.createElement(StrategyResearchApp, {
       intent: parseStrategyResearchLaunch({ pathname: "/strategy.html", search: "?source=current" }),
-      libraryEnabled: false,
     }),
   );
   assert.match(html, /strategy-research-current-chart-unavailable|strategy-research-open-market-tester/);
   assert.doesNotMatch(html, /data-symbol="BTCUSDT"/);
-  assert.doesNotMatch(html, /strategy-research-import-own-data/);
 });

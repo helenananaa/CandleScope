@@ -95,6 +95,7 @@ dataset_id + data_epoch + snapshot_hash + interval + start_time_ms + end_time_ms
    - `VITE_RESEARCH_DATA_LIBRARY_ENABLED`
    - 未设置时启用；显式设为 `0` 时恢复已验证的 chart-first + 独立 `local.html` 行为
    - 默认值变化发生在 Phase 12 完成并合并后，不追写历史候选证据
+   - **2026-11-15 修订**（前端设计重构 5g，产品决定）：前端开关 `VITE_RESEARCH_DATA_LIBRARY_ENABLED` 及其关闭时的回退已退役：独立 `LocalApp`、`BacktestApp` 包装、研究禁用页，以及 `VITE_BACKTEST_RESEARCH_ENABLED` / `VITE_BACKTEST_LEGACY_WORKBENCH_ENABLED`。`/strategy.html`、`/local.html`、`/backtest.html` 始终打开同一个 StrategyResearchApp。后端开关 `CANDLESCOPE_RESEARCH_DATA_LIBRARY_ENABLED` 不变。
 
 ### 6. 目标信息架构
 

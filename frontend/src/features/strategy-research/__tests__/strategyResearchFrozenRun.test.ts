@@ -21,7 +21,6 @@ test("unified first paint still does not load Monaco and does not ask for a data
   const html = renderToStaticMarkup(
     React.createElement(StrategyResearchApp, {
       intent: parseStrategyResearchLaunch({ pathname: "/strategy.html", search: "" }),
-      libraryEnabled: true,
     }),
   );
   assert.match(html, /strategy-research-shell/);

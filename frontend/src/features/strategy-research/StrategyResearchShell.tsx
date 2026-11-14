@@ -16,7 +16,6 @@ export function StrategyResearchShell({
   hostStatus,
   source,
   sourceLabel,
-  libraryEnabled,
   libraryOpen,
   currentChartEnabled,
   marketBatchAvailable = false,
@@ -40,7 +39,6 @@ export function StrategyResearchShell({
   hostStatus?: ChartStrategyTesterStatus | undefined;
   source: ResearchSourceRefV1 | null;
   sourceLabel?: string;
-  libraryEnabled: boolean;
   libraryOpen: boolean;
   currentChartEnabled: boolean;
   marketBatchAvailable?: boolean;
@@ -96,7 +94,6 @@ export function StrategyResearchShell({
               <ResearchDataSourceBar
                 source={source}
                 {...(sourceLabel ? { sourceLabel } : {})}
-                libraryEnabled={libraryEnabled}
                 currentChartEnabled={currentChartEnabled}
                 onOpenLibrary={onOpenLibrary}
                 onSelectCurrentChart={onSelectCurrentChart}

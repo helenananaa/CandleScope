@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -136,26 +136,14 @@ test("import job polling follows queued to completed and cancel stops at cancell
   assert.equal(cancelled.dataset, null);
 });
 
-test("LocalApp no longer embeds import or management implementations and keeps interval localStorage keys", () => {
+test("the standalone LocalApp shell is retired and interval selection keeps its localStorage keys", () => {
   const directory = path.dirname(fileURLToPath(import.meta.url));
-  const source = readFileSync(
-    path.resolve(directory, "../../local-data/LocalApp.tsx"),
-    "utf8",
-  );
+  assert.equal(existsSync(path.resolve(directory, "../../local-data/LocalApp.tsx")), false);
   const intervalSource = readFileSync(
     path.resolve(directory, "../../local-data/useLocalIntervalSelection.ts"),
     "utf8",
   );
-  assert.match(source, /useResearchDataLibrary/);
-  assert.match(source, /ResearchDatasetRail/);
-  assert.match(source, /ResearchDatasetManagement/);
-  assert.match(source, /useLocalIntervalSelection/);
   assert.match(intervalSource, /candlescope:local-interval:v1:/);
-  assert.doesNotMatch(source, /function LocalImportForm/);
-  assert.doesNotMatch(source, /function LocalDatasetRail/);
-  assert.doesNotMatch(source, /function LocalDatasetManagement/);
-  assert.doesNotMatch(source, /createLocalImportJob/);
-  assert.doesNotMatch(source, /getLocalImportJob/);
 });
 
 test("researchDataApi reuses local-data HTTP adapters instead of copying them", () => {

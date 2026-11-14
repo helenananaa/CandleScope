@@ -2,8 +2,6 @@ import { lazy, StrictMode, Suspense, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 
 import AppProviders, { ChartErrorBoundary } from "../../app/AppProviders.js";
-import { MarketDataWorkspaceProvider } from "../market-data/MarketDataWorkspaceProvider.js";
-import { RESEARCH_DATA_LIBRARY_ENABLED } from "../research-data/researchDataFlags.js";
 import { bindDocumentLocale, initializeLocale } from "../../i18n/index.js";
 import { readPersistedLocale } from "../settings/chartAppearanceSettings.js";
 import "./strategyResearch.css";
@@ -14,16 +12,11 @@ import "../backtest/chart-tester/chartStrategyTester.css";
 import "../backtest/continuous/continuousStrategy.css";
 import {
   parseStrategyResearchLaunch,
-  resolveStrategyResearchBootstrap,
   type StrategyResearchLaunchIntent,
   type StrategyResearchPage,
 } from "./strategyResearchLaunch.js";
 
 const StrategyResearchApp = lazy(() => import("./StrategyResearchApp.js"));
-const LocalApp = lazy(() => import("../local-data/LocalApp.js"));
-const BacktestApp = lazy(() => import("../backtest/BacktestApp.js"));
-const BacktestResearchApp = lazy(() => import("../backtest/research/BacktestResearchApp.js"));
-const BacktestResearchDisabled = lazy(() => import("../backtest/research/BacktestResearchDisabled.js"));
 
 export function strategyResearchDocumentKeys(page: StrategyResearchPage): {
   titleKey: "strategy.documentTitle" | "local.documentTitle" | "backtest.documentTitle";
@@ -38,41 +31,18 @@ export function strategyResearchDocumentKeys(page: StrategyResearchPage): {
   return { titleKey: "strategy.documentTitle", descriptionKey: "strategy.documentDescription" };
 }
 
+/** strategy.html, and its compatibility URLs backtest.html and local.html, all open the one strategy research page. */
 export function renderStrategyResearchBootstrap(input: {
   page: StrategyResearchPage;
   location?: { pathname: string; search: string };
-  libraryEnabled?: boolean;
-  researchEnabled?: boolean;
-  legacyEnabled?: boolean;
 }): ReactNode {
-  const libraryEnabled = input.libraryEnabled ?? RESEARCH_DATA_LIBRARY_ENABLED;
   const location = input.location ?? { pathname: `/${input.page}.html`, search: "" };
   const intent: StrategyResearchLaunchIntent = parseStrategyResearchLaunch(location);
-  const mode = resolveStrategyResearchBootstrap({ libraryEnabled, page: input.page });
-  if (mode === "unified") {
-    return <StrategyResearchApp intent={intent} libraryEnabled={libraryEnabled} />;
-  }
-  // Flag-off keeps independent local.html and the thin backtest compatibility shell.
-  if (mode === "local-legacy") {
-    return <LocalApp />;
-  }
-  if (input.researchEnabled === false && input.legacyEnabled === false) {
-    return <BacktestResearchDisabled />;
-  }
-  if (input.researchEnabled === false) {
-    return <BacktestApp />;
-  }
-  return (
-    <MarketDataWorkspaceProvider>
-      <BacktestResearchApp />
-    </MarketDataWorkspaceProvider>
-  );
+  return <StrategyResearchApp intent={intent} />;
 }
 
 export async function mountStrategyResearchPage(input: {
   page: StrategyResearchPage;
-  researchEnabled?: boolean;
-  legacyEnabled?: boolean;
 }): Promise<void> {
   await initializeLocale(readPersistedLocale());
   bindDocumentLocale(strategyResearchDocumentKeys(input.page));
@@ -86,12 +56,7 @@ export async function mountStrategyResearchPage(input: {
       <ChartErrorBoundary>
         <Suspense fallback={<main className="research-status-page" data-state="loading" />}>
           <AppProviders>
-            {renderStrategyResearchBootstrap({
-              page: input.page,
-              location,
-              ...(input.researchEnabled === undefined ? {} : { researchEnabled: input.researchEnabled }),
-              ...(input.legacyEnabled === undefined ? {} : { legacyEnabled: input.legacyEnabled }),
-            })}
+            {renderStrategyResearchBootstrap({ page: input.page, location })}
           </AppProviders>
         </Suspense>
       </ChartErrorBoundary>
