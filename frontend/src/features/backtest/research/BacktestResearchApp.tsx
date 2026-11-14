@@ -1,7 +1,9 @@
+import { useEffect } from "react";
 import { t } from "../../../i18n/index.js";
 import AppPageShell from "../../../app/AppPageShell.js";
 import ResearchMarketChart from "./ResearchMarketChart.js";
-import ResearchTaskPicker from "./ResearchTaskPicker.js";
+import { ResearchModeLayout } from "./ResearchModeLayout.js";
+import type { BacktestResearchTask } from "./backtestResearchTypes.js";
 import { useBacktestResearchRuntime } from "./useBacktestResearchRuntime.js";
 import { useControlCommands, usePageControlBridge } from "../../app-control/useControlCommands.js";
 import { backtestCommands } from "../../app-control/backtestCommands.js";
@@ -28,23 +30,41 @@ function ResearchStatus({
 
 export default function BacktestResearchApp({
   search,
+  task = null,
+  onTaskResolved,
 }: {
   search?: string;
+  /** The research tool the page's mode rail asks for; null lets the launch context or deep link decide. */
+  task?: BacktestResearchTask | null;
+  /** Reports the tool actually open, so the mode rail follows deep links and commands. */
+  onTaskResolved?(task: BacktestResearchTask): void;
 } = {}) {
-  const runtime = useBacktestResearchRuntime(search === undefined ? {} : { search });
+  const runtime = useBacktestResearchRuntime({ ...(search === undefined ? {} : { search }), initialTask: task });
   usePageControlBridge();
   useControlCommands(() => backtestCommands(runtime));
+  const { phase, selectedTask } = runtime.view;
+  const { selectTask } = runtime.actions;
+  // The rail drives the tool; a deep link without a tool falls back to 精确成交验证 once loaded.
+  useEffect(() => {
+    if (task !== null && task !== selectedTask) selectTask(task);
+    // Only a new request from the rail selects a tool.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task]);
+  useEffect(() => {
+    if (phase === "READY" && selectedTask === null) selectTask(task ?? "PRECISE_EXECUTION");
+  }, [phase, selectedTask, selectTask, task]);
+  useEffect(() => {
+    if (selectedTask !== null && selectedTask !== task) onTaskResolved?.(selectedTask);
+    // Report only changes of the open tool.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTask]);
   // Pages without a chart share the app header like every other page.
-  if (runtime.view.phase !== "READY") {
-    return <AppPageShell source="research"><ResearchStatus error={runtime.view.phase === "ERROR" ? runtime.view.error : null} onRetry={runtime.actions.refresh} /></AppPageShell>;
-  }
-  if (runtime.view.selectedTask === null) {
+  if (phase !== "READY" || selectedTask === null) {
     return (
       <AppPageShell source="research">
-        <ResearchTaskPicker
-          returnHref={runtime.view.returnHref}
-          onSelect={runtime.actions.selectTask}
-        />
+        <ResearchModeLayout>
+          <ResearchStatus error={phase === "ERROR" ? runtime.view.error : null} onRetry={runtime.actions.refresh} />
+        </ResearchModeLayout>
       </AppPageShell>
     );
   }

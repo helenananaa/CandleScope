@@ -58,7 +58,7 @@ test("first open lists templates and recents on one screen, with no blank editor
   for (const key of ["continuous.history", "continuous.historyLive", "continuous.liveOnly"] as const) assert.ok(html.includes(t(key)));
   for (const template of CHART_STRATEGY_TEMPLATES) assert.ok(html.includes(t(template.nameKey)));
   assert.match(html, /chart-strategy-start-footer"><button/);
-  assert.match(html, /href="\/backtest\.html"/);
+  assert.match(html, /href="\/strategy\.html\?mode=precise"/);
   assert.doesNotMatch(html, /data-chart-strategy-editor/);
   assert.doesNotMatch(html, /chart-strategy-run-button/);
   assert.doesNotMatch(html, /保存 revision|创建 Run/);

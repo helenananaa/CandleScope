@@ -487,6 +487,13 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - No visible change on the default build: the three pages capture byte-identical before and after.
 - Tests and `scripts/strategy-research-smoke.mjs` now assert that the fallbacks stay gone, as the repository does for retired Pyne entry points. ADR-BACKTEST-014 carries a dated amendment.
 
+**Phase 5g2 is done (branch `design/phase-5g2-research-modes`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_5G2.md`](../docs/FRONTEND_DESIGN_QA_PHASE_5G2.md). Strategy research and backtest are one page (§6.1).
+
+- A 72 px mode rail at the left edge of `strategy.html`: 快速测试, then 成交验证, 参数稳健, 模型测试, 多市场, 交易复盘. `?mode=` carries the mode; switching rewrites the address without reloading, and the app-control `research-panels` group has a `mode` command.
+- The five-card landing page and its 研究任务 button are gone; the rail is the overview. Leaving 快速测试 carries its source, strategy draft and latest result into the tools as a launch context; with nothing to carry, a tool opens with its own defaults instead of refusing (the "需要先选择数据 / 草稿" errors are gone).
+- `backtest.html` and `local.html` rewrite themselves to `strategy.html` in the matching mode (`?mode=precise`, `?source=imported`), keeping run, study and context links; links the app builds (chart tester, results, preparation jobs) point at `strategy.html?mode=…` directly. Every URL carries the 策略研究 title.
+- Still to do in this row: the research tools' panels and copy (5g3), the strategy page (5g4), local data and CSV import (5g5).
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.
