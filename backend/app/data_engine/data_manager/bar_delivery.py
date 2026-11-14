@@ -212,9 +212,16 @@ class DurableBarDelivery:
             return
         async with self._dispatcher:
             try:
-                records = await self._retry(journal.pending)
-                self._dispatch_records = records
-                self._pending = await self._retry(journal.pending_count)
+                page = getattr(journal, 'pending_page', None)
+                snapshot = await self._retry(page) if callable(page) else None
+                if snapshot is None:
+                    records = await self._retry(journal.pending)
+                    self._dispatch_records = records
+                    self._pending = await self._retry(journal.pending_count)
+                else:
+                    records, self._pending = snapshot
+                    snapshot = None
+                    self._dispatch_records = records
                 acknowledgements = []
                 acknowledgement_started = None
 

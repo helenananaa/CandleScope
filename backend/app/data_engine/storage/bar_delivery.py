@@ -129,6 +129,24 @@ class BarDeliveryJournal:
         with closing(self._connect()) as conn:
             return conn.execute("SELECT COUNT(*) FROM bar_delivery WHERE phase IN ('pending','committed') OR recovery_required=1").fetchone()[0]
 
+    def pending_page(self, limit=64):
+        """The original page and exact count from one finite read view.
+
+        Explicit/custom pending readers keep their original independent calls.
+        This snapshot never proves the dispatcher's later empty boundary.
+        """
+        if type(limit) is not int or not 1 <= limit <= 64:
+            raise ValueError('pending page requires one to 64 records')
+        if (getattr(self.pending, '__func__', None) is not BarDeliveryJournal.pending
+                or getattr(self.pending_count, '__func__', None) is not BarDeliveryJournal.pending_count):
+            return None
+        with closing(self._connect()) as conn, conn:
+            conn.execute('BEGIN')
+            count = conn.execute("SELECT COUNT(*) FROM bar_delivery WHERE phase IN ('pending','committed') OR recovery_required=1").fetchone()[0]
+            rows = [self._record(row) for row in conn.execute(
+                "SELECT * FROM bar_delivery WHERE phase IN ('pending','committed') OR recovery_required=1 ORDER BY sequence LIMIT ?", (limit,))]
+            return rows, count
+
     def _prune(self, conn):
         conn.execute("""DELETE FROM bar_delivery WHERE phase IN ('published','rejected')
             AND recovery_required=0
