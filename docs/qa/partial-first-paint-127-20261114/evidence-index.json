@@ -1,0 +1,177 @@
+[
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/partial-first-paint-127-20261114/CandleScope/output/partial-first-paint-127-20261114/frontend-check-corrected.log",
+    "archive": "evidence/frontend-check-corrected.log.gz",
+    "original_sha256": "168066d6b1ca9c7ad559ebe37df9c7dbc3e07870bfc512d80a8355ab43e52f56",
+    "archived_payload_sha256": "168066d6b1ca9c7ad559ebe37df9c7dbc3e07870bfc512d80a8355ab43e52f56",
+    "bytes": 506604
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/partial-first-paint-127-20261114/CandleScope/output/partial-first-paint-127-20261114/frontend-check.log",
+    "archive": "evidence/frontend-check.log.gz",
+    "original_sha256": "b6428d1699100f11764cfad1936218ce664d2d57b6186054672a4bd819fa3bf2",
+    "archived_payload_sha256": "b6428d1699100f11764cfad1936218ce664d2d57b6186054672a4bd819fa3bf2",
+    "bytes": 1666
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/partial-first-paint-127-20261114/CandleScope/output/partial-first-paint-127-20261114/native-single.log",
+    "archive": "evidence/native-single.log.gz",
+    "original_sha256": "f1f919fea9c1d9e004a3123de55341735b9065b925c8ec740fde84b5d25a2418",
+    "archived_payload_sha256": "f1f919fea9c1d9e004a3123de55341735b9065b925c8ec740fde84b5d25a2418",
+    "bytes": 1161
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/partial-first-paint-127-20261114/CandleScope/output/partial-first-paint-127-20261114/native.log",
+    "archive": "evidence/native.log.gz",
+    "original_sha256": "58829a18e19c4eae49828db9aa388c13a53fc8b7c6b473397fee91efbd7647a6",
+    "archived_payload_sha256": "58829a18e19c4eae49828db9aa388c13a53fc8b7c6b473397fee91efbd7647a6",
+    "bytes": 3941
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/partial-first-paint-127-20261114/CandleScope/output/partial-first-paint-127-20261114/package-after.json",
+    "archive": "evidence/package-after.json.gz",
+    "original_sha256": "f992477267fe496ddd151c261aea857d15533b7212517abdaa1fddf587ba475c",
+    "archived_payload_sha256": "f992477267fe496ddd151c261aea857d15533b7212517abdaa1fddf587ba475c",
+    "bytes": 427
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/partial-first-paint-127-20261114/CandleScope/output/partial-first-paint-127-20261114/prepare-native.log",
+    "archive": "evidence/prepare-native.log.gz",
+    "original_sha256": "bba68fc178cdaa5578a3b2f30a44bef29d92c32f4b4651a2d63a786e77f7060f",
+    "archived_payload_sha256": "bba68fc178cdaa5578a3b2f30a44bef29d92c32f4b4651a2d63a786e77f7060f",
+    "bytes": 71
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/partial-first-paint-127-20261114/CandleScope/output/partial-first-paint-127-20261114/native-cold/acceptance.json",
+    "archive": "evidence/native-cold/acceptance.json.gz",
+    "original_sha256": "24cbfa14590d2622d5794e97eda99de5cb17de6255aa2c97bb4398676c0af46d",
+    "archived_payload_sha256": "1cee72c60b6aa96cc216735a2f1ab6dc1f689188f811bc75c38232242b40393c",
+    "bytes": 211455
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/partial-first-paint-127-20261114/CandleScope/output/partial-first-paint-127-20261114/native-cold/failure.png",
+    "archive": "native-cold-failure.png",
+    "original_sha256": "7178d61154d6ab632a92107af17b0651386a47d74d9e1e58bbb17f3c743f2ece",
+    "archived_payload_sha256": "7178d61154d6ab632a92107af17b0651386a47d74d9e1e58bbb17f3c743f2ece",
+    "bytes": 424400
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/partial-first-paint-127-20261114/CandleScope/output/partial-first-paint-127-20261114/native-cold/partial-display-11.png",
+    "archive": "native-cold-partial-display-11.png",
+    "original_sha256": "b0f3a921ae545bbcd63b08d5fe8aa1c7e3d4cc15e6c24f6b70fb9b2e3d90fc66",
+    "archived_payload_sha256": "b0f3a921ae545bbcd63b08d5fe8aa1c7e3d4cc15e6c24f6b70fb9b2e3d90fc66",
+    "bytes": 424023
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/partial-first-paint-127-20261114/CandleScope/output/partial-first-paint-127-20261114/native-cold/partial-display-3.png",
+    "archive": "native-cold-partial-display-3.png",
+    "original_sha256": "d274e6fcf1153961c6240230e8d987d3dd48cbdc9b510771947d744f8752e330",
+    "archived_payload_sha256": "d274e6fcf1153961c6240230e8d987d3dd48cbdc9b510771947d744f8752e330",
+    "bytes": 394967
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/partial-first-paint-127-20261114/CandleScope/output/partial-first-paint-127-20261114/native-cold/process.log",
+    "archive": "evidence/native-cold/process.log.gz",
+    "original_sha256": "51166acd9f5c231a3ef56253b7c771f9d9bf04e877fa5603802dea615b1c16c6",
+    "archived_payload_sha256": "51166acd9f5c231a3ef56253b7c771f9d9bf04e877fa5603802dea615b1c16c6",
+    "bytes": 304
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/partial-first-paint-127-20261114/CandleScope/output/partial-first-paint-127-20261114/native-cold/resource-samples.jsonl",
+    "archive": "evidence/native-cold/resource-samples.jsonl.gz",
+    "original_sha256": "db9536519c4c940b68112f884823e23a119a8d442180115f7f6fc94186e7e17e",
+    "archived_payload_sha256": "db9536519c4c940b68112f884823e23a119a8d442180115f7f6fc94186e7e17e",
+    "bytes": 93610
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/partial-first-paint-127-20261114/CandleScope/output/partial-first-paint-127-20261114/native-cold/traffic.json",
+    "archive": "evidence/native-cold/traffic.json.gz",
+    "original_sha256": "ae0bde0504716dd7214e03d16bd625b9e5f3419532638c6c644eb295e9062c07",
+    "archived_payload_sha256": "ae0bde0504716dd7214e03d16bd625b9e5f3419532638c6c644eb295e9062c07",
+    "bytes": 9351467
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/partial-first-paint-127-20261114/CandleScope/output/partial-first-paint-127-20261114/native-cold/profile/logs/backend-sidecar.log",
+    "archive": "evidence/native-cold/backend-sidecar.log.gz",
+    "original_sha256": "ee64918ebf8a7f411f9dbf97cb7b508cfa967fdde2e1d1b7496cdaad5c035cd8",
+    "archived_payload_sha256": "ee64918ebf8a7f411f9dbf97cb7b508cfa967fdde2e1d1b7496cdaad5c035cd8",
+    "bytes": 336645
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/partial-first-paint-127-20261114/CandleScope/output/partial-first-paint-127-20261114/native-single-cold/acceptance.json",
+    "archive": "evidence/native-single-cold/acceptance.json.gz",
+    "original_sha256": "b47f820c1b2ff3de2870af6993cd91d3b00436da054cf190ce669324c81f530c",
+    "archived_payload_sha256": "5a340726ba9a69e519a021c4f5467ddd90c9e72c92f75bb1caed3f7fa1f0cd84",
+    "bytes": 83448
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/partial-first-paint-127-20261114/CandleScope/output/partial-first-paint-127-20261114/native-single-cold/partial-display-11.png",
+    "archive": "native-single-cold-partial-display-11.png",
+    "original_sha256": "e7d96bbb72a55b4a1e295d1e794c8a62e2dbc449d48bc9b0ded46e2e2035916d",
+    "archived_payload_sha256": "e7d96bbb72a55b4a1e295d1e794c8a62e2dbc449d48bc9b0ded46e2e2035916d",
+    "bytes": 318802
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/partial-first-paint-127-20261114/CandleScope/output/partial-first-paint-127-20261114/native-single-cold/partial-display-3.png",
+    "archive": "native-single-cold-partial-display-3.png",
+    "original_sha256": "1403e1d044c93d679a0c3b057978d2fd5e1dc59aca1f433dc137b56680e9c626",
+    "archived_payload_sha256": "1403e1d044c93d679a0c3b057978d2fd5e1dc59aca1f433dc137b56680e9c626",
+    "bytes": 320024
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/partial-first-paint-127-20261114/CandleScope/output/partial-first-paint-127-20261114/native-single-cold/process.log",
+    "archive": "evidence/native-single-cold/process.log.gz",
+    "original_sha256": "f55d98fe807b5e7bfe37d06a6f81da12a5fb61848a3d728e6b060fb715fd981d",
+    "archived_payload_sha256": "f55d98fe807b5e7bfe37d06a6f81da12a5fb61848a3d728e6b060fb715fd981d",
+    "bytes": 304
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/partial-first-paint-127-20261114/CandleScope/output/partial-first-paint-127-20261114/native-single-cold/resource-samples.jsonl",
+    "archive": "evidence/native-single-cold/resource-samples.jsonl.gz",
+    "original_sha256": "455176daa5f4d1f84ad19fc85073cf15d634144b758ae0be4da2ef1882679db9",
+    "archived_payload_sha256": "455176daa5f4d1f84ad19fc85073cf15d634144b758ae0be4da2ef1882679db9",
+    "bytes": 92430
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/partial-first-paint-127-20261114/CandleScope/output/partial-first-paint-127-20261114/native-single-cold/traffic.json",
+    "archive": "evidence/native-single-cold/traffic.json.gz",
+    "original_sha256": "b50fdc0cb96e85fbc8153d70643ee0fcd17738f12887193c566a0186062ed543",
+    "archived_payload_sha256": "b50fdc0cb96e85fbc8153d70643ee0fcd17738f12887193c566a0186062ed543",
+    "bytes": 4831743
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/partial-first-paint-127-20261114/CandleScope/output/partial-first-paint-127-20261114/native-single-cold/profile/logs/backend-sidecar.log",
+    "archive": "evidence/native-single-cold/backend-sidecar.log.gz",
+    "original_sha256": "13655621923803315648b0ec5d40ccbb428bad0b703e841eaea9fd767280e683",
+    "archived_payload_sha256": "13655621923803315648b0ec5d40ccbb428bad0b703e841eaea9fd767280e683",
+    "bytes": 139027
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/partial-first-paint-127-20261114/CandleScope/output/partial-first-paint-127-20261114/native-candidate/package-source-manifest.json",
+    "archive": "evidence/native-candidate/package-source-manifest.json.gz",
+    "original_sha256": "0ff32b3e54f3cc98bd88d3cf6a10dbe83679d46870e5c9aa5c8aa5fbcc7daa1c",
+    "archived_payload_sha256": "0ff32b3e54f3cc98bd88d3cf6a10dbe83679d46870e5c9aa5c8aa5fbcc7daa1c",
+    "bytes": 140213
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/partial-first-paint-127-20261114/CandleScope/output/partial-first-paint-127-20261114/native-candidate/sign-after.log",
+    "archive": "evidence/native-candidate/sign-after.log.gz",
+    "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "archived_payload_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/partial-first-paint-127-20261114/CandleScope/output/partial-first-paint-127-20261114/native-candidate/sign-before.log",
+    "archive": "evidence/native-candidate/sign-before.log.gz",
+    "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "archived_payload_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/partial-first-paint-127-20261114/CandleScope/output/partial-first-paint-127-20261114/native-candidate/sign.log",
+    "archive": "evidence/native-candidate/sign.log.gz",
+    "original_sha256": "c31b54bf4d9f673c74457bdf9d6240f4e707e90d2f4c019eabf3f05aea6af52c",
+    "archived_payload_sha256": "c31b54bf4d9f673c74457bdf9d6240f4e707e90d2f4c019eabf3f05aea6af52c",
+    "bytes": 182
+  }
+]

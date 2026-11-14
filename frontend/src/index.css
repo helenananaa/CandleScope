@@ -4867,6 +4867,26 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   animation: spin 0.8s linear infinite;
 }
 
+.loading-overlay--partial {
+  inset: auto auto 30px 10px;
+  max-width: calc(100% - 90px);
+  padding: 4px 8px;
+  flex-direction: row;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.loading-overlay--partial .loading-spinner {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+  flex-shrink: 0;
+}
+
+.loading-overlay--partial .loading-text {
+  font-size: var(--font-size-xs);
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

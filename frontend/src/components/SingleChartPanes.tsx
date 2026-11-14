@@ -6,6 +6,7 @@ import type { ChartDisplayScheduler } from "../features/market-data/chartDisplay
 import { drawingDocumentSessionRegistry } from "../features/drawings/core/drawingDocumentStore.js";
 import { describeError } from "../i18n/serverErrors.js";
 import PanePriceScaleMenu from "./PanePriceScaleMenu.js";
+import { ChartLoadingStatus } from "./ChartLoadingStatus.js";
 import { PineScenePrimitive } from "../chart-adapter/pineScenePrimitive.js";
 import { usePanePriceScaleMenu } from "./usePanePriceScaleMenu.js";
 import NativePaneDrawingHost from "./NativePaneDrawingHost.js";
@@ -5638,12 +5639,14 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       {indicatorStatusText && !loading && (
         <div className="chart-indicator-status" role="status">{indicatorStatusText}</div>
       )}
-      {loading && (
-        <div className="loading-overlay">
-          <div className="loading-spinner" />
-          <span className="loading-text">{t("chart.loadingKlines", { symbol, interval: formatIntervalLabel(interval) }, locale)}</span>
-        </div>
-      )}
+      <ChartLoadingStatus
+        loading={loading}
+        text={t("chart.loadingKlines", { symbol, interval: formatIntervalLabel(interval) }, locale)}
+        datasetKey={datasetKey}
+        dataMeta={dataMeta}
+        seriesStore={seriesStore}
+        paintedDatasetKey={drawingSurfaceDataKey}
+      />
     </div>
     </div>
   );
