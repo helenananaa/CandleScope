@@ -13,7 +13,7 @@ from app.data_engine.storage.gap_ledger import GapLedger
 from tests.test_default_mixed_history_query import mixed_query
 from tests.test_mixed_backfill_plan import engine_for
 from tests.test_mixed_backfill_pipeline import Upstream
-from tests.test_mixed_history_reader import MINUTE
+from tests.test_mixed_history_reader import MINUTE, row
 
 
 def test_large_closed_query_detects_target_demand_even_with_submission_disabled(mixed_query):
@@ -33,15 +33,24 @@ def test_large_closed_query_detects_target_demand_even_with_submission_disabled(
 def test_planning_budget_is_not_a_market_gap_or_a_new_download_demand(mixed_query, monkeypatch):
     engine = mixed_query
     calls = []
+    # A crossing day keeps the conservative count upper bound sufficient,
+    # so this fixture reaches the exact-cover budget fault rather than the
+    # independently provable empty-local-input path.
+    day = 1440 * MINUTE
+    engine.storage.upsert_bars('BTCUSDT', '1d',
+        [row(opened, day) for opened in range(0, 7*day, day)], source='backfill', market_type='futures')
+    entered = []
     engine.set_backfill_trigger(lambda *args: calls.append(args))
     @contextmanager
     def exhausted(*args, **kwargs):
+        entered.append(True)
         raise CoverBudgetExceeded("controlled work bound")
         yield  # pragma: no cover
     monkeypatch.setattr(engine, "read_mixed_history_blocks", exhausted)
     result = engine.query("BTCUSDT", "10007m", start_ms=0, end_ms=10007 * MINUTE - 1,
         limit=1, market_type="futures", auto_backfill=True, min_revision=engine.storage.revision_store.head())
     assert result.retryable and not result.complete and not result.missing_ranges and not calls
+    assert entered
 
 
 @pytest.mark.parametrize('source', ['fetch_result','native_pages'])
