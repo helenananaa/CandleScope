@@ -19,6 +19,7 @@ import { automaticHostExecution, emptyAdvancedInputs, executionInputs, freezeAdv
 import { PreparationApiError, preparationRequest, waitForPreparation, type PreparationJob, type PreparationCapabilities } from "../../data-preparation/api.js";
 import PreparationWaiting from "../../data-preparation/PreparationWaiting.js";
 import { Icon } from "../../../components/icons/Icon.js";
+import { Button, Disclosure, InlineAlert, Tabs } from "../../../components/ui/index.js";
 import { reportAnalytics } from "./nativeReportAnalytics.js";
 import { useNativeStrategyCollection, nativeStrategySwitcherActions, nativeStrategySwitcherItems, type NativeStrategyController } from "./useNativeStrategyCollection.js";
 import { StrategyDockPane, StrategyDockSlot } from "../chart-tester/StrategyDockSlots.js";
@@ -83,7 +84,7 @@ export default function NativeStrategyPanel(props: NativeStrategyPanelProps) {
     {strategies.storageError && <p role="alert">{strategies.storageError}</p>}
     <StrategyDockPane hidden={!comparing}>
       <StrategyDockSlot name="tabs"><strong className="strategy-dock-view-title">{t("strategyCompare.title")}</strong></StrategyDockSlot>
-      <StrategyDockSlot name="actions"><button type="button" className="strategy-dock-button" onClick={() => strategies.setComparing(false)}>{t("chartTester.close")}</button></StrategyDockSlot>
+      <StrategyDockSlot name="actions"><Button size="sm" variant="ghost" onClick={() => strategies.setComparing(false)}>{t("chartTester.close")}</Button></StrategyDockSlot>
       <NativeStrategyComparison items={collection.items}
         context={contextParts}
         saved={collection.comparisons?.[context]}
@@ -92,7 +93,7 @@ export default function NativeStrategyPanel(props: NativeStrategyPanelProps) {
     </StrategyDockPane>
     {!collection.items.length && !comparing && <div className="strategy-dock-empty">
       <p>{t("strategyDock.empty")}</p>
-      <button type="button" className="strategy-run-button" onClick={() => strategies.add(false)}><Icon name="plus" size={13} />{t("strategyCollection.add")}</button>
+      <Button size="sm" variant="primary" icon={<Icon name="plus" size={13} />} onClick={() => strategies.add(false)}>{t("strategyCollection.add")}</Button>
     </div>}
     {collection.items.map((item) => <StrategyDockPane key={item.id} hidden={comparing || item.id !== collection.activeId}>
       <NativeStrategyInstancePanel {...props} instance={item} onInstanceChange={strategies.updateInstance} onInstanceBusy={strategies.setInstanceBusy}
@@ -422,14 +423,6 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   const percent = (value: number | null | undefined) => value == null || !Number.isFinite(value) ? "—" : `${number.format(value)}%`;
   const returnPercent = summary?.series.at(-1)?.returnPercent ?? null;
   const runNow = () => { if (!runDisabled) void start(); };
-  const tabKey = (event: KeyboardEvent<HTMLButtonElement>, item: typeof tab) => {
-    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-    event.preventDefault();
-    const next = SESSION_TABS[(SESSION_TABS.indexOf(item) + (event.key === "ArrowRight" ? 1 : -1) + SESSION_TABS.length) % SESSION_TABS.length]!;
-    selectTab(next);
-    const list = event.currentTarget.parentElement;
-    requestAnimationFrame(() => list?.querySelector<HTMLButtonElement>('[aria-selected="true"]')?.focus());
-  };
   useControlCommands(() => ({ id: `native:${props.cellScope}:${mode}`, title: "Native strategy draft, run and report",
     context: () => ({ session: props.session, dataset: props.dataset, mode, language, source, parameters, hostSettings, fidelity, fillRecalculation,
       historyStart, historyEnd, automaticContexts, executionOrigin, advanced: contextReference(advanced), executionData: contextReference(executionData), runId: run?.run_id, historicalRunId: historicalRun?.run_id, allHistory, busy, executionDataState }),
@@ -492,10 +485,8 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
     ] }), props.active !== false);
   return <section className={`native-strategy-panel${props.docked ? " native-strategy-docked" : ""}`} aria-label={t("native.title")}>
     {!props.docked && <header><strong>{t(mode === "NATIVE" ? "native.title" : "native.external.title")}</strong><span>{props.session.symbol} · {formatIntervalLabel(props.session.interval)}</span><button type="button" aria-label={t("backtest.close")} onClick={props.onClose}><Icon name="close" size={14} /></button></header>}
-    {props.docked && <StrategyDockSlot name="tabs"><div className="strategy-tabs" role="tablist" aria-label={t("chartTester.tabsAria")}>
-      {SESSION_TABS.map((item) => <button key={item} type="button" role="tab" aria-selected={tab === item} tabIndex={tab === item ? 0 : -1}
-        onClick={() => selectTab(item)} onKeyDown={(event) => tabKey(event, item)}>{t(item === "history" ? "ux.history" : `chartTester.tab.${item}`)}</button>)}
-    </div></StrategyDockSlot>}
+    {props.docked && <StrategyDockSlot name="tabs"><Tabs className="strategy-dock-view-tabs" label={t("chartTester.tabsAria")} value={tab} onChange={selectTab}
+      tabs={SESSION_TABS.map((item) => ({ value: item, label: t(item === "history" ? "ux.history" : `chartTester.tab.${item}`) }))} /></StrategyDockSlot>}
     <StrategyDockSlot name="actions"><div className="strategy-dock-run">
       {summary && <button type="button" className="strategy-summary" data-stale={resultStale && !historicalRun} onClick={() => selectTab("overview")}
         title={resultStale && !historicalRun ? t("chartTester.result.staleGuidanceTitle") : t("chartTester.tab.overview")}>
@@ -504,39 +495,40 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         <span><small>{t("report.winRate")}</small><b>{percent(summary.winRate)}</b></span>
       </button>}
       {status !== "idle" && <span role="status" className="strategy-run-status" data-status={status}><i aria-hidden="true" />{t(`strategyReview.status.${status}`)}</span>}
-      {run && !nativeTerminal(run.state) && <button type="button" className="strategy-dock-button" onClick={() => void nativeApi<NativeRun>(`${runPath}/${run.run_id}/cancel`, {}).then(receiveRun).catch((reason) => setError(String(reason)))}>
-        <Icon name="stop" size={11} filled />{t("native.cancel")}</button>}
-      <button type="button" className="strategy-run-button" disabled={runDisabled} onClick={runNow}
+      {run && !nativeTerminal(run.state) && <Button size="sm" variant="ghost" icon={<Icon name="stop" size={11} filled />}
+        onClick={() => void nativeApi<NativeRun>(`${runPath}/${run.run_id}/cancel`, {}).then(receiveRun).catch((reason) => setError(String(reason)))}>
+        {t("native.cancel")}</Button>}
+      <Button size="sm" variant="primary" icon={<Icon name="play" size={11} filled />} disabled={runDisabled} onClick={runNow}
         title={t(mode === "NATIVE" ? "native.run" : "native.external.run")}>
-        <Icon name="play" size={11} filled />{t("chartTester.run")}</button>
+        {t("chartTester.run")}</Button>
     </div></StrategyDockSlot>
     <StrategyDockSlot name="notice">
-      {preparation && !["READY", "CANCELLED"].includes(preparation.state) && <div className="strategy-notice" data-tone="info" role="status">
-        <strong>{t("preparation.title")} · {preparation.completed}/{preparation.total}</strong>
+      {preparation && !["READY", "CANCELLED"].includes(preparation.state) && <InlineAlert className="strategy-dock-alert"
+        title={`${t("preparation.title")} · ${preparation.completed}/${preparation.total}`}
+        action={<Button size="sm" variant="ghost" disabled={preparation.stage === "STARTING" || preparation.cancel_requested} onClick={() => void preparationRequest<PreparationJob>(`/${preparation.id}/cancel`, { method: "POST" }).then((value) => { preparationSubmission.current = null; setPreparation(value); }).catch((reason) => setError(String(reason)))}>{t("preparation.cancel")}</Button>}>
         <PreparationWaiting job={preparation} />
-        <button type="button" disabled={preparation.stage === "STARTING" || preparation.cancel_requested} onClick={() => void preparationRequest<PreparationJob>(`/${preparation.id}/cancel`, { method: "POST" }).then((value) => { preparationSubmission.current = null; setPreparation(value); }).catch((reason) => setError(String(reason)))}>{t("preparation.cancel")}</button>
-      </div>}
-      {resolution && resolution.status !== "READY" && <div className="strategy-notice" data-tone="warning" role="status">
-        <strong>{t("strategyReview.status.needsData")}</strong><span>{resolution.status}</span>
-        <button type="button" disabled={runDisabled} onClick={() => void start(true)}>{t("native.prepare")}</button>
-      </div>}
-      {errorDetails && <div className="strategy-notice" data-tone="error" role="alert">
-        <strong>{t("strategyReview.status.failed")}</strong><span>{errorDetails.includes(t("native.parametersInvalid")) ? t("native.parametersInvalid")
-          : errorDetails.includes(t("native.external.originRequired")) ? t("native.external.originRequired") : t("native.executionErrorHelp")}</span>
-        {errorLocation && <button type="button" onClick={() => {
+      </InlineAlert>}
+      {resolution && resolution.status !== "READY" && <InlineAlert className="strategy-dock-alert" tone="warning" title={t("strategyReview.status.needsData")}
+        action={<Button size="sm" disabled={runDisabled} onClick={() => void start(true)}>{t("native.prepare")}</Button>}>
+        <code>{resolution.status}</code>
+      </InlineAlert>}
+      {errorDetails && <InlineAlert className="strategy-dock-alert" tone="danger" title={t("strategyReview.status.failed")}
+        action={errorLocation ? <Button size="sm" variant="ghost" onClick={() => {
           selectTab("script");
           setErrorFocus({ line: errorLocation.line, column: errorLocation.column });
-        }}>{t("native.jumpToError", { line: errorLocation.line, column: errorLocation.column })}</button>}
-        <details><summary>{t("plugin.techDetails")}</summary><pre>{errorDetails}</pre></details>
-      </div>}
-      {capabilities && !engineReady && <div className="strategy-notice" data-tone="info" role="status">
-        <span>{t("indicator.editor.runtimeUnavailableHelp")} {t("native.platformHelp")}</span>
-        {available?.reason && <details><summary>{t("plugin.techDetails")}</summary><p>{available.reason}</p></details>}
-      </div>}
-      {historicalRun && <div className="strategy-notice" data-tone="info" role="status">
-        <strong>{t("strategyHistory.viewing")}</strong><code>{historicalRun.run_id}</code>
-        <button type="button" onClick={() => setHistoricalRun(null)}>{t("strategyHistory.latest")}</button>
-      </div>}
+        }}>{t("native.jumpToError", { line: errorLocation.line, column: errorLocation.column })}</Button> : undefined}>
+        <p>{errorDetails.includes(t("native.parametersInvalid")) ? t("native.parametersInvalid")
+          : errorDetails.includes(t("native.external.originRequired")) ? t("native.external.originRequired") : t("native.executionErrorHelp")}</p>
+        <Disclosure summary={t("plugin.techDetails")}><pre className="strategy-dock-detail">{errorDetails}</pre></Disclosure>
+      </InlineAlert>}
+      {capabilities && !engineReady && <InlineAlert className="strategy-dock-alert">
+        <p>{t("indicator.editor.runtimeUnavailableHelp")} {t("native.platformHelp")}</p>
+        {available?.reason && <Disclosure summary={t("plugin.techDetails")}><p>{available.reason}</p></Disclosure>}
+      </InlineAlert>}
+      {historicalRun && <InlineAlert className="strategy-dock-alert" title={t("strategyHistory.viewing")}
+        action={<Button size="sm" variant="ghost" onClick={() => setHistoricalRun(null)}>{t("strategyHistory.latest")}</Button>}>
+        <code>{historicalRun.run_id}</code>
+      </InlineAlert>}
     </StrategyDockSlot>
     <div className="native-dock-scroll" ref={scrollPane} onScroll={(event) => { scrollPositions.current[tab] = event.currentTarget.scrollTop; }}>
     <div hidden={props.docked && tab !== "script"} className="native-code">
@@ -634,13 +626,11 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       </details>
     </div>
     <div className="native-dock-report" data-view={tab} hidden={props.docked && tab !== "overview" && tab !== "trades"}>
-      {resultStale && !historicalRun && <div className="strategy-notice" data-tone="warning" role="status">
-        <strong>{t("chartTester.result.staleGuidanceTitle")}</strong>
-        <button type="button" disabled={runDisabled} onClick={runNow}>{t("chartTester.run")}</button>
-      </div>}
+      {resultStale && !historicalRun && <InlineAlert tone="warning" title={t("chartTester.result.staleGuidanceTitle")}
+        action={<Button size="sm" disabled={runDisabled} onClick={runNow}>{t("chartTester.run")}</Button>} />}
       {!reportRun?.result && props.docked && <div className="strategy-dock-empty">
         <p>{t("strategyDock.empty")}</p>
-        <button type="button" className="strategy-run-button" disabled={runDisabled} onClick={runNow}><Icon name="play" size={11} filled />{t("chartTester.run")}</button>
+        <Button size="sm" variant="primary" icon={<Icon name="play" size={11} filled />} disabled={runDisabled} onClick={runNow}>{t("chartTester.run")}</Button>
       </div>}
       {reportRun?.result && !props.externalReport && <NativeStrategyReport key={reportRun.run_id} run={reportRun} onLocate={props.onLocateTrade} onReviewTrade={props.onReviewTrade} active={!historicalRun && props.active !== false && (!props.docked || tab === "trades")}
         stale={(!historicalRun && resultStale) || datasetIdentityChanged(reportRun.config, props.dataset)}

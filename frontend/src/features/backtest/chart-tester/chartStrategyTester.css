@@ -4,7 +4,6 @@
 @layer features {
 
 /* Keep both modes in the workspace's column layout, including the resizable tester. */
-.chart-strategy-mode-container { display: contents; }
 
 .chart-strategy-tester-panel { --text-muted: var(--text-secondary); }
 
@@ -24,16 +23,19 @@
   box-shadow: 0 -3px 12px rgba(0, 0, 0, 0.08);
 }
 
-.strategy-conditions-editor, .strategy-parameters-editor { display: grid; gap: 14px; padding: 14px; color: var(--text-primary); }
-.strategy-conditions-editor p, .strategy-parameters-editor p { font: 12px/1.6 var(--font-sans); color: var(--text-secondary); }
-.strategy-conditions-editor h3, .strategy-parameters-editor h3 { font: 600 14px/1.5 var(--font-sans); margin: 0; }
-.strategy-condition-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 12px; }
-.strategy-condition-grid label, .strategy-condition-range { display: flex; flex-direction: column; gap: 6px; min-width: 0; font: 12px/1.5 var(--font-sans); }
-.strategy-conditions-editor :is(input:not([type='checkbox']), select), .strategy-parameters-editor input { width: 100%; min-width: 0; padding: 8px; border: 1px solid var(--border-color); border-radius: var(--radius-control); background: var(--bg-primary); color: var(--text-primary); font: 13px var(--font-sans); }
-.strategy-conditions-editor input:disabled { color: var(--text-secondary); background: var(--bg-secondary); }
-.strategy-condition-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-.strategy-conditions-editor [role='alert'] { color: var(--strategy-negative); }
-.chart-strategy-advanced-link { padding: 8px 12px; border: 1px solid var(--border-color); border-radius: var(--radius-control); color: var(--strategy-link); background: var(--bg-secondary); cursor: pointer; }
+.strategy-conditions-editor, .strategy-parameters-editor { display: grid; gap: var(--space-3); padding: 14px; color: var(--text-primary); }
+.strategy-parameters-editor h3 { margin: 0; font: 600 var(--font-size-base)/1.4 var(--font-sans); }
+.strategy-editor-note { margin: 0; color: var(--text-secondary); font: var(--font-size-sm)/1.6 var(--font-sans); }
+.strategy-editor-notes { display: grid; gap: 2px; margin: 0; padding-left: var(--space-4); color: var(--text-muted); font: var(--font-size-xs)/1.6 var(--font-sans); }
+.strategy-condition-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: var(--space-3); }
+.strategy-conditions-editor > .ui-field { max-width: 360px; }
+.strategy-parameters-editor .ui-field-label code { font: 500 var(--font-size-xs)/1.4 var(--font-mono); }
+
+/* The CandleScope run mode sits above the panel's content. */
+.continuous-mode { display: flex; flex: 0 0 auto; padding: var(--space-2) 14px 0; }
+.continuous-mode .ui-field { display: flex; align-items: center; gap: var(--space-2); }
+.continuous-mode .ui-field-label { color: var(--text-secondary); font-size: var(--font-size-sm); white-space: nowrap; }
+.continuous-mode .ui-select { width: auto; }
 
 .chart-strategy-resize-handle {
   position: absolute;
@@ -74,15 +76,6 @@
 
 .chart-strategy-autosave.state-error { color: var(--strategy-error); }
 
-.chart-strategy-run-button,
-.chart-strategy-close-button,
-.chart-strategy-link-button {
-  height: 31px;
-  border-radius: var(--radius-control);
-  font-size: 11px;
-  cursor: pointer;
-}
-
 .chart-strategy-tester-body {
   flex: 1;
   min-height: 0;
@@ -109,35 +102,15 @@
 .chart-strategy-result-context strong { color: var(--strategy-success); }
 .chart-strategy-result-context span { min-width: 0; overflow: hidden; color: var(--text-secondary); text-overflow: ellipsis; }
 .chart-strategy-result-context span:nth-of-type(2) { flex: 1; }
-.chart-strategy-result-context a { margin-left: auto; color: var(--strategy-link); text-decoration: none; }
-.chart-strategy-result-context a:hover,
-.chart-strategy-result-context a:focus-visible { text-decoration: underline; outline: 0; }
+.chart-strategy-result-context > .ui-btn { flex: 0 0 auto; margin-left: auto; }
 .chart-strategy-result-context.stale {
   border-color: color-mix(in srgb, var(--color-warning) 38%, transparent);
   background: color-mix(in srgb, var(--color-warning) 8%, transparent);
 }
 .chart-strategy-result-context.stale strong { color: var(--strategy-warning); }
 
-.chart-strategy-eyebrow {
-  margin: 0 0 6px;
-  color: var(--strategy-accent);
-  font: 650 var(--font-size-xs)/1 var(--font-mono);
-  letter-spacing: 0.1em;
-}
-
-.chart-strategy-advanced-link {
-  color: var(--strategy-link);
-  font-size: 11px;
-  text-decoration: none;
-}
-.chart-strategy-advanced-link:hover,
-.chart-strategy-advanced-link:focus-visible { text-decoration: underline; outline: 0; }
-
-.chart-strategy-privacy { margin-top: 11px !important; color: var(--text-muted) !important; font-size: var(--font-size-xs) !important; }
-.chart-strategy-empty-recent,
-.chart-strategy-placeholder { display: grid; min-height: 190px; place-items: center; color: var(--text-secondary); font-size: 12px; text-align: center; }
-.chart-strategy-placeholder { align-content: center; gap: 7px; }
-.chart-strategy-placeholder strong { color: var(--text-primary); font-size: 14px; }
+.chart-strategy-privacy { margin: 0; color: var(--text-muted); font-size: var(--font-size-xs); }
+.chart-strategy-placeholder { min-height: 190px; }
 
 .chart-strategy-editor-layout {
   display: grid;
@@ -159,7 +132,6 @@
   background: var(--bg-secondary);
 }
 
-.chart-strategy-editor-head,
 .chart-strategy-problems-head {
   flex: 0 0 34px;
   padding: 9px 11px;
@@ -177,7 +149,7 @@
 .chart-strategy-problem { margin-top: 12px; padding: 10px; border-left: 2px solid var(--candle-down); background: color-mix(in srgb, var(--color-danger) 8%, transparent); }
 .chart-strategy-problem strong { display: block; font-size: 11px; }
 .chart-strategy-problem p { margin: 6px 0 0; color: var(--text-secondary); font-size: var(--font-size-xs); line-height: 1.5; }
-.chart-strategy-problem button { margin-top: 8px; padding: 0; border: 0; color: var(--strategy-link); background: transparent; font-size: var(--font-size-xs); cursor: pointer; }
+.chart-strategy-problem .ui-btn { margin-top: 6px; margin-left: -10px; }
 
 .chart-strategy-run-overview {
   max-width: 760px;
@@ -189,21 +161,9 @@
 }
 
 .chart-strategy-run-overview h2 { margin: 0; font-size: 18px; }
-.chart-strategy-run-overview > p:not(.chart-strategy-eyebrow) { max-width: 620px; color: var(--text-secondary); font-size: 11px; line-height: 1.6; }
+.chart-strategy-run-overview > p { max-width: 620px; color: var(--text-secondary); font-size: 11px; line-height: 1.6; }
 
 .chart-strategy-result-overview { display: grid; gap: 10px; min-width: 0; }
-.chart-strategy-stale-guidance {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 9px 11px;
-  border-left: 3px solid var(--color-warning);
-  color: var(--text-secondary);
-  background: color-mix(in srgb, var(--color-warning) 7%, transparent);
-  font-size: var(--font-size-xs);
-}
-.chart-strategy-stale-guidance strong { color: var(--strategy-warning); }
-
 .chart-strategy-result-metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -240,40 +200,13 @@
 .chart-strategy-run-comparison-head span { display: block; }
 .chart-strategy-run-comparison-head strong { font-size: 11px; }
 .chart-strategy-run-comparison-head span { margin-top: 3px; color: var(--text-muted); font-size: var(--font-size-xs); }
-.chart-strategy-run-comparison-head a { color: var(--strategy-link); font-size: var(--font-size-xs); text-decoration: none; white-space: nowrap; }
 .chart-strategy-run-comparison-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
 .chart-strategy-run-comparison-grid .chart-strategy-result-metric { min-height: 58px; padding: 8px 9px; }
 .chart-strategy-run-comparison-grid .chart-strategy-result-metric strong { margin-top: 6px; font-size: 12px; }
 
-.chart-strategy-explain-backdrop {
-  position: absolute;
-  z-index: 12;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: 18px;
-  background: color-mix(in srgb, var(--surface-0) 72%, transparent);
-}
-.chart-strategy-explain-popover {
-  display: flex;
-  width: min(720px, 92vw);
-  max-width: 100%;
-  max-height: calc(100% - 12px);
-  flex-direction: column;
-  overflow: hidden;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  background: var(--bg-secondary);
-  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.5);
-}
-.chart-strategy-explain-popover > header { display: flex; flex: 0 0 52px; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--border-color); }
-.chart-strategy-explain-popover > header small,
-.chart-strategy-explain-popover > header strong { display: block; }
-.chart-strategy-explain-popover > header small { color: var(--text-muted); font-size: var(--font-size-xs); letter-spacing: 0.08em; text-transform: uppercase; }
-.chart-strategy-explain-popover > header strong { margin-top: 4px; font-size: 12px; }
-.chart-strategy-explain-popover > header button { border: 0; color: var(--text-secondary); background: transparent; font-size: var(--font-size-xs); cursor: pointer; }
-.chart-strategy-explain-scroll { overflow: auto; padding: 10px; }
-.chart-strategy-explain-scroll article + article { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-color); }
+/* Trade explanation: a kit dialog; one article per decision. */
+.chart-strategy-explain { display: grid; gap: var(--space-3); }
+.chart-strategy-explain article + article { padding-top: var(--space-3); border-top: 1px solid var(--border-subtle); }
 .chart-strategy-explain-summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .chart-strategy-explain-summary strong { font-size: 11px; }
 .chart-strategy-explain-summary span { padding: 3px 6px; border-radius: var(--radius-full); color: var(--strategy-success); background: color-mix(in srgb, var(--color-success) 10%, transparent); font: var(--font-size-xs)/1 var(--font-mono); }
@@ -290,7 +223,6 @@
 .chart-strategy-explain-block code { overflow: hidden; color: var(--text-secondary); font: var(--font-size-xs)/1.3 var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
 .chart-strategy-explain-block span { overflow: hidden; color: var(--text-secondary); font: var(--font-size-xs)/1.3 var(--font-mono); text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 .chart-strategy-explain-technical { margin-top: 8px; color: var(--text-muted); font-size: var(--font-size-xs); }
-.chart-strategy-explain-technical summary { cursor: pointer; }
 .chart-strategy-explain-technical dl { margin: 7px 0 0; }
 .chart-strategy-explain-technical dl > div { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 8px; margin-top: 4px; }
 .chart-strategy-explain-technical dd { margin: 0; overflow: hidden; color: var(--text-secondary); font-family: var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
@@ -321,31 +253,13 @@
 .chart-strategy-latest-trade { display: flex; flex-direction: column; align-items: flex-start; padding: 12px; }
 .chart-strategy-latest-trade strong { font-size: 11px; }
 .chart-strategy-latest-trade span { margin-top: 7px; color: var(--text-secondary); font-size: var(--font-size-xs); line-height: 1.45; }
-.chart-strategy-latest-trade button {
-  margin-top: auto;
-  padding: 0;
-  border: 0;
-  color: var(--strategy-link);
-  background: transparent;
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-}
-.chart-strategy-latest-trade button:disabled { color: var(--text-muted); cursor: default; }
+.chart-strategy-latest-trade .ui-btn { margin-top: auto; margin-left: -10px; }
 
-.chart-strategy-credibility-details {
-  padding: 8px 10px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-control);
-  color: var(--text-secondary);
-  background: var(--bg-secondary);
-  font-size: var(--font-size-xs);
-}
-.chart-strategy-credibility-details summary { cursor: pointer; }
+.chart-strategy-credibility-details { color: var(--text-secondary); font-size: var(--font-size-xs); }
 .chart-strategy-credibility-details dl { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 10px 0; }
 .chart-strategy-credibility-details dl > div { min-width: 0; }
 .chart-strategy-credibility-details dt { color: var(--text-muted); }
 .chart-strategy-credibility-details dd { margin: 3px 0 0; overflow: hidden; color: var(--text-primary); text-overflow: ellipsis; white-space: nowrap; }
-.chart-strategy-credibility-details a { color: var(--strategy-link); text-decoration: none; }
 
 .chart-strategy-trades { display: flex; height: 100%; min-height: 205px; flex-direction: column; }
 .chart-strategy-trade-head,
@@ -396,8 +310,8 @@
 .chart-strategy-result-metric > span { font-size: 12px; color: var(--text-secondary); }
 .chart-strategy-result-metric > strong { font: 650 20px/1.4 var(--font-sans); font-variant-numeric: tabular-nums; }
 .chart-strategy-result-metric > small { font-size: 11px; color: var(--text-secondary); }
-.chart-strategy-equity-card span, .chart-strategy-latest-trade span, .chart-strategy-latest-trade button { font-size: 11px; }
-.chart-strategy-tester-panel button:focus-visible { outline: 2px solid var(--strategy-link); outline-offset: -2px; }
+.chart-strategy-equity-card span, .chart-strategy-latest-trade span { font-size: 11px; }
+.chart-strategy-tester-panel button:where(:not(.ui-btn, .ui-icon-btn, .ui-tab, .ui-segment)):focus-visible { outline: 2px solid var(--strategy-link); outline-offset: -2px; }
 
 @media (max-width: 1180px) {
   .chart-strategy-autosave { display: none; }
@@ -421,19 +335,20 @@
 .chart-strategy-start-columns { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 20px; }
 .chart-strategy-start-columns h3 { margin: 0 0 8px; color: var(--text-secondary); font: 600 11px/1.4 var(--font-sans); }
 .chart-strategy-start-list { display: flex; flex-direction: column; border-top: 1px solid var(--border-color); }
-.chart-strategy-start-list button { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 9px 8px; border: 0; border-bottom: 1px solid var(--border-color); color: var(--text-primary); background: transparent; font: inherit; text-align: left; cursor: pointer; }
-.chart-strategy-start-list button:hover, .chart-strategy-start-list button:focus-visible { background: var(--bg-hover); outline: 0; box-shadow: inset 2px 0 0 var(--accent-blue); }
+.chart-strategy-start-row { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 9px 8px; border: 0; border-bottom: 1px solid var(--border-color); color: var(--text-primary); background: transparent; font: inherit; text-align: left; cursor: pointer; }
+.chart-strategy-start-row:hover, .chart-strategy-start-row:focus-visible { background: var(--bg-hover); outline: 0; box-shadow: inset 2px 0 0 var(--accent-blue); }
 .chart-strategy-start-list strong { font-weight: 600; }
 .chart-strategy-start-list span { overflow: hidden; color: var(--text-secondary); font-size: 11px; line-height: 1.5; text-overflow: ellipsis; }
 .chart-strategy-start-empty { margin: 0; padding: 10px 0; border-top: 1px solid var(--border-color); color: var(--text-secondary); font-size: 11px; line-height: 1.5; }
 .chart-strategy-start-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
-.chart-strategy-start-footer .chart-strategy-privacy { flex: 1 1 260px; margin: 0 !important; }
-.chart-strategy-start-footer .chart-strategy-advanced-link { padding: 0; border: 0; background: transparent; }
+.chart-strategy-start-footer .chart-strategy-privacy { flex: 1 1 260px; }
 
 .chart-strategy-run-detail { margin: 0 0 10px; color: var(--text-secondary); font-size: 11px; line-height: 1.5; }
 .chart-strategy-run-detail[data-tone=error] { color: var(--strategy-error); }
 .chart-strategy-run-detail small { display: block; color: var(--text-secondary); }
-.chart-strategy-run-overview .strategy-notice { margin-top: 12px; }
+.chart-strategy-run-overview .ui-alert { margin-top: 12px; }
+.chart-strategy-run-overview .ui-alert-body p { margin: 0 0 6px; }
+.strategy-settings-resolved { margin-top: var(--space-3); }
 
 .chart-strategy-settings { max-width: 980px; }
 .chart-strategy-settings .strategy-conditions-editor { padding: 0 0 14px; border-bottom: 1px solid var(--border-color); }
