@@ -4373,6 +4373,7 @@ export const sv = {
   "common.cancel": "Avbryt",
   "common.close": "Stäng",
   "common.notifications": "Aviseringar",
+  "replay.rail.notesSummary": "Planer och utvärderingar",
   "replay.integrity.editRules": "Ändra regler",
   "replay.capability.exact": "Exakt",
   "replay.capability.approx": "Ungefärlig",

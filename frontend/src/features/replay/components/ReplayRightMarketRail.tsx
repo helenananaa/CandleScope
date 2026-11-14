@@ -68,7 +68,7 @@ function ReplayRightMarketRail({
   const views = useMemo<MarketRailViewDescriptor[]>(() => [
     {
       id: REPLAY_RAIL_VIEW_IDS.notes, title: t("replay.notes.title", {}, locale), icon: <NotesRailIcon />,
-      order: 35, sizing: "flex", collapsedSummary: t("replay.notes.title", {}, locale),
+      order: 35, sizing: "flex", collapsedSummary: t("replay.rail.notesSummary", {}, locale),
     },
     {
       id: REPLAY_RAIL_VIEW_IDS.paper,

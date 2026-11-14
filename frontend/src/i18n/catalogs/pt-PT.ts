@@ -4373,6 +4373,7 @@ export const ptPT = {
   "common.cancel": "Cancelar",
   "common.close": "Fechar",
   "common.notifications": "Notificações",
+  "replay.rail.notesSummary": "Planos e revisões",
   "replay.integrity.editRules": "Alterar regras",
   "replay.capability.exact": "Exato",
   "replay.capability.approx": "Aproximado",

@@ -4373,6 +4373,7 @@ export const vi = {
   "common.cancel": "Hủy",
   "common.close": "Đóng",
   "common.notifications": "Thông báo",
+  "replay.rail.notesSummary": "Kế hoạch và đánh giá",
   "replay.integrity.editRules": "Thay đổi quy tắc",
   "replay.capability.exact": "Chính xác",
   "replay.capability.approx": "Gần đúng",

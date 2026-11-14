@@ -4373,6 +4373,7 @@ export const ms = {
   "common.cancel": "Batal",
   "common.close": "Tutup",
   "common.notifications": "Pemberitahuan",
+  "replay.rail.notesSummary": "Rancangan dan semakan",
   "replay.integrity.editRules": "Tukar peraturan",
   "replay.capability.exact": "Tepat",
   "replay.capability.approx": "Anggaran",

@@ -4373,6 +4373,7 @@ export const hu = {
   "common.cancel": "Mégse",
   "common.close": "Bezárás",
   "common.notifications": "Értesítések",
+  "replay.rail.notesSummary": "Tervek és értékelések",
   "replay.integrity.editRules": "Szabályok módosítása",
   "replay.capability.exact": "Pontos",
   "replay.capability.approx": "Közelítő",

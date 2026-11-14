@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Button, Checkbox, InlineAlert } from "../../../components/ui/index.js";
 import { t } from "../../../i18n/index.js";
 import { replayNoteView, replayNoteLinkField, replayNoteSelectedLinks, sameReplayNoteContext,
   type ReplayNoteContext, type ReplayNoteLink } from "../replayNotes.js";
@@ -31,13 +32,13 @@ function LinkOptions({ api, context, kind, selected, full, disabled, onToggle }:
     return () => controller.abort();
   }, [api, context, kind, before, request]);
   return <div className="replay-note-link-options" data-testid="replay-note-link-options">
-    {page.links.map(link => <label key={link.id}><input type="checkbox" checked={selected.includes(link.id)}
-      disabled={disabled || (full && !selected.includes(link.id))} onChange={() => onToggle(link.id)} />{label(link)}</label>)}
-    {loading && <p role="status">{t("replay.notes.linksLoading")}</p>}
-    {!loading && page.error && <><p role="alert">{t("replay.notes.linksFailed")}</p>
-      <button type="button" onClick={() => setAttempt(value => value + 1)}>{t("replay.notes.refresh")}</button></>}
-    {!loading && !page.error && page.links.length === 0 && <p>{t("replay.notes.linksEmpty")}</p>}
-    {!loading && !page.error && page.next && <button type="button" onClick={() => setBefore(page.next!)}>{t("replay.notes.moreLinks")}</button>}
+    {page.links.map(link => <Checkbox key={link.id} checked={selected.includes(link.id)}
+      disabled={disabled || (full && !selected.includes(link.id))} onChange={() => onToggle(link.id)} label={label(link)} />)}
+    {loading && <p className="replay-notes-status" role="status">{t("replay.notes.linksLoading")}</p>}
+    {!loading && page.error && <InlineAlert tone="danger" action={<Button size="sm" onClick={() => setAttempt(value => value + 1)}>{t("replay.notes.refresh")}</Button>}>
+      {t("replay.notes.linksFailed")}</InlineAlert>}
+    {!loading && !page.error && page.links.length === 0 && <p className="replay-note-hint">{t("replay.notes.linksEmpty")}</p>}
+    {!loading && !page.error && page.next && <Button size="sm" variant="ghost" onClick={() => setBefore(page.next!)}>{t("replay.notes.moreLinks")}</Button>}
   </div>;
 }
 
@@ -56,17 +57,19 @@ export function ReplayNoteLinkPicker({ api, context, fields, disabled, onChange 
     if (next.length + (selectionKind === "FILL" ? trades.length : fills.length) > 8) return;
     onChange({ ...fields, [replayNoteLinkField(selectionKind)]: JSON.stringify(next) });
   };
+  const chosen = [...fills.map(id => ({ kind: "FILL" as const, id })), ...trades.map(id => ({ kind: "TRADE" as const, id }))];
   return <div className="replay-note-link-picker">
-    <p>{t("replay.notes.linksHint")}</p>
-    {!valid && <p role="alert">{t("replay.notes.linksFailed")}</p>}
-    <div className="replay-note-actions">
-      {(["FILL", "TRADE"] as const).map(value => <button type="button" key={value} disabled={disabled || !valid}
+    <div className="replay-note-tool-row">
+      {(["FILL", "TRADE"] as const).map(value => <Button size="sm" key={value} disabled={disabled || !valid}
         aria-expanded={kind === value} onClick={() => setKind(current => current === value ? null : value)}>
-        {t(value === "FILL" ? "replay.notes.chooseFills" : "replay.notes.chooseTrades")}</button>)}
+        {t(value === "FILL" ? "replay.notes.chooseFills" : "replay.notes.chooseTrades")}</Button>)}
     </div>
-    {([...fills.map(id => ({ kind: "FILL" as const, id })), ...trades.map(id => ({ kind: "TRADE" as const, id }))]).map(link =>
-      <button type="button" key={link.kind + ":" + link.id} disabled={disabled || !valid} onClick={() => toggle(link.kind, link.id)}>
-        {t("replay.notes.removeLink", { id: link.id })}</button>)}
+    <p className="replay-note-hint">{t("replay.notes.linksHint")}</p>
+    {!valid && <InlineAlert tone="danger">{t("replay.notes.linksFailed")}</InlineAlert>}
+    {chosen.length > 0 && <div className="replay-note-tool-row">
+      {chosen.map(link => <Button size="sm" variant="ghost" key={link.kind + ":" + link.id} disabled={disabled || !valid} onClick={() => toggle(link.kind, link.id)}>
+        {t("replay.notes.removeLink", { id: link.id })}</Button>)}
+    </div>}
     {kind && valid && <LinkOptions key={kind} api={api} context={context} kind={kind}
       selected={kind === "FILL" ? fills : trades} full={fills.length + trades.length >= 8} disabled={disabled}
       onToggle={id => toggle(kind, id)} />}

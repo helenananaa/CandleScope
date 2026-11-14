@@ -15,14 +15,6 @@
 
 .replay-history-boundary-notice button { border: 0; color: inherit; background: transparent; font-size: var(--font-size-lg); }
 
-.replay-review-right-rail h3 { margin: 5px 0 10px; color: var(--text-primary); }
-
-.replay-note-editor p { margin: 0; color: var(--text-secondary); font-size: var(--font-size-xs); }
-
-.replay-notes-panel button { min-height: 30px; padding: 5px 9px; border: 1px solid var(--border-strong); border-radius: var(--radius-control); color: var(--text-primary); background: var(--surface-1); font: 500 var(--font-size-xs)/1.4 var(--font-sans); cursor: pointer; }
-.replay-notes-panel button:hover:enabled { background: var(--surface-2); }
-.replay-notes-panel button:disabled { opacity: .5; cursor: default; }
-
 @media (max-width: 760px) {
   .replay-right-rail { display: none; }
   .right-market-rail[data-runtime-source="replay"] { display: none; }
@@ -98,8 +90,7 @@
 
 .replay-ticket-type select:focus-visible,
 .replay-ticket-fields input:focus-visible,
-.replay-trading-workbench :is(button, input):focus-visible,
-.replay-market-context button:focus-visible {
+.replay-trading-workbench :is(button, input):focus-visible {
   outline: 2px solid var(--trade-focus);
   outline-offset: 1px;
 }
@@ -228,10 +219,6 @@
 
 .replay-risk-dashboard p { margin: 4px 0; color: var(--trade-secondary); line-height: 1.4; }
 .replay-risk-dashboard button { min-height: 26px; padding: 3px 7px; border: 1px solid var(--trade-border); border-radius: var(--radius-sm); color: var(--trade-text); background: var(--trade-surface-raised); font-size: var(--font-size-xs); }
-
-.replay-market-context-tabs button { min-height: 36px; margin-bottom: -1px; border: 0; border-bottom: 2px solid transparent; color: var(--trade-muted); background: transparent; font-size: var(--font-size-sm); font-weight: 600; }
-.replay-market-context-tabs button:hover { color: var(--trade-text); }
-.replay-market-context-tabs button.active { border-bottom-color: var(--trade-focus); color: var(--trade-text); }
 
 @media (max-height: 700px) {
   .replay-trading-workbench { flex-basis: 205px; }

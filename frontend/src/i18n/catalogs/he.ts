@@ -4373,6 +4373,7 @@ export const he = {
   "common.cancel": "ביטול",
   "common.close": "סגירה",
   "common.notifications": "התראות",
+  "replay.rail.notesSummary": "תוכניות וסיכומים",
   "replay.integrity.editRules": "שינוי כללים",
   "replay.capability.exact": "מדויק",
   "replay.capability.approx": "משוער",
