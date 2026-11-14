@@ -107,11 +107,10 @@ class ComponentPreviewScheduler:
         if state.source_refs or incoming.extra.get('source_ref'):
             ref = incoming.extra.get('source_ref')
             provider = getattr(agg,'acquisition_revision_provider',None)
-            plane = state.acquisition_revision if state._source_recovery is not None else (
-                provider() if provider is not None else None)
             if (agg._preview_source_validator is None or agg._preview_source_binding is None
                     or agg._preview_source_binding() is None or provider is None
-                    or type(plane) is not int or len(state.source_snapshots)>256
+                    or type(state.acquisition_revision if state._source_recovery is not None else provider()) is not int
+                    or len(state.source_snapshots)>256
                     or not state.identity.is_legacy_default_for(state.exchange)
                     or ref is None or set(ref) != {'series','open_time','revision'}):
                 state.preview_fallback_reason = 'source_reference_window'
