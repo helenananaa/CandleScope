@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Button, Checkbox, InlineAlert } from "../../../components/ui/index.js";
 import { t } from "../../../i18n/index.js";
 import { attachReplayNoteCapture, createReplayNoteCaptureDraft, readReplayNoteCaptureDraft, releaseReplayNoteCaptureDraft,
   replayNotePendingCapture, replayNotePendingCaptureField, replayNoteScreenshotField, replayNoteScreenshotIds, saveReplayNoteCaptureDraft } from "../replayNoteCaptureDraft.js";
@@ -82,36 +83,40 @@ export default function ReplayNoteCaptureControls({ api, context, view, fields, 
     } catch { if (!controller.signal.aborted) setOperation({ key: viewKey, busy: false, error: true, draftError: false }); }
     finally { finish(controller); }
   };
+  const discard = () => {
+    let payload: ReplayNoteCaptureSave | null = null;
+    try { payload = readReplayNoteCaptureDraft(localStorage, pending!, context, view); } catch { /* Retain unreadable material. */ }
+    if (edit(value => { const next = { ...value }; delete next[replayNotePendingCaptureField]; return next; })) {
+      try { if (payload) releaseReplayNoteCaptureDraft(localStorage, payload); } catch { /* Preserve conflicting recovery data. */ }
+      memory.current = null; setOperation(null);
+    }
+  };
   return <div className="replay-note-capture-controls" data-testid="replay-note-capture-controls">
-    <p>{t("replay.notes.captureHint")}</p>
-    <div className="replay-note-actions">
-      <button type="button" disabled={disabled || busy || !valid || !current || !captureChart || selected.length >= 2 || pending !== null}
-        onClick={() => { void capture(); }}>{t("replay.notes.capture")}</button>
-      <button type="button" disabled={disabled || busy || !valid || !current || pending !== null}
-        onClick={() => { void loadChoices(); }} aria-expanded={showChoices}>{t("replay.notes.capturesChoose")}</button>
+    <div className="replay-note-tool-row">
+      <Button size="sm" disabled={disabled || busy || !valid || !current || !captureChart || selected.length >= 2 || pending !== null}
+        onClick={() => { void capture(); }}>{t("replay.notes.capture")}</Button>
+      <Button size="sm" variant="ghost" disabled={disabled || busy || !valid || !current || pending !== null}
+        onClick={() => { void loadChoices(); }} aria-expanded={showChoices}>{t("replay.notes.capturesChoose")}</Button>
     </div>
-    {busy && <p role="status">{t("replay.notes.captureBusy")}</p>}
-    {(!valid || operation?.key === viewKey && operation.error) && <p role="alert">{t(operation?.draftError ? "replay.notes.captureDraftFailed" : "replay.notes.captureFailed")}</p>}
-    {pending && <><p role="status">{t("replay.notes.capturePending")}</p><div className="replay-note-actions">
-      <button type="button" disabled={disabled || busy} onClick={() => { void retry(); }}>{t("replay.notes.captureRetry")}</button>
-      <button type="button" disabled={disabled || busy} onClick={() => {
-        let payload: ReplayNoteCaptureSave | null = null;
-        try { payload = readReplayNoteCaptureDraft(localStorage, pending!, context, view); } catch { /* Retain unreadable material. */ }
-        if (edit(value => { const next = { ...value }; delete next[replayNotePendingCaptureField]; return next; })) {
-          try { if (payload) releaseReplayNoteCaptureDraft(localStorage, payload); } catch { /* Preserve conflicting recovery data. */ }
-          memory.current = null; setOperation(null);
-        }
-      }}>{t("replay.notes.captureDiscard")}</button></div></>}
-    {selected.map((id, index) => <button type="button" key={id} disabled={disabled || busy} data-capture-id={id}
-      onClick={() => edit(value => ({ ...value, [replayNoteScreenshotField]: JSON.stringify(replayNoteScreenshotIds(value).filter(item => item !== id)) }))}>
-      {t("replay.notes.captureRemove", { index: index + 1 })}</button>)}
+    <p className="replay-note-hint">{t("replay.notes.captureHint")}</p>
+    {busy && <p className="replay-notes-status" role="status">{t("replay.notes.captureBusy")}</p>}
+    {(!valid || operation?.key === viewKey && operation.error) && <InlineAlert tone="danger">{t(operation?.draftError ? "replay.notes.captureDraftFailed" : "replay.notes.captureFailed")}</InlineAlert>}
+    {pending && <InlineAlert tone="warning" action={<span className="replay-note-tool-row">
+      <Button size="sm" disabled={disabled || busy} onClick={() => { void retry(); }}>{t("replay.notes.captureRetry")}</Button>
+      <Button size="sm" variant="ghost" disabled={disabled || busy} onClick={discard}>{t("replay.notes.captureDiscard")}</Button>
+    </span>}>{t("replay.notes.capturePending")}</InlineAlert>}
+    {selected.length > 0 && <div className="replay-note-tool-row">
+      {selected.map((id, index) => <Button size="sm" variant="ghost" key={id} disabled={disabled || busy} data-capture-id={id}
+        onClick={() => edit(value => ({ ...value, [replayNoteScreenshotField]: JSON.stringify(replayNoteScreenshotIds(value).filter(item => item !== id)) }))}>
+        {t("replay.notes.captureRemove", { index: index + 1 })}</Button>)}
+    </div>}
     {showChoices && current && <div className="replay-note-capture-options">
-      {available.length === 0 && !busy && <p>{t("replay.notes.capturesEmpty")}</p>}
-      {available.map(capture => <label key={capture.id}><input type="checkbox" checked={selected.includes(capture.id)}
+      {available.length === 0 && !busy && <p className="replay-note-hint">{t("replay.notes.capturesEmpty")}</p>}
+      {available.map(capture => <Checkbox key={capture.id} checked={selected.includes(capture.id)}
         disabled={disabled || busy || pending !== null || selected.length >= 2 && !selected.includes(capture.id)} onChange={() => edit(value => {
           const selected = replayNoteScreenshotIds(value), next = selected.includes(capture.id) ? selected.filter(id => id !== capture.id) : [...selected, capture.id];
           return { ...value, [replayNoteScreenshotField]: JSON.stringify(next) };
-        })} />{actualTime(capture.savedAtMs)} · {capture.interval} · {capture.width}×{capture.height}</label>)}
+        })} label={`${actualTime(capture.savedAtMs)} · ${capture.interval} · ${capture.width}×${capture.height}`} />)}
     </div>}
   </div>;
 }

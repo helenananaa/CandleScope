@@ -4373,6 +4373,7 @@ export const uk = {
   "common.cancel": "Скасувати",
   "common.close": "Закрити",
   "common.notifications": "Сповіщення",
+  "replay.rail.notesSummary": "Плани й розбори",
   "replay.integrity.editRules": "Змінити правила",
   "replay.capability.exact": "Точно",
   "replay.capability.approx": "Приблизно",

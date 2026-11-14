@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Badge, Button, Disclosure, EmptyState, Field, InlineAlert, Textarea } from "../../../components/ui/index.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import { JournalEditor } from "../../trading-accounts/journalEditor.js";
@@ -19,7 +20,6 @@ function NoteEditor({ api, target, view, captureChart, actualTime, onChanged, on
   api: Api; target: EditorTarget; view: ReplayNotesResponse["context"]; captureChart?: ReplayNoteChartCapture | undefined; actualTime(ms: number): string; onChanged(): void; onClose(): void;
   onCopy?: (fields: Record<string, string>) => void;
 }) {
-  const id = useId();
   const [captureBusy, setCaptureBusy] = useState(false);
   const { binding, note } = target;
   const sameView = binding.context.reviewId === view.reviewId;
@@ -41,26 +41,27 @@ function NoteEditor({ api, target, view, captureChart, actualTime, onChanged, on
     try { if (!sameView || captureBusy || replayNotePendingCapture(editor.getSnapshot().fields)) return; } catch { return; }
     if (await editor.flush()) { onChanged(); if (close) onClose(); }
   };
+  const saveBlocked = !sameView || !state.ready || state.status === "saving" || captureBusy || state.fields.replayPendingCaptureId !== undefined;
   return <div className="replay-note-editor" data-testid="replay-note-editor">
-    <label htmlFor={id}>{t("replay.notes.body")}</label>
-    <textarea id={id} value={state.fields.entryBasis ?? ""} disabled={!state.ready} maxLength={16_000}
-      onChange={event => editor.edit({ ...state.fields, entryBasis: event.target.value })} />
+    <Field label={t("replay.notes.body")} hint={t(binding.context.reviewNote ? "replay.notes.reviewHint" : "replay.notes.planHint")}>
+      <Textarea value={state.fields.entryBasis ?? ""} disabled={!state.ready} maxLength={16_000} rows={6}
+        onChange={event => editor.edit({ ...state.fields, entryBasis: event.target.value })} />
+    </Field>
     <ReplayNoteLinkPicker api={api} context={binding.context} fields={state.fields}
       disabled={!sameView || !state.ready || state.status === "saving"} onChange={fields => editor.edit(fields)} />
     <ReplayNoteCaptureControls api={api} context={binding.context} view={view} fields={state.fields}
       captureChart={captureChart} disabled={!sameView || !state.ready || state.status === "saving"} onBusy={setCaptureBusy} actualTime={actualTime}
       edit={update => { try { editor.edit(update(editor.getSnapshot().fields)); return editor.getSnapshot().status !== "failed"; } catch { return false; } }} />
-    <p>{t(binding.context.reviewNote ? "replay.notes.reviewHint" : "replay.notes.planHint")}</p>
-    {state.recovered && <p role="status">{t("replay.notes.recovered")}</p>}
-    {state.error != null && <p role="alert">{t("replay.notes.saveFailed")}</p>}
-    {onCopy && <p>{t("replay.notes.copyHint")}</p>}
-    <div className="replay-note-actions">
-      <button type="button" disabled={!sameView || !state.ready || state.status === "saving" || captureBusy || state.fields.replayPendingCaptureId !== undefined} onClick={() => { void save(false); }}>
-        {t(state.status === "saving" ? "replay.notes.saving" : "replay.notes.save")}</button>
-      <button type="button" disabled={!sameView || !state.ready || state.status === "saving" || captureBusy || state.fields.replayPendingCaptureId !== undefined} onClick={() => { void save(true); }}>{t("replay.notes.saveClose")}</button>
-      <button type="button" disabled={state.status === "saving"} onClick={onClose}>{t("replay.notes.close")}</button>
-      {onCopy && <button type="button" disabled={!state.ready || state.status === "saving"}
-        onClick={() => onCopy(state.fields)}>{t("replay.notes.copyCurrent")}</button>}
+    {state.recovered && <InlineAlert tone="info">{t("replay.notes.recovered")}</InlineAlert>}
+    {state.error != null && <InlineAlert tone="danger">{t("replay.notes.saveFailed")}</InlineAlert>}
+    {onCopy && <InlineAlert tone="warning">{t("replay.notes.copyHint")}</InlineAlert>}
+    <div className="replay-note-editor-actions">
+      <Button size="sm" variant="primary" disabled={saveBlocked} onClick={() => { void save(false); }}>
+        {t(state.status === "saving" ? "replay.notes.saving" : "replay.notes.save")}</Button>
+      <Button size="sm" disabled={saveBlocked} onClick={() => { void save(true); }}>{t("replay.notes.saveClose")}</Button>
+      {onCopy && <Button size="sm" disabled={!state.ready || state.status === "saving"}
+        onClick={() => onCopy(state.fields)}>{t("replay.notes.copyCurrent")}</Button>}
+      <Button size="sm" variant="ghost" disabled={state.status === "saving"} onClick={onClose}>{t("replay.notes.close")}</Button>
     </div>
   </div>;
 }
@@ -143,40 +144,53 @@ export default function ReplayNotesPanel({ api, runId, trackId, generationKey, r
     onTimes?.([...(current?.notes.flatMap(note => [note.marketTimeMs, note.effectiveTimeMs, ...(note.links?.map(link => link.eventTimeMs) ?? []), ...(note.screenshots?.map(capture => capture.marketTimeMs) ?? [])]) ?? []),
       ...(historyScope && historyTimes.scope === historyScope ? historyTimes.values : [])]);
   }, [current, historyScope, historyTimes, onTimes]);
-  return <section className="replay-notes-panel" aria-label={t("replay.notes.title")} data-testid="replay-notes-panel">
-    {!embedded && <button type="button" className="replay-notes-toggle" aria-expanded={open} onClick={() => setOpen(value => !value)}>{t("replay.notes.title")}</button>}
-    {open && <div className="replay-notes-body">
-      {error && <p role="alert">{t("replay.notes.loadFailed")}</p>}
-      {!settled && <p role="status">{t("replay.notes.loading")}</p>}
-      {draftError && <p role="alert">{t("replay.notes.draftFailed")}</p>}
-      <div className="replay-note-actions">
-        <button type="button" disabled={!settled || visibleTarget !== null} onClick={() => edit(null)}>
-          {t(current?.context.reviewNote ? "replay.notes.addReview" : "replay.notes.add")}</button>
-        <button type="button" onClick={changed}>{t("replay.notes.refresh")}</button>
-      </div>
-      {visibleTarget ? <NoteEditor key={visibleTarget.binding.key} api={api} target={visibleTarget} view={current!.context} captureChart={captureChart} actualTime={actualTime} onChanged={saved} onClose={close} {...(canCopy ? { onCopy: copy } : {})} />
-        : <>
-          {drafts.filter(draft => current && cursorMs !== null && draft.context.virtualTimeMs <= cursorMs
-            && draft.context.timelineSequence <= current.context.timelineSequence
-            && draft.context.dataEpoch === current.context.dataEpoch).map(draft =>
-            <button type="button" key={draft.key} onClick={() => edit(current?.notes.find(note => note.id === draft.noteId) ?? null, draft)}>
-              {t("replay.notes.recover")} · {formatTime(draft.context.virtualTimeMs)}</button>)}
-          {current && current.notes.length === 0 && <p>{t("replay.notes.empty")}</p>}
-          {current?.notes.map(note => <article key={note.id} data-note-id={note.id}>
-            <strong>{t(note.reviewNote ? "replay.notes.review" : "replay.notes.original")}</strong>
-            <dl><dt>{t("replay.notes.virtualTime")}</dt><dd>{formatTime(note.marketTimeMs)}</dd>
-              <dt>{t("replay.notes.savedTime")}</dt><dd>{actualTime(note.updatedAtMs)}</dd></dl>
+  const visibleDrafts = drafts.filter(draft => current && cursorMs !== null && draft.context.virtualTimeMs <= cursorMs
+    && draft.context.timelineSequence <= current.context.timelineSequence
+    && draft.context.dataEpoch === current.context.dataEpoch);
+  const body = <div className="replay-notes-body">
+    <div className="replay-notes-toolbar">
+      <Button size="sm" variant="primary" disabled={!settled || visibleTarget !== null} onClick={() => edit(null)}>
+        {t(current?.context.reviewNote ? "replay.notes.addReview" : "replay.notes.add")}</Button>
+      <Button size="sm" variant="ghost" onClick={changed}>{t("replay.notes.refresh")}</Button>
+    </div>
+    {error && <InlineAlert tone="danger">{t("replay.notes.loadFailed")}</InlineAlert>}
+    {!settled && !error && <p className="replay-notes-status" role="status">{t("replay.notes.loading")}</p>}
+    {draftError && <InlineAlert tone="danger">{t("replay.notes.draftFailed")}</InlineAlert>}
+    {visibleTarget ? <NoteEditor key={visibleTarget.binding.key} api={api} target={visibleTarget} view={current!.context} captureChart={captureChart} actualTime={actualTime} onChanged={saved} onClose={close} {...(canCopy ? { onCopy: copy } : {})} />
+      : <>
+        {visibleDrafts.length > 0 && <div className="replay-note-drafts">
+          {visibleDrafts.map(draft =>
+            <Button size="sm" key={draft.key} onClick={() => edit(current?.notes.find(note => note.id === draft.noteId) ?? null, draft)}>
+              {t("replay.notes.recover")} · {formatTime(draft.context.virtualTimeMs)}</Button>)}
+        </div>}
+        {current && current.notes.length === 0 && <EmptyState compact title={t("replay.notes.empty")} />}
+        {current && current.notes.length > 0 && <ul className="replay-note-list">
+          {current.notes.map(note => <li key={note.id} className="replay-note-card" data-note-id={note.id}>
+            <header className="replay-note-head">
+              <Badge tone={note.reviewNote ? "accent" : "neutral"}>{t(note.reviewNote ? "replay.notes.review" : "replay.notes.original")}</Badge>
+              <time className="replay-note-time" title={t("replay.notes.virtualTime")}>{formatTime(note.marketTimeMs)}</time>
+            </header>
             <p className="replay-note-text">{note.fields.entryBasis ?? ""}</p>
             <ReplayNoteLinks links={note.links ?? []} formatTime={formatTime} />
             <ReplayNoteScreenshots note={note} context={current.context} formatTime={formatTime} onOpen={setPreview} disabled={!settled} />
-            <button type="button" disabled={!settled || Boolean(current.context.reviewNote && !note.reviewNote)} onClick={() => edit(note)}>{t("replay.notes.edit")}</button>
-            <button type="button" disabled={!settled} aria-expanded={historyNote?.id === note.id}
-              onClick={() => setHistoryId(value => value === note.id ? null : note.id)}>{t("replay.notes.history")}</button>
+            <footer className="replay-note-foot">
+              <small className="replay-note-saved">{t("replay.notes.savedTime")} {actualTime(note.updatedAtMs)}</small>
+              <span className="replay-note-actions">
+              <Button size="sm" variant="ghost" disabled={!settled || Boolean(current.context.reviewNote && !note.reviewNote)} onClick={() => edit(note)}>{t("replay.notes.edit")}</Button>
+              <Button size="sm" variant="ghost" disabled={!settled} aria-expanded={historyNote?.id === note.id}
+                onClick={() => setHistoryId(value => value === note.id ? null : note.id)}>{t("replay.notes.history")}</Button>
+              </span>
+            </footer>
             {historyNote?.id === note.id && <ReplayNoteHistory key={historyScope} api={api} note={note} context={current.context}
               scope={historyScope} asOfMs={current.asOfMs} formatTime={formatTime} actualTime={actualTime} onTimes={reportHistoryTimes} onImage={setPreview} />}
-          </article>)}
-        </>}
-    </div>}
+          </li>)}
+        </ul>}
+      </>}
+  </div>;
+  return <section className="replay-notes-panel" aria-label={t("replay.notes.title")} data-testid="replay-notes-panel" data-embedded={embedded ? "true" : undefined}>
+    {embedded ? body : <Disclosure summary={t("replay.notes.title")} open={open} onToggle={setOpen}>
+      {open && body}
+    </Disclosure>}
     {preview && open && !visibleTarget && settled && current && preview.contextKey === JSON.stringify(current.context) && <ReplayNoteScreenshotViewer
       key={JSON.stringify([preview.contextKey, preview.noteId, preview.revision, preview.capture.id])} api={api} selection={preview}
       context={current.context} formatTime={formatTime} actualTime={actualTime} onClose={closePreview} />}

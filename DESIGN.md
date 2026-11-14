@@ -162,6 +162,15 @@ The indicator drawer adds two more:
 - **A library to add from** is rows: the name, one line of description and where it goes (主图, 副图), and a small `IconButton` toggle with `pressed` (+, then ✓). Badges only mark exceptions (自定义, 行情数据, unavailable); what every row has in common is not a badge.
 - **An editor in a drawer** has one toolbar: the title with what is being edited under it, then the actions (the primary one last), a divider and the close button. Advanced inputs are closed `Disclosure`s; the run status is the last line, toned and announced. Labels are never uppercased by CSS, since they can contain code.
 
+## Rail views
+
+The replay rail (回放笔记, 自选, 市场) sets the pattern for a view in a side rail:
+
+- **The rail frame names the view**: its title and a short subtitle that says something new (计划与复盘), never the title again. The view itself has no eyebrow or second heading.
+- **The view's main action comes first**, as a small primary button, with refresh as a quiet button at the other end.
+- **Data the source does not have is an `EmptyState`** with the reason (未启用历史盘口). A warning alert is for something that broke, with the action that repairs it (重新校验并同步).
+- **Rows, not cards.** The open item has an accent edge and a light tint; actions every row has are an icon button or small ghost buttons at its end.
+
 ## Search and export dialogs
 
 Symbol search and Export set the pattern for a dialog that filters a list or configures an output:

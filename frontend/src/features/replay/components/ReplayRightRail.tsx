@@ -1,6 +1,7 @@
 import { useReplayOperations } from "../useReplayOperations.js";
 import { describeError } from "../../../i18n/serverErrors.js";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Button, EmptyState, InlineAlert, Stat, TabPanel, Tabs } from "../../../components/ui/index.js";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { getNumberLocale, t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
@@ -2255,6 +2256,7 @@ export function ReplayTradingWorkbench({ runtime, viewer, formatTime }: Pick<Rep
 
 export function ReplayMarketDataDock({ runtime, viewer, indicatorStatus, formatTime }: ReplayRightRailProps) {
   useLocale();
+  const tabsId = useId();
   const [activeTab, setActiveTab] = useState<MarketTab>("book");
   const store = runtime.store;
   const config = store.sessionConfig;
@@ -2269,32 +2271,92 @@ export function ReplayMarketDataDock({ runtime, viewer, indicatorStatus, formatT
   });
   const time = (value: number) => formatTime?.(value)
     ?? formatReplayPublicTime(value, { blindMode: config?.blind_mode ?? true, originMs: store.replayStartMs });
-  const handleMarketTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, value: MarketTab) => {
-    handleTabKeyDown(event, MARKET_TAB_IDS, value, setActiveTab, "data-replay-market-tab");
-  };
+  const bookLevels = (side: "bid" | "ask", levels: readonly (readonly [string, string])[]) => (
+    <ol className="replay-book-side" data-book-side={side}>
+      {levels.map(([levelPrice, levelQuantity]) => (
+        <li key={`${side}:${levelPrice}`} data-book-side={side}>
+          <span>{formatDecimal(levelPrice, 6)}</span>
+          <span>{formatDecimal(levelQuantity)}</span>
+        </li>
+      ))}
+    </ol>
+  );
   return (
-    <div className="replay-paper-trading replay-market-context" data-replay-paper-surface="market-data">
-      <nav className="replay-market-context-tabs" role="tablist" aria-label={t("replay.dock.marketAria")}>
-        {MARKET_TAB_IDS.map((value) => <button key={value} type="button" role="tab" className={activeTab === value ? "active" : ""} aria-selected={activeTab === value} tabIndex={activeTab === value ? 0 : -1} data-replay-market-tab={value} onClick={() => setActiveTab(value)} onKeyDown={(event) => handleMarketTabKeyDown(event, value)}>{marketTabLabel(value)}</button>)}
-      </nav>
-      <div className="replay-market-context-body" role="tabpanel">
+    <div className="replay-market-context" data-replay-paper-surface="market-data">
+      <Tabs
+        id={tabsId}
+        className="replay-market-context-tabs"
+        label={t("replay.dock.marketAria")}
+        value={activeTab}
+        tabs={MARKET_TAB_IDS.map((value) => ({ value, label: marketTabLabel(value) }))}
+        onChange={setActiveTab}
+      />
+      <TabPanel tabsId={tabsId} value={activeTab} className="replay-market-context-body">
         {activeTab === "book" && (
-          <section className="replay-rail-section replay-historical-book" data-replay-panel="historical-book" data-replay-book-status={historicalBook?.status ?? "OFF"}>
+          <section className="replay-market-context-section" data-replay-panel="historical-book" data-replay-book-status={historicalBook?.status ?? "OFF"}>
             <h2>{t("replay.dock.histL2", { symbol: selectedTrack?.symbol ?? "--" })}</h2>
-            {historicalBook === null || historicalBook.status === "OFF" ? <div className="replay-capability-boundary" role="status"><strong>{t("replay.dock.bookOff")}</strong><p>{t("replay.dock.bookOffHint")}</p></div> : historicalBook.status !== "READY" ? <div className="replay-capability-boundary" role="alert"><strong>{t("replay.dock.bookCleared", { status: historicalBook.status })}</strong><p>{historicalBook.message}</p><button type="button" data-replay-action="resync-historical-book" disabled={viewer.viewerPending || viewer.marketTracks?.global_clock?.state !== "PAUSED"} onClick={() => void viewer.actions.resyncHistoricalBook().catch(() => undefined)}>{t("replay.dock.resync")}</button></div> : <><small>{t("replay.dock.l2Ready")}</small><div className="replay-book-columns"><div><h3>{t("replay.dock.bids")}</h3>{historicalBook.bids.map(([levelPrice, levelQuantity]) => <span key={`bid:${levelPrice}`} data-book-side="bid"><strong>{formatDecimal(levelPrice, 6)}</strong><small>{formatDecimal(levelQuantity)}</small></span>)}</div><div><h3>{t("replay.dock.asks")}</h3>{historicalBook.asks.map(([levelPrice, levelQuantity]) => <span key={`ask:${levelPrice}`} data-book-side="ask"><strong>{formatDecimal(levelPrice, 6)}</strong><small>{formatDecimal(levelQuantity)}</small></span>)}</div></div></>}
+            {historicalBook === null || historicalBook.status === "OFF"
+              ? <EmptyState compact title={t("replay.dock.bookOff")} description={t("replay.dock.bookOffHint")} />
+              : historicalBook.status !== "READY"
+                ? (
+                  <InlineAlert
+                    tone="warning"
+                    title={t("replay.dock.bookCleared", { status: historicalBook.status })}
+                    action={(
+                      <Button
+                        size="sm"
+                        data-replay-action="resync-historical-book"
+                        disabled={viewer.viewerPending || viewer.marketTracks?.global_clock?.state !== "PAUSED"}
+                        onClick={() => void viewer.actions.resyncHistoricalBook().catch(() => undefined)}
+                      >{t("replay.dock.resync")}</Button>
+                    )}
+                  >{historicalBook.message}</InlineAlert>
+                )
+                : (
+                  <>
+                    <p className="replay-market-context-note">{t("replay.dock.l2Ready")}</p>
+                    <div className="replay-book-columns">
+                      <div><h3>{t("replay.dock.bids")}</h3>{bookLevels("bid", historicalBook.bids)}</div>
+                      <div><h3>{t("replay.dock.asks")}</h3>{bookLevels("ask", historicalBook.asks)}</div>
+                    </div>
+                  </>
+                )}
           </section>
         )}
         {activeTab === "flow" && (
-          <section className="replay-rail-section replay-trade-flow" data-replay-panel="trade-flow" data-replay-trade-flow-state={tradeFlow.state}>
+          <section className="replay-market-context-section" data-replay-panel="trade-flow" data-replay-trade-flow-state={tradeFlow.state}>
             <h2>{t("replay.dock.tapeTitle")}</h2>
-            {tradeFlow.state === "UNSUPPORTED_SOURCE_MODE" && <div className="replay-capability-boundary" role="status"><strong>{t("replay.dock.flowOff")}</strong><p>{t("replay.dock.flowOffHint")}</p></div>}
-            {tradeFlow.state === "LOADING" && <p className="replay-empty">{t("replay.dock.flowLoading")}</p>}
-            {tradeFlow.state === "DEGRADED" && <div className="replay-capability-boundary" role="alert"><strong>{t("replay.dock.flowDegraded")}</strong><p>{tradeFlow.error ?? t("replay.dock.flowFail")}</p></div>}
-            {tradeFlow.state === "CONTIGUOUS" && <><dl className="replay-metrics-grid"><div><dt>{t("replay.dock.windowCvd")}</dt><dd>{formatDecimal(tradeFlow.cvd)}</dd></div><div><dt>{t("replay.dock.pageDelta")}</dt><dd>{formatDecimal(tradeFlow.pageDelta)}</dd></div></dl><small>{t("replay.dock.tapeHint", { fidelity: tradeFlow.fidelity })}</small><div className="replay-trade-flow-list">{[...tradeFlow.tape].reverse().map((item) => <article key={item.source_sequence} data-aggressor-side={item.aggressor_side}><strong>{sideLabel(item.aggressor_side)} {formatDecimal(item.quantity)} @ {formatDecimal(item.price, 6)}</strong><span>Δ {formatDecimal(item.cvd_delta)} · agg #{item.agg_trade_id}</span><small>{time(item.trade_time_ms)} · {t("replay.dock.rawAgg", { count: item.raw_trade_count })}</small></article>)}</div></>}
+            {tradeFlow.state === "UNSUPPORTED_SOURCE_MODE" && <EmptyState compact title={t("replay.dock.flowOff")} description={t("replay.dock.flowOffHint")} />}
+            {tradeFlow.state === "LOADING" && <p className="replay-market-context-note" role="status">{t("replay.dock.flowLoading")}</p>}
+            {tradeFlow.state === "DEGRADED" && <InlineAlert tone="warning" title={t("replay.dock.flowDegraded")}>{tradeFlow.error ?? t("replay.dock.flowFail")}</InlineAlert>}
+            {tradeFlow.state === "CONTIGUOUS" && (
+              <>
+                <div className="replay-trade-flow-stats">
+                  <Stat label={t("replay.dock.windowCvd")} value={formatDecimal(tradeFlow.cvd)} />
+                  <Stat label={t("replay.dock.pageDelta")} value={formatDecimal(tradeFlow.pageDelta)} />
+                </div>
+                <p className="replay-market-context-note">{t("replay.dock.tapeHint", { fidelity: tradeFlow.fidelity })}</p>
+                <ol className="replay-trade-flow-list">
+                  {[...tradeFlow.tape].reverse().map((item) => (
+                    <li key={item.source_sequence} data-aggressor-side={item.aggressor_side}>
+                      <strong>{sideLabel(item.aggressor_side)} {formatDecimal(item.quantity)} @ {formatDecimal(item.price, 6)}</strong>
+                      <span>Δ {formatDecimal(item.cvd_delta)} · agg #{item.agg_trade_id}</span>
+                      <small>{time(item.trade_time_ms)} · {t("replay.dock.rawAgg", { count: item.raw_trade_count })}</small>
+                    </li>
+                  ))}
+                </ol>
+              </>
+            )}
           </section>
         )}
-        {activeTab === "indicators" && <section className="replay-rail-section replay-indicator-boundary" data-replay-panel="indicators"><h2>{t("replay.dock.localInd")}</h2><p>{t("replay.dock.localIndHint", { count: indicatorStatus.sourceBarCount })}</p><p>{t("replay.dock.hostedOff")}</p></section>}
-      </div>
+        {activeTab === "indicators" && (
+          <section className="replay-market-context-section" data-replay-panel="indicators">
+            <h2>{t("replay.dock.localInd")}</h2>
+            <p>{t("replay.dock.localIndHint", { count: indicatorStatus.sourceBarCount })}</p>
+            <p className="replay-market-context-note">{t("replay.dock.hostedOff")}</p>
+          </section>
+        )}
+      </TabPanel>
     </div>
   );
 }

@@ -393,7 +393,8 @@ Still outside the stack, and moved when each is rebuilt:
 | 5f2 | Replay storage management and the initial market picker |
 | 5f3 | Replay session controls: the bottom bar, its notices and diagnostics, the end dialog, the capabilities view |
 | 5f4 | Replay review and integrity drawer, training results |
-| 5f5 | Replay right rail: account, activity, watchlist, notes, market views |
+| 5f5 | Replay right rail: notes, watchlist, the market data view, the review rail |
+| 5f6 | Replay order ticket and account view (positions, orders, fills, assets, risk) |
 | 5g | Strategy research merged with backtest (§6.1), local data, CSV import |
 | 5h | Data workbench |
 | 5i | Order book, trade flow and account docks; panel toggles and Settings on `IconButton` |
@@ -461,6 +462,14 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - 复盘与完整性: the six code tiles are labelled facts (mode and disclosure in words); the rule revision forms and history, the audit events and the proof hashes are folded into disclosures; kit fields and buttons throughout, with 不可逆揭示时间 as a danger button and the review timeline as rows.
 - Training results: kit stats and trade rows with side badges and tinted P&L, instead of a nearly unstyled panel.
 - About 60 old panel rules (one `!important`, an element rule that restyled every button in the drawer) are replaced by token-based drawer rules.
+
+**Phase 5f5 is done (branch `design/phase-5f5-replay-rail`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_5F5.md`](../docs/FRONTEND_DESIGN_QA_PHASE_5F5.md). The right rail was split when it started: **5f5** the notes, watchlist, market data view and review rail; **5f6** the order ticket and the account view, about 1,850 lines whose source and styles the tests check closely.
+
+- 回放笔记: notes are rows with a 原始记录 / 复盘补记 badge, the market time, the text, links and screenshots, and 编辑 / 版本历史 as quiet buttons; the editor is a kit field with its hint, the link and screenshot pickers use kit checkboxes, errors are alerts and an empty view is an `EmptyState`. Before, the notes had browser buttons, body-size headings and an oversized field label. The rail's subtitle no longer repeats the title (计划与复盘).
+- 自选: kit search field; search results are rows that no longer truncate the symbol to "B.. U.. S.."; the selected market has an accent edge; 在新图表打开 is an icon button.
+- 市场: kit tabs and panels; 未启用历史盘口 and 当前来源不支持订单流 are empty states instead of amber boxes; trade-flow figures are kit stats.
+- Review rail: the "复核 · 只读" eyebrow is a badge, the facts are one list, status notices are alerts.
+- About 120 old rules (including element rules that restyled every button in the notes panel and the watchlist) are replaced by 95 token-based ones.
 
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 

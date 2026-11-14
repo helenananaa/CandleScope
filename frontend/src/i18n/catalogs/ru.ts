@@ -4374,6 +4374,7 @@ export const ru = {
   "common.cancel": "Отмена",
   "common.close": "Закрыть",
   "common.notifications": "Уведомления",
+  "replay.rail.notesSummary": "Планы и разборы",
   "replay.integrity.editRules": "Изменить правила",
   "replay.capability.exact": "Точно",
   "replay.capability.approx": "Приблизительно",

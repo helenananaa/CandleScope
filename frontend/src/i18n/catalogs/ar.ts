@@ -4373,6 +4373,7 @@ export const ar = {
   "common.cancel": "إلغاء",
   "common.close": "إغلاق",
   "common.notifications": "الإشعارات",
+  "replay.rail.notesSummary": "الخطط والمراجعات",
   "replay.integrity.editRules": "تغيير القواعد",
   "replay.capability.exact": "دقيق",
   "replay.capability.approx": "تقريبي",

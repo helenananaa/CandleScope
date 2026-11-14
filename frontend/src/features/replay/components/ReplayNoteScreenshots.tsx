@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Icon } from "../../../components/icons/Icon.js";
+import { Button, IconButton, InlineAlert } from "../../../components/ui/index.js";
 import { t } from "../../../i18n/index.js";
 import { replayNoteView, parseReplayNoteContext, sameReplayNoteContext, type ReplayNote, type ReplayNoteCapture, type ReplayNoteContext } from "../replayNotes.js";
 import type { ReplayV2ApiClient } from "../replayV2Api.js";
@@ -9,9 +11,9 @@ export function ReplayNoteScreenshots({ note, context, formatTime, onOpen, disab
   onOpen(selection: ReplayNoteScreenshotSelection): void; disabled?: boolean;
 }) {
   return (note.screenshots?.length ?? 0) > 0 ? <div className="replay-note-screenshots" data-testid="replay-note-screenshots">
-    {note.screenshots!.map((capture, index) => <button type="button" key={capture.id} disabled={disabled}
+    {note.screenshots!.map((capture, index) => <Button size="sm" key={capture.id} disabled={disabled}
       data-capture-id={capture.id} onClick={() => onOpen({ noteId: note.id, revision: note.revisionCount, capture, contextKey: JSON.stringify(context) })}>
-      {t("replay.notes.captureView", { index: index + 1 })} · {formatTime(capture.marketTimeMs)}</button>)}
+      {t("replay.notes.captureView", { index: index + 1 })} · {formatTime(capture.marketTimeMs)}</Button>)}
   </div> : null;
 }
 
@@ -37,15 +39,18 @@ export function ReplayNoteScreenshotViewer({ api, selection, context, formatTime
   }, [api, expected, noteId, revision, capture.id, captureKey, attempt]);
   return <dialog ref={dialog} className="replay-note-screenshot-viewer" aria-label={t("replay.notes.captureTitle")}
     onCancel={event => { event.preventDefault(); onClose(); }}>
-    <div className="replay-note-actions"><strong>{t("replay.notes.version", { version: revision })}</strong>
-      <button type="button" onClick={onClose}>{t("replay.notes.close")}</button></div>
-    <p>{t("replay.notes.captureTime")} · {formatTime(capture.marketTimeMs)} · {capture.interval}</p>
-    <p>{t("replay.notes.savedTime")} · {actualTime(capture.savedAtMs)}</p>
-    {loaded === null && <p role="status">{t("replay.notes.captureBusy")}</p>}
+    <header className="replay-note-viewer-head">
+      <IconButton size="sm" label={t("replay.notes.close")} icon={<Icon name="close" size={14} />} onClick={onClose} />
+      <div>
+        <h2>{t("replay.notes.captureTitle")} · {t("replay.notes.version", { version: revision })}</h2>
+        <p>{t("replay.notes.captureTime")} {formatTime(capture.marketTimeMs)} · {capture.interval} · {t("replay.notes.savedTime")} {actualTime(capture.savedAtMs)}</p>
+      </div>
+    </header>
+    {loaded === null && <p className="replay-notes-status" role="status">{t("replay.notes.captureBusy")}</p>}
     {loaded?.image && <img src={loaded.image} alt={t("replay.notes.captureAlt", { time: formatTime(capture.marketTimeMs) })}
       onLoad={event => { if (event.currentTarget.naturalWidth !== capture.width || event.currentTarget.naturalHeight !== capture.height)
         setLoaded({ image: null, error: true }); }} onError={() => setLoaded({ image: null, error: true })} />}
-    {loaded?.error && <><p role="alert">{t("replay.notes.captureLoadFailed")}</p><button type="button"
-      onClick={() => { setLoaded(null); setAttempt(value => value + 1); }}>{t("replay.notes.refresh")}</button></>}
+    {loaded?.error && <InlineAlert tone="danger" action={<Button size="sm"
+      onClick={() => { setLoaded(null); setAttempt(value => value + 1); }}>{t("replay.notes.refresh")}</Button>}>{t("replay.notes.captureLoadFailed")}</InlineAlert>}
   </dialog>;
 }

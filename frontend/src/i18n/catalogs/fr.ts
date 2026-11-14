@@ -4374,6 +4374,7 @@ export const fr = {
   "common.cancel": "Annuler",
   "common.close": "Fermer",
   "common.notifications": "Notifications",
+  "replay.rail.notesSummary": "Plans et bilans",
   "replay.integrity.editRules": "Modifier les règles",
   "replay.capability.exact": "Exact",
   "replay.capability.approx": "Approché",
