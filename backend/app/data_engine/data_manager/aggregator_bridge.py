@@ -70,17 +70,21 @@ class AggregatorBridge:
             return 'unavailable'
         budget = self.preview_memory_budget
         version = state.preview_input_version
+        source_receipt = state._source_recovery
+        extra = {'source_window': source_receipt.version} if source_receipt is not None else {}
+        receipt_bytes = source_receipt.estimated_bytes if source_receipt is not None else 0
         # References can outlive replacements while physical reads await.
         # Charge their full frozen values, not only the tuple container.
-        with budget.reserve('history-query',16384+sum(row.estimated_bytes for row in components)):
+        with budget.reserve('history-query',16384+receipt_bytes+sum(row.estimated_bytes for row in components)):
             try:
                 status = await run_storage(storage.validate_component_preview,components,
                     symbol=state.symbol,interval=state.interval,exchange=state.exchange,
                     market_type=state.market_type,series_identity=state.identity,
-                    revision_floor=revision_floor)
+                    revision_floor=revision_floor, **extra)
             finally:
                 components = ()
         if (self._storage_provider() is not storage or state.preview_input_version != version
+                or state._source_recovery is not source_receipt
                 or not is_current()):
             return 'superseded'
         if status == 'canonical_changed':
