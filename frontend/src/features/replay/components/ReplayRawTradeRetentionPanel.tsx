@@ -3,6 +3,7 @@ import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import type { RawTradePlan, RawTradeRetentionReply } from "../rawTradeRetention.js";
 import { defaultReplayV2Api } from "../replayV2Api.js";
+import { Button, Checkbox, DateTimeInput, Field, InlineAlert, Input, Select } from "../../../components/ui/index.js";
 
 const MIB = 1024 * 1024;
 
@@ -27,6 +28,28 @@ function statusText(status: string, bytes: string) {
   }
 }
 
+/** Done is success; a lookup or protection result is information; a stale or refused step is a warning; failures are errors. */
+function noticeToneFor(status: string): "success" | "info" | "warning" | "danger" {
+  switch (status) {
+    case "POLICY_SAVED":
+    case "RECLAIMED":
+    case "RESTORED":
+    case "RETIRED":
+    case "RECLAIM_PENDING": return "success";
+    case "UNMANAGED":
+    case "POLICY_RETAINS_DAY":
+    case "DAY_ACQUISITION_IN_PROGRESS":
+    case "PARTITION_RETENTION_LEASE":
+    case "ACTIVE_DATASET_PIN":
+    case "SAVED_REFERENCES_PROTECTED": return "info";
+    case "STALE_RECEIPT":
+    case "STALE_PLAN":
+    case "POLICY_CONFLICT":
+    case "RETENTION_NOT_AUTHORIZED": return "warning";
+    default: return "danger";
+  }
+}
+
 export default function ReplayRawTradeRetentionPanel({ disabled, formatBytes }: {
   readonly disabled: boolean;
   readonly formatBytes: (value: number) => string;
@@ -36,7 +59,7 @@ export default function ReplayRawTradeRetentionPanel({ disabled, formatBytes }: 
   const [day, setDay] = useState("");
   const [entry, setEntry] = useState<RawTradeRetentionReply | null>(null);
   const [permanent, setPermanent] = useState(true);
-  const [cutoff, setCutoff] = useState("");
+  const [cutoffMs, setCutoffMs] = useState<number | null>(null);
   const [batchMiB, setBatchMiB] = useState(64);
   const [files, setFiles] = useState(1);
   const [downloadMiB, setDownloadMiB] = useState(64);
@@ -61,7 +84,6 @@ export default function ReplayRawTradeRetentionPanel({ disabled, formatBytes }: 
   const item = entry?.item;
   const key = item ? { symbol: normalized, day, day_id: item.day_id } : null;
   const blocked = busy || disabled;
-  const cutoffMs = Date.parse(`${cutoff}Z`);
   const hasSavedProtection = !entry?.saved_reference_scan_complete || (entry.saved_reference_count ?? 0) > 0;
   const policyAllowsPlan = entry?.policy?.retain_until_ms != null && entry.policy.retain_until_ms <= Date.now();
   const validBatch = Number.isSafeInteger(batchMiB) && batchMiB >= 1 && batchMiB <= 953_674
@@ -92,7 +114,7 @@ export default function ReplayRawTradeRetentionPanel({ disabled, formatBytes }: 
     if (plan && (next.item.day_id !== plan.day_id || next.policy?.revision !== plan.revision)) clearPlan();
     const retainUntil = next.policy?.retain_until_ms ?? null;
     setPermanent(retainUntil === null);
-    setCutoff(retainUntil === null ? "" : new Date(retainUntil).toISOString().slice(0, 16));
+    setCutoffMs(retainUntil);
   }
 
   async function perform(action: (signal: AbortSignal) => Promise<void>) {
@@ -122,7 +144,7 @@ export default function ReplayRawTradeRetentionPanel({ disabled, formatBytes }: 
     await refresh(signal);
   });
   const save = () => void perform(async (signal) => {
-    if (!key || (!permanent && !Number.isFinite(cutoffMs))) return;
+    if (!key || (!permanent && cutoffMs === null)) return;
     clearPlan();
     const result = await defaultReplayV2Api.saveRawTradePolicy({
       ...key, expected_revision: entry?.policy?.revision ?? 0, retain_until_ms: permanent ? null : cutoffMs,
@@ -172,65 +194,66 @@ export default function ReplayRawTradeRetentionPanel({ disabled, formatBytes }: 
     await refresh(signal);
   });
 
+  const noticeTone = notice === null ? "info" : noticeToneFor(notice.status);
+
   return (
-    <section className="replay-storage-gc" aria-label={t("replay.rawRetention.title")}>
-      <header>
-        <h3>{t("replay.rawRetention.title")}</h3>
-        <p>{t("replay.rawRetention.hint")}</p>
-      </header>
-      <div className="replay-storage-gc-form">
-        <label>{t("replay.rawRetention.symbol")}
-          <input value={symbol} maxLength={64} disabled={blocked}
+    <section className="replay-storage-section" aria-label={t("replay.rawRetention.title")}>
+      <h3>{t("replay.rawRetention.title")}</h3>
+      <p className="replay-storage-hint">{t("replay.rawRetention.hint")}</p>
+      <div className="replay-storage-form">
+        <Field label={t("replay.rawRetention.symbol")}>
+          <Input value={symbol} maxLength={64} disabled={blocked}
             onChange={(event) => { setSymbol(event.target.value); clearSelection(); }} />
-        </label>
-        <label>{t("trade.history.date")}
-          <input type="date" value={day} disabled={blocked}
+        </Field>
+        <Field label={t("trade.history.date")}>
+          <Input type="date" value={day} disabled={blocked}
             onChange={(event) => { setDay(event.target.value); clearSelection(); }} />
-        </label>
-        <button type="button" disabled={blocked || !validDay} onClick={lookup}>{t("replay.rawRetention.lookup")}</button>
+        </Field>
+        <Button disabled={blocked || !validDay} onClick={lookup}>{t("replay.rawRetention.lookup")}</Button>
       </div>
       {item && (
         <>
-          <p data-raw-retention-state={item.state}>
+          <p className="replay-storage-note" data-raw-retention-state={item.state}>
             {t(item.state === "COMMITTED" ? "replay.rawRetention.committed" : "replay.rawRetention.detached",
               { files: item.files, bytes: formatBytes(item.logical_bytes) })}
             {" · "}
             {entry?.saved_reference_scan_complete
               ? t("replay.rawRetention.references", { count: entry.saved_reference_count ?? 0 })
               : t("replay.rawRetention.incomplete")}
+            {" · "}
+            {entry?.policy ? t("replay.rawRetention.revision", { revision: entry.policy.revision })
+              : t("replay.rawRetention.unmanaged")}
           </p>
-          <p>{entry?.policy ? t("replay.rawRetention.revision", { revision: entry.policy.revision })
-            : t("replay.rawRetention.unmanaged")}</p>
-          <div className="replay-storage-gc-form">
-            <label>{t("replay.rawRetention.policy")}
-              <select disabled={blocked} value={permanent ? "permanent" : "until"}
+          <div className="replay-storage-form">
+            <Field label={t("replay.rawRetention.policy")}>
+              <Select disabled={blocked} value={permanent ? "permanent" : "until"}
                 onChange={(event) => { setPermanent(event.target.value === "permanent"); clearPlan(); }}>
                 <option value="permanent">{t("replay.rawRetention.permanent")}</option>
                 <option value="until">{t("replay.rawRetention.until")}</option>
-              </select>
-            </label>
+              </Select>
+            </Field>
             {!permanent && (
-              <label>{t("replay.rawRetention.untilUtc")}
-                <input type="datetime-local" value={cutoff} disabled={blocked}
-                  onChange={(event) => { setCutoff(event.target.value); clearPlan(); }} />
-              </label>
+              <Field label={t("replay.rawRetention.untilUtc")}>
+                <DateTimeInput value={cutoffMs} zoneLabel={false} disabled={blocked}
+                  onChange={(value) => { setCutoffMs(value); clearPlan(); }} />
+              </Field>
             )}
-            <button type="button" disabled={blocked || (!permanent && !Number.isFinite(cutoffMs))} onClick={save}>
+            <Button disabled={blocked || (!permanent && cutoffMs === null)} onClick={save}>
               {t("replay.rawRetention.save")}
-            </button>
+            </Button>
           </div>
           {item.files > 0 && (
-            <div className="replay-storage-gc-form">
-              <label>{t("replay.rawRetention.batchMib")}
-                <input type="number" min={1} max={953_674} value={batchMiB} disabled={blocked}
+            <div className="replay-storage-form">
+              <Field label={t("replay.rawRetention.batchMib")}>
+                <Input type="number" min={1} max={953_674} value={batchMiB} disabled={blocked}
                   onChange={(event) => { setBatchMiB(Number(event.target.value)); clearPlan(); }} />
-              </label>
-              <label>{t("replay.rawRetention.batchFiles")}
-                <input type="number" min={1} max={8192} value={files} disabled={blocked}
+              </Field>
+              <Field label={t("replay.rawRetention.batchFiles")}>
+                <Input type="number" min={1} max={8192} value={files} disabled={blocked}
                   onChange={(event) => { setFiles(Number(event.target.value)); clearPlan(); }} />
-              </label>
-              <button type="button" disabled={blocked || !validBatch || hasSavedProtection || !policyAllowsPlan}
-                onClick={makePlan}>{t("replay.storage.plan")}</button>
+              </Field>
+              <Button disabled={blocked || !validBatch || hasSavedProtection || !policyAllowsPlan}
+                onClick={makePlan}>{t("replay.storage.plan")}</Button>
             </div>
           )}
           {plan && (
@@ -239,42 +262,45 @@ export default function ReplayRawTradeRetentionPanel({ disabled, formatBytes }: 
                 files: plan.max_files, bytes: formatBytes(plan.max_bytes),
                 time: new Date(plan.expires_ms).toISOString().slice(11, 19),
               })}</p>
-              <label className="replay-storage-confirm">
-                <input type="checkbox" checked={confirmed} disabled={blocked}
-                  onChange={(event) => setConfirmed(event.target.checked)} />
-                {t(item.state === "COMMITTED" ? "replay.rawRetention.confirmRetire" : "replay.rawRetention.confirmReclaim")}
-              </label>
-              <button type="button" disabled={blocked || !confirmed || hasSavedProtection} onClick={execute}>
-                {t(item.state === "COMMITTED" ? "replay.rawRetention.retire" : "replay.rawRetention.reclaim")}
-              </button>
+              <Checkbox
+                label={t(item.state === "COMMITTED" ? "replay.rawRetention.confirmRetire" : "replay.rawRetention.confirmReclaim")}
+                checked={confirmed}
+                disabled={blocked}
+                onChange={(event) => setConfirmed(event.target.checked)}
+              />
+              <div>
+                <Button variant="danger" disabled={blocked || !confirmed || hasSavedProtection} onClick={execute}>
+                  {t(item.state === "COMMITTED" ? "replay.rawRetention.retire" : "replay.rawRetention.reclaim")}
+                </Button>
+              </div>
             </div>
           )}
           {item.state === "RETIRED" && (
-            <div className="replay-storage-gc-form">
+            <div className="replay-storage-form">
               {item.reclaim_started && (
                 <>
-                  <label>{t("replay.rawRetention.downloadMib")}
-                    <input type="number" min={1} max={2048} value={downloadMiB} disabled={blocked}
+                  <Field label={t("replay.rawRetention.downloadMib")}>
+                    <Input type="number" min={1} max={2048} value={downloadMiB} disabled={blocked}
                       onChange={(event) => setDownloadMiB(Number(event.target.value))} />
-                  </label>
-                  <label>{t("replay.rawRetention.restoreMib")}
-                    <input type="number" min={1} max={953_674} value={restoreMiB} disabled={blocked}
+                  </Field>
+                  <Field label={t("replay.rawRetention.restoreMib")}>
+                    <Input type="number" min={1} max={953_674} value={restoreMiB} disabled={blocked}
                       onChange={(event) => setRestoreMiB(Number(event.target.value))} />
-                  </label>
+                  </Field>
                 </>
               )}
-              <button type="button" disabled={blocked || (item.reclaim_started && !validRecovery)} onClick={recover}>
+              <Button disabled={blocked || (item.reclaim_started && !validRecovery)} onClick={recover}>
                 {t(item.reclaim_started ? "replay.rawRetention.redownload" : "replay.rawRetention.restore")}
-              </button>
+              </Button>
             </div>
           )}
         </>
       )}
-      {busy && <p role="status">{t("replay.storage.loading")}</p>}
+      {busy && <p className="replay-storage-note" role="status">{t("replay.storage.loading")}</p>}
       {notice && (
-        <p role="status" data-raw-retention-status={notice.status}>
-          {statusText(notice.status, formatBytes(notice.removed_logical_bytes ?? 0))}
-        </p>
+        <div data-raw-retention-status={notice.status}>
+          <InlineAlert tone={noticeTone}>{statusText(notice.status, formatBytes(notice.removed_logical_bytes ?? 0))}</InlineAlert>
+        </div>
       )}
     </section>
   );
