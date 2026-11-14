@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../../i18n/index.js";
 import { buildEquityPolyline } from "../replayIntegrityModel.js";
 import type { PortfolioCurveResponse } from "../portfolioCurve.js";
+import { Button, Disclosure, InlineAlert } from "../../../components/ui/index.js";
 
 export default function ReplayPortfolioCurve({ runId }: { readonly runId: string | null }) {
   const { api } = useReplayOperations(runId, "rail");
@@ -39,13 +40,14 @@ export default function ReplayPortfolioCurve({ runId }: { readonly runId: string
       if (active.current === request) setBusy(false);
     }
   };
-  return <details className="replay-portfolio-curve">
-    <summary>{t("replay.portfolio.title")}</summary>
+  return <Disclosure className="replay-portfolio-curve" summary={t("replay.portfolio.title")}>
     <p>{t("replay.portfolio.hint")}</p>
-    <button type="button" disabled={busy || runId === null} onClick={() => void load()}>
-      {busy ? t("replay.integrity.loading") : t("replay.portfolio.load")}
-    </button>
-    {error !== null && <p role="alert">{error}</p>}
+    <div>
+      <Button size="sm" disabled={busy || runId === null} onClick={() => void load()}>
+        {busy ? t("replay.integrity.loading") : t("replay.portfolio.load")}
+      </Button>
+    </div>
+    {error !== null && <InlineAlert tone="danger">{error}</InlineAlert>}
     {visible !== null && !visible.available && <p>{t("replay.portfolio.empty")}</p>}
     {visible?.available && <>
       <p>{t("replay.portfolio.coverage", { hours: (visible.span_ms / 3600000).toFixed(1), count: visible.samples.length })}</p>
@@ -54,12 +56,12 @@ export default function ReplayPortfolioCurve({ runId }: { readonly runId: string
       </svg>
       <p>{t("replay.portfolio.drawdown")}: {visible.summary?.max_drawdown}</p>
       {/* Downloads are browser-owned streams; do not buffer an unbounded export in the chart renderer. */}
-      {runId !== null && <a href={api.portfolioExportUrl(runId)} download onClick={event => {
+      {runId !== null && <a className="ui-btn ui-btn-sm" href={api.portfolioExportUrl(runId)} download onClick={event => {
         const native = requestNativePortfolioDownload(runId);
         if (native === null) return;
         event.preventDefault();
         void native.catch(cause => setError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.rt.integrityLoad")));
       }}>{t("replay.portfolio.export")}</a>}
     </>}
-  </details>;
+  </Disclosure>;
 }
