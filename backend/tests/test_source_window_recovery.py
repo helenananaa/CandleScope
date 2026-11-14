@@ -1823,3 +1823,51 @@ def test_same_content_permission_upgrade_keeps_old_content_proof_conservative(da
             await manager.shutdown()
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize('count', [129, 2048])
+def test_source_window_pages_preserve_fractional_fields_against_fsum_reference(database, count):
+    import math
+    from app.data_engine.bar_aggregator.models import BarInput, BarInputSource, MergeMode
+    from app.data_engine.bar_aggregator.bar_state import ComponentSnapshotOHLCVMerge
+
+    names = ('open','high','low','close','volume','quote_volume','trades','taker_buy_base','taker_buy_quote')
+    rows, receipts = [], []
+    with klines_repo._connect() as conn:
+        kline_sources._schema(conn)
+        conn.execute('BEGIN IMMEDIATE')
+        for index in range(count):
+            volume = (1e-6, .1, 1., 1e6)[index % 4] * (1 + (index % 11) / 100)
+            quote = volume * (10 + index % 3)
+            values = dict(open=10 + index % 7 * .02, high=20 + index % 6 * .01,
+                low=5 - index % 3 * .01, close=11 + index % 5 * .03,
+                volume=volume, quote_volume=quote, trades=index % 23,
+                taker_buy_base=volume * .25, taker_buy_quote=quote * .5)
+            opened = index * W
+            envelope = {key:str(values[key]) for key in ('open','high','low','close','volume')}
+            envelope.update(quoteVolume=str(quote), trades=values['trades'],
+                takerBuyBaseVolume=str(values['taker_buy_base']), takerBuyQuoteVolume=str(values['taker_buy_quote']),
+                closeTime=opened + W - 1, eventTime=opened + W + 1)
+            event = MarketEvent(event_type=StreamType.KLINE, symbol='BTCUSDT', exchange='binance', market_type='futures',
+                source=DataSource.WEBSOCKET, event_time_ms=opened + W + 1, received_at_ms=opened + W + 2,
+                data=dict(interval='1m',open_time=opened,close_time=opened+W-1,is_closed=True,source_candle=envelope,**values))
+            receipts.append(kline_sources.record(event, DESC, _connection=conn))
+            rows.append(values)
+        conn.commit()
+    index = count // 2
+    value = BarInput(symbol='BTCUSDT',exchange='binance',market_type='futures',source_interval='1m',
+        source=BarInputSource.CORRECTION,merge_mode=MergeMode.COMPONENT,open_time_ms=index*W,
+        close_time_ms=(index+1)*W-1,is_closed=True,extra={'source_ref':receipts[index]['ref']},
+        enhanced_fields=frozenset(names[5:]),**rows[index])
+    summary = fold(count, source=value)
+    result = summary.merge([ComponentSnapshotOHLCVMerge._snapshot_from_input(value)])
+    assert result.count == count and result.coverage(0,count*W).closed
+    expected = dict(open=rows[0]['open'],close=rows[-1]['close'],high=max(r['high'] for r in rows),low=min(r['low'] for r in rows))
+    expected.update({name:math.fsum(r[name] for r in rows) for name in names[4:]})
+    for name in names:
+        actual = getattr(result.values,name)
+        if name in ('open','high','low','close','trades'):
+            assert actual == expected[name]
+        else:
+            assert math.isclose(actual,expected[name],rel_tol=1e-12,abs_tol=1e-9), (name,actual,expected[name])
+    assert not klines_repo.query_klines('BTCUSDT','1m',market_type='futures')
