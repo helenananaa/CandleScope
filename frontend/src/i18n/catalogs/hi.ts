@@ -3981,7 +3981,6 @@ export const hi = {
   "chartTester.run": "चलाएँ",
   "chartTester.close": "बंद करें",
   "chartTester.language.pine": "Pine",
-  "chartTester.startEyebrow": "त्वरित चार्ट टेस्ट शुरू करें",
   "chartTester.startTitle": "शुरू करने का तरीका चुनें",
   "chartTester.startLead": "स्क्रिप्ट {symbol} · {interval} से जुड़ेगी; चुनाव के बाद संपादक लोड होगा।",
   "chartTester.openAdvanced": "उन्नत रिसर्च में खोलें",

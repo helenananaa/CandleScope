@@ -3981,7 +3981,6 @@ export const id = {
   "chartTester.run": "Jalankan",
   "chartTester.close": "Tutup",
   "chartTester.language.pine": "Pine",
-  "chartTester.startEyebrow": "MULAI UJI GRAFIK CEPAT",
   "chartTester.startTitle": "Pilih cara memulai",
   "chartTester.startLead": "Skrip akan dipasang ke {symbol} · {interval}; editor dimuat setelah pilihan Anda.",
   "chartTester.openAdvanced": "Buka di Riset Lanjutan",

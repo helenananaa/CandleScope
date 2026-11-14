@@ -4527,7 +4527,6 @@ export const ko = {
   "chartTester.run": "실행",
   "chartTester.close": "닫기",
   "chartTester.language.pine": "Pine",
-  "chartTester.startEyebrow": "차트 빠른 테스트 시작",
   "chartTester.startTitle": "시작 방법 선택",
   "chartTester.startLead": "스크립트는 현재 {symbol} · {interval} 차트에 연결됨. 선택 후 편집기를 불러옴.",
   "chartTester.openAdvanced": "고급 연구에서 열기",

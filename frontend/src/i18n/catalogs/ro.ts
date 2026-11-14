@@ -3981,7 +3981,6 @@ export const ro = {
   "chartTester.run": "Rulează",
   "chartTester.close": "Închide",
   "chartTester.language.pine": "Pine",
-  "chartTester.startEyebrow": "PORNEȘTE UN TEST RAPID PE GRAFIC",
   "chartTester.startTitle": "Alegeți cum să începeți",
   "chartTester.startLead": "Scriptul se va atașa la {symbol} · {interval}; editorul se încarcă după alegerea dvs.",
   "chartTester.openAdvanced": "Deschide în Cercetare avansată",

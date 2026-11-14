@@ -3981,7 +3981,6 @@ export const tr = {
   "chartTester.run": "Çalıştır",
   "chartTester.close": "Kapat",
   "chartTester.language.pine": "Pine",
-  "chartTester.startEyebrow": "HIZLI GRAFİK TESTİ BAŞLAT",
   "chartTester.startTitle": "Nasıl başlayacağınızı seçin",
   "chartTester.startLead": "Betik {symbol} · {interval} grafiğine bağlanır; düzenleyici seçiminizden sonra yüklenir.",
   "chartTester.openAdvanced": "Gelişmiş Araştırmada aç",

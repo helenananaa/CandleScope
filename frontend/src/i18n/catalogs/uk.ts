@@ -3981,7 +3981,6 @@ export const uk = {
   "chartTester.run": "Запустити",
   "chartTester.close": "Закрити",
   "chartTester.language.pine": "Pine",
-  "chartTester.startEyebrow": "ПОЧАТИ ШВИДКИЙ ТЕСТ НА ГРАФІКУ",
   "chartTester.startTitle": "Виберіть, як почати",
   "chartTester.startLead": "Скрипт прикріпиться до {symbol} · {interval}; редактор завантажиться після вашого вибору.",
   "chartTester.openAdvanced": "Відкрити в розширеному дослідженні",

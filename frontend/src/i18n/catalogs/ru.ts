@@ -3982,7 +3982,6 @@ export const ru = {
   "chartTester.run": "Запуск",
   "chartTester.close": "Закрыть",
   "chartTester.language.pine": "Pine",
-  "chartTester.startEyebrow": "БЫСТРЫЙ ТЕСТ НА ГРАФИКЕ",
   "chartTester.startTitle": "Выберите способ начала",
   "chartTester.startLead": "Скрипт будет прикреплён к {symbol} · {interval}; редактор загрузится после выбора.",
   "chartTester.openAdvanced": "Открыть в расширенном исследовании",

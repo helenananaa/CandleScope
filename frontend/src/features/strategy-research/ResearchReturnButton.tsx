@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Button, InlineAlert } from "../../components/ui/index.js";
 import { defaultBacktestApi } from "../backtest/backtestApi.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -22,8 +23,8 @@ export default function ResearchReturnButton({ runId, origin }: { runId: string;
     } catch (failure) { if (!controller.signal.aborted) setError(researchReturnError(failure)); }
     finally { if (!controller.signal.aborted) { pending.current = null; setBusy(false); } }
   }
-  return <div data-research-return>
-    <button type="button" className="ui-control" disabled={busy} onClick={() => { void select(); }}>{t(busy ? "researchReturn.loading" : "researchReturn.select")}</button>
-    {error && <p role="alert">{error}</p>}
+  return <div className="research-return" data-research-return>
+    <Button size="sm" disabled={busy} onClick={() => { void select(); }}>{t(busy ? "researchReturn.loading" : "researchReturn.select")}</Button>
+    {error && <InlineAlert tone="danger">{error}</InlineAlert>}
   </div>;
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Button, Checkbox, Disclosure, Field, InlineAlert, Input, Select, Stat, Textarea } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import { BACKTEST_REPLAY_EXTRA_SLOTS, type BacktestReplayChartOptions, type BacktestReplayExtraSlot, type BacktestReplayExtraCharts, type BacktestResultReplayChart, type BacktestResultReplayCursor, type BacktestResultReplayFrame, type BacktestResultReplayNote, type BacktestResultReplayNoteDraft } from "../backtest/backtestTypes.js";
@@ -16,12 +17,12 @@ function ReplayMaControl({ testId, interval, period, onChange }: {
   testId: string; interval: string; period: number | undefined; onChange(period: number | undefined): void;
 }) {
   const options = period === undefined || MA_PERIODS.includes(period) ? MA_PERIODS : [...MA_PERIODS, period].sort((a, b) => a - b);
-  return <label>{t("replay.indicator.sma.name")} · {formatIntervalLabel(interval)}
-    <select data-testid={testId} value={period ?? ""} onChange={event => onChange(Number(event.target.value) || undefined)}>
+  return <Field label={`${t("replay.indicator.sma.name")} · ${formatIntervalLabel(interval)}`}>
+    <Select size="sm" data-testid={testId} value={period ?? ""} onChange={event => onChange(Number(event.target.value) || undefined)}>
       <option value="">{t("backtest.none")}</option>
       {options.map(value => <option key={value} value={value}>{value}</option>)}
-    </select>
-  </label>;
+    </Select>
+  </Field>;
 }
 
 export default function StrategyResultReplay({ initial, manager, datasets, display, onCommit, onClose, onDisplay }: {
@@ -169,35 +170,37 @@ export default function StrategyResultReplay({ initial, manager, datasets, displ
   return (
     <main className="strategy-result-replay" data-testid="strategy-result-replay"
       data-cursor={frame?.cursor} data-interval={frame?.interval}>
-      <header>
+      <header className="strategy-result-replay-head">
         <h1>{t("report.replay")}{frame ? ` · ${frame.symbol}` : ""}</h1>
-        <button type="button" disabled={noteDraft !== null} onClick={onClose}>{t("report.analysis")}</button>
+        <Button size="sm" variant="ghost" disabled={noteDraft !== null} onClick={onClose}>{t("report.analysis")}</Button>
       </header>
       <fieldset className="strategy-result-replay-controls" disabled={noteDraft !== null}>
-        <button type="button" disabled={request.cursor === 0} onClick={() => navigate(0)}>⏮ {t("native.replay.seek")}</button>
-        <button type="button" disabled={request.cursor === 0} onClick={() => navigate(request.cursor - 1)}>← {t("native.replay.seek")}</button>
-        <button type="button" disabled={!canAdvance} onClick={() => navigate(request.cursor + 1)}>{t("native.replay.step")}</button>
-        <button type="button" disabled={!playing && !canAdvance} onClick={() => setPlaying(!playing)}>
-          {t(playing ? "native.replay.pause" : "native.replay.play")}
-        </button>
-        <form onSubmit={event => {
+        <div className="strategy-result-replay-transport">
+          <Button size="sm" disabled={request.cursor === 0} onClick={() => navigate(0)}>⏮ {t("native.replay.seek")}</Button>
+          <Button size="sm" disabled={request.cursor === 0} onClick={() => navigate(request.cursor - 1)}>← {t("native.replay.seek")}</Button>
+          <Button size="sm" disabled={!canAdvance} onClick={() => navigate(request.cursor + 1)}>{t("native.replay.step")}</Button>
+          <Button size="sm" variant="primary" disabled={!playing && !canAdvance} onClick={() => setPlaying(!playing)}>
+            {t(playing ? "native.replay.pause" : "native.replay.play")}
+          </Button>
+        </div>
+        <form className="strategy-result-replay-seek" onSubmit={event => {
           event.preventDefault();
           if (Number.isSafeInteger(candidate) && candidate >= 0 && total !== undefined && candidate <= total) navigate(candidate);
         }}>
-          <label>{t(barClock ? "native.replay.cursor" : "settings.exchange.channel.trade")}
-            <input type="number" min={0} max={total} step={1} value={target} onChange={event => setTarget(event.target.value)} />
-          </label>
-          <button disabled={!Number.isSafeInteger(candidate) || candidate < 0 || total === undefined || candidate > total}>
+          <Field label={t(barClock ? "native.replay.cursor" : "settings.exchange.channel.trade")}>
+            <Input size="sm" type="number" min={0} max={total} step={1} value={target} onChange={event => setTarget(event.target.value)} />
+          </Field>
+          <Button size="sm" type="submit" disabled={!Number.isSafeInteger(candidate) || candidate < 0 || total === undefined || candidate > total}>
             {t("native.replay.seek")}
-          </button>
+          </Button>
         </form>
-        <label>{t("local.interval")}
-          <select data-testid="strategy-replay-primary-period" value={request.interval} onChange={event => navigate(request.cursor, { interval: event.target.value })}>
+        <Field label={t("local.interval")}>
+          <Select size="sm" data-testid="strategy-replay-primary-period" value={request.interval} onChange={event => navigate(request.cursor, { interval: event.target.value })}>
             {selectableIntervals.filter(interval => pinned || interval !== request.comparisonInterval).map(interval => <option key={interval} value={interval}>{formatIntervalLabel(interval)}</option>)}
-          </select>
-        </label>
-        {(comparisonDatasets.length > 0 || pinned) && <label>{t("researchBatch.replayComparisonSource")}
-          <select data-testid="strategy-replay-comparison-source" value={pinnedKey} onChange={event => {
+          </Select>
+        </Field>
+        {(comparisonDatasets.length > 0 || pinned) && <Field label={t("researchBatch.replayComparisonSource")}>
+          <Select size="sm" data-testid="strategy-replay-comparison-source" value={pinnedKey} onChange={event => {
             const dataset = comparisonDatasets.find(item => `${item.dataset_id}:${item.data_epoch}` === event.target.value);
             navigate(request.cursor, dataset
               ? { comparisonDataset: { datasetId: dataset.dataset_id, dataEpoch: dataset.data_epoch }, comparisonInterval: dataset.interval }
@@ -209,22 +212,22 @@ export default function StrategyResultReplay({ initial, manager, datasets, displ
             {comparisonDatasets.map(dataset => <option key={dataset.dataset_id} value={`${dataset.dataset_id}:${dataset.data_epoch}`}>
               {dataset.name} · {dataset.symbol}
             </option>)}
-          </select>
-        </label>}
-        <label>{t("local.interval")} · {t("replay.workspace.openNew")}
-          <select data-testid="strategy-replay-comparison-period" value={request.comparisonInterval ?? ""}
+          </Select>
+        </Field>}
+        <Field label={`${t("local.interval")} · ${t("replay.workspace.openNew")}`}>
+          <Select size="sm" data-testid="strategy-replay-comparison-period" value={request.comparisonInterval ?? ""}
             onChange={event => navigate(request.cursor, { comparisonInterval: event.target.value || undefined })}>
             <option value="">{t("backtest.none")}</option>
             {comparisonIntervals.map(interval =>
               <option key={interval} value={interval}>{formatIntervalLabel(interval)}</option>)}
-          </select>
-        </label>
+          </Select>
+        </Field>
         <ReplayMaControl testId="strategy-replay-primary-ma" interval={request.interval} period={request.maPeriod}
           onChange={maPeriod => navigate(request.cursor, { maPeriod })} />
         {request.comparisonInterval && <ReplayMaControl testId="strategy-replay-comparison-ma" interval={request.comparisonInterval}
           period={request.comparisonMaPeriod} onChange={comparisonMaPeriod => navigate(request.cursor, { comparisonMaPeriod })} />}
-        {nextSlot && <button type="button" data-testid="strategy-replay-add-chart"
-          onClick={() => changeReference(nextSlot, { interval: request.interval })}>{t("replay.workspace.openNew")}</button>}
+        {nextSlot && <Button size="sm" variant="ghost" data-testid="strategy-replay-add-chart"
+          onClick={() => changeReference(nextSlot, { interval: request.interval })}>{t("replay.workspace.openNew")}</Button>}
       </fieldset>
       {extraSlots.map(slot => {
         const chart = request.additionalCharts![slot]!;
@@ -237,8 +240,8 @@ export default function StrategyResultReplay({ initial, manager, datasets, displ
         return <fieldset key={slot} className="strategy-result-replay-view-controls" disabled={noteDraft !== null}
           data-testid={`strategy-replay-${slot}-controls`}>
           <legend>{t("workspace.cellN", { n: activeSlots.indexOf(slot) + 1 })}</legend>
-          <label>{t("researchBatch.replayComparisonSource")}
-            <select data-testid={`strategy-replay-${slot}-source`} value={datasetKey} onChange={event => {
+          <Field label={t("researchBatch.replayComparisonSource")}>
+            <Select size="sm" data-testid={`strategy-replay-${slot}-source`} value={datasetKey} onChange={event => {
               const dataset = comparisonDatasets.find(item => `${item.dataset_id}:${item.data_epoch}` === event.target.value);
               changeReference(slot, dataset
                 ? { ...chart, interval: dataset.interval, dataset: { datasetId: dataset.dataset_id, dataEpoch: dataset.data_epoch } }
@@ -250,22 +253,22 @@ export default function StrategyResultReplay({ initial, manager, datasets, displ
               {comparisonDatasets.map(dataset => <option key={dataset.dataset_id} value={`${dataset.dataset_id}:${dataset.data_epoch}`}>
                 {dataset.name} · {dataset.symbol}
               </option>)}
-            </select>
-          </label>
-          <label>{t("local.interval")}
-            <select data-testid={`strategy-replay-${slot}-period`} value={chart.interval}
+            </Select>
+          </Field>
+          <Field label={t("local.interval")}>
+            <Select size="sm" data-testid={`strategy-replay-${slot}-period`} value={chart.interval}
               onChange={event => changeReference(slot, { ...chart, interval: event.target.value })}>
               {intervals.map(interval => <option key={interval} value={interval}>{formatIntervalLabel(interval)}</option>)}
-            </select>
-          </label>
+            </Select>
+          </Field>
           <ReplayMaControl testId={`strategy-replay-${slot}-ma`} interval={chart.interval} period={chart.maPeriod} onChange={maPeriod => {
             const next = { ...chart };
             if (maPeriod === undefined) delete next.maPeriod;
             else next.maPeriod = maPeriod;
             changeReference(slot, next);
           }} />
-          <button type="button" data-testid={`strategy-replay-${slot}-close`}
-            onClick={() => changeReference(slot, null)}>{t("workspace.closeChart")}</button>
+          <Button size="sm" variant="ghost" data-testid={`strategy-replay-${slot}-close`}
+            onClick={() => changeReference(slot, null)}>{t("workspace.closeChart")}</Button>
         </fieldset>;
       })}
       {activeSlots.length > 1 && <fieldset className="strategy-result-replay-view-controls"
@@ -278,16 +281,13 @@ export default function StrategyResultReplay({ initial, manager, datasets, displ
           ["indicatorVisibility", "replay.indicator.sma.name"],
           ["drawings", "workspace.link.drawings"],
           ["drawingVisibility", "drawing.showAll"],
-        ] as const).map(([channel, label]) => <label key={channel}>
-          <input type="checkbox" data-testid={`strategy-replay-link-${channel}`} checked={display.links[channel]}
-            onChange={event => onDisplay(displayKey, { ...display, links: { ...display.links, [channel]: event.target.checked } })} />
-          {t(label)}
-        </label>)}
+        ] as const).map(([channel, label]) => <Checkbox key={channel} data-testid={`strategy-replay-link-${channel}`} checked={display.links[channel]}
+          onChange={event => onDisplay(displayKey, { ...display, links: { ...display.links, [channel]: event.target.checked } })} label={t(label)} />)}
       </fieldset>}
-      {error ? <p role="alert">{error} <button type="button" onClick={() => navigate(request.cursor)}>{t("shell.retry")}</button></p>
-        : !frame ? <p role="status">{t("research.loading")}</p> : <>
+      {error ? <InlineAlert tone="danger" action={<Button size="sm" variant="ghost" onClick={() => navigate(request.cursor)}>{t("shell.retry")}</Button>}>{error}</InlineAlert>
+        : !frame ? <p className="strategy-research-note" role="status">{t("research.loading")}</p> : <>
           <div className="strategy-result-replay-status" role="status">
-            <span>{frame.cursor} / {frame.total}</span>
+            <strong>{frame.cursor} / {frame.total}</strong>
             {frame.time_ms !== null && <time>{new Date(frame.time_ms).toISOString()}</time>}
             {frame.source_sequence !== null && <span>#{frame.source_sequence}</span>}
           </div>
@@ -304,50 +304,52 @@ export default function StrategyResultReplay({ initial, manager, datasets, displ
                 disabled={noteDraft !== null} onChange={updateChart} />;
             })}
           </div>
-          <dl className="strategy-result-replay-status">
-            <div><dt>{t("replay.wb.balance")}</dt><dd>{frame.cash} {frame.quote_asset}</dd></div>
-            <div><dt>{t("replay.wb.positions")}</dt><dd>{frame.position}</dd></div>
-            <div><dt>{t("replay.wb.equity")}</dt><dd data-testid="strategy-replay-equity">{frame.equity} {frame.quote_asset}</dd></div>
-          </dl>
+          <div className="strategy-result-replay-account">
+            <Stat label={t("replay.wb.balance")} value={`${frame.cash} ${frame.quote_asset}`} />
+            <Stat label={t("replay.wb.positions")} value={frame.position} />
+            <Stat label={t("replay.wb.equity")} value={<span data-testid="strategy-replay-equity">{frame.equity} {frame.quote_asset}</span>} />
+          </div>
           {frame.notes && <section className="strategy-result-replay-notes" data-testid="strategy-replay-notes">
             <h2>{t("replay.notes.title")}</h2>
-            {frame.notes.length === 0 && <p>{t("replay.notes.empty")}</p>}
+            {frame.notes.length === 0 && <p className="strategy-research-note">{t("replay.notes.empty")}</p>}
             {frame.notes.map(note => <article key={note.id} data-testid="strategy-replay-note"
               data-revision={note.revision} data-cursor={note.cursor}>
-              <span>#{note.cursor} {note.time_ms !== null && <time>{new Date(note.time_ms).toISOString()}</time>}</span>
+              <span className="strategy-result-replay-note-meta">#{note.cursor} {note.time_ms !== null && <time>{new Date(note.time_ms).toISOString()}</time>}</span>
               <p>{note.body}</p>
-              <button type="button" disabled={noteDraft !== null || note.revision >= 20}
-                onClick={() => editNote(note)}>{t("replay.notes.edit")}</button>
+              <Button size="sm" variant="ghost" disabled={noteDraft !== null || note.revision >= 20}
+                onClick={() => editNote(note)}>{t("replay.notes.edit")}</Button>
             </article>)}
-            {noteDraft ? <form onSubmit={event => { event.preventDefault(); void saveNote(); }}>
-              <label>{t("replay.notes.body")}
-                <textarea data-testid="strategy-replay-note-body" rows={4} maxLength={2000} required
+            {noteDraft ? <form className="strategy-result-replay-note-form" onSubmit={event => { event.preventDefault(); void saveNote(); }}>
+              <Field label={t("replay.notes.body")}>
+                <Textarea data-testid="strategy-replay-note-body" rows={4} maxLength={2000} required
                   value={noteDraft.body} disabled={noteSaving}
                   onChange={event => setNoteDraft({ ...noteDraft, body: event.target.value })} />
-              </label>
-              {noteError && <p role="alert">{noteError}</p>}
-              <button type="submit" disabled={noteSaving || !noteDraft.body.trim()}>
-                {t(noteSaving ? "replay.notes.saving" : "replay.notes.save")}
-              </button>
-              <button type="button" disabled={noteSaving} onClick={() => setNoteDraft(null)}>{t("replay.notes.close")}</button>
-            </form> : <button type="button" disabled={frame.notes.length >= 100}
-              onClick={() => editNote()}>{t("replay.notes.add")}</button>}
+              </Field>
+              {noteError && <InlineAlert tone="danger">{noteError}</InlineAlert>}
+              <div className="strategy-history-actions">
+                <Button size="sm" variant="primary" type="submit" disabled={noteSaving || !noteDraft.body.trim()}>
+                  {t(noteSaving ? "replay.notes.saving" : "replay.notes.save")}
+                </Button>
+                <Button size="sm" variant="ghost" disabled={noteSaving} onClick={() => setNoteDraft(null)}>{t("replay.notes.close")}</Button>
+              </div>
+            </form> : <Button size="sm" disabled={frame.notes.length >= 100}
+              onClick={() => editNote()}>{t("replay.notes.add")}</Button>}
           </section>}
-          <details open><summary>{t("chartTester.tab.trades")} · {frame.fill_count}</summary>
+          <Disclosure defaultOpen className="strategy-result-replay-trace" summary={`${t("chartTester.tab.trades")} · ${frame.fill_count}`}>
             <ol data-testid="strategy-replay-fills">
               {frame.fills.map((fill, i) => <li key={`${fill.cursor}:${fill.order_id}:${i}`}>#{fill.cursor} · {fill.side} · {fill.qty} @ {fill.price}</li>)}
             </ol>
-          </details>
-          {frame.signal_trace_available && <details><summary>{t("local.kind.signal")}</summary>
+          </Disclosure>
+          {frame.signal_trace_available && <Disclosure className="strategy-result-replay-trace" summary={t("local.kind.signal")}>
             <ol data-testid="strategy-replay-signals">{frame.closed_bar_signals.map(signal => <li key={signal.signal_sequence}>
               #{signal.reveal_sequence} · {signal.kind} · {signal.value}
             </li>)}</ol>
-          </details>}
-          {frame.order_trace_available && <details><summary>{t("native.orders")}</summary>
+          </Disclosure>}
+          {frame.order_trace_available && <Disclosure className="strategy-result-replay-trace" summary={t("native.orders")}>
             <ol data-testid="strategy-replay-orders">{frame.order_events.map(order => <li key={order.ordinal}>
               #{order.reveal_sequence} · {order.order_id} · {order.state}
             </li>)}</ol>
-          </details>}
+          </Disclosure>}
         </>}
     </main>
   );

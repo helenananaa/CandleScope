@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { Button, Field, Select, TabPanel, Tabs } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { StrategyLanguageControls } from "../backtest/chart-tester/StrategyLanguageControls.js";
 import { strategyLanguageLabel } from "../backtest/chart-tester/strategyLanguageLabel.js";
@@ -307,45 +308,46 @@ export function StrategyResearchScriptPanel({
       command("openAdvanced", "Flush the draft and open advanced research.", empty, () => openAdvanced()),
     ] }));
   if (!editorSession) {
-    return <><p data-testid="strategy-research-script-empty">{t("strategy.scriptSlot")}</p>
+    return <><p className="strategy-research-note" data-testid="strategy-research-script-empty">{t("strategy.scriptSlot")}</p>
       {marketBatchAvailable && batchControls?.(null)}
     </>;
   }
 
+  const paneTabsId = `strategy-research-pane-${cellScope}`;
   return (
     <section className="strategy-research-script-panel" data-testid="strategy-research-script-panel">
-      <header><strong>{draft?.displayName ?? t("strategy.scriptSlot")}</strong></header>
-      {recentDrafts.length > 0 && <label className="strategy-condition-range">{t("chartTester.recentTitle")}
-        <select value={draftId ?? ""} onChange={(event) => onDraftId(event.target.value || null)}>
+      <h3 className="strategy-research-script-title">{draft?.displayName ?? t("strategy.scriptSlot")}</h3>
+      {recentDrafts.length > 0 && <Field label={t("chartTester.recentTitle")}>
+        <Select size="sm" value={draftId ?? ""} onChange={(event) => onDraftId(event.target.value || null)}>
           <option value="">{t("chartTester.templateTitle")}</option>
           {recentDrafts.map((record) => <option key={record.id} value={record.id}>{record.displayName}</option>)}
-        </select>
-      </label>}
+        </Select>
+      </Field>}
       {barOnly ? (
-        <p className="strategy-research-bar-only" data-testid="strategy-research-bar-only">
+        <p className="strategy-research-note" data-testid="strategy-research-bar-only">
           {t("research.capability.tapeDenied")}
         </p>
       ) : null}
       {draft === null ? (
-        <div className="strategy-research-templates" data-testid="strategy-research-templates">
+        <div className="strategy-research-template-list" data-testid="strategy-research-templates">
           {RESEARCH_STRATEGY_TEMPLATES.map((template) => (
-            <button
+            <Button
               key={template.id}
-              type="button"
+              fullWidth
               data-testid={`strategy-research-template-${template.id}`}
               onClick={() => void startDraft(template.id)}
             >
               {strategyLanguageLabel(template.language)} · {t(template.nameKey)}
-            </button>
+            </Button>
           ))}
-          <button
-            type="button"
-            className="chart-strategy-advanced-link"
+          <Button
+            variant="ghost"
+            size="sm"
             data-testid="strategy-research-open-advanced"
             onClick={() => void openAdvanced()}
           >
             {t("strategy.advanced")}
-          </button>
+          </Button>
         </div>
       ) : (
         <>
@@ -353,43 +355,55 @@ export function StrategyResearchScriptPanel({
             setPythonApproval(null);
             void saveDraft({ ...draft, language, source, cursor });
           }} />
-          <div className="research-library-tabs" role="tablist" aria-label={t("strategy.scriptSlot")}>
-            {(["parameters", "code", "conditions"] as const).map((value) => <button type="button" role="tab" key={value} aria-selected={pane === value} onClick={() => setPane(value)}>{t(value === "parameters" ? "ux.parameters" : value === "code" ? "chartTester.tab.script" : "chartTester.tab.settings")}</button>)}
+          <Tabs
+            id={paneTabsId}
+            label={t("strategy.scriptSlot")}
+            value={pane}
+            onChange={setPane}
+            tabs={[
+              { value: "parameters", label: t("ux.parameters") },
+              { value: "code", label: t("chartTester.tab.script") },
+              { value: "conditions", label: t("chartTester.tab.settings") },
+            ]}
+          />
+          <TabPanel tabsId={paneTabsId} value={pane} className="strategy-research-pane">
+            {pane === "parameters" && <StrategyParametersEditor source={source} onChange={setSource} />}
+            {pane === "conditions" && onConfigure && <StrategyConditionsEditor settings={configuration} marketType={editorSession.marketType} capitalAsset={capitalAsset} preciseAvailable={!barOnly || !!marketBatchAvailable} preciseArchiveHint={sourceKind === "CURRENT_CHART"} onChange={onConfigure} />}
+            {openEditor && pane === "code" ? (
+              <Suspense fallback={<p className="strategy-research-note">{t("strategy.scriptSlot")}</p>}>
+                <StrategyScriptWorkspace
+                  source={source}
+                  language={draft.language}
+                  cursor={cursor}
+                  issues={diagnoseChartStrategyDraft(source)}
+                  focusIssue={null}
+                  focusOnMount={false}
+                  onSourceChange={setSource}
+                  onCursorChange={setCursor}
+                  onRun={run}
+                />
+              </Suspense>
+            ) : null}
+          </TabPanel>
+          <div className="strategy-research-run-actions">
+            <Button
+              variant="primary"
+              fullWidth
+              data-testid="strategy-research-run"
+              disabled={!session || preciseBlocked || (draft.language === "python" && !pythonTrustedConfirmed) || !runRequest || runStatus === "RUNNING" || runStatus === "QUEUED" || runStatus === "RESOLVING"}
+              onClick={needsData ? onConfirmNeedsData : run}
+            >
+              {t(needsData ? "chartTester.prepareDataRun" : "chartTester.run")}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              data-testid="strategy-research-open-advanced"
+              onClick={() => void openAdvanced()}
+            >
+              {t("strategy.advanced")}
+            </Button>
           </div>
-          {pane === "parameters" && <StrategyParametersEditor source={source} onChange={setSource} />}
-          {pane === "conditions" && onConfigure && <StrategyConditionsEditor settings={configuration} marketType={editorSession.marketType} capitalAsset={capitalAsset} preciseAvailable={!barOnly || !!marketBatchAvailable} preciseArchiveHint={sourceKind === "CURRENT_CHART"} onChange={onConfigure} />}
-          {openEditor && pane === "code" ? (
-            <Suspense fallback={<p>{t("strategy.scriptSlot")}</p>}>
-              <StrategyScriptWorkspace
-                source={source}
-                language={draft.language}
-                cursor={cursor}
-                issues={diagnoseChartStrategyDraft(source)}
-                focusIssue={null}
-                focusOnMount={false}
-                onSourceChange={setSource}
-                onCursorChange={setCursor}
-                onRun={run}
-              />
-            </Suspense>
-          ) : null}
-          <button
-            type="button"
-            data-testid="strategy-research-run"
-            className="research-primary"
-            disabled={!session || preciseBlocked || (draft.language === "python" && !pythonTrustedConfirmed) || !runRequest || runStatus === "RUNNING" || runStatus === "QUEUED" || runStatus === "RESOLVING"}
-            onClick={needsData ? onConfirmNeedsData : run}
-          >
-            {t(needsData ? "chartTester.prepareDataRun" : "chartTester.run")}
-          </button>
-          <button
-            type="button"
-            className="chart-strategy-advanced-link"
-            data-testid="strategy-research-open-advanced"
-            onClick={() => void openAdvanced()}
-          >
-            {t("strategy.advanced")}
-          </button>
         </>
       )}
       {batchControls?.(runRequest && !runRequest.attachment.pythonBarExecution
