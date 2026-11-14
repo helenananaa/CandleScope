@@ -1,0 +1,275 @@
+[
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/alias-baseline.log",
+    "archive": "evidence/alias-baseline.log.gz",
+    "original_sha256": "453b02a6a3cc190ad2343adda1dcde6b7222e0466e7736daed5390f853907107",
+    "archived_payload_sha256": "453b02a6a3cc190ad2343adda1dcde6b7222e0466e7736daed5390f853907107",
+    "bytes": 9956
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/alias-baseline.xml",
+    "archive": "evidence/alias-baseline.xml.gz",
+    "original_sha256": "442356ec139d8cb927d8a735e6fe94f57313a1bfde00639c630ea5db736f08ec",
+    "archived_payload_sha256": "442356ec139d8cb927d8a735e6fe94f57313a1bfde00639c630ea5db736f08ec",
+    "bytes": 11115
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/alias-coordinator.log",
+    "archive": "evidence/alias-coordinator.log.gz",
+    "original_sha256": "21b458d28fb0b83f18e8f7e6b61c06b6c16214775b9e301783ca7797f6b62d16",
+    "archived_payload_sha256": "21b458d28fb0b83f18e8f7e6b61c06b6c16214775b9e301783ca7797f6b62d16",
+    "bytes": 2400
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/alias-coordinator.xml",
+    "archive": "evidence/alias-coordinator.xml.gz",
+    "original_sha256": "b7778d44e8ea2d091611426b16a4dd54e70d3dad94d8b0ffac7b54f46ff8af65",
+    "archived_payload_sha256": "b7778d44e8ea2d091611426b16a4dd54e70d3dad94d8b0ffac7b54f46ff8af65",
+    "bytes": 18399
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/architecture.log",
+    "archive": "evidence/architecture.log.gz",
+    "original_sha256": "e2ec53d38953e0905e69ca86e3ea1d5d69edc69bf185b6bf696b5438dded2775",
+    "archived_payload_sha256": "e2ec53d38953e0905e69ca86e3ea1d5d69edc69bf185b6bf696b5438dded2775",
+    "bytes": 66
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/backend-full.log",
+    "archive": "evidence/backend-full.log.gz",
+    "original_sha256": "6a2795fc85a3f9b300dc121977b894e14a13030c089049fadc7d6cee66f99599",
+    "archived_payload_sha256": "6a2795fc85a3f9b300dc121977b894e14a13030c089049fadc7d6cee66f99599",
+    "bytes": 5747
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/backend-full.xml",
+    "archive": "evidence/backend-full.xml.gz",
+    "original_sha256": "f6208a4380d98a9a029eccbcf32091a94d8a93046ddb32e8ebc27e37708a9e09",
+    "archived_payload_sha256": "f6208a4380d98a9a029eccbcf32091a94d8a93046ddb32e8ebc27e37708a9e09",
+    "bytes": 364888
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/baseline-sign-after.log",
+    "archive": "evidence/baseline-sign-after.log.gz",
+    "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "archived_payload_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/candidate-sign-after.log",
+    "archive": "evidence/candidate-sign-after.log.gz",
+    "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "archived_payload_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/native-baseline.log",
+    "archive": "evidence/native-baseline.log.gz",
+    "original_sha256": "8808dc6e8e84275acc59c9b77204ef9f3e4ba0402d0c7100aa95ef142cd4ab09",
+    "archived_payload_sha256": "8808dc6e8e84275acc59c9b77204ef9f3e4ba0402d0c7100aa95ef142cd4ab09",
+    "bytes": 3918
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/native-budget.log",
+    "archive": "evidence/native-budget.log.gz",
+    "original_sha256": "b917b356cb1acb12037c38156a6de18979082253044b26e78df2b3afb078e376",
+    "archived_payload_sha256": "b917b356cb1acb12037c38156a6de18979082253044b26e78df2b3afb078e376",
+    "bytes": 2097
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/native-identity.log",
+    "archive": "evidence/native-identity.log.gz",
+    "original_sha256": "95dcd22a17b82e057105c74703b518752ff404df1141ab016cbc3aa4d8b0d12d",
+    "archived_payload_sha256": "95dcd22a17b82e057105c74703b518752ff404df1141ab016cbc3aa4d8b0d12d",
+    "bytes": 599
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/package-after.json",
+    "archive": "evidence/package-after.json.gz",
+    "original_sha256": "7ca2299369c8f0a3686e1fe7a808ad7eab88925bf2dfd3126ce78e9130cd66eb",
+    "archived_payload_sha256": "7ca2299369c8f0a3686e1fe7a808ad7eab88925bf2dfd3126ce78e9130cd66eb",
+    "bytes": 1096
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/prepare-native.log",
+    "archive": "evidence/prepare-native.log.gz",
+    "original_sha256": "327fb21ad5b25cb2c7a4bc941b72e81736c739864f6fb7f25f33473c539ec65a",
+    "archived_payload_sha256": "327fb21ad5b25cb2c7a4bc941b72e81736c739864f6fb7f25f33473c539ec65a",
+    "bytes": 74
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/native-baseline-cold/acceptance.json",
+    "archive": "evidence/native-baseline-cold/acceptance.json.gz",
+    "original_sha256": "43ebd4c6414766a0ddc08839fdecaa04c6dfb51dc846962242933ad8df096a14",
+    "archived_payload_sha256": "e155cf076205f8392487514b932a1a90b7a497a226b6fbf6b7db78caf53b7fa9",
+    "bytes": 1024509
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/native-baseline-cold/failure.png",
+    "archive": "native-baseline-cold-failure.png",
+    "original_sha256": "28ab61140635becaebdf6527e440a585eed18cbfd61c2b18fca4d73ac1f6ca87",
+    "archived_payload_sha256": "28ab61140635becaebdf6527e440a585eed18cbfd61c2b18fca4d73ac1f6ca87",
+    "bytes": 177681
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/native-baseline-cold/partial-display-11.png",
+    "archive": "native-baseline-cold-partial-display-11.png",
+    "original_sha256": "779ee8fc814521e0ce937ae6a0925a4475a812de28cf5cd38ffe334ce9575a7b",
+    "archived_payload_sha256": "779ee8fc814521e0ce937ae6a0925a4475a812de28cf5cd38ffe334ce9575a7b",
+    "bytes": 177085
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/native-baseline-cold/partial-display-3.png",
+    "archive": "native-baseline-cold-partial-display-3.png",
+    "original_sha256": "cc8122d90148c6622ab0869cbe09ab7985c18d9e752e8baad8b349c7bbe41651",
+    "archived_payload_sha256": "cc8122d90148c6622ab0869cbe09ab7985c18d9e752e8baad8b349c7bbe41651",
+    "bytes": 160981
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/native-baseline-cold/process.log",
+    "archive": "evidence/native-baseline-cold/process.log.gz",
+    "original_sha256": "2e481bc1f6f2b7f89935d5a0708a44209a90b0ff44a53366b9d6afdd3df18ffd",
+    "archived_payload_sha256": "2e481bc1f6f2b7f89935d5a0708a44209a90b0ff44a53366b9d6afdd3df18ffd",
+    "bytes": 304
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/native-baseline-cold/resource-samples.jsonl",
+    "archive": "evidence/native-baseline-cold/resource-samples.jsonl.gz",
+    "original_sha256": "35b2ac344091ff2c2e1ece1dd1dc0aedad45c85ef0746b0ab3c0ab06cd0b02e8",
+    "archived_payload_sha256": "35b2ac344091ff2c2e1ece1dd1dc0aedad45c85ef0746b0ab3c0ab06cd0b02e8",
+    "bytes": 97141
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/native-baseline-cold/traffic.json",
+    "archive": "evidence/native-baseline-cold/traffic.json.gz",
+    "original_sha256": "8111d5e1dc876c063314a8adb653ed2670afe24c50cab0645f614806f5de430b",
+    "archived_payload_sha256": "8111d5e1dc876c063314a8adb653ed2670afe24c50cab0645f614806f5de430b",
+    "bytes": 8568248
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/native-baseline-cold/profile/logs/backend-sidecar.log",
+    "archive": "evidence/native-baseline-cold/backend-sidecar.log.gz",
+    "original_sha256": "7bca9990b111982868ffca83e1831be5e8a0dcefeeff27d604b01714d7e65aeb",
+    "archived_payload_sha256": "7bca9990b111982868ffca83e1831be5e8a0dcefeeff27d604b01714d7e65aeb",
+    "bytes": 201263
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/native-budget-diagnostic/acceptance.json",
+    "archive": "evidence/native-budget-diagnostic/acceptance.json.gz",
+    "original_sha256": "914dd155cb9f3b5dab6d45c39ad0f52190621f87d678d0d91e4c6c42c9ddd358",
+    "archived_payload_sha256": "20693bc034b157b12089ad6264074c2ba9fa47bff9108ff89d996a1eab31526e",
+    "bytes": 1060269
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/native-budget-diagnostic/failure.png",
+    "archive": "native-budget-diagnostic-failure.png",
+    "original_sha256": "84e73781639ebc5400c5097ffa21e1bf60e125e9c2f19292d72e3ea942f3b801",
+    "archived_payload_sha256": "84e73781639ebc5400c5097ffa21e1bf60e125e9c2f19292d72e3ea942f3b801",
+    "bytes": 175989
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/native-budget-diagnostic/partial-display-3.png",
+    "archive": "native-budget-diagnostic-partial-display-3.png",
+    "original_sha256": "8c3399b76abb6ab0828c148c77676cf6ea8c71b6a0d0300b1c072431e7f667f8",
+    "archived_payload_sha256": "8c3399b76abb6ab0828c148c77676cf6ea8c71b6a0d0300b1c072431e7f667f8",
+    "bytes": 175865
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/native-budget-diagnostic/partial-display-5.png",
+    "archive": "native-budget-diagnostic-partial-display-5.png",
+    "original_sha256": "053055d5e179990e170ec47702bf3d3ae6376eb89c7ded1cb242f02076828b9b",
+    "archived_payload_sha256": "053055d5e179990e170ec47702bf3d3ae6376eb89c7ded1cb242f02076828b9b",
+    "bytes": 176040
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/native-budget-diagnostic/process.log",
+    "archive": "evidence/native-budget-diagnostic/process.log.gz",
+    "original_sha256": "6fa21aa19aaad355cd993ce17ae3a68098884f8d8d933529fde3d2c8391d71f0",
+    "archived_payload_sha256": "6fa21aa19aaad355cd993ce17ae3a68098884f8d8d933529fde3d2c8391d71f0",
+    "bytes": 304
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/native-budget-diagnostic/resource-samples.jsonl",
+    "archive": "evidence/native-budget-diagnostic/resource-samples.jsonl.gz",
+    "original_sha256": "0e2b8882967c970690760f495076a0abfbf205422b2345aa8677d7f01f898919",
+    "archived_payload_sha256": "0e2b8882967c970690760f495076a0abfbf205422b2345aa8677d7f01f898919",
+    "bytes": 44981
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/native-budget-diagnostic/traffic.json",
+    "archive": "evidence/native-budget-diagnostic/traffic.json.gz",
+    "original_sha256": "1fe6366ccf7a9886c181644903a4c79e53ad74228c945176844b4b0f529d9632",
+    "archived_payload_sha256": "1fe6366ccf7a9886c181644903a4c79e53ad74228c945176844b4b0f529d9632",
+    "bytes": 4738850
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/native-budget-diagnostic/profile/logs/backend-sidecar.log",
+    "archive": "evidence/native-budget-diagnostic/backend-sidecar.log.gz",
+    "original_sha256": "c237dfbb83fbbd5701057357d474877614cfb4684254a6ee284c5ae60fe4b5c1",
+    "archived_payload_sha256": "c237dfbb83fbbd5701057357d474877614cfb4684254a6ee284c5ae60fe4b5c1",
+    "bytes": 70344
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/native-identity-cold/acceptance.json",
+    "archive": "evidence/native-identity-cold/acceptance.json.gz",
+    "original_sha256": "e0da8fd52f3b54854c1fc1e33daa460b57ec3d14b39601139e688f9bf04fbc8c",
+    "archived_payload_sha256": "37730a4d7490499aff9e10094a2cd537110b678ae3c2c077e99697cc4281bbc0",
+    "bytes": 461319
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/native-identity-cold/failure.png",
+    "archive": "native-identity-cold-failure.png",
+    "original_sha256": "64d1a71e2acdb89fe76fc32ebc62f6e7d6e00788de481c07f427f9b1b14dab16",
+    "archived_payload_sha256": "64d1a71e2acdb89fe76fc32ebc62f6e7d6e00788de481c07f427f9b1b14dab16",
+    "bytes": 178581
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/native-identity-cold/process.log",
+    "archive": "evidence/native-identity-cold/process.log.gz",
+    "original_sha256": "488371c842b09dc665e5aa7cb43d4c3ce3263fdb1ee100be1fc8ec88da221f43",
+    "archived_payload_sha256": "488371c842b09dc665e5aa7cb43d4c3ce3263fdb1ee100be1fc8ec88da221f43",
+    "bytes": 304
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/native-identity-cold/resource-samples.jsonl",
+    "archive": "evidence/native-identity-cold/resource-samples.jsonl.gz",
+    "original_sha256": "82275842954e2052085779605a7c8e9b4679d0261b1436df08a842d57efeb939",
+    "archived_payload_sha256": "82275842954e2052085779605a7c8e9b4679d0261b1436df08a842d57efeb939",
+    "bytes": 92726
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/native-identity-cold/traffic.json",
+    "archive": "evidence/native-identity-cold/traffic.json.gz",
+    "original_sha256": "a3af8f35a12219d56e0865ffd79db50e1fe2174e72977d5a71bc2cde90e887a4",
+    "archived_payload_sha256": "a3af8f35a12219d56e0865ffd79db50e1fe2174e72977d5a71bc2cde90e887a4",
+    "bytes": 8392571
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/native-identity-cold/profile/logs/backend-sidecar.log",
+    "archive": "evidence/native-identity-cold/backend-sidecar.log.gz",
+    "original_sha256": "b8a8b5b3754e43eb45a188de26e3d8b7f045fb762425f08dbf1cad3d59bcddb8",
+    "archived_payload_sha256": "b8a8b5b3754e43eb45a188de26e3d8b7f045fb762425f08dbf1cad3d59bcddb8",
+    "bytes": 185058
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/native-identity-candidate/package-source-manifest.json",
+    "archive": "evidence/native-candidate/package-source-manifest.json.gz",
+    "original_sha256": "5104cf520f3eb8fb68e8d0fa85f3ef88ae64d6230f72e9e3e69719fcb5f4e7d6",
+    "archived_payload_sha256": "5104cf520f3eb8fb68e8d0fa85f3ef88ae64d6230f72e9e3e69719fcb5f4e7d6",
+    "bytes": 140216
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/native-identity-candidate/sign-before.log",
+    "archive": "evidence/native-candidate/sign-before.log.gz",
+    "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "archived_payload_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  {
+    "source": "/Users/ryanliang/.codex/worktrees/mixed-prefix-input-129-20261114/CandleScope/output/mixed-prefix-input-129-20261114/native-identity-candidate/sign.log",
+    "archive": "evidence/native-candidate/sign.log.gz",
+    "original_sha256": "a83d5641707dbfa39d98313e1e8da642100ef253481cdee62889d6d07e9ba867",
+    "archived_payload_sha256": "a83d5641707dbfa39d98313e1e8da642100ef253481cdee62889d6d07e9ba867",
+    "bytes": 189
+  }
+]
