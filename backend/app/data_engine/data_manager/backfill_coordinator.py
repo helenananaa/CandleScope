@@ -63,6 +63,7 @@ from .backfill_contracts import (
     RepairReportSummary,
     RepairRequest,
     RepairRetryDeferred,
+    RepairChunkSplit,
     RepairWrittenRangeSummary,
     ScanReport,
     _merge_derived_repair_targets,
@@ -2438,6 +2439,11 @@ class BackfillCoordinator:
                        if scheduled_request._native_progress is not None else {}),
                 )
                 await self._notify_source_storage(request, report)
+                if (self._is_failed(report.status) and request.metadata.get('required_history_composition')
+                        and request.end_ms > request.start_ms and not getattr(report, 'fetch_results', ())
+                        and (getattr(report, 'metadata', {}) or {}).get('mixed_plan_fallback')
+                            in {'source_row_budget', 'refined_source_row_budget', 'planning_work_budget', 'task_work_budget'}):
+                    raise RepairChunkSplit('mixed canonical source work requires a smaller chunk')
                 if self._is_failed(report.status) and attempt < self._max_retries:
                     delay = self._backoff(attempt)
                     await self._ledger_mark_retry_wait(
@@ -2550,6 +2556,8 @@ class BackfillCoordinator:
                         or self._report_retryable(report)
                     ),
                 )
+            except RepairChunkSplit:
+                raise
             except RepairRetryDeferred:
                 raise
             except RateLimitDeferred as exc:

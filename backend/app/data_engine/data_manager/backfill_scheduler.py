@@ -26,6 +26,7 @@ from .backfill_contracts import (
     RepairOutcome,
     RepairRequest,
     RepairRetryDeferred,
+    RepairChunkSplit,
     _merge_derived_repair_targets,
     repair_status_value,
 )
@@ -276,6 +277,7 @@ class BackfillScheduler:
         # each wait a full rotation behind another owner's network work.
         self.local_burst_seconds = 2.0
         self.local_burst_dispatches = 0
+        self.mixed_chunk_refinements = 0
         self._local_burst: dict[tuple[int, bool], tuple[str, float]] = {}
 
     def submit(self, request: RepairRequest) -> tuple[str, asyncio.Future[RepairOutcome]]:
@@ -883,6 +885,7 @@ class BackfillScheduler:
             "covered_chunks_skipped": self.covered_chunks_skipped,
             "fairness_rotations": self.fairness_rotations,
             "local_burst_dispatches": self.local_burst_dispatches,
+            "mixed_chunk_refinements": self.mixed_chunk_refinements,
             "aged_dispatches": self.aged_dispatches,
             "max_dispatch_bypass": self.max_dispatch_bypass,
             "running_background_chunks": self._running_background_count(),
@@ -1550,6 +1553,11 @@ class BackfillScheduler:
                 get_public_admission().forget(chunk.public_demand)
                 with public_demand(chunk.public_demand):
                     outcome = await self._execute(chunk.request)
+            except RepairChunkSplit as exc:
+                self._note_local_burst(chunk, None)
+                if self._refine_mixed_chunk(chunk):
+                    return
+                outcome = RepairOutcome(request=chunk.request, status='failed', error=str(exc))
             except RepairRetryDeferred as exc:
                 chunk.request._retry_attempt = exc.attempt + 1
                 self._note_local_burst(chunk, None)
@@ -1589,6 +1597,46 @@ class BackfillScheduler:
             if chunk.public_demand is not None and not chunk.public_demand.alive():
                 get_public_admission().forget(chunk.public_demand)
             self._drain()
+
+    def _refine_mixed_chunk(self, chunk):
+        """Replace one unacquired work item by two on the same parent queue.
+
+        Existing finer canonical history can make a cold 16-target proposal
+        exceed its row bound. Refinement preserves leases, cancellation, quota
+        ownership, deletion floor and final verification; it creates no queue.
+        """
+        state = self._requests.get(chunk.parent_id)
+        width = parse_interval_ms(chunk.request.interval)
+        if (state is None or state.stale or state.cancel_requested or not width
+                or not chunk.request.metadata.get('required_history_composition')
+                or chunk.request.end_ms <= chunk.request.start_ms
+                or self._chunks.get(chunk.chunk_id) is not chunk):
+            return False
+        count = (chunk.request.end_ms-chunk.request.start_ms)//width+1
+        middle = chunk.request.start_ms + (count//2)*width
+        children = []
+        next_sequence = max((self._chunks[c].sequence for c in state.chunk_ids if c in self._chunks), default=chunk.sequence)+1
+        for index, (first, last) in enumerate(((chunk.request.start_ms, middle-width), (middle, chunk.request.end_ms))):
+            work = self._source_aware_chunk_plan(chunk.request, (last-first)//width+1)
+            sequence = chunk.sequence if index == 0 else next_sequence
+            request = replace(chunk.request, start_ms=first, end_ms=last, _retry_attempt=1,
+                metadata={**chunk.request.metadata, **work.to_metadata(), 'chunk_sequence': sequence})
+            children.append(_FetchChunk(chunk.chunk_id+f':split{index}', chunk.parent_id, request, sequence))
+        position = state.chunk_ids.index(chunk.chunk_id)
+        state.chunk_ids[position:position+1] = [child.chunk_id for child in children]
+        self._chunks.pop(chunk.chunk_id)
+        series = self._series.get(chunk.request.series_key)
+        if series is not None:
+            series.active = None
+            if chunk.parent_id not in series.pending:
+                series.pending.append(chunk.parent_id)
+        for child in (reversed(children) if self._newest_first(chunk.request) else children):
+            self._chunks[child.chunk_id] = child
+            self._push_ready(child)
+        state.progress_revision += 1
+        self.mixed_chunk_refinements += 1
+        self._publish_progress(state, status='chunk_refined', details={'source_chunk': chunk.chunk_id})
+        return True
 
     async def _defer_chunk(
         self,

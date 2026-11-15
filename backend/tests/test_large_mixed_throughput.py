@@ -303,3 +303,61 @@ def test_partly_materialized_chunk_with_two_gaps_completes_from_canonical_inputs
     assert len(report.plan.gaps) == 2
     assert report.reconcile_result.custom_bars_written == 4
     assert mixed_query.storage.count_bars('BTCUSDT', '10007m', 0, 4*WIDTH-1, market_type='futures') == 4
+
+
+def test_scheduler_refines_work_without_failing_or_replacing_the_parent_owner():
+    from app.data_engine.data_manager.backfill_contracts import RepairRequest, RepairOutcome, RepairChunkSplit
+    from app.data_engine.data_manager.backfill_scheduler import BackfillScheduler
+    async def run():
+        loop = asyncio.get_running_loop()
+        futures, completed = {}, []
+        def future(request):
+            return futures.setdefault(request.request_id, loop.create_future())
+        def complete(request, outcome):
+            if not future(request).done(): future(request).set_result(outcome)
+        async def execute(request):
+            count = (request.end_ms-request.start_ms)//WIDTH+1
+            if count > 2: raise RepairChunkSplit('source_row_budget')
+            completed.extend(range(request.start_ms, request.end_ms+1, WIDTH))
+            return RepairOutcome(request, 'completed', bars_loaded=count, verified_contiguous=True, attempts=1)
+        async def noop(*args, **kwargs): pass
+        scheduler = BackfillScheduler(execute=execute, future_for=future, complete=complete,
+            finalize=noop, on_queued=lambda *_: None, max_concurrency=1)
+        request = RepairRequest('BTCUSDT', '10007m', 0, 7*WIDTH, market_type='futures',
+            reason='initial_history', metadata={'required_history_composition': 'binance.usdm.trade-klines/base-utc/1'})
+        try:
+            _, result = scheduler.submit(request)
+            outcome = await asyncio.wait_for(result, 5)
+            assert outcome.status == 'completed' and outcome.bars_loaded == 8
+            assert outcome.request.request_id == request.request_id
+            assert sorted(completed) == list(range(0, 8*WIDTH, WIDTH))
+            assert scheduler.mixed_chunk_refinements == 3
+        finally:
+            await scheduler.shutdown()
+    asyncio.run(run())
+
+
+def test_dense_fine_history_refines_the_real_coordinator_request(mixed_query):
+    from app.data_engine.data_manager.backfill_coordinator import BackfillCoordinator
+    from app.data_engine.data_manager.backfill_contracts import RepairRequest
+    mixed_query.storage.upsert_bars('BTCUSDT', '1m',
+        [row(at, MINUTE) for at in range(0, 4*WIDTH, MINUTE)], source='backfill', market_type='futures')
+    engine = engine_for(mixed_query)
+    upstream = IntervalTransport()
+    engine._fetcher = HistoricalFetcher(engine.config, upstream, IngestionConfig())
+    async def run():
+        async def noop(*args, **kwargs): pass
+        coordinator = BackfillCoordinator(storage=mixed_query.storage, engine=engine,
+            bars_backfilled=noop, emit_event=noop, loop=asyncio.get_running_loop(), max_concurrency=1, max_retries=1)
+        request = RepairRequest('BTCUSDT', '10007m', 0, 3*WIDTH, market_type='futures', reason='initial_history',
+            metadata={'required_history_composition': 'binance.usdm.trade-klines/base-utc/1',
+                'acquisition_revision': mixed_query.storage.revision_store.head(), 'history_calendar_id': 'crypto.24x7.utc'})
+        try:
+            outcome = await asyncio.wait_for(coordinator.request_and_wait(request), 30)
+            assert outcome.verified_contiguous is True, outcome.error
+            assert coordinator.snapshot()['mixed_chunk_refinements'] == 3
+            assert not upstream.calls
+        finally:
+            await coordinator.shutdown()
+    asyncio.run(run())
+    assert mixed_query.storage.count_bars('BTCUSDT', '10007m', 0, 4*WIDTH-1, market_type='futures') == 4

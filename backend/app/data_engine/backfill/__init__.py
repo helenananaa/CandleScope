@@ -425,6 +425,7 @@ class BackfillEngine:
                         enabled=self._cfg.mixed_custom_history and self._cfg.reconcile_generate_custom
                             and self._cfg.custom_alignment_mode == 'epoch' and not self._cfg.alignment_epoch_ms)
             plan = await build_mixed_backfill_plan(self, gaps, metadata, mixed_diagnostics)
+            metadata.update(mixed_diagnostics)
             if plan is None:
                 if required_contract is not None:
                     raise IntervalResolutionError(
