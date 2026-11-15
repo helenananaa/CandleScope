@@ -7,6 +7,8 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from app.core.executors import run_storage
+
 from app.data_engine.interval_policy import (
     is_monthly_interval,
     parse_custom_interval,
@@ -219,7 +221,10 @@ class AggregatorWarmStartService:
             # components. Do not expand/replay its already-owned old prefix.
             fetch_start_ms = bucket_start_ms
 
-        rows = storage.query_bars(
+        target_source = SeriesKey.create(symbol, base_interval, exchange=exchange,
+                                         market_type=market_type, identity=series_identity)
+        target_token = self._bar_aggregator.history_target_token(target_source, interval)
+        rows = await run_storage(storage.query_bars,
             symbol=symbol,
             interval=base_interval,
             start_ms=fetch_start_ms,
@@ -229,6 +234,10 @@ class AggregatorWarmStartService:
             market_type=market_type,
             series_identity=series_identity,
         )
+        if self._bar_aggregator.history_target_token(target_source, interval) != target_token:
+            # An unsubscribe/re-subscribe must not adopt the old read into the
+            # new target, even when its market identity is unchanged.
+            return
         base_key = SeriesKey.create(
             symbol,
             base_interval,
