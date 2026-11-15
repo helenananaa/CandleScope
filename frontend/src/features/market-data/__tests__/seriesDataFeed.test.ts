@@ -82,6 +82,93 @@ test("monthly feed helpers use absolute month anchors and calendar successors", 
 const resolvedQuality = { complete: true, retryable: false, history_state: "ready" as const,
   verified_contiguous: true, missing_ranges: [], has_tail_gap: false, all_rows_final: true, truncated: false };
 
+test("nested exact repair polls share one proof and retain every completion owner", async () => {
+  const originalNow = Date.now;
+  let now = 1_000_000, ready = false;
+  Date.now = () => now;
+  const requests: number[][] = [], resolved: string[] = [];
+  const pending = (start: number, end: number): KlineFetchResult => ({
+    data: [], start_ms: start*1000, end_ms: end*1000, history_state: "pending",
+    complete: false, retryable: true, verified_contiguous: false,
+    missing_ranges: [{ start_ms: start*1000, end_ms: end*1000 }],
+  });
+  const feed = new SeriesDataFeed({
+    api: { fetchKlinesRange: async (_symbol, _interval, start, end) => {
+      requests.push([start, end]);
+      return ready ? { ...resolvedQuality, start_ms: start*1000, end_ms: end*1000,
+        data: rows([0, 3_600, 7_200, 10_800]) } : pending(start, end);
+    } },
+    getActiveSeries: () => SERIES, commitMergedChartData: () => {},
+  });
+  try {
+    for (const [name, start, end] of [["parent", 0, 10_800], ["child", 3_600, 7_200],
+      ["point", 7_200, 7_200]] as const) {
+      feed.trackPendingResultRepair(SERIES, pending(start, end), () => resolved.push(name));
+    }
+    assert.equal(await feed.pollPendingRepairs(SERIES, { force: true }), 1);
+    assert.deepEqual(requests, [[0, 10_800]]);
+    assert.equal(feed.pendingRepairCount(SERIES), 3, "partial rows cannot settle any owner");
+    assert.deepEqual(resolved, []);
+    now += ACTIVE_EXACT_REPAIR_POLL_MS-1;
+    assert.equal(await feed.pollPendingRepairs(SERIES), 0, "covered owners share the pending read's cooldown");
+    ready = true; now += 1;
+    assert.equal(await feed.pollPendingRepairs(SERIES), 1);
+    assert.deepEqual(requests, [[0, 10_800], [0, 10_800]]);
+    assert.deepEqual(resolved.sort(), ["child", "parent", "point"]);
+    assert.equal(feed.pendingRepairCount(SERIES), 0);
+  } finally { Date.now = originalNow; }
+});
+
+test("failed covering repair does not impose its transport backoff on a child", async () => {
+  const originalNow = Date.now;
+  let now = 1_000_000, resolved = 0;
+  Date.now = () => now;
+  const requests: number[][] = [];
+  const feed = new SeriesDataFeed({
+    api: { fetchKlinesRange: async (_symbol, _interval, start, end) => {
+      requests.push([start, end]);
+      if (start === 0) throw Error("controlled covering request failure");
+      return { ...resolvedQuality, start_ms: start*1000, end_ms: end*1000, data: rows([start, end]) };
+    } },
+    getActiveSeries: () => SERIES, commitMergedChartData: () => {},
+  });
+  try {
+    for (const [start, end] of [[0, 10_800], [3_600, 7_200]] as const) {
+      feed.trackPendingResultRepair(SERIES, { data: [], start_ms: start*1000, end_ms: end*1000,
+        complete: false, retryable: true, history_state: "pending", verified_contiguous: false },
+      start === 0 ? undefined : () => { resolved += 1; });
+    }
+    assert.equal(await feed.pollPendingRepairs(SERIES, { force: true }), 0);
+    now += ACTIVE_EXACT_REPAIR_POLL_MS;
+    assert.equal(await feed.pollPendingRepairs(SERIES), 1);
+    assert.deepEqual(requests, [[0, 10_800], [3_600, 7_200]]);
+    assert.equal(resolved, 1);
+    assert.equal(feed.pendingRepairCount(SERIES), 1);
+  } finally { Date.now = originalNow; }
+});
+
+test("a covering proof cannot settle a successor generation created by its callback", async () => {
+  let oldChild = 0, successor = 0;
+  const pending = (start: number, end: number): KlineFetchResult => ({
+    data: [], start_ms: start*1000, end_ms: end*1000, history_state: "pending",
+    complete: false, retryable: true, verified_contiguous: false,
+  });
+  const feed = new SeriesDataFeed({
+    api: { fetchKlinesRange: async () => ({ ...resolvedQuality, start_ms: 0, end_ms: 10_800_000,
+      data: rows([0, 3_600, 7_200, 10_800]) }) },
+    getActiveSeries: () => SERIES, commitMergedChartData: () => {},
+  });
+  feed.trackPendingResultRepair(SERIES, pending(0, 10_800), () => {
+    feed.clearPendingResultRepair(SERIES, { start: epochSeconds(0), end: epochSeconds(10_800) });
+    feed.trackPendingResultRepair(SERIES, pending(3_600, 7_200), () => { successor += 1; });
+  });
+  feed.trackPendingResultRepair(SERIES, pending(3_600, 7_200), () => { oldChild += 1; });
+  assert.equal(await feed.pollPendingRepairs(SERIES, { force: true }), 1);
+  assert.equal(oldChild, 0);
+  assert.equal(successor, 0);
+  assert.equal(feed.pendingRepairCount(SERIES), 1, "old proof cannot clear a new owner's obligation");
+});
+
 function rows(times: number[]): KlineBar[] {
   return times.map((time) => ({ time: epochSeconds(time), close: time }));
 }

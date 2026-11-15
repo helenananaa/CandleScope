@@ -1678,7 +1678,10 @@ export class SeriesDataFeed {
       return;
     }
     const seriesKey = this.seriesKey(series);
+    const epoch = this.currentEpoch(series);
+    const generation = this.currentGapRepairGeneration(series);
     for (const [repairKey, pending] of this.pendingGapRepairs) {
+      if (!this.isCurrent(series, epoch) || this.currentGapRepairGeneration(series) !== generation) break;
       if (this.seriesKey(pending.series) !== seriesKey) continue;
       if (terminalOnly && !pending.terminalReason) continue;
       if (
@@ -2059,10 +2062,23 @@ export class SeriesDataFeed {
         return true;
       }
       this.updatePendingGapRepairFromResult(series, range, result, attempts, dormant);
+      if (this.currentGapRepairGeneration(series) !== repairGeneration) return true;
+      // One verified superset retires every covered obligation, with each
+      // original callback/window owner intact. Partial rows are never proof.
+      this.resolveVerifiedPendingGapRepairs(series, range, result);
+      if (!this.isCurrent(series, epoch) || this.currentGapRepairGeneration(series) !== repairGeneration) return true;
       const remaining = this.pendingGapRepairs.get(key);
       if (remaining) {
         remaining.indicatorWindowOwner = indicatorWindowOwner;
         remaining.indicatorWindowEpoch = epoch;
+        if (remaining.nextPollAt <= Date.now() + ACTIVE_EXACT_REPAIR_POLL_MS) {
+          for (const peer of this.pendingGapRepairs.values()) {
+            if (this.seriesKey(peer.series) === this.seriesKey(series) && !peer.terminalReason
+                && peer.range.start >= range.start && peer.range.end <= range.end) {
+              peer.nextPollAt = Math.max(peer.nextPollAt, remaining.nextPollAt);
+            }
+          }
+        }
       }
       return true;
     } catch (error) {
@@ -2187,7 +2203,12 @@ export class SeriesDataFeed {
         && (force || now >= pending.nextPollAt)
       ))
       .sort((left, right) => left.nextPollAt - right.nextPollAt);
-    for (const pending of due) {
+    // Count-back growth retains older completion owners. Polling each nested
+    // window repeats the same storage/repair work; one due covering range is
+    // sufficient. Disjoint/partially overlapping ranges remain independent.
+    const coalesced = due.filter(pending => !due.some(other => other !== pending
+      && other.range.start <= pending.range.start && other.range.end >= pending.range.end));
+    for (const pending of coalesced) {
       if (requested >= maxRequests) break;
       if (this.currentGapRepairGeneration(series) !== repairGeneration) break;
       if (this.pendingGapRepairs.get(this.gapRepairKey(series, pending.range)) !== pending) continue;
