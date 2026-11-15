@@ -35,7 +35,7 @@ test("live EMA validates once against Python, then advances repeated previews wi
   assert.equal(requests, 2, "a historical correction must be reseeded by the authority");
 });
 
-test("full series identity separates live EMA validation and unverified outputs stay remote", async () => {
+test("full series identity separates live EMA validation", async () => {
   let calls = 0;
   const remote: IndicatorComputeBatchExecutor = async ({ jobs }) => {
     calls++;
@@ -48,4 +48,31 @@ test("full series identity separates live EMA validation and unverified outputs 
       request: { mode: "builtin", name: "EMA", ohlcv: rows, seriesIdentity: { providerId } } }] }, remote);
   }
   assert.equal(calls, 2);
+});
+
+test("a validated builtin never relabels retired or other script execution as EMA", async () => {
+  const languages: (string | undefined)[] = [];
+  const remote: IndicatorComputeBatchExecutor = async ({ jobs }) => ({ ok: true,
+    results: jobs.map(job => {
+      languages.push(job.request.language);
+      return { clientId: job.clientId, jobKey: job.jobKey,
+        payload: parseIndicatorPayloadEnvelope(job.request.language || job.request.script
+          ? { ok: false, code: "PYNE_RETIRED", error: "Unsupported runtime", lines: [] }
+          : reference.seed) };
+    }),
+  });
+  const request: IndicatorComputeRequest = { mode: "builtin", name: "EMA",
+    ohlcv: fixture.bars.slice(0, reference.seed_count) };
+  const run = (request: IndicatorComputeRequest) => routeIndicatorComputeBatch({
+    jobs: [{ clientId: "same-indicator", jobKey: "same-key", request }],
+  }, remote);
+  assert.equal((await run(request)).results[0]!.payload.ok, true);
+  assert.equal((await run(request)).results[0]!.payload.ok, true);
+  assert.deepEqual(languages, [undefined]);
+  for (const scriptRequest of [{ language: "pyne" }, { language: " PyNe " },
+    { language: "community-js" }, { script: "plot(close)" }]) {
+    const result = await run({ ...request, ...scriptRequest });
+    assert.equal(result.results[0]!.payload.ok, false);
+  }
+  assert.equal(languages.length, 5);
 });

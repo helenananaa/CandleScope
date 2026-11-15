@@ -141,6 +141,9 @@ export class BuiltinIncrementalState {
 
   static supports(request: IndicatorComputeRequest): boolean {
     if (request.mode !== "builtin" || !["MACD", "VOL", "EMA", "RSI", "ATR", "MA", "BOLL"].includes(request.name ?? "")) return false;
+    // A builtin checkpoint cannot reinterpret a language/script request.
+    // Unsupported and retired runtimes must reach their explicit rejection.
+    if (request.script?.trim() || request.language?.trim()) return false;
     const params = request.params ?? {};
     if (["MACD", "EMA", "RSI", "MA", "BOLL"].includes(request.name ?? "")
       && !["open", "high", "low", "close", "hl2", "hlc3", "ohlc4"].includes(String(params.source ?? "close"))) return false;
@@ -332,7 +335,8 @@ export function createIncrementalBuiltinCompute(remote: IndicatorComputeBatchExe
     const results: IndicatorComputeBatchItem[] = [];
     const pending: IndicatorComputeBatchJob[] = [];
     const keyFor = (request: IndicatorComputeRequest) => JSON.stringify([
-      options.sourceKey?.(), request.exchange, request.marketType, request.symbol, request.interval, request.seriesIdentity, request.name, request.params,
+      options.sourceKey?.(), request.exchange, request.marketType, request.symbol, request.interval, request.seriesIdentity,
+      request.mode, request.name, request.params, request.language, request.script, request.securityMode,
     ]);
     for (const job of jobs) {
       const started = performance.now();

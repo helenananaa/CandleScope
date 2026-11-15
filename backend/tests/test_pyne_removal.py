@@ -56,6 +56,43 @@ def test_saved_scripts_use_explicit_language_and_reject_retired_code(tmp_path):
         store.upsert({"name": "Old", "kind": "script", "language": "pyne", "script": "plot(close)"})
 
 
+@pytest.mark.parametrize('mode', [None, 'builtin', 'script'])
+def test_retired_language_cannot_be_relabelled_as_a_builtin(mode, monkeypatch):
+    from app.api.v1 import indicators
+    async def forbidden(*args, **kwargs):
+        pytest.fail('retired source reached an executor')
+    monkeypatch.setattr(indicators, '_compute_engine', forbidden)
+    monkeypatch.setattr(indicators, '_compute_script', forbidden)
+    app = FastAPI()
+    app.include_router(router, prefix='/api/v1')
+    with TestClient(app) as client:
+        response = client.post('/api/v1/indicators/compute', json={
+            'mode':mode, 'name':'EMA', 'language':' PyNe ', 'script':'plot(close)',
+            'ohlcv':[{'time':1,'open':1,'high':1,'low':1,'close':1,'volume':1}]})
+        assert response.json()['code'] == 'PYNE_RETIRED'
+        assert not response.json()['ok']
+
+
+def test_retired_batch_item_is_rejected_before_builtin_execution(monkeypatch):
+    from app.api.v1 import indicators
+    async def forbidden(*args, **kwargs):
+        pytest.fail('retired batch source reached an executor')
+    monkeypatch.setattr(indicators, '_compute_engine', forbidden)
+    monkeypatch.setattr(indicators, '_compute_script', forbidden)
+    app = FastAPI()
+    app.include_router(router, prefix='/api/v1')
+    with TestClient(app) as client:
+        response = client.post('/api/v1/indicators/compute/batch', json={
+            'schemaVersion':1,
+            'context':{'exchange':'binance','marketType':'spot','symbol':'BTCUSDT','interval':'1m'},
+            'ohlcv':[{'time':1,'open':1,'high':1,'low':1,'close':1,'volume':1}],
+            'requests':[{'clientId':'old','jobKey':'old','mode':'builtin','name':'EMA',
+                         'language':'pyne','script':'plot(close)'}]})
+        item = response.json()['results'][0]
+        assert item['payload']['code'] == 'PYNE_RETIRED'
+        assert not item['payload']['ok']
+
+
 def test_retired_installed_runtime_cannot_autostart(monkeypatch):
     from app.plugin_runtime.registry import RuntimeRegistry, RuntimeProcessSpec
     registry = RuntimeRegistry(plugins=tuple(
