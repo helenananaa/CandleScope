@@ -79,7 +79,8 @@ def read_closed_target(storage, store, scope, key, first, last, width, count, no
             ' AND '.join(f'{name}=?' for name in IDENTITY_COLUMNS) +
             ' AND open_time BETWEEN ? AND ? ORDER BY open_time LIMIT ?',
             (*key, first, last, count+1)).fetchall()
-        if not rows or not 0 <= count-len(rows) <= 8:
+        missing = count-len(rows)
+        if not rows or not 0 <= missing <= min(8, count//4):
             return [dict(row) for row in rows], None
         for row in rows:
             if ((row['open_time']-first) % width or row['close_time'] != row['open_time']+width-1

@@ -139,13 +139,13 @@ def test_partial_snapshot_rechecks_surviving_rows_and_absent_slots(mixed_query, 
     assert not result.complete and result.retryable and not result.bars
 
 
-@pytest.mark.parametrize('missing', [8, 9, 16])
+@pytest.mark.parametrize('missing', [8, 9, 32])
 def test_sparse_fast_path_caps_repair_fanout_and_defers_cold_pages(mixed_query, missing):
     query = mixed_query
     query.storage.upsert_bars('BTCUSDT','10007m',
-        [row(n*WIDTH,WIDTH) for n in range(16-missing)],
+        [row(n*WIDTH,WIDTH) for n in range(32-missing)],
         market_type='futures',source='backfill_aggregated')
-    result = query.query('BTCUSDT','10007m',start_ms=0,end_ms=16*WIDTH-1,limit=16,
+    result = query.query('BTCUSDT','10007m',start_ms=0,end_ms=32*WIDTH-1,limit=32,
         market_type='futures',auto_backfill=False)
     assert bool(result.metadata.get('canonical_target_partial')) is (missing == 8)
     if missing == 8:
