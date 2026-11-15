@@ -288,3 +288,18 @@ def test_archive_rest_slices_clip_the_exact_read_ahead_selection():
     assert selected_fetch_rows(first, rows) == [rows[0]]
     empty = _slice_task(item, 100*width, 200*width, lane='rest_fallback')
     assert selected_fetch_rows(empty, rows) == []
+
+
+def test_partly_materialized_chunk_with_two_gaps_completes_from_canonical_inputs(mixed_query):
+    mixed_query.storage.upsert_bars('BTCUSDT', '10007m', [row(2*WIDTH, WIDTH)],
+        source='backfill_aggregated', market_type='futures')
+    engine = engine_for(mixed_query)
+    engine.config.fetch_binance_futures_rate_limit_delay = 0
+    engine._fetcher = HistoricalFetcher(engine.config, IntervalTransport(), IngestionConfig())
+    metadata = {'history_calendar_id': 'crypto.24x7.utc', 'required_history_composition': 'binance.usdm.trade-klines/base-utc/1'}
+    report = asyncio.run(engine.run('BTCUSDT', intervals=['10007m'], range_start_ms=0,
+        range_end_ms=3*WIDTH, exchange='binance', market_type='futures', metadata=metadata))
+    assert report.status == BackfillStatus.COMPLETED, report.errors
+    assert len(report.plan.gaps) == 2
+    assert report.reconcile_result.custom_bars_written == 4
+    assert mixed_query.storage.count_bars('BTCUSDT', '10007m', 0, 4*WIDTH-1, market_type='futures') == 4

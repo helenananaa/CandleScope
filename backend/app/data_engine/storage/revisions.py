@@ -552,6 +552,9 @@ def guarded_write(conn, values, *, commit=True, native_rows=None, source=None, n
             from .mixed_history_fence import matching_computation as matching_mixed_computation
             computation = matching_mixed_computation(scope, values, native_rows, source)
         targets = affected_targets(scope, values, native_rows) if view is not None else ()
+        if view is not None:
+            from .mixed_history_fence import affected_targets as affected_mixed_targets
+            targets += affected_mixed_targets(scope, values, native_rows)
         warmup = scope.warmup_view
         # Native range permission still belongs to this warmup acquisition.
         # Record its own source commits so subsequent derived writes do not

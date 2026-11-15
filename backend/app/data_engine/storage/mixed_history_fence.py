@@ -163,3 +163,11 @@ def capture_standard_targets(store, scope, plan):
             view = MixedTarget(key, dependencies, start, end, spec.nominal_ms, fingerprint(conn, key, start, end))
             view.check(conn, scope)
             scope.mixed_target_views.append(view)
+
+
+def affected_targets(scope, key, rows):
+    if not rows:
+        return ()
+    first, last = min(row['open_time'] for row in rows), max(row['close_time'] for row in rows)
+    return tuple(view for view in scope.mixed_target_views if key in view.dependencies
+                 and first < view.end+view.duration and last >= view.start)

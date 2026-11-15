@@ -1226,12 +1226,12 @@ async def _background_gap_audit_loop(
             get_series = getattr(dm, "gap_audit_series", None)
             if callable(get_series_async) or callable(get_series):
                 get_tail_series = getattr(dm, "gap_audit_tail_series", None)
+                inventory = await get_series_async() if callable(get_series_async) else get_series()
+                input_only = getattr(dm, "gap_audit_input_only_series", None)
+                options = ({"interior_exclusions": input_only(inventory)} if callable(input_only) else {})
                 report = await backfill_coordinator.audit_storage_series(
-                    (
-                        await get_series_async()
-                        if callable(get_series_async)
-                        else get_series()
-                    ),
+                    inventory,
+                    **options,
                     scan_limit=50_000,
                     max_gaps=100,
                     repair=True,

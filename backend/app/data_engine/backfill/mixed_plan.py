@@ -101,13 +101,22 @@ class _MixedBinding:
 
 async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
     cfg, storage = engine._cfg, engine._storage
-    if (not getattr(cfg, "mixed_custom_history", False) or not cfg.reconcile_generate_custom or len(gaps) != 1
+    if (not getattr(cfg, "mixed_custom_history", False) or not cfg.reconcile_generate_custom or not gaps
             or cfg.custom_alignment_mode != "epoch" or cfg.alignment_epoch_ms
             or metadata.get("history_calendar_id") not in (None, "crypto.24x7.utc")
             or not all(callable(getattr(storage, name, None)) for name in
                        ("query_bars_range_presence", "query_canonical_page"))):
         return None
     gap = gaps[0]
+    if len(gaps) > 1:
+        if any((item.symbol, item.interval, item.exchange, item.market_type) !=
+               (gap.symbol, gap.interval, gap.exchange, gap.market_type) for item in gaps):
+            return None
+        spec = parse_interval_spec(gap.interval)
+        if spec is None or spec.nominal_ms <= 0:
+            return None
+        first, last = min(item.start_ms for item in gaps), max(item.end_ms for item in gaps)
+        gap = replace(gap, start_ms=first, end_ms=last, missing_bars=(last-first)//spec.nominal_ms+1)
     detector = engine.detector
     resolve_calendar = getattr(detector, "_resolve_calendar", None)
     if not callable(resolve_calendar):

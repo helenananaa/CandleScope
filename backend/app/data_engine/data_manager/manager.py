@@ -681,6 +681,37 @@ class DataManager(DataManagerCore):
             logger.exception("Failed to list storage series for gap audit")
         return sorted((item for item in series if item[2] and item[3]), key=repair_series_order)
 
+    def gap_audit_input_only_series(self, inventory) -> set[RepairSeries]:
+        """Sparse mixed inputs do not request dense automatic source history.
+
+        Explicit range queries/manual audits retain ordinary repair semantics.
+        Periodic auditing still checks tracked live tails of these sources.
+        Stored composed targets retain this intent across release/restart.
+        """
+        inputs = set()
+        if not self._cfg.query.mixed_custom_history:
+            return inputs
+        for key in set(inventory) | self._gap_audit_tracked_series():
+            exchange, market_type, symbol, interval = key[:4]
+            identity = key[4] if len(key) == 5 else None
+            if identity is not None and not identity.is_legacy_default_for(exchange):
+                continue
+            try:
+                declaration = self.interval_resolver.history_composition_routes(
+                    exchange=exchange, market_type=market_type, interval=interval)
+                if declaration is None:
+                    continue
+                route = self.interval_resolver.resolve(exchange=exchange, market_type=market_type,
+                    interval=interval, purpose=IntervalPurpose.HISTORY)
+            except IntervalResolutionError:
+                continue  # Unsupported inventory retains the ordinary audit path.
+            base = parse_interval_spec(route.base_interval)
+            if base is None or route.spec.nominal_ms <= base.nominal_ms*self._cfg.query.max_limit:
+                continue
+            inputs.update(repair_series_key(exchange, market_type, symbol, source.canonical_interval)
+                          for source in declaration[1])
+        return inputs
+
     def gap_audit_tail_series(self) -> list[RepairSeries]:
         """Return live/prewarm series whose closed tail should stay current."""
         return sorted((item for item in self._gap_audit_tracked_series() if item[2] and item[3]), key=repair_series_order)

@@ -429,7 +429,7 @@ class BackfillEngine:
                 if required_contract is not None:
                     raise IntervalResolutionError(
                         IntervalResolutionErrorCode.HISTORY_COMPOSITION_UNAVAILABLE,
-                        'Qualified composed history could not admit this bounded repair',
+                        'Qualified composed history could not admit this bounded repair: ' + str(mixed_diagnostics.get('mixed_plan_fallback', 'unsupported_gap_shape')),
                         exchange=exchange, market_type=market_type, interval=gaps[0].interval,
                         purpose=IntervalPurpose.HISTORY)
                 plan = self.planner.plan(gaps)

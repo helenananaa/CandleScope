@@ -771,6 +771,7 @@ class BackfillCoordinator:
         tail_series: Iterable[RepairSeries] | None = None,
         detailed: bool = False,
         repair_wait_seconds: float = 0,
+        interior_exclusions: Iterable[RepairSeries] = (),
     ) -> ScanReport:
         # Manual and periodic audits advance the same bounded cursors. They
         # share the repair scheduler, never create a second repair queue.
@@ -778,6 +779,7 @@ class BackfillCoordinator:
             report = await self._audit_storage_series(
                 series, scan_limit=scan_limit, max_gaps=max_gaps,
                 repair=repair, tail_series=tail_series, detailed=detailed,
+                interior_exclusions=interior_exclusions,
             )
         if detailed and repair:
             await self._verify_audit_repairs(report, wait_seconds=repair_wait_seconds)
@@ -792,6 +794,7 @@ class BackfillCoordinator:
         repair: bool,
         tail_series: Iterable[RepairSeries] | None,
         detailed: bool,
+        interior_exclusions: Iterable[RepairSeries] = (),
     ) -> ScanReport:
         """Scan exact series and optionally queue repairs.
 
@@ -826,6 +829,7 @@ class BackfillCoordinator:
                 continue
             normalized_series.append(key)
         normalized_tail_series = {repair_series_key(*raw) for raw in tail_series or ()}
+        excluded_interiors = {repair_series_key(*raw) for raw in interior_exclusions}
 
         async def _queue_scan_gaps(
             scan: dict[str, Any],
@@ -1150,6 +1154,10 @@ class BackfillCoordinator:
                                 tail_exc,
                             )
 
+                if series_key in excluded_interiors:
+                    # Sparse canonical inputs of composed history have no
+                    # dense historical demand. Tail checks above remain live.
+                    continue
                 cursor_ms = self._gap_audit_cursors.get(series_key)
                 scan_kwargs: dict[str, Any] = {
                     "symbol": symbol,

@@ -223,3 +223,18 @@ async def test_gate_audit_repairs_contract_gap_despite_legacy_cooldown(tmp_path,
         requests[0], coverage_start_ms=300_000, coverage_end_ms=900_000,
     ) == 0
     assert ledger.get_status(legacy)["status"] == "failed"
+
+
+def test_sparse_composed_inputs_do_not_imply_dense_periodic_history_demand():
+    from app.data_engine.series_identity import KlineSeriesIdentity
+    from dataclasses import replace
+    dm = _data_manager(_Storage())
+    native = ('binance', 'futures', 'BTCUSDT', '1m')
+    large = ('binance', 'futures', 'BTCUSDT', '10007m')
+    foreign = (*native, replace(KlineSeriesIdentity.for_exchange('binance'), series_variant='mark'))
+    inventory = [native, large, foreign, ('binance', 'spot', 'BTCUSDT', '1m')]
+    excluded = dm.gap_audit_input_only_series(inventory)
+    assert native in excluded and foreign not in excluded
+    assert large not in excluded and ('binance', 'spot', 'BTCUSDT', '1m') not in excluded
+    # The stored target also protects sparse inputs after its live lease ends.
+    assert native in dm.gap_audit_input_only_series(inventory)

@@ -5679,3 +5679,26 @@ def test_repair_identity_alias_normalization_keeps_each_semantic_dimension_isola
             await coord.shutdown()
 
     asyncio.run(run())
+
+
+def test_periodic_input_exclusion_preserves_tail_and_manual_interior_audits():
+    async def run():
+        class Storage:
+            def __init__(self): self.calls = []
+            def scan_gaps(self, **kwargs):
+                self.calls.append(kwargs)
+                return {'gaps': [], 'truncated': False}
+            def get_bounds(self, *args, **kwargs):
+                return {'earliest_open_time': 0, 'latest_open_time': 60000}
+        storage, dm = Storage(), _DataManager()
+        coordinator = BackfillCoordinator(storage=storage, bars_backfilled=dm.on_bars_backfilled,
+            emit_event=dm.event_bus.emit, loop=asyncio.get_running_loop())
+        source = ('binance', 'futures', 'BTCUSDT', '1m')
+        await coordinator.audit_storage_series([source], tail_series=[source], repair=False,
+                                               interior_exclusions=[source])
+        assert len(storage.calls) == 1 and 'end_ms' in storage.calls[0]
+        storage.calls.clear()
+        await coordinator.audit_storage_series([source], repair=False)
+        assert len(storage.calls) == 1 and 'end_ms' not in storage.calls[0]
+        await coordinator.shutdown()
+    asyncio.run(run())
