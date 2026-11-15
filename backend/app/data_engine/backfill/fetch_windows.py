@@ -9,7 +9,7 @@ def selected_fetch_rows(task, bars):
     windows = task.metadata.get('mixed_fetch_windows')
     if windows is None:
         return bars
-    if not isinstance(windows, (list, tuple)) or not 1 <= len(windows) <= 4096:
+    if not isinstance(windows, (list, tuple)) or not 0 <= len(windows) <= 4096:
         raise ValueError('invalid mixed fetch windows')
     previous = None
     starts, ends = [], []

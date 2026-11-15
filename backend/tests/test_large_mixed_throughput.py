@@ -264,3 +264,27 @@ def test_nearly_complete_native_stream_reports_its_actual_hole(mixed_query, monk
         limit=2, market_type='futures', auto_backfill=True, min_revision=mixed_query.storage.revision_store.head())
     assert not result.complete and result.retryable and result.missing_ranges
     assert [(gap.interval, gap.start_ms, gap.end_ms) for gap in result.missing_ranges] == [('1m', 100*MINUTE, 100*MINUTE)]
+
+
+def test_multi_target_source_choice_prices_the_merged_http_envelopes(mixed_query):
+    from tests.test_mixed_backfill_plan import propose, gap
+    plan, report = propose(engine_for(mixed_query), mixed_query, gap(count=16))
+    assert plan is not None, report
+    # Counting each boundary independently favored >10k fine rows and roughly
+    # 32 requests. The actual envelope cost admits a much smaller coarse cover.
+    assert plan.estimated_requests <= 22
+    assert report['mixed_source_rows'] < 6000
+
+
+def test_archive_rest_slices_clip_the_exact_read_ahead_selection():
+    from types import SimpleNamespace
+    from app.data_engine.backfill.fetcher import _slice_task
+    from app.data_engine.backfill.fetch_windows import selected_fetch_rows
+    width = 4*60*MINUTE
+    item = coalesce_mixed_fetches([task(0), task(420*width)], page_size=1000, row_budget=16384)[0]
+    first = _slice_task(item, 0, 100*width, lane='rest_tail')
+    assert first.metadata['mixed_fetch_windows'] == [(0, 0)]
+    rows = [SimpleNamespace(open_time=at) for at in (0, width, 50*width)]
+    assert selected_fetch_rows(first, rows) == [rows[0]]
+    empty = _slice_task(item, 100*width, 200*width, lane='rest_fallback')
+    assert selected_fetch_rows(empty, rows) == []

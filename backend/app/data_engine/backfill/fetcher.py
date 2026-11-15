@@ -1475,12 +1475,16 @@ def _slice_task(
         while cursor <= end_ms:
             estimated += 1
             cursor = spec.next_ms(cursor)
+    metadata = {**task.metadata, "history_lane": lane}
+    if "mixed_fetch_windows" in metadata:
+        metadata["mixed_fetch_windows"] = [(max(first, start_ms), min(last, end_ms))
+            for first, last in metadata["mixed_fetch_windows"] if first <= end_ms and last >= start_ms]
     return replace(
         task,
         start_ms=int(start_ms),
         end_ms=int(end_ms),
         estimated_bars=estimated,
-        metadata={**task.metadata, "history_lane": lane},
+        metadata=metadata,
     )
 
 
