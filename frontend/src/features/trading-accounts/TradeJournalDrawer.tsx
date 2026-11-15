@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Icon } from "../../components/icons/Icon.js";
 import { Badge, Button, Disclosure, Drawer, Field, InlineAlert, Input, Textarea } from "../../components/ui/index.js";
-import { t } from "../../i18n/index.js";
+import { t, translateExchangeName, translateMarketType } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import {
   PRE_TRADE_FIELD_KEYS,
@@ -102,7 +102,7 @@ export default function TradeJournalDrawer({
     () => ({ exchange: source.exchange, marketType: source.marketType, symbol: source.symbol }),
     [source.exchange, source.marketType, source.symbol],
   );
-  const instrumentLabel = `${instrument.symbol} · ${instrument.exchange} ${instrument.marketType}`;
+  const instrumentLabel = `${instrument.symbol} · ${translateExchangeName(instrument.exchange)} ${translateMarketType(instrument.marketType)}`;
   const stage = stageOf(trade);
   const template = templateFor(note?.templateId);
 
