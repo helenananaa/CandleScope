@@ -2292,12 +2292,63 @@ class BackfillCoordinator:
             self._complete(request, outcome)
             return request.request_id, future
 
+        self._qualify_large_history_repair(prepared.request)
         canonical_id, future = self._scheduler.submit(prepared.request)
         if canonical_id != request.request_id:
             self._request_id_aliases[request.request_id] = canonical_id
             self._request_id_alias_expires_at[request.request_id] = None
             self._prune_retained_state()
         return canonical_id, future
+
+    def _qualify_large_history_repair(self, request: RepairRequest) -> None:
+        """Keep automatic large repairs on the enabled provider-qualified route.
+
+        Query/tail repairs need the same bounded splitting as composed HTTP
+        demands; a planning limit must not silently become dense base history.
+        Custom reducers, identities, calendars and disabled mixed work stay on
+        their original route. Explicit caller contracts are never replaced.
+        """
+        metadata = request.metadata
+        engine = self._engine
+        config = getattr(engine, 'config', None)
+        planner = getattr(engine, 'planner', None)
+        reconciler = getattr(engine, 'reconciler', None)
+        resolver = getattr(planner, '_interval_resolver', None)
+        if (metadata.get('required_history_composition') is not None
+                or metadata.get('history_calendar_id') != 'crypto.24x7.utc'
+                or metadata.get('history_exclusions')
+                or not getattr(config, 'mixed_custom_history', False)
+                or not getattr(config, 'reconcile_generate_custom', False)
+                or getattr(config, 'custom_alignment_mode', None) != 'epoch'
+                or getattr(config, 'alignment_epoch_ms', 0)
+                or resolver is None or reconciler is None
+                or getattr(planner, '_custom_alignment_fn', None) is not None
+                or getattr(planner, '_custom_decomposition_fn', None) is not None
+                or request.interval in getattr(planner, '_interval_mappings', {})
+                or getattr(reconciler, '_custom_aggregator', None) is not None
+                or getattr(reconciler, '_custom_dedup_fn', None) is not None):
+            return
+        identity = identity_from_metadata(request.exchange, metadata)
+        if identity is not None and not identity.is_legacy_default_for(request.exchange):
+            return
+        from app.data_engine.interval_resolution import IntervalPurpose, IntervalResolutionError
+        from app.data_engine.interval_policy import parse_interval_spec
+        try:
+            declaration = resolver.history_composition_routes(exchange=request.exchange,
+                market_type=request.market_type, interval=request.interval)
+            if declaration is None:
+                return
+            route = resolver.resolve(exchange=request.exchange, market_type=request.market_type,
+                interval=request.interval, purpose=IntervalPurpose.HISTORY)
+        except IntervalResolutionError:
+            return
+        base = parse_interval_spec(route.base_interval)
+        if (base is None or route.spec.phase_ms or route.spec.calendar_unit is not None
+                or route.spec.nominal_ms <= base.nominal_ms * max(1, config.fetch_batch_size)
+                or route.spec.next_ms(route.spec.floor_ms(request.end_ms)) > int(time.time()*1000)):
+            return
+        metadata.update(required_history_composition=declaration[0].contract_id,
+            history_composition_selected_by='coordinator_large_repair')
 
     def _demand_rejection_reason(self, request: RepairRequest) -> str | None:
         metadata = request.metadata or {}

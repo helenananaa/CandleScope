@@ -205,7 +205,11 @@ def test_outside_source_change_before_plan_capture_does_not_restart_planning(mix
 
 
 @pytest.mark.parametrize('change', ['outside', 'inside'])
-def test_standard_canonical_reducer_uses_its_own_range_proof(mixed_query, monkeypatch, change):
+@pytest.mark.parametrize('local', [False, True])
+def test_standard_canonical_reducer_uses_its_own_range_proof(mixed_query, monkeypatch, change, local):
+    if local:
+        mixed_query.storage.upsert_bars('BTCUSDT', '1m',
+            [row(at, MINUTE) for at in range(0, 4*89*MINUTE, MINUTE)], source='backfill', market_type='futures')
     engine = engine_for(mixed_query)
     engine.config.fetch_binance_futures_rate_limit_delay = 0
     engine._fetcher = HistoricalFetcher(engine.config, IntervalTransport(), IngestionConfig())
@@ -337,7 +341,8 @@ def test_scheduler_refines_work_without_failing_or_replacing_the_parent_owner():
     asyncio.run(run())
 
 
-def test_dense_fine_history_refines_the_real_coordinator_request(mixed_query):
+@pytest.mark.parametrize('qualified', [False, True])
+def test_dense_fine_history_refines_the_real_coordinator_request(mixed_query, qualified):
     from app.data_engine.data_manager.backfill_coordinator import BackfillCoordinator
     from app.data_engine.data_manager.backfill_contracts import RepairRequest
     mixed_query.storage.upsert_bars('BTCUSDT', '1m',
@@ -350,8 +355,9 @@ def test_dense_fine_history_refines_the_real_coordinator_request(mixed_query):
         coordinator = BackfillCoordinator(storage=mixed_query.storage, engine=engine,
             bars_backfilled=noop, emit_event=noop, loop=asyncio.get_running_loop(), max_concurrency=1, max_retries=1)
         request = RepairRequest('BTCUSDT', '10007m', 0, 3*WIDTH, market_type='futures', reason='initial_history',
-            metadata={'required_history_composition': 'binance.usdm.trade-klines/base-utc/1',
-                'acquisition_revision': mixed_query.storage.revision_store.head(), 'history_calendar_id': 'crypto.24x7.utc'})
+            metadata={'acquisition_revision': mixed_query.storage.revision_store.head(), 'history_calendar_id': 'crypto.24x7.utc'})
+        if qualified:
+            request.metadata['required_history_composition'] = 'binance.usdm.trade-klines/base-utc/1'
         try:
             outcome = await asyncio.wait_for(coordinator.request_and_wait(request), 30)
             assert outcome.verified_contiguous is True, outcome.error
@@ -361,3 +367,29 @@ def test_dense_fine_history_refines_the_real_coordinator_request(mixed_query):
             await coordinator.shutdown()
     asyncio.run(run())
     assert mixed_query.storage.count_bars('BTCUSDT', '10007m', 0, 4*WIDTH-1, market_type='futures') == 4
+
+
+@pytest.mark.parametrize('excluded', ['disabled', 'custom_reducer', 'custom_mapping', 'shifted_epoch',
+                                    'foreign_calendar', 'small_target', 'explicit_contract', 'forming'])
+def test_automatic_large_repair_qualification_preserves_other_contracts(mixed_query, excluded):
+    from app.data_engine.data_manager.backfill_coordinator import BackfillCoordinator
+    from app.data_engine.data_manager.backfill_contracts import RepairRequest
+    engine = engine_for(mixed_query)
+    async def noop(*args, **kwargs): pass
+    coordinator = BackfillCoordinator(storage=mixed_query.storage, engine=engine,
+        bars_backfilled=noop, emit_event=noop)
+    request = RepairRequest('BTCUSDT', '10007m', 0, 0, market_type='futures',
+        metadata={'history_calendar_id': 'crypto.24x7.utc'})
+    if excluded == 'disabled': engine.config.mixed_custom_history = False
+    elif excluded == 'custom_reducer': engine.reconciler._custom_aggregator = lambda *args: []
+    elif excluded == 'custom_mapping': engine.planner._interval_mappings['10007m'] = []
+    elif excluded == 'shifted_epoch': engine.config.alignment_epoch_ms = 1
+    elif excluded == 'foreign_calendar': request.metadata['history_calendar_id'] = 'other'
+    elif excluded == 'small_target': request.interval = '89m'
+    elif excluded == 'explicit_contract': request.metadata['required_history_composition'] = 'caller-contract'
+    elif excluded == 'forming':
+        import time
+        request.end_ms = int(time.time()*1000)
+    before = dict(request.metadata)
+    coordinator._qualify_large_history_repair(request)
+    assert request.metadata == before

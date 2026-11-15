@@ -136,7 +136,8 @@ def capture_standard_targets(store, scope, plan):
     """
     for decomp in plan.decompositions:
         spec = parse_interval_spec(decomp.custom_interval)
-        tasks = [task for task in plan.tasks if task.metadata.get('custom_interval') == decomp.custom_interval]
+        tasks = [task for task in (*plan.tasks, *plan.derived_source_windows)
+                 if task.metadata.get('custom_interval') == decomp.custom_interval]
         if (spec is None or spec.phase_ms or spec.calendar_unit is not None or not tasks
                 or spec.nominal_ms <= 60000 or spec.nominal_ms % 60000
                 or any(task.exchange != 'binance' or task.market_type != 'futures' or task.interval != '1m'
