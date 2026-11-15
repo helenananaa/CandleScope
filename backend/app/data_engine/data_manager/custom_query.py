@@ -42,7 +42,7 @@ from app.data_engine.kline_quality import incoming_source_can_replace, source_ra
 from app.data_engine.memory_budget import reserve_work
 
 from .cache import BarCache, HistoryCapacityReservation
-from .config import QueryConfig
+from .config import QueryConfig, CUSTOM_HISTORY_MAX_BASE_PAGES, CUSTOM_HISTORY_SOURCE_PAGE_ROWS
 from .models import BarData, MissingRange, QueryResult, QuerySource, SeriesKey
 from .history_stream import FixedHistoryStream, StreamingOrderError
 
@@ -53,11 +53,11 @@ TargetWriter = Callable[..., int]
 logger = logging.getLogger("data_manager.custom_query")
 
 
-_MAX_CUSTOM_BASE_PAGES = 32
+_MAX_CUSTOM_BASE_PAGES = CUSTOM_HISTORY_MAX_BASE_PAGES
 # Streaming also holds the target boundary/output allowance. A full 10k
 # source page plus its nested D126 read reservation can exceed the default
 # 64MiB owner budget for a valid small viewport of a large fixed interval.
-_STREAM_SOURCE_PAGE_ROWS = 4096
+_STREAM_SOURCE_PAGE_ROWS = CUSTOM_HISTORY_SOURCE_PAGE_ROWS
 _IO_COUNT_FIELDS = (
     "storage_reads",
     "storage_rows",

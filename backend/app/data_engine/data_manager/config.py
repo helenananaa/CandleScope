@@ -14,6 +14,10 @@ Usage::
 """
 from __future__ import annotations
 
+# Shared bounds for the existing paged single-base history route.
+CUSTOM_HISTORY_MAX_BASE_PAGES = 32
+CUSTOM_HISTORY_SOURCE_PAGE_ROWS = 4096
+
 from dataclasses import dataclass, field
 
 

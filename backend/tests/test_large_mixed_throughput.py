@@ -234,3 +234,33 @@ def test_multi_batch_target_write_retains_the_computation_proof(mixed_query):
         range_end_ms=3*WIDTH, exchange='binance', market_type='futures', metadata=META))
     assert report.status == BackfillStatus.COMPLETED, report.errors
     assert report.reconcile_result.custom_bars_written == 4
+
+
+def test_complete_native_stream_is_selected_before_optional_mixed_work(mixed_query, monkeypatch):
+    mixed_query.storage.upsert_bars('BTCUSDT', '1m',
+        [row(at, MINUTE) for at in range(0, 2*WIDTH, MINUTE)],
+        source='backfill', market_type='futures')
+    def forbidden(*args, **kwargs):
+        raise AssertionError('complete base history must not enter optional mixed planning')
+    monkeypatch.setattr(mixed_query, 'read_mixed_history_blocks', forbidden)
+    calls = []
+    mixed_query.set_backfill_trigger(lambda *args: calls.append(args))
+    result = mixed_query.query('BTCUSDT', '10007m', start_ms=0, end_ms=2*WIDTH-1,
+        limit=2, market_type='futures', auto_backfill=True, min_revision=mixed_query.storage.revision_store.head())
+    assert result.complete and len(result.bars) == 2 and not calls
+    assert all(bar.volume == bar.trades == 10007 for bar in result.bars)
+
+
+def test_nearly_complete_native_stream_reports_its_actual_hole(mixed_query, monkeypatch):
+    mixed_query.storage.upsert_bars('BTCUSDT', '1m',
+        [row(at, MINUTE) for at in range(0, 2*WIDTH, MINUTE) if at != 100*MINUTE],
+        source='backfill', market_type='futures')
+    def forbidden(*args, **kwargs):
+        raise AssertionError('one real native hole should use the bounded base route')
+    monkeypatch.setattr(mixed_query, 'read_mixed_history_blocks', forbidden)
+    calls = []
+    mixed_query.set_backfill_trigger(lambda *args: calls.append(args))
+    result = mixed_query.query('BTCUSDT', '10007m', start_ms=0, end_ms=2*WIDTH-1,
+        limit=2, market_type='futures', auto_backfill=True, min_revision=mixed_query.storage.revision_store.head())
+    assert not result.complete and result.retryable and result.missing_ranges
+    assert [(gap.interval, gap.start_ms, gap.end_ms) for gap in result.missing_ranges] == [('1m', 100*MINUTE, 100*MINUTE)]
