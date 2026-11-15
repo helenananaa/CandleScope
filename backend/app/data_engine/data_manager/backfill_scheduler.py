@@ -108,6 +108,7 @@ class _FetchChunk:
     defer_count: int = 0
     public_demand: PublicDemand | None = None
     dispatch_bypasses: int = 0
+    dispatched_at_monotonic: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -270,6 +271,12 @@ class BackfillScheduler:
         self.fairness_rotations = 0
         self.max_dispatch_bypass = 8
         self.aged_dispatches = 0
+        # A chunk served entirely from local data takes well under a second.
+        # Its owner may keep its turn for this long, so such chunks do not
+        # each wait a full rotation behind another owner's network work.
+        self.local_burst_seconds = 2.0
+        self.local_burst_dispatches = 0
+        self._local_burst: dict[tuple[int, bool], tuple[str, float]] = {}
 
     def submit(self, request: RepairRequest) -> tuple[str, asyncio.Future[RepairOutcome]]:
         if self._shutdown:
@@ -875,6 +882,7 @@ class BackfillScheduler:
             "foreground_reserve_dispatches": self.foreground_reserve_dispatches,
             "covered_chunks_skipped": self.covered_chunks_skipped,
             "fairness_rotations": self.fairness_rotations,
+            "local_burst_dispatches": self.local_burst_dispatches,
             "aged_dispatches": self.aged_dispatches,
             "max_dispatch_bypass": self.max_dispatch_bypass,
             "running_background_chunks": self._running_background_count(),
@@ -1012,13 +1020,17 @@ class BackfillScheduler:
             # page size (for example a monthly target sourced from minutes).
             # Admit exactly one target with an explicit, finite source budget
             # instead of falling back to the old unbounded target chunk.
-            minimum_budget = max(1, (plan.source_padding_bars + 1) * plan.source_factor)
+            declaration = self._interval_resolver.history_composition_routes(
+                exchange=request.exchange, market_type=request.market_type, interval=request.interval)
+            qualified = (declaration is not None and request.metadata.get("required_history_composition") == declaration[0].contract_id)
+            targets = min(16, max(1, int(requested_target_bars))) if qualified else 1
+            minimum_budget = max(1, (plan.source_padding_bars + targets) * plan.source_factor)
             return resolve_interval_work_plan(
                 self._interval_resolver,
                 exchange=request.exchange,
                 market_type=request.market_type,
                 interval=request.interval,
-                requested_target_bars=1,
+                requested_target_bars=targets,
                 source_row_budget=minimum_budget,
                 source_padding_bars=plan.source_padding_bars,
                 purpose=IntervalPurpose.HISTORY,
@@ -1111,7 +1123,7 @@ class BackfillScheduler:
             return state.last_dispatch_sequence if state is not None else 0
         if aged:
             item = min(aged, key=lambda row: row[2])
-        else:
+        elif (item := self._local_burst_candidate()) is None:
             # Avoiding only the immediately previous owner alternates the
             # first two large requests forever ahead of a third/fourth chart.
             # Store one turn on the existing request owner, not another queue.
@@ -1121,6 +1133,42 @@ class BackfillScheduler:
         self._ready.remove(item)
         heapq.heapify(self._ready)
         return item
+
+    def _fairness_lane(self, request: RepairRequest) -> tuple[int, bool]:
+        return int(request.priority or 100), self._is_background(request)
+
+    def _continues_local_burst(self, request: RepairRequest, now_monotonic: float) -> bool:
+        burst = self._local_burst.get(self._fairness_lane(request))
+        return (burst is not None and burst[0] == self._fairness_owner(request)
+                and now_monotonic - burst[1] < self.local_burst_seconds)
+
+    def _local_burst_candidate(self):
+        """The burst owner's next ready chunk, while its slice lasts.
+
+        Only among the best-priority work, and only after aged chunks, whose
+        handling is unchanged. The slice is what bounds a burst.
+        """
+        if not self._local_burst or not self._ready:
+            return None
+        now_monotonic = time.monotonic()
+        best = min(row[0] for row in self._ready)
+        rows = [row for row in self._ready
+                if row[0] == best and (chunk := self._chunks.get(row[3])) is not None
+                and chunk.eligible_at_monotonic <= now_monotonic
+                and self._continues_local_burst(chunk.request, now_monotonic)]
+        return min(rows, key=lambda row: row[2]) if rows else None
+
+    def _note_local_burst(self, chunk: _FetchChunk, outcome: RepairOutcome | None) -> None:
+        """Start, keep or end the owner's burst from what its chunk just did."""
+        lane, owner = self._fairness_lane(chunk.request), self._fairness_owner(chunk.request)
+        current = self._local_burst.get(lane)
+        if (outcome is not None and not self._is_failed(outcome.status)
+                and getattr(outcome.report, "network_free", False) is True):
+            if current is None or current[0] != owner:
+                # The slice includes this first chunk's own time on the lane.
+                self._local_burst[lane] = (owner, chunk.dispatched_at_monotonic or time.monotonic())
+        elif current is not None and current[0] == owner:
+            del self._local_burst[lane]
 
     @staticmethod
     def _shared_gap_input(request: RepairRequest) -> tuple[tuple[str, ...], int, int] | None:
@@ -1198,16 +1246,16 @@ class BackfillScheduler:
                 ):
                     skipped.append(item)
                     continue
-                fairness_lane = (
-                    int(chunk.request.priority or 100),
-                    self._is_background(chunk.request),
-                )
+                fairness_lane = self._fairness_lane(chunk.request)
                 fairness_owner = self._fairness_owner(chunk.request)
-                if (
+                repeats_owner = (
                     chunk.dispatch_bypasses < self.max_dispatch_bypass
                     and self._last_dispatch_owner.get(fairness_lane) == fairness_owner
                     and self._has_fairness_alternative(chunk, lane=fairness_lane)
-                ):
+                )
+                continues_burst = repeats_owner and self._continues_local_burst(
+                    chunk.request, now_monotonic)
+                if repeats_owner and not continues_burst:
                     self.fairness_rotations += 1
                     skipped.append(item)
                     continue
@@ -1224,6 +1272,12 @@ class BackfillScheduler:
                 chunk.retry_at_ms = None
                 chunk.defer_reason = None
                 chunk.rate_limit_bucket = None
+                chunk.dispatched_at_monotonic = now_monotonic
+                if continues_burst:
+                    self.local_burst_dispatches += 1
+                elif (burst := self._local_burst.get(fairness_lane)) is not None and burst[0] != fairness_owner:
+                    # Another owner has the lane now; a later burst starts afresh.
+                    del self._local_burst[fairness_lane]
                 series.active = chunk.parent_id
                 if chunk.parent_id in series.pending:
                     series.pending.remove(chunk.parent_id)
@@ -1498,9 +1552,11 @@ class BackfillScheduler:
                     outcome = await self._execute(chunk.request)
             except RepairRetryDeferred as exc:
                 chunk.request._retry_attempt = exc.attempt + 1
+                self._note_local_burst(chunk, None)
                 await self._defer_chunk(chunk, exc)
                 return
             except RateLimitDeferred as exc:
+                self._note_local_burst(chunk, None)
                 if chunk.public_demand is not None:
                     get_public_admission().protect(
                         chunk.public_demand, exc.bucket_key,
@@ -1522,6 +1578,7 @@ class BackfillScheduler:
                     status="failed",
                     error=str(exc),
                 )
+            self._note_local_burst(chunk, outcome)
             await self._finish_chunk(chunk, outcome)
         finally:
             if foreground_chunk or not self._is_background(chunk.request):

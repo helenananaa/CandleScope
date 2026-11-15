@@ -225,7 +225,8 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
                 await builder.prefetch(batch)
                 for cover in batch:
                     await builder.refine(cover)
-            tasks = planner._deduplicate_tasks(builder.tasks)
+            tasks = coalesce_mixed_fetches(planner._deduplicate_tasks(builder.tasks),
+                page_size=page_size, row_budget=MAX_SOURCE_ROWS)
             windows = planner._deduplicate_tasks(builder.windows)
             requests = sum(math.ceil(task.estimated_bars / page_size) for task in tasks)
             if requests > baseline_requests:
@@ -430,9 +431,14 @@ async def checked_mixed_windows(storage, target, policy, windows):
     result = []
     if len(windows) > MAX_TASKS:
         raise StaleAcquisition("mixed materialization windows exceed their bound")
-    for offset in range(0, len(windows), 64):
+    pending = deque(windows)
+    positions = seen = 0
+    while pending:
         batch, presence = [], {}
-        for window in windows[offset:offset + 64]:
+        for window in (pending.popleft() for _ in range(min(64, len(pending)))):
+            seen += 1
+            if seen > MAX_TASKS:
+                raise StaleAcquisition("mixed canonical refinement exceeds task bound")
             interval, first, last, identity = window
             if interval not in selected_widths or (identity and not identity.is_legacy_default_for(target.exchange)):
                 raise StaleAcquisition("mixed materialization source identity changed")
@@ -453,7 +459,57 @@ async def checked_mixed_windows(storage, target, policy, windows):
             if not any(deleted or presence[(source, lo, hi)] for source, lo, hi, deleted
                        in finer_requirements(span, precedences, mutations)):
                 result.append(window)
+            else:
+                # Read-ahead can make a finer canonical grid authoritative in
+                # a formerly coarse span. Refine locally before reducing;
+                # never ignore those rows or redownload the entire target.
+                finer = tuple(FixedHistorySource(replace(target, interval=interval), width, 0,
+                    ((span.start_ms, span.end_ms),), frozenset(policy.fields), policy.contract_id)
+                    for interval, width in selected_widths.items() if width < span.source.width_ms)
+                if not finer:
+                    continue
+                cover = await run_preparation(plan_fixed_range, target, span.start_ms, span.end_ms,
+                    finer, required_fields=frozenset(policy.fields), max_positions=MAX_POSITION_WORK-positions)
+                positions += cover.explored_positions
+                pending.extend((part.source.series.interval, part.start_ms,
+                    part.end_ms-part.source.width_ms, window[3]) for part in cover.spans)
     _, current = await run_storage(store.read_versions, keys)
     if tuple(current) != versions:
         raise StaleAcquisition("mixed post-commit canonical inputs changed")
     return result
+
+
+def coalesce_mixed_fetches(tasks, *, page_size, row_budget):
+    """Bounded read-ahead across holes on one qualified canonical source grid.
+
+    Extra native rows go through the normal writer and finer-precedence recheck;
+    they never become additional reduction windows. Limit total fetched slots,
+    including overread, to the existing mixed source budget.
+    """
+    total = sum(task.estimated_bars for task in tasks)
+    groups = {}
+    for task in tasks:
+        key = (task.exchange, task.market_type, task.symbol, task.interval,
+               task.metadata.get("history_composition_contract"), task.metadata.get("custom_interval"),
+               repr(identity_from_metadata(task.exchange, task.metadata)))
+        groups.setdefault(key, []).append(task)
+    output = []
+    for group in groups.values():
+        group.sort(key=lambda task: task.start_ms)
+        current = group[0]
+        width = parse_interval_spec(current.interval).nominal_ms
+        for task in group[1:]:
+            end = max(current.end_ms, task.end_ms)
+            slots = (end - current.start_ms) // width + 1
+            extra = slots - current.estimated_bars - task.estimated_bars
+            if (current.metadata.get("history_composition_contract") is not None
+                    and 0 <= extra and slots <= page_size and total + extra <= row_budget):
+                total += extra
+                current = replace(current, end_ms=end, estimated_bars=slots,
+                    metadata={**current.metadata, "mixed_fetch_read_ahead": True,
+                              "ledger_range": {"start_ms": current.start_ms, "end_ms": end}})
+            else:
+                output.append(current)
+                current = task
+        output.append(current)
+    return output

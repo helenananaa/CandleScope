@@ -230,7 +230,7 @@ def test_existing_source_aware_scheduler_completes_the_full_composed_demand(comp
                 **options(manager), 'end_ms': 8 * WIDTH - 1, 'limit': 8})
             assert result.complete and len(result.bars) == 8
             assert all(bar.trusted_final and bar.volume == bar.trades == 10007 for bar in result.bars)
-            assert {task.metadata['chunk_sequence'] for task in upstream.calls} == set(range(8))
+            assert {task.metadata['chunk_sequence'] for task in upstream.calls} == {0}
             assert all(task.metadata['required_history_composition'] == CONTRACT for task in upstream.calls)
             assert len(upstream.calls) < 40
         finally:

@@ -479,6 +479,7 @@ class Acquisition:
     accepted: dict[tuple, int] = field(default_factory=dict)
     native_history_views: list = field(default_factory=list, repr=False)
     derived_target_views: list = field(default_factory=list, repr=False)
+    mixed_target_views: list = field(default_factory=list, repr=False)
     warmup_view: WarmupView | None = field(default=None, repr=False)
     lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
 
@@ -547,6 +548,9 @@ def guarded_write(conn, values, *, commit=True, native_rows=None, source=None, n
         if view is None and commit and native_empty_ranges is not None:
             view = matching_empty_view(scope, values, native_empty_ranges)
         computation = matching_computation(scope, values, native_rows, source) if commit else None
+        if computation is None and commit:
+            from .mixed_history_fence import matching_computation as matching_mixed_computation
+            computation = matching_mixed_computation(scope, values, native_rows, source)
         targets = affected_targets(scope, values, native_rows) if view is not None else ()
         warmup = scope.warmup_view
         # Native range permission still belongs to this warmup acquisition.
@@ -669,6 +673,17 @@ async def prepare_derived_targets(storage, plan):
     from .derived_history_fence import capture_targets
     await run_storage(capture_targets, getattr(storage, 'revision_store', None),
                       _acquisition.get(), plan)
+    from .mixed_history_fence import capture_targets as capture_mixed_targets
+    await run_storage(capture_mixed_targets, getattr(storage, 'revision_store', None),
+                      _acquisition.get(), plan)
+
+
+async def prepare_mixed_computation(storage, decomp):
+    from app.core.executors import run_storage
+    from .mixed_history_fence import capture_computations, computation_scope
+    views = await run_storage(capture_computations, getattr(storage, 'revision_store', None),
+                              _acquisition.get(), decomp)
+    return computation_scope(views)
 
 
 async def prepare_derived_inputs(storage, decomp, grouped):

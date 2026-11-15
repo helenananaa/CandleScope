@@ -3660,7 +3660,30 @@ class BackfillCoordinator:
             written_range_count=len(report_ranges),
             written_ranges=tuple(range_summaries),
             elapsed_ms=int(getattr(report, "elapsed_ms", 0) or 0),
+            network_free=cls._report_network_free(report, fetch_results),
         )
+
+    @staticmethod
+    def _report_network_free(report: Any, fetch_results: list[Any]) -> bool:
+        """Whether a completed run wrote bars entirely from local data.
+
+        REST pages and archive downloads are the engine's exchange traffic.
+        Anything unfinished, failed, empty or unknown counts as network work.
+        """
+        status = getattr(report, "status", None)
+        if getattr(status, "value", status) != "completed":
+            return False
+        reconcile = getattr(report, "reconcile_result", None)
+        if (int(getattr(reconcile, "bars_written", 0) or 0)
+                + int(getattr(reconcile, "custom_bars_written", 0) or 0)) <= 0:
+            return False
+        for result in fetch_results:
+            metadata = getattr(result, "metadata", None)
+            downloaded = metadata.get("archive_download_bytes", 0) if isinstance(metadata, dict) else 0
+            if (int(getattr(result, "pages_fetched", 0) or 0) or int(downloaded or 0)
+                    or getattr(result, "errors", None)):
+                return False
+        return True
 
     @staticmethod
     def _report_fetch_results(report: Any) -> list[Any]:

@@ -222,6 +222,10 @@ class IngestionConfig:
             4,
         ),
     )
+    # Shared physical USD-M admission must use the backfill endpoint setting.
+    fetch_binance_futures_concurrency: int = field(
+        default_factory=lambda: _env_int("BACKFILL_FETCH_BINANCE_FUTURES_CONCURRENCY", 3),
+    )
     # HTTP proxy (None = no proxy)
     http_proxy: str | None = field(default_factory=_load_persisted_http_proxy)
     # Proxy mode: "none" | "system" | "custom"

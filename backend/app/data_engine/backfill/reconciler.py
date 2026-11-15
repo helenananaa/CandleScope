@@ -409,10 +409,12 @@ class Reconciler:
         for fetch_result in fetch_results:
             if fetch_result.status == BackfillStatus.FAILED:
                 continue
+            task = fetch_result.task
             declared = fetch_result.metadata.get("rest_ranges")
+            if not isinstance(declared, list) and task.metadata.get("history_composition_contract") is not None:
+                declared = [[task.start_ms, task.end_ms]]
             if not isinstance(declared, list):
                 continue
-            task = fetch_result.task
             key = (task.exchange, task.market_type, task.symbol, task.interval)
             for item in declared:
                 try:
@@ -922,7 +924,12 @@ class Reconciler:
                 lease.fail(exc)
             raise
 
-    async def _generate_custom_bars(
+    async def _generate_custom_bars(self, decomp, grouped, source_windows, **kwargs):
+        from app.data_engine.storage.revisions import prepare_mixed_computation
+        with await prepare_mixed_computation(self._storage, decomp):
+            return await self._generate_custom_bars_inner(decomp, grouped, source_windows, **kwargs)
+
+    async def _generate_custom_bars_inner(
         self,
         decomp: IntervalDecomposition,
         grouped: dict[tuple[str, str, str, str], list[FetchedBar]],

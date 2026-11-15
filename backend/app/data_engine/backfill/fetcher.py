@@ -469,6 +469,14 @@ class HistoricalFetcher:
             req = current_request
             if collector is not None:
                 req = replace(req, limit=min(req.limit or batch_size, max_total-collector.raw_count))
+            if task.exchange == "binance" and req.start_ms is not None and req.end_ms is not None:
+                spec = parse_interval_spec(task.interval)
+                if spec is not None and spec.nominal_ms > 0 and spec.calendar_unit is None:
+                    first = spec.floor_ms(req.start_ms)
+                    if first < req.start_ms:
+                        first = spec.next_ms(first)
+                    slots = max(1, (req.end_ms - first) // spec.nominal_ms + 1)
+                    req = replace(req, limit=min(req.limit or batch_size, slots))
             req.history_projection = True
 
             # Fetch with retry
@@ -489,7 +497,7 @@ class HistoricalFetcher:
                     await self._rate_limit_admission(task, req)
                     physical = (callable(getattr(self._transport, "manages_physical_admission", None))
                                 and self._transport.manages_physical_admission(req))
-                    exchange_semaphore = nullcontext() if physical else self._get_exchange_semaphore(task, req)
+                    exchange_semaphore = self._get_exchange_semaphore(task, req)
                     async with exchange_semaphore:
                         quota_reservation: RateLimitReservation | None = None
                         if self._custom_rate_limiter is None and not physical:
@@ -1429,7 +1437,12 @@ def planned_write_windows(
     for task in tasks:
         refs = route_plan.refs_for(task)
         interval_spec = parse_interval_spec(task.interval)
-        if not refs or interval_spec is None:
+        if interval_spec is None:
+            continue
+        if not refs:
+            if task.metadata.get("history_composition_contract") is not None:
+                windows.append(PlannedWriteWindow(task.exchange, task.market_type, task.symbol,
+                    task.interval, task.start_ms, task.end_ms, False, task.metadata))
             continue
         _, uncovered = _routed_coverage(task, refs, interval_spec)
         spans = [(start, end, False) for start, end in uncovered]

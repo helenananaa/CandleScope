@@ -480,7 +480,7 @@ class CustomIntervalQueryService:
                                        **({'composition_contract': composition_contract}
                                           if composition_contract is not None else {}), **bounds)
         if result is None:
-            if composition_contract is not None:
+            if composition_contract is not None or report.get("mixed_fallback_reason") == "planning_budget":
                 # Failure/work limits do not authorize the larger legacy base
                 # route or a new network repair. Retain only stored final rows.
                 spec = parse_interval_spec(key.interval)
