@@ -189,7 +189,7 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
     try:
         with work:
             cold = all(change is None or change['start_ms'] >= stop for change in changes)
-            if cold:
+            if cold or (stop-first) // spec.nominal_ms > 1:
                 planning = budget.reserve("history-backfill", PLAN_BYTES) if budget else nullcontext()
                 with planning:
                     choice = await run_preparation(choose_cold_sources, target, first, stop, sources,

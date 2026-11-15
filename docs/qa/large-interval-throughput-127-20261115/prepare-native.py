@@ -4,9 +4,10 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 
 root = Path(__file__).resolve().parents[3]
-output = root / 'output/large-interval-throughput-127-20261115/candidate'
+output = root / 'output/large-interval-throughput-127-20261115' / (sys.argv[1] if len(sys.argv) > 1 else 'candidate')
 source = Path('/Users/ryanliang/CandleScope/.claude/worktrees/local-chunk-burst/output/local-chunk-burst-rerun-20261115/candidate/CandleScope.app')
 app = output / 'CandleScope.app'
 assert not app.exists()

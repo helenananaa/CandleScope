@@ -142,3 +142,16 @@ def test_only_qualified_composed_requests_get_larger_target_chunks():
         exchange='binance', market_type='futures', interval='10007m')[0]
     request.metadata['required_history_composition'] = policy.contract_id
     assert scheduler._source_aware_chunk_plan(request, 40).effective_target_bars == 16
+
+
+def test_calendar_month_request_preserves_exchange_owned_pagination():
+    from types import SimpleNamespace
+    calls = []
+    async def fetch(request):
+        calls.append(request)
+        return []
+    item = replace(task(0), interval='1M', end_ms=90*1440*MINUTE, metadata={})
+    cfg = BackfillConfig(history_archive_enabled=False, fetch_binance_futures_rate_limit_delay=0)
+    fetcher = HistoricalFetcher(cfg, SimpleNamespace(http_fetch=fetch), IngestionConfig())
+    asyncio.run(fetcher.fetch([item]))
+    assert len(calls) == 1 and calls[0].limit == cfg.fetch_batch_size

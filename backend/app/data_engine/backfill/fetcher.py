@@ -46,7 +46,7 @@ from app.exchanges import (
     get_exchange_registry,
 )
 from app.exchanges.rate_limits import RateLimitReservation
-from app.data_engine.interval_policy import parse_interval_ms, parse_interval_spec
+from app.data_engine.interval_policy import IntervalAlignment, parse_interval_ms, parse_interval_spec
 
 from ..ingestion.config import IngestionConfig
 from ..ingestion.metrics import LayerMetrics
@@ -471,7 +471,7 @@ class HistoricalFetcher:
                 req = replace(req, limit=min(req.limit or batch_size, max_total-collector.raw_count))
             if task.exchange == "binance" and req.start_ms is not None and req.end_ms is not None:
                 spec = parse_interval_spec(task.interval)
-                if spec is not None and spec.nominal_ms > 0 and spec.calendar_unit is None:
+                if spec is not None and spec.nominal_ms > 0 and spec.alignment is not IntervalAlignment.CALENDAR_MONTH and spec.timezone is None:
                     first = spec.floor_ms(req.start_ms)
                     if first < req.start_ms:
                         first = spec.next_ms(first)
@@ -1440,9 +1440,8 @@ def planned_write_windows(
         if interval_spec is None:
             continue
         if not refs:
-            if task.metadata.get("history_composition_contract") is not None:
-                windows.append(PlannedWriteWindow(task.exchange, task.market_type, task.symbol,
-                    task.interval, task.start_ms, task.end_ms, False, task.metadata))
+            windows.append(PlannedWriteWindow(task.exchange, task.market_type, task.symbol,
+                task.interval, task.start_ms, task.end_ms, False, task.metadata))
             continue
         _, uncovered = _routed_coverage(task, refs, interval_spec)
         spans = [(start, end, False) for start, end in uncovered]

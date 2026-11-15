@@ -209,6 +209,7 @@ def test_fetcher_reports_owned_archive_days_and_rest_edges():
         (EDGE[0], EDGE[1], False),
         (DAY0 + 2 * DAY, DAY0 + 2 * DAY + 30 * MINUTE, False),
         (DAY0, DAY0 + DAY - 1, True),
+        (plain.start_ms, plain.end_ms, False),
     ]
     assert all((item.exchange, item.market_type, item.symbol, item.interval) == ("binance", "futures", "BTCUSDT", "1m")
                for item in planned_write_windows([routed], plan))
