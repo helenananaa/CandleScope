@@ -319,3 +319,29 @@ def test_only_the_changed_edge_is_lost(store):
     assert outcome.write_errors == 1
     assert stored(store, EDGE[0], DAY0 + DAY - 1) == 69 + 1_440
     assert stored(store, *tail) == 1
+
+
+@pytest.mark.parametrize('changed', ['outside', 'inside'])
+def test_standard_target_permission_follows_owned_windows_not_wide_parent(store, changed):
+    from app.data_engine.backfill.models import IntervalComponent, IntervalDecomposition
+    from app.data_engine.storage.mixed_history_fence import capture_targets, capture_computations, computation_scope
+    width = 89*MINUTE
+    task = BackfillTask('BTCUSDT', '1m', 0, 999*MINUTE, exchange='binance', market_type='futures',
+        metadata={'custom_interval':'89m','requested_range':{'start_ms':0,'end_ms':90*DAY}})
+    decomp = IntervalDecomposition('89m', width, [IntervalComponent('1m', 89, MINUTE)])
+    plan = BackfillPlan(gaps=[], tasks=[task], decompositions=[decomp], custom_intervals=['89m'])
+    scope = store.revision_store.acquisition()
+    capture_targets(store.revision_store, scope, plan, allow_standard=True)
+    with acquisition_scope(scope):
+        asyncio.run(prepare_planned_write_views(store, [
+            window(0, DAY-1, archive=True, metadata={'custom_interval':'89m'}),
+            window(DAY, 2*DAY-1, archive=True, metadata={'custom_interval':'89m'})]))
+        write(range(0, 2*DAY, MINUTE))
+        views = capture_computations(store.revision_store, scope, decomp)
+        Context().run(write, [50*DAY if changed == 'outside' else 0], close=11)
+        with computation_scope(views):
+            if changed == 'inside':
+                with pytest.raises(StaleAcquisition):
+                    write([25*width], interval='89m', width=width, source='backfill_aggregated')
+            else:
+                assert write([25*width], interval='89m', width=width, source='backfill_aggregated') == 1

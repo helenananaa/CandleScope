@@ -36,6 +36,11 @@ from .models import BackfillTask, FetchedBar
 
 logger = logging.getLogger("backfill.HistoricalSourceRouter")
 
+# Match the bounded native write-view footprints. Object count alone allows
+# three minute-grid monthly ZIPs to turn a 1,000-row task into 130,000 rows.
+MAX_USDM_ARCHIVE_OBJECT_ROWS = 8192
+MAX_USDM_ARCHIVE_ROUTE_ROWS = 32768
+
 
 @dataclass(frozen=True, slots=True)
 class ArchiveObjectResult:
@@ -335,6 +340,10 @@ class HistoricalSourceRouter:
                     rest_page_size=capabilities.rest_page_size,
                     minimum_pages=max(1, self._cfg.history_archive_min_rest_pages),
                 )
+                if exchange == 'binance' and market_type == 'futures':
+                    bounded = _bounded_usdm_archive_candidates(candidates, run, interval)
+                    self._metrics.inc('archive_source_budget_skips', len(candidates)-len(bounded))
+                    candidates = bounded
                 if not candidates:
                     continue
                 # Local ZIPs are usable without contacting the resolver or
@@ -1034,6 +1043,31 @@ def _filter_daily_candidates(
     if _ceil_div(daily_bars, rest_page_size) < minimum_pages:
         return monthly
     return monthly + daily
+
+
+def _bounded_usdm_archive_candidates(refs, tasks, interval):
+    """Bound imports/prefetch by native rows and the current work envelope.
+
+    A persistent warm ZIP is not free reduction work. Oversized monthly or
+    distant parent objects stay out of this page's acquisition; normal bounded
+    REST pages remain available. The shared archive cache is left untouched.
+    """
+    width = parse_interval_ms(interval)
+    if not width or not tasks:
+        return []
+    first, last = min(task.start_ms for task in tasks), max(task.end_ms for task in tasks)
+    ordered = sorted(refs, key=lambda ref: _range_distance(first, last, ref.start_ms, ref.end_ms))
+    selected, rows = [], 0
+    for ref in ordered:
+        count = (ref.end_ms-ref.start_ms)//width+1
+        lo, hi = min(first, ref.start_ms), max(last, ref.end_ms)
+        if (count > MAX_USDM_ARCHIVE_OBJECT_ROWS or rows+count > MAX_USDM_ARCHIVE_ROUTE_ROWS
+                or (hi-lo)//width+1 > MAX_USDM_ARCHIVE_ROUTE_ROWS):
+            continue
+        selected.append(ref)
+        rows += count
+        first, last = lo, hi
+    return selected
 
 
 def _archive_decision_range(tasks: list[BackfillTask]) -> tuple[int, int]:

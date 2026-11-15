@@ -831,3 +831,45 @@ def test_okx_archive_flag_off_skips_okx_tasks(tmp_path, monkeypatch) -> None:
     plan = asyncio.run(router.prepare([task]))
     assert plan.refs_by_task == {}
 
+
+
+def test_usdm_small_page_does_not_import_a_whole_minute_month(tmp_path) -> None:
+    async def run():
+        provider = BinanceKlineArchiveProvider()
+        refs = provider.plan_objects(market_type='futures', symbol='BTCUSDT', interval='1m',
+            start_ms=_ms(datetime(2024, 1, 1, tzinfo=UTC)),
+            end_ms=_ms(datetime(2024, 2, 1, tzinfo=UTC))-1,
+            now_ms=_ms(datetime(2024, 4, 1, tzinfo=UTC)))
+        ref = next(item for item in refs if item.period == '2024-01')
+        archive_http = _ArchiveHttp(ref, _archive_payload(ref, 2))
+        config = _config(tmp_path)
+        router = HistoricalSourceRouter(config, cache=HistoricalArchiveCache(tmp_path,
+            max_bytes=config.history_archive_cache_max_bytes), http=archive_http)
+        task = _task(ref, 0, 1)
+        task.market_type = 'futures'
+        rest = _RestTransport(_rest_rows(ref.start_ms, 2))
+        fetcher = HistoricalFetcher(config, rest, IngestionConfig(), source_router=router)
+        result = (await fetcher.fetch([task]))[0]
+        assert result.status is BackfillStatus.COMPLETED and result.bars_count == 2
+        assert len(rest.requests) == 1 and archive_http.downloads == 0
+        assert not result.metadata.get('archive_object_count')
+        assert router.snapshot()['metrics']['counters']['archive_source_budget_skips'] == 1
+    asyncio.run(run())
+
+
+def test_usdm_archive_bounds_price_rows_and_envelope_not_only_object_count():
+    from types import SimpleNamespace
+    from app.data_engine.backfill.source_router import _bounded_usdm_archive_candidates
+    day = 1440*MINUTE_MS
+    refs = [SimpleNamespace(start_ms=n*day, end_ms=(n+1)*day-1) for n in range(40)]
+    task = BackfillTask('BTCUSDT', '1m', 20*day, 20*day+999*MINUTE_MS,
+                        exchange='binance', market_type='futures')
+    selected = _bounded_usdm_archive_candidates(refs, [task], '1m')
+    assert len(selected) == 22 and refs[20] in selected
+    assert sum((r.end_ms-r.start_ms)//MINUTE_MS+1 for r in selected) <= 32768
+    assert (max(r.end_ms for r in selected)-min(r.start_ms for r in selected))//MINUTE_MS+1 <= 32768
+    distant = SimpleNamespace(start_ms=90*day, end_ms=91*day-1)
+    assert _bounded_usdm_archive_candidates([distant], [task], '1m') == []
+    # Monthly coarse grids remain a useful, bounded archive route.
+    coarse = SimpleNamespace(start_ms=0, end_ms=31*day-1)
+    assert _bounded_usdm_archive_candidates([coarse], [BackfillTask('BTCUSDT','4h',0,0)], '4h') == [coarse]

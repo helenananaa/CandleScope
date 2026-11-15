@@ -130,8 +130,8 @@ def computation_scope(views):
 def capture_standard_targets(store, scope, plan):
     """The built-in fixed 1m reducer uses only its canonical minute inputs.
 
-    Routed parent prefill may contribute whole daily objects around the parent
-    demand. Include those finite calendar edges in the pre-fetch target proof.
+    Actual tasks establish initial permission. Routing later extends it to the
+    bounded owned archive/REST footprints before acquisition starts.
     Other identities, grids, calendars and custom reducers stay on the strict path.
     """
     for decomp in plan.decompositions:
@@ -148,10 +148,6 @@ def capture_standard_targets(store, scope, plan):
                and not identity.is_legacy_default_for('binance') for task in tasks):
             continue
         first, last = min(task.start_ms for task in tasks), max(task.end_ms for task in tasks)
-        for task in tasks:
-            parent = task.metadata.get('requested_range', {})
-            if type(parent.get('start_ms')) is int and type(parent.get('end_ms')) is int:
-                first, last = min(first, parent['start_ms']-86400000), max(last, parent['end_ms']+86400000)
         start, end = max(0, spec.floor_ms(first)), spec.floor_ms(last)
         if not 0 < (end-start)//spec.nominal_ms+1 <= 512:
             continue
@@ -172,3 +168,27 @@ def affected_targets(scope, key, rows):
     first, last = min(row['open_time'] for row in rows), max(row['close_time'] for row in rows)
     return tuple(view for view in scope.mixed_target_views if key in view.dependencies
                  and first < view.end+view.duration and last >= view.start)
+
+
+def extend_standard_targets(store, scope, windows):
+    """Add only the actual routed 1m write footprint to a builtin target proof."""
+    if store is None or scope is None or not scope.mixed_target_views:
+        return
+    with scope.lock, closing(store.connect()) as conn, conn:
+        conn.execute('BEGIN')
+        for target in scope.mixed_target_views:
+            if len(target.dependencies) != 1 or target.dependencies[0][3] != '1m':
+                continue
+            selected = [window for window in windows if window.exchange == target.key[0]
+                and window.market_type == target.key[1] and window.symbol == target.key[2]
+                and window.interval == '1m' and window.metadata.get('custom_interval') == target.key[3]]
+            if not selected:
+                continue
+            start = min(target.start, min(window.start_ms//target.duration*target.duration for window in selected))
+            end = max(target.end, max(window.end_ms//target.duration*target.duration for window in selected))
+            if (end-start)//target.duration+1 > 512:
+                continue
+            target.check(conn, scope)
+            check_range_since(conn, {target.key, *target.dependencies}, start, end+target.duration, scope.revision)
+            target.start, target.end = start, end
+            target.digest = fingerprint(conn, target.key, start, end)

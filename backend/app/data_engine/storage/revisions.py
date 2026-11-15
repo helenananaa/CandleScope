@@ -669,6 +669,9 @@ async def prepare_planned_write_views(storage, windows):
     from .native_history_fence import capture_planned_write_views
     await run_storage(capture_planned_write_views, getattr(storage, "revision_store", None),
                       _acquisition.get(), windows)
+    from .mixed_history_fence import extend_standard_targets
+    await run_storage(extend_standard_targets, getattr(storage, "revision_store", None),
+                      _acquisition.get(), windows)
 
 
 async def prepare_derived_targets(storage, plan, *, allow_standard=False):
