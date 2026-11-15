@@ -87,7 +87,9 @@ def test_intersecting_change_during_reduction_cannot_publish_stale_targets(mixed
         if change == 'finer_insert':
             write_elsewhere(query, at=MINUTE)
         elif change == 'source_correction':
-            write_elsewhere(query, at=0, interval='1d', width=1440*MINUTE)
+            # This grid is now fetched by the cheaper cover. Change its
+            # content rather than issuing an identical, correctly no-op upsert.
+            write_elsewhere(query, at=0, interval='1d', width=1440*MINUTE, close=100.5)
         elif change == 'empty_delete':
             Context().run(query.storage.delete_bars, 'BTCUSDT', '1m', 100*WIDTH, 100*WIDTH, market_type='futures')
         elif change == 'target_write':

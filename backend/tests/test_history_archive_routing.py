@@ -873,3 +873,23 @@ def test_usdm_archive_bounds_price_rows_and_envelope_not_only_object_count():
     # Monthly coarse grids remain a useful, bounded archive route.
     coarse = SimpleNamespace(start_ms=0, end_ms=31*day-1)
     assert _bounded_usdm_archive_candidates([coarse], [BackfillTask('BTCUSDT','4h',0,0)], '4h') == [coarse]
+
+
+def test_sparse_composed_edges_do_not_import_a_whole_coarse_month():
+    from types import SimpleNamespace
+    from app.data_engine.backfill.source_router import _bounded_usdm_archive_candidates
+    hour = 60*MINUTE_MS
+    month = SimpleNamespace(start_ms=0, end_ms=31*24*hour-1)
+    task = BackfillTask('BTCUSDT','1h',0,999*hour,exchange='binance',market_type='futures',
+        metadata={'history_composition_contract':'qualified',
+                  'mixed_fetch_windows':[(0,0),(10*hour,10*hour)]})
+    assert _bounded_usdm_archive_candidates([month],[task],'1h') == []
+    # Neither a read-ahead envelope nor duplicate windows count as selected
+    # canonical rows for deciding whether to import the whole archive.
+    assert _bounded_usdm_archive_candidates([month],[task]*100,'1h') == []
+    task.metadata.pop('mixed_fetch_windows')
+    task.end_ms = 743*hour
+    assert _bounded_usdm_archive_candidates([month],[task],'1h') == [month]
+    day = SimpleNamespace(start_ms=0,end_ms=24*hour-1)
+    task.metadata['mixed_fetch_windows'] = [(0,0)]
+    assert _bounded_usdm_archive_candidates([day],[task],'1h') == [day]

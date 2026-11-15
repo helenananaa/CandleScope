@@ -126,3 +126,38 @@ def test_preview_does_not_bypass_a_closed_prefix_correction(mixed_query, monkeyp
     result = query.query('BTCUSDT','10007m',start_ms=0,end_ms=4*WIDTH,limit=5,
                          market_type='futures',auto_backfill=False)
     assert not result.complete and result.retryable and not result.bars
+
+
+@pytest.mark.parametrize('change', ['tick', 'cache_aba', 'forming_source', 'other_symbol'])
+def test_preview_keeps_its_own_generation_fence(mixed_query, monkeypatch, change):
+    from dataclasses import replace
+    from app.data_engine.data_manager.models import BarData, SeriesKey
+    query = mixed_query
+    seed(query)
+    monkeypatch.setattr('time.time', lambda: (4*WIDTH+MINUTE)/1000)
+    query._cache.revision_consumer.sync(force=True)
+    key = SeriesKey('BTCUSDT','10007m',exchange='binance',market_type='futures')
+    forming = BarData(time=4*WIDTH//1000,open=100,high=102,low=99,
+                      close=101,volume=1,is_closed=False,source='ws')
+    query._cache.bulk_load(key,[forming])
+    original = query.storage.read_closed_target_snapshot
+    def changing(*args):
+        result = original(*args)
+        def mutate():
+            if change == 'tick': query._cache.bulk_load(key,[replace(forming, close=102)])
+            elif change == 'cache_aba':
+                query._cache.invalidate(key)
+                query._cache.bulk_load(key,[forming])
+            else:
+                symbol = 'ETHUSDT' if change == 'other_symbol' else 'BTCUSDT'
+                query.storage.upsert_bars(symbol,'1m',[row(4*WIDTH,MINUTE)],
+                    market_type='futures',source='backfill')
+        Context().run(mutate)
+        return result
+    monkeypatch.setattr(query.storage,'read_closed_target_snapshot',changing)
+    result = query.query('BTCUSDT','10007m',start_ms=0,end_ms=4*WIDTH,limit=5,
+                         market_type='futures',auto_backfill=False)
+    if change == 'other_symbol':
+        assert result.complete and result.bars[-1] == forming
+    else:
+        assert not result.complete and result.retryable and not result.bars

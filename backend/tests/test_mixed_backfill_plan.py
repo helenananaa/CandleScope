@@ -40,11 +40,11 @@ def test_cold_large_prime_proposes_exact_mixed_inputs_and_component_scoped_routi
     engine = engine_for(query)
     plan, report = propose(engine, query, gap())
     assert plan is not None and report["mixed_history"]
-    assert plan.metadata["mixed_source_rows"] == 669
+    assert plan.metadata["mixed_source_rows"] == 75
     assert plan.estimated_requests < plan.metadata["single_base_estimated_rest_requests"]
     intervals = {task.interval for task in plan.tasks}
-    assert intervals == {"15m", "1m"}
-    assert plan.estimated_requests == 2
+    assert intervals == {"1d", "1h", "1m"}
+    assert plan.estimated_requests == 3
     at = 0
     for task in sorted(plan.derived_source_windows, key=lambda task: task.start_ms):
         width = parse_interval_ms(task.interval)

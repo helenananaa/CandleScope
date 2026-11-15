@@ -300,11 +300,14 @@ class QueryEngine:
         now_ms = int(time.time()*1000)
         current_open = spec.floor_ms(now_ms)
         preview = None
+        preview_snapshot = None
+        preview_cache = self._cache
         if last == current_open and first < last:
             # A current preview must never force reacquisition of the entire
             # immutable closed prefix. It is an immutable cache value, remains
             # explicitly forming, and grants no storage/write authority.
-            preview = self._cache.get_bar_at(key, last//1000)
+            preview_snapshot = preview_cache.bar_snapshot(key, last//1000)
+            preview = preview_snapshot[1] if preview_snapshot is not None else None
             if preview is None or preview.is_closed:
                 return None
             last -= spec.nominal_ms
@@ -338,6 +341,9 @@ class QueryEngine:
             return None
         if preview is not None:
             bars.append(preview)
+            from dataclasses import replace
+            proof = replace(proof, preview_check=lambda: self._cache is preview_cache
+                and preview_cache.bar_snapshot_current(key, preview_snapshot))
         result = QueryResult(bars=bars,symbol=key.symbol,interval=key.interval,exchange=key.exchange,
             market_type=key.market_type,**key.identity.to_dict(),
             source=QuerySource.MIXED if preview is not None else QuerySource.STORAGE,total=len(bars),

@@ -8,6 +8,7 @@ from dataclasses import dataclass, replace
 import hashlib
 import sqlite3
 from contextlib import contextmanager
+from collections.abc import Callable
 
 from app.data_engine.aggregation.semantics import valid_ohlcv
 from app.data_engine.kline_quality import source_is_trusted_final
@@ -36,6 +37,7 @@ class ClosedTargetRead:
     revision: int
     digest: bytes
     bars: tuple | None = None
+    preview_check: Callable[[], bool] | None = None
 
     def bind(self, rows, bars):
         digest = hashlib.sha256()
@@ -53,10 +55,14 @@ class ClosedTargetRead:
                 or key != self.key or self.bars is None or tuple(bars) != self.bars):
             raise StaleAcquisition('canonical target read binding or output changed')
         with _snapshot(self.store) as conn:
+            if self.preview_check is not None and not self.preview_check():
+                raise StaleAcquisition('current preview changed before read adoption')
             head = current_revision(conn)
             check_deletions(conn, scope, self.key)
             if head < self.revision or fingerprint(conn, self.key, self.start, self.end) != self.digest:
                 raise StaleAcquisition('canonical target changed before read adoption')
+            if self.preview_check is not None and not self.preview_check():
+                raise StaleAcquisition('current preview changed during read adoption')
             return head
 
 

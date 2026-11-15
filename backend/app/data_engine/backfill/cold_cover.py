@@ -10,6 +10,11 @@ import math
 
 from app.data_engine.history.cover_plan import CoverUnavailable, CoverBudgetExceeded, plan_fixed_batch
 
+# A request has fixed transport/admission overhead; fetched rows incur decoding
+# and selected canonical rows also incur journaling/index/materialization work.
+# Do not give one fewer request unlimited priority over thousands of writes.
+REQUEST_ROW_COST = 256
+
 
 @dataclass(frozen=True, slots=True)
 class ColdCoverChoice:
@@ -116,11 +121,12 @@ def choose_cold_sources(target, first, stop, sources, *, required_fields,
             coalesced = coalesce_mixed_fetches(proposals, page_size=page_size, row_budget=max_rows)
             requests = sum(math.ceil(task.estimated_bars/page_size) for task in coalesced)
             fetched_rows = sum(task.estimated_bars for task in coalesced)
-            score = requests, fetched_rows, rows, -width
+            work_cost = requests * min(page_size, REQUEST_ROW_COST) + fetched_rows + rows
+            score = work_cost, requests, fetched_rows, rows, -width
             if best_score is None or score < best_score:
                 best, best_score = candidate, score
         if spent >= max_positions:
             break
     return ColdCoverChoice(best, spent, tried,
-        best_score[0] if best_score else None, best_score[2] if best_score else None,
+        best_score[1] if best_score else None, best_score[3] if best_score else None,
         None if best is not None else reason)

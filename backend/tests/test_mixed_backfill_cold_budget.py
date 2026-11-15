@@ -28,7 +28,7 @@ def choose(**overrides):
     return choose_cold_sources(TARGET, 0, WIDTH, sources, **options)
 
 
-@pytest.mark.parametrize('page,requests', [(1000, 2), (32, 4)])
+@pytest.mark.parametrize('page,requests', [(1000, 3), (32, 5)])
 def test_cold_choice_uses_request_page_cost_and_replays_an_exact_cover(page, requests):
     choice = choose(page_size=page, task_page_size=page)
     assert choice.requests == requests and choice.sources is not None
@@ -44,6 +44,27 @@ def test_later_search_budget_does_not_discard_an_already_feasible_choice():
     assert choice.sources is not None and choice.reason is None
     assert choice.positions == 100 and choice.requests <= 5
     assert plan_fixed_batch(TARGET, 0, WIDTH, choice.sources).planned_range == (0, WIDTH)
+
+
+def test_cold_choice_balances_requests_against_canonical_write_work():
+    # A real sixteen-target phase: a 4h/1m pair needs ~4500 canonical
+    # rows for 18 requests. A modestly larger request count can avoid most
+    # minute writes while retaining the exact same qualified target cover.
+    first = 1717801620000
+    stop = first+16*WIDTH
+    sources = tuple(FixedHistorySource(SeriesKey('BTCUSDT', interval, market_type='futures'),
+        minutes*MINUTE, 0, ((0, stop),), FIELDS, 'fixture/qualified')
+        for interval, minutes in [('1m',1),('5m',5),('15m',15),('1h',60),('4h',240),('1d',1440)])
+    choice = choose_cold_sources(TARGET, first, stop, sources, required_fields=FIELDS,
+        target_width=WIDTH, base_width=0, page_size=1000, task_page_size=1000,
+        max_rows=16_384, max_tasks=4096, max_positions=65_536)
+    assert choice.sources is not None and choice.rows < 2500 and choice.requests <= 24
+    cursor = first
+    while cursor < stop:
+        batch = plan_fixed_batch(TARGET, cursor, stop, choice.sources, required_fields=FIELDS)
+        assert batch.planned_range[0] == cursor
+        assert sum(span.end_ms-span.start_ms for cover in batch.covers for span in cover.spans) == batch.planned_range[1]-cursor
+        cursor = batch.planned_range[1]
 
 
 def test_planning_does_not_rewalk_all_earlier_tasks_for_every_new_span(mixed_query, monkeypatch):
