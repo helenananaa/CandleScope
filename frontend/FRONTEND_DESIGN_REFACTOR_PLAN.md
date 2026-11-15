@@ -565,6 +565,11 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - Replay is off the internal-terms baseline (zh-CN 171 → 114, en 225 → 168): codes dropped from option labels in every language (HIDE_DAY, ONE_WAY, APPROX_PROXY…), review mode named in each language, and 20 sentences rewritten in all 30 catalogs (the end dialog, hedge and order-book hints, storage cleanup).
 - The session's default view names things: the header reads "Binance · 永续 · BTCUSDT", the status bar "K 线回放 · 已暂停 · 控制权：本页 · 成交 · 精确" (was "REPLAY", "PAUSED", "Controller:", "AGG_TRADE · EXACT"); capability names and levels are translated (new `replay.capName.*`), and value codes moved to a tooltip.
 
+**Phase 6b2 is done (branch `design/phase-6b2-replay-panels`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_6B2.md`](../docs/FRONTEND_DESIGN_QA_PHASE_6B2.md). With it the replay rows (6b, 6b2) are complete.
+
+- Replay's technical panels name their states: the create dialog's practice changes, the review drawer (strictness, lock, rule revisions, audits, funding, budget), the liquidation timeline (case, step, leg, order and auto-deleveraging states, sides and orders) and the storage panel (decision, switches, alert levels, object identity and health); 47 new messages in all 30 catalogs.
+- 73 Chinese replay messages lose their English words (in zh-CN and the Traditional catalogs), 8 English ones lose code names. Kept as codes on purpose: the drawer's result label and event log, storage protection codes and ids.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.

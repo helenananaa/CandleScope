@@ -4,7 +4,7 @@ import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import { Icon } from "../../../components/icons/Icon.js";
 import { Badge, Button, Disclosure, EmptyState, Field, IconButton, InlineAlert, Input, Select } from "../../../components/ui/index.js";
-import { trainingIntegrityLabel, trainingTimeDisclosureLabel } from "../trainingHubLabels.js";
+import { replayAccountModeLabel, replayAuditStatusLabel, replayLiquidationFidelityLabel, replayMutationLabel, replayRevisionKindLabel, trainingIntegrityLabel, trainingTimeDisclosureLabel } from "../trainingHubLabels.js";
 
 import { buildEquityPolyline } from "../replayIntegrityModel.js";
 import { downloadReplayTrainingReport } from "../replayReportExport.js";
@@ -140,8 +140,8 @@ export default function ReplayIntegrityReviewPanel({
               <div><dt>{t("replay.integrity.mode")}</dt><dd><Badge tone="accent">{trainingIntegrityLabel(integrity.integrity_mode)}</Badge></dd></div>
               <div><dt>{t("replay.integrity.publicTime")}</dt><dd data-public-time-label>{integrity.public_time.label}</dd></div>
               <div><dt>{t("replay.integrity.disclosure")}</dt><dd>{trainingTimeDisclosureLabel(integrity.effective_time_disclosure_policy)}</dd></div>
-              <div><dt>{t("replay.integrity.strict")}</dt><dd>{integrity.strict_eligible ? <Badge tone="success">ELIGIBLE</Badge> : <Badge>NOT STRICT</Badge>}</dd></div>
-              <div><dt>{t("replay.integrity.startKnown")}</dt><dd>{integrity.start_time_known ? "YES" : "NO"}</dd></div>
+              <div><dt>{t("replay.integrity.strict")}</dt><dd>{integrity.strict_eligible ? <Badge tone="success">{t("replay.integrity.strictEligible")}</Badge> : <Badge>{t("replay.integrity.notStrict")}</Badge>}</dd></div>
+              <div><dt>{t("replay.integrity.startKnown")}</dt><dd>{t(integrity.start_time_known ? "common.yes" : "common.no")}</dd></div>
               <div><dt>{t("replay.integrity.result")}</dt><dd><code>{integrity.result_label}</code></dd></div>
             </dl>
 
@@ -149,7 +149,7 @@ export default function ReplayIntegrityReviewPanel({
               <div className="replay-drawer-section-head">
                 <h3 id="replay-equity-title">{t("replay.integrity.equity")}</h3>
                 <span>{t("replay.integrity.sampleCount", {
-                  resolution: integrityRuntime.equity?.resolution ?? "--",
+                  resolution: integrityRuntime.equity?.resolution === "EVENT" ? t("replay.integrity.byEvent") : integrityRuntime.equity?.resolution ?? "--",
                   count: integrityRuntime.equity?.samples.length ?? 0,
                 })}</span>
               </div>
@@ -169,7 +169,7 @@ export default function ReplayIntegrityReviewPanel({
             <section className="replay-drawer-section" aria-labelledby="replay-policy-title">
               <div className="replay-drawer-section-head">
                 <h3 id="replay-policy-title">{t("replay.integrity.policy")}</h3>
-                <span className="replay-drawer-codes">{integrity.allowed_mutations.length === 0 ? "LOCKED" : integrity.allowed_mutations.join(" · ")}</span>
+                <span className="replay-drawer-codes">{integrity.allowed_mutations.length === 0 ? t("replay.integrity.locked") : integrity.allowed_mutations.map(replayMutationLabel).join(" · ")}</span>
               </div>
               {(allowed.has("deposit") || allowed.has("withdraw")) && (
                 <div className="replay-drawer-form">
@@ -212,7 +212,7 @@ export default function ReplayIntegrityReviewPanel({
                   <dl className="replay-integrity-facts">
                     <div><dt>{t("replay.integrity.makerTaker")}</dt><dd>{rules.fee_policy.maker_fee_bps} / {rules.fee_policy.taker_fee_bps} bps</dd></div>
                     <div><dt>{t("replay.integrity.userLeverage")}</dt><dd>{rules.leverage_policy.max_leverage}×</dd></div>
-                    <div><dt>{t("replay.integrity.funding")}</dt><dd>{rules.funding_policy.funding_mode}</dd></div>
+                    <div><dt>{t("replay.integrity.funding")}</dt><dd>{rules.funding_policy.funding_mode === "OFF" ? t("replay.hub.modeOff") : rules.funding_policy.funding_mode === "SANDBOX_FIXED" ? t("replay.integrity.sandboxFixed") : rules.funding_policy.funding_mode === "HISTORICAL_EXACT" ? t("replay.hub.fundingMode.historicalExact") : rules.funding_policy.funding_mode}</dd></div>
                     <div><dt>{t("replay.integrity.exchangeRules")}</dt><dd>{t("replay.integrity.immutableRules", { count: rules.instrument_rules.length })}</dd></div>
                   </dl>
                   <Disclosure summary={t("replay.integrity.editRules")}>
@@ -277,7 +277,7 @@ export default function ReplayIntegrityReviewPanel({
                     <ul className="replay-drawer-list" aria-label={t("replay.integrity.ruleHistory")}>
                       {rules.history.map((revision) => (
                         <li key={`${revision.kind}-${revision.revision}-${revision.policy_hash}`}>
-                          <div className="replay-drawer-list-head"><strong>{revision.kind} r{revision.revision}</strong><span>{revision.public_time.label}</span></div>
+                          <div className="replay-drawer-list-head"><strong>{replayRevisionKindLabel(revision.kind)} r{revision.revision}</strong><span>{revision.public_time.label}</span></div>
                           <span>{revision.reason}</span>
                           <code>{revision.command_id ?? "creation"} · {revision.policy_hash}</code>
                         </li>
@@ -291,7 +291,7 @@ export default function ReplayIntegrityReviewPanel({
             <section className="replay-drawer-section" aria-labelledby="replay-review-budget-title" data-budget-warning={budgetPressure >= 0.85 ? "true" : "false"}>
               <div className="replay-drawer-section-head">
                 <h3 id="replay-review-budget-title">{t("replay.integrity.budget")}</h3>
-                <strong>{budget === null ? "--" : `${Math.round(budgetPressure * 100)}% peak`}</strong>
+                <strong>{budget === null ? "--" : t("replay.integrity.budgetPeak", { pct: Math.round(budgetPressure * 100) })}</strong>
               </div>
               {budget !== null && (
                 <p className="replay-drawer-note replay-budget-line">
@@ -314,7 +314,7 @@ export default function ReplayIntegrityReviewPanel({
                   <ul className="replay-drawer-list">
                     {integrity.mutations.slice(-20).map((mutation) => (
                       <li key={mutation.event_id} data-audit-event={mutation.event_type}>
-                        <div className="replay-drawer-list-head"><strong>{mutation.event_type}</strong><span>{t("replay.integrity.ruleRevision", { time: mutation.public_time.label, revision: mutation.rule_revision })}</span></div>
+                        <div className="replay-drawer-list-head"><strong>{replayMutationLabel(mutation.event_type)}</strong><span>{t("replay.integrity.ruleRevision", { time: mutation.public_time.label, revision: mutation.rule_revision })}</span></div>
                         <span>{mutation.reason}</span>
                         <span className="replay-audit-change"><AuditValue value={mutation.old_value} /> → <AuditValue value={mutation.new_value} /></span>
                       </li>
@@ -341,13 +341,13 @@ export default function ReplayIntegrityReviewPanel({
                   <div><dt>{t("replay.integrity.trades")}</dt><dd>{report.report.trade_count}</dd></div>
                   {report.modelled_account.schema_version === "replay.training.portfolio.v2" && (
                     <>
-                      <div><dt>{t("replay.integrity.accountInputs")}</dt><dd>{report.modelled_account.account_history.mode}</dd></div>
+                      <div><dt>{t("replay.integrity.accountInputs")}</dt><dd>{replayAccountModeLabel(report.modelled_account.account_history.mode)}</dd></div>
                       <div>
                         <dt>{t("replay.integrity.accountAudit")}</dt>
-                        <dd data-account-auditor-status={report.modelled_account.account_history.auditor.status}>{report.modelled_account.account_history.auditor.status}</dd>
+                        <dd data-account-auditor-status={report.modelled_account.account_history.auditor.status}>{replayAuditStatusLabel(report.modelled_account.account_history.auditor.status)}</dd>
                       </div>
                       <div><dt>{t("replay.integrity.simLiq")}</dt><dd>{report.modelled_account.liquidations.length + report.modelled_account.liquidation_recoveries.length}</dd></div>
-                      <div><dt>{t("replay.integrity.mktLiq")}</dt><dd>{report.modelled_account.liquidation_channels.historical_market.fidelity}</dd></div>
+                      <div><dt>{t("replay.integrity.mktLiq")}</dt><dd>{replayLiquidationFidelityLabel(report.modelled_account.liquidation_channels.historical_market.fidelity)}</dd></div>
                     </>
                   )}
                 </dl>
@@ -364,7 +364,7 @@ export default function ReplayIntegrityReviewPanel({
                 )}
                 {report.account_audit !== null && (
                   <p className="replay-drawer-note">
-                    {t("replay.integrity.accountAudit")}<strong>{report.account_audit.status}</strong>
+                    {t("replay.integrity.accountAudit")}<strong>{replayAuditStatusLabel(report.account_audit.status)}</strong>
                     {" · "}<code>{report.account_audit.proof_hash}</code>
                   </p>
                 )}
@@ -497,7 +497,7 @@ export default function ReplayIntegrityReviewPanel({
                 >
                   <code>{integrityRuntime.forked.run.state_hash}</code>
                   {" · "}{t("replay.integrity.forkSummary", { tracks: integrityRuntime.forked.tracks.length, sequence: integrityRuntime.forked.parent_timeline_sequence })}
-                  {integrityRuntime.forked.account_audit !== null && <> · {t("replay.integrity.exactAuditor", { status: String(integrityRuntime.forked.account_audit.status ?? "--") })}</>}
+                  {integrityRuntime.forked.account_audit !== null && <> · {t("replay.integrity.exactAuditor", { status: replayAuditStatusLabel(String(integrityRuntime.forked.account_audit.status ?? "--")) })}</>}
                 </InlineAlert>
               )}
             </section>

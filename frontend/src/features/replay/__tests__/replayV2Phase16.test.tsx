@@ -564,8 +564,8 @@ test("Phase 16 Hub defers exact archive binding until a market is selected", () 
   } satisfies TrainingHubRuntime;
   const html = renderToStaticMarkup(<TrainingHubDialog runtime={runtime} />);
   assert.match(html, /缺少的项目会近似并明确标出，不会改成单向/);
-  assert.match(html, /HEDGE 会优先绑定完整历史输入/);
-  assert.match(html, /连续历史 L2 仍是硬门槛/);
+  assert.match(html, /双向持仓优先绑定完整历史输入/);
+  assert.match(html, /连续的历史 L2 才是必需条件/);
   assert.match(html, />固定归档结算</);
   assert.doesNotMatch(html, /data-account-history-capability|account-btc-202403/);
 });

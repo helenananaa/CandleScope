@@ -225,9 +225,7 @@ export default function ReplayInitialMarketPicker({
         setSelecting(null);
         return;
       }
-      const message = reason instanceof ReplayV2ApiError
-        ? `${reason.code}: ${reason.message}`
-        : reason instanceof Error ? describeError(reason, reason.message) : t("replay.picker.initFailed");
+      const message = describeError(reason, t("replay.picker.initFailed"));
       setError(message);
       setSelecting(null);
     }

@@ -1,3 +1,4 @@
+import { replaySeverityLabel, trainingExchangeLabel, trainingMarketTypeLabel } from "../trainingHubLabels.js";
 import PreparationJobsPanel from "../../data-preparation/PreparationJobsPanel.js";
 import { useState } from "react";
 import ReplayRawTradeRetentionPanel from "./ReplayRawTradeRetentionPanel.js";
@@ -50,10 +51,18 @@ function formatBytes(value: number): string {
   return `${(value / GIB).toFixed(2)} GiB`;
 }
 
+/** An object's health; known states use the summary's words, others stay as sent. */
+function storageHealthLabel(health: string): string {
+  if (health === "READY") return t("replay.storage.ready");
+  if (health === "EVICTED") return t("replay.storage.evicted");
+  if (health === "ISOLATED" || health === "QUARANTINED") return t("replay.storage.isolated");
+  return health;
+}
+
 function identityLabel(item: ReplayStorageObjectItem): string {
   return [
-    item.identity.exchange,
-    item.identity.market_type,
+    typeof item.identity.exchange === "string" ? trainingExchangeLabel(item.identity.exchange) : null,
+    typeof item.identity.market_type === "string" ? trainingMarketTypeLabel(item.identity.market_type) : null,
     item.identity.symbol,
     item.identity.base_interval,
   ].filter((value): value is string => typeof value === "string").join(" · ");
@@ -76,7 +85,7 @@ function StorageObjectRows({
         <li key={item.object_id} data-storage-object={item.object_id}>
           <div className="replay-storage-object-head">
             <strong>{identityLabel(item)}</strong>
-            <Badge tone={item.health === "READY" ? "neutral" : "warning"} data-storage-health={item.health}>{item.health}</Badge>
+            <Badge tone={item.health === "READY" ? "neutral" : "warning"} data-storage-health={item.health}>{storageHealthLabel(item.health)}</Badge>
           </div>
           <dl className="replay-storage-object-facts">
             <div><dt>{t("replay.storage.objects")}</dt><dd><code>{item.object_id}</code></dd></div>
@@ -154,15 +163,15 @@ export default function ReplayStorageGovernancePanel({
         ) : (
           <>
             <div className="replay-storage-status" data-release-decision={inventory.decision.state}>
-              <InlineAlert tone={inventory.decision.state === "ENABLE" ? "success" : "warning"} title={t("replay.storage.decision", { state: inventory.decision.state })}>
-                {t("replay.storage.defaultFlags", { value: inventory.decision.default_flags_enabled ? "ON" : "OFF" })}
+              <InlineAlert tone={inventory.decision.state === "ENABLE" ? "success" : "warning"} title={t("replay.storage.decision", { state: t(inventory.decision.state === "ENABLE" ? "replay.storage.decisionEnable" : "replay.storage.decisionHold") })}>
+                {t("replay.storage.defaultFlags", { value: t(inventory.decision.default_flags_enabled ? "common.on" : "common.off") })}
                 {inventory.decision.reason_codes.length > 0 && <> · <span className="replay-storage-codes">{inventory.decision.reason_codes.join(" · ")}</span></>}
               </InlineAlert>
               {inventory.alerts.length > 0 && (
                 <div className="replay-storage-alerts" aria-label={t("replay.storage.alerts")}>
                   {inventory.alerts.map((alert) => (
-                    <InlineAlert key={`${alert.category}:${alert.code}`} tone={alertTone(alert.severity)} title={`${alert.severity} · ${alert.code}`}>
-                      {alert.message}
+                    <InlineAlert key={`${alert.category}:${alert.code}`} tone={alertTone(alert.severity)} title={replaySeverityLabel(alert.severity)}>
+                      {alert.message} <span className="replay-storage-codes">{alert.code}</span>
                     </InlineAlert>
                   ))}
                 </div>
