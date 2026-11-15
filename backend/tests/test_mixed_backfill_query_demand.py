@@ -16,6 +16,35 @@ from tests.test_mixed_backfill_pipeline import Upstream
 from tests.test_mixed_history_reader import MINUTE, row
 
 
+@pytest.mark.parametrize('period', [89, 97, 101])
+def test_merged_warm_tail_and_history_rebuild_local_target_holes_without_refetch(mixed_query, period):
+    query = mixed_query
+    query.storage.upsert_bars('BTCUSDT','1m',[row(n*MINUTE,MINUTE) for n in range(2*period)],
+        market_type='futures',source='backfill')
+    engine = engine_for(query)
+    class NoFetch:
+        async def close(self):
+            pass
+        async def fetch(self, tasks, **options):
+            assert not tasks, 'merged read/warm interest must not refetch committed fine inputs'
+            return []
+    engine._fetcher = NoFetch()
+    async def run():
+        try:
+            report = await engine.run_receipt('BTCUSDT',[f'{period}m'],0,period*MINUTE,
+                market_type='futures',metadata=dict(requester='mixed',
+                    requester_kinds=['klines_history','warm_start_custom_tail','klines_range'],
+                    history_calendar_id='crypto.24x7.utc',requires_trusted_finality=False))
+            assert report.status.value == 'completed' and not report.errors
+            targets = query.storage.query_bars('BTCUSDT',f'{period}m',start_ms=0,end_ms=period*MINUTE,
+                market_type='futures',order='ASC')
+            assert [(bar['open_time'],bar['volume'],bar['trades']) for bar in targets] == [
+                (0,period,period),(period*MINUTE,period,period)]
+        finally:
+            await engine.close()
+    asyncio.run(run())
+
+
 def test_large_closed_query_detects_target_demand_even_with_submission_disabled(mixed_query):
     engine = mixed_query
     calls = []

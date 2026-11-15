@@ -109,7 +109,9 @@ def _is_read_repair(metadata: dict[str, Any]) -> bool:
         return True
     kinds = metadata.get("requester_kinds")
     return (requester == "mixed" and isinstance(kinds, (list, tuple))
-            and 0 < len(kinds) <= 32 and all(isinstance(kind, str) and kind in _READ_REPAIR_REQUESTERS for kind in kinds))
+            and 0 < len(kinds) <= 32
+            and all(isinstance(kind, str) and kind in _READ_REPAIR_REQUESTERS | {"warm_start_custom_tail"} for kind in kinds)
+            and any(kind in _READ_REPAIR_REQUESTERS for kind in kinds))
 
 __all__ = [
     # Engine
