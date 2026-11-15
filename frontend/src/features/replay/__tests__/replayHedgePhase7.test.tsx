@@ -156,7 +156,8 @@ test("Phase 7 parses and renders the complete liquidation, insurance and ADL tim
 
   assert.match(html, /Case #1/);
   assert.match(html, /FULL_LIQUIDATION/);
-  assert.match(html, /queue exact: false/);
+  assert.match(html, /L2/);
+  assert.doesNotMatch(html, /queue exact/);
   assert.match(html, /Insurance/);
   assert.match(html, /ADL · COMPLETED/);
   assert.match(html, /deterministic simulation, not a historical exchange private queue/);

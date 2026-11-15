@@ -1,3 +1,4 @@
+import { trainingExchangeLabel, trainingMarketTypeLabel } from "../trainingHubLabels.js";
 import { useReplayOperations } from "../useReplayOperations.js";
 import { describeError } from "../../../i18n/serverErrors.js";
 import React, { useEffect, useMemo, useState } from "react";
@@ -219,7 +220,7 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange, e
           }
           onClick={activate}
         >
-          <span><strong>{identity.symbol}</strong><small>{identity.exchange} · {identity.marketType}</small></span>
+          <span><strong>{identity.symbol}</strong><small>{trainingExchangeLabel(identity.exchange)} · {trainingMarketTypeLabel(identity.marketType)}</small></span>
           <span className="replay-watchlist-price">{last ?? "--"}</span>
         </button>
         {viewer.actions.openTrack && track !== null && <IconButton

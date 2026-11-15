@@ -39,6 +39,8 @@ Internal term → what users see. "Technical details only" terms may appear insi
 |---|---|---|---|
 | status codes (`ONE_WAY`, `COMPLETED`, `BAR_APPROX`, …) | the state's name (单向持仓, 已完成, 按 K 线估算) | the state's name (One-way, Completed, Bar estimate) | via a label function |
 | backend (后端) | 本地服务, or CandleScope | local service, or CandleScope | the app runs it for you |
+| Run (replay) | 训练 | run | |
+| fork | 分叉 | fork | |
 | revision | 版本 | version | |
 | epoch, dataEpoch | 数据版本 | data version | |
 | receipt | 记录 | record | |
@@ -77,4 +79,4 @@ Internal term → what users see. "Technical details only" terms may appear insi
 
 While Phase 6 rewrites the remaining surfaces, the messages that still use internal terms are listed in `scripts/i18n-internal-terms-baseline.json`. A new internal term fails the check; so does a listed message that no longer needs its entry. After rewriting a surface, run `npx tsx scripts/check-i18n.mts --write-internal-terms-baseline` and check that the diff only removes lines.
 
-When you change a message's wording in `zh-CN` and `en`, update the same key in every catalog in the same change, so all languages say the same thing.
+When a message's meaning changes in `zh-CN` and `en`, update the same key in every catalog in the same change, so all languages say the same thing. When only a term changes (an English word inside Chinese, a code dropped from a label), fix every catalog that shows that term; languages that already use their own word can stay as they are.
