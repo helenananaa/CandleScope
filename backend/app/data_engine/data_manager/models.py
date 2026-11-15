@@ -751,6 +751,8 @@ class QueryResult:
     next_before_ms: int | None = None
     availability_revision: str | None = None
     excluded_ranges: list[dict[str, Any]] = field(default_factory=list)
+    # Internal canonical read evidence; never serialized or placed in metadata.
+    _closed_target_read: Any = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         identity = KlineSeriesIdentity.for_exchange(

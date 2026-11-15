@@ -271,6 +271,59 @@ class QueryEngine:
         """Lease-scoped H127 canonical history page; publish only after context exit."""
         return self.history_blocks.read(source, start_ms, end_ms, **options)
 
+    def _closed_target_snapshot(self, *, key, route, start_ms, end_ms, limit, composition_contract):
+        """Read an already persisted closed page without reacquiring its inputs."""
+        from app.data_engine.history import AlwaysOpenCalendar
+        from app.data_engine.interval_policy import parse_interval_spec
+        if (not self._cfg.mixed_custom_history or start_ms is None or end_ms is None
+                or not key.identity.is_legacy_default_for(key.exchange)):
+            return None
+        base = parse_interval_spec(route.base_interval)
+        spec = route.spec
+        if (base is None or spec.phase_ms or spec.calendar_unit is not None
+                or spec.nominal_ms <= base.nominal_ms*self._cfg.max_limit):
+            return None
+        calendar = self._calendar_for(key)
+        if calendar is not None and not isinstance(calendar, AlwaysOpenCalendar):
+            return None
+        declaration = self._interval_resolver.history_composition_routes(exchange=key.exchange,
+            market_type=key.market_type, interval=key.interval)
+        if declaration is None:
+            return None
+        if composition_contract is not None:
+            self._interval_resolver.require_history_composition(exchange=key.exchange,
+                market_type=key.market_type, interval=key.interval, contract_id=composition_contract,
+                identity=key.identity, enabled=True)
+        first, last = spec.floor_ms(start_ms), spec.floor_ms(end_ms)
+        if first < start_ms:
+            first = spec.next_ms(first)
+        count = (last-first)//spec.nominal_ms+1
+        effective_limit = min(limit or self._cfg.default_limit, self._cfg.max_limit)
+        reader = getattr(self._storage, 'read_closed_target_snapshot', None)
+        consumer = self._cache.revision_consumer
+        if not callable(reader) or consumer is None or not 0 < count <= min(512, effective_limit):
+            return None
+        values = (key.exchange,key.market_type,key.symbol,key.interval,*key.identity.storage_values)
+        snapshot = reader(consumer.store, values, first, last, spec.nominal_ms,
+                          count, int(time.time()*1000))
+        if snapshot is None:
+            return None
+        rows, proof = snapshot
+        metrics = _QueryIOMetrics()
+        bars = self._storage_rows_to_bars(key, rows, metrics)
+        if (len(bars) != count or any(not bar.trusted_final or not bar.is_closed for bar in bars)
+                or composition_contract is not None and any(
+                    getattr(bar, field, None) is None for bar in bars for field in declaration[0].fields)):
+            return None
+        result = QueryResult(bars=bars,symbol=key.symbol,interval=key.interval,exchange=key.exchange,
+            market_type=key.market_type,**key.identity.to_dict(),source=QuerySource.STORAGE,total=count,
+            complete=True,metadata={'all_rows_final':True,'expected_closed_rows':count,
+                'expected_closed_through_ms':last,'target_materialized':True,'canonical_target_snapshot':True,
+                'storage_reads':1,'storage_rows':count,'target_materialized_rows':count,
+                'target_materialized_written':0,'derived_from':route.base_interval},
+            _closed_target_read=proof.bind(rows, bars))
+        return result
+
     def _query_closed_mixed(self, key, **options):
         from .mixed_query import query_closed_mixed
         return query_closed_mixed(self, key, **options)
@@ -385,6 +438,11 @@ class QueryEngine:
                     interval=interval,
                     purpose=IntervalPurpose.HISTORY,
                 )
+            result = self._closed_target_snapshot(key=SeriesKey(symbol, interval, exchange=exchange,
+                market_type=market_type, **identity.to_dict()), route=route, start_ms=start_ms,
+                end_ms=end_ms, limit=limit, composition_contract=composition_contract)
+            if result is not None:
+                return result
             result = self.custom_intervals.query_from_base(
                 symbol=symbol,
                 interval=interval,

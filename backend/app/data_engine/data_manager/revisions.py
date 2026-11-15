@@ -226,7 +226,12 @@ def revision_checked_query(function):
                 exchange=result.exchange, market_type=result.market_type,
                 **{name: getattr(result, name) for name in ("provider_id", "venue", "asset_class",
                     "series_variant", "price_adjustment", "session_variant", "volume_semantics")})
-            if after < before or (
+            canonical = result._closed_target_read
+            if canonical is not None:
+                after = canonical.check(self._storage, consumer.store, scope,
+                    (result_key.exchange,result_key.market_type,result_key.symbol,result_key.interval,
+                     *result_key.identity.storage_values),result.bars)
+            if after < before or (canonical is None and
                 consumer.conflicts(before, result_key, scope.accepted)
                 and (result.metadata.get("derived_from") or not result.metadata.get("cache_read_retries"))
             ):

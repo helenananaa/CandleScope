@@ -1714,6 +1714,11 @@ class KlinesRepoAdapter:
             series_identity=series_identity or self._series_identity,
         )
 
+    def read_closed_target_snapshot(self, store, key, first, last, width, count, now_ms):
+        from .closed_target_read import read_closed_target
+        from .revisions import _acquisition
+        return read_closed_target(self, store, _acquisition.get(), key, first, last, width, count, now_ms)
+
     def query_bar_components(
         self,
         symbol: str,
