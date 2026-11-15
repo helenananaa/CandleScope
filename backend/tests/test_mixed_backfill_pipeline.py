@@ -58,21 +58,21 @@ def test_default_cold_pipeline_fetches_native_mixed_inputs_and_materializes_only
     assert report.metadata["mixed_history"] and report.plan.estimated_requests < 11
     assert report.plan.mixed_binding is None
     assert report.reconcile_result.custom_bars_written == 1
-    assert {task.interval for task in upstream.calls} == {"15m", "1m"}
+    assert {task.interval for task in upstream.calls} == {"1d", "1h", "1m"}
     result = mixed_query.query("BTCUSDT", "10007m", start_ms=0, end_ms=10007 * MINUTE - 1,
         limit=1, market_type="futures", min_revision=mixed_query.storage.revision_store.head())
     assert result.complete and result.bars[0].trusted_final
     assert result.bars[0].volume == result.bars[0].trades == 10007
     assert result.metadata["target_materialized"]
     assert mixed_query.storage.count_bars("BTCUSDT", "1m", 0, 10007 * MINUTE - 1,
-                                           market_type="futures") == 2
+                                           market_type="futures") == 47
     assert any(w.interval == "10007m" and w.bars_written == 1 for w in report.written_ranges)
     assert not any(w.interval == "1m" and w.bars_written == 10007 for w in report.written_ranges)
 
 
 def test_unknown_coarse_fields_remain_pending_then_retry_refines_from_canonical(mixed_query):
     engine = engine_for(mixed_query)
-    upstream = Upstream(unknown_interval="15m")
+    upstream = Upstream(unknown_interval="1d")
     engine._fetcher = upstream
     async def run():
         first = await repair(engine)
@@ -85,7 +85,7 @@ def test_unknown_coarse_fields_remain_pending_then_retry_refines_from_canonical(
         second = await repair(engine)
         assert second.status == BackfillStatus.COMPLETED, second.errors
         assert second.reconcile_result.custom_bars_written == 1
-        assert "15m" not in {task.interval for task in upstream.calls[previous:]}
+        assert "1d" not in {task.interval for task in upstream.calls[previous:]}
     asyncio.run(run())
 
 
