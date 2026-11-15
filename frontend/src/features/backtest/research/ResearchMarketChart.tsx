@@ -14,6 +14,7 @@ import MarketStatusBar from "../../../app/MarketStatusBar.js";
 import AppHeader from "../../../app/AppHeader.js";
 import MarketWorkspaceFrame from "../../../app/MarketWorkspaceFrame.js";
 import { getLocale, t } from "../../../i18n/index.js";
+import { describeError } from "../../../i18n/serverErrors.js";
 import { useChartSession } from "../../chart-session/useChartSession.js";
 import type { ChartSession } from "../../chart-session/chartSessionTypes.js";
 import { useMarketDataRuntime } from "../../market-data/useMarketDataRuntime.js";
@@ -320,7 +321,7 @@ export default function ResearchMarketChart({ runtime }: { runtime: BacktestRese
                 errorFallback={(
                   <div className={liveUnavailable ? "research-chart-offline" : "research-chart-error"}>
                     <strong>{liveUnavailable ? t("research.source.liveOfflineTitle") : t("research.source.unavailable")}</strong>
-                    <span>{liveUnavailable ? t("research.source.liveOffline") : String(activeSource.marketData.view.error ?? "Chart unavailable")}</span>
+                    <span>{liveUnavailable ? t("research.source.liveOffline") : describeError(activeSource.marketData.view.error, t("research.source.unavailable"))}</span>
                   </div>
                 )}
               />

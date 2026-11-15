@@ -194,7 +194,7 @@ describe("python studio mapping and state", () => {
   it("identifies PYTHON_SOURCE revisions and Host-owned orders copy", () => {
     assert.equal(isPythonRevision({ provider_kind: "PYTHON_SOURCE" }), true);
     assert.equal(isPythonRevision({ provider_kind: "BUILTIN" }), false);
-    assert.match(hostOwnsOrdersCopy(), /Host/);
+    assert.match(hostOwnsOrdersCopy(), /CandleScope/);
     assert.equal(pythonStudyParameterSpace([{ name: "fast", default: 20 }]), '{"fast":[20]}');
   });
 });

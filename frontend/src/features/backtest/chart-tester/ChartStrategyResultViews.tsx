@@ -1,5 +1,6 @@
 import { Button, Dialog, Disclosure, InlineAlert, buttonClassName } from "../../../components/ui/index.js";
 import { strategyResearchModeHref } from "../research/backtestResearchModes.js";
+import { researchStateLabel } from "../research/researchLabels.js";
 import { formatIntervalLabel } from "../../../utils/intervals.js";
 import { strategyTradeFocus, type StrategyTradeFocus } from "./strategyTradeReview.js";
 import { useControlCommands } from "../../app-control/useControlCommands.js";
@@ -97,7 +98,7 @@ export function TradeExplanationPopover({
                   <dl className="chart-strategy-explain-facts">
                     <div><dt>{t("chartTester.explain.strategyReason")}</dt><dd>{explanation.reasonLabel ?? explanation.reasonCode ?? "—"}</dd></div>
                     <div><dt>{t("chartTester.explain.source")}</dt><dd>{explanation.source.line == null ? "—" : t("chartTester.explain.line", { line: explanation.source.line })}</dd></div>
-                    <div><dt>{t("chartTester.explain.hostResult")}</dt><dd>{explanation.execution.state}</dd></div>
+                    <div><dt>{t("chartTester.explain.hostResult")}</dt><dd>{researchStateLabel(explanation.execution.state)}</dd></div>
                     <div><dt>{t("chartTester.explain.hostReason")}</dt><dd>{explanation.execution.reasonCode ?? "—"}</dd></div>
                   </dl>
                   {explanation.conditions.length > 0 && (

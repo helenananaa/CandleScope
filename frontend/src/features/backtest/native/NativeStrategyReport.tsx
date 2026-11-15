@@ -16,6 +16,7 @@ import { NativeSeriesScene } from "./NativeSeriesScene.js";
 import { reportAnalytics, reportTrade, formatReportPercent } from "./nativeReportAnalytics.js";
 import { NativePerformanceChart } from "./NativePerformanceChart.js";
 import { NativeCostSensitivity } from "./NativeCostSensitivity.js";
+import { researchFidelityLabel } from "../research/researchLabels.js";
 
 interface NativeMarker { time: number; value: number; kind: "entry" | "exit" | "fill" }
 export function NativeCurve({ points, title, markers = [], onLocate }: { points: Array<{ time: number; value: number | null }>; title: string;
@@ -249,7 +250,7 @@ function NativeResultBody({ run, onLocate, exportUrl, view, controls, onReviewTr
     </div>
     <Disclosure className="native-report-disclosure" summary={t("report.details")}><div className="native-report-toolbar">
     <Disclosure className="native-report-method" summary={t("native.mode")}>
-    <p><strong>{result.account_authority}</strong> · {run.execution_mode === "CANDLESCOPE" && run.runtime_identity.engine.package} {run.runtime_identity.engine.version} · {result.fill_model}{result.fidelity && <> · {result.fidelity}</>}</p>
+    <p><strong>{result.account_authority}</strong> · {run.execution_mode === "CANDLESCOPE" && run.runtime_identity.engine.package} {run.runtime_identity.engine.version} · {result.fill_model}{result.fidelity && <> · {researchFidelityLabel(result.fidelity)}</>}</p>
     {result.evaluation_contract && <p><code>{result.evaluation_contract}</code></p>}
     {run.config?.context && <p>{run.config.context.symbol} · {formatIntervalLabel(run.config.interval ?? "")} · {JSON.stringify(run.config.parameters)}</p>}
     <p>{t(run.execution_mode === "CANDLESCOPE" ? "native.external.authority" : "native.authority")}</p>

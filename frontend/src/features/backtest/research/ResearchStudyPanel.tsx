@@ -1,6 +1,7 @@
 import { Badge, Button, Disclosure, InlineAlert, Textarea } from "../../../components/ui/index.js";
 import { t } from "../../../i18n/index.js";
 import { researchStateTone } from "./researchStateTone.js";
+import { researchStateLabel } from "./researchLabels.js";
 import { researchStudyIsActive } from "./backtestResearchAdvancedModel.js";
 import type { BacktestResearchRuntime } from "./backtestResearchTypes.js";
 import ResearchPanelFrame from "./ResearchPanelFrame.js";
@@ -44,7 +45,7 @@ export default function ResearchStudyPanel({ runtime }: { runtime: BacktestResea
               onClick={() => void runtime.actions.openStudy(study.study_id)}
             >
               <span><strong>{study.name}</strong><small>{study.study_id}</small></span>
-              <Badge tone={researchStateTone(study.state)}>{study.state}</Badge>
+              <Badge tone={researchStateTone(study.state)}>{researchStateLabel(study.state)}</Badge>
             </button>
           </li>
         ))}

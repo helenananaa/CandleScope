@@ -1,6 +1,7 @@
 import { Badge, Button, Disclosure, buttonClassName } from "../../../components/ui/index.js";
 import { t } from "../../../i18n/index.js";
 import { researchStateTone } from "./researchStateTone.js";
+import { researchStateLabel, researchTimeRangeLabel } from "./researchLabels.js";
 import { researchReplayHref } from "./backtestResearchAdvancedModel.js";
 import type { BacktestResearchRuntime } from "./backtestResearchTypes.js";
 import ResearchPanelFrame from "./ResearchPanelFrame.js";
@@ -17,10 +18,10 @@ export default function ResearchReplayPanel({ runtime }: { runtime: BacktestRese
       <p className="research-panel-copy">{t("research.replay.copy")}</p>
       <dl className="research-facts">
         <div><dt>{t("research.replay.sourceRun")}</dt><dd title={activeRun?.run_id}>{activeRun?.run_id ?? "—"}</dd></div>
-        <div><dt>{t("research.replay.window")}</dt><dd>{startTimeMs} → {endTimeMs}</dd></div>
-        <div><dt>{t("research.replay.flag")}</dt><dd><Badge tone={bridgeEnabled ? "success" : "neutral"}>{bridgeEnabled ? "ON" : "OFF"}</Badge></dd></div>
-        <div><dt>{t("research.replay.runtime")}</dt><dd><Badge tone={replayTrainingAvailable ? "success" : "neutral"}>{replayTrainingAvailable ? "AVAILABLE" : "UNAVAILABLE"}</Badge></dd></div>
-        <div><dt>{t("research.replay.state")}</dt><dd>{bridgeState ? <Badge tone={researchStateTone(bridgeState)}>{bridgeState}</Badge> : "—"}</dd></div>
+        <div><dt>{t("research.replay.window")}</dt><dd className="research-fact-wrap">{researchTimeRangeLabel(startTimeMs, endTimeMs)}</dd></div>
+        <div><dt>{t("research.replay.flag")}</dt><dd><Badge tone={bridgeEnabled ? "success" : "neutral"}>{t(bridgeEnabled ? "common.on" : "common.off")}</Badge></dd></div>
+        <div><dt>{t("research.replay.runtime")}</dt><dd><Badge tone={replayTrainingAvailable ? "success" : "neutral"}>{t(replayTrainingAvailable ? "plugin.available" : "plugin.unavailable")}</Badge></dd></div>
+        <div><dt>{t("research.replay.state")}</dt><dd>{bridgeState ? <Badge tone={researchStateTone(bridgeState)}>{researchStateLabel(bridgeState)}</Badge> : "—"}</dd></div>
       </dl>
       {advancedEnabled && (
         <div className="research-button-row">

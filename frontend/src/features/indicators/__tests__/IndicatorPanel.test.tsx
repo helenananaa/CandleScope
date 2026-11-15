@@ -66,7 +66,7 @@ test("advanced inputs are closed kit disclosures with labelled monospace text ar
   const html = editor(false);
   assert.match(html, /<div class="indicator-editor-advanced"><details class="ui-disclosure">/);
   assert.doesNotMatch(html, /<details[^>]*open/);
-  assert.match(html, /<label class="ui-field-label" for="([^"]+)">宿主输入（JSON）<\/label><textarea class="ui-input ui-textarea indicator-editor-json"[^>]*id="\1"/);
+  assert.match(html, /<label class="ui-field-label" for="([^"]+)">运行输入（JSON）<\/label><textarea class="ui-input ui-textarea indicator-editor-json"[^>]*id="\1"/);
   assert.match(html, /<label class="ui-check">.*?将收盘确认的 Pine 提醒发送到通知中心/s);
   assert.doesNotMatch(html, /text-transform|PINE SCRIPT/);
 });

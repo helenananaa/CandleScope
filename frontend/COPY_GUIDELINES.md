@@ -27,7 +27,7 @@ How CandleScope talks to people, in Chinese and English. The interface defaults 
 - **Codes never reach a default view.** Map run states, fidelity tiers, kinds and reasons through a label function (`trainingMarketTypeLabel`, `translateMarketType`, …). An unknown value gets a neutral label ("Other"); the raw code goes in technical details.
 - **Errors** go through `describeError` (`src/i18n/serverErrors.ts`): a translated summary chosen by code, HTTP status or known message, with the backend's own words as detail. Frequent codes get a message of their own (`CODE_KEYS`).
 - **Exchanges and markets** use `translateExchangeName` and `translateMarketType`, never the wire value (`binance spot`).
-- **Times** use the locale formatters (`formatDateTime`, `getDateTimeLocale()`); mark UTC when it is UTC. Never epoch milliseconds or ISO strings.
+- **Times** use the locale formatters (`formatDateTime`, `getDateTimeLocale()`); mark UTC when it is UTC. Never epoch milliseconds or ISO strings, in a value or in a field: a time a person enters uses `DateTimeInput`.
 - **Numbers** use the locale's grouping; prices keep the exchange's precision.
 - Not translated: symbols, intervals, indicator tickers, plugin and exchange ids (see `src/i18n/README.md`).
 - **Identifiers a person must type** (an environment variable to set, a file format's field names and values) stay exact: pass them into the message as placeholders, so the sentence is translated and the identifier is not.
@@ -41,6 +41,22 @@ Internal term → what users see. "Technical details only" terms may appear insi
 | status codes (`ONE_WAY`, `COMPLETED`, `BAR_APPROX`, …) | the state's name (单向持仓, 已完成, 按 K 线估算) | the state's name (One-way, Completed, Bar estimate) | via a label function |
 | backend (后端) | 本地服务, or CandleScope | local service, or CandleScope | the app runs it for you |
 | Run (replay) | 训练 | run | |
+| Run, BacktestRun (research) | 运行 | run | |
+| Study, BacktestStudy | 参数研究 | parameter study | |
+| Host, 宿主 (matching, accounts) | CandleScope, 撮合 | CandleScope, matching | |
+| authority, authoritative (权威) | 服务端 | server | "reset from authority" → 恢复为服务端设置 / Reset to server settings |
+| frozen, immutable (冻结, 不可变) | 固定, 保存 | saved, fixed; lock (a version) | |
+| bridge (replay review) | 复盘连接 | review link | |
+| blinded / reveal | 隐藏结果 / 公开 | results hidden / show | |
+| holdout | 留出数据 | held-out data | |
+| trace | 记录 | log | |
+| projection (投影) | — | — | drop it: "report and chart" |
+| warmup | 预热 | warm-up | |
+| BAR (execution mode) | K 线 | bar | |
+| V1 / V2 account model | 标准账户 / 历史永续账户 | standard account / historical perpetual account | |
+| profile (offline) | 模式 | mode | |
+| provider (evidence source) | 数据源 | source | |
+| clone | 复制 | copy | |
 | fork | 分叉 | fork | |
 | revision | 版本 | version | |
 | smoke run | 快速试运行 | quick test run | |

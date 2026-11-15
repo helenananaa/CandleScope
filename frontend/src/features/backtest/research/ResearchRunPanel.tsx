@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Badge, Button, Disclosure, Field, InlineAlert, Input, Select } from "../../../components/ui/index.js";
 import { t } from "../../../i18n/index.js";
 import { researchStateTone } from "./researchStateTone.js";
+import { researchFidelityLabel, researchStateLabel } from "./researchLabels.js";
 import { parseResearchRunConfig, researchRunIsActive } from "./backtestResearchAdvancedModel.js";
 import type { BacktestResearchRuntime } from "./backtestResearchTypes.js";
 import ResearchPanelFrame from "./ResearchPanelFrame.js";
@@ -32,8 +33,8 @@ export default function ResearchRunPanel({ runtime }: { runtime: BacktestResearc
     <ResearchPanelFrame eyebrow={t("research.panel.run")} title={activeRun?.run_id ?? t("research.run.none")}>
       {activeRun && (
         <div className="research-active-run">
-          <Badge tone={researchStateTone(activeRun.state)}>{activeRun.state}</Badge>
-          <small>{activeRun.fidelity_mode}</small>
+          <Badge tone={researchStateTone(activeRun.state)}>{researchStateLabel(activeRun.state)}</Badge>
+          <small>{researchFidelityLabel(activeRun.fidelity_mode)}</small>
         </div>
       )}
       {activeRun?.waiting_for && <InlineAlert tone="warning">{t(activeRun.waiting_for === "EXTERNAL_PROVIDER_DISABLED"
@@ -73,8 +74,8 @@ export default function ResearchRunPanel({ runtime }: { runtime: BacktestResearc
               aria-current={run.run_id === activeRun?.run_id ? "true" : undefined}
               onClick={() => void runtime.actions.openRun(run.run_id)}
             >
-              <span><strong>{run.run_id}</strong><small>{run.fidelity_mode}</small></span>
-              <Badge tone={researchStateTone(run.state)}>{run.state}</Badge>
+              <span><strong>{run.run_id}</strong><small>{researchFidelityLabel(run.fidelity_mode)}</small></span>
+              <Badge tone={researchStateTone(run.state)}>{researchStateLabel(run.state)}</Badge>
             </button>
           </li>
         ))}

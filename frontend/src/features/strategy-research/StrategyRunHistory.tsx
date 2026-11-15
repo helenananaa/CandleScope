@@ -9,6 +9,7 @@ import type { StrategyDataManager } from "../market-data/manager/strategyDataMan
 import { formatChartStrategyNumber, sampledReportDrawdown } from "../backtest/chart-tester/chartStrategyResultModel.js";
 import { formatDecimal } from "../../shared/formatDecimal.js";
 import { researchStateTone } from "../backtest/research/researchStateTone.js";
+import { researchStateLabel } from "../backtest/research/researchLabels.js";
 
 function researchRunConfig(run: BacktestRunRecord): Record<string, unknown> {
   try {
@@ -127,7 +128,7 @@ export default function StrategyRunHistory({ manager, draftId, currentRunId, onO
         <span>{date(config.start_time_ms)} — {date(config.end_time_ms)}</span>
         <small>{typeof config.external_connection_id === "string" && `${t("research.external.title")} · `}{shortId(run.run_id)}</small>
       </div>
-      <Badge tone={researchStateTone(run.state)}>{run.state}</Badge>
+      <Badge tone={researchStateTone(run.state)}>{researchStateLabel(run.state)}</Badge>
       <div className="strategy-history-actions">
         <Button size="sm" disabled={run.state !== "COMPLETED"} onClick={() => onOpen(run.run_id)}>{t("ux.openResult")}</Button>
         <Button size="sm" variant="ghost" disabled={run.state !== "COMPLETED" || !currentAvailable || run.run_id === currentRunId}

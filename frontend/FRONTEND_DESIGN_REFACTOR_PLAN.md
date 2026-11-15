@@ -576,6 +576,13 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - Strategy research is off the internal-terms baseline (zh-CN 114 → 42, en 168 → 60): 36 messages nothing used any more (the retired backtest workbench) are deleted; 45 are rewritten in all 30 catalogs (Python run modes and their permissions, quick test runs, packages and versions, fingerprints, the status bar, offline mode, the local service instead of "backend", the mode rail); the rest fix English or Chinese vocabulary only (accuracy, version).
 - Identifiers a person must type stay exact and outside the sentence: the trusted-run setting (`BACKTEST_PYTHON_TRUSTED_LOCAL_ENABLED=1`) and the account import format's fields are passed as placeholders.
 
+**Phase 6c2 is done (branch `design/phase-6c2-research-panels`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_6C2.md`](../docs/FRONTEND_DESIGN_QA_PHASE_6C2.md). With it the strategy research rows (6c, 6c2) are complete.
+
+- Research codes from data are named through `researchLabels.ts` (run, study, review and order states; accuracy tiers; why a chart's data can't be used) wherever the strategy page, native panels and tester show them; the review panel's switch, engine and range read as words and UTC dates; the data panel's start and end are `DateTimeInput` fields (were epoch milliseconds); fingerprints drop `sha256:`; the strategy panel is titled by the version's name.
+- `describeError` no longer repeats a code or a bare HTTP status ("该功能当前不可用", not "…（BACKTEST_API_UNAVAILABLE: backtest API 503）").
+- 305 unused messages (the rest of the retired backtest workbench) deleted from all 30 catalogs; 31 new or rewritten in all 30; 111 research messages reworded in Chinese and English (运行, 参数研究, CandleScope / 撮合, 服务端, 固定, 复盘连接…); 94 strategy-page messages translated into Japanese.
+- The internal-terms check also rejects Run, Study, trace, manifest, warm-up, provider, snapshot, tick and 权威 in Chinese and "holdout" in both languages; the baseline stays 42 / 60 (6d).
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.

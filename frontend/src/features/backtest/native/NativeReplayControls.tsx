@@ -6,6 +6,7 @@ import { choice, empty, number, object, text } from "../../app-control/commandSc
 import { t } from "../../../i18n/index.js";
 import { nativeApi, type NativeResult } from "./nativeBacktestApi.js";
 import { pollNativeReplay } from "./nativeReplayPolling.js";
+import { researchStateLabel } from "../research/researchLabels.js";
 
 export interface NativeReplayRecord {
   replay_id: string;
@@ -71,7 +72,7 @@ export function NativeReplayControls({ runId, replay, onChange, hostAccount = fa
     <strong>{title}</strong>
     {replay && <p>{t(replay.method === "HOST_ACCOUNT_CHECKPOINT" ? "native.replay.host" : replay.method === "FIXED_HORIZON_INCREMENTAL" ? "native.replay.incremental" : "native.replay.method")}</p>}
     {!replay ? <Button size="sm" variant="primary" disabled={busy} onClick={() => void command("create")}>{t("native.replay.start")}</Button> : <>
-      <p className="native-replay-position" role="status">{replay.cursor} / {replay.total} · {replay.state}</p>
+      <p className="native-replay-position" role="status">{replay.cursor} / {replay.total} · {researchStateLabel(replay.state)}</p>
       <div className="native-toolbar">
         <Button size="sm" disabled={busy || running || replay.cursor >= replay.total} onClick={() => void command("step")}>{t("native.replay.step")}</Button>
         <Button size="sm" variant="primary" disabled={busy || running || replay.cursor >= replay.total} onClick={() => void command("play")}>{t("native.replay.play")}</Button>
