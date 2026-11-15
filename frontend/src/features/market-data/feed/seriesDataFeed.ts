@@ -287,6 +287,7 @@ const PENDING_REPAIR_POLL_BASE_MS = 2_000;
 const PENDING_REPAIR_MAX_ATTEMPTS = 5;
 const PENDING_REPAIR_DORMANT_POLL_MS = 10 * 60_000;
 export const ACTIVE_EXACT_REPAIR_POLL_MS = 1_500;
+export const LARGE_EXACT_REPAIR_POLL_MS = 3_000;
 const ACTIVE_EXACT_REPAIR_ERROR_MAX_MS = 30_000;
 const GAP_PLANNER_THROTTLE_MS = 1_000;
 const FRONTEND_CONTINUOUS_EXCHANGES: ReadonlySet<string> = new Set(["binance", "okx"]);
@@ -1600,7 +1601,8 @@ export class SeriesDataFeed {
       failureAttempts: current?.failureAttempts ?? 0,
       nextPollAt: nextTerminalReason
         ? Number.POSITIVE_INFINITY
-        : Date.now() + ACTIVE_EXACT_REPAIR_POLL_MS,
+        : Date.now() + ((parseIntervalSeconds(series.interval) ?? 0) > 10_000*60
+          ? LARGE_EXACT_REPAIR_POLL_MS : ACTIVE_EXACT_REPAIR_POLL_MS),
       dormant: nextDormant,
       ...(nextTerminalReason ? { terminalReason: nextTerminalReason } : {}),
       ...(nextResolved ? { onResolved: nextResolved } : {}),
@@ -2071,14 +2073,6 @@ export class SeriesDataFeed {
       if (remaining) {
         remaining.indicatorWindowOwner = indicatorWindowOwner;
         remaining.indicatorWindowEpoch = epoch;
-        if (remaining.nextPollAt <= Date.now() + ACTIVE_EXACT_REPAIR_POLL_MS) {
-          for (const peer of this.pendingGapRepairs.values()) {
-            if (this.seriesKey(peer.series) === this.seriesKey(series) && !peer.terminalReason
-                && peer.range.start >= range.start && peer.range.end <= range.end) {
-              peer.nextPollAt = Math.max(peer.nextPollAt, remaining.nextPollAt);
-            }
-          }
-        }
       }
       return true;
     } catch (error) {
@@ -2203,12 +2197,9 @@ export class SeriesDataFeed {
         && (force || now >= pending.nextPollAt)
       ))
       .sort((left, right) => left.nextPollAt - right.nextPollAt);
-    // Count-back growth retains older completion owners. Polling each nested
-    // window repeats the same storage/repair work; one due covering range is
-    // sufficient. Disjoint/partially overlapping ranges remain independent.
-    const coalesced = due.filter(pending => !due.some(other => other !== pending
-      && other.range.start <= pending.range.start && other.range.end >= pending.range.end));
-    for (const pending of coalesced) {
+    // An unresolved covering request cannot establish a child's availability
+    // or admit its work. Only the verified proof above may retire its owner.
+    for (const pending of due) {
       if (requested >= maxRequests) break;
       if (this.currentGapRepairGeneration(series) !== repairGeneration) break;
       if (this.pendingGapRepairs.get(this.gapRepairKey(series, pending.range)) !== pending) continue;

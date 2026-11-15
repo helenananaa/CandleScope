@@ -8,6 +8,26 @@ from tests.test_mixed_history_reader import row, MINUTE
 WIDTH = 10007*MINUTE
 
 
+@pytest.mark.parametrize('period', [89, 97, 101])
+@pytest.mark.parametrize('mode', ['range', 'before'])
+@pytest.mark.parametrize('holes', [(), (60, 61)])
+def test_large_source_window_reuses_canonical_targets_even_when_each_bar_is_small(mixed_query, monkeypatch, period, mode, holes):
+    query = mixed_query
+    width = period*MINUTE
+    query.storage.upsert_bars('BTCUSDT',f'{period}m',
+        [row(n*width,width) for n in range(128) if n not in holes],
+        market_type='futures',source='backfill_aggregated')
+    monkeypatch.setattr(query, '_query_closed_mixed', lambda *a, **kw: pytest.fail('reacquired a large persisted source window'))
+    options = dict(limit=128,market_type='futures',auto_backfill=False)
+    result = (query.query_before('BTCUSDT',f'{period}m',128*width,**options) if mode == 'before'
+        else query.query('BTCUSDT',f'{period}m',start_ms=0,end_ms=128*width-1,**options))
+    assert result.metadata['canonical_target_snapshot']
+    assert result.metadata['storage_reads'] == 1 and result.metadata['storage_rows'] == 128-len(holes)
+    assert [bar.time_ms for bar in result.bars] == [n*width for n in range(128) if n not in holes]
+    assert result.complete is (not holes)
+    assert [(gap.start_ms,gap.end_ms) for gap in result.missing_ranges] == [(n*width,n*width) for n in holes]
+
+
 def seed(query, count=4):
     query.storage.upsert_bars('BTCUSDT','10007m',[row(n*WIDTH,WIDTH) for n in range(count)],
         market_type='futures',source='backfill_aggregated')

@@ -280,8 +280,7 @@ class QueryEngine:
             return None
         base = parse_interval_spec(route.base_interval)
         spec = route.spec
-        if (base is None or spec.phase_ms or spec.calendar_unit is not None
-                or spec.nominal_ms <= base.nominal_ms*self._cfg.max_limit):
+        if base is None or spec.phase_ms or spec.calendar_unit is not None:
             return None
         calendar = self._calendar_for(key)
         if calendar is not None and not isinstance(calendar, AlwaysOpenCalendar):
@@ -312,6 +311,8 @@ class QueryEngine:
                 return None
             last -= spec.nominal_ms
         count = (last-first)//spec.nominal_ms+1
+        if count*spec.nominal_ms <= base.nominal_ms*self._cfg.max_limit:
+            return None
         effective_limit = min(limit or self._cfg.default_limit, self._cfg.max_limit)
         reader = getattr(self._storage, 'read_closed_target_snapshot', None)
         consumer = self._cache.revision_consumer
