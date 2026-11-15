@@ -50,7 +50,7 @@ export const workbenchEnglish = {
   "native.account.fundingOff": "Off",
   "native.account.fundingHistorical": "Historical settlements",
   "native.account.data": "Historical account data (JSON)",
-  "native.account.dataHelp": "Import symbol, ordered events (time_ms, role, payload) and optional provenance. Include opening INSTRUMENT_RULES and MARK_INDEX; historical funding also requires FUNDING events. Times are Unix milliseconds.",
+  "native.account.dataHelp": "Import the symbol, time-ordered events ({fields}) and optional provenance. Include {rules} and {markIndex} before the open; historical funding also needs {funding} events. Times are Unix milliseconds.",
   "native.account.events": "account events",
   "native.account.clear": "Clear account file",
   "native.account.participation": "Limit fills by BAR volume",

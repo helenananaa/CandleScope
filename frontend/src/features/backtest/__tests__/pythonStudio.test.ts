@@ -83,7 +83,8 @@ describe("python studio mapping and state", () => {
     assert.match(located.nextStep, /close/);
 
     const sandbox = mapStudioFailure(new Error("SANDBOX_UNAVAILABLE: AppContainer missing"));
-    assert.match(sandbox.nextStep, /TRUSTED_LOCAL/);
+    assert.match(sandbox.nextStep, /直接运行/);
+    assert.doesNotMatch(sandbox.nextStep, /TRUSTED_LOCAL|SANDBOXED_LOCAL/);
     assert.doesNotMatch(sandbox.nextStep, /继续/);
   });
 
@@ -115,7 +116,8 @@ describe("python studio mapping and state", () => {
     assert.equal(canStartTrustedLocal({ trustedFlagEnabled: false, confirmed: true }), false);
     assert.equal(canStartTrustedLocal({ trustedFlagEnabled: true, confirmed: false }), false);
     assert.equal(canStartTrustedLocal({ trustedFlagEnabled: true, confirmed: true }), true);
-    assert.match(trustedLocalConfirmLabel(), /权限事实/);
+    assert.match(trustedLocalConfirmLabel(), /权限说明/);
+    assert.ok(trustedLocalFacts().some((fact) => fact.includes("BACKTEST_PYTHON_TRUSTED_LOCAL_ENABLED=1")));
     assert.ok(trustedLocalFacts().some((fact) => fact.includes("AppContainer")));
     assert.doesNotMatch(studio, />继续</);
     assert.match(studio, /trustedLocalConfirmLabel/);

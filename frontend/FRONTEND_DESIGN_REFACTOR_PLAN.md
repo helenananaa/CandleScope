@@ -551,6 +551,7 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 | 6b | Replay: hub options, storage, session status bar, end dialog, integrity drawer, rail, ticket and account (57 zh-CN / 57 en baseline entries, plus codes rendered from data) |
 | 6b2 | Replay's technical panels: codes rendered from data in the integrity and review drawer, the liquidation timeline, storage governance and raw-trade retention, and the remaining replay messages with English words (about 100, outside the check's term list) |
 | 6c | Strategy research: tools, status bar, run states, fidelity and engine names, times as epoch ms, the strategy tester, local data and CSV import (72 / 108 entries, plus codes from data) |
+| 6c2 | Strategy research's remaining copy: codes rendered from data (run states such as `DRAFT`, fidelity tiers such as `BAR_APPROX`, engine and model ids), times shown as epoch milliseconds, and about 150 messages with English words outside the check's term list ("Run", "fold", "holdout", "authority"…) |
 | 6d | Data and plugins: Settings storage and maintenance, the data workbench and repair, the plugin center and live control, the extension text helper moved into the catalogs (42 / 60 entries); the baseline is empty after it, so the check becomes a plain rule |
 
 **Phase 6a is done (branch `design/phase-6-copy`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_6A.md`](../docs/FRONTEND_DESIGN_QA_PHASE_6A.md).
@@ -569,6 +570,11 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 
 - Replay's technical panels name their states: the create dialog's practice changes, the review drawer (strictness, lock, rule revisions, audits, funding, budget), the liquidation timeline (case, step, leg, order and auto-deleveraging states, sides and orders) and the storage panel (decision, switches, alert levels, object identity and health); 47 new messages in all 30 catalogs.
 - 73 Chinese replay messages lose their English words (in zh-CN and the Traditional catalogs), 8 English ones lose code names. Kept as codes on purpose: the drawer's result label and event log, storage protection codes and ids.
+
+**Phase 6c is done (branch `design/phase-6c-research-copy`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_6C.md`](../docs/FRONTEND_DESIGN_QA_PHASE_6C.md). Row 6c2 was added when it started: the research pages still show codes from data and about 150 messages with English words outside the term list, so they follow on their own.
+
+- Strategy research is off the internal-terms baseline (zh-CN 114 → 42, en 168 → 60): 36 messages nothing used any more (the retired backtest workbench) are deleted; 45 are rewritten in all 30 catalogs (Python run modes and their permissions, quick test runs, packages and versions, fingerprints, the status bar, offline mode, the local service instead of "backend", the mode rail); the rest fix English or Chinese vocabulary only (accuracy, version).
+- Identifiers a person must type stay exact and outside the sentence: the trusted-run setting (`BACKTEST_PYTHON_TRUSTED_LOCAL_ENABLED=1`) and the account import format's fields are passed as placeholders.
 
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 

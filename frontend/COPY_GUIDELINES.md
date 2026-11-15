@@ -30,6 +30,7 @@ How CandleScope talks to people, in Chinese and English. The interface defaults 
 - **Times** use the locale formatters (`formatDateTime`, `getDateTimeLocale()`); mark UTC when it is UTC. Never epoch milliseconds or ISO strings.
 - **Numbers** use the locale's grouping; prices keep the exchange's precision.
 - Not translated: symbols, intervals, indicator tickers, plugin and exchange ids (see `src/i18n/README.md`).
+- **Identifiers a person must type** (an environment variable to set, a file format's field names and values) stay exact: pass them into the message as placeholders, so the sentence is translated and the identifier is not.
 
 ## Glossary
 
@@ -42,12 +43,14 @@ Internal term → what users see. "Technical details only" terms may appear insi
 | Run (replay) | 训练 | run | |
 | fork | 分叉 | fork | |
 | revision | 版本 | version | |
+| smoke run | 快速试运行 | quick test run | |
+| Study V2 | 参数研究 | parameter study | |
+| sandboxed / trusted local (Python) | 沙箱运行 / 本机直接运行 | sandboxed / directly on this computer | |
 | epoch, dataEpoch | 数据版本 | data version | |
 | receipt | 记录 | record | |
 | bundle | 策略包 | package | |
 | payload | 内容 | content | |
 | hash, checksum | 校验值 | fingerprint | technical details only |
-| smoke run | 快速试运行 | quick test run | |
 | dry-run | 预演 | preview | |
 | GC | 清理 | cleanup | |
 | VACUUM | 压缩数据库 | compact the database | |
