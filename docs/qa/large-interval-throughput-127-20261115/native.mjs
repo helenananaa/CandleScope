@@ -165,14 +165,14 @@ async function launch() {
   await q.record('packaged-launch', { identity: q.s.identity, bootstrap: q.s.bootstrap });
 }
 
-async function waitForLiveFrames(label) {
+async function waitForLiveFrames(label, since=0) {
   if (process.env.CANDLESCOPE_AGGREGATION_REQUIRE_LIVE !== 'true') return;
   let streams;
   await q.until(async () => {
     const diagnostics = await api('/api/v1/settings/cache-diagnostics');
     streams = diagnostics.data_manager.coordinator.streams;
     return ['1m', ...PRIMARY].every(interval => streams.some(stream =>
-      stream.interval === interval && stream.bars_received > 0));
+      stream.interval === interval && stream.bars_received > 0 && stream.last_bar_at_ms >= since));
   }, 120_000);
   await q.record('live-frames-' + label, { streams });
 }
@@ -399,8 +399,10 @@ try {
   await q.delay(5000);
   await q.record('actual-window-hidden',{hidden,documentVisibility:await q.s.page.evaluate(()=>document.visibilityState),
     diagnostics:await api('/api/v1/settings/cache-diagnostics')});
+  const restoredSince = Date.now();
   await q.s.app.evaluate(({BrowserWindow},id)=>{const window=BrowserWindow.fromId(id);window.restore();window.show();},hidden.id);
   phase='restored-visible';
+  await waitForLiveFrames('restored-visible',restoredSince);
   await verifyConsumers('restored-visible');
   await q.record('visible-prime-canonical',await verify(PRIMARY));
   await q.screenshot('restored-visible');
@@ -414,11 +416,13 @@ try {
   await configure(charts(PRIMARY),'quad');
   await q.record('warm-prime-recreation',await verify(PRIMARY,anchors));
   await addProbes();
+  await waitForLiveFrames('recreated',Date.now());
   await verifyConsumers('recreated');
   await q.screenshot('recreated-primes');
   await quit();
   phase='saved-prime-restart';
   await launch();
+  await waitForLiveFrames('saved-prime-restart',Date.now());
   await q.record('saved-prime-restart',await verify(PRIMARY,anchors));
   await verifyConsumers('restarted');
   await q.screenshot('restarted-primes');
