@@ -3,6 +3,7 @@ import asyncio
 import sqlite3
 from dataclasses import replace
 import threading
+from types import SimpleNamespace
 
 import pytest
 
@@ -45,6 +46,45 @@ async def feed(agg, row, *, closed=False):
 
 def actual(agg):
     return agg.get_bucket_state('BTCUSDT', '121d', 0, market_type='futures')
+
+
+def test_warm_storage_read_cannot_replace_prefix_adopted_while_waiting(dm, runtime):
+    from app.data_engine.data_manager.cache import BarCache
+    from app.data_engine.data_manager.warm_start import AggregatorWarmStartService
+    agg, prefix_runtime, _ = runtime
+
+    async def check():
+        entered, release = threading.Event(), threading.Event()
+
+        class Storage:
+            def query_bars(self, **kwargs):
+                entered.set()
+                assert release.wait(10)
+                return [dict(open_time=0, close_time=DAY-1, open=1, high=1,
+                             low=1, close=1, volume=1, source='backfill')]
+
+        warm = AggregatorWarmStartService(cache=BarCache(), bar_aggregator=agg,
+            base_interval='1d', storage_provider=lambda: Storage(),
+            backfill_trigger_provider=lambda: None)
+        task = asyncio.create_task(warm._seed_custom_interval('BTCUSDT', '121d',
+            market_type='futures', route=SimpleNamespace(base_interval='1d')))
+        try:
+            for _ in range(100):
+                if entered.is_set():
+                    break
+                await asyncio.sleep(.01)
+            assert entered.is_set()
+            assert await prefix_runtime.seed(KEY, '121d', 0, 120 * DAY)
+            before = actual(agg)
+            assert before._history_prefix is not None
+        finally:
+            release.set()
+        await task
+        after = actual(agg)
+        assert after._history_prefix is not None
+        assert after._history_prefix == before._history_prefix
+        assert after.volume == before.volume
+    asyncio.run(check())
 
 
 def reference(dm, tail):

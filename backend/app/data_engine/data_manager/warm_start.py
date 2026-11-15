@@ -362,6 +362,18 @@ class AggregatorWarmStartService:
             market_type=market_type,
             series_identity=series_identity,
         )
+        if current_state is not None and current_state._source_recovery is not None:
+            # A canonical prefix may have been adopted while storage ran in
+            # its worker. Preserve that newer owner rather than expiring it.
+            self._keep_source_recovery(current_state, base_interval, base_seconds, now_ms,
+                focus_scope, subscription_tier)
+            return
+        if current_state is not None and current_state._history_prefix is not None:
+            key = SeriesKey.create(symbol, interval, exchange=exchange,
+                                   market_type=market_type, identity=series_identity)
+            await self._cache.apply_protected(self._cache.upsert_if_accepted, key,
+                                             BarData.from_bar_state(current_state))
+            return
         components: list[BarInput] = []
         for row in rows:
             open_time_ms = int(row["open_time"])
