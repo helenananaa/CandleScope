@@ -90,6 +90,35 @@ def test_local_materialization_rechecks_a_later_canonical_amendment(mixed_query,
     assert not result.complete and result.retryable and not result.bars
 
 
+def test_local_reacquisition_cannot_renew_deleted_source_permission(mixed_query, monkeypatch):
+    query = mixed_query
+    width = 89*MINUTE
+    query.storage.upsert_bars('BTCUSDT','1m',[row(n*MINUTE,MINUTE) for n in range(2*89)],
+        market_type='futures',source='backfill')
+    query.storage.upsert_bars('BTCUSDT','89m',[row(n*width,width) for n in range(2,128)],
+        market_type='futures',source='backfill_aggregated')
+    original = query.storage.count_bars
+    changed = []
+    def count(*args, **options):
+        result = original(*args, **options)
+        if not changed:
+            changed.append(True)
+            def delete_reinsert():
+                query.storage.delete_bars('BTCUSDT','1m',0,0,market_type='futures')
+                query.storage.upsert_bars('BTCUSDT','1m',[row(0,MINUTE)],
+                    market_type='futures',source='backfill')
+            Context().run(delete_reinsert)
+        return result
+    monkeypatch.setattr(query.storage,'count_bars',count)
+    result = query.query('BTCUSDT','89m',start_ms=0,end_ms=128*width-1,limit=128,
+        market_type='futures',auto_backfill=False)
+    # The unrelated surviving canonical prefix remains readable; neither
+    # deleted input permission nor either missing target may be recreated.
+    assert not result.complete and result.retryable and len(result.bars) == 126
+    assert result.metadata['target_materialized_written'] == 0
+    assert original('BTCUSDT','89m',0,width,market_type='futures') == 0
+
+
 @pytest.mark.parametrize('period', [89, 97, 101])
 @pytest.mark.parametrize('mode', ['range', 'before'])
 @pytest.mark.parametrize('holes', [(), (60, 61)])

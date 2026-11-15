@@ -368,10 +368,18 @@ class QueryEngine:
                 if available < fine_count:
                     continue
                 local_budget -= cost
-                local = self.custom_intervals.query_from_base(symbol=key.symbol, interval=key.interval,
-                    start_ms=opened,end_ms=opened,limit=1,started_at=started_at,
-                    exchange=key.exchange,market_type=key.market_type,auto_backfill=False,
-                    route=route,composition_contract=composition_contract)
+                from app.data_engine.storage.revisions import (
+                    acquisition_scope, acquisition_delete_floor, acquisition_revision)
+                # Reacquire all inputs for this independent local reduction.
+                # Keep the caller's deletion floor: a newer view must never
+                # renew permission revoked by a concurrent explicit deletion.
+                deletion_floor = acquisition_delete_floor(acquisition_revision())
+                consumer.sync(force=True)
+                with acquisition_scope(consumer.store.acquisition(revision=deletion_floor)):
+                    local = self.custom_intervals.query_from_base(symbol=key.symbol, interval=key.interval,
+                        start_ms=opened,end_ms=opened,limit=1,started_at=started_at,
+                        exchange=key.exchange,market_type=key.market_type,auto_backfill=False,
+                        route=route,composition_contract=composition_contract)
                 if local is not None:
                     local_reports.append({'open_ms':opened,'complete':local.complete,
                         'storage_reads':local.metadata.get('storage_reads',0),
