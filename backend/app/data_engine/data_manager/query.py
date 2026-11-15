@@ -271,7 +271,7 @@ class QueryEngine:
         """Lease-scoped H127 canonical history page; publish only after context exit."""
         return self.history_blocks.read(source, start_ms, end_ms, **options)
 
-    def _closed_target_snapshot(self, *, key, route, start_ms, end_ms, limit, composition_contract, io_metrics, started_at):
+    def _closed_target_snapshot(self, *, key, route, start_ms, end_ms, limit, composition_contract, io_metrics, started_at, auto_backfill):
         """Read an already persisted closed page without reacquiring its inputs."""
         from app.data_engine.history import AlwaysOpenCalendar
         from app.data_engine.interval_policy import parse_interval_spec
@@ -335,10 +335,20 @@ class QueryEngine:
             return None
         proof = proofs[0]
         bars = self._storage_rows_to_bars(key, rows, io_metrics)
-        if (len(bars) != count or any(not bar.trusted_final or not bar.is_closed for bar in bars)
+        if (not bars or any(not bar.trusted_final or not bar.is_closed for bar in bars)
                 or composition_contract is not None and any(
                     getattr(bar, field, None) is None for bar in bars for field in declaration[0].fields)):
             return None
+        stored_count = len(bars)
+        present = {bar.time_ms for bar in bars}
+        # A finer source commit can withdraw a handful of dependent targets.
+        # Do not re-aggregate the surviving page or merge the holes into a
+        # source budget that a single target already nearly consumes.
+        missing = [gap for opened in range(first, last+1, spec.nominal_ms)
+            if opened not in present and (gap := self._trigger_backfill(
+                key, opened, opened, reason='query_empty', missing_bars=1,
+                submit=auto_backfill)) is not None]
+        partial = stored_count != count
         if preview is not None:
             bars.append(preview)
             from dataclasses import replace
@@ -348,10 +358,13 @@ class QueryEngine:
             market_type=key.market_type,**key.identity.to_dict(),
             source=QuerySource.MIXED if preview is not None else QuerySource.STORAGE,total=len(bars),
             has_more=first > 0, next_before_ms=first if first > 0 else None,
-            complete=True,metadata={'all_rows_final':preview is None,'expected_closed_rows':count,
-                'expected_closed_through_ms':last,'target_materialized':True,'canonical_target_snapshot':True,
+            complete=not partial, retryable=partial, history_state='pending' if partial else 'ready',
+            missing_ranges=missing, backfill_triggered=bool(missing and auto_backfill and self._backfill_trigger),
+            metadata={'all_rows_final':preview is None,'expected_closed_rows':count,
+                'expected_closed_through_ms':last,'target_materialized':not partial,'canonical_target_snapshot':True,
+                'canonical_target_partial':partial,
                 'canonical_target_preview':preview is not None,
-                'storage_reads':1,'storage_rows':count,'target_materialized_rows':count,
+                'storage_reads':1,'storage_rows':stored_count,'target_materialized_rows':stored_count,
                 'target_materialized_written':0,'derived_from':route.base_interval,
                 'elapsed_ms':round((time.monotonic()-started_at)*1000,2)},
             _closed_target_read=proof.bind(rows, bars))
@@ -474,7 +487,8 @@ class QueryEngine:
                 )
             result = self._closed_target_snapshot(key=SeriesKey(symbol, interval, exchange=exchange,
                 market_type=market_type, **identity.to_dict()), route=route, start_ms=start_ms,
-                end_ms=end_ms, limit=limit, composition_contract=composition_contract, io_metrics=io_metrics, started_at=t0)
+                end_ms=end_ms, limit=limit, composition_contract=composition_contract, io_metrics=io_metrics, started_at=t0,
+                auto_backfill=allow_backfill)
             if result is not None:
                 return result
             result = self.custom_intervals.query_from_base(
@@ -895,8 +909,8 @@ class QueryEngine:
                 market_type=market_type, **identity.to_dict()), route=route,
                 start_ms=max(0, last-(effective_limit-1)*route.spec.nominal_ms), end_ms=last,
                 limit=effective_limit, composition_contract=composition_contract,
-                io_metrics=io_metrics, started_at=t0)
-            if result is not None and len(result.bars) == effective_limit:
+                io_metrics=io_metrics, started_at=t0, auto_backfill=allow_backfill)
+            if result is not None:
                 return result
             result = self.custom_intervals.query_before(
                 symbol,

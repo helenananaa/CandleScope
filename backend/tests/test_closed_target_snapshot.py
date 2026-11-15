@@ -55,10 +55,10 @@ def test_canonical_target_snapshot_is_fenced_without_recomputing_sources(mixed_q
         assert not result.complete and result.retryable and not result.bars
 
 
-@pytest.mark.parametrize('invalid',['hole','untrusted','malformed_close','malformed_value','forming','truncated'])
-def test_canonical_fast_read_requires_the_whole_closed_trusted_page(mixed_query, monkeypatch, invalid):
+@pytest.mark.parametrize('invalid',['untrusted','malformed_close','malformed_value','forming','truncated'])
+def test_canonical_fast_read_requires_closed_trusted_untruncated_rows(mixed_query, monkeypatch, invalid):
     query = mixed_query
-    seed(query, 3 if invalid == 'hole' else 4)
+    seed(query)
     if invalid == 'untrusted':
         from app.data_engine.storage import klines_repo
         with klines_repo._connect() as conn:
@@ -77,6 +77,97 @@ def test_canonical_fast_read_requires_the_whole_closed_trusted_page(mixed_query,
                              market_type='futures',auto_backfill=False)
     else: result = read(query)
     assert not result.metadata.get('canonical_target_snapshot')
+
+
+@pytest.mark.parametrize('mode', ['range', 'before'])
+@pytest.mark.parametrize('auto_backfill', [False, True])
+def test_nearly_complete_page_reads_once_and_repairs_only_missing_targets(mixed_query, monkeypatch, mode, auto_backfill):
+    query = mixed_query
+    holes = {118, 119}
+    query.storage.upsert_bars('BTCUSDT','10007m',
+        [row(n*WIDTH,WIDTH) for n in range(128) if n not in holes],
+        market_type='futures',source='backfill_aggregated')
+    submitted = []
+    monkeypatch.setattr(query, '_backfill_trigger', lambda *args: submitted.append(args))
+    monkeypatch.setattr(query, '_query_closed_mixed', lambda *a, **kw: pytest.fail('recomputed surviving targets'))
+    options = dict(limit=128, market_type='futures', auto_backfill=auto_backfill)
+    result = (query.query_before('BTCUSDT','10007m',128*WIDTH,**options) if mode == 'before'
+        else query.query('BTCUSDT','10007m',start_ms=0,end_ms=128*WIDTH-1,**options))
+    assert [bar.time_ms for bar in result.bars] == [n*WIDTH for n in range(128) if n not in holes]
+    assert not result.complete and result.retryable and result.history_state == 'pending'
+    assert result.metadata['canonical_target_snapshot'] and result.metadata['canonical_target_partial']
+    assert not result.metadata['target_materialized'] and result.metadata['target_materialized_written'] == 0
+    assert result.metadata['storage_reads'] == 1 and result.metadata['storage_rows'] == 126
+    assert [(gap.start_ms,gap.end_ms,gap.missing_bars) for gap in result.missing_ranges] == [
+        (118*WIDTH,118*WIDTH,1),(119*WIDTH,119*WIDTH,1)]
+    expected = [('BTCUSDT','10007m',n*WIDTH,n*WIDTH,'binance','futures') for n in sorted(holes)]
+    assert submitted == (expected if auto_backfill else [])
+    assert result.backfill_triggered is auto_backfill
+    # Filling a hole creates a new snapshot, never an old "complete" page.
+    query.storage.upsert_bars('BTCUSDT','10007m',[row(n*WIDTH,WIDTH) for n in holes],
+        market_type='futures',source='backfill_aggregated')
+    complete = query.query('BTCUSDT','10007m',start_ms=0,end_ms=128*WIDTH-1,**options)
+    assert complete.complete and len(complete.bars) == 128 and not complete.missing_ranges
+
+
+@pytest.mark.parametrize('change', ['fill', 'amend', 'delete_reinsert', 'decoded_row', 'input'])
+def test_partial_snapshot_rechecks_surviving_rows_and_absent_slots(mixed_query, monkeypatch, change):
+    query = mixed_query
+    seed(query, 3)
+    original = query.storage.read_closed_target_snapshot
+    def changing(*args):
+        snapshot = original(*args)
+        def mutate():
+            if change == 'fill':
+                query.storage.upsert_bars('BTCUSDT','10007m',[row(3*WIDTH,WIDTH)],
+                    market_type='futures',source='backfill_aggregated')
+            elif change == 'amend':
+                query.storage.upsert_bars('BTCUSDT','10007m',[{**row(0,WIDTH),'close':100.5}],
+                    market_type='futures',source='backfill_aggregated')
+            elif change == 'delete_reinsert':
+                query.storage.delete_bars('BTCUSDT','10007m',0,0,market_type='futures')
+                query.storage.upsert_bars('BTCUSDT','10007m',[row(0,WIDTH)],
+                    market_type='futures',source='backfill_aggregated')
+            elif change == 'input':
+                query.storage.upsert_bars('BTCUSDT','1m',[row(0,MINUTE)],
+                    market_type='futures',source='backfill')
+            else: snapshot[0][0]['close'] = 100.5
+        Context().run(mutate)
+        return snapshot
+    monkeypatch.setattr(query.storage,'read_closed_target_snapshot',changing)
+    result = read(query)
+    assert not result.complete and result.retryable and not result.bars
+
+
+@pytest.mark.parametrize('missing', [8, 9, 16])
+def test_sparse_fast_path_caps_repair_fanout_and_defers_cold_pages(mixed_query, missing):
+    query = mixed_query
+    query.storage.upsert_bars('BTCUSDT','10007m',
+        [row(n*WIDTH,WIDTH) for n in range(16-missing)],
+        market_type='futures',source='backfill_aggregated')
+    result = query.query('BTCUSDT','10007m',start_ms=0,end_ms=16*WIDTH-1,limit=16,
+        market_type='futures',auto_backfill=False)
+    assert bool(result.metadata.get('canonical_target_partial')) is (missing == 8)
+    if missing == 8:
+        assert len(result.missing_ranges) == 8 and not result.complete
+
+
+def test_partial_closed_prefix_keeps_forming_preview_explicit(mixed_query, monkeypatch):
+    from app.data_engine.data_manager.models import BarData, SeriesKey
+    query = mixed_query
+    seed(query, 3)
+    monkeypatch.setattr('time.time', lambda: (4*WIDTH+MINUTE)/1000)
+    query._cache.revision_consumer.sync(force=True)
+    key = SeriesKey('BTCUSDT','10007m',exchange='binance',market_type='futures')
+    forming = BarData(time=4*WIDTH//1000,open=100,high=102,low=99,close=101,
+        volume=1,is_closed=False,source='ws')
+    query._cache.bulk_load(key,[forming])
+    result = query.query('BTCUSDT','10007m',start_ms=0,end_ms=4*WIDTH,limit=5,
+        market_type='futures',auto_backfill=False)
+    assert not result.complete and result.retryable and result.bars[-1] == forming
+    assert len(result.bars) == 4 and result.metadata['canonical_target_partial']
+    assert result.metadata['canonical_target_preview'] and not result.metadata['all_rows_final']
+    assert [(gap.start_ms,gap.end_ms) for gap in result.missing_ranges] == [(3*WIDTH,3*WIDTH)]
 
 
 @pytest.mark.parametrize('preview', [False, True])

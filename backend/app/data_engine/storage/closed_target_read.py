@@ -2,7 +2,8 @@
 
 This reads no cache, computes no aggregate and grants no write permission.
 Current target contents and the durable explicit-deletion floor are checked
-again before adoption. All incomplete/untrusted/nonfixed pages decline.
+again before adoption. A nearly complete page may expose its bounded holes;
+untrusted/nonfixed pages and cold pages still decline.
 """
 from dataclasses import dataclass, replace
 import hashlib
@@ -78,10 +79,10 @@ def read_closed_target(storage, store, scope, key, first, last, width, count, no
             ' AND '.join(f'{name}=?' for name in IDENTITY_COLUMNS) +
             ' AND open_time BETWEEN ? AND ? ORDER BY open_time LIMIT ?',
             (*key, first, last, count+1)).fetchall()
-        if len(rows) != count:
+        if not rows or not 0 <= count-len(rows) <= 8:
             return [dict(row) for row in rows], None
-        for index, row in enumerate(rows):
-            if (row['open_time'] != first+index*width or row['close_time'] != row['open_time']+width-1
+        for row in rows:
+            if ((row['open_time']-first) % width or row['close_time'] != row['open_time']+width-1
                     or not source_is_trusted_final(row['source'])
                     or any(type(row[name]) not in (int,float) for name in ('open','high','low','close','volume'))
                     or not valid_ohlcv(tuple(row[name] for name in ('open','high','low','close','volume')))):
