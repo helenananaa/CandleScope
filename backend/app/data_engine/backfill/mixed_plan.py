@@ -177,9 +177,9 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
     if count >= (stop - first) // base.nominal_ms and not required_contract:
         diagnostics["mixed_plan_fallback"] = "local_single_base_preferred"
         return None
-    _, changes = await run_storage(store.read_series_changes, keys)
-    if any(change and change["revision"] > floor for change in changes):
-        raise StaleAcquisition("mixed planning sources changed after acquisition")
+    planning_head, changes = await run_storage(store.read_series_changes, keys)
+    from app.data_engine.storage.range_changes import check_store_range
+    await run_storage(check_store_range, store, keys, first, stop, floor)
     mutations = {key: change for (key, _), change in zip(precedences, changes)}
     versions = tuple(change["revision"] if change else 0 for change in changes)
     budget = getattr(engine, "memory_budget", None)
@@ -233,8 +233,10 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
             if requests > baseline_requests:
                 raise _DeclineMixed("rest_request_cost")
             _, current = await run_storage(store.read_versions, keys)
-            if tuple(current) != versions or engine._storage is not storage or engine._cfg is not cfg:
-                raise StaleAcquisition("mixed planning sources or bindings changed")
+            if tuple(current) != versions:
+                await run_storage(check_store_range, store, keys, first, stop, planning_head)
+            if engine._storage is not storage or engine._cfg is not cfg:
+                raise StaleAcquisition("mixed planning bindings changed")
             if (detector._calendar_resolver is not calendar_resolver
                     or detector._resolve_calendar(target.exchange, target.market_type, target.symbol) != calendar):
                 raise StaleAcquisition("mixed planning calendar changed")
@@ -426,7 +428,7 @@ async def checked_mixed_windows(storage, target, policy, windows):
     keys = tuple((key.exchange, key.market_type, key.symbol, key.interval, *key.identity.storage_values)
                  for key, _ in precedences)
     store = storage.revision_store
-    _, changes = await run_storage(store.read_series_changes, keys)
+    read_head, changes = await run_storage(store.read_series_changes, keys)
     mutations = {key: change for (key, _), change in zip(precedences, changes)}
     versions = tuple(change["revision"] if change else 0 for change in changes)
     result = []
@@ -476,7 +478,10 @@ async def checked_mixed_windows(storage, target, policy, windows):
                     part.end_ms-part.source.width_ms, window[3]) for part in cover.spans)
     _, current = await run_storage(store.read_versions, keys)
     if tuple(current) != versions:
-        raise StaleAcquisition("mixed post-commit canonical inputs changed")
+        from app.data_engine.storage.range_changes import check_store_range
+        lower = min(first for _, first, _, _ in windows)
+        upper = max(last + selected_widths[interval] for interval, _, last, _ in windows)
+        await run_storage(check_store_range, store, keys, lower, upper, read_head)
     return result
 
 

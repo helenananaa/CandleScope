@@ -668,14 +668,14 @@ async def prepare_planned_write_views(storage, windows):
                       _acquisition.get(), windows)
 
 
-async def prepare_derived_targets(storage, plan):
+async def prepare_derived_targets(storage, plan, *, allow_standard=False):
     from app.core.executors import run_storage
     from .derived_history_fence import capture_targets
     await run_storage(capture_targets, getattr(storage, 'revision_store', None),
                       _acquisition.get(), plan)
     from .mixed_history_fence import capture_targets as capture_mixed_targets
     await run_storage(capture_mixed_targets, getattr(storage, 'revision_store', None),
-                      _acquisition.get(), plan)
+                      _acquisition.get(), plan, allow_standard)
 
 
 async def prepare_mixed_computation(storage, decomp):

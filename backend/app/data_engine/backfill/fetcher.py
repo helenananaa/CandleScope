@@ -978,7 +978,7 @@ class HistoricalFetcher:
             "rest_tail_ranges": len(uncovered),
             "rest_fallback_ranges": len(fallback_ranges),
             # Lets the reconciler commit each REST edge as its own batch.
-            "rest_ranges": [[int(start), int(end)] for start, end in uncovered],
+            "rest_ranges": [[int(start), int(end)] for start, end in [*uncovered, *fallback_ranges]],
             "rest_pages": pages_fetched,
         }
         self._metrics.inc("archive_objects_selected", len(owned_archive_values))
@@ -1446,8 +1446,10 @@ def planned_write_windows(
             windows.append(PlannedWriteWindow(task.exchange, task.market_type, task.symbol,
                 task.interval, task.start_ms, task.end_ms, False, task.metadata))
             continue
-        _, uncovered = _routed_coverage(task, refs, interval_spec)
-        spans = [(start, end, False) for start, end in uncovered]
+        coverage, uncovered = _routed_coverage(task, refs, interval_spec)
+        # A failed/missing archive may fall back to REST inside its intersection.
+        fallback = [(max(task.start_ms, ref.start_ms), min(task.end_ms, ref.end_ms)) for ref in coverage]
+        spans = [(start, end, False) for start, end in [*uncovered, *fallback]]
         spans += [(ref.start_ms, ref.end_ms, True) for ref in refs if route_plan.owns_object(task, ref)]
         windows.extend(
             PlannedWriteWindow(task.exchange, task.market_type, task.symbol, task.interval,

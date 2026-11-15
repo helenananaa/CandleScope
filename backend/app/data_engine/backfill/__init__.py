@@ -483,7 +483,10 @@ class BackfillEngine:
                     (self._cfg.reconcile_dedup_strategy,self._cfg.reconcile_generate_custom))
             status = BackfillStatus.FETCHING
             await prepare_native_history_views(self._storage, plan.tasks)
-            await prepare_derived_targets(self._storage, plan)
+            await prepare_derived_targets(self._storage, plan, allow_standard=(
+                self.reconciler._custom_aggregator is None and self.reconciler._custom_dedup_fn is None
+                and self._cfg.custom_alignment_mode == 'epoch' and not self._cfg.alignment_epoch_ms
+                and self.planner._custom_alignment_fn is None and self.planner._custom_decomposition_fn is None))
             # Archive routing decides what a task really writes. Capture those
             # windows as soon as the built-in fetcher knows them.
             if getattr(self.fetcher.fetch, '__func__', None) is HistoricalFetcher.fetch:

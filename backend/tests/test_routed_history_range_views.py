@@ -208,6 +208,8 @@ def test_fetcher_reports_owned_archive_days_and_rest_edges():
     assert reported == [
         (EDGE[0], EDGE[1], False),
         (DAY0 + 2 * DAY, DAY0 + 2 * DAY + 30 * MINUTE, False),
+        (DAY0, DAY0 + DAY - 1, False),
+        (DAY0 + DAY, DAY0 + 2 * DAY - 1, False),
         (DAY0, DAY0 + DAY - 1, True),
         (plain.start_ms, plain.end_ms, False),
     ]
@@ -240,7 +242,7 @@ def test_fetcher_reports_windows_before_it_fetches_any_task():
         events.append(("windows", [(item.start_ms, item.end_ms, item.archive) for item in windows]))
 
     asyncio.run(fetcher.fetch([routed], on_write_windows=capture_windows))
-    assert events[:3] == ["routed", ("windows", [(EDGE[0], EDGE[1], False), (DAY0, DAY0 + DAY - 1, True)]), "fetched"]
+    assert events[:3] == ["routed", ("windows", [(EDGE[0], EDGE[1], False), (DAY0, DAY0 + 30 * MINUTE, False), (DAY0, DAY0 + DAY - 1, True)]), "fetched"]
 
 
 def bar(open_time, source="backfill", object_key=None):

@@ -10,6 +10,8 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 
 from app.data_engine.interval_resolution import IntervalResolver
+from app.data_engine.interval_policy import parse_interval_spec
+from .range_changes import check_range_since
 from .derived_history_fence import check_deletions
 from .native_history_fence import fingerprint
 from .revisions import IDENTITY_COLUMNS, StaleAcquisition, block_change_receipts, current_revision, series_change, series_values
@@ -48,16 +50,23 @@ class MixedComputation:
         if not receipts:
             raise StaleAcquisition('mixed computation receipt suffix is unavailable')
         for receipt in receipts:
-            if (tuple(receipt[name] for name in IDENTITY_COLUMNS) in changed
+            key = tuple(receipt[name] for name in IDENTITY_COLUMNS)
+            if key == self.target.key and receipt['revision'] <= scope.accepted.get(key, self.revision):
+                continue  # A previously checked transaction of this computation.
+            if (key in changed
                     and receipt['start_ms'] < self.target.end + self.target.duration
                     and receipt['end_ms'] >= self.target.start):
                 raise StaleAcquisition('mixed canonical inputs or target changed during computation')
 
 
-def capture_targets(store, scope, plan):
-    if store is None or scope is None or scope.mixed_target_views or plan.mixed_binding is None:
+def capture_targets(store, scope, plan, allow_standard=False):
+    if store is None or scope is None or scope.mixed_target_views:
         return
     binding = plan.mixed_binding
+    if binding is None:
+        if allow_standard:
+            capture_standard_targets(store, scope, plan)
+        return
     binding.validate()
     target = binding.target
     if target.exchange != 'binance' or target.market_type != 'futures' or not target.identity.is_legacy_default_for('binance'):
@@ -78,7 +87,8 @@ def capture_targets(store, scope, plan):
                              for route in declaration[2])
         with scope.lock, closing(store.connect()) as conn, conn:
             conn.execute('BEGIN')
-            scope.check(conn, key)
+            check_deletions(conn, scope, key, *dependencies)
+            check_range_since(conn, {*dependencies, key}, start, stop, scope.revision)
             view = MixedTarget(key, dependencies, start, stop-duration, duration,
                                fingerprint(conn, key, start, stop-duration))
             view.check(conn, scope)
@@ -86,7 +96,7 @@ def capture_targets(store, scope, plan):
 
 
 def capture_computations(store, scope, decomp):
-    if store is None or scope is None or decomp.composition_policy is None:
+    if store is None or scope is None:
         return ()
     views = []
     with scope.lock, closing(store.connect()) as conn, conn:
@@ -115,3 +125,41 @@ def computation_scope(views):
         yield
     finally:
         _current.reset(token)
+
+
+def capture_standard_targets(store, scope, plan):
+    """The built-in fixed 1m reducer uses only its canonical minute inputs.
+
+    Routed parent prefill may contribute whole daily objects around the parent
+    demand. Include those finite calendar edges in the pre-fetch target proof.
+    Other identities, grids, calendars and custom reducers stay on the strict path.
+    """
+    for decomp in plan.decompositions:
+        spec = parse_interval_spec(decomp.custom_interval)
+        tasks = [task for task in plan.tasks if task.metadata.get('custom_interval') == decomp.custom_interval]
+        if (spec is None or spec.phase_ms or spec.calendar_unit is not None or not tasks
+                or spec.nominal_ms <= 60000 or spec.nominal_ms % 60000
+                or any(task.exchange != 'binance' or task.market_type != 'futures' or task.interval != '1m'
+                       for task in tasks)):
+            continue
+        from app.data_engine.series_identity import identity_from_metadata
+        if any((identity := identity_from_metadata(task.exchange, task.metadata)) is not None
+               and not identity.is_legacy_default_for('binance') for task in tasks):
+            continue
+        first, last = min(task.start_ms for task in tasks), max(task.end_ms for task in tasks)
+        for task in tasks:
+            parent = task.metadata.get('requested_range', {})
+            if type(parent.get('start_ms')) is int and type(parent.get('end_ms')) is int:
+                first, last = min(first, parent['start_ms']-86400000), max(last, parent['end_ms']+86400000)
+        start, end = max(0, spec.floor_ms(first)), spec.floor_ms(last)
+        if not 0 < (end-start)//spec.nominal_ms+1 <= 512:
+            continue
+        key = series_values(tasks[0].symbol, spec.canonical, 'binance', 'futures')
+        dependencies = (series_values(tasks[0].symbol, '1m', 'binance', 'futures'),)
+        with scope.lock, closing(store.connect()) as conn, conn:
+            conn.execute('BEGIN')
+            check_deletions(conn, scope, key, *dependencies)
+            check_range_since(conn, {*dependencies, key}, start, end+spec.nominal_ms, scope.revision)
+            view = MixedTarget(key, dependencies, start, end, spec.nominal_ms, fingerprint(conn, key, start, end))
+            view.check(conn, scope)
+            scope.mixed_target_views.append(view)

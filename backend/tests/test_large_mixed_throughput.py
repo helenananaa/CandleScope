@@ -40,8 +40,8 @@ def test_read_ahead_reduces_requests_with_a_total_source_bound():
     assert len(coalesce_mixed_fetches([tasks[0], foreign, other], page_size=1000, row_budget=16384)) == 3
 
 
-def write_elsewhere(query, *, at=100 * WIDTH, interval='1m', width=MINUTE):
-    Context().run(query.storage.upsert_bars, 'BTCUSDT', interval, [row(at, width)],
+def write_elsewhere(query, *, at=100 * WIDTH, interval='1m', width=MINUTE, close=101):
+    Context().run(query.storage.upsert_bars, 'BTCUSDT', interval, [{**row(at, width), 'close': close}],
                   source='backfill', market_type='futures')
 
 
@@ -189,3 +189,48 @@ def test_transport_read_ahead_never_becomes_unrequested_canonical_data(mixed_que
         spec = next(component for component in report.plan.decompositions[0].components if component.interval == interval)
         stored = mixed_query.storage.count_bars('BTCUSDT', interval, 0, 4*WIDTH-1, market_type='futures')
         assert stored == spec.count
+
+
+def test_outside_source_change_before_plan_capture_does_not_restart_planning(mixed_query, monkeypatch):
+    from tests.test_mixed_backfill_plan import propose, gap
+    engine = engine_for(mixed_query)
+    original = engine._storage.count_bars
+    async def count(*args, **kwargs):
+        result = await original(*args, **kwargs)
+        write_elsewhere(mixed_query)
+        return result
+    monkeypatch.setattr(engine._storage, 'count_bars', count)
+    plan, report = propose(engine, mixed_query, gap(count=4))
+    assert plan is not None, report
+
+
+@pytest.mark.parametrize('change', ['outside', 'inside'])
+def test_standard_canonical_reducer_uses_its_own_range_proof(mixed_query, monkeypatch, change):
+    engine = engine_for(mixed_query)
+    engine.config.fetch_binance_futures_rate_limit_delay = 0
+    engine._fetcher = HistoricalFetcher(engine.config, IntervalTransport(), IngestionConfig())
+    original = engine.reconciler._reduce_custom_rows
+    def reduce(*args, **kwargs):
+        values = original(*args, **kwargs)
+        write_elsewhere(mixed_query, at=100*WIDTH if change == 'outside' else 0, close=100.5)
+        return values
+    monkeypatch.setattr(engine.reconciler, '_reduce_custom_rows', reduce)
+    report = asyncio.run(engine.run('BTCUSDT', intervals=['89m'], range_start_ms=0,
+        range_end_ms=3*89*MINUTE, exchange='binance', market_type='futures', metadata=META))
+    if change == 'outside':
+        assert report.status == BackfillStatus.COMPLETED, report.errors
+        assert report.reconcile_result.custom_bars_written == 4
+    else:
+        assert report.status != BackfillStatus.COMPLETED
+        assert report.reconcile_result is None or report.reconcile_result.custom_bars_written == 0
+
+
+def test_multi_batch_target_write_retains_the_computation_proof(mixed_query):
+    engine = engine_for(mixed_query)
+    engine.config.fetch_binance_futures_rate_limit_delay = 0
+    engine.config.reconcile_write_batch_size = 2
+    engine._fetcher = HistoricalFetcher(engine.config, IntervalTransport(), IngestionConfig())
+    report = asyncio.run(engine.run('BTCUSDT', intervals=['10007m'], range_start_ms=0,
+        range_end_ms=3*WIDTH, exchange='binance', market_type='futures', metadata=META))
+    assert report.status == BackfillStatus.COMPLETED, report.errors
+    assert report.reconcile_result.custom_bars_written == 4
