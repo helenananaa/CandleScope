@@ -27,9 +27,9 @@ def selected_fetch_rows(task, bars):
 def coalesce_mixed_fetches(tasks, *, page_size, row_budget):
     """Bounded read-ahead across holes on one qualified canonical source grid.
 
-    Extra native rows go through the normal writer and finer-precedence recheck;
-    they never become additional reduction windows. Limit total fetched slots,
-    including overread, to the existing mixed source budget.
+    Only the declared exact source windows reach the canonical writer. Limit
+    total fetched slots, including discarded read-ahead rows, to the existing
+    mixed source budget.
     """
     total = sum(task.estimated_bars for task in tasks)
     groups = {}

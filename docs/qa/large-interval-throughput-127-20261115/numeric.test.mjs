@@ -19,6 +19,6 @@ test('preserves missingness and rejects nonfinite additive values', () => {
   assert.equal(compareField(undefined, null, 'quote_volume', 'missing'), null);
   assert.throws(() => compareField(0, null, 'quote_volume', 'missing'));
   assert.throws(() => compareField(Infinity, 1, 'quote_volume', 'infinite'));
-  assert.throws(() => compareField(Infinity, Infinity, 'quote_volume', 'infinite equal')); 
+  assert.throws(() => compareField(Infinity, Infinity, 'quote_volume', 'infinite equal'));
   assert.throws(() => compareField(NaN, 1, 'quote_volume', 'nan'));
 });
