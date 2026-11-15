@@ -8,6 +8,88 @@ from tests.test_mixed_history_reader import row, MINUTE
 WIDTH = 10007*MINUTE
 
 
+@pytest.mark.parametrize('period', [89,97,101])
+def test_canonical_page_rebuilds_only_local_closed_holes_before_waiting_for_scheduler(mixed_query, monkeypatch, period):
+    query = mixed_query
+    width = period*MINUTE
+    query.storage.upsert_bars('BTCUSDT','1m',[row(n*MINUTE,MINUTE) for n in range(2*period)],
+        market_type='futures',source='backfill')
+    query.storage.upsert_bars('BTCUSDT',f'{period}m',[row(n*width,width) for n in range(2,128)],
+        market_type='futures',source='backfill_aggregated')
+    calls = []
+    original = query.custom_intervals.query_from_base
+    def bounded(**options):
+        calls.append((options['start_ms'],options['end_ms'],options['limit'],options['auto_backfill']))
+        assert options['limit'] == 1, 'never recompute the surviving page'
+        return original(**options)
+    monkeypatch.setattr(query.custom_intervals,'query_from_base',bounded)
+    submitted = []
+    monkeypatch.setattr(query,'_backfill_trigger',lambda *args: submitted.append(args))
+    result = query.query('BTCUSDT',f'{period}m',start_ms=0,end_ms=128*width-1,limit=128,
+        market_type='futures',auto_backfill=True)
+    assert result.complete and len(result.bars) == 128 and not result.missing_ranges and not submitted
+    assert result.metadata['canonical_target_snapshot'] and result.metadata['target_materialized_written'] == 2
+    assert result.metadata['canonical_local_repair_source_budget'] == 8*period <= query._cfg.max_limit
+    assert calls == [(0,0,1,False),(width,width,1,False)]
+    assert all((bar.volume,bar.trades) == (period,period) for bar in result.bars)
+
+
+def test_local_row_count_is_only_a_hint_and_never_authorizes_untrusted_inputs(mixed_query):
+    from app.data_engine.storage import klines_repo
+    query = mixed_query
+    width = 89*MINUTE
+    query.storage.upsert_bars('BTCUSDT','1m',[row(n*MINUTE,MINUTE) for n in range(2*89)],
+        market_type='futures',source='backfill')
+    query.storage.upsert_bars('BTCUSDT','89m',[row(n*width,width) for n in range(2,128)],
+        market_type='futures',source='backfill_aggregated')
+    with klines_repo._connect() as conn:
+        conn.execute("UPDATE klines SET source='unknown' WHERE interval='1m' AND open_time=0")
+    result = query.query('BTCUSDT','89m',start_ms=0,end_ms=128*width-1,limit=128,
+        market_type='futures',auto_backfill=False)
+    assert not result.complete and result.retryable and not result.backfill_triggered
+    assert [gap.start_ms for gap in result.missing_ranges] == [0]
+    assert query.storage.count_bars('BTCUSDT','89m',0,0,market_type='futures') == 0
+    assert result.metadata['target_materialized_written'] == 1
+
+
+def test_local_rebuild_reserves_source_padding_and_declines_an_oversized_hole(mixed_query, monkeypatch):
+    query = mixed_query
+    width = 3001*MINUTE
+    query.storage.upsert_bars('BTCUSDT','1m',[row(n*MINUTE,MINUTE) for n in range(3001)],
+        market_type='futures',source='backfill')
+    query.storage.upsert_bars('BTCUSDT','3001m',[row(n*width,width) for n in range(1,4)],
+        market_type='futures',source='backfill_aggregated')
+    monkeypatch.setattr(query.custom_intervals,'query_from_base',lambda **kw: pytest.fail('exceeded local source budget'))
+    result = query.query('BTCUSDT','3001m',start_ms=0,end_ms=4*width-1,limit=4,
+        market_type='futures',auto_backfill=False)
+    assert not result.complete and len(result.bars) == 3
+    assert result.metadata['canonical_local_repair_source_budget'] == 0
+    assert result.metadata['target_materialized_written'] == 0
+
+
+def test_local_materialization_rechecks_a_later_canonical_amendment(mixed_query, monkeypatch):
+    query = mixed_query
+    width = 89*MINUTE
+    query.storage.upsert_bars('BTCUSDT','1m',[row(n*MINUTE,MINUTE) for n in range(2*89)],
+        market_type='futures',source='backfill')
+    query.storage.upsert_bars('BTCUSDT','89m',[row(n*width,width) for n in range(2,128)],
+        market_type='futures',source='backfill_aggregated')
+    original = query.storage.read_closed_target_snapshot
+    reads = []
+    def changing(*args):
+        snapshot = original(*args)
+        reads.append(len(snapshot[0]))
+        if reads == [126,128]:
+            Context().run(lambda: query.storage.upsert_bars('BTCUSDT','89m',
+                [{**row(10*width,width),'close':100.5}],market_type='futures',source='backfill_aggregated'))
+        return snapshot
+    monkeypatch.setattr(query.storage,'read_closed_target_snapshot',changing)
+    result = query.query('BTCUSDT','89m',start_ms=0,end_ms=128*width-1,limit=128,
+        market_type='futures',auto_backfill=False)
+    assert reads == [126,128]
+    assert not result.complete and result.retryable and not result.bars
+
+
 @pytest.mark.parametrize('period', [89, 97, 101])
 @pytest.mark.parametrize('mode', ['range', 'before'])
 @pytest.mark.parametrize('holes', [(), (60, 61)])
@@ -22,7 +104,8 @@ def test_large_source_window_reuses_canonical_targets_even_when_each_bar_is_smal
     result = (query.query_before('BTCUSDT',f'{period}m',128*width,**options) if mode == 'before'
         else query.query('BTCUSDT',f'{period}m',start_ms=0,end_ms=128*width-1,**options))
     assert result.metadata['canonical_target_snapshot']
-    assert result.metadata['storage_reads'] == 1 and result.metadata['storage_rows'] == 128-len(holes)
+    assert result.metadata['target_storage_reads'] == 1 and result.metadata['storage_rows'] == 128-len(holes)
+    assert result.metadata['storage_reads'] == 1+len(holes)
     assert [bar.time_ms for bar in result.bars] == [n*width for n in range(128) if n not in holes]
     assert result.complete is (not holes)
     assert [(gap.start_ms,gap.end_ms) for gap in result.missing_ranges] == [(n*width,n*width) for n in holes]

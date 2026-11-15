@@ -342,6 +342,58 @@ class QueryEngine:
             return None
         stored_count = len(bars)
         present = {bar.time_ms for bar in bars}
+        local_reports = []
+        local_probes = 0
+        local_probe_ms = 0.0
+        local_budget = self._cfg.max_limit
+        written = 0
+        counter = getattr(self._storage, 'count_bars', None)
+        # Rebuild only a handful of closed holes whose fine inputs are already
+        # present. The count is merely an admission hint: the ordinary reducer
+        # must acquire/validate its own source and write proofs. A snapshot read
+        # never grants write authority. Include the normal source padding in
+        # this per-query budget and never perform network work here.
+        if (preview is None and stored_count != count and callable(counter)
+                and spec.nominal_ms % base.nominal_ms == 0):
+            fine_count = spec.nominal_ms//base.nominal_ms
+            cost = 4*fine_count
+            for opened in range(first, last+1, spec.nominal_ms):
+                if opened in present or cost > local_budget:
+                    continue
+                local_probes += 1
+                probe_started = time.monotonic()
+                available = counter(key.symbol,route.base_interval,opened,opened+spec.nominal_ms-1,
+                    exchange=key.exchange,market_type=key.market_type)
+                local_probe_ms += (time.monotonic()-probe_started)*1000
+                if available < fine_count:
+                    continue
+                local_budget -= cost
+                local = self.custom_intervals.query_from_base(symbol=key.symbol, interval=key.interval,
+                    start_ms=opened,end_ms=opened,limit=1,started_at=started_at,
+                    exchange=key.exchange,market_type=key.market_type,auto_backfill=False,
+                    route=route,composition_contract=composition_contract)
+                if local is not None:
+                    local_reports.append({'open_ms':opened,'complete':local.complete,
+                        'storage_reads':local.metadata.get('storage_reads',0),
+                        'storage_rows':local.metadata.get('storage_rows',0),
+                        'storage_read_ms':local.metadata.get('storage_read_ms',0),
+                        'written':local.metadata.get('target_materialized_written',0)})
+                    written += int(local.metadata.get('target_materialized_written',0))
+            if written:
+                # Adopt only a new canonical snapshot after the reducer's
+                # independent writes, including every surviving row/absence.
+                proofs.clear()
+                rows = self._measure_storage_read(io_metrics, load)
+                if not proofs:
+                    return None
+                proof = proofs[0]
+                bars = self._storage_rows_to_bars(key, rows, io_metrics)
+                if (not bars or any(not bar.trusted_final or not bar.is_closed for bar in bars)
+                        or composition_contract is not None and any(
+                            getattr(bar, field, None) is None for bar in bars for field in declaration[0].fields)):
+                    return None
+                stored_count = len(bars)
+                present = {bar.time_ms for bar in bars}
         # A finer source commit can withdraw a handful of dependent targets.
         # Do not re-aggregate the surviving page or merge the holes into a
         # source budget that a single target already nearly consumes.
@@ -366,11 +418,21 @@ class QueryEngine:
                 'canonical_target_partial':partial,
                 'canonical_target_preview':preview is not None,
                 'storage_reads':1,'storage_rows':stored_count,'target_materialized_rows':stored_count,
-                'target_materialized_written':0,'derived_from':route.base_interval,
+                'target_materialized_written':written,'derived_from':route.base_interval,
+                'canonical_local_probe_reads':local_probes,
+                'canonical_local_probe_ms':round(local_probe_ms,2),
+                'canonical_local_repair_source_budget':self._cfg.max_limit-local_budget,
+                'canonical_local_repair_reports':local_reports,
                 'elapsed_ms':round((time.monotonic()-started_at)*1000,2)},
             _closed_target_read=proof.bind(rows, bars))
         result.metadata.update({'target_'+name:value for name,value in io_metrics.metadata().items()})
-        return self._attach_io_metrics(result, io_metrics)
+        result = self._attach_io_metrics(result, io_metrics)
+        # Overall work includes local reductions; target_* remains the bounded
+        # snapshot-only accounting. Count probes do not decode candle rows.
+        result.metadata['storage_reads'] += local_probes + sum(item['storage_reads'] for item in local_reports)
+        result.metadata['storage_rows'] += sum(item['storage_rows'] for item in local_reports)
+        result.metadata['storage_read_ms'] += round(local_probe_ms + sum(item['storage_read_ms'] for item in local_reports),2)
+        return result
 
     def _query_closed_mixed(self, key, **options):
         from .mixed_query import query_closed_mixed
