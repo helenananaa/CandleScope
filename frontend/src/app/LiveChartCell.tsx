@@ -1,3 +1,4 @@
+import { Button } from "../components/ui/index.js";
 import ChartAccountOverlayMenu from "../features/trading-accounts/ChartAccountOverlayMenu.js";
 import type { ChartAccountOverlaySettings } from "../features/chart-workspace/chartAccountOverlaySettings.js";
 import { useChartTimeNavigation } from "../features/market-data/useChartTimeNavigation.js";
@@ -1203,8 +1204,8 @@ function LiveChartCell({
           )}
           {replay.key && !quickReplay && !study.masked && <div className="history-study-mask" data-quick-replay-pending>
             <p role={replay.error ? "alert" : "status"}>{replay.error ?? t("study.loading")}</p>
-            {replay.error && <button type="button" className="trading-button" onClick={replay.retry}>{t("trading.replay.retry")}</button>}
-            <button type="button" className="trading-button" onClick={exitQuickReplay}>{t("trading.replay.exit")}</button>
+            {replay.error && <Button size="sm" onClick={replay.retry}>{t("trading.replay.retry")}</Button>}
+            <Button size="sm" onClick={exitQuickReplay}>{t("trading.replay.exit")}</Button>
           </div>}
           {study.masked && study.playback && marketWorkspaceResources && <Suspense fallback={<div className="history-study-mask">{t("study.loading")}</div>}>
             <HistoryStudyOverlay key={study.playback.input.id} playback={study.playback}
@@ -1220,14 +1221,14 @@ function LiveChartCell({
           </Suspense>}
           {study.masked && !study.playback && <div className="history-study-mask" role="status">
             {t(study.error ? "study.error" : "study.loading")}
-            {study.error ? <button type="button" className="trading-button" onClick={study.retry}>{t("study.retry")}</button> : null}
+            {study.error ? <Button size="sm" onClick={study.retry}>{t("study.retry")}</Button> : null}
           </div>}
           {!study.masked && study.error && <div className="study-recovery-message" role="alert">
-            {t("study.error")} <button type="button" className="trading-button" onClick={study.retry}>{t("study.retry")}</button>
+            {t("study.error")} <Button size="sm" onClick={study.retry}>{t("study.retry")}</Button>
           </div>}
           {!study.masked && cursorLinkIssue?.operation === "mode" && <div className="study-recovery-message" role="alert">
             {t("study.modeLinkFailed", { count: cursorLinkIssue.failed.length })}
-            <button type="button" className="trading-button" disabled={study.pending || study.busy} onClick={retryCursorLink}>{t("study.modeLinkRetry")}</button>
+            <Button size="sm" disabled={study.pending || study.busy} onClick={retryCursorLink}>{t("study.modeLinkRetry")}</Button>
           </div>}
           {active && !study.masked && model.chartWorkspace.exportPanel.isOpen && (
             <Suspense fallback={null}>

@@ -537,6 +537,12 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - The order book's mode and the trade flow's side filter are kit segmented controls across the dock; their selects and the trade history's date and hour are compact kit fields. The order book's three selects fit one row down to a 1024 px window, and its range readout wraps as one piece.
 - `orderBookControls.css` is merged into `orderBook.css`; the rules for the replaced switches, selects, collapse buttons and header icons are gone.
 
+**Phase 5i2 is done (branch `design/phase-5i2-accounts`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_5I2.md`](../docs/FRONTEND_DESIGN_QA_PHASE_5I2.md). With it the Phase 5 rows (5a–5i2) are complete.
+
+- The trading-account dock is on the kit: account select and icon buttons, rail-sized tabs, kit alerts and empty states, direction badges in the chart's up and down colours, the ticket and manual form on segmented controls, fields and a checkbox, the add-account kit dialog (kinds stay choice cards), the trade journal as a kit drawer with disclosure sections and pressed toggle choices, stats as kit stats, and quick replay's transport as kit buttons. The history study overlay and the chart cell's masks, which borrowed `.trading-button`, use kit buttons; the chart's 交易与笔记 menu is a kit popover.
+- The read-only account dock is on the kit: toned sync badge, kit buttons and password fields, wrapping pressed view buttons, disclosures and alerts in the overview, reconciliation, trade review and journal.
+- `tradingAccounts.css` (628 → 381 lines), `readonlyAccount.css` (no element rules left) and `chartAccountOverlay.css` load with the global stylesheet. Left for Phase 6: fact kinds and exchange ids shown as codes, `binance spot` in the journal.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.

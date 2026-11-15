@@ -46,3 +46,6 @@
 @import "./styles/lateFixes.css" layer(features);
 @import "./features/settings/settings.css" layer(features);
 @import "./features/data-workbench/dataWorkbench.css" layer(features);
+@import "./features/trading-accounts/tradingAccounts.css" layer(features);
+@import "./features/trading-accounts/chartAccountOverlay.css" layer(features);
+@import "./features/readonly-accounts/readonlyAccount.css" layer(features);
