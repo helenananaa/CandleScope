@@ -1,0 +1,1203 @@
+[
+  {
+    "run": "native-four-cold",
+    "source_commit": "b70e037df22bdb25260a71872ff298abc28ccfed",
+    "driver_source_commit": "b70e037df22bdb25260a71872ff298abc28ccfed",
+    "driver_sha256": "c6cb7516e52df2fa89248a7520fb4a84a1a447d414a790efc3d65db363152695",
+    "passed": false,
+    "failure": "Error: Timed out waiting for acceptance state\n    at Module.until (file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/backend-batch1-20261101/driver.mjs:29:9)\n    at async verify (file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/large-interval-throughput-127-20261115/native.mjs:185:5)\n    at async file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/large-interval-throughput-127-20261115/native.mjs:341:17",
+    "cold_elapsed_ms": null,
+    "cold_closed_comparisons": null,
+    "failed_ui_counts": {
+      "89m": 110,
+      "97m": 197,
+      "101m": 58,
+      "10007m": 2
+    },
+    "steps": [
+      {
+        "name": "initial-live-owner-ready",
+        "at": "2026-11-15T06:09:10.831Z"
+      },
+      {
+        "name": "packaged-launch",
+        "at": "2026-11-15T06:09:10.847Z"
+      },
+      {
+        "name": "workspace-configure",
+        "at": "2026-11-15T06:09:36.109Z"
+      },
+      {
+        "name": "failure-state",
+        "at": "2026-11-15T06:12:36.487Z"
+      },
+      {
+        "name": "full-process-exit",
+        "at": "2026-11-15T06:12:43.889Z"
+      }
+    ],
+    "errors": [],
+    "peak_owned_rss_mib": 1778.81,
+    "resource_scope": "sum of owned process RSS; shared pages may be counted multiple times; no paired baseline",
+    "numeric_comparison": null,
+    "canonical_checks": []
+  },
+  {
+    "run": "native-four-cold-2",
+    "source_commit": "2f57e978c4e90c5249260cbb548b7e6638e7d658",
+    "driver_source_commit": "2f57e978c4e90c5249260cbb548b7e6638e7d658",
+    "driver_sha256": "c6cb7516e52df2fa89248a7520fb4a84a1a447d414a790efc3d65db363152695",
+    "passed": false,
+    "failure": "Error: Timed out waiting for acceptance state\n    at Module.until (file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/backend-batch1-20261101/driver.mjs:29:9)\n    at async verify (file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/large-interval-throughput-127-20261115/native.mjs:185:5)\n    at async file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/large-interval-throughput-127-20261115/native.mjs:341:17",
+    "cold_elapsed_ms": null,
+    "cold_closed_comparisons": null,
+    "failed_ui_counts": {
+      "89m": 6,
+      "97m": 199,
+      "101m": 5,
+      "10007m": 2
+    },
+    "steps": [
+      {
+        "name": "initial-live-owner-ready",
+        "at": "2026-11-15T06:18:00.965Z"
+      },
+      {
+        "name": "packaged-launch",
+        "at": "2026-11-15T06:18:00.967Z"
+      },
+      {
+        "name": "workspace-configure",
+        "at": "2026-11-15T06:18:26.223Z"
+      },
+      {
+        "name": "failure-state",
+        "at": "2026-11-15T06:21:30.399Z"
+      },
+      {
+        "name": "full-process-exit",
+        "at": "2026-11-15T06:21:39.158Z"
+      }
+    ],
+    "errors": [],
+    "peak_owned_rss_mib": 1587.2,
+    "resource_scope": "sum of owned process RSS; shared pages may be counted multiple times; no paired baseline",
+    "numeric_comparison": null,
+    "canonical_checks": []
+  },
+  {
+    "run": "native-four-cold-3",
+    "source_commit": "a5816a3c8e2a5092b59f3d3572a71248f1bf7686",
+    "driver_source_commit": "a5816a3c8e2a5092b59f3d3572a71248f1bf7686",
+    "driver_sha256": "c6cb7516e52df2fa89248a7520fb4a84a1a447d414a790efc3d65db363152695",
+    "passed": false,
+    "failure": "Error: Timed out waiting for acceptance state\n    at Module.until (file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/backend-batch1-20261101/driver.mjs:29:9)\n    at async verify (file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/large-interval-throughput-127-20261115/native.mjs:185:5)\n    at async file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/large-interval-throughput-127-20261115/native.mjs:341:17",
+    "cold_elapsed_ms": null,
+    "cold_closed_comparisons": null,
+    "failed_ui_counts": {
+      "89m": 214,
+      "97m": 197,
+      "101m": 196,
+      "10007m": 17
+    },
+    "steps": [
+      {
+        "name": "initial-live-owner-ready",
+        "at": "2026-11-15T06:23:23.459Z"
+      },
+      {
+        "name": "packaged-launch",
+        "at": "2026-11-15T06:23:23.461Z"
+      },
+      {
+        "name": "workspace-configure",
+        "at": "2026-11-15T06:23:48.666Z"
+      },
+      {
+        "name": "failure-state",
+        "at": "2026-11-15T06:26:49.082Z"
+      },
+      {
+        "name": "full-process-exit",
+        "at": "2026-11-15T06:26:55.674Z"
+      }
+    ],
+    "errors": [],
+    "peak_owned_rss_mib": 1795.3,
+    "resource_scope": "sum of owned process RSS; shared pages may be counted multiple times; no paired baseline",
+    "numeric_comparison": null,
+    "canonical_checks": []
+  },
+  {
+    "run": "native-four-cold-4",
+    "source_commit": "60df99d2b6b60cf5e7ee38963938032ee7152f33",
+    "driver_source_commit": "60df99d2b6b60cf5e7ee38963938032ee7152f33",
+    "driver_sha256": "c6cb7516e52df2fa89248a7520fb4a84a1a447d414a790efc3d65db363152695",
+    "passed": false,
+    "failure": "Error: Timed out waiting for acceptance state\n    at Module.until (file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/backend-batch1-20261101/driver.mjs:29:9)\n    at async verify (file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/large-interval-throughput-127-20261115/native.mjs:185:5)\n    at async file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/large-interval-throughput-127-20261115/native.mjs:341:17",
+    "cold_elapsed_ms": null,
+    "cold_closed_comparisons": null,
+    "failed_ui_counts": {
+      "89m": 37,
+      "97m": 204,
+      "101m": 16,
+      "10007m": 49
+    },
+    "steps": [
+      {
+        "name": "initial-live-owner-ready",
+        "at": "2026-11-15T06:34:32.607Z"
+      },
+      {
+        "name": "packaged-launch",
+        "at": "2026-11-15T06:34:32.609Z"
+      },
+      {
+        "name": "workspace-configure",
+        "at": "2026-11-15T06:34:57.814Z"
+      },
+      {
+        "name": "failure-state",
+        "at": "2026-11-15T06:38:08.471Z"
+      },
+      {
+        "name": "full-process-exit",
+        "at": "2026-11-15T06:38:18.569Z"
+      }
+    ],
+    "errors": [],
+    "peak_owned_rss_mib": 1713.12,
+    "resource_scope": "sum of owned process RSS; shared pages may be counted multiple times; no paired baseline",
+    "numeric_comparison": null,
+    "canonical_checks": []
+  },
+  {
+    "run": "native-four-cold-5",
+    "source_commit": "52a3d02077bd2d432bd73da524d92d1de1bb934a",
+    "driver_source_commit": "52a3d02077bd2d432bd73da524d92d1de1bb934a",
+    "driver_sha256": "c6cb7516e52df2fa89248a7520fb4a84a1a447d414a790efc3d65db363152695",
+    "passed": false,
+    "failure": "Error: Timed out waiting for acceptance state\n    at Module.until (file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/backend-batch1-20261101/driver.mjs:29:9)\n    at async verify (file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/large-interval-throughput-127-20261115/native.mjs:185:5)\n    at async file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/large-interval-throughput-127-20261115/native.mjs:341:17",
+    "cold_elapsed_ms": null,
+    "cold_closed_comparisons": null,
+    "failed_ui_counts": {
+      "89m": 222,
+      "97m": 204,
+      "101m": 196,
+      "10007m": 45
+    },
+    "steps": [
+      {
+        "name": "initial-live-owner-ready",
+        "at": "2026-11-15T06:45:54.413Z"
+      },
+      {
+        "name": "packaged-launch",
+        "at": "2026-11-15T06:45:54.420Z"
+      },
+      {
+        "name": "workspace-configure",
+        "at": "2026-11-15T06:46:19.620Z"
+      },
+      {
+        "name": "failure-state",
+        "at": "2026-11-15T06:50:31.518Z"
+      },
+      {
+        "name": "full-process-exit",
+        "at": "2026-11-15T06:50:39.294Z"
+      }
+    ],
+    "errors": [],
+    "peak_owned_rss_mib": 2061.38,
+    "resource_scope": "sum of owned process RSS; shared pages may be counted multiple times; no paired baseline",
+    "numeric_comparison": null,
+    "canonical_checks": []
+  },
+  {
+    "run": "native-four-cold-6",
+    "source_commit": "ae03b0166a470f8218214d394cdf0ab3f06980d8",
+    "driver_source_commit": "ae03b0166a470f8218214d394cdf0ab3f06980d8",
+    "driver_sha256": "c6cb7516e52df2fa89248a7520fb4a84a1a447d414a790efc3d65db363152695",
+    "passed": false,
+    "failure": "Error: Timed out waiting for acceptance state\n    at Module.until (file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/backend-batch1-20261101/driver.mjs:29:9)\n    at async verify (file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/large-interval-throughput-127-20261115/native.mjs:185:5)\n    at async file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/large-interval-throughput-127-20261115/native.mjs:341:17",
+    "cold_elapsed_ms": null,
+    "cold_closed_comparisons": null,
+    "failed_ui_counts": {
+      "89m": 223,
+      "97m": 204,
+      "101m": 196,
+      "10007m": 34
+    },
+    "steps": [
+      {
+        "name": "initial-live-owner-ready",
+        "at": "2026-11-15T06:54:52.252Z"
+      },
+      {
+        "name": "packaged-launch",
+        "at": "2026-11-15T06:54:52.259Z"
+      },
+      {
+        "name": "workspace-configure",
+        "at": "2026-11-15T06:55:17.477Z"
+      },
+      {
+        "name": "failure-state",
+        "at": "2026-11-15T06:59:27.141Z"
+      },
+      {
+        "name": "full-process-exit",
+        "at": "2026-11-15T06:59:33.985Z"
+      }
+    ],
+    "errors": [],
+    "peak_owned_rss_mib": 1842.94,
+    "resource_scope": "sum of owned process RSS; shared pages may be counted multiple times; no paired baseline",
+    "numeric_comparison": null,
+    "canonical_checks": []
+  },
+  {
+    "run": "native-four-cold-7",
+    "source_commit": "56c5c7bb7dc51ff7db80203906ea582436e3a909",
+    "driver_source_commit": "56c5c7bb7dc51ff7db80203906ea582436e3a909",
+    "driver_sha256": "c6cb7516e52df2fa89248a7520fb4a84a1a447d414a790efc3d65db363152695",
+    "passed": false,
+    "failure": "Error: Timed out waiting for acceptance state\n    at Module.until (file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/backend-batch1-20261101/driver.mjs:29:9)\n    at async verify (file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/large-interval-throughput-127-20261115/native.mjs:185:5)\n    at async file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/large-interval-throughput-127-20261115/native.mjs:341:17",
+    "cold_elapsed_ms": null,
+    "cold_closed_comparisons": null,
+    "failed_ui_counts": {
+      "89m": 804,
+      "97m": 738,
+      "101m": 708,
+      "10007m": 33
+    },
+    "steps": [
+      {
+        "name": "initial-live-owner-ready",
+        "at": "2026-11-15T07:13:21.050Z"
+      },
+      {
+        "name": "packaged-launch",
+        "at": "2026-11-15T07:13:21.052Z"
+      },
+      {
+        "name": "workspace-configure",
+        "at": "2026-11-15T07:13:46.260Z"
+      },
+      {
+        "name": "failure-state",
+        "at": "2026-11-15T07:18:56.833Z"
+      },
+      {
+        "name": "full-process-exit",
+        "at": "2026-11-15T07:19:03.148Z"
+      }
+    ],
+    "errors": [],
+    "peak_owned_rss_mib": 1768.77,
+    "resource_scope": "sum of owned process RSS; shared pages may be counted multiple times; no paired baseline",
+    "numeric_comparison": null,
+    "canonical_checks": []
+  },
+  {
+    "run": "native-four-cold-8",
+    "source_commit": "9f92d3d7ed7073eb29cc98a1cefe6cd2060ced47",
+    "driver_source_commit": "9f92d3d7ed7073eb29cc98a1cefe6cd2060ced47",
+    "driver_sha256": "c6cb7516e52df2fa89248a7520fb4a84a1a447d414a790efc3d65db363152695",
+    "passed": false,
+    "failure": "AssertionError [ERR_ASSERTION]: 10007m:quote_volume\n+ actual - expected\n\n+ 79060615711.7157\n- 79060615711.71571\n\n    at verify (file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/large-interval-throughput-127-20261115/native.mjs:239:16)\n    at async file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/large-interval-throughput-127-20261115/native.mjs:353:43",
+    "cold_elapsed_ms": 217617,
+    "cold_closed_comparisons": {
+      "89m": 221,
+      "97m": 203,
+      "101m": 195,
+      "10007m": 128
+    },
+    "failed_ui_counts": {
+      "89m": 222,
+      "97m": 204,
+      "101m": 196,
+      "10007m": 129
+    },
+    "steps": [
+      {
+        "name": "initial-live-owner-ready",
+        "at": "2026-11-15T07:28:24.390Z"
+      },
+      {
+        "name": "packaged-launch",
+        "at": "2026-11-15T07:28:24.401Z"
+      },
+      {
+        "name": "workspace-configure",
+        "at": "2026-11-15T07:28:49.606Z"
+      },
+      {
+        "name": "strict-read-waiting-for-consistent-history",
+        "at": "2026-11-15T07:32:00.012Z"
+      },
+      {
+        "name": "cold-prime-targets",
+        "at": "2026-11-15T07:32:02.054Z"
+      },
+      {
+        "name": "native-indicator-inputs-cold",
+        "at": "2026-11-15T07:32:07.238Z"
+      },
+      {
+        "name": "live-frames-cold-primes",
+        "at": "2026-11-15T07:32:08.082Z"
+      },
+      {
+        "name": "prime-steady-minute-1",
+        "at": "2026-11-15T07:33:08.941Z"
+      },
+      {
+        "name": "prime-steady-minute-2",
+        "at": "2026-11-15T07:34:09.702Z"
+      },
+      {
+        "name": "prime-steady-minute-3",
+        "at": "2026-11-15T07:35:10.527Z"
+      },
+      {
+        "name": "prime-steady-minute-4",
+        "at": "2026-11-15T07:36:11.441Z"
+      },
+      {
+        "name": "prime-steady-minute-5",
+        "at": "2026-11-15T07:37:12.489Z"
+      },
+      {
+        "name": "prime-steady-minute-6",
+        "at": "2026-11-15T07:38:13.957Z"
+      },
+      {
+        "name": "prime-steady-minute-7",
+        "at": "2026-11-15T07:39:15.526Z"
+      },
+      {
+        "name": "prime-steady-minute-8",
+        "at": "2026-11-15T07:40:17.343Z"
+      },
+      {
+        "name": "prime-steady-minute-9",
+        "at": "2026-11-15T07:41:19.447Z"
+      },
+      {
+        "name": "prime-steady-minute-10",
+        "at": "2026-11-15T07:42:22.225Z"
+      },
+      {
+        "name": "failure-state",
+        "at": "2026-11-15T07:42:27.337Z"
+      },
+      {
+        "name": "full-process-exit",
+        "at": "2026-11-15T07:42:34.014Z"
+      }
+    ],
+    "errors": [],
+    "peak_owned_rss_mib": 1853.47,
+    "resource_scope": "sum of owned process RSS; shared pages may be counted multiple times; no paired baseline",
+    "numeric_comparison": null,
+    "canonical_checks": [
+      {
+        "stage": "cold-prime-targets",
+        "closed": {
+          "89m": 221,
+          "97m": 203,
+          "101m": 195,
+          "10007m": 128
+        },
+        "roundoff": []
+      }
+    ]
+  },
+  {
+    "run": "native-four-cold-9",
+    "source_commit": "9f92d3d7ed7073eb29cc98a1cefe6cd2060ced47",
+    "driver_source_commit": "23db7680c1168d6c7fedeef8dbce81a93ce1ec17",
+    "driver_sha256": "ceda0b25add961f8825fa1d822ade6e9462649a68a41c8ac88a954a29ff8c114",
+    "passed": false,
+    "failure": "Error: Timed out waiting for acceptance state\n    at Module.until (file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/backend-batch1-20261101/driver.mjs:29:9)\n    at async verify (file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/large-interval-throughput-127-20261115/native.mjs:223:5)\n    at async file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/large-interval-throughput-127-20261115/native.mjs:384:42",
+    "cold_elapsed_ms": 199293,
+    "cold_closed_comparisons": {
+      "89m": 221,
+      "97m": 203,
+      "101m": 195,
+      "10007m": 128
+    },
+    "failed_ui_counts": {
+      "89m": 222,
+      "97m": 204,
+      "101m": 197,
+      "10007m": 129
+    },
+    "steps": [
+      {
+        "name": "initial-live-owner-ready",
+        "at": "2026-11-15T07:45:42.329Z"
+      },
+      {
+        "name": "packaged-launch",
+        "at": "2026-11-15T07:45:42.335Z"
+      },
+      {
+        "name": "workspace-configure",
+        "at": "2026-11-15T07:46:07.500Z"
+      },
+      {
+        "name": "strict-read-waiting-for-consistent-history",
+        "at": "2026-11-15T07:49:00.283Z"
+      },
+      {
+        "name": "cold-prime-targets",
+        "at": "2026-11-15T07:49:01.656Z"
+      },
+      {
+        "name": "native-indicator-inputs-cold",
+        "at": "2026-11-15T07:49:03.082Z"
+      },
+      {
+        "name": "live-frames-cold-primes",
+        "at": "2026-11-15T07:49:03.610Z"
+      },
+      {
+        "name": "prime-steady-minute-1",
+        "at": "2026-11-15T07:50:04.181Z"
+      },
+      {
+        "name": "prime-steady-minute-2",
+        "at": "2026-11-15T07:51:04.970Z"
+      },
+      {
+        "name": "prime-steady-minute-3",
+        "at": "2026-11-15T07:52:05.797Z"
+      },
+      {
+        "name": "prime-steady-minute-4",
+        "at": "2026-11-15T07:53:06.901Z"
+      },
+      {
+        "name": "prime-steady-minute-5",
+        "at": "2026-11-15T07:54:08.379Z"
+      },
+      {
+        "name": "prime-steady-minute-6",
+        "at": "2026-11-15T07:55:09.995Z"
+      },
+      {
+        "name": "prime-steady-minute-7",
+        "at": "2026-11-15T07:56:12.370Z"
+      },
+      {
+        "name": "prime-steady-minute-8",
+        "at": "2026-11-15T07:57:15.240Z"
+      },
+      {
+        "name": "prime-steady-minute-9",
+        "at": "2026-11-15T07:58:17.892Z"
+      },
+      {
+        "name": "prime-steady-minute-10",
+        "at": "2026-11-15T07:59:20.439Z"
+      },
+      {
+        "name": "steady-prime-canonical",
+        "at": "2026-11-15T07:59:25.014Z"
+      },
+      {
+        "name": "native-indicator-inputs-steady",
+        "at": "2026-11-15T07:59:27.189Z"
+      },
+      {
+        "name": "actual-window-hidden",
+        "at": "2026-11-15T07:59:35.388Z"
+      },
+      {
+        "name": "native-indicator-inputs-restored-visible",
+        "at": "2026-11-15T07:59:38.172Z"
+      },
+      {
+        "name": "visible-prime-canonical",
+        "at": "2026-11-15T07:59:44.287Z"
+      },
+      {
+        "name": "workspace-configure",
+        "at": "2026-11-15T07:59:57.524Z"
+      },
+      {
+        "name": "strict-read-waiting-for-consistent-history",
+        "at": "2026-11-15T08:00:02.094Z"
+      },
+      {
+        "name": "native-controls",
+        "at": "2026-11-15T08:00:43.255Z"
+      },
+      {
+        "name": "released-prime-resources",
+        "at": "2026-11-15T08:00:46.491Z"
+      },
+      {
+        "name": "workspace-configure",
+        "at": "2026-11-15T08:01:14.482Z"
+      },
+      {
+        "name": "strict-read-waiting-for-consistent-history",
+        "at": "2026-11-15T08:02:36.571Z"
+      },
+      {
+        "name": "failure-state",
+        "at": "2026-11-15T08:04:23.713Z"
+      },
+      {
+        "name": "full-process-exit",
+        "at": "2026-11-15T08:04:34.457Z"
+      }
+    ],
+    "errors": [],
+    "peak_owned_rss_mib": 7302.08,
+    "resource_scope": "sum of owned process RSS; shared pages may be counted multiple times; no paired baseline",
+    "numeric_comparison": {
+      "exact": [
+        "OHLC",
+        "time",
+        "trades",
+        "missingness"
+      ],
+      "additive": "max(1e-8 absolute, 4*Number.EPSILON*scale); tighter than K130 relative 1e-12; every nonzero accepted difference recorded"
+    },
+    "canonical_checks": [
+      {
+        "stage": "cold-prime-targets",
+        "closed": {
+          "89m": 221,
+          "97m": 203,
+          "101m": 195,
+          "10007m": 128
+        },
+        "roundoff": []
+      },
+      {
+        "stage": "steady-prime-canonical",
+        "closed": {
+          "89m": 221,
+          "97m": 203,
+          "101m": 195,
+          "10007m": 128
+        },
+        "roundoff": []
+      },
+      {
+        "stage": "visible-prime-canonical",
+        "closed": {
+          "89m": 221,
+          "97m": 203,
+          "101m": 195,
+          "10007m": 128
+        },
+        "roundoff": []
+      },
+      {
+        "stage": "native-controls",
+        "closed": {
+          "1m": 501,
+          "5m": 503,
+          "15m": 501,
+          "1h": 501
+        },
+        "roundoff": []
+      }
+    ]
+  },
+  {
+    "run": "native-four-cold-10",
+    "source_commit": "95af148f971cd7aa2969ac22fc623b03f3e720fd",
+    "driver_source_commit": "95af148f971cd7aa2969ac22fc623b03f3e720fd",
+    "driver_sha256": "ceda0b25add961f8825fa1d822ade6e9462649a68a41c8ac88a954a29ff8c114",
+    "passed": false,
+    "failure": "Error: Timed out waiting for acceptance state\n    at Module.until (file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/backend-batch1-20261101/driver.mjs:29:9)\n    at async verify (file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/large-interval-throughput-127-20261115/native.mjs:186:5)\n    at async file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/large-interval-throughput-127-20261115/native.mjs:346:17",
+    "cold_elapsed_ms": null,
+    "cold_closed_comparisons": null,
+    "failed_ui_counts": {
+      "89m": 218,
+      "97m": 200,
+      "101m": 193,
+      "10007m": 18
+    },
+    "steps": [
+      {
+        "name": "initial-live-owner-ready",
+        "at": "2026-11-15T08:15:19.319Z"
+      },
+      {
+        "name": "packaged-launch",
+        "at": "2026-11-15T08:15:19.332Z"
+      },
+      {
+        "name": "workspace-configure",
+        "at": "2026-11-15T08:15:44.496Z"
+      },
+      {
+        "name": "failure-state",
+        "at": "2026-11-15T08:21:26.135Z"
+      },
+      {
+        "name": "full-process-exit",
+        "at": "2026-11-15T08:21:41.712Z"
+      }
+    ],
+    "errors": [],
+    "peak_owned_rss_mib": 2005.11,
+    "resource_scope": "sum of owned process RSS; shared pages may be counted multiple times; no paired baseline",
+    "numeric_comparison": {
+      "exact": [
+        "OHLC",
+        "time",
+        "trades",
+        "missingness"
+      ],
+      "additive": "max(1e-8 absolute, 4*Number.EPSILON*scale); tighter than K130 relative 1e-12; every nonzero accepted difference recorded"
+    },
+    "canonical_checks": []
+  },
+  {
+    "run": "native-four-cold-11",
+    "source_commit": "d44ad86f6aa9f979018712862e0b5ab150b93028",
+    "driver_source_commit": "d44ad86f6aa9f979018712862e0b5ab150b93028",
+    "driver_sha256": "ceda0b25add961f8825fa1d822ade6e9462649a68a41c8ac88a954a29ff8c114",
+    "passed": false,
+    "failure": "Error: Timed out waiting for acceptance state\n    at Module.until (file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/backend-batch1-20261101/driver.mjs:29:9)\n    at async verify (file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/large-interval-throughput-127-20261115/native.mjs:223:5)\n    at async file:///Users/ryanliang/.codex/worktrees/large-interval-throughput-127-20261115/CandleScope/docs/qa/large-interval-throughput-127-20261115/native.mjs:384:42",
+    "cold_elapsed_ms": 245436,
+    "cold_closed_comparisons": {
+      "89m": 221,
+      "97m": 203,
+      "101m": 195,
+      "10007m": 128
+    },
+    "failed_ui_counts": {
+      "89m": 222,
+      "97m": 204,
+      "101m": 196,
+      "10007m": 129
+    },
+    "steps": [
+      {
+        "name": "initial-live-owner-ready",
+        "at": "2026-11-15T08:34:43.355Z"
+      },
+      {
+        "name": "packaged-launch",
+        "at": "2026-11-15T08:34:43.359Z"
+      },
+      {
+        "name": "workspace-configure",
+        "at": "2026-11-15T08:35:08.616Z"
+      },
+      {
+        "name": "cold-prime-targets",
+        "at": "2026-11-15T08:38:48.839Z"
+      },
+      {
+        "name": "native-indicator-inputs-cold",
+        "at": "2026-11-15T08:38:50.305Z"
+      },
+      {
+        "name": "live-frames-cold-primes",
+        "at": "2026-11-15T08:38:50.926Z"
+      },
+      {
+        "name": "prime-steady-minute-1",
+        "at": "2026-11-15T08:39:51.624Z"
+      },
+      {
+        "name": "prime-steady-minute-2",
+        "at": "2026-11-15T08:40:52.347Z"
+      },
+      {
+        "name": "prime-steady-minute-3",
+        "at": "2026-11-15T08:41:53.194Z"
+      },
+      {
+        "name": "prime-steady-minute-4",
+        "at": "2026-11-15T08:42:54.500Z"
+      },
+      {
+        "name": "prime-steady-minute-5",
+        "at": "2026-11-15T08:43:55.702Z"
+      },
+      {
+        "name": "prime-steady-minute-6",
+        "at": "2026-11-15T08:44:56.421Z"
+      },
+      {
+        "name": "prime-steady-minute-7",
+        "at": "2026-11-15T08:45:57.388Z"
+      },
+      {
+        "name": "prime-steady-minute-8",
+        "at": "2026-11-15T08:46:58.399Z"
+      },
+      {
+        "name": "prime-steady-minute-9",
+        "at": "2026-11-15T08:47:59.471Z"
+      },
+      {
+        "name": "prime-steady-minute-10",
+        "at": "2026-11-15T08:49:00.557Z"
+      },
+      {
+        "name": "steady-prime-canonical",
+        "at": "2026-11-15T08:49:02.768Z"
+      },
+      {
+        "name": "native-indicator-inputs-steady",
+        "at": "2026-11-15T08:49:03.809Z"
+      },
+      {
+        "name": "actual-window-hidden",
+        "at": "2026-11-15T08:49:10.083Z"
+      },
+      {
+        "name": "native-indicator-inputs-restored-visible",
+        "at": "2026-11-15T08:49:11.759Z"
+      },
+      {
+        "name": "visible-prime-canonical",
+        "at": "2026-11-15T08:49:14.670Z"
+      },
+      {
+        "name": "workspace-configure",
+        "at": "2026-11-15T08:49:29.223Z"
+      },
+      {
+        "name": "native-controls",
+        "at": "2026-11-15T08:49:32.224Z"
+      },
+      {
+        "name": "released-prime-resources",
+        "at": "2026-11-15T08:49:33.322Z"
+      },
+      {
+        "name": "workspace-configure",
+        "at": "2026-11-15T08:49:59.276Z"
+      },
+      {
+        "name": "strict-read-waiting-for-consistent-history",
+        "at": "2026-11-15T08:51:10.486Z"
+      },
+      {
+        "name": "failure-state",
+        "at": "2026-11-15T08:53:00.904Z"
+      },
+      {
+        "name": "full-process-exit",
+        "at": "2026-11-15T08:53:07.208Z"
+      }
+    ],
+    "errors": [],
+    "peak_owned_rss_mib": 7206.59,
+    "resource_scope": "sum of owned process RSS; shared pages may be counted multiple times; no paired baseline",
+    "numeric_comparison": {
+      "exact": [
+        "OHLC",
+        "time",
+        "trades",
+        "missingness"
+      ],
+      "additive": "max(1e-8 absolute, 4*Number.EPSILON*scale); tighter than K130 relative 1e-12; every nonzero accepted difference recorded"
+    },
+    "canonical_checks": [
+      {
+        "stage": "cold-prime-targets",
+        "closed": {
+          "89m": 221,
+          "97m": 203,
+          "101m": 195,
+          "10007m": 128
+        },
+        "roundoff": [
+          {
+            "interval": "10007m",
+            "time": 1794054960,
+            "field": "taker_buy_quote",
+            "absolute": 1.52587890625e-05,
+            "relative": 3.96889757815673e-16,
+            "tolerance": 3.4146830169306076e-05
+          }
+        ]
+      },
+      {
+        "stage": "steady-prime-canonical",
+        "closed": {
+          "89m": 221,
+          "97m": 203,
+          "101m": 195,
+          "10007m": 128
+        },
+        "roundoff": [
+          {
+            "interval": "10007m",
+            "time": 1794054960,
+            "field": "quote_volume",
+            "absolute": 1.52587890625e-05,
+            "relative": 1.9300114127796825e-16,
+            "tolerance": 7.021993272335055e-05
+          },
+          {
+            "interval": "10007m",
+            "time": 1794054960,
+            "field": "taker_buy_quote",
+            "absolute": 1.52587890625e-05,
+            "relative": 3.96889757815673e-16,
+            "tolerance": 3.4146830169306076e-05
+          }
+        ]
+      },
+      {
+        "stage": "visible-prime-canonical",
+        "closed": {
+          "89m": 221,
+          "97m": 203,
+          "101m": 195,
+          "10007m": 128
+        },
+        "roundoff": []
+      },
+      {
+        "stage": "native-controls",
+        "closed": {
+          "1m": 500,
+          "5m": 500,
+          "15m": 500,
+          "1h": 1191
+        },
+        "roundoff": []
+      }
+    ]
+  },
+  {
+    "run": "native-four-cold-13",
+    "source_commit": "4529ff51d337697c52102962fa32ee39f871d0b5",
+    "driver_source_commit": "4529ff51d337697c52102962fa32ee39f871d0b5",
+    "driver_sha256": "ceda0b25add961f8825fa1d822ade6e9462649a68a41c8ac88a954a29ff8c114",
+    "passed": true,
+    "failure": null,
+    "cold_elapsed_ms": 231417,
+    "cold_closed_comparisons": {
+      "89m": 221,
+      "97m": 203,
+      "101m": 196,
+      "10007m": 128
+    },
+    "failed_ui_counts": null,
+    "steps": [
+      {
+        "name": "initial-live-owner-ready",
+        "at": "2026-11-15T09:39:57.511Z"
+      },
+      {
+        "name": "packaged-launch",
+        "at": "2026-11-15T09:39:57.513Z"
+      },
+      {
+        "name": "workspace-configure",
+        "at": "2026-11-15T09:40:22.686Z"
+      },
+      {
+        "name": "cold-prime-targets",
+        "at": "2026-11-15T09:43:48.977Z"
+      },
+      {
+        "name": "native-indicator-inputs-cold",
+        "at": "2026-11-15T09:43:50.548Z"
+      },
+      {
+        "name": "live-frames-cold-primes",
+        "at": "2026-11-15T09:43:51.611Z"
+      },
+      {
+        "name": "prime-steady-minute-1",
+        "at": "2026-11-15T09:44:52.793Z"
+      },
+      {
+        "name": "prime-steady-minute-2",
+        "at": "2026-11-15T09:45:53.666Z"
+      },
+      {
+        "name": "prime-steady-minute-3",
+        "at": "2026-11-15T09:46:54.629Z"
+      },
+      {
+        "name": "prime-steady-minute-4",
+        "at": "2026-11-15T09:47:55.981Z"
+      },
+      {
+        "name": "prime-steady-minute-5",
+        "at": "2026-11-15T09:48:56.884Z"
+      },
+      {
+        "name": "prime-steady-minute-6",
+        "at": "2026-11-15T09:49:57.899Z"
+      },
+      {
+        "name": "prime-steady-minute-7",
+        "at": "2026-11-15T09:50:58.859Z"
+      },
+      {
+        "name": "prime-steady-minute-8",
+        "at": "2026-11-15T09:52:00.045Z"
+      },
+      {
+        "name": "prime-steady-minute-9",
+        "at": "2026-11-15T09:53:01.111Z"
+      },
+      {
+        "name": "prime-steady-minute-10",
+        "at": "2026-11-15T09:54:02.233Z"
+      },
+      {
+        "name": "steady-prime-canonical",
+        "at": "2026-11-15T09:54:04.563Z"
+      },
+      {
+        "name": "native-indicator-inputs-steady",
+        "at": "2026-11-15T09:54:05.858Z"
+      },
+      {
+        "name": "actual-window-hidden",
+        "at": "2026-11-15T09:54:12.235Z"
+      },
+      {
+        "name": "native-indicator-inputs-restored-visible",
+        "at": "2026-11-15T09:54:14.020Z"
+      },
+      {
+        "name": "visible-prime-canonical",
+        "at": "2026-11-15T09:54:17.304Z"
+      },
+      {
+        "name": "workspace-configure",
+        "at": "2026-11-15T09:54:28.661Z"
+      },
+      {
+        "name": "strict-read-waiting-for-consistent-history",
+        "at": "2026-11-15T09:54:30.698Z"
+      },
+      {
+        "name": "native-controls",
+        "at": "2026-11-15T09:55:04.132Z"
+      },
+      {
+        "name": "released-prime-resources",
+        "at": "2026-11-15T09:55:05.723Z"
+      },
+      {
+        "name": "workspace-configure",
+        "at": "2026-11-15T09:55:32.120Z"
+      },
+      {
+        "name": "strict-read-waiting-for-consistent-history",
+        "at": "2026-11-15T09:56:00.330Z"
+      },
+      {
+        "name": "warm-prime-recreation",
+        "at": "2026-11-15T09:56:13.570Z"
+      },
+      {
+        "name": "native-indicator-inputs-recreated",
+        "at": "2026-11-15T09:56:16.126Z"
+      },
+      {
+        "name": "full-process-exit",
+        "at": "2026-11-15T09:56:22.469Z"
+      },
+      {
+        "name": "initial-live-owner-ready",
+        "at": "2026-11-15T09:56:33.154Z"
+      },
+      {
+        "name": "packaged-launch",
+        "at": "2026-11-15T09:56:34.921Z"
+      },
+      {
+        "name": "saved-prime-restart",
+        "at": "2026-11-15T09:56:38.260Z"
+      },
+      {
+        "name": "native-indicator-inputs-restarted",
+        "at": "2026-11-15T09:56:39.987Z"
+      },
+      {
+        "name": "full-process-exit",
+        "at": "2026-11-15T09:56:45.367Z"
+      },
+      {
+        "name": "server-response-audit",
+        "at": "2026-11-15T09:56:46.570Z"
+      }
+    ],
+    "errors": [],
+    "peak_owned_rss_mib": 7216.03,
+    "resource_scope": "sum of owned process RSS; shared pages may be counted multiple times; no paired baseline",
+    "numeric_comparison": {
+      "exact": [
+        "OHLC",
+        "time",
+        "trades",
+        "missingness"
+      ],
+      "additive": "max(1e-8 absolute, 4*Number.EPSILON*scale); tighter than K130 relative 1e-12; every nonzero accepted difference recorded"
+    },
+    "canonical_checks": [
+      {
+        "stage": "cold-prime-targets",
+        "closed": {
+          "89m": 221,
+          "97m": 203,
+          "101m": 196,
+          "10007m": 128
+        },
+        "roundoff": []
+      },
+      {
+        "stage": "steady-prime-canonical",
+        "closed": {
+          "89m": 221,
+          "97m": 203,
+          "101m": 196,
+          "10007m": 128
+        },
+        "roundoff": [
+          {
+            "interval": "10007m",
+            "time": 1794054960,
+            "field": "quote_volume",
+            "absolute": 1.52587890625e-05,
+            "relative": 1.9300114127796825e-16,
+            "tolerance": 7.021993272335055e-05
+          },
+          {
+            "interval": "10007m",
+            "time": 1794054960,
+            "field": "taker_buy_quote",
+            "absolute": 1.52587890625e-05,
+            "relative": 3.96889757815673e-16,
+            "tolerance": 3.4146830169306076e-05
+          }
+        ]
+      },
+      {
+        "stage": "visible-prime-canonical",
+        "closed": {
+          "89m": 221,
+          "97m": 203,
+          "101m": 196,
+          "10007m": 128
+        },
+        "roundoff": [
+          {
+            "interval": "10007m",
+            "time": 1794054960,
+            "field": "quote_volume",
+            "absolute": 1.52587890625e-05,
+            "relative": 1.9300114127796825e-16,
+            "tolerance": 7.021993272335055e-05
+          },
+          {
+            "interval": "10007m",
+            "time": 1794054960,
+            "field": "taker_buy_quote",
+            "absolute": 1.52587890625e-05,
+            "relative": 3.96889757815673e-16,
+            "tolerance": 3.4146830169306076e-05
+          }
+        ]
+      },
+      {
+        "stage": "native-controls",
+        "closed": {
+          "1m": 500,
+          "5m": 502,
+          "15m": 500,
+          "1h": 500
+        },
+        "roundoff": []
+      },
+      {
+        "stage": "warm-prime-recreation",
+        "closed": {
+          "89m": 221,
+          "97m": 203,
+          "101m": 196,
+          "10007m": 128
+        },
+        "roundoff": [
+          {
+            "interval": "10007m",
+            "time": 1792854120,
+            "field": "quote_volume",
+            "absolute": 1.52587890625e-05,
+            "relative": 1.9104792626801137e-16,
+            "tolerance": 7.093783963431593e-05
+          },
+          {
+            "interval": "10007m",
+            "time": 1793454540,
+            "field": "quote_volume",
+            "absolute": 1.52587890625e-05,
+            "relative": 2.0028089352461984e-16,
+            "tolerance": 6.766759882865631e-05
+          },
+          {
+            "interval": "10007m",
+            "time": 1793454540,
+            "field": "taker_buy_quote",
+            "absolute": 7.62939453125e-06,
+            "relative": 2.0018750449834721e-16,
+            "tolerance": 3.384958314463803e-05
+          },
+          {
+            "interval": "10007m",
+            "time": 1794054960,
+            "field": "taker_buy_quote",
+            "absolute": 1.52587890625e-05,
+            "relative": 3.96889757815673e-16,
+            "tolerance": 3.4146830169306076e-05
+          },
+          {
+            "interval": "10007m",
+            "time": 1717801620,
+            "field": "taker_buy_quote",
+            "anchor": true,
+            "absolute": 7.62939453125e-06,
+            "relative": 1.66101878835853e-16,
+            "tolerance": 4.07958273893513e-05
+          }
+        ]
+      },
+      {
+        "stage": "saved-prime-restart",
+        "closed": {
+          "89m": 221,
+          "97m": 203,
+          "101m": 195,
+          "10007m": 128
+        },
+        "roundoff": [
+          {
+            "interval": "10007m",
+            "time": 1717801620,
+            "field": "taker_buy_quote",
+            "anchor": true,
+            "absolute": 7.62939453125e-06,
+            "relative": 1.66101878835853e-16,
+            "tolerance": 4.07958273893513e-05
+          }
+        ]
+      }
+    ]
+  }
+]
