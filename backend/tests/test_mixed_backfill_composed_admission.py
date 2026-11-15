@@ -392,6 +392,10 @@ def test_latest_stream_start_failure_preserves_bounded_targets_without_repair(co
         manager.query_engine.storage.upsert_bars('BTCUSDT', '89m',
             [row(index*width, width) for index in range(stored_targets)],
             source='backfill_aggregated', market_type='futures')
+        # set_storage() polled the cache revision before this write. A read that
+        # starts just inside that 50 ms poll window is a legitimate
+        # storage_revision_conflict with no bars; this test is not about that.
+        manager.query_engine._cache.revision_consumer.sync(force=True)
     monkeypatch.setattr(manager.query_engine.custom_intervals, '_base_query', forbidden)
     monkeypatch.setattr(manager.query_engine.custom_intervals, '_base_query_before', forbidden)
     manager.set_backfill_trigger(forbidden)
