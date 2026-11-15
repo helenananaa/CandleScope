@@ -64,5 +64,5 @@ test("mixed batch never sends browser source to backend and retains per-item ide
   assert.deepEqual(result.results.map(row => row.clientId), ["js", "native"]);
   assert.equal(result.results[0]!.payload.error, "syntax error");
   assert.equal(result.results[1]!.payload.ok, true);
-  assert.deepEqual(publications, ["js"]);
+  assert.deepEqual(publications, ["js", "native"]);
 });

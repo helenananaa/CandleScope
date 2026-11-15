@@ -289,10 +289,14 @@ def test_forming_fanout_reuses_reads_and_observes_a_mid_dispatch_commit(dm, runt
     store = dm.query_engine.storage.revision_store
     original = store._read_versions
     reads = []
+    transaction_starts = []
 
     def count_read(conn, keys):
         reads.append(conn)
-        return original(conn, keys)
+        transaction_starts.append(conn.in_transaction)
+        result = original(conn, keys)
+        assert not conn.in_transaction
+        return result
 
     async def check():
         for interval in intervals:
@@ -347,7 +351,9 @@ def test_forming_fanout_reuses_reads_and_observes_a_mid_dispatch_commit(dm, runt
             equal(agg.get_bucket_state("BTCUSDT", interval, 0, market_type="futures"), reference(dm, tail))
         reads.clear()
         await send(4, closed=True)
-        assert len(reads) == 2 and reads[0] is not reads[1]
+        # Closed inputs use independent transactions. The reusable read
+        # pool may serve both calls with the same connection on one worker.
+        assert len(reads) == 2 and transaction_starts[-2:] == [False, False]
         await service.close()
 
     asyncio.run(check())

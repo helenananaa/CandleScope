@@ -286,12 +286,23 @@ async function sampleResources() {
     const owned = new Set([q.s.identity.pid]);
     for (let pass=0;pass<10;pass++) for (const row of rows) if (owned.has(row.ppid)) owned.add(row.pid);
     const processes = rows.filter(row=>owned.has(row.pid));
+    const electronMetrics = await q.s.app.evaluate(({ app }) => app.getAppMetrics()).catch(() => null);
     for (const row of processes) observedCpu.set(row.pid,Math.max(observedCpu.get(row.pid)??0,row.cpuSeconds));
     await fs.appendFile(path.join(q.s.root,'resource-samples.jsonl'),JSON.stringify({at:new Date().toISOString(),phase,
       scope:'sum of owned process RSS, shared pages can be counted more than once; cumulative CPU includes observed exited children',
       rssKiB:processes.reduce((value,row)=>value+row.rssKiB,0),
-      cpuSeconds:[...observedCpu.values()].reduce((a,b)=>a+b,0),processes})+'\n');
+      cpuSeconds:[...observedCpu.values()].reduce((a,b)=>a+b,0),processes,electronMetrics})+'\n');
   } finally { sampling = false; }
+}
+
+async function footprint(label) {
+  if (process.platform !== 'darwin') return;
+  const lines = (await fs.readFile(path.join(q.s.root,'resource-samples.jsonl'),'utf8')).trim().split('\n');
+  const sample = JSON.parse(lines.at(-1));
+  const result = execFileSync('/usr/bin/footprint', ['--noCategories','-j',
+    path.join(q.s.root,'footprint-'+label+'.json'), ...sample.processes.map(row=>String(row.pid))],
+    {encoding:'utf8',timeout:20_000});
+  await fs.writeFile(path.join(q.s.root,'footprint-'+label+'.txt'),result);
 }
 
 const closeProbe = id => ({id,name:'Joint native close input',kind:'script',executionTarget:'local',
@@ -324,8 +335,26 @@ async function verifyConsumers(label) {
     const closed=view.bars.filter(bar=>bar.is_closed);
     assert.ok(closed.length>=127);
     for (const bar of closed) assert.equal(points.get(bar.time),bar.close,view.interval+':'+bar.time);
+    const emaChecks = [];
+    for (const period of [20,60]) {
+      const line = view.lines.find(line=>line.name === 'EMA('+period+')');
+      assert.ok(line,'missing EMA('+period+') on '+view.interval);
+      const output = new Map(line.data.map(point=>[Number(point.time),point.value]));
+      let sum=0, ema=null, checked=0;
+      for (const [position,bar] of view.bars.entries()) {
+        if (position < period) { sum+=bar.close; if (position === period-1) ema=sum/period; }
+        else ema=2/(period+1)*bar.close+(1-2/(period+1))*ema;
+        if (ema !== null && bar.is_closed) {
+          const actual=output.get(bar.time);
+          assert.ok(Number.isFinite(actual) && Math.abs(actual-ema)<=1e-7,
+            view.interval+' EMA('+period+') '+bar.time+': '+actual+' != '+ema);
+          checked++;
+        }
+      }
+      assert.ok(checked>0); emaChecks.push({period,checked});
+    }
     evidence.push({interval:view.interval,checkedClosed:closed.length,
-      probe:probe[0].id,indicatorLines:view.lines.map(line=>({id:line.id,name:line.name,points:line.data.length}))});
+      probe:probe[0].id,emaChecks,indicatorLines:view.lines.map(line=>({id:line.id,name:line.name,points:line.data.length}))});
   }
   await q.record('native-indicator-inputs-'+label,{evidence,workspace:await q.inspect(),
     scope:'two builtin local EMAs plus a supported frontend-JS close mirror on each real chart; closed inputs independently compared; no strategy qualification'});
@@ -345,6 +374,7 @@ try {
   await configure(charts(PRIMARY),'quad');
   const initial=await verify(PRIMARY);
   await q.record('cold-prime-targets',{...initial,elapsedMs:Date.now()-coldBegan});
+  await footprint('cold-ready');
   await addProbes();
   await verifyConsumers('cold');
   await q.screenshot('cold-primes');
@@ -353,6 +383,7 @@ try {
   phase='four-prime-steady';
   for(let minute=0;minute<10;minute++) {
     await q.delay(60000);
+    if (minute === 0 || minute === 9) await footprint('steady-minute-'+(minute+1));
     await q.record('prime-steady-minute-'+(minute+1),{workspace:await q.inspect(),diagnostics:await api('/api/v1/settings/cache-diagnostics')});
   }
   await q.record('steady-prime-canonical',await verify(PRIMARY));

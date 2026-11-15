@@ -3,6 +3,20 @@ import { computeFrontendScript } from "./frontendScriptRuntime.js";
 import { awaitIndicatorComputations } from "./indicatorComputeSettlement.js";
 import type { IndicatorComputeBatchExecutor } from "./indicatorComputeController.js";
 import type { IndicatorComputeBatchItem } from "./indicatorTypes.js";
+import { createIncrementalBuiltinCompute } from "./builtinIncrementalCompute.js";
+
+const liveBuiltinExecutors = new WeakMap<IndicatorComputeBatchExecutor, IndicatorComputeBatchExecutor>();
+function liveBuiltinExecutor(hosted: IndicatorComputeBatchExecutor): IndicatorComputeBatchExecutor {
+  let executor = liveBuiltinExecutors.get(hosted);
+  if (!executor) {
+    executor = createIncrementalBuiltinCompute(hosted, {
+      supports: request => request.name === "EMA" && request.replayContext === undefined,
+      maxEntries: 8, maxCachedBars: 20_000, eventName: "indicator.builtin.incremental",
+    });
+    liveBuiltinExecutors.set(hosted, executor);
+  }
+  return executor;
+}
 
 /** Intercept before either the live backend executor or replay executor. */
 export async function routeIndicatorComputeBatch(
@@ -18,7 +32,7 @@ export async function routeIndicatorComputeBatch(
     options.onResults?.([result]);
     return result;
   }));
-  const server = hostedJobs.length ? hosted({ ...options, jobs: hostedJobs })
+  const server = hostedJobs.length ? liveBuiltinExecutor(hosted)({ ...options, jobs: hostedJobs })
     : Promise.resolve({ ok: true, results: [] as IndicatorComputeBatchItem[] });
   const [local, remote] = await awaitIndicatorComputations([browser, server] as const);
   const results = [...local, ...remote.results];

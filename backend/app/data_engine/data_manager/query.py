@@ -297,14 +297,25 @@ class QueryEngine:
         first, last = spec.floor_ms(start_ms), spec.floor_ms(end_ms)
         if first < start_ms:
             first = spec.next_ms(first)
+        now_ms = int(time.time()*1000)
+        current_open = spec.floor_ms(now_ms)
+        preview = None
+        if last == current_open and first < last:
+            # A current preview must never force reacquisition of the entire
+            # immutable closed prefix. It is an immutable cache value, remains
+            # explicitly forming, and grants no storage/write authority.
+            preview = self._cache.get_bar_at(key, last//1000)
+            if preview is None or preview.is_closed:
+                return None
+            last -= spec.nominal_ms
         count = (last-first)//spec.nominal_ms+1
         effective_limit = min(limit or self._cfg.default_limit, self._cfg.max_limit)
         reader = getattr(self._storage, 'read_closed_target_snapshot', None)
         consumer = self._cache.revision_consumer
-        if not callable(reader) or consumer is None or not 0 < count <= min(512, effective_limit):
+        if (not callable(reader) or consumer is None or not 0 < count <= 512
+                or count + int(preview is not None) > effective_limit):
             return None
         values = (key.exchange,key.market_type,key.symbol,key.interval,*key.identity.storage_values)
-        now_ms = int(time.time()*1000)
         if first < 0 or last+spec.nominal_ms > now_ms:
             return None
         proofs = []
@@ -325,10 +336,15 @@ class QueryEngine:
                 or composition_contract is not None and any(
                     getattr(bar, field, None) is None for bar in bars for field in declaration[0].fields)):
             return None
+        if preview is not None:
+            bars.append(preview)
         result = QueryResult(bars=bars,symbol=key.symbol,interval=key.interval,exchange=key.exchange,
-            market_type=key.market_type,**key.identity.to_dict(),source=QuerySource.STORAGE,total=count,
-            complete=True,metadata={'all_rows_final':True,'expected_closed_rows':count,
+            market_type=key.market_type,**key.identity.to_dict(),
+            source=QuerySource.MIXED if preview is not None else QuerySource.STORAGE,total=len(bars),
+            has_more=first > 0, next_before_ms=first if first > 0 else None,
+            complete=True,metadata={'all_rows_final':preview is None,'expected_closed_rows':count,
                 'expected_closed_through_ms':last,'target_materialized':True,'canonical_target_snapshot':True,
+                'canonical_target_preview':preview is not None,
                 'storage_reads':1,'storage_rows':count,'target_materialized_rows':count,
                 'target_materialized_written':0,'derived_from':route.base_interval,
                 'elapsed_ms':round((time.monotonic()-started_at)*1000,2)},
@@ -830,6 +846,7 @@ class QueryEngine:
         composition_contract: str | None = None,
     ) -> QueryResult:
         """Query bars strictly before a timestamp (for pagination)."""
+        t0 = time.monotonic()
         io_metrics = _QueryIOMetrics()
         with self._metrics_lock:
             self._query_before_calls += 1
@@ -866,6 +883,15 @@ class QueryEngine:
                     interval=interval,
                     purpose=IntervalPurpose.HISTORY,
                 )
+            effective_limit = min(limit or self._cfg.default_limit, self._cfg.max_limit)
+            last = route.spec.floor_ms(int(before_ms)-1)
+            result = self._closed_target_snapshot(key=SeriesKey(symbol, interval, exchange=exchange,
+                market_type=market_type, **identity.to_dict()), route=route,
+                start_ms=max(0, last-(effective_limit-1)*route.spec.nominal_ms), end_ms=last,
+                limit=effective_limit, composition_contract=composition_contract,
+                io_metrics=io_metrics, started_at=t0)
+            if result is not None and len(result.bars) == effective_limit:
+                return result
             result = self.custom_intervals.query_before(
                 symbol,
                 interval,

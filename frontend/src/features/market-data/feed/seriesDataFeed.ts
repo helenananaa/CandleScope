@@ -721,7 +721,8 @@ export class SeriesDataFeed {
       },
       read: (job) => this.readBackfilledData(job),
       verify: (job) => this.verifyPendingInitialRange(job),
-      needsVerification: (job) => Boolean(job.options.pendingInitial),
+      needsVerification: (job) => Boolean(job.options.pendingInitial
+        && (!job.options.pendingInitial.range || !rangeCovers(job.range, job.options.pendingInitial.range))),
       isCurrent: (job) => this.isCurrent(job.series, job.epoch) && this.shouldCommitActive(job.series),
       cooldown: (job) => job.options.cooldownMs,
       onError: (error) => console.warn("Failed to reload after backfill:", error),
@@ -1402,6 +1403,7 @@ export class SeriesDataFeed {
     );
     let loadedAny = false;
     let initialResolved = false;
+    let rangeVerified = false;
     let lastError: unknown = null;
 
     const canReleaseInitialLoading = (result: FeedResult, rows: KlineBar[]): boolean => {
@@ -1469,13 +1471,23 @@ export class SeriesDataFeed {
           this.clearInactivePendingState(job.series);
           return false;
         }
+        rangeVerified = hasVerifiedRangeCoverage(result);
         loadedAny = afterBackfillRows(result) || loadedAny;
-        if (isKlineResultRepairPending(result)) {
+        const ownsInitialRange = isPendingInitial && pendingInitial?.range
+          && rangeCovers(fetchRange, pendingInitial.range);
+        if (isKlineResultRepairPending(result) || (ownsInitialRange && !initialResolved)) {
           const range = {
             start: millisecondsToSeconds(fetchRange.start),
             end: millisecondsToSeconds(fetchRange.end),
           };
-          this.updatePendingGapRepairFromResult(job.series, range, result, 0, false);
+          this.updatePendingGapRepairFromResult(job.series, range, result, 0, false,
+            ownsInitialRange ? () => {
+              if (this.isCurrent(job.series, job.epoch)
+                && this.shouldCommitActive(job.series)
+                && job.options.getPendingInitial() === pendingInitial) {
+                onRecoveryProgress({ type: "initial-resolved", owner: pendingInitial });
+              }
+            } : undefined);
         } else {
           this.resolveVerifiedPendingGapRepairs(job.series, {
             start: millisecondsToSeconds(fetchRange.start),
@@ -1493,7 +1505,7 @@ export class SeriesDataFeed {
     if (!loadedAny && lastError) {
       throw lastError instanceof Error ? lastError : new Error(String(lastError));
     }
-    return initialResolved;
+    return initialResolved || (!isPendingInitial && rangeVerified);
   }
 
   private async verifyPendingInitialRange(job: BackfillReloadJob): Promise<void> {

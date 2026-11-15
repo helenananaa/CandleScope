@@ -57,15 +57,58 @@ export function parseFrontendScriptOutput(encoded: unknown, request: IndicatorCo
 
 function abortError(): DOMException { return new DOMException("Frontend script cancelled", "AbortError"); }
 
-function isolatedCompute(request: IndicatorComputeRequest, signal?: AbortSignal): Promise<IndicatorPayloadEnvelope> {
+interface SandboxHost {
+  frame: HTMLIFrameElement;
+  ready: Promise<void>;
+}
+interface SandboxSlot {
+  busy: boolean;
+  host?: SandboxHost;
+  idleTimer?: ReturnType<typeof setTimeout>;
+}
+const slots: SandboxSlot[] = [{ busy: false }, { busy: false }];
+const waiting: (() => void)[] = [];
+const HOST_IDLE_MS = 30_000;
+let startedComputations = 0;
+
+function retireHost(slot: SandboxSlot): void {
+  clearTimeout(slot.idleTimer);
+  slot.host?.frame.remove();
+  delete slot.host;
+}
+
+/** Release unused interpreters without interrupting another chart's work. */
+export function releaseIdleFrontendScriptHosts(): void {
+  for (const slot of slots) if (!slot.busy) retireHost(slot);
+}
+
+export function frontendScriptRuntimeDiagnostics() {
+  return { hosts: slots.filter(slot => slot.host?.frame.isConnected).length,
+    running: slots.filter(slot => slot.busy).length, queued: waiting.length, started: startedComputations };
+}
+
+function getHost(slot: SandboxSlot): SandboxHost {
+  if (slot.host?.frame.isConnected) return slot.host;
+  retireHost(slot);
+  const frame = document.createElement("iframe");
+  frame.hidden = true;
+  frame.title = "Frontend indicator isolation";
+  frame.setAttribute("sandbox", "allow-scripts");
+  frame.referrerPolicy = "no-referrer";
+  const ready = new Promise<void>(resolve => { frame.onload = () => resolve(); });
+  const host = { frame, ready };
+  slot.host = host;
+  frame.srcdoc = frontendScriptSandboxDocument();
+  document.body.append(frame);
+  return host;
+}
+
+function isolatedCompute(slot: SandboxSlot, request: IndicatorComputeRequest, signal?: AbortSignal): Promise<IndicatorPayloadEnvelope> {
   if (signal?.aborted) return Promise.reject(abortError());
   validateFrontendScriptInput(request);
+  startedComputations++;
   return new Promise((resolve, reject) => {
-    const frame = document.createElement("iframe");
-    frame.hidden = true;
-    frame.title = "Frontend indicator isolation";
-    frame.setAttribute("sandbox", "allow-scripts");
-    frame.referrerPolicy = "no-referrer";
+    const host = getHost(slot);
     const channel = new MessageChannel();
     let settled = false;
     let connected = false;
@@ -75,18 +118,23 @@ function isolatedCompute(request: IndicatorComputeRequest, signal?: AbortSignal)
       settled = true;
       clearTimeout(timer);
       signal?.removeEventListener("abort", abort);
-      const release = () => {
-        channel.port1.close(); channel.port2.close(); frame.remove();
+      const release = (reusable: boolean) => {
+        channel.port1.onmessage = null;
+        channel.port1.close(); channel.port2.close();
+        if (!reusable) retireHost(slot);
         if (error) reject(error); else resolve(result!);
       };
       if (connected && !workerStopped) {
         // Drain the trusted bootstrap's termination acknowledgement before
         // releasing the slot. If its document failed, destroying that owner
         // remains the bounded cleanup path.
-        const cleanup = setTimeout(release, 250);
-        channel.port1.onmessage = () => { clearTimeout(cleanup); release(); };
+        const cleanup = setTimeout(() => release(false), 250);
+        channel.port1.onmessage = event => {
+          if (event.data !== "stopped") return;
+          clearTimeout(cleanup); release(true);
+        };
         channel.port1.postMessage("stop");
-      } else release();
+      } else release(workerStopped);
     };
     const abort = () => finish(undefined, abortError());
     // Isolating/loading a trusted document is not user-script execution. The
@@ -104,24 +152,19 @@ function isolatedCompute(request: IndicatorComputeRequest, signal?: AbortSignal)
       try { finish(parseFrontendScriptOutput(event.data, request), undefined, true); }
       catch (error) { finish(frontendScriptPayload([], error instanceof Error ? error.message : "Invalid frontend script output"), undefined, true); }
     };
-    frame.onload = () => {
+    void host.ready.then(() => {
       if (settled) return;
       connected = true;
-      frame.contentWindow?.postMessage({ script: request.script, bars: request.ohlcv, params: request.params ?? {} }, "*", [channel.port2]);
-    };
-    frame.srcdoc = frontendScriptSandboxDocument();
-    document.body.append(frame);
+      host.frame.contentWindow?.postMessage({ script: request.script, bars: request.ohlcv, params: request.params ?? {} }, "*", [channel.port2]);
+    });
   });
 }
 
-let running = 0;
-const waiting: (() => void)[] = [];
-
-/** Two workers total, including different charts; cancelled queued work never starts. */
+/** Two reusable opaque hosts; every computation still gets a fresh Worker. */
 export async function computeFrontendScript(request: IndicatorComputeRequest, signal?: AbortSignal): Promise<IndicatorPayloadEnvelope> {
   if (signal?.aborted) throw abortError();
   if (waiting.length >= 32) return frontendScriptPayload([], "Frontend script queue is full");
-  await new Promise<void>((resolve, reject) => {
+  const slot = await new Promise<SandboxSlot>((resolve, reject) => {
     const abort = () => {
       const index = waiting.indexOf(enter);
       if (index !== -1) waiting.splice(index, 1);
@@ -129,18 +172,22 @@ export async function computeFrontendScript(request: IndicatorComputeRequest, si
     };
     const enter = () => {
       signal?.removeEventListener("abort", abort);
-      running++; resolve();
+      const available = slots.find(candidate => !candidate.busy)!;
+      clearTimeout(available.idleTimer);
+      available.busy = true;
+      resolve(available);
     };
-    if (running < 2) enter();
+    if (slots.some(candidate => !candidate.busy)) enter();
     else { waiting.push(enter); signal?.addEventListener("abort", abort, { once: true }); }
   });
   try {
-    return await isolatedCompute(request, signal);
+    return await isolatedCompute(slot, request, signal);
   } catch (error) {
     if (signal?.aborted) throw abortError();
     return frontendScriptPayload([], error instanceof Error ? error.message : "Frontend script failed");
   } finally {
-    running--;
+    slot.busy = false;
+    slot.idleTimer = setTimeout(() => retireHost(slot), HOST_IDLE_MS);
     waiting.shift()?.();
   }
 }

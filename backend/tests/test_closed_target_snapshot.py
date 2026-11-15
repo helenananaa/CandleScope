@@ -77,3 +77,52 @@ def test_canonical_fast_read_requires_the_whole_closed_trusted_page(mixed_query,
                              market_type='futures',auto_backfill=False)
     else: result = read(query)
     assert not result.metadata.get('canonical_target_snapshot')
+
+
+@pytest.mark.parametrize('preview', [False, True])
+def test_countback_and_preview_reuse_the_closed_prefix(mixed_query, monkeypatch, preview):
+    from app.data_engine.data_manager.models import BarData, SeriesKey
+    query = mixed_query
+    seed(query)
+    monkeypatch.setattr('time.time', lambda: (4*WIDTH+MINUTE)/1000)
+    # Synchronize canonical mutations before installing the current preview.
+    query._cache.revision_consumer.sync(force=True)
+    key = SeriesKey('BTCUSDT','10007m',exchange='binance',market_type='futures')
+    forming = BarData(time=4*WIDTH//1000,open=100,high=102,low=99,close=101,
+                      volume=1,is_closed=False,source='ws')
+    if preview:
+        query._cache.bulk_load(key,[forming])
+    monkeypatch.setattr(query,'_query_closed_mixed',lambda *a,**kw: pytest.fail('recomputed a complete closed prefix'))
+    if preview:
+        result = query.query('BTCUSDT','10007m',start_ms=0,end_ms=4*WIDTH,limit=5,
+                             market_type='futures',auto_backfill=False)
+        assert result.bars[-1] == forming and not result.bars[-1].is_closed
+        assert result.metadata['canonical_target_preview']
+        assert not result.metadata['all_rows_final']
+    else:
+        result = query.query_before('BTCUSDT','10007m',4*WIDTH,limit=4,
+                                    market_type='futures',auto_backfill=False)
+    assert result.complete and result.metadata['canonical_target_snapshot']
+    assert len(result.bars) == 4+preview
+    assert result.metadata['storage_rows'] == 4
+
+
+def test_preview_does_not_bypass_a_closed_prefix_correction(mixed_query, monkeypatch):
+    from app.data_engine.data_manager.models import BarData, SeriesKey
+    query = mixed_query
+    seed(query)
+    monkeypatch.setattr('time.time', lambda: (4*WIDTH+MINUTE)/1000)
+    query._cache.revision_consumer.sync(force=True)
+    key = SeriesKey('BTCUSDT','10007m',exchange='binance',market_type='futures')
+    query._cache.bulk_load(key,[BarData(time=4*WIDTH//1000,open=100,high=102,low=99,
+                                      close=101,volume=1,is_closed=False,source='ws')])
+    original = query.storage.read_closed_target_snapshot
+    def correcting(*args):
+        result = original(*args)
+        Context().run(lambda: query.storage.upsert_bars('BTCUSDT','1m',[row(0,MINUTE)],
+                    market_type='futures',source='backfill'))
+        return result
+    monkeypatch.setattr(query.storage,'read_closed_target_snapshot',correcting)
+    result = query.query('BTCUSDT','10007m',start_ms=0,end_ms=4*WIDTH,limit=5,
+                         market_type='futures',auto_backfill=False)
+    assert not result.complete and result.retryable and not result.bars
