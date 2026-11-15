@@ -271,7 +271,7 @@ class QueryEngine:
         """Lease-scoped H127 canonical history page; publish only after context exit."""
         return self.history_blocks.read(source, start_ms, end_ms, **options)
 
-    def _closed_target_snapshot(self, *, key, route, start_ms, end_ms, limit, composition_contract):
+    def _closed_target_snapshot(self, *, key, route, start_ms, end_ms, limit, composition_contract, io_metrics, started_at):
         """Read an already persisted closed page without reacquiring its inputs."""
         from app.data_engine.history import AlwaysOpenCalendar
         from app.data_engine.interval_policy import parse_interval_spec
@@ -304,13 +304,23 @@ class QueryEngine:
         if not callable(reader) or consumer is None or not 0 < count <= min(512, effective_limit):
             return None
         values = (key.exchange,key.market_type,key.symbol,key.interval,*key.identity.storage_values)
-        snapshot = reader(consumer.store, values, first, last, spec.nominal_ms,
-                          count, int(time.time()*1000))
-        if snapshot is None:
+        now_ms = int(time.time()*1000)
+        if first < 0 or last+spec.nominal_ms > now_ms:
             return None
-        rows, proof = snapshot
-        metrics = _QueryIOMetrics()
-        bars = self._storage_rows_to_bars(key, rows, metrics)
+        proofs = []
+        def load():
+            snapshot = reader(consumer.store, values, first, last, spec.nominal_ms, count, now_ms)
+            if snapshot is None:
+                return []
+            rows, proof = snapshot
+            if proof is not None:
+                proofs.append(proof)
+            return rows
+        rows = self._measure_storage_read(io_metrics, load)
+        if not proofs:
+            return None
+        proof = proofs[0]
+        bars = self._storage_rows_to_bars(key, rows, io_metrics)
         if (len(bars) != count or any(not bar.trusted_final or not bar.is_closed for bar in bars)
                 or composition_contract is not None and any(
                     getattr(bar, field, None) is None for bar in bars for field in declaration[0].fields)):
@@ -320,9 +330,11 @@ class QueryEngine:
             complete=True,metadata={'all_rows_final':True,'expected_closed_rows':count,
                 'expected_closed_through_ms':last,'target_materialized':True,'canonical_target_snapshot':True,
                 'storage_reads':1,'storage_rows':count,'target_materialized_rows':count,
-                'target_materialized_written':0,'derived_from':route.base_interval},
+                'target_materialized_written':0,'derived_from':route.base_interval,
+                'elapsed_ms':round((time.monotonic()-started_at)*1000,2)},
             _closed_target_read=proof.bind(rows, bars))
-        return result
+        result.metadata.update({'target_'+name:value for name,value in io_metrics.metadata().items()})
+        return self._attach_io_metrics(result, io_metrics)
 
     def _query_closed_mixed(self, key, **options):
         from .mixed_query import query_closed_mixed
@@ -440,7 +452,7 @@ class QueryEngine:
                 )
             result = self._closed_target_snapshot(key=SeriesKey(symbol, interval, exchange=exchange,
                 market_type=market_type, **identity.to_dict()), route=route, start_ms=start_ms,
-                end_ms=end_ms, limit=limit, composition_contract=composition_contract)
+                end_ms=end_ms, limit=limit, composition_contract=composition_contract, io_metrics=io_metrics, started_at=t0)
             if result is not None:
                 return result
             result = self.custom_intervals.query_from_base(
@@ -456,6 +468,10 @@ class QueryEngine:
                 route=route,
                 composition_contract=composition_contract,
             )
+            if io_metrics.storage_reads:
+                for name, value in io_metrics.metadata().items():
+                    result.metadata[name] = result.metadata.get(name, 0) + value
+                    result.metadata['target_'+name] = result.metadata.get('target_'+name, 0) + value
             key = SeriesKey(symbol, interval, exchange=exchange, market_type=market_type)
             return self._apply_custom_finality_contract(result, key, end_ms=end_ms)
 

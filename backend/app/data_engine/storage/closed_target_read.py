@@ -73,13 +73,13 @@ def read_closed_target(storage, store, scope, key, first, last, width, count, no
             ' AND open_time BETWEEN ? AND ? ORDER BY open_time LIMIT ?',
             (*key, first, last, count+1)).fetchall()
         if len(rows) != count:
-            return None
+            return [dict(row) for row in rows], None
         for index, row in enumerate(rows):
             if (row['open_time'] != first+index*width or row['close_time'] != row['open_time']+width-1
                     or not source_is_trusted_final(row['source'])
                     or any(type(row[name]) not in (int,float) for name in ('open','high','low','close','volume'))
                     or not valid_ohlcv(tuple(row[name] for name in ('open','high','low','close','volume')))):
-                return None
+                return [dict(row) for row in rows], None
         proof = ClosedTargetRead(storage, store, key, first, last, head,
                                  fingerprint(conn, key, first, last))
         return [dict(row) for row in rows], proof

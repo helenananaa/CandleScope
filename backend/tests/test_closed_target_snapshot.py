@@ -47,6 +47,7 @@ def test_canonical_target_snapshot_is_fenced_without_recomputing_sources(mixed_q
     if change == 'tail':
         assert result.complete and len(result.bars) == 4
         assert result.metadata['canonical_target_snapshot']
+        assert result.metadata['storage_reads'] == 1 and result.metadata['storage_rows'] == 4
         assert not result.backfill_triggered
         assert query.storage.count_bars('BTCUSDT','1m',0,4*WIDTH-1,market_type='futures') == 0
         assert '_closed_target_read' not in result.to_dict()
