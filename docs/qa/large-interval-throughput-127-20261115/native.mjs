@@ -10,6 +10,7 @@ import { createRequire } from 'node:module';
 import * as q from '../backend-batch1-20261101/driver.mjs';
 import { capture } from '../backend-batch1-20261101/value-probe.mjs';
 import { ControlClient } from '../../../packages/candlescope-control/client.mjs';
+import { compareField } from './numeric.mjs';
 
 if (process.env.BAR_AGG_UPDATE_THROTTLE_MS) {
   assert(/^\d{1,6}$/.test(process.env.BAR_AGG_UPDATE_THROTTLE_MS));
@@ -208,6 +209,7 @@ async function verify(intervals, anchors = []) {
   const views = await capture(q);
   assert.deepEqual(views.map(view => view.interval), intervals);
   const result = [];
+  const additiveRoundoff = [];
   for (const [index, view] of views.entries()) {
     const closed = view.bars.filter(bar => bar.is_closed);
     assert.ok(closed.length >= minimumBars - 1);
@@ -236,7 +238,8 @@ async function verify(intervals, anchors = []) {
       const stored = rows.get(bar.time);
       assert.ok(stored, 'missing canonical bar ' + bar.time);
       for (const field of ['open', 'high', 'low', 'close', 'volume', 'quote_volume', 'trades', 'taker_buy_base', 'taker_buy_quote']) {
-        assert.equal(bar[field] ?? null, stored[field] ?? null, view.interval + ':' + field);
+        const drift = compareField(bar[field], stored[field], field, view.interval + ':' + bar.time + ':' + field);
+        if (drift) additiveRoundoff.push({ interval: view.interval, time: bar.time, field, ...drift });
       }
     }
     const anchor = anchors[index];
@@ -244,14 +247,15 @@ async function verify(intervals, anchors = []) {
       const restored = closed.find(bar => bar.time === anchor.time);
       assert.ok(restored, 'saved historical anchor missing');
       for (const field of ['open', 'high', 'low', 'close', 'volume', 'quote_volume', 'trades', 'taker_buy_base', 'taker_buy_quote']) {
-        assert.equal(restored[field] ?? null, anchor[field] ?? null, 'restored ' + view.interval + ':' + field);
+        const drift = compareField(restored[field], anchor[field], field, 'restored ' + view.interval + ':' + field);
+        if (drift) additiveRoundoff.push({ interval: view.interval, time: anchor.time, field, anchor: true, ...drift });
       }
     }
     result.push({ interval: view.interval, compared: closed.length,
       first: closed[0], last: closed.at(-1), anchor: closed.at(-Math.min(128, closed.length)) });
   }
   assert.deepEqual(q.s.receipt.errors, []);
-  return { values: result, workspace: await q.inspect(), diagnostics: await api('/api/v1/settings/cache-diagnostics') };
+  return { values: result, additiveRoundoff, workspace: await q.inspect(), diagnostics: await api('/api/v1/settings/cache-diagnostics') };
 }
 
 async function quit() {
@@ -330,6 +334,7 @@ async function verifyConsumers(label) {
 try {
   q.s.receipt.driverSha256=Buffer.from(await crypto.subtle.digest('SHA-256',await fs.readFile(fileURLToPath(import.meta.url)))).toString('hex');
   q.s.receipt.primaryIntervals=PRIMARY;
+  q.s.receipt.numericComparison={exact:['OHLC','time','trades','missingness'],additive:'max(1e-8 absolute, 4*Number.EPSILON*scale); tighter than K130 relative 1e-12; every nonzero accepted difference recorded'};
   q.s.receipt.indicatorsPerCell=['local EMA20','local EMA60','frontend-JS close mirror'];
   q.s.receipt.resourceSampling='2s owned process tree RSS/CPU; stage diagnostics; not a paired RSS/GC/alloc qualification';
   await launch();
