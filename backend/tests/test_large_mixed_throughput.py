@@ -155,3 +155,37 @@ def test_calendar_month_request_preserves_exchange_owned_pagination():
     fetcher = HistoricalFetcher(cfg, SimpleNamespace(http_fetch=fetch), IngestionConfig())
     asyncio.run(fetcher.fetch([item]))
     assert len(calls) == 1 and calls[0].limit == cfg.fetch_batch_size
+
+
+def test_partial_fine_history_is_included_in_multi_target_cost_budget(mixed_query):
+    from tests.test_mixed_backfill_plan import propose, gap
+    # One complete fine bucket plus fifteen cold buckets. A cheap-HTTP proposal
+    # must leave space for the mandatory existing finer canonical inputs.
+    mixed_query.storage.upsert_bars('BTCUSDT', '1m',
+        [row(at, MINUTE) for at in range(15*WIDTH, 16*WIDTH, MINUTE)],
+        source='backfill', market_type='futures')
+    plan, report = propose(engine_for(mixed_query), mixed_query, gap(count=16))
+    assert plan is not None, report
+    assert report['mixed_cold_candidates'] > 0
+    assert report['mixed_source_rows'] <= 16384
+    assert plan.estimated_requests < 100
+
+
+@pytest.mark.parametrize('receipt', [False, True])
+def test_transport_read_ahead_never_becomes_unrequested_canonical_data(mixed_query, receipt):
+    engine = engine_for(mixed_query)
+    engine.config.fetch_binance_futures_rate_limit_delay = 0
+    upstream = IntervalTransport()
+    engine._fetcher = HistoricalFetcher(engine.config, upstream, IngestionConfig())
+    run = engine.run_receipt if receipt else engine.run
+    report = asyncio.run(run('BTCUSDT', intervals=['10007m'], range_start_ms=0,
+        range_end_ms=3*WIDTH, exchange='binance', market_type='futures', metadata=META))
+    assert report.status == BackfillStatus.COMPLETED, report.errors
+    assert report.reconcile_result.custom_bars_written == 4
+    assert any(task.metadata.get('mixed_fetch_windows') for task in report.plan.tasks)
+    # The canonical rows are precisely the reduction windows; transport-only
+    # holes must not cause derived invalidation or a precedence replan.
+    for interval in {task.interval for task in report.plan.tasks}:
+        spec = next(component for component in report.plan.decompositions[0].components if component.interval == interval)
+        stored = mixed_query.storage.count_bars('BTCUSDT', interval, 0, 4*WIDTH-1, market_type='futures')
+        assert stored == spec.count

@@ -144,7 +144,8 @@ class PageConsumer:
         self.raw_count += len(bars)
         selected = []
         task = self.task
-        for bar in bars:
+        from .fetch_windows import selected_fetch_rows
+        for bar in selected_fetch_rows(task, bars):
             if ((bar.exchange, bar.market_type, bar.symbol, bar.interval)
                     != (task.exchange, task.market_type, task.symbol, task.interval)
                     or (bar.series_identity is not None

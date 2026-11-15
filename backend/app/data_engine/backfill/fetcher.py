@@ -721,6 +721,9 @@ class HistoricalFetcher:
         if task.end_ms is not None:
             all_bars = [b for b in all_bars if b.open_time <= task.end_ms]
 
+        from .fetch_windows import selected_fetch_rows
+        all_bars = selected_fetch_rows(task, all_bars)
+
         # Determine status
         elapsed = self._elapsed_ms(start_time)
         if errors and not all_bars:

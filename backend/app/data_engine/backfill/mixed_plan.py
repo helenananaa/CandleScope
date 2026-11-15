@@ -195,7 +195,8 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
                     choice = await run_preparation(choose_cold_sources, target, first, stop, sources,
                         required_fields=frozenset(policy.fields), target_width=spec.nominal_ms,
                         base_width=0 if required_contract else base.nominal_ms, page_size=page_size,
-                        task_page_size=max(1, cfg.fetch_batch_size), max_rows=MAX_SOURCE_ROWS,
+                        task_page_size=max(1, cfg.fetch_batch_size),
+                        max_rows=MAX_SOURCE_ROWS if cold else max(0, MAX_SOURCE_ROWS-count),
                         max_tasks=MAX_TASKS, max_positions=MAX_POSITION_WORK // 2)
                 builder.positions(choice.positions)
                 diagnostics.update(mixed_cold_candidates=choice.candidates,
@@ -507,7 +508,9 @@ def coalesce_mixed_fetches(tasks, *, page_size, row_budget):
                 total += extra
                 current = replace(current, end_ms=end, estimated_bars=slots,
                     metadata={**current.metadata, "mixed_fetch_read_ahead": True,
-                              "ledger_range": {"start_ms": current.start_ms, "end_ms": end}})
+                              "ledger_range": {"start_ms": current.start_ms, "end_ms": end},
+                              "mixed_fetch_windows": [*current.metadata.get("mixed_fetch_windows",
+                                  [(current.start_ms, current.end_ms)]), (task.start_ms, task.end_ms)]})
             else:
                 output.append(current)
                 current = task
