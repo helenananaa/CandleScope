@@ -918,6 +918,79 @@ def test_bounded_prime_page_does_not_prefill_ledger_parent_archives(tmp_path, mo
             assert http.downloads == 0, 'a three-row chunk must not import its month-long ledger parent'
             assert len(rest.requests) == 1
             assert results[0].metadata['history_lane'] == 'rest'
+            receipt = results[0].metadata['source_route']
+            assert receipt['bounded_history_page'] is True
+            assert (receipt['route_start_ms'], receipt['route_end_ms']) == (task.start_ms, task.end_ms)
+            assert receipt['ledger_end_ms'] > receipt['route_end_ms']
+            assert receipt['selected_object_count'] == 0
+            assert receipt['fetched_rows'] == 3
+            assert receipt['rest_pages'] == 1
+            assert fetcher.snapshot()['recent_source_routes'] == [receipt]
         finally:
             await router.close()
+    asyncio.run(run())
+
+
+def test_route_receipts_are_bounded_and_snapshot_cannot_mutate_them(tmp_path, monkeypatch):
+    from app.data_engine.backfill.models import FetchResult
+
+    async def run():
+        cfg = _config(tmp_path)
+        cfg.history_archive_enabled = False
+        router = HistoricalSourceRouter(cfg)
+        fetcher = HistoricalFetcher(cfg, _RestTransport([]), IngestionConfig(), source_router=router)
+
+        async def fetched(task, plan):
+            return FetchResult(task=task, metadata={'history_lane': 'rest'})
+
+        monkeypatch.setattr(fetcher, '_fetch_task', fetched)
+        try:
+            for i in range(65):
+                task = BackfillTask('BTCUSDT', '1m', i*MINUTE_MS, i*MINUTE_MS)
+                await fetcher.fetch([task])
+            snapshot = fetcher.snapshot()
+            assert snapshot['source_route_sequence'] == 65
+            assert len(snapshot['recent_source_routes']) == 64
+            assert snapshot['recent_source_routes'][0]['sequence'] == 2
+            snapshot['recent_source_routes'][0]['selected_objects'].append('changed')
+            assert not fetcher.snapshot()['recent_source_routes'][0]['selected_objects']
+        finally:
+            await router.close()
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('bounded_first', [True, False])
+def test_adjacent_bounded_and_legacy_tasks_keep_separate_archive_envelopes(
+    tmp_path, monkeypatch, bounded_first,
+):
+    async def run():
+        start = _ms(datetime(2024, 1, 1, tzinfo=UTC))
+        calls = []
+
+        class PlanningProvider(BinanceKlineArchiveProvider):
+            def plan_objects(self, **kwargs):
+                calls.append((kwargs['start_ms'], kwargs['end_ms']))
+                # No objects are published: this checks routing before I/O,
+                # independently of the existing successful archive/REST tests.
+                return []
+
+        router = HistoricalSourceRouter(_config(tmp_path))
+        monkeypatch.setattr(router, '_provider', lambda _: PlanningProvider())
+        tasks = [BackfillTask('BTCUSDT', '1m', start+i*3*MINUTE_MS,
+                             start+(i*3+2)*MINUTE_MS, exchange='binance',
+                             market_type='futures', metadata={'ledger_range': {
+                                 'start_ms': start, 'end_ms': start+14*1440*MINUTE_MS-1}})
+                 for i in range(2)]
+        bounded = tasks[0 if bounded_first else 1]
+        bounded.metadata['bounded_history_batch_contract'] = 'binance.usdm.trade-klines/base-utc/1'
+        try:
+            await router.prepare(tasks)
+            assert sorted(calls) == sorted([
+                (bounded.start_ms, bounded.end_ms),
+                (start, start+14*1440*MINUTE_MS-1),
+            ]), 'a legacy neighbour must not restore the parent envelope for a bounded page'
+        finally:
+            await router.close()
+
     asyncio.run(run())
