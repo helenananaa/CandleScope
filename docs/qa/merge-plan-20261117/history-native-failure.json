@@ -1,0 +1,173 @@
+{
+  "source_commit": "ee8071fbe6dfcc8b562cf315133dfb644800d2e8",
+  "driver_sha256": "9fa8b4592d255f4ebaf2f43bf2008ee16f46dd8c1fc954c40e4e3f0d6b41f1d9",
+  "passed": false,
+  "phase": "cold-four-prime",
+  "failure": "Error: Timed out waiting for acceptance state\n    at Module.until (file:///Users/ryanliang/.codex/worktrees/merge-plan-20261117/backend/docs/qa/backend-batch1-20261101/driver.mjs:29:9)\n    at async verify (file:///Users/ryanliang/.codex/worktrees/merge-plan-20261117/backend/docs/qa/merge-plan-20261117/native-history.mjs:187:5)\n    at async file:///Users/ryanliang/.codex/worktrees/merge-plan-20261117/backend/docs/qa/merge-plan-20261117/native-history.mjs:396:17",
+  "scope": "macOS arm64 packaged application; isolated profile; real public Binance USD-M history/realtime; no response substitution",
+  "cells": [
+    {
+      "cellId": "cell-1",
+      "session": {
+        "exchange": "binance",
+        "marketType": "futures",
+        "symbol": "BTCUSDT",
+        "interval": "89m"
+      },
+      "runtime": {
+        "mode": "live",
+        "session": {
+          "exchange": "binance",
+          "marketType": "futures",
+          "symbol": "BTCUSDT",
+          "interval": "89m"
+        },
+        "indicatorSignature": "[[\"control-native178-1794832154850-0-0\",\"EMA\",{\"period\":20},\"builtin\",\"local\",true],[\"control-native178-1794832154850-0-1\",\"EMA\",{\"period\":60},\"builtin\",\"local\",true]]",
+        "marketReady": false,
+        "indicatorsReady": false,
+        "barCount": 25,
+        "loading": true,
+        "initialHistoryPending": true,
+        "loadingMoreLeft": false,
+        "paused": false,
+        "computing": false,
+        "indicatorErrors": [],
+        "indicatorOutputPoints": [
+          6,
+          0
+        ],
+        "error": null
+      }
+    },
+    {
+      "cellId": "cell-2",
+      "session": {
+        "exchange": "binance",
+        "marketType": "futures",
+        "symbol": "BTCUSDT",
+        "interval": "97m"
+      },
+      "runtime": {
+        "mode": "live",
+        "session": {
+          "exchange": "binance",
+          "marketType": "futures",
+          "symbol": "BTCUSDT",
+          "interval": "97m"
+        },
+        "indicatorSignature": "[[\"control-native178-1794832154850-1-0\",\"EMA\",{\"period\":20},\"builtin\",\"local\",true],[\"control-native178-1794832154850-1-1\",\"EMA\",{\"period\":60},\"builtin\",\"local\",true]]",
+        "marketReady": false,
+        "indicatorsReady": false,
+        "barCount": 28,
+        "loading": true,
+        "initialHistoryPending": true,
+        "loadingMoreLeft": false,
+        "paused": false,
+        "computing": false,
+        "indicatorErrors": [],
+        "indicatorOutputPoints": [
+          9,
+          0
+        ],
+        "error": null
+      }
+    },
+    {
+      "cellId": "cell-3",
+      "session": {
+        "exchange": "binance",
+        "marketType": "futures",
+        "symbol": "BTCUSDT",
+        "interval": "101m"
+      },
+      "runtime": {
+        "mode": "live",
+        "session": {
+          "exchange": "binance",
+          "marketType": "futures",
+          "symbol": "BTCUSDT",
+          "interval": "101m"
+        },
+        "indicatorSignature": "[[\"control-native178-1794832154850-2-0\",\"EMA\",{\"period\":20},\"builtin\",\"local\",true],[\"control-native178-1794832154850-2-1\",\"EMA\",{\"period\":60},\"builtin\",\"local\",true]]",
+        "marketReady": false,
+        "indicatorsReady": false,
+        "barCount": 23,
+        "loading": true,
+        "initialHistoryPending": true,
+        "loadingMoreLeft": false,
+        "paused": false,
+        "computing": false,
+        "indicatorErrors": [],
+        "indicatorOutputPoints": [
+          4,
+          0
+        ],
+        "error": null
+      }
+    },
+    {
+      "cellId": "cell-4",
+      "session": {
+        "exchange": "binance",
+        "marketType": "futures",
+        "symbol": "BTCUSDT",
+        "interval": "10007m"
+      },
+      "runtime": {
+        "mode": "live",
+        "session": {
+          "exchange": "binance",
+          "marketType": "futures",
+          "symbol": "BTCUSDT",
+          "interval": "10007m"
+        },
+        "indicatorSignature": "[[\"control-native178-1794832154850-3-0\",\"EMA\",{\"period\":20},\"builtin\",\"local\",true],[\"control-native178-1794832154850-3-1\",\"EMA\",{\"period\":60},\"builtin\",\"local\",true]]",
+        "marketReady": false,
+        "indicatorsReady": false,
+        "barCount": 2,
+        "loading": true,
+        "initialHistoryPending": true,
+        "loadingMoreLeft": false,
+        "paused": false,
+        "computing": false,
+        "indicatorErrors": [],
+        "indicatorOutputPoints": [
+          0,
+          0
+        ],
+        "error": null
+      }
+    }
+  ],
+  "artifacts": {
+    "traffic.json": {
+      "bytes": 8274100,
+      "sha256": "957fc78bf99d09e66491efc3aac8d39d8584ce68f2128158f04cee0c605cb349"
+    },
+    "process.log": {
+      "bytes": 304,
+      "sha256": "d29aa175085ae9c49753faa864473d5ea8d8d196136f5d2d3f130726bad5a316"
+    },
+    "acceptance.json": {
+      "bytes": 446956,
+      "sha256": "855c87742e2133ad570acc065e53ece3241977c95ead06f9297db2c01d4a9928"
+    },
+    "resource-samples.jsonl": {
+      "bytes": 212699,
+      "sha256": "2780b60e5f5279bf96428226c5869276e946766d7f947a23091a789c01b7d639"
+    },
+    "ambient-load-before.txt": {
+      "bytes": 56,
+      "sha256": "f7370bb78f6f8dd237da45a7cfabb7a040bfaeca76b076379927043806a1de49"
+    },
+    "driver.log": {
+      "bytes": 523,
+      "sha256": "050f84424f58b586306a47d7818ac6df48dd6ca819e79700cc25a61640218033"
+    },
+    "failure.png": {
+      "bytes": 197461,
+      "sha256": "826d84389f757b92c4b1f1c2e7b31f023c0abcf340983866e5109102cca85541"
+    }
+  },
+  "full_process_exit": 6883
+}
