@@ -1,3 +1,4 @@
+import { Badge, InlineAlert } from "../../../components/ui/index.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import type { ReplayReviewResponse } from "../replayIntegrityModel.js";
@@ -26,10 +27,11 @@ export default function ReplayReviewRightRail({ review, notes }: { readonly revi
       aria-label={t("replay.shell.reviewPortfolio")}
       data-review-track-id={selectedTrackId}
     >
-      <span className="training-hub-kicker">{t("replay.kicker.reviewReadOnly")}</span>
-      <h3>{String(selected?.symbol ?? "--")}</h3>
-      {notes}
-      <dl>
+      <header className="replay-review-rail-head">
+        <h3>{String(selected?.symbol ?? "--")}</h3>
+        <Badge tone="accent">{t("replay.kicker.reviewReadOnly")}</Badge>
+      </header>
+      <dl className="replay-review-rail-facts">
         <div><dt>{t("replay.shell.publicTime")}</dt><dd>{review.events.find((event) => event.event_id === review.selected_event_id)?.public_time.label ?? "--"}</dd></div>
         <div><dt>{t("replay.shell.equity")}</dt><dd>{String(accountRecord?.equity ?? "--")}</dd></div>
         <div><dt>{t("replay.shell.position")}</dt><dd>{positionText}</dd></div>
@@ -39,9 +41,10 @@ export default function ReplayReviewRightRail({ review, notes }: { readonly revi
         <div><dt>{t("replay.shell.ledger")}</dt><dd>{review.projection.ledger.length}</dd></div>
         <div><dt>{t("replay.shell.drawingRev")}</dt><dd>r{review.projection.drawing_revision}</dd></div>
       </dl>
-      {accountRecord?.status === "LEGACY_PARTIAL" && <p role="status">{t("replay.shell.legacyAccountIncomplete")}</p>}
-      {accountRecord?.status === "UNAVAILABLE" && <p role="status">{t("serverError.unavailable")}</p>}
-      <p>{t("replay.shell.reviewSidebarHint")}</p>
+      {accountRecord?.status === "LEGACY_PARTIAL" && <InlineAlert tone="warning">{t("replay.shell.legacyAccountIncomplete")}</InlineAlert>}
+      {accountRecord?.status === "UNAVAILABLE" && <InlineAlert tone="warning">{t("serverError.unavailable")}</InlineAlert>}
+      <p className="replay-review-rail-hint">{t("replay.shell.reviewSidebarHint")}</p>
+      {notes}
     </aside>
   );
 }

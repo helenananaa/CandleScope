@@ -6,7 +6,7 @@ export const researchReturnEnglish = {
   "researchReturn.workspace": "Target workspace", "researchReturn.target": "Target chart", "researchReturn.origin": "Original chart",
   "researchReturn.version": "Selected run: {run} · Strategy version: {revision}",
   "researchReturn.apply": "Create independent chart draft",
-  "researchReturn.unsupported": "This version cannot be applied to the current chart continuation profile ({field}). Supported: editor Python, native crypto 1m BAR, V1 account at leverage 1, equity-percent sizing, equal maker/taker fees and standard execution settings. The research version is retained.",
+  "researchReturn.unsupported": "This version can't be applied to the chart's continuous run ({field}). Supported: Python from the editor, native crypto 1-minute bars, the standard account at 1× leverage, equity-percent sizing, equal maker and taker fees, and standard execution settings. The research version is kept.",
   "researchReturn.changed": "The target chart or workspace changed while saving. Select the target again and retry. Existing runs and drafts are retained.",
 } as const;
 export const researchReturnChinese: Record<keyof typeof researchReturnEnglish, string> = {
@@ -15,7 +15,7 @@ export const researchReturnChinese: Record<keyof typeof researchReturnEnglish, s
   "researchReturn.help": "以选定源码、参数、品种周期、区间和执行设置创建独立图表草稿，并解除目标图表的分组联动。已有运行继续保持原版本。请查看 Python 权限后，选择“历史接实时”并初始化新运行；不复制研究账户的余额、持仓和成交。",
   "researchReturn.workspace": "目标工作区", "researchReturn.target": "目标图表", "researchReturn.origin": "原图表",
   "researchReturn.version": "选定运行：{run} · 策略版本：{revision}", "researchReturn.apply": "创建独立图表草稿",
-  "researchReturn.unsupported": "该版本无法应用到当前图表连续执行规格（{field}）。目前支持编辑器 Python、原生加密市场 1 分钟 BAR、1 倍杠杆 V1 账户、权益比例下单、相同挂单/吃单费率与标准执行设置；研究版本仍保留。",
+  "researchReturn.unsupported": "该版本无法应用到当前图表的连续运行（{field}）。目前支持：编辑器中的 Python、原生加密市场 1 分钟 K 线、1 倍杠杆的标准账户、按权益比例下单、挂单与吃单费率相同以及标准执行设置。研究版本仍会保留。",
   "researchReturn.changed": "保存期间目标图表或工作区发生了变化，请重新选择目标后再试。已有运行与草稿仍保留。",
 };
 export const researchReturnJapanese: Record<keyof typeof researchReturnEnglish, string> = {

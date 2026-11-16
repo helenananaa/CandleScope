@@ -338,7 +338,7 @@ async function readJson<T>(response: Response): Promise<T> {
     }
     throw new BacktestApiError(
       "BACKTEST_API_UNAVAILABLE",
-      `backtest API ${response.status}`,
+      `HTTP ${response.status}`,
       {},
       response.status,
     );

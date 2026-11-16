@@ -87,7 +87,7 @@ export function getFullSubscriptionResourceSummary({
     nativeCount: nativeValues.length,
     customCount: customValues.length,
     totalIntervals,
-    shortText: totalIntervals > 0 ? t("watchlist.fullSummary", { n: totalIntervals }) : "ticker",
+    shortText: totalIntervals > 0 ? t("watchlist.fullSummary", { n: totalIntervals }) : t("watchlist.tier.price.label"),
     tooltip: t("watchlist.fullTooltip", { native: nativeValues.length, custom: customValues.length }),
   };
 }

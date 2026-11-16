@@ -1,3 +1,4 @@
+import { IconButton } from "../components/ui/index.js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   CSSProperties,
@@ -16,6 +17,7 @@ import {
 import { t } from "../i18n/index.js";
 import { useLocale } from "../i18n/useLocale.js";
 import type { MarketRailViewDescriptor } from "./marketRailTypes.js";
+import { scrollBehavior } from "../utils/reducedMotion.js";
 
 type RailCssVars = CSSProperties & Record<`--${string}`, string | number>;
 
@@ -201,7 +203,7 @@ export default function MarketRightRailFrame({
       const top = Math.max(0, section.offsetTop - 6);
       const bottom = section.offsetTop + section.offsetHeight;
       if (top < panel.scrollTop || bottom > panel.scrollTop + panel.clientHeight) {
-        panel.scrollTo({ top, behavior: "smooth" });
+        panel.scrollTo({ top, behavior: scrollBehavior() });
       }
       pendingRevealRef.current = null;
     });
@@ -371,15 +373,8 @@ export default function MarketRightRailFrame({
                     <span>{activeView.collapsedSummary}</span>
                   )}
                   {onTogglePanelCollapsed && (
-                    <button
-                      type="button"
-                      className="market-rail-single-hide"
-                      title={t("rail.hidePanel")}
-                      aria-label={t("rail.hidePanel")}
-                      onClick={onTogglePanelCollapsed}
-                    >
-                      <PanelCollapseIcon collapsed />
-                    </button>
+                    <IconButton size="sm" className="market-rail-single-hide" label={t("rail.hidePanel")}
+                      onClick={onTogglePanelCollapsed} icon={<PanelCollapseIcon collapsed />} />
                   )}
                 </header>
               )}

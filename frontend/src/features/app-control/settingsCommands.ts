@@ -1,4 +1,4 @@
-import { normalizeSettings, type ChartSettingsRuntime } from "../settings/chartAppearanceSettings.js";
+import { migrateApplicationSettings, normalizeSettings, type ChartSettingsRuntime } from "../settings/chartAppearanceSettings.js";
 import { LOCALES } from "../../i18n/index.js";
 import { MAIN_CHART_TYPES } from "../../shared/mainChartTypes.js";
 import { command, type ControlCommandGroup } from "./commandRegistry.js";
@@ -21,8 +21,8 @@ const cachePatch = object({ cachePreset: optional(text(64)), cacheLimits: option
 export function settingsCommands(runtime: ChartSettingsRuntime, id = "settings"): ControlCommandGroup {
   return { id, title: "Appearance, locale and cache preferences", context: () => runtime.settings,
     snapshot: () => ({ settings: runtime.settings, resolvedTheme: runtime.resolvedTheme }), commands: [
-      command("appearance", "Patch appearance and locale through the same persisted settings action as the UI.", appearancePatch,
-        (patch) => runtime.setSettings((current) => normalizeSettings({ ...current, ...patch }))),
+      command("appearance", "Patch app appearance and locale through the same persisted settings action as the UI. A custom background belongs to individual charts; for the app, theme \"custom\" resolves to dark or light by customBg.", appearancePatch,
+        (patch) => runtime.setSettings((current) => migrateApplicationSettings(normalizeSettings({ ...current, ...patch })))),
       command("cache", "Patch cache preferences; this does not trigger GC or delete stored data.", cachePatch,
         (patch) => runtime.setSettings((current) => normalizeSettings({ ...current, ...patch }))),
     ] };

@@ -25,8 +25,7 @@ import {
 import { buildOrderBookRows } from "./orderBookRows.js";
 import type { DisplayOrderBookLevel } from "./orderBookRows.js";
 import { fixedRowWindow } from "./orderBookVirtualization.js";
-import { Button } from "../../components/ui/Button.js";
-import { EmptyState as SharedEmptyState } from "../../components/ui/EmptyState.js";
+import { Button, EmptyState as SharedEmptyState, IconButton, SegmentedControl, Select } from "../../components/ui/index.js";
 import { Icon } from "../../components/icons/Icon.js";
 import {
   FULL_OUTPUT_LIMITS,
@@ -340,17 +339,10 @@ function OrderBookDock({ runtime, height, onRequestClose }: OrderBookDockProps) 
     >
       <header className="ob-header">
         {onRequestClose && (
-          <button
-            type="button"
-            className="ob-collapse-button"
-            onClick={onRequestClose}
-            title={t("orderBook.collapse")}
-            aria-label={t("orderBook.collapse")}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+          <IconButton size="sm" onClick={onRequestClose} label={t("orderBook.collapse")}
+            icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
               <polyline points="9 18 15 12 9 6" />
-            </svg>
-          </button>
+            </svg>} />
         )}
         <span className="ob-title">{t("orderBook.title")}</span>
         <span className="ob-symbol">{symbol || view.identity.symbol}</span>
@@ -373,47 +365,32 @@ function OrderBookDock({ runtime, height, onRequestClose }: OrderBookDockProps) 
 
       <>
           <div className="ob-controls">
-            <div className="ob-mode-switch" role="group" aria-label={t("orderBook.mode")}>
-              <button
-                type="button"
-                className={view.preferences.mode === "partial" ? "active" : ""}
-                onClick={() => actions.setMode("partial")}
-                title={view.snapshotMode === "polling_snapshot"
-                  ? t("orderBook.snapshotPollingTitle")
-                  : t("orderBook.snapshotTitle")}
-              >
-                {t("orderBook.snapshot")}
-              </button>
-              <button
-                type="button"
-                className={view.preferences.mode === "full" ? "active" : ""}
-                onClick={() => actions.setMode("full")}
-                disabled={!view.fullModeSupported}
-                title={view.fullModeSupported
-                  ? t("orderBook.continuousTitle")
-                  : t("orderBook.continuousUnsupported")}
-              >
-                {t("orderBook.continuous")}
-              </button>
-            </div>
+            <SegmentedControl size="sm" fullWidth label={t("orderBook.mode")} value={view.preferences.mode}
+              onChange={(mode) => actions.setMode(mode)}
+              options={[
+                { value: "partial", label: t("orderBook.snapshot"),
+                  title: view.snapshotMode === "polling_snapshot" ? t("orderBook.snapshotPollingTitle") : t("orderBook.snapshotTitle") },
+                { value: "full", label: t("orderBook.continuous"), disabled: !view.fullModeSupported,
+                  title: view.fullModeSupported ? t("orderBook.continuousTitle") : t("orderBook.continuousUnsupported") },
+              ]} />
             <label>
               <span className="sr-only">{t("orderBook.levels")}</span>
               {view.preferences.mode === "partial" ? (
-                <select
+                <Select size="sm"
                   aria-label={t("orderBook.snapshotLevels")}
                   value={view.preferences.partialDepth}
                   onChange={(event) => actions.setPartialDepth(Number(event.target.value) as PartialDepthLevel)}
                 >
                   {PARTIAL_DEPTH_LEVELS.map((depth) => <option key={depth} value={depth}>{t("orderBook.levelsOption", { n: depth })}</option>)}
-                </select>
+                </Select>
               ) : (
-                <select
+                <Select size="sm"
                   aria-label={t("orderBook.fullLevels")}
                   value={view.preferences.fullOutputLimit}
                   onChange={(event) => actions.setFullOutputLimit(Number(event.target.value) as FullOutputLimit)}
                 >
                   {FULL_OUTPUT_LIMITS.map((limit) => <option key={limit} value={limit}>{t("orderBook.levelsOption", { n: limit })}</option>)}
-                </select>
+                </Select>
               )}
             </label>
             <label title={view.preferences.mode === "partial"
@@ -421,7 +398,7 @@ function OrderBookDock({ runtime, height, onRequestClose }: OrderBookDockProps) 
               : t("orderBook.groupingFull")}
             >
               <span className="sr-only">{t("orderBook.grouping")}</span>
-              <select
+              <Select size="sm"
                 aria-label={t("orderBook.groupingAria")}
                 value={activeGrouping}
                 onChange={(event) => actions.setPriceGrouping(
@@ -438,29 +415,29 @@ function OrderBookDock({ runtime, height, onRequestClose }: OrderBookDockProps) 
                     {groupingLabel(grouping, view.preferences.mode, snapshot.book)}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label>
               <span className="sr-only">{t("orderBook.frequency")}</span>
-              <select
+              <Select size="sm"
                 aria-label={t("orderBook.frequency")}
                 value={view.updateIntervalMs}
                 onChange={(event) => actions.setUpdateIntervalMs(Number(event.target.value) as OrderBookUpdateIntervalMs)}
               >
                 {view.updateIntervalsMs.map((interval) => <option key={interval} value={interval}>{interval} ms</option>)}
-              </select>
+              </Select>
             </label>
           </div>
 
           <div className="ob-range-controls">
             <label>
               {t("orderBook.range")}
-              <select aria-label={t("orderBook.range")} value={rangeBps}
+              <Select size="sm" aria-label={t("orderBook.range")} value={rangeBps}
                 onChange={(event) => setRangeBps(Number(event.target.value))}>
                 {[0, 5, 10, 25, 50, 100].map((bps) => (
                   <option key={bps} value={bps}>{bps ? `${bps / 100}%` : t("orderBook.rangeAll")}</option>
                 ))}
-              </select>
+              </Select>
             </label>
             {snapshot.book?.midPrice && coveredBid !== null && coveredAsk !== null && (
               <span>
@@ -495,7 +472,7 @@ function OrderBookDock({ runtime, height, onRequestClose }: OrderBookDockProps) 
           {snapshot.book && presentation && rows && snapshot.status === "stale" && (
             <div className="ob-stale-bar" role="status">
               <span>{snapshot.message || t("orderBook.rt.staleSnapshot")}</span>
-              <button type="button" onClick={actions.retry}>{t("orderBook.retry")}</button>
+              <Button size="sm" variant="ghost" onClick={actions.retry}>{t("orderBook.retry")}</Button>
             </div>
           )}
           {snapshot.book && presentation && rows ? (

@@ -38,12 +38,15 @@ chrome. It is app-wide infrastructure, not a business feature.
   `loadLocaleCatalog` first when needed). Locale changes write `document.documentElement.lang` so plugin
   sandbox snapshots stay in sync, and apply the registered text direction.
 - `bindDocumentLocale` also writes CSS custom properties used by `content:`
-  fallbacks in `index.css`, so chrome that lives in stylesheets follows locale.
+  fallbacks in the global stylesheets (`index.css` and the feature files it imports), so chrome
+  that lives in stylesheets follows locale.
 - Components call `useLocale()` from `useLocale.ts` plus `t(key)` from this
   folder. Non-React modules import `t()` from `index.ts` and must not import
   the React hook.
 
 ## Rules
+
+- Wording, the glossary of user terms, and the internal-terms check: [`COPY_GUIDELINES.md`](../../COPY_GUIDELINES.md).
 
 - Do not import features, services, or app shell internals.
 - Do not persist storage keys here.

@@ -6,7 +6,7 @@ import { useCacheDiagnosticsRuntime } from "./cacheDiagnosticsSettingsRuntime";
 import { useExchangeSettingsRuntime } from "./exchangeSettingsRuntime";
 import { useProxySettingsRuntime } from "./proxySettingsRuntime";
 import { useSettingsMaintenanceRuntime } from "./maintenanceSettingsRuntime";
-import type { ChartSettings } from "./chartAppearanceSettings.js";
+import type { AppearanceTargets, ChartSettings } from "./chartAppearanceSettings.js";
 import type { CacheTrimOwnerResult, GcVictim } from "../cache-gc/cacheGcTypes.js";
 import type { WatchlistGroup } from "../watchlist/watchlistTypes.js";
 import type { SettingsRuntimeActions, SettingsRuntimeView } from "./settingsTypes.js";
@@ -16,6 +16,7 @@ export { SETTINGS_CATEGORIES };
 export interface UseSettingsRuntimeOptions {
   isOpen: boolean;
   appearanceScope?: "chart" | "application";
+  appearanceTargets?: AppearanceTargets;
   settings: ChartSettings;
   onUpdate(settings: ChartSettings): void;
   currentSymbol?: string;
@@ -39,6 +40,7 @@ export function useSettingsRuntime({
   settings,
   onUpdate,
   appearanceScope = "application",
+  appearanceTargets,
   currentSymbol = "",
   currentMarketType = "spot",
   currentExchange = "binance",
@@ -74,6 +76,7 @@ export function useSettingsRuntime({
   const view: SettingsRuntime["view"] = {
       appearance: {
         appearanceScope,
+        ...(appearanceTargets ? { appearanceTargets } : {}),
         settings,
         onUpdate,
       },
