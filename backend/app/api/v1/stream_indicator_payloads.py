@@ -581,6 +581,7 @@ def _query_script_snapshot_bars(
     *,
     bar_time: int = 0,
     seed_bars: list[Any] | None = None,
+    closed_bar: Any | None = None,
 ) -> list[Any]:
     history_limit = int(meta["historyLimit"])
     if bar_time:
@@ -588,6 +589,29 @@ def _query_script_snapshot_bars(
             max(history_limit, 1),
             max(int(config.SCRIPT_TICK_RECOMPUTE_MAX_BARS), 1),
         )
+
+    if closed_bar is not None:
+        if not bar_time or int(closed_bar.time) != bar_time or not closed_bar.is_closed:
+            raise ValueError("Closed indicator input does not match its close event")
+        if seed_bars is None:
+            # A delayed close must not calculate a later forming window. The
+            # live query projection can also still contain its forming record.
+            query_result = dm.query_before(
+                meta["symbol"], meta["interval"], bar_time * 1000 + 1,
+                limit=history_limit, exchange=meta["exchange"],
+                market_type=meta["market_type"], auto_backfill=False,
+                **identity_kwargs(meta),
+            )
+            resolved_bars = list(query_result.bars)
+        else:
+            resolved_bars = list(seed_bars)
+        by_time = {int(bar.time): bar for bar in resolved_bars if int(bar.time) <= bar_time}
+        retained = by_time.get(bar_time)
+        # Keep a newer authoritative amendment already returned by the query.
+        # Only the exact close event can fill/promote its absent/forming row.
+        if retained is None or not retained.is_closed:
+            by_time[bar_time] = closed_bar
+        return [by_time[t] for t in sorted(by_time)][-history_limit:]
 
     if seed_bars is None:
         query_result = dm.query_latest(
@@ -859,6 +883,7 @@ async def _compute_script_snapshot_message_async(
     bar_time: int = 0,
     runtime_service: IndicatorRuntimeService | None = None,
     seed_bars: list[Any] | None = None,
+    closed_bar: Any | None = None,
 ) -> dict:
     """Compute a script-runtime snapshot without blocking the event loop."""
     service = runtime_service or _unbound_indicator_runtime_service
@@ -870,6 +895,7 @@ async def _compute_script_snapshot_message_async(
         meta,
         bar_time=bar_time,
         seed_bars=seed_bars,
+        closed_bar=closed_bar,
     )
 
     return await service.execute(

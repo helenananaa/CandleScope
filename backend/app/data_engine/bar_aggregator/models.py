@@ -23,6 +23,7 @@ from typing import Any, Mapping, Protocol, runtime_checkable
 
 from app.data_engine.market_data.kline_metrics import declared_enhanced_fields
 from app.data_engine.readonly import ReadonlyFields
+from .component_memory import ComponentSnapshots
 from app.data_engine.series_identity import KlineSeriesIdentity, resolve_kline_series_identity
 
 
@@ -243,7 +244,7 @@ class BarState:
     finality: BarFinality = BarFinality.PROVISIONAL
     close_reason: str | None = None
     quality_source: str = ""
-    source_snapshots: dict[str, Mapping[str, Any]] = field(default_factory=dict)
+    source_snapshots: dict[str, Mapping[str, Any]] = field(default_factory=ComponentSnapshots)
     source_refs: dict[str, dict[str, Any]] = field(default_factory=dict)
     status: BarStatus = BarStatus.FORMING
     created_at_ms: int = field(default_factory=lambda: int(time.time() * 1000))
@@ -252,12 +253,40 @@ class BarState:
 
     acquisition_revision: int | None = None
     canonical_recovery_delete_floor: int | None = None
+    # Original selected-source permission is independent of content freshness.
+    source_permission_floor: int | None = None
     # Mutable execution metadata belongs only to this builder. Publication
     # copies carry immutable inputs and scalars, never the live accumulator.
     _component_accumulator: Any = field(default=None, repr=False, compare=False)
     # Immutable canonical H127 prefix. Publication retains its coverage proof;
     # the mutable accumulator above remains private to the live builder.
     _history_prefix: Any = field(default=None, repr=False, compare=False)
+    # Bounded SourceJournal runs have their own revision domain and exact
+    # interior holes. They are not canonical H127 history.
+    _source_recovery: Any = field(default=None, repr=False, compare=False)
+    # Failed optional compaction retries after more source progress, rather
+    # than rereading the same unavailable seam on every preview or duplicate.
+    _history_compaction_retry_ms: int = field(default=0, repr=False, compare=False)
+    # Loop-owned execution watermarks, separate from durable data revisions.
+    preview_input_version: int = field(default=0, repr=False, compare=False)
+    preview_computed_version: int = field(default=0, repr=False, compare=False)
+    preview_published_version: int = field(default=0, repr=False, compare=False)
+    _preview_publications: int = field(default=0, repr=False, compare=False)
+    preview_fallback_reason: str = field(default='', repr=False, compare=False)
+    _preview_dirty: bool = field(default=False, repr=False, compare=False)
+    _preview_deferred_inputs: int = field(default=0, repr=False, compare=False)
+    _preview_calculations: int = field(default=0, repr=False, compare=False)
+    _closed_compaction_attempt_version: int = field(default=-1, repr=False, compare=False)
+
+    def materialize_preview(self):
+        """Owner-side read/barrier: never publish scalars behind accepted inputs."""
+        if self._preview_dirty:
+            from .bar_state import materialize_component_preview
+            materialize_component_preview(self)
+
+    def __post_init__(self):
+        if not isinstance(self.source_snapshots, ComponentSnapshots):
+            self.source_snapshots = ComponentSnapshots(self.source_snapshots)
 
     def with_accepted_forming_components(
         self, components: list[BarInput], source_interval: str,
@@ -286,7 +315,7 @@ class BarState:
 
     def matches_source_components(self, components: list[BarInput]) -> bool:
         """Compare accepted leaves rather than an aggregate of their values."""
-        if self._history_prefix is not None:
+        if self._history_prefix is not None or self._source_recovery is not None:
             return False
         fields = (
             "open_time_ms", "close_time_ms", "open", "high", "low", "close",
@@ -305,12 +334,17 @@ class BarState:
         return 0 < len(matched) == len(self.source_snapshots)
 
     def __deepcopy__(self, memo):
+        self.materialize_preview()
         # Builder scalars are immutable. Share immutable component values and
         # copy only their index; foreign mutable components retain isolation.
-        result = replace(self, source_snapshots={
-            key: value if isinstance(value, ReadonlyFields) else deepcopy(value, memo)
-            for key, value in self.source_snapshots.items()
-        }, source_refs=deepcopy(self.source_refs, memo), _component_accumulator=None)
+        snapshots = (self.source_snapshots.publication_copy(memo)
+                     if isinstance(self.source_snapshots, ComponentSnapshots) else {
+                         key: value if type(value) is ReadonlyFields else deepcopy(value, memo)
+                         for key, value in self.source_snapshots.items()
+                     })
+        result = replace(self, source_snapshots=snapshots,
+                         source_refs=deepcopy(self.source_refs, memo), _component_accumulator=None,
+                         _preview_publications=0)
         memo[id(self)] = result
         return result
 
@@ -336,7 +370,13 @@ class BarState:
         if not isinstance(self.finality, BarFinality):
             self.finality = BarFinality(str(self.finality))
 
+    @property
+    def bar_key(self):
+        return (f"{self.identity_prefix}{self.exchange}:{self.market_type}:{self.symbol}"
+                f"@{self.interval}:{self.bucket_start_ms}")
+
     def to_dict(self) -> dict:
+        self.materialize_preview()
         return {
             "symbol": self.symbol,
             "exchange": self.exchange,
@@ -373,6 +413,7 @@ class BarState:
 
     def to_ohlcv(self) -> dict:
         """Lightweight OHLCV dict for charting / storage."""
+        self.materialize_preview()
         return {
             "time": self.bucket_start_ms // 1000,  # seconds for lightweight-charts
             "open": self.open,
@@ -384,8 +425,11 @@ class BarState:
 
     def to_storage_dict(self) -> dict:
         """Full dict for database storage."""
+        self.materialize_preview()
         return {
             **({"source_refs": [dict(ref) for ref in self.source_refs.values()]} if self.source_refs else {}),
+            **({'source_window': self._source_recovery.version.to_dict()}
+               if self._source_recovery is not None else {}),
             "open_time": self.bucket_start_ms,
             "close_time": self.bucket_end_ms - 1,  # inclusive end
             "open": self.open,
@@ -443,10 +487,7 @@ class BarEvent:
     @property
     def bar_key(self) -> str:
         """Unique key for this bar: symbol@interval:bucket_start."""
-        return (
-            f"{self.bar.identity_prefix}{self.bar.exchange}:{self.bar.market_type}:{self.bar.symbol}"
-            f"@{self.bar.interval}:{self.bar.bucket_start_ms}"
-        )
+        return self.bar.bar_key
 
 
 # ═══════════════════════════════════════════════════════════════

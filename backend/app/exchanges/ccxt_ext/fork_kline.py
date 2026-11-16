@@ -230,6 +230,7 @@ def normalize_fork_kline(
         if receipt["status"] != "selected":
             return None
         data["source_ref"] = dict(receipt["ref"])
+        data['source_permission_floor'] = receipt.get('permission_floor', 0)
         data["is_correction"] = is_closed
     return MarketEvent(
         event_type=StreamType.KLINE,
@@ -345,6 +346,7 @@ def _normalize_okx(
         if receipt["status"] != "selected":
             return None
         data.update(source_ref=dict(receipt["ref"]), is_correction=p["closed"])
+        data['source_permission_floor'] = receipt.get('permission_floor', 0)
     return MarketEvent(
         event_type=StreamType.KLINE,
         symbol=descriptor.symbol,

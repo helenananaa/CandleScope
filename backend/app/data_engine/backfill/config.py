@@ -308,6 +308,11 @@ class BackfillConfig:
     exchange: str = field(
         default_factory=lambda: _env_str("BACKFILL_EXCHANGE", "binance"),
     )
+    # Provider-qualified, bounded fixed-grid proposals retain the existing
+    # fetch/reconcile pipeline. False restores single-base planning.
+    mixed_custom_history: bool = field(
+        default_factory=lambda: _env_bool("BACKFILL_MIXED_CUSTOM_HISTORY", True),
+    )
 
     # ── Methods ──────────────────────────────────────────────
 

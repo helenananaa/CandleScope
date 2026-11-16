@@ -145,6 +145,7 @@ from .models import (
     SeriesKey,
     StorageBackend,
     StreamInfo,
+    StreamNotReady,
     StreamStatus,
     SubscriptionHandle,
     audience_for_backfill_reason,
@@ -442,6 +443,8 @@ class DataManager(DataManagerCore):
 
         from app.data_engine.memory_budget import MemoryBudget
         self.memory_budget = MemoryBudget(self._cfg.memory_budget_bytes)
+        self.aggregator_bridge.preview_memory_budget = self.memory_budget
+        self.bar_aggregator.memory_budget = self.memory_budget
         for owner, service, limit in (("bar-cache", self.cache, 128 * 1024 * 1024),
                                       ("realtime-state", self.bar_aggregator, 128 * 1024 * 1024),
                                       ("event-delivery", self.event_bus, 32 * 1024 * 1024),
@@ -463,7 +466,7 @@ class DataManager(DataManagerCore):
         self.history_prefix_runtime = (
             HistoryPrefixRuntime(
                 HistoryPrefixReader(self.query_engine), self.bar_aggregator,
-                self.aggregator_bridge._require_recovery, flush_delivery=self.aggregator_bridge.delivery.flush,
+                self.aggregator_bridge._require_recovery, flush_delivery=self.aggregator_bridge.delivery.flush_pending,
             ) if HISTORY_PREFIX_ENABLED else None
         )
         self.bar_aggregator.history_prefix_runtime = self.history_prefix_runtime
@@ -471,7 +474,16 @@ class DataManager(DataManagerCore):
 
         # Wire BarAggregator output → DataManager → Cache + EventBus
         self.bar_aggregator.set_source_component_reader(self.aggregator_bridge.read_source_components)
+        from .source_recovery import SourceRecoveryReader
+        self.bar_aggregator.source_recovery_reader = SourceRecoveryReader(self.aggregator_bridge, self.bar_aggregator)
+        self.bar_aggregator.set_preview_source_validator(
+            self.aggregator_bridge.validate_component_preview,
+            self.aggregator_bridge.preview_source_binding)
         self.bar_aggregator.publisher.on_bar_event(self.aggregator_bridge.on_bar_event)
+        self.bar_aggregator.publisher.set_update_requirement(
+            lambda state: self.event_bus.requires_every_update(SeriesKey(
+                state.symbol, state.interval, exchange=state.exchange,
+                market_type=state.market_type, **state.identity.to_dict())))
         self.query_engine.set_bar_aggregator(self.bar_aggregator)
 
         # Tell Coordinator to route ingestion data through BarAggregator
@@ -509,7 +521,11 @@ class DataManager(DataManagerCore):
             dm.set_storage(KlinesRepoAdapter())
         """
         self.query_engine.set_storage(storage)
+        source_reader = getattr(self.bar_aggregator, 'source_recovery_reader', None)
+        if source_reader is not None:
+            source_reader.reset_binding()
         self.coordinator.set_storage(storage)
+        self.warm_start.reset_tail_repairs()
         store = getattr(storage, "revision_store", None)
         if store is not None:
             # Startup establishes the cheap lower-bound used by aggregation
@@ -801,6 +817,9 @@ class DataManager(DataManagerCore):
             logger.exception("Failed to submit source repair for %s", target)
 
     async def _annotate_source_continuity(self, event: DataEvent) -> DataEvent:
+        # Quote subscriptions share lifecycle delivery, not candle continuity.
+        if event.key.interval == "price":
+            return event
         if event.event_type == DataEventType.BACKFILL_COMPLETED:
             await self._refresh_source_gap_proof(event.key)
         elif (event.event_type in {DataEventType.BAR_CLOSED, DataEventType.BAR_AMENDED}
@@ -1087,6 +1106,10 @@ class DataManager(DataManagerCore):
         """
         return self.query_engine.read_history_blocks(source, start_ms, end_ms, **options)
 
+    def read_mixed_history_blocks(self, target: SeriesKey, start_ms: int, end_ms: int, sources, **options):
+        """Read a composition-qualified target through the shared H127 owner."""
+        return self.query_engine.read_mixed_history_blocks(target, start_ms, end_ms, sources, **options)
+
     @property
     def query_row_limit(self) -> int:
         """Maximum rows returned by one bounded history query."""
@@ -1107,6 +1130,7 @@ class DataManager(DataManagerCore):
         backfill_metadata: dict[str, Any] | None = None,
         series_identity: KlineSeriesIdentity | None = None,
         min_revision: int | None = None,
+        composition_contract: str | None = None,
     ) -> QueryResult:
         """Query K-line bars.
 
@@ -1147,13 +1171,15 @@ class DataManager(DataManagerCore):
             series_identity=series_identity,
             auto_backfill=auto_backfill,
             **({"min_revision": min_revision} if min_revision is not None else {}),
+            **({'composition_contract': composition_contract} if composition_contract is not None else {}),
         )
         self._finish_query_snapshot(version_key, version_before, result, start_ms=start_ms, end_ms=end_ms)
         return self._submit_missing_ranges(
             result,
             reason=backfill_reason,
             requester=backfill_requester,
-            backfill_metadata=backfill_metadata,
+            backfill_metadata=({**(backfill_metadata or {}), 'required_history_composition': composition_contract}
+                               if composition_contract is not None else backfill_metadata),
             submit=(
                 self.query_engine.auto_backfill_default
                 if auto_backfill is None
@@ -1166,12 +1192,13 @@ class DataManager(DataManagerCore):
         symbol: str,
         interval: str,
         *,
-        start_ms: int,
-        end_ms: int,
+        start_ms: int | None = None,
+        end_ms: int | None = None,
         limit: int,
         exchange: str = "binance",
         market_type: str = "spot",
         series_identity: KlineSeriesIdentity | None = None,
+        min_revision: int | None = None,
     ) -> QueryResult:
         """Probe target cache/storage without deriving or admitting repairs.
 
@@ -1193,10 +1220,25 @@ class DataManager(DataManagerCore):
             exchange=exchange, market_type=market_type,
             series_identity=series_identity, auto_backfill=False,
             _materialized_only=True,
+            **({'min_revision': min_revision} if min_revision is not None else {}),
         )
         self._finish_query_snapshot(version_key, version_before, result, start_ms=start_ms, end_ms=end_ms)
         result.metadata["target_materialized_only"] = True
         return result
+
+    def query_composed(self, symbol: str, interval: str, *, composition_contract: str,
+                       **options) -> QueryResult:
+        """Explicit composed-history entry point; never silently drops its mode."""
+        if not isinstance(composition_contract, str) or not composition_contract:
+            raise ValueError('a history composition contract is required')
+        return self.query(symbol, interval, composition_contract=composition_contract, **options)
+
+    def query_before_composed(self, symbol: str, interval: str, before_ms: int,
+                              limit: int = 500, *, composition_contract: str, **options) -> QueryResult:
+        if not isinstance(composition_contract, str) or not composition_contract:
+            raise ValueError('a history composition contract is required')
+        return self.query_before(symbol, interval, before_ms, limit,
+                                 composition_contract=composition_contract, **options)
 
     def query_latest(
         self,
@@ -1258,6 +1300,7 @@ class DataManager(DataManagerCore):
         backfill_metadata: dict[str, Any] | None = None,
         series_identity: KlineSeriesIdentity | None = None,
         min_revision: int | None = None,
+        composition_contract: str | None = None,
     ) -> QueryResult:
         """Get bars before a timestamp (for pagination / load-more)."""
         market_type = self._normalize_market_type(market_type)
@@ -1282,13 +1325,15 @@ class DataManager(DataManagerCore):
             series_identity=series_identity,
             auto_backfill=auto_backfill,
             **({"min_revision": min_revision} if min_revision is not None else {}),
+            **({'composition_contract': composition_contract} if composition_contract is not None else {}),
         )
         self._finish_query_snapshot(version_key, version_before, result, end_ms=before_ms - 1)
         return self._submit_missing_ranges(
             result,
             reason=backfill_reason,
             requester=backfill_requester,
-            backfill_metadata=backfill_metadata,
+            backfill_metadata=({**(backfill_metadata or {}), 'required_history_composition': composition_contract}
+                               if composition_contract is not None else backfill_metadata),
             submit=(
                 self.query_engine.auto_backfill_default
                 if auto_backfill is None
@@ -1968,7 +2013,8 @@ class DataManager(DataManagerCore):
         ``continuity`` defaults to strict (10 seconds from gap detection).
         Pass a ContinuityPolicy to set the wait budget, or "gap_aware" to
         receive live events, mandatory gap controls, and historical corrections.
-        ``preserve_updates`` retains distinct pending intrabar observations;
+        ``preserve_updates`` retains each enabled intrabar observation through
+        the aggregator throttle and this consumer's queue;
         exhaustion requires recovery instead of coalescing or dropping them.
 
         Args:
@@ -2199,10 +2245,7 @@ class DataManager(DataManagerCore):
         """Fail closed when a coordinator start attempt did not become active."""
         if info.status is StreamStatus.ACTIVE:
             return
-        detail = f"{role} stream {info.key} is {info.status.value}"
-        if info.error:
-            detail = f"{detail}: {info.error}"
-        raise RuntimeError(detail)
+        raise StreamNotReady(info.key, info.status, role=role, error=info.error)
 
     async def release_stream(
         self,

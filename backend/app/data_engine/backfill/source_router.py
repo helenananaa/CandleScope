@@ -114,6 +114,7 @@ class HistoricalSourceRouter:
         self._sources = sources or ArchiveSourceRegistry()
         self._source_reasons: dict[str, str] = {}
         self._probe_passed: set[str] = set()
+        self._probe_tasks: dict[str, asyncio.Task] = {}
         self._probe_retry_at: dict[str, float] = {}
         self._cache = cache or HistoricalArchiveCache(
             config.history_archive_cache_dir,
@@ -215,6 +216,21 @@ class HistoricalSourceRouter:
         return result
 
     async def _probe_provider(self, exchange, provider):
+        # Startup warming and foreground demand share one qualification. A
+        # cancelled waiter must not cancel work still needed by another reader.
+        task = self._probe_tasks.get(provider.id)
+        if task is None:
+            task = asyncio.create_task(self._run_probe_provider(exchange, provider))
+            self._probe_tasks[provider.id] = task
+            def finished(completed):
+                if self._probe_tasks.get(provider.id) is completed:
+                    self._probe_tasks.pop(provider.id, None)
+                if not completed.cancelled():
+                    completed.exception()  # Retrieve failure even if all waiters left.
+            task.add_done_callback(finished)
+        return await asyncio.shield(task)
+
+    async def _run_probe_provider(self, exchange, provider):
         if exchange in self._disabled_providers:
             return {"enabled": False, "reason": self._disabled_providers[exchange]}
         if time.monotonic() < self._probe_retry_at.get(provider.id, 0):
@@ -568,6 +584,11 @@ class HistoricalSourceRouter:
             self._cleanup.request()
 
     async def close(self) -> None:
+        probes = tuple(self._probe_tasks.values())
+        for task in probes:
+            task.cancel()
+        await asyncio.gather(*probes, return_exceptions=True)
+        self._probe_tasks.clear()
         launchers = tuple(self._background_launchers)
         for task in launchers:
             task.cancel()
@@ -630,6 +651,7 @@ class HistoricalSourceRouter:
                 int(self._cfg.history_archive_min_rest_pages),
             ),
             "singleflight_inflight": len(self._inflight),
+            "capability_probes_inflight": len(self._probe_tasks),
             "deferred_prefetch_launchers": len(self._background_launchers),
             "deferred_prefetch_objects": len(self._deferred_objects),
             "deferred_prefetch_delay_seconds": (

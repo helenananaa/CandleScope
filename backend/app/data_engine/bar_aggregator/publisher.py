@@ -26,11 +26,15 @@ Usage::
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass
 from copy import deepcopy
 
 import asyncio
 import copy
 import logging
+import sys
 import time
 from typing import Callable, Awaitable, AsyncIterator
 
@@ -48,6 +52,15 @@ logger = logging.getLogger("bar_aggregator.L5_Publisher")
 
 # Type alias
 BarEventCallback = Callable[[BarEvent], Awaitable[None]]
+
+
+@dataclass(slots=True)
+class _SourceHandoff:
+    # A spawned callback task inherits ContextVars. Keep no payload/callback
+    # references here, and deactivate on scope exit to prevent stale observers.
+    bar_id: int
+    transferred: bool = False
+    active: bool = True
 
 
 class BarAggregatorPublisher:
@@ -82,6 +95,63 @@ class BarAggregatorPublisher:
         self._queue_recovery_required: int = 0
         self._preview_drops: int = 0
         self._pending_source_events: dict[str, BarEvent] = {}
+        # References to payloads already held by suspended publisher frames.
+        # Registration adds no new snapshot and ends on success/error/cancel.
+        self._inflight_payloads: dict[object, tuple[str, object]] = {}
+        self._source_handoff_observer = ContextVar("source_handoff_observer", default=None)
+        self._update_requirement: Callable[[BarState], bool] | None = None
+        self._update_requirement_errors = 0
+        self._update_requirement_warned = False
+        self._required_updates_unthrottled = 0
+        self._preview_wakeup = None
+
+    @contextmanager
+    def _observe_source_handoff(self, bar):
+        """Observe transfer to the existing retry owner in this call context."""
+        observer = _SourceHandoff(id(bar))
+        token = self._source_handoff_observer.set(observer)
+        try:
+            yield observer
+        finally:
+            observer.active = False
+            self._source_handoff_observer.reset(token)
+
+    def _hold_payload(self, kind, payload):
+        token = object()
+        self._inflight_payloads[token] = (kind, payload)
+        return token
+
+    def _release_payload(self, token):
+        self._inflight_payloads.pop(token, None)
+        if not self._inflight_payloads:
+            self._inflight_payloads.clear()  # release capacity after a burst
+
+    def _retained_payloads(self):
+        frames = list(self._inflight_payloads.values())
+        events = [*list(self._pending_source_events.values()),
+                  *(payload for _, payload in frames if isinstance(payload, BarEvent))]
+        inputs = [bar for kind, payload in frames if kind == "input"
+                  for bar in payload if bar is not None]
+        counts = {f"inflight_{kind}_frames": sum(k == kind for k, _ in frames)
+                  for kind in ("input", "dispatch", "callback", "retry_input", "retry_keys")}
+        counts["pending_source_snapshots"] = len(self._pending_source_events)
+        counts["publisher_metadata_bytes"] = (
+            sys.getsizeof(self._pending_source_events) + sys.getsizeof(self._inflight_payloads)
+            + (len(frames) + len(self._pending_source_events)) * 128
+            + sum(sys.getsizeof(payload) + sum(sys.getsizeof(key) for key in payload)
+                  for kind, payload in frames if kind == "retry_keys")
+        )
+        return events, inputs, counts
+
+    def _memory_roots(self):
+        return [self._pending_source_events, self._inflight_payloads]
+
+    def _mutable_callback_state_ids(self):
+        # Callback snapshots retain their public mutation contract. Only IDs
+        # escape this transient lookup; the existing frame is their owner.
+        return {id(state) for kind, event in self._inflight_payloads.values()
+                if kind == "callback" and isinstance(event, BarEvent)
+                for state in (event.bar, event.previous_bar) if state is not None}
 
     # ── Public: Callback Registration ────────────────────────
 
@@ -211,43 +281,66 @@ class BarAggregatorPublisher:
 
         # Snapshot the single emitted state before the first await. Later
         # ticks may mutate its builder while callbacks are suspended.
+        original_bar = event.bar
         event = deepcopy(event)
+        original_bar._preview_publications += 1
         self._events_emitted += 1
+        token = self._hold_payload("dispatch", event)
+        try:
+            # Fire type-specific callbacks. A retry keeps the original pending
+            # version without constructing a discarded duplicate snapshot.
+            if event.bar.source_refs and event.delivery_id not in self._pending_source_events:
+                self._pending_source_events[event.delivery_id] = copy.deepcopy(event)
+            observer = self._source_handoff_observer.get()
+            if (event.bar.source_refs and observer is not None and observer.active
+                    and observer.bar_id == id(original_bar)):
+                # This is synchronous with registration, before any callback can
+                # suspend or a concurrent retry can acknowledge the snapshot.
+                observer.transferred = True
+            await self._fire_callbacks(event)
+            if (self._pending_source_events.pop(event.delivery_id, None) is not None
+                    and not self._pending_source_events):
+                self._pending_source_events.clear()
+            # Push to subscriber queues
+            self._enqueue(event)
+            original_bar.preview_published_version = max(original_bar.preview_published_version,
+                                                        event.bar.preview_computed_version)
+        finally:
+            self._release_payload(token)
+            original_bar._preview_publications -= 1
+            if self._preview_wakeup is not None and not original_bar._preview_publications:
+                self._preview_wakeup(original_bar)
 
-        # Fire type-specific callbacks
-        if event.bar.source_refs:
-            self._pending_source_events.setdefault(event.delivery_id, copy.deepcopy(event))
-        await self._fire_callbacks(event)
-        self._pending_source_events.pop(event.delivery_id, None)
-
-        # Push to subscriber queues
-        self._enqueue(event)
+    async def _emit_bar_event(self, event_type, bar, previous=None):
+        # Convenience-call arguments are real retained builder references even
+        # if a callback detaches their target while the publication awaits.
+        token = self._hold_payload("input", (bar, previous))
+        try:
+            await self.emit(BarEvent(event_type=event_type, bar=bar, previous_bar=previous))
+        finally:
+            self._release_payload(token)
 
     async def emit_created(self, bar: BarState) -> None:
         """Convenience: emit a CREATED event."""
-        await self.emit(BarEvent(event_type=BarEventType.CREATED, bar=bar))
+        await self._emit_bar_event(BarEventType.CREATED, bar)
 
     async def emit_updated(self, bar: BarState) -> None:
         """Convenience: emit an UPDATED event (subject to throttling)."""
-        await self.emit(BarEvent(event_type=BarEventType.UPDATED, bar=bar))
+        await self._emit_bar_event(BarEventType.UPDATED, bar)
 
     async def emit_closed(self, bar: BarState) -> None:
         """Convenience: emit a CLOSED event."""
-        await self.emit(BarEvent(event_type=BarEventType.CLOSED, bar=bar))
+        await self._emit_bar_event(BarEventType.CLOSED, bar)
 
     async def emit_amended(
         self, bar: BarState, previous: BarState | None = None,
     ) -> None:
         """Convenience: emit an AMENDED event."""
-        await self.emit(BarEvent(
-            event_type=BarEventType.AMENDED,
-            bar=bar,
-            previous_bar=previous,
-        ))
+        await self._emit_bar_event(BarEventType.AMENDED, bar, previous)
 
     async def emit_expired(self, bar: BarState) -> None:
         """Convenience: emit an EXPIRED event."""
-        await self.emit(BarEvent(event_type=BarEventType.EXPIRED, bar=bar))
+        await self._emit_bar_event(BarEventType.EXPIRED, bar)
 
     # ── Public: Throttle Configuration ───────────────────────
 
@@ -261,9 +354,39 @@ class BarAggregatorPublisher:
         self._cfg.update_throttle_ms = ms
         logger.info("Update throttle changed to %d ms", ms)
 
+    def set_update_requirement(self, provider: Callable[[BarState], bool] | None) -> None:
+        """Bind synchronous consumer demand without changing producer flags.
+
+        True requires every enabled update. None restores the ordinary throttle.
+        A failed demand lookup processes the update rather than losing input.
+        """
+        if provider is not None and (not callable(provider) or asyncio.iscoroutinefunction(provider)):
+            raise TypeError("update requirement must be a synchronous callable or None")
+        self._update_requirement = provider
+        self._update_requirement_warned = False
+
+    def _requires_every_update(self, state: BarState) -> bool:
+        if self._update_requirement is None:
+            return False
+        try:
+            required = self._update_requirement(state)
+            if type(required) is not bool:
+                if asyncio.iscoroutine(required):
+                    required.close()
+                raise TypeError("update requirement must return a boolean")
+            self._update_requirement_warned = False
+            return required
+        except Exception:
+            self._update_requirement_errors += 1
+            if not self._update_requirement_warned:
+                logger.warning("Update demand lookup failed; preserving enabled updates", exc_info=True)
+                self._update_requirement_warned = True
+            return True
+
     # ── Public: Snapshot ─────────────────────────────────────
 
     def snapshot(self) -> dict:
+        _, _, payload_counts = self._retained_payloads()
         return {
             "layer": "L5_Publisher",
             "events_emitted": self._events_emitted,
@@ -279,6 +402,9 @@ class BarAggregatorPublisher:
             "expired_callbacks": len(self._expired_callbacks),
             "active_subscribers": len(self._subscribers),
             "update_throttle_ms": self._cfg.update_throttle_ms,
+            "required_updates_unthrottled": self._required_updates_unthrottled,
+            "update_requirement_errors": self._update_requirement_errors,
+            **payload_counts,
         }
 
     # ── Internal: Should Emit ────────────────────────────────
@@ -301,6 +427,9 @@ class BarAggregatorPublisher:
         throttle_ms = self._cfg.update_throttle_ms
         if throttle_ms <= 0:
             return True
+        if self._requires_every_update(event.bar):
+            self._required_updates_unthrottled += 1
+            return True
 
         bar_key = event.bar_key
         now_ms = int(time.time() * 1000)
@@ -322,8 +451,23 @@ class BarAggregatorPublisher:
     # ── Internal: Callback Dispatch ──────────────────────────
 
     async def retry_source_deliveries(self) -> None:
-        for event in list(self._pending_source_events.values()):
-            await self.emit(event)
+        keys = tuple(self._pending_source_events)
+        if not keys:
+            return
+        keys_token = self._hold_payload("retry_keys", keys)
+        try:
+            for key in keys:
+                event = self._pending_source_events.get(key)
+                if event is None:
+                    continue  # Another retry already acknowledged this record.
+                token = self._hold_payload("retry_input", event)
+                try:
+                    await self.emit(event)
+                finally:
+                    self._release_payload(token)
+                    del event
+        finally:
+            self._release_payload(keys_token)
 
     async def _fire_callbacks(self, event: BarEvent) -> None:
         """Fire all matching callbacks for this event."""
@@ -344,8 +488,11 @@ class BarAggregatorPublisher:
 
         # Fire type-specific + all-events callbacks
         for cb in specific + self._all_callbacks:
+            callback_event = token = None
             try:
-                await cb(deepcopy(event))
+                callback_event = deepcopy(event)
+                token = self._hold_payload("callback", callback_event)
+                await cb(callback_event)
             except BarDeliveryUnavailable:
                 self._callback_errors += 1
                 raise
@@ -357,6 +504,10 @@ class BarAggregatorPublisher:
                 )
                 if event.bar.source_refs:
                     raise BarDeliveryUnavailable(str(exc)) from exc
+            finally:
+                if token is not None:
+                    self._release_payload(token)
+                del callback_event
 
     # ── Internal: Queue Dispatch ─────────────────────────────
 

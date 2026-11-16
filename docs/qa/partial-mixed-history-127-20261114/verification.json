@@ -1,0 +1,74 @@
+{
+  "runtime_source_head": "b43d5a5118635109f12f52a4d645d531d77c6526",
+  "current_head": "b43d5a5118635109f12f52a4d645d531d77c6526",
+  "source_sha256": {
+    "backend/app/data_engine/data_manager/custom_query.py": "91155d80ebe9715a5a5ea981d62803509255b55360acee4af15d76590a0351ad",
+    "backend/app/data_engine/data_manager/mixed_query.py": "a4b62140a293f71fd45aa00bfd35489295b3ce5bd6f7bba2431c7f458e586888",
+    "backend/tests/test_default_mixed_history_query.py": "2537d6f1e34cfeb504d30ed28e66ca2193c700c5a1c11888ab074f3b14227985"
+  },
+  "tests": {
+    "baseline": {
+      "tests": 2.0,
+      "failures": 2.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 3.322
+    },
+    "final-focused": {
+      "tests": 220.0,
+      "failures": 0.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 40.999
+    },
+    "default-final": {
+      "tests": 42.0,
+      "failures": 0.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 19.094
+    },
+    "backend-final": {
+      "tests": 2397.0,
+      "failures": 0.0,
+      "errors": 0.0,
+      "skipped": 0.0,
+      "time": 667.442
+    }
+  },
+  "real_profile_probe": {
+    "bars": 133,
+    "canonical_values_equal": true,
+    "original_unchanged": true,
+    "pending": true,
+    "target_writes": 0
+  },
+  "native_partial_paint": {
+    "source_head": "b43d5a5118635109f12f52a4d645d531d77c6526",
+    "backend_files": 1005,
+    "all_source_hashes_match": true,
+    "strict_signature_status": 0,
+    "initial_history_response": {
+      "status": 200,
+      "count": 133,
+      "historyState": "pending",
+      "complete": false
+    },
+    "rendered": {
+      "barCount": 213,
+      "loading": false,
+      "marketReady": false,
+      "initialHistoryPending": true,
+      "indicatorsReady": true,
+      "indicatorOutputPoints": [
+        194,
+        154
+      ],
+      "indicatorErrors": [],
+      "error": null
+    },
+    "owned_processes_exited": 11,
+    "scope": "partial-history paint on retained public history in fresh profile; no complete/cold/resource/strategy qualification"
+  },
+  "scope": "full backend collection predates the last test-only exact repair-span contract; default-final includes that added contract; final CI must collect all current tests; native baseline remains failed, no passing native/resource qualification"
+}

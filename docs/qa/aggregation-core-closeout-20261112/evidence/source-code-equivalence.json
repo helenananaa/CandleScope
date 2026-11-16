@@ -1,0 +1,34 @@
+{
+  "source_recording_runtime": "ef8f0e0fa6df299a823f4460b701eb1c3c98361f",
+  "native_runtime": "3878a4ad69196903e630ede4530f77d19e0e5d4c",
+  "unchanged_modules": [
+    {
+      "path": "backend/app/data_engine/history/cover_plan.py",
+      "sha256": "d427ff57e7dca6fa16eeb3dd84a74a52beebaec12fe1d433156fa74d9caa63af"
+    },
+    {
+      "path": "backend/app/data_engine/data_manager/mixed_history.py",
+      "sha256": "458a135b2124e0358ca04abdd431849b666effbd400b634ad38a938b37cf900d"
+    },
+    {
+      "path": "backend/app/data_engine/data_manager/history_blocks.py",
+      "sha256": "73dac07364583df67fdecc072b0444132bbe794f0da43cb1e442d084a5c0fb8d"
+    },
+    {
+      "path": "backend/app/data_engine/aggregation/core.py",
+      "sha256": "786bd5804b4579ed5ada78048c23390b898bdb741dd3f836bc457f3c70d3bf93"
+    },
+    {
+      "path": "backend/app/data_engine/aggregation/semantics.py",
+      "sha256": "2e78ea845242969affedc21a082d30c611723383b13e04e8b60423c6c769be40"
+    },
+    {
+      "path": "backend/app/data_engine/aggregation/blocks.py",
+      "sha256": "31c5dc6dd63d494d1054b2c825ec75bc5812cd903115ded6a3c1034928c05755"
+    },
+    {
+      "path": "backend/app/data_engine/storage/klines_repo.py",
+      "sha256": "1485f20dda5f0d6e2462bf31a566caafd20a5a77debe38737d00296e6d2e1f67"
+    }
+  ]
+}

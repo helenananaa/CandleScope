@@ -240,7 +240,9 @@ export class MarketDataManager extends MarketDataManagerCore implements MarketDa
     });
     this.healthRecovery = new MarketHealthRecovery(series => this.cache.verificationDemand(series),
       (series, limit, signal) => this.requestCoordinator.fetchKlinesHistory(series.symbol, series.interval, null,
-        series.marketType, series.exchange, { countBack: limit, maxWaitMs: 0, intent: "viewport", seriesIdentity: series,
+        // Zero-wait viewport reads are storage-only probes on the backend.
+        // Recovery owns bounded repair admission, not another first-paint probe.
+        series.marketType, series.exchange, { countBack: limit, maxWaitMs: 1500, intent: "viewport", seriesIdentity: series,
           signal, clientContext: { cacheMode: "network-only", priority: 1 } }));
     this.warmStreams = new MarketWarmStreams(this.subscribe, options.warmStreams?.maxSeries, options.warmStreams?.ttlMs);
   }

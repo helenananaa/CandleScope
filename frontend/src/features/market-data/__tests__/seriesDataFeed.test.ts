@@ -2212,6 +2212,8 @@ test("a pagination cap preserves missing ranges from consumed newer pages", asyn
         }
         return {
           data: [],
+          all_rows_final: true,
+          has_tail_gap: false,
           truncated: true,
           next_end_ms: (end - 3_600) * 1_000,
           verified_contiguous: false,
@@ -4050,4 +4052,99 @@ test("declared terminal history reports each missing range and resets with the c
   assert.deepEqual(feed.getTerminalHistoryGaps(), []);
   assert.ok(snapshots.length >= 2);
   stop();
+});
+
+for (const knownRange of [true, false]) test(`initial backfill completion retires its original indicator owner (${knownRange ? "bounded range" : "count back"})`, async () => {
+  const { IndicatorWindowCommitBuffer } = await import("../indicatorWindowCommitBuffer.js");
+  const buffer = new IndicatorWindowCommitBuffer();
+  const series = { ...SERIES, interval: "1m" };
+  const key = "initial-owner-recovery";
+  let historyCalls = 0, rangeCalls = 0;
+  let pending: NonNullable<BackfillCompletedOptions["pendingInitial"]> | null = null;
+  const feed = new SeriesDataFeed({
+    getActiveSeries: () => series,
+    commitMergedChartData: (_symbol, _interval, _rows, meta) => {
+      buffer.record(key, [], { ownerToken: meta?.indicatorWindowOwner,
+        pending: meta?.deferIndicatorWindow === true, epoch: meta?.indicatorWindowEpoch });
+    },
+    api: {
+      fetchKlinesHistory: async () => ++historyCalls === 1
+        ? { data: rows([120]), complete: false, retryable: true, history_state: "pending" }
+        : { ...resolvedQuality, data: rows([120, 180]) },
+      fetchKlinesRange: async () => { rangeCalls++; return { ...resolvedQuality, data: rows([120, 180]) }; },
+    },
+  });
+  const initial = await feed.getBars(series, { countBack: 2, maxWaitMs: 0, intent: "viewport" });
+  assert.equal(buffer.hasPending(key), true);
+  pending = { ...series, countBack: 2, range: knownRange
+    ? { start: toEpochMilliseconds(120_000)!, end: toEpochMilliseconds(180_000)! } : null,
+    indicatorWindowOwner: initial.indicatorWindowOwner!, indicatorWindowEpoch: initial.indicatorWindowEpoch! };
+  feed.handleBackfillCompleted({ type: "backfill_completed", ...series, market_type: series.marketType,
+    detail: { request_id: "initial-owner-completion", reason: "initial_history", range_start_ms: 120_000, range_end_ms: 180_000 } }, {
+    activeSeries: series, pendingInitial: pending, getPendingInitial: () => pending,
+    getCacheRows: () => rows([120]), cooldownMs: 0,
+    onRecoveryProgress: event => { if (event.type === "initial-resolved") pending = null; },
+  });
+  while (feed.backfillReloadInFlight.size) await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(pending, null);
+  assert.equal(buffer.hasPending(key), false, "completed initial window retained its obsolete gate owner");
+  assert.equal(rangeCalls, 1);
+  assert.equal(historyCalls, knownRange ? 1 : 2, "unknown initial range still requires its full count-back proof");
+});
+
+test("verified external readback releases the exact repair's pending indicator owner", async () => {
+  const { IndicatorWindowCommitBuffer } = await import("../indicatorWindowCommitBuffer.js");
+  const buffer = new IndicatorWindowCommitBuffer();
+  const series = { ...SERIES, interval: "1m" };
+  const fullRows = rows([120, 180, 240]);
+  let settled = false;
+  const feed = new SeriesDataFeed({
+    getActiveSeries: () => series,
+    commitMergedChartData: (_s, _i, _rows, meta) => buffer.record("repair", [], {
+      ownerToken: meta?.indicatorWindowOwner, pending: meta?.deferIndicatorWindow === true, epoch: meta?.indicatorWindowEpoch }),
+    api: { fetchKlinesRange: async () => settled ? { ...resolvedQuality, data: fullRows }
+      : { data: rows([120, 240]), complete: false, retryable: true, history_state: "pending", verified_contiguous: false } },
+  });
+  feed.trackPendingResultRepair(series, { data: rows([120, 240]), complete: false, retryable: true,
+    history_state: "pending", start_ms: 120_000, end_ms: 240_000 });
+  await feed.repairVisibleGaps(series, rows([120, 240]), null, { throttleMs: 0 });
+  assert.equal(buffer.hasPending("repair"), true);
+  settled = true;
+  feed.handleBackfillCompleted({ type: "backfill_completed", ...series, market_type: series.marketType,
+    detail: { request_id: "external-repair-proof", reason: "initial_history", range_start_ms: 120_000, range_end_ms: 240_000 } }, {
+    activeSeries: series, getCacheRows: () => fullRows, cooldownMs: 0,
+  });
+  while (feed.backfillReloadInFlight.size) await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(feed.pendingRepairCount(series), 0);
+  assert.equal(buffer.hasPending("repair"), false, "the proven repair was removed while its indicator gate remained");
+});
+
+test("an unproven capped parent retains its window owner until a full external proof arrives", async () => {
+  const { IndicatorWindowCommitBuffer } = await import("../indicatorWindowCommitBuffer.js");
+  const buffer = new IndicatorWindowCommitBuffer();
+  const series = { ...SERIES, interval: "1m" };
+  const fullRows = rows(Array.from({ length: 11 }, (_, i) => i * 60));
+  let settled = false;
+  const feed = new SeriesDataFeed({
+    getActiveSeries: () => series,
+    commitMergedChartData: (_s, _i, _rows, meta) => buffer.record("cap", [], {
+      ownerToken: meta?.indicatorWindowOwner, pending: meta?.deferIndicatorWindow === true, epoch: meta?.indicatorWindowEpoch }),
+    api: { fetchKlinesRange: async (_s, _i, start, end) => settled
+      ? { ...resolvedQuality, data: fullRows.filter(row => row.time >= start && row.time <= end) }
+      : { data: rows([end]), truncated: true, next_end_ms: (end - 60) * 1000,
+        verified_contiguous: true, missing_ranges: [] } },
+  });
+  await feed.repairVisibleGaps(series, rows([0, 600]), null, { throttleMs: 0 });
+  assert.equal(buffer.hasPending("cap"), true);
+  settled = true;
+  await feed.pollPendingRepairs(series, { force: true, maxRequests: 1 });
+  assert.equal(feed.pendingRepairCount(series), 1, "child proof must not promote unknown retained parent rows");
+  assert.equal(buffer.hasPending("cap"), true);
+  feed.handleBackfillCompleted({ type: "backfill_completed", ...series, market_type: series.marketType,
+    detail: { request_id: "full-cap-parent-proof", reason: "initial_history", range_start_ms: 60_000, range_end_ms: 540_000 } }, {
+    activeSeries: series, getCacheRows: () => fullRows, cooldownMs: 0,
+  });
+  while (feed.backfillReloadInFlight.size) await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(feed.pendingRepairCount(series), 0);
+  assert.equal(buffer.hasPending("cap"), false);
 });

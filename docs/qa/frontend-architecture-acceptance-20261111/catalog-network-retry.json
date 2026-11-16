@@ -1,0 +1,11 @@
+{
+  "installedAttempt": "native-range",
+  "installedOutcome": "failed initial finite-matrix setup before cold trials; repeated 30-second spot exchangeInfo timeouts",
+  "independentProbes": {
+    "curlWithoutCompression": "curl: (28) Operation timed out after 60008 milliseconds with 2669800 out of 17816888 bytes received\nstatus=200 bytes=2669800 seconds=60.008047 speed=44490\n",
+    "curlWithCompression": "status=200 bytes=326426 seconds=11.819231\n",
+    "actualCcxtClient": "markets 3742 seconds 10.978075167000497\nrequestHeaders {'User-Agent': 'python-requests/2.32.3', 'Accept-Encoding': 'gzip, deflate'} responseEncoding gzip\n",
+    "smallServerTime": "status=200 bytes=28 seconds=2.338254\n"
+  },
+  "interpretation": "The uncompressed transfer is not the CCXT payload size. CCXT sends gzip, deflate and the separate actual-client probe loaded the full catalog in about 11 seconds. No timeout/proof relaxation was made for the retry."
+}

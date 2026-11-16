@@ -81,6 +81,38 @@ class HistoryPrefixReader:
                 or manager.snapshot()['closed']):
             raise BlockRevisionChanged("history prefix source binding changed")
 
+    def matches_closed_overlay(self, source, prefix, components):
+        """Fence and compare a bounded seam before dropping accepted leaves.
+
+        Aggregate equality alone can hide opposite corrections to two leaves.
+        Use the existing canonical reader and normalizer, without another cache
+        or a write path. The new prefix covers this range on both read fences.
+        """
+        if not components or len(components) > 128:
+            raise ValueError("bounded closed overlay required")
+        lo, hi = components[0]['open_time_ms'], components[-1]['close_time_ms'] + 1
+        if source != prefix.summary.target or not prefix.start_ms <= lo < hi <= prefix.through_ms:
+            raise ValueError("overlay is outside the staged prefix")
+        engine = self.engine
+        self.validate_bound(prefix)
+        with self.memory_budget.reserve('history-query', len(components) * 4096 + 4096):
+            rows = engine._read_canonical_history_rows(engine.storage, source, lo, hi, len(components) + 1)
+            if retained_size((rows,))[0] > len(components) * 2048 + 2048:
+                raise MemoryBudgetExceeded('overlay comparison exceeds its decoding allowance')
+            bars = engine._storage_rows_to_bars(source, rows)
+            valid = len(rows) == len(bars) == len(components)
+            for row, bar, held in zip(rows, bars, components):
+                fields = ('open', 'high', 'low', 'close', 'volume', *held['enhanced_fields'])
+                if (row.get('open_time') != held['open_time_ms']
+                        or row.get('close_time') != held['close_time_ms']
+                        or not bar.is_closed or not bar.trusted_final or not held['is_closed']
+                        or bar.enhanced_fields != held['enhanced_fields']
+                        or any(getattr(bar, name) != held[name] for name in fields)):
+                    valid = False
+                    break
+        self.validate_bound(prefix)
+        return valid
+
     @asynccontextmanager
     async def stage(self, source, start_ms, through_ms, *, page_rows=256, require_complete=True):
         from app.data_engine.interval_policy import parse_interval_spec

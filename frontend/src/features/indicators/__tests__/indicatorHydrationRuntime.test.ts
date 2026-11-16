@@ -333,3 +333,20 @@ test("cache miss preserves an explicit-local terminal error while clearing stale
   assert.equal(hydrated[0]?.error, "INDICATOR_COMPUTE_FAILED");
   assert.strictEqual(hydrateIndicatorDefinitionsFromCache(hydrated, []), hydrated);
 });
+
+test("deferred hosted cache ranges preserve outside history and honor resolved empty points", () => {
+  const previous = [{ id: "ma", engineName: "MA", lines: [{ outputName: "ma", data: [
+    { time: 60, value: 1 }, { time: 120, value: 2 }, { time: 180, value: 3 },
+  ] }] }];
+  const entry = structuralMock<IndicatorCacheResult>({ indicatorId: "ma", schema: [],
+    normalized: { lines: [{ outputName: "ma", data: [{ time: 180, value: 30 }] }] },
+    computedSegments: [{ start: 120, end: 180 }],
+  });
+  const hydrated = hydrateIndicatorDefinitionsFromCache(previous, [entry], {
+    clearMissing: false, preserveOutsideComputedRanges: true,
+  });
+  assert.deepEqual(hydrated[0]!.lines![0]!.data, [{ time: 60, value: 1 }, { time: 180, value: 30 }]);
+  const newContext = hydrateIndicatorDefinitionsFromCache(previous, [entry]);
+  assert.deepEqual(newContext[0]!.lines![0]!.data, [{ time: 180, value: 30 }],
+    "an ownership reset still replaces the old projection");
+});

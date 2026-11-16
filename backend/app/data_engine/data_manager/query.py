@@ -193,6 +193,7 @@ class QueryEngine:
             calendar_provider=self._calendar_for,
             memory_budget_provider=lambda: getattr(self, "memory_budget", None),
             block_manager_provider=lambda: getattr(self, "shared_blocks", None),
+            mixed_query=self._query_closed_mixed,
         )
 
         from .history_blocks import HistoryBlockReader
@@ -270,6 +271,15 @@ class QueryEngine:
         """Lease-scoped H127 canonical history page; publish only after context exit."""
         return self.history_blocks.read(source, start_ms, end_ms, **options)
 
+    def _query_closed_mixed(self, key, **options):
+        from .mixed_query import query_closed_mixed
+        return query_closed_mixed(self, key, **options)
+
+    def read_mixed_history_blocks(self, target: SeriesKey, start_ms: int, end_ms: int, sources, **options):
+        """One qualified mixed target; consume only after the context fence."""
+        from .mixed_history import MixedHistoryReader
+        return MixedHistoryReader(self).read(target, start_ms, end_ms, sources, **options)
+
     def _read_canonical_history_rows(self, storage, source, start_ms, end_ms, limit):
         # Full canonical rows retain actual close_time; the compact chart
         # projection intentionally omits it and cannot prove H127 bounds.
@@ -281,6 +291,21 @@ class QueryEngine:
                 market_type=source.market_type, series_identity=source.identity))
         except Exception as exc:
             raise BlockUnavailable("canonical history page read failed") from exc
+
+    def _count_canonical_history_rows(self, storage, source, start_ms, end_ms):
+        # One scalar SQL result; this chooses an executor, never proves finality.
+        return self._measure_storage_read(_QueryIOMetrics(), lambda: [storage.count_bars(
+            symbol=source.symbol, interval=source.interval, start_ms=start_ms, end_ms=end_ms - 1,
+            exchange=source.exchange, market_type=source.market_type, series_identity=source.identity)])[0]
+
+    def _probe_canonical_history_ranges(self, storage, source, ranges):
+        from app.data_engine.aggregation.blocks import BlockUnavailable
+        try:
+            return self._measure_storage_read(_QueryIOMetrics(), lambda: storage.query_bars_range_presence(
+                source.symbol, source.interval, ranges, exchange=source.exchange,
+                market_type=source.market_type, series_identity=source.identity))
+        except Exception as exc:
+            raise BlockUnavailable("canonical range presence read failed") from exc
 
     # ── Public: Main Query ───────────────────────────────────
 
@@ -297,6 +322,7 @@ class QueryEngine:
         series_identity: KlineSeriesIdentity | None = None,
         auto_backfill: bool | None = None,
         _materialized_only: bool = False,
+        composition_contract: str | None = None,
     ) -> QueryResult:
         """Query bars for a (symbol, interval) with flexible parameters.
 
@@ -337,6 +363,10 @@ class QueryEngine:
         interval = route.canonical_interval
         identity = resolve_kline_series_identity(exchange, series_identity)
         route.require_series_identity(identity)
+        if composition_contract is not None and route.kind is not IntervalRouteKind.DERIVED:
+            self._interval_resolver.require_history_composition(exchange=exchange,
+                market_type=market_type, interval=interval, contract_id=composition_contract,
+                identity=identity, enabled=False)
         if route.kind is IntervalRouteKind.TRADE and not identity.is_legacy_default_for(exchange):
             raise IntervalResolutionError(
                 IntervalResolutionErrorCode.SERIES_IDENTITY_UNSUPPORTED,
@@ -366,6 +396,7 @@ class QueryEngine:
                 market_type=market_type,
                 auto_backfill=auto_backfill,
                 route=route,
+                composition_contract=composition_contract,
             )
             key = SeriesKey(symbol, interval, exchange=exchange, market_type=market_type)
             return self._apply_custom_finality_contract(result, key, end_ms=end_ms)
@@ -722,6 +753,7 @@ class QueryEngine:
         series_identity: KlineSeriesIdentity | None = None,
         auto_backfill: bool | None = None,
         _materialized_only: bool = False,
+        composition_contract: str | None = None,
     ) -> QueryResult:
         """Query bars strictly before a timestamp (for pagination)."""
         io_metrics = _QueryIOMetrics()
@@ -739,6 +771,10 @@ class QueryEngine:
         interval = route.canonical_interval
         identity = resolve_kline_series_identity(exchange, series_identity)
         route.require_series_identity(identity)
+        if composition_contract is not None and route.kind is not IntervalRouteKind.DERIVED:
+            self._interval_resolver.require_history_composition(exchange=exchange,
+                market_type=market_type, interval=interval, contract_id=composition_contract,
+                identity=identity, enabled=False)
         if route.kind is IntervalRouteKind.TRADE and not identity.is_legacy_default_for(exchange):
             raise IntervalResolutionError(
                 IntervalResolutionErrorCode.SERIES_IDENTITY_UNSUPPORTED,
@@ -765,6 +801,7 @@ class QueryEngine:
                 market_type=market_type,
                 auto_backfill=auto_backfill,
                 route=route,
+                composition_contract=composition_contract,
             )
             key = SeriesKey(symbol, interval, exchange=exchange, market_type=market_type)
             return self._apply_custom_finality_contract(

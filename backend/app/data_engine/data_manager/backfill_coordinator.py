@@ -50,6 +50,7 @@ from app.exchanges.rate_limits import RateLimitDeferred
 from app.data_engine.backfill.native_progress import (
     MAX_COMPLETED_CHUNKS, NativeBackfillDeferred, NativeBackfillProgress,
 )
+from app.data_engine.backfill.fetch_stream import StreamBackfillDeferred
 from app.data_engine.storage.gap_ledger import COMPLETED_NATIVE_CHUNKS_FIELD, NATIVE_PROGRESS_FIELD
 from .backfill_contracts import (
     BACKFILL_REASON_PRIORITIES,
@@ -2409,7 +2410,9 @@ class BackfillCoordinator:
         for attempt in range(next_attempt, self._max_retries + 1):
             try:
                 await self._ledger_mark_started(request, attempt=attempt)
-                report = await self._engine.run(
+                run_engine = (self._engine.run_receipt
+                    if callable(getattr(type(self._engine),'run_receipt',None)) else self._engine.run)
+                report = await run_engine(
                     symbol=request.symbol,
                     intervals=[request.interval],
                     range_start_ms=request.start_ms,
@@ -2555,7 +2558,7 @@ class BackfillCoordinator:
                     retry_at_ms=exc.retry_at_ms,
                     native_progress=progress,
                 )
-                if progress is not None:
+                if progress is not None or isinstance(exc,StreamBackfillDeferred):
                     await self._notify_source_storage(request, exc)
                 raise
             except asyncio.CancelledError:

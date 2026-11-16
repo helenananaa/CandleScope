@@ -1,0 +1,192 @@
+{
+  "native-cold4": {
+    "product": "3878a4ad69196903e630ede4530f77d19e0e5d4c",
+    "passed": true,
+    "scope": "macOS arm64 packaged application; isolated profile; real public OKX history/realtime; no response substitution",
+    "input": "fresh isolated profile with no seeded market history",
+    "steps": [
+      {
+        "name": "packaged-launch",
+        "at": "2026-11-12T03:30:09.089Z",
+        "values": []
+      },
+      {
+        "name": "explicit-left-history",
+        "at": "2026-11-12T03:30:40.463Z",
+        "values": []
+      },
+      {
+        "name": "explicit-left-history",
+        "at": "2026-11-12T03:30:45.148Z",
+        "values": []
+      },
+      {
+        "name": "initial-derived-targets",
+        "at": "2026-11-12T03:31:31.774Z",
+        "values": [
+          {
+            "interval": "45m",
+            "compared": 628,
+            "first": 1792756800,
+            "last": 1794449700
+          },
+          {
+            "interval": "90m",
+            "compared": 533,
+            "first": 1791574200,
+            "last": 1794447000
+          }
+        ]
+      },
+      {
+        "name": "released-derived-targets",
+        "at": "2026-11-12T03:32:42.978Z",
+        "values": []
+      },
+      {
+        "name": "recreated-within-same-bucket",
+        "at": "2026-11-12T03:32:47.819Z",
+        "values": [
+          {
+            "interval": "45m",
+            "compared": 628,
+            "first": 1792756800,
+            "last": 1794449700
+          },
+          {
+            "interval": "90m",
+            "compared": 533,
+            "first": 1791574200,
+            "last": 1794447000
+          }
+        ]
+      },
+      {
+        "name": "full-process-exit",
+        "at": "2026-11-12T03:32:54.534Z",
+        "values": []
+      },
+      {
+        "name": "packaged-launch",
+        "at": "2026-11-12T03:33:04.380Z",
+        "values": []
+      },
+      {
+        "name": "explicit-left-history",
+        "at": "2026-11-12T03:33:05.773Z",
+        "values": []
+      },
+      {
+        "name": "explicit-left-history",
+        "at": "2026-11-12T03:33:06.502Z",
+        "values": []
+      },
+      {
+        "name": "saved-exit-restart",
+        "at": "2026-11-12T03:33:07.728Z",
+        "values": [
+          {
+            "interval": "45m",
+            "compared": 628,
+            "first": 1792756800,
+            "last": 1794449700
+          },
+          {
+            "interval": "90m",
+            "compared": 628,
+            "first": 1791061200,
+            "last": 1794447000
+          }
+        ]
+      },
+      {
+        "name": "full-process-exit",
+        "at": "2026-11-12T03:33:12.955Z",
+        "values": []
+      }
+    ],
+    "compared_bars": 3578,
+    "exits": [
+      {
+        "ms": 6427,
+        "owned_processes": 10
+      },
+      {
+        "ms": 4785,
+        "owned_processes": 10
+      }
+    ]
+  },
+  "native-version3": {
+    "candidate": "3878a4ad69196903e630ede4530f77d19e0e5d4c",
+    "baseline": "83778381611f67b0835a7dce8a1bde08f48b9837",
+    "passed": true,
+    "scope": "packaged frontend held open; controlled sidecar replacement on one endpoint and SQLite profile; real public OKX transport; no response substitution",
+    "input": "fresh profile with no seeded market database",
+    "steps": [
+      {
+        "name": "packaged-launch",
+        "at": "2026-11-12T03:30:09.135Z"
+      },
+      {
+        "name": "candidate-initial",
+        "at": "2026-11-12T03:30:38.847Z"
+      },
+      {
+        "name": "baseline",
+        "at": "2026-11-12T03:31:19.324Z"
+      },
+      {
+        "name": "candidate-restored",
+        "at": "2026-11-12T03:32:07.375Z"
+      },
+      {
+        "name": "full-process-exit",
+        "at": "2026-11-12T03:32:12.995Z"
+      },
+      {
+        "name": "physical-request-audit",
+        "at": "2026-11-12T03:32:13.002Z"
+      }
+    ],
+    "connection_stages": [
+      {
+        "name": "candidate-initial",
+        "attempts": 1,
+        "failed_handshakes": 0,
+        "established_sockets": 1,
+        "subscribe_messages": 1,
+        "events": [
+          33
+        ]
+      },
+      {
+        "name": "baseline",
+        "attempts": 9,
+        "failed_handshakes": 8,
+        "established_sockets": 1,
+        "subscribe_messages": 1,
+        "events": [
+          23
+        ]
+      },
+      {
+        "name": "candidate-restored",
+        "attempts": 9,
+        "failed_handshakes": 8,
+        "established_sockets": 1,
+        "subscribe_messages": 1,
+        "events": [
+          18
+        ]
+      }
+    ],
+    "audit": {
+      "requests": 18,
+      "completed": 18,
+      "rule": "Identical successful complete OKX 1m windows already carrying upstream confirm=1; incomplete/provisional responses do not qualify",
+      "duplicateCandidateClosedWindows": [],
+      "duplicateBaselineClosedWindows": []
+    }
+  }
+}

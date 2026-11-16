@@ -43,11 +43,23 @@ export async function checkFrontendScripts() {
   assert(isolation.ok && JSON.stringify(bars) === before, `isolation failed: ${JSON.stringify(isolation)}`);
   checks.push("opaque worker cannot use DOM, Node, storage, network or child workers; input copy preserved");
 
-  for (const script of ['throw new Error("example failure")', 'const = broken', 'plot("bad", bars.map(() => NaN))', 'postMessage({lines: []})']) {
+  for (const script of ['throw new Error("example failure")', 'const = broken', 'plot("bad", bars.map(() => NaN))', 'postMessage({lines: []})', 'postMessage("ready"); while (true) {}']) {
     const error = await computeFrontendScript({ ...request, script });
     assert(error.ok === false && error.lines.length === 0, `failed closed: ${script}`);
   }
   checks.push("runtime, syntax, nonfinite and forged output errors clear plots");
+
+  const append = document.body.append;
+  document.body.append = function (...nodes: (Node | string)[]) {
+    if (nodes.some(node => node instanceof HTMLIFrameElement && node.title === "Frontend indicator isolation")) {
+      setTimeout(() => append.apply(this, nodes), 2200);
+    } else append.apply(this, nodes);
+  };
+  let delayed;
+  try { delayed = await computeFrontendScript(request); }
+  finally { document.body.append = append; }
+  assert(delayed.ok, `isolation bootstrap consumed the execution budget: ${JSON.stringify(delayed)}`);
+  checks.push("slow trusted isolation startup does not consume the script's two-second execution budget");
 
   let beats = 0;
   const heartbeat = setInterval(() => beats++, 20);
