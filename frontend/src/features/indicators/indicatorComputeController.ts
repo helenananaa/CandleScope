@@ -19,6 +19,7 @@ import { routeIndicatorComputeBatch } from "./frontendScriptBatch.js";
 import { awaitIndicatorComputations } from "./indicatorComputeSettlement.js";
 import { standaloneIndicatorResults, type IndicatorResultManager } from "./indicatorResultManager.js";
 import { cachedIndicatorComputeResult } from "./indicatorCachedCompute.js";
+import { withPartialSeed } from "./indicatorSeedState.js";
 import { markPerf, recordPerfEvent } from "../../runtime/performance/perfMarks.js";
 import {
   buildIndicatorComputeParams,
@@ -436,12 +437,13 @@ export function useIndicatorComputeController({
             const current = updated[index];
             if (current === undefined) continue;
             const paramSchema = newParamSchemas[id];
-            updated[index] = {
+            // Locally computed outputs replace every value and carry no seed.
+            updated[index] = withPartialSeed({
               ...current,
               lines: mappedLines,
               error,
               ...(paramSchema ? { paramSchema } : {}),
-            };
+            }, []);
           }
           return updated;
         });

@@ -17,6 +17,7 @@ import type {
   ProjectionCustomValues,
 } from "../features/chart-representation/chartRepresentationTypes.js";
 import type { MainChartType } from "../shared/mainChartTypes.js";
+import type { IndicatorPartialSeedRange } from "../features/indicators/indicatorTypes.js";
 
 export { TickMarkType } from "lightweight-charts";
 
@@ -119,6 +120,8 @@ export interface IndicatorLine {
   data?: IndicatorDataEntry[];
   colorData?: IndicatorDataEntry[] | null;
   renderUpdate?: "tail" | "full" | null;
+  /** Owner indicator's partial-seed spans; read by legends, ignored by renderers. */
+  partialSeed?: readonly IndicatorPartialSeedRange[];
 }
 
 export interface IndicatorSeriesDefinition extends IndicatorLine {
