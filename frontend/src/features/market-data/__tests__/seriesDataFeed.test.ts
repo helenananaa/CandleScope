@@ -4347,7 +4347,7 @@ for (const endpoint of ["history", "before", "range", "latest"] as const) {
     });
     const epoch = feed.beginEpoch(SERIES);
     const request = endpoint === "history" ? feed.getHistory(SERIES)
-      : endpoint === "before" ? feed.getBefore(SERIES, { before: 120, bars: 2 })
+      : endpoint === "before" ? feed.getBefore(SERIES, { before: epochSeconds(120), bars: 2 })
       : endpoint === "latest" ? feed.getLatest(SERIES)
       : feed.getRange(SERIES, { startSec: 60, endSec: 120 });
     while (!finish) await new Promise<void>((resolve) => setImmediate(resolve));
