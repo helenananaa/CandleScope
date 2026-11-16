@@ -1,6 +1,7 @@
 import type { PluginPlatformRuntime } from "./pluginPlatformTypes.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
+import { liveModeLabel } from "./pluginLabels.js";
 
 export default function PluginPlatformToolbar({ runtime }: { runtime: PluginPlatformRuntime }) {
   useLocale();
@@ -59,7 +60,7 @@ export default function PluginPlatformToolbar({ runtime }: { runtime: PluginPlat
           className={`live-control-toolbar live-control-${runtime.view.liveControl.mode}`}
           onClick={runtime.actions.openLiveControl}
         >
-          LIVE {runtime.view.liveControl.mode.toUpperCase()}
+          {t("plugin.live.toolbar", { mode: liveModeLabel(runtime.view.liveControl.mode) })}
         </button>
       )}
     </div>

@@ -1,3 +1,4 @@
+@layer features {
 /* The visible chart entry must be styled before the tester is lazily loaded. */
 /* Semantic foregrounds stay legible on the selected theme's surfaces. */
 :root {
@@ -19,7 +20,9 @@
   gap: 7px;
   color: var(--text-primary);
   font-weight: 600;
+  white-space: nowrap;
 }
+.chart-strategy-entry-label { font-weight: inherit; }
 
 .chart-strategy-entry-dot { flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; background: color-mix(in srgb, var(--text-secondary) 50%, transparent); }
 .chart-strategy-entry-button:not([data-state=unattached]) .chart-strategy-entry-dot { background: var(--accent-blue); }
@@ -28,3 +31,4 @@
 .chart-strategy-entry-button span { max-width: 140px; overflow: hidden; color: var(--text-secondary); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .chart-strategy-entry-button[data-state="error"] span { color: var(--strategy-error); }
 .chart-strategy-entry-button[aria-expanded=true] { border-color: var(--accent-blue); }
+}

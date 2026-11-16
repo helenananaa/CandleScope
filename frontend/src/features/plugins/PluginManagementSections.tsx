@@ -1,8 +1,11 @@
 import { describeError } from "../../i18n/serverErrors.js";
+import { confirmAction } from "../../components/ui/overlay/overlayApi.js";
+import { Badge } from "../../components/ui/Display.js";
 import { useEffect, useMemo, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import type { JsonValue, PluginManagementDetail, PluginPlatformRuntime, PluginProviderContribution, PluginPaperContribution, PluginMarketplaceStatus, PluginRuntimeRegistryStatus, PluginTrustSummary, PluginLocalInstallCandidate, PluginTrustReview, PluginTrustChangeReview } from "./pluginPlatformTypes.js";
+import { permissionDecisionLabel, permissionKindLabel, releaseChannelLabel, releaseChannelOrder, runtimeVerificationLabel, sandboxStatusLabel, trustModeLabel } from "./pluginLabels.js";
 export function PermissionRows({ runtime, detail, reload }: {
   runtime: PluginPlatformRuntime;
   detail: PluginManagementDetail;
@@ -29,7 +32,7 @@ export function PermissionRows({ runtime, detail, reload }: {
     <div className="plugin-permissions">
       {permissions.map((permission) => (
         <article key={permission.permissionId}>
-          <div><strong>{permission.permissionId}</strong><span>{permission.kind} · {permission.decision}</span></div>
+          <div><strong>{permission.permissionId}</strong><span>{permissionKindLabel(permission.kind)} · {permissionDecisionLabel(permission.decision)}</span></div>
           <pre>{JSON.stringify(permission.requestedScope, null, 2)}</pre>
           <div className="plugin-action-row">
             {permission.decision !== "granted" && <button type="button" disabled={pending || !runtime.view.managementAvailable} onClick={() => void decide(permission.permissionId, "grant", permission.requestedScope)}>{t("plugin.host.grantScope")}</button>}
@@ -107,7 +110,7 @@ export function PaperRows({
   const toggleKillSwitch = async () => {
     if (!paper) return;
     const next = !paper.killSwitchEnabled;
-    if (!next && !window.confirm(t("plugin.host.paperResumeConfirm"))) return;
+    if (!next && !(await confirmAction({ title: t("plugin.host.paperResumeConfirm"), confirmLabel: t("plugin.host.resumePaperOrders") }))) return;
     try {
       await runtime.actions.setPaperKillSwitch(next);
       await reload();
@@ -200,7 +203,7 @@ export function MarketplacePanel({
       <details className="plugin-technical-details">
         <summary>{t("plugin.market.policy")}</summary>
         <p>{t("plugin.market.policyHint")}</p>
-        {catalog.rollout && <p>{t("plugin.market.channel", { channel: catalog.rollout.channel })}</p>}
+        {catalog.rollout && <p>{t("plugin.market.channel", { channel: releaseChannelLabel(catalog.rollout.channel), order: releaseChannelOrder() })}</p>}
         {status?.telemetry && (
           <p data-marketplace-telemetry={status.telemetry.enabled ? "enabled" : "disabled"}>
             {t("plugin.market.telemetry", {
@@ -353,13 +356,16 @@ export function MarketplacePanel({
                     type="button"
                     data-marketplace-activate={entry.pluginId}
                     disabled={!runtime.view.managementAvailable || !activationReady || busy !== null}
-                    onClick={() => {
-                      if (!window.confirm(t("plugin.market.activateConfirm", { plugin: entry.pluginId, version: candidate.version }))) return;
+                    onClick={() => void (async () => {
+                      if (!(await confirmAction({
+                        title: t("plugin.market.activateConfirm", { plugin: entry.pluginId, version: candidate.version }),
+                        confirmLabel: t("plugin.market.activateObserve"),
+                      }))) return;
                       void run(
                         `activate:${entry.pluginId}`,
                         () => runtime.actions.activateMarketplaceRelease(entry.pluginId),
                       );
-                    }}
+                    })()}
                   >
                     {busy === `activate:${entry.pluginId}` ? t("plugin.market.activating") : t("plugin.market.activateObserve")}
                   </button>
@@ -400,12 +406,12 @@ export function RuntimeRegistryPanel({ status }: { status: PluginRuntimeRegistry
             {t("plugin.host.registryRevision", { id: status.active.registryId, revision: status.active.revision })} · {t("plugin.runtime.autoUpdateOff")}
           </p>
         </div>
-        <span className="plugin-state-pill is-muted">{t("plugin.count", { count: status.runtimes.length })}</span>
+        <Badge>{t("plugin.count", { count: status.runtimes.length })}</Badge>
       </header>
       {status.runtimes.map((item) => (
         <article key={`${item.runtimeId}:${item.kind}:${item.os}:${item.arch}`} className="plugin-runtime-registry-row">
           <strong>{item.runtimeId} · {item.version}</strong>
-          <p>{item.kind} · {item.os}/{item.arch} · {size(item.size)} · {item.verificationStatus}</p>
+          <p>{item.kind} · {item.os}/{item.arch} · {size(item.size)} · {runtimeVerificationLabel(item.verificationStatus)}</p>
           <small>
             {t("plugin.host.runtimeFingerprint", {
               owner: t("plugin.host.hostManaged"),
@@ -528,13 +534,13 @@ export function LocalTrustInstallPanel({ runtime, onPendingChange }: { runtime: 
   };
 
   return (
-    <section className="plugin-settings-card plugin-install-card plugin-trust-install-card" data-plugin-trust-flow="itemized-double-confirmation">
+    <section className="plugin-settings-card plugin-trust-install-card" data-plugin-trust-flow="itemized-double-confirmation">
       <header className="plugin-settings-card-header">
         <div>
           <h3>{t("plugin.localInstall")}</h3>
           <p>{t("plugin.trust.localHint")}</p>
         </div>
-        <span className="plugin-state-pill is-warn">{t("plugin.trust.localCode")}</span>
+        <Badge tone="warning">{t("plugin.trust.localCode")}</Badge>
       </header>
       <ol className="pc-install-steps" aria-label={t("pc.install")}>
         <li aria-current={!candidate && !installed ? "step" : undefined}>{t("plugin.localInstall")}</li>
@@ -599,8 +605,8 @@ export function LocalTrustInstallPanel({ runtime, onPendingChange }: { runtime: 
           ))}
           <p data-sandbox-status={candidate.preview.authorization.sandbox.status}>
             {t("plugin.trust.sandboxMode", {
-              status: candidate.preview.authorization.sandbox.status,
-              mode: candidate.preview.authorization.mode,
+              status: sandboxStatusLabel(candidate.preview.authorization.sandbox.status),
+              mode: trustModeLabel(candidate.preview.authorization.mode),
             })}
           </p>
           <TrustRequestMatrix trust={candidate.preview.requests} />
@@ -740,10 +746,10 @@ export function TrustModeControl({
         <div className="plugin-trust-diffs" data-trust-change-preview={review.previewSha256}>
           <div>
             <strong>{t("plugin.trust.frozenBoundary")}</strong>
-            <span>{review.preview.to.mode} · {review.preview.to.sandbox.status}</span>
+            <span>{trustModeLabel(review.preview.to.mode)} · {sandboxStatusLabel(review.preview.to.sandbox.status)}</span>
             <small>
               {t("plugin.diff.runtime", { state: changedLabel(review.preview.runtimeDiff.changed) })}
-              {` · kind/id ${changedLabel(review.preview.runtimeDiff.kindOrIdChanged)}`}
+              {` · ${t("plugin.host.kindOrId", { state: changedLabel(review.preview.runtimeDiff.kindOrIdChanged) })}`}
               {` · ${t("plugin.diff.sigRoot", { state: changedLabel(review.preview.runtimeDiff.signatureRootChanged) })}`}
               {` · ${t("plugin.diff.sysPath", { state: changedLabel(review.preview.runtimeDiff.systemRuntimePathChanged) })}`}
             </small>
@@ -759,7 +765,7 @@ export function TrustModeControl({
       )}
       <div className="plugin-action-row">
         <button type="button" disabled={busy || !allAccepted || reason.trim().length < 12 || review !== null} onClick={() => void begin()}>
-          {t("plugin.trust.firstReviewTarget", { target })}
+          {t("plugin.trust.firstReviewTarget", { target: trustModeLabel(target) })}
         </button>
         <button type="button" disabled={busy || review === null} onClick={() => void confirm()}>
           {t("plugin.trust.secondApply")}

@@ -1,8 +1,9 @@
 import type { ReactNode, Ref } from "react";
 
 import MarketPageFrame from "../../app/MarketPageFrame.js";
-import MarketTopBarFrame from "../../app/MarketTopBarFrame.js";
+import AppHeader, { type AppHeaderProps } from "../../app/AppHeader.js";
 import MarketWorkspaceFrame from "../../app/MarketWorkspaceFrame.js";
+import { ResearchModeLayout } from "../backtest/research/ResearchModeLayout.js";
 import { t } from "../../i18n/index.js";
 import { ResearchDataSourceBar } from "../research-data/ResearchDataSourceBar.js";
 import type { ResearchSourceRefV1 } from "../research-data/researchDataTypes.js";
@@ -16,14 +17,13 @@ export function StrategyResearchShell({
   hostStatus,
   source,
   sourceLabel,
-  libraryEnabled,
   libraryOpen,
   currentChartEnabled,
   marketBatchAvailable = false,
   onOpenLibrary,
   onSelectCurrentChart,
   pageExportRef,
-  controls,
+  header,
   runtimeMode,
   intervalSelector,
   toolbar,
@@ -40,14 +40,14 @@ export function StrategyResearchShell({
   hostStatus?: ChartStrategyTesterStatus | undefined;
   source: ResearchSourceRefV1 | null;
   sourceLabel?: string;
-  libraryEnabled: boolean;
   libraryOpen: boolean;
   currentChartEnabled: boolean;
   marketBatchAvailable?: boolean;
   onOpenLibrary(): void;
   onSelectCurrentChart(): void;
   pageExportRef: Ref<HTMLDivElement>;
-  controls: ReactNode;
+  /** The page's header actions, panel toggles and Settings. */
+  header: Pick<AppHeaderProps, "actions" | "panels" | "settings">;
   runtimeMode: "LIVE" | "LOCAL_OFFLINE";
   intervalSelector: ReactNode;
   toolbar: ReactNode;
@@ -88,25 +88,24 @@ export function StrategyResearchShell({
       <MarketPageFrame
         rootRef={pageExportRef}
         topBar={(
-          <MarketTopBarFrame
+          <AppHeader
             source="research"
             offline={runtimeMode === "LOCAL_OFFLINE"}
-            brandText={t("strategy.brand")}
-            identity={(
+            context={(
               <ResearchDataSourceBar
                 source={source}
                 {...(sourceLabel ? { sourceLabel } : {})}
-                libraryEnabled={libraryEnabled}
                 currentChartEnabled={currentChartEnabled}
                 onOpenLibrary={onOpenLibrary}
                 onSelectCurrentChart={onSelectCurrentChart}
               />
             )}
-            controls={controls}
+            {...header}
           />
         )}
-        intervalSelector={intervalSelector}
+        intervalSelector={null}
         workspace={(
+          <ResearchModeLayout top={intervalSelector}>
           <MarketWorkspaceFrame
             toolbar={toolbar}
             exportOverlay={exportOverlay}
@@ -128,10 +127,11 @@ export function StrategyResearchShell({
                 <div className="strategy-research-script" data-testid="strategy-research-script-slot">
                   {script}
                 </div>
-                <details className="strategy-research-analysis"><summary>{t("local.ops")}</summary>{analysis}</details>
+                {analysis ? <div className="strategy-research-analysis">{analysis}</div> : null}
               </aside>
             ) : null}
           />
+          </ResearchModeLayout>
         )}
         featureSurfaces={(
           <>

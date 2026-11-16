@@ -3,6 +3,8 @@ import { ReadOnlyAccountDataManager } from "./accountDataManager.js";
 import { useMarketDataWorkspaceResources } from "../market-data/marketDataWorkspaceContext.js";
 import { t, type MessageKey } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
+import { Icon } from "../../components/icons/Icon.js";
+import { Badge, Button, Disclosure, EmptyState, Field, IconButton, InlineAlert, Input } from "../../components/ui/index.js";
 import AccountReconciliation from "./AccountReconciliation.js";
 import ReadOnlyTradeReview, { type ReadOnlyReviewBinding } from "./ReadOnlyTradeReview.js";
 import AccountJournal from "./AccountJournal.js";
@@ -10,7 +12,6 @@ import { accountErrorHelp } from "./accountErrors.js";
 import type { LinkedNoteRequest } from "./journalDraft.js";
 import { AccountApiError, accountSession, getAccountFacts,
   record, type AccountStatus, type Fact, type FactKind, type FactPage } from "./accountApi.js";
-import "./readonlyAccount.css";
 
 type Tab = "overview" | FactKind | "journal" | "reconcile" | "trades";
 const TABS: Tab[] = ["overview", "fills", "orders", "bills", "reconcile", "trades", "journal"];
@@ -91,68 +92,84 @@ export default function ReadOnlyAccountDock({ height, onRequestClose, trading }:
         : status.account.status === "disconnected" ? "account.disconnected" : "account.error";
   const failure = error ?? readError ?? status?.serviceError ?? status?.account?.error_code ?? null;
   const pair = (label: MessageKey, value: unknown, suffix = "") => <><dt>{t(label, {}, locale)}</dt><dd>{scalar(value)}{suffix && ` ${suffix}`}</dd></>;
+  const factKindLabel = (kind: unknown) => kind === "fills" || kind === "orders" || kind === "bills" ? t(`account.${kind}`, {}, locale) : scalar(kind);
   const leg = (value: unknown) => value === "long" || value === "short" ? t(`account.${value}`, {}, locale) : t("account.unknown", {}, locale);
 
+  const stateTone = !status?.account ? "neutral" : status.account.status === "synced" ? "success"
+    : status.account.status === "syncing" ? "accent" : status.account.status === "disconnected" ? "neutral" : "danger";
+  const factsTab = tab !== "overview" && tab !== "journal" && tab !== "reconcile" && tab !== "trades";
+
   return <section className="readonly-account-dock" style={{ height }} aria-label={t("account.title", {}, locale)}>
-    <header>
-      <div className="readonly-account-heading"><strong>{t("account.title", {}, locale)}</strong><button type="button" aria-label={t("account.closePanel", {}, locale)} onClick={onRequestClose}>×</button></div>
+    <header className="readonly-account-header">
+      <div className="readonly-account-heading">
+        <strong>{t("account.title", {}, locale)}</strong>
+        <IconButton size="sm" label={t("account.closePanel", {}, locale)} icon={<Icon name="close" size={16} />} onClick={onRequestClose} />
+      </div>
       <p className="readonly-account-scope">{t("account.scope", {}, locale)}</p>
       <div className="readonly-account-identity">
-        <span role="status">{t(stateKey, {}, locale)}</span>
-        {status?.account && <span>UID {status.account.venue_uid}</span>}
+        <span role="status"><Badge tone={stateTone}>{t(stateKey, {}, locale)}</Badge></span>
+        {status?.account && <span className="readonly-account-uid">UID {status.account.venue_uid}</span>}
       </div>
     </header>
     <div className="readonly-account-body">
       <p className="readonly-account-help">{t("account.boundary", {}, locale)}</p>
-      {!available || status?.available === false ? <p>{t("account.desktopRequired", {}, locale)}</p> : <>
+      {!available || status?.available === false ? <EmptyState compact title={t("account.title", {}, locale)} description={t("account.desktopRequired", {}, locale)} /> : <>
         {status?.account && <p className="readonly-account-help">{t("account.lastRead", { time: date(status.account.last_success_ms) }, locale)}</p>}
-        {failure && <div className="readonly-account-error" role="alert"><p>{t(accountErrorHelp(failure), {}, locale)}</p><code>{failure}</code></div>}
+        {failure && <InlineAlert tone="danger">{t(accountErrorHelp(failure), {}, locale)} <code>{failure}</code></InlineAlert>}
         <div className="readonly-account-actions">
-          <button type="button" disabled={busy} onClick={() => setCredentialsOpen(!credentialsOpen)}>{t(status?.account ? "account.rotate" : "account.connect", {}, locale)}</button>
-          {status?.account && <><button type="button" disabled={busy} onClick={() => { void action(() => accountManager.resync()); }}>{t("account.sync", {}, locale)}</button>
-            <button type="button" disabled={busy || !status.account.enabled} onClick={() => { void action(() => accountManager.disconnect(false)); }}>{t("account.pause", {}, locale)}</button></>}
+          <Button size="sm" variant={status?.account ? "secondary" : "primary"} disabled={busy} aria-expanded={credentialsOpen} onClick={() => setCredentialsOpen(!credentialsOpen)}>{t(status?.account ? "account.rotate" : "account.connect", {}, locale)}</Button>
+          {status?.account && <><Button size="sm" disabled={busy} onClick={() => { void action(() => accountManager.resync()); }}>{t("account.sync", {}, locale)}</Button>
+            <Button size="sm" variant="ghost" disabled={busy || !status.account.enabled} onClick={() => { void action(() => accountManager.disconnect(false)); }}>{t("account.pause", {}, locale)}</Button></>}
         </div>
-        {credentialsOpen && <form onSubmit={connect} autoComplete="off">
+        {credentialsOpen && <form className="readonly-account-form" onSubmit={connect} autoComplete="off">
           <p className="readonly-account-help">{t("account.credentialsHelp", {}, locale)}</p>
-          {([ ["apiKey", "account.key"], ["secret", "account.secret"], ["password", "account.passphrase"] ] as const).map(([name, label]) => <label key={name}>{t(label, {}, locale)}<input name={name} type="password" autoComplete="off" spellCheck={false} required maxLength={256} disabled={busy} /></label>)}
-          <button type="submit" disabled={busy}>{t(busy ? "account.working" : "account.connect", {}, locale)}</button>
-          {status?.account && <><p className="readonly-account-help">{t("account.forgetHelp", {}, locale)}</p><button type="button" disabled={busy} onClick={() => { void action(() => accountManager.disconnect(true)); }}>{t("account.forget", {}, locale)}</button></>}
+          {([ ["apiKey", "account.key"], ["secret", "account.secret"], ["password", "account.passphrase"] ] as const).map(([name, label]) => <Field key={name} label={t(label, {}, locale)}>
+            <Input size="sm" name={name} type="password" autoComplete="off" spellCheck={false} required maxLength={256} disabled={busy} />
+          </Field>)}
+          <div className="readonly-account-actions">
+            <Button size="sm" variant="primary" type="submit" disabled={busy}>{t(busy ? "account.working" : "account.connect", {}, locale)}</Button>
+          </div>
+          {status?.account && <div className="readonly-account-forget"><p className="readonly-account-help">{t("account.forgetHelp", {}, locale)}</p>
+            <Button size="sm" variant="danger" disabled={busy} onClick={() => { void action(() => accountManager.disconnect(true)); }}>{t("account.forget", {}, locale)}</Button></div>}
         </form>}
-        <nav aria-label={t("account.title", {}, locale)}>{TABS.map((id) => <button type="button" key={id} aria-pressed={tab === id} onClick={() => setTab(id)}>{t(`account.${id}`, {}, locale)}</button>)}</nav>
+        <nav className="readonly-account-views" aria-label={t("account.title", {}, locale)}>{TABS.map((id) => <Button size="sm" variant="ghost" key={id} aria-pressed={tab === id} onClick={() => setTab(id)}>{t(`account.${id}`, {}, locale)}</Button>)}</nav>
         {tab === "overview" && <>
           <p className="readonly-account-help">{t("account.reconciliation", {}, locale)}</p>
           <h4>{t("account.positions", {}, locale)}</h4>
           <p className="readonly-account-help">{t("account.snapshotTime", { time: date(positionsSnapshot?.receivedMs) }, locale)}</p>
-          {!positionData.length && <p>{t("account.empty", {}, locale)}</p>}
+          {!positionData.length && <p className="readonly-account-empty">{t("account.empty", {}, locale)}</p>}
           {positionData.map((item, index) => <article className="readonly-account-card" key={`${scalar(item.positionId)}:${index}`}><strong>{scalar(item.instrument)} · {leg(item.positionSide)}</strong><dl>
             {pair("account.contracts", item.contracts)}{pair("account.entry", item.entryPrice)}{pair("account.mark", item.markPrice)}{pair("account.pnl", item.unrealizedPnl, unit(item.settleCurrency))}</dl></article>)}
           <h4>{t("account.openOrders", {}, locale)}</h4>
           <p className="readonly-account-help">{t("account.snapshotTime", { time: date(status?.snapshots.open_orders?.receivedMs) }, locale)}</p>
-          {!openOrders.length && <p>{t("account.empty", {}, locale)}</p>}
+          {!openOrders.length && <p className="readonly-account-empty">{t("account.empty", {}, locale)}</p>}
           {openOrders.map((item, index) => <article className="readonly-account-card" key={`${scalar(item.orderId)}:${index}`}><strong>{scalar(item.instrument)} · {leg(item.positionSide)}</strong><dl>{pair("account.contracts", item.contracts)}{pair("account.price", item.price)}</dl></article>)}
           <h4>{t("account.balance", {}, locale)}</h4><p className="readonly-account-help">{t("account.balanceHelp", {}, locale)}</p>
           <p className="readonly-account-help">{t("account.snapshotTime", { time: date(status?.snapshots.balances?.receivedMs) }, locale)}</p>
           {balances.map((item, index) => <article className="readonly-account-card" key={`${scalar(item.ccy)}:${index}`}><strong>{scalar(item.ccy)}</strong><dl>{pair("account.equity", item.eq)}{pair("account.cash", item.cashBal)}</dl></article>)}
-          <details><summary>{t("account.coverage", {}, locale)}</summary><p className="readonly-account-help">{t("account.coverageHelp", {}, locale)}</p>
+          <Disclosure className="readonly-account-coverage" summary={t("account.coverage", {}, locale)}><p className="readonly-account-help">{t("account.coverageHelp", {}, locale)}</p>
             {status?.scans.map((scan) => <p key={scan.kind}>{t(`account.${scan.kind as FactKind}`, {}, locale)} · {date(scan.start_ms)} – {date(scan.end_ms)}<br />{t(scan.complete ? "account.queryComplete" : "account.queryPending", { pages: scan.pages }, locale)}</p>)}
-            {status?.gaps.map((gap, index) => <p key={index}>{t("account.gap", {}, locale)} · {scalar(gap.kind)}<br />{date(gap.start_ms)} – {date(gap.end_ms)}</p>)}
-          </details>
+            {status?.gaps.map((gap, index) => <p key={index}>{t("account.gap", {}, locale)} · {factKindLabel(gap.kind)}<br />{date(gap.start_ms)} – {date(gap.end_ms)}</p>)}
+          </Disclosure>
           <p className="readonly-account-help">{t("account.lastEvent", { time: date(status?.stream.lastReceivedMs) }, locale)}</p>
-          {status?.stream.error && <p>{t(accountErrorHelp(status.stream.error), {}, locale)} <code>{status.stream.error}</code></p>}
+          {status?.stream.error && <InlineAlert tone="warning">{t(accountErrorHelp(status.stream.error), {}, locale)} <code>{status.stream.error}</code></InlineAlert>}
         </>}
-        {tab !== "overview" && tab !== "journal" && tab !== "reconcile" && tab !== "trades" && <>
-          <button type="button" disabled={loadingFacts} onClick={() => { void loadFacts(false); }}>{t(loadingFacts ? "account.loading" : "account.refresh", {}, locale)}</button>
+        {factsTab && <>
+          <div className="readonly-account-actions">
+            <Button size="sm" disabled={loadingFacts} onClick={() => { void loadFacts(false); }}>{t(loadingFacts ? "account.loading" : "account.refresh", {}, locale)}</Button>
+          </div>
           {tab === "bills" && <p className="readonly-account-help">{t("account.unassignedFunding", {}, locale)}</p>}
-          {!loadingFacts && !page.items.length && <p>{t("account.empty", {}, locale)}</p>}
+          {!loadingFacts && !page.items.length && <p className="readonly-account-empty">{t("account.empty", {}, locale)}</p>}
           {page.items.map((item, index) => <article key={`${scalar(item.fillId ?? item.orderId ?? item.billId)}:${index}`} className="readonly-account-card">
-            <strong>{scalar(item.instrument)} {leg(item.positionSide)}</strong><p>{date(typeof item.eventTimeMs === "number" ? item.eventTimeMs : null)}</p><dl>
+            <strong>{scalar(item.instrument)} {leg(item.positionSide)}</strong><p className="readonly-account-help">{date(typeof item.eventTimeMs === "number" ? item.eventTimeMs : null)}</p><dl>
               {tab === "bills" ? pair("account.amount", item.cashChange, unit(item.currency)) : <>{pair("account.contracts", item.contracts)}{pair("account.price", item.price)}</>}
               {item.feeCashChange !== undefined && pair("account.fee", item.feeCashChange, unit(item.feeCurrency ?? item.currency))}
             </dl>
-            {tab === "fills" && <><p>{item.effect === "open" || item.effect === "close" ? t(`account.${item.effect}`, {}, locale) : "—"}</p><button type="button" onClick={() => { setNewNoteRequest({ id: crypto.randomUUID(), fillId: scalar(item.fillId) }); setTab("journal"); }}>{t("account.linkFill", {}, locale)}</button></>}
+            {tab === "fills" && <div className="readonly-account-card-foot"><Badge>{item.effect === "open" || item.effect === "close" ? t(`account.${item.effect}`, {}, locale) : "—"}</Badge>
+              <Button size="sm" variant="ghost" onClick={() => { setNewNoteRequest({ id: crypto.randomUUID(), fillId: scalar(item.fillId) }); setTab("journal"); }}>{t("account.linkFill", {}, locale)}</Button></div>}
             {tab === "bills" && item.inSelectedScope === false && <p className="readonly-account-help">{t("account.otherScope", {}, locale)}</p>}
           </article>)}
-          {page.next && <button type="button" disabled={loadingFacts} onClick={() => { void loadFacts(true); }}>{t("account.more", {}, locale)}</button>}
+          {page.next && <Button size="sm" disabled={loadingFacts} onClick={() => { void loadFacts(true); }}>{t("account.more", {}, locale)}</Button>}
         </>}
         {tab === "reconcile" && <AccountReconciliation />}
         {tab === "trades" && <ReadOnlyTradeReview binding={trading} />}

@@ -46,7 +46,20 @@ def main():
         "test_host_completion.py", "test_host_boundary_inputs.py", "test_prefix_reply.py")]
     cases += [repo / "backend/tests" / name for name in (
         "test_native_calendar_basis.py", "test_native_fixed_anchor.py",
-        "test_pine_prefix_reply.py", "test_pyne_removal.py")]
+        "test_pine_prefix_reply.py", "test_pyne_removal.py",
+        "test_preview_update_requirements.py", "test_event_bus_routing_index.py",
+        "test_deferred_component_preview.py", "test_deferred_component_preview_pipeline.py",
+        "test_deferred_component_preview_prefix.py",
+        "test_deferred_component_preview_source_window.py",
+        "test_deferred_component_preview_continuation.py",
+        "test_closed_component_retention.py",
+        "test_forming_component_retention.py",
+        "test_source_window_recovery.py",
+        "test_history_prefix.py", "test_history_prefix_overlay.py",
+        "test_history_prefix_runtime.py", "test_history_prefix_retention.py",
+        "test_history_fetch_stream.py", "test_history_fetch_stream_engine.py",
+        "test_chart_calculation_real_bus.py", "test_chart_calculation_ack_loss.py",
+        "test_chart_calculation_source_fencing.py", "test_chart_calculation_transports.py")]
     # Confirm every required file exists: a renamed gate must never silently disappear.
     for case in cases:
         if not case.is_file():

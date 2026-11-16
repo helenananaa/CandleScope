@@ -1,0 +1,17 @@
+{
+  "base": "12514a92fb4cc8745e3564538dd68247316e019d",
+  "files": {
+    "frontend/scripts/check-architecture.mjs": "eabf831d54e9adb1893cd2fe8cf00ddce4b194e41196fcc16435b3c80577c980",
+    "frontend/scripts/check-architecture.test.mjs": "91995ff220ff96b4aa49a8e8a8b3c72804586d2e8e35669d9b7134f737e4a9e4",
+    "frontend/scripts/indicator-flow-browser.html": "935c44379294b2d7e6eb9d0ad9c33090e2776dab4f1f91d4344b1e790f54bf20",
+    "frontend/src/chart-adapter/__tests__/indicatorResults.browser.ts": "b52a1640ccdfd467901ec9f9f12dc8a06e45ca5ed7fb7cbed7cd35cb1a5310cf",
+    "frontend/src/features/indicators/__tests__/indicatorResultManager.test.ts": "a3971dd479751dc45834005b1f10d6c9185da4394b003c48743a1ba3daab4cd9",
+    "frontend/src/features/indicators/indicatorComputeController.ts": "0cec6462474077051ffa816b435aa2f44634f1bf443f90c7a5113f6d80c0debf",
+    "frontend/src/features/indicators/indicatorDataManager.ts": "9a5c7101b3f5eea366654f1bf9dced9d624172b204a4bc326cbd63942d8a4cb0",
+    "frontend/src/features/indicators/indicatorResultCacheStore.ts": "272bc069a1808229fba465e290e1b51fbb89caa3d2862074ed4fd1007c79eea9",
+    "frontend/src/features/indicators/indicatorResultManager.ts": "094a4ffd7cf8ed8ac135d3c847ef8dc3a9d4f307cbac54c8e56bc0a22dc410ff",
+    "frontend/src/features/indicators/indicatorRuntimeAdapter.ts": "6944d8f62e5d3604dfaec59489001ebc58a1dddc9b92683c73f6828921d6b1ac",
+    "frontend/src/features/indicators/useIndicatorRuntime.ts": "e7fdf0e38853d20925ad6550692ccfad3de44918cffff731a7263c86d96c878e",
+    "frontend/src/features/market-data/manager/chartDataFlowManager.ts": "530b66b222cec57603f0ff493dd999b47e77a41c61a590f6cb0725a078d0de29"
+  }
+}

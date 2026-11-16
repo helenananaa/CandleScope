@@ -647,7 +647,7 @@ async function openAddedMarketStudies(cdp) {
   const activeTabClick = indicatorPanelOpened
     ? await cdp.send("Runtime.evaluate", {
         expression: `(() => {
-          const tab = Array.from(document.querySelectorAll('.indicator-tab')).find(
+          const tab = Array.from(document.querySelectorAll('.indicator-tab-bar [role="tab"]')).find(
             (element) => element.textContent?.includes('已添加')
           );
           if (!(tab instanceof HTMLButtonElement)) return false;
@@ -1461,7 +1461,7 @@ async function openSettings(cdp) {
     waitForPerfTiming(cdp, "settingsOpenMs", 5_000, 25),
     waitForExpression(
       cdp,
-      "Boolean(document.querySelector('.st-overlay .st-panel') && document.querySelector('.st-sidebar') && document.querySelector('.st-btn-close'))",
+      "Boolean(document.querySelector('.st-overlay .st-panel[role=dialog]') && document.querySelector('.st-sidebar') && document.querySelector('.st-sidebar-footer button'))",
       5_000,
       25,
     ),

@@ -1,4 +1,4 @@
-import { clearIndicatorLineData } from "./indicatorPayloadRuntime.js";
+import { clearIndicatorLineData, mergeIndicatorLines, replaceIndicatorLinesRange } from "./indicatorPayloadRuntime.js";
 import { isFrontendScript } from "./frontendScriptContract.js";
 import type {
   IndicatorCacheResult,
@@ -64,9 +64,11 @@ export function hydrateIndicatorDefinitionsFromCache(
   entries: IndicatorCacheResult[] = [],
   {
     clearMissing = true,
+    preserveOutsideComputedRanges = false,
     reconcileLines,
   }: {
     clearMissing?: boolean;
+    preserveOutsideComputedRanges?: boolean;
     reconcileLines?: (
       indicator: IndicatorDefinition,
       lines: IndicatorLine[],
@@ -79,9 +81,15 @@ export function hydrateIndicatorDefinitionsFromCache(
     const cached = cachedById.get(indicator.id);
     if (cached) {
       const schema = cached.schema.length > 0 ? cached.schema : indicator.paramSchema;
+      let cachedLines = cached.normalized.lines;
+      if (preserveOutsideComputedRanges && !isFrontendScript(indicator) && indicator.executionTarget !== "local") {
+        cachedLines = cached.computedSegments.length
+          ? cached.computedSegments.reduce((lines, range) => replaceIndicatorLinesRange(lines, cached.normalized.lines, range), indicator.lines || [])
+          : mergeIndicatorLines(indicator.lines || [], cached.normalized.lines);
+      }
       const lines = reconcileLines
-        ? reconcileLines(indicator, cached.normalized.lines)
-        : cached.normalized.lines;
+        ? reconcileLines(indicator, cachedLines)
+        : cachedLines;
       if (
         indicator.lines === lines
         && indicator.error === null

@@ -1,0 +1,42 @@
+{
+  "scope": "Real Chromium, production-minified browser fixture and real React lifecycle; not native application qualification",
+  "output": "/tmp/cs-frontend-architecture-initial-owner-before",
+  "browser": "Chrome/157.0.8103.40",
+  "result": {
+    "result": {
+      "type": "object",
+      "value": {}
+    },
+    "exceptionDetails": {
+      "exceptionId": 1,
+      "text": "Uncaught (in promise) TypeError: l.dispose is not a function",
+      "lineNumber": 5,
+      "columnNumber": 106636,
+      "scriptId": "3",
+      "stackTrace": {
+        "callFrames": [
+          {
+            "functionName": "Jm",
+            "scriptId": "3",
+            "url": "http://127.0.0.1:65284/assets/market-health-browser-DrRqleNo.js",
+            "lineNumber": 4,
+            "columnNumber": 106635
+          }
+        ]
+      },
+      "exception": {
+        "type": "object",
+        "subtype": "error",
+        "className": "TypeError",
+        "description": "TypeError: l.dispose is not a function\n    at Jm (http://127.0.0.1:65284/assets/market-health-browser-DrRqleNo.js:5:106636)\n    at async Zm (http://127.0.0.1:65284/assets/market-health-browser-DrRqleNo.js:5:122014)",
+        "objectId": "4119335002405179373.1.1"
+      }
+    }
+  },
+  "immediateWorkerCount": 0,
+  "remainingWorkers": [],
+  "exceptions": [],
+  "passed": false,
+  "error": "Error: {\"exceptionId\":1,\"text\":\"Uncaught (in promise) TypeError: l.dispose is not a function\",\"lineNumber\":5,\"columnNumber\":106636,\"scriptId\":\"3\",\"stackTrace\":{\"callFrames\":[{\"functionName\":\"Jm\",\"scriptId\":\"3\",\"url\":\"http://127.0.0.1:65284/assets/market-health-browser-DrRqleNo.js\",\"lineNumber\":4,\"columnNumber\":106635}]},\"exception\":{\"type\":\"object\",\"subtype\":\"error\",\"className\":\"TypeError\",\"description\":\"TypeError: l.dispose is not a function\\n    at Jm (http://127.0.0.1:65284/assets/market-health-browser-DrRqleNo.js:5:106636)\\n    at async Zm (http://127.0.0.1:65284/assets/market-health-browser-DrRqleNo.js:5:122014)\",\"objectId\":\"4119335002405179373.1.1\"}}",
+  "browserExitCode": 0
+}

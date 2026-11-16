@@ -251,3 +251,12 @@ test("stored settings gain a seconds tier without changing unlimited retention",
   assert.equal(normalizeSettings({ cacheLimits: { seconds: 3600 } }).cacheLimits.seconds, 3600);
   assert.equal(normalizeSettings({ cacheLimits: { seconds: -1 } }).cacheLimits.seconds, 86400);
 });
+
+test("a stored custom app theme becomes dark or light by its background", () => {
+  assert.equal(parseStoredSettings(JSON.stringify({ theme: "custom", customBg: "#f4efe2" })).theme, "light");
+  const dark = parseStoredSettings(JSON.stringify({ theme: "custom", customBg: "#102030" }));
+  assert.equal(dark.theme, "dark");
+  assert.equal(dark.customBg, "#102030", "the colour stays as the starting value for a chart's own background");
+  assert.equal(settingsFromStorageChange("candlescope-settings", JSON.stringify({ theme: "custom", customBg: "#ffffff" }))?.theme, "light");
+  assert.equal(normalizeSettings({ theme: "custom" }).theme, "custom", "per-chart settings may still be custom");
+});

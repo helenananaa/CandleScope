@@ -102,6 +102,9 @@ class QueryConfig:
     # Fixed-width multi-page reads reduce each page before pulling the next.
     # False retains the bounded batch implementation for comparison/rollback.
     stream_custom_history: bool = True
+    # Qualified closed fixed-grid pages may use H127 native mixed coverage.
+    # False restores single-base reads, retaining data/revisions/materialization.
+    mixed_custom_history: bool = True
 
 
 @dataclass

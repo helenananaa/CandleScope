@@ -1070,6 +1070,12 @@ def _create_exchange(
         "aiohttp_trust_env": config.proxy_mode == "system",
         "options": options,
     }
+    if entry.exchange_id == "binance" and base_type == "spot":
+        # REST and WS join the same ~18 MB spot catalog bootstrap. Keep
+        # either client capable of loading it on an ordinary slower link.
+        values["timeout"] = max(30_000, config.http_timeout * 1000)
+        if websocket:
+            values["urls"] = {"api": {"ws": {"spot": "wss://stream.binance.com:443/ws"}}}
     if entry.exchange_id == "okx" and not websocket:
         from app.exchanges.okx_intervals import OKX_UTC_INTERVALS
 

@@ -1,0 +1,15 @@
+{
+  "base": "85bc9412f19bdd5b0037607b3601ec651c6c0e09",
+  "product_head": "29768cdef1bdb1f8d4debb13b467a1df6c32e122",
+  "files": {
+    "backend/app/data_engine/bar_aggregator/aggregator.py": "e6c91f792ed9d25d05868b705444a0bfc01205bbfa8891f56cb34f95e940a737",
+    "backend/app/data_engine/bar_aggregator/bar_state.py": "3b013554e46c0196583011de824ccba765353cbc3ff08213f7d4683d1a46c9e0",
+    "backend/app/data_engine/bar_aggregator/component_inputs.py": "852e961b7e0128b141decab668c2e52143e90796a1d6c7f2a549361baa45822c",
+    "backend/app/data_engine/bar_aggregator/config.py": "454ddf8f8597003881582af08afe7f7b7fef004d082129b2a87217d4ac716fc1",
+    "backend/app/data_engine/data_manager/manager.py": "6c81f0a0aec14d2993df74f0f7b3e73ba9e3bf0df394b47fe0c82087c4add465",
+    "backend/app/data_engine/memory_budget.py": "52a3e7d41d05322a5019dcd8e8e76886e8430a0c2b9710affd29edfe1d24c369",
+    "backend/app/data_engine/readonly.py": "03c9438601305b61e6d638cc11f9f8ce58470d810d204f52487421d3c212b321",
+    "backend/scripts/ccxt_contracts/integration.py": "157ffb7207fb782338da4a7cbb08db75ab4d86e5db34721fd9a23f8204cfd302",
+    "backend/tests/test_shared_component_input.py": "1a4a0c3c1658345f9e0395ee47b67cab3c550e5fe062c924833ff46a396c7ac5"
+  }
+}

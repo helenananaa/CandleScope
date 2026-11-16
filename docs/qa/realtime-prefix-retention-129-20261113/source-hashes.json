@@ -1,0 +1,13 @@
+{
+  "base": "1ca92972982b9ef5127dccd351fee386c3056496",
+  "product_head": "2334655171a341cf1d61297c238b021e735193e0",
+  "files": {
+    ".github/workflows/pine-host-contracts.yml": "2c9e320b232abb97e6f0e1f3dad2a5af37b3448123f1e30cbee9f1ff02dbdcc4",
+    "backend/app/data_engine/bar_aggregator/history_prefix_runtime.py": "1bda564f0d0b96e89aaf0f4a4fd61897c6b97485813fdc199c8f7a5d345c5450",
+    "backend/app/data_engine/bar_aggregator/models.py": "0b94714953b0fa847c14adb560159d50a45a13595125a8912a0961a98b3defa2",
+    "backend/app/data_engine/data_manager/history_prefix.py": "77b8962621df1cefb79553d73e0bbc6206a7c9b0fa5e62dea032df7207c4bf3b",
+    "backend/scripts/ccxt_contracts/integration.py": "48738bbe9d927b9f99a733846f3e4f3eec5939ed8a80d26c762837adf9db949c",
+    "backend/tests/test_history_prefix_retention.py": "353ac757d6f1aad7d2e30187b3d918eb5e55f038691f6c470f092b394f31b9fe",
+    "packages/candlescope-plugin-pine-compat/scripts/qualify_host_contracts.py": "e2e59e07ccdaf27913d2633255dce9e7986172c504d3b976d5ef1eb0faacaa62"
+  }
+}

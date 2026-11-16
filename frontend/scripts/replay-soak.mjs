@@ -834,8 +834,8 @@ export async function configureFormalV2TrainingPlan(cdp, plan, timeoutMs) {
     assert(configured?.configured === true, `formal HEDGE control unavailable: ${value}`, configured);
     await waitForValue(cdp, `([...document.querySelectorAll('select')].some(select => select.value === ${JSON.stringify(value)}))`, timeoutMs, `HEDGE ${value} selection`);
   }
-  // datetime-local normalizes a zero-seconds value to the shortest valid form.
-  const requestedStartValue = new Date(plan.requestedStartMs).toISOString().slice(0, 16);
+  // The start field takes UTC text written "YYYY-MM-DD HH:mm".
+  const requestedStartValue = new Date(plan.requestedStartMs).toISOString().slice(0, 16).replace("T", " ");
   const start = await evaluate(cdp, `(() => {
     const input = document.querySelector('[data-training-field="requested-start-utc"]');
     if (!(input instanceof HTMLInputElement)) return { configured: false, reason: "requested-start-control-missing" };
@@ -2948,10 +2948,10 @@ async function v2AccessibilityAudit(cdp, timeoutMs) {
 
   const endKeyboard = await keyboardActivateButton(cdp, { action: "end" }, timeoutMs);
   const dialog = await waitForValue(cdp, `(() => {
-    const item = document.querySelector('[role="dialog"][data-replay-focus-trap="active"]');
+    const item = document.querySelector('.replay-end-dialog[role="dialog"][aria-modal="true"]');
     const describedBy = item?.getAttribute("aria-describedby") || "";
     const active = document.activeElement;
-    return item instanceof HTMLElement && describedBy === "replay-end-description"
+    return item instanceof HTMLElement && describedBy !== "" && document.getElementById(describedBy) !== null
       && active instanceof HTMLElement && active.dataset.replayAction === "cancel-end"
       ? { describedBy, initialAction: active.dataset.replayAction }
       : null;
@@ -2964,9 +2964,11 @@ async function v2AccessibilityAudit(cdp, timeoutMs) {
     "danger dialog confirm tab stop",
   );
   await pressKey(cdp, "Tab");
+  // The kit dialog's close button comes first in its focus order, then the two selects.
   const wrapped = await waitForValue(
     cdp,
-    `document.activeElement instanceof HTMLSelectElement && document.activeElement.value === "expire"`,
+    `document.activeElement?.closest('.replay-end-dialog') !== null
+      && (document.activeElement?.hasAttribute("data-overlay-close") || document.activeElement instanceof HTMLSelectElement)`,
     timeoutMs,
     "danger dialog focus trap wrap",
   );
@@ -2990,7 +2992,7 @@ async function v2AccessibilityAudit(cdp, timeoutMs) {
     host.append(probe);
     const result = {
       mediaMatches: matchMedia("(prefers-reduced-motion: reduce)").matches,
-      animationName: getComputedStyle(probe).animationName,
+      animationDuration: getComputedStyle(probe).animationDuration,
       transitionDuration: getComputedStyle(probe).transitionDuration,
     };
     probe.remove();
@@ -2998,7 +3000,8 @@ async function v2AccessibilityAudit(cdp, timeoutMs) {
   })()`);
   assert(
     reducedMotion?.mediaMatches === true
-      && reducedMotion?.animationName === "none"
+      // The spinner keeps turning, slower; nothing else animates (reset.css).
+      && reducedMotion?.animationDuration === "1.6s"
       && ["0.00001s", "1e-05s"].includes(reducedMotion?.transitionDuration),
     "reduced-motion policy was not effective",
     reducedMotion,
@@ -4406,7 +4409,7 @@ async function main() {
           url: location.href,
           text: (document.body?.innerText || "").slice(-5000),
           play: (() => { const button = document.querySelector('[data-replay-action="play"]'); return button instanceof HTMLButtonElement ? { disabled: button.disabled, text: button.textContent?.trim() || "" } : null; })(),
-          commandErrors: [...document.querySelectorAll('.replay-error-summary, .replay-command-error')].map((item) => item.textContent?.trim() || ""),
+          commandErrors: [...document.querySelectorAll('.replay-command-error, .ui-alert[data-tone=danger]')].map((item) => item.textContent?.trim() || ""),
         })`).catch(() => null),
         apiRequests: replayCapture.requests.filter((item) => item.url.includes("/api/")).slice(-30),
         apiResponses: replayCapture.responses.filter((item) => item.url.includes("/api/")).slice(-30),
@@ -4471,7 +4474,7 @@ async function main() {
                 disabled: item instanceof HTMLButtonElement || item instanceof HTMLSelectElement ? item.disabled : null,
                 text: item.textContent?.trim() || "",
               })),
-              commandErrors: [...document.querySelectorAll('.replay-error-summary, .replay-command-error')].map((item) => item.textContent?.trim() || ""),
+              commandErrors: [...document.querySelectorAll('.replay-command-error, .ui-alert[data-tone=danger]')].map((item) => item.textContent?.trim() || ""),
             })`).catch(() => null),
             backend: await readJson(diagnosticsUrl).catch((backendError) => ({ error: backendError.message || String(backendError) })),
             apiRequests: replayCapture.requests.filter((item) => item.url.includes("/api/")).slice(-30),

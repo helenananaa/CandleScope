@@ -733,7 +733,12 @@ async def handle_script_indicator_subscribe(
     async def _run_realtime_event(event: Any) -> None:
         if meta.get("_disposed"):
             return
-        msg = await compute_snapshot(bar_time=event.bar.time if event.bar else 0)
+        msg = await compute_snapshot(
+            bar_time=event.bar.time if event.bar else 0,
+            **({"closed_bar": event.bar}
+               if closed_bars_only and event.event_type == DataEventType.BAR_CLOSED
+               and event.bar is not None else {}),
+        )
         if range_service is not None:
             msg["dataRevision"] = range_service.data_revision_for_meta(meta)
         if meta.get("_disposed"):

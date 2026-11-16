@@ -1,3 +1,4 @@
+import { researchModeForTask, strategyResearchModeHref } from "../research/backtestResearchModes.js";
 import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
 import { describeError } from "../../../i18n/serverErrors.js";
 import type { NativeStrategyCollection } from "../native/nativeStrategyCollection.js";
@@ -704,7 +705,7 @@ export default function ChartStrategyTesterCellBridge({
   const openResearch = useCallback((entryTask: "PRECISE_EXECUTION" | "PARAMETER_ROBUSTNESS") => {
     if (advancedOpening) return;
     if (!attachment) {
-      window.location.assign("/backtest.html");
+      window.location.assign(strategyResearchModeHref(researchModeForTask(entryTask)));
       return;
     }
     setAdvancedOpening(true);
@@ -728,7 +729,7 @@ export default function ChartStrategyTesterCellBridge({
       return;
     }
     void defaultBacktestApi.createResearchLaunchContext(payload).then((context) => {
-      window.location.assign(backtestResearchContextHref(context.context_id));
+      window.location.assign(backtestResearchContextHref(context.context_id, entryTask));
     }).catch((reason: unknown) => {
       setResultError(reason instanceof Error ? describeError(reason, reason.message) : String(reason));
       setAdvancedOpening(false);

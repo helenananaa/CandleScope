@@ -1,0 +1,146 @@
+[
+  {
+    "attempt": "native-cold",
+    "passed": false,
+    "failure_head": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:",
+    "source": "ef8f0e0fa6df299a823f4460b701eb1c3c98361f",
+    "steps": [
+      [
+        "packaged-launch",
+        "2026-11-12T02:54:59.848Z"
+      ],
+      [
+        "explicit-left-history",
+        "2026-11-12T02:55:48.452Z"
+      ],
+      [
+        "explicit-left-history",
+        "2026-11-12T02:55:57.011Z"
+      ],
+      [
+        "full-process-exit",
+        "2026-11-12T02:59:23.160Z"
+      ]
+    ]
+  },
+  {
+    "attempt": "native-cold2",
+    "passed": false,
+    "failure_head": "AssertionError [ERR_ASSERTION]: saved historical anchor missing",
+    "source": "ef8f0e0fa6df299a823f4460b701eb1c3c98361f",
+    "steps": [
+      [
+        "packaged-launch",
+        "2026-11-12T03:02:28.911Z"
+      ],
+      [
+        "explicit-left-history",
+        "2026-11-12T03:03:09.836Z"
+      ],
+      [
+        "explicit-left-history",
+        "2026-11-12T03:03:41.273Z"
+      ],
+      [
+        "initial-derived-targets",
+        "2026-11-12T03:07:19.165Z"
+      ],
+      [
+        "released-derived-targets",
+        "2026-11-12T03:08:19.603Z"
+      ],
+      [
+        "strict-read-waiting-for-consistent-history",
+        "2026-11-12T03:08:26.327Z"
+      ],
+      [
+        "recreated-within-same-bucket",
+        "2026-11-12T03:08:27.747Z"
+      ],
+      [
+        "full-process-exit",
+        "2026-11-12T03:09:12.166Z"
+      ],
+      [
+        "packaged-launch",
+        "2026-11-12T03:09:34.277Z"
+      ],
+      [
+        "explicit-left-history",
+        "2026-11-12T03:09:35.456Z"
+      ],
+      [
+        "explicit-left-history",
+        "2026-11-12T03:09:36.085Z"
+      ],
+      [
+        "full-process-exit",
+        "2026-11-12T03:09:43.927Z"
+      ]
+    ]
+  },
+  {
+    "attempt": "native-version",
+    "passed": false,
+    "failure_head": "AssertionError [ERR_ASSERTION]: duplicate successful fully-closed REST windows",
+    "source": "ef8f0e0fa6df299a823f4460b701eb1c3c98361f",
+    "steps": [
+      [
+        "packaged-launch",
+        "2026-11-12T03:07:02.476Z"
+      ],
+      [
+        "candidate-initial",
+        "2026-11-12T03:07:27.143Z"
+      ],
+      [
+        "baseline",
+        "2026-11-12T03:08:38.976Z"
+      ],
+      [
+        "candidate-restored",
+        "2026-11-12T03:09:37.825Z"
+      ],
+      [
+        "full-process-exit",
+        "2026-11-12T03:09:44.653Z"
+      ],
+      [
+        "physical-request-audit",
+        "2026-11-12T03:09:44.660Z"
+      ]
+    ]
+  },
+  {
+    "attempt": "native-version2",
+    "passed": false,
+    "failure_head": "AssertionError [ERR_ASSERTION]: candidate duplicates an already confirmed complete REST window",
+    "source": "94e98908248f8b864b307f3a50152f2382b63cf2",
+    "steps": [
+      [
+        "packaged-launch",
+        "2026-11-12T03:18:01.860Z"
+      ],
+      [
+        "candidate-initial",
+        "2026-11-12T03:18:26.257Z"
+      ],
+      [
+        "baseline",
+        "2026-11-12T03:19:08.511Z"
+      ],
+      [
+        "candidate-restored",
+        "2026-11-12T03:19:44.678Z"
+      ],
+      [
+        "full-process-exit",
+        "2026-11-12T03:19:48.542Z"
+      ],
+      [
+        "physical-request-audit",
+        "2026-11-12T03:19:48.547Z"
+      ]
+    ]
+  }
+]

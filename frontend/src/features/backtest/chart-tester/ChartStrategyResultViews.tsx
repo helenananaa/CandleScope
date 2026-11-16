@@ -1,3 +1,6 @@
+import { Button, Dialog, Disclosure, InlineAlert, buttonClassName } from "../../../components/ui/index.js";
+import { strategyResearchModeHref } from "../research/backtestResearchModes.js";
+import { researchStateLabel } from "../research/researchLabels.js";
 import { formatIntervalLabel } from "../../../utils/intervals.js";
 import { strategyTradeFocus, type StrategyTradeFocus } from "./strategyTradeReview.js";
 import { useControlCommands } from "../../app-control/useControlCommands.js";
@@ -76,20 +79,8 @@ export function TradeExplanationPopover({
   onClose(): void;
 }) {
   return (
-    <div className="chart-strategy-explain-backdrop" role="presentation" onMouseDown={onClose}>
-      <section
-        className="chart-strategy-explain-popover"
-        role="dialog"
-        aria-modal="true"
-        aria-label={t("chartTester.explain.title")}
-        data-testid="trade-explanation-popover"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <header>
-          <div><small>{t("chartTester.explain.eyebrow")}</small><strong>{selection.title}</strong></div>
-          <button type="button" onClick={onClose}>{t("chartTester.close")}</button>
-        </header>
-        <div className="chart-strategy-explain-scroll">
+    <Dialog open onClose={onClose} size="md" title={selection.title} description={t("chartTester.explain.eyebrow")}>
+      <div className="chart-strategy-explain" data-testid="trade-explanation-popover" aria-label={t("chartTester.explain.title")}>
           {selection.items.map(({ label, explanation }) => (
             <article key={`${selection.id}:${label}:${explanation.evidenceHash}`}>
               <div className="chart-strategy-explain-summary">
@@ -107,7 +98,7 @@ export function TradeExplanationPopover({
                   <dl className="chart-strategy-explain-facts">
                     <div><dt>{t("chartTester.explain.strategyReason")}</dt><dd>{explanation.reasonLabel ?? explanation.reasonCode ?? "—"}</dd></div>
                     <div><dt>{t("chartTester.explain.source")}</dt><dd>{explanation.source.line == null ? "—" : t("chartTester.explain.line", { line: explanation.source.line })}</dd></div>
-                    <div><dt>{t("chartTester.explain.hostResult")}</dt><dd>{explanation.execution.state}</dd></div>
+                    <div><dt>{t("chartTester.explain.hostResult")}</dt><dd>{researchStateLabel(explanation.execution.state)}</dd></div>
                     <div><dt>{t("chartTester.explain.hostReason")}</dt><dd>{explanation.execution.reasonCode ?? "—"}</dd></div>
                   </dl>
                   {explanation.conditions.length > 0 && (
@@ -122,7 +113,7 @@ export function TradeExplanationPopover({
                     </div>
                   )}
                   {Object.keys(explanation.variables).length > 0 && (
-                    <div className="chart-strategy-explain-block variables">
+                    <div className="chart-strategy-explain-block">
                       <strong>{t("chartTester.explain.variables")}</strong>
                       {Object.entries(explanation.variables).map(([name, value]) => (
                         <div key={name}><code>{name}</code><span>{explanationVariable(value)}</span></div>
@@ -131,20 +122,18 @@ export function TradeExplanationPopover({
                   )}
                 </>
               )}
-              <details className="chart-strategy-explain-technical">
-                <summary>{t("chartTester.explain.technical")}</summary>
+              <Disclosure className="chart-strategy-explain-technical" summary={t("chartTester.explain.technical")}>
                 <dl>
                   <div><dt>{t("chartTester.explain.decisionId")}</dt><dd>{explanation.decisionId}</dd></div>
                   <div><dt>{t("chartTester.explain.orderId")}</dt><dd>{explanation.orderId ?? "—"}</dd></div>
                   <div><dt>{t("chartTester.explain.fillId")}</dt><dd>{explanation.fillId ?? "—"}</dd></div>
                   <div><dt>{t("chartTester.explain.evidenceHash")}</dt><dd>{explanation.evidenceHash}</dd></div>
                 </dl>
-              </details>
+              </Disclosure>
             </article>
           ))}
-        </div>
-      </section>
-    </div>
+      </div>
+    </Dialog>
   );
 }
 
@@ -186,11 +175,11 @@ export function ChartStrategyResultContextBar({
       <span>{fidelityLabel(run.fidelity_mode)}</span>
       <span title={fee}>{fee}</span>
       {onOpenAdvanced ? (
-        <button type="button" className="chart-strategy-advanced-link" onClick={onOpenAdvanced}>
+        <Button size="sm" variant="ghost" onClick={onOpenAdvanced}>
           {t("chartTester.result.credibility")}
-        </button>
+        </Button>
       ) : (
-        <a href={`/backtest.html?run=${encodeURIComponent(run.run_id)}`}>
+        <a className={buttonClassName({ variant: "ghost", size: "sm" })} href={strategyResearchModeHref("precise", { run: run.run_id })}>
           {t("chartTester.result.credibility")}
         </a>
       )}
@@ -237,16 +226,11 @@ export function ChartStrategyResultOverview({
   const netPnlDelta = directComparison?.tradeDiff.netPnl?.delta ?? null;
   const maxDrawdownDelta = directComparison?.tradeDiff.maxDrawdown?.delta ?? null;
   const tradeCountDelta = directComparison?.tradeDiff.tradeCount?.delta ?? null;
-  const advancedHref = comparison?.baselineRunId
-    ? `/backtest.html?run=${encodeURIComponent(run.run_id)}&compare=${encodeURIComponent(comparison.baselineRunId)}`
-    : `/backtest.html?run=${encodeURIComponent(run.run_id)}`;
+  const advancedHref = strategyResearchModeHref("precise", { run: run.run_id, compare: comparison?.baselineRunId });
   return (
     <div className="chart-strategy-result-overview" data-testid="chart-strategy-result-overview">
       {stale && (
-        <div className="chart-strategy-stale-guidance">
-          <strong>{t("chartTester.result.staleGuidanceTitle")}</strong>
-          <span>{t("chartTester.result.staleGuidance")}</span>
-        </div>
+        <InlineAlert tone="warning" title={t("chartTester.result.staleGuidanceTitle")}>{t("chartTester.result.staleGuidance")}</InlineAlert>
       )}
       <div className="chart-strategy-result-metrics">
         <ResultMetric
@@ -285,8 +269,8 @@ export function ChartStrategyResultOverview({
                 : t("chartTester.compare.noBaseline")}</span>
             </div>
             {onOpenAdvanced
-              ? <button type="button" className="chart-strategy-advanced-link" onClick={onOpenAdvanced}>{t("chartTester.compare.full")}</button>
-              : <a href={advancedHref}>{t("chartTester.compare.full")}</a>}
+              ? <Button size="sm" variant="ghost" onClick={onOpenAdvanced}>{t("chartTester.compare.full")}</Button>
+              : <a className={buttonClassName({ variant: "ghost", size: "sm" })} href={advancedHref}>{t("chartTester.compare.full")}</a>}
           </div>
           {directComparison && (
             <div className="chart-strategy-run-comparison-grid">
@@ -322,13 +306,12 @@ export function ChartStrategyResultOverview({
           <span>{latest
             ? t("chartTester.result.latestTradeDetail")
             : t(report.metrics.rejected_order_count ? "chartTester.result.rejectedNoTrades" : "chartTester.result.zeroTradesDetail")}</span>
-          <button type="button" onClick={onOpenTrades} disabled={trades.length === 0}>
+          <Button size="sm" variant="ghost" onClick={onOpenTrades} disabled={trades.length === 0}>
             {t("chartTester.result.openTrades")}
-          </button>
+          </Button>
         </aside>
       </div>
-      <details className="chart-strategy-credibility-details">
-        <summary>{t("chartTester.result.credibilityDetails")}</summary>
+      <Disclosure className="chart-strategy-credibility-details" summary={t("chartTester.result.credibilityDetails")}>
         <dl>
           <div><dt>{t("chartTester.result.credibilityLevel")}</dt><dd>{credibility?.level ?? "—"}</dd></div>
           <div><dt>{t("chartTester.result.sampleRole")}</dt><dd>{credibility?.sample_role ?? report.identity?.sample_role ?? "—"}</dd></div>
@@ -336,9 +319,9 @@ export function ChartStrategyResultOverview({
           <div><dt>{t("chartTester.result.reportHash")}</dt><dd title={result.reportHash}>{result.reportHash.slice(0, 18)}…</dd></div>
         </dl>
         {onOpenAdvanced
-          ? <button type="button" className="chart-strategy-advanced-link" onClick={onOpenAdvanced}>{t("chartTester.openAdvanced")}</button>
-          : <a href={advancedHref}>{t("chartTester.openAdvanced")}</a>}
-      </details>
+          ? <Button size="sm" variant="ghost" onClick={onOpenAdvanced}>{t("chartTester.openAdvanced")}</Button>
+          : <a className={buttonClassName({ variant: "ghost", size: "sm" })} href={advancedHref}>{t("chartTester.openAdvanced")}</a>}
+      </Disclosure>
     </div>
   );
 }
@@ -414,9 +397,9 @@ export function ChartStrategyTradeList({
   return (
     <div className="chart-strategy-trades" data-testid="chart-strategy-trades" data-trade-count={trades.length}>
       <div className="strategy-trade-navigation" aria-label={t("strategyReview.navigation")}>
-        <button disabled={selectedIndex === 0} onClick={() => selectTrade(Math.max(0, selectedIndex - 1))}>{t("strategyReview.previous")}</button>
+        <Button size="sm" disabled={selectedIndex === 0} onClick={() => selectTrade(Math.max(0, selectedIndex - 1))}>{t("strategyReview.previous")}</Button>
         <span role="status">{selectedIndex < 0 ? t("strategyReview.select") : `${selectedIndex + 1} / ${trades.length}`}</span>
-        <button disabled={selectedIndex === trades.length - 1} onClick={() => selectTrade(selectedIndex + 1)}>{t("strategyReview.next")}</button>
+        <Button size="sm" disabled={selectedIndex === trades.length - 1} onClick={() => selectTrade(selectedIndex + 1)}>{t("strategyReview.next")}</Button>
       </div>
       <div className="chart-strategy-trade-head" aria-hidden="true">
         <span>{t("chartTester.result.trade")}</span><span>{t("chartTester.result.side")}</span>

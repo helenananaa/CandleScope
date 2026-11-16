@@ -9,8 +9,10 @@ export interface ExtensionState {
   errors: Record<string, string>;
   reloadRequired: boolean;
   running: RunningExtension[];
+  /** The registry says extensions are off for this launch (desktop recovery mode). */
+  safeMode: boolean;
 }
-let state: ExtensionState = { revision: 0, theme: null, layout: null, slots: new Map(), errors: {}, reloadRequired: false, running: [] };
+let state: ExtensionState = { revision: 0, theme: null, layout: null, slots: new Map(), errors: {}, reloadRequired: false, running: [], safeMode: false };
 export const getExtensionState = (): ExtensionState => state;
 export const subscribeExtensions = (listener: () => void): (() => void) => {
   listeners.add(listener);
@@ -53,11 +55,13 @@ export function applyExtensionTheme(theme: ExtensionState["theme"]): void {
   document.documentElement.dataset.extensionTheme = theme.base;
   const style = document.createElement("style");
   style.id = "candlescope-extension-theme";
-  style.textContent = `:root{${Object.entries(theme.tokens).map(([name, value]) => `--${name}:${value} !important;`).join("")}}
+  // The features layer keeps theme rules competing with feature CSS by specificity, as before layers.
+  style.textContent = `@layer features {
+    :root{${Object.entries(theme.tokens).map(([name, value]) => `--${name}:${value} !important;`).join("")}}
     :root[data-extension-theme] .app-layout button { border-radius:var(--radius-sm); }
     :root[data-extension-theme] :is(.plugin-center, .extension-manager) :is(button, select) { min-height:var(--control-height, 32px); }
     :root[data-extension-theme] :is(.pc-engines article, .extension-item, .extension-review) { border-radius:var(--radius-md); box-shadow:var(--panel-shadow, none); }
     :root[data-extension-theme] .extension-actions { gap:var(--panel-gap, 8px); }
-  `;
+  }`;
   document.head.append(style);
 }
