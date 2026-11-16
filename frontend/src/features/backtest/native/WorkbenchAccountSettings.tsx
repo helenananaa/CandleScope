@@ -27,7 +27,7 @@ export function WorkbenchAccountSettings(props: {
       </>}
     </div>
     {value.accountModel === "LINEAR_PERP_ONE_WAY_V2" && <>
-      <FileDrop key={props.inputKey} compact label={t("native.account.data")} hint={t("native.account.dataHelp")} accept="application/json,.json"
+      <FileDrop key={props.inputKey} compact label={t("native.account.data")} hint={t("native.account.dataHelp", { fields: "time_ms, role, payload", rules: "INSTRUMENT_RULES", markIndex: "MARK_INDEX", funding: "FUNDING" })} accept="application/json,.json"
         disabled={disabled} onFiles={([file]) => props.onFile(file ?? null)} />
       {props.data && <p role="status">{props.data.symbol} · {props.data.events.length} {t("native.account.events")}</p>}
       {(props.data || props.state !== "ready") && <Button size="sm" variant="ghost" className="strategy-settings-action" disabled={disabled} onClick={() => props.onFile(null)}>{t("native.account.clear")}</Button>}
