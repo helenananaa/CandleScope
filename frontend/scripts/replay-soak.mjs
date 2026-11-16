@@ -2948,10 +2948,10 @@ async function v2AccessibilityAudit(cdp, timeoutMs) {
 
   const endKeyboard = await keyboardActivateButton(cdp, { action: "end" }, timeoutMs);
   const dialog = await waitForValue(cdp, `(() => {
-    const item = document.querySelector('[role="dialog"][data-replay-focus-trap="active"]');
+    const item = document.querySelector('.replay-end-dialog[role="dialog"][aria-modal="true"]');
     const describedBy = item?.getAttribute("aria-describedby") || "";
     const active = document.activeElement;
-    return item instanceof HTMLElement && describedBy === "replay-end-description"
+    return item instanceof HTMLElement && describedBy !== "" && document.getElementById(describedBy) !== null
       && active instanceof HTMLElement && active.dataset.replayAction === "cancel-end"
       ? { describedBy, initialAction: active.dataset.replayAction }
       : null;
@@ -2964,9 +2964,11 @@ async function v2AccessibilityAudit(cdp, timeoutMs) {
     "danger dialog confirm tab stop",
   );
   await pressKey(cdp, "Tab");
+  // The kit dialog's close button comes first in its focus order, then the two selects.
   const wrapped = await waitForValue(
     cdp,
-    `document.activeElement instanceof HTMLSelectElement && document.activeElement.value === "expire"`,
+    `document.activeElement?.closest('.replay-end-dialog') !== null
+      && (document.activeElement?.hasAttribute("data-overlay-close") || document.activeElement instanceof HTMLSelectElement)`,
     timeoutMs,
     "danger dialog focus trap wrap",
   );
