@@ -21,8 +21,11 @@ from tests.test_shared_aggregation_blocks import assert_idle
 
 
 @pytest.mark.parametrize('mode', ['range', 'before'])
-def test_incomplete_mixed_request_keeps_committed_partial_target_history(mixed_query, mode):
+def test_incomplete_mixed_request_keeps_committed_partial_target_history(mixed_query, monkeypatch, mode):
     engine = mixed_query
+    # Keep the mixed-probe fallback's independent contract exercised even
+    # when a nonempty canonical page can now return without that probe.
+    monkeypatch.setattr(engine, '_closed_target_snapshot', lambda *a, **kw: None)
     width, count = 89 * MINUTE, 200
     opened = [*range(50), *range(180, count)]
     rows = [row(index * width, width) for index in opened]
@@ -87,6 +90,9 @@ def test_before_keeps_sparse_older_canonical_targets_without_expanding_repair_wi
 @pytest.mark.parametrize('mutation', ['target_delete', 'source_delete', 'amend'])
 def test_partial_target_read_is_fenced_again_after_mixed_probe(mixed_query, monkeypatch, mutation):
     engine = mixed_query
+    # Keep the mixed-probe fallback's independent contract exercised even
+    # when a nonempty canonical page can now return without that probe.
+    monkeypatch.setattr(engine, '_closed_target_snapshot', lambda *a, **kw: None)
     width, count = 89 * MINUTE, 200
     rows = [row(index * width, width) for index in range(180, count)]
     engine.storage.upsert_bars('BTCUSDT', '89m', rows,

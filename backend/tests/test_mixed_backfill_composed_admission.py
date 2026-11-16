@@ -94,6 +94,8 @@ def test_unsupported_composed_mode_never_enters_the_legacy_reader(composed_dm, m
 
 def test_planning_work_limit_retains_stored_partial_without_new_repair(composed_dm, monkeypatch):
     manager = composed_dm
+    # Exercise planning/budget fallback rather than the earlier canonical read.
+    monkeypatch.setattr(manager.query_engine, '_closed_target_snapshot', lambda *a, **kw: None)
     enough_count_to_reach_cover(manager)
     manager.query_engine.storage.upsert_bars('BTCUSDT', '10007m', [row(0, WIDTH)],
         source='backfill_aggregated', market_type='futures')
@@ -264,6 +266,8 @@ def test_required_composition_reuses_complete_fine_inputs_without_fetch(composed
 @pytest.mark.parametrize('explicit', [False, True])
 def test_obvious_local_coverage_shortage_skips_cover_planning_without_losing_partial(composed_dm, monkeypatch, partial_targets, explicit):
     manager = composed_dm
+    # Exercise planning/budget fallback rather than the earlier canonical read.
+    monkeypatch.setattr(manager.query_engine, '_closed_target_snapshot', lambda *a, **kw: None)
     if partial_targets:
         manager.query_engine.storage.upsert_bars('BTCUSDT', '10007m',
             [row(index * WIDTH, WIDTH) for index in range(128-partial_targets, 128)],
