@@ -1,28 +1,16 @@
-import { useEffect, useRef } from "react";
-import { formatUtcReplayStartInput, parseUtcReplayStartInput } from "../trainingHubModel.js";
+import { DateTimeInput } from "../../../components/ui/index.js";
 
-/** Preserve native date segments while an incomplete edit is not a valid UTC instant. */
+/**
+ * A replay start instant in UTC, written `2026-01-02 03:04` in every locale (the native control
+ * followed the browser's locale). While the text does not parse, onChange receives null and the
+ * typed text stays, so a partly typed year is not erased.
+ */
 export default function UtcReplayStartInput({ value, onChange, ...attributes }: {
   readonly value: number | null;
   readonly onChange: (value: number | null) => void;
   readonly disabled?: boolean;
   readonly "data-training-field"?: string;
 }) {
-  const input = useRef<HTMLInputElement>(null);
-  const published = useRef(value);
-  useEffect(() => {
-    // Apply external changes (preset, restored draft), but do not round-trip a
-    // locally typed intermediate year such as 0002 through the UTC validator.
-    if (value !== published.current && input.current !== null) {
-      input.current.value = formatUtcReplayStartInput(value);
-      published.current = value;
-    }
-  }, [value]);
-  return <input {...attributes} ref={input} type="datetime-local" step={60}
-    defaultValue={formatUtcReplayStartInput(value)}
-    onChange={(event) => {
-      const next = parseUtcReplayStartInput(event.currentTarget.value);
-      published.current = next;
-      onChange(next);
-    }} />;
+  // The field labels already say UTC; starts before 1970 are not valid replay instants.
+  return <DateTimeInput {...attributes} value={value} onChange={onChange} zoneLabel={false} earliest={0} />;
 }

@@ -65,14 +65,19 @@ export function Stat({ label, value, hint, tone = "neutral", className }: StatPr
 export interface DisclosureProps {
   summary: ReactNode;
   defaultOpen?: boolean;
+  /** Controlled: the disclosure is open while this is true; pair it with onToggle. */
+  open?: boolean;
+  onToggle?: (open: boolean) => void;
+  id?: string;
   className?: string;
   children: ReactNode;
 }
 
 /** Hides secondary detail (diagnostics, technical details) until asked for. */
-export function Disclosure({ summary, defaultOpen = false, className, children }: DisclosureProps) {
+export function Disclosure({ summary, defaultOpen = false, open, onToggle, id, className, children }: DisclosureProps) {
   return (
-    <details className={["ui-disclosure", className].filter(Boolean).join(" ")} open={defaultOpen || undefined}>
+    <details id={id} className={["ui-disclosure", className].filter(Boolean).join(" ")} open={(open ?? defaultOpen) || undefined}
+      onToggle={onToggle ? (event) => onToggle(event.currentTarget.open) : undefined}>
       <summary className="ui-disclosure-summary">
         <svg className="ui-disclosure-chevron" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
           <path d="M3 2l3 3-3 3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />

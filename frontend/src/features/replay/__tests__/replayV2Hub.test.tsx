@@ -1893,3 +1893,85 @@ test("account-mode changes replace the automatic catalog and abort stale respons
   assert.ok(accepted?.entries.length);
   assert.equal(lifecycle.getSnapshot().automaticPreparationAvailable, false);
 });
+
+function layoutRuntime(overrides: Partial<TrainingHubRuntime> = {}): TrainingHubRuntime {
+  const catalog = blindCatalog();
+  const draft = createTrainingRunDraft(catalog);
+  const capabilities = parseReplayCapabilities(enabledCapabilities());
+  return {
+    phase: "READY",
+    items: parseTrainingRunListResponse(listResponse([
+      runCard(),
+      runCard({ run_id: "run-2", name: "ETH 待选", state: "AWAITING_MARKET", last_symbol: null, adapter_session_id: null,
+        resume_action: "SELECT_MARKET", time_disclosure_policy: "HIDE_YEAR" }),
+    ])).items,
+    nextCursor: null,
+    filters: { state: null, sourceKind: null, compatibility: null },
+    operation: null,
+    error: null,
+    createOpen: false,
+    capabilities,
+    catalog,
+    draft,
+    evaluation: evaluateTrainingRunDraft(draft, capabilities, catalog),
+    segmentPlan: parseReplaySegmentPreparePlan(segmentPlanResponse()),
+    storageOpen: false,
+    storageInventory: null,
+    storagePlan: null,
+    storagePlanConfirmed: false,
+    storageResult: null,
+    actions: {
+      refresh() {}, loadNext() {}, setFilters() {}, openCreate() {}, closeCreate() {}, openStorage() {}, closeStorage() {},
+      refreshStorage() {}, planStorageGc() {}, confirmStoragePlan() {}, runStorageGc() {}, rehydrateStorageObject() {},
+      setDraft() {}, refreshCreatePlan() {}, createRun() {}, deleteRun() {}, continueRun() {},
+    },
+    ...overrides,
+  } satisfies TrainingHubRuntime;
+}
+
+test("the hub lists runs as rows with a state badge and one line of details, filtered by a segmented control", () => {
+  const html = renderToStaticMarkup(<TrainingHubDialog runtime={layoutRuntime()} />);
+  assert.match(html, /role="radiogroup" aria-label="快捷状态"/);
+  assert.match(html, /<button[^>]*role="radio" aria-checked="true"[^>]*data-value="all">全部<\/button>/);
+  assert.equal((html.match(/<article class="training-hub-card"/g) ?? []).length, 2);
+  assert.match(html, /<span class="ui-badge"[^>]*data-tone="warning"[^>]*>待选商品<\/span>/);
+  assert.match(html, /隐藏年份/, "a non-default time disclosure is shown");
+  assert.doesNotMatch(html, /显示历史时间/, "the default time disclosure is not repeated on every row");
+  assert.doesNotMatch(html, /training-hub-card-meta|training-hub-stats|<dl/, "no tile grid per run and no counts strip");
+  assert.match(html, /<button[^>]*class="ui-btn ui-btn-ghost ui-btn-sm training-hub-delete-action"/);
+});
+
+test("a filter that matches nothing offers to clear it instead of the first-run empty state", () => {
+  const html = renderToStaticMarkup(<TrainingHubDialog runtime={layoutRuntime({
+    items: [],
+    filters: { state: "ENDED", sourceKind: null, compatibility: null },
+  })} />);
+  assert.match(html, /没有符合当前筛选的训练/);
+  assert.match(html, /清除筛选/);
+  assert.doesNotMatch(html, /新建第一条训练/);
+});
+
+test("the create form is a kit dialog: choices are segmented controls without internal codes, dates are UTC text", () => {
+  const runtime = layoutRuntime({ createOpen: true });
+  const html = renderToStaticMarkup(<TrainingHubDialog runtime={runtime} />);
+  assert.match(html, /<section role="dialog" aria-modal="true" aria-labelledby="[^"]+"[^>]*class="ui-dialog ui-dialog-lg training-hub-create"/);
+  for (const label of ["历史源", "开始方式", "完整性模式"]) {
+    assert.match(html, new RegExp(`<span class="ui-field-label">${label}</span><div role="radiogroup" aria-label="${label}"`));
+  }
+  assert.doesNotMatch(html, /<small>(BAR|AGG_TRADE|RANDOM|MANUAL|CHALLENGE|PRACTICE|SANDBOX)<\/small>/);
+  assert.doesNotMatch(html, /training-hub-create-steps|type="datetime-local"[^>]*data-training-field/);
+  assert.match(html, /<details id="training-hub-create-advanced" class="ui-disclosure training-hub-advanced"/);
+  const manual = renderToStaticMarkup(<TrainingHubDialog runtime={{ ...runtime,
+    draft: { ...runtime.draft!, startMode: "MANUAL", requestedStartMs: Date.UTC(2024, 2, 9, 16, 0) } }} />);
+  assert.match(manual, /data-training-field="requested-start-utc"[^>]*value="2024-03-09 16:00"|value="2024-03-09 16:00"[^>]*data-training-field="requested-start-utc"/);
+});
+
+test("archive deletion is the kit confirm dialog with a danger action", () => {
+  const card = parseTrainingRunListResponse(listResponse()).items[0];
+  assert.ok(card);
+  const html = renderToStaticMarkup(
+    <TrainingRunDeleteConfirmation card={card} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
+  );
+  assert.match(html, /<section role="alertdialog"[^>]*class="ui-dialog ui-dialog-sm"/);
+  assert.match(html, /<button[^>]*class="ui-btn ui-btn-danger[^"]*"[^>]*>确认永久删除<\/button>/);
+});

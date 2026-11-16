@@ -834,8 +834,8 @@ export async function configureFormalV2TrainingPlan(cdp, plan, timeoutMs) {
     assert(configured?.configured === true, `formal HEDGE control unavailable: ${value}`, configured);
     await waitForValue(cdp, `([...document.querySelectorAll('select')].some(select => select.value === ${JSON.stringify(value)}))`, timeoutMs, `HEDGE ${value} selection`);
   }
-  // datetime-local normalizes a zero-seconds value to the shortest valid form.
-  const requestedStartValue = new Date(plan.requestedStartMs).toISOString().slice(0, 16);
+  // The start field takes UTC text written "YYYY-MM-DD HH:mm".
+  const requestedStartValue = new Date(plan.requestedStartMs).toISOString().slice(0, 16).replace("T", " ");
   const start = await evaluate(cdp, `(() => {
     const input = document.querySelector('[data-training-field="requested-start-utc"]');
     if (!(input instanceof HTMLInputElement)) return { configured: false, reason: "requested-start-control-missing" };

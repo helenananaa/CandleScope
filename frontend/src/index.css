@@ -14,7 +14,6 @@
 @import "./features/plugins/pluginCenter.css" layer(features);
 @import "./features/extensions/extensions.css" layer(features);
 @import "./app/appShell.css" layer(features);
-@import "./features/replay/trainingHub.css" layer(features);
 @import "./app/marketRail.css" layer(features);
 @import "./features/watchlist/watchlist.css" layer(features);
 @import "./features/order-book/orderBook.css" layer(features);
@@ -40,7 +39,7 @@
 @import "./features/advanced-market-data/advancedMarketPaneLabels.css" layer(features);
 @import "./components/chartPaneOverlays.css" layer(features);
 @import "./features/replay/replayPanels.css" layer(features);
-@import "./features/replay/trainingHubPage.css" layer(features);
+@import "./features/replay/trainingHub.css" layer(features);
 @import "./features/replay/trainingHubMarketPicker.css" layer(features);
 @import "./features/order-book/orderBookControls.css" layer(features);
 @import "./features/chart-workspace/workspaceMembers.css" layer(features);

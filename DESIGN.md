@@ -80,7 +80,7 @@ Build surfaces from the primitives in `frontend/src/components/ui` (import from 
 |---|---|
 | An action | `Button`: `primary` for the one main action in a view, `secondary` (default), `ghost` for low emphasis, `danger` for destructive actions; `size="sm"` in dense panels. `IconButton` when there is no room for text; it always has a label. |
 | A toolbar pill or picker | `.ui-control` (with `.is-active` or `aria-expanded`) |
-| Text, number, choice or time input | `Field` around `Input`, `Select`, `Textarea` or `DateTimeInput`. `DateTimeInput` writes times as `2026-01-02 09:30` in every locale (the browser's own control follows the browser's language, not the app's), opens the browser's calendar from its button, and always shows its zone, UTC by default. Pass `zoneLabel={false}` only when the field's label already names the zone. |
+| Text, number, choice or time input | `Field` around `Input`, `Select`, `Textarea` or `DateTimeInput`. `DateTimeInput` writes times as `2026-01-02 09:30` in every locale (the browser's own control follows the browser's language, not the app's), opens the browser's calendar from its button, and always shows its zone, UTC by default. Pass `zoneLabel={false}` only when the field's label already names the zone, and `earliest` when instants before a bound are not valid (they count as unfinished text, so a half-typed year is kept). |
 | On/off | `Switch` for settings that apply at once; `Checkbox` in forms that are submitted |
 | One of two to five options | `SegmentedControl`. A label too long for its share wraps (hyphenated where the language allows) instead of running under the next option. |
 | Switching views | `Tabs` with `TabPanel` |
@@ -170,6 +170,8 @@ Symbol search and Export set the pattern for a dialog that filters a list or con
 - **Choices that need a sentence each** (export scope, format) are a `SegmentedControl` with the chosen option's description under it, not a card per option.
 - **One fact, one place.** Show the output's name once (under the field that shapes it) and the preview's status and details on one line, not as tiles.
 - **Dialogs that are wider than the kit sizes** keep the kit `Dialog` (title, close, footer, Escape) and set their width in their own class.
+- **A long form in a dialog** (replay's 新建训练) uses the drawer pattern: numbered sections without cards, options folded into a `Disclosure`, and a summary column beside the form; the primary action stays in the dialog's footer.
+- **A filter that matches nothing** says so and offers to clear it; the first-run empty state ("create your first …") is only for an empty list with no filter.
 - **Keys typed in a dialog stay in it**: stop propagation in its `onKeyDown`, except Escape, which the overlay stack needs.
 
 ## Stylesheets and cascade layers
