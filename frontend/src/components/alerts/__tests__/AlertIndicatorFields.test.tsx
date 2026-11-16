@@ -41,7 +41,7 @@ test("indicator parameters retain the selected calculation values in kit control
     <AlertIndicatorParamFields value="ind:RSI:rsi:period=7,source=hl2" onChange={() => undefined} />
   </AlertIndicatorCatalogContext.Provider>);
   assert.match(html, /class="alert-field-grid"/);
-  assert.match(html, /class="ui-input[^\"]*"/);
+  assert.match(html, /class="ui-input[^"]*"/);
   assert.match(html, /value="7"/);
   assert.match(html, /<option value="hl2" selected=""/);
   assert.doesNotMatch(html, /alert-condition-grid|alert-field compact/);
