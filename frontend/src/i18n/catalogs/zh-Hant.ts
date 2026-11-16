@@ -3994,7 +3994,6 @@ export const zhHant = {
   "chartTester.run": "執行",
   "chartTester.close": "關閉",
   "chartTester.language.pine": "Pine",
-  "chartTester.startEyebrow": "開始一個圖表腳本快測",
   "chartTester.startTitle": "選擇一種開始方式",
   "chartTester.startLead": "腳本將綁定當前 {symbol} · {interval} 圖表；選擇後才載入編輯器。",
   "chartTester.openAdvanced": "在高階研究中開啟",

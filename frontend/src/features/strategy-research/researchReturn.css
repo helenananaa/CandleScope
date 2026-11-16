@@ -1,8 +1,0 @@
-@layer features {
-.research-return-dialog { width: min(38rem, calc(100vw - 3rem)); border: 1px solid var(--border-strong); border-radius: 10px; padding: 1.4rem; color: var(--text-primary); background: var(--surface-2); }
-.research-return-dialog::backdrop { background: var(--backdrop); }
-.research-return-dialog label { display: grid; gap: .4rem; margin: .9rem 0; }
-.research-return-dialog select { width: 100%; padding: .5rem; }
-.research-return-dialog footer { display: flex; justify-content: flex-end; gap: .7rem; margin-top: 1.2rem; }
-.research-return-dialog p { overflow-wrap: anywhere; line-height: 1.5; }
-}

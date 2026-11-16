@@ -3981,7 +3981,6 @@ export const th = {
   "chartTester.run": "รัน",
   "chartTester.close": "ปิด",
   "chartTester.language.pine": "Pine",
-  "chartTester.startEyebrow": "START A QUICK CHART TEST",
   "chartTester.startTitle": "เลือกวิธีเริ่ม",
   "chartTester.startLead": "สคริปต์จะแนบกับ {symbol} · {interval} ตัวแก้ไขโหลดหลังคุณเลือก",
   "chartTester.openAdvanced": "เปิดในงานวิจัยขั้นสูง",

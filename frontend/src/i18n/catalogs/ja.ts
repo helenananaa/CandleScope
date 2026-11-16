@@ -4325,7 +4325,6 @@ export const ja = {
   "chartTester.run": "実行",
   "chartTester.close": "閉じる",
   "chartTester.language.pine": "Pine",
-  "chartTester.startEyebrow": "チャートスクリプトの簡易テストを開始",
   "chartTester.startTitle": "開始方法を選ぶ",
   "chartTester.startLead": "スクリプトは現在の {symbol} · {interval} チャートにアタッチします。選択後にエディタを読み込みます。",
   "chartTester.openAdvanced": "高度な研究で開く",

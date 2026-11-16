@@ -3981,7 +3981,6 @@ export const nl = {
   "chartTester.run": "Uitvoeren",
   "chartTester.close": "Sluiten",
   "chartTester.language.pine": "Pine",
-  "chartTester.startEyebrow": "START EEN SNELLE GRAFIEKTEST",
   "chartTester.startTitle": "Kies hoe je wilt beginnen",
   "chartTester.startLead": "Het script wordt gekoppeld aan {symbol} · {interval}; de editor laadt na je keuze.",
   "chartTester.openAdvanced": "Openen in Geavanceerd onderzoek",

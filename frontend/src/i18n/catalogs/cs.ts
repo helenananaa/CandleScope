@@ -3981,7 +3981,6 @@ export const cs = {
   "chartTester.run": "Spustit",
   "chartTester.close": "Zavřít",
   "chartTester.language.pine": "Pine",
-  "chartTester.startEyebrow": "ZAČÍT RYCHLÝ TEST GRAFU",
   "chartTester.startTitle": "Zvolte, jak začít",
   "chartTester.startLead": "Skript se připojí k {symbol} · {interval}; editor se načte po vaší volbě.",
   "chartTester.openAdvanced": "Otevřít v pokročilém výzkumu",

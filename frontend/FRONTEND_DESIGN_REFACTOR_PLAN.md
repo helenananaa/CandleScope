@@ -400,6 +400,7 @@ Still outside the stack, and moved when each is rebuilt:
 | 5g3 | The research tools (精确成交验证, 参数稳健性, Python / 模型, 多市场比较, 交易回放复盘) on the kit |
 | 5g4 | The strategy page: script panel, results, run history, first open |
 | 5g5 | Local data library and CSV import |
+| 5g6 | The strategy tester shared by the market page and the strategy page: language and Python permission, parameters and conditions editors, result context, overview and trade list, the native Pine panel and report |
 | 5h | Data workbench |
 | 5i | Order book, trade flow and account docks; panel toggles and Settings on `IconButton` |
 
@@ -499,6 +500,12 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - The five research tools are on the kit: a segmented chart-source switch, panels as sections with a plain heading and the object in mono, kit fields and buttons (the creating step primary), run and study rows with state badges, raw JSON behind closed 技术详情 disclosures, results as kit stats and tabs (概览, 交易, 信号轨迹, 对比, 数据质量), the Python studio and the status page on kit pieces.
 - `backtest.css` (983 lines, only loaded by `backtest.html`, styling the retired workbench) is deleted with the unused `BacktestResultChart`; `backtestResearch.css` is rewritten on tokens. The quick test's external model form moved onto the kit with them.
 - Left for Phase 6: the tools' internal terms (`BAR_APPROX`, "Study V2", "Phase 11", "runtime receipt", the status bar's "独立研究 runtime"), epoch-millisecond times; the JSON drafts stay text areas.
+
+**Phase 5g4 is done (branch `design/phase-5g4-strategy-page`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_5G4.md`](../docs/FRONTEND_DESIGN_QA_PHASE_5G4.md). Row 5g6 was added when it started: the strategy tester's pieces are shared with the market page, so they are restyled once for both.
+
+- The strategy page's own pieces are on the kit: first open (template cards, the two ways to start as buttons), the engine switch as a segmented control, the script panel (recent scripts select, tabs, primary 运行), batch sources and the external model as disclosures, results with kit tabs and badges, run history and saved accounts as kit drawers with state badges and a kit comparison picker, and the result replay's controls, stats, notes and traces.
+- The dialog that hands a research run back to a market chart is the kit dialog (it rendered unstyled before); `researchReturn.css` is deleted. `strategyResearch.css` is rewritten on tokens for the page, with the library and import rules left for 5g5; its element rules skip kit segments, tabs and link-buttons.
+- Left: the shared strategy tester (5g6), imported data's interval strip and event markers (5g5), copy such as run states as codes (Phase 6).
 
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 

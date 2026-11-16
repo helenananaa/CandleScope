@@ -3981,7 +3981,6 @@ export const de = {
   "chartTester.run": "Ausführen",
   "chartTester.close": "Schließen",
   "chartTester.language.pine": "Pine",
-  "chartTester.startEyebrow": "SCHNELLEN CHART-TEST STARTEN",
   "chartTester.startTitle": "Startweise wählen",
   "chartTester.startLead": "Das Skript wird an {symbol} · {interval} angehängt; der Editor lädt nach Ihrer Wahl.",
   "chartTester.openAdvanced": "In erweiterter Forschung öffnen",

@@ -4589,7 +4589,6 @@ export const zhCN = {
   "chartTester.run": "运行",
   "chartTester.close": "关闭",
   "chartTester.language.pine": "Pine",
-  "chartTester.startEyebrow": "开始一个图表脚本快测",
   "chartTester.startTitle": "选择一种开始方式",
   "chartTester.startLead": "使用当前 {symbol} · {interval} 图表，选择策略后即可编辑并运行。",
   "chartTester.openAdvanced": "在高级研究中打开",

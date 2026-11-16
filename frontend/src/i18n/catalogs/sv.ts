@@ -3981,7 +3981,6 @@ export const sv = {
   "chartTester.run": "Kör",
   "chartTester.close": "Stäng",
   "chartTester.language.pine": "Pine",
-  "chartTester.startEyebrow": "STARTA ETT SNABBT DIAGRAMTEST",
   "chartTester.startTitle": "Välj hur du vill starta",
   "chartTester.startLead": "Skriptet kopplas till {symbol} · {interval}; redigeraren laddas efter ditt val.",
   "chartTester.openAdvanced": "Öppna i Avancerad research",
