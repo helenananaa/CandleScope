@@ -21,6 +21,7 @@ export const HOOK_CLASSES = new Set([
   "indicator-editor-console", // frontendScript browser test reads script output
   "indicator-editor-run", // frontendScript browser test runs the script
   "replay-public-time", // replay workspace test reads the public clock
+  "pc-navigation", // scripts/trusted-extensions-desktop-smoke.mjs finds the plugin center's tabs
 ]);
 
 function walk(dir) {

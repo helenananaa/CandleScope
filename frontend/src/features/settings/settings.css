@@ -1,10 +1,5 @@
-export type SettingsModalStylesProps = Record<string, never>;
-
-export default function SettingsModalStyles(props: SettingsModalStylesProps) {
-  void props;
-  return (
-    <style>{`
-@layer features {
+/* Settings dialog (and the appearance-only page Settings). Loaded with the global stylesheet,
+ * last in the features layer, where the dialog's injected <style> used to sit. */
 
 /* ═══════════════════════════════════════════════════════════
    Settings Panel — Full-page sidebar + content layout
@@ -48,8 +43,8 @@ export default function SettingsModalStyles(props: SettingsModalStylesProps) {
 
 .st-panel {
   display: flex;
-  width: min(960px, 92vw);
-  height: min(680px, 88vh);
+  width: min(1080px, 94vw);
+  height: min(760px, 90vh);
   background: var(--bg-secondary);
   color: var(--text-primary);
   border: 1px solid var(--border-color);
@@ -138,10 +133,6 @@ export default function SettingsModalStyles(props: SettingsModalStylesProps) {
   color: var(--text-secondary);
 }
 
-.st-sidebar-footer {
-  padding: 12px;
-  border-top: 1px solid var(--border-color);
-}
 
 /* ── Content area ───────────────────────────────────────── */
 .st-content {
@@ -170,20 +161,6 @@ export default function SettingsModalStyles(props: SettingsModalStylesProps) {
   gap: 8px;
 }
 
-.st-close-x {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 18px;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: var(--radius-control);
-  transition: all 0.15s;
-}
-.st-close-x:hover {
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
-  color: var(--text-primary);
-}
 
 .st-content-body {
   flex: 1;
@@ -366,7 +343,8 @@ html[lang="ru"] .st-preset-btn {
   border-radius: var(--radius-sm);
 }
 
-input[type="color"] {
+/* Scoped to Settings: this rule used to apply only while the dialog was open. */
+:where(.st-panel) input[type="color"] {
   border: none;
   width: 32px;
   height: 32px;
@@ -479,9 +457,6 @@ input[type="color"] {
   margin-top: 14px;
 }
 
-.st-content-body section > a.ui-btn:first-child {
-  margin-bottom: 16px;
-}
 
 /* ── Preset cards (storage strategy) ────────────────────── */
 .st-preset-cards {
@@ -1618,10 +1593,6 @@ input[type="color"] {
     display: none;
   }
 
-  .st-sidebar-footer {
-    display: none;
-  }
-
   .st-content-body {
     padding: 16px;
   }
@@ -2358,7 +2329,171 @@ input[type="color"] {
   flex: 1;
   text-align: right;
 }
+
+/* ── Phase 5a: frame pieces and kit layouts ─────────────── */
+
+/* Unsaved proxy edits: a dot on 网络连接. */
+.st-nav-dirty {
+  width: 7px;
+  height: 7px;
+  margin-inline-start: auto;
+  border-radius: 50%;
+  background: var(--text-warning);
+  flex-shrink: 0;
 }
-`}</style>
-  );
+
+/* Form footer: its buttons, then a quiet state note. */
+.st-form-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.st-form-actions > .ui-field {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.st-unsaved {
+  color: var(--text-warning);
+  font-size: var(--font-size-sm);
+}
+
+/* A label and a value on one row. */
+.st-kv {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 16px;
+  margin: 12px 0 0;
+  font-size: var(--font-size-sm);
+}
+.st-kv dt {
+  color: var(--text-secondary);
+}
+.st-kv dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.st-kv code,
+.st-plain-list code {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--text-primary);
+}
+
+.st-proxy > .ui-alert,
+.st-proxy > .ui-field {
+  margin-top: 12px;
+}
+.st-proxy-route {
+  display: grid;
+  gap: 12px;
+}
+.st-proxy-route legend {
+  padding: 0 4px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+.st-proxy-route-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.st-proxy-route-actions .ui-check {
+  margin-inline-end: auto;
+}
+.st-proxy-status {
+  display: grid;
+  gap: 2px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  overflow-wrap: anywhere;
+}
+.st-proxy-results {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* Settings → 数据管理. */
+.st-data {
+  display: grid;
+  gap: 20px;
+}
+.st-data-panel:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+.st-launch-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+.st-launch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+}
+.st-launch-row + .st-launch-row {
+  border-top: 1px solid var(--border-subtle);
+}
+.st-launch-text {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.st-launch-text strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-primary);
+  font-size: var(--font-size-md);
+  font-weight: 600;
+}
+.st-launch-text span:not(.ui-badge) {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+.st-launch-row > .ui-btn {
+  flex-shrink: 0;
+}
+
+/* Settings → AI MCP (desktop app). */
+.st-ai {
+  display: grid;
+  gap: 8px;
+}
+.st-ai .st-group {
+  display: grid;
+  gap: 12px;
+}
+.st-ai .st-form-actions {
+  margin-top: 0;
+}
+.st-code {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+}
+.st-plain-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-inline-start: 18px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+.st-nav-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.st-ai-status {
+  display: flex;
 }

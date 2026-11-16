@@ -49,8 +49,27 @@ export interface ProxySaveMessage {
   text: string;
 }
 
+/** The proxy settings the backend has saved, or the ones being edited. */
+export interface ProxyConfig {
+  mode: ProxyMode;
+  customProxy: string;
+  routes: ProxyRouteConfig[];
+  strategy: "failover" | "balanced";
+}
+
+/** Whether the edited proxy settings differ from the saved ones (false until they have loaded). */
+export function proxyConfigChanged(saved: ProxyConfig | null, current: ProxyConfig): boolean {
+  if (!saved) return false;
+  return saved.mode !== current.mode
+    || saved.customProxy.trim() !== current.customProxy.trim()
+    || saved.strategy !== current.strategy
+    || JSON.stringify(saved.routes) !== JSON.stringify(current.routes);
+}
+
 export interface ProxySettingsRuntime extends Record<string, unknown> {
   proxyMode: ProxyMode;
+  /** Edits that 保存 has not sent yet. */
+  proxyDirty: boolean;
   customProxy: string;
   systemProxy: string;
   effectiveProxy: string;
@@ -99,6 +118,7 @@ export function useProxySettingsRuntime({ isOpen }: { isOpen: boolean }): ProxyS
   const [proxySavedRoutes, setProxySavedRoutes] = useState<ProxyRouteConfig[]>([]);
   const [proxyStrategy, setProxyStrategy] = useState<"failover" | "balanced">("failover");
   const [proxyPoolStatus, setProxyPoolStatus] = useState<ProxyPoolStatus | null>(null);
+  const [savedConfig, setSavedConfig] = useState<ProxyConfig | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -112,9 +132,11 @@ export function useProxySettingsRuntime({ isOpen }: { isOpen: boolean }): ProxyS
         setSystemProxy(stringField(record, "system_proxy"));
         setEffectiveProxy(stringField(record, "effective_proxy"));
         const routes = Array.isArray(record.routes) ? record.routes as ProxyRouteConfig[] : [];
+        const strategy = record.strategy === "balanced" ? "balanced" : "failover";
         setProxyRoutes(routes);
         setProxySavedRoutes(routes);
-        setProxyStrategy(record.strategy === "balanced" ? "balanced" : "failover");
+        setProxyStrategy(strategy);
+        setSavedConfig({ mode: proxyModeField(record), customProxy: stringField(record, "custom_proxy"), routes, strategy });
       })
       .catch(() => {});
   }, [isOpen]);
@@ -163,6 +185,7 @@ export function useProxySettingsRuntime({ isOpen }: { isOpen: boolean }): ProxyS
       const savedRoutes = Array.isArray(record.routes) ? record.routes as ProxyRouteConfig[] : proxyRoutes;
       setProxyRoutes(savedRoutes);
       setProxySavedRoutes(savedRoutes);
+      setSavedConfig({ mode: proxyMode, customProxy, routes: savedRoutes, strategy: proxyStrategy });
       setProxyPoolStatus(null);
       setProxySaveMsg({ ok: true, text: t("settings.proxy.saved") });
     } catch (err: unknown) {
@@ -192,8 +215,11 @@ export function useProxySettingsRuntime({ isOpen }: { isOpen: boolean }): ProxyS
     }
   }, [proxyMode, customProxy, proxyRoutes, proxyStrategy]);
 
+  const proxyDirty = proxyConfigChanged(savedConfig, { mode: proxyMode, customProxy, routes: proxyRoutes, strategy: proxyStrategy });
+
   return {
     proxyMode,
+    proxyDirty,
     customProxy,
     systemProxy,
     effectiveProxy,

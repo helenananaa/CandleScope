@@ -48,37 +48,37 @@ const sampleViews: MarketRailViewDescriptor[] = [
 test("settings category labels follow the active locale", () => {
   withLocale("zh-CN", () => {
     assert.equal(t(SETTINGS_CATEGORIES[0].labelKey), "外观显示");
-    assert.equal(t("settings.saveAndClose"), "保存并关闭");
+    assert.equal(t("settings.close"), "关闭设置");
   });
   withLocale("en", () => {
     assert.equal(t(SETTINGS_CATEGORIES[0].labelKey), "Appearance");
-    assert.equal(t("settings.saveAndClose"), "Save and close");
+    assert.equal(t("settings.close"), "Close settings");
   });
   withLocale("fr", () => {
     assert.equal(t(SETTINGS_CATEGORIES[0].labelKey), "Apparence");
-    assert.equal(t("settings.saveAndClose"), "Enregistrer et fermer");
+    assert.equal(t("settings.close"), "Fermer les paramètres");
   });
   withLocale("ja", () => {
     assert.equal(t(SETTINGS_CATEGORIES[0].labelKey), "外観");
-    assert.equal(t("settings.saveAndClose"), "保存して閉じる");
+    assert.equal(t("settings.close"), "設定を閉じる");
     assert.equal(t("settings.language.title"), "表示言語");
   });
   withLocale("ko", () => {
     assert.match(t(SETTINGS_CATEGORIES[0].labelKey), /\p{Script=Hangul}/u);
-    assert.match(t("settings.saveAndClose"), /\p{Script=Hangul}/u);
-    assert.notEqual(t("settings.saveAndClose"), "Save and close");
-    assert.notEqual(t("settings.saveAndClose"), "保存并关闭");
+    assert.match(t("settings.close"), /\p{Script=Hangul}/u);
+    assert.notEqual(t("settings.close"), "Close settings");
+    assert.notEqual(t("settings.close"), "关闭设置");
   });
   withLocale("pt-BR", () => {
     assert.equal(t(SETTINGS_CATEGORIES[0].labelKey), "Aparência");
-    assert.equal(t("settings.saveAndClose"), "Salvar e fechar");
-    assert.doesNotMatch(t("settings.saveAndClose"), /ecrã|ficheiro|utilizador|percentagem/);
+    assert.equal(t("settings.close"), "Fechar configurações");
+    assert.doesNotMatch(t("settings.close"), /ecrã|ficheiro|utilizador|percentagem/);
   });
   withLocale("ru", () => {
     assert.match(t(SETTINGS_CATEGORIES[0].labelKey), /\p{Script=Cyrillic}/u);
     assert.doesNotMatch(t(SETTINGS_CATEGORIES[0].labelKey), /\p{Script=Han}/u);
-    assert.match(t("settings.saveAndClose"), /\p{Script=Cyrillic}/u);
-    assert.doesNotMatch(t("settings.saveAndClose"), /\p{Script=Han}/u);
+    assert.match(t("settings.close"), /\p{Script=Cyrillic}/u);
+    assert.doesNotMatch(t("settings.close"), /\p{Script=Han}/u);
   });
 });
 
@@ -412,7 +412,7 @@ test("Russian layout CSS keeps long chrome wrapping and a Cyrillic-capable font 
   const manifest = fs.readFileSync(new URL("../../index.css", import.meta.url), "utf8");
   const css = readAppStyles();
   const settingsCss = fs.readFileSync(
-    new URL("../../features/settings/SettingsModalStyles.tsx", import.meta.url),
+    new URL("../../features/settings/settings.css", import.meta.url),
     "utf8",
   );
   const tokens = fs.readFileSync(new URL("../../styles/tokens.css", import.meta.url), "utf8");

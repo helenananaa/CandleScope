@@ -201,7 +201,7 @@ test("t interpolates and switches with the locale store", () => {
     assert.equal(t("shell.replay"), "Relecture");
     assert.notEqual(t("shell.replay"), en["shell.replay"]);
     assert.equal(t("status.connectedTo", { exchange: "Binance" }), "Connecté à Binance");
-    assert.equal(t("settings.saveAndClose"), "Enregistrer et fermer");
+    assert.equal(t("settings.close"), "Fermer les paramètres");
     assert.equal(t("rail.watchlist"), "Liste de suivi");
     assert.equal(t("orderBook.title"), "Carnet d’\u2060ordres");
     assert.match(t("settings.language.title"), /Langue/);
@@ -479,7 +479,7 @@ test("pt-BR host chrome uses Brazilian trading copy rather than English clones o
   withLocale("pt-BR", () => {
     assert.equal(t("shell.replay"), "Replay");
     assert.equal(t("orderBook.title"), "Livro de ofertas");
-    assert.equal(t("settings.saveAndClose"), "Salvar e fechar");
+    assert.equal(t("settings.close"), "Fechar configurações");
     assert.equal(t("settings.language.title"), "Idioma da interface");
     assert.equal(t("status.connectedTo", { exchange: "Binance" }), "Conectado a Binance");
     assert.equal(t("settings.exchange.channel.fundingRate"), "Taxa de financiamento");
