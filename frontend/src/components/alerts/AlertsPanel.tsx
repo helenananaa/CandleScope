@@ -1,3 +1,4 @@
+import { Button } from "../ui/Button.js";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { useControlCommands } from "../../features/app-control/useControlCommands.js";
 import { command } from "../../features/app-control/commandRegistry.js";
@@ -461,8 +462,8 @@ function LogicGroupEditor({ node, onAction, depth = 0, path, canDelete = false }
       ))}
 
       <div className="alert-logic-footer">
-        <button className="alert-btn alert-btn-secondary" type="button" onClick={() => onAction({ type: "add-condition", nodeId: node.id })}>{t("alert.addCondition")}</button>
-        <button className="alert-btn alert-btn-secondary" type="button" onClick={() => onAction({ type: "add-group", nodeId: node.id })}>{t("alert.addGroup")}</button>
+        <Button onClick={() => onAction({ type: "add-condition", nodeId: node.id })}>{t("alert.addCondition")}</Button>
+        <Button onClick={() => onAction({ type: "add-group", nodeId: node.id })}>{t("alert.addGroup")}</Button>
       </div>
     </div>
   );
@@ -485,7 +486,7 @@ function NestedLogicBuilder({ expression, onAction }: NestedLogicBuilderProps) {
       <div className="alert-logic-builder simple">
         <ConditionCard node={single} index="1" onAction={onAction} canDelete={false} />
         <div className="alert-logic-footer">
-          <button className="alert-btn alert-btn-secondary" type="button" onClick={() => onAction({ type: "add-condition", nodeId: expression.id })}>{t("alert.addCondition")}</button>
+          <Button onClick={() => onAction({ type: "add-condition", nodeId: expression.id })}>{t("alert.addCondition")}</Button>
         </div>
       </div>
     );
@@ -787,10 +788,10 @@ function RuleTestPanel({
         </div>
       </div>
       <div className="alert-test-actions">
-        <button className="alert-btn alert-btn-secondary" type="button" onClick={onResetContext} disabled={testLoading}>{t("alert.resetChart")}</button>
-        <button className="alert-btn alert-btn-primary" type="button" onClick={onRunTest} disabled={testLoading}>
+        <Button onClick={onResetContext} disabled={testLoading}>{t("alert.resetChart")}</Button>
+        <Button variant="primary" onClick={onRunTest} disabled={testLoading}>
           {testLoading ? t("alert.testing") : t("alert.testRule")}
-        </button>
+        </Button>
       </div>
       {testResult && (
         <div className="alert-test-result">
@@ -1449,9 +1450,9 @@ export default function AlertsPanel({
               <strong>{alertError ? t("alert.systemHint") : t("alert.syncing")}</strong>
               <span>{alertError || t("alert.syncingDesc")}</span>
             </div>
-            <button className="alert-btn alert-btn-secondary" type="button" onClick={() => loadAlerts()} disabled={alertLoading}>
+            <Button onClick={() => loadAlerts()} disabled={alertLoading}>
               {t("alert.refresh")}
-            </button>
+            </Button>
           </div>
         )}
 
@@ -1546,10 +1547,10 @@ export default function AlertsPanel({
               />
 
               <div className="alert-editor-actions sticky-actions">
-                <button className="alert-btn alert-btn-secondary" type="button" onClick={resetDraft} disabled={alertSaving}>{t("alert.newDraft")}</button>
-                <button className="alert-btn alert-btn-primary" type="button" onClick={createCurrentAlert} disabled={!canCreateAlert}>
+                <Button onClick={resetDraft} disabled={alertSaving}>{t("alert.newDraft")}</Button>
+                <Button variant="primary" onClick={createCurrentAlert} disabled={!canCreateAlert}>
                   {alertSaving ? t("alert.saving") : editorModeLabel}
-                </button>
+                </Button>
               </div>
             </div>
           )}
@@ -1569,8 +1570,8 @@ export default function AlertsPanel({
                   <option value="paused">{t("alert.statusPaused")}</option>
                   <option value="expired">{t("alert.statusExpired")}</option>
                 </select>
-                <button className="alert-btn alert-btn-secondary" type="button" onClick={() => loadAlerts()} disabled={alertLoading}>{t("alert.refresh")}</button>
-                <button className="alert-btn alert-btn-primary" type="button" onClick={resetDraft}>{t("alert.addAlert")}</button>
+                <Button onClick={() => loadAlerts()} disabled={alertLoading}>{t("alert.refresh")}</Button>
+                <Button variant="primary" onClick={resetDraft}>{t("alert.addAlert")}</Button>
               </div>
 
               <div className="alert-filter-chip-row">
@@ -1629,7 +1630,7 @@ export default function AlertsPanel({
                   <option value="unread">{t("alert.unread")}</option>
                   <option value="ack">{t("alert.acked")}</option>
                 </select>
-                <button className="alert-btn alert-btn-secondary" type="button" onClick={() => loadAlerts()} disabled={alertLoading}>{t("alert.refreshHistory")}</button>
+                <Button onClick={() => loadAlerts()} disabled={alertLoading}>{t("alert.refreshHistory")}</Button>
               </div>
 
               <div className="alert-history-list">

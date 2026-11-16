@@ -27,7 +27,7 @@ test("from a chart, Settings shows the app theme and this chart's own appearance
   );
   assert.match(following, /data-settings-chart-appearance="true"/);
   assert.match(following, /当前图表外观/);
-  assert.match(following, /aria-pressed="true"[^>]*>跟随应用主题/);
+  assert.match(following, /role="radio" aria-checked="true"[^>]*>跟随应用主题/);
   assert.match(following, /aria-pressed="true"[^>]*><span class="st-theme-icon">.*?亮色/, "the app theme card reflects the app, not the chart");
   assert.doesNotMatch(following, /type="color" aria-label="自定义背景色"/);
 
@@ -35,6 +35,6 @@ test("from a chart, Settings shows the app theme and this chart's own appearance
     <ChartAppearancePanel appearanceScope="chart" appearanceTargets={targets({ theme: "custom", customBg: "#f4efe2" })}
       settings={DEFAULT_SETTINGS} onUpdate={() => undefined} />,
   );
-  assert.match(own, /aria-pressed="true"[^>]*>单独设置/);
+  assert.match(own, /role="radio" aria-checked="true"[^>]*>单独设置/);
   assert.match(own, /type="color" aria-label="自定义背景色" value="#f4efe2"/);
 });

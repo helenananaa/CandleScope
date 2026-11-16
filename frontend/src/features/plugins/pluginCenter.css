@@ -7,15 +7,13 @@
 .plugin-center h4 { font-size: 14px; font-weight: 600; }
 .plugin-center p, .plugin-center small { color: var(--pc-secondary); }
 .plugin-center small { font-size: 12px; }
-.plugin-center button, .plugin-center input, .plugin-center select, .plugin-center textarea { font: inherit; }
-.plugin-center button { min-height: 34px; padding: 6px 12px; border: 1px solid var(--border-color); border-radius: var(--radius-md); color: var(--text-primary); background: var(--bg-secondary); cursor: pointer; }
-.plugin-center button:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--accent-blue); }
-.plugin-center button:disabled { cursor: not-allowed; opacity: .5; }
+.plugin-center button:not(.ui-btn), .plugin-center input, .plugin-center select, .plugin-center textarea { font: inherit; }
+.plugin-center button:not(.ui-btn) { min-height: 34px; padding: 6px 12px; border: 1px solid var(--border-color); border-radius: var(--radius-md); color: var(--text-primary); background: var(--bg-secondary); cursor: pointer; }
+.plugin-center button:not(.ui-btn):hover:not(:disabled) { background: var(--bg-hover); border-color: var(--accent-blue); }
+.plugin-center button:not(.ui-btn):disabled { cursor: not-allowed; opacity: .5; }
 .plugin-center :is(button,input,select,textarea,summary):focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 3px; }
 .plugin-center input:not([type=checkbox]), .plugin-center select, .plugin-center textarea { min-height: 36px; max-width: 100%; min-width: 0; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-primary); color: var(--text-primary); }
 .plugin-center input::placeholder { color: var(--pc-secondary); }
-.plugin-center .pc-primary { color: white; background: var(--accent-solid); border-color: var(--accent-solid); }
-.plugin-center .pc-primary:hover:not(:disabled) { color: white; background: var(--accent-solid-hover); }
 .plugin-center .pc-danger { color: var(--text-on-accent); background: var(--color-danger); }
 .pc-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 20px 28px 16px; }
 .pc-header > div:first-child { display: flex; gap: 20px; align-items: center; }

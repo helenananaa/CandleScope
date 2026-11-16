@@ -5,6 +5,10 @@
 @import "./styles/layers.css";
 @import "./styles/reset.css" layer(reset);
 @import "./styles/tokens.css" layer(tokens);
+@import "./components/ui/button.css" layer(primitives);
+@import "./components/ui/field.css" layer(primitives);
+@import "./components/ui/choice.css" layer(primitives);
+@import "./components/ui/display.css" layer(primitives);
 @import "./styles/components.css" layer(features);
 @import "./features/plugins/pluginCenter.css" layer(features);
 @import "./features/extensions/extensions.css" layer(features);

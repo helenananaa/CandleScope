@@ -1,0 +1,133 @@
+/* Segmented controls and tabs (primitives layer). */
+
+.ui-segmented {
+  display: inline-flex;
+  gap: 2px;
+  min-width: 0;
+  padding: 2px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--surface-1);
+}
+
+.ui-segmented-block {
+  display: flex;
+  width: 100%;
+}
+
+.ui-segment {
+  display: inline-flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  height: calc(var(--control-height-md) - 6px);
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius-control) - 2px);
+  background: transparent;
+  color: var(--text-secondary);
+  font: 500 var(--font-size-sm)/1 var(--font-sans);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
+}
+
+.ui-segmented-sm .ui-segment {
+  height: calc(var(--control-height-sm) - 6px);
+  padding: 0 8px;
+  font-size: var(--font-size-xs);
+}
+
+.ui-segment:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+/* The selected segment reads as raised in both themes. */
+.ui-segment[aria-checked='true'] {
+  border-color: var(--border-strong);
+  background: var(--surface-0);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+  font-weight: 600;
+}
+
+.ui-segment:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.ui-segment:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 1px;
+}
+
+.ui-segment-icon {
+  display: inline-flex;
+}
+
+.ui-tabs {
+  display: flex;
+  gap: var(--space-4);
+  min-width: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.ui-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  height: 36px;
+  margin-bottom: -1px;
+  padding: 0 2px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font: 500 var(--font-size-md)/1 var(--font-sans);
+  cursor: pointer;
+  transition: color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out);
+}
+
+.ui-tab:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.ui-tab[aria-selected='true'] {
+  border-bottom-color: var(--accent-blue);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.ui-tab:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.ui-tab:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: -2px;
+}
+
+.ui-tab-icon {
+  display: inline-flex;
+}
+
+.ui-tab-badge {
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: var(--radius-full);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font: 600 var(--font-size-2xs)/1.4 var(--font-sans);
+  text-align: center;
+}
+
+.ui-tab-panel:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}

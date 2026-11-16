@@ -1,0 +1,163 @@
+/* Buttons, icon buttons and toolbar controls (primitives layer). Features add layout only. */
+
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: var(--control-height-md);
+  min-width: 0;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font: 600 var(--font-size-md)/1 var(--font-sans);
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
+}
+
+.ui-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.ui-btn-sm {
+  height: var(--control-height-sm);
+  padding: 0 10px;
+  font-size: var(--font-size-sm);
+}
+
+.ui-btn-block {
+  width: 100%;
+}
+
+.ui-btn-icon {
+  display: inline-flex;
+}
+
+.ui-btn-primary {
+  border-color: var(--accent-solid);
+  background: var(--accent-solid);
+  color: var(--text-on-accent);
+}
+
+.ui-btn-primary:hover:not(:disabled) {
+  border-color: var(--accent-solid-hover);
+  background: var(--accent-solid-hover);
+}
+
+.ui-btn-ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.ui-btn-ghost:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.ui-btn-danger {
+  border-color: color-mix(in srgb, var(--color-danger) 45%, transparent);
+  background: transparent;
+  color: var(--text-danger);
+}
+
+.ui-btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+}
+
+.ui-btn:disabled {
+  border-color: var(--border-subtle);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.ui-btn-ghost:disabled {
+  border-color: transparent;
+  background: transparent;
+}
+
+/* Square icon-only button */
+.ui-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: var(--control-height-md);
+  height: var(--control-height-md);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
+}
+
+.ui-icon-btn-sm {
+  width: var(--control-height-sm);
+  height: var(--control-height-sm);
+}
+
+.ui-icon-btn-secondary {
+  border-color: var(--border-subtle);
+  background: var(--surface-2);
+}
+
+.ui-icon-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.ui-icon-btn[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--accent-blue) 16%, transparent);
+  color: var(--text-accent);
+}
+
+.ui-icon-btn:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+/* Toolbar control: pills, pickers and toggles in bars and headers */
+.ui-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  min-width: 0;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font: 500 var(--font-size-sm)/1 var(--font-sans);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
+}
+
+.ui-control:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.ui-control[aria-expanded='true'],
+.ui-control.is-active {
+  border-color: var(--accent-blue);
+  color: var(--text-primary);
+}
+
+.ui-control-sm {
+  height: 24px;
+  padding: 0 8px;
+  font-size: var(--font-size-xs);
+}
+
+:is(.ui-control, .ui-btn, .ui-icon-btn):focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
