@@ -35,7 +35,7 @@ export class KlineConsumerRecovery {
     const key = feed.seriesKey(series);
     const pending = this.pending.get(key);
     const previous = pending && feed.isCurrent(series, pending.epoch) ? pending : undefined;
-    const epoch = feed.beginEpoch(series); // Fence HTTP results started before the gap.
+    const epoch = feed.fenceDisconnectedRequests(series);
     // A forming row may finalize while disconnected and fall outside latest2.
     // Keep its timestamp even when no temporal hole remains in the window.
     const times = rows.map((row) => Number(row.time)).filter(Number.isFinite);

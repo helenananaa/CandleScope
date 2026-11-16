@@ -4291,3 +4291,70 @@ test("a same-epoch stale readback retains its unresolved initial callback until 
     assert.equal(feed.pendingRepairCount(series), 0);
   } finally { feed.getRange = getRange; }
 });
+
+test("repeated stream gaps preserve initial repair ownership while fencing pre-gap reads", async () => {
+  const series = { ...SERIES, interval: "1m" };
+  let finish!: (result: KlineFetchResult) => void;
+  let first = true;
+  const committed: number[][] = [];
+  let resolved = 0;
+  const feed = new SeriesDataFeed({
+    getActiveSeries: () => series,
+    api: { fetchKlinesRange: async () => {
+      if (first) { first = false; return new Promise((resolve) => { finish = resolve; }); }
+      return { ...resolvedQuality, data: rows([60, 120]), complete: true, retryable: false,
+        verified_contiguous: true, truncated: false, missing_ranges: [], history_state: "ready" };
+    } },
+    commitMergedChartData: (_s, _i, data) => { committed.push(data.map(row => Number(row.time))); },
+  });
+  const epoch = feed.beginEpoch(series);
+  feed.trackPendingResultRepair(series, { data: rows([60]), start_ms: 60_000, end_ms: 120_000,
+    complete: false, retryable: true, verified_contiguous: false, history_state: "pending" }, () => {
+    assert.equal(feed.isCurrent(series, epoch), true);
+    resolved += 1;
+  });
+  const pending = [...feed.pendingGapRepairs.values()][0]!;
+  pending.indicatorWindowOwner = "initial-owner";
+  pending.indicatorWindowEpoch = epoch;
+  const old = feed.getRange(series, { startSec: 60, endSec: 120 });
+  while (!finish) await new Promise<void>((resolve) => setImmediate(resolve));
+  const recovery = new KlineConsumerRecovery();
+  recovery.capture(feed, series, rows([60, 120]));
+  recovery.capture(feed, series, rows([60, 120]));
+  assert.equal(feed.currentEpoch(series), epoch, "a stream gap does not retire the chart session");
+  assert.equal(feed.pendingGapRepairs.size, 1);
+  assert.equal([...feed.pendingGapRepairs.values()][0]?.indicatorWindowOwner, "initial-owner");
+  finish({ data: rows([60, 120]), complete: true, verified_contiguous: true });
+  assert.equal((await old).stale, true);
+  assert.deepEqual(committed, []);
+  assert.equal(resolved, 0, "pre-gap coverage cannot settle the original callback");
+  await recovery.recover(feed, () => true);
+  await feed.pollPendingRepairs(series, { force: true });
+  assert.equal(resolved, 1);
+  assert.equal(feed.pendingGapRepairs.size, 0);
+  assert.equal(recovery.required, false);
+  recovery.close();
+});
+
+for (const endpoint of ["history", "before", "range", "latest"] as const) {
+  test(`a stream gap rejects an older ${endpoint} response without cancelling the chart epoch`, async () => {
+    let finish!: (result: KlineFetchResult) => void;
+    let commits = 0;
+    const read = () => new Promise<KlineFetchResult>((resolve) => { finish = resolve; });
+    const feed = new SeriesDataFeed({ getActiveSeries: () => SERIES,
+      api: { fetchKlinesHistory: read, fetchKlinesBefore: read, fetchKlinesRange: read, fetchLatestKlines: read },
+      commitMergedChartData: () => { commits += 1; }, commitPatchedChartData: () => { commits += 1; },
+    });
+    const epoch = feed.beginEpoch(SERIES);
+    const request = endpoint === "history" ? feed.getHistory(SERIES)
+      : endpoint === "before" ? feed.getBefore(SERIES, { before: 120, bars: 2 })
+      : endpoint === "latest" ? feed.getLatest(SERIES)
+      : feed.getRange(SERIES, { startSec: 60, endSec: 120 });
+    while (!finish) await new Promise<void>((resolve) => setImmediate(resolve));
+    feed.fenceDisconnectedRequests(SERIES);
+    finish({ ...resolvedQuality, data: rows([60, 120]) });
+    assert.equal((await request).stale, true);
+    assert.equal(commits, 0);
+    assert.equal(feed.isCurrent(SERIES, epoch), true);
+  });
+}

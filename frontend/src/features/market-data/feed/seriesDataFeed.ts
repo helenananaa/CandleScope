@@ -181,6 +181,7 @@ interface KlineTransportDemandOptions {
 
 interface ApplyResultOptions {
   epoch: number;
+  transportGeneration?: number;
   source: string;
   commit: FeedCommitMode;
   mode: FeedApplyMode;
@@ -669,6 +670,7 @@ function dataPlaneDisabledResult(): AppliedKlineResult {
 
 export class SeriesDataFeed {
   epochBySeries: Map<SeriesKey, number>;
+  private readonly transportGenerationBySeries = new Map<SeriesKey, number>();
   beforePageCooldownUntil: Map<SeriesKey, number>;
   pendingBeforePages: Map<SeriesKey, PendingBeforePage>;
   beforePageFetchInFlight: Map<SeriesKey, EpochLease>;
@@ -894,19 +896,29 @@ export class SeriesDataFeed {
     const key = this.seriesKey(series);
     const next = (this.epochBySeries.get(key) || 0) + 1;
     this.epochBySeries.set(key, next);
-    this.backfillRecovery.cancel(key);
-    this.clearBeforePageAvailability(series);
+    this.fenceDisconnectedRequests(series);
     this.clearPendingBeforePage(series);
-    this.bumpGapRepairGeneration(series);
-    this.excludedRangesBySeries.delete(key);
     for (const [repairKey, pending] of this.pendingGapRepairs) {
       if (this.seriesKey(pending.series) === key) this.deletePendingGapRepair(repairKey);
     }
-    this.gapPlannerNextAllowedAt.delete(key);
-    // The epoch gate makes every request from the previous session stale, so
-    // its request-scoped realtime mutations can be released as well.
-    this.realtimeFenceBySeries.delete(key);
     return next;
+  }
+
+  /** A transport gap invalidates old reads, but the chart's coverage owners survive. */
+  fenceDisconnectedRequests(series: MarketSeries): number {
+    const key = this.seriesKey(series);
+    this.transportGenerationBySeries.set(key, this.currentTransportGeneration(series) + 1);
+    this.backfillRecovery.cancel(key);
+    this.clearBeforePageAvailability(series);
+    this.bumpGapRepairGeneration(series);
+    this.excludedRangesBySeries.delete(key);
+    this.gapPlannerNextAllowedAt.delete(key);
+    this.realtimeFenceBySeries.delete(key);
+    return this.currentEpoch(series);
+  }
+
+  private currentTransportGeneration(series: MarketSeries): number {
+    return this.transportGenerationBySeries.get(this.seriesKey(series)) ?? 0;
   }
 
   cancelSeriesRequests(series: MarketSeries): void {
@@ -2656,6 +2668,7 @@ export class SeriesDataFeed {
       } else compositionContract = required;
     }
     const epoch = this.currentEpoch(series);
+    const transportGeneration = this.currentTransportGeneration(series);
     const indicatorWindowOwner = requestedIndicatorWindowOwner || this.indicatorWindowOwner(
       "history",
       series,
@@ -2699,6 +2712,7 @@ export class SeriesDataFeed {
         commit,
         mode: "range",
         expectedRealtimeVersion: realtimeFence.version,
+        transportGeneration,
         indicatorWindowOwner,
       });
       },
@@ -2729,6 +2743,7 @@ export class SeriesDataFeed {
     if (required === null) throw new Error("History is unavailable for this interval");
     compositionContract = required;
     const epoch = this.currentEpoch(series);
+    const transportGeneration = this.currentTransportGeneration(series);
     const indicatorWindowOwner = requestedIndicatorWindowOwner || this.indicatorWindowOwner(
       "before",
       series,
@@ -2769,6 +2784,7 @@ export class SeriesDataFeed {
         commit,
         mode: "range",
         expectedRealtimeVersion: realtimeFence.version,
+        transportGeneration,
         indicatorWindowOwner,
       });
       if (!applied.stale) this.updateBeforePageAvailability(series, before, applied);
@@ -2811,6 +2827,7 @@ export class SeriesDataFeed {
     if (required === null) throw new Error("History is unavailable for this interval");
     compositionContract = required;
     const epoch = this.currentEpoch(series);
+    const transportGeneration = this.currentTransportGeneration(series);
     const indicatorWindowOwner = requestedIndicatorWindowOwner || this.indicatorWindowOwner(
       "range",
       series,
@@ -2867,6 +2884,7 @@ export class SeriesDataFeed {
           commit,
           mode: "range",
           expectedRealtimeVersion: realtimeFence.version,
+          transportGeneration,
           indicatorWindowOwner,
         });
         finalResult = applied;
@@ -2983,6 +3001,7 @@ export class SeriesDataFeed {
       if (
         terminalPagination
         && this.isCurrent(series, epoch)
+        && transportGeneration === this.currentTransportGeneration(series)
         && (commit === "always" || (commit === "active" && this.shouldCommitActive(series)))
       ) {
         this.commitMergedChartData(series.symbol, series.interval, [], {
@@ -2995,7 +3014,8 @@ export class SeriesDataFeed {
       combinedResult.endpoint = "range";
       combinedResult.quality = assessKlineQuality(combinedResult, "range");
       if ((commit === "active" || commit === "always")
-          && this.isCurrent(series, epoch) && this.shouldCommitActive(series)) {
+          && !combinedResult.stale && this.isCurrent(series, epoch)
+          && transportGeneration === this.currentTransportGeneration(series) && this.shouldCommitActive(series)) {
         this.resolveVerifiedPendingGapRepairs(series, range, combinedResult, true);
       }
       return combinedResult;
@@ -3021,6 +3041,7 @@ export class SeriesDataFeed {
   ): Promise<AppliedKlineResult> {
     if (!this.isSeriesRequestAllowed(series)) return dataPlaneDisabledResult();
     const epoch = this.currentEpoch(series);
+    const transportGeneration = this.currentTransportGeneration(series);
     const transportDemand = this.transportDemandOptions(series);
     const clientContext = this.transportContext(series, epoch, undefined, priority, `kline-latest:${source}`);
     const realtimeFence = this.beginRealtimeRequest(series);
@@ -3054,6 +3075,7 @@ export class SeriesDataFeed {
         commit,
         mode: "tick",
         expectedRealtimeVersion: realtimeFence.version,
+        transportGeneration,
       });
       },
       signal,
@@ -3067,6 +3089,7 @@ export class SeriesDataFeed {
     result: KlineFetchResult,
     {
       epoch,
+      transportGeneration,
       source,
       commit,
       mode,
@@ -3080,7 +3103,8 @@ export class SeriesDataFeed {
     result = { ...result, quality };
     const rawRows = rowsFromResult(result);
     const active = this.shouldCommitActive(series);
-    if (!this.isCurrent(series, epoch)) {
+    if (!this.isCurrent(series, epoch)
+        || (transportGeneration !== undefined && transportGeneration !== this.currentTransportGeneration(series))) {
       return {
         ...result,
         data: rawRows,
