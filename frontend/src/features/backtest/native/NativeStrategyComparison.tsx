@@ -9,6 +9,7 @@ import { comparisonConditions, comparisonMetrics, conditionStatus } from "./nati
 import { useControlCommands } from "../../app-control/useControlCommands.js";
 import { command } from "../../app-control/commandRegistry.js";
 import { array, choice, empty, object, text } from "../../app-control/commandSchema.js";
+import { researchStateLabel } from "../research/researchLabels.js";
 
 type Candidate = { id: string; name: string; runId: string | undefined; mode: PinnedStrategyRun["mode"] };
 type Pinned = PinnedStrategyRun;
@@ -20,6 +21,11 @@ export default function NativeStrategyComparison({ items, context, onOpen, saved
   saved?: NativeComparisonSelection | undefined; onSave(value: NativeComparisonSelection): void;
 }) {
   const locale = useLocale();
+  // Start and end are compared as sent (epoch milliseconds) and shown as UTC dates.
+  const conditionValue = (key: (typeof CONDITION_KEYS)[number], value: string | null) =>
+    value === null ? "—"
+      : (key === "start" || key === "end") && /^\d+$/.test(value) ? new Date(Number(value)).toLocaleString(locale, { timeZone: "UTC" })
+        : value;
   const candidates: Candidate[] = items.map((item) => {
     const mode = item.executionMode ?? "NATIVE";
     return { id: item.id, name: item.name || t("strategyCollection.default"), mode, runId: item.runs[JSON.stringify([mode, ...context])] };
@@ -99,7 +105,7 @@ export default function NativeStrategyComparison({ items, context, onOpen, saved
         {latest?.runId && latest.runId !== item.runId && <span>{t("strategyCompare.older")}</span>}
         {!state && <span role="status">{t("native.loading")}</span>}
         {state?.error && <InlineAlert tone="danger">{state.error}</InlineAlert>}
-        {state?.run && (state.run.state !== "COMPLETED" || !state.run.result) && <span>{state.run.state} · {t("strategyCompare.unavailable")}</span>}
+        {state?.run && (state.run.state !== "COMPLETED" || !state.run.result) && <span>{researchStateLabel(state.run.state)} · {t("strategyCompare.unavailable")}</span>}
         <span className="native-comparison-actions">
           <Button size="sm" disabled={!state?.run?.result} onClick={() => { if (state?.run) setInspected({ name: item.name, run: state.run }); }}>{t("strategyCompare.exactRun")}</Button>
           <Button size="sm" variant="ghost" disabled={!latest} onClick={() => onOpen(item.id)}>{t("strategyCompare.current")}</Button>
@@ -122,7 +128,7 @@ export default function NativeStrategyComparison({ items, context, onOpen, saved
       <p className="native-comparison-note">{t("strategyCompare.caution")}</p>
       <Disclosure summary={`${t("strategyCompare.conditions")} · ${t(`strategyCompare.${overall}`)}`}>
         <div className="native-comparison-table"><table><thead><tr><th>{t("strategyCompare.metric")}</th><th>{t("strategyCompare.check")}</th>{ready.map(({ item }) => <th key={item.id}>{item.name}</th>)}</tr></thead><tbody>
-          {CONDITION_KEYS.map((key) => <tr key={key}><th>{t(`strategyCompare.condition.${key}`)}</th><td>{t(`strategyCompare.${conditionStatus(ready.map((entry) => entry.conditions[key] ?? null))}`)}</td>{ready.map(({ item, conditions }) => <td key={item.id}>{conditions[key] ?? "—"}</td>)}</tr>)}
+          {CONDITION_KEYS.map((key) => <tr key={key}><th>{t(`strategyCompare.condition.${key}`)}</th><td>{t(`strategyCompare.${conditionStatus(ready.map((entry) => entry.conditions[key] ?? null))}`)}</td>{ready.map(({ item, conditions }) => <td key={item.id}>{conditionValue(key, conditions[key] ?? null)}</td>)}</tr>)}
         </tbody></table></div>
       </Disclosure>
     </>}

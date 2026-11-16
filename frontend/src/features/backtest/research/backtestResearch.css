@@ -130,6 +130,8 @@
   white-space: nowrap;
 }
 .research-facts code { font: inherit; }
+/* A value that is long by nature (a date range) wraps instead of being cut off. */
+.research-facts dd.research-fact-wrap { white-space: normal; }
 .research-range-grid,
 .research-form {
   display: grid;

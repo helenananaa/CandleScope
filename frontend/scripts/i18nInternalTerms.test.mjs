@@ -16,6 +16,12 @@ test("English words that are jargon in Chinese text are ordinary words in Englis
   assert.deepEqual(internalTerms("en", "Exact fills use the trade tape"), []);
   assert.deepEqual(internalTerms("en", "The Pine runtime restarted"), []);
   assert.deepEqual(internalTerms("zh-CN", "插件随包 runtime"), ["runtime"]);
+  // Research objects and data terms (Phase 6c2): English words inside Chinese, and "authority".
+  assert.deepEqual(internalTerms("zh-CN", "校验并创建 Run"), ["Run"]);
+  assert.deepEqual(internalTerms("zh-CN", "Study 草稿 · 载入有界信号 trace"), ["Study", "trace"]);
+  assert.deepEqual(internalTerms("zh-CN", "按权威对象重置"), ["权威"]);
+  assert.deepEqual(internalTerms("en", "Reveal holdout"), ["holdout"]);
+  assert.deepEqual(internalTerms("en", "Created run {id}."), []);
   assert.deepEqual(internalTerms("zh-CN", "正在从后端读取规则"), ["后端"]);
   assert.deepEqual(internalTerms("en", "Reading rules from the backend"), ["backend"]);
 });

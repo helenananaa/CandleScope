@@ -86,3 +86,12 @@ test("a service that has not started yet, and a request that never arrived, read
   assert.equal(describeError(new TypeError("Load failed"), "fallback"), "Can't reach the local service");
   assert.equal(describeError(new TypeError("x is not a function"), "fallback"), "x is not a function");
 });
+
+test("a message that repeats its code drops it, and a bare HTTP status adds no detail", () => {
+  setLocale("zh-CN");
+  const repeated = describeError(new CodedError("DATA_SNAPSHOT_MISMATCH", "DATA_SNAPSHOT_MISMATCH: saved order has an invalid boundary"), "fallback");
+  assert.match(repeated, /（saved order has an invalid boundary）$/);
+  assert.doesNotMatch(repeated, /DATA_SNAPSHOT_MISMATCH/);
+  // An uncoded failure of the backtest service: the client names it, the summary says what it means.
+  assert.equal(describeError(new HttpError(503, "BACKTEST_API_UNAVAILABLE: HTTP 503", "BACKTEST_API_UNAVAILABLE"), "fallback"), "该功能当前不可用");
+});

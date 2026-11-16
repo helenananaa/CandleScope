@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Button, Checkbox, Disclosure, Field, InlineAlert, Input, Select, Stat, Textarea } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { describeError } from "../../i18n/serverErrors.js";
+import { researchStateLabel } from "../backtest/research/researchLabels.js";
 import { BACKTEST_REPLAY_EXTRA_SLOTS, type BacktestReplayChartOptions, type BacktestReplayExtraSlot, type BacktestReplayExtraCharts, type BacktestResultReplayChart, type BacktestResultReplayCursor, type BacktestResultReplayFrame, type BacktestResultReplayNote, type BacktestResultReplayNoteDraft } from "../backtest/backtestTypes.js";
 import type { LocalDatasetManifest } from "../local-data/localDataTypes.js";
 import type { StrategyDataManager } from "../market-data/manager/strategyDataManager.js";
@@ -347,7 +348,7 @@ export default function StrategyResultReplay({ initial, manager, datasets, displ
           </Disclosure>}
           {frame.order_trace_available && <Disclosure className="strategy-result-replay-trace" summary={t("native.orders")}>
             <ol data-testid="strategy-replay-orders">{frame.order_events.map(order => <li key={order.ordinal}>
-              #{order.reveal_sequence} · {order.order_id} · {order.state}
+              #{order.reveal_sequence} · {order.order_id} · {researchStateLabel(order.state)}
             </li>)}</ol>
           </Disclosure>}
         </>}

@@ -36,7 +36,7 @@ export default function ResearchStrategyPanel({ runtime }: { runtime: BacktestRe
     endTimeMs,
     busy,
   } = runtime.view;
-  const [revisionName, setRevisionName] = useState("Research revision");
+  const [revisionName, setRevisionName] = useState(() => t("research.strategy.revision"));
   const [revisionLanguage, setRevisionLanguage] = useState("BUILTIN_TEMPLATE");
   const [revisionSource, setRevisionSource] = useState("");
   const parameters = useMemo(() => schemaParameters(runtime), [runtime]);
@@ -45,12 +45,12 @@ export default function ResearchStrategyPanel({ runtime }: { runtime: BacktestRe
   return (
     <ResearchPanelFrame
       eyebrow={t("research.panel.strategy")}
-      title={draft?.displayName ?? selectedRevisionId ?? t("research.strategy.noDraft")}
+      title={draft?.displayName ?? revisions.find((revision) => revision.revision_id === selectedRevisionId)?.label ?? t("research.strategy.noDraft")}
     >
       {draft && (
         <dl className="research-facts">
           <div><dt>{t("research.strategy.draft")}</dt><dd>{draft.id}</dd></div>
-          <div><dt>{t("research.strategy.language")}</dt><dd>{draft.language}</dd></div>
+          <div><dt>{t("research.strategy.language")}</dt><dd>{draft.language === "pine" ? "Pine" : "Python"}</dd></div>
           <div><dt>{t("research.strategy.parameters")}</dt><dd>{Object.keys(runtime.view.launchContext?.parameters ?? {}).length}</dd></div>
         </dl>
       )}

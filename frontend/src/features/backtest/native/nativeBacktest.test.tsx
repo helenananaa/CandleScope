@@ -15,7 +15,8 @@ test("sampled book reports disclose bounded taker-only policy separately from fu
   const html = renderToStaticMarkup(<NativeStrategyReport run={run} />);
   assert.ok(html.includes(t("native.external.sampledHint")));
   assert.ok(!html.includes(t("native.external.depthHint")));
-  assert.match(html, /BOOK_SAMPLED/);
+  assert.ok(html.includes(t("research.fidelity.bookSampled")));
+  assert.doesNotMatch(html, /BOOK_SAMPLED/);
 });
 
 test("external reports label host authority and cannot open native replay", () => {
@@ -35,7 +36,8 @@ test("replay starts paused with a server cursor and no future account output", (
     result: null, snapshots: [], error: null,
   }} />);
   assert.match(html, /0 \/ 200/);
-  assert.match(html, /PAUSED/);
+  assert.ok(html.includes(t("research.state.paused")));
+  assert.doesNotMatch(html, /PAUSED/);
   assert.doesNotMatch(html, /<svg/);
 });
 

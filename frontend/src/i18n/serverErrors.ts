@@ -99,7 +99,10 @@ export function describeError(reason: unknown, fallback: string): string {
     const own = CODE_KEYS[code];
     if (own) return t(own);
     const summary = t(SUMMARY_KEYS[serverErrorKind(code)]);
-    const detail = message && message !== code ? message : code;
+    // Errors built as "CODE: message" already carry the code; a bare HTTP status adds nothing to the summary.
+    const text = message?.startsWith(`${code}:`) ? message.slice(code.length + 1).trim() : message;
+    if (text && /^HTTP \d{3}$/.test(text)) return summary;
+    const detail = text && text !== code ? text : code;
     return t("serverError.withDetail", { summary, detail });
   }
   if (message && STARTING_MESSAGE.test(message)) return t("serverError.starting");

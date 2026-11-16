@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Badge, Button, Disclosure, Textarea } from "../../../components/ui/index.js";
 import { researchStateTone } from "./researchStateTone.js";
+import { researchFidelityLabel, researchStateLabel } from "./researchLabels.js";
 import { t } from "../../../i18n/index.js";
 import type { BacktestResearchRuntime } from "./backtestResearchTypes.js";
 import ResearchPanelFrame from "./ResearchPanelFrame.js";
@@ -20,11 +21,11 @@ export default function ResearchExecutionPanel({ runtime }: { runtime: BacktestR
       ? t("research.execution.python")
       : t("research.execution.general");
   return (
-    <ResearchPanelFrame eyebrow={t("research.panel.execution")} title={fidelity}>
+    <ResearchPanelFrame eyebrow={t("research.panel.execution")} title={researchFidelityLabel(fidelity)}>
       <p className="research-panel-copy">{copy}</p>
       <dl className="research-facts">
         <div><dt>{t("research.execution.preset")}</dt><dd>{launchContext?.quick_preset_id ?? "—"}</dd></div>
-        <div><dt>{t("research.execution.state")}</dt><dd><Badge tone={researchStateTone(activeRun?.state ?? "DRAFT")}>{activeRun?.state ?? "DRAFT"}</Badge></dd></div>
+        <div><dt>{t("research.execution.state")}</dt><dd><Badge tone={researchStateTone(activeRun?.state ?? "DRAFT")}>{researchStateLabel(activeRun?.state ?? "DRAFT")}</Badge></dd></div>
         <div><dt>{t("research.execution.configHash")}</dt><dd title={activeRun?.config_hash}>{activeRun?.config_hash?.slice(0, 16) ?? "—"}</dd></div>
       </dl>
       <ResearchChartBookInputs runtime={runtime} onLoadingChange={setImporting} />

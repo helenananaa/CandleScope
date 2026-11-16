@@ -44,6 +44,7 @@ import type {
 } from "./backtestResearchTypes.js";
 import { externalRunDraft, externalSnapshotRequest, isExternalRevision, matchingExternalConnections } from "./externalProviderModel.js";
 import { chartBookMode } from "./chartBookInputs.js";
+import { researchStateLabel } from "./researchLabels.js";
 
 interface LoadedRunBundle {
   run: BacktestRunRecord;
@@ -881,7 +882,7 @@ export function useBacktestResearchRuntime(options: {
         await refreshStudies();
         setActiveStudy(created);
         setStudyComparison(null);
-        setNotice(t("research.notice.studyCreated", { id: created.study_id, state: created.state }));
+        setNotice(t("research.notice.studyCreated", { id: created.study_id, state: researchStateLabel(created.state) }));
       }),
       startStudy: async () => perform(async () => {
         if (!activeStudy || activeStudy.state !== "CREATED") {

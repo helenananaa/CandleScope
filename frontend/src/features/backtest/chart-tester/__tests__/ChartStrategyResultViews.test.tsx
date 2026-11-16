@@ -166,7 +166,9 @@ test("trade explanation renders bounded decision-time and Host evidence", () => 
   assert.match(html, /data-testid="trade-explanation-popover"/);
   assert.match(html, /COMPLETE/);
   assert.match(html, /fast &gt; slow/);
-  assert.match(html, /FILLED/);
+  // The execution state is named, not shown as its code.
+  assert.match(html, /已成交/);
+  assert.doesNotMatch(html, /FILLED/);
   assert.match(html, new RegExp(evidence.evidenceHash));
 });
 

@@ -21,6 +21,7 @@ import PreparationWaiting from "../../data-preparation/PreparationWaiting.js";
 import { Icon } from "../../../components/icons/Icon.js";
 import { Badge, Button, Checkbox, Disclosure, EmptyState, Field, FileDrop, IconButton, InlineAlert, Input, SegmentedControl, Select, Tabs, Textarea } from "../../../components/ui/index.js";
 import { researchStateTone } from "../research/researchStateTone.js";
+import { chartContextStatusLabel, researchStateLabel } from "../research/researchLabels.js";
 import { reportAnalytics } from "./nativeReportAnalytics.js";
 import { useNativeStrategyCollection, nativeStrategySwitcherActions, nativeStrategySwitcherItems, type NativeStrategyController } from "./useNativeStrategyCollection.js";
 import { StrategyDockPane, StrategyDockSlot } from "../chart-tester/StrategyDockSlots.js";
@@ -511,7 +512,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       </InlineAlert>}
       {resolution && resolution.status !== "READY" && <InlineAlert tone="warning" title={t("strategyReview.status.needsData")}
         action={<Button size="sm" disabled={runDisabled} onClick={() => void start(true)}>{t("native.prepare")}</Button>}>
-        <code>{resolution.status}</code>
+        {chartContextStatusLabel(resolution.status)}
       </InlineAlert>}
       {errorDetails && <InlineAlert tone="danger" title={t("strategyReview.status.failed")}
         action={errorLocation ? <Button size="sm" variant="ghost" onClick={() => {
@@ -653,7 +654,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
           onClick={() => void nativeApi<NativeRun>(`${runPath}/${item.run_id}`).then((value) => { pendingOverview.current = null; setError(""); setHistoricalRun(value); selectTab("overview"); }).catch((reason) => setError(String(reason)))}>
           <time dateTime={new Date(item.created_at_ms).toISOString()}>{new Date(item.created_at_ms).toLocaleString(locale)}</time>
           <span>{item.runtime_identity.engine.package}</span>
-          <Badge tone={researchStateTone(item.state === "INTERRUPTED" ? "FAILED" : item.state)}>{item.state}</Badge>
+          <Badge tone={researchStateTone(item.state === "INTERRUPTED" ? "FAILED" : item.state)}>{researchStateLabel(item.state)}</Badge>
         </button></li>)}
       </ul>}
       {feedbackRun?.config?.source && <Disclosure summary={t("native.source")}><pre className="native-source">{feedbackRun.config.source}</pre></Disclosure>}

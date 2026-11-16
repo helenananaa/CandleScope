@@ -38,6 +38,7 @@ const SHARED_TERMS: ReadonlyArray<readonly [string, RegExp]> = [
   ["revision", /\brevisions?\b/i],
   ["queue exact", /\bqueue exact\b/i],
   ["raw trade", /\braw trades?\b/i],
+  ["holdout", /\bholdout\b/i],
 ];
 
 /** English words that are jargon inside Chinese text, and Chinese engineering terms. */
@@ -51,9 +52,17 @@ const CHINESE_TERMS: ReadonlyArray<readonly [string, RegExp]> = [
   ["ticker", /\bticker\b/i],
   ["Canvas", /\bcanvas\b/i],
   ["closed bars", /\bclosed bars?\b/i],
+  ["Run", /\bRuns?\b/],
+  ["Study", /\bStud(?:y|ies)\b/],
+  ["trace", /\btraces?\b/i],
+  ["manifest", /\bmanifest\b/i],
+  ["warmup", /\bwarm-?up\b/i],
+  ["provider", /\bproviders?\b/i],
+  ["snapshot", /\bsnapshots?\b/i],
+  ["tick", /\bticks?\b/i],
   ["后端", /后端/],
   ["影子", /影子/],
-  ["权威 ID", /权威 ?ID/],
+  ["权威", /权威/],
   ["信任门", /信任门/],
   ["死信", /死信/],
   ["水化", /水化/],
