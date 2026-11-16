@@ -111,6 +111,7 @@ class Reconciler:
         # Extension points
         self._custom_aggregator: CustomAggregator | None = None
         self._custom_dedup_fn: DedupFn | None = None
+        self._binding_revision = 0
         self._write_batch_callbacks: list[WriteBatchCallback] = []
         self._done_callbacks: list[ReconcileDoneCallback] = []
         self._materialization_write_tasks: set[asyncio.Task[Any]] = set()
@@ -135,7 +136,7 @@ class Reconciler:
 
     # ── Public: Extension points ─────────────────────────────
 
-    def set_custom_aggregator(self, fn: CustomAggregator) -> None:
+    def set_custom_aggregator(self, fn: CustomAggregator | None) -> None:
         """Override the OHLCV aggregation logic for custom intervals.
 
         The function signature::
@@ -158,14 +159,16 @@ class Reconciler:
             reconciler.set_custom_aggregator(my_agg)
         """
         self._custom_aggregator = fn
+        self._binding_revision += 1
 
-    def set_dedup_fn(self, fn: DedupFn) -> None:
+    def set_dedup_fn(self, fn: DedupFn | None) -> None:
         """Override the deduplication decision.
 
         The function receives ``(new_bar, existing_row_dict)`` and returns
         ``True`` if the new bar should replace the existing one.
         """
         self._custom_dedup_fn = fn
+        self._binding_revision += 1
 
     def on_write_batch(self, callback: WriteBatchCallback) -> None:
         """Register a callback invoked after each DB write batch."""
@@ -1000,10 +1003,27 @@ class Reconciler:
                         symbol, interval, start_ms, end_ms, exchange, market_type, identity,
                     )
                     canonical_rows.update({(interval, row["open_time"]): row for row in rows})
+                inputs = list(canonical_rows.values())
+                owner = (self._storage, self._cfg, self._custom_aggregator, self._custom_dedup_fn, self._binding_revision)
+                def check_input_owner():
+                    if owner != (self._storage, self._cfg, self._custom_aggregator, self._custom_dedup_fn, self._binding_revision):
+                        raise StaleAcquisition('canonical reducer owner changed during computation',
+                            details={'reason': 'reducer_owner_changed'})
+                sealed = 0
+                if (self._custom_aggregator is None and self._custom_dedup_fn is None
+                        and getattr(self._reduce_custom_rows, '__func__', None) is Reconciler._reduce_custom_rows):
+                    from app.data_engine.storage.mixed_history_fence import seal_standard_inputs
+                    sealed = await run_preparation(seal_standard_inputs,
+                        symbol, target, exchange, market_type, inputs, check_input_owner)
+                    self._metrics.inc('canonical_input_snapshots', sealed)
+                    if sealed:
+                        self._metrics.inc('canonical_input_snapshot_rows', len(inputs))
                 custom_bars = await run_preparation(
-                    self._reduce_custom_rows, list(canonical_rows.values()), symbol, target,
+                    self._reduce_custom_rows, inputs, symbol, target,
                     exchange, market_type, int(time.time() * 1000),
                 )
+                if sealed:
+                    check_input_owner()
             if policy is not None:
                 core = {"open", "high", "low", "close", "volume"}
                 enhanced = frozenset(policy.fields) - core
@@ -1193,7 +1213,7 @@ class Reconciler:
         phase: str,
     ) -> dict[str, Any]:
         open_times = [bar.open_time for bar in batch]
-        return {
+        detail = {
             "exchange": exchange,
             "market_type": market_type,
             "symbol": symbol,
@@ -1204,6 +1224,10 @@ class Reconciler:
             "end_ms": max(open_times) if open_times else None,
             "error": str(error),
         }
+        for key, value in list(getattr(error, 'fence_details', {}).items())[:12]:
+            if type(value) in (int, float, bool, type(None), str):
+                detail['fence_'+str(key)[:40]] = value[:160] if isinstance(value, str) else value
+        return detail
 
     @staticmethod
     def _record_write_failures(

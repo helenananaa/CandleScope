@@ -8,6 +8,7 @@ from .derived_history_fence import check_deletions
 from .native_history_fence import MAX_SLOTS, MAX_WINDOWS
 from .revisions import (
     IDENTITY_COLUMNS,
+    BLOCK_CHANGE_WINDOW,
     StaleAcquisition,
     block_change_receipts,
     current_revision,
@@ -56,7 +57,10 @@ class WarmupView:
         if changed:
             receipts = block_change_receipts(conn, base, head)
             if not receipts:
-                raise StaleAcquisition("warmup change receipts do not cover the acquisition")
+                raise StaleAcquisition("warmup change receipts do not cover the acquisition", details={
+                    'reason': 'warmup_receipt_suffix_unavailable', 'acquisition_revision': scope.revision,
+                    'base_revision': base, 'head_revision': head, 'receipt_limit': BLOCK_CHANGE_WINDOW,
+                    'start_ms': opens[0], 'end_ms': opens[-1], 'owned_commits': len(self.owned)})
             for receipt in receipts:
                 if tuple(receipt[name] for name in IDENTITY_COLUMNS) not in changed:
                     continue
@@ -64,7 +68,11 @@ class WarmupView:
                     continue
                 i = bisect_left(opens, receipt["start_ms"] - width + 1)
                 if i < len(opens) and opens[i] <= receipt["end_ms"]:
-                    raise StaleAcquisition("warmup inputs or target changed during acquisition")
+                    raise StaleAcquisition("warmup inputs or target changed during acquisition", details={
+                        'reason': 'warmup_overlapping_change', 'acquisition_revision': scope.revision,
+                        'base_revision': base, 'head_revision': head, 'change_revision': receipt['revision'],
+                        'change_start_ms': receipt['start_ms'], 'change_end_ms': receipt['end_ms'],
+                        'start_ms': opens[0], 'end_ms': opens[-1]})
         return head
 
     def accept(self, before: int, after: int) -> None:

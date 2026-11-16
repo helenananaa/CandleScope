@@ -33,6 +33,10 @@ REVISION_CHANGED_FIELDS = (*IDENTITY_COLUMNS, "open_time", "close_time", "open",
 class StaleAcquisition(RuntimeError):
     """The input was acquired before a newer canonical mutation; reacquire it."""
 
+    def __init__(self, message, *, details=None):
+        super().__init__(message)
+        self.fence_details = dict(details or {})
+
 
 def _execute_schema(conn, script):
     """Execute trigger DDL without sqlite3.executescript's implicit commit."""
@@ -556,21 +560,28 @@ def guarded_write(conn, values, *, commit=True, native_rows=None, source=None, n
             from .mixed_history_fence import affected_targets as affected_mixed_targets
             targets += affected_mixed_targets(scope, values, native_rows)
         warmup = scope.warmup_view
-        # Native range permission still belongs to this warmup acquisition.
-        # Record its own source commits so subsequent derived writes do not
-        # mistake them for intervening external corrections.
-        warmup_head = (warmup.check_write(conn, scope, values, native_rows, source)
-                       if commit and warmup is not None and computation is None else None)
+        warmup_head = None
         if computation is not None:
             computation.check(conn, scope)
             targets = (computation.target,)
         elif view is None:
+            if commit and warmup is not None:
+                warmup_head = warmup.check_write(conn, scope, values, native_rows, source)
             if warmup_head is None:
                 scope.check(conn, values)
         else:
             view.check(conn, scope)
             for target in targets:
                 target.check(conn, scope)
+            if warmup is not None and values == warmup.source and source == 'backfill':
+                # The captured native fingerprint already proves this exact
+                # range under the writer lock. Do not also demand a global
+                # receipt suffix that our own large commit may have evicted.
+                # Keep the original source AND target deletion permission,
+                # and account for this commit only after SQLite succeeds.
+                from .derived_history_fence import check_deletions
+                check_deletions(conn, scope, warmup.source, warmup.target)
+                warmup_head = current_revision(conn)
         before = versions() if view is not None or computation is not None or warmup_head is not None else None
         yield
         accepted = versions()

@@ -18,6 +18,8 @@ if (process.env.BAR_AGG_UPDATE_THROTTLE_MS) {
   assert(/^\d{1,6}$/.test(process.env.BAR_AGG_UPDATE_THROTTLE_MS));
   q.s.env.BAR_AGG_UPDATE_THROTTLE_MS = process.env.BAR_AGG_UPDATE_THROTTLE_MS;
 }
+const diagnosticIssue = process.env.CANDLESCOPE_QA_DIAGNOSTIC_ISSUE ?? '460';
+assert(/^\d+$/.test(diagnosticIssue));
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const qaProxy = process.env.CANDLESCOPE_QA_HTTP_PROXY;
 if (qaProxy) {
@@ -385,7 +387,8 @@ async function verifyConsumers(label) {
 
 try {
   q.s.receipt.driverSha256=Buffer.from(await crypto.subtle.digest('SHA-256',await fs.readFile(fileURLToPath(import.meta.url)))).toString('hex');
-  q.s.receipt.scope += '; #460 source-routing diagnostic only; no joint qualification';
+  q.s.receipt.scope += `; #${diagnosticIssue} scoped diagnostic only; no joint qualification`;
+  q.s.receipt.diagnosticIssue = Number(diagnosticIssue);
   q.s.receipt.primaryIntervals=PRIMARY;
   q.s.receipt.netReadinessLimitMs=3000;
   q.s.receipt.netReadinessMs=null;

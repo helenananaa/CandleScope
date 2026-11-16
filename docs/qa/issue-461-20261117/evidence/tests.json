@@ -1,0 +1,137 @@
+{
+  "product_backend": "9a5ec8d152633149b3acc47bd09776a37c97f7c6",
+  "final_selection": {
+    "passed": 417,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": 160.82
+  },
+  "scoped_new_tests": 20,
+  "baseline": "Two pre-fix regressions fail with warmup receipt/mixed receipt suffix errors.",
+  "earlier_runs": "Initial 381/382 failed only child import environment. Concurrent 416/417 observed extra loopback transport request; final post-native selection passed. Failures retained.",
+  "backend_hashes": {
+    "backend/app/data_engine/backfill/reconciler.py": "1d456bba120f0eea601761a5dd4e8eb34e08b4a0fa60ab2fdf746d4e56fed32c",
+    "backend/app/data_engine/storage/derived_history_fence.py": "75212c0812fbf15787005133d6992a062fb8f61fa69873037f4ef1a1b1315dab",
+    "backend/app/data_engine/storage/mixed_history_fence.py": "dd53417f00258ff683dcf7e6b7a7f2fdd026815c08af5c878ba661981045a313",
+    "backend/app/data_engine/storage/native_history_fence.py": "6ae4898cf5cab77eae4c4b005e1093bad0dd89a63e03402004b8de90f1b5f641",
+    "backend/app/data_engine/storage/revisions.py": "814146e2fd0b6286426bf4993dc0165be0563c08d140b43c65226f9149bde941",
+    "backend/app/data_engine/storage/warmup_revision_fence.py": "e0ec1b4c12125e31f4e1fbfe030f88b520f2dc01b393899481862fd0a9dcedf5"
+  },
+  "reports": [
+    {
+      "artifact": "baseline.xml.gz",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "2",
+      "skipped": "0",
+      "tests": "2",
+      "time": "7.365",
+      "timestamp": "2026-11-17T02:34:57.860928",
+      "hostname": "Ryans-MacBook-Air.local",
+      "failures_detail": [
+        {
+          "case": "test_second_native_batch_survives_own_large_commit_after_disjoint_live_tail",
+          "message": "app.data_engine.storage.revisions.StaleAcquisition: warmup change receipts do not cover the acquisition"
+        },
+        {
+          "case": "test_builtin_reduction_survives_disjoint_tail_and_unrelated_journal_overrun",
+          "message": "AssertionError: [{'batch_size': 17, 'end_ms': 85440000, 'error': 'mixed computation receipt suffix is unavailable', 'exchange': 'binance', ...}]\nassert not [{'batch_size': 17, 'end_ms': 85440000, 'error': 'mixed computation receipt suffix is unavailable', 'exchange': 'binance', ...}]"
+        }
+      ]
+    },
+    {
+      "artifact": "fixed-first.xml.gz",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "2",
+      "time": "9.091",
+      "timestamp": "2026-11-17T02:38:25.499540",
+      "hostname": "Ryans-MacBook-Air.local",
+      "failures_detail": []
+    },
+    {
+      "artifact": "scoped.xml.gz",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "13",
+      "time": "15.759",
+      "timestamp": "2026-11-17T02:42:12.311062",
+      "hostname": "Ryans-MacBook-Air.local",
+      "failures_detail": []
+    },
+    {
+      "artifact": "fences-integration.xml.gz",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "136",
+      "time": "33.208",
+      "timestamp": "2026-11-17T02:44:52.602921",
+      "hostname": "Ryans-MacBook-Air.local",
+      "failures_detail": []
+    },
+    {
+      "artifact": "integration.xml.gz",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "1",
+      "skipped": "0",
+      "tests": "382",
+      "time": "100.909",
+      "timestamp": "2026-11-17T02:48:42.112918",
+      "hostname": "Ryans-MacBook-Air.local",
+      "failures_detail": [
+        {
+          "case": "test_restart_in_another_process_rejects_a_pre_delete_receipt",
+          "message": "subprocess.CalledProcessError: Command '['/Users/ryanliang/.codex/worktrees/merge-plan-20261117/test-venv/bin/python', '-c', \"from app.data_engine.storage import klines_repo as r; import sys; r.KLINES_DB_PATH=sys.argv[1]; print(r.KlinesRepoAdapter().bar_delivery.commit('old')['phase'])\", '/private/var/folders/m3/7mjl333j70j6nhb5nrxrbx800000gn/T/pytest-of-ryanliang/pytest-61/test_restart_in_another_proces0/revision.sqlite']' returned non-zero exit status 1."
+        }
+      ]
+    },
+    {
+      "artifact": "final-integration.xml.gz",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "1",
+      "skipped": "0",
+      "tests": "417",
+      "time": "220.230",
+      "timestamp": "2026-11-17T02:50:42.806758",
+      "hostname": "Ryans-MacBook-Air.local",
+      "failures_detail": [
+        {
+          "case": "test_cold_mixed_pipeline_uses_real_ccxt_transport_and_preserves_all_fields[full-32]",
+          "message": "AssertionError: assert 6 == 5\n +  where 6 = len([{'endTime': '576000000', 'interval': '4h', 'limit': '5', 'startTime': '518400000', ...}, {'endTime': '432000000', 'in...startTime': '518400000', ...}, {'endTime': '600360000', 'interval': '1m', 'limit': '2', 'startTime': '600300000', ...}])"
+        }
+      ]
+    },
+    {
+      "artifact": "final-scoped.xml.gz",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "20",
+      "time": "33.730",
+      "timestamp": "2026-11-17T02:53:25.245295",
+      "hostname": "Ryans-MacBook-Air.local",
+      "failures_detail": []
+    },
+    {
+      "artifact": "acceptance-tests.xml.gz",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "417",
+      "time": "160.691",
+      "timestamp": "2026-11-17T02:56:03.981467",
+      "hostname": "Ryans-MacBook-Air.local",
+      "failures_detail": []
+    }
+  ]
+}
