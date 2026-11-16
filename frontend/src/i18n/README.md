@@ -46,6 +46,8 @@ chrome. It is app-wide infrastructure, not a business feature.
 
 ## Rules
 
+- Wording, the glossary of user terms, and the internal-terms check: [`COPY_GUIDELINES.md`](../../COPY_GUIDELINES.md).
+
 - Do not import features, services, or app shell internals.
 - Do not persist storage keys here.
 - Do not translate identifiers: symbols, intervals, indicator tickers, plugin

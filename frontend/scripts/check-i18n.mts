@@ -4,6 +4,9 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { DEFAULT_LOCALE, LOCALES, loadLocaleCatalog, localeDefinition } from "../src/i18n/registry.js";
 import { workspaceNameAliases } from "../src/i18n/workspaceNameAliases.js";
+import { internalTermKeys, internalTermProblems, type InternalTermsBaseline } from "./i18nInternalTerms.mts";
+
+const INTERNAL_TERMS_BASELINE = new URL("./i18n-internal-terms-baseline.json", import.meta.url);
 
 const ZH_TW_SIMPLIFIED_HAN = new Set(
   fs.readFileSync(new URL("./zh-tw-simplified-han.txt", import.meta.url), "utf8").trim(),
@@ -196,7 +199,14 @@ async function main(): Promise<void> {
   await Promise.all(LOCALES.map(loadLocaleCatalog));
   const frontendRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const catalogs = Object.fromEntries(LOCALES.map((locale) => [locale, localeDefinition(locale).messages]));
-  const catalog = catalogProblems(catalogs, DEFAULT_LOCALE);
+  if (process.argv.includes("--write-internal-terms-baseline")) {
+    // Regenerates the list after Phase 6 rewrites; review the diff: it should only shrink.
+    fs.writeFileSync(INTERNAL_TERMS_BASELINE, `${JSON.stringify(internalTermKeys(catalogs), null, 2)}\n`);
+    console.log("wrote scripts/i18n-internal-terms-baseline.json");
+    return;
+  }
+  const baseline = JSON.parse(fs.readFileSync(INTERNAL_TERMS_BASELINE, "utf8")) as InternalTermsBaseline;
+  const catalog = [...catalogProblems(catalogs, DEFAULT_LOCALE), ...internalTermProblems(catalogs, baseline)];
   const sources = sourceProblems(path.join(frontendRoot, "src"));
   const lines = [
     ...catalog.map((message) => `catalog: ${message}`),
@@ -213,7 +223,7 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  console.log(`i18n check passed (${LOCALES.length} locales, ${Object.keys(catalogs[DEFAULT_LOCALE]!).length} catalog keys, ${sourceFiles(path.join(frontendRoot, "src")).length} source files)`);
+  console.log(`i18n check passed (${LOCALES.length} locales, ${Object.keys(catalogs[DEFAULT_LOCALE]!).length} catalog keys, ${sourceFiles(path.join(frontendRoot, "src")).length} source files; internal terms still listed: ${baseline["zh-CN"].length} zh-CN, ${baseline.en.length} en)`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) void main();

@@ -92,6 +92,7 @@ export default function ReadOnlyAccountDock({ height, onRequestClose, trading }:
         : status.account.status === "disconnected" ? "account.disconnected" : "account.error";
   const failure = error ?? readError ?? status?.serviceError ?? status?.account?.error_code ?? null;
   const pair = (label: MessageKey, value: unknown, suffix = "") => <><dt>{t(label, {}, locale)}</dt><dd>{scalar(value)}{suffix && ` ${suffix}`}</dd></>;
+  const factKindLabel = (kind: unknown) => kind === "fills" || kind === "orders" || kind === "bills" ? t(`account.${kind}`, {}, locale) : scalar(kind);
   const leg = (value: unknown) => value === "long" || value === "short" ? t(`account.${value}`, {}, locale) : t("account.unknown", {}, locale);
 
   const stateTone = !status?.account ? "neutral" : status.account.status === "synced" ? "success"
@@ -148,7 +149,7 @@ export default function ReadOnlyAccountDock({ height, onRequestClose, trading }:
           {balances.map((item, index) => <article className="readonly-account-card" key={`${scalar(item.ccy)}:${index}`}><strong>{scalar(item.ccy)}</strong><dl>{pair("account.equity", item.eq)}{pair("account.cash", item.cashBal)}</dl></article>)}
           <Disclosure className="readonly-account-coverage" summary={t("account.coverage", {}, locale)}><p className="readonly-account-help">{t("account.coverageHelp", {}, locale)}</p>
             {status?.scans.map((scan) => <p key={scan.kind}>{t(`account.${scan.kind as FactKind}`, {}, locale)} · {date(scan.start_ms)} – {date(scan.end_ms)}<br />{t(scan.complete ? "account.queryComplete" : "account.queryPending", { pages: scan.pages }, locale)}</p>)}
-            {status?.gaps.map((gap, index) => <p key={index}>{t("account.gap", {}, locale)} · {scalar(gap.kind)}<br />{date(gap.start_ms)} – {date(gap.end_ms)}</p>)}
+            {status?.gaps.map((gap, index) => <p key={index}>{t("account.gap", {}, locale)} · {factKindLabel(gap.kind)}<br />{date(gap.start_ms)} – {date(gap.end_ms)}</p>)}
           </Disclosure>
           <p className="readonly-account-help">{t("account.lastEvent", { time: date(status?.stream.lastReceivedMs) }, locale)}</p>
           {status?.stream.error && <InlineAlert tone="warning">{t(accountErrorHelp(status.stream.error), {}, locale)} <code>{status.stream.error}</code></InlineAlert>}

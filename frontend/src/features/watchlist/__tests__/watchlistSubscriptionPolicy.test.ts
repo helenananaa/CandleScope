@@ -64,8 +64,8 @@ test("getFullSubscriptionResourceSummary reports native and custom counts", () =
       nativeCount: 2,
       customCount: 2,
       totalIntervals: 4,
-      shortText: "ticker + 4周期",
-      tooltip: "完全订阅：ticker + 2 native + 2 custom",
+      shortText: "价格 + 4 个周期",
+      tooltip: "完全订阅：价格 + 2 个交易所周期 + 2 个自定义周期",
     },
   );
 });

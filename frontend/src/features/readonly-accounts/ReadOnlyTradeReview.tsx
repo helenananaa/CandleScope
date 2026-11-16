@@ -51,7 +51,7 @@ export default function ReadOnlyTradeReview({ binding }: { binding?: ReadOnlyRev
       {(!listing.current || stats?.cachedCount) ? <InlineAlert tone="warning">{t("account.review.cached")}</InlineAlert> : null}
       {listing.truncated && <InlineAlert tone="warning">{t("account.check.truncated")}</InlineAlert>}
       <Disclosure summary={t("account.review.coverage")}>
-        {listing.coverage.map((range, index) => <p key={index}>{range.kind}: {formatDateTime(range.start_ms)} – {formatDateTime(range.end_ms)}</p>)}
+        {listing.coverage.map((range, index) => <p key={index}>{range.kind === "fills" || range.kind === "orders" || range.kind === "bills" ? t(`account.${range.kind}`) : range.kind}: {formatDateTime(range.start_ms)} – {formatDateTime(range.end_ms)}</p>)}
         {listing.gaps.map((range, index) => <p key={index}>{t("account.check.coverageGap")}: {formatDateTime(range.start_ms)} – {formatDateTime(range.end_ms)}</p>)}
       </Disclosure>
       <p>{t("account.check.unmatchedFills")}: {listing.unmatchedFills ?? 0}</p>

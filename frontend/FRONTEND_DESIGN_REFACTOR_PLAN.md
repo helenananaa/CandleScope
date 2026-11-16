@@ -543,6 +543,22 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - The read-only account dock is on the kit: toned sync badge, kit buttons and password fields, wrapping pressed view buttons, disclosures and alerts in the overview, reconciliation, trade review and journal.
 - `tradingAccounts.css` (628 → 381 lines), `readonlyAccount.css` (no element rules left) and `chartAccountOverlay.css` load with the global stylesheet. Left for Phase 6: fact kinds and exchange ids shown as codes, `binance spot` in the journal.
 
+**Phase 6 lands in four PRs** (split decided 2026-11-15, when it started: the copy left by Phase 5 spans every surface, and each reworded message changes all 30 catalogs):
+
+| PR | Scope |
+|---|---|
+| 6a | Foundations and the market page: `COPY_GUIDELINES.md` (voice, Chinese and English rules, glossary), `describeError` for uncoded failures, the internal-terms check in `check:i18n` with a shrinking baseline, and the market page's copy (watchlist, order book, trade flow, workspace, indicators, alerts, export, account docks) |
+| 6b | Replay: hub options, storage, session status bar, end dialog, integrity drawer, rail, ticket and account (57 zh-CN / 57 en baseline entries, plus codes rendered from data) |
+| 6c | Strategy research: tools, status bar, run states, fidelity and engine names, times as epoch ms, the strategy tester, local data and CSV import (72 / 108 entries, plus codes from data) |
+| 6d | Data and plugins: Settings storage and maintenance, the data workbench and repair, the plugin center and live control, the extension text helper moved into the catalogs (42 / 60 entries); the baseline is empty after it, so the check becomes a plain rule |
+
+**Phase 6a is done (branch `design/phase-6-copy`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_6A.md`](../docs/FRONTEND_DESIGN_QA_PHASE_6A.md).
+
+- [`COPY_GUIDELINES.md`](COPY_GUIDELINES.md) sets the voice, the Chinese and English rules, how codes, errors, exchanges and times appear, and a glossary from internal terms to user terms.
+- `describeError` gives uncoded failures a translated summary: by HTTP status, for requests that never reached the local service, and for services still starting (a new message in all 30 catalogs); a coded error's JSON detail shows only its message.
+- `check:i18n` rejects internal terms (status codes, storage and runtime internals, class names, "backend", English jargon in Chinese) in the zh-CN and en catalogs. Today's 171 zh-CN and 225 en messages are listed in `scripts/i18n-internal-terms-baseline.json`; a new one fails, and so does a listed one that no longer needs its entry.
+- The market page's 29 messages with internal terms are rewritten in all 30 catalogs (pt-BR's untranslated "FULL" tier label too); the journal shows the exchange and market by name, and the read-only views name fact kinds.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.
