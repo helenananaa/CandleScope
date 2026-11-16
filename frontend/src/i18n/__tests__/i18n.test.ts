@@ -491,7 +491,7 @@ test("pt-BR host chrome uses Brazilian trading copy rather than English clones o
     assert.equal(t("alert.ruleName"), "Nome da regra");
     assert.equal(t("alert.saving"), "Salvando...");
     assert.equal(t("alert.empty"), "Ainda não há regras de alerta");
-    assert.equal(t("export.close"), "Fechar painel de exportação");
+    assert.equal(t("export.saveCurrent"), "Salvar prévia atual");
     assert.equal(t("export.chartLoading"), "O gráfico ainda está carregando dados.");
     assert.equal(t("plugin.live.reviewTitle"), "Revisar uma intenção preparada exata");
     assert.equal(t("core.error.exchangeList"), "Falha ao carregar a lista de exchanges");

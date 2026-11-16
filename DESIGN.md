@@ -161,6 +161,17 @@ The indicator drawer adds two more:
 - **A library to add from** is rows: the name, one line of description and where it goes (主图, 副图), and a small `IconButton` toggle with `pressed` (+, then ✓). Badges only mark exceptions (自定义, 行情数据, unavailable); what every row has in common is not a badge.
 - **An editor in a drawer** has one toolbar: the title with what is being edited under it, then the actions (the primary one last), a divider and the close button. Advanced inputs are closed `Disclosure`s; the run status is the last line, toned and announced. Labels are never uppercased by CSS, since they can contain code.
 
+## Search and export dialogs
+
+Symbol search and Export set the pattern for a dialog that filters a list or configures an output:
+
+- **Filters are one row of labelled small selects** (label above, `Select size="sm"`), wrapping to fewer columns in a narrow dialog. A switch between views of the same list (全部 / 最近使用 / 收藏) is a `SegmentedControl`, not tabs.
+- **A list's columns are plain text.** A value every row shares a kind of (spot, futures) is text in its column, not a coloured pill; a badge marks the exception (当前).
+- **Choices that need a sentence each** (export scope, format) are a `SegmentedControl` with the chosen option's description under it, not a card per option.
+- **One fact, one place.** Show the output's name once (under the field that shapes it) and the preview's status and details on one line, not as tiles.
+- **Dialogs that are wider than the kit sizes** keep the kit `Dialog` (title, close, footer, Escape) and set their width in their own class.
+- **Keys typed in a dialog stay in it**: stop propagation in its `onKeyDown`, except Escape, which the overlay stack needs.
+
 ## Stylesheets and cascade layers
 
 Every app stylesheet sits in a cascade layer. The order is set once, in `frontend/src/styles/layers.css`, which every entry page imports first:

@@ -1,4 +1,4 @@
-import { createContext, useContext, useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
+import { createContext, useContext, useId, type InputHTMLAttributes, type ReactNode, type Ref, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 import type { ControlSize } from "./Button.js";
 
 interface FieldContextValue {
@@ -56,6 +56,7 @@ const sizeClass = (base: string, size: ControlSize | undefined) => (size === "sm
 
 export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "size"> {
   size?: ControlSize;
+  ref?: Ref<HTMLInputElement>;
 }
 
 export function Input({ size, className, ...rest }: InputProps) {

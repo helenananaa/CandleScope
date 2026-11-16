@@ -340,7 +340,7 @@ Sixteen of the new files hold rules that must load later than their feature's ma
 
 Still outside the stack, and moved when each is rebuilt:
 
-- **Surfaces that open as native modal `<dialog>`s:** Export, jump to date, research return, replay screenshots, and the drawing property panels. The browser keeps them above everything and gives them their own Escape; the stack leaves Escape to them. (The history study moved to a popover in 3b.)
+- **Surfaces that open as native modal `<dialog>`s:** Export, jump to date, research return, replay screenshots, and the drawing property panels. The browser keeps them above everything and gives them their own Escape; the stack leaves Escape to them. (The history study moved to a popover in 3b; Export moved onto the stack in 5e.)
 - **The replay hub's create and end-session dialogs, and the trade explanation inside the strategy tester.**
 
 **Phase 3b is done (branch `design/phase-3b-unstyled-surfaces`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_3B.md`](../docs/FRONTEND_DESIGN_QA_PHASE_3B.md).
@@ -425,6 +425,12 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - Added indicators show their parameters as kit fields, two per row (one in a narrow drawer), with compact colour swatches; errors and notices are `InlineAlert`s.
 - The script editor has one toolbar (title and name, actions, close), kit fields, no uppercase labels (they turned `ta.timeframe` into "TA. TIMEFRAME"), and Pine's advanced inputs as closed disclosures with labelled monospace text areas. It had 40 inline styles and has none.
 - `indicators.css` went from 957 lines to 437 with no hard-coded colours; the late-loading `indicatorEditorToolbar.css` is merged and deleted; two unused keys are gone.
+
+**Phase 5e is done (branch `design/phase-5e-search-export`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_5E.md`](../docs/FRONTEND_DESIGN_QA_PHASE_5E.md).
+
+- Symbol search: the scope is a segmented control and the five filters one row of labelled kit selects; rows show the market type as text instead of a pill on every line; the 名称 and 数据来源 columns have their own labels instead of borrowed ones; loading, empty and error states use the kit; the footer actions are ghost buttons.
+- Export is a kit `Dialog` on the overlay stack instead of a native `<dialog>`. Scope and format are segmented controls with the chosen option's description, the options kit checkboxes, the file name shown once, and the preview's four tiles one line.
+- `symbolSearch.css` 700 → 444 lines and `exportPanel.css` 517 → 169, with no hard-coded colours. The kit `Dialog` takes `onKeyDown`, and segments and tabs carry `data-value` for scripts and tests.
 
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 

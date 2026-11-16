@@ -28,6 +28,9 @@ export const HOOK_CLASSES = new Set([
   "indicator-tab-create", // frontendScript browser test opens the custom indicator editor
   "indicator-visibility-btn", // scripts/smoke.mjs toggles an active study
   "indicator-editor-save", // frontendScript browser test saves the custom indicator
+  "export-panel-message", // export drill scripts read the panel's error message
+  "export-preview-refresh", // export drill scripts regenerate the preview
+  "sym-modal-close-btn", // smoke.mjs closes symbol search
 ]);
 
 function walk(dir) {
