@@ -40,7 +40,6 @@
 @import "./features/advanced-market-data/advancedMarketPaneLabels.css" layer(features);
 @import "./components/chartPaneOverlays.css" layer(features);
 @import "./features/replay/replayPanels.css" layer(features);
-@import "./features/alerts/alertToasts.css" layer(features);
 @import "./features/replay/trainingHubPage.css" layer(features);
 @import "./features/replay/trainingHubMarketPicker.css" layer(features);
 @import "./features/indicators/indicatorEditorToolbar.css" layer(features);

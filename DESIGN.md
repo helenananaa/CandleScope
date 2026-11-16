@@ -145,6 +145,17 @@ Settings is one dialog: categories on the left, the selected category on the rig
 - **Figures.** Show the one figure a person acts on (a layer's size, a count) beside its section's title; the rest go into a 详细数据 disclosure. Estimates and results are one-line `InlineAlert`s, not more tiles.
 - **Lists of things** (exchanges) are rows: the name, one line of plain text, and a badge only for an exception (当前, 不可路由). Verification levels, field lists and transport tables belong in disclosures inside the expanded row.
 
+## Long forms and lists in drawers
+
+The alerts drawer sets the pattern for a long form in a narrow panel:
+
+- **Numbered sections, not cards.** Each part is a heading with a small number and its fields; a divider separates sections. A card is used once, around a repeated unit the user adds or removes (a condition).
+- **Fields stack to one column** when the drawer is narrow (a container query on the drawer, not the window).
+- **Optional work is folded away.** A dry run, advanced options or diagnostics sit in a `Disclosure` with their state in its summary (未测试, 命中).
+- **The primary action stays visible** in a footer under the scrolling content.
+- **Lists are rows**: a title (with the symbol as a `Badge`), one line of what it does, one line of status, then small ghost buttons. An unread item has a dot, not a coloured card.
+- **Events that arrive in the background** (a fired alert) go through `notify()` with an action that opens their surface, so they appear above dialogs instead of under them.
+
 ## Stylesheets and cascade layers
 
 Every app stylesheet sits in a cascade layer. The order is set once, in `frontend/src/styles/layers.css`, which every entry page imports first:
