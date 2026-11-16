@@ -5,6 +5,7 @@ import { useChartSurfaceRuntime } from "../../chart-adapter/useChartSurfaceRunti
 import SingleChartPanes from "../../components/SingleChartPanes.js";
 import { chartIndicatorSelection } from "../indicators/chartIndicatorInput.js";
 import { capturedSyntheticSource } from "../market-data/synthetic/capturedSyntheticSource.js";
+import { Badge, Button, Checkbox, InlineAlert, Input, Select } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { normalizeMainChartType } from "../../shared/mainChartTypes.js";
@@ -35,7 +36,6 @@ import { tradingApi } from "./tradingApi.js";
 import { formatAmount, formatDateTime, formatPrice, formatQty, formatSigned, pnlTone, tokenColor } from "./tradingFormat.js";
 import type { QuickReplayRequest, TradeDetail } from "./tradingTypes.js";
 import { tradingErrorMessage } from "./useTradingAccountsRuntime.js";
-import "./tradingAccounts.css";
 
 export interface QuickReplayChartStyle {
   upColor: string;
@@ -421,20 +421,27 @@ export default function QuickReplayOverlay({
   return (
     <div className="quick-replay" data-replay-cursor-sec={cursor} data-replay-account={request.accountId} role="region" aria-label={t("trading.replay.title")}>
       <header className="quick-replay-banner">
-        <span className="trading-badge" data-tone="warning">{t("trading.replay.badge")}</span>
+        <Badge tone="warning">{t("trading.replay.badge")}</Badge>
         <strong>{trade.symbol}</strong>
         <span>{request.interval}</span>
         <span className="quick-replay-cursor">{t("trading.replay.cursor", { time: formatDateTime(cursor * 1000) })}</span>
         {timeOutsideHistory && <span className="trading-help" role="status">{t("trading.replay.timeOutsideHistory")}</span>}
         <span className="quick-replay-spacer" />
         <span className="trading-help">{t("trading.replay.reconstructed")}</span>
-        <button type="button" className="trading-button" onClick={onExit}>{t("trading.replay.exit")}</button>
+        <Button size="sm" onClick={onExit}>{t("trading.replay.exit")}</Button>
       </header>
       <div className="quick-replay-body">
         <div className="quick-replay-chart">
-          {error && <p className="trading-error" role="alert">{error}</p>}
-          {loadFailed && <button type="button" className="trading-button" onClick={() => setReload((value) => value + 1)}>{t("trading.replay.retry")}</button>}
-          {!loading && chartBars.length === 0 && !error && <p className="trading-empty">{t("trading.replay.noData")}</p>}
+          {(error || loadFailed) && (
+            <InlineAlert
+              tone="danger"
+              className="quick-replay-notice"
+              {...(loadFailed ? { action: <Button size="sm" onClick={() => setReload((value) => value + 1)}>{t("trading.replay.retry")}</Button> } : {})}
+            >
+              {error}
+            </InlineAlert>
+          )}
+          {!loading && chartBars.length === 0 && !error && <InlineAlert tone="info" className="quick-replay-notice">{t("trading.replay.noData")}</InlineAlert>}
           <ChartErrorBoundary>
             <SingleChartPanes
               ref={chartSurface.ref}
@@ -501,10 +508,7 @@ export default function QuickReplayOverlay({
             </p>
           )}
           {!exitReached && trade.status === "closed" && (
-            <label className="trading-check">
-              <input type="checkbox" checked={showOutcome} onChange={(event) => setShowOutcome(event.target.checked)} />
-              <span>{t("trading.replay.showOutcome")}</span>
-            </label>
+            <Checkbox label={t("trading.replay.showOutcome")} checked={showOutcome} onChange={(event) => setShowOutcome(event.target.checked)} />
           )}
           <h3>{t("trading.replay.notesSoFar")}</h3>
           <ul className="trading-quick-notes">
@@ -526,8 +530,9 @@ export default function QuickReplayOverlay({
               </li>)}
             </ul>
           </>}
-          <input
-            className="trading-quick-input"
+          <Input
+            size="sm"
+            aria-label={t("trading.replay.notePlaceholder")}
             value={captureComment}
             placeholder={t("trading.replay.notePlaceholder")}
             onChange={(event) => {
@@ -542,42 +547,42 @@ export default function QuickReplayOverlay({
         </aside>
       </div>
       <footer className="quick-replay-controls" role="toolbar" aria-label={t("trading.replay.controls")}>
-        <button disabled={!canNavigate} type="button" className="trading-button" onClick={() => move(-SETUP_BARS * intervalSec)} title={t("trading.replay.setupHint")}>
+        <Button size="sm" disabled={!canNavigate} onClick={() => move(-SETUP_BARS * intervalSec)} title={t("trading.replay.setupHint")}>
           {t("trading.replay.setup")}
-        </button>
-        <button disabled={!canNavigate} type="button" className="trading-button" onClick={jumpPrevious} title={t("trading.replay.prevEventHint")}>
+        </Button>
+        <Button size="sm" disabled={!canNavigate} onClick={jumpPrevious} title={t("trading.replay.prevEventHint")}>
           {t("trading.replay.prevEvent")}
-        </button>
-        <button disabled={!canNavigate} type="button" className="trading-button" onClick={() => move(-stepSec)} aria-label={t("trading.replay.back")}>◀</button>
-        <button
+        </Button>
+        <Button size="sm" className="quick-replay-glyph" disabled={!canNavigate} onClick={() => move(-stepSec)} aria-label={t("trading.replay.back")}>◀</Button>
+        <Button
+          size="sm"
+          variant="primary"
+          className="quick-replay-glyph"
           disabled={!canNavigate}
-          type="button"
-          className="trading-button"
-          data-variant="primary"
           onClick={() => setPlaying((value) => (value === 0 ? 1 : 0))}
           aria-label={playing ? t("trading.replay.pause") : t("trading.replay.play")}
         >
           {playing ? "❚❚" : "▶"}
-        </button>
-        <button
+        </Button>
+        <Button
+          size="sm"
+          className="quick-replay-glyph"
           disabled={!canNavigate}
-          type="button"
-          className="trading-button"
-          data-active={playing === 2}
+          aria-pressed={playing === 2}
           onClick={() => setPlaying((value) => (value === 2 ? 1 : 2))}
           aria-label={t("trading.replay.fast")}
         >
           4×
-        </button>
-        <button disabled={!canNavigate} type="button" className="trading-button" onClick={() => move(stepSec)} aria-label={t("trading.replay.forward")}>▶|</button>
-        <button disabled={!canNavigate} type="button" className="trading-button" onClick={jumpNext} title={t("trading.replay.nextEventHint")}>
+        </Button>
+        <Button size="sm" className="quick-replay-glyph" disabled={!canNavigate} onClick={() => move(stepSec)} aria-label={t("trading.replay.forward")}>▶|</Button>
+        <Button size="sm" disabled={!canNavigate} onClick={jumpNext} title={t("trading.replay.nextEventHint")}>
           {t("trading.replay.nextEvent")}
-        </button>
+        </Button>
         <label className="quick-replay-step">
           <span>{t("trading.replay.stepBy")}</span>
-          <select value={step} onChange={(event) => setStep(event.target.value)}>
+          <Select size="sm" value={step} onChange={(event) => setStep(event.target.value)}>
             {stepOptions.map((item) => <option key={item} value={item}>{item}</option>)}
-          </select>
+          </Select>
         </label>
         <span className="trading-help">{t("trading.replay.keys")}</span>
       </footer>

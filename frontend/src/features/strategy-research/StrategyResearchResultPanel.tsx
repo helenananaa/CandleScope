@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Badge, Button, Disclosure, InlineAlert, TabPanel, Tabs } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import {
   ChartStrategyResultContextBar,
@@ -42,11 +43,22 @@ export function StrategyResearchResultPanel({
   const [activeTab, setActiveTab] = useState<"overview" | "trades">("overview");
   const [explanation, setExplanation] = useState<TradeExplanationSelection | null>(null);
   if (error !== null) {
-    return <p className="strategy-research-error" role="alert">{error}</p>;
+    return <InlineAlert tone="danger">{error}</InlineAlert>;
   }
+  const networkGuard = network !== null ? (
+    <Disclosure className="strategy-research-network-guard" summary={t("strategy.network.summary")}>
+      <div data-testid="strategy-research-network-guard">
+        <p>{network.installed ? t("strategy.network.installed") : t("strategy.network.missing")}</p>
+        {result !== null && <>
+          <p>{t("strategy.network.policy", { policy: network.policy })}</p>
+          <p>{t("strategy.network.blocked", { count: network.blockedAttempts })}</p>
+        </>}
+      </div>
+    </Disclosure>
+  ) : null;
   if (result === null) {
     return (
-      <section data-testid="strategy-research-result-panel" data-run-status={runStatus}>
+      <section className="strategy-research-result-empty" data-testid="strategy-research-result-panel" data-run-status={runStatus}>
         <h3>{t("strategy.resultSlot")}</h3>
         <p role="status">{t(runStatus === "NEEDS_DATA"
           ? "chartTester.status.needs_data"
@@ -61,17 +73,16 @@ export function StrategyResearchResultPanel({
           })}</p>
         </>}
         {barOnly ? (
-          <p data-testid="strategy-research-bar-only-result">{t("chartTester.result.fidelityFast")}</p>
+          <Badge className="strategy-research-fidelity">
+            <span data-testid="strategy-research-bar-only-result">{t("chartTester.result.fidelityFast")}</span>
+          </Badge>
         ) : null}
-        {network !== null ? (
-          <details data-testid="strategy-research-network-guard"><summary>{t("strategy.network.summary")}</summary><p>
-            {network.installed ? t("strategy.network.installed") : t("strategy.network.missing")}
-          </p></details>
-        ) : null}
+        {networkGuard}
       </section>
     );
   }
   const external = result.report.strategy?.external_provider;
+  const tabsId = "strategy-research-result";
   return (
     <section
       className="strategy-research-result-panel"
@@ -85,20 +96,28 @@ export function StrategyResearchResultPanel({
         locale={locale}
         stale={stale}
       />
-      {external && <p data-testid="strategy-research-external-result">
-        {t("research.external.model")} · {external.provider_id} · {external.provider_revision}
-      </p>}
-      {onOpenReplay && <button type="button" onClick={onOpenReplay}>{t("report.replay")}</button>}
-      {barOnly ? (
-        <p data-testid="strategy-research-no-precise">{t("chartTester.result.fidelityFast")}</p>
-      ) : null}
-      <div className="strategy-research-result-tabs" role="tablist" aria-label={t("strategy.resultSlot")}>
-        {(["overview", "trades"] as const).map((tab) => (
-          <button key={tab} type="button" role="tab" aria-selected={activeTab === tab}
-            onClick={() => setActiveTab(tab)}>{t(tab === "overview" ? "chartTester.tab.overview" : "chartTester.tab.trades")}</button>
-        ))}
+      <div className="strategy-research-result-bar">
+        <Tabs
+          id={tabsId}
+          label={t("strategy.resultSlot")}
+          value={activeTab}
+          onChange={setActiveTab}
+          tabs={[
+            { value: "overview", label: t("chartTester.tab.overview") },
+            { value: "trades", label: t("chartTester.tab.trades") },
+          ]}
+        />
+        <span className="strategy-research-result-meta">
+          {barOnly ? (
+            <Badge><span data-testid="strategy-research-no-precise">{t("chartTester.result.fidelityFast")}</span></Badge>
+          ) : null}
+          {external && <Badge tone="accent">
+            <span data-testid="strategy-research-external-result">{t("research.external.model")} · {external.provider_id} · {external.provider_revision}</span>
+          </Badge>}
+          {onOpenReplay && <Button size="sm" onClick={onOpenReplay}>{t("report.replay")}</Button>}
+        </span>
       </div>
-      <div role="tabpanel" aria-label={t(activeTab === "overview" ? "chartTester.tab.overview" : "chartTester.tab.trades")}>
+      <TabPanel tabsId={tabsId} value={activeTab} className="strategy-research-result-body">
       {activeTab === "overview" ? <ChartStrategyResultOverview
         result={result}
         stale={stale}
@@ -110,16 +129,9 @@ export function StrategyResearchResultPanel({
         onLocateTrade={(timeMs) => { if (!stale) onLocateTrade?.(timeMs); }}
         onSelectExplanation={setExplanation}
       />}
-      </div>
+      </TabPanel>
       {explanation && <TradeExplanationPopover selection={explanation} onClose={() => setExplanation(null)} />}
-      {network !== null ? (
-        <details className="strategy-research-network-guard" data-testid="strategy-research-network-guard">
-          <summary>{t("strategy.network.summary")}</summary>
-          <p>{network.installed ? t("strategy.network.installed") : t("strategy.network.missing")}</p>
-          <p>{t("strategy.network.policy", { policy: network.policy })}</p>
-          <p>{t("strategy.network.blocked", { count: network.blockedAttempts })}</p>
-        </details>
-      ) : null}
+      {networkGuard}
     </section>
   );
 }

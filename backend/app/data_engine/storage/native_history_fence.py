@@ -1,7 +1,8 @@
 """Bounded pre-fetch views for independent native REST repairs.
 
 This is an optimistic range read, not a relaxation for derived calculations.
-The existing native 1s sources and trusted Binance spot gap repairs qualify.
+The existing native 1s sources, trusted Binance spot gap repairs and
+source-receipted OKX spot native repairs qualify.
 There is no new durable mutation log: canonical rows and the existing durable
 deletion watermark remain the authority, including writers in other processes.
 """
@@ -22,8 +23,9 @@ def _window_slots(task):
             and task.market_type == "spot" and task.interval == "1s"):
         return (task.end_ms - task.start_ms) // 1000 + 1
     metadata = getattr(task, "metadata", {})
-    if (task.exchange != "binance" or task.market_type != "spot"
-            or metadata.get("requires_trusted_finality") is not True):
+    if (task.market_type != "spot" or not (
+            task.exchange == "okx" or (task.exchange == "binance"
+            and metadata.get("requires_trusted_finality") is True))):
         return None
     from app.data_engine.interval_resolution import IntervalResolver, IntervalPurpose, IntervalResolutionError
     from app.data_engine.series_identity import identity_from_metadata
@@ -67,6 +69,18 @@ class NativeHistoryView:
     start: int
     end: int
     digest: bytes
+
+    def accepts_history_receipts(self, conn, rows):
+        # OKX's qualified fork journals exact native closed inputs. Only those
+        # current REST heads may use range permission instead of the family
+        # fence. Legacy/unreceipted, websocket, stale and derived writes cannot.
+        if self.key[0] != "okx":
+            return True
+        from .kline_sources import filter_projection_rows
+        accepted = filter_projection_rows(
+            conn, rows, exchange=self.key[0], market_type=self.key[1],
+            symbol=self.key[2], interval=self.key[3], native_identity=True)
+        return len(accepted) == len(rows) and all(row.get("_history_source_ref") for row in accepted)
 
     def check(self, conn, scope):
         row = series_change(conn, self.key)

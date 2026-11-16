@@ -1,3 +1,4 @@
+import { strategyResearchModeHref } from "../backtest/research/backtestResearchModes.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import { replayPreparationActivity, replayPreparationCompleted } from "./preparationActivity.js";
 import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
@@ -111,7 +112,7 @@ export default function PreparationJobsPanel({ summary = false, onReady }: {
       <PreparationWaiting job={job} />
       <div className="preparation-job-actions">
       {job.result?.run && <a href={`/replay.html?run=${encodeURIComponent(job.result.run.run_id)}`}>{t("preparation.open")}</a>}
-      {job.result?.strategy_run && <a href={`/backtest.html?run=${encodeURIComponent(job.result.strategy_run.run_id)}`}>{t("ux.openResult")}</a>}
+      {job.result?.strategy_run && <a href={strategyResearchModeHref("precise", { run: job.result.strategy_run.run_id })}>{t("ux.openResult")}</a>}
       {job.result?.native_run && <button type="button" onClick={() => setNativeRun(job.result!.native_run!)}>{t("ux.openResult")}</button>}
       {["FAILED", "BLOCKED_STORAGE"].includes(job.state) && <button type="button" onClick={() => void action(job, "retry")}>{t("preparation.retry")}</button>}
       {["QUEUED", "RUNNING", "BLOCKED_STORAGE"].includes(job.state) && <button type="button" disabled={job.cancel_requested || job.stage === "STARTING"} onClick={() => void action(job, "cancel")}>{t("preparation.cancel")}</button>}

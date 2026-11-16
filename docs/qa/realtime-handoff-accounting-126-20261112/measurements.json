@@ -1,0 +1,2082 @@
+{
+  "measure-10007-callback-baseline": {
+    "python": "3.12.15 (main, Sep 30 2026, 22:04:19) [Clang 21.0.0 (clang-2100.3.34.2)]",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "backend": "/Users/ryanliang/.codex/worktrees/realtime-handoff-accounting-126-20261112/CandleScope/output/realtime-handoff-accounting-126-20261112/baseline/backend/app/data_engine/bar_aggregator/publisher.py",
+    "period": 10007,
+    "scenario": "callback",
+    "source": "deterministic controlled accepted components; no network/repo source qualification",
+    "owner": "default DataManager realtime-state registration; manager not started, storage bridge callback remains inactive",
+    "payload_hash": "d71499b2761b534c27fb455f9ab183ff00129c5b12c0b786d780070a88e6961f",
+    "components": 10007,
+    "held": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "component_index_bytes": 0,
+      "history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 0,
+      "protection": "active and correction state owned by realtime executor",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 168,
+      "unique_objects": 3
+    },
+    "after": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "component_index_bytes": 0,
+      "history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 0,
+      "protection": "active and correction state owned by realtime executor",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 168,
+      "unique_objects": 3
+    },
+    "pending_before": 0,
+    "observed_pending_graph_bytes": 0,
+    "cpu": {
+      "samples": 64,
+      "p50_us": 1658.0,
+      "p95_us": 1915.0,
+      "p99_us": 2011.0
+    },
+    "wall": {
+      "samples": 64,
+      "p50_us": 1659.271,
+      "p95_us": 1915.833,
+      "p99_us": 2161.875
+    },
+    "gc_before": [
+      {
+        "collections": 938,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 85,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 8,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "gc_after": [
+      {
+        "collections": 938,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 85,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 8,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "process_peak_rss": 228933632,
+    "limits": "heap is diagnostic visibility, not memory reduction/RSS; single-host instrumented callback costs, not product/native acceptance"
+  },
+  "measure-10007-callback-product": {
+    "python": "3.12.15 (main, Sep 30 2026, 22:04:19) [Clang 21.0.0 (clang-2100.3.34.2)]",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "backend": "/Users/ryanliang/.codex/worktrees/realtime-handoff-accounting-126-20261112/CandleScope/backend/app/data_engine/bar_aggregator/publisher.py",
+    "period": 10007,
+    "scenario": "callback",
+    "source": "deterministic controlled accepted components; no network/repo source qualification",
+    "owner": "default DataManager realtime-state registration; manager not started, storage bridge callback remains inactive",
+    "payload_hash": "d71499b2761b534c27fb455f9ab183ff00129c5b12c0b786d780070a88e6961f",
+    "components": 10007,
+    "held": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "buffered_handoff_states": 0,
+      "retained_payload_states": 3,
+      "retained_states": 3,
+      "retained_components": 30021,
+      "retained_events": 2,
+      "inflight_input_frames": 1,
+      "inflight_dispatch_frames": 1,
+      "inflight_callback_frames": 1,
+      "inflight_retry_input_frames": 0,
+      "inflight_retry_keys_frames": 0,
+      "pending_source_snapshots": 0,
+      "publisher_metadata_bytes": 672,
+      "component_index_bytes": 0,
+      "retained_component_index_bytes": 12288,
+      "history_prefixes": 0,
+      "retained_history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 30758048,
+      "estimate_basis": "unique retained state containers; component references may overcount shared immutable values",
+      "protection": "active/correction state and pending publications stay with realtime owner",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 10258413,
+      "unique_objects": 60256
+    },
+    "after": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "buffered_handoff_states": 0,
+      "retained_payload_states": 0,
+      "retained_states": 0,
+      "retained_components": 0,
+      "retained_events": 0,
+      "inflight_input_frames": 0,
+      "inflight_dispatch_frames": 0,
+      "inflight_callback_frames": 0,
+      "inflight_retry_input_frames": 0,
+      "inflight_retry_keys_frames": 0,
+      "pending_source_snapshots": 0,
+      "publisher_metadata_bytes": 128,
+      "component_index_bytes": 0,
+      "retained_component_index_bytes": 0,
+      "history_prefixes": 0,
+      "retained_history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 128,
+      "estimate_basis": "unique retained state containers; component references may overcount shared immutable values",
+      "protection": "active/correction state and pending publications stay with realtime owner",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 368,
+      "unique_objects": 6
+    },
+    "pending_before": 0,
+    "observed_pending_graph_bytes": 0,
+    "cpu": {
+      "samples": 64,
+      "p50_us": 1921.0,
+      "p95_us": 1931.0,
+      "p99_us": 2017.0
+    },
+    "wall": {
+      "samples": 64,
+      "p50_us": 1922.3125,
+      "p95_us": 1933.0,
+      "p99_us": 2101.375
+    },
+    "gc_before": [
+      {
+        "collections": 939,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 85,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 8,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "gc_after": [
+      {
+        "collections": 939,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 85,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 8,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "process_peak_rss": 231473152,
+    "limits": "heap is diagnostic visibility, not memory reduction/RSS; single-host instrumented callback costs, not product/native acceptance"
+  },
+  "measure-10007-pending-baseline": {
+    "python": "3.12.15 (main, Sep 30 2026, 22:04:19) [Clang 21.0.0 (clang-2100.3.34.2)]",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "backend": "/Users/ryanliang/.codex/worktrees/realtime-handoff-accounting-126-20261112/CandleScope/output/realtime-handoff-accounting-126-20261112/baseline/backend/app/data_engine/bar_aggregator/publisher.py",
+    "period": 10007,
+    "scenario": "pending",
+    "source": "deterministic controlled accepted components; no network/repo source qualification",
+    "owner": "default DataManager realtime-state registration; manager not started, storage bridge callback remains inactive",
+    "payload_hash": "948e661585e417c7915a6c40e20f676055fad6cc19e3d3af54e8e3b4cfcd0dba",
+    "components": 10007,
+    "held": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "component_index_bytes": 0,
+      "history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 0,
+      "protection": "active and correction state owned by realtime executor",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 168,
+      "unique_objects": 3
+    },
+    "after": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "component_index_bytes": 0,
+      "history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 0,
+      "protection": "active and correction state owned by realtime executor",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 168,
+      "unique_objects": 3
+    },
+    "pending_before": 1,
+    "observed_pending_graph_bytes": 15145010,
+    "cpu": {
+      "samples": 64,
+      "p50_us": 73990.5,
+      "p95_us": 112066.0,
+      "p99_us": 120348.0
+    },
+    "wall": {
+      "samples": 64,
+      "p50_us": 74882.6875,
+      "p95_us": 187190.917,
+      "p99_us": 348620.0
+    },
+    "gc_before": [
+      {
+        "collections": 1315,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 119,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 8,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "gc_after": [
+      {
+        "collections": 4601,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 417,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 8,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "process_peak_rss": 250675200,
+    "limits": "heap is diagnostic visibility, not memory reduction/RSS; single-host instrumented callback costs, not product/native acceptance"
+  },
+  "measure-10007-pending-product": {
+    "python": "3.12.15 (main, Sep 30 2026, 22:04:19) [Clang 21.0.0 (clang-2100.3.34.2)]",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "backend": "/Users/ryanliang/.codex/worktrees/realtime-handoff-accounting-126-20261112/CandleScope/backend/app/data_engine/bar_aggregator/publisher.py",
+    "period": 10007,
+    "scenario": "pending",
+    "source": "deterministic controlled accepted components; no network/repo source qualification",
+    "owner": "default DataManager realtime-state registration; manager not started, storage bridge callback remains inactive",
+    "payload_hash": "948e661585e417c7915a6c40e20f676055fad6cc19e3d3af54e8e3b4cfcd0dba",
+    "components": 10007,
+    "held": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "buffered_handoff_states": 0,
+      "retained_payload_states": 1,
+      "retained_states": 1,
+      "retained_components": 10007,
+      "retained_events": 1,
+      "inflight_input_frames": 0,
+      "inflight_dispatch_frames": 0,
+      "inflight_callback_frames": 0,
+      "inflight_retry_input_frames": 0,
+      "inflight_retry_keys_frames": 0,
+      "pending_source_snapshots": 1,
+      "publisher_metadata_bytes": 376,
+      "component_index_bytes": 0,
+      "retained_component_index_bytes": 0,
+      "history_prefixes": 0,
+      "retained_history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 10248824,
+      "estimate_basis": "unique retained state containers; component references may overcount shared immutable values",
+      "protection": "active/correction state and pending publications stay with realtime owner",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 15145498,
+      "unique_objects": 100139
+    },
+    "after": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "buffered_handoff_states": 0,
+      "retained_payload_states": 0,
+      "retained_states": 0,
+      "retained_components": 0,
+      "retained_events": 0,
+      "inflight_input_frames": 0,
+      "inflight_dispatch_frames": 0,
+      "inflight_callback_frames": 0,
+      "inflight_retry_input_frames": 0,
+      "inflight_retry_keys_frames": 0,
+      "pending_source_snapshots": 0,
+      "publisher_metadata_bytes": 128,
+      "component_index_bytes": 0,
+      "retained_component_index_bytes": 0,
+      "history_prefixes": 0,
+      "retained_history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 128,
+      "estimate_basis": "unique retained state containers; component references may overcount shared immutable values",
+      "protection": "active/correction state and pending publications stay with realtime owner",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 368,
+      "unique_objects": 6
+    },
+    "pending_before": 1,
+    "observed_pending_graph_bytes": 15145010,
+    "cpu": {
+      "samples": 64,
+      "p50_us": 71369.0,
+      "p95_us": 81975.0,
+      "p99_us": 91297.0
+    },
+    "wall": {
+      "samples": 64,
+      "p50_us": 71841.042,
+      "p95_us": 86255.291,
+      "p99_us": 106603.917
+    },
+    "gc_before": [
+      {
+        "collections": 1302,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 118,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 8,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "gc_after": [
+      {
+        "collections": 4588,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 416,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 8,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "process_peak_rss": 249643008,
+    "limits": "heap is diagnostic visibility, not memory reduction/RSS; single-host instrumented callback costs, not product/native acceptance"
+  },
+  "measure-97-callback-baseline": {
+    "python": "3.12.15 (main, Sep 30 2026, 22:04:19) [Clang 21.0.0 (clang-2100.3.34.2)]",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "backend": "/Users/ryanliang/.codex/worktrees/realtime-handoff-accounting-126-20261112/CandleScope/output/realtime-handoff-accounting-126-20261112/baseline/backend/app/data_engine/bar_aggregator/publisher.py",
+    "period": 97,
+    "scenario": "callback",
+    "source": "deterministic controlled accepted components; no network/repo source qualification",
+    "owner": "default DataManager realtime-state registration; manager not started, storage bridge callback remains inactive",
+    "payload_hash": "b747e0af96df1dc0ba96355f16bba0124cb0921d58e22e43eff7956e29f24be4",
+    "components": 97,
+    "held": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "component_index_bytes": 0,
+      "history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 0,
+      "protection": "active and correction state owned by realtime executor",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 168,
+      "unique_objects": 3
+    },
+    "after": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "component_index_bytes": 0,
+      "history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 0,
+      "protection": "active and correction state owned by realtime executor",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 168,
+      "unique_objects": 3
+    },
+    "pending_before": 0,
+    "observed_pending_graph_bytes": 0,
+    "cpu": {
+      "samples": 256,
+      "p50_us": 51.0,
+      "p95_us": 55.0,
+      "p99_us": 56.0
+    },
+    "wall": {
+      "samples": 256,
+      "p50_us": 52.4585,
+      "p95_us": 55.666,
+      "p99_us": 58.291
+    },
+    "gc_before": [
+      {
+        "collections": 858,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 78,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 7,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "gc_after": [
+      {
+        "collections": 859,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 78,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 7,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "process_peak_rss": 216170496,
+    "limits": "heap is diagnostic visibility, not memory reduction/RSS; single-host instrumented callback costs, not product/native acceptance"
+  },
+  "measure-97-callback-product": {
+    "python": "3.12.15 (main, Sep 30 2026, 22:04:19) [Clang 21.0.0 (clang-2100.3.34.2)]",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "backend": "/Users/ryanliang/.codex/worktrees/realtime-handoff-accounting-126-20261112/CandleScope/backend/app/data_engine/bar_aggregator/publisher.py",
+    "period": 97,
+    "scenario": "callback",
+    "source": "deterministic controlled accepted components; no network/repo source qualification",
+    "owner": "default DataManager realtime-state registration; manager not started, storage bridge callback remains inactive",
+    "payload_hash": "b747e0af96df1dc0ba96355f16bba0124cb0921d58e22e43eff7956e29f24be4",
+    "components": 97,
+    "held": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "buffered_handoff_states": 0,
+      "retained_payload_states": 3,
+      "retained_states": 3,
+      "retained_components": 291,
+      "retained_events": 2,
+      "inflight_input_frames": 1,
+      "inflight_dispatch_frames": 1,
+      "inflight_callback_frames": 1,
+      "inflight_retry_input_frames": 0,
+      "inflight_retry_keys_frames": 0,
+      "pending_source_snapshots": 0,
+      "publisher_metadata_bytes": 672,
+      "component_index_bytes": 0,
+      "retained_component_index_bytes": 7168,
+      "history_prefixes": 0,
+      "retained_history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 309408,
+      "estimate_basis": "unique retained state containers; component references may overcount shared immutable values",
+      "protection": "active/correction state and pending publications stay with realtime owner",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 110778,
+      "unique_objects": 723
+    },
+    "after": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "buffered_handoff_states": 0,
+      "retained_payload_states": 0,
+      "retained_states": 0,
+      "retained_components": 0,
+      "retained_events": 0,
+      "inflight_input_frames": 0,
+      "inflight_dispatch_frames": 0,
+      "inflight_callback_frames": 0,
+      "inflight_retry_input_frames": 0,
+      "inflight_retry_keys_frames": 0,
+      "pending_source_snapshots": 0,
+      "publisher_metadata_bytes": 128,
+      "component_index_bytes": 0,
+      "retained_component_index_bytes": 0,
+      "history_prefixes": 0,
+      "retained_history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 128,
+      "estimate_basis": "unique retained state containers; component references may overcount shared immutable values",
+      "protection": "active/correction state and pending publications stay with realtime owner",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 368,
+      "unique_objects": 6
+    },
+    "pending_before": 0,
+    "observed_pending_graph_bytes": 0,
+    "cpu": {
+      "samples": 256,
+      "p50_us": 42.0,
+      "p95_us": 45.0,
+      "p99_us": 65.0
+    },
+    "wall": {
+      "samples": 256,
+      "p50_us": 43.083,
+      "p95_us": 45.5,
+      "p99_us": 76.708
+    },
+    "gc_before": [
+      {
+        "collections": 859,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 78,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 7,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "gc_after": [
+      {
+        "collections": 860,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 78,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 7,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "process_peak_rss": 217563136,
+    "limits": "heap is diagnostic visibility, not memory reduction/RSS; single-host instrumented callback costs, not product/native acceptance"
+  },
+  "measure-97-pending-baseline": {
+    "python": "3.12.15 (main, Sep 30 2026, 22:04:19) [Clang 21.0.0 (clang-2100.3.34.2)]",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "backend": "/Users/ryanliang/.codex/worktrees/realtime-handoff-accounting-126-20261112/CandleScope/output/realtime-handoff-accounting-126-20261112/baseline/backend/app/data_engine/bar_aggregator/publisher.py",
+    "period": 97,
+    "scenario": "pending",
+    "source": "deterministic controlled accepted components; no network/repo source qualification",
+    "owner": "default DataManager realtime-state registration; manager not started, storage bridge callback remains inactive",
+    "payload_hash": "36628c7fde787199bbece7a4a1fe0ce791b515546e8316d329d53bfb92d88bf8",
+    "components": 97,
+    "held": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "component_index_bytes": 0,
+      "history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 0,
+      "protection": "active and correction state owned by realtime executor",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 168,
+      "unique_objects": 3
+    },
+    "after": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "component_index_bytes": 0,
+      "history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 0,
+      "protection": "active and correction state owned by realtime executor",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 168,
+      "unique_objects": 3
+    },
+    "pending_before": 1,
+    "observed_pending_graph_bytes": 152135,
+    "cpu": {
+      "samples": 256,
+      "p50_us": 658.0,
+      "p95_us": 780.0,
+      "p99_us": 949.0
+    },
+    "wall": {
+      "samples": 256,
+      "p50_us": 662.7085,
+      "p95_us": 987.584,
+      "p99_us": 1725.708
+    },
+    "gc_before": [
+      {
+        "collections": 860,
+        "collected": 2968,
+        "uncollectable": 0
+      },
+      {
+        "collections": 78,
+        "collected": 893,
+        "uncollectable": 0
+      },
+      {
+        "collections": 7,
+        "collected": 29,
+        "uncollectable": 0
+      }
+    ],
+    "gc_after": [
+      {
+        "collections": 861,
+        "collected": 2968,
+        "uncollectable": 0
+      },
+      {
+        "collections": 78,
+        "collected": 893,
+        "uncollectable": 0
+      },
+      {
+        "collections": 7,
+        "collected": 29,
+        "uncollectable": 0
+      }
+    ],
+    "process_peak_rss": 225296384,
+    "limits": "heap is diagnostic visibility, not memory reduction/RSS; single-host instrumented callback costs, not product/native acceptance"
+  },
+  "measure-97-pending-product": {
+    "python": "3.12.15 (main, Sep 30 2026, 22:04:19) [Clang 21.0.0 (clang-2100.3.34.2)]",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "backend": "/Users/ryanliang/.codex/worktrees/realtime-handoff-accounting-126-20261112/CandleScope/backend/app/data_engine/bar_aggregator/publisher.py",
+    "period": 97,
+    "scenario": "pending",
+    "source": "deterministic controlled accepted components; no network/repo source qualification",
+    "owner": "default DataManager realtime-state registration; manager not started, storage bridge callback remains inactive",
+    "payload_hash": "36628c7fde787199bbece7a4a1fe0ce791b515546e8316d329d53bfb92d88bf8",
+    "components": 97,
+    "held": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "buffered_handoff_states": 0,
+      "retained_payload_states": 1,
+      "retained_states": 1,
+      "retained_components": 97,
+      "retained_events": 1,
+      "inflight_input_frames": 0,
+      "inflight_dispatch_frames": 0,
+      "inflight_callback_frames": 0,
+      "inflight_retry_input_frames": 0,
+      "inflight_retry_keys_frames": 0,
+      "pending_source_snapshots": 1,
+      "publisher_metadata_bytes": 376,
+      "component_index_bytes": 0,
+      "retained_component_index_bytes": 0,
+      "history_prefixes": 0,
+      "retained_history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 100984,
+      "estimate_basis": "unique retained state containers; component references may overcount shared immutable values",
+      "protection": "active/correction state and pending publications stay with realtime owner",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 152623,
+      "unique_objects": 1037
+    },
+    "after": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "buffered_handoff_states": 0,
+      "retained_payload_states": 0,
+      "retained_states": 0,
+      "retained_components": 0,
+      "retained_events": 0,
+      "inflight_input_frames": 0,
+      "inflight_dispatch_frames": 0,
+      "inflight_callback_frames": 0,
+      "inflight_retry_input_frames": 0,
+      "inflight_retry_keys_frames": 0,
+      "pending_source_snapshots": 0,
+      "publisher_metadata_bytes": 128,
+      "component_index_bytes": 0,
+      "retained_component_index_bytes": 0,
+      "history_prefixes": 0,
+      "retained_history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 128,
+      "estimate_basis": "unique retained state containers; component references may overcount shared immutable values",
+      "protection": "active/correction state and pending publications stay with realtime owner",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 368,
+      "unique_objects": 6
+    },
+    "pending_before": 1,
+    "observed_pending_graph_bytes": 152135,
+    "cpu": {
+      "samples": 256,
+      "p50_us": 853.5,
+      "p95_us": 1555.0,
+      "p99_us": 1728.0
+    },
+    "wall": {
+      "samples": 256,
+      "p50_us": 929.5205,
+      "p95_us": 3658.125,
+      "p99_us": 17966.708
+    },
+    "gc_before": [
+      {
+        "collections": 860,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 78,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 7,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "gc_after": [
+      {
+        "collections": 861,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 78,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 7,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "process_peak_rss": 217808896,
+    "limits": "heap is diagnostic visibility, not memory reduction/RSS; single-host instrumented callback costs, not product/native acceptance"
+  },
+  "measure-repeat2-10007-callback-baseline": {
+    "python": "3.12.15 (main, Sep 30 2026, 22:04:19) [Clang 21.0.0 (clang-2100.3.34.2)]",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "backend": "/Users/ryanliang/.codex/worktrees/realtime-handoff-accounting-126-20261112/CandleScope/output/realtime-handoff-accounting-126-20261112/baseline/backend/app/data_engine/bar_aggregator/publisher.py",
+    "period": 10007,
+    "scenario": "callback",
+    "source": "deterministic controlled accepted components; no network/repo source qualification",
+    "owner": "default DataManager realtime-state registration; manager not started, storage bridge callback remains inactive",
+    "payload_hash": "d71499b2761b534c27fb455f9ab183ff00129c5b12c0b786d780070a88e6961f",
+    "components": 10007,
+    "held": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "component_index_bytes": 0,
+      "history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 0,
+      "protection": "active and correction state owned by realtime executor",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 168,
+      "unique_objects": 3
+    },
+    "after": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "component_index_bytes": 0,
+      "history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 0,
+      "protection": "active and correction state owned by realtime executor",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 168,
+      "unique_objects": 3
+    },
+    "pending_before": 0,
+    "observed_pending_graph_bytes": 0,
+    "cpu": {
+      "samples": 64,
+      "p50_us": 1726.5,
+      "p95_us": 2119.0,
+      "p99_us": 3044.0
+    },
+    "wall": {
+      "samples": 64,
+      "p50_us": 1743.2085,
+      "p95_us": 2479.084,
+      "p99_us": 3960.041
+    },
+    "gc_before": [
+      {
+        "collections": 938,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 85,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 8,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "gc_after": [
+      {
+        "collections": 938,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 85,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 8,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "process_peak_rss": 228638720,
+    "limits": "heap is diagnostic visibility, not memory reduction/RSS; single-host instrumented callback costs, not product/native acceptance"
+  },
+  "measure-repeat2-10007-callback-product": {
+    "python": "3.12.15 (main, Sep 30 2026, 22:04:19) [Clang 21.0.0 (clang-2100.3.34.2)]",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "backend": "/Users/ryanliang/.codex/worktrees/realtime-handoff-accounting-126-20261112/CandleScope/backend/app/data_engine/bar_aggregator/publisher.py",
+    "period": 10007,
+    "scenario": "callback",
+    "source": "deterministic controlled accepted components; no network/repo source qualification",
+    "owner": "default DataManager realtime-state registration; manager not started, storage bridge callback remains inactive",
+    "payload_hash": "d71499b2761b534c27fb455f9ab183ff00129c5b12c0b786d780070a88e6961f",
+    "components": 10007,
+    "held": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "buffered_handoff_states": 0,
+      "retained_payload_states": 3,
+      "retained_states": 3,
+      "retained_components": 30021,
+      "retained_events": 2,
+      "inflight_input_frames": 1,
+      "inflight_dispatch_frames": 1,
+      "inflight_callback_frames": 1,
+      "inflight_retry_input_frames": 0,
+      "inflight_retry_keys_frames": 0,
+      "pending_source_snapshots": 0,
+      "publisher_metadata_bytes": 672,
+      "component_index_bytes": 0,
+      "retained_component_index_bytes": 12288,
+      "history_prefixes": 0,
+      "retained_history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 30758048,
+      "estimate_basis": "unique retained state containers; component references may overcount shared immutable values",
+      "protection": "active/correction state and pending publications stay with realtime owner",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 10258413,
+      "unique_objects": 60256
+    },
+    "after": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "buffered_handoff_states": 0,
+      "retained_payload_states": 0,
+      "retained_states": 0,
+      "retained_components": 0,
+      "retained_events": 0,
+      "inflight_input_frames": 0,
+      "inflight_dispatch_frames": 0,
+      "inflight_callback_frames": 0,
+      "inflight_retry_input_frames": 0,
+      "inflight_retry_keys_frames": 0,
+      "pending_source_snapshots": 0,
+      "publisher_metadata_bytes": 128,
+      "component_index_bytes": 0,
+      "retained_component_index_bytes": 0,
+      "history_prefixes": 0,
+      "retained_history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 128,
+      "estimate_basis": "unique retained state containers; component references may overcount shared immutable values",
+      "protection": "active/correction state and pending publications stay with realtime owner",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 368,
+      "unique_objects": 6
+    },
+    "pending_before": 0,
+    "observed_pending_graph_bytes": 0,
+    "cpu": {
+      "samples": 64,
+      "p50_us": 1792.0,
+      "p95_us": 2439.0,
+      "p99_us": 3329.0
+    },
+    "wall": {
+      "samples": 64,
+      "p50_us": 1794.6045,
+      "p95_us": 2624.75,
+      "p99_us": 3640.25
+    },
+    "gc_before": [
+      {
+        "collections": 939,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 85,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 8,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "gc_after": [
+      {
+        "collections": 939,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 85,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 8,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "process_peak_rss": 232177664,
+    "limits": "heap is diagnostic visibility, not memory reduction/RSS; single-host instrumented callback costs, not product/native acceptance"
+  },
+  "measure-repeat2-97-pending-baseline": {
+    "python": "3.12.15 (main, Sep 30 2026, 22:04:19) [Clang 21.0.0 (clang-2100.3.34.2)]",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "backend": "/Users/ryanliang/.codex/worktrees/realtime-handoff-accounting-126-20261112/CandleScope/output/realtime-handoff-accounting-126-20261112/baseline/backend/app/data_engine/bar_aggregator/publisher.py",
+    "period": 97,
+    "scenario": "pending",
+    "source": "deterministic controlled accepted components; no network/repo source qualification",
+    "owner": "default DataManager realtime-state registration; manager not started, storage bridge callback remains inactive",
+    "payload_hash": "36628c7fde787199bbece7a4a1fe0ce791b515546e8316d329d53bfb92d88bf8",
+    "components": 97,
+    "held": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "component_index_bytes": 0,
+      "history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 0,
+      "protection": "active and correction state owned by realtime executor",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 168,
+      "unique_objects": 3
+    },
+    "after": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "component_index_bytes": 0,
+      "history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 0,
+      "protection": "active and correction state owned by realtime executor",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 168,
+      "unique_objects": 3
+    },
+    "pending_before": 1,
+    "observed_pending_graph_bytes": 152135,
+    "cpu": {
+      "samples": 256,
+      "p50_us": 629.0,
+      "p95_us": 659.0,
+      "p99_us": 682.0
+    },
+    "wall": {
+      "samples": 256,
+      "p50_us": 630.354,
+      "p95_us": 672.084,
+      "p99_us": 712.0
+    },
+    "gc_before": [
+      {
+        "collections": 860,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 78,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 7,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "gc_after": [
+      {
+        "collections": 861,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 78,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 7,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "process_peak_rss": 217808896,
+    "limits": "heap is diagnostic visibility, not memory reduction/RSS; single-host instrumented callback costs, not product/native acceptance"
+  },
+  "measure-repeat2-97-pending-product": {
+    "python": "3.12.15 (main, Sep 30 2026, 22:04:19) [Clang 21.0.0 (clang-2100.3.34.2)]",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "backend": "/Users/ryanliang/.codex/worktrees/realtime-handoff-accounting-126-20261112/CandleScope/backend/app/data_engine/bar_aggregator/publisher.py",
+    "period": 97,
+    "scenario": "pending",
+    "source": "deterministic controlled accepted components; no network/repo source qualification",
+    "owner": "default DataManager realtime-state registration; manager not started, storage bridge callback remains inactive",
+    "payload_hash": "36628c7fde787199bbece7a4a1fe0ce791b515546e8316d329d53bfb92d88bf8",
+    "components": 97,
+    "held": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "buffered_handoff_states": 0,
+      "retained_payload_states": 1,
+      "retained_states": 1,
+      "retained_components": 97,
+      "retained_events": 1,
+      "inflight_input_frames": 0,
+      "inflight_dispatch_frames": 0,
+      "inflight_callback_frames": 0,
+      "inflight_retry_input_frames": 0,
+      "inflight_retry_keys_frames": 0,
+      "pending_source_snapshots": 1,
+      "publisher_metadata_bytes": 376,
+      "component_index_bytes": 0,
+      "retained_component_index_bytes": 0,
+      "history_prefixes": 0,
+      "retained_history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 100984,
+      "estimate_basis": "unique retained state containers; component references may overcount shared immutable values",
+      "protection": "active/correction state and pending publications stay with realtime owner",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 152623,
+      "unique_objects": 1037
+    },
+    "after": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "buffered_handoff_states": 0,
+      "retained_payload_states": 0,
+      "retained_states": 0,
+      "retained_components": 0,
+      "retained_events": 0,
+      "inflight_input_frames": 0,
+      "inflight_dispatch_frames": 0,
+      "inflight_callback_frames": 0,
+      "inflight_retry_input_frames": 0,
+      "inflight_retry_keys_frames": 0,
+      "pending_source_snapshots": 0,
+      "publisher_metadata_bytes": 128,
+      "component_index_bytes": 0,
+      "retained_component_index_bytes": 0,
+      "history_prefixes": 0,
+      "retained_history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 128,
+      "estimate_basis": "unique retained state containers; component references may overcount shared immutable values",
+      "protection": "active/correction state and pending publications stay with realtime owner",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 368,
+      "unique_objects": 6
+    },
+    "pending_before": 1,
+    "observed_pending_graph_bytes": 152135,
+    "cpu": {
+      "samples": 256,
+      "p50_us": 710.0,
+      "p95_us": 1037.0,
+      "p99_us": 1283.0
+    },
+    "wall": {
+      "samples": 256,
+      "p50_us": 738.6875,
+      "p95_us": 1192.5,
+      "p99_us": 1619.542
+    },
+    "gc_before": [
+      {
+        "collections": 860,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 78,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 7,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "gc_after": [
+      {
+        "collections": 861,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 78,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 7,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "process_peak_rss": 208420864,
+    "limits": "heap is diagnostic visibility, not memory reduction/RSS; single-host instrumented callback costs, not product/native acceptance"
+  },
+  "measure-repeat3-10007-callback-baseline": {
+    "python": "3.12.15 (main, Sep 30 2026, 22:04:19) [Clang 21.0.0 (clang-2100.3.34.2)]",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "backend": "/Users/ryanliang/.codex/worktrees/realtime-handoff-accounting-126-20261112/CandleScope/output/realtime-handoff-accounting-126-20261112/baseline/backend/app/data_engine/bar_aggregator/publisher.py",
+    "period": 10007,
+    "scenario": "callback",
+    "source": "deterministic controlled accepted components; no network/repo source qualification",
+    "owner": "default DataManager realtime-state registration; manager not started, storage bridge callback remains inactive",
+    "payload_hash": "d71499b2761b534c27fb455f9ab183ff00129c5b12c0b786d780070a88e6961f",
+    "components": 10007,
+    "held": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "component_index_bytes": 0,
+      "history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 0,
+      "protection": "active and correction state owned by realtime executor",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 168,
+      "unique_objects": 3
+    },
+    "after": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "component_index_bytes": 0,
+      "history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 0,
+      "protection": "active and correction state owned by realtime executor",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 168,
+      "unique_objects": 3
+    },
+    "pending_before": 0,
+    "observed_pending_graph_bytes": 0,
+    "cpu": {
+      "samples": 64,
+      "p50_us": 2010.5,
+      "p95_us": 2822.0,
+      "p99_us": 3719.0
+    },
+    "wall": {
+      "samples": 64,
+      "p50_us": 2032.6875,
+      "p95_us": 3138.083,
+      "p99_us": 4301.0
+    },
+    "gc_before": [
+      {
+        "collections": 938,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 85,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 8,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "gc_after": [
+      {
+        "collections": 938,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 85,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 8,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "process_peak_rss": 219561984,
+    "limits": "heap is diagnostic visibility, not memory reduction/RSS; single-host instrumented callback costs, not product/native acceptance"
+  },
+  "measure-repeat3-10007-callback-product": {
+    "python": "3.12.15 (main, Sep 30 2026, 22:04:19) [Clang 21.0.0 (clang-2100.3.34.2)]",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "backend": "/Users/ryanliang/.codex/worktrees/realtime-handoff-accounting-126-20261112/CandleScope/backend/app/data_engine/bar_aggregator/publisher.py",
+    "period": 10007,
+    "scenario": "callback",
+    "source": "deterministic controlled accepted components; no network/repo source qualification",
+    "owner": "default DataManager realtime-state registration; manager not started, storage bridge callback remains inactive",
+    "payload_hash": "d71499b2761b534c27fb455f9ab183ff00129c5b12c0b786d780070a88e6961f",
+    "components": 10007,
+    "held": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "buffered_handoff_states": 0,
+      "retained_payload_states": 3,
+      "retained_states": 3,
+      "retained_components": 30021,
+      "retained_events": 2,
+      "inflight_input_frames": 1,
+      "inflight_dispatch_frames": 1,
+      "inflight_callback_frames": 1,
+      "inflight_retry_input_frames": 0,
+      "inflight_retry_keys_frames": 0,
+      "pending_source_snapshots": 0,
+      "publisher_metadata_bytes": 672,
+      "component_index_bytes": 0,
+      "retained_component_index_bytes": 12288,
+      "history_prefixes": 0,
+      "retained_history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 30758048,
+      "estimate_basis": "unique retained state containers; component references may overcount shared immutable values",
+      "protection": "active/correction state and pending publications stay with realtime owner",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 10258413,
+      "unique_objects": 60256
+    },
+    "after": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "buffered_handoff_states": 0,
+      "retained_payload_states": 0,
+      "retained_states": 0,
+      "retained_components": 0,
+      "retained_events": 0,
+      "inflight_input_frames": 0,
+      "inflight_dispatch_frames": 0,
+      "inflight_callback_frames": 0,
+      "inflight_retry_input_frames": 0,
+      "inflight_retry_keys_frames": 0,
+      "pending_source_snapshots": 0,
+      "publisher_metadata_bytes": 128,
+      "component_index_bytes": 0,
+      "retained_component_index_bytes": 0,
+      "history_prefixes": 0,
+      "retained_history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 128,
+      "estimate_basis": "unique retained state containers; component references may overcount shared immutable values",
+      "protection": "active/correction state and pending publications stay with realtime owner",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 368,
+      "unique_objects": 6
+    },
+    "pending_before": 0,
+    "observed_pending_graph_bytes": 0,
+    "cpu": {
+      "samples": 64,
+      "p50_us": 2142.5,
+      "p95_us": 2744.0,
+      "p99_us": 2991.0
+    },
+    "wall": {
+      "samples": 64,
+      "p50_us": 2200.6035,
+      "p95_us": 3517.75,
+      "p99_us": 7457.25
+    },
+    "gc_before": [
+      {
+        "collections": 939,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 85,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 8,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "gc_after": [
+      {
+        "collections": 939,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 85,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 8,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "process_peak_rss": 223444992,
+    "limits": "heap is diagnostic visibility, not memory reduction/RSS; single-host instrumented callback costs, not product/native acceptance"
+  },
+  "measure-repeat3-97-pending-baseline": {
+    "python": "3.12.15 (main, Sep 30 2026, 22:04:19) [Clang 21.0.0 (clang-2100.3.34.2)]",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "backend": "/Users/ryanliang/.codex/worktrees/realtime-handoff-accounting-126-20261112/CandleScope/output/realtime-handoff-accounting-126-20261112/baseline/backend/app/data_engine/bar_aggregator/publisher.py",
+    "period": 97,
+    "scenario": "pending",
+    "source": "deterministic controlled accepted components; no network/repo source qualification",
+    "owner": "default DataManager realtime-state registration; manager not started, storage bridge callback remains inactive",
+    "payload_hash": "36628c7fde787199bbece7a4a1fe0ce791b515546e8316d329d53bfb92d88bf8",
+    "components": 97,
+    "held": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "component_index_bytes": 0,
+      "history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 0,
+      "protection": "active and correction state owned by realtime executor",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 168,
+      "unique_objects": 3
+    },
+    "after": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "component_index_bytes": 0,
+      "history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 0,
+      "protection": "active and correction state owned by realtime executor",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 168,
+      "unique_objects": 3
+    },
+    "pending_before": 1,
+    "observed_pending_graph_bytes": 152135,
+    "cpu": {
+      "samples": 256,
+      "p50_us": 699.0,
+      "p95_us": 1022.0,
+      "p99_us": 1282.0
+    },
+    "wall": {
+      "samples": 256,
+      "p50_us": 701.042,
+      "p95_us": 1211.667,
+      "p99_us": 1570.917
+    },
+    "gc_before": [
+      {
+        "collections": 860,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 78,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 7,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "gc_after": [
+      {
+        "collections": 861,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 78,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 7,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "process_peak_rss": 210354176,
+    "limits": "heap is diagnostic visibility, not memory reduction/RSS; single-host instrumented callback costs, not product/native acceptance"
+  },
+  "measure-repeat3-97-pending-product": {
+    "python": "3.12.15 (main, Sep 30 2026, 22:04:19) [Clang 21.0.0 (clang-2100.3.34.2)]",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "backend": "/Users/ryanliang/.codex/worktrees/realtime-handoff-accounting-126-20261112/CandleScope/backend/app/data_engine/bar_aggregator/publisher.py",
+    "period": 97,
+    "scenario": "pending",
+    "source": "deterministic controlled accepted components; no network/repo source qualification",
+    "owner": "default DataManager realtime-state registration; manager not started, storage bridge callback remains inactive",
+    "payload_hash": "36628c7fde787199bbece7a4a1fe0ce791b515546e8316d329d53bfb92d88bf8",
+    "components": 97,
+    "held": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "buffered_handoff_states": 0,
+      "retained_payload_states": 1,
+      "retained_states": 1,
+      "retained_components": 97,
+      "retained_events": 1,
+      "inflight_input_frames": 0,
+      "inflight_dispatch_frames": 0,
+      "inflight_callback_frames": 0,
+      "inflight_retry_input_frames": 0,
+      "inflight_retry_keys_frames": 0,
+      "pending_source_snapshots": 1,
+      "publisher_metadata_bytes": 376,
+      "component_index_bytes": 0,
+      "retained_component_index_bytes": 0,
+      "history_prefixes": 0,
+      "retained_history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 100984,
+      "estimate_basis": "unique retained state containers; component references may overcount shared immutable values",
+      "protection": "active/correction state and pending publications stay with realtime owner",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 152623,
+      "unique_objects": 1037
+    },
+    "after": {
+      "active_bars": 0,
+      "closed_bars": 0,
+      "components": 0,
+      "queued_snapshots": 0,
+      "queued_components": 0,
+      "buffered_handoff_states": 0,
+      "retained_payload_states": 0,
+      "retained_states": 0,
+      "retained_components": 0,
+      "retained_events": 0,
+      "inflight_input_frames": 0,
+      "inflight_dispatch_frames": 0,
+      "inflight_callback_frames": 0,
+      "inflight_retry_input_frames": 0,
+      "inflight_retry_keys_frames": 0,
+      "pending_source_snapshots": 0,
+      "publisher_metadata_bytes": 128,
+      "component_index_bytes": 0,
+      "retained_component_index_bytes": 0,
+      "history_prefixes": 0,
+      "retained_history_prefixes": 0,
+      "history_handoff_bytes": 0,
+      "source_preparation_scopes": 0,
+      "source_preparation_capacity_slots": 0,
+      "source_preparation_max_targets": 128,
+      "source_preparation_in_use": 0,
+      "source_preparation_capacity_bytes": 0,
+      "preparation_scopes": 0,
+      "preparation_builds": 0,
+      "preparation_hits": 0,
+      "preparation_declines": 0,
+      "preparation_budget_deferred": 0,
+      "estimated_bytes": 128,
+      "estimate_basis": "unique retained state containers; component references may overcount shared immutable values",
+      "protection": "active/correction state and pending publications stay with realtime owner",
+      "limit_bytes": 134217728,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "unique_retained_bytes": 368,
+      "unique_objects": 6
+    },
+    "pending_before": 1,
+    "observed_pending_graph_bytes": 152135,
+    "cpu": {
+      "samples": 256,
+      "p50_us": 704.5,
+      "p95_us": 1186.0,
+      "p99_us": 1597.0
+    },
+    "wall": {
+      "samples": 256,
+      "p50_us": 706.4169999999999,
+      "p95_us": 1535.667,
+      "p99_us": 1945.959
+    },
+    "gc_before": [
+      {
+        "collections": 860,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 78,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 7,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "gc_after": [
+      {
+        "collections": 861,
+        "collected": 2875,
+        "uncollectable": 0
+      },
+      {
+        "collections": 78,
+        "collected": 946,
+        "uncollectable": 0
+      },
+      {
+        "collections": 7,
+        "collected": 0,
+        "uncollectable": 0
+      }
+    ],
+    "process_peak_rss": 206143488,
+    "limits": "heap is diagnostic visibility, not memory reduction/RSS; single-host instrumented callback costs, not product/native acceptance"
+  }
+}

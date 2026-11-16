@@ -92,7 +92,7 @@ The TypeScript contract is `frontend/src/features/extensions/contracts.ts`:
   `rightRail`, or `exportOverlay`. The component receives `fallback`; `shell` also
   receives the host's `slots`. Two active replacements for the same slot fail
   explicitly; there is no installation-order winner.
-- `ui.stylesheet(css)`: add an owned stylesheet that is removed on disposal.
+- `ui.stylesheet(css)`: add an owned stylesheet that is removed on disposal. The host places it in the app's `features` cascade layer, so it competes with feature CSS by specificity and order. `@import` is not supported inside it.
 - `commands.register(localName, handler)` / `commands.execute(fullName, payload)`:
   command names are prefixed with the extension ID.
 - `services.register(localName, value)` / `services.get(name)`: plugin services
@@ -178,10 +178,17 @@ requests to drain before cancelling unfinished requests and running lifespan
 cleanup. The desktop's existing 15-second process stop limit is unchanged. Slow
 or blocked extension cleanup can still exceed that limit and be forcibly stopped.
 
-Recovery is available outside replaceable UI slots:
+Extensions are managed in **Settings → 插件与扩展 (Plugins) → 可信扩展 (Trusted
+extensions)**. Recovery is available outside replaceable UI slots:
 
-- The **Extension recovery** button opens management or reloads with
-  `?extensions=off`. This skips frontend extensions for that document.
+- When an extension fails to load, or extensions are off for this launch, a
+  notice appears with **Manage extensions**. It opens the same management in a
+  dialog rendered outside the replaceable slots, so it works when an extension
+  has broken the page. The notice does not appear otherwise.
+- **Reload without extensions** (in management) reloads with
+  `?extensions=off`, which skips frontend extensions for that document; in that
+  mode the button reads **Reload with extensions**. Opening a page with
+  `?extensions=off` directly does the same.
 - Launch the desktop app with `--extensions-safe-mode`, or set
   `CANDLESCOPE_EXTENSIONS_SAFE_MODE=1`, to skip all extension execution realms.
 - An interrupted-load marker skips the interrupted package activation on the next

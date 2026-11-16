@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -25,21 +25,9 @@ test("imported analysis reuses shared chart controls, settings, export, and indi
   assert.doesNotMatch(source, /from "\.\.\/market-data\/feed\/klineApi/);
 });
 
-test("legacy LocalApp is compatibility assembly without independent chart business logic", () => {
-  const source = readFileSync(resolve(directory, "LocalApp.tsx"), "utf8");
-
-  assert.match(source, /StrategyResearchImportedWorkspace/);
-  assert.match(source, /useLocalIntervalSelection/);
-  assert.match(source, /useResearchDataLibrary/);
-  assert.match(source, /ResearchDatasetRail/);
-  assert.match(source, /ResearchDatasetManagement/);
-  assert.match(source, /<SettingsModal/);
-  assert.match(source, /useChartSettingsRuntime\(\)/);
-  assert.match(source, /interval=\{selectedInterval\}/);
-  assert.doesNotMatch(source, /function LocalChart/);
-  assert.doesNotMatch(source, /function LocalDatasetWorkspace/);
-  assert.doesNotMatch(source, /<SingleChartPanes/);
-  assert.doesNotMatch(source, /<IndicatorPanel/);
-  assert.doesNotMatch(source, /<DrawingToolbar/);
-  assert.doesNotMatch(source, /<ExportPanel/);
+test("the standalone LocalApp shell is retired; local.html opens the strategy research page", () => {
+  assert.equal(existsSync(resolve(directory, "LocalApp.tsx")), false);
+  const app = readFileSync(resolve(directory, "../strategy-research/StrategyResearchApp.tsx"), "utf8");
+  assert.match(app, /useResearchDataLibrary/);
+  assert.match(app, /useLocalIntervalSelection/);
 });

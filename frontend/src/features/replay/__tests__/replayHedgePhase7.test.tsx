@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { getLocale, setLocale } from "../../../i18n/index.js";
 import ReplayLiquidationTimeline from "../components/ReplayLiquidationTimeline.js";
 import { parseReplayLiquidationCases } from "../replayV2Types.js";
+import { readAppStyles } from "../../../test/appStyles.js";
 
 const digest = `sha256:${"a".repeat(64)}`;
 
@@ -154,10 +155,11 @@ test("Phase 7 parses and renders the complete liquidation, insurance and ADL tim
   }
 
   assert.match(html, /Case #1/);
-  assert.match(html, /FULL_LIQUIDATION/);
-  assert.match(html, /queue exact: false/);
+  assert.match(html, /Full liquidation|全部强平/);
+  assert.match(html, /L2/);
+  assert.doesNotMatch(html, /queue exact/);
   assert.match(html, /Insurance/);
-  assert.match(html, /ADL · COMPLETED/);
+  assert.match(html, /ADL · Completed/);
   assert.match(html, /deterministic simulation, not a historical exchange private queue/);
   assert.doesNotMatch(html, /actual_time|archive_path|private_queue_position/);
 });
@@ -173,11 +175,11 @@ test("Phase 7 timeline parser rejects queue-exact claims and unknown private fie
 
 test("Phase 7 entry and narrow-rail layout have no gray gate or horizontal overflow trap", () => {
   const entrySource = readFileSync(new URL("../useReplayEntryCapability.ts", import.meta.url), "utf8");
-  const css = readFileSync(new URL("../../../index.css", import.meta.url), "utf8");
+  const css = readAppStyles();
 
   assert.doesNotMatch(entrySource, /VITE_REPLAY_ENTRY_ENABLED/);
   assert.doesNotMatch(entrySource, /hidden/);
   assert.match(css, /\.replay-liquidation-case-body,[\s\S]*\{[^}]*min-width:\s*0[^}]*max-width:\s*100%/s);
   assert.match(css, /\.replay-liquidation-steps\s*\{[^}]*overflow-x:\s*hidden/s);
-  assert.match(css, /\.replay-right-rail[\s\S]*\.replay-liquidation-legs\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s);
+  assert.match(css, /\.replay-trading-workbench \.replay-liquidation-legs\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s);
 });

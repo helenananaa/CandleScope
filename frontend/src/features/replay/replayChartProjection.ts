@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
+import { describeError } from "../../i18n/serverErrors.js";
 import { ReplayDataManager, type ReplaySequenceLease } from "./replayDataManager.js";
 import { useReplayDataManager } from "./replayDataContext.js";
 import { defaultReplayV2Api } from "./replayV2Api.js";
@@ -143,7 +144,7 @@ export class ReplayChartProjection {
         observation: tapeObservation => this.publish({ ...this.state, tapeObservation,
           boundaryMs: tapeObservation?.virtualTimeMs ?? null }),
         loading: loading => this.publish({ ...this.state, loading: loading && this.seriesStore.isEmpty() }),
-        error: error => this.publish({ ...this.state, error: error?.message ?? null }),
+        error: error => this.publish({ ...this.state, error: error ? describeError(error, error.message) : null }),
         request: this.data.request.bind(this.data),
         ...(this.fetcher ? { fetcher: this.fetcher } : {}),
       });
@@ -169,7 +170,7 @@ export class ReplayChartProjection {
         this.publish({ loading: false, error: null, boundaryMs: boundary });
       } catch (error) {
         this.seriesStore.clear({ source: "replay-cell-projection-error" });
-        this.publish({ loading: false, error: String(error), boundaryMs: null });
+        this.publish({ loading: false, error: describeError(error, String(error)), boundaryMs: null });
       }
       return;
     }
@@ -201,7 +202,7 @@ export class ReplayChartProjection {
     }).catch((error: unknown) => {
       if (request.signal.aborted || !this.data.active) return;
       this.seriesStore.clear({ source: "replay-cell-projection-error" });
-      this.publish({ loading: false, error: error instanceof Error ? error.message : String(error), boundaryMs: null });
+      this.publish({ loading: false, error: describeError(error, String(error)), boundaryMs: null });
     }).finally(() => {
       if (this.request !== request) return;
       this.request = null;

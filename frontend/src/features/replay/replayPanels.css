@@ -1,0 +1,42 @@
+
+
+.replay-history-boundary-notice button { border: 0; color: inherit; background: transparent; font-size: var(--font-size-lg); }
+
+@media (max-width: 760px) {
+
+  .right-market-rail[data-runtime-source="replay"] { display: none; }
+
+  .replay-identity-readonly { max-width: 38vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .replay-launcher-overlay { padding: 8px; }
+  .replay-launcher-popup-blocked { top: 14px; right: 14px; left: 14px; flex-wrap: wrap; }
+
+}
+
+.replay-liquidation-case > summary,
+.replay-liquidation-steps > details > summary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.replay-liquidation-case > summary > span:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.replay-liquidation-legs > article > header,
+.replay-liquidation-order > header,
+.replay-liquidation-adl > header {
+  display: flex;
+  min-width: 0;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.replay-chart-cell > .chart-area { flex: 1; min-height: 0; }

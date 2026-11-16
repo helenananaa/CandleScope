@@ -442,8 +442,8 @@ test("initial HEDGE hybrid selection requires an explicit funding downgrade conf
       },
     },
   });
-  assert.match(prepared.downgradeConfirmation ?? "", /HEDGE_HYBRID/);
-  assert.match(prepared.downgradeConfirmation ?? "", /资金费.*OFF/);
+  assert.match(prepared.downgradeConfirmation ?? "", /近似输入的双向持仓/);
+  assert.match(prepared.downgradeConfirmation ?? "", /历史资金费关闭/);
   assert.equal(selectionCalls, 0);
 });
 
@@ -479,7 +479,7 @@ test("initial preparation refreshes one stale epoch before showing HEDGE confirm
   assert.equal(prepared.selection.catalog_epoch, epoch);
   assert.equal(prepared.catalog, fresh);
   assert.equal(prepared.entry, fresh.entries[0]);
-  assert.match(prepared.downgradeConfirmation ?? "", /HEDGE_HYBRID/);
+  assert.match(prepared.downgradeConfirmation ?? "", /近似输入的双向持仓/);
   assert.equal(selected, 0);
 });
 
@@ -535,7 +535,7 @@ test("selection drift to hybrid inputs requires confirmation of the refreshed pl
     assert.ok(reason instanceof ReplayInitialMarketDowngradeRequired);
     assert.equal(reason.catalog, fresh);
     assert.equal(reason.entry, fresh.entries[0]);
-    assert.match(reason.message, /HEDGE_HYBRID/);
+    assert.match(reason.message, /近似输入的双向持仓/);
     return true;
   });
   assert.equal(selected, 1, "the refreshed hybrid selection must wait for the explicit prompt");
@@ -1149,11 +1149,11 @@ test("create model defaults to a selectable ONE_WAY run and exposes fail-closed 
   const evaluation = evaluateTrainingRunSetupDraft(draft, capabilities);
   assert.equal(evaluation.canSubmit, true);
   assert.deepEqual(evaluation.unsupported, {
-    account_history: "精确账户只接受服务端已校验并固定的 mark/index/funding/规则归档；公开 K 线代理不算 exact",
-    funding: "HEDGE 优先使用 pinned historical funding；缺失时可明确降级为 OFF 或 Sandbox 固定模型",
-    historical_l2: "仅连续、可 pin、已验证的 Binance USD-M 历史 L2 可开启；不含真实盘口排队",
-    rule_changes: "费率、杠杆与 Sandbox 固定资金费可按白名单审计变更",
-    isolated_margin: "CROSS 与 ISOLATED 均可用；逐仓开仓前必须显式分配保证金",
+    account_history: "精确账户只接受服务端已校验并固定的标记价格、指数价格、资金费与规则归档；公开 K 线代理不算精确",
+    funding: "双向持仓优先使用固定的历史资金费；缺失时可明确降级为关闭或沙盒固定模型",
+    historical_l2: "仅连续、可固定、已验证的币安 U 本位历史 L2 可开启；不含真实盘口排队",
+    rule_changes: "费率、杠杆与沙盒固定资金费可按白名单审计变更",
+    isolated_margin: "全仓与逐仓均可用；逐仓开仓前必须明确分配保证金",
   });
   const request = buildTrainingRunCreateRequest(draft, evaluation);
   assert.equal(request.protocol, "replay.v3");
@@ -1419,7 +1419,7 @@ test("Phase 9 create model enables BOOK_ASSISTED only with an exact server plan"
   };
   const unavailable = evaluateTrainingRunDraft(draft, capabilities, catalog);
   assert.equal(unavailable.canSubmit, false);
-  assert.match(unavailable.errors.join("\n"), /exact L2/);
+  assert.match(unavailable.errors.join("\n"), /精确还原 L2/);
   const exactBook = {
     feature_enabled: true,
     requested_mode: "BOOK_ASSISTED_REQUIRED",
@@ -1465,6 +1465,22 @@ test("AGG initial market picker discloses unknown full-day download size", () =>
   assert.match(html, /只看可用/);
   assert.doesNotMatch(html, /training-hub-card/);
   assert.doesNotMatch(html, /合格窗口/);
+});
+
+test("the initial market picker lists markets as rows on the kit, with the run's constraints on one line", () => {
+  const run = parseTrainingRunListResponse(listResponse([runCard({
+    state: "AWAITING_MARKET",
+    last_symbol: null,
+    adapter_session_id: null,
+    resume_action: "SELECT_MARKET",
+  })])).items[0];
+  assert.ok(run);
+  const html = renderToStaticMarkup(<ReplayInitialMarketPicker run={run} onInitialized={() => {}} />);
+  assert.match(html, /<dl class="replay-market-picker-commit"[^>]*><div><dt>开局时间<\/dt>/);
+  assert.match(html, /<label class="ui-field-label"[^>]*>搜索商品<\/label><input class="ui-input" type="search"/);
+  assert.match(html, /<label class="ui-check replay-market-picker-toggle"><input type="checkbox" class="ui-check-input"[^>]*checked=""/);
+  assert.doesNotMatch(html, /training-hub-brand|training-hub-kicker|training-hub-filter-chips|>T0</, "no decorative mark, eyebrow or chip filters");
+  assert.match(html, /<a class="ui-btn ui-btn-ghost" href="\/replay.html">返回大厅<\/a>/);
 });
 
 test("hub markup exposes saves, native actions, filters and explicit unavailable capability reasons", () => {
@@ -1574,19 +1590,21 @@ test("hub markup exposes saves, native actions, filters and explicit unavailable
   assert.match(html, /新建训练/);
   assert.match(html, /待选商品|已暂停|已结束/);
   assert.doesNotMatch(html, />AWAITING_MARKET<|>PAUSED<|>ENDED</);
-  assert.match(html, /资金费.*OFF/);
+  assert.match(html, /降级为关闭/);
   assert.match(html, /完整性模式/);
   assert.match(html, /HIDE_MINUTE/);
-  assert.match(html, /Practice 可审计变更白名单/);
-  assert.match(html, /历史盘口.*连续、可 pin/);
+  assert.match(html, /练习模式允许的变更/);
+  assert.match(html, /修改手续费/);
+  assert.doesNotMatch(html, /change_fee_policy</);
+  assert.match(html, /历史盘口.*连续、可固定/);
   assert.match(html, /创建训练后选择商品/);
   assert.match(html, /创建时确定开始时间，暂不绑定商品、交易所、市场类型、基础周期或数据集/);
   assert.match(html, /检查通过后才会加入训练/);
-  assert.match(html, /缺少可近似项时自动使用清楚标记的 HEDGE_HYBRID/);
-  assert.match(html, /HEDGE 会优先绑定完整历史输入/);
+  assert.match(html, /缺少的项目会近似并明确标出，不会改成单向/);
+  assert.match(html, /双向持仓优先绑定完整历史输入/);
   assert.doesNotMatch(html, /DETERMINISTIC_SIMULATION[^<]*disabled|APPROX_PROXY[^<]*disabled/);
-  assert.match(html, /公开 K 线代理不算 exact/);
-  assert.match(html, /指标预热 BAR/);
+  assert.match(html, /公开 K 线代理不算精确/);
+  assert.match(html, /指标预热 K 线数/);
   assert.match(html, /全部可用（默认，按需加载）/);
   assert.match(html, /像实时行情一样向左按需分页/);
   assert.match(html, /确认时间并创建训练/);
@@ -1892,4 +1910,86 @@ test("account-mode changes replace the automatic catalog and abort stale respons
   assert.equal(lifecycle.getSnapshot().catalog, accepted);
   assert.ok(accepted?.entries.length);
   assert.equal(lifecycle.getSnapshot().automaticPreparationAvailable, false);
+});
+
+function layoutRuntime(overrides: Partial<TrainingHubRuntime> = {}): TrainingHubRuntime {
+  const catalog = blindCatalog();
+  const draft = createTrainingRunDraft(catalog);
+  const capabilities = parseReplayCapabilities(enabledCapabilities());
+  return {
+    phase: "READY",
+    items: parseTrainingRunListResponse(listResponse([
+      runCard(),
+      runCard({ run_id: "run-2", name: "ETH 待选", state: "AWAITING_MARKET", last_symbol: null, adapter_session_id: null,
+        resume_action: "SELECT_MARKET", time_disclosure_policy: "HIDE_YEAR" }),
+    ])).items,
+    nextCursor: null,
+    filters: { state: null, sourceKind: null, compatibility: null },
+    operation: null,
+    error: null,
+    createOpen: false,
+    capabilities,
+    catalog,
+    draft,
+    evaluation: evaluateTrainingRunDraft(draft, capabilities, catalog),
+    segmentPlan: parseReplaySegmentPreparePlan(segmentPlanResponse()),
+    storageOpen: false,
+    storageInventory: null,
+    storagePlan: null,
+    storagePlanConfirmed: false,
+    storageResult: null,
+    actions: {
+      refresh() {}, loadNext() {}, setFilters() {}, openCreate() {}, closeCreate() {}, openStorage() {}, closeStorage() {},
+      refreshStorage() {}, planStorageGc() {}, confirmStoragePlan() {}, runStorageGc() {}, rehydrateStorageObject() {},
+      setDraft() {}, refreshCreatePlan() {}, createRun() {}, deleteRun() {}, continueRun() {},
+    },
+    ...overrides,
+  } satisfies TrainingHubRuntime;
+}
+
+test("the hub lists runs as rows with a state badge and one line of details, filtered by a segmented control", () => {
+  const html = renderToStaticMarkup(<TrainingHubDialog runtime={layoutRuntime()} />);
+  assert.match(html, /role="radiogroup" aria-label="快捷状态"/);
+  assert.match(html, /<button[^>]*role="radio" aria-checked="true"[^>]*data-value="all">全部<\/button>/);
+  assert.equal((html.match(/<article class="training-hub-card"/g) ?? []).length, 2);
+  assert.match(html, /<span class="ui-badge"[^>]*data-tone="warning"[^>]*>待选商品<\/span>/);
+  assert.match(html, /隐藏年份/, "a non-default time disclosure is shown");
+  assert.doesNotMatch(html, /显示历史时间/, "the default time disclosure is not repeated on every row");
+  assert.doesNotMatch(html, /training-hub-card-meta|training-hub-stats|<dl/, "no tile grid per run and no counts strip");
+  assert.match(html, /<button[^>]*class="ui-btn ui-btn-ghost ui-btn-sm training-hub-delete-action"/);
+});
+
+test("a filter that matches nothing offers to clear it instead of the first-run empty state", () => {
+  const html = renderToStaticMarkup(<TrainingHubDialog runtime={layoutRuntime({
+    items: [],
+    filters: { state: "ENDED", sourceKind: null, compatibility: null },
+  })} />);
+  assert.match(html, /没有符合当前筛选的训练/);
+  assert.match(html, /清除筛选/);
+  assert.doesNotMatch(html, /新建第一条训练/);
+});
+
+test("the create form is a kit dialog: choices are segmented controls without internal codes, dates are UTC text", () => {
+  const runtime = layoutRuntime({ createOpen: true });
+  const html = renderToStaticMarkup(<TrainingHubDialog runtime={runtime} />);
+  assert.match(html, /<section role="dialog" aria-modal="true" aria-labelledby="[^"]+"[^>]*class="ui-dialog ui-dialog-lg training-hub-create"/);
+  for (const label of ["历史源", "开始方式", "完整性模式"]) {
+    assert.match(html, new RegExp(`<span class="ui-field-label">${label}</span><div role="radiogroup" aria-label="${label}"`));
+  }
+  assert.doesNotMatch(html, /<small>(BAR|AGG_TRADE|RANDOM|MANUAL|CHALLENGE|PRACTICE|SANDBOX)<\/small>/);
+  assert.doesNotMatch(html, /training-hub-create-steps|type="datetime-local"[^>]*data-training-field/);
+  assert.match(html, /<details id="training-hub-create-advanced" class="ui-disclosure training-hub-advanced"/);
+  const manual = renderToStaticMarkup(<TrainingHubDialog runtime={{ ...runtime,
+    draft: { ...runtime.draft!, startMode: "MANUAL", requestedStartMs: Date.UTC(2024, 2, 9, 16, 0) } }} />);
+  assert.match(manual, /data-training-field="requested-start-utc"[^>]*value="2024-03-09 16:00"|value="2024-03-09 16:00"[^>]*data-training-field="requested-start-utc"/);
+});
+
+test("archive deletion is the kit confirm dialog with a danger action", () => {
+  const card = parseTrainingRunListResponse(listResponse()).items[0];
+  assert.ok(card);
+  const html = renderToStaticMarkup(
+    <TrainingRunDeleteConfirmation card={card} busy={false} onCancel={() => {}} onConfirm={() => {}} />,
+  );
+  assert.match(html, /<section role="alertdialog"[^>]*class="ui-dialog ui-dialog-sm"/);
+  assert.match(html, /<button[^>]*class="ui-btn ui-btn-danger[^"]*"[^>]*>确认永久删除<\/button>/);
 });

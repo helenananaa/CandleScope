@@ -1,6 +1,9 @@
+import { Button, InlineAlert } from "../../components/ui/index.js";
 import ChartNoteFilterFields from "../chart-workspace/ChartNoteFilterFields.js";
 import { normalizeChartAccountOverlay } from "../chart-workspace/chartAccountOverlaySettings.js";
-import { applicationSettingsPatch, nextCellChartSettings } from "../chart-workspace/chartWorkspaceChartSettings.js";
+import { applicationSettingsPatch, buildAppearanceTargets, cellsWithAppearanceOverride, hasCellAppearanceOverride, nextCellChartSettings } from "../chart-workspace/chartWorkspaceChartSettings.js";
+import { resolveChartLinkTargetsForChannel } from "../chart-workspace/chartWorkspaceLinkModel.js";
+import ChartAppearanceSection from "../../components/settings/ChartAppearanceSection.js";
 import { normalizeSettings, useCellChartTheme } from "../settings/chartAppearanceSettings.js";
 import { useReplayOperations } from "./useReplayOperations.js";
 import { PageDrawingExportRegistry } from "../export/pageDrawingExport.js";
@@ -161,6 +164,17 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
   const settings = useMemo<ChartSettingsRuntime>(() => ({
     ...globalSettings,
     appearanceScope: "chart",
+    appearanceTargets: buildAppearanceTargets({
+      application: globalSettings.settings,
+      setApplication: globalSettings.setSettings,
+      cell: cell.chartSettings,
+      setCell: (next) => workspace.actions.updateCellChartSettings(cell.id, next),
+      // Each chart sets its own appearance in its header menu; Settings only counts and resets them.
+      workspace: {
+        overrides: cellsWithAppearanceOverride(workspace.view.document, workspace.view.layoutCellIds).length,
+        resetAll: workspace.actions.resetCellAppearance,
+      },
+    }),
     inheritApplicationTheme: cell.chartSettings.theme === undefined,
     settings: { ...globalSettings.settings, ...cell.chartSettings },
     resolvedTheme,
@@ -171,7 +185,7 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
       const applicationPatch = applicationSettingsPatch(current, next);
       if (Object.keys(applicationPatch).length) globalSettings.setSettings(previous => ({ ...previous, ...applicationPatch }));
     },
-  }), [cell.chartSettings, cell.id, globalSettings, workspace.actions, resolvedTheme]);
+  }), [cell.chartSettings, cell.id, globalSettings, workspace.actions, workspace.view.document, workspace.view.layoutCellIds, resolvedTheme]);
   const cellIntegrity = useMemo<ReplayIntegrityRuntime>(() => integrity.review === null ? integrity : ({
     ...integrity,
     review: {
@@ -214,9 +228,8 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
       data-replay-boundary-ms={projection.boundaryMs ?? ""} data-replay-cell-bars={projection.seriesStore.barCount}
       data-replay-cell-interval={cell.session.interval} data-replay-cell-error={projection.error ?? ""} />
     {projection.loading && <div role="status" className="replay-chart-loading">{t("replay.opening")}</div>}
-    {projection.error && <div role="alert" className="replay-chart-error">{projection.error}
-      <button type="button" onClick={projection.retry}>{t("replay.retry")}</button>
-    </div>}
+    {projection.error && <InlineAlert tone="danger" className="replay-chart-error"
+      action={<Button size="sm" onClick={projection.retry}>{t("replay.retry")}</Button>}>{projection.error}</InlineAlert>}
     <ReplayTrainingPageShell runtime={runtime} viewer={viewer} indicators={indicators}
       chartSurfaceRef={surface.ref} chartSurfaceActions={surface.actions}
       pageExportRef={pageExportRef} preparePageDrawingExport={preparePageDrawingExport}
@@ -398,6 +411,7 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
   return <>
     {import.meta.env.DEV && focusTiming && <span hidden data-replay-focus-cell={focusTiming.id} data-replay-focus-ms={focusTiming.durationMs} />}
     <MarketPageFrame
+      skipToChart
       rootRef={pageExportRef}
       topBar={<div ref={hostRefs.topBar} className="replay-workspace-host" />}
       intervalSelector={<div ref={hostRefs.intervalSelector} className="replay-workspace-host" />}
@@ -444,6 +458,14 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
                 </button>
                 <button type="button" onClick={() => workspace.actions.toggleMaximize(id)} aria-label={t("workspace.tab.layout")}><Icon name="maximize" size={14} /></button>
                 <WorkspaceCellLayoutMenu portal cellId={id} layoutCellIds={workspace.view.layoutCellIds}
+                  appearance={<ChartAppearanceSection targets={buildAppearanceTargets({
+                    application: chartSettingsRuntime.settings,
+                    setApplication: chartSettingsRuntime.setSettings,
+                    cell: cell.chartSettings,
+                    setCell: (next) => workspace.actions.updateCellChartSettings(id, next),
+                    linkedCharts: resolveChartLinkTargetsForChannel(workspace.view.document, id, "chartStyle").length,
+                  })} />}
+                  customized={hasCellAppearanceOverride(cell.chartSettings)}
                   maxCellsPerWindow={workspace.view.maxCellsPerWindow} disabled={workspace.view.layoutLocked}
                   onSplit={workspace.actions.splitCell} onClose={workspace.actions.closeCell} onSwap={workspace.actions.swapCells}>
                   <fieldset>
@@ -486,8 +508,10 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
           }} />}
       />}
       featureSurfaces={<><div ref={hostRefs.featureSurfaces} className="replay-workspace-host" />
-        {drawings.error && <div role="alert">{drawings.error}<button type="button" onClick={drawings.retry}>{t("replay.retry")}</button></div>}
-        {error && <div role="alert">{error}<button type="button" onClick={() => { setError(null); setSelectionAttempt((attempt) => attempt + 1); }}>{t("replay.retry")}</button></div>}
+        {drawings.error && <InlineAlert tone="danger" className="replay-workspace-error"
+          action={<Button size="sm" onClick={drawings.retry}>{t("replay.retry")}</Button>}>{drawings.error}</InlineAlert>}
+        {error && <InlineAlert tone="danger" className="replay-workspace-error"
+          action={<Button size="sm" onClick={() => { setError(null); setSelectionAttempt((attempt) => attempt + 1); }}>{t("replay.retry")}</Button>}>{error}</InlineAlert>}
       </>}
       statusBar={<div ref={hostRefs.statusBar} className="replay-workspace-host" />}
     />

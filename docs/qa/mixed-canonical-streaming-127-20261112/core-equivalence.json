@@ -1,0 +1,30 @@
+[
+  {
+    "mode": "batch",
+    "cases": 64,
+    "field_comparisons": 996,
+    "max_abs_difference": 0.0,
+    "max_rel_difference": 0.0
+  },
+  {
+    "mode": "1",
+    "cases": 64,
+    "field_comparisons": 996,
+    "max_abs_difference": 0.00115966796875,
+    "max_rel_difference": 4.533317090743072e-15
+  },
+  {
+    "mode": "7",
+    "cases": 64,
+    "field_comparisons": 996,
+    "max_abs_difference": 0.00079345703125,
+    "max_rel_difference": 2.9142752726205468e-15
+  },
+  {
+    "mode": "256",
+    "cases": 64,
+    "field_comparisons": 996,
+    "max_abs_difference": 0.00018310546875,
+    "max_rel_difference": 6.475370332648816e-16
+  }
+]

@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { Button, InlineAlert, buttonClassName } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { dismissCompatNotice, isCompatNoticeDismissed } from "./strategyResearchCompat.js";
@@ -15,17 +16,24 @@ export function StrategyResearchCompatNotice({ page }: { page: "local" | "backte
       data-testid="strategy-research-compat-notice"
       data-compat-page={page}
     >
-      <p>{page === "local" ? t("strategy.compat.local") : t("strategy.compat.backtest")}</p>
-      <a href="/strategy.html">{t("strategy.compat.canonical")}</a>
-      <button
-        type="button"
-        onClick={() => {
-          dismissCompatNotice();
-          setDismissed(true);
-        }}
+      <InlineAlert
+        tone="info"
+        action={<>
+          <a href="/strategy.html" className={buttonClassName({ variant: "ghost", size: "sm" })}>{t("strategy.compat.canonical")}</a>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              dismissCompatNotice();
+              setDismissed(true);
+            }}
+          >
+            {t("strategy.compat.dismiss")}
+          </Button>
+        </>}
       >
-        {t("strategy.compat.dismiss")}
-      </button>
+        {page === "local" ? t("strategy.compat.local") : t("strategy.compat.backtest")}
+      </InlineAlert>
     </aside>
   );
 }

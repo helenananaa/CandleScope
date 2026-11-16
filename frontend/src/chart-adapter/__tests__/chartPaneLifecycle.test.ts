@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { contrastRatio, parseColor } from "../legibleColor.js";
 import {
   buildChartPaneOptions,
   applyChartPaneAppearance,
@@ -74,7 +75,7 @@ test("explicit chart themes override extension tokens while inherited charts fol
     assert.equal(getPaneThemeColors({ theme: "light" }).bgColor, "#123456");
     const independent = { theme: "light", inheritApplicationTheme: false };
     assert.equal(getPaneThemeColors(independent).bgColor, "#ffffff");
-    assert.equal(getPaneThemeColors(independent).textColor, "#1e293b");
+    assert.equal(getPaneThemeColors(independent).textColor, "#4a4d55");
     const options = buildChartPaneOptions({ ...independent,
       container: structuralMock<HTMLElement>({ clientWidth: 900, clientHeight: 500 }),
     });
@@ -91,14 +92,29 @@ test("explicit chart themes override extension tokens while inherited charts fol
 });
 
 
-test("per-chart DOM legend colors match candles and explicit pane themes", () => {
+test("per-chart DOM legend colors follow the candles and stay readable on the pane", () => {
+  const readable = (color: string, background: string) => contrastRatio(parseColor(color)!, parseColor(background)!) >= 4.5;
   const palette = chartPaneCssVariables({ theme: "light", inheritApplicationTheme: false,
     upColor: "#ff0000", downColor: "#00ff00" });
-  assert.equal(palette["--text-up"], "#ff0000");
-  assert.equal(palette["--text-down"], "#00ff00");
-  assert.equal(palette["--text-muted"], "#1e293b");
+  // Pure red and green are too light for a white pane; the legend gets darker shades of them.
+  assert.match(palette["--text-up"]!, /^#[a-f0-9]{2}0000$/);
+  assert.ok(readable(palette["--text-up"]!, "#ffffff"));
+  assert.ok(readable(palette["--text-down"]!, "#ffffff"));
+  assert.equal(palette["--text-muted"], "#4a4d55");
   assert.equal(palette["--surface-0"], "#ffffff");
-  assert.deepEqual(chartPaneCssVariables({ theme: "dark", upColor: "#123456", downColor: "#654321" }), {
-    "--text-up": "#123456", "--text-down": "#654321",
+  // Colours that already read on the dark pane are kept as chosen.
+  assert.deepEqual(chartPaneCssVariables({ theme: "dark", upColor: "#22c55e", downColor: "#ef4444" }), {
+    "--text-up": "#22c55e", "--text-down": "#ef4444",
   });
+});
+
+
+test("custom chart backgrounds pick readable text and grid colours", () => {
+  const lightCustom = getPaneThemeColors({ theme: "custom", customBg: "#f4efe2", inheritApplicationTheme: false });
+  assert.equal(lightCustom.bgColor, "#f4efe2");
+  assert.equal(lightCustom.textColor, "#4a4d55");
+  assert.equal(lightCustom.gridColor, "rgba(0, 0, 0, 0.06)");
+  const darkCustom = getPaneThemeColors({ theme: "custom", customBg: "#102030", inheritApplicationTheme: false });
+  assert.equal(darkCustom.textColor, "#a6a9b0");
+  assert.equal(getPaneThemeColors({ theme: "dark", inheritApplicationTheme: false }).bgColor, "#0d0e10");
 });

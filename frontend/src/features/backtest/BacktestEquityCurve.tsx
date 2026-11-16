@@ -27,7 +27,7 @@ export default function BacktestEquityCurve({
   if (!points) return <p className="backtest-empty">{t("backtest.equityEmpty")}</p>;
   return (
     <svg
-      className={compact ? "backtest-equity-svg compact" : "backtest-equity-svg"}
+      className="backtest-equity-svg"
       viewBox="0 0 1000 210"
       preserveAspectRatio="none"
       aria-label={t("backtest.equityAria")}

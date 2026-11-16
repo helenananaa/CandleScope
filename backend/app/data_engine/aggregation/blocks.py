@@ -276,6 +276,23 @@ class SharedBlockManager:
                 or view.generation != self._generation or self._closed):
             raise BlockRevisionChanged("block read view expired or was invalidated")
 
+    def has_resident_inputs(self, view, start_ms, end_ms):
+        """A conservative existence probe, never an availability certificate.
+
+        Canonical row counts alone cannot exclude summaries already retained
+        here or being built. Keep this metadata query on the original owner.
+        """
+        if start_ms >= end_ms:
+            raise ValueError('positive resident-input range required')
+        with self._lock:
+            self._check_view(view)
+            sources = frozenset(revision.series for revision in view.revisions)
+            def overlaps(item):
+                key, dependencies = item
+                return (key.start_ms < end_ms and start_ms < key.end_ms
+                    and any(revision.series in sources for revision in dependencies))
+            return any(overlaps(item) for item in self._entries) or any(overlaps(item) for item in self._flights)
+
     def _drop(self, key, entry):
         self._entries.pop(key, None)
         entry.valid = False
