@@ -111,12 +111,14 @@ export function useBacktestResearchRuntime(options: {
   api?: BacktestApiClient;
   search?: string;
   advancedEnabled?: boolean;
+  /** The research tool to open; otherwise the launch context or deep link decides. */
+  initialTask?: BacktestResearchTask | null;
 } = {}): BacktestResearchRuntime {
   const api = options.api ?? defaultBacktestApi;
   const search = options.search ?? (typeof window === "undefined" ? "" : window.location.search);
   const entry = useMemo(() => parseBacktestResearchEntry(search), [search]);
   const advancedEnabled = options.advancedEnabled ?? isBacktestResearchAdvancedEnabled();
-  const [selectedTask, setSelectedTask] = useState<BacktestResearchTask | null>(null);
+  const [selectedTask, setSelectedTask] = useState<BacktestResearchTask | null>(options.initialTask ?? null);
   const [sourceMode, setSourceMode] = useState<BacktestResearchRuntime["view"]["sourceMode"]>("LIVE_REFERENCE");
   const [refreshRevision, setRefreshRevision] = useState(0);
   const [phase, setPhase] = useState<BacktestResearchRuntime["view"]["phase"]>("LOADING");

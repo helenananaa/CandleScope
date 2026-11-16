@@ -144,3 +144,30 @@ test("drawer failure fallback copy does not clear a script draft", () => {
   assert.match(html, /data-strategy-draft=""/);
   assert.equal(runtime.state.script.draftId, "draft-keep");
 });
+
+test("the page opens in the mode ?mode= names, or the one the compatibility URL or deep link implies", async () => {
+  const { initialStrategyResearchMode } = await import("../strategyResearchMode.js");
+  const at = (pathname: string, search = "") => initialStrategyResearchMode(parseStrategyResearchLaunch({ pathname, search }), search);
+  assert.equal(at("/strategy.html"), "quick");
+  assert.equal(at("/strategy.html", "?mode=robust"), "robust");
+  assert.equal(at("/strategy.html", "?mode=unknown"), "quick");
+  assert.equal(at("/backtest.html"), "precise");
+  assert.equal(at("/backtest.html", "?run=bt_0123456789abcdef"), "precise");
+  assert.equal(at("/backtest.html", "?study=st_0123456789abcdef"), "robust");
+  // A launch context picks its own tool (its entry task) unless the URL names one.
+  assert.equal(at("/backtest.html", "?context=brc_abcdefgh"), null);
+  assert.equal(at("/strategy.html", "?mode=replay&context=brc_abcdefgh"), "replay");
+  assert.equal(at("/local.html"), "quick");
+});
+
+test("backtest.html and local.html rewrite their address to strategy.html in the matching mode", async () => {
+  const { canonicalStrategyResearchHref } = await import("../strategyResearchMode.js");
+  const href = (pathname: string, search = "") => canonicalStrategyResearchHref({ pathname, search }, parseStrategyResearchLaunch({ pathname, search }));
+  assert.equal(href("/strategy.html", "?mode=precise"), null);
+  assert.equal(href("/backtest.html"), "/strategy.html?mode=precise");
+  assert.equal(href("/backtest.html", "?run=bt_0123456789abcdef&compare=bt_fedcba9876543210"),
+    "/strategy.html?mode=precise&run=bt_0123456789abcdef&compare=bt_fedcba9876543210");
+  assert.equal(href("/backtest.html", "?context=brc_abcdefgh"), "/strategy.html?context=brc_abcdefgh");
+  assert.equal(href("/local.html"), "/strategy.html?source=imported");
+  assert.equal(href("/local.html", "?action=import"), "/strategy.html?action=import");
+});

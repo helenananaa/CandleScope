@@ -138,7 +138,7 @@ test("result context is completed-Run authoritative and never claims all history
   assert.match(html, /全部本地可用数据/);
   assert.doesNotMatch(html, /全部历史/);
   assert.match(html, /BINANCE_SPOT_V1/);
-  assert.match(html, /backtest\.html\?run=bt_result_12345678/);
+  assert.match(html, /strategy\.html\?mode=precise&amp;run=bt_result_12345678/);
   assert.match(html, /data-result-cache-key="bt_result_12345678\|sha256:report\|sha256:chart"/);
 });
 
@@ -181,7 +181,7 @@ test("ordinary overview exposes directional deltas only for exact compatible Run
   );
   assert.match(compatible, /data-testid="chart-strategy-run-comparison"/);
   assert.match(compatible, /\+2 \/ −1/);
-  assert.match(compatible, /backtest\.html\?run=bt_result_12345678&amp;compare=bt_baseline_12345678/);
+  assert.match(compatible, /strategy\.html\?mode=precise&amp;run=bt_result_12345678&amp;compare=bt_baseline_12345678/);
 
   const incompatible = renderToStaticMarkup(
     <ChartStrategyResultOverview

@@ -1,3 +1,4 @@
+import { ResearchModeLayout } from "./ResearchModeLayout.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useControlCommands } from "../../app-control/useControlCommands.js";
 import { command } from "../../app-control/commandRegistry.js";
@@ -231,11 +232,6 @@ export default function ResearchMarketChart({ runtime }: { runtime: BacktestRese
         <AppHeader
           source="research"
           className="research-top-bar"
-          badge={(
-            <button type="button" className="research-task-home-button" onClick={() => runtime.actions.selectTask(null)}>
-              {t("research.task.home")}
-            </button>
-          )}
           context={(
             <div className="research-market-identity">
               <strong>{chartSession.view.symbol}</strong>
@@ -260,7 +256,9 @@ export default function ResearchMarketChart({ runtime }: { runtime: BacktestRese
           )}
         />
       )}
-      intervalSelector={(
+      intervalSelector={null}
+      workspace={(
+        <ResearchModeLayout top={(
         <IntervalSelector
           interval={chartSession.view.interval}
           capabilityReady={chartSession.status.exchangeCatalogStatus !== "loading" && chartSession.status.historyIntervalAvailable}
@@ -278,8 +276,7 @@ export default function ResearchMarketChart({ runtime }: { runtime: BacktestRese
           intervalNotice={chartSession.view.intervalNotice}
           readOnlyReason={activeSource.mode === "LIVE_REFERENCE" ? null : sourceLabel(activeSource.mode)}
         />
-      )}
-      workspace={(
+      )}>
         <MarketWorkspaceFrame
           toolbar={leftPanels}
           exportOverlay={null}
@@ -328,6 +325,7 @@ export default function ResearchMarketChart({ runtime }: { runtime: BacktestRese
             : null}
           rightRail={rightPanels}
         />
+        </ResearchModeLayout>
       )}
       featureSurfaces={null}
       statusBar={(

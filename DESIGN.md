@@ -172,6 +172,15 @@ The replay rail (回放笔记, 自选, 市场) sets the pattern for a view in a 
 - **Rows, not cards.** The open item has an accent edge and a light tint; actions every row has are an icon button or small ghost buttons at its end. A card is kept for a unit with its own controls (an open position).
 - **Trading views** (下单, 仓位): a figure's unit sits inside its input; 开仓 / 平仓 is a `SegmentedControl` and the order type `Tabs` whose panel holds the fields; figures are `Stat`s and two-column label/value lists in mono. Buy and sell are the one pair of buttons outside the kit: filled with the user's candle colours, and tinted rather than grey when disabled so the sides stay recognisable.
 
+## Pages with modes
+
+策略研究 is one page with modes (快速测试 and the five research tools) instead of a page per tool and a landing page of cards:
+
+- **A 72 px mode rail at the left edge**, from under the header down, like the market page's activity bar but wide enough for the longest single word in any language: an icon and a two-line label per mode, the current one tinted with an accent edge and `aria-current="page"`. Its first item (the everyday mode) is set apart by a divider.
+- **The URL carries the mode** (`?mode=robust`), so every mode has a link; switching rewrites the address without reloading. Old URLs (`backtest.html`, `local.html`) rewrite themselves to the canonical page and mode.
+- **Switching keeps the work.** What one mode has (data source, strategy draft, latest result) is carried into the next; a mode that lacks an input opens with its own defaults rather than refusing.
+- **The view's interval bar and workspace sit beside the rail**, so the rail does not move when the view below the header changes.
+
 ## Search and export dialogs
 
 Symbol search and Export set the pattern for a dialog that filters a list or configures an output:

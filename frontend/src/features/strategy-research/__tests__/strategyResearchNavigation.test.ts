@@ -155,9 +155,12 @@ test("ordinary research persists edited source for remount and advanced draft lo
   assert.match(panelSource, /beforeunload/);
 });
 
-test("unified app lazily hosts advanced research and does not import the advanced runtime", () => {
+test("unified app lazily hosts the research tools as modes and carries its context into them", () => {
   const app = readFileSync(path.resolve(here, "../StrategyResearchApp.tsx"), "utf8");
   assert.match(app, /lazy\(\(\) => import\("\.\.\/backtest\/research\/BacktestResearchApp/);
   assert.doesNotMatch(app, /useBacktestResearchRuntime/);
-  assert.match(app, /createStrategyResearchAdvancedHref/);
+  assert.match(app, /createStrategyResearchContextSearch/);
+  assert.match(app, /<StrategyResearchModeRail/);
+  assert.match(app, /window\.history\.replaceState/);
+  assert.doesNotMatch(app, /window\.location\.assign|strategy\.advancedNeedSource|strategy\.advancedNeedDraft/);
 });

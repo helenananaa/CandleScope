@@ -1,3 +1,4 @@
+import { strategyResearchModeHref } from "../research/backtestResearchModes.js";
 import { formatIntervalLabel } from "../../../utils/intervals.js";
 import { strategyTradeFocus, type StrategyTradeFocus } from "./strategyTradeReview.js";
 import { useControlCommands } from "../../app-control/useControlCommands.js";
@@ -190,7 +191,7 @@ export function ChartStrategyResultContextBar({
           {t("chartTester.result.credibility")}
         </button>
       ) : (
-        <a href={`/backtest.html?run=${encodeURIComponent(run.run_id)}`}>
+        <a href={strategyResearchModeHref("precise", { run: run.run_id })}>
           {t("chartTester.result.credibility")}
         </a>
       )}
@@ -237,9 +238,7 @@ export function ChartStrategyResultOverview({
   const netPnlDelta = directComparison?.tradeDiff.netPnl?.delta ?? null;
   const maxDrawdownDelta = directComparison?.tradeDiff.maxDrawdown?.delta ?? null;
   const tradeCountDelta = directComparison?.tradeDiff.tradeCount?.delta ?? null;
-  const advancedHref = comparison?.baselineRunId
-    ? `/backtest.html?run=${encodeURIComponent(run.run_id)}&compare=${encodeURIComponent(comparison.baselineRunId)}`
-    : `/backtest.html?run=${encodeURIComponent(run.run_id)}`;
+  const advancedHref = strategyResearchModeHref("precise", { run: run.run_id, compare: comparison?.baselineRunId });
   return (
     <div className="chart-strategy-result-overview" data-testid="chart-strategy-result-overview">
       {stale && (

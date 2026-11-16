@@ -15,21 +15,9 @@ import {
   type StrategyResearchLaunchIntent,
   type StrategyResearchPage,
 } from "./strategyResearchLaunch.js";
+import { canonicalStrategyResearchHref } from "./strategyResearchMode.js";
 
 const StrategyResearchApp = lazy(() => import("./StrategyResearchApp.js"));
-
-export function strategyResearchDocumentKeys(page: StrategyResearchPage): {
-  titleKey: "strategy.documentTitle" | "local.documentTitle" | "backtest.documentTitle";
-  descriptionKey: "strategy.documentDescription" | "local.documentDescription" | "backtest.documentDescription";
-} {
-  if (page === "local") {
-    return { titleKey: "local.documentTitle", descriptionKey: "local.documentDescription" };
-  }
-  if (page === "backtest") {
-    return { titleKey: "backtest.documentTitle", descriptionKey: "backtest.documentDescription" };
-  }
-  return { titleKey: "strategy.documentTitle", descriptionKey: "strategy.documentDescription" };
-}
 
 /** strategy.html, and its compatibility URLs backtest.html and local.html, all open the one strategy research page. */
 export function renderStrategyResearchBootstrap(input: {
@@ -45,12 +33,16 @@ export async function mountStrategyResearchPage(input: {
   page: StrategyResearchPage;
 }): Promise<void> {
   await initializeLocale(readPersistedLocale());
-  bindDocumentLocale(strategyResearchDocumentKeys(input.page));
+  // One page: the compatibility URLs carry the strategy research title too.
+  bindDocumentLocale({ titleKey: "strategy.documentTitle", descriptionKey: "strategy.documentDescription" });
   const root = document.getElementById("root");
   if (!(root instanceof HTMLElement)) {
     throw new Error("Strategy research document root is missing");
   }
   const location = { pathname: window.location.pathname, search: window.location.search };
+  // backtest.html and local.html stay as compatibility URLs: show the canonical address.
+  const canonical = canonicalStrategyResearchHref(location, parseStrategyResearchLaunch(location));
+  if (canonical !== null) window.history.replaceState(window.history.state, "", canonical);
   createRoot(root).render(
     <StrictMode>
       <ChartErrorBoundary>

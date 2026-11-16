@@ -3,6 +3,7 @@ import type { ReactNode, Ref } from "react";
 import MarketPageFrame from "../../app/MarketPageFrame.js";
 import AppHeader, { type AppHeaderProps } from "../../app/AppHeader.js";
 import MarketWorkspaceFrame from "../../app/MarketWorkspaceFrame.js";
+import { ResearchModeLayout } from "../backtest/research/ResearchModeLayout.js";
 import { t } from "../../i18n/index.js";
 import { ResearchDataSourceBar } from "../research-data/ResearchDataSourceBar.js";
 import type { ResearchSourceRefV1 } from "../research-data/researchDataTypes.js";
@@ -102,8 +103,9 @@ export function StrategyResearchShell({
             {...header}
           />
         )}
-        intervalSelector={intervalSelector}
+        intervalSelector={null}
         workspace={(
+          <ResearchModeLayout top={intervalSelector}>
           <MarketWorkspaceFrame
             toolbar={toolbar}
             exportOverlay={exportOverlay}
@@ -129,6 +131,7 @@ export function StrategyResearchShell({
               </aside>
             ) : null}
           />
+          </ResearchModeLayout>
         )}
         featureSurfaces={(
           <>
