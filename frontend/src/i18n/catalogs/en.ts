@@ -3401,9 +3401,7 @@ export const en = {
   "settings.diag.sharedMarketCache": "Shared market data cache",
   "settings.diag.indicatorCache": "Indicator result cache",
 
-  "workbench.kicker": "Inventory inspection and history downloads",
   "workbench.subtitle": "Inventory and gap queries are read-only. Manual history downloads write to local user datasets.",
-  "workbench.close": "Close data workbench",
   "workbench.filterTitle": "Inventory filters",
   "workbench.filterDesc": "Filters run on the backend. Results are capped at 500 series.",
   "workbench.readonly": "Read-only inventory query",
@@ -3421,8 +3419,6 @@ export const en = {
   "workbench.summarySeries": "Series",
   "workbench.summaryGaps": "Gaps",
   "workbench.summaryNoGaps": "No gaps",
-  "workbench.expandSection": "Expand",
-  "workbench.collapseSection": "Collapse",
   "workbench.snapshot": "SQLite snapshot",
   "workbench.capturedAt": "Captured at {time}",
   "workbench.readingSnapshot": "Reading snapshot from the backend",

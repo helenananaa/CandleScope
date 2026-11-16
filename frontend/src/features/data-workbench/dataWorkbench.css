@@ -1,0 +1,150 @@
+/* Data workbench (Phase 5h): storage inventory, integrity and manual history download.
+ * A kit dialog; controls come from the kit and these rules lay them out. Loaded with the
+ * global stylesheet, where the workbench's injected <style> used to be. */
+
+.data-workbench.ui-dialog-lg { max-width: min(1080px, calc(100vw - 48px)); }
+.data-workbench .ui-dialog-body { padding-top: var(--space-1); }
+.dw-body { display: grid; gap: var(--space-4); min-width: 0; }
+.dw-note { margin: 0; color: var(--text-muted); font: var(--font-size-xs)/1.6 var(--font-sans); }
+.dw-mono { font-family: var(--font-mono); }
+
+/* Filters */
+.dw-filter-card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.dw-filter-title-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.dw-filter-title-row h3,
+.dw-section-heading h3,
+.dw-manual-head h3 { margin: 0; color: var(--text-primary); font: 600 var(--font-size-base)/1.4 var(--font-sans); }
+.dw-live-badges { display: flex; gap: var(--space-1); }
+.dw-filter-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); }
+.dw-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
+
+/* Summary and snapshot figures */
+.dw-summary,
+.dw-stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); }
+.dw-integrity-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
+.dw-summary > .ui-stat,
+.dw-stat-grid > .ui-stat { padding: 10px var(--space-3); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--surface-0); }
+.dw-integrity-grid .ui-stat-value { font: 600 var(--font-size-sm)/1.5 var(--font-mono); white-space: normal; overflow-wrap: anywhere; }
+
+/* Folding sections */
+.dw-section .ui-disclosure-summary { width: 100%; }
+.dw-fold-summary { display: flex; flex: 1; align-items: center; justify-content: space-between; gap: var(--space-3); min-width: 0; }
+.dw-fold-copy { display: grid; gap: 2px; min-width: 0; }
+.dw-fold-copy strong { color: var(--text-primary); font: 600 var(--font-size-md)/1.4 var(--font-sans); }
+.dw-fold-copy small { color: var(--text-muted); font-size: var(--font-size-xs); }
+.dw-fold-body { display: grid; gap: var(--space-3); padding-top: var(--space-2); }
+
+/* Instrument rows: stored series and gaps */
+.dw-stored { display: grid; gap: var(--space-3); }
+.dw-section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.dw-result-count { color: var(--text-muted); font-size: var(--font-size-xs); }
+.dw-instrument-list { display: grid; gap: var(--space-1); }
+.dw-instrument {
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-0);
+}
+.dw-instrument[data-open='true'] { border-color: color-mix(in srgb, var(--accent-blue) 40%, var(--border-subtle)); }
+.dw-instrument-head {
+  display: grid;
+  grid-template-columns: 16px minmax(120px, 0.8fr) minmax(0, 1.4fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  color: var(--text-primary);
+  background: transparent;
+  font: inherit;
+  text-align: start;
+}
+button.dw-instrument-head { cursor: pointer; }
+button.dw-instrument-head:hover { background: var(--surface-2); }
+button.dw-instrument-head:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: -2px; }
+.dw-fold-chevron { display: inline-flex; color: var(--text-muted); transition: transform var(--motion-fast) var(--ease-out); }
+.dw-fold-chevron.spacer { width: 12px; }
+.dw-instrument-head.static { cursor: default; }
+.dw-instrument-head[aria-expanded='true'] .dw-fold-chevron { transform: rotate(90deg); }
+.dw-series-name { display: grid; gap: 2px; min-width: 0; }
+.dw-series-name strong { overflow: hidden; font: 600 var(--font-size-md)/1.4 var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.dw-series-name small { overflow: hidden; color: var(--text-muted); font-size: var(--font-size-xs); text-overflow: ellipsis; white-space: nowrap; }
+.dw-interval-chips { display: flex; flex-wrap: wrap; gap: var(--space-1); min-width: 0; }
+.dw-interval-chips .ui-badge { font-family: var(--font-mono); }
+.dw-instrument-stats { color: var(--text-secondary); font-size: var(--font-size-xs); text-align: end; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dw-instrument-detail { border-top: 1px solid var(--border-subtle); background: var(--surface-1); }
+.dw-interval-row {
+  display: grid;
+  grid-template-columns: 72px minmax(90px, 1fr) minmax(120px, 1fr) minmax(120px, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+  padding: 6px var(--space-3) 6px calc(var(--space-3) + 16px + var(--space-3));
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+.dw-interval-row + .dw-interval-row { border-top: 1px solid var(--border-subtle); }
+.dw-interval-row .dw-mono { color: var(--text-accent); font-weight: 600; }
+
+/* Manual history download */
+.dw-manual {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.dw-manual-disabled { background: var(--surface-1); }
+.dw-manual-head { display: grid; gap: 4px; }
+.dw-manual-head p { margin: 0; color: var(--text-secondary); font: var(--font-size-sm)/1.6 var(--font-sans); }
+.dw-manual-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.dw-symbols { min-height: 64px; font: var(--font-size-sm)/1.5 var(--font-mono); }
+.dw-intervals { display: grid; gap: var(--space-3); min-width: 0; margin: 0; padding: var(--space-3); border: 1px solid var(--border-subtle); border-radius: var(--radius-control); }
+.dw-intervals legend { padding: 0 var(--space-1); color: var(--text-secondary); font: 600 var(--font-size-xs)/1.4 var(--font-sans); }
+.dw-interval-checks { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
+.dw-interval-checks .ui-check-label { font-family: var(--font-mono); }
+.dw-custom-interval { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2); }
+.dw-custom-interval .ui-field { width: 160px; }
+.dw-start { max-width: 280px; }
+.dw-manual-actions { justify-content: flex-start; }
+.dw-manual-box { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--border-subtle); border-radius: var(--radius-control); background: var(--surface-1); }
+.dw-manual-box h4,
+.dw-manual-records h4 { margin: 0; color: var(--text-secondary); font: 600 var(--font-size-xs)/1.4 var(--font-sans); }
+.dw-manual-box p { margin: 0; color: var(--text-secondary); font-size: var(--font-size-sm); }
+.dw-manual-list { display: grid; gap: 2px; margin: 0; padding-left: var(--space-4); color: var(--text-secondary); font: var(--font-size-xs)/1.6 var(--font-mono); }
+.dw-job-state { font-weight: 600; }
+.dw-job-state[data-tone='success'] { color: var(--text-success); }
+.dw-job-state[data-tone='warning'] { color: var(--text-warning); }
+.dw-job-state[data-tone='danger'] { color: var(--text-danger); }
+.dw-manual-records { display: grid; gap: var(--space-2); }
+.dw-record-list { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.dw-record {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: 6px 6px 6px var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--surface-1);
+}
+.dw-record-text { flex: 1 1 200px; min-width: 0; color: var(--text-secondary); font: var(--font-size-xs)/1.5 var(--font-mono); overflow-wrap: anywhere; }
+.dw-record > .dw-note { flex-basis: 100%; }
+
+@media (max-width: 900px) {
+  .dw-filter-grid, .dw-summary, .dw-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dw-integrity-grid, .dw-manual-grid { grid-template-columns: 1fr; }
+  .dw-instrument-head { grid-template-columns: 16px minmax(0, 1fr); }
+  .dw-instrument-head > :nth-child(n + 3) { grid-column: 2; }
+  .dw-instrument-stats { text-align: start; }
+  .dw-interval-row { grid-template-columns: 64px minmax(0, 1fr); padding-left: var(--space-3); }
+  .dw-interval-row span:nth-child(n + 3) { grid-column: 2; }
+}

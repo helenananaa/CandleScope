@@ -525,6 +525,11 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - The native Pine panel's body is on the kit: the code view's language as a segmented control, settings for both engines on kit fields, file drops, checkboxes and disclosures (the engines stay choice cards), run history with state badges, the report's switches, navigation and disclosures, the incremental replay controls and the strategy comparison.
 - `nativeStrategy.css` is rewritten on tokens without element rules; the dock stylesheet drops the retired settings rules. Left for Phase 6: fidelity options, run states and engine names shown as codes.
 
+**Phase 5h is done (branch `design/phase-5h-data-workbench`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_5H.md`](../docs/FRONTEND_DESIGN_QA_PHASE_5H.md).
+
+- The data workbench is a kit dialog: filters on kit fields with badges, the summary and snapshot as kit stats, the snapshot and integrity sections as kit disclosures, stored series and gaps as rows with interval badges, and the manual history download on kit fields, checkboxes, buttons and badged rows. The read-only inventory now comes before the download, which writes data.
+- The 891-line injected `<style>` (`DataWorkbenchStyles.tsx`) is replaced by `dataWorkbench.css` loaded with the global stylesheet. Left for Phase 6: internal terms and codes (SQLite, WAL, gap states and age buckets, job states).
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.

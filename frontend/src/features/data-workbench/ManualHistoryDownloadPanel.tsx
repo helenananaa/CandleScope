@@ -2,6 +2,7 @@ import { useExchangeCatalog } from "../chart-session/exchangeCatalogRuntime.js";
 import { manualHistoryExchanges, manualHistoryMarkets } from "./manualHistoryMarkets.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import { useEffect, useId, useMemo, useState } from "react";
+import { Badge, Button, Checkbox, Field, InlineAlert, Input, Select, Textarea } from "../../components/ui/index.js";
 import { useControlCommands } from "../app-control/useControlCommands.js";
 import { command } from "../app-control/commandRegistry.js";
 import { array, choice, empty, nullable, number, object, text } from "../app-control/commandSchema.js";
@@ -275,7 +276,7 @@ export function ManualHistoryDownloadPanel({
   if (!flagEnabled) {
     return (
       <section className="dw-manual dw-manual-disabled" data-testid="manual-history-download-disabled">
-        {copyText("disabled")}
+        <p className="dw-note">{copyText("disabled")}</p>
       </section>
     );
   }
@@ -293,52 +294,55 @@ export function ManualHistoryDownloadPanel({
             : copyText("jobState", { state: jobState });
 
   return (
-    <section className="dw-manual" data-testid="manual-history-download-panel">
-      <h3>{copyText("title")}</h3>
-      <p>{copyText("hint")}</p>
-      <p>{copyText("protected")}</p>
-      <p data-testid="manual-history-target-count">{summary}</p>
-      <label>
-        {copyText("exchange")}
-        <select
-          data-testid="manual-history-exchange"
-          value={form.exchange}
-          disabled={exchangeCatalogStatus !== "ready"}
-          onChange={(event) => {
-            const exchange = event.target.value;
-            const markets = manualHistoryMarkets(exchangeCatalog, exchange);
-            setForm((current) => ({ ...current, exchange,
-              marketType: markets.some((market) => market.market_type === current.marketType)
-                ? current.marketType : markets[0]?.market_type || "spot" }));
-            setPlan(null);
-          }}
-        >
-          {!exchangeChoices.some((entry) => entry.id === form.exchange)
-            ? <option value={form.exchange} disabled>{form.exchange}</option> : null}
-          {exchangeChoices.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
-        </select>
-      </label>
-      <label>
-        {copyText("marketType")}
-        <select
-          data-testid="manual-history-market"
-          value={form.marketType}
-          disabled={exchangeCatalogStatus !== "ready"}
-          onChange={(event) => {
-            setForm((current) => ({ ...current, marketType: event.target.value }));
-            setPlan(null);
-          }}
-        >
-          {!selectionAvailable ? <option value={form.marketType} disabled>{form.marketType}</option> : null}
-          {marketChoices.map((market) => <option key={market.market_type} value={market.market_type}>
-            {market.market_type === "spot" ? copyText("spot")
-              : market.market_type === "futures" ? copyText("futures") : market.label}
-          </option>)}
-        </select>
-      </label>
-      <label>
-        {copyText("symbols")}
-        <textarea
+    <section className="dw-manual" data-testid="manual-history-download-panel" aria-label={copyText("title")}>
+      <header className="dw-manual-head">
+        <h3>{copyText("title")}</h3>
+        <p>{copyText("hint")}</p>
+        <p>{copyText("protected")}</p>
+      </header>
+      <div className="dw-manual-grid">
+        <Field label={copyText("exchange")}>
+          <Select
+            size="sm"
+            data-testid="manual-history-exchange"
+            value={form.exchange}
+            disabled={exchangeCatalogStatus !== "ready"}
+            onChange={(event) => {
+              const exchange = event.target.value;
+              const markets = manualHistoryMarkets(exchangeCatalog, exchange);
+              setForm((current) => ({ ...current, exchange,
+                marketType: markets.some((market) => market.market_type === current.marketType)
+                  ? current.marketType : markets[0]?.market_type || "spot" }));
+              setPlan(null);
+            }}
+          >
+            {!exchangeChoices.some((entry) => entry.id === form.exchange)
+              ? <option value={form.exchange} disabled>{form.exchange}</option> : null}
+            {exchangeChoices.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
+          </Select>
+        </Field>
+        <Field label={copyText("marketType")}>
+          <Select
+            size="sm"
+            data-testid="manual-history-market"
+            value={form.marketType}
+            disabled={exchangeCatalogStatus !== "ready"}
+            onChange={(event) => {
+              setForm((current) => ({ ...current, marketType: event.target.value }));
+              setPlan(null);
+            }}
+          >
+            {!selectionAvailable ? <option value={form.marketType} disabled>{form.marketType}</option> : null}
+            {marketChoices.map((market) => <option key={market.market_type} value={market.market_type}>
+              {market.market_type === "spot" ? copyText("spot")
+                : market.market_type === "futures" ? copyText("futures") : market.label}
+            </option>)}
+          </Select>
+        </Field>
+      </div>
+      <Field label={copyText("symbols")} hint={<span data-testid="manual-history-target-count">{summary}</span>}>
+        <Textarea
+          className="dw-symbols"
           data-testid="manual-history-symbols"
           value={symbolDraft}
           onChange={(event) => {
@@ -348,13 +352,14 @@ export function ManualHistoryDownloadPanel({
             setPlan(null);
           }}
         />
-      </label>
-      <fieldset data-testid="manual-history-intervals">
+      </Field>
+      <fieldset className="dw-intervals" data-testid="manual-history-intervals">
         <legend>{copyText("intervals")}</legend>
-        {MANUAL_HISTORY_INTERVAL_CHOICES.map((interval) => (
-          <label key={interval}>
-            <input
-              type="checkbox"
+        <div className="dw-interval-checks">
+          {MANUAL_HISTORY_INTERVAL_CHOICES.map((interval) => (
+            <Checkbox
+              key={interval}
+              label={interval}
               checked={form.intervals.includes(interval)}
               onChange={() => {
                 setForm((current) => ({
@@ -364,17 +369,15 @@ export function ManualHistoryDownloadPanel({
                 setPlan(null);
               }}
             />
-            {interval}
-          </label>
-        ))}
-        {form.intervals
-          .filter((interval) => !MANUAL_HISTORY_INTERVAL_CHOICES.includes(
-            interval as typeof MANUAL_HISTORY_INTERVAL_CHOICES[number],
-          ))
-          .map((interval) => (
-            <label key={interval}>
-              <input
-                type="checkbox"
+          ))}
+          {form.intervals
+            .filter((interval) => !MANUAL_HISTORY_INTERVAL_CHOICES.includes(
+              interval as typeof MANUAL_HISTORY_INTERVAL_CHOICES[number],
+            ))
+            .map((interval) => (
+              <Checkbox
+                key={interval}
+                label={interval}
                 checked
                 onChange={() => {
                   setForm((current) => ({
@@ -384,30 +387,30 @@ export function ManualHistoryDownloadPanel({
                   setPlan(null);
                 }}
               />
-              {interval}
-            </label>
-          ))}
+            ))}
+        </div>
+        <div className="dw-custom-interval">
+          <Field label={copyText("customInterval")}>
+            <Input
+              size="sm"
+              data-testid="manual-history-custom-interval"
+              value={customIntervalDraft}
+              placeholder="89m"
+              onChange={(event) => setCustomIntervalDraft(event.target.value)}
+            />
+          </Field>
+          <Button
+            size="sm"
+            data-testid="manual-history-add-custom-interval"
+            onClick={onAddCustomInterval}
+          >
+            {copyText("addCustomInterval")}
+          </Button>
+        </div>
       </fieldset>
-      <label>
-        {copyText("customInterval")}
-        <input
-          data-testid="manual-history-custom-interval"
-          value={customIntervalDraft}
-          placeholder="89m"
-          onChange={(event) => setCustomIntervalDraft(event.target.value)}
-        />
-      </label>
-      <button
-        type="button"
-        className="dw-button dw-button-secondary dw-manual-add-interval"
-        data-testid="manual-history-add-custom-interval"
-        onClick={onAddCustomInterval}
-      >
-        {copyText("addCustomInterval")}
-      </button>
-      <label>
-        {copyText("startTime")}
-        <input
+      <Field label={copyText("startTime")} hint={hasEnd ? copyText("endNotAllowed") : undefined} className="dw-start">
+        <Input
+          size="sm"
           data-testid="manual-history-start"
           type="datetime-local"
           onChange={(event) => {
@@ -419,33 +422,34 @@ export function ManualHistoryDownloadPanel({
             setPlan(null);
           }}
         />
-      </label>
-      {hasEnd ? <p>{copyText("endNotAllowed")}</p> : null}
-      <button className="dw-button dw-button-secondary" type="button" data-testid="manual-history-plan" onClick={() => void onPlan()}>
-        {copyText("previewPlan")}
-      </button>
-      <button
-        type="button"
-        className="dw-button dw-button-primary"
-        data-testid="manual-history-start-download"
-        disabled={!startEnabled}
-        onClick={() => void onStart()}
-      >
-        {copyText("startDownload")}
-      </button>
-      <button
-        type="button"
-        className="dw-button dw-button-secondary"
-        data-testid="manual-history-cancel"
-        disabled={!jobId}
-        onClick={() => void onCancel()}
-      >
-        {copyText("cancel")}
-      </button>
-      {ACTIVE_JOB_STATES.has(jobState) ? <p data-testid="manual-history-polling">{copyText("polling")}</p> : null}
-      {error ? <p data-testid="manual-history-error">{error}</p> : null}
+      </Field>
+      <div className="dw-actions dw-manual-actions">
+        <Button size="sm" data-testid="manual-history-plan" onClick={() => void onPlan()}>
+          {copyText("previewPlan")}
+        </Button>
+        <Button
+          size="sm"
+          variant="primary"
+          data-testid="manual-history-start-download"
+          disabled={!startEnabled}
+          onClick={() => void onStart()}
+        >
+          {copyText("startDownload")}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          data-testid="manual-history-cancel"
+          disabled={!jobId}
+          onClick={() => void onCancel()}
+        >
+          {copyText("cancel")}
+        </Button>
+      </div>
+      {ACTIVE_JOB_STATES.has(jobState) ? <p className="dw-note" data-testid="manual-history-polling">{copyText("polling")}</p> : null}
+      {error ? <div data-testid="manual-history-error"><InlineAlert tone="danger">{error}</InlineAlert></div> : null}
       {plan ? (
-        <div data-testid="manual-history-plan-summary">
+        <div className="dw-manual-box" data-testid="manual-history-plan-summary">
           <h4>{copyText("planSummary")}</h4>
           <p>{copyText("planCanStart", { value: plan.can_start === true ? copyText("yes") : copyText("no") })}</p>
           {planStorage ? (
@@ -455,7 +459,7 @@ export function ManualHistoryDownloadPanel({
               })}
             </p>
           ) : null}
-          <ul>
+          <ul className="dw-manual-list">
             {plannedTargets.map((target) => (
               <li key={`${String(target.symbol)}:${String(target.canonical_interval)}`}>
                 {String(target.symbol)} · {String(target.canonical_interval)} · {String(target.route_kind)}
@@ -469,12 +473,12 @@ export function ManualHistoryDownloadPanel({
         </div>
       ) : null}
       {jobState ? (
-        <div>
-          <p data-testid="manual-history-job-state" data-tone={tone}>
+        <div className="dw-manual-box">
+          <p className="dw-job-state" data-testid="manual-history-job-state" data-tone={tone}>
             {statusMessage}
           </p>
           {jobTargets.length > 0 ? (
-            <ul data-testid="manual-history-job-targets">
+            <ul className="dw-manual-list" data-testid="manual-history-job-targets">
               {jobTargets.map((target) => (
                 <li key={`${String(target.symbol)}:${String(target.canonical_interval)}`}>
                   {String(target.symbol)} · {String(target.canonical_interval)} · {String(target.state)}
@@ -485,12 +489,12 @@ export function ManualHistoryDownloadPanel({
           ) : null}
         </div>
       ) : null}
-      <div data-testid="manual-history-recent-jobs">
+      <div className="dw-manual-records" data-testid="manual-history-recent-jobs">
         <h4>{copyText("recentJobs")}</h4>
-        <p>{copyText("archiveHint")}</p>
-        {!archiveEnabled ? <p>{copyText("archiveUnavailable")}</p> : null}
-        {recentJobs.length === 0 ? <p>{copyText("none")}</p> : (
-          <ul>
+        <p className="dw-note">{copyText("archiveHint")}</p>
+        {!archiveEnabled ? <p className="dw-note">{copyText("archiveUnavailable")}</p> : null}
+        {recentJobs.length === 0 ? <p className="dw-note">{copyText("none")}</p> : (
+          <ul className="dw-record-list">
             {recentJobs.map((item) => {
               const collection = collections.find((entry) => entry.collection_id === item.collection_id);
               const targets = Array.isArray(collection?.targets)
@@ -498,18 +502,21 @@ export function ManualHistoryDownloadPanel({
               const labels = targets.map((target) => `${String(target.symbol)}@${String(target.canonical_interval)}`);
               const hasMinuteHistory = targets.some((target) => target.canonical_interval === "1m");
               return (
-              <li key={String(item.job_id)}>
-                {String(item.state)} · {String(item.ready_targets ?? 0)}/{String(item.total_targets ?? 0)}
-                {labels.length > 0 ? ` · ${labels.join(", ")}` : ""}
+              <li key={String(item.job_id)} className="dw-record">
+                <Badge tone={parentStateTone(String(item.state))}>{String(item.state)}</Badge>
+                <span className="dw-record-text">
+                  {String(item.ready_targets ?? 0)}/{String(item.total_targets ?? 0)}
+                  {labels.length > 0 ? ` · ${labels.join(", ")}` : ""}
+                </span>
                 {item.state === "SUCCEEDED" && hasMinuteHistory ? (
-                  <button type="button" className="dw-button dw-button-secondary"
+                  <Button size="sm"
                     disabled={!archiveEnabled || Boolean(archivingJob)}
                     onClick={() => void onArchive(String(item.job_id))}>
                     {archivingJob === item.job_id ? copyText("archiving") : copyText("archiveAction")}
-                  </button>
+                  </Button>
                 ) : null}
                 {archiveResult[String(item.job_id)] ? (
-                  <p role="status">{archiveResult[String(item.job_id)]}</p>
+                  <p className="dw-note" role="status">{archiveResult[String(item.job_id)]}</p>
                 ) : null}
               </li>
               );
@@ -517,10 +524,10 @@ export function ManualHistoryDownloadPanel({
           </ul>
         )}
       </div>
-      <div data-testid="manual-history-collections">
+      <div className="dw-manual-records" data-testid="manual-history-collections">
         <h4>{copyText("protectedCollections")}</h4>
-        {collections.length === 0 ? <p>{copyText("none")}</p> : (
-          <ul>
+        {collections.length === 0 ? <p className="dw-note">{copyText("none")}</p> : (
+          <ul className="dw-record-list">
             {collections.map((item) => {
               const collectionId = String(item.collection_id || "");
               const released = String(item.status || "") === "RELEASED";
@@ -531,17 +538,20 @@ export function ManualHistoryDownloadPanel({
                 })
                 : [];
               return (
-                <li key={collectionId}>
-                  {String(item.exchange)} · {String(item.market_type)} · {String(item.status)}
-                  {targetLabels.length > 0 ? ` · ${targetLabels.join(", ")}` : ""}
-                  <button
-                    type="button"
-                    className="dw-button dw-button-secondary dw-manual-release"
+                <li key={collectionId} className="dw-record">
+                  <Badge tone={released ? "neutral" : "accent"}>{String(item.status)}</Badge>
+                  <span className="dw-record-text">
+                    {String(item.exchange)} · {String(item.market_type)}
+                    {targetLabels.length > 0 ? ` · ${targetLabels.join(", ")}` : ""}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
                     disabled={released}
                     onClick={() => void onReleaseCollection(collectionId)}
                   >
                     {released ? copyText("released") : copyText("releaseProtection")}
-                  </button>
+                  </Button>
                 </li>
               );
             })}
