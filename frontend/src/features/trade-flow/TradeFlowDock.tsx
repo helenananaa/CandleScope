@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { Button } from "../../components/ui/Button.js";
-import { EmptyState } from "../../components/ui/EmptyState.js";
+import { Button, EmptyState, IconButton, SegmentedControl, Select } from "../../components/ui/index.js";
 import { getDateTimeLocale, t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { isTradeFlowQuiet, latestTradeTime } from "./tradeFlowFreshness.js";
@@ -309,17 +308,11 @@ function TradeFlowDock({
     >
       <header className="ob-header tf-header">
         {onRequestClose && (
-          <button
-            type="button"
-            className="ob-collapse-button"
-            onClick={onRequestClose}
-            title={mode === "profile" ? t("trade.collapseProfile") : t("trade.collapseTape")}
-            aria-label={mode === "profile" ? t("trade.collapseProfile") : t("trade.collapseTape")}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+          <IconButton size="sm" onClick={onRequestClose}
+            label={mode === "profile" ? t("trade.collapseProfile") : t("trade.collapseTape")}
+            icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
               <polyline points="9 18 15 12 9 6" />
-            </svg>
-          </button>
+            </svg>} />
         )}
         <span className="ob-title">{mode === "profile" ? t("trade.profile") : t("trade.tape")}</span>
         <span
@@ -349,31 +342,24 @@ function TradeFlowDock({
       ) : (
         <>
           <div className="tf-controls">
-            <div className="tf-side-switch" role="group" aria-label={t("trade.sideFilter")}>
-              {(["all", "buy", "sell"] as const).map((side) => (
-                <button
-                  key={side}
-                  type="button"
-                  className={preferences.sideFilter === side ? "active" : ""}
-                  onClick={() => runtime.actions.setSideFilter(side)}
-                >{side === "all" ? t("trade.all") : side === "buy" ? t("trade.buy") : t("trade.sell")}</button>
-              ))}
-            </div>
+            <SegmentedControl className="tf-side-switch" size="sm" fullWidth label={t("trade.sideFilter")} value={preferences.sideFilter}
+              onChange={(side) => runtime.actions.setSideFilter(side)}
+              options={(["all", "buy", "sell"] as const).map((side) => ({ value: side, label: side === "all" ? t("trade.all") : side === "buy" ? t("trade.buy") : t("trade.sell") }))} />
             <label title={t("trade.filterTitle")}>
               <span>{t("trade.filter")}</span>
-              <select value={preferences.minNotional} onChange={(event) => runtime.actions.setMinNotional(Number(event.target.value))}>
+              <Select size="sm" value={preferences.minNotional} onChange={(event) => runtime.actions.setMinNotional(Number(event.target.value))}>
                 {TRADE_FLOW_NOTIONAL_OPTIONS.map((value) => <option key={value} value={value}>{value ? `≥ ${formatNotional(value)}` : t("trade.all")}</option>)}
-              </select>
+              </Select>
             </label>
             <label title={t("trade.bubbleTitle")}>
               <span>{t("trade.bubbles")}</span>
-              <select value={preferences.largeTradeNotional} onChange={(event) => runtime.actions.setLargeTradeNotional(Number(event.target.value))}>
+              <Select size="sm" value={preferences.largeTradeNotional} onChange={(event) => runtime.actions.setLargeTradeNotional(Number(event.target.value))}>
                 {TRADE_FLOW_BUBBLE_OPTIONS.map((value) => (
                   <option key={value} value={value}>
                     {value ? `≥ ${formatNotional(value)}` : t("trade.off")}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
           </div>
           {mode === "profile"

@@ -1,3 +1,4 @@
+import { IconButton } from "../components/ui/index.js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   CSSProperties,
@@ -371,15 +372,8 @@ export default function MarketRightRailFrame({
                     <span>{activeView.collapsedSummary}</span>
                   )}
                   {onTogglePanelCollapsed && (
-                    <button
-                      type="button"
-                      className="market-rail-single-hide"
-                      title={t("rail.hidePanel")}
-                      aria-label={t("rail.hidePanel")}
-                      onClick={onTogglePanelCollapsed}
-                    >
-                      <PanelCollapseIcon collapsed />
-                    </button>
+                    <IconButton size="sm" className="market-rail-single-hide" label={t("rail.hidePanel")}
+                      onClick={onTogglePanelCollapsed} icon={<PanelCollapseIcon collapsed />} />
                   )}
                 </header>
               )}

@@ -103,36 +103,15 @@
   }
 }
 
-/* ── 指标按钮 ────────────────────────────────────────────── */
-.indicator-toggle-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: var(--font-size-lg);
-  color: var(--text-secondary);
-  transition: all 0.15s ease;
-  position: relative;
-}
-.indicator-toggle-btn:hover {
-  color: var(--text-primary);
-  background: var(--bg-hover);
-  border-color: var(--border-color);
-}
-.indicator-toggle-btn.active {
+/* Header panel toggles (indicators, alerts): kit icon buttons that show when their panel is open. */
+.panel-toggle { position: relative; }
+.panel-toggle[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--accent-blue) 14%, transparent);
   color: var(--text-accent);
-  background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
-  border-color: var(--accent-blue);
 }
-
-.alert-toggle-btn.active {
+.alert-toggle-btn.panel-toggle[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--color-warning) 14%, transparent);
   color: var(--text-warning);
-  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
-  border-color: var(--color-warning);
 }
 
 @media (max-width: 1280px) {

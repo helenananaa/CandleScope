@@ -404,6 +404,7 @@ Still outside the stack, and moved when each is rebuilt:
 | 5g7 | The native Pine panel's body and report: settings, history, report sections, comparison, replay controls, advanced inputs, `nativeStrategy.css` |
 | 5h | Data workbench |
 | 5i | Order book, trade flow and account docks; panel toggles and Settings on `IconButton` |
+| 5i2 | Trading accounts and read-only account docks |
 
 Each PR also merges its surface's late-loading CSS file into the main one and removes its `!important` rules.
 
@@ -529,6 +530,12 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 
 - The data workbench is a kit dialog: filters on kit fields with badges, the summary and snapshot as kit stats, the snapshot and integrity sections as kit disclosures, stored series and gaps as rows with interval badges, and the manual history download on kit fields, checkboxes, buttons and badged rows. The read-only inventory now comes before the download, which writes data.
 - The 891-line injected `<style>` (`DataWorkbenchStyles.tsx`) is replaced by `dataWorkbench.css` loaded with the global stylesheet. Left for Phase 6: internal terms and codes (SQLite, WAL, gap states and age buckets, job states).
+
+**Phase 5i is done (branch `design/phase-5i-docks`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_5I.md`](../docs/FRONTEND_DESIGN_QA_PHASE_5I.md). Row 5i2 was added when it started: the trading-account and read-only account docks have about 65 raw buttons of their own, so they follow on their own.
+
+- The header's indicators and alerts toggles (market, replay and strategy pages) are one `PanelToggle` on the kit icon button, tinted while open; Settings, the ⋯ overflow and the single-view rail's hide button are kit icon buttons.
+- The order book's mode and the trade flow's side filter are kit segmented controls across the dock; their selects and the trade history's date and hour are compact kit fields. The order book's three selects fit one row down to a 1024 px window, and its range readout wraps as one piece.
+- `orderBookControls.css` is merged into `orderBook.css`; the rules for the replaced switches, selects, collapse buttons and header icons are gone.
 
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 

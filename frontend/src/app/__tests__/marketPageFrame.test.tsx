@@ -85,7 +85,7 @@ test("live and replay top/status adapters share exact source-neutral DOM owners"
     assert.match(top, new RegExp(`data-runtime-source="${source}"`));
     // Context and tools on the left; actions, extras, panels and Settings (always last) on the right.
     const order = ['data-slot="navigation"', 'data-slot="badge"', 'data-slot="context"', 'data-slot="tools"',
-      'data-header-action="action"', 'data-slot="extras"', 'data-slot="panels"', 'class="settings-btn']
+      'data-header-action="action"', 'data-slot="extras"', 'data-slot="panels"', 'settings-btn']
       .map((marker) => top.indexOf(marker));
     assert.ok(order.every((index) => index >= 0), String(order));
     assert.deepEqual(order, [...order].sort((left, right) => left - right));
@@ -159,7 +159,7 @@ test("single-view rail renders only the selected view at full height with no acc
   assert.doesNotMatch(html, /market-rail-accordion-trigger/);
   assert.doesNotMatch(html, /market-rail-view-resizer/);
   // The header hides the panel; the activity bar needs no separate collapse item.
-  assert.match(html, /class="market-rail-single-hide"/);
+  assert.match(html, /class="[^"]*\bmarket-rail-single-hide"/);
   assert.doesNotMatch(html, /data-rail-action="toggle-panel"/);
 });
 
