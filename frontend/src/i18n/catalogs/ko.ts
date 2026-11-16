@@ -4919,6 +4919,7 @@ export const ko = {
   "common.cancel": "취소",
   "common.close": "닫기",
   "common.notifications": "알림 방식",
+  "replay.rail.notesSummary": "계획과 복기",
   "replay.integrity.editRules": "규칙 변경",
   "replay.capability.exact": "정확",
   "replay.capability.approx": "근사",

@@ -4373,6 +4373,7 @@ export const id = {
   "common.cancel": "Batal",
   "common.close": "Tutup",
   "common.notifications": "Notifikasi",
+  "replay.rail.notesSummary": "Rencana dan tinjauan",
   "replay.integrity.editRules": "Ubah aturan",
   "replay.capability.exact": "Tepat",
   "replay.capability.approx": "Perkiraan",

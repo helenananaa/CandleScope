@@ -4373,6 +4373,7 @@ export const th = {
   "common.cancel": "ยกเลิก",
   "common.close": "ปิด",
   "common.notifications": "การแจ้ง",
+  "replay.rail.notesSummary": "แผนและการทบทวน",
   "replay.integrity.editRules": "เปลี่ยนกฎ",
   "replay.capability.exact": "แม่นยำ",
   "replay.capability.approx": "โดยประมาณ",

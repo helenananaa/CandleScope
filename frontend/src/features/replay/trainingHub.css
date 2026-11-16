@@ -733,4 +733,4 @@
 
 /* Session rules that loaded last (they move with the session in 5f3). */
 .replay-chart-cell .multi-chart-cell-header > button { color: inherit; background: transparent; border: 0; }
-.replay-note-history > div + div { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-subtle); }
+

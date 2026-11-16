@@ -4373,6 +4373,7 @@ export const cs = {
   "common.cancel": "Zrušit",
   "common.close": "Zavřít",
   "common.notifications": "Oznámení",
+  "replay.rail.notesSummary": "Plány a hodnocení",
   "replay.integrity.editRules": "Změnit pravidla",
   "replay.capability.exact": "Přesné",
   "replay.capability.approx": "Přibližné",

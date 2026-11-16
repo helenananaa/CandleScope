@@ -13,6 +13,3 @@
 
 .interval-anchor-controls p { margin: 0; color: var(--text-secondary); max-width: 420px; }
 
-.replay-note-link-options label { display: flex; align-items: flex-start; gap: 6px; font-size: var(--font-size-xs); overflow-wrap: anywhere; }
-
-.replay-note-capture-options label { display: flex; gap: 6px; align-items: flex-start; }

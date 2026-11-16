@@ -4717,6 +4717,7 @@ export const ja = {
   "common.cancel": "キャンセル",
   "common.close": "閉じる",
   "common.notifications": "通知",
+  "replay.rail.notesSummary": "計画と振り返り",
   "replay.integrity.editRules": "ルールを変更",
   "replay.capability.exact": "正確",
   "replay.capability.approx": "近似",

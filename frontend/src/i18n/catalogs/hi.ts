@@ -4373,6 +4373,7 @@ export const hi = {
   "common.cancel": "रद्द करें",
   "common.close": "बंद करें",
   "common.notifications": "सूचनाएँ",
+  "replay.rail.notesSummary": "योजनाएँ और समीक्षाएँ",
   "replay.integrity.editRules": "नियम बदलें",
   "replay.capability.exact": "सटीक",
   "replay.capability.approx": "अनुमानित",

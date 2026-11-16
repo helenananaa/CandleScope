@@ -4373,6 +4373,7 @@ export const ro = {
   "common.cancel": "Anulează",
   "common.close": "Închide",
   "common.notifications": "Notificări",
+  "replay.rail.notesSummary": "Planuri și analize",
   "replay.integrity.editRules": "Modifică regulile",
   "replay.capability.exact": "Exact",
   "replay.capability.approx": "Aproximativ",

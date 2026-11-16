@@ -2,6 +2,7 @@ import { useReplayOperations } from "../useReplayOperations.js";
 import { describeError } from "../../../i18n/serverErrors.js";
 import React, { useEffect, useMemo, useState } from "react";
 import { Icon } from "../../../components/icons/Icon.js";
+import { Badge, Button, IconButton, InlineAlert, Input, Select } from "../../../components/ui/index.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import { sharesReplayMarketScope } from "../replayMarketScope.js";
@@ -219,17 +220,20 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange, e
           onClick={activate}
         >
           <span><strong>{identity.symbol}</strong><small>{identity.exchange} · {identity.marketType}</small></span>
-          <span>{last ?? "--"}</span>
+          <span className="replay-watchlist-price">{last ?? "--"}</span>
         </button>
-        {viewer.actions.openTrack && track !== null && <button type="button"
-          aria-label={`${identity.symbol} · ${t("replay.workspace.openNew")}`}
-          disabled={pending} title={t("replay.workspace.openNew")}
+        {viewer.actions.openTrack && track !== null && <IconButton
+          size="sm"
+          label={`${identity.symbol} · ${t("replay.workspace.openNew")}`}
+          icon={<Icon name="external" size={14} />}
+          disabled={pending}
           onClick={() => void viewer.actions.openTrack?.(track.track_id, "new").catch((reason: unknown) => setCatalogError(String(reason)))}
-        >{t("replay.workspace.openNew")}</button>}
-        {!viewer.actions.openTrack && <code>{tier}</code>}
+        />}
+        {!viewer.actions.openTrack && <Badge tone={tier === "NONE" ? "neutral" : "success"}>{tier}</Badge>}
         {!viewer.actions.openTrack && forced.length > 0 && <small className="replay-track-force" title={forced.join(", ")}><Icon name="lock" size={12} /> {forced.join(" · ")}</small>}
         {!viewer.actions.openTrack && track !== null && !selected && (
-          <select
+          <Select
+            size="sm"
             aria-label={t("replay.watchlist.tierAria", { symbol: identity.symbol })}
             value={tier}
             disabled={pending || forced.length > 0}
@@ -243,9 +247,9 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange, e
             <option value="NONE">{t("replay.watchlist.tier.none")}</option>
             <option value="WARM">{t("replay.watchlist.tier.warm")}</option>
             <option value="FULL">{t("replay.watchlist.tier.full")}</option>
-          </select>
+          </Select>
         )}
-        {track?.degraded_reason && <small role="alert">{track.degraded_reason}</small>}
+        {track?.degraded_reason && <small className="replay-watchlist-degraded" role="alert">{track.degraded_reason}</small>}
       </div>
     );
   };
@@ -271,40 +275,38 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange, e
         <div className="replay-watchlist-rows">
           <section className="replay-watchlist-group replay-market-search">
             {!embedded && <header>
-              <i style={{ background: "var(--accent-cyan)" }} />
               <span>{t("replay.watchlist.add")}</span>
-              <button
-                type="button"
+              <Button
+                size="sm"
+                variant="ghost"
                 disabled={runId === null || addingMarket !== null}
                 onClick={() => setCatalogAttempt((value) => value + 1)}
-              >{t("replay.watchlist.refresh")}</button>
+              >{t("replay.watchlist.refresh")}</Button>
             </header>}
-            <label>
-              {!embedded && <span>{t("replay.watchlist.search")}</span>}
-              <input
-                type="search"
-                title={embedded ? t("replay.watchlist.hint") : undefined}
-                aria-label={t("replay.watchlist.search")}
-                value={marketQuery}
-                onChange={(event) => setMarketQuery(event.target.value)}
-                placeholder={t("replay.watchlist.searchPlaceholder")}
-              />
-            </label>
-            {!embedded && <small>{t("replay.watchlist.hint")}</small>}
-            {viewer.marketPreparation ? <p role="status">
+            <Input
+              type="search"
+              size="sm"
+              title={embedded ? t("replay.watchlist.hint") : undefined}
+              aria-label={t("replay.watchlist.search")}
+              value={marketQuery}
+              onChange={(event) => setMarketQuery(event.target.value)}
+              placeholder={t("replay.watchlist.searchPlaceholder")}
+            />
+            {!embedded && <p className="replay-watchlist-note">{t("replay.watchlist.hint")}</p>}
+            {viewer.marketPreparation ? <p className="replay-watchlist-note" role="status">
               {t("preparation.title")} · {viewer.marketPreparation.completed} / {viewer.marketPreparation.total}
-            </p> : addingMarket !== null && <p role="status">{t("replay.watchlist.preparing")}</p>}
-            {catalogError !== null && <p role="alert">
-              {catalogError}
-              {embedded && <button
-                type="button"
+            </p> : addingMarket !== null && <p className="replay-watchlist-note" role="status">{t("replay.watchlist.preparing")}</p>}
+            {catalogError !== null && <InlineAlert
+              tone="danger"
+              action={embedded ? <Button
+                size="sm"
                 disabled={runId === null || addingMarket !== null}
                 onClick={() => setCatalogAttempt((value) => value + 1)}
-              >{t("replay.watchlist.refresh")}</button>}
-            </p>}
-            {showCatalogResults && catalog === null && catalogError === null && <p>{t("replay.watchlist.loading")}</p>}
-            {showCatalogResults && catalog !== null && catalogEntries.length === 0 && <p>{t("replay.watchlist.noMatch")}</p>}
-            {showCatalogResults && <div className="replay-market-search-results">
+              >{t("replay.watchlist.refresh")}</Button> : undefined}
+            >{catalogError}</InlineAlert>}
+            {showCatalogResults && catalog === null && catalogError === null && <p className="replay-watchlist-note" role="status">{t("replay.watchlist.loading")}</p>}
+            {showCatalogResults && catalog !== null && catalogEntries.length === 0 && <p className="replay-watchlist-note">{t("replay.watchlist.noMatch")}</p>}
+            {showCatalogResults && catalogEntries.length > 0 && <ul className="replay-market-search-results">
               {catalogEntries.map((entry) => {
                 const key = symbolKey(
                   entry.identity.symbol,
@@ -317,29 +319,31 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange, e
                   && entry.start_compatibility?.state === "READY";
                 const unavailableReason = entry.start_compatibility?.message
                   ?? t("replay.watchlist.noCover");
+                const state = addingMarket === key ? "adding" : tracked ? "tracked" : available ? "available" : "unavailable";
                 return (
-                  <div key={key} className="replay-market-search-result">
-                  <button
-                    type="button"
-                    disabled={tracked || !available || addingMarket !== null || viewer.viewerPending}
-                    title={tracked ? t("replay.watchlist.inRun") : available ? t("search.addToWatchlist") : unavailableReason}
-                    onClick={() => void addCatalogMarket(entry)}
-                  >
-                    <strong>{entry.identity.symbol}</strong>
-                    <small>{addingMarket === key ? t("replay.watchlist.adding") : tracked ? t("replay.watchlist.added") : available ? t("search.addToWatchlist") : t("replay.watchlist.unavailable")}</small>
-                  </button>
-                  {viewer.actions.openTrack && (tracked || available) && <div className="replay-market-open-actions">
-                    <button type="button" disabled={addingMarket !== null || viewer.viewerPending || viewer.controlPending !== null}
-                      aria-label={`${entry.identity.symbol} · ${t("workspace.activeChart")}`}
-                      onClick={() => void addCatalogMarket(entry, "current")}>{t("workspace.activeChart")}</button>
-                    <button type="button" disabled={addingMarket !== null || viewer.viewerPending || viewer.controlPending !== null}
-                      aria-label={`${entry.identity.symbol} · ${t("replay.workspace.openNew")}`}
-                      onClick={() => void addCatalogMarket(entry, "new")}>{t("replay.workspace.openNew")}</button>
-                  </div>}
-                  </div>
+                  <li key={key} className="replay-market-search-result" data-state={state}>
+                    <button
+                      type="button"
+                      className="replay-market-search-add"
+                      disabled={tracked || !available || addingMarket !== null || viewer.viewerPending}
+                      title={tracked ? t("replay.watchlist.inRun") : available ? t("search.addToWatchlist") : unavailableReason}
+                      onClick={() => void addCatalogMarket(entry)}
+                    >
+                      <strong>{entry.identity.symbol}</strong>
+                      <small>{addingMarket === key ? t("replay.watchlist.adding") : tracked ? t("replay.watchlist.added") : available ? t("search.addToWatchlist") : t("replay.watchlist.unavailable")}</small>
+                    </button>
+                    {viewer.actions.openTrack && (tracked || available) && <span className="replay-market-open-actions">
+                      <Button size="sm" variant="ghost" disabled={addingMarket !== null || viewer.viewerPending || viewer.controlPending !== null}
+                        aria-label={`${entry.identity.symbol} · ${t("workspace.activeChart")}`}
+                        onClick={() => void addCatalogMarket(entry, "current")}>{t("workspace.activeChart")}</Button>
+                      <Button size="sm" variant="ghost" disabled={addingMarket !== null || viewer.viewerPending || viewer.controlPending !== null}
+                        aria-label={`${entry.identity.symbol} · ${t("replay.workspace.openNew")}`}
+                        onClick={() => void addCatalogMarket(entry, "new")}>{t("replay.workspace.openNew")}</Button>
+                    </span>}
+                  </li>
                 );
               })}
-            </div>}
+            </ul>}
           </section>
           {groups.map((group) => (
             <section className="replay-watchlist-group" key={group.id}>
@@ -349,7 +353,7 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange, e
                 <small>{group.rows.length}</small>
               </header>
               {group.rows.length === 0
-                ? <p>{t("replay.watchlist.emptyGroup")}</p>
+                ? <p className="replay-watchlist-note">{t("replay.watchlist.emptyGroup")}</p>
                 : group.rows.map(({ key, track }) => (
                     renderRow(key, track, `${group.id}:${key}`)
                   ))}

@@ -4373,6 +4373,7 @@ export const zhMO = {
   "common.cancel": "取消",
   "common.close": "關閉",
   "common.notifications": "通知",
+  "replay.rail.notesSummary": "計劃與復盤",
   "replay.integrity.editRules": "修改規則",
   "replay.capability.exact": "精確",
   "replay.capability.approx": "近似",

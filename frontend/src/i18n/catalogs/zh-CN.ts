@@ -4981,6 +4981,7 @@ export const zhCN = {
   "common.cancel": "取消",
   "common.close": "关闭",
   "common.notifications": "通知",
+  "replay.rail.notesSummary": "计划与复盘",
   "replay.integrity.editRules": "修改规则",
   "replay.capability.exact": "精确",
   "replay.capability.approx": "近似",

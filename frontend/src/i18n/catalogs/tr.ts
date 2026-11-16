@@ -4373,6 +4373,7 @@ export const tr = {
   "common.cancel": "İptal",
   "common.close": "Kapat",
   "common.notifications": "Bildirimler",
+  "replay.rail.notesSummary": "Planlar ve değerlendirmeler",
   "replay.integrity.editRules": "Kuralları değiştir",
   "replay.capability.exact": "Kesin",
   "replay.capability.approx": "Yaklaşık",
