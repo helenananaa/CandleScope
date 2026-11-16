@@ -3,17 +3,19 @@
 Capture the target before fetching. After native commits, capture a computation
 head before any canonical read/precedence check. The final writer rejects every
 intersecting source/target mutation since that head, including finer insertions.
-Unrelated live tail writes are allowed only with a complete receipt suffix.
+Unrelated live tail writes require a complete receipt suffix or the exact dense
+canonical inputs consumed by the qualified built-in 1m reducer.
 """
 from contextlib import closing, contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
+from typing import Callable
 
 from app.data_engine.interval_resolution import IntervalResolver
 from app.data_engine.interval_policy import parse_interval_spec
 from .range_changes import check_range_since
 from .derived_history_fence import check_deletions
-from .native_history_fence import fingerprint
+from .native_history_fence import fingerprint, fingerprint_rows, NativeHistoryView, MAX_SLOTS
 from .revisions import IDENTITY_COLUMNS, StaleAcquisition, block_change_receipts, current_revision, series_change, series_values
 
 _current = ContextVar('mixed_canonical_computation', default=())
@@ -31,16 +33,28 @@ class MixedTarget:
     def check(self, conn, scope):
         check_deletions(conn, scope, self.key, *self.dependencies)
         if fingerprint(conn, self.key, self.start, self.end) != self.digest:
-            raise StaleAcquisition('mixed target changed during acquisition')
+            raise StaleAcquisition('mixed target changed during acquisition', details={
+                'reason': 'target_window_changed', 'acquisition_revision': scope.revision,
+                'head_revision': current_revision(conn), 'interval': self.key[3],
+                'start_ms': self.start, 'end_ms': self.end})
 
 
 @dataclass
 class MixedComputation:
     target: MixedTarget
     revision: int
+    canonical_input: NativeHistoryView | None = None
+    input_owner_check: Callable[[], None] | None = None
 
     def check(self, conn, scope):
+        if self.canonical_input is not None and self.input_owner_check is not None:
+            self.input_owner_check()
         self.target.check(conn, scope)
+        if self.canonical_input is not None:
+            # This is the digest of the exact dense rows actually consumed,
+            # not a fresh post-compute snapshot that could bless stale output.
+            self.canonical_input.check(conn, scope)
+            return
         keys = {*self.target.dependencies, self.target.key}
         changed = {key for key in keys if (row := series_change(conn, key)) is not None
                    and row['revision'] > self.revision}
@@ -48,7 +62,10 @@ class MixedComputation:
             return
         receipts = block_change_receipts(conn, self.revision, current_revision(conn))
         if not receipts:
-            raise StaleAcquisition('mixed computation receipt suffix is unavailable')
+            raise StaleAcquisition('mixed computation receipt suffix is unavailable', details={
+                'reason': 'mixed_receipt_suffix_unavailable', 'acquisition_revision': scope.revision,
+                'base_revision': self.revision, 'head_revision': current_revision(conn),
+                'start_ms': self.target.start, 'end_ms': self.target.end+self.target.duration})
         for receipt in receipts:
             key = tuple(receipt[name] for name in IDENTITY_COLUMNS)
             if key == self.target.key and receipt['revision'] <= scope.accepted.get(key, self.revision):
@@ -56,7 +73,11 @@ class MixedComputation:
             if (key in changed
                     and receipt['start_ms'] < self.target.end + self.target.duration
                     and receipt['end_ms'] >= self.target.start):
-                raise StaleAcquisition('mixed canonical inputs or target changed during computation')
+                raise StaleAcquisition('mixed canonical inputs or target changed during computation', details={
+                    'reason': 'mixed_overlapping_change', 'acquisition_revision': scope.revision,
+                    'base_revision': self.revision, 'head_revision': current_revision(conn),
+                    'change_revision': receipt['revision'], 'change_start_ms': receipt['start_ms'],
+                    'change_end_ms': receipt['end_ms']})
 
 
 def capture_targets(store, scope, plan, allow_standard=False):
@@ -107,6 +128,33 @@ def capture_computations(store, scope, decomp):
                 target.check(conn, scope)
                 views.append(MixedComputation(target, head))
     return tuple(views)
+
+
+def seal_standard_inputs(symbol, interval, exchange, market_type, rows, owner_check):
+    """Bind bounded dense 1m inputs used by the qualified built-in reducer.
+
+    True mixed grids, sparse/partial windows and larger reductions retain
+    their existing receipt proof. No new fetching or mutable market owner.
+    """
+    sealed = 0
+    for view in _current.get():
+        target = view.target
+        if ((exchange, market_type, symbol, interval) != target.key[:4]
+                or len(target.dependencies) != 1 or target.dependencies[0][3] != '1m'):
+            continue
+        start, stop = target.start, target.end + target.duration
+        count = (stop-start)//60_000
+        if not 0 < count <= MAX_SLOTS or len(rows) != count:
+            continue
+        ordered = sorted(rows, key=lambda row: row['open_time'])
+        if any(row.get('interval') != '1m' or row['open_time'] != start+i*60_000
+               or row['close_time'] != start+(i+1)*60_000-1 for i, row in enumerate(ordered)):
+            continue
+        view.canonical_input = NativeHistoryView(target.dependencies[0], start,
+            stop-60_000, fingerprint_rows(ordered))
+        view.input_owner_check = owner_check
+        sealed += 1
+    return sealed
 
 
 def matching_computation(scope, key, rows, source):

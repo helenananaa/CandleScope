@@ -60,15 +60,20 @@ def _native_grid_slots(task, metadata):
 
 
 def fingerprint(conn, key, start, end):
-    digest = hashlib.sha256()
     rows = conn.execute("SELECT " + ",".join(FIELDS) + " FROM klines WHERE " +
                         " AND ".join(f"{name}=?" for name in IDENTITY_COLUMNS) +
                         " AND open_time BETWEEN ? AND ? ORDER BY open_time LIMIT ?",
                         (*key, start, end, MAX_SLOTS + 1))
+    return fingerprint_rows(rows)
+
+
+def fingerprint_rows(rows):
+    """The same bounded digest for canonical SQL rows and consumed inputs."""
+    digest = hashlib.sha256()
     for index, row in enumerate(rows):
         if index >= MAX_SLOTS:
             raise StaleAcquisition("native history view exceeds bounded row budget")
-        digest.update(repr(tuple(row)).encode("utf-8"))
+        digest.update(repr(tuple(row[name] for name in FIELDS)).encode("utf-8"))
         digest.update(b"\n")
     return digest.digest()
 
@@ -101,7 +106,11 @@ class NativeHistoryView:
         if row is not None and int(row["delete_revision"]) > max(floor, scope.accepted.get(self.key, 0)):
             raise StaleAcquisition("native history was deleted after request permission")
         if fingerprint(conn, self.key, self.start, self.end) != self.digest:
-            raise StaleAcquisition("native history window changed during acquisition")
+            from .revisions import current_revision
+            raise StaleAcquisition("native history window changed during acquisition", details={
+                'reason': 'canonical_window_changed', 'acquisition_revision': scope.revision,
+                'head_revision': current_revision(conn), 'interval': self.key[3],
+                'start_ms': self.start, 'end_ms': self.end})
 
 
 def capture_native_history_views(store, scope, tasks):

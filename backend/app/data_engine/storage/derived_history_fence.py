@@ -22,7 +22,9 @@ def check_deletions(conn, scope, *keys):
         row = conn.execute('SELECT revision FROM kline_delete_permissions WHERE ' +
                            ' AND '.join(f'{name}=?' for name in IDENTITY_COLUMNS), key).fetchone()
         if row is not None and int(row[0]) > floor:
-            raise StaleAcquisition('derived history was deleted after request permission')
+            raise StaleAcquisition('derived history was deleted after request permission', details={
+                'reason': 'deletion_permission_changed', 'acquisition_revision': scope.revision,
+                'delete_floor': floor, 'delete_revision': int(row[0]), 'interval': key[3]})
 
 
 @dataclass
