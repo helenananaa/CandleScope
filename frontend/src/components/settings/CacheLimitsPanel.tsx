@@ -1,4 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
+import { SegmentedControl } from "../ui/Choice.js";
+import { Disclosure, InlineAlert } from "../ui/Display.js";
+import { Checkbox, Field, Input } from "../ui/Field.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import type {
@@ -152,7 +155,6 @@ export default function CacheLimitsPanel({
     settings,
     onUpdate,
     showAdvanced,
-    onToggleAdvanced,
 }: CacheLimitsPanelProps) {
     const locale = useLocale();
     const currentPreset = settings.cachePreset || 'standard';
@@ -238,117 +240,46 @@ export default function CacheLimitsPanel({
         });
     };
 
+    // Enter commits (by blurring); Escape restores the saved value.
+    const budgetKeys = (reset: () => void) => (event: KeyboardEvent<HTMLInputElement>) => {
+        if (event.key === 'Enter') event.currentTarget.blur();
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            reset();
+        }
+    };
+
     return (
         <>
-            <div className="st-group">
-                <div className="st-group-title">
-                    <span>{t("settings.cache.ephemeralTitle")}</span>
-                    <span className="st-badge st-badge-memory">{t("settings.cache.memory")}</span>
-                </div>
-                <div className="st-group-desc">
-                    {t("settings.cache.ephemeralDesc")}
-                </div>
+            <section className="st-group">
+                <div className="st-group-title">{t("settings.cache.ephemeralTitle")}</div>
+                <div className="st-group-desc">{t("settings.cache.ephemeralSummary")}</div>
+                <SegmentedControl
+                    label={t("settings.cache.ephemeralTitle")}
+                    value={String(currentEphemeralBars)}
+                    onChange={(value) => handleEphemeralChange(Number(value))}
+                    options={EPHEMERAL_CACHE_OPTIONS.map((option) => ({ value: String(option.value), label: t(option.labelKey) }))}
+                />
+                <dl className="st-kv st-kv-inline">
+                    <dt>{t("settings.cache.capacity")}</dt>
+                    <dd>{t("settings.cache.bars", { count: currentEphemeralBars.toLocaleString(locale) })}</dd>
+                    <dt>{t("settings.cache.coverage")}</dt>
+                    <dd>{barsToHumanTime(currentEphemeralBars, 1).replace('≈ ', '')}</dd>
+                    <dt>{t("settings.cache.memoryUse")}</dt>
+                    <dd>{barsToMemorySize(currentEphemeralBars)} {t("settings.cache.perSymbol")}</dd>
+                </dl>
+            </section>
 
-                <div className="st-ephemeral-cards">
-                    {EPHEMERAL_CACHE_OPTIONS.map((option) => (
-                        <button
-                            key={option.value}
-                            className={`st-ephemeral-card ${currentEphemeralBars === option.value ? 'active' : ''}`}
-                            onClick={() => handleEphemeralChange(option.value)}
-                        >
-                            <span className="st-ephemeral-label">{t(option.labelKey)}</span>
-                            <span className="st-ephemeral-desc">{t("settings.cache.bars", { count: option.bars.toLocaleString(locale) })}</span>
-                        </button>
-                    ))}
-                </div>
-
-                <div className="st-ephemeral-summary">
-                    <span className="st-ephemeral-stat">
-                        {t("settings.cache.capacity")} <strong>{currentEphemeralBars.toLocaleString(locale)}</strong>
-                    </span>
-                    <span className="st-ephemeral-stat">
-                        {t("settings.cache.coverage")} <strong>{barsToHumanTime(currentEphemeralBars, 1).replace('≈ ', '')}</strong>
-                    </span>
-                    <span className="st-ephemeral-stat">
-                        {t("settings.cache.memoryUse")} <strong>{barsToMemorySize(currentEphemeralBars)}</strong> {t("settings.cache.perSymbol")}
-                    </span>
-                </div>
-            </div>
-
-            <div className="st-group">
-                <div className="st-group-title">
-                    <span>{t("settings.cache.dbTitle")}</span>
-                    <span className="st-badge st-badge-db">{t("settings.cache.persistent")}</span>
-                </div>
-                <div className="st-group-desc">
-                    {t("settings.cache.dbDesc")}
-                </div>
-
-                <div className="st-tier-table">
-                    <div className="st-tier-row">
-                        <div className="st-tier-col-name">
-                            <span className="st-tier-label">{t("settings.cache.frontendBudget")}</span>
-                            <span className="st-tier-desc">{t("settings.cache.frontendBudgetDesc")}</span>
-                        </div>
-                        <div className="st-tier-col-limit">
-                            <input
-                                type="number"
-                                className="st-tier-input"
-                                value={frontendBudgetDraft}
-                                min={16}
-                                max={4096}
-                                step={16}
-                                onChange={(event) => setFrontendBudgetDraft(event.target.value)}
-                                onBlur={commitFrontendBudget}
-                                onKeyDown={(event) => {
-                                    if (event.key === 'Enter') event.currentTarget.blur();
-                                    if (event.key === 'Escape') {
-                                        event.preventDefault();
-                                        setFrontendBudgetDraft(String(bytesToMbInput(currentFrontendBudget)));
-                                    }
-                                }}
-                                title={t("settings.cache.frontendBudgetTitle")}
-                            />
-                        </div>
-                        <span className="st-tier-col-time">MB</span>
-                        <span className="st-tier-col-size">{barsToMemorySize(Math.floor(currentFrontendBudget / 200))}</span>
-                    </div>
-                    <div className="st-tier-row">
-                        <div className="st-tier-col-name">
-                            <span className="st-tier-label">{t("settings.cache.sqliteBudget")}</span>
-                            <span className="st-tier-desc">{t("settings.cache.sqliteBudgetDesc")}</span>
-                        </div>
-                        <div className="st-tier-col-limit">
-                            <input
-                                type="number"
-                                className="st-tier-input"
-                                value={sqliteBudgetDraft}
-                                min={0}
-                                max={16384}
-                                step={0.25}
-                                placeholder={t("settings.cache.unset")}
-                                onChange={(event) => setSqliteBudgetDraft(event.target.value)}
-                                onBlur={commitSqliteBudget}
-                                onKeyDown={(event) => {
-                                    if (event.key === 'Enter') event.currentTarget.blur();
-                                    if (event.key === 'Escape') {
-                                        event.preventDefault();
-                                        setSqliteBudgetDraft(bytesToGbInput(currentSqliteBudget));
-                                    }
-                                }}
-                                title={t("settings.cache.sqliteBudgetTitle")}
-                            />
-                        </div>
-                        <span className="st-tier-col-time">GB</span>
-                        <span className="st-tier-col-size">{currentSqliteBudget ? barsToStorageSize(Math.floor(currentSqliteBudget / 200)) : t("settings.cache.unset")}</span>
-                    </div>
-                </div>
-
+            <section className="st-group">
+                <div className="st-group-title">{t("settings.cache.dbTitle")}</div>
+                <div className="st-group-desc">{t("settings.cache.dbSummary")}</div>
                 <div className="st-preset-cards">
                     {DB_PRESETS.map((preset) => (
                         <button
                             key={preset.key}
+                            type="button"
                             className={`st-preset-card ${currentPreset === preset.key ? 'active' : ''}`}
+                            aria-pressed={currentPreset === preset.key}
                             onClick={() => handlePresetChange(preset.key)}
                         >
                             <span className="st-preset-level" aria-hidden="true">{[1, 2, 3, 4].map((step) => <span key={step} className={step <= preset.level ? "on" : undefined} />)}</span>
@@ -357,86 +288,94 @@ export default function CacheLimitsPanel({
                         </button>
                     ))}
                 </div>
-
-                {isCustomPreset && (
-                    <div className="st-info-box" style={{ marginTop: 12 }}>
-                        <span>{t("settings.cache.custom")}</span>
-                    </div>
-                )}
-            </div>
-
-            <div className="st-group">
-                <div className="st-group-title-row">
-                    <div className="st-group-title" style={{ marginBottom: 0 }}>{t("settings.cache.advanced")}</div>
-                    <button
-                        className={`st-advanced-toggle ${showAdvanced ? 'active' : ''}`}
-                        onClick={onToggleAdvanced}
-                    >
-                        {showAdvanced ? t("settings.cache.hideAdvanced") : t("settings.cache.showAdvanced")}
-                    </button>
+                {isCustomPreset && <InlineAlert>{t("settings.cache.custom")}</InlineAlert>}
+                <div className="st-budget-fields">
+                    <Field label={`${t("settings.cache.frontendBudget")} (MB)`} hint={t("settings.cache.frontendBudgetHint")}>
+                        <Input
+                            type="number"
+                            value={frontendBudgetDraft}
+                            min={16}
+                            max={4096}
+                            step={16}
+                            onChange={(event) => setFrontendBudgetDraft(event.target.value)}
+                            onBlur={commitFrontendBudget}
+                            onKeyDown={budgetKeys(() => setFrontendBudgetDraft(String(bytesToMbInput(currentFrontendBudget))))}
+                            title={t("settings.cache.frontendBudgetTitle")}
+                        />
+                    </Field>
+                    <Field label={`${t("settings.cache.sqliteBudget")} (GB)`} hint={t("settings.cache.sqliteBudgetHint")}>
+                        <Input
+                            type="number"
+                            value={sqliteBudgetDraft}
+                            min={0}
+                            max={16384}
+                            step={0.25}
+                            placeholder={t("settings.cache.unset")}
+                            onChange={(event) => setSqliteBudgetDraft(event.target.value)}
+                            onBlur={commitSqliteBudget}
+                            onKeyDown={budgetKeys(() => setSqliteBudgetDraft(bytesToGbInput(currentSqliteBudget)))}
+                            title={t("settings.cache.sqliteBudgetTitle")}
+                        />
+                    </Field>
                 </div>
-                <div className="st-group-desc">
-                    {t("settings.cache.advancedDesc")}
-                </div>
+            </section>
 
-                <label className="st-info-box" style={{ marginTop: 0 }}>
-                    <input
-                        type="checkbox"
-                        checked={rowLimitsEnabled}
-                        onChange={(event) => handleRowLimitsEnabledChange(event.target.checked)}
-                    />
-                    <span>{t("settings.cache.enableRowLimits")}</span>
-                </label>
-
-                <div className="st-tier-table">
-                    <div className="st-tier-header">
-                        <span className="st-tier-col-name">{t("settings.cache.tier")}</span>
-                        <span className="st-tier-col-limit">{t("settings.cache.maxBars")}</span>
-                        <span className="st-tier-col-time">{t("settings.cache.duration")}</span>
-                        <span className="st-tier-col-size">{t("settings.cache.disk")}</span>
+            <section className="st-group">
+                <Disclosure summary={t("settings.cache.advanced")} defaultOpen={showAdvanced}>
+                    <div className="st-limits">
+                        <p className="st-group-desc">{t("settings.cache.advancedDesc")}</p>
+                        <Checkbox
+                            label={t("settings.cache.enableRowLimits")}
+                            checked={rowLimitsEnabled}
+                            onChange={(event) => handleRowLimitsEnabledChange(event.target.checked)}
+                        />
+                        <table className="st-limits-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">{t("settings.cache.tier")}</th>
+                                    <th scope="col">{t("settings.cache.maxBars")}</th>
+                                    <th scope="col">{t("settings.cache.duration")}</th>
+                                    <th scope="col">{t("settings.cache.disk")}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {DB_TIERS.map((tier) => {
+                                    const limit = currentLimits[tier.key] ?? 0;
+                                    return (
+                                        <tr key={tier.key}>
+                                            <th scope="row">
+                                                {t(tier.labelKey)}
+                                                <span>{t(tier.descKey)}</span>
+                                            </th>
+                                            <td>
+                                                {rowLimitsEnabled && tier.key !== 'daily' ? (
+                                                    <Input
+                                                        size="sm"
+                                                        type="number"
+                                                        aria-label={`${t(tier.labelKey)} · ${t("settings.cache.maxBars")}`}
+                                                        value={limit}
+                                                        min={0}
+                                                        step={1000}
+                                                        onChange={(event) => handleLimitChange(tier.key, Math.max(0, parseInt(event.target.value) || 0))}
+                                                        title={t("settings.cache.zeroNoCleanup")}
+                                                    />
+                                                ) : (
+                                                    <span className="st-limits-value">
+                                                        {!rowLimitsEnabled ? t("settings.cache.off") : limit === 0 ? '∞' : limit.toLocaleString(locale)}
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td>{barsToHumanTime(limit, tier.representativeSec)}</td>
+                                            <td>{barsToStorageSize(limit)}</td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                        <p className="st-group-desc">{t("settings.cache.zeroHint")}</p>
                     </div>
-                    {DB_TIERS.map((tier) => {
-                        const limit = currentLimits[tier.key] ?? 0;
-                        return (
-                            <div key={tier.key} className="st-tier-row">
-                                <div className="st-tier-col-name">
-                                    <span className="st-tier-label">{t(tier.labelKey)}</span>
-                                    <span className="st-tier-desc">{t(tier.descKey)}</span>
-                                </div>
-                                <div className="st-tier-col-limit">
-                                    {showAdvanced && rowLimitsEnabled && tier.key !== 'daily' ? (
-                                        <input
-                                            type="number"
-                                            className="st-tier-input"
-                                            value={limit}
-                                            min={0}
-                                            step={1000}
-                                            onChange={(event) => handleLimitChange(tier.key, Math.max(0, parseInt(event.target.value) || 0))}
-                                            title={t("settings.cache.zeroNoCleanup")}
-                                        />
-                                    ) : (
-                                        <span className={`st-tier-value ${limit === 0 ? 'unlimited' : ''}`}>
-                                            {!rowLimitsEnabled ? t("settings.cache.off") : limit === 0 ? '∞' : limit.toLocaleString(locale)}
-                                        </span>
-                                    )}
-                                </div>
-                                <span className="st-tier-col-time">
-                                    {barsToHumanTime(limit, tier.representativeSec)}
-                                </span>
-                                <span className="st-tier-col-size">
-                                    {barsToStorageSize(limit)}
-                                </span>
-                            </div>
-                        );
-                    })}
-                </div>
-
-                {showAdvanced && (
-                    <div className="st-advanced-hint">
-                        <span>{t("settings.cache.zeroHint")}</span>
-                    </div>
-                )}
-            </div>
+                </Disclosure>
+            </section>
         </>
     );
 }

@@ -404,6 +404,13 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - AI MCP has its own icon; in a browser it is an empty state, and the desktop panel is rebuilt from the kit (it was the last unstyled class name).
 - The Settings CSS moved from a 2,364-line `<style>` string, re-injected on every open, into `features/settings/settings.css`.
 
+**Phase 5b is done (branch `design/phase-5b-settings-panels`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_5B.md`](../docs/FRONTEND_DESIGN_QA_PHASE_5B.md).
+
+- 交易所: each exchange is a row with its name and one line of plain text instead of up to six pills and market chips; 当前 and 不可路由 are the only badges. Verification ("已通过并行影子验收", now "已与并行数据比对验证") moved into the technical details, product status is a label/value list instead of tinted tiles, and each market's channel table sits behind a disclosure. The panel's own colour set (including a hard-coded orange) is gone; it uses tokens and kit controls.
+- 存储与维护: three storage layers, each with one figure, 预估清理 / 清理 and a 详细数据 disclosure, instead of three walls of tiles; estimates and results are one-line alerts. The hard-coded English labels ("DataManager series", "Script cache", "active/subscribed") are translated. The storage policy uses a segmented control, kit fields and a real table in a disclosure.
+- 高级维护 uses the row pattern; results are alerts with per-series detail in a disclosure. 关于与支持 and 外观显示 use kit disclosures, selects and a segmented colour preset.
+- Settings has no raw `<select>` or text field left; the raw buttons that remain are the choice cards (themes, proxy modes, storage presets), the sidebar and the exchange rows, plus native colour inputs, which the kit has no equivalent for. `settings.css` is 1,289 lines (2,364 at the start of 5a), and 46 unused message keys are gone.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.

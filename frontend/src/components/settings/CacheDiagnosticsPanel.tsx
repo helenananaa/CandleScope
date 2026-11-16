@@ -1,4 +1,5 @@
 import { Button } from "../ui/Button.js";
+import { Disclosure, InlineAlert, Stat } from "../ui/Display.js";
 import type { ReactNode } from "react";
 import { getLocale, t, type MessageKey } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -78,68 +79,7 @@ interface StatCardProps {
 }
 
 function StatCard({ label, value, detail }: StatCardProps) {
-  return (
-    <div className="st-diagnostics-card">
-      <span className="st-diagnostics-label">{label}</span>
-      <strong className="st-diagnostics-value">{value}</strong>
-      {detail ? <span className="st-diagnostics-detail">{detail}</span> : null}
-    </div>
-  );
-}
-
-interface GcPlanSummary {
-  victims?: readonly unknown[];
-  series?: readonly unknown[];
-}
-
-function countVictims(plan: GcPlanSummary | null | undefined): number {
-  return Number(plan?.victims?.length ?? plan?.series?.length ?? 0);
-}
-
-interface ScopeSummaryCardProps {
-  title: string;
-  mode: string;
-  plan: GcPlanSummary | null;
-  result: unknown;
-  metricLabel?: string;
-  metricValue: string;
-}
-
-function ScopeSummaryCard({ title, mode, plan, result, metricLabel, metricValue }: ScopeSummaryCardProps) {
-  const plannedCount = countVictims(plan);
-  const hasResult = Boolean(result);
-  let status = t("settings.diag.pending");
-  let detail = mode;
-  if (plannedCount) {
-    status = t("settings.diag.planned");
-    detail = t("settings.diag.candidates", { count: formatNumber(plannedCount) });
-  }
-  if (hasResult) {
-    status = t("settings.diag.executed");
-    detail = metricValue;
-  }
-  return (
-    <div className="st-gc-scope-card">
-      <span className="st-gc-scope-title">{title}</span>
-      <strong className="st-gc-scope-status">{status}</strong>
-      <span className="st-gc-scope-detail">{metricLabel ? `${metricLabel} ${detail}` : detail}</span>
-    </div>
-  );
-}
-
-interface SectionTitleProps {
-  title: string;
-  badge?: string;
-  tone?: string;
-}
-
-function SectionTitle({ title, badge, tone = "memory" }: SectionTitleProps) {
-  return (
-    <div className="st-diagnostics-heading-row">
-      <div className="st-diagnostics-heading">{title}</div>
-      {badge ? <span className={`st-badge st-badge-${tone}`}>{badge}</span> : null}
-    </div>
-  );
+  return <Stat label={label} value={value} {...(detail ? { hint: detail } : {})} />;
 }
 
 interface GcPlanRowsProps {
@@ -252,214 +192,190 @@ export default function CacheDiagnosticsPanel({
   ) && !storageVacuumResult;
 
   return (
-    <div className="st-group">
-      <div className="st-group-title-row">
-        <div className="st-group-title" style={{ marginBottom: 0 }}>
-          {t("settings.diag.title")}
-          <span className="st-badge st-badge-memory">{t("settings.diag.layered")}</span>
-        </div>
-        <button className="st-advanced-toggle" onClick={() => onRefresh?.()} disabled={loading}>
+    <div className="st-group st-storage">
+      <div className="st-ex-head">
+        <p className="st-group-desc">{t("settings.diag.summary")}</p>
+        <Button size="sm" onClick={() => onRefresh?.()} disabled={loading}>
           {loading ? t("settings.diag.refreshing") : t("settings.diag.refresh")}
-        </button>
-      </div>
-      <div className="st-group-desc">
-        {t("settings.diag.desc")}
+        </Button>
       </div>
 
-      {error ? <div className="st-info-box st-info-warn">{error}</div> : null}
+      {error ? <InlineAlert tone="warning">{error}</InlineAlert> : null}
 
-      <div className="st-gc-scope-grid">
-        <ScopeSummaryCard
-          title={t("settings.diag.frontendMem")}
-          mode={t("settings.diag.browserCache")}
-          plan={frontendGcPlan}
-          result={frontendGcResult}
-          metricLabel={t("settings.diag.freed")}
-          metricValue={formatBytes(frontendGcResult?.removedEstimatedBytes)}
-        />
-        <ScopeSummaryCard
-          title={t("settings.diag.backendMem")}
-          mode="DataManager"
-          plan={backendMemoryGcPlan}
-          result={backendMemoryGcResult}
-          metricLabel={t("settings.diag.freed")}
-          metricValue={`${formatNumber(backendMemoryGcResult?.removed_bars)} bars`}
-        />
-        <ScopeSummaryCard
-          title={t("settings.diag.sqlite")}
-          mode={t("settings.diag.persistent")}
-          plan={storageGcPlan}
-          result={storageGcResult}
-          metricLabel={t("settings.diag.deleted")}
-          metricValue={t("settings.diag.rows", { count: formatNumber(storageGcResult?.deleted_rows) })}
-        />
-      </div>
-
-      <div className="st-diagnostics-section">
-        <SectionTitle title={t("settings.diag.frontendCache")} badge={t("settings.diag.local")} />
-        <div className="st-diagnostics-grid">
-          <StatCard label={t("settings.diag.chartBars")} value={t("settings.diag.barsUnit", { count: formatNumber(chart.totalBars) })} detail={t("settings.diag.seriesCount", { count: formatNumber(chart.seriesCount) })} />
-          <StatCard label={t("settings.diag.sharedMarketCache")} value={t("settings.diag.barsUnit", { count: formatNumber(market.totalBars) })} detail={t("settings.diag.seriesCount", { count: formatNumber(market.seriesCount) })} />
-          <StatCard label={t("settings.diag.indicatorResults")} value={t("settings.diag.pointsUnit", { count: formatNumber(indicators.totalPoints) })} detail={t("settings.diag.entriesUnit", { count: formatNumber(indicators.entryCount) })} />
-          <StatCard label={t("settings.diag.estimatedMem")} value={formatBytes(frontend.estimatedBytes)} detail={t("settings.diag.browserEstimate")} />
-        </div>
-        <TopEntries entries={[...(chart.entries || []), ...(market.entries || [])]} metric="bars" />
-        <div className="st-actions-row">
-          <Button onClick={() => onPlanFrontendGc?.()}>
-            {t("settings.diag.planFrontend")}
-          </Button>
-          <Button
-            onClick={() => onRunFrontendGc?.()}
-            disabled={!canRunFrontendGc}
-          >
-            {t("settings.diag.runFrontend")}
-          </Button>
-        </div>
-        {frontendGcPlan ? (
-          <div className="st-diagnostics-plan">
-            <div className="st-diagnostics-grid">
-              <StatCard label={t("settings.diag.wouldFree")} value={formatBytes(frontendGcPlan.wouldFreeEstimatedBytes)} detail={t("settings.diag.entriesCount", { count: formatNumber(frontendGcPlan.victims?.length) })} />
-              <StatCard label={t("settings.diag.barCount")} value={formatNumber(frontendGcPlan.wouldFreeBars)} detail={t("settings.diag.pressureBars", { count: formatNumber(frontendGcPlan.pressure?.klineBars) })} />
-              <StatCard label={t("settings.diag.indicatorPoints")} value={formatNumber(frontendGcPlan.wouldFreeIndicatorPoints)} detail={t("settings.diag.pressurePoints", { count: formatNumber(frontendGcPlan.pressure?.indicatorPoints) })} />
-              <StatCard label={t("settings.diag.protectedEntries")} value={formatNumber(frontendGcPlan.protectedCount)} detail="active/subscribed" />
-            </div>
-            <GcPlanRows victims={frontendGcPlan.victims || []} />
+      <section className="st-layer" aria-label={t("settings.diag.browserCache")}>
+        <div className="st-layer-head">
+          <div className="st-launch-text">
+            <strong>{t("settings.diag.browserCache")}</strong>
+            <span>{t("settings.diag.browserDesc")}</span>
           </div>
+          <Stat label={t("settings.diag.estimatedMem")} value={formatBytes(frontend.estimatedBytes)} />
+        </div>
+        <div className="st-layer-actions">
+          <Button size="sm" onClick={() => onPlanFrontendGc?.()}>{t("settings.diag.plan")}</Button>
+          <Button size="sm" onClick={() => onRunFrontendGc?.()} disabled={!canRunFrontendGc}>{t("settings.diag.run")}</Button>
+        </div>
+        {frontendGcPlan && !frontendGcResult ? (
+          <InlineAlert>{frontendGcPlan.victims?.length
+            ? t("settings.diag.planSummary", { bytes: formatBytes(frontendGcPlan.wouldFreeEstimatedBytes), count: formatNumber(frontendGcPlan.victims.length) })
+            : t("settings.diag.empty")}</InlineAlert>
         ) : null}
         {frontendGcResult ? (
-          <div className="st-info-box">
-            <span className="st-info-label">{t("settings.diag.gcResult")}</span>
-            <span>{t("settings.diag.removedEntries", { count: formatNumber(frontendGcResult.removedCount) })}</span>
-            <span>{t("settings.diag.freedEst", { bytes: formatBytes(frontendGcResult.removedEstimatedBytes) })}</span>
-            <span>{t("settings.diag.barsRemoved", { count: formatNumber(frontendGcResult.removedBars) })}</span>
-            <span>{t("settings.diag.pointsRemoved", { count: formatNumber(frontendGcResult.removedIndicatorPoints) })}</span>
-          </div>
+          <InlineAlert tone="success" title={t("settings.diag.gcResult")}>
+            {[
+              t("settings.diag.removedEntries", { count: formatNumber(frontendGcResult.removedCount) }),
+              t("settings.diag.freedEst", { bytes: formatBytes(frontendGcResult.removedEstimatedBytes) }),
+              t("settings.diag.barsRemoved", { count: formatNumber(frontendGcResult.removedBars) }),
+              t("settings.diag.pointsRemoved", { count: formatNumber(frontendGcResult.removedIndicatorPoints) }),
+            ].join(" · ")}
+          </InlineAlert>
         ) : null}
-      </div>
-
-      <div className="st-diagnostics-section">
-        <SectionTitle title={t("settings.diag.backendCache")} badge={t("settings.diag.inProcess")} />
-        <div className="st-diagnostics-grid">
-          <StatCard label="DataManager series" value={formatNumber(backendCache.total_series)} detail={t("settings.diag.cap", { count: formatNumber(backendCache.max_series) })} />
-          <StatCard label="DataManager bars" value={formatNumber(backendCache.total_bars)} detail={t("settings.diag.perSeries", { count: formatNumber(backendCache.max_bars_per_series) })} />
-          <StatCard label={t("settings.diag.cacheHits")} value={formatNumber(backendCache.hits)} detail={t("settings.diag.misses", { count: formatNumber(backendCache.misses) })} />
-          <StatCard label="Script cache" value={formatNumber(scriptCache.size ?? scriptCache.items ?? 0)} detail={t("settings.diag.cap", { count: formatNumber(scriptCache.max_items ?? scriptCache.maxItems ?? 0) })} />
-        </div>
-        <div className="st-actions-row">
-          <Button onClick={() => onPlanBackendMemoryGc?.()} disabled={loading}>
-            {t("settings.diag.planBackend")}
-          </Button>
-          <Button
-            onClick={() => onRunBackendMemoryGc?.()}
-            disabled={loading || !canRunBackendMemoryGc}
-          >
-            {t("settings.diag.runBackend")}
-          </Button>
-        </div>
-        {backendMemoryGcPlan ? (
-          <div className="st-diagnostics-plan">
-            <div className="st-diagnostics-grid">
-              <StatCard label={t("settings.diag.wouldFree")} value={formatBytes(backendMemoryGcPlan.would_free_estimated_bytes)} detail={t("settings.diag.entriesCount", { count: formatNumber(backendMemoryGcPlan.victims?.length) })} />
-              <StatCard label={t("settings.diag.wouldFreeBars")} value={formatNumber(backendMemoryGcPlan.would_free_bars)} detail={t("settings.diag.seriesUnit", { count: formatNumber(backendMemoryGcPlan.would_remove_series) })} />
-              <StatCard label={t("settings.diag.protected")} value={formatNumber(backendMemoryGcPlan.protected_count)} detail="active/subscribed" />
-              <StatCard label={t("settings.diag.pressure")} value={formatNumber(backendMemoryGcPlan.pressure?.total_bars)} detail={t("settings.diag.cap", { count: formatNumber(backendMemoryGcPlan.pressure?.max_total_bars) })} />
-            </div>
-            <GcPlanRows victims={backendMemoryGcPlan.victims || []} />
+        <Disclosure summary={t("settings.diag.details")}>
+          <div className="st-stat-grid">
+            <StatCard label={t("settings.diag.chartBars")} value={t("settings.diag.barsUnit", { count: formatNumber(chart.totalBars) })} detail={t("settings.diag.seriesCount", { count: formatNumber(chart.seriesCount) })} />
+            <StatCard label={t("settings.diag.sharedMarketCache")} value={t("settings.diag.barsUnit", { count: formatNumber(market.totalBars) })} detail={t("settings.diag.seriesCount", { count: formatNumber(market.seriesCount) })} />
+            <StatCard label={t("settings.diag.indicatorResults")} value={t("settings.diag.pointsUnit", { count: formatNumber(indicators.totalPoints) })} detail={t("settings.diag.entriesUnit", { count: formatNumber(indicators.entryCount) })} />
           </div>
+          <TopEntries entries={[...(chart.entries || []), ...(market.entries || [])]} metric="bars" />
+          {frontendGcPlan ? (
+            <div className="st-diagnostics-plan">
+              <div className="st-stat-grid">
+                <StatCard label={t("settings.diag.wouldFree")} value={formatBytes(frontendGcPlan.wouldFreeEstimatedBytes)} detail={t("settings.diag.entriesCount", { count: formatNumber(frontendGcPlan.victims?.length) })} />
+                <StatCard label={t("settings.diag.barCount")} value={formatNumber(frontendGcPlan.wouldFreeBars)} detail={t("settings.diag.pressureBars", { count: formatNumber(frontendGcPlan.pressure?.klineBars) })} />
+                <StatCard label={t("settings.diag.indicatorPoints")} value={formatNumber(frontendGcPlan.wouldFreeIndicatorPoints)} detail={t("settings.diag.pressurePoints", { count: formatNumber(frontendGcPlan.pressure?.indicatorPoints) })} />
+                <StatCard label={t("settings.diag.protectedEntries")} value={formatNumber(frontendGcPlan.protectedCount)} detail={t("settings.diag.activeSubscribed")} />
+              </div>
+              <GcPlanRows victims={frontendGcPlan.victims || []} />
+            </div>
+          ) : null}
+        </Disclosure>
+      </section>
+
+      <section className="st-layer" aria-label={t("settings.diag.backendMem")}>
+        <div className="st-layer-head">
+          <div className="st-launch-text">
+            <strong>{t("settings.diag.backendMem")}</strong>
+            <span>{t("settings.diag.backendDesc")}</span>
+          </div>
+          <Stat label={t("settings.diag.memoryBars")} value={formatNumber(backendCache.total_bars)} />
+        </div>
+        <div className="st-layer-actions">
+          <Button size="sm" onClick={() => onPlanBackendMemoryGc?.()} disabled={loading}>{t("settings.diag.plan")}</Button>
+          <Button size="sm" onClick={() => onRunBackendMemoryGc?.()} disabled={loading || !canRunBackendMemoryGc}>{t("settings.diag.run")}</Button>
+        </div>
+        {backendMemoryGcPlan && !backendMemoryGcResult ? (
+          <InlineAlert>{backendMemoryGcPlan.victims?.length
+            ? t("settings.diag.planSummary", { bytes: formatBytes(backendMemoryGcPlan.would_free_estimated_bytes), count: formatNumber(backendMemoryGcPlan.victims.length) })
+            : t("settings.diag.empty")}</InlineAlert>
         ) : null}
         {backendMemoryGcResult ? (
-          <div className="st-info-box">
-            <span className="st-info-label">{t("settings.diag.backendResult")}</span>
-            <span>{t("settings.diag.removedSeries", { count: formatNumber(backendMemoryGcResult.removed_series) })}</span>
-            <span>{t("settings.diag.trimmedSeries", { count: formatNumber(backendMemoryGcResult.trimmed_series) })}</span>
-            <span>{t("settings.diag.freedBars", { count: formatNumber(backendMemoryGcResult.removed_bars) })}</span>
-            <span>{t("settings.diag.estimated", { bytes: formatBytes(backendMemoryGcResult.removed_estimated_bytes) })}</span>
-          </div>
+          <InlineAlert tone="success" title={t("settings.diag.backendResult")}>
+            {[
+              t("settings.diag.removedSeries", { count: formatNumber(backendMemoryGcResult.removed_series) }),
+              t("settings.diag.trimmedSeries", { count: formatNumber(backendMemoryGcResult.trimmed_series) }),
+              t("settings.diag.freedBars", { count: formatNumber(backendMemoryGcResult.removed_bars) }),
+              t("settings.diag.estimated", { bytes: formatBytes(backendMemoryGcResult.removed_estimated_bytes) }),
+            ].join(" · ")}
+          </InlineAlert>
         ) : null}
-      </div>
-
-      <div className="st-diagnostics-section">
-        <SectionTitle title={t("settings.diag.sqliteStorage")} badge={t("settings.diag.persistentBadge")} tone="db" />
-        <div className="st-diagnostics-grid">
-          <StatCard label={t("settings.diag.dbFile")} value={formatBytes(storageFiles.db_size_bytes)} detail={storageFiles.exists ? t("settings.diag.created") : t("settings.diag.notCreated")} />
-          <StatCard label={t("settings.diag.walFile")} value={formatBytes(storageFiles.wal_size_bytes)} detail={t("settings.diag.readonly")} />
-          <StatCard label="Series" value={formatNumber(storageSeries.series_count)} detail={t("settings.diag.totalRows", { count: formatNumber(storageSeries.total_rows) })} />
-          <StatCard label={t("settings.diag.totalSize")} value={formatBytes(storageFiles.total_size_bytes)} detail="DB + WAL + SHM" />
-          <StatCard
-            label={t("settings.diag.sqliteBudget")}
-            value={storageWatermarks.budget_bytes ? formatBytes(storageWatermarks.budget_bytes) : t("settings.diag.unset")}
-            detail={t("settings.diag.watermark", { level: watermarkLabel(storageWatermarks.level) })}
-          />
-        </div>
-        <div className="st-actions-row">
-          <Button onClick={() => onPlanStorageGc?.()} disabled={loading}>
-            {t("settings.diag.planStorage")}
-          </Button>
-          <Button variant="danger"
-            onClick={() => onRunStorageGc?.()}
-            disabled={loading || !canRunStorageGc}
-          >
-            {t("settings.diag.runStorage")}
-          </Button>
-          <Button
-            onClick={() => onVacuumStorage?.()}
-            disabled={loading || !canVacuumStorage}
-          >
-            {t("settings.diag.vacuum")}
-          </Button>
-        </div>
-        {storageGcPlan ? (
-          <div className="st-diagnostics-plan">
-            <div className="st-diagnostics-grid">
-              <StatCard label={t("settings.diag.wouldDeleteRows")} value={formatNumber(storageGcPlan.would_delete_rows)} detail={t("settings.diag.seriesUnit", { count: formatNumber(storageGcPlan.victim_count) })} />
-              <StatCard label={t("settings.diag.freeEst")} value={formatBytes(storageGcPlan.would_free_estimated_bytes)} detail={t("settings.diag.roughEst")} />
-              <StatCard label={t("settings.diag.budgetLevel")} value={watermarkLabel(storageGcPlan.watermarks?.level)} detail={`${((storageGcPlan.watermarks?.budget_usage_ratio || 0) * 100).toFixed(1)}%`} />
-              <StatCard label={t("settings.diag.vacuumLabel")} value={storageGcPlan.vacuum_recommended ? t("settings.diag.recommended") : t("settings.diag.optional")} detail={t("settings.diag.notAuto")} />
-            </div>
-            {storageGcPlan.unable_to_reach_budget ? (
-              <div className="st-info-box st-info-warn">
-                <span className="st-info-label">{t("settings.diag.budgetWarn")}</span>
-                <span>{t("settings.diag.budgetGap", { bytes: formatBytes(storageGcPlan.budget_gap_bytes) })}</span>
-              </div>
-            ) : null}
-            {storageGcPlan.series?.length ? (
-              <div className="st-diagnostics-list">
-                {storageGcPlan.series.slice(0, 8).map((entry) => (
-                  <div key={`${entry.owner}:${entry.key}`} className="st-diagnostics-row st-diagnostics-row-storage">
-                    <span className="st-diagnostics-row-key">{entry.key}</span>
-                    <span>{reasonLabel(entry.reason)}</span>
-                    <span>{t("settings.diag.rows", { count: formatNumber(entry.would_delete_rows) })}</span>
-                    <span>{riskLabel(entry.risk_flags)}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="st-diagnostics-empty">{t("settings.diag.noStorageVictims")}</div>
-            )}
+        <Disclosure summary={t("settings.diag.details")}>
+          <div className="st-stat-grid">
+            <StatCard label={t("settings.diag.memorySeries")} value={formatNumber(backendCache.total_series)} detail={t("settings.diag.cap", { count: formatNumber(backendCache.max_series) })} />
+            <StatCard label={t("settings.diag.memoryBars")} value={formatNumber(backendCache.total_bars)} detail={t("settings.diag.perSeries", { count: formatNumber(backendCache.max_bars_per_series) })} />
+            <StatCard label={t("settings.diag.cacheHits")} value={formatNumber(backendCache.hits)} detail={t("settings.diag.misses", { count: formatNumber(backendCache.misses) })} />
+            <StatCard label={t("settings.diag.scriptCache")} value={formatNumber(scriptCache.size ?? scriptCache.items ?? 0)} detail={t("settings.diag.cap", { count: formatNumber(scriptCache.max_items ?? scriptCache.maxItems ?? 0) })} />
           </div>
+          {backendMemoryGcPlan ? (
+            <div className="st-diagnostics-plan">
+              <div className="st-stat-grid">
+                <StatCard label={t("settings.diag.wouldFree")} value={formatBytes(backendMemoryGcPlan.would_free_estimated_bytes)} detail={t("settings.diag.entriesCount", { count: formatNumber(backendMemoryGcPlan.victims?.length) })} />
+                <StatCard label={t("settings.diag.wouldFreeBars")} value={formatNumber(backendMemoryGcPlan.would_free_bars)} detail={t("settings.diag.seriesUnit", { count: formatNumber(backendMemoryGcPlan.would_remove_series) })} />
+                <StatCard label={t("settings.diag.protected")} value={formatNumber(backendMemoryGcPlan.protected_count)} detail={t("settings.diag.activeSubscribed")} />
+                <StatCard label={t("settings.diag.pressure")} value={formatNumber(backendMemoryGcPlan.pressure?.total_bars)} detail={t("settings.diag.cap", { count: formatNumber(backendMemoryGcPlan.pressure?.max_total_bars) })} />
+              </div>
+              <GcPlanRows victims={backendMemoryGcPlan.victims || []} />
+            </div>
+          ) : null}
+        </Disclosure>
+      </section>
+
+      <section className="st-layer" aria-label={t("settings.diag.localDb")}>
+        <div className="st-layer-head">
+          <div className="st-launch-text">
+            <strong>{t("settings.diag.localDb")}</strong>
+            <span>{t("settings.diag.dbDesc")}</span>
+          </div>
+          <Stat label={t("settings.diag.totalSize")} value={formatBytes(storageFiles.total_size_bytes)} />
+        </div>
+        <div className="st-layer-actions">
+          <Button size="sm" onClick={() => onPlanStorageGc?.()} disabled={loading}>{t("settings.diag.plan")}</Button>
+          <Button size="sm" variant="danger" onClick={() => onRunStorageGc?.()} disabled={loading || !canRunStorageGc}>{t("settings.diag.runStorage")}</Button>
+          <Button size="sm" onClick={() => onVacuumStorage?.()} disabled={loading || !canVacuumStorage}>{t("settings.diag.vacuum")}</Button>
+        </div>
+        {storageGcPlan && !storageGcResult ? (
+          <InlineAlert tone={storageGcPlan.unable_to_reach_budget ? "warning" : "info"}>
+            {storageGcPlan.series?.length
+              ? t("settings.diag.dbPlanSummary", { rows: formatNumber(storageGcPlan.would_delete_rows), bytes: formatBytes(storageGcPlan.would_free_estimated_bytes) })
+              : t("settings.diag.noStorageVictims")}
+            {storageGcPlan.unable_to_reach_budget ? <div>{t("settings.diag.budgetGap", { bytes: formatBytes(storageGcPlan.budget_gap_bytes) })}</div> : null}
+          </InlineAlert>
         ) : null}
         {storageGcResult ? (
-          <div className="st-info-box">
-            <span className="st-info-label">{t("settings.diag.storageResult")}</span>
-            <span>{t("settings.diag.deletedRows", { count: formatNumber(storageGcResult.deleted_rows) })}</span>
-            <span>{t("settings.diag.affectedSeries", { count: formatNumber(storageGcResult.affected_series) })}</span>
-            <span>{t("settings.diag.elapsed", { count: formatNumber(storageGcResult.elapsed_ms) })}</span>
-            <span>{storageGcResult.checkpoint_result ? t("settings.diag.checkpointDone") : t("settings.diag.checkpointSkip")}</span>
-          </div>
+          <InlineAlert tone="success" title={t("settings.diag.storageResult")}>
+            {[
+              t("settings.diag.deletedRows", { count: formatNumber(storageGcResult.deleted_rows) }),
+              t("settings.diag.affectedSeries", { count: formatNumber(storageGcResult.affected_series) }),
+              t("settings.diag.elapsed", { count: formatNumber(storageGcResult.elapsed_ms) }),
+              storageGcResult.checkpoint_result ? t("settings.diag.checkpointDone") : t("settings.diag.checkpointSkip"),
+            ].join(" · ")}
+          </InlineAlert>
         ) : null}
         {storageVacuumResult ? (
-          <div className="st-info-box">
-            <span className="st-info-label">{t("settings.diag.vacuumResult")}</span>
-            <span>{storageVacuumResult.status || "ok"}</span>
-            <span>{t("settings.diag.elapsed", { count: formatNumber(storageVacuumResult.elapsed_ms) })}</span>
-            <span>{t("settings.diag.currentTotal", { bytes: formatBytes(storageVacuumResult.storage_files_after?.total_size_bytes) })}</span>
-          </div>
+          <InlineAlert tone="success" title={t("settings.diag.vacuumResult")}>
+            {[
+              t("settings.diag.elapsed", { count: formatNumber(storageVacuumResult.elapsed_ms) }),
+              t("settings.diag.currentTotal", { bytes: formatBytes(storageVacuumResult.storage_files_after?.total_size_bytes) }),
+            ].join(" · ")}
+          </InlineAlert>
         ) : null}
-        <TopEntries entries={(storageSeries.largest_series || []).map((item) => ({
-          key: `${item.exchange}:${item.market_type}:${item.symbol}:${item.interval}`,
-          rows: item.total_count,
-        }))} metric="rows" />
-      </div>
+        <Disclosure summary={t("settings.diag.details")}>
+          <div className="st-stat-grid">
+            <StatCard label={t("settings.diag.dbFile")} value={formatBytes(storageFiles.db_size_bytes)} detail={storageFiles.exists ? t("settings.diag.created") : t("settings.diag.notCreated")} />
+            <StatCard label={t("settings.diag.walFile")} value={formatBytes(storageFiles.wal_size_bytes)} detail={t("settings.diag.readonly")} />
+            <StatCard label={t("settings.diag.dbSeries")} value={formatNumber(storageSeries.series_count)} detail={t("settings.diag.totalRows", { count: formatNumber(storageSeries.total_rows) })} />
+            <StatCard
+              label={t("settings.diag.sqliteBudget")}
+              value={storageWatermarks.budget_bytes ? formatBytes(storageWatermarks.budget_bytes) : t("settings.diag.unset")}
+              detail={t("settings.diag.watermark", { level: watermarkLabel(storageWatermarks.level) })}
+            />
+          </div>
+          {storageGcPlan ? (
+            <div className="st-diagnostics-plan">
+              <div className="st-stat-grid">
+                <StatCard label={t("settings.diag.wouldDeleteRows")} value={formatNumber(storageGcPlan.would_delete_rows)} detail={t("settings.diag.seriesUnit", { count: formatNumber(storageGcPlan.victim_count) })} />
+                <StatCard label={t("settings.diag.freeEst")} value={formatBytes(storageGcPlan.would_free_estimated_bytes)} detail={t("settings.diag.roughEst")} />
+                <StatCard label={t("settings.diag.budgetLevel")} value={watermarkLabel(storageGcPlan.watermarks?.level)} detail={`${((storageGcPlan.watermarks?.budget_usage_ratio || 0) * 100).toFixed(1)}%`} />
+                <StatCard label={t("settings.diag.vacuumLabel")} value={storageGcPlan.vacuum_recommended ? t("settings.diag.recommended") : t("settings.diag.optional")} detail={t("settings.diag.notAuto")} />
+              </div>
+              {storageGcPlan.series?.length ? (
+                <div className="st-diagnostics-list">
+                  {storageGcPlan.series.slice(0, 8).map((entry) => (
+                    <div key={`${entry.owner}:${entry.key}`} className="st-diagnostics-row st-diagnostics-row-storage">
+                      <span className="st-diagnostics-row-key">{entry.key}</span>
+                      <span>{reasonLabel(entry.reason)}</span>
+                      <span>{t("settings.diag.rows", { count: formatNumber(entry.would_delete_rows) })}</span>
+                      <span>{riskLabel(entry.risk_flags)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          <TopEntries entries={(storageSeries.largest_series || []).map((item) => ({
+            key: `${item.exchange}:${item.market_type}:${item.symbol}:${item.interval}`,
+            rows: item.total_count,
+          }))} metric="rows" />
+        </Disclosure>
+      </section>
     </div>
   );
 }

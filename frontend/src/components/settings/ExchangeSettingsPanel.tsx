@@ -23,6 +23,11 @@ import {
     type ExchangeSupportFilter,
 } from "../../features/exchange-support/exchangeSupportModel.js";
 import { Icon } from "../icons/Icon.js";
+import { Button } from "../ui/Button.js";
+import { SegmentedControl } from "../ui/Choice.js";
+import { Badge, Disclosure, InlineAlert, Stat } from "../ui/Display.js";
+import { EmptyState } from "../ui/EmptyState.js";
+import { Input } from "../ui/Field.js";
 
 const CHANNEL_ORDER = [
     "kline",
@@ -204,21 +209,14 @@ function ProductSurfaceRow({ exchange }: { exchange: ExchangeCapabilityPayload }
             : null],
     ] as const;
     return (
-        <div className="st-exchange-surfaces">
+        <dl className="st-ex-surfaces">
             {entries.map(([field, label, detail]) => (
-                <div
-                    key={field}
-                    className={`st-exchange-surface ${surfaces[field] ? "supported" : "pending"}`}
-                >
-                    <span>{t(label)}</span>
-                    <strong>
-                        {surfaces[field]
-                            ? detail
-                            : t("settings.exchange.surface.pending")}
-                    </strong>
+                <div key={field} className="st-ex-surface" data-supported={surfaces[field] ? "true" : "false"}>
+                    <dt>{t(label)}</dt>
+                    <dd>{surfaces[field] ? detail : t("settings.exchange.surface.pending")}</dd>
                 </div>
             ))}
-        </div>
+        </dl>
     );
 }
 
@@ -241,79 +239,77 @@ function MarketCapabilityDetail({
         });
 
     return (
-        <div className="st-exchange-market-detail">
-            <div className="st-exchange-market-detail-head">
+        <section className="st-ex-market">
+            <div className="st-ex-market-head">
                 <div>
                     <strong>{market.label || market.market_type}</strong>
-                    <span>{market.market_type}</span>
+                    <code>{market.market_type}</code>
                 </div>
-                <button
-                    className="st-exchange-test-button"
-                    type="button"
+                <Button
+                    size="sm"
                     onClick={onTest}
                     disabled={connectionCheck?.status === "running" || !exchangeIsRoutable(exchange)}
                 >
                     {connectionCheck?.status === "running"
                         ? t("settings.exchange.testing")
                         : t("settings.exchange.testMarket")}
-                </button>
+                </Button>
             </div>
 
             {connectionCheck?.status === "success" && (
-                <div className="st-exchange-check-result success">
-                    {t("settings.exchange.testSuccess", {
-                        count: connectionCheck.symbolCount ?? 0,
-                    })}
-                </div>
+                <InlineAlert tone="success">
+                    {t("settings.exchange.testSuccess", { count: connectionCheck.symbolCount ?? 0 })}
+                </InlineAlert>
             )}
             {connectionCheck?.status === "error" && (
-                <div className="st-exchange-check-result error">{connectionCheck.error}</div>
+                <InlineAlert tone="danger">{connectionCheck.error}</InlineAlert>
             )}
 
             {channels.length === 0 ? (
-                <div className="st-exchange-empty">{t("settings.exchange.noChannels")}</div>
+                <p className="st-ex-muted">{t("settings.exchange.noChannels")}</p>
             ) : (
-                <div>
-                    <div className="st-exchange-capability-header">
-                        <span>{t("settings.exchange.dataChannel")}</span>
-                        <span>{t("settings.exchange.realtime")}</span>
-                        <span>{t("settings.exchange.history")}</span>
-                        <span>{t("settings.exchange.dataQuality")}</span>
-                    </div>
-                    {channels.map((channel) => {
-                        const values = configuredValues(channel);
-                        const fields = stringArray(channel.available_fields);
-                        const unavailableFields = stringArray(channel.unavailable_fields);
-                        const limitations = stringArray(channel.known_limitations);
-                        return (
-                            <div key={channel.channel} className="st-exchange-capability-row">
-                                <div>
-                                    <strong>{channelLabel(channel.channel)}</strong>
-                                    {values.length > 0 && (
-                                        <div className="st-exchange-inline-chips">
-                                            {values.slice(0, 8).map((value) => <span key={value}>{value}</span>)}
-                                            {values.length > 8 && <span>+{values.length - 8}</span>}
-                                        </div>
-                                    )}
-                                </div>
-                                <span>{formatTransports(channel.realtime_transports, channel.realtime)}</span>
-                                <span>{formatTransports(channel.history_transports, channel.history)}</span>
-                                <div className="st-exchange-quality">
-                                    <strong>{qualityLabel(channel)}</strong>
-                                    {fields.length > 0 && (
-                                        <span>{t("settings.exchange.fields")}: {fields.join(", ")}</span>
-                                    )}
-                                    {unavailableFields.length > 0 && (
-                                        <span>{t("settings.exchange.unavailableFields")}: {unavailableFields.join(", ")}</span>
-                                    )}
-                                    {limitations.map((limitation) => <span key={limitation}>{limitation}</span>)}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
+                <Disclosure summary={t("settings.exchange.channels", { count: channels.length })}>
+                    <table className="st-ex-channels">
+                        <thead>
+                            <tr>
+                                <th scope="col">{t("settings.exchange.dataChannel")}</th>
+                                <th scope="col">{t("settings.exchange.realtime")}</th>
+                                <th scope="col">{t("settings.exchange.history")}</th>
+                                <th scope="col">{t("settings.exchange.dataQuality")}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {channels.map((channel) => {
+                                const values = configuredValues(channel);
+                                const fields = stringArray(channel.available_fields);
+                                const unavailableFields = stringArray(channel.unavailable_fields);
+                                const limitations = stringArray(channel.known_limitations);
+                                return (
+                                    <tr key={channel.channel}>
+                                        <th scope="row">
+                                            {channelLabel(channel.channel)}
+                                            {values.length > 0 && (
+                                                <span className="st-ex-values">
+                                                    {values.slice(0, 8).join(" · ")}{values.length > 8 ? ` · +${values.length - 8}` : ""}
+                                                </span>
+                                            )}
+                                        </th>
+                                        <td>{formatTransports(channel.realtime_transports, channel.realtime)}</td>
+                                        <td>{formatTransports(channel.history_transports, channel.history)}</td>
+                                        <td className="st-ex-quality">
+                                            <strong>{qualityLabel(channel)}</strong>
+                                            {fields.length > 0 && <span>{t("settings.exchange.fields")}: {fields.join(", ")}</span>}
+                                            {unavailableFields.length > 0 && <span>{t("settings.exchange.unavailableFields")}: {unavailableFields.join(", ")}</span>}
+                                            {limitations.map((limitation) => <span key={limitation}>{limitation}</span>)}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </Disclosure>
             )}
-        </div>
+        </section>
     );
 }
 
@@ -355,37 +351,28 @@ export default function ExchangeSettingsPanel({
         ))
     )).length;
 
+    const marketsLabel = (exchange: ExchangeCapabilityPayload) => (
+        exchange.markets.length > 0
+            ? new Intl.ListFormat(locale, { style: "narrow", type: "conjunction" }).format(exchange.markets.map((market) => market.label || market.market_type))
+            : t("settings.exchange.noMarkets")
+    );
+
     return (
-        <div className="st-group st-exchange-directory">
-            <div className="st-group-title-row">
-                <div>
-                    <div className="st-group-title">{t("settings.exchange.title")}</div>
-                    <div className="st-group-desc">{t("settings.exchange.desc")}</div>
-                </div>
-                <button
-                    className="st-exchange-refresh"
-                    type="button"
-                    onClick={onRefreshExchanges}
-                    disabled={exchangeListLoading}
-                >
+        <div className="st-group st-ex">
+            <div className="st-ex-head">
+                <p className="st-group-desc">{t("settings.exchange.summary")}</p>
+                <Button size="sm" onClick={onRefreshExchanges} disabled={exchangeListLoading}>
                     {exchangeListLoading ? t("settings.exchange.refreshing") : t("settings.exchange.refresh")}
-                </button>
+                </Button>
             </div>
 
             {exchangeCatalogSummary && (
-                <div className="st-exchange-summary">
-                    <div className="st-exchange-stat">
-                        <span>{t("settings.exchange.routable")}</span>
-                        <strong>{routableCount}</strong>
-                    </div>
-                    <div className="st-exchange-stat">
-                        <span>{t("settings.exchange.wsKline")}</span>
-                        <strong>{streamCount}</strong>
-                    </div>
+                <div className="st-ex-summary">
+                    <Stat label={t("settings.exchange.routable")} value={routableCount} />
+                    <Stat label={t("settings.exchange.wsKline")} value={streamCount} />
                     {/* Implementation figures stay available, folded away for the curious */}
-                    <details className="st-exchange-tech">
-                        <summary>{t("plugin.techDetails")}</summary>
-                        <dl>
+                    <Disclosure summary={t("plugin.techDetails")} className="st-ex-tech">
+                        <dl className="st-kv">
                             <dt>{t("settings.exchange.kernelVersion")}</dt>
                             <dd>CCXT {exchangeCatalogSummary.version}</dd>
                             <dt>{t("settings.exchange.adapterIds")}</dt>
@@ -393,51 +380,41 @@ export default function ExchangeSettingsPanel({
                             <dt>{t("settings.exchange.proIds")}</dt>
                             <dd>{exchangeCatalogSummary.pro_exchange_ids}</dd>
                         </dl>
-                    </details>
+                    </Disclosure>
                 </div>
             )}
 
-            <div className="st-exchange-toolbar">
-                <label className="st-exchange-search">
-                    <span>{t("settings.exchange.search")}</span>
-                    <input
-                        value={search}
-                        onChange={(event) => setSearch(event.target.value)}
-                        placeholder={t("settings.exchange.searchPlaceholder")}
-                    />
-                </label>
-                <div className="st-exchange-filters" role="group" aria-label={t("settings.exchange.filter")}>
-                    {FILTERS.map((option) => (
-                        <button
-                            key={option.value}
-                            type="button"
-                            className={`st-exchange-filter${filter === option.value ? " active" : ""}`}
-                            aria-pressed={filter === option.value}
-                            onClick={() => setFilter(option.value)}
-                        >
-                            {t(option.label)}
-                        </button>
-                    ))}
-                </div>
+            <div className="st-ex-toolbar">
+                <Input
+                    type="search"
+                    aria-label={t("settings.exchange.search")}
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder={t("settings.exchange.searchPlaceholder")}
+                />
+                <SegmentedControl<ExchangeSupportFilter>
+                    size="sm"
+                    label={t("settings.exchange.filter")}
+                    value={filter}
+                    onChange={setFilter}
+                    options={FILTERS.map((option) => ({ value: option.value, label: t(option.label) }))}
+                />
             </div>
 
             {exchangeListError && (
-                <div className="st-result st-result-fail">
-                    <div className="st-result-head">{t("settings.exchange.loadFailed")}</div>
-                    <div className="st-result-detail">{exchangeListError}</div>
-                </div>
+                <InlineAlert tone="danger" title={t("settings.exchange.loadFailed")}>{exchangeListError}</InlineAlert>
             )}
             {!exchangeListError && exchangeListLoading && supportedExchanges.length === 0 && (
-                <div className="st-info-box">{t("settings.exchange.loading")}</div>
+                <EmptyState compact title={t("settings.exchange.loading")} />
             )}
             {!exchangeListError && !exchangeListLoading && supportedExchanges.length === 0 && (
-                <div className="st-info-box st-info-warn">{t("settings.exchange.empty")}</div>
+                <InlineAlert tone="warning">{t("settings.exchange.empty")}</InlineAlert>
             )}
             {supportedExchanges.length > 0 && filteredExchanges.length === 0 && (
-                <div className="st-exchange-empty">{t("settings.exchange.noMatches")}</div>
+                <EmptyState compact title={t("settings.exchange.noMatches")} />
             )}
 
-            <div className="st-exchange-list">
+            <ul className="st-ex-list">
                 {filteredExchanges.map((exchange) => {
                     const isExpanded = expandedExchange === exchange.exchange;
                     const isCurrent = exchange.exchange === currentExchange;
@@ -445,89 +422,46 @@ export default function ExchangeSettingsPanel({
                     const provider = exchangeProvider(exchange);
                     const qualifications = exchange.support?.qualifications
                         || (exchange.support?.qualification ? [exchange.support.qualification] : []);
+                    const meta = [
+                        providerLabel(provider),
+                        marketsLabel(exchange),
+                        ...(exchangeIsPollingOnly(exchange) ? [t("settings.exchange.pollingOnly")] : []),
+                    ];
                     return (
-                        <section
+                        <li
                             key={exchange.exchange}
-                            className={[
-                                "st-exchange-card",
-                                isExpanded ? "expanded" : "",
-                                isCurrent ? "current" : "",
-                                isRoutable ? "" : "unroutable",
-                            ].filter(Boolean).join(" ")}
+                            className="st-ex-item"
+                            data-expanded={isExpanded ? "true" : undefined}
+                            data-current={isCurrent ? "true" : undefined}
+                            data-unroutable={isRoutable ? undefined : "true"}
                         >
                             <button
                                 type="button"
-                                className="st-exchange-card-head"
+                                className="st-ex-row"
                                 onClick={() => setExpandedExchange(isExpanded ? "" : exchange.exchange)}
                                 aria-expanded={isExpanded}
                             >
-                                <span className="st-exchange-disclosure" aria-hidden="true">
-                                    <span className="st-exchange-chevron"><Icon name="chevron-right" size={12} /></span>
-                                </span>
-                                <span className="st-exchange-identity">
-                                    <strong>{exchange.name || exchange.exchange}</strong>
-                                    <small>{exchange.exchange}</small>
-                                </span>
-                                <span className="st-exchange-row-badges">
-                                    {isCurrent && <span className="st-series-badge st-badge-ok">{t("settings.exchange.current")}</span>}
-                                    <span className="st-series-badge st-badge-info">{providerLabel(provider)}</span>
-                                    <span className={`st-series-badge ${isRoutable ? "st-badge-ok" : "st-badge-fail"}`}>
-                                        {isRoutable
-                                            ? verificationLabel(exchange.support?.verification_level || "capability_contract")
-                                            : t("settings.exchange.unroutable")}
+                                <span className="st-ex-chevron" aria-hidden="true"><Icon name="chevron-right" size={14} /></span>
+                                <span className="st-ex-identity">
+                                    <span className="st-ex-name">
+                                        <strong>{exchange.name || exchange.exchange}</strong>
+                                        <code>{exchange.exchange}</code>
                                     </span>
-                                    {exchangeIsPollingOnly(exchange) && (
-                                        <span className="st-series-badge st-badge-info">{t("settings.exchange.pollingOnly")}</span>
-                                    )}
-                                    {exchangeHasDerivatives(exchange) && (
-                                        <span className="st-series-badge st-badge-info">{t("settings.exchange.derivatives")}</span>
-                                    )}
+                                    <span className="st-ex-meta">{meta.join(" · ")}</span>
+                                    <span className="st-ex-capabilities">{capabilitySummary(exchange) || t("settings.exchange.noChannels")}</span>
                                 </span>
-                                <span className="st-exchange-row-meta">
-                                    <span className="st-exchange-row-markets">
-                                        {exchange.markets.length > 0
-                                            ? exchange.markets.map((market) => (
-                                                <span key={market.market_type} className="st-exchange-chip">
-                                                    {market.label || market.market_type}
-                                                </span>
-                                            ))
-                                            : <span className="st-exchange-chip muted">{t("settings.exchange.noMarkets")}</span>}
-                                    </span>
-                                    <span className="st-exchange-row-capabilities">
-                                        {capabilitySummary(exchange) || t("settings.exchange.noChannels")}
-                                    </span>
+                                <span className="st-ex-badges">
+                                    {isCurrent && <Badge tone="accent">{t("settings.exchange.current")}</Badge>}
+                                    {!isRoutable && <Badge tone="danger">{t("settings.exchange.unroutable")}</Badge>}
                                 </span>
                             </button>
 
                             {isExpanded && (
-                                <div className="st-exchange-card-detail">
-                                    <div className="st-exchange-detail-section">
+                                <div className="st-ex-detail">
+                                    <section>
                                         <h4>{t("settings.exchange.productSurfaces")}</h4>
                                         <ProductSurfaceRow exchange={exchange} />
-                                    </div>
-
-                                    {qualifications.length > 0 && (
-                                    <details className="st-exchange-tech">
-                                    <summary>{t("plugin.techDetails")}</summary>
-                                    {qualifications.map((qualification) => (
-                                        <div key={qualification.evidence_id} className="st-exchange-qualification">
-                                            <strong>{verificationLabel(qualification.level)}</strong>
-                                            <span>CCXT {qualification.ccxt_version}</span>
-                                            <span>{qualification.market_types.join(" / ")}</span>
-                                            <span>{qualification.channels.map(channelLabel).join(" · ")}</span>
-                                            {qualification.event_count != null && (
-                                                <span>{t("settings.exchange.verification.events", { count: qualification.event_count })}</span>
-                                            )}
-                                            {qualification.duration_seconds != null && (
-                                                <span>{t("settings.exchange.verification.durationHours", {
-                                                    hours: qualification.duration_seconds / 3600,
-                                                })}</span>
-                                            )}
-                                            <span>{new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(qualification.verified_at))}</span>
-                                        </div>
-                                    ))}
-                                    </details>
-                                    )}
+                                    </section>
 
                                     {exchange.markets.map((market) => (
                                         <MarketCapabilityDetail
@@ -542,19 +476,49 @@ export default function ExchangeSettingsPanel({
                                     ))}
 
                                     {exchange.known_limitations.length > 0 && (
-                                        <div className="st-exchange-limitations">
-                                            <strong>{t("settings.exchange.knownLimitations")}</strong>
-                                            <ul>
+                                        <section>
+                                            <h4>{t("settings.exchange.knownLimitations")}</h4>
+                                            <ul className="st-plain-list">
                                                 {exchange.known_limitations.map((limitation) => <li key={limitation}>{limitation}</li>)}
                                             </ul>
-                                        </div>
+                                        </section>
                                     )}
+
+                                    <Disclosure summary={t("plugin.techDetails")}>
+                                        <dl className="st-kv">
+                                            <dt>{t("settings.exchange.verificationTitle")}</dt>
+                                            <dd>{isRoutable
+                                                ? verificationLabel(exchange.support?.verification_level || "capability_contract")
+                                                : t("settings.exchange.unroutable")}</dd>
+                                            {exchangeHasDerivatives(exchange) && <>
+                                                <dt>{t("settings.exchange.derivatives")}</dt>
+                                                <dd>{t("settings.exchange.supported")}</dd>
+                                            </>}
+                                        </dl>
+                                        {qualifications.map((qualification) => (
+                                            <div key={qualification.evidence_id} className="st-ex-qualification">
+                                                <strong>{verificationLabel(qualification.level)}</strong>
+                                                <span>CCXT {qualification.ccxt_version}</span>
+                                                <span>{qualification.market_types.join(" / ")}</span>
+                                                <span>{qualification.channels.map(channelLabel).join(" · ")}</span>
+                                                {qualification.event_count != null && (
+                                                    <span>{t("settings.exchange.verification.events", { count: qualification.event_count })}</span>
+                                                )}
+                                                {qualification.duration_seconds != null && (
+                                                    <span>{t("settings.exchange.verification.durationHours", {
+                                                        hours: qualification.duration_seconds / 3600,
+                                                    })}</span>
+                                                )}
+                                                <span>{new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(qualification.verified_at))}</span>
+                                            </div>
+                                        ))}
+                                    </Disclosure>
                                 </div>
                             )}
-                        </section>
+                        </li>
                     );
                 })}
-            </div>
+            </ul>
         </div>
     );
 }

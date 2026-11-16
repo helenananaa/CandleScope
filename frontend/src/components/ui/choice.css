@@ -37,6 +37,11 @@
   transition: background-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
 }
 
+/* An inline control sizes each segment to its label; a full-width one shares the row equally. */
+.ui-segmented:not(.ui-segmented-block) > .ui-segment {
+  flex: 1 1 auto;
+}
+
 .ui-segmented-sm .ui-segment {
   min-height: calc(var(--control-height-sm) - 6px);
   padding: 2px 6px;

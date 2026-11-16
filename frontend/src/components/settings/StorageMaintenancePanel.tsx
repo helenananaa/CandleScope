@@ -1,17 +1,17 @@
 import { Button } from "../ui/Button.js";
+import { Badge, Disclosure, InlineAlert } from "../ui/Display.js";
 import type { ReactNode } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
-import { Icon } from "../icons/Icon.js";
 import type {
     MaintenanceResult,
     MaintenanceScope,
 } from "../../features/settings/maintenanceSettingsRuntime.js";
 
-function getRepairResultClassName(status: string | undefined): string {
-    if (status === 'ok') return 'st-result-ok';
-    if (status === 'partial' || status === 'warning' || status === 'empty') return 'st-result-warn';
-    return 'st-result-fail';
+function resultTone(status: string | undefined): "success" | "warning" | "danger" {
+    if (status === 'ok') return 'success';
+    if (status === 'partial' || status === 'warning' || status === 'empty') return 'warning';
+    return 'danger';
 }
 
 function getRepairStatusLabel(status: string | undefined): string {
@@ -28,9 +28,9 @@ function renderRepairDetails(result: MaintenanceResult): ReactNode {
                 <div key={`${item.symbol}-${item.interval}`} className="st-series-item">
                     <div className="st-series-line">
                         <span className="st-series-name">{item.symbol} · {item.interval}</span>
-                        <span className={`st-series-badge st-badge-${item.status === 'repaired' ? 'ok' : item.status === 'failed' ? 'fail' : 'info'}`}>
+                        <Badge tone={item.status === 'repaired' ? 'success' : item.status === 'failed' ? 'danger' : 'neutral'}>
                             {getRepairStatusLabel(item.status)}
-                        </span>
+                        </Badge>
                     </div>
                     <div className="st-series-msg">{item.message}</div>
                 </div>
@@ -54,9 +54,9 @@ function renderGapScanDetails(result: MaintenanceResult): ReactNode {
                         <span className="st-series-name">
                             {item.symbol} · {item.interval}
                         </span>
-                        <span className={`st-series-badge st-badge-${item.status === 'filled' ? 'ok' : item.status === 'ok' ? 'info' : 'fail'}`}>
-                            {item.status === 'ok' || item.status === 'filled' ? <Icon name="check" size={12} /> : '!'}
-                        </span>
+                        <Badge tone={item.status === 'filled' ? 'success' : item.status === 'ok' ? 'neutral' : 'danger'}>
+                            {item.status === 'filled' ? t("settings.maint.filled") : item.status === 'ok' ? t("settings.maint.passed") : t("settings.maint.failed")}
+                        </Badge>
                     </div>
                     <div className="st-series-msg">{item.message}</div>
                     <div className="st-series-msg">{t("settings.maint.inspectedRange", {
@@ -122,152 +122,128 @@ export default function StorageMaintenancePanel({
     useLocale();
     const scopeLabel = maintenanceScope === 'watchlist' ? t("settings.maint.scopeWatchlist") : t("settings.maint.scopeCurrent");
 
+    const scopeLine = (result: MaintenanceResult) => [
+        t("settings.maint.scopeLine", {
+            scope: scopeLabel,
+            exchange: exchangeLabel(result.exchange || currentExchange),
+            market: result.market_type || currentMarketType,
+        }),
+        Array.isArray(result.symbols_filter) && result.symbols_filter.length > 0
+            ? t("settings.maint.symbolCount", { count: result.symbols_filter.length })
+            : '',
+    ].join('');
+    const busy = storageRepairLoading || gapScanLoading;
+
     return (
         <div className="st-group">
-            <div className="st-group-title">{t("settings.maint.title")}</div>
             <div className="st-group-desc">{t("settings.maint.desc")}</div>
-
-            <div className="st-tool-card">
-                <div className="st-tool-header">
-                    <span className="st-tool-icon"><Icon name="wrench" size={20} /></span>
-                    <div>
-                        <div className="st-tool-name">{t("settings.maint.repairName")}</div>
-                        <div className="st-tool-desc">
-                            {t("settings.maint.repairDesc")}
+            <ul className="st-launch-list">
+                <li className="st-launch-row">
+                    <div className="st-launch-text">
+                        <strong>{t("settings.maint.repairName")}</strong>
+                        <span>{t("settings.maint.repairDesc")}</span>
+                    </div>
+                    <div className="st-launch-actions">
+                        <Button size="sm"
+                            onClick={() => onStorageRepair('current')}
+                            disabled={busy || currentScopeSymbols.length === 0}
+                        >
+                            {storageRepairLoading && maintenanceScope === 'current'
+                                ? t("settings.maint.checking")
+                                : t("settings.maint.currentChart", { symbol: currentSymbol || '-' })}
+                        </Button>
+                        <Button size="sm"
+                            onClick={() => onStorageRepair('watchlist')}
+                            disabled={busy || watchlistScopeSymbols.length === 0}
+                        >
+                            {storageRepairLoading && maintenanceScope === 'watchlist'
+                                ? t("settings.maint.checking")
+                                : t("settings.maint.watchlistCurrent", { count: watchlistScopeSymbols.length })}
+                        </Button>
+                    </div>
+                    {storageRepairResult && (
+                        <div className="st-launch-result">
+                            <InlineAlert tone={resultTone(storageRepairResult.status)} title={storageRepairResult.message}>
+                                {scopeLine(storageRepairResult)}
+                                <div className="st-result-stats">
+                                    <span>{t("settings.maint.checked", { count: storageRepairResult.checked_series || 0 })}</span>
+                                    <span>{t("settings.maint.repairedCount", { count: storageRepairResult.repaired_series || 0 })}</span>
+                                    <span>{t("settings.maint.passedCount", { count: storageRepairResult.unchanged_series || 0 })}</span>
+                                    <span>{t("settings.maint.failedCount", { count: storageRepairResult.failed_series || 0 })}</span>
+                                    <span>{t("settings.maint.deletedRows", { count: storageRepairResult.total_deleted_rows || 0 })}</span>
+                                    <span>{t("settings.maint.writtenRows", { count: storageRepairResult.total_written_rows || 0 })}</span>
+                                </div>
+                            </InlineAlert>
+                            {Array.isArray(storageRepairResult.results) && storageRepairResult.results.length > 0 && (
+                                <Disclosure summary={t("settings.maint.details")}>{renderRepairDetails(storageRepairResult)}</Disclosure>
+                            )}
                         </div>
-                    </div>
-                </div>
-                <div className="st-actions-row">
-                    <Button variant="danger"
-                        onClick={() => onStorageRepair('current')}
-                        disabled={storageRepairLoading || gapScanLoading || currentScopeSymbols.length === 0}
-                        style={{ flex: 1 }}
-                    >
-                        {storageRepairLoading && maintenanceScope === 'current'
-                            ? t("settings.maint.checking")
-                            : t("settings.maint.currentChart", { symbol: currentSymbol || '-' })}
-                    </Button>
-                    <Button
-                        onClick={() => onStorageRepair('watchlist')}
-                        disabled={storageRepairLoading || gapScanLoading || watchlistScopeSymbols.length === 0}
-                        style={{ flex: 1 }}
-                    >
-                        {storageRepairLoading && maintenanceScope === 'watchlist'
-                            ? t("settings.maint.checking")
-                            : t("settings.maint.watchlistCurrent", { count: watchlistScopeSymbols.length })}
-                    </Button>
-                </div>
-            </div>
+                    )}
+                </li>
 
-            {storageRepairResult && (
-                <div className={`st-result ${getRepairResultClassName(storageRepairResult.status)}`}>
-                    <div className="st-result-head">{storageRepairResult.message}</div>
-                    <div className="st-result-detail">
-                        {t("settings.maint.scopeLine", {
-                            scope: scopeLabel,
-                            exchange: exchangeLabel(storageRepairResult.exchange || currentExchange),
-                            market: storageRepairResult.market_type || currentMarketType,
-                        })}
-                        {Array.isArray(storageRepairResult.symbols_filter) && storageRepairResult.symbols_filter.length > 0
-                            ? t("settings.maint.symbolCount", { count: storageRepairResult.symbols_filter.length })
-                            : ''}
+                <li className="st-launch-row">
+                    <div className="st-launch-text">
+                        <strong>{t("settings.maint.gapName")}</strong>
+                        <span>{t("settings.maint.gapDesc", { exchange: exchangeLabel(currentExchange) })}</span>
                     </div>
-                    <div className="st-result-stats">
-                        <span>{t("settings.maint.checked", { count: storageRepairResult.checked_series || 0 })}</span>
-                        <span>{t("settings.maint.repairedCount", { count: storageRepairResult.repaired_series || 0 })}</span>
-                        <span>{t("settings.maint.passedCount", { count: storageRepairResult.unchanged_series || 0 })}</span>
-                        <span>{t("settings.maint.failedCount", { count: storageRepairResult.failed_series || 0 })}</span>
-                        <span>{t("settings.maint.deletedRows", { count: storageRepairResult.total_deleted_rows || 0 })}</span>
-                        <span>{t("settings.maint.writtenRows", { count: storageRepairResult.total_written_rows || 0 })}</span>
+                    <div className="st-launch-actions">
+                        <Button size="sm"
+                            onClick={() => onGapScan('current')}
+                            disabled={busy || currentScopeSymbols.length === 0}
+                        >
+                            {gapScanLoading && maintenanceScope === 'current'
+                                ? t("settings.maint.scanning")
+                                : gapScanResult?.has_more && maintenanceScope === 'current'
+                                ? t("settings.maint.continueScan")
+                                : t("settings.maint.currentChart", { symbol: currentSymbol || '-' })}
+                        </Button>
+                        <Button size="sm"
+                            onClick={() => onGapScan('watchlist')}
+                            disabled={busy || watchlistScopeSymbols.length === 0}
+                        >
+                            {gapScanLoading && maintenanceScope === 'watchlist'
+                                ? t("settings.maint.scanning")
+                                : gapScanResult?.has_more && maintenanceScope === 'watchlist'
+                                ? t("settings.maint.continueScan")
+                                : t("settings.maint.watchlistCurrent", { count: watchlistScopeSymbols.length })}
+                        </Button>
                     </div>
-                    {renderRepairDetails(storageRepairResult)}
-                </div>
-            )}
-
-            <div className="st-tool-card" style={{ marginTop: 12 }}>
-                <div className="st-tool-header">
-                    <span className="st-tool-icon"><Icon name="search" size={20} /></span>
-                    <div>
-                        <div className="st-tool-name">{t("settings.maint.gapName")}</div>
-                        <div className="st-tool-desc">
-                            {t("settings.maint.gapDesc", { exchange: exchangeLabel(currentExchange) })}
+                    {gapScanResult && (
+                        <div className="st-launch-result">
+                            <InlineAlert tone={resultTone(gapScanResult.status)} title={gapScanResult.message}>
+                                {scopeLine(gapScanResult)}
+                                <div className="st-result-stats">
+                                    <span>{t("settings.maint.checked", { count: gapScanResult.scanned_ranges || 0 })}</span>
+                                    <span>{t("settings.maint.passedCount", { count: gapScanResult.verified_ranges || 0 })}</span>
+                                    <span>{t("settings.maint.failedCount", { count: gapScanResult.failed_ranges || 0 })}</span>
+                                    <span>{t("settings.maint.elapsed", { seconds: ((gapScanResult.elapsed_ms || 0) / 1000).toFixed(1) })}</span>
+                                </div>
+                                {gapScanResult.errors?.map((error, index) => <div key={index} className="st-series-msg">{error}</div>)}
+                            </InlineAlert>
+                            {Array.isArray(gapScanResult.results) && gapScanResult.results.length > 0 && (
+                                <Disclosure summary={t("settings.maint.details")}>{renderGapScanDetails(gapScanResult)}</Disclosure>
+                            )}
                         </div>
-                    </div>
-                </div>
-                <div className="st-actions-row">
-                    <Button
-                        onClick={() => onGapScan('current')}
-                        disabled={gapScanLoading || storageRepairLoading || currentScopeSymbols.length === 0}
-                        style={{ flex: 1 }}
-                    >
-                        {gapScanLoading && maintenanceScope === 'current'
-                            ? t("settings.maint.scanning")
-                            : gapScanResult?.has_more && maintenanceScope === 'current'
-                            ? t("settings.maint.continueScan")
-                            : t("settings.maint.currentChart", { symbol: currentSymbol || '-' })}
-                    </Button>
-                    <Button
-                        onClick={() => onGapScan('watchlist')}
-                        disabled={gapScanLoading || storageRepairLoading || watchlistScopeSymbols.length === 0}
-                        style={{ flex: 1 }}
-                    >
-                        {gapScanLoading && maintenanceScope === 'watchlist'
-                            ? t("settings.maint.scanning")
-                            : gapScanResult?.has_more && maintenanceScope === 'watchlist'
-                            ? t("settings.maint.continueScan")
-                            : t("settings.maint.watchlistCurrent", { count: watchlistScopeSymbols.length })}
-                    </Button>
-                </div>
-            </div>
+                    )}
+                </li>
 
-            {gapScanResult && (
-                <div className={`st-result ${getRepairResultClassName(gapScanResult.status)}`}>
-                    <div className="st-result-head">{gapScanResult.message}</div>
-                    <div className="st-result-detail">
-                        {t("settings.maint.scopeLine", {
-                            scope: scopeLabel,
-                            exchange: exchangeLabel(gapScanResult.exchange || currentExchange),
-                            market: gapScanResult.market_type || currentMarketType,
-                        })}
-                        {Array.isArray(gapScanResult.symbols_filter) && gapScanResult.symbols_filter.length > 0
-                            ? t("settings.maint.symbolCount", { count: gapScanResult.symbols_filter.length })
-                            : ''}
+                <li className="st-launch-row">
+                    <div className="st-launch-text">
+                        <strong>{t("settings.maint.refreshName")}</strong>
+                        <span>{t("settings.maint.refreshDesc")}</span>
                     </div>
-                    <div className="st-result-stats">
-                        <span>{t("settings.maint.checked", { count: gapScanResult.scanned_ranges || 0 })}</span>
-                        <span>{t("settings.maint.passedCount", { count: gapScanResult.verified_ranges || 0 })}</span>
-                        <span>{t("settings.maint.failedCount", { count: gapScanResult.failed_ranges || 0 })}</span>
-                        <span>{t("settings.maint.elapsed", { seconds: ((gapScanResult.elapsed_ms || 0) / 1000).toFixed(1) })}</span>
+                    <div className="st-launch-actions">
+                        <Button size="sm" onClick={onExchangeRefresh} disabled={exchangeRefreshLoading}>
+                            {exchangeRefreshLoading ? t("settings.maint.refreshingPairs") : t("settings.maint.refreshBtn")}
+                        </Button>
                     </div>
-                    {gapScanResult.errors?.map((error, index) => <div key={index} className="st-series-msg">{error}</div>)}
-                    {renderGapScanDetails(gapScanResult)}
-                </div>
-            )}
-
-            <div className="st-tool-card" style={{ marginTop: 12 }}>
-                <div className="st-tool-header">
-                    <span className="st-tool-icon"><Icon name="refresh" size={20} /></span>
-                    <div>
-                        <div className="st-tool-name">{t("settings.maint.refreshName")}</div>
-                        <div className="st-tool-desc">
-                            {t("settings.maint.refreshDesc")}
+                    {exchangeRefreshResult && (
+                        <div className="st-launch-result">
+                            <InlineAlert tone={resultTone(exchangeRefreshResult.status)}>{exchangeRefreshResult.message}</InlineAlert>
                         </div>
-                    </div>
-                </div>
-                <Button
-                    onClick={onExchangeRefresh}
-                    disabled={exchangeRefreshLoading}
-                    style={{ width: '100%' }}
-                >
-                    {exchangeRefreshLoading ? t("settings.maint.refreshingPairs") : t("settings.maint.refreshBtn")}
-                </Button>
-            </div>
-
-            {exchangeRefreshResult && (
-                <div className={`st-result ${getRepairResultClassName(exchangeRefreshResult.status)}`}>
-                    <div className="st-result-head">{exchangeRefreshResult.message}</div>
-                </div>
-            )}
+                    )}
+                </li>
+            </ul>
         </div>
     );
 }
