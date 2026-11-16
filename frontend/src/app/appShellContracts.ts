@@ -7,7 +7,7 @@ import type { ExportRuntime } from "../features/export/useExportRuntime.js";
 import type { IndicatorRuntime } from "../features/indicators/indicatorRuntimeContract.js";
 import type { MarketDataRuntimeContract } from "../features/market-data/marketDataRuntimeContract.js";
 import type { AdvancedMarketRuntime } from "../features/advanced-market-data/advancedMarketDataTypes.js";
-import type { ChartSettings } from "../features/settings/chartAppearanceSettings.js";
+import type { AppearanceTargets, ChartSettings } from "../features/settings/chartAppearanceSettings.js";
 import type { WatchlistRuntime } from "../features/watchlist/useWatchlistRuntime.js";
 import type { OrderBookRuntime } from "../features/order-book/orderBookTypes.js";
 import type { ReplayEntryCapabilityView } from "../features/replay/useReplayEntryCapability.js";
@@ -31,6 +31,7 @@ export interface IndicatorShellRuntime {
 export interface SettingsShellRuntime {
   view: {
     appearanceScope?: "chart" | "application";
+    appearanceTargets?: AppearanceTargets;
     settings: ChartSettings;
     resolvedTheme: string;
     isOpen: boolean;

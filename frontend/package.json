@@ -111,7 +111,7 @@
     "smoke:strategy-research": "node scripts/strategy-research-smoke.mjs",
     "soak:backtest": "node scripts/backtest-m10-api-soak.mjs --duration-ms 3600000 --output ../output/backtest-m10-api-soak.json",
     "check:plugins": "node scripts/check-plugin-platform.mjs",
-    "check": "npm run check:architecture && npm run check:plugins && npm run check:i18n && npm run typecheck && npm run lint && npm test && npm run test:desktop && npm run build",
+    "check": "npm run check:architecture && npm run check:plugins && npm run check:i18n && npm run check:styles && npm run typecheck && npm run lint && npm test && npm run test:desktop && npm run build",
     "desktop:dev": "electron desktop/main.mjs",
     "desktop:package:dir": "node scripts/package-desktop.mjs",
     "desktop:spike": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/desktop-phase6-spike.ps1",
@@ -140,6 +140,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "smoke": "tsx scripts/smoke.mjs",
+    "design:snapshots": "node scripts/design-snapshots.mjs",
     "smoke:replay": "node scripts/replay-soak.mjs --allow-short --duration-ms 10000 --cycles 1 --projection-events 10000 --sample-ms 5000",
     "smoke:replay:v2": "node scripts/replay-soak.mjs --allow-short --duration-ms 10000 --cycles 1 --projection-events 10000 --sample-ms 5000",
     "stress:replay:orders": "node scripts/replay-soak.mjs --allow-short --duration-ms 10000 --cycles 10 --projection-events 10000 --sample-ms 5000 --out ../docs/perf-baselines/replay-v2-order-advisory-stress.json",
@@ -157,9 +158,11 @@
     "check:drawing:rollback-drills:browser": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/drawing-rollback-drills-browser.ps1",
     "test:drawing": "node scripts/run-frontend-tests.mjs \"src/features/drawings/**/*.test.{ts,tsx}\"",
     "desktop:runtime:prepare": "node scripts/prepare-desktop-runtime.mjs",
-    "desktop:package:mac": "node scripts/package-desktop.mjs --distributable --mac dmg zip --publish never"
+    "desktop:package:mac": "node scripts/package-desktop.mjs --distributable --mac dmg zip --publish never",
+    "check:styles": "node scripts/check-style-metrics.mjs"
   },
   "dependencies": {
+    "@fontsource/ibm-plex-sans": "^5.3.0",
     "@fontsource/inter": "^5.2.8",
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@monaco-editor/react": "^4.7.0",

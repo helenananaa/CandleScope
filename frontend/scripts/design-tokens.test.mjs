@@ -59,6 +59,16 @@ test("every text token reaches WCAG AA on every surface in both themes", () => {
   assert.ok(contrast("#ffffff", dark["--accent-solid"]) >= 4.5, "--text-on-accent must be legible on --accent-solid");
 });
 
+test("Chinese text never falls back to a Korean font", () => {
+  const css = readFileSync(TOKENS, "utf8");
+  const root = css.match(/:root\s*\{([^}]*)\}/)?.[1] ?? "";
+  const stacks = [...root.matchAll(/--font-(?:sans|cjk):([^;]*);/g)].map(([, value]) => value).join(" ");
+  assert.match(stacks, /'IBM Plex Sans'/, "the interface font comes first");
+  assert.match(stacks, /'PingFang SC'.*'Microsoft YaHei'/, "Simplified Chinese stack is the default CJK stack");
+  assert.doesNotMatch(stacks, /Malgun Gothic|Apple SD Gothic Neo|Noto Sans KR/, "Korean fonts belong only under :lang(ko)");
+  assert.match(css, /:root:lang\(ko\)\s*\{[^}]*Apple SD Gothic Neo/);
+});
+
 test("stylesheets never set text below the 11px floor except through the size tokens", () => {
   const offenders = styleSources().flatMap((path) => {
     const css = readFileSync(path, "utf8");

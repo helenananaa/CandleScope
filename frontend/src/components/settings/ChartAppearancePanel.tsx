@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { Icon } from "../icons/Icon.js";
 import type { IconName } from "../icons/Icon.js";
 import type {
+    AppearanceTargets,
     ChartSettings,
     ChartTheme,
     PriceBoxSizeMode,
@@ -29,12 +30,24 @@ const THEME_OPTIONS: ThemeOption[] = [
     { value: "custom", icon: "palette", labelKey: "settings.appearance.theme.custom" },
 ];
 
+// The app theme has no custom background; custom backgrounds belong to individual charts.
+const APP_THEME_OPTIONS = THEME_OPTIONS.filter((option) => option.value !== "custom");
+const CHART_THEME_OPTIONS = THEME_OPTIONS.filter((option) => option.value !== "system");
+
+function effectiveScheme(theme: ChartTheme): "dark" | "light" {
+    if (theme === "light") return "light";
+    if (theme === "system" && typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: light)").matches) return "light";
+    return "dark";
+}
+
 function priceBoxSizeMode(value: string): PriceBoxSizeMode {
     return value === "traditional" ? "traditional" : "atr";
 }
 
 export interface ChartAppearancePanelProps {
     appearanceScope?: "chart" | "application";
+    /** Present when opened from a chart: app theme and colours go to the app, own appearance to the chart. */
+    appearanceTargets?: AppearanceTargets;
     settings: ChartSettings;
     onUpdate(settings: ChartSettings): void;
 }
@@ -43,7 +56,7 @@ const GREEN = '#22c55e';
 const RED = '#ef4444';
 const sameColor = (a: string | undefined, b: string) => String(a || '').toLowerCase() === b;
 
-export default function ChartAppearancePanel({ settings, onUpdate, appearanceScope = "application" }: ChartAppearancePanelProps) {
+export default function ChartAppearancePanel({ settings, onUpdate, appearanceScope = "application", appearanceTargets }: ChartAppearancePanelProps) {
     useLocale();
     const [loadingLocale, setLoadingLocale] = useState(false);
     const [localeError, setLocaleError] = useState(false);
@@ -61,8 +74,23 @@ export default function ChartAppearancePanel({ settings, onUpdate, appearanceSco
             }
         }).catch(() => setLocaleError(true)).finally(() => setLoadingLocale(false));
     };
-    const greenUpActive = sameColor(settings.upColor, GREEN) && sameColor(settings.downColor, RED);
-    const redUpActive = sameColor(settings.upColor, RED) && sameColor(settings.downColor, GREEN);
+    // Hosts that have not adopted appearance targets keep the older combined chart picker.
+    const legacyChartScope = !appearanceTargets && appearanceScope === "chart";
+    const application = appearanceTargets?.application;
+    const appTheme = application ? application.theme : settings.theme;
+    const appColors = application
+        ? { upColor: application.upColor, downColor: application.downColor }
+        : { upColor: settings.upColor, downColor: settings.downColor };
+    const setAppTheme = (theme: ChartTheme) => (application ? application.update({ theme }) : handleUpdate("theme", theme));
+    const setAppColors = (colors: Partial<Pick<ChartSettings, "upColor" | "downColor">>) => (
+        application ? application.update(colors) : onUpdate({ ...settings, ...colors })
+    );
+    const themeOptions = legacyChartScope ? THEME_OPTIONS : APP_THEME_OPTIONS;
+    const chart = appearanceTargets?.chart;
+    const chartOverride = chart?.override ?? {};
+    const chartHasOwnAppearance = Object.keys(chartOverride).length > 0;
+    const greenUpActive = sameColor(appColors.upColor, GREEN) && sameColor(appColors.downColor, RED);
+    const redUpActive = sameColor(appColors.upColor, RED) && sameColor(appColors.downColor, GREEN);
 
     return (
         <>
@@ -92,13 +120,15 @@ export default function ChartAppearancePanel({ settings, onUpdate, appearanceSco
 
             <div className="st-group">
                 <div className="st-group-title">{t("settings.appearance.themeTitle")}</div>
-                <div className="st-group-desc">{t(appearanceScope === "chart" ? "settings.appearance.cellThemeDescription" : "settings.appearance.themeDescription")}</div>
+                <div className="st-group-desc">{t(legacyChartScope ? "settings.appearance.cellThemeDescription" : "settings.appearance.themeDescription")}</div>
                 <div className="st-theme-grid st-appearance-theme-grid">
-                    {THEME_OPTIONS.map((theme) => (
+                    {themeOptions.map((theme) => (
                         <button
                             key={theme.value}
-                            className={`st-theme-card ${settings.theme === theme.value ? 'active' : ''}`}
-                            onClick={() => handleUpdate('theme', theme.value)}
+                            type="button"
+                            className={`st-theme-card ${appTheme === theme.value ? 'active' : ''}`}
+                            aria-pressed={appTheme === theme.value}
+                            onClick={() => setAppTheme(theme.value)}
                         >
                             <span className="st-theme-icon"><Icon name={theme.icon} size={22} /></span>
                             <span className="st-theme-label">{t(theme.labelKey)}</span>
@@ -107,7 +137,63 @@ export default function ChartAppearancePanel({ settings, onUpdate, appearanceSco
                 </div>
             </div>
 
-            {settings.theme === 'custom' && (
+            {chart && (
+                <div className="st-group" data-settings-chart-appearance="true">
+                    <div className="st-group-title">{t("settings.appearance.chartAppearanceTitle")}</div>
+                    <div className="st-group-desc">{t("settings.appearance.cellThemeDescription")}</div>
+                    <div className="st-preset-row" role="group" aria-label={t("settings.appearance.chartAppearanceTitle")}>
+                        <button
+                            type="button"
+                            className={`st-preset-btn ${chartHasOwnAppearance ? '' : 'active'}`}
+                            aria-pressed={!chartHasOwnAppearance}
+                            onClick={() => chart.set(null)}
+                        >
+                            {t("settings.appearance.followApp")}
+                        </button>
+                        <button
+                            type="button"
+                            className={`st-preset-btn ${chartHasOwnAppearance ? 'active' : ''}`}
+                            aria-pressed={chartHasOwnAppearance}
+                            onClick={() => { if (!chartHasOwnAppearance) chart.set({ theme: effectiveScheme(appTheme) }); }}
+                        >
+                            {t("settings.appearance.ownAppearance")}
+                        </button>
+                    </div>
+                    {chartHasOwnAppearance && (
+                        <div className="st-theme-grid st-appearance-theme-grid">
+                            {CHART_THEME_OPTIONS.map((theme) => (
+                                <button
+                                    key={theme.value}
+                                    type="button"
+                                    className={`st-theme-card ${chartOverride.theme === theme.value ? 'active' : ''}`}
+                                    aria-pressed={chartOverride.theme === theme.value}
+                                    onClick={() => chart.set({
+                                        ...chartOverride,
+                                        theme: theme.value,
+                                        ...(theme.value === "custom" && !chartOverride.customBg ? { customBg: application?.customBg ?? settings.customBg } : {}),
+                                    })}
+                                >
+                                    <span className="st-theme-icon"><Icon name={theme.icon} size={22} /></span>
+                                    <span className="st-theme-label">{t(theme.value === "custom" ? "settings.appearance.customBg" : theme.labelKey)}</span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                    {chartOverride.theme === "custom" && (
+                        <div className="st-color-row">
+                            <input
+                                type="color"
+                                aria-label={t("settings.appearance.customBg")}
+                                value={chartOverride.customBg ?? settings.customBg}
+                                onChange={(event) => chart.set({ ...chartOverride, customBg: event.target.value })}
+                            />
+                            <code className="st-color-code">{chartOverride.customBg ?? settings.customBg}</code>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {legacyChartScope && settings.theme === 'custom' && (
                 <div className="st-group">
                     <div className="st-group-title">{t("settings.appearance.customBg")}</div>
                     <div className="st-color-row">
@@ -129,7 +215,7 @@ export default function ChartAppearancePanel({ settings, onUpdate, appearanceSco
                         type="button"
                         className={`st-preset-btn ${greenUpActive ? 'active' : ''}`}
                         aria-pressed={greenUpActive}
-                        onClick={() => onUpdate({ ...settings, upColor: GREEN, downColor: RED })}
+                        onClick={() => setAppColors({ upColor: GREEN, downColor: RED })}
                     >
                         <span style={{ color: 'var(--text-success)', fontWeight: 700 }}>● {t("settings.appearance.greenUp")}</span>
                         <span style={{ color: 'var(--text-danger)', fontWeight: 700 }}>● {t("settings.appearance.redDown")}</span>
@@ -138,7 +224,7 @@ export default function ChartAppearancePanel({ settings, onUpdate, appearanceSco
                         type="button"
                         className={`st-preset-btn ${redUpActive ? 'active' : ''}`}
                         aria-pressed={redUpActive}
-                        onClick={() => onUpdate({ ...settings, upColor: RED, downColor: GREEN })}
+                        onClick={() => setAppColors({ upColor: RED, downColor: GREEN })}
                     >
                         <span style={{ color: 'var(--text-danger)', fontWeight: 700 }}>● {t("settings.appearance.redUp")}</span>
                         <span style={{ color: 'var(--text-success)', fontWeight: 700 }}>● {t("settings.appearance.greenDown")}</span>
@@ -150,10 +236,10 @@ export default function ChartAppearancePanel({ settings, onUpdate, appearanceSco
                         <div className="st-color-row">
                             <input
                                 type="color"
-                                value={settings.upColor}
-                                onChange={(event) => handleUpdate('upColor', event.target.value)}
+                                value={appColors.upColor}
+                                onChange={(event) => setAppColors({ upColor: event.target.value })}
                             />
-                            <code className="st-color-code">{settings.upColor}</code>
+                            <code className="st-color-code">{appColors.upColor}</code>
                         </div>
                     </div>
                     <div className="st-color-item">
@@ -161,10 +247,10 @@ export default function ChartAppearancePanel({ settings, onUpdate, appearanceSco
                         <div className="st-color-row">
                             <input
                                 type="color"
-                                value={settings.downColor}
-                                onChange={(event) => handleUpdate('downColor', event.target.value)}
+                                value={appColors.downColor}
+                                onChange={(event) => setAppColors({ downColor: event.target.value })}
                             />
-                            <code className="st-color-code">{settings.downColor}</code>
+                            <code className="st-color-code">{appColors.downColor}</code>
                         </div>
                     </div>
                 </div>
