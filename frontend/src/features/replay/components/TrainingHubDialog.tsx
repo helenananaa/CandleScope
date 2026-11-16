@@ -17,7 +17,7 @@ import type {
   TrainingRunCompatibility,
 } from "../replayV2Types.js";
 import type { TrainingHubRuntime } from "../useTrainingHub.js";
-import { formatTrainingEquity, trainingCompatibilityLabel, trainingExchangeLabel, trainingIntegrityLabel, trainingRunStateLabel, trainingSourceKindLabel, trainingTimeDisclosureLabel } from "../trainingHubLabels.js";
+import { formatTrainingEquity, replayMutationLabel, trainingCompatibilityLabel, trainingExchangeLabel, trainingIntegrityLabel, trainingRunStateLabel, trainingSourceKindLabel, trainingTimeDisclosureLabel } from "../trainingHubLabels.js";
 import ReplayStorageGovernancePanel from "./ReplayStorageGovernancePanel.js";
 import { applyTrainingPreset } from "../trainingPresets.js";
 import PreparationJobsPanel from "../../data-preparation/PreparationJobsPanel.js";
@@ -367,7 +367,7 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
                 {REPLAY_POLICY_MUTATIONS.map((mutation) => (
                   <Checkbox
                     key={mutation}
-                    label={mutation}
+                    label={replayMutationLabel(mutation)}
                     checked={draft.allowedMutations.includes(mutation)}
                     onChange={(event) => toggleMutation(mutation, event.target.checked)}
                   />

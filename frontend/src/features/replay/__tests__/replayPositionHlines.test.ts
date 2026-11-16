@@ -142,7 +142,7 @@ test("ONE_WAY falls back to the prior K-line mark proxy only without a server li
 test("risk price presentation exposes proxy fidelity and rejects non-positive model prices", () => {
   assert.equal(replayMarkFidelityLabel("REVEALED_BAR_OR_TAPE_PRICE_PROXY"), "K线/成交代理");
   assert.equal(replayMarkFidelityLabel("REVEALED_BAR_CLOSE_PROXY"), "K线代理");
-  assert.equal(replayMarkFidelityLabel("HISTORICAL_EXACT_ARCHIVE_MARK"), "历史 Mark");
+  assert.equal(replayMarkFidelityLabel("HISTORICAL_EXACT_ARCHIVE_MARK"), "历史标记价格");
   assert.equal(replayMarkFidelityLabel(undefined), "模型代理");
   assert.equal(replayPositiveModelPrice("44770.25"), 44770.25);
   assert.equal(replayPositiveModelPrice("0"), null);

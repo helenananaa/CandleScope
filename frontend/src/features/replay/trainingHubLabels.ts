@@ -1,4 +1,4 @@
-import { t } from "../../i18n/index.js";
+import { t, type MessageKey } from "../../i18n/index.js";
 import { formatDecimal } from "../../shared/formatDecimal.js";
 import type { ReplayCatalogEntry } from "./replayTypes.js";
 import type {
@@ -166,4 +166,109 @@ export function replayCapabilityStateLabel(state: string): string {
   if (state === "AVAILABLE_EXACT") return t("replay.capability.exact");
   if (state === "AVAILABLE_APPROX") return t("replay.capability.approx");
   return t("replay.capability.unsupported");
+}
+
+const MUTATION_KEYS: Readonly<Record<string, MessageKey>> = {
+  deposit: "replay.mutation.deposit",
+  withdraw: "replay.mutation.withdraw",
+  change_fee_policy: "replay.mutation.changeFeePolicy",
+  change_leverage_cap: "replay.mutation.changeLeverageCap",
+  change_funding_policy: "replay.mutation.changeFundingPolicy",
+  reveal_time: "replay.mutation.revealTime",
+};
+
+/** A practice change that can be allowed (deposit, change fees…); unknown ids stay as they are. */
+export function replayMutationLabel(mutation: string): string {
+  const key = MUTATION_KEYS[mutation];
+  return key ? t(key) : mutation;
+}
+
+const REVISION_KIND_KEYS: Readonly<Record<string, MessageKey>> = {
+  FEE_POLICY: "replay.revisionKind.feePolicy",
+  LEVERAGE_CAP: "replay.revisionKind.leverageCap",
+  FUNDING_POLICY: "replay.revisionKind.fundingPolicy",
+};
+
+export function replayRevisionKindLabel(kind: string): string {
+  const key = REVISION_KIND_KEYS[kind];
+  return key ? t(key) : kind;
+}
+
+const AUDIT_KEYS: Readonly<Record<string, MessageKey>> = {
+  NOT_RUN: "replay.audit.notRun",
+  PASS: "replay.audit.pass",
+  FAIL: "replay.audit.fail",
+  NOT_APPLICABLE: "replay.audit.notApplicable",
+};
+
+/** An account audit's result: passed, failed, not run. */
+export function replayAuditStatusLabel(status: string): string {
+  const key = AUDIT_KEYS[status];
+  return key ? t(key) : status;
+}
+
+const ACCOUNT_MODE_KEYS: Readonly<Record<string, MessageKey>> = {
+  HISTORICAL_EXACT: "replay.hub.accountData.historicalExact",
+  APPROX_PROXY: "replay.hub.accountData.approxProxy",
+  DETERMINISTIC_SIMULATION: "replay.hub.accountData.deterministicSimulation",
+};
+
+/** Where the modelled account's inputs come from (the same names as the create dialog). */
+export function replayAccountModeLabel(mode: string): string {
+  const key = ACCOUNT_MODE_KEYS[mode];
+  return key ? t(key) : mode;
+}
+
+/** How faithful a liquidation channel is: exact inputs, approximate, or not available. */
+export function replayLiquidationFidelityLabel(fidelity: string): string {
+  if (fidelity === "UNSUPPORTED_NO_HISTORY") return t("replay.capability.unsupported");
+  return fidelity.startsWith("HISTORICAL_EXACT") ? t("replay.capability.exact") : t("replay.capability.approx");
+}
+
+const LIQUIDATION_STATE_KEYS: Readonly<Record<string, MessageKey>> = {
+  RISK_BREACH_DETECTED: "replay.liqState.riskBreach",
+  CANCELING_ORDERS: "replay.liqState.cancelingOrders",
+  CANCEL_ORDERS: "replay.liqState.cancelingOrders",
+  RISK_RECHECK: "replay.liqState.riskRecheck",
+  PARTIAL_LIQUIDATION: "replay.liqState.partial",
+  FULL_LIQUIDATION: "replay.liqState.full",
+  BANKRUPTCY_TRANSFER: "replay.liqState.bankruptcyTransfer",
+  INSURANCE_FUND_SETTLEMENT: "replay.liqState.insuranceSettlement",
+  ADL: "replay.liqState.adl",
+  RECOVERED_AFTER_CANCEL: "replay.liqState.recoveredAfterCancel",
+  COMPLETED: "replay.liqState.completed",
+  COMPLETE: "replay.liqState.completed",
+  BANKRUPT: "replay.liqState.bankrupt",
+  FAILED_CLOSED: "replay.liqState.failedClosed",
+  PENDING: "replay.liqState.pending",
+  NEW: "replay.liqState.pending",
+  APPLIED: "replay.liqState.applied",
+  PARTIAL: "replay.liqState.partialLeg",
+  CLOSED: "replay.liqState.closed",
+  TRANSFERRED: "replay.liqState.transferred",
+  FILLED: "replay.liqState.filled",
+  PARTIALLY_FILLED: "replay.liqState.partiallyFilled",
+  CANCELED: "replay.liqState.canceled",
+};
+
+/** A simulated liquidation's stage or state (case, step, leg, order, auto-deleveraging). */
+export function replayLiquidationStateLabel(state: string): string {
+  const key = LIQUIDATION_STATE_KEYS[state];
+  return key ? t(key) : state;
+}
+
+export function replayPositionSideLabel(side: string): string {
+  return side === "LONG" ? t("replay.wb.long") : side === "SHORT" ? t("replay.wb.short") : side;
+}
+
+export function replayOrderLabel(side: string, type: string): string {
+  const sideLabel = side === "BUY" ? t("replay.paper.buy") : side === "SELL" ? t("replay.paper.sell") : side;
+  const typeLabel = type === "MARKET" ? t("replay.paper.typeMarket") : type === "LIMIT" ? t("replay.paper.typeLimit") : type;
+  return `${sideLabel} ${typeLabel}`;
+}
+
+export function replaySeverityLabel(severity: string): string {
+  if (severity === "CRITICAL") return t("replay.severity.critical");
+  if (severity === "WARNING") return t("replay.severity.warning");
+  return t("replay.severity.info");
 }

@@ -1,3 +1,4 @@
+import { replayLiquidationStateLabel, replayOrderLabel, replayPositionSideLabel } from "../trainingHubLabels.js";
 import { Badge, EmptyState } from "../../../components/ui/index.js";
 import { t, type LocaleId } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
@@ -31,7 +32,7 @@ export default function ReplayLiquidationTimeline({
         <details className="replay-liquidation-case" key={item.case_id} open={cases.length === 1}>
           <summary>
             <span><strong>{t("replay.liq.case", { sequence: item.case_sequence })}</strong><small>{item.reason}</small></span>
-            <span data-liquidation-state={item.state}><Badge tone={item.state === "COMPLETED" ? "neutral" : "warning"}>{item.state}</Badge></span>
+            <span data-liquidation-state={item.state}><Badge tone={item.state === "COMPLETED" ? "neutral" : "warning"}>{replayLiquidationStateLabel(item.state)}</Badge></span>
           </summary>
           <div className="replay-liquidation-case-body">
             <p className="replay-liquidation-disclosure">
@@ -43,7 +44,7 @@ export default function ReplayLiquidationTimeline({
             <div className="replay-liquidation-legs">
               {item.legs.map((leg) => (
                 <article key={leg.liquidation_leg_id} data-position-side={leg.position_side.toLowerCase()}>
-                  <header><strong>{leg.position_side} · {leg.track_id}</strong><span>{leg.state}</span></header>
+                  <header><strong>{replayPositionSideLabel(leg.position_side)} · {leg.track_id}</strong><span>{replayLiquidationStateLabel(leg.state)}</span></header>
                   <dl className="replay-metric-flat">
                     <div><dt>{t("replay.liq.triggerQty")}</dt><dd>{amount(leg.trigger_quantity, locale)}</dd></div>
                     <div><dt>{t("replay.liq.completed")}</dt><dd>{amount(leg.completed_quantity, locale)}</dd></div>
@@ -60,8 +61,8 @@ export default function ReplayLiquidationTimeline({
               {item.steps.map((step) => (
                 <details key={`${item.case_id}:${step.step_sequence}`} open={step.state === "FAILED_CLOSED"}>
                   <summary>
-                    <span>{t("replay.liq.step", { sequence: step.step_sequence, type: step.step_type })}</span>
-                    <span data-liquidation-step-state={step.state}>{step.state}</span>
+                    <span>{t("replay.liq.step", { sequence: step.step_sequence, type: replayLiquidationStateLabel(step.step_type) })}</span>
+                    <span data-liquidation-step-state={step.state}>{replayLiquidationStateLabel(step.state)}</span>
                   </summary>
                   <p>{step.reason}</p>
                   {step.book_execution !== null && (
@@ -76,8 +77,8 @@ export default function ReplayLiquidationTimeline({
                   {step.orders.map((order) => (
                     <article className="replay-liquidation-order" key={order.order_id}>
                       <header>
-                        <strong>{order.side} {order.order_type}</strong>
-                        <span>{order.state} · {amount(order.filled_quantity, locale)}/{amount(order.requested_quantity, locale)}</span>
+                        <strong>{replayOrderLabel(order.side, order.order_type)}</strong>
+                        <span>{replayLiquidationStateLabel(order.state)} · {amount(order.filled_quantity, locale)}/{amount(order.requested_quantity, locale)}</span>
                       </header>
                       {order.fills.map((fill) => (
                         <dl className="replay-liquidation-fill" key={fill.fill_id}>
@@ -98,7 +99,7 @@ export default function ReplayLiquidationTimeline({
                   ))}
                   {step.adl_events.map((event) => (
                     <article className="replay-liquidation-adl" key={event.adl_event_id}>
-                      <header><strong>{t("replay.liq.adl", { state: event.state })}</strong><span>{amount(event.completed_notional, locale)}/{amount(event.required_notional, locale)}</span></header>
+                      <header><strong>{t("replay.liq.adl", { state: replayLiquidationStateLabel(event.state) })}</strong><span>{amount(event.completed_notional, locale)}/{amount(event.required_notional, locale)}</span></header>
                       {event.selections.map((selection) => (
                         <div key={selection.candidate_id}>
                           <span>#{selection.selection_sequence} {selection.candidate_id}</span>

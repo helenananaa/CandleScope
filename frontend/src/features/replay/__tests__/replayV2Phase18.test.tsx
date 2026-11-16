@@ -394,8 +394,8 @@ test("storage panel exposes HOLD, protected Review evidence and exact plan confi
   } satisfies TrainingHubRuntime;
   const html = renderToStaticMarkup(<TrainingHubDialog runtime={runtime} />);
   assert.match(html, /data-release-decision="HOLD"/);
-  assert.match(html, /Run archive evidence 永久受保护/);
-  assert.match(html, /本阶段没有删除入口/);
+  assert.match(html, /训练归档证据永久受保护/);
+  assert.match(html, /当前没有删除入口/);
   assert.match(html, /data-storage-plan-hash="sha256:a{64}"/);
   assert.match(html, /我已核对上述清理预演/);
   assert.match(html, /重新载入并校验/);
