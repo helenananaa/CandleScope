@@ -32,6 +32,30 @@ export function choiceKeyTarget(key: string, index: number, disabled: readonly b
   return null;
 }
 
+const MENU_ITEMS = "[role='menuitem'], [role='menuitemradio'], [role='menuitemcheckbox']";
+
+/**
+ * Arrow keys, Home and End inside a menu: moves focus to the next item that can be chosen,
+ * wrapping around. Returns whether the key was used (and its default prevented).
+ */
+export function moveMenuFocus(event: { key: string; preventDefault(): void }, container: HTMLElement | null, selector = MENU_ITEMS): boolean {
+  if (!container) return false;
+  const items = [...container.querySelectorAll<HTMLElement>(selector)].filter((item) => item.getClientRects().length > 0);
+  const active = items.indexOf(document.activeElement as HTMLElement);
+  // From outside the items, Down starts at the first one and Up at the last.
+  const index = active >= 0 ? active : event.key === "ArrowUp" || event.key === "ArrowLeft" ? 0 : -1;
+  const target = choiceKeyTarget(event.key, index, items.map((item) => item.matches(":disabled, [aria-disabled='true']")));
+  if (target == null) return false;
+  event.preventDefault();
+  items[target]?.focus();
+  return true;
+}
+
+/** Whether a key opens a context menu from the keyboard: the menu key, or Shift+F10. */
+export function isContextMenuKey(event: { key: string; shiftKey: boolean }): boolean {
+  return event.key === "ContextMenu" || (event.shiftKey && event.key === "F10");
+}
+
 export const tabId = (base: string, value: string) => `${base}-tab-${value}`;
 export const tabPanelId = (base: string, value: string) => `${base}-panel-${value}`;
 

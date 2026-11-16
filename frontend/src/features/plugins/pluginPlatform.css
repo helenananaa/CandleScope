@@ -383,7 +383,7 @@
 }
 button.plugin-platform-notice { cursor: pointer; }
 button.plugin-platform-notice:hover { background: var(--surface-hover); }
-button.plugin-platform-notice:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: -2px; }
+button.plugin-platform-notice:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 .plugin-platform-error {
   border-top-color: color-mix(in srgb, var(--color-danger) 70%, transparent);
   background: color-mix(in srgb, var(--color-danger) 10%, var(--surface-1));
@@ -634,7 +634,7 @@ button.plugin-platform-notice:focus-visible { outline: 2px solid var(--accent-bl
 .plugin-settings-page button:focus-visible,
 .plugin-install-button:focus-within,
 .plugin-technical-details summary:focus-visible {
-  outline: 2px solid var(--accent-blue);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 .plugin-settings-page button:disabled {

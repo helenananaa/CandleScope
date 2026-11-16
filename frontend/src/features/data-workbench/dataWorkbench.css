@@ -68,7 +68,7 @@
 }
 button.dw-instrument-head { cursor: pointer; }
 button.dw-instrument-head:hover { background: var(--surface-2); }
-button.dw-instrument-head:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: -2px; }
+button.dw-instrument-head:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 .dw-fold-chevron { display: inline-flex; color: var(--text-muted); transition: transform var(--motion-fast) var(--ease-out); }
 .dw-fold-chevron.spacer { width: 12px; }
 .dw-instrument-head.static { cursor: default; }

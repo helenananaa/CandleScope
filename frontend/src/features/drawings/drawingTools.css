@@ -196,7 +196,7 @@
   box-shadow: 0 4px 16px #0003;
 }
 
-.selected-drawing-style-bar :is(button, summary, input, select):focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
+.selected-drawing-style-bar :is(button, summary, input, select):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
 .selected-drawing-style-bar .drawing-delete-button:hover { color: #ef4444; background: color-mix(in srgb, var(--color-danger) 8%, transparent); }
 .drawing-toolbar-divider { width: 1px; height: 20px; margin: 0 4px; background: var(--drawing-border); }

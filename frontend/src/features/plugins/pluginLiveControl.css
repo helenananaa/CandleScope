@@ -24,7 +24,7 @@
   background: color-mix(in srgb, var(--live-banner-tone) 20%, var(--surface-1));
 }
 .live-control-banner:focus-visible {
-  outline: 2px solid var(--accent-blue);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 .live-control-banner strong {
@@ -151,7 +151,7 @@
 }
 
 .live-market-metrics-compact > summary:focus-visible {
-  outline: 2px solid var(--accent-blue);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 .live-market-metrics-compact > .advanced-market-summary {

@@ -14,9 +14,21 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { BLOCK_WRITES, SETTINGS_KEY, STATES, findChrome, openBrowser, parseArgs as parseSnapshotArgs, visitState } from "./design-snapshots.mjs";
 
-/** Parses `rgb(...)` / `rgba(...)` (as getComputedStyle returns them) into [r, g, b, a]. */
+/**
+ * Parses a computed colour into [r, g, b, a]: `rgb(...)` / `rgba(...)`, and `color(srgb r g b / a)`,
+ * which is how the browser reports the result of `color-mix(in srgb, ...)`.
+ */
 export function parseColor(value) {
-  const match = /^rgba?\(([^)]+)\)$/.exec(String(value).trim());
+  const text = String(value).trim();
+  const srgb = /^color\(srgb\s+([^)]+)\)$/.exec(text);
+  if (srgb) {
+    const [channels, alphaText] = srgb[1].split("/");
+    const rgb = channels.trim().split(/\s+/).map(Number);
+    const alpha = alphaText === undefined ? 1 : Number(alphaText.trim());
+    if (rgb.length !== 3 || rgb.some((n) => !Number.isFinite(n)) || !Number.isFinite(alpha)) return null;
+    return [rgb[0] * 255, rgb[1] * 255, rgb[2] * 255, alpha];
+  }
+  const match = /^rgba?\(([^)]+)\)$/.exec(text);
   if (!match) return null;
   const parts = match[1].split(/[\s,/]+/).filter(Boolean).map(Number);
   if (parts.length < 3 || parts.slice(0, 3).some((n) => !Number.isFinite(n))) return null;

@@ -87,7 +87,7 @@
   outline: none;
 }
 .market-rail-accordion-trigger:focus-visible {
-  box-shadow: inset 3px 0 var(--accent-blue);
+  box-shadow: inset 3px 0 var(--focus-ring);
 }
 .market-rail-accordion-chevron {
   display: inline-flex;

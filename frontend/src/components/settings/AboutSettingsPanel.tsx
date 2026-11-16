@@ -119,6 +119,9 @@ export default function AboutSettingsPanel(props: AboutSettingsPanelProps) {
                         ["Esc", t("settings.about.shortcutSearchClose")],
                         [`${modifier} + Z`, t("settings.about.shortcutWorkspaceUndo")],
                         [`${modifier} + Shift + Z`, t("settings.about.shortcutWorkspaceRedo")],
+                        ["Shift + F10", t("settings.about.shortcutContextMenu")],
+                        ["→", t("settings.about.shortcutToolVariants")],
+                        [modifier === "⌘" ? "Ctrl + Shift + M" : "Ctrl + M", t("settings.about.shortcutEditorTab")],
                     ].map(([keys, description]) => <div className="st-stack-item st-shortcut-item" key={keys}><kbd className="st-stack-value">{keys}</kbd><span className="st-stack-label">{description}</span></div>)}
                 </div>
             </Disclosure>

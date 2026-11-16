@@ -9,6 +9,7 @@
 import { useEffect, useState } from "react";
 import type * as Monaco from "monaco-editor";
 import { bindExtensionEditorTheme } from "./extensionTheme.js";
+import { prefersReducedMotion } from "../utils/reducedMotion.js";
 
 export const SCRIPT_THEME_DARK = "script-dark";
 export const SCRIPT_THEME_LIGHT = "script-light";
@@ -191,6 +192,7 @@ export function registerScriptTheme(monaco: typeof Monaco): void {
 export function getScriptEditorOptions(
   overrides: Partial<Monaco.editor.IStandaloneEditorConstructionOptions> = {},
 ): Monaco.editor.IStandaloneEditorConstructionOptions {
+  const reducedMotion = prefersReducedMotion();
   return {
     // Typography
     fontSize: 14,
@@ -210,9 +212,10 @@ export function getScriptEditorOptions(
     foldingHighlight: true,
 
     // Behavior
-    smoothScrolling: true,
-    cursorBlinking: "smooth",
-    cursorSmoothCaretAnimation: "on",
+    // No smooth scrolling, fading caret or gliding caret when reduced motion is asked for.
+    smoothScrolling: !reducedMotion,
+    cursorBlinking: reducedMotion ? "solid" : "smooth",
+    cursorSmoothCaretAnimation: reducedMotion ? "off" : "on",
     formatOnPaste: true,
     autoClosingBrackets: "always",
     autoClosingQuotes: "always",

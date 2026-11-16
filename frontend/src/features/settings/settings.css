@@ -110,7 +110,7 @@
 }
 
 .st-nav-item:focus-visible {
-  outline: 2px solid var(--accent-blue);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 
@@ -606,7 +606,7 @@ html[lang="ru"] .st-select {
 .st-support-export { margin-top: 16px; }
 .st-support-export summary { cursor: pointer; color: var(--text-primary); font-size: 13px; padding: 6px 0; }
 
-.st-support-card :focus-visible, .st-support-links a:focus-visible, .st-support-export summary:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 3px; }
+.st-support-card :focus-visible, .st-support-links a:focus-visible, .st-support-export summary:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
 .st-about-stack .st-stack-item { gap: 16px; }
 .st-about-stack .st-stack-value { overflow-wrap: anywhere; text-align: right; min-width: 0; }
 .st-about-header {
@@ -837,7 +837,7 @@ html[lang="ru"] .st-select {
   gap: 20px;
 }
 .st-data-panel:focus-visible {
-  outline: 2px solid var(--accent-blue);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 .st-launch-list {
@@ -970,7 +970,7 @@ html[lang="ru"] .st-select {
   background: var(--surface-hover);
 }
 .st-ex-row:focus-visible {
-  outline: 2px solid var(--accent-blue);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 .st-ex-chevron {

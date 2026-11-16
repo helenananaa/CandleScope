@@ -1,4 +1,5 @@
 import type { ComponentPropsWithoutRef, ReactNode, RefObject } from "react";
+import { openToolMenuFromKeyboard } from "./toolMenuKeys.js";
 
 type DrawingButtonEvents = Pick<
   ComponentPropsWithoutRef<"button">,
@@ -51,6 +52,7 @@ export default function DrawingToolButton({
         onClick={onClick}
         onDoubleClick={onDoubleClick}
         onContextMenu={onContextMenu}
+        onKeyDown={onContextMenu ? openToolMenuFromKeyboard : undefined}
         title={title}
         aria-label={title}
       >

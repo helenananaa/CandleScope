@@ -17,10 +17,24 @@ export default function ChartTimeNavigationDialog({ cellId, onClose, onSubmit, i
   const [value, setValue] = useState(() => formatUtcDateTimeInput(initialTimeMs ?? Date.now()));
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  // The opener, captured once: StrictMode runs the effect again after focus moved into the dialog.
+  const opener = useRef<Element | null | undefined>(undefined);
   useEffect(() => {
-    const previous = document.activeElement;
-    dialog.current?.showModal();
-    return () => { sequence.current += 1; if (previous instanceof HTMLElement) previous.focus(); };
+    if (opener.current === undefined) opener.current = document.activeElement;
+    const previous = opener.current;
+    const element = dialog.current;
+    if (element && !element.open) element.showModal();
+    // Focus goes back to the opener once the dialog has left the page (a StrictMode re-run keeps
+    // it), unless something else took focus meanwhile.
+    return () => {
+      sequence.current += 1;
+      if (!(previous instanceof HTMLElement)) return;
+      setTimeout(() => {
+        if (element?.isConnected) return;
+        const now = document.activeElement;
+        if (previous.isConnected && (!now || now === document.body)) previous.focus({ preventScroll: true });
+      }, 0);
+    };
   }, []);
   async function submit(event: FormEvent) {
     event.preventDefault();

@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -13,6 +14,7 @@ import type {
   ChartWorkspaceSplitDirection,
 } from "./chartWorkspaceTypes.js";
 import { Icon } from "../../components/icons/Icon.js";
+import { useAnchoredPopup } from "../../components/ui/index.js";
 
 export interface WorkspaceCellLayoutMenuProps {
   cellId: ChartCellId;
@@ -62,6 +64,9 @@ export default function WorkspaceCellLayoutMenu({
   const canClose = !layoutDisabled && layoutCellIds.length > 1;
   const swapTargets = layoutDisabled ? [] : layoutCellIds.filter((candidate) => candidate !== cellId);
   const menuOpen = open && !menuDisabled;
+  const closeMenu = useCallback(() => setOpen(false), []);
+  // On the overlay stack: Escape closes it, focus moves in and back to the trigger.
+  useAnchoredPopup({ open: menuOpen, onClose: closeMenu, popupRef: popoverRef, triggerRef });
 
   useEffect(() => {
     if (!menuOpen) return undefined;
@@ -70,19 +75,8 @@ export default function WorkspaceCellLayoutMenu({
       if (popoverRef.current?.contains(event.target as Node)) return;
       setOpen(false);
     };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopPropagation();
-      setOpen(false);
-      triggerRef.current?.focus();
-    };
     document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [menuOpen]);
 
   const runAndClose = (action: () => void) => {

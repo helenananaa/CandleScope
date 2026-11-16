@@ -54,7 +54,7 @@
   cursor: pointer;
 }
 .wl-table-header > button:hover { color: var(--text-primary); }
-.wl-table-header > button:focus-visible { outline: 2px solid var(--accent-blue); }
+.wl-table-header > button:focus-visible { outline: 2px solid var(--focus-ring); }
 
 /* ── Collapsed view ── */
 .wl-collapsed-icons {
@@ -63,6 +63,13 @@
   align-items: center;
   padding: 8px 0;
   gap: 4px;
+}
+.wl-collapsed-icon,
+.wl-collapsed-tab {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
 }
 .wl-collapsed-icon {
   display: flex;
@@ -189,7 +196,24 @@
   color: var(--wl-down-text, var(--text-down)) !important;
 }
 
-.wl-sym-row:hover .wl-sym-del { opacity: 1; }
+/* The row's keyboard control holds the ticker and price columns; it looks like the row. */
+.wl-sym-select {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: inherit;
+}
+.wl-sym-row .wl-sym-select:focus-visible { outline-offset: -1px; }
+/* Shown while the row is pointed at or has keyboard focus, so a focused delete button is seen. */
+.wl-sym-row:is(:hover, :focus-within) .wl-sym-del { opacity: 1; }
 .wl-sym-del:hover { color: var(--text-down); background: color-mix(in srgb, var(--color-danger) 10%, transparent); }
 /* ── Drag-and-drop indicators ── */
 .wl-drop-bar {

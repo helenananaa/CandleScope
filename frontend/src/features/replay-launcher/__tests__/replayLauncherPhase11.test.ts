@@ -154,7 +154,9 @@ test("Phase 11 live launcher is lazy, modal, and has no v1 fallback", () => {
   assert.match(launcher, /reserveReplayWindow\(\)/);
   assert.match(launcher, /child\.opener = null/);
   assert.match(launcher, /location\.replace\(url\)/);
-  assert.match(launcher, /previousFocus\?\.focus\(\)/);
+  // Focus goes back to the opener through the overlay layer, captured once per opening.
+  assert.match(launcher, /<OverlayLayer kind="modal"/);
+  assert.doesNotMatch(launcher, /previousFocus/);
   assert.doesNotMatch(
     launcher,
     /useMarketDataRuntime|useWatchlistRuntime|ReplayRuntime|replayBars|WebSocket/,

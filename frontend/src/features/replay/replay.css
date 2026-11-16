@@ -48,7 +48,7 @@
 }
 .replay-chart-toolbar { gap: 10px; width: 42px; overflow: hidden; writing-mode: vertical-rl; padding-top: 8px; color: var(--text-secondary); font-size: var(--font-size-xs); }
 
-.replay-loading-spinner { width: 28px; height: 28px; border: 3px solid var(--border-strong); border-top-color: var(--color-warning); border-radius: 50%; animation: replay-spin 900ms linear infinite; }
+.replay-loading-spinner { width: 28px; height: 28px; border: 3px solid var(--border-strong); border-top-color: var(--color-warning); border-radius: 50%; animation: replay-spin 900ms linear infinite; --motion-reduced-duration: 1.6s; --motion-reduced-iterations: infinite; }
 @keyframes replay-spin { to { transform: rotate(360deg); } }
 
 .replay-bottom-control-dock { z-index: calc(var(--z-rail) + 30); flex: 0 0 auto; min-width: 0; border-top: 1px solid var(--border-color); box-shadow: 0 -8px 28px rgba(2, 6, 23, .22); }
@@ -920,7 +920,7 @@
 .replay-market-search-add:hover:enabled { background: var(--surface-2); }
 .replay-market-search-add:disabled { cursor: default; }
 .replay-market-search-add:focus-visible {
-  outline: 2px solid var(--accent-blue);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 .replay-market-search-add strong {
@@ -992,7 +992,7 @@
 .replay-watchlist-market:disabled { cursor: default; }
 .replay-watchlist-row:not(.active) .replay-watchlist-market:disabled { opacity: .6; }
 .replay-watchlist-market:focus-visible {
-  outline: 2px solid var(--accent-blue);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 .replay-watchlist-market > span:first-child {
@@ -1260,7 +1260,7 @@
   background: var(--surface-0);
 }
 .replay-size-slider input[type="range"]:focus-visible {
-  outline: 2px solid var(--accent-blue);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 4px;
 }
 .replay-size-slider input[type="range"]:disabled {
@@ -1350,7 +1350,7 @@
 .replay-submit-order[data-side="SELL"] { background: var(--trade-negative); }
 .replay-submit-order:hover:enabled { filter: brightness(1.08); }
 .replay-submit-order:focus-visible {
-  outline: 2px solid var(--accent-blue);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 /* Disabled sides keep a faint tint so buy and sell stay recognisable. */

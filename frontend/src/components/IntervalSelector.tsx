@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { confirmAction } from "./ui/overlay/overlayApi.js";
+import { useAnchoredPopup } from "./ui/overlay/overlayRuntime.js";
 import { getLocale, t, type LocaleId } from "../i18n/index.js";
 import { useLocale } from "../i18n/useLocale.js";
 import {
@@ -287,6 +288,9 @@ function IntervalSelector({
   const moreBtnRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  // Focus goes back here when the picker closes: the button, or what had focus when a typed
+  // digit opened it.
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const amountInputRef = useRef<HTMLInputElement | null>(null);
 
   const nativeValueSet = useMemo(
@@ -495,17 +499,16 @@ function IntervalSelector({
       const button = moreBtnRef.current;
       const panel = panelRef.current;
       if (!wrap || !button || !panel) return;
+      // The panel is fixed (the header clips what overflows it): place it in window coordinates,
+      // under the toolbar and starting at the button, kept inside the window.
       const wrapRect = wrap.getBoundingClientRect();
       const buttonRect = button.getBoundingClientRect();
       const panelWidth = panel.offsetWidth || Math.min(400, window.innerWidth - 32);
       const pad = 8;
-      const minLeft = pad - wrapRect.left;
-      const maxLeft = window.innerWidth - pad - panelWidth - wrapRect.left;
-      let left = buttonRect.left - wrapRect.left;
-      left = maxLeft >= minLeft
-        ? Math.min(Math.max(left, minLeft), maxLeft)
-        : Math.max(0, left);
+      const maxLeft = window.innerWidth - pad - panelWidth;
+      const left = maxLeft >= pad ? Math.min(Math.max(buttonRect.left, pad), maxLeft) : pad;
       panel.style.left = `${Math.round(left)}px`;
+      panel.style.top = `${Math.round(wrapRect.bottom + 8)}px`;
     };
     update();
     window.addEventListener("resize", update);
@@ -555,6 +558,9 @@ function IntervalSelector({
         return;
       }
       event.preventDefault();
+      returnFocusRef.current = document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+        ? document.activeElement
+        : moreBtnRef.current;
       setActiveTab("all");
       setSearch(character);
       setHighlightIndex(0);
@@ -572,6 +578,7 @@ function IntervalSelector({
     setKeyboardNavigated(false);
     setHighlightIndex(0);
   }, [onCancelPreview]);
+  useAnchoredPopup({ open, onClose: closePanel, popupRef: panelRef, triggerRef: returnFocusRef, initialFocusRef: searchInputRef });
 
   const selectInterval = useCallback((value: IntervalString) => {
     const normalized = canonicalizeIntervalValue(value) || value;
@@ -839,6 +846,7 @@ function IntervalSelector({
               closePanel();
               return;
             }
+            returnFocusRef.current = moreBtnRef.current;
             setOpen(true);
           }}
           disabled={readOnlyReason !== null}

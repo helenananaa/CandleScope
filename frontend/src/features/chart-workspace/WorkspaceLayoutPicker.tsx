@@ -14,6 +14,7 @@ import type {
   ChartWorkspaceTemplateId,
 } from "./chartWorkspaceTypes.js";
 import { Icon } from "../../components/icons/Icon.js";
+import { useAnchoredPopup } from "../../components/ui/index.js";
 
 interface LayoutRect {
   x: number;
@@ -100,6 +101,7 @@ function WorkspaceLayoutPicker({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const currentRef = useRef<HTMLButtonElement | null>(null);
 
   const templates = useMemo(() => CHART_WORKSPACE_TEMPLATE_IDS
     .filter((templateId) => chartWorkspaceTemplateCellCount(templateId) <= maxCellsPerWindow)
@@ -111,28 +113,19 @@ function WorkspaceLayoutPicker({
     if (restoreFocus) triggerRef.current?.focus();
   }, []);
 
+  const closeFromStack = useCallback(() => setOpen(false), []);
+  // On the overlay stack: Escape and Tab past the end close it, and focus goes back to the trigger.
+  // Focus starts on the current layout (the first control when layouts cannot change).
+  useAnchoredPopup({ open, onClose: closeFromStack, popupRef: panelRef, triggerRef, initialFocusRef: currentRef });
+
   useEffect(() => {
     if (!open) return undefined;
     const handlePointerDown = (event: MouseEvent) => {
       if (event.target instanceof Node && rootRef.current?.contains(event.target)) return;
       close(false);
     };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopPropagation();
-      close(true);
-    };
     document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown, true);
-    const focusTarget = panelRef.current?.querySelector<HTMLButtonElement>(
-      "button[aria-pressed='true']:not(:disabled), button:not(:disabled)",
-    );
-    focusTarget?.focus();
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown, true);
-    };
+    return () => document.removeEventListener("mousedown", handlePointerDown);
   }, [close, open]);
 
   const handleGridKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -185,6 +178,7 @@ function WorkspaceLayoutPicker({
               return (
                 <button
                   key={template.id}
+                  ref={active && ready && !locked ? currentRef : undefined}
                   type="button"
                   className={active ? "active" : ""}
                   aria-pressed={active}
