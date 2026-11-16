@@ -10,7 +10,9 @@ from app.data_engine.backfill.reconciler import Reconciler
 from app.data_engine.storage import klines_repo
 from app.data_engine.storage.native_history_fence import capture_planned_write_views
 from app.data_engine.storage.mixed_history_fence import capture_standard_targets
-from app.data_engine.storage.revisions import acquisition_scope, prepare_warmup_view, StaleAcquisition
+from app.data_engine.storage.revisions import (
+    acquisition_scope, block_change_receipts, prepare_warmup_view, StaleAcquisition,
+)
 
 MINUTE = 60_000
 SLOTS = 17 * 89
@@ -52,9 +54,15 @@ def captured(store):
 
 def test_second_native_batch_survives_own_large_commit_after_disjoint_live_tail(store):
     scope = captured(store)
+    assert scope.revision == 0
     write([row(3000)])  # A newer live source, outside every acquired window.
+    assert store.revision_store.head() == 1
     with acquisition_scope(scope):
         assert write([row(i) for i in range(1500)]) == 1500
+        assert store.revision_store.head() == 1501
+        assert scope.warmup_view.owned == [(1, 1501)]
+        with klines_repo._connect() as conn:
+            assert not block_change_receipts(conn, scope.revision, 1501)
         assert write([row(i) for i in range(1500, 1511)]) == 11
     assert len(store.query_bars('BTCUSDT', '1m', exchange='binance', market_type='futures')) == 1512
 

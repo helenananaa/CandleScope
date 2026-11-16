@@ -1,4 +1,4 @@
-"""Clone a verified integrated frontend/runtime; overlay committed #460 backend."""
+"""Clone a verified integrated frontend/runtime; overlay committed backend."""
 import hashlib
 import json
 from pathlib import Path
@@ -29,9 +29,11 @@ for name in files:
     shutil.copyfile(repo / name, destination)
     hashes[name] = hashlib.sha256(destination.read_bytes()).hexdigest()
 head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repo, text=True).strip()
-manifest = dict(prior, product_head=head, files=hashes, source_app=str(app),
+manifest = dict(prior, product_head=head,
+    product_tree=subprocess.check_output(['git', 'rev-parse', 'HEAD^{tree}'], cwd=repo, text=True).strip(),
+    files=hashes, source_app=str(app),
     frontend_source_head=prior['product_head'],
-    scope='macOS arm64 retained integrated frontend/CI runtime/plugins; complete committed #460 backend overlay; not a fresh release or joint acceptance')
+    scope='macOS arm64 retained integrated frontend/CI runtime/plugins; complete committed backend overlay; not a fresh release or joint acceptance')
 assert hashlib.sha256((resources / 'app.asar').read_bytes()).hexdigest() == prior['app_asar_sha256']
 (target / 'package-source-manifest.json').write_text(json.dumps(manifest, indent=2)+'\n')
 for name, command in [('sign', ['codesign', '--force', '--deep', '--sign', '-', str(target / 'CandleScope.app')]),
