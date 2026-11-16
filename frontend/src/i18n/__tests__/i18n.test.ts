@@ -201,7 +201,7 @@ test("t interpolates and switches with the locale store", () => {
     assert.equal(t("shell.replay"), "Relecture");
     assert.notEqual(t("shell.replay"), en["shell.replay"]);
     assert.equal(t("status.connectedTo", { exchange: "Binance" }), "Connecté à Binance");
-    assert.equal(t("settings.saveAndClose"), "Enregistrer et fermer");
+    assert.equal(t("settings.close"), "Fermer les paramètres");
     assert.equal(t("rail.watchlist"), "Liste de suivi");
     assert.equal(t("orderBook.title"), "Carnet d’\u2060ordres");
     assert.match(t("settings.language.title"), /Langue/);
@@ -479,7 +479,7 @@ test("pt-BR host chrome uses Brazilian trading copy rather than English clones o
   withLocale("pt-BR", () => {
     assert.equal(t("shell.replay"), "Replay");
     assert.equal(t("orderBook.title"), "Livro de ofertas");
-    assert.equal(t("settings.saveAndClose"), "Salvar e fechar");
+    assert.equal(t("settings.close"), "Fechar configurações");
     assert.equal(t("settings.language.title"), "Idioma da interface");
     assert.equal(t("status.connectedTo", { exchange: "Binance" }), "Conectado a Binance");
     assert.equal(t("settings.exchange.channel.fundingRate"), "Taxa de financiamento");
@@ -491,7 +491,7 @@ test("pt-BR host chrome uses Brazilian trading copy rather than English clones o
     assert.equal(t("alert.ruleName"), "Nome da regra");
     assert.equal(t("alert.saving"), "Salvando...");
     assert.equal(t("alert.empty"), "Ainda não há regras de alerta");
-    assert.equal(t("export.close"), "Fechar painel de exportação");
+    assert.equal(t("export.saveCurrent"), "Salvar prévia atual");
     assert.equal(t("export.chartLoading"), "O gráfico ainda está carregando dados.");
     assert.equal(t("plugin.live.reviewTitle"), "Revisar uma intenção preparada exata");
     assert.equal(t("core.error.exchangeList"), "Falha ao carregar a lista de exchanges");
@@ -585,8 +585,8 @@ test("market and exchange labels follow the active locale", () => {
 test("runtime leftover keys stay Chinese by default and switch with the store", () => {
   withLocale("zh-CN", () => {
     assert.equal(t("countdown.days", { days: 1, clock: "01:01:01" }), "1天 01:01:01");
-    assert.match(t("replay.init.hedgeHybrid"), /HEDGE_HYBRID/);
-    assert.match(t("replay.init.hedgeHybrid"), /资金费.*OFF/);
+    assert.doesNotMatch(t("replay.init.hedgeHybrid"), /HEDGE_HYBRID/);
+    assert.match(t("replay.init.hedgeHybrid"), /历史资金费关闭/);
     assert.equal(t("settings.workbench.name"), "数据工作台");
     assert.equal(t("scale.auto"), "自动缩放");
     assert.match(t("python.hostOwns"), /成交/);
@@ -623,8 +623,8 @@ test("runtime leftover keys stay Chinese by default and switch with the store", 
   });
   withLocale("fr", () => {
     assert.equal(t("countdown.days", { days: 1, clock: "01:01:01" }), "1j 01:01:01");
-    assert.match(t("replay.init.hedgeHybrid"), /HEDGE_HYBRID/);
-    assert.match(t("replay.init.hedgeHybrid"), /OFF/);
+    assert.doesNotMatch(t("replay.init.hedgeHybrid"), /HEDGE_HYBRID/);
+    assert.match(t("replay.init.hedgeHybrid"), /désactivé/);
     assert.doesNotMatch(t("replay.init.hedgeHybrid"), /资金费/);
     assert.equal(t("settings.workbench.name"), "Atelier de données");
     assert.equal(t("scale.auto"), "Échelle auto");
@@ -714,7 +714,7 @@ test("Spanish host copy is translated, keeps placeholders, and uses the trading 
     assert.match(t("replay.shell.ordersFills"), /[oó]rdenes/i);
     assert.match(t("replay.shell.ordersFills"), /ejecuci/i);
     assert.match(t("shell.replay"), /reproducci[oó]n/i);
-    assert.match(t("replay.init.hedgeHybrid"), /HEDGE_HYBRID/);
+    assert.doesNotMatch(t("replay.init.hedgeHybrid"), /HEDGE_HYBRID/);
     assert.doesNotMatch(t("replay.init.hedgeHybrid"), han);
     assert.doesNotMatch(t("shell.replay"), /Replay/);
     assert.doesNotMatch(t("orderBook.title"), /Order book/i);
@@ -832,7 +832,7 @@ test("Japanese dates, numbers, and document lang follow the shipped ja locale", 
     setLocale("ja");
     assert.equal(t("css.workspaceLoading"), "チャートワークスペースを読み込み中…");
     assert.equal(t("scale.auto"), "自動スケール");
-    assert.match(t("replay.init.hedgeHybrid"), /HEDGE_HYBRID/);
+    assert.doesNotMatch(t("replay.init.hedgeHybrid"), /HEDGE_HYBRID/);
     assert.doesNotMatch(t("replay.init.hedgeHybrid"), /资金费|資金費/);
   } finally {
     if (previousDocument === undefined) {
@@ -922,7 +922,7 @@ test("Korean catalog translates host copy, preserves placeholders, and uses requ
     assert.doesNotMatch(tPlural("status.barCount", 2), /\{count\}/);
     assert.match(tPlural("status.barCount", 1), hangul);
     assert.doesNotMatch(t("replay.init.hedgeHybrid"), /资金费/);
-    assert.match(t("replay.init.hedgeHybrid"), /HEDGE_HYBRID/);
+    assert.doesNotMatch(t("replay.init.hedgeHybrid"), /HEDGE_HYBRID/);
   });
 });
 

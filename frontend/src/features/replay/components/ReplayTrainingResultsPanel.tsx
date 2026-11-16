@@ -6,6 +6,8 @@ import { command } from "../../app-control/commandRegistry.js";
 import { empty, object, text } from "../../app-control/commandSchema.js";
 
 import { getNumberLocale, t } from "../../../i18n/index.js";
+import { Icon } from "../../../components/icons/Icon.js";
+import { Badge, Button, EmptyState, IconButton, InlineAlert, Stat } from "../../../components/ui/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import type { LocaleId } from "../../../i18n/locale.js";
 import type {
@@ -60,12 +62,17 @@ function TradeRow({
   const plan = item.plans[0] ?? null;
   const pnl = Number(item.gross_realized_pnl);
   return (
-    <article className="replay-training-result-row" data-pnl={pnl > 0 ? "profit" : pnl < 0 ? "loss" : "flat"}>
-      <header>
-        <strong>{item.symbol} · {item.position_side === "BUY" ? t("replay.results.long") : t("replay.results.short")}</strong>
-        <span>{decimal(item.gross_realized_pnl, 2, locale)} {item.settlement_asset} · {item.r_multiple === null ? t("replay.results.noPlanR") : `${decimal(item.r_multiple, 2, locale)}R`}</span>
-      </header>
-      <dl>
+    <li className="replay-training-result-row" data-pnl={pnl > 0 ? "profit" : pnl < 0 ? "loss" : "flat"}>
+      <div className="replay-training-result-head">
+        <strong>{item.symbol}</strong>
+        <Badge tone={item.position_side === "BUY" ? "success" : "danger"}>
+          {item.position_side === "BUY" ? t("replay.results.long") : t("replay.results.short")}
+        </Badge>
+        <span className="replay-training-result-pnl">
+          {decimal(item.gross_realized_pnl, 2, locale)} {item.settlement_asset} · {item.r_multiple === null ? t("replay.results.noPlanR") : `${decimal(item.r_multiple, 2, locale)}R`}
+        </span>
+      </div>
+      <dl className="replay-training-result-facts">
         <div><dt>{t("replay.results.entryExit")}</dt><dd>{decimal(item.entry_price, 8, locale)} / {decimal(item.exit_price, 8, locale)}</dd></div>
         <div><dt>MAE / MFE</dt><dd>{decimal(item.mae, 2, locale)} / {decimal(item.mfe, 2, locale)} {item.settlement_asset}</dd></div>
         <div><dt>{t("replay.results.hold")}</dt><dd>{duration(item.holding_duration_ms, locale)}</dd></div>
@@ -73,20 +80,21 @@ function TradeRow({
         <div><dt>{t("replay.results.risk")}</dt><dd>{decimal(item.initial_risk_amount, 2, locale)} {item.settlement_asset}</dd></div>
         <div><dt>{t("replay.results.plan")}</dt><dd>{plan === null ? t("replay.results.unrecorded") : `${decimal(plan.risk_amount, 2, locale)} ${item.settlement_asset} · ${decimal(plan.reward_risk_ratio, 2, locale)} R:R`}</dd></div>
       </dl>
-      {plan !== null && <p title={plan.plan_hash}>{plan.reason}</p>}
-      <footer>
-        <button
-          type="button"
+      {plan !== null && <p className="replay-training-result-plan" title={plan.plan_hash}>{plan.reason}</p>}
+      <div className="replay-training-result-actions">
+        <Button
+          size="sm"
           disabled={!canReview || item.review_event_id === null || jumping}
           onClick={onJump}
-        >{jumping ? t("replay.results.jumping") : t("replay.results.jump")}</button>
-        <button
-          type="button"
+        >{jumping ? t("replay.results.jumping") : t("replay.results.jump")}</Button>
+        <Button
+          size="sm"
+          variant="ghost"
           disabled={!canReview || item.review_event_id === null || forking}
           onClick={onFork}
-        >{forking ? t("replay.results.forking") : t("replay.results.fork")}</button>
-      </footer>
-    </article>
+        >{forking ? t("replay.results.forking") : t("replay.results.fork")}</Button>
+      </div>
+    </li>
   );
 }
 
@@ -171,52 +179,57 @@ export default function ReplayTrainingResultsPanel({
     command("close", "Close training results.", empty, onClose),
   ] }));
   const summaryAsset = results?.items[0]?.settlement_asset ?? "";
+  const net = summary === null ? 0 : Number(summary.net_realized_pnl);
   return (
-    <section className="replay-training-results-panel" data-replay-panel="training-results">
-      <header>
+    <section className="replay-drawer-panel" data-replay-panel="training-results" aria-labelledby={`${controlId}-title`}>
+      <header className="replay-drawer-head">
         <div>
-          <span className="training-hub-kicker">{t("replay.kicker.results")}</span>
-          <h2>{t("replay.results.title")}</h2>
+          <h2 id={`${controlId}-title`}>{t("replay.results.title")}</h2>
           <p>{t("replay.results.hint")}</p>
         </div>
-        <div>
-          <button type="button" disabled={loading} onClick={() => load()}>{t("replay.hub.refresh")}</button>
-          <button type="button" onClick={onClose}>{t("replay.hub.close")}</button>
+        <div className="replay-drawer-actions">
+          <IconButton size="sm" label={t("replay.hub.refresh")} icon={<Icon name="refresh" size={15} />} disabled={loading} onClick={() => load()} />
+          <IconButton size="sm" label={t("replay.hub.close")} icon={<Icon name="close" size={15} />} onClick={onClose} />
         </div>
       </header>
 
-      {summary !== null && (
-        <dl className="replay-training-result-summary">
-          <div><dt>{t("replay.results.winRate")}</dt><dd>{percent(summary.win_rate)}</dd></div>
-          <div><dt>{t("replay.results.payoff")}</dt><dd>{decimal(summary.payoff_ratio, 2, locale)}</dd></div>
-          <div><dt>{t("replay.results.drawdown")}</dt><dd>{decimal(summary.max_drawdown, 2, locale)} {summaryAsset}</dd></div>
-          <div><dt>{t("replay.results.net")}</dt><dd>{decimal(summary.net_realized_pnl, 2, locale)} {summaryAsset}</dd></div>
-          <div><dt>{t("replay.results.avgR")}</dt><dd>{summary.average_r_multiple === null ? "--" : `${decimal(summary.average_r_multiple, 2, locale)}R`}</dd></div>
-          <div><dt>{t("replay.results.avgHold")}</dt><dd>{duration(summary.average_holding_duration_ms, locale)}</dd></div>
-          <div><dt>{t("replay.results.avgMae")}</dt><dd>{decimal(summary.average_mae, 2, locale)} {summaryAsset}</dd></div>
-          <div><dt>{t("replay.results.avgMfe")}</dt><dd>{decimal(summary.average_mfe, 2, locale)} {summaryAsset}</dd></div>
-        </dl>
-      )}
+      <div className="replay-drawer-body">
+        {summary !== null && (
+          <div className="replay-training-result-summary">
+            <Stat label={t("replay.results.winRate")} value={percent(summary.win_rate)} />
+            <Stat label={t("replay.results.payoff")} value={decimal(summary.payoff_ratio, 2, locale)} />
+            <Stat label={t("replay.results.net")} value={`${decimal(summary.net_realized_pnl, 2, locale)} ${summaryAsset}`.trim()}
+              tone={net > 0 ? "success" : net < 0 ? "danger" : "neutral"} />
+            <Stat label={t("replay.results.drawdown")} value={`${decimal(summary.max_drawdown, 2, locale)} ${summaryAsset}`.trim()} />
+            <Stat label={t("replay.results.avgR")} value={summary.average_r_multiple === null ? "--" : `${decimal(summary.average_r_multiple, 2, locale)}R`} />
+            <Stat label={t("replay.results.avgHold")} value={duration(summary.average_holding_duration_ms, locale)} />
+            <Stat label={t("replay.results.avgMae")} value={`${decimal(summary.average_mae, 2, locale)} ${summaryAsset}`.trim()} />
+            <Stat label={t("replay.results.avgMfe")} value={`${decimal(summary.average_mfe, 2, locale)} ${summaryAsset}`.trim()} />
+          </div>
+        )}
 
-      {!canReview && <p className="replay-training-results-notice">{t("replay.results.pauseToJump")}</p>}
-      {forkedRunId !== null && <p className="replay-training-results-notice">{t("replay.results.forked", { id: forkedRunId })}</p>}
-      {error !== null && <p className="replay-training-results-error" role="alert">{error}</p>}
-      {loading && results === null && <p>{t("replay.results.loading")}</p>}
-      {!loading && results !== null && results.items.length === 0 && <p>{t("replay.results.empty")}</p>}
-      <div className="replay-training-result-list">
-        {results?.items.map((item) => (
-          <TradeRow
-            key={`${item.track_id}:${item.trade_id}`}
-            item={item}
-            jumping={jumpingId === item.trade_id}
-            forking={forkingId === item.trade_id}
-            canReview={canReview}
-            onJump={() => void jump(item)}
-            onFork={() => void fork(item)}
-          />
-        ))}
+        {!canReview && <InlineAlert tone="info">{t("replay.results.pauseToJump")}</InlineAlert>}
+        {forkedRunId !== null && <InlineAlert tone="success">{t("replay.results.forked", { id: forkedRunId })}</InlineAlert>}
+        {error !== null && <InlineAlert tone="danger">{error}</InlineAlert>}
+        {loading && results === null && <EmptyState compact icon={<span className="replay-loading-spinner" />} title={t("replay.results.loading")} />}
+        {!loading && results !== null && results.items.length === 0 && <EmptyState compact title={t("replay.results.empty")} />}
+        {results !== null && results.items.length > 0 && (
+          <ul className="replay-training-result-list">
+            {results.items.map((item) => (
+              <TradeRow
+                key={`${item.track_id}:${item.trade_id}`}
+                item={item}
+                jumping={jumpingId === item.trade_id}
+                forking={forkingId === item.trade_id}
+                canReview={canReview}
+                onJump={() => void jump(item)}
+                onFork={() => void fork(item)}
+              />
+            ))}
+          </ul>
+        )}
+        {results?.truncated && <p className="replay-drawer-note">{t("replay.results.truncated", { count: results.returned_count })}</p>}
       </div>
-      {results?.truncated && <p>{t("replay.results.truncated", { count: results.returned_count })}</p>}
     </section>
   );
 }

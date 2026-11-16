@@ -154,6 +154,158 @@ exclude allocator fragmentation, native memory and unregistered transient work.
 and reconstruction; #130 owns block leases/dependency retention. Their minimum
 consumer integration receipts and joint budget acceptance remain separate work.
 
+R129 default source dispatch shares only a recursively immutable component value
+among compatible default derived targets. Target admission, indexes, finality and
+revision handling remain independent. Nested source references are captured before
+publication; mutable caller payloads cannot change accepted values. Preparation
+holds at most one latest value per dispatch, at most 128 target handles, and uses
+the existing realtime-state budget for up to 64 reusable 16 KiB work allowances.
+Capacity is an estimate, distinct from physical heap; no source values persist in
+the allowance pool. Cancellation releases task-local values; detach, rollback and
+stop trim idle allowance. Optional admission failure uses independent preparation.
+`BAR_AGG_SHARED_COMPONENT_INPUTS=false` disables sharing while preserving ownership
+and revision fixes. Custom extension routes remain independent.
+
+Heap diagnostics retain temporary root views across all owners so identity-based
+deduplication cannot hide a later owner's graph through recycled container IDs.
+Ordinary estimates count accepted immutable component/proof reference weights
+and may overcount shared values. Foreign mutable entries use live traversal;
+consumer-mutable callback proofs are measured while their frame owns them.
+These estimates remain distinct from allocator/RSS bounds. See
+[component weights](../qa/component-byte-accounting-126-20261113/README.md) and
+[callback proof accounting](../qa/callback-proof-accounting-126-20261113/README.md).
+
+Realtime-state also owns closed/expired engine eviction buffers, pending source
+publication snapshots and suspended publisher input/dispatch/callback/retry frames.
+The publisher tracks existing payload references until the frame finishes; normal
+completion, failure and cancellation release registrations. Retry snapshots retain
+the existing delivery IDs; retries enumerate IDs and release each acknowledged
+payload before advancing. Per-state identity deduplication avoids alias double
+charging; opt-in roots include the actual private dictionaries and buffers.
+This accounting does not discard data or raise budgets. See
+[handoff accounting evidence and limits](../qa/realtime-handoff-accounting-126-20261112/README.md).
+
+Eviction drains claim one raw buffer item synchronously before awaiting the
+existing public emitter. Per-pipeline claims remain in realtime-state roots until
+completion. A task-context observation marks transfer to the existing publisher
+source snapshot before callbacks await. The inherited context contains only a
+numeric identity and flags, deactivated on scope exit; no payload or callback is
+retained by child contexts. Failure/cancel restores raw data only
+before transfer, even when a concurrent retry already acknowledged the snapshot.
+No-source/pre-transfer failures retain their original retryable buffer item.
+Silent drains cannot discard another task's claim. Successful items release
+before later callbacks; no callback lock or independent delivery ledger is added.
+See [eviction handoff proof and costs](../qa/realtime-eviction-handoff-129-20261113/README.md).
+
+### H127 page receipts
+
+The default coordinator uses an explicit `run_receipt()` contract for qualified
+native REST plans. The fetcher awaits the existing reconciler/writer per page
+before dropping the page. A receipt counts unique fetched rows, not successful
+commits; `ReconcileResult` owns committed counts/ranges. Mixed plans then consume
+the existing canonical H127 stream/K130/D126 path. Ordinary `run()/fetch()`,
+payload observers, preview, archives and unqualified/custom routes retain their
+complete payload contracts. Register new payload observers between active receipt
+runs; the explicit receipt API rejects registrations while its payload contract
+is frozen. Ordinary calls retain dynamic registration.
+
+Page/dedup/output diagnostics have bounds, use the existing history-backfill
+budget, and retain source, deletion, revision and owner fences. The conservative
+whole-window forecast remains and page reservations are additional. Archive
+objects retain their atomic import contract; this is not universal archive
+streaming or whole-application constant memory. See
+[receipt scope, failure evidence and costs](../qa/history-fetch-stream-127-20261113/README.md).
+
+### R129 deferred component previews
+
+An accepted fixed-grid forming tail can advance the existing immutable component
+index before its K130 summary/projection is calculated. Every input still passes
+freshness admission against the immediately preceding accepted value. Only
+repeated replacements of the same eligible forming tail coalesce; close,
+correction, new-component/bucket and custom execution paths calculate eagerly.
+Native snapshots, price-only and trade/tick inputs retain their execution modes.
+
+One aggregation-loop scheduler owns at most 128 pending/in-flight references,
+with a single deadline handle and at most 16 entries per drain. Each entry reserves
+16 KiB under realtime-state, covering metadata and its extra prior immutable
+tail (qualified at <=8 KiB). It copies no source history. The original publisher
+still owns fanout, throttling, source retry and delivery. Existing publications
+wake delayed work on completion, avoiding concurrent duplicate previews and
+retention of finished builders across later awaits. Detached in-flight builders
+remain visible to the same memory owner. Failure/cancel/detach/stop drain leases;
+capacity/admission failure uses eager calculation with explicit fallback diagnostics.
+
+Effective `preserve_updates` demand bypasses calculation coalescing, as it already
+bypasses producer throttling. Producer flags remain authoritative. Disabled
+UPDATED output may retain dirty state without a timer; reads and mandatory
+barriers still materialize it. Public state copies, scalar adapters and storage
+conversion calculate the latest accepted value before returning. Diagnostics do
+not force calculation. Deadline publication reuses the target token and existing
+H127 source validation/owner locking; it cannot revive deleted or rebound work.
+
+Native source receipts use the existing storage owner to recheck at most 256
+accepted leaves in one read transaction before a delayed publication. Each
+immutable leaf is at most 8 KiB; history-query reserves its retained bytes plus
+16 KiB until the physical read finishes. Current journal heads and canonical
+closed values (including warm-start leaves without receipts), deletion floors
+and the target revision must agree. Normal superseding source observations skip
+the old preview without requesting repair; canonical changes use existing
+recovery. Input-version, target-generation and owner checks reject late reads.
+Larger/unqualified receipt windows retain eager execution. This is a bounded
+read view, not another journal, writer or source cache.
+
+The watermarks are builder-local ordinals: `preview_input_version` counts accepted
+target observations (including prefix adoption), `preview_computed_version` marks
+their projected values, and `preview_published_version` marks successful publisher
+fanout for that builder. They are not transport sequences, database revisions,
+nor consumer acknowledgments. Accepted/computed/published lag and fallback reasons
+are exposed in bounded read-only diagnostics. Journal retries retain their existing
+payload/delivery ownership; these counters do not replace durable delivery receipts.
+
+`BAR_AGG_DEFERRED_COMPONENT_PREVIEWS=false` selects eager calculation. Pending
+work remains fenced and can be drained; rollback does not remove canonical rows,
+receipts, revisions, recovery evidence or supported runtimes. Started default
+component pipelines consume this stage; unsupported grids/strategies retain
+their original algorithms. Whole-runtime load, closed/no-prefix state retention,
+all consumer policies and the remaining #129 matrix require separate qualification.
+
+### R129 closed component retention and canonical recovery
+
+Closed authoritative default COMPONENT buckets can replace their raw indexes
+with the existing immutable H127 prefix, including buckets that never had a
+warm-start prefix. Fixed native source grids, complete elapsed coverage and the
+existing 65536-source-slot bound remain required. Every retiring leaf is compared
+against trusted canonical data in pages of at most 128, followed by the original
+K130 projection check. Equal aggregate totals cannot hide opposite leaf changes.
+Status, finality, close reason, timestamps, watermarks and deletion permission
+floors survive optional compaction. No synthetic event or canonical write occurs.
+
+The existing H127 runtime owns at most 128 maintenance IDs/epochs/source names,
+charged at 1 KiB each to realtime-state. Its existing timeout loop drains one
+job per pass, without a new timer or background task. Payloads stay in the closed
+state index; physical work registers them with the existing publisher retention
+owner and reserves the old frozen index/proof graph plus bounded staging work.
+Pages stage outside the target lock. A final durable/source/strategy/config/
+builder/version/generation check and adoption use the existing target lock, so
+new forming buckets can proceed during the expensive readback. Cancellation
+waits for physical reads; detach clears queued metadata. Rejecting an obsolete
+optional read must preserve newer jobs and prefixes for the same target.
+
+Publisher completion can mean durable admission while the original dispatcher
+still owns a native commit. Maintenance drains that dispatcher before canonical
+staging. Covered closed inputs also drain it before deciding that a prefix is
+unchanged. A changed, already-closed bucket rebuilds its complete canonical
+window, consuming D126's existing canonical-recovery permission protocol: the
+fresh read revision never replaces the old explicit-delete floor. Missing or
+untrusted coverage revokes the old close instead of resurrecting accepted data.
+
+`BAR_AGG_COMPACT_CLOSED_COMPONENTS=false` disables new optional maintenance;
+existing compact prefixes retain mandatory revision validation and recovery.
+Capacity, budget, field/grid/identity mismatch and stale reads preserve the old
+indexes with bounded diagnostics. This decline path and the remaining state,
+consumer/source, resource and long-running matrix still need qualification;
+these bounds are not a claim that all application memory or RSS is bounded.
+
 ## Migration and operational rollback
 
 1. Stop old writers and back up the SQLite database (including WAL through a
@@ -175,3 +327,11 @@ consumer integration receipts and joint budget acceptance remain separate work.
    desktop restart acceptance are not claimed by the component tests.
 
 See [verification and measurements](../qa/issue126/D126_BACKEND_VERIFICATION.md).
+
+### First live prefixes and deletion permission
+
+A qualified default fixed-grid forming target with at least 2048 source slots may retire its first 128 confirmed live components through the existing H127/B130/D126 owner, even when startup admitted no history prefix. Closed and first-forming maintenance share the existing bounded metadata queue and timeout loop. Canonical staging runs outside the target lock; final validation must fence the exact retired immutable leaves, target generation, strategy/configuration/storage/budget bindings, and latest target projection. Concurrent forming-tail progress is allowed. Missing or changed evidence retains raw components with bounded diagnostics and progress-based retry; it does not establish a hard retention bound under failures.
+
+Every history-prefix adoption preserves the builder's oldest explicit-delete permission floor separately from fresh canonical acquisition provenance. This includes warm re-adoption and retiring the last raw seam, not just source-revision recovery. A fresh source view cannot grant permission to recreate a target or base series explicitly deleted during the builder's lifetime. Existing D126 transaction checks enforce this distinction. See `docs/qa/realtime-forming-retention-129-20261113` for three full-old-backend SQLite resurrection regressions, bounded live handoff contracts, current native qualification, and retained costs/failures.
+
+A native-first callback may return durable admission while the original dispatcher still owns commit. A newly closed component outside a compact prefix also changes that prefix's source-series revision. Closed-input validation/refresh therefore waits for the original dispatcher boundary before reading any retained prefix, rather than only for corrections inside it. `flush_pending` reuses the existing 64-receipt dispatch pages, within the existing history caller deadline; a single page is insufficient as a commit barrier. Errors or rebinding cannot be reported as an empty boundary. This does not turn forming previews into durable delivery or consumer acknowledgement.

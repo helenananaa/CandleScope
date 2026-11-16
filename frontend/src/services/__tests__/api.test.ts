@@ -103,6 +103,52 @@ test("history probe boundary survives single and batched HTTP transport", async 
   assert.equal(batch.requests[0]?.materialized_only, true);
 });
 
+test("composed history uses a fail-closed URL and preserves its contract in a batch", async (context) => {
+  const originalFetch = globalThis.fetch;
+  context.after(() => { globalThis.fetch = originalFetch; });
+  const captured: { url: string; body?: string }[] = [];
+  globalThis.fetch = async (url, options) => {
+    captured.push({ url: String(url), ...(typeof options?.body === "string" ? { body: options.body } : {}) });
+    return String(url).endsWith("/batch")
+      ? jsonResponse({ results: [{ request_id: "history-0", ok: true, status: 200, payload: { data: [] } }] })
+      : jsonResponse({ data: [] });
+  };
+  const options = { compositionContract: "qualified-v1", countBack: 128, maxWaitMs: 0 };
+  await fetchKlinesHistory("BTCUSDT", "10007m", null, "futures", "binance", options);
+  await fetchKlinesHistoryBatch([{ symbol: "BTCUSDT", interval: "10007m", days: null,
+    marketType: "futures", exchange: "binance", options }]);
+  const single = new URL(captured[0]!.url, "http://localhost");
+  assert.equal(single.pathname, "/api/v1/klines/history/composed");
+  assert.equal(single.searchParams.get("composition_contract"), "qualified-v1");
+  const batch = JSON.parse(captured[1]!.body!) as { requests: { composition_contract?: string }[] };
+  assert.equal(batch.requests[0]?.composition_contract, "qualified-v1");
+});
+
+test("composed pagination and range retain fail-closed routes even for an empty contract", async (context) => {
+  const originalFetch = globalThis.fetch;
+  context.after(() => { globalThis.fetch = originalFetch; });
+  const captured: URL[] = [];
+  globalThis.fetch = async url => {
+    captured.push(new URL(String(url), "http://localhost"));
+    return jsonResponse({ data: [] });
+  };
+  for (const compositionContract of ["qualified-v1", ""]) {
+    await fetchKlinesBefore("BTCUSDT", "10007m", 1_700_000_000, 128, "futures", "binance", { compositionContract });
+    await fetchKlinesRange("BTCUSDT", "10007m", 1_600_000_000, 1_700_000_000, "futures", "binance", { compositionContract });
+    const before = captured.at(-2)!;
+    const range = captured.at(-1)!;
+    assert.equal(before.pathname, "/api/v1/klines/history/before/composed");
+    assert.equal(range.pathname, "/api/v1/klines/range/composed");
+    // The URL builder omits empty values; the distinct endpoint still rejects
+    // a missing contract instead of accepting a legacy source-expanding read.
+    assert.equal(before.searchParams.get("composition_contract"), compositionContract || null);
+    assert.equal(range.searchParams.get("composition_contract"), compositionContract || null);
+  }
+  await assert.rejects(fetchKlinesHistory("BTCUSDT", "10007m", null, "futures", "binance",
+    { materializedOnly: true, compositionContract: "" }), TypeError);
+  assert.equal(captured.length, 4);
+});
+
 test("count-back history omits the redundant days window", async (context) => {
   const originalFetch = globalThis.fetch;
   context.after(() => { globalThis.fetch = originalFetch; });

@@ -51,21 +51,21 @@ export function buildReplayCapabilityModel(
   const tape = sourceKind === "AGG_TRADE" || sourceKind === "agg_trade";
   const orderBook = historicalBook?.status === "READY"
     ? item(
-      "Order book",
+      t("replay.capName.orderBook"),
       "AVAILABLE_EXACT",
       t("replay.cap.bookExact"),
       "EXACT_L2",
     )
     : historicalBook !== null && historicalBook.status !== "OFF"
       ? item(
-        "Order book",
+        t("replay.capName.orderBook"),
         "DEGRADED",
         t("replay.cap.bookDegraded"),
       )
-      : item("Order book", "UNSUPPORTED_NO_HISTORY", t("replay.cap.bookNone"));
+      : item(t("replay.capName.orderBook"), "UNSUPPORTED_NO_HISTORY", t("replay.cap.bookNone"));
   return {
     OHLCV: item(
-      "OHLCV",
+      t("replay.capName.ohlcv"),
       tape ? "AVAILABLE_APPROX" : "AVAILABLE_EXACT",
       tape
         ? t("replay.cap.ohlcvTape")
@@ -73,31 +73,31 @@ export function buildReplayCapabilityModel(
       tape ? "APPROX_AGGREGATE" : "EXACT",
     ),
     INDICATORS: item(
-      "Local indicators",
+      t("replay.capName.indicators"),
       tape ? "AVAILABLE_APPROX" : "AVAILABLE_EXACT",
       tape ? t("replay.cap.indTape") : t("replay.cap.indBar"),
       tape ? "LOCAL_APPROX_BARS" : "LOCAL",
     ),
-    SIMULATED_LIQUIDATION: item("Paper liquidation", "AVAILABLE_APPROX", t("replay.cap.simLiq"), "APPROX"),
+    SIMULATED_LIQUIDATION: item(t("replay.capName.simLiq"), "AVAILABLE_APPROX", t("replay.cap.simLiq"), "APPROX"),
     AGG_TRADE_TAPE: tape
-      ? item("Agg trade tape", "AVAILABLE_EXACT", t("replay.cap.tapeExact"), "EXACT_AGGREGATE")
-      : item("Agg trade tape", "UNSUPPORTED_SOURCE_MODE", t("replay.cap.tapeNone")),
+      ? item(t("replay.capName.tape"), "AVAILABLE_EXACT", t("replay.cap.tapeExact"), "EXACT_AGGREGATE")
+      : item(t("replay.capName.tape"), "UNSUPPORTED_SOURCE_MODE", t("replay.cap.tapeNone")),
     ORDER_FLOW: tape
-      ? item("Order flow", "AVAILABLE_APPROX", t("replay.cap.flowTape"), "APPROX_AGGRESSOR")
+      ? item(t("replay.capName.orderFlow"), "AVAILABLE_APPROX", t("replay.cap.flowTape"), "APPROX_AGGRESSOR")
       : item(
-        "Order flow",
+        t("replay.capName.orderFlow"),
         "AVAILABLE_APPROX",
         t("replay.cap.flowBar"),
         "KLINE_TAKER_PROXY",
       ),
-    OPEN_INTEREST: item("Open interest", "UNSUPPORTED_NO_HISTORY", t("replay.cap.oi")),
-    MARK_PRICE: item("Mark", "UNSUPPORTED_NO_HISTORY", t("replay.cap.mark")),
-    INDEX_PRICE: item("Index", "UNSUPPORTED_NO_HISTORY", t("replay.cap.index")),
-    BASIS: item("Basis", "UNSUPPORTED_NO_HISTORY", t("replay.cap.basis")),
-    FUNDING: item("Funding", "UNSUPPORTED_NO_HISTORY", t("replay.cap.funding")),
-    MARKET_LIQUIDATION: item("Market liquidations", "UNSUPPORTED_NO_HISTORY", t("replay.cap.mktLiq")),
+    OPEN_INTEREST: item(t("replay.capName.openInterest"), "UNSUPPORTED_NO_HISTORY", t("replay.cap.oi")),
+    MARK_PRICE: item(t("replay.capName.mark"), "UNSUPPORTED_NO_HISTORY", t("replay.cap.mark")),
+    INDEX_PRICE: item(t("replay.capName.index"), "UNSUPPORTED_NO_HISTORY", t("replay.cap.index")),
+    BASIS: item(t("replay.capName.basis"), "UNSUPPORTED_NO_HISTORY", t("replay.cap.basis")),
+    FUNDING: item(t("replay.capName.funding"), "UNSUPPORTED_NO_HISTORY", t("replay.cap.funding")),
+    MARKET_LIQUIDATION: item(t("replay.capName.marketLiq"), "UNSUPPORTED_NO_HISTORY", t("replay.cap.mktLiq")),
     ORDER_BOOK: orderBook,
-    HOSTED_INDICATORS: item("Hosted indicators", "UNSUPPORTED_NO_PROVIDER", t("replay.cap.hosted")),
-    ALERTS: item("Alerts", "UNSUPPORTED_NO_PROVIDER", t("replay.cap.alerts")),
+    HOSTED_INDICATORS: item(t("replay.capName.hosted"), "UNSUPPORTED_NO_PROVIDER", t("replay.cap.hosted")),
+    ALERTS: item(t("replay.capName.alerts"), "UNSUPPORTED_NO_PROVIDER", t("replay.cap.alerts")),
   };
 }

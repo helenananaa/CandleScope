@@ -83,8 +83,11 @@ export const TRUSTED_LOCAL_FACT_KEYS = [
   "python.fact.notContinue",
 ] as const satisfies readonly MessageKey[];
 
+/** The setting a person adds to the local service to allow direct (unsandboxed) Python runs. */
+export const TRUSTED_LOCAL_SETTING = "BACKTEST_PYTHON_TRUSTED_LOCAL_ENABLED=1";
+
 export function trustedLocalFacts(): readonly string[] {
-  return TRUSTED_LOCAL_FACT_KEYS.map((key) => t(key));
+  return TRUSTED_LOCAL_FACT_KEYS.map((key) => t(key, { setting: TRUSTED_LOCAL_SETTING }));
 }
 
 export function trustedLocalConfirmLabel(): string {
@@ -489,7 +492,7 @@ export function mapStudioFailure(error: unknown): StudioFailure {
     if (code === "SANDBOX_UNAVAILABLE") {
       nextStep = t("python.next.sandbox");
     } else if (code === "TRUSTED_LOCAL_DISABLED" || code === "TRUSTED_LOCAL_UNCONFIRMED") {
-      nextStep = t("python.next.trusted");
+      nextStep = t("python.next.trusted", { setting: TRUSTED_LOCAL_SETTING });
     } else if (code === "FLAG_DISABLED") {
       nextStep = t("python.next.flag");
     }

@@ -918,3 +918,23 @@ def test_subscription_service_migrates_legacy_subscription_table(tmp_path) -> No
 
     assert "intervals_json" in columns
     assert row == ("spot:BTCUSDT", "full", 123, "[]")
+
+
+def test_quote_stream_lifecycle_does_not_resolve_a_candle_interval(caplog) -> None:
+    """The real watchlist price lifecycle must pass continuity middleware."""
+    async def run():
+        dm = DataManager()
+        calls = []
+        async def ensure_controller(*args, **kwargs):
+            calls.append((args, kwargs))
+        dm._ensure_price_stream_controller = ensure_controller
+        try:
+            await dm.ensure_price_stream('BTCUSDT')
+            await dm.ensure_price_stream('BTCUSDT')
+            await dm.stop_price_stream('BTCUSDT')
+            assert len(calls) == 2
+            assert not [r for r in caplog.records if r.levelno >= 40], caplog.text
+            assert dm.source_gaps.snapshot()['pending'] == []
+        finally:
+            await dm.shutdown()
+    asyncio.run(run())

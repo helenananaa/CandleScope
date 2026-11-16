@@ -22,12 +22,15 @@ from __future__ import annotations
 
 from app.data_engine.kline_quality import BYBIT_WS_CONFIRMED_SOURCE
 from app.data_engine.readonly import ReadonlyFields
+from .component_memory import ComponentSnapshots
 from app.data_engine.aggregation.adapters import (
     snapshot_aggregation_values, snapshot_coverage, snapshot_field_summary,
 )
-from app.data_engine.aggregation.semantics import sum_additive
+from app.data_engine.aggregation.semantics import sum_additive, valid_ohlcv
 from app.data_engine.interval_policy import IntervalAlignment, parse_interval_spec
 from . import component_accumulator
+
+from copy import deepcopy
 
 import logging
 import time
@@ -56,6 +59,10 @@ logger = logging.getLogger("bar_aggregator.L3_BarState")
 
 def has_complete_closed_component_coverage(state: BarState) -> bool:
     """Return whether component snapshots authoritatively cover the bucket."""
+    state.materialize_preview()
+    if state._source_recovery is not None:
+        result = state._source_recovery.merge(state.source_snapshots.values())
+        return result is not None and result.coverage(state.bucket_start_ms, state.bucket_end_ms).closed
     accumulator = state._component_accumulator
     if accumulator is not None and accumulator.current(state.source_snapshots):
         return accumulator.result.coverage(state.bucket_start_ms, state.bucket_end_ms).closed
@@ -201,6 +208,35 @@ class ComponentSnapshotOHLCVMerge:
     def __init__(self, *, incremental=True):
         self.incremental = incremental
 
+    def adopt_source_recovery(self, state, receipt, incoming=None):
+        """Replace only covered closed runs; preserve every interior live hole."""
+        if (state._history_prefix is not None or receipt.version.start_ms != state.bucket_start_ms
+                or receipt.version.through_ms > state.bucket_end_ms):
+            raise ValueError('selected-source recovery does not belong to this builder')
+        snapshots = ComponentSnapshots((key, row) for key, row in state.source_snapshots.items()
+                                       if not receipt.covers(row['open_time_ms'])
+                                       and (incoming is None or key != incoming.input_key))
+        from app.data_engine.aggregation.source_window import MAX_SOURCE_OVERLAY_ROWS
+        if len(snapshots) + int(incoming is not None) > MAX_SOURCE_OVERLAY_ROWS:
+            from app.data_engine.memory_budget import MemoryBudgetExceeded
+            raise MemoryBudgetExceeded('selected-source live overlay is at capacity')
+        # Validate all chronological overlaps before touching the original state.
+        result = receipt.merge(snapshots.values())
+        floor = state.canonical_recovery_delete_floor
+        if floor is None:
+            floor = state.acquisition_revision
+        state.source_snapshots = snapshots
+        state.source_refs = {key: ref for key, ref in state.source_refs.items() if key in snapshots}
+        state._component_accumulator = None
+        state._source_recovery = receipt
+        state.acquisition_revision = receipt.version.acquisition_revision
+        state.canonical_recovery_delete_floor = min(
+            receipt.version.permission_floor,
+            floor if floor is not None else receipt.version.permission_floor,
+        )
+        if result is not None:
+            self._project(state, result, is_new=False)
+
     def adopt_history_prefix(self, state, prefix):
         """Synchronous owner operation, after durable and target fences pass.
 
@@ -208,6 +244,14 @@ class ComponentSnapshotOHLCVMerge:
         The caller is responsible for refreshing the prefix on source changes;
         an input inside the prefix is rejected here instead of double counted.
         """
+        state.materialize_preview()
+        if state._source_recovery is not None:
+            import json
+            old = state._source_recovery
+            if (not prefix.complete or prefix.through_ms < old.version.through_ms
+                    or prefix.source_width_ms != old.version.source_width_ms
+                    or prefix.summary.target.interval != json.loads(old.version.series)[3]):
+                raise ValueError('selected-source handoff requires complete matching canonical coverage')
         source = prefix.summary.target
         if ((source.exchange, source.market_type, source.symbol, source.identity)
                 != (state.exchange, state.market_type, state.symbol, state.identity)
@@ -227,10 +271,12 @@ class ComponentSnapshotOHLCVMerge:
         ordered = sorted(snapshots.values(), key=lambda row: row['open_time_ms'])
         tail = component_accumulator._Summary.batch(ordered) if ordered else None
         result = component_accumulator._combine(head, tail)
-        state.source_snapshots = snapshots
+        state._source_recovery = None
+        state.source_snapshots = ComponentSnapshots(snapshots)
         state.source_refs = {key: value for key, value in state.source_refs.items() if key in snapshots}
         state._component_accumulator = None
         state._history_prefix = prefix
+        state.preview_input_version += 1
         return self._project(state, result, is_new=False)
 
     @staticmethod
@@ -256,6 +302,9 @@ class ComponentSnapshotOHLCVMerge:
         if is_new and state.created_at_ms == 0:
             state.created_at_ms = now_ms
         state.updated_at_ms = now_ms
+        state.preview_computed_version = state.preview_input_version
+        state._preview_dirty = False
+        state._preview_calculations += 1
         return state
 
     def _can_accumulate(self, state, bar_input):
@@ -264,30 +313,15 @@ class ComponentSnapshotOHLCVMerge:
         specs = (parse_interval_spec(state.interval), parse_interval_spec(bar_input.source_interval))
         return all(spec is not None and spec.alignment is IntervalAlignment.FIXED_EPOCH for spec in specs)
 
+    INPUT_FIELDS = ("open_time_ms", "close_time_ms", "open", "high", "low", "close",
+                    "volume", "quote_volume", "trades", "taker_buy_base", "taker_buy_quote",
+                    "enhanced_fields", "is_closed", "sequence")
+
     @staticmethod
     def _snapshot_from_input(bar_input: BarInput) -> ReadonlyFields:
-        snapshot = {
-            "source_ref": bar_input.extra.get("source_ref"),
-            "open_time_ms": bar_input.open_time_ms,
-            "close_time_ms": bar_input.close_time_ms,
-            "open": bar_input.open,
-            "high": bar_input.high,
-            "low": bar_input.low,
-            "close": bar_input.close,
-            "volume": bar_input.volume,
-            "quote_volume": bar_input.quote_volume,
-            "trades": bar_input.trades,
-            "taker_buy_base": bar_input.taker_buy_base,
-            "taker_buy_quote": bar_input.taker_buy_quote,
-            "enhanced_fields": bar_input.enhanced_fields,
-            "is_closed": bar_input.is_closed,
-            # ``open_time_ms`` identifies the component; it says nothing about
-            # which of two cumulative snapshots for that component is newer.
-            # Keep an unavailable freshness sequence explicit so replacement
-            # can fall back to monotonic cumulative evidence instead of
-            # silently treating every update as equally fresh.
-            "sequence": bar_input.sequence,
-        }
+        snapshot = {name:getattr(bar_input,name) for name in ComponentSnapshotOHLCVMerge.INPUT_FIELDS}
+        snapshot["is_closed"] = bool(snapshot["is_closed"])
+        snapshot["source_ref"] = bar_input.extra.get("source_ref")
         if bar_input.extra.get("warm_start_seed"):
             snapshot["warm_start_seed"] = True
         snapshot["aggregation_values"] = snapshot_aggregation_values(snapshot)
@@ -403,12 +437,14 @@ class ComponentSnapshotOHLCVMerge:
         # ambiguous close-only changes fail closed.
         return cls._has_monotonic_progress(existing, candidate)
 
-    def apply(self, state: BarState, bar_input: BarInput, is_new: bool) -> BarState:
+    def apply(self, state: BarState, bar_input: BarInput, is_new: bool, *, defer_preview=False) -> BarState:
         now_ms = int(time.time() * 1000)
         snapshots = state.source_snapshots
 
         if state._history_prefix is not None and bar_input.open_time_ms < state._history_prefix.through_ms:
             raise ValueError('covered history input requires prefix revision refresh')
+        if state._source_recovery is not None and state._source_recovery.covers(bar_input.open_time_ms):
+            raise ValueError('covered selected-source input requires source revision refresh')
 
         if is_new and snapshots:
             # Closed custom bars may be amended by late backfill components.
@@ -416,8 +452,14 @@ class ComponentSnapshotOHLCVMerge:
             pass
 
         input_key = bar_input.input_key
-        candidate = self._snapshot_from_input(bar_input)
+        prepare = getattr(self, "prepare_input", None)
+        candidate = prepare(bar_input) if prepare is not None else None
+        if candidate is None:
+            candidate = self._snapshot_from_input(bar_input)
         existing = snapshots.get(input_key)
+        delay = (defer_preview and self._can_defer(state, bar_input, existing, candidate))
+        if state._preview_dirty and not delay:
+            state.materialize_preview()
         if existing is not None and not self._should_replace(
             existing,
             candidate,
@@ -437,6 +479,17 @@ class ComponentSnapshotOHLCVMerge:
             return state
 
         snapshots[input_key] = candidate
+        state.preview_input_version += 1
+        if state._source_recovery is not None and not delay:
+            state._component_accumulator = None
+            return self._project(state, state._source_recovery.merge(snapshots.values()), is_new=is_new)
+        if delay:
+            # Every candidate was admitted against the immediately preceding
+            # accepted value above. Only K130 summary/projection work is delayed.
+            state._preview_dirty = True
+            state._preview_deferred_inputs += 1
+            state.updated_at_ms = now_ms
+            return state
         if self._can_accumulate(state, bar_input):
             accumulator = state._component_accumulator
             if accumulator is None:
@@ -503,7 +556,94 @@ class ComponentSnapshotOHLCVMerge:
         if is_new and state.created_at_ms == 0:
             state.created_at_ms = now_ms
         state.updated_at_ms = now_ms
+        state.preview_computed_version = state.preview_input_version
+        state._preview_dirty = False
+        state._preview_calculations += 1
         return state
+
+    def _can_defer(self, state, incoming, previous, candidate):
+        if state._source_recovery is not None:
+            return self._can_defer_source_tail(state, incoming, previous, candidate)
+        accumulator = state._component_accumulator
+        return (not incoming.is_closed and incoming.source == BarInputSource.REALTIME
+                and state._source_recovery is None
+                and state.status == BarStatus.FORMING and self._can_accumulate(state, incoming)
+                and accumulator is not None and accumulator.tail_unique
+                and accumulator.container_id == id(state.source_snapshots)
+                and accumulator.count == len(state.source_snapshots)
+                and accumulator.tail_key == incoming.input_key
+                and previous is not None and not previous['is_closed']
+                and type(previous) is ReadonlyFields and type(candidate) is ReadonlyFields
+                and previous.estimated_bytes <= 8192 and candidate.estimated_bytes <= 8192
+                and valid_ohlcv(candidate['aggregation_values'][:5])
+                and ((previous.get('source_ref') is None and candidate.get('source_ref') is None)
+                     or (previous.get('source_ref') is not None and candidate.get('source_ref') is not None
+                         and set(previous['source_ref']) == set(candidate['source_ref']) == {'series','open_time','revision'}
+                         and previous['source_ref']['series'] == candidate['source_ref']['series']
+                         and previous['source_ref']['open_time'] == candidate['source_ref']['open_time']))
+                and previous['enhanced_fields'] == candidate['enhanced_fields']
+                and previous['open_time_ms'] == candidate['open_time_ms'] == accumulator.tail.last
+                and previous['close_time_ms'] == candidate['close_time_ms'] == accumulator.tail.end - 1)
+
+    @staticmethod
+    def _can_defer_source_tail(state, incoming, previous, candidate):
+        receipt = state._source_recovery
+        return (receipt is not None and 0 < len(state.source_snapshots) <= 128
+                and incoming.source == BarInputSource.REALTIME and not incoming.is_closed
+                and state.status == BarStatus.FORMING
+                and incoming.open_time_ms >= receipt.version.through_ms
+                and incoming.close_time_ms + 1 <= state.bucket_end_ms
+                and incoming.close_time_ms + 1 - incoming.open_time_ms == receipt.version.source_width_ms
+                and incoming.open_time_ms % receipt.version.source_width_ms == 0
+                and type(previous) is ReadonlyFields and type(candidate) is ReadonlyFields
+                and not previous['is_closed'] and not candidate['is_closed']
+                and previous.estimated_bytes <= 8192 and candidate.estimated_bytes <= 8192
+                and previous['open_time_ms'] == candidate['open_time_ms'] == incoming.open_time_ms
+                and previous['close_time_ms'] == candidate['close_time_ms'] == incoming.close_time_ms
+                and previous['enhanced_fields'] == candidate['enhanced_fields']
+                and valid_ohlcv(candidate['aggregation_values'][:5])
+                and previous.get('source_ref') is not None and candidate.get('source_ref') is not None
+                and set(previous['source_ref']) == set(candidate['source_ref']) == {'series','open_time','revision'}
+                and previous['source_ref']['series'] == candidate['source_ref']['series'] == receipt.version.series
+                and previous['source_ref']['open_time'] == candidate['source_ref']['open_time'] == incoming.open_time_ms
+                and all(row is previous or (
+                    type(row) is ReadonlyFields and row.estimated_bytes <= 8192 and row['is_closed']
+                    and receipt.version.start_ms <= row['open_time_ms'] < incoming.open_time_ms
+                    and row['close_time_ms'] + 1 - row['open_time_ms'] == receipt.version.source_width_ms
+                    and row.get('source_ref') is not None
+                    and set(row['source_ref']) == {'series','open_time','revision'}
+                    and row['source_ref']['series'] == receipt.version.series
+                    and row['source_ref']['open_time'] == row['open_time_ms'])
+                    for row in state.source_snapshots.values()))
+
+
+def materialize_component_preview(state):
+    """Fold the latest accepted tail once, using the existing K130 index."""
+    if not state._preview_dirty:
+        return
+    if state._source_recovery is not None:
+        accepted_at = state.updated_at_ms
+        result = state._source_recovery.merge(state.source_snapshots.values())
+        ComponentSnapshotOHLCVMerge._project(state, result, is_new=False)
+        state.updated_at_ms = accepted_at
+        return
+    accumulator = state._component_accumulator
+    if accumulator is None:
+        # Owner maintenance may have explicitly discarded the execution index.
+        accumulator = component_accumulator.ComponentAccumulator()
+        key = next(reversed(state.source_snapshots))
+        previous = None
+    else:
+        key, previous = accumulator.tail_key, accumulator.tail_snapshot
+    result = accumulator.update(state.source_snapshots, key, previous)
+    if state._history_prefix is not None:
+        result = component_accumulator._combine(
+            component_accumulator._Summary.history(state._history_prefix), result)
+        accumulator.result = result
+    accepted_at = state.updated_at_ms
+    ComponentSnapshotOHLCVMerge._project(state, result, is_new=False)
+    state.updated_at_ms = accepted_at
+    state._component_accumulator = accumulator
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -579,7 +719,8 @@ class BarStateEngine:
 
     # ── Public: Core Operation ───────────────────────────────
 
-    def adopt_history_prefix(self, prefix, *, refresh=False, replace_provisional=False) -> BarState:
+    def adopt_history_prefix(self, prefix, *, refresh=False, replace_provisional=False,
+                             compact_closed=False) -> BarState:
         """Install a qualified prefix while retaining the current live overlay."""
         source = prefix.summary.target
         key = (source.exchange, source.market_type, source.symbol, prefix.start_ms)
@@ -587,9 +728,12 @@ class BarStateEngine:
         state = self._active.get(key) or self._closed.get(key)
         replacing = (replace_provisional and was_closed and state.finality == BarFinality.PROVISIONAL
                      and prefix.complete and prefix.through_ms == state.bucket_end_ms)
-        if (was_closed and not (refresh or replacing)) or self._merge_strategy_overridden:
+        if compact_closed and (not was_closed or state.finality != BarFinality.AUTHORITATIVE
+                or not prefix.complete or prefix.through_ms != state.bucket_end_ms):
+            raise ValueError('closed compaction requires complete authoritative coverage')
+        if (was_closed and not (refresh or replacing or compact_closed)) or self._merge_strategy_overridden:
             raise ValueError('history initialization requires a forming or recoverable target')
-        if refresh and (state is None or state._history_prefix is None):
+        if refresh and not compact_closed and (state is None or state._history_prefix is None):
             raise ValueError('history refresh requires an existing compact prefix')
         if state is None:
             start, end = self._time_bucket.compute_bucket_range(prefix.start_ms)
@@ -621,6 +765,7 @@ class BarStateEngine:
         symbol: str,
         bucket_start_ms: int,
         bar_input: BarInput,
+        *, defer_preview: bool = False, source_recovery=None,
     ) -> tuple[BarState, BarStateChange]:
         """Apply a BarInput to the appropriate bucket state.
 
@@ -640,6 +785,19 @@ class BarStateEngine:
         key = (exchange, market_type, symbol, bucket_start_ms)
         merge_strategy = self._strategy_for(bar_input)
         existing_state = self._active.get(key) or self._closed.get(key)
+        if source_recovery is not None and existing_state is not None:
+            if merge_strategy is not self._component_merge_strategy:
+                raise ValueError('source reconstruction requires the default component owner')
+            if existing_state.status == BarStatus.CLOSED and bar_input.source == BarInputSource.REALTIME:
+                if not bar_input.is_closed:
+                    return existing_state, BarStateChange.NO_CHANGE
+                from dataclasses import replace
+                bar_input = replace(bar_input, source=BarInputSource.CORRECTION)
+            merge_strategy.adopt_source_recovery(existing_state, source_recovery, bar_input)
+        builtin_component = (merge_strategy is self._component_merge_strategy
+            and getattr(merge_strategy.apply,'__func__',None) is ComponentSnapshotOHLCVMerge.apply)
+        if existing_state is not None and not (defer_preview and builtin_component):
+            existing_state.materialize_preview()
         source_ref = bar_input.extra.get("source_ref")
         if existing_state is not None and source_ref is not None:
             previous_ref = existing_state.source_refs.get(bar_input.input_key)
@@ -654,7 +812,8 @@ class BarStateEngine:
                 if merge_strategy is self._component_merge_strategy
                 else None
             )
-            state = merge_strategy.apply(state, bar_input, is_new=False)
+            state = merge_strategy.apply(state, bar_input, is_new=False,
+                **({'defer_preview': defer_preview} if builtin_component else {}))
             self._mark_authoritative_close_policy(state, bar_input)
             self._active[key] = state
             if (
@@ -665,7 +824,7 @@ class BarStateEngine:
                 return state, BarStateChange.NO_CHANGE
             # Move to end (most recently updated)
             if source_ref is not None:
-                state.source_refs[bar_input.input_key] = dict(source_ref)
+                state.source_refs[bar_input.input_key] = deepcopy(dict(source_ref))
             self._active.move_to_end(key)
             return state, BarStateChange.UPDATED
 
@@ -707,7 +866,7 @@ class BarStateEngine:
                 ):
                     return state, BarStateChange.NO_CHANGE
                 if source_ref is not None:
-                    state.source_refs[bar_input.input_key] = dict(source_ref)
+                    state.source_refs[bar_input.input_key] = deepcopy(dict(source_ref))
                 return state, BarStateChange.AMENDED
             # Realtime data for an already-closed bar — ignore
             return old_state, BarStateChange.NO_CHANGE
@@ -728,16 +887,24 @@ class BarStateEngine:
             close=0.0,
             volume=0.0,
         )
+        if source_recovery is not None:
+            if merge_strategy is not self._component_merge_strategy:
+                raise ValueError('source reconstruction requires the default component owner')
+            # Legacy reconstruction silently admitted every sibling before the
+            # real incoming leaf. Preserve accepted-version and event semantics
+            # without retaining or projecting those leaves individually.
+            state.preview_input_version = source_recovery.version.closed_count - int(bar_input.is_closed)
+            merge_strategy.adopt_source_recovery(state, source_recovery, bar_input)
         state = merge_strategy.apply(state, bar_input, is_new=True)
         self._mark_authoritative_close_policy(state, bar_input)
         self._active[key] = state
         if source_ref is not None:
-            state.source_refs[bar_input.input_key] = dict(source_ref)
+            state.source_refs[bar_input.input_key] = deepcopy(dict(source_ref))
 
         # Evict oldest active bars if limit exceeded
         self._enforce_active_limit(exchange, market_type, symbol)
 
-        return state, BarStateChange.CREATED
+        return state, BarStateChange.UPDATED if source_recovery is not None else BarStateChange.CREATED
 
     def _mark_authoritative_close_policy(
         self,
@@ -834,10 +1001,12 @@ class BarStateEngine:
         Returns the closed BarState, or None if not found.
         """
         key = (exchange.strip().lower(), market_type.strip().lower(), symbol, bucket_start_ms)
-        state = self._active.pop(key, None)
+        state = self._active.get(key)
         if state is None:
             return None
 
+        state.materialize_preview()
+        self._active.pop(key,None)
         state.status = BarStatus.CLOSED
         state.updated_at_ms = int(time.time() * 1000)
         self._closed[key] = state
@@ -855,8 +1024,11 @@ class BarStateEngine:
         Returns the expired BarState, or None if not found.
         """
         key = (exchange.strip().lower(), market_type.strip().lower(), symbol, bucket_start_ms)
-        state = self._active.pop(key, None) or self._closed.pop(key, None)
+        state = self._active.get(key) or self._closed.get(key)
         if state is not None:
+            state.materialize_preview()
+            self._active.pop(key,None)
+            self._closed.pop(key,None)
             state.status = BarStatus.EXPIRED
         return state
 
@@ -921,6 +1093,19 @@ class BarStateEngine:
             "closed_bars": len(self._closed),
             "max_active": self._cfg.max_active_bars,
             "max_closed": self._cfg.max_closed_bars_in_memory,
+            "preview": {
+                "dirty_states": sum(s._preview_dirty for s in self._active.values()),
+                "deferred_inputs": sum(s._preview_deferred_inputs for s in (*self._active.values(), *self._closed.values())),
+                "calculations": sum(s._preview_calculations for s in (*self._active.values(), *self._closed.values())),
+                "watermark_limit": 128,
+                "watermarks_truncated": len(self._active)>128,
+                "watermarks": [dict(symbol=s.symbol,exchange=s.exchange,market_type=s.market_type,
+                    identity=s.identity.to_dict(),bucket_start_ms=s.bucket_start_ms,
+                    input=s.preview_input_version,computed=s.preview_computed_version,
+                    published=s.preview_published_version,dirty=s._preview_dirty,
+                    fallback_reason=s.preview_fallback_reason)
+                    for s in list(self._active.values())[:128]],
+            },
             "component_execution": {
                 "enabled": self._component_merge_strategy.incremental,
                 "indexed_states": len(indices),

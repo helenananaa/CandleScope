@@ -400,6 +400,21 @@ class RevisionStore:
         with closing(self.connect()) as conn:
             return self._read_versions(conn, tuple(series))
 
+    def read_series_changes(self, series):
+        """Bounded current per-series mutation/deletion evidence, one snapshot.
+
+        The coalesced range is conservative. Consumers must not interpret it
+        as exact per-row history or compare revision numbers across series.
+        """
+        values = tuple(series)
+        if not 1 <= len(values) <= 32:
+            raise ValueError("one to 32 source dependencies required")
+        with closing(self.connect()) as conn, conn:
+            conn.execute("BEGIN")
+            return current_revision(conn), tuple(
+                dict(row) if (row := series_change(conn, key)) is not None else None
+                for key in values)
+
     def scoped_version_reader(self):
         return ScopedRevisionRead(self)
 
@@ -518,13 +533,20 @@ def guarded_write(conn, values, *, commit=True, native_rows=None, source=None, n
         from .native_history_fence import matching_view, matching_empty_view, fingerprint
         from .derived_history_fence import matching_computation, affected_targets
         view = matching_view(scope, values, native_rows, source) if commit else None
+        if view is not None and not view.accepts_history_receipts(conn, native_rows):
+            # Unqualified rows retain their original strict acquisition path.
+            # Missing receipts deny range permission, not the legacy writer.
+            view = None
         if view is None and commit and native_empty_ranges is not None:
             view = matching_empty_view(scope, values, native_empty_ranges)
         computation = matching_computation(scope, values, native_rows, source) if commit else None
         targets = affected_targets(scope, values, native_rows) if view is not None else ()
         warmup = scope.warmup_view
+        # Native range permission still belongs to this warmup acquisition.
+        # Record its own source commits so subsequent derived writes do not
+        # mistake them for intervening external corrections.
         warmup_head = (warmup.check_write(conn, scope, values, native_rows, source)
-                       if commit and warmup is not None and view is None and computation is None else None)
+                       if commit and warmup is not None and computation is None else None)
         if computation is not None:
             computation.check(conn, scope)
             targets = (computation.target,)

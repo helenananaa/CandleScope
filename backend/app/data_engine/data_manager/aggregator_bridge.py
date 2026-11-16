@@ -41,6 +41,7 @@ class AggregatorBridge:
         self._storage_provider = storage_provider
         self._mark_bar_received = mark_bar_received
         self._is_started = is_started
+        self.preview_memory_budget = None
         self.delivery = DurableBarDelivery(storage_provider, self._publish,
                                            require_recovery=self._require_recovery,
                                            recovery_lookback_bars=recovery_lookback_bars,
@@ -51,6 +52,56 @@ class AggregatorBridge:
         if not callable(reader):
             raise BarDeliveryUnavailable("storage cannot restore source components")
         return await run_storage(reader, series, start_ms, end_ms)
+
+    def preview_source_binding(self):
+        storage = self._storage_provider()
+        if (callable(getattr(storage,'validate_component_preview',None))
+                and getattr(storage,'revision_store',None) is not None
+                and self.preview_memory_budget is not None):
+            return storage
+        return None
+
+    async def validate_component_preview(self, state, revision_floor, *, is_current=lambda: True):
+        storage = self.preview_source_binding()
+        if storage is None or type(revision_floor) is not int or not 0<len(state.source_snapshots)<=256:
+            return 'unavailable'
+        components = tuple(state.source_snapshots.values())
+        if any(row is None or getattr(row,'estimated_bytes',8193)>8192 for row in components):
+            return 'unavailable'
+        budget = self.preview_memory_budget
+        version = state.preview_input_version
+        source_receipt = state._source_recovery
+        permission = self._source_preview_permission(state) if source_receipt is not None else None
+        extra = ({'source_window': source_receipt.version, 'source_permission_floor': permission}
+                 if source_receipt is not None else {})
+        receipt_bytes = source_receipt.estimated_bytes if source_receipt is not None else 0
+        # References can outlive replacements while physical reads await.
+        # Charge their full frozen values, not only the tuple container.
+        with budget.reserve('history-query',16384+receipt_bytes+sum(row.estimated_bytes for row in components)):
+            try:
+                status = await run_storage(storage.validate_component_preview,components,
+                    symbol=state.symbol,interval=state.interval,exchange=state.exchange,
+                    market_type=state.market_type,series_identity=state.identity,
+                    revision_floor=revision_floor, **extra)
+            finally:
+                components = ()
+        if (self._storage_provider() is not storage or state.preview_input_version != version
+                or state._source_recovery is not source_receipt
+                or (source_receipt is not None and self._source_preview_permission(state) != permission)
+                or not is_current()):
+            return 'superseded'
+        if status == 'canonical_changed':
+            self._require_recovery(SeriesKey.create(state.symbol,state.interval,exchange=state.exchange,
+                                                    market_type=state.market_type,identity=state.identity))
+        return status
+
+    @staticmethod
+    def _source_preview_permission(state):
+        # Source permission is independent of the pending read acquisition.
+        # Missing original leaf permission remains conservatively unknown.
+        return min(state._source_recovery.version.permission_floor,
+                   state.source_permission_floor if state.source_permission_floor is not None else 0,
+                   state.canonical_recovery_delete_floor if state.canonical_recovery_delete_floor is not None else 0)
 
     async def on_bar_event(self, event: BarEvent) -> str | None:
         """Convert an aggregator event into cache updates and DataEvents."""
@@ -128,7 +179,9 @@ class AggregatorBridge:
             if dm_event.previous_bar is not None:
                 payload["previous_bar"] = {name: getattr(dm_event.previous_bar, name) for name in fields}
             payload["storage_row"] = bar_state.to_storage_dict()
-            payload["derived"] = bool(bar_state.source_snapshots or bar_state._history_prefix)
+            if bar_state.source_permission_floor is not None:
+                payload["source_permission_floor"] = bar_state.source_permission_floor
+            payload["derived"] = bool(bar_state.source_snapshots or bar_state._history_prefix or bar_state._source_recovery)
             if bar_state._history_prefix is not None:
                 # Recheck the acquired source version in the eventual SQLite
                 # commit transaction. An external write can happen after the
@@ -245,7 +298,7 @@ class AggregatorBridge:
         finality = getattr(bar_state, "finality", None)
         if getattr(finality, "value", finality) != BarFinality.AUTHORITATIVE.value:
             return None
-        if bar_state.source_refs:
+        if bar_state.source_refs or bar_state._source_recovery is not None:
             return "source_snapshot_verified"
         if bar_state.quality_source == "trade_history_verified":
             return "trade_history_verified"

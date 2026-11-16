@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Button, InlineAlert } from "../../../components/ui/index.js";
 import { t } from "../../../i18n/index.js";
 import { replayNoteView, sameReplayNoteContext, type ReplayNote, type ReplayNoteContext } from "../replayNotes.js";
 import type { ReplayV2ApiClient } from "../replayV2Api.js";
@@ -31,17 +32,19 @@ export default function ReplayNoteHistory({ api, note, context, scope, asOfMs, f
   }, [api, context, note.id, asOfMs, before, attempt]);
   useEffect(() => { onTimes(scope, page.versions.flatMap(version => [version.effectiveTimeMs, ...(version.links?.map(link => link.eventTimeMs) ?? []), ...(version.screenshots?.map(capture => capture.marketTimeMs) ?? [])])); }, [scope, page.versions, onTimes]);
   return <div className="replay-note-history" data-testid="replay-note-history">
-    {page.versions.map(version => <div key={version.revisionCount} data-note-version={version.revisionCount}>
-      <strong>{t("replay.notes.version", { version: version.revisionCount })}</strong>
-      <dl><dt>{t("replay.notes.effectiveTime")}</dt><dd>{formatTime(version.effectiveTimeMs)}</dd>
-        <dt>{t("replay.notes.savedTime")}</dt><dd>{actualTime(version.updatedAtMs)}</dd></dl>
+    {page.versions.map(version => <div key={version.revisionCount} className="replay-note-version" data-note-version={version.revisionCount}>
+      <header className="replay-note-head">
+        <strong>{t("replay.notes.version", { version: version.revisionCount })}</strong>
+        <time className="replay-note-time" title={t("replay.notes.effectiveTime")}>{formatTime(version.effectiveTimeMs)}</time>
+      </header>
       <p className="replay-note-text">{version.fields.entryBasis ?? ""}</p>
       <ReplayNoteLinks links={version.links ?? []} formatTime={formatTime} />
       <ReplayNoteScreenshots note={version} context={context} formatTime={formatTime} onOpen={onImage} />
+      <small className="replay-note-saved">{t("replay.notes.savedTime")} {actualTime(version.updatedAtMs)}</small>
     </div>)}
-    {loading && <p role="status">{t("replay.notes.historyLoading")}</p>}
-    {page.error && !loading && <p role="alert">{t("replay.notes.historyFailed")}</p>}
-    {!loading && page.error && <button type="button" onClick={() => setAttempt(value => value + 1)}>{t("replay.notes.refresh")}</button>}
-    {!loading && !page.error && page.next !== null && <button type="button" onClick={() => setBefore(page.next!)}>{t("replay.notes.moreVersions")}</button>}
+    {loading && <p className="replay-notes-status" role="status">{t("replay.notes.historyLoading")}</p>}
+    {page.error && !loading && <InlineAlert tone="danger" action={<Button size="sm" onClick={() => setAttempt(value => value + 1)}>{t("replay.notes.refresh")}</Button>}>
+      {t("replay.notes.historyFailed")}</InlineAlert>}
+    {!loading && !page.error && page.next !== null && <Button size="sm" variant="ghost" onClick={() => setBefore(page.next!)}>{t("replay.notes.moreVersions")}</Button>}
   </div>;
 }

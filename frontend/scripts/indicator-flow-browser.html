@@ -3,5 +3,6 @@
 import { checkIndicatorDataFlow } from "/src/chart-adapter/__tests__/indicatorDataFlow.browser.tsx";
 import { checkIndicatorHydration } from "/src/chart-adapter/__tests__/indicatorHydration.browser.tsx";
 import { checkIndicatorTimeScaleRepair } from "/src/chart-adapter/__tests__/indicatorTimeScale.browser.ts";
-window.__indicatorFlowCheck = async () => { const result = await checkIndicatorDataFlow(); result.checks.push(await checkIndicatorHydration()); result.checks.push(await checkIndicatorTimeScaleRepair()); return result; };
+import { checkIndicatorResults } from "/src/chart-adapter/__tests__/indicatorResults.browser.ts";
+window.__indicatorFlowCheck = async () => { const result = await checkIndicatorDataFlow(); result.checks.push(await checkIndicatorResults()); result.checks.push(await checkIndicatorHydration()); result.checks.push(await checkIndicatorTimeScaleRepair()); return result; };
 </script></body></html>

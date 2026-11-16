@@ -1,0 +1,169 @@
+/* Screenshot export: a kit Dialog, wider than its lg size, with the settings beside a live preview. */
+
+.export-panel {
+  max-width: min(1040px, calc(100vw - 32px));
+  height: min(800px, calc(100dvh - 48px));
+  max-height: none;
+}
+.export-panel .ui-dialog-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  padding-bottom: 0;
+}
+.export-workspace-body {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+  gap: var(--space-5);
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ── Settings ── */
+.export-settings-panel {
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+  min-height: 0;
+  overflow-y: auto;
+  /* Room for focus rings and the scroll end. */
+  padding: 2px 6px var(--space-5) 2px;
+}
+.export-choice {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.export-settings-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-4);
+}
+.export-settings-row .ui-select {
+  width: 100%;
+}
+.export-range {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent-blue);
+}
+.export-checks {
+  display: grid;
+  gap: var(--space-3);
+}
+.export-filename {
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+
+/* ── Preview ── */
+.export-preview-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  min-height: 0;
+  padding-bottom: var(--space-5);
+}
+.export-preview-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.export-preview-heading {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+.export-preview-title {
+  margin: 0;
+  font: 600 var(--font-size-md)/1.3 var(--font-sans);
+}
+.export-preview-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 6px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+.export-preview-meta > span + span::before {
+  content: "·";
+  margin-right: 6px;
+}
+.export-preview-status[data-tone='accent'] { color: var(--text-accent); }
+.export-preview-status[data-tone='success'] { color: var(--text-success); }
+.export-preview-status[data-tone='warning'] { color: var(--text-warning); }
+
+.export-preview-frame {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  /* A checkerboard shows where the image is transparent. */
+  background-color: var(--surface-0);
+  background-image: conic-gradient(var(--surface-2) 25%, transparent 0 50%, var(--surface-2) 0 75%, transparent 0);
+  background-size: 16px 16px;
+}
+.export-preview-frame:not([data-zoom='fit']) {
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+.export-preview-image {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  box-shadow: var(--shadow-md);
+}
+.export-preview-frame[data-zoom='50'] .export-preview-image,
+.export-preview-frame[data-zoom='100'] .export-preview-image {
+  max-width: none;
+  max-height: none;
+}
+.export-preview-frame[data-zoom='50'] .export-preview-image { width: 50%; }
+.export-preview-frame[data-zoom='100'] .export-preview-image { width: 100%; }
+.export-preview-frame.stale .export-preview-image {
+  opacity: 0.55;
+}
+.export-preview-overlay {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  box-shadow: var(--shadow-sm);
+}
+.export-preview-error {
+  max-width: 420px;
+}
+
+@media (max-width: 760px) {
+  .export-panel .ui-dialog-body {
+    overflow-y: auto;
+  }
+  .export-workspace-body {
+    grid-template-columns: 1fr;
+  }
+  .export-settings-panel {
+    overflow: visible;
+  }
+  .export-preview-frame {
+    min-height: 260px;
+  }
+}

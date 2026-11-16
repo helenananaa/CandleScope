@@ -1,0 +1,69 @@
+[
+  {
+    "attempt": "native",
+    "passed": false,
+    "failure": "Error: Timed out waiting for acceptance state\n    at until (file:///Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/docs/qa/backend-batch1-20261101/driver.mjs:29:9)\n    at async verify (file:///Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/docs/qa/aggregation-closeout-20261112/native.mjs:47:3)\n    at async file:///Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/docs/qa/aggregation-closeout-20261112/native.mjs:94:19",
+    "cleanupFailure": null,
+    "steps": [
+      {
+        "name": "packaged-launch",
+        "at": "2026-11-12T01:52:08.881Z"
+      },
+      {
+        "name": "full-process-exit",
+        "at": "2026-11-12T01:57:02.741Z"
+      }
+    ]
+  },
+  {
+    "attempt": "native2",
+    "passed": false,
+    "failure": "Error: Timed out waiting for acceptance state\n    at Module.until (file:///Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/docs/qa/backend-batch1-20261101/driver.mjs:29:9)\n    at async verify (file:///Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/docs/qa/aggregation-closeout-20261112/native.mjs:52:5)\n    at async file:///Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/docs/qa/aggregation-closeout-20261112/native.mjs:105:19",
+    "cleanupFailure": null,
+    "steps": [
+      {
+        "name": "packaged-launch",
+        "at": "2026-11-12T01:58:26.037Z"
+      },
+      {
+        "name": "full-process-exit",
+        "at": "2026-11-12T02:02:05.432Z"
+      }
+    ]
+  },
+  {
+    "attempt": "native3",
+    "passed": false,
+    "failure": "Error: Timed out waiting for acceptance state\n    at Module.until (file:///Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/docs/qa/backend-batch1-20261101/driver.mjs:29:9)\n    at async verify (file:///Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/docs/qa/aggregation-closeout-20261112/native.mjs:52:5)\n    at async file:///Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/docs/qa/aggregation-closeout-20261112/native.mjs:111:19",
+    "cleanupFailure": null,
+    "steps": [
+      {
+        "name": "packaged-launch",
+        "at": "2026-11-12T02:06:14.451Z"
+      },
+      {
+        "name": "full-process-exit",
+        "at": "2026-11-12T02:09:44.626Z"
+      }
+    ]
+  },
+  {
+    "attempt": "native4",
+    "passed": false,
+    "failure": "electronApplication.firstWindow: Timeout 90000ms exceeded while waiting for event \"window\"\n    at Module.launch (/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/docs/qa/backend-batch1-20261101/driver.mjs:39:22)\n    at async launch (/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/docs/qa/aggregation-closeout-20261112/native.mjs:41:3)\n    at async file:///Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/docs/qa/aggregation-closeout-20261112/native.mjs:112:3",
+    "cleanupFailure": null,
+    "steps": []
+  },
+  {
+    "attempt": "native5",
+    "passed": false,
+    "failure": "electronApplication.firstWindow: Timeout 90000ms exceeded while waiting for event \"window\"\n    at Module.launch (/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/docs/qa/backend-batch1-20261101/driver.mjs:39:22)\n    at async launch (/Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/docs/qa/aggregation-closeout-20261112/native.mjs:49:5)\n    at async file:///Users/ryanliang/.codex/worktrees/aggregation-closeout-20261112/CandleScope/docs/qa/aggregation-closeout-20261112/native.mjs:125:3",
+    "cleanupFailure": null,
+    "steps": [
+      {
+        "name": "full-process-exit",
+        "at": "2026-11-12T02:20:02.229Z"
+      }
+    ]
+  }
+]

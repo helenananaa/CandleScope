@@ -1,4 +1,5 @@
 import ToolFlyout from "./ToolFlyout.js";
+import { openToolMenuFromKeyboard } from "./toolMenuKeys.js";
 import type { ComponentPropsWithoutRef, ReactNode, RefObject } from "react";
 import type { ToolbarVariant } from "./drawingToolbarDefinitions.js";
 
@@ -74,6 +75,11 @@ export default function DrawingVariantToolButton<TId extends string>({
         onClick={onClick}
         onDoubleClick={onDoubleClick}
         onContextMenu={onContextMenu}
+        onKeyDown={onContextMenu ? openToolMenuFromKeyboard : undefined}
+        // A click picks the tool and the variants open from right-click or the keyboard;
+        // a button without that (the chart type) opens its menu on click.
+        aria-haspopup={onContextMenu ? undefined : "menu"}
+        aria-expanded={flyoutOpen === flyoutKey}
         title={title}
         aria-label={title}
       >
@@ -87,6 +93,7 @@ export default function DrawingVariantToolButton<TId extends string>({
           onSelect={onSelect}
           onClose={onCloseFlyout}
           anchorRef={anchorRef}
+          label={title}
           className={flyoutClassName}
           {...(isVariantDisabled === undefined ? {} : { isVariantDisabled })}
         />

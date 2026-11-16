@@ -612,6 +612,7 @@ _OKX_CHANNEL_EXPECTATIONS = {
         resync="none",
         connection_model="polling_only",
         available_fields=frozenset({"open_interest", "open_interest_value"}),
+        params=(("period", ("5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d")),),
         known_limitations=(
             "Pinned CCXT exposes open interest through REST for this exchange",
         ),

@@ -246,3 +246,19 @@ test("equal document versions in different workspaces are valid and same-workspa
   assert.equal((await manager.reconcile({ ...next, expectedShellRevision: 5 })).idempotent, true);
   await assert.rejects(manager.reconcile({ ...next, workspaceRevision: 3, expectedShellRevision: 5 }), /revision conflict/);
 });
+
+test("app appearance recolors the sending window and windows opened afterwards", async () => {
+  const state = topology(1, ["main-window"]);
+  const manager = createManager(new MemoryStore(state));
+  await manager.restoreCached(state);
+  const main = manager.windows.get("main-window");
+  assert.equal(main.options.backgroundColor, "#0d0e10");
+  const applied = [];
+  main.setBackgroundColor = (color) => applied.push(color);
+  manager.setAppearance(main.webContents, "#ffffff");
+  assert.deepEqual(applied, ["#ffffff"]);
+  await manager.openAppPage("http://127.0.0.1:15287/replay.html");
+  assert.equal([...manager.appWindows.values()][0].options.backgroundColor, "#ffffff");
+  manager.setAppearance({ unknown: true }, "#0d0e10");
+  assert.deepEqual(applied, ["#ffffff"], "unknown senders change only the default for new windows");
+});

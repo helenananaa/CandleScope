@@ -1,40 +1,16 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
+import { Field, Input, Select } from "../ui/Field.js";
 import {
   coerceAlertIndicatorParam,
-  type AlertIndicatorOption,
   type AlertIndicatorParamSpec,
-  type AlertIndicatorSpec,
 } from "../../features/alerts/alertIndicatorCatalog.js";
 import {
   alertIndicatorFieldKey,
-  canonicalAlertField,
-  isAlertIndicatorField,
-  labelForSource,
   parseAlertIndicatorField,
 } from "../../features/alerts/alertRuleModel.js";
 import { indicatorParamLabel, indicatorSourceLabel } from "../../features/indicators/indicatorParamLabels.js";
 
-export interface AlertIndicatorCatalog {
-  specs: AlertIndicatorSpec[];
-  options: AlertIndicatorOption[];
-}
-
-export const AlertIndicatorCatalogContext = createContext<AlertIndicatorCatalog>({ specs: [], options: [] });
-
-const ALIAS_FIELDS = ["rsi", "macdHist", "ma20"] as const;
-
-/** Indicator choices for a select, always including the current value. */
-export function useAlertIndicatorOptions(current: string): AlertIndicatorOption[] {
-  const { options } = useContext(AlertIndicatorCatalogContext);
-  const base = options.length
-    ? options
-    : ALIAS_FIELDS.map((field) => ({ value: canonicalAlertField(field), label: labelForSource(field) }));
-  if (!isAlertIndicatorField(current)) return base;
-  const value = canonicalAlertField(current);
-  return base.some((option) => option.value === value)
-    ? base
-    : [...base, { value, label: labelForSource(current) }];
-}
+import { AlertIndicatorCatalogContext } from "./alertIndicatorCatalogContext.js";
 
 interface ParamInputProps {
   spec: AlertIndicatorParamSpec;
@@ -53,16 +29,15 @@ function ParamInput({ spec, value, onCommit }: ParamInputProps) {
     if (coerced !== null && coerced !== value) onCommit(coerced);
   };
   return (
-    <label className="alert-field compact">
-      <span>{label}</span>
+    <Field label={label}>
       {spec.options ? (
-        <select value={text} onChange={(event) => commit(event.target.value)}>
+        <Select size="sm" value={text} onChange={(event) => commit(event.target.value)}>
           {spec.options.map((option) => (
             <option key={option} value={option}>{spec.key === "source" ? indicatorSourceLabel(option) : option}</option>
           ))}
-        </select>
+        </Select>
       ) : (
-        <input
+        <Input size="sm"
           type="number"
           value={text}
           min={spec.min}
@@ -72,7 +47,7 @@ function ParamInput({ spec, value, onCommit }: ParamInputProps) {
           onBlur={() => setText(external)}
         />
       )}
-    </label>
+    </Field>
   );
 }
 
@@ -88,7 +63,7 @@ export function AlertIndicatorParamFields({ value, onChange }: AlertIndicatorPar
   const spec = field ? specs.find((item) => item.name === field.name) : undefined;
   if (!field || !spec || spec.params.length === 0) return null;
   return (
-    <div className="alert-condition-grid">
+    <div className="alert-field-grid">
       {spec.params.map((param) => (
         <ParamInput
           key={param.key}

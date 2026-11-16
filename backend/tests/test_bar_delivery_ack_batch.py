@@ -193,3 +193,32 @@ async def test_process_exit_after_batch_publication_recovers_same_durable_identi
     assert not storage.bar_delivery.pending()
     for event_id, revision in revisions.items():
         assert storage.bar_delivery.commit(event_id)['committed_revision'] == revision
+
+
+@async_test
+async def test_history_barrier_drains_more_than_one_original_dispatch_page(storage):
+    journal=storage.bar_delivery
+    enqueue(journal,130)
+    observed=[]
+    async def publish(event): observed.append(event.detail['delivery_id'])
+    delivery=DurableBarDelivery(lambda:storage,publish,retry_delay=0)
+    # Dispatch-page semantics, not a 130-transaction latency benchmark. The
+    # existing outer pytest deadline bounds this controlled real-SQLite test.
+    await delivery.flush_pending()
+    assert observed==[f'event-{i}' for i in range(130)]
+    assert journal.pending_count()==0
+    assert delivery.memory_usage()['dispatch_records']==0
+    assert delivery.snapshot()['published']==130
+
+
+@async_test
+async def test_history_barrier_reports_original_failure_without_discarding_receipt(storage):
+    from app.data_engine.bar_delivery_errors import BarDeliveryUnavailable
+    enqueue(storage.bar_delivery,1)
+    async def fail(_event): raise OSError('controlled publication failure')
+    delivery=DurableBarDelivery(lambda:storage,fail,retry_delay=0)
+    with pytest.raises(BarDeliveryUnavailable,match='could not drain'):
+        async with asyncio.timeout(5): await delivery.flush_pending()
+    pending=storage.bar_delivery.pending()
+    assert len(pending)==1 and pending[0]['phase']=='committed'
+    assert delivery.memory_usage()['dispatch_records']==0

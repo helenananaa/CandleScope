@@ -1,0 +1,83 @@
+{
+  "scope": "Real Chromium, production-minified browser fixture and real React lifecycle; not native application qualification",
+  "output": "/tmp/cs-indicator-161-164-browser-delivery",
+  "browser": "Chrome/157.0.8103.40",
+  "result": {
+    "result": {
+      "type": "object",
+      "value": {
+        "checks": [
+          "two committed React runtimes share one real browser-worker computation",
+          "hover warms enabled JS; selection reuses exact cache without another worker and preserves the other chart viewport",
+          "hosted prewarm uses the bounded HTTP range route without starting an indicator WebSocket",
+          "cancelling one live consumer leaves the other's real worker computation running",
+          "shared cache range notification recomputes corrected JS values before private window publication; unrelated chart stays unchanged",
+          "failed backend work cannot poison a pending real JS worker; backend recovery preserves the other chart",
+          "superseded input cancellation is not a script failure and fresh demand still computes",
+          "two real hosted React runtimes share one wire; late join receives a fresh ACK and preserves prior history/viewport",
+          "overload disconnect restores one cold shared subscription and both real runtimes resume without losing private history",
+          "normal chart history growth preserves the live shared subscription without another subscribe",
+          "parameter divergence splits only the affected demand; rejoin shares again and final release closes the transport",
+          "authoritative sparse history hydrates real visible MA values and starts its hosted stream without fabricated empty bars",
+          "an actual backend missing-range response still defers the hosted stream after sparse input admission",
+          "real JS workers: BTC/ETH × 1m/5m cold/hot results, different origins and corrected input (12 executions)",
+          "real chart survives staged cold history and indicator publication across markets",
+          "historical indicator time insertion preserves market candles, historical viewport and crosshair with pending candle styles"
+        ],
+        "browserExecutions": 15,
+        "hostedExecutions": 6,
+        "diagnostics": {
+          "plans": 2,
+          "warming": 0,
+          "warmed": 2,
+          "rejected": 0,
+          "indicators": {
+            "range": {
+              "pending": 0,
+              "physicalActive": 0,
+              "joined": 0,
+              "totalPhysical": 6,
+              "completed": 6,
+              "consumers": 0
+            },
+            "compute": {
+              "pending": 0,
+              "physicalActive": 0,
+              "joined": 2,
+              "totalPhysical": 14,
+              "completed": 11,
+              "consumers": 0
+            },
+            "inputs": {
+              "subscriptions": 1
+            },
+            "results": {
+              "commits": 21,
+              "rejected": 0,
+              "reused": 0,
+              "completed": 0,
+              "bytes": 0,
+              "subscribers": 0
+            }
+          }
+        },
+        "streams": {
+          "logicalClients": 0,
+          "logicalSubscriptions": 0,
+          "sharedSubscriptions": 0,
+          "deduplicatedSubscriptions": 0,
+          "privateScriptSubscriptions": 0,
+          "maxSubscriptions": 50,
+          "physicalShards": 0,
+          "shards": [],
+          "subscriptions": 0
+        }
+      }
+    }
+  },
+  "immediateWorkerCount": 0,
+  "remainingWorkers": [],
+  "exceptions": [],
+  "passed": true,
+  "browserExitCode": 0
+}

@@ -1,0 +1,15 @@
+{
+  "policy": "only ephemeral control context strings; numeric active_read_tokens remain intact",
+  "paths": {
+    "initial-310": [
+      "/steps/2/evidence/action/contextToken",
+      "/steps/3/evidence/action/contextToken",
+      "/steps/11/evidence/action/contextToken"
+    ],
+    "final-7cde": [
+      "/steps/2/evidence/action/contextToken",
+      "/steps/3/evidence/action/contextToken",
+      "/steps/11/evidence/action/contextToken"
+    ]
+  }
+}

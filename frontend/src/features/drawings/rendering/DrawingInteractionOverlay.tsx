@@ -14,7 +14,7 @@ export default function DrawingInteractionOverlay({
     <div className="drawing-interaction-overlay" aria-hidden="true">
       <canvas
         ref={dynamicCanvasRef}
-        className="drawing-interaction-canvas drawing-interaction-canvas-dynamic"
+        className="drawing-interaction-canvas"
         data-drawing-overlay="dynamic"
       />
       <canvas

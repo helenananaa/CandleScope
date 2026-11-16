@@ -23,6 +23,58 @@ from app.data_engine.series_identity import (
 CRYPTO_24X7_CALENDAR_ID = "crypto.24x7.utc"
 
 
+@dataclass(frozen=True, slots=True)
+class HistoryCompositionPolicy:
+    """Provider-owned native field/basis contract, separate from availability.
+
+    V1 covers default trade/base identities and elapsed native UTC minute/day
+    grids. A declaration never proves that any particular range is present:
+    the historical reader still checks every source, field and revision.
+    """
+
+    contract_id: str
+    fields: tuple[str, ...]
+    evidence: tuple[str, ...]
+    native_intervals: tuple[str, ...]
+    min_width_ms: int = 60_000
+    max_width_ms: int = 86_400_000
+
+    def __post_init__(self) -> None:
+        from app.data_engine.market_data.kline_metrics import KLINE_ENHANCED_FIELDS
+
+        core = frozenset({"open", "high", "low", "close", "volume"})
+        allowed = core | frozenset(KLINE_ENHANCED_FIELDS)
+        if not isinstance(self.contract_id, str) or not 1 <= len(self.contract_id) <= 128:
+            raise ValueError("bounded composition contract identity required")
+        if (not isinstance(self.fields, tuple) or any(not isinstance(f, str) for f in self.fields)
+                or not core <= frozenset(self.fields)
+                or not frozenset(self.fields) <= allowed or len(set(self.fields)) != len(self.fields)):
+            raise ValueError("composable OHLCV/enhanced field contract required")
+        if (not isinstance(self.evidence, tuple) or not 1 <= len(self.evidence) <= 16
+                or any(not isinstance(value, str) or not 1 <= len(value) <= 256 for value in self.evidence)):
+            raise ValueError("bounded composition evidence references required")
+        if (type(self.min_width_ms) is not int or type(self.max_width_ms) is not int
+                or not 60_000 <= self.min_width_ms <= self.max_width_ms <= 86_400_000):
+            raise ValueError("composition v1 requires native minute-to-day grids")
+        from app.data_engine.interval_policy import IntervalAlignment, parse_interval_spec
+        if (not isinstance(self.native_intervals, tuple) or not 1 <= len(self.native_intervals) <= 32
+                or any(not isinstance(value, str) for value in self.native_intervals)
+                or len(set(self.native_intervals)) != len(self.native_intervals)):
+            raise ValueError("bounded qualified native grids required")
+        for interval in self.native_intervals:
+            spec = parse_interval_spec(interval)
+            if (spec is None or spec.alignment is not IntervalAlignment.FIXED_EPOCH or spec.phase_ms
+                    or not self.min_width_ms <= spec.nominal_ms <= self.max_width_ms):
+                raise ValueError("qualified native grid lies outside composition scope")
+
+    def to_dict(self) -> dict[str, Any]:
+        return dict(schema_version=1, contract_id=self.contract_id, fields=list(self.fields),
+                    evidence=list(self.evidence), min_width_ms=self.min_width_ms,
+                    max_width_ms=self.max_width_ms, identity_scope="default-trade-base",
+                    native_intervals=list(self.native_intervals),
+                    boundary_scope="fixed-epoch-utc", finality="trusted-closed-only")
+
+
 class HistoryCadence(str, Enum):
     """How a historical channel is expected to produce observations."""
 
@@ -203,6 +255,7 @@ class MarketChannelCapability:
     # Schema-v3 addition. Kept last so v1/v2 positional construction remains
     # source compatible.
     history_policy: HistoryAvailabilityPolicy | None = None
+    history_composition: HistoryCompositionPolicy | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.channel, MarketChannel):
@@ -233,6 +286,12 @@ class MarketChannelCapability:
             self.connection_model = str(self.connection_model).strip().lower() or None
         self.limits = dict(self.limits)
         self.known_limitations = _unique_strings(self.known_limitations)
+        if self.history_composition is not None:
+            if not isinstance(self.history_composition, HistoryCompositionPolicy):
+                raise TypeError("typed history composition policy required")
+            if (self.channel is not MarketChannel.KLINE or not self.history
+                    or not set(self.history_composition.fields) <= set(self.available_fields)):
+                raise ValueError("history composition requires a matching historical K-line field contract")
         if isinstance(self.history_policy, dict):
             self.history_policy = HistoryAvailabilityPolicy(**self.history_policy)
         elif self.history_policy is not None and not isinstance(
@@ -291,6 +350,8 @@ class MarketChannelCapability:
                 if self.history_policy is not None
                 else None
             ),
+            **({"history_composition": self.history_composition.to_dict()}
+               if self.history_composition is not None else {}),
         }
 
 

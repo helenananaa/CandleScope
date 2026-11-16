@@ -1,3 +1,5 @@
+import { indicatorRuntimeAdapter } from "./indicatorRuntimeAdapter.js";
+import { standaloneIndicatorResults } from "./indicatorResultManager.js";
 import { ChartCalculationSessions } from "./chartCalculationSessions.js";
 import { usesChartCalculation } from "./pineChartTransport.js";
 import { indicatorWarmPlanKey, type IndicatorWarmPlan } from "../market-data/manager/chartDataFlowManager.js";
@@ -72,19 +74,15 @@ import {
   buildIndicatorCacheContext,
   buildIndicatorCacheHydrationSignature,
   buildIndicatorResultCacheKey,
-  cacheIndicatorSnapshot,
   getCachedIndicatorComputedSegments,
   getCachedIndicatorMetadata,
   getCachedIndicatorRevision,
   getCachedIndicatorResumeState,
   invalidateCachedIndicatorRange,
-  patchCachedIndicatorResult,
   rebaseCachedIndicatorRevision,
   removeCachedIndicatorResult,
-  replaceCachedIndicatorRange,
   resolveCachedIndicatorResults,
   snapshotIndicatorResultCacheDiagnostics,
-  upsertCachedIndicatorLinePoint,
 } from "./indicatorResultCacheStore.js";
 import {
   buildIndicatorRuntimeDiagnosticSnapshot,
@@ -643,6 +641,7 @@ export function useIndicatorRuntime(
   const computeChartData = frontendWindow.rows ?? chartData;
   const computeChartDataRef = useLatestRef(computeChartData);
   const inputSource = marketWorkspaceResources?.indicatorDataManager.inputSource;
+  const indicatorResults = marketWorkspaceResources?.indicatorDataManager.results ?? standaloneIndicatorResults;
   const localInputKey = useMemo(() => activeIndicators.some(indicator => isFrontendScript(indicator) || indicator.executionTarget === "local")
     ? buildIndicatorOhlcvSignature(computeChartData) : undefined, [activeIndicators, computeChartData]);
   const localInputKeyRef = useLatestRef(localInputKey);
@@ -1155,7 +1154,7 @@ export function useIndicatorRuntime(
     const dataRevision = normalizeIndicatorRevision(payload);
     if (dataRevision) seriesRevisionRef.current = dataRevision;
     if (!error) {
-      cacheIndicatorSnapshot(
+      indicatorResults.snapshot(
         indicator,
         getIndicatorCacheContext(),
         normalized,
@@ -1201,6 +1200,7 @@ export function useIndicatorRuntime(
     ownedCalculation,
     getIndicatorCacheContext,
     reapplyProvisionalIndicatorPreview,
+    indicatorResults,
     setActiveIndicators,
   ]);
 
@@ -1214,7 +1214,7 @@ export function useIndicatorRuntime(
     const dataRevision = normalizeIndicatorRevision(payload);
     if (dataRevision) seriesRevisionRef.current = dataRevision;
     if (payload?.ok !== false) {
-      patchCachedIndicatorResult(indicator, getIndicatorCacheContext(), normalized, {
+      indicatorResults.patch(indicator, getIndicatorCacheContext(), normalized, {
         range: payload?.range,
         revision: dataRevision,
         ...(payload.seed !== undefined ? { seed: payload.seed } : {}),
@@ -1258,6 +1258,7 @@ export function useIndicatorRuntime(
     getIndicatorCacheContext,
     markHostedSubscriptionReady,
     reapplyProvisionalIndicatorPreview,
+    indicatorResults,
     setActiveIndicators,
   ]);
 
@@ -1280,7 +1281,7 @@ export function useIndicatorRuntime(
     if (dataRevision) seriesRevisionRef.current = dataRevision;
     const resolvedEmpty = isResolvedIndicatorRangeEmpty(payload);
     if (payload?.ok !== false || resolvedEmpty) {
-      replaceCachedIndicatorRange(indicator, getIndicatorCacheContext(), normalized, range, {
+      indicatorResults.replaceRange(indicator, getIndicatorCacheContext(), normalized, range, {
         revision: dataRevision,
         ...(payload.seed !== undefined ? { seed: payload.seed } : {}),
       });
@@ -1318,6 +1319,7 @@ export function useIndicatorRuntime(
     ownedCalculation,
     getIndicatorCacheContext,
     reapplyProvisionalIndicatorPreview,
+    indicatorResults,
     setActiveIndicators,
   ]);
 
@@ -1358,7 +1360,7 @@ export function useIndicatorRuntime(
             })
           );
           if (update.isFinal && cacheContext) {
-            upsertCachedIndicatorLinePoint(
+            indicatorResults.point(
               indicator,
               cacheContext,
               update.values,
@@ -1391,6 +1393,7 @@ export function useIndicatorRuntime(
     candleUpColorRef,
     getIndicatorCacheContext,
     resolveRealtimeIndicatorConfigSignature,
+    indicatorResults,
     runtimeContextRef,
     setActiveIndicators,
   ]);
@@ -3205,6 +3208,7 @@ export function useIndicatorRuntime(
 
   const { computeAll, computing, recompute } = useIndicatorComputeController({
     executeBatch: marketWorkspaceResources?.indicatorDataManager.compute,
+    resultManager: indicatorResults,
     seriesIdentity,
     inputSource,
     activeIndicators,
@@ -3267,59 +3271,89 @@ export function useIndicatorRuntime(
   ]);
 
   useEffect(() => {
-    const cacheContext = getIndicatorCacheContext();
-    const currentIndicators = activeIndicatorsRef.current;
-    if (
-      buildIndicatorCacheHydrationSignature(currentIndicators, cacheContext)
-      !== indicatorCacheHydrationSignature
-    ) return undefined;
+    const scheduleHydration = () => {
+      const cacheContext = getIndicatorCacheContext();
+      const currentIndicators = activeIndicatorsRef.current;
+      if (
+        buildIndicatorCacheHydrationSignature(currentIndicators, cacheContext)
+        !== indicatorCacheHydrationSignature
+      ) return;
 
-    const contentVersion = currentIndicators.map((indicator) => (
-      getCachedIndicatorMetadata(indicator, cacheContext)?.contentVersion ?? "missing"
-    )).join("|");
-    indicatorHydrationScheduler.schedule({
-      lifecycleKey: indicatorHydrationLifecycleKey,
-      contentSignature: indicatorCacheHydrationSignature,
-      contentVersion,
-      isCurrent: (identity) => (
-        indicatorHydrationLifecycleKeyRef.current === identity.lifecycleKey
-      ),
-      run: (identity) => {
-        if (indicatorHydrationLifecycleKeyRef.current !== identity.lifecycleKey) return;
-        const currentContext = getIndicatorCacheContext();
-        const indicators = activeIndicatorsRef.current;
-        if (
-          buildIndicatorCacheHydrationSignature(indicators, currentContext)
-          !== indicatorCacheHydrationSignature
-        ) return;
-
-        // Resolve at execution time so a WS/range update that lands while the
-        // task is deferred wins over the snapshot observed when it was queued.
-        const cachedEntries = resolveCachedIndicatorResults(indicators, currentContext);
-        setActiveIndicators((previous) => {
+      const sharedIndicators = currentIndicators.filter(indicator => indicatorRuntimeAdapter(indicator, cacheContext).sharing !== "private-session");
+      const contentVersion = sharedIndicators.map((indicator) => (
+        getCachedIndicatorMetadata(indicator, cacheContext)?.contentVersion ?? "missing"
+      )).join("|");
+      indicatorHydrationScheduler.schedule({
+        lifecycleKey: indicatorHydrationLifecycleKey,
+        contentSignature: indicatorCacheHydrationSignature,
+        contentVersion,
+        isCurrent: (identity) => (
+          indicatorHydrationLifecycleKeyRef.current === identity.lifecycleKey
+        ),
+        run: (identity) => {
+          if (indicatorHydrationLifecycleKeyRef.current !== identity.lifecycleKey) return;
+          const currentContext = getIndicatorCacheContext();
+          const indicators = activeIndicatorsRef.current;
           if (
-            buildIndicatorCacheHydrationSignature(previous, currentContext)
+            buildIndicatorCacheHydrationSignature(indicators, currentContext)
             !== indicatorCacheHydrationSignature
-          ) return previous;
-          return hydrateIndicatorDefinitionsFromCache(
-            previous,
-            resolveCachedIndicatorResults(previous, getIndicatorCacheContext()),
-            {
-              clearMissing: false,
-              reconcileLines: (indicator, lines) => reapplyProvisionalIndicatorPreview(
-                indicator,
-                lines,
-                null,
-              ),
-            },
-          );
-        });
-        if (indicatorHydrationLifecycleKeyRef.current === identity.lifecycleKey) {
-          outputDispatch({ type: "hydrate-cache", entries: cachedEntries });
-        }
-      },
+          ) return;
+
+          // Resolve at execution time so a WS/range update that lands while the
+          // task is deferred wins over the snapshot observed when it was queued.
+          const shared = indicators.filter(indicator => indicatorRuntimeAdapter(indicator, currentContext).sharing !== "private-session");
+          const cachedEntries = resolveCachedIndicatorResults(shared, currentContext);
+          setActiveIndicators((previous) => {
+            if (
+              buildIndicatorCacheHydrationSignature(previous, currentContext)
+              !== indicatorCacheHydrationSignature
+            ) return previous;
+            return hydrateIndicatorDefinitionsFromCache(
+              previous,
+              resolveCachedIndicatorResults(previous.filter(indicator => indicatorRuntimeAdapter(indicator, currentContext).sharing !== "private-session"), getIndicatorCacheContext()),
+              {
+                clearMissing: false,
+                preserveOutsideComputedRanges: true,
+                reconcileLines: (indicator, lines) => reapplyProvisionalIndicatorPreview(
+                  indicator,
+                  lines,
+                  null,
+                ),
+              },
+            );
+          });
+          if (indicatorHydrationLifecycleKeyRef.current === identity.lifecycleKey) {
+            for (const cached of cachedEntries) {
+              const definition = shared.find(indicator => indicator.id === cached.indicatorId);
+              if (definition && (isFrontendScript(definition) || definition.executionTarget === "local")) {
+                outputDispatch({ type: "snapshot", indicatorId: cached.indicatorId, normalized: cached.normalized, schema: cached.schema });
+              } else if (cached.computedSegments.length) {
+                for (const range of cached.computedSegments) outputDispatch({ type: "replace-range", indicatorId: cached.indicatorId, normalized: cached.normalized, range });
+              } else {
+                outputDispatch({ type: "patch", indicatorId: cached.indicatorId, normalized: cached.normalized, ok: true });
+              }
+            }
+          }
+        },
+      });
+    };
+    // Another view can fill shared builtin coverage without sending this
+    // view another wire snapshot. Publish that committed cache generation
+    // through the existing deferred, lifecycle-fenced hydration scheduler.
+    const unsubscribe = indicatorResults.subscribe((commit) => {
+      // Private hosted sessions already apply their own admitted wire delta.
+      // A prefix invalidation may leave only that range in the cache; reading
+      // it back as a complete projection would discard retained session history.
+      // Point updates already fan out through the shared stream. Rehydrating
+      // the whole cached range here would turn the incremental tail into a rebuild.
+      if (commit.adapter.sharing === "private-session" || commit.operation === "point") return;
+      const context = getIndicatorCacheContext();
+      if (activeIndicatorsRef.current.some(indicator => (
+        buildIndicatorResultCacheKey(indicator, context) === commit.key
+      ))) scheduleHydration();
     });
-    return () => indicatorHydrationScheduler.cancel();
+    scheduleHydration();
+    return () => { unsubscribe(); indicatorHydrationScheduler.cancel(); };
   }, [
     activeIndicatorsRef,
     getIndicatorCacheContext,
@@ -3327,6 +3361,7 @@ export function useIndicatorRuntime(
     indicatorHydrationLifecycleKey,
     indicatorHydrationLifecycleKeyRef,
     indicatorHydrationScheduler,
+    indicatorResults,
     outputDispatch,
     reapplyProvisionalIndicatorPreview,
     setActiveIndicators,

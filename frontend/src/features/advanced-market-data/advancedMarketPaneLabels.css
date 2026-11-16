@@ -1,0 +1,29 @@
+/* Advanced market data pane labels.
+ * Loads later than features/advanced-market-data/advancedMarketData.css on purpose: these
+ * rules depend on files imported in between (cascade order). They move into that file when
+ * this surface is rebuilt (design refactor Phase 5). */
+
+.advanced-market-pane-label {
+  border: 1px solid color-mix(in srgb, var(--text-secondary) 16%, transparent);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 250px);
+  white-space: nowrap;
+}
+
+.advanced-market-pane-countdown strong {
+  color: var(--text-warning);
+  font-weight: 700;
+}
+
+@media (max-width: 1250px) {
+  .advanced-market-chip {
+    padding-inline: 5px;
+  }
+
+  .chart-main-legend {
+    max-width: calc(100% - 160px);
+  }
+}

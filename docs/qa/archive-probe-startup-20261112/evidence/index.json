@@ -1,0 +1,18 @@
+{
+  "baseline": "837783816",
+  "tests": 206,
+  "files": [
+    {
+      "path": "backend-final.log.gz",
+      "sha256": "0e5a232dd1d4e628342d35ed2c56bdc909696fbb6eef52251ac62d263ee8c241"
+    },
+    {
+      "path": "backend-final.xml.gz",
+      "sha256": "a6e3c7f9eec1f5bebd5f130dafd2d5d119c4c23bb2e560bf9742a203c8ce9959"
+    },
+    {
+      "path": "baseline.log.gz",
+      "sha256": "6f37bb2fa5b540dcf14f757eed5d4e0a907c867b7549b3d3f50ff09982e8e05a"
+    }
+  ]
+}

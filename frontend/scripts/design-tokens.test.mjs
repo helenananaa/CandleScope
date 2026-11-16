@@ -9,8 +9,8 @@ const TOKENS = join(SRC, "styles", "tokens.css");
 
 // Ratchet: raw color literals outside tokens.css may only go down.
 // When a migration lowers the count, lower these numbers in the same change.
-const MAX_RAW_HEX = 30;
-const MAX_RAW_RGB = 99;
+const MAX_RAW_HEX = 16;
+const MAX_RAW_RGB = 49;
 
 function styleSources(dir = SRC) {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -57,6 +57,16 @@ test("every text token reaches WCAG AA on every surface in both themes", () => {
   }
   assert.deepEqual(failures, []);
   assert.ok(contrast("#ffffff", dark["--accent-solid"]) >= 4.5, "--text-on-accent must be legible on --accent-solid");
+});
+
+test("Chinese text never falls back to a Korean font", () => {
+  const css = readFileSync(TOKENS, "utf8");
+  const root = css.match(/:root\s*\{([^}]*)\}/)?.[1] ?? "";
+  const stacks = [...root.matchAll(/--font-(?:sans|cjk):([^;]*);/g)].map(([, value]) => value).join(" ");
+  assert.match(stacks, /'IBM Plex Sans'/, "the interface font comes first");
+  assert.match(stacks, /'PingFang SC'.*'Microsoft YaHei'/, "Simplified Chinese stack is the default CJK stack");
+  assert.doesNotMatch(stacks, /Malgun Gothic|Apple SD Gothic Neo|Noto Sans KR/, "Korean fonts belong only under :lang(ko)");
+  assert.match(css, /:root:lang\(ko\)\s*\{[^}]*Apple SD Gothic Neo/);
 });
 
 test("stylesheets never set text below the 11px floor except through the size tokens", () => {
