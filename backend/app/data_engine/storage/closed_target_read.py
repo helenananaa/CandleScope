@@ -2,8 +2,9 @@
 
 This reads no cache, computes no aggregate and grants no write permission.
 Current target contents and the durable explicit-deletion floor are checked
-again before adoption. A nearly complete page may expose its bounded holes;
-untrusted/nonfixed pages and cold pages still decline.
+again before adoption. Sparse valid snapshots can seed bounded local repair;
+the query layer decides whether a partial page is eligible for exposure.
+Untrusted/nonfixed pages and empty cold pages still decline.
 """
 from dataclasses import dataclass, replace
 import hashlib
@@ -80,7 +81,7 @@ def read_closed_target(storage, store, scope, key, first, last, width, count, no
             ' AND open_time BETWEEN ? AND ? ORDER BY open_time LIMIT ?',
             (*key, first, last, count+1)).fetchall()
         missing = count-len(rows)
-        if not rows or not 0 <= missing <= min(8, count//4):
+        if not rows or not 0 <= missing < count:
             return [dict(row) for row in rows], None
         for row in rows:
             if ((row['open_time']-first) % width or row['close_time'] != row['open_time']+width-1

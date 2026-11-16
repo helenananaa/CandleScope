@@ -404,3 +404,101 @@ def test_preview_keeps_its_own_generation_fence(mixed_query, monkeypatch, change
         assert result.complete and result.bars[-1] == forming
     else:
         assert not result.complete and result.retryable and not result.bars
+
+
+@pytest.mark.parametrize('period', [89, 97, 101])
+def test_sparse_withdrawn_page_advances_local_repair_with_bounded_work(mixed_query, monkeypatch, period):
+    query = mixed_query
+    width = period*MINUTE
+    query.storage.upsert_bars('BTCUSDT','1m',[row(n*MINUTE,MINUTE) for n in range(128*period)],
+        market_type='futures',source='backfill')
+    query.storage.upsert_bars('BTCUSDT',f'{period}m',[row(n*width,width) for n in range(104,128)],
+        market_type='futures',source='backfill_aggregated')
+    calls = []
+    original = query.custom_intervals.query_from_base
+    def bounded(**options):
+        assert options['limit'] == 1 and options['start_ms'] == options['end_ms']
+        assert not options['auto_backfill']
+        calls.append(options['start_ms'])
+        return original(**options)
+    monkeypatch.setattr(query.custom_intervals,'query_from_base',bounded)
+    monkeypatch.setattr(query,'_query_closed_mixed',lambda *a, **k: pytest.fail('recomputed whole withdrawn page'))
+    previous = 24
+    for attempt in range(8):
+        result = query.query('BTCUSDT',f'{period}m',start_ms=0,end_ms=128*width-1,limit=128,
+            market_type='futures',auto_backfill=False)
+        assert result.metadata['canonical_target_snapshot']
+        assert previous < len(result.bars) <= 128
+        assert result.metadata['canonical_local_repair_source_budget'] <= query._cfg.max_limit
+        assert sum(r['storage_rows'] for r in result.metadata['canonical_local_repair_reports']) <= query._cfg.max_limit
+        if result.complete:
+            break
+        assert result.retryable and result.history_state == 'pending'
+        assert len(result.missing_ranges) <= 8, 'group the unrepaired frontier rather than fan out per target'
+        previous = len(result.bars)
+    assert result.complete and len(result.bars) == 128
+    assert len(calls) == len(set(calls)) == 104
+    assert all((bar.volume,bar.trades) == (period,period) for bar in result.bars)
+
+
+def test_sparse_local_progress_preserves_live_preview_fence(mixed_query, monkeypatch):
+    from app.data_engine.data_manager.models import BarData, SeriesKey
+    query = mixed_query
+    period, count = 89, 128
+    width = period*MINUTE
+    query.storage.upsert_bars('BTCUSDT','1m',[row(n*MINUTE,MINUTE) for n in range(count*period)],
+        market_type='futures',source='backfill')
+    query.storage.upsert_bars('BTCUSDT','89m',[row(n*width,width) for n in range(104,128)],
+        market_type='futures',source='backfill_aggregated')
+    monkeypatch.setattr('time.time',lambda: (128*width+MINUTE)/1000)
+    key = SeriesKey('BTCUSDT','89m',exchange='binance',market_type='futures')
+    for attempt in range(8):
+        query._cache.revision_consumer.sync(force=True)
+        forming = BarData(time=128*width//1000,open=100,high=110,low=99,close=101+attempt,
+                          volume=1,is_closed=False,source='ws')
+        query._cache.bulk_load(key,[forming])
+        result = query.query('BTCUSDT','89m',start_ms=0,end_ms=128*width,limit=129,
+            market_type='futures',auto_backfill=False)
+        if result.complete:
+            assert result.bars[-1] == forming
+            assert len(result.bars) == 129 and not result.metadata['all_rows_final']
+            break
+        # Each local write changes the cache incarnation, so that read cannot
+        # expose its older preview even though its closed repairs are durable.
+        assert result.retryable and not result.bars
+    assert result.complete
+
+
+def test_sparse_repair_preserves_all_holes_but_caps_scheduler_submissions(mixed_query, monkeypatch):
+    query = mixed_query
+    width = 89*MINUTE
+    query.storage.upsert_bars('BTCUSDT','1m',[row(n*MINUTE,MINUTE) for n in range(128*89)],
+        market_type='futures',source='backfill')
+    query.storage.upsert_bars('BTCUSDT','89m',[row(n*width,width) for n in range(0,128,2)],
+        market_type='futures',source='backfill_aggregated')
+    submitted = []
+    monkeypatch.setattr(query,'_backfill_trigger',lambda *args: submitted.append(args))
+    result = query.query('BTCUSDT','89m',start_ms=0,end_ms=128*width-1,limit=128,
+        market_type='futures',auto_backfill=True)
+    assert not result.complete and result.retryable
+    assert result.metadata['target_materialized_written'] > 0
+    assert len(submitted) == 8 < len(result.missing_ranges)
+    absent = {n*width for n in range(128)} - {bar.time_ms for bar in result.bars}
+    assert absent == {gap.start_ms for gap in result.missing_ranges}
+    assert all(gap.start_ms == gap.end_ms and gap.missing_bars == 1 for gap in result.missing_ranges)
+
+
+def test_sparse_untrusted_local_inputs_do_not_fall_through_to_second_source_budget(mixed_query, monkeypatch):
+    query = mixed_query
+    width = 89*MINUTE
+    query.storage.upsert_bars('BTCUSDT','1m',[row(n*MINUTE,MINUTE) for n in range(128*89)],
+        market_type='futures',source='unknown')
+    query.storage.upsert_bars('BTCUSDT','89m',[row(n*width,width) for n in range(104,128)],
+        market_type='futures',source='backfill_aggregated')
+    monkeypatch.setattr(query,'_query_closed_mixed',lambda *a, **k: pytest.fail('spent a second full source budget'))
+    result = query.query('BTCUSDT','89m',start_ms=0,end_ms=128*width-1,limit=128,
+        market_type='futures',auto_backfill=False)
+    assert not result.complete and result.retryable and len(result.bars) == 24
+    assert result.metadata['target_materialized_written'] == 0
+    assert result.metadata['canonical_local_repair_source_budget'] <= query._cfg.max_limit
+    assert all(not item['complete'] for item in result.metadata['canonical_local_repair_reports'])

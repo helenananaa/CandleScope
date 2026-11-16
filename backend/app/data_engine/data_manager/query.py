@@ -402,13 +402,27 @@ class QueryEngine:
                     return None
                 stored_count = len(bars)
                 present = {bar.time_ms for bar in bars}
+        # Sparse canonical pages are useful as a bounded local repair frontier,
+        # not as a shortcut around cold source acquisition. Expose a broader
+        # partial snapshot only after a bounded local reduction attempt. A declined
+        # source must stay pending without spending another full-window budget.
+        broad_partial = count-stored_count > min(8, count//4)
+        if broad_partial and not local_reports:
+            return None
         # A finer source commit can withdraw a handful of dependent targets.
         # Do not re-aggregate the surviving page or merge the holes into a
         # source budget that a single target already nearly consumes.
-        missing = [gap for opened in range(first, last+1, spec.nominal_ms)
-            if opened not in present and (gap := self._trigger_backfill(
-                key, opened, opened, reason='query_empty', missing_bars=1,
-                submit=auto_backfill)) is not None]
+        absent = [opened for opened in range(first, last+1, spec.nominal_ms) if opened not in present]
+        runs = []
+        for opened in absent:
+            if broad_partial and runs and opened == runs[-1][1]+spec.nominal_ms:
+                runs[-1][1] = opened
+            else:
+                runs.append([opened, opened])
+        missing = [gap for index, (begin, end) in enumerate(runs) if (gap := self._trigger_backfill(
+            key, begin, end, reason='query_empty',
+            missing_bars=(end-begin)//spec.nominal_ms+1,
+            submit=auto_backfill and (not broad_partial or index < 8))) is not None]
         partial = stored_count != count
         if preview is not None:
             bars.append(preview)
