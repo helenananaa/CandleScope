@@ -2315,6 +2315,7 @@ class BackfillCoordinator:
         reconciler = getattr(engine, 'reconciler', None)
         resolver = getattr(planner, '_interval_resolver', None)
         if (metadata.get('required_history_composition') is not None
+                or metadata.get('bounded_history_batch_contract') is not None
                 or metadata.get('history_calendar_id') != 'crypto.24x7.utc'
                 or metadata.get('history_exclusions')
                 or not getattr(config, 'mixed_custom_history', False)
@@ -2344,11 +2345,18 @@ class BackfillCoordinator:
             return
         base = parse_interval_spec(route.base_interval)
         if (base is None or route.spec.phase_ms or route.spec.calendar_unit is not None
-                or route.spec.nominal_ms <= base.nominal_ms * max(1, config.fetch_batch_size)
+                or (route.spec.floor_ms(request.end_ms) - route.spec.floor_ms(request.start_ms)
+                    + route.spec.nominal_ms) <= base.nominal_ms * max(1, config.fetch_batch_size)
                 or route.spec.next_ms(route.spec.floor_ms(request.end_ms)) > int(time.time()*1000)):
             return
-        metadata.update(required_history_composition=declaration[0].contract_id,
-            history_composition_selected_by='coordinator_large_repair')
+        if route.spec.nominal_ms > base.nominal_ms * max(1, config.fetch_batch_size):
+            metadata.update(required_history_composition=declaration[0].contract_id,
+                history_composition_selected_by='coordinator_large_repair')
+        else:
+            # A prime-period page can need a larger scheduling batch while
+            # ordinary fine REST remains cheaper than a mixed source cover.
+            metadata.update(bounded_history_batch_contract=declaration[0].contract_id,
+                history_composition_selected_by='coordinator_large_page_batch')
 
     def _demand_rejection_reason(self, request: RepairRequest) -> str | None:
         metadata = request.metadata or {}

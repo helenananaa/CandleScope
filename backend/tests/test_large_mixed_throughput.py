@@ -395,3 +395,76 @@ def test_automatic_large_repair_qualification_preserves_other_contracts(mixed_qu
     before = dict(request.metadata)
     coordinator._qualify_large_history_repair(request)
     assert request.metadata == before
+
+@pytest.mark.parametrize('interval', ['89m', '97m', '101m'])
+def test_large_prime_viewport_qualification_uses_page_source_cost(mixed_query, interval):
+    from app.data_engine.data_manager.backfill_coordinator import BackfillCoordinator
+    from app.data_engine.data_manager.backfill_contracts import RepairRequest
+    from app.data_engine.data_manager.backfill_scheduler import BackfillScheduler
+    from app.data_engine.interval_policy import parse_interval_spec
+    engine = engine_for(mixed_query)
+    async def noop(*args, **kwargs): pass
+    coordinator = BackfillCoordinator(storage=mixed_query.storage, engine=engine,
+        bars_backfilled=noop, emit_event=noop)
+    width = parse_interval_spec(interval).nominal_ms
+    request = RepairRequest('BTCUSDT', interval, 0, 127 * width, market_type='futures',
+        metadata={'history_calendar_id': 'crypto.24x7.utc'})
+    unused = lambda *args: None
+    scheduler = BackfillScheduler(execute=unused, future_for=unused, complete=unused,
+        finalize=unused, on_queued=unused)
+    before = scheduler._source_aware_chunk_plan(request, 128).effective_target_bars
+    coordinator._qualify_large_history_repair(request)
+    assert request.metadata.get('bounded_history_batch_contract') == 'binance.usdm.trade-klines/base-utc/1'
+    assert 'required_history_composition' not in request.metadata
+    plan = scheduler._source_aware_chunk_plan(request, 128)
+    assert plan.effective_target_bars == 16 and plan.effective_target_bars > before
+    assert plan.planned_source_rows <= (16 + 3) * (width // MINUTE)
+
+def test_qualified_short_period_keeps_larger_ordinary_batch():
+    from app.data_engine.data_manager.backfill_contracts import RepairRequest
+    from app.data_engine.data_manager.backfill_scheduler import BackfillScheduler
+    unused = lambda *args: None
+    scheduler = BackfillScheduler(execute=unused, future_for=unused, complete=unused,
+        finalize=unused, on_queued=unused)
+    request = RepairRequest('BTCUSDT', '7m', 0, 127*7*MINUTE, market_type='futures',
+        metadata={'required_history_composition': 'binance.usdm.trade-klines/base-utc/1'})
+    assert scheduler._source_aware_chunk_plan(request, 128).effective_target_bars == 128
+
+@pytest.mark.parametrize('interval,minutes', [('89m', 89), ('97m', 97), ('101m', 101)])
+def test_qualified_prime_page_preserves_all_canonical_fields(mixed_query, interval, minutes):
+    from app.data_engine.data_manager.backfill_coordinator import BackfillCoordinator
+    from app.data_engine.data_manager.backfill_contracts import RepairRequest
+    engine = engine_for(mixed_query)
+    upstream = IntervalTransport()
+    engine._fetcher = HistoricalFetcher(engine.config, upstream, IngestionConfig())
+    width = minutes * MINUTE
+    async def run():
+        async def noop(*args, **kwargs): pass
+        coordinator = BackfillCoordinator(storage=mixed_query.storage, engine=engine,
+            bars_backfilled=noop, emit_event=noop, loop=asyncio.get_running_loop(), max_concurrency=1, max_retries=1)
+        request = RepairRequest('BTCUSDT', interval, 0, 15*width, market_type='futures', reason='initial_history',
+            metadata={'history_calendar_id': 'crypto.24x7.utc'})
+        try:
+            result = await asyncio.wait_for(coordinator.request_and_wait(request), 30)
+            assert result.verified_contiguous is True, result.error
+        finally:
+            await coordinator.shutdown()
+    asyncio.run(run())
+    bars = mixed_query.storage.query_bars('BTCUSDT', interval, 0, 16*width-1, market_type='futures')
+    assert len(bars) == 16
+    for bar in bars:
+        assert (bar['open'], bar['high'], bar['low'], bar['close'], bar['volume'], bar['quote_volume'],
+                bar['trades'], bar['taker_buy_base'], bar['taker_buy_quote']) == (
+                    100, 102, 99, 101, minutes, 2*minutes, minutes, minutes, 2*minutes)
+
+@pytest.mark.parametrize('field', ['required_history_composition', 'bounded_history_batch_contract'])
+@pytest.mark.parametrize('value', ['unknown-contract', {}, []])
+def test_invalid_batch_contract_cannot_bypass_source_sizing(field, value):
+    from app.data_engine.data_manager.backfill_contracts import RepairRequest
+    from app.data_engine.data_manager.backfill_scheduler import BackfillScheduler
+    unused = lambda *args: None
+    scheduler = BackfillScheduler(execute=unused, future_for=unused, complete=unused,
+        finalize=unused, on_queued=unused)
+    request = RepairRequest('BTCUSDT', '89m', 0, 127*89*MINUTE, market_type='futures', metadata={field: value})
+    plan = scheduler._source_aware_chunk_plan(request, 128)
+    assert plan.source_factor == 89 and 0 < plan.effective_target_bars < 16

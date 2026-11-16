@@ -1017,16 +1017,16 @@ class BackfillScheduler:
                 source_padding_bars=3,
                 purpose=IntervalPurpose.HISTORY,
             )
-            if plan.effective_target_bars > 0:
-                return plan
-            # One derived candle can legitimately exceed the ordinary source
-            # page size (for example a monthly target sourced from minutes).
-            # Admit exactly one target with an explicit, finite source budget
-            # instead of falling back to the old unbounded target chunk.
             declaration = self._interval_resolver.history_composition_routes(
                 exchange=request.exchange, market_type=request.market_type, interval=request.interval)
-            qualified = (declaration is not None and request.metadata.get("required_history_composition") == declaration[0].contract_id)
+            qualified = (declaration is not None and declaration[0].contract_id in (
+                request.metadata.get("required_history_composition"), request.metadata.get("bounded_history_batch_contract")))
             targets = min(16, max(1, int(requested_target_bars))) if qualified else 1
+            if plan.effective_target_bars > 0 and (not qualified or plan.effective_target_bars >= targets):
+                return plan
+            # Qualified pages use the same bounded target batch for 89m and
+            # 10007m. Retain larger ordinary native batches when they already
+            # fit; the engine still enforces mixed-source budgets/refinement.
             minimum_budget = max(1, (plan.source_padding_bars + targets) * plan.source_factor)
             return resolve_interval_work_plan(
                 self._interval_resolver,
