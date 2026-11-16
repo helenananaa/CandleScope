@@ -99,7 +99,7 @@ test("dataset rail lists datasets and marks the selected row", () => {
   );
   assert.match(html, /research-dataset-rail/);
   assert.match(html, /ETH/);
-  assert.match(html, /class="active"/);
+  assert.match(html, /data-active="true"[^>]*aria-current="true"/);
 });
 
 test("quality card uses the same dataset identity the library already selected", () => {

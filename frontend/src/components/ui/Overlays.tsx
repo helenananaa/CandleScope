@@ -123,16 +123,32 @@ export interface DrawerProps {
 
 /** Side panel next to the page. One per side: opening another replaces it. Not modal. */
 export function Drawer(props: DrawerProps) {
-  if (!props.open || typeof document === "undefined") return null;
+  if (!props.open) return null;
+  // Without a DOM (static rendering) the drawer renders in place, unmanaged, like Dialog.
+  if (typeof document === "undefined") return <DrawerStatic {...props} />;
   return createPortal(<DrawerLayer {...props} />, overlayHost());
 }
 
-function DrawerLayer({ open, onClose, title, side = "right", children, footer, actions, className }: DrawerProps) {
+function DrawerStatic(props: DrawerProps) {
+  const titleId = useId();
+  return <DrawerSurface {...props} titleId={titleId} />;
+}
+
+function DrawerLayer(props: DrawerProps) {
   const layerRef = useRef<HTMLElement>(null);
   const titleId = useId();
-  const zIndex = useOverlayLayer({ open, kind: "drawer", side, onClose, layerRef });
+  const zIndex = useOverlayLayer({ open: props.open, kind: "drawer", side: props.side ?? "right", onClose: props.onClose, layerRef });
+  return <DrawerSurface {...props} ref={layerRef} titleId={titleId} zIndex={zIndex} />;
+}
+
+function DrawerSurface({ ref, titleId, zIndex, onClose, title, side = "right", children, footer, actions, className }: DrawerProps & {
+  ref?: RefObject<HTMLElement | null>;
+  titleId: string;
+  zIndex?: number | undefined;
+}) {
   return (
-    <aside ref={layerRef} role="dialog" aria-labelledby={titleId} tabIndex={-1} data-side={side} style={{ zIndex }}
+    <aside ref={ref} role="dialog" aria-labelledby={titleId} tabIndex={-1} data-side={side}
+      style={zIndex === undefined ? undefined : { zIndex }}
       className={["ui-drawer", className].filter(Boolean).join(" ")}>
       <header className="ui-drawer-head">
         <h2 id={titleId} className="ui-drawer-title">{title}</h2>

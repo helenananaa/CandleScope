@@ -1,5 +1,5 @@
-import { useRef, type ReactNode } from "react";
-import { OverlayLayer } from "../../components/ui/Overlays.js";
+import type { ReactNode } from "react";
+import { Drawer } from "../../components/ui/index.js";
 
 import { t } from "../../i18n/index.js";
 import { ordinarySourceLabel, isCapabilityAvailable } from "./researchDataSourceModel.js";
@@ -71,16 +71,9 @@ function ResearchDataDrawerBody({
   onClose(): void;
 }) {
   const kinds: ResearchSourceKind[] = availableKinds ?? ["CURRENT_CHART", "IMPORTED_DATASET", "COMPLETED_RUN"];
-  // The overlay layer focuses the drawer, returns focus on close and handles Escape.
-  const drawerRef = useRef<HTMLElement>(null);
   return (
-    <OverlayLayer kind="drawer" side="right" onClose={onClose} initialFocusRef={drawerRef}>
-    <aside className="research-data-drawer" data-testid="research-data-drawer" ref={drawerRef}
-      role="dialog" aria-label={t("research.drawer.title")} tabIndex={-1}>
-      <header>
-        <strong>{t("research.drawer.title")}</strong>
-        <button type="button" onClick={onClose} data-overlay-close="">{t("backtest.close")}</button>
-      </header>
+    <Drawer open onClose={onClose} title={t("research.drawer.title")} className="research-data-drawer">
+      <div className="research-data-drawer-content" data-testid="research-data-drawer">
       {kinds.length > 1 && <div className="research-source-cards">
         {kinds.map((kind) => {
           const runnable = kind !== "CURRENT_CHART" || currentChartEnabled;
@@ -95,6 +88,7 @@ function ResearchDataDrawerBody({
             <button
               key={kind}
               type="button"
+              className="research-source-card"
               disabled={kind === "CURRENT_CHART" && !runnable}
               onClick={() => onSelectKind(kind)}
               data-testid={`research-source-card-${kind}`}
@@ -134,7 +128,7 @@ function ResearchDataDrawerBody({
           analysis={analysis}
         />
       ) : null}
-    </aside>
-    </OverlayLayer>
+      </div>
+    </Drawer>
   );
 }

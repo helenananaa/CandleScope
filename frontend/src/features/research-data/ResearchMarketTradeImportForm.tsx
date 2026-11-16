@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Button, Checkbox, Disclosure, Field, FileDrop, InlineAlert, Input, Select } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { importLocalMarketTrades, type LocalDatasetManifest } from "./researchDataApi.js";
 
@@ -10,21 +11,20 @@ export function ResearchMarketTradeImportForm({ selected, onImported }: {
 }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [file, setFile] = useState<File | null>(null);
   const previous = selected?.market_trade_input;
   return (
-    <details className="local-management-details">
-      <summary>{t("local.import")} · {t("settings.exchange.channel.trade")}</summary>
-      <form className="local-import-form" data-testid="research-market-trade-import"
+    <Disclosure className="research-trade-import" summary={`${t("local.import")} · ${t("settings.exchange.channel.trade")}`}>
+      <form className="research-import-form" data-testid="research-market-trade-import"
         key={selected?.dataset_id} onSubmit={(event) => {
           event.preventDefault();
           if (submitting) return;
           const fields = new FormData(event.currentTarget);
-          const file = fields.get("file");
           const timestampUnit = fields.get("timestampUnit");
           const tradeKind = fields.get("tradeKind");
           const start = Date.parse(String(fields.get("start")) + "Z");
           const end = Date.parse(String(fields.get("end")) + "Z");
-          if (!(file instanceof File) || file.size === 0 || !Number.isFinite(start) || !(end > start)
+          if (file === null || file.size === 0 || !Number.isFinite(start) || !(end > start)
             || (timestampUnit !== "s" && timestampUnit !== "ms")
             || (tradeKind !== "MARKET_TRADE" && tradeKind !== "MARKET_AGG_TRADE")) {
             setError(t("ux.invalidConditions"));
@@ -42,35 +42,34 @@ export function ResearchMarketTradeImportForm({ selected, onImported }: {
             setError(reason instanceof Error ? reason.message : t("local.importFailed"));
           }).finally(() => setSubmitting(false));
         }}>
-        <p>{t("local.marketTradeCoverage")}</p>
-        <code>{TRADE_CSV_HEADER}</code>
-        <fieldset className="local-import-grid" disabled={submitting}>
-          <label>{t("local.chooseFile")}<input required name="file" type="file" accept=".csv,text/csv" /></label>
-          <label>{t("local.datasetName")}<input name="name" maxLength={160} placeholder={t("local.namePh")} /></label>
-          <label>{t("local.symbol")}<input required name="symbol" maxLength={80} defaultValue={previous ? selected?.symbol : ""} /></label>
-          <label>{t("local.baseAsset")}<input required name="baseAsset" maxLength={32} defaultValue={previous ? selected?.instrument?.base_asset : ""} /></label>
-          <label>{t("local.quoteAsset")}<input required name="quoteAsset" maxLength={32} defaultValue={previous ? selected?.instrument?.quote_asset : ""} /></label>
-          <label>{t("local.timeFormat")}
-            <select required name="timestampUnit" defaultValue="">
+        <p className="research-import-note">{t("local.marketTradeCoverage")}</p>
+        <code className="research-import-columns">{TRADE_CSV_HEADER}</code>
+        <FileDrop compact label={file?.name ?? t("local.chooseFile")} hint=".csv" accept=".csv,text/csv" disabled={submitting}
+          onFiles={([selectedFile]) => setFile(selectedFile ?? null)} />
+        <fieldset className="research-import-grid" disabled={submitting}>
+          <Field label={t("local.datasetName")}><Input size="sm" name="name" maxLength={160} placeholder={t("local.namePh")} /></Field>
+          <Field label={t("local.symbol")} required><Input size="sm" required name="symbol" maxLength={80} defaultValue={previous ? selected?.symbol : ""} /></Field>
+          <Field label={t("local.baseAsset")} required><Input size="sm" required name="baseAsset" maxLength={32} defaultValue={previous ? selected?.instrument?.base_asset : ""} /></Field>
+          <Field label={t("local.quoteAsset")} required><Input size="sm" required name="quoteAsset" maxLength={32} defaultValue={previous ? selected?.instrument?.quote_asset : ""} /></Field>
+          <Field label={t("local.timeFormat")} required>
+            <Select size="sm" required name="timestampUnit" defaultValue="">
               <option value="">—</option><option value="s">{t("local.unixS")}</option><option value="ms">{t("local.unixMs")}</option>
-            </select>
-          </label>
-          <label>{t("settings.exchange.channel.trade")}
-            <select required name="tradeKind" defaultValue={previous?.kind ?? ""}>
+            </Select>
+          </Field>
+          <Field label={t("settings.exchange.channel.trade")} required>
+            <Select size="sm" required name="tradeKind" defaultValue={previous?.kind ?? ""}>
               <option value="">—</option>
               <option value="MARKET_TRADE">{t("settings.exchange.channel.trade")}</option>
               <option value="MARKET_AGG_TRADE">{t("settings.exchange.channel.aggTrade")}</option>
-            </select>
-          </label>
-          <label>{t("ux.startUtc")}<input required type="datetime-local" name="start" /></label>
-          <label>{t("ux.endUtc")}<input required type="datetime-local" name="end" /></label>
+            </Select>
+          </Field>
+          <Field label={t("ux.startUtc")} required><Input size="sm" required type="datetime-local" name="start" /></Field>
+          <Field label={t("ux.endUtc")} required><Input size="sm" required type="datetime-local" name="end" /></Field>
         </fieldset>
-        {previous && selected && <label>
-          <input type="checkbox" name="revision" disabled={submitting} />{t("local.asRevision", { name: selected.name })}
-        </label>}
-        {error && <p role="alert">{error}</p>}
-        <button type="submit" disabled={submitting}>{t(submitting ? "local.csvValidating" : "local.importBtn")}</button>
+        {previous && selected && <Checkbox name="revision" disabled={submitting} label={t("local.asRevision", { name: selected.name })} />}
+        {error && <InlineAlert tone="danger">{error}</InlineAlert>}
+        <Button variant="primary" type="submit" className="research-import-submit" disabled={submitting || file === null}>{t(submitting ? "local.csvValidating" : "local.importBtn")}</Button>
       </form>
-    </details>
+    </Disclosure>
   );
 }
