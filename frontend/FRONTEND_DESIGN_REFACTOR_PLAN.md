@@ -365,6 +365,13 @@ Still outside the stack, and moved when each is rebuilt:
 - Regions: brand and navigation, then context and tools on the left; actions, extras, panels and Settings on the right. Settings is always the last control; on the market page it used to sit between the intervals and the panel toggles.
 - Page actions are data and collapse into a 更多 menu when space runs out: 历史研究 and 跳转到日期 on the market page, the saved accounts and run history on the strategy page, and the replay session's five actions.
 
+**Phase 4b is done (branch `design/phase-4b-market-shell`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_4B.md`](../docs/FRONTEND_DESIGN_QA_PHASE_4B.md).
+
+- The header compacts by measurement in four steps instead of window-width breakpoints tuned for Chinese labels; English at 1024 px no longer overlaps "Chart strategy" with the intervals or hides the active interval. Every page has the same divider between the navigation and its context, and the strategy page uses the standard brand.
+- The right rail keeps the chart at 65% of the window (31% for the rail at 1024 px, was 36%). Its tab strip is 60 px and labels wrap instead of truncating (交易账户, "Trading accounts", "Beobach-tungsliste"). At that width the watchlist keeps change % and drops the exchange badge.
+- The status bar drops whole items, lowest priority first, with separators, and uses classes instead of inline colours.
+- Moved to Phase 5: panel toggles and Settings on the kit `IconButton` (it has no slot for the indicator count badge yet), and the English truncations inside the chart header ("Controller gro…") and order book controls, which belong to those surfaces.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.

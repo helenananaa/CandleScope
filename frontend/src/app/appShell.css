@@ -6,7 +6,6 @@
 .workspace-navigation :is(a,button):focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
 .workspace-navigation button:disabled, .workspace-navigation [aria-disabled='true'] { opacity: .5; }
 
-@media (max-width: 1450px) { .top-bar:has(.workspace-navigation) .logo-text { display: none; } }
 
 /* ── 布局容器 ────────────────────────────────────────────── */
 .app-layout {
@@ -146,10 +145,6 @@
   }
 }
 @media (max-width: 1050px) {
-  .top-bar[data-runtime-source="live"] .logo-text {
-    display: none;
-  }
-
   .workspace-switcher-trigger {
     width: 104px;
   }
@@ -162,13 +157,6 @@
 .top-bar .symbol-name {
   max-width: none;
   overflow: visible;
-}
-@media (max-width: 1180px) {
-  .top-bar .symbol-shortcut-badge { display: none; }
-}
-@media (max-width: 1080px) {
-  .top-bar .symbol-exchange,
-  .top-bar .chart-strategy-entry-button > span { display: none; }
 }
 @media (max-width: 980px) {
   .top-bar .interval-btn:not(.active) { display: none; }

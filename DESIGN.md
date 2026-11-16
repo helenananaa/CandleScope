@@ -119,6 +119,19 @@ Every page uses `AppHeader` (`frontend/src/app/AppHeader.tsx`), so the brand, th
 
 Put a new page button in `actions`, not in `tools` or `extras`, so it collapses with the others at narrow widths.
 
+**Narrow widths.** The header measures itself instead of following window-width breakpoints, so it holds in every language. When something does not fit it sets compaction steps on `data-compact`, in this order:
+
+1. Inline market metrics become the compact 合约市场摘要 button; the replay session's metric placeholders hide.
+2. The wordmark, the ⌘K hint and the replay price-change label hide.
+3. Only now, if the left side still does not fit after the page actions moved into 更多: the exchange badge and the 图表策略 label hide (its status dot stays).
+4. Last: the interval chips scroll and long names truncate.
+
+A window resize recomputes the steps; content changes (a new symbol, a ticking price) can only add steps, so the header never flickers. To let a new header element give way, add it to a step in `app/topBar.css`, not a `@media` rule.
+
+**Right rail.** The chart keeps at least 65% of the window (up to 760 px), so at 1024 px the rail and its tab strip take about 31%. Tab labels wrap onto two lines between words (hyphenated where the language allows) instead of truncating.
+
+**Status bar.** Each side lists its items most important first. When a side runs out of room its later items drop out whole, never cut; on the right, the version goes first.
+
 ## Stylesheets and cascade layers
 
 Every app stylesheet sits in a cascade layer. The order is set once, in `frontend/src/styles/layers.css`, which every entry page imports first:

@@ -5,7 +5,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 .right-market-rail {
-  --market-activity-bar-width: 44px;
+  --market-activity-bar-width: 60px;
   display: flex;
   flex-direction: row;
   flex-shrink: 0;
@@ -27,7 +27,7 @@
   border-left-color: var(--border-color);
 }
 .market-rail-loading {
-  width: calc(320px + var(--market-activity-bar-width, 44px));
+  width: calc(320px + var(--market-activity-bar-width, 60px));
   opacity: 0.65;
 }
 .market-rail-panel {
@@ -238,9 +238,9 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 36px;
+  width: 56px;
   min-height: 46px;
-  padding: 4px 0 3px;
+  padding: 5px 2px 4px;
   gap: 3px;
   border: 0;
   border-radius: var(--radius-sm, 6px);
@@ -281,15 +281,20 @@ html[lang="ru"] .market-rail-accordion-trigger strong {
   justify-content: center;
   line-height: 0;
 }
+/* Labels wrap between words onto two lines instead of truncating ("Order / book"); a word too
+   long for the strip is hyphenated where the language allows. */
 .market-activity-label {
-  display: block;
-  max-width: 34px;
+  display: -webkit-box;
+  max-width: 52px;
   overflow: hidden;
-  font-size: var(--font-size-xs);
-  font-weight: 700;
-  line-height: 1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: var(--font-size-2xs);
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 .market-activity-badge {
   position: absolute;

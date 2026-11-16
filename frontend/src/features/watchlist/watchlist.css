@@ -589,11 +589,14 @@
   .wl-th-change,
   .wl-col-change { display: none; }
 }
-/* Very narrow rail (small windows): ticker and last price only */
-@container watchlist (max-width: 260px) {
-  .wl-th-changepct,
-  .wl-col-changepct,
+/* Narrower rail (a 1024px window): the exchange badge gives way, change % stays */
+@container watchlist (max-width: 270px) {
   .wl-exchange-badge { display: none; }
+}
+/* Very narrow rail: ticker and last price only */
+@container watchlist (max-width: 230px) {
+  .wl-th-changepct,
+  .wl-col-changepct { display: none; }
 }
 
 .wl-sym-del {
