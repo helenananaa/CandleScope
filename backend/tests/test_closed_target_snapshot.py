@@ -9,7 +9,8 @@ WIDTH = 10007*MINUTE
 
 
 @pytest.mark.parametrize('period', [89,97,101])
-def test_canonical_page_rebuilds_only_local_closed_holes_before_waiting_for_scheduler(mixed_query, monkeypatch, period):
+@pytest.mark.parametrize('preview', [False, True])
+def test_canonical_page_rebuilds_only_local_closed_holes_before_waiting_for_scheduler(mixed_query, monkeypatch, period, preview):
     query = mixed_query
     width = period*MINUTE
     query.storage.upsert_bars('BTCUSDT','1m',[row(n*MINUTE,MINUTE) for n in range(2*period)],
@@ -23,15 +24,34 @@ def test_canonical_page_rebuilds_only_local_closed_holes_before_waiting_for_sche
         assert options['limit'] == 1, 'never recompute the surviving page'
         return original(**options)
     monkeypatch.setattr(query.custom_intervals,'query_from_base',bounded)
+    if preview:
+        from app.data_engine.data_manager.models import BarData, SeriesKey
+        monkeypatch.setattr('time.time', lambda: (128*width+MINUTE)/1000)
+        query._cache.revision_consumer.sync(force=True)
+        key = SeriesKey('BTCUSDT',f'{period}m',exchange='binance',market_type='futures')
+        forming = BarData(time=128*width//1000,open=100,high=102,low=99,close=101,
+                          volume=1,is_closed=False,source='ws')
+        query._cache.bulk_load(key,[forming])
     submitted = []
     monkeypatch.setattr(query,'_backfill_trigger',lambda *args: submitted.append(args))
-    result = query.query('BTCUSDT',f'{period}m',start_ms=0,end_ms=128*width-1,limit=128,
+    result = query.query('BTCUSDT',f'{period}m',start_ms=0,end_ms=128*width if preview else 128*width-1,limit=128+preview,
         market_type='futures',auto_backfill=True)
-    assert result.complete and len(result.bars) == 128 and not result.missing_ranges and not submitted
-    assert result.metadata['canonical_target_snapshot'] and result.metadata['target_materialized_written'] == 2
-    assert result.metadata['canonical_local_repair_source_budget'] == 8*period <= query._cfg.max_limit
+    if preview:
+        # The local canonical writes invalidate the old cache incarnation.
+        # Never adopt that preview. A new live frame can reuse the repaired
+        # closed page without repeating either the reduction or network work.
+        assert not result.complete and result.retryable and not result.bars
+        query._cache.revision_consumer.sync(force=True)
+        query._cache.bulk_load(key,[forming])
+        result = query.query('BTCUSDT',f'{period}m',start_ms=0,end_ms=128*width,limit=129,
+            market_type='futures',auto_backfill=True)
+    assert result.complete and len(result.bars) == 128+preview and not result.missing_ranges and not submitted
+    if preview:
+        assert result.bars[-1] == forming and not result.metadata['all_rows_final']
+    assert result.metadata['canonical_target_snapshot'] and result.metadata['target_materialized_written'] == (0 if preview else 2)
+    assert result.metadata['canonical_local_repair_source_budget'] == (0 if preview else 8*period) <= query._cfg.max_limit
     assert calls == [(0,0,1,False),(width,width,1,False)]
-    assert all((bar.volume,bar.trades) == (period,period) for bar in result.bars)
+    assert all((bar.volume,bar.trades) == (period,period) for bar in result.bars[:128])
 
 
 def test_local_row_count_is_only_a_hint_and_never_authorizes_untrusted_inputs(mixed_query):

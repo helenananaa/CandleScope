@@ -353,7 +353,7 @@ class QueryEngine:
         # must acquire/validate its own source and write proofs. A snapshot read
         # never grants write authority. Include the normal source padding in
         # this per-query budget and never perform network work here.
-        if (preview is None and stored_count != count and callable(counter)
+        if (stored_count != count and callable(counter)
                 and spec.nominal_ms % base.nominal_ms == 0):
             fine_count = spec.nominal_ms//base.nominal_ms
             cost = 4*fine_count
