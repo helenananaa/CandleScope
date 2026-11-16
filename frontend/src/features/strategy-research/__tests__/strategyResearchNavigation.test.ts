@@ -42,7 +42,6 @@ test("backtest.html remains a compatibility deep-link URL into the unified app",
   const html = renderToStaticMarkup(
     React.createElement(StrategyResearchApp, {
       intent: parseStrategyResearchLaunch({ pathname: "/backtest.html", search: "" }),
-      libraryEnabled: true,
     }),
   );
   assert.match(html, /strategy-research-advanced/);
@@ -59,7 +58,6 @@ test("invalid deep link shows an actionable error and does not select a dataset"
   const html = renderToStaticMarkup(
     React.createElement(StrategyResearchApp, {
       intent,
-      libraryEnabled: true,
     }),
   );
   assert.match(html, /strategy-research-deep-link-error/);

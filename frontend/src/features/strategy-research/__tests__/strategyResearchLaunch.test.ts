@@ -10,7 +10,6 @@ import StrategyResearchApp from "../StrategyResearchApp.js";
 import { StrategyResearchRuntime } from "../StrategyResearchRuntime.js";
 import {
   parseStrategyResearchLaunch,
-  resolveStrategyResearchBootstrap,
   strategyResearchLaunchActions,
   strategyResearchVisualState,
 } from "../strategyResearchLaunch.js";
@@ -50,13 +49,10 @@ test("legacy deep links run/compare/context still parse", () => {
   if (context.kind === "deep-link") assert.equal(context.entry.kind, "context");
 });
 
-test("flag-on uses one unified app; flag-off keeps local and backtest legacy", () => {
-  assert.equal(resolveStrategyResearchBootstrap({ libraryEnabled: true, page: "strategy" }), "unified");
-  assert.equal(resolveStrategyResearchBootstrap({ libraryEnabled: true, page: "local" }), "unified");
-  assert.equal(resolveStrategyResearchBootstrap({ libraryEnabled: true, page: "backtest" }), "unified");
-  assert.equal(resolveStrategyResearchBootstrap({ libraryEnabled: false, page: "local" }), "local-legacy");
-  assert.equal(resolveStrategyResearchBootstrap({ libraryEnabled: false, page: "backtest" }), "backtest-legacy");
-  assert.equal(resolveStrategyResearchBootstrap({ libraryEnabled: false, page: "strategy" }), "unified");
+test("every page, including the compatibility URLs, opens the one strategy research app", () => {
+  const bootstrap = readFileSync(path.resolve(here, "../strategyResearchBootstrap.tsx"), "utf8");
+  assert.match(bootstrap, /return <StrategyResearchApp intent=\{intent\} \/>;/);
+  assert.doesNotMatch(bootstrap, /LocalApp|BacktestApp\b|BacktestResearchDisabled|local-legacy|backtest-legacy|libraryEnabled/);
 });
 
 test("local import and backtest advanced launch actions do not create a Run", () => {
@@ -67,7 +63,7 @@ test("local import and backtest advanced launch actions do not create a Run", ()
   assert.deepEqual(chartActions, []);
   const advanced = parseStrategyResearchLaunch({ pathname: "/backtest.html", search: "" });
   assert.deepEqual(strategyResearchLaunchActions(advanced), []);
-  const runtime = new StrategyResearchRuntime({ restoreWorkspace: false, libraryEnabled: true });
+  const runtime = new StrategyResearchRuntime({ restoreWorkspace: false });
   for (const action of strategyResearchLaunchActions(imported)) runtime.dispatch(action);
   assert.equal(runtime.state.result.runId, null);
   assert.equal(runtime.state.source.libraryOpen, true);
@@ -108,7 +104,7 @@ test("visual states cover first, import, chart, edit, and completed", () => {
 test("unified shell renders without creating a second library store or loading Monaco", () => {
   const intent = parseStrategyResearchLaunch({ pathname: "/strategy.html", search: "" });
   const html = renderToStaticMarkup(
-    React.createElement(StrategyResearchApp, { intent, libraryEnabled: true }),
+    React.createElement(StrategyResearchApp, { intent }),
   );
   assert.match(html, /strategy-research-shell/);
   assert.match(html, /data-visual-state="first"/);
@@ -122,7 +118,7 @@ test("unified shell renders without creating a second library store or loading M
   assert.doesNotMatch(drawerSource, /useResearchDataLibrary\(\)/);
 });
 
-test("compatibility mains call the same bootstrap and keep legacy fallbacks", () => {
+test("compatibility mains call the same bootstrap", () => {
   const strategyMain = readFileSync(path.resolve(here, "../../../strategy-main.tsx"), "utf8");
   const localMain = readFileSync(path.resolve(here, "../../../local-main.tsx"), "utf8");
   const backtestMain = readFileSync(path.resolve(here, "../../../backtest-main.tsx"), "utf8");
@@ -133,28 +129,18 @@ test("compatibility mains call the same bootstrap and keep legacy fallbacks", ()
   assert.match(backtestMain, /page: "backtest"/);
   const bootstrap = readFileSync(path.resolve(here, "../strategyResearchBootstrap.tsx"), "utf8");
   assert.match(bootstrap, /StrategyResearchApp/);
-  assert.match(bootstrap, /LocalApp/);
-  assert.match(bootstrap, /BacktestResearchApp/);
-  assert.match(bootstrap, /local-legacy/);
+  assert.doesNotMatch(bootstrap, /LocalApp|BacktestResearchApp|local-legacy/);
+  assert.doesNotMatch(backtestMain, /isBacktestLegacyWorkbenchEnabled|isBacktestResearchEnabled/);
 });
 
 test("drawer failure fallback copy does not clear a script draft", () => {
-  const runtime = new StrategyResearchRuntime({ restoreWorkspace: false, libraryEnabled: true });
+  const runtime = new StrategyResearchRuntime({ restoreWorkspace: false });
   runtime.dispatch({ type: "script/setDraft", draftId: "draft-keep" });
   const html = renderToStaticMarkup(
     React.createElement(StrategyResearchApp, {
       intent: parseStrategyResearchLaunch({ pathname: "/strategy.html", search: "" }),
-      libraryEnabled: true,
     }),
   );
   assert.match(html, /data-strategy-draft=""/);
   assert.equal(runtime.state.script.draftId, "draft-keep");
-});
-
-test("flag-off bootstrap chooses legacy local and backtest trees", () => {
-  const bootstrap = readFileSync(path.resolve(here, "../strategyResearchBootstrap.tsx"), "utf8");
-  assert.match(bootstrap, /if \(mode === "local-legacy"\)/);
-  assert.match(bootstrap, /if \(mode === "unified"\)/);
-  assert.match(bootstrap, /<LocalApp/);
-  assert.match(bootstrap, /<BacktestResearchApp/);
 });

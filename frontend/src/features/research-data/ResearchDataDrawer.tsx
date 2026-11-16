@@ -4,7 +4,6 @@ import { OverlayLayer } from "../../components/ui/Overlays.js";
 import { t } from "../../i18n/index.js";
 import { ordinarySourceLabel, isCapabilityAvailable } from "./researchDataSourceModel.js";
 import type { ResearchCapabilitySummaryV1, ResearchRuntimeMode, ResearchSourceKind } from "./researchDataTypes.js";
-import { RESEARCH_DATA_LIBRARY_ENABLED } from "./researchDataFlags.js";
 import { ResearchDatasetRail } from "./ResearchDatasetRail.js";
 import { ResearchDatasetManagement } from "./ResearchDatasetManagement.js";
 import type { ResearchDataLibraryController, ResearchImportSubmitInput } from "./useResearchDataLibrary.js";
@@ -16,7 +15,6 @@ export function ResearchDataDrawer(props: {
   open: boolean;
   runtimeMode: ResearchRuntimeMode;
   capabilities: ResearchCapabilitySummaryV1 | null;
-  libraryEnabled?: boolean;
   currentChartEnabled?: boolean;
   availableKinds?: ResearchSourceKind[];
   library?: ResearchDataLibraryController;
@@ -39,7 +37,6 @@ export function ResearchDataDrawer(props: {
 function ResearchDataDrawerBody({
   runtimeMode,
   capabilities,
-  libraryEnabled = RESEARCH_DATA_LIBRARY_ENABLED,
   currentChartEnabled = false,
   availableKinds,
   library,
@@ -58,7 +55,6 @@ function ResearchDataDrawerBody({
   open: boolean;
   runtimeMode: ResearchRuntimeMode;
   capabilities: ResearchCapabilitySummaryV1 | null;
-  libraryEnabled?: boolean;
   currentChartEnabled?: boolean;
   availableKinds?: ResearchSourceKind[];
   library?: ResearchDataLibraryController;
@@ -87,8 +83,6 @@ function ResearchDataDrawerBody({
       </header>
       {kinds.length > 1 && <div className="research-source-cards">
         {kinds.map((kind) => {
-          const hideImport = kind === "IMPORTED_DATASET" && !libraryEnabled;
-          if (hideImport) return null;
           const runnable = kind !== "CURRENT_CHART" || currentChartEnabled;
           const reason = kind === "CURRENT_CHART" && !runnable
             ? runtimeMode === "LOCAL_OFFLINE"
@@ -111,7 +105,7 @@ function ResearchDataDrawerBody({
           );
         })}
       </div>}
-      {libraryEnabled && library ? (
+      {library ? (
         <ResearchDatasetRail
           datasets={library.datasets}
           selectedId={library.selectedId}

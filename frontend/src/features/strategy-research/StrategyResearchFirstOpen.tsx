@@ -6,14 +6,12 @@ import { getChartStrategyDraftStore } from "../backtest/chart-tester/chartStrate
 import type { StrategyDraftRecord } from "../backtest/chart-tester/StrategyDraftStore.js";
 
 export function StrategyResearchFirstOpen({
-  libraryEnabled,
   runtimeMode,
   onOpenLibrary,
   draftId,
   saving,
   onSelectTemplate,
 }: {
-  libraryEnabled: boolean;
   runtimeMode: "LIVE" | "LOCAL_OFFLINE";
   onOpenLibrary(): void;
   draftId: string | null;
@@ -48,7 +46,7 @@ export function StrategyResearchFirstOpen({
             key={template.id}
             type="button"
             data-testid={`strategy-research-template-${template.id}`}
-            disabled={!libraryEnabled || saving}
+            disabled={saving}
             aria-pressed={selected?.source === template.source}
             onClick={() => onSelectTemplate(template.id)}
           >
@@ -72,11 +70,9 @@ export function StrategyResearchFirstOpen({
             </a>
           ) : null}
         </div>
-        {libraryEnabled ? (
-          <button type="button" data-testid="strategy-research-import-own-data" onClick={onOpenLibrary}>
-            {t("research.source.openLibrary")}
-          </button>
-        ) : null}
+        <button type="button" data-testid="strategy-research-import-own-data" onClick={onOpenLibrary}>
+          {t("research.source.openLibrary")}
+        </button>
       </div>
     </div>
   );

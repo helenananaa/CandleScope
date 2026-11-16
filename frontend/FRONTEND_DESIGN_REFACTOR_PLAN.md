@@ -395,7 +395,11 @@ Still outside the stack, and moved when each is rebuilt:
 | 5f4 | Replay review and integrity drawer, training results |
 | 5f5 | Replay right rail: notes, watchlist, the market data view, the review rail |
 | 5f6 | Replay order ticket and account view (positions, orders, fills, assets, risk) |
-| 5g | Strategy research merged with backtest (§6.1), local data, CSV import |
+| 5g | Retire the flag-off fallbacks (standalone local page, research-disabled screen, the library and legacy flags) before the merge (§6.1) |
+| 5g2 | Strategy research merged with backtest (§6.1): one page with a mode rail, `?mode=` deep links, backtest.html and local.html open strategy.html in the matching mode, no landing |
+| 5g3 | The research tools (精确成交验证, 参数稳健性, Python / 模型, 多市场比较, 交易回放复盘) on the kit |
+| 5g4 | The strategy page: script panel, results, run history, first open |
+| 5g5 | Local data library and CSV import |
 | 5h | Data workbench |
 | 5i | Order book, trade flow and account docks; panel toggles and Settings on `IconButton` |
 
@@ -477,6 +481,12 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - 仓位: equity, available and floating P&L are stats; the record tabs are kit tabs with counts; a position is one card with side, margin mode and leverage as badges, its figures in two columns and kit buttons (市价全平 as danger); orders and fills are rows with side, type and status badges; empty tabs are `EmptyState`s; the risk tab is sections with dividers; closed trades, the ledger and liquidation recoveries are kit disclosures.
 - The legacy rail stylesheet is gone: about 410 rules for the ticket, the account view and rail markup nothing renders any more (old tabs, tables, chips, the `--replay-rail-*` aliases), including 7 `!important`, are replaced by 99 token-based rules; `replayPanels.css` is down to 42 lines. The liquidation timeline uses global tokens (its `--trade-*` colours were undefined inside the integrity drawer).
 
+**Phase 5g is done (branch `design/phase-5g-strategy-research`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_5G.md`](../docs/FRONTEND_DESIGN_QA_PHASE_5G.md). The strategy-research row was split when it started (5g–5g5), after the product call in §6.1.
+
+- The flag-off fallbacks are retired: the standalone `LocalApp` shell, the `BacktestApp` wrapper, the research-disabled screen, `VITE_RESEARCH_DATA_LIBRARY_ENABLED` (frontend) with every `libraryEnabled` branch, `VITE_BACKTEST_RESEARCH_ENABLED` and `VITE_BACKTEST_LEGACY_WORKBENCH_ENABLED`. `strategy.html`, `local.html` and `backtest.html` always open the one strategy research app. The backend's `CANDLESCOPE_RESEARCH_DATA_LIBRARY_ENABLED` is unchanged.
+- No visible change on the default build: the three pages capture byte-identical before and after.
+- Tests and `scripts/strategy-research-smoke.mjs` now assert that the fallbacks stay gone, as the repository does for retired Pyne entry points. ADR-BACKTEST-014 carries a dated amendment.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.
@@ -496,7 +506,7 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - **Plain copy.** Internal terms ("Bundle、信任门", "runtime receipt", "仅使用权威 ID", "独立研究 runtime") are rewritten or moved behind "技术详情".
 - **Compatibility.** `backtest.html` and `local.html` stay as compatibility URLs that open `strategy.html` in the matching mode. Keep their bootstrap tests, `scripts/strategy-research-smoke.mjs`, and the explicit rejection of retired Pyne scripts (`AGENTS.md`).
 
-**Needs a product call (outside design).** Is the flag-off legacy path (`isBacktestLegacyWorkbenchEnabled`, legacy `BacktestApp`) still required? If not, retire it in its own PR before the merge, so only one path needs restyling.
+**Product call (decided 2026-11-15): retire the flag-off fallbacks first.** By then the legacy `BacktestApp` was already a 10-line wrapper around the research app; what remained were flag-off fallbacks that no default or start script enabled (the standalone `LocalApp` behind `VITE_RESEARCH_DATA_LIBRARY_ENABLED=0`, the research-disabled screen behind `VITE_BACKTEST_RESEARCH_ENABLED=0` with the legacy flag off). They are removed in their own PR (5g) before the merge.
 
 **Size:** 3–5 days inside Phase 5.
 
