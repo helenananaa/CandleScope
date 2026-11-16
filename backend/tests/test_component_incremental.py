@@ -307,3 +307,23 @@ def test_public_pipeline_keeps_close_amend_order_and_published_snapshot_isolatio
         return trace
     fast, slow = asyncio.run(run(True)), asyncio.run(run(False))
     assert fast == slow
+
+
+def test_ordered_history_before_an_accepted_live_tail_has_bounded_rebuild_work():
+    fast, slow = engine(10007), engine(10007, incremental=False)
+    tail = component(512, closed=False, sequence=42, source=BarInputSource.REALTIME)
+    apply(fast, tail)
+    apply(slow, tail)
+    for index in range(512):
+        incoming = component(index)
+        apply(fast, incoming)
+        apply(slow, incoming)
+    state = fast.get_active('binance','spot','BTCUSDT',0)
+    equal(state, slow.get_active('binance','spot','BTCUSDT',0))
+    accumulator = state._component_accumulator
+    assert accumulator.rebuilds <= 1
+    assert accumulator.rebuilt_components <= 1
+    assert accumulator.appends == 512
+    apply(fast, replace(tail, sequence=43, volume=100))
+    apply(slow, replace(tail, sequence=43, volume=100))
+    equal(fast.get_active('binance','spot','BTCUSDT',0), slow.get_active('binance','spot','BTCUSDT',0))
