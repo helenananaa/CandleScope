@@ -187,7 +187,7 @@ def test_public_numeric_query_uses_existing_isolated_history_process(dm, query):
     from app.indicator.history_worker import history_executor_snapshot, shutdown_builtin_history
     service = NumericIndicatorService(IndicatorInputPort(dm), IndicatorRangeResultService())
     async def run():
-        submitted_before = history_executor_snapshot()['submitted']
+        submitted_before = history_executor_snapshot().get('submitted', 0)
         try:
             result = await service.query(query)
             assert result.status == 'ready', result
