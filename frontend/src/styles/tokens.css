@@ -34,7 +34,8 @@
   --text-purple: #d8b4fe;
 
   /* Accent fills and outlines */
-  --accent-blue: #3d8ef0;     /* outlines, indicators, focus */
+  --accent-blue: #3d8ef0;     /* outlines, indicators */
+  --focus-ring: var(--accent-blue); /* keyboard focus; 3:1 or more on every surface */
   --accent-solid: #1473e6;    /* brand blue; filled controls with --text-on-accent */
   --accent-solid-hover: #0f63cc;
   --accent-purple: #8b5cf6;
@@ -148,6 +149,9 @@
 
   --text-accent: #0f5bbd;
   --text-info: #0b6577;
+
+  /* The accent blue is 2.6–2.9:1 on the light surfaces; focus needs 3:1 (WCAG 1.4.11). */
+  --focus-ring: #2a74d9;
   --text-success: #12703a;
   --text-danger: #be123c;
   --text-warning: #92400e;

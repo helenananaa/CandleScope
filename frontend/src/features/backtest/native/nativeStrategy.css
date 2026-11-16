@@ -46,7 +46,7 @@
   cursor: pointer;
 }
 .strategy-engine-option:hover:not(:disabled) { border-color: var(--border-strong); background: var(--surface-2); }
-.strategy-engine-option:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
+.strategy-engine-option:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .strategy-engine-option:disabled { opacity: .6; cursor: not-allowed; }
 .strategy-engine-option[aria-checked=true] { border-color: var(--accent-blue); background: color-mix(in srgb, var(--accent-blue) 8%, var(--surface-0)); }
 .strategy-engine-option strong { font: 600 var(--font-size-md)/1.4 var(--font-sans); }
@@ -67,7 +67,7 @@
 .native-history-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--border-subtle); }
 .native-history-list button { display: grid; grid-template-columns: minmax(150px, auto) minmax(0, 1fr) auto; gap: var(--space-4); align-items: center; width: 100%; padding: var(--space-2) 6px; border: 0; border-bottom: 1px solid var(--border-subtle); color: var(--text-primary); background: transparent; font: inherit; text-align: start; cursor: pointer; }
 .native-history-list button:hover:not(:disabled) { background: var(--surface-2); }
-.native-history-list button:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: -2px; }
+.native-history-list button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 .native-history-list button:disabled { cursor: not-allowed; opacity: .6; }
 .native-history-list button[aria-current=true] { box-shadow: inset 2px 0 0 var(--accent-blue); }
 .native-history-list time { font: var(--font-size-sm)/1.4 var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -128,7 +128,7 @@
 .native-table th { color: var(--text-secondary); font-size: var(--font-size-xs); font-weight: 500; }
 .native-table tr:hover { background: var(--surface-2); cursor: pointer; }
 .native-table tr[data-selected="true"] { background: color-mix(in srgb, var(--accent-blue) 14%, transparent); outline: 1px solid var(--accent-blue); outline-offset: -1px; }
-.native-table tr:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: -2px; }
+.native-table tr:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 .native-strategy-docked .native-table { flex: 1; min-height: 0; max-height: none; margin: 0; overscroll-behavior: contain; }
 .native-strategy-docked .native-table th { position: sticky; top: 0; z-index: 1; background: var(--surface-1); }
 /* Review controls stay outside the table's scroll area, even in a short dock. */

@@ -25,7 +25,7 @@
 .local-analysis-csv-hint { margin: 0; color: var(--text-muted); font: var(--font-size-xs)/1.6 var(--font-sans); }
 .local-analysis-csv-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
 .local-analysis-csv-preview { overflow: auto; max-height: 160px; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); }
-.local-analysis-csv-preview:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
+.local-analysis-csv-preview:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .local-analysis-csv-preview table { width: 100%; border-collapse: collapse; font: var(--font-size-xs)/1.5 var(--font-sans); font-variant-numeric: tabular-nums; }
 .local-analysis-csv-preview :is(th, td) { padding: 6px 8px; border-bottom: 1px solid var(--border-subtle); text-align: left; white-space: nowrap; }
 .local-analysis-csv-preview th { position: sticky; top: 0; background: var(--surface-1); color: var(--text-secondary); font-weight: 600; }
@@ -46,7 +46,7 @@
 .local-analysis-event-main strong { color: var(--text-primary); font: 600 var(--font-size-sm)/1.4 var(--font-sans); overflow-wrap: anywhere; }
 .local-analysis-event-main small { color: var(--text-muted); font: var(--font-size-xs)/1.4 var(--font-sans); font-variant-numeric: tabular-nums; }
 .local-analysis-event-main em { display: -webkit-box; overflow: hidden; color: var(--text-secondary); font: normal var(--font-size-xs)/1.5 var(--font-sans); white-space: pre-wrap; overflow-wrap: anywhere; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
-.local-analysis-event-main:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
+.local-analysis-event-main:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .local-analysis-event-actions { display: flex; gap: 0; margin-top: -2px; }
 .local-analysis-event-actions .ui-btn { padding-inline: 8px; }
 .local-analysis-delete { color: var(--text-danger); }

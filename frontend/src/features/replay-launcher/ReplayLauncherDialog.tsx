@@ -88,17 +88,14 @@ export default function ReplayLauncherDialog({
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
-    const previousFocus = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null;
     document.body.style.overflow = "hidden";
     overlayRef.current?.focus();
+    // The overlay layer gives focus back to the opener when the dialog closes.
     return () => {
       document.body.style.overflow = previousOverflow;
       const pending = pendingReplayWindowRef.current;
       pendingReplayWindowRef.current = null;
       if (pending !== null && !pending.closed) pending.close();
-      previousFocus?.focus();
     };
   }, []);
 

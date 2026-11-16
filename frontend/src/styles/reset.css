@@ -14,6 +14,22 @@ body,
   width: 100%;
   overflow: hidden;
 }
+/* Reduced motion: nothing slides, fades or pulses, and scrolling jumps; every change is
+ * immediate. Marked important in the reset layer, these declarations outrank every other layer.
+ * A spinner keeps turning, slower, because the turning is what says "loading": it sets
+ * --motion-reduced-duration and --motion-reduced-iterations on itself. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-delay: 0s !important;
+    animation-duration: var(--motion-reduced-duration, 0.01ms) !important;
+    animation-iteration-count: var(--motion-reduced-iterations, 1) !important;
+    transition-delay: 0s !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 body {
   font-family: var(--font-sans);
   /* Fixed-width digits so prices, sizes and timers do not shift as they tick */

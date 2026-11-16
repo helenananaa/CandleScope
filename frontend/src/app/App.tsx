@@ -627,6 +627,7 @@ function LiveWorkspaceApp() {
   return (
     <>
       <MarketPageFrame
+        skipToChart
         rootRef={pageExportRef}
         topBar={<div className="workspace-portal-host" ref={setTopBarHost} />}
         intervalSelector={null}

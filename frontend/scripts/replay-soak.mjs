@@ -2992,7 +2992,7 @@ async function v2AccessibilityAudit(cdp, timeoutMs) {
     host.append(probe);
     const result = {
       mediaMatches: matchMedia("(prefers-reduced-motion: reduce)").matches,
-      animationName: getComputedStyle(probe).animationName,
+      animationDuration: getComputedStyle(probe).animationDuration,
       transitionDuration: getComputedStyle(probe).transitionDuration,
     };
     probe.remove();
@@ -3000,7 +3000,8 @@ async function v2AccessibilityAudit(cdp, timeoutMs) {
   })()`);
   assert(
     reducedMotion?.mediaMatches === true
-      && reducedMotion?.animationName === "none"
+      // The spinner keeps turning, slower; nothing else animates (reset.css).
+      && reducedMotion?.animationDuration === "1.6s"
       && ["0.00001s", "1e-05s"].includes(reducedMotion?.transitionDuration),
     "reduced-motion policy was not effective",
     reducedMotion,
