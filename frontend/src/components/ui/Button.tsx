@@ -31,13 +31,14 @@ export interface IconButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonEle
   variant?: "ghost" | "secondary";
   /** Toggle buttons report their state. */
   pressed?: boolean;
+  ref?: Ref<HTMLButtonElement>;
 }
 
 /** Square icon-only button. */
-export function IconButton({ label, icon, size = "md", variant = "ghost", pressed, className, type = "button", ...rest }: IconButtonProps) {
+export function IconButton({ label, icon, size = "md", variant = "ghost", pressed, className, type = "button", ref, ...rest }: IconButtonProps) {
   const classes = ["ui-icon-btn", size === "sm" ? "ui-icon-btn-sm" : null, variant === "secondary" ? "ui-icon-btn-secondary" : null, className].filter(Boolean).join(" ");
   return (
-    <button type={type} className={classes} aria-label={label} title={label} aria-pressed={pressed} {...rest}>
+    <button ref={ref} type={type} className={classes} aria-label={label} title={label} aria-pressed={pressed} {...rest}>
       <span aria-hidden="true">{icon}</span>
     </button>
   );

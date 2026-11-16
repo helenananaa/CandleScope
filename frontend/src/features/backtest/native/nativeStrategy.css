@@ -1,5 +1,6 @@
 @layer features {
-.native-strategy-panel :is(button, select, input) {
+/* The native panel's own raw controls (until 5g7); kit controls style themselves. */
+.native-strategy-panel :is(button, select, input):where(:not(.ui-btn, .ui-icon-btn, .ui-tab, .ui-segment, .ui-input, .ui-check-input, .ui-file-drop-input)) {
   box-sizing:border-box;
   padding:6px 10px;
   border:1px solid var(--border-color);
@@ -8,10 +9,10 @@
   background:var(--bg-primary);
   font:inherit;
 }
-.native-strategy-panel button:hover:not(:disabled) { background:var(--bg-tertiary); }
-.native-strategy-panel :is(button, select, input):disabled { opacity:.55; cursor:not-allowed; }
-.native-strategy-panel button[aria-pressed=true] { color:var(--text-accent); border-color:currentColor; }
-.native-strategy-panel :is(button, select, input, textarea):focus-visible { outline:2px solid var(--accent-blue); outline-offset:2px; }
+.native-strategy-panel button:where(:not(.ui-btn, .ui-icon-btn, .ui-tab, .ui-segment, .ui-input, .ui-check-input, .ui-file-drop-input)):hover:not(:disabled) { background:var(--bg-tertiary); }
+.native-strategy-panel :is(button, select, input):where(:not(.ui-btn, .ui-icon-btn, .ui-tab, .ui-segment, .ui-input, .ui-check-input, .ui-file-drop-input)):disabled { opacity:.55; cursor:not-allowed; }
+.native-strategy-panel button:where(:not(.ui-btn, .ui-icon-btn, .ui-tab, .ui-segment, .ui-input, .ui-check-input, .ui-file-drop-input))[aria-pressed=true] { color:var(--text-accent); border-color:currentColor; }
+.native-strategy-panel :is(button, select, input, textarea):where(:not(.ui-btn, .ui-icon-btn, .ui-tab, .ui-segment, .ui-input, .ui-check-input, .ui-file-drop-input)):focus-visible { outline:2px solid var(--accent-blue); outline-offset:2px; }
 .strategy-research-script > [data-strategy-draft] { flex-direction:column; }
 .strategy-research-script .native-strategy-panel { padding:8px 0; width:100%; box-sizing:border-box; }
 .strategy-research-script .native-code { grid-template-columns:1fr; }
@@ -24,7 +25,7 @@
 .native-strategy-panel header,.native-toolbar { display:flex; align-items:center; gap:12px; }
 .native-strategy-panel header button { margin-left:auto; }
 .native-strategy-panel p { color:var(--text-secondary); }
-.native-strategy-panel button,.native-strategy-panel select { padding:6px 10px; cursor:pointer; }
+.native-strategy-panel :is(button, select):where(:not(.ui-btn, .ui-icon-btn, .ui-tab, .ui-segment, .ui-input)) { padding:6px 10px; cursor:pointer; }
 .native-strategy-panel pre { max-height:320px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; }
 .native-strategy-panel [role=alert] { color:var(--strategy-error); }
 .native-curve { margin:16px 0; border:1px solid var(--border-color); padding:10px; border-radius:var(--radius-control); }

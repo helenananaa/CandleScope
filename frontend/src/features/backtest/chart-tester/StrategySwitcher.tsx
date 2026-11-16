@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { t } from "../../../i18n/index.js";
 import { Icon } from "../../../components/icons/Icon.js";
+import { Input } from "../../../components/ui/index.js";
 
 export interface StrategySwitcherItem {
   id: string;
@@ -40,7 +41,7 @@ export function StrategySwitcher({ items, activeId, actions, onSelect, renaming 
   if (renaming && current && onRename) {
     const settle = (name: string | null) => { if (!renameSettled.current) { renameSettled.current = true; onRename(name); } };
     return <div className="strategy-switcher">
-      <input className="strategy-switcher-rename" autoFocus maxLength={80} defaultValue={current.name}
+      <Input size="sm" className="strategy-switcher-rename" autoFocus maxLength={80} defaultValue={current.name}
         aria-label={t("strategyCollection.name")} placeholder={t("strategyCollection.default")}
         onFocus={() => { renameSettled.current = false; }}
         onBlur={(event) => settle(event.currentTarget.value)}

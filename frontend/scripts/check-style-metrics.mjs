@@ -14,6 +14,7 @@ const SRC = path.resolve(import.meta.dirname, "../src");
 // Class names that are JS or test hooks, not styling hooks. Keep each one justified.
 export const HOOK_CLASSES = new Set([
   "export-exclude", // export.ts drops these nodes from screenshots
+  "chart-strategy-run-button", // ChartStrategyTesterPanel.test finds the tester's Run button (a kit Button)
   "pane-overlay-anchor", // positioning anchor read by pane overlays
   "drawing-text-style-bar", // drawingModel.ts keeps pointer events inside the text toolbar
   "settings-btn", // scripts/smoke.mjs finds the Settings button on every page

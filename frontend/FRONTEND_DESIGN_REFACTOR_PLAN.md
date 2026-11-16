@@ -400,7 +400,8 @@ Still outside the stack, and moved when each is rebuilt:
 | 5g3 | The research tools (精确成交验证, 参数稳健性, Python / 模型, 多市场比较, 交易回放复盘) on the kit |
 | 5g4 | The strategy page: script panel, results, run history, first open |
 | 5g5 | Local data library and CSV import |
-| 5g6 | The strategy tester shared by the market page and the strategy page: language and Python permission, parameters and conditions editors, result context, overview and trade list, the native Pine panel and report |
+| 5g6 | The strategy tester shared by the market page and the strategy page: the dock and its header for both strategy kinds, the CandleScope tester, the parameters and conditions editors, the result views and trade explanation |
+| 5g7 | The native Pine panel's body and report: settings, history, report sections, comparison, replay controls, advanced inputs, `nativeStrategy.css` |
 | 5h | Data workbench |
 | 5i | Order book, trade flow and account docks; panel toggles and Settings on `IconButton` |
 
@@ -512,6 +513,12 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - The data library is the kit drawer: datasets and CSV import as kit tabs (the count as a badge), dataset rows with an accent edge for the selected one, the CSV import and trade import on kit fields, file drops, selects and alerts, the maintenance disclosure with quality as a badge and kit stats.
 - The header's 打开本地资料库 and the interval chips above an imported chart are kit buttons; the kit button has a pressed style for toggles, and the kit drawer renders in place without a DOM (like the dialog).
 - The drawer's element rules are gone; the unused imported-chart empty state and 7 unused strings are deleted. Left: the shared strategy tester (5g6), copy such as raw column names and stage codes (Phase 6).
+
+**Phase 5g6 is done (branch `design/phase-5g6-strategy-tester`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_5G6.md`](../docs/FRONTEND_DESIGN_QA_PHASE_5G6.md). Row 5g7 was added when it started: the tester has about 150 raw controls, so the native Pine panel's body and report follow on their own.
+
+- The dock's window buttons are kit icon buttons; both strategy kinds publish kit tabs, a primary kit Run and quiet kit buttons into its header, and their notices are one-row kit alerts. The CandleScope tester's ⋯ is a kit menu, its run mode a kit field (it was an unstyled select), its start screen, problems, run states and settings use kit buttons, checkboxes, disclosures, alerts and an empty state.
+- The parameters and conditions editors use kit fields; the result views use kit buttons, disclosures and alerts; the trade explanation is the kit dialog (the chart's 回到实时 showed through the old popover). `IconButton` takes a `ref`.
+- The dock and tester stylesheets drop the replaced rules and 4 `!important`s; their element rules, and the native panel's until 5g7, skip kit controls.
 
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
