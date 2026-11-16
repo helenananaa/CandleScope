@@ -602,3 +602,21 @@ def test_stale_reader_reloads_repair_frontier_before_becoming_owner(mixed_query,
         result = waiting.result(timeout=3)
     assert len(calls) == 2 and calls[0][1] < calls[1][0]
     assert len(result.bars) > len(fresh.bars)
+
+
+@pytest.mark.parametrize('limit', [2, 5])
+def test_latest_read_reuses_canonical_closed_tail_and_live_preview(mixed_query, monkeypatch, limit):
+    from app.data_engine.data_manager.models import BarData, SeriesKey
+    query = mixed_query
+    seed(query)
+    monkeypatch.setattr('time.time',lambda: (4*WIDTH+MINUTE)/1000)
+    query._cache.revision_consumer.sync(force=True)
+    key = SeriesKey('BTCUSDT','10007m',exchange='binance',market_type='futures')
+    forming = BarData(time=4*WIDTH//1000,open=100,high=102,low=99,close=101,
+                      volume=1,is_closed=False,source='ws')
+    query._cache.bulk_load(key,[forming])
+    monkeypatch.setattr(query.custom_intervals,'query_from_base',lambda **kw: pytest.fail('reacquired the latest tail sources'))
+    result = query.query('BTCUSDT','10007m',limit=limit,market_type='futures',auto_backfill=False)
+    assert result.complete and len(result.bars) == limit and result.bars[-1] == forming
+    assert not result.metadata['all_rows_final'] and result.metadata['canonical_target_preview']
+    assert result.metadata['storage_rows'] == limit-1

@@ -277,7 +277,7 @@ class QueryEngine:
         """Read an already persisted closed page without reacquiring its inputs."""
         from app.data_engine.history import AlwaysOpenCalendar
         from app.data_engine.interval_policy import parse_interval_spec
-        if (not self._cfg.mixed_custom_history or start_ms is None or end_ms is None
+        if (not self._cfg.mixed_custom_history
                 or not key.identity.is_legacy_default_for(key.exchange)):
             return None
         base = parse_interval_spec(route.base_interval)
@@ -295,10 +295,17 @@ class QueryEngine:
             self._interval_resolver.require_history_composition(exchange=key.exchange,
                 market_type=key.market_type, interval=key.interval, contract_id=composition_contract,
                 identity=key.identity, enabled=True)
+        now_ms = int(time.time()*1000)
+        if start_ms is None and end_ms is None and type(limit) is int and 2 <= limit <= 512:
+            # Latest reads own the same bounded closed tail plus forming
+            # preview as an explicit range. They need no fresh base reduction.
+            end_ms = spec.floor_ms(now_ms)
+            start_ms = end_ms-(min(limit,self._cfg.max_limit)-1)*spec.nominal_ms
+        if start_ms is None or end_ms is None:
+            return None
         first, last = spec.floor_ms(start_ms), spec.floor_ms(end_ms)
         if first < start_ms:
             first = spec.next_ms(first)
-        now_ms = int(time.time()*1000)
         current_open = spec.floor_ms(now_ms)
         preview = None
         preview_snapshot = None
