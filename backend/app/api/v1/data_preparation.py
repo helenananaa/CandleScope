@@ -34,6 +34,7 @@ class PythonBarExecution(BaseModel):
 
 
 class StrategyLaunchPayload(BaseModel):
+    signal_chart: dict | None = None
     model_config = ConfigDict(extra="forbid")
     strategy_revision_id: str = Field(min_length=1, max_length=128)
     parameters: dict = Field(default_factory=dict)
@@ -112,6 +113,7 @@ async def prepare_frozen_external_strategy(request: Request, payload: FrozenExte
 
 
 class NativePreparationPayload(BaseModel):
+    signal_chart: dict | None = None
     model_config = ConfigDict(extra="forbid")
     idempotency_key: str = Field(min_length=8, max_length=128)
     context: ChartContextResolveRequest
@@ -149,6 +151,8 @@ async def prepare_native_strategy(request: Request, payload: NativePreparationPa
     from app.backtest.native import timeframe
     from app.backtest.chart_context import ChartContextRequest
     submission = payload.model_dump(mode="json")
+    if payload.signal_chart is None:
+        submission.pop("signal_chart")
     if payload.chart_metadata is None:
         submission.pop("chart_metadata")
     if payload.currency_rates is None:
@@ -246,6 +250,7 @@ async def prepare_native_strategy(request: Request, payload: NativePreparationPa
             end_ms=primary["end_time_ms"] + 1))
     prepared = PreparationRequest(idempotency_key=payload.idempotency_key, consumer="STRATEGY",
         requirements=requirements, intent={"submission": submission, "native_strategy": {
+            **({"signal_chart": payload.signal_chart} if payload.signal_chart is not None else {}),
             "language": payload.language, "source": payload.source, "parameters": payload.parameters,
             "libraries": payload.libraries, "host_inputs": payload.host_inputs.model_dump(exclude_none=True), "bindings": bindings, "dependency_requirements": dependencies,
             **({"chart_metadata": payload.chart_metadata.model_dump(exclude_none=True)} if payload.chart_metadata is not None else {}),
@@ -263,7 +268,7 @@ async def prepare_strategy(request: Request, payload: StrategyPreparationPayload
     submission = payload.model_dump(mode="json")
     if payload.strategy is not None:
         # Keep the persisted submission identity for retries from older clients.
-        for field in ("python_runtime_mode", "python_trusted_confirmed", "python_bar_execution"):
+        for field in ("signal_chart", "python_runtime_mode", "python_trusted_confirmed", "python_bar_execution"):
             if field not in payload.strategy.model_fields_set:
                 submission["strategy"].pop(field)
     prior = await invoke_async(lambda: service(request).storage(service(request).repository.by_idempotency, payload.idempotency_key))

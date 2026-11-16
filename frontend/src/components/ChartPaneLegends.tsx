@@ -1,3 +1,5 @@
+import type { AxisTime } from "../features/chart-representation/chartRepresentationTypes.js";
+import { sourceTimeFromChartTime } from "../chart-adapter/chartTime.js";
 import type { ChartDisplaySubscription } from "../features/market-data/chartDisplaySubscription.js";
 import { memo, useCallback, useMemo, useSyncExternalStore } from "react";
 import { t } from "../i18n/index.js";
@@ -150,15 +152,16 @@ export const MainChartLegend = memo(function MainChartLegend({
     void storeVersion;
     return seriesStore?.last() ?? null;
   }, [seriesStore, storeVersion]);
-  const exactCrosshair = crosshairTime !== null
+  const sourceCrosshairTime = sourceTimeFromChartTime(crosshairTime);
+  const exactCrosshair = sourceCrosshairTime !== null
     && typeof crosshair?.time === "number"
-    && crosshair.time === crosshairTime
+    && crosshair.time === sourceCrosshairTime
     ? crosshair
     : null;
   const sourceCrosshairBar = useMemo(() => {
-    if (crosshairTime === null || !allowSourceCrosshairFallback) return null;
-    return seriesStore?.getByTime(crosshairTime) ?? null;
-  }, [allowSourceCrosshairFallback, crosshairTime, seriesStore]);
+    if (sourceCrosshairTime === null || !allowSourceCrosshairFallback) return null;
+    return seriesStore?.getByTime(sourceCrosshairTime) ?? null;
+  }, [allowSourceCrosshairFallback, sourceCrosshairTime, seriesStore]);
   const mainData = completeMainLegendData(
     crosshairTime === null ? latestBar : (exactCrosshair || sourceCrosshairBar),
   );
@@ -245,7 +248,7 @@ const IndicatorPaneLabel = memo(function IndicatorPaneLabel({
   pane,
 }: {
   collapsed: boolean;
-  crosshairTime: number | null;
+  crosshairTime: AxisTime | null;
   lines: readonly IndicatorLine[];
   pane: IndicatorSubPane;
 }) {

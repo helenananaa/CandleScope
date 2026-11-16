@@ -55,6 +55,11 @@ export function parseFrontendScriptOutput(encoded: unknown, request: IndicatorCo
   return frontendScriptPayload(lines);
 }
 
+/** Script time is the source clock; output codecs retain the ordered execution key. */
+export function frontendScriptBars(request: IndicatorComputeRequest) {
+  return request.ohlcv.map((row, index) => ({ ...row, time: row.sourceTime ?? row.time, index }));
+}
+
 function abortError(): DOMException { return new DOMException("Frontend script cancelled", "AbortError"); }
 
 function isolatedCompute(request: IndicatorComputeRequest, signal?: AbortSignal): Promise<IndicatorPayloadEnvelope> {
@@ -107,7 +112,7 @@ function isolatedCompute(request: IndicatorComputeRequest, signal?: AbortSignal)
     frame.onload = () => {
       if (settled) return;
       connected = true;
-      frame.contentWindow?.postMessage({ script: request.script, bars: request.ohlcv, params: request.params ?? {} }, "*", [channel.port2]);
+      frame.contentWindow?.postMessage({ script: request.script, bars: frontendScriptBars(request), params: request.params ?? {} }, "*", [channel.port2]);
     };
     frame.srcdoc = frontendScriptSandboxDocument();
     document.body.append(frame);

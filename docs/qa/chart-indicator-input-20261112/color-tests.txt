@@ -1,0 +1,32 @@
+
+[frontend] functional: 2 files, concurrency=4
+✔ alignIndicatorLinesToTimes clips line and color data to the main bar time set (5.684208ms)
+✔ line normalization inserts whitespace so indicators do not bridge missing candles (1.551166ms)
+✔ histograms remain sparse without synthetic gap bars (0.313542ms)
+✔ realtime histogram point colors override historical colorData and survive missing color entries (1.286791ms)
+✔ time filtering and normalization reuse immutable inputs until the time axis changes (0.658417ms)
+✔ histogram normalization preserves stable point identity across tail updates (0.491083ms)
+✔ line normalization reuses unchanged data and invalidates when the mutable axis grows (0.38825ms)
+✔ alignIndicatorMarkersToTimes and bgcolors clip payloads to the main bar time set (2.1305ms)
+✔ buildFillRenderEntries only uses shared clipped line times (0.769292ms)
+✔ buildFillRenderEntries aligns and sorts separate ordinal time objects by order (0.8525ms)
+✔ buildFillRenderEntries signature includes ordinal lineage and plotted values (0.70275ms)
+✔ ordinal filtering and histogram colors require matching source lineage (0.36875ms)
+✔ trailing updates reject ordinal orders reassigned to different source lineage (0.233375ms)
+✔ applyLineSeriesData clears existing indicator series when next data is empty (0.54675ms)
+✔ applyLineSeriesData performs no chart write for an unchanged normalized array (0.2385ms)
+✔ applyLineSeriesData can force a full reset for custom ordinal axes (0.299583ms)
+✔ applyLineSeriesData trusts an explicit realtime tail hint without weakening range updates (0.313292ms)
+✔ applyLineSeriesData shields frozen realtime points from chart-library mutation (0.261333ms)
+✔ applyLineSeriesData keeps a full reset when a trusted tail changes series shape (0.219166ms)
+✔ ordered chart inputs preserve every brick and expose real script clocks (18.004708ms)
+✔ chart lines bypass raw-time filtering and map to each exact brick; market panes retain their source axis (81.411416ms)
+✔ an unavailable chart input is explicit and never reports readiness or raw-bar fallback (2.045ms)
+ℹ tests 22
+ℹ suites 0
+ℹ pass 22
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1337.770541

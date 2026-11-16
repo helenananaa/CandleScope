@@ -1,3 +1,4 @@
+import { syntheticEnglish } from "./syntheticMessages.js";
 import { continuousEnglish } from "./continuousMessages.js";
 import { tradeHistoryEnglish } from "./tradeHistoryMessages.js";
 import { replayNoteEnglish } from "./replayNoteMessages.js";
@@ -9,6 +10,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const hu = {
+  ...syntheticEnglish,
   ...continuousEnglish,
   ...tradeHistoryEnglish,
   ...replayNoteEnglish,

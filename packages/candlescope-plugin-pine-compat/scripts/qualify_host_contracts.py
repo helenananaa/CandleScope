@@ -21,7 +21,7 @@ def main():
                     "--uv", args.uv, "--qualification"], check=True)
     subprocess.run([sys.executable, "-m", "pip", "install", "--no-index", "--no-deps", "--force-reinstall",
                     *map(str, output.glob("*.whl"))], check=True)
-    subprocess.run([sys.executable, "-c", "import pine_compat as p; assert p.BAR_BOUNDARY_SCHEMA == 'host-bar-boundaries/1'; assert p.EVENT_REQUEST_SERIES_CONTRACT == 'renko-event-rows/1'"], check=True)
+    subprocess.run([sys.executable, "-c", "import pine_compat as p; assert p.BAR_BOUNDARY_SCHEMA == 'host-bar-boundaries/1'; assert p.EVENT_REQUEST_SERIES_CONTRACT == 'renko-event-rows/1'; assert p.ORDERED_CHART_INPUT_CONTRACT == 'ordered-chart-input/1'"], check=True)
     from importlib.metadata import version
     registry = output / "native-runtime-registry.json"
     registry.write_text(json.dumps({"schemaVersion": 1, "plugins": [{
@@ -40,13 +40,17 @@ def main():
            "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"}
     cases = [output / "engine-source/python/tests" / name for name in (
         "test_host_bar_boundaries.py", "test_renko_event_requests.py", "test_realtime_session.py",
-        "test_bar_calendars.py")]
+        "test_bar_calendars.py", "test_external_ordered_chart_contract.py",
+        "test_external_ordered_chart_events.py")]
     cases += [repo / "packages/candlescope-plugin-pine-compat/tests" / name for name in (
-        "test_runtime.py", "test_native_sessions.py", "test_event_strategy.py",
-        "test_host_completion.py", "test_host_boundary_inputs.py", "test_prefix_reply.py")]
+        "test_runtime.py", "test_native_sessions.py", "test_event_strategy.py", "test_chart_indicator_input.py",
+        "test_host_completion.py", "test_host_boundary_inputs.py", "test_prefix_reply.py",
+        "test_ordered_chart_strategy.py", "test_chart_event_stream.py")]
     cases += [repo / "backend/tests" / name for name in (
         "test_native_calendar_basis.py", "test_native_fixed_anchor.py",
-        "test_pine_prefix_reply.py", "test_pyne_removal.py",
+        "test_pine_prefix_reply.py", "test_pyne_removal.py", "test_native_chart_indicator_input.py",
+        "test_chart_signal_native_runs.py", "test_chart_event_series.py",
+        "test_pine_chart_events.py", "test_native_chart_events.py",
         "test_preview_update_requirements.py", "test_event_bus_routing_index.py",
         "test_deferred_component_preview.py", "test_deferred_component_preview_pipeline.py",
         "test_deferred_component_preview_prefix.py",
@@ -72,7 +76,7 @@ def main():
     (output / "qualification-receipt.json").write_text(json.dumps({
         "schema": "candlescope.host-contracts-qualification/1", "qualified": True,
         "head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip(),
-        "python": sys.version, "contracts": ["host-bar-boundaries/1", "renko-event-rows/1"],
+        "python": sys.version, "contracts": ["host-bar-boundaries/1", "renko-event-rows/1", "ordered-chart-input/1"],
         "checks": [str(p.relative_to(repo)) if p.is_relative_to(repo) else p.name for p in cases],
         "bundle_manifest": json.loads((output / "manifest.json").read_text()),
     }, indent=2) + "\n", encoding="utf-8")

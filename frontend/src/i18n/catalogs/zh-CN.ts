@@ -4034,6 +4034,8 @@ export const zhCN = {
   "replay.storage.evicted": "已淘汰",
   "replay.hub.makerTakerBps": "Maker / Taker 基点",
   "chart.loadingKlines": "正在加载 {symbol} {interval} K 线…",
+  "chart.syntheticPreparing": "正在准备图表数据…",
+  "chart.syntheticUnavailable": "图表数据暂不可用，正在重新连接…",
   "backtest.bundleHash": "策略包 {hash}",
   "backtest.sourceManifestHashes": "源码 {source} · 清单 {manifest}",
   "backtest.coverageRows": "{rows} 行 / 预热 {warmup}",

@@ -3799,6 +3799,8 @@ export const en = {
   "replay.storage.evicted": "EVICTED",
   "replay.hub.makerTakerBps": "Maker / Taker bps",
   "chart.loadingKlines": "Loading {symbol} {interval} candles…",
+  "chart.syntheticPreparing": "Preparing chart data…",
+  "chart.syntheticUnavailable": "Chart data is temporarily unavailable. Reconnecting…",
   "backtest.bundleHash": "Package {hash}",
   "backtest.sourceManifestHashes": "Source {source} · manifest {manifest}",
   "backtest.coverageRows": "{rows} rows / warmup {warmup}",

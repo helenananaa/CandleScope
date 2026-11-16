@@ -490,7 +490,7 @@ test("v2 composition reuses the shared indicator product without hosted/cache re
 
   assert.match(composition, /ReplayChartWorkspace/);
   const cells = source("src/features/replay/ReplayChartWorkspace.tsx");
-  assert.match(cells, /useReplaySharedIndicatorRuntime\(runtime, viewer, scope, persistence\)/);
+  assert.match(cells, /useReplaySharedIndicatorRuntime\(runtime, viewer, scope, persistence,/);
   assert.match(cells, /controlled: true/);
   assert.match(workspace, /<IndicatorPanel/);
   assert.match(workspace, /const ensureIndicatorViewport = review === null[\s\S]*indicators\.actions\.ensureVisibleIndicatorRange[\s\S]*reviewIndicators\.actions\.ensureVisibleIndicatorRange/);

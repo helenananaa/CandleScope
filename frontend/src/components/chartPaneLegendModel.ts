@@ -101,15 +101,17 @@ function legendIndicatorId(line: IndicatorLine): string | null {
  */
 export function resolveChartPaneLegendValues(
   lines: readonly IndicatorLine[] | null | undefined,
-  crosshairTime: number | null,
+  crosshairTime: AxisTime | null,
   options: ResolveChartPaneLegendOptions = {},
 ): ChartPaneLegendValue[] {
   return (lines || []).map((line, index) => {
     const point = crosshairTime === null
       ? latestFinitePoint(line.data)
-      : exactFinitePoint(line.data, crosshairTime);
+      : exactFinitePoint(line.data, line.inputAxis === "display-ordinal"
+        ? (typeof crosshairTime === "object" ? crosshairTime.order + 1 : Number.NaN)
+        : sourceTimeFromChartTime(crosshairTime) ?? Number.NaN);
     const partialSeed = point
-      ? partialSeedRangeAt(line.partialSeed, crosshairTime ?? sourceTimeFromChartTime(point.time))
+      ? partialSeedRangeAt(line.partialSeed, sourceTimeFromChartTime(crosshairTime ?? point.time))
       : null;
     return {
       color: point?.color || line.color || null,

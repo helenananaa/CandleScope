@@ -99,6 +99,7 @@ export type NormalizedIndicatorSeriesEntry =
   | NormalizedIndicatorWhitespaceEntry;
 
 export interface IndicatorLine {
+  inputAxis?: "display-ordinal";
   nativeScene?: Record<string, unknown>;
   id?: string;
   indicatorId?: string;
@@ -138,6 +139,7 @@ export interface IndicatorMarkerEntry {
 }
 
 export interface IndicatorMarkerGroup {
+  inputAxis?: "display-ordinal";
   id?: string;
   indicatorId?: string;
   pane?: string;
@@ -145,6 +147,7 @@ export interface IndicatorMarkerGroup {
 }
 
 export interface IndicatorBgcolorGroup {
+  inputAxis?: "display-ordinal";
   id?: string;
   indicatorId?: string;
   pane?: string;
@@ -275,6 +278,7 @@ export interface DeltaViewportController<TRow extends TimedSeriesRow> {
 }
 
 export interface IndicatorBarcolorGroup {
+  inputAxis?: "display-ordinal";
   data?: Array<{ time?: ChartTime; color?: string }>;
 }
 

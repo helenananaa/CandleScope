@@ -15,13 +15,15 @@ class ChartClosingTicks:
     def on_fill(self, bar, tick):
         intents = (self.callbacks.observe_closing_fill(bar) if hasattr(self.callbacks,"observe_closing_fill")
                    else self.callbacks.observe(bar, confirmed=True))
-        wire = getattr(intents, "decision", None) or {}
-        decision = _decision_record(intents, sequence=wire.get("sequence", bar.sequence), watermark_ms=bar.event_time_ms)
-        decision.update(trigger="CLOSE_FILL", signal_sequence=bar.sequence, source_sequence=tick.sequence,
-            closing_tick_contract=CONTRACT)
-        if self.kernel.scale_stream_decisions:
-            self.kernel._decision_chain_hash = "sha256:" + sha256_hex({"previous":self.kernel._decision_chain_hash,"decision":decision})
-            self.kernel._decision_count += 1
-        else:
-            self.kernel.decisions.append(decision)
-        self.kernel.execution._enqueue_many(intents, current_sequence=tick.sequence - 1)
+        from app.simulation.chart_decisions import decision_plans
+        for plan in decision_plans(intents):
+            wire = getattr(plan, "decision", None) or {}
+            decision = _decision_record(plan, sequence=wire.get("sequence", bar.sequence), watermark_ms=bar.event_time_ms)
+            decision.update(trigger="CLOSE_FILL", signal_sequence=bar.sequence, source_sequence=tick.sequence,
+                closing_tick_contract=CONTRACT)
+            if self.kernel.scale_stream_decisions:
+                self.kernel._decision_chain_hash = "sha256:" + sha256_hex({"previous":self.kernel._decision_chain_hash,"decision":decision})
+                self.kernel._decision_count += 1
+            else:
+                self.kernel.decisions.append(decision)
+            getattr(self.kernel,"execution",self.kernel)._enqueue_many(plan, current_sequence=tick.sequence - 1)

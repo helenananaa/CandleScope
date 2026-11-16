@@ -2,6 +2,7 @@ import type { ChartSession } from "../chart-session/chartSessionTypes.js";
 import type { MarketDataRuntimeContract } from "../market-data/marketDataRuntimeContract.js";
 import type { KlineBar, KlineBarInput } from "../market-data/marketDataTypes.js";
 import { SeriesWindowStore } from "../market-data/window/seriesWindowStore.js";
+import type { SyntheticOrigin } from "../market-data/synthetic/syntheticSeries.js";
 
 export const MARKET_CHART_SOURCE_MODES = [
   "LIVE_REFERENCE",
@@ -40,6 +41,7 @@ export interface MarketChartSourceDescription {
 }
 
 export interface MarketChartSourceRuntime {
+  readonly syntheticOrigin?: SyntheticOrigin;
   readonly mode: MarketChartSourceMode;
   readonly sourceId: string;
   readonly session: ChartSession;
@@ -75,6 +77,9 @@ export interface FrozenSnapshotSourceInput {
   datasetId: string;
   dataEpoch: string;
   snapshotHash: string;
+  /** Backend chart receipt that supplies this frozen window. */
+  runId?: string;
+  chartHash?: string;
   bars: readonly KlineBarInput[];
 }
 
@@ -262,6 +267,7 @@ class LiveReferenceSource implements LiveReferenceMarketChartSourceRuntime {
 }
 
 class StaticMarketChartSource implements MarketChartSourceRuntime {
+  readonly syntheticOrigin?: SyntheticOrigin;
   readonly mode: "FROZEN_SNAPSHOT" | "RUN_RESULT";
   readonly sourceId: string;
   readonly session: ChartSession;
@@ -272,6 +278,7 @@ class StaticMarketChartSource implements MarketChartSourceRuntime {
   private state: MarketChartSourceLifecycleState = "ACTIVE";
 
   constructor(input: {
+    syntheticOrigin?: SyntheticOrigin;
     mode: "FROZEN_SNAPSHOT" | "RUN_RESULT";
     sourceId: string;
     session: ChartSession;
@@ -280,6 +287,7 @@ class StaticMarketChartSource implements MarketChartSourceRuntime {
     bars: readonly KlineBarInput[];
   }) {
     this.mode = input.mode;
+    if (input.syntheticOrigin) this.syntheticOrigin = Object.freeze({ ...input.syntheticOrigin });
     this.sourceId = requiredText(input.sourceId, "sourceId");
     this.session = Object.freeze(cloneSession(input.session));
     this.datasetKey = requiredText(input.datasetKey, "datasetKey");
@@ -338,6 +346,8 @@ export function createFrozenSnapshotSource(
   const snapshotHash = requiredText(input.snapshotHash, "snapshotHash");
   return new StaticMarketChartSource({
     mode: "FROZEN_SNAPSHOT",
+    ...(input.runId && input.chartHash ? { syntheticOrigin: { kind: "FROZEN_SNAPSHOT" as const, dataset_id: datasetId, data_epoch: dataEpoch,
+      snapshot_hash: snapshotHash, run_id: input.runId, chart_hash: input.chartHash } } : {}),
     sourceId: input.sourceId ?? `snapshot:${snapshotHash}`,
     session: input.session,
     datasetKey: `${datasetId}:${dataEpoch}`,
@@ -353,6 +363,8 @@ export function createRunResultSource(input: RunResultSourceInput): MarketChartS
   const chartHash = requiredText(input.chartHash, "chartHash");
   return new StaticMarketChartSource({
     mode: "RUN_RESULT",
+    syntheticOrigin: { kind: "RUN_RESULT", run_id: runId, config_hash: configHash,
+      report_hash: reportHash, chart_hash: chartHash },
     sourceId: input.sourceId ?? `run:${runId}`,
     session: input.session,
     datasetKey: `run:${runId}:${chartHash}`,

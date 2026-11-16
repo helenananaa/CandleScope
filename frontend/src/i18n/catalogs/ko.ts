@@ -1,3 +1,4 @@
+import { syntheticEnglish } from "./syntheticMessages.js";
 import { continuousKorean } from "./continuousMessages.js";
 import { tradeHistoryKorean } from "./tradeHistoryMessages.js";
 import { replayNoteKorean } from "./replayNoteMessages.js";
@@ -9,6 +10,7 @@ import { tradingAccountsKo } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
+  ...syntheticEnglish,
   ...continuousKorean,
   ...tradeHistoryKorean,
   ...replayNoteKorean,
@@ -3977,6 +3979,8 @@ export const ko = {
   "replay.storage.evicted": "축출됨",
   "replay.hub.makerTakerBps": "메이커 / 테이커 bps",
   "chart.loadingKlines": "{symbol} {interval} 캔들을 불러오는 중…",
+  "chart.syntheticPreparing": "차트 데이터를 준비하는 중…",
+  "chart.syntheticUnavailable": "현재 차트 데이터를 사용할 수 없습니다. 다시 연결하는 중…",
   "backtest.bundleHash": "패키지 {hash}",
   "backtest.sourceManifestHashes": "소스 {source} · 매니페스트 {manifest}",
   "backtest.coverageRows": "{rows}행 / 워밍업 {warmup}",

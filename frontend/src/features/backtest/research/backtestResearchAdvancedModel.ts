@@ -118,7 +118,7 @@ export function composeResearchRunDraft(input: {
     warmup_bars: 0,
     output_mode: input.outputMode ?? "TARGET_POSITION",
     ...existing,
-    ...(overrides ? {
+    ...(input.context?.signal_chart ? { signal_chart: { ...input.context.signal_chart } } : {}),    ...(overrides ? {
       initial_balance: overrides.initialBalance, equity_percent: overrides.equityPercent, leverage: overrides.leverage,
       taker_fee_bps: overrides.feeBps, maker_fee_bps: overrides.feeBps, slippage_bps: overrides.slippageBps,
       fee_source: "user-defined", sizing_policy: "EQUITY_PERCENT_V1",

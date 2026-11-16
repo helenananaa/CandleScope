@@ -25,6 +25,7 @@ export interface BacktestResearchDatasetIdentity {
 }
 
 export interface BacktestResearchLaunchContext {
+  signal_chart?: import("../../shared/strategyRunSettings.js").ChartSignalDefinition | null;
   execution_overrides?: import("../../shared/strategyRunSettings.js").StrategyExecutionOverrides | null;
   schema_version: "candlescope.backtest-research-launch-context/1";
   context_id: string;

@@ -49,7 +49,7 @@ class Stream:
                    "host_settings", "risk_contract", "closing_ticks", "order_metadata_contract", "currency_rates",
                    "request_update_contract", "historical_plan", "requested_history", "execution_schedule_contract", "execution_tick_contract",
                    "external_stream_contract", "window_feedback_contract", "event_request_contract", "event_sources",
-                   "plan_state", "realtime_window_plan_contract"}
+                   "plan_state", "realtime_window_plan_contract", "signal_chart", "chart_signal_contract", "chart_event_contract"}
         if set(request) - allowed:
             raise ValueError("PINE_STREAM_INVALID: unknown opening fields")
         if (request.get("external_stream_contract") != CONTRACT or not capabilities()
@@ -67,6 +67,12 @@ class Stream:
                 raise ValueError("PINE_STREAM_UNSUPPORTED: realtime windows require qualified observed feedback")
         elif realtime_contract is not None:
             raise ValueError("PINE_STREAM_INVALID: realtime window contract requires realtime plan state")
+        self.chart_events=request.get("chart_event_contract")
+        if self.chart_events is not None:
+            if self.chart_events!="candlescope.chart-signal-events/1" or getattr(pine_compat,"EXTERNAL_CHART_EVENT_SCHEMA_VERSION",0)!=1:
+                raise ValueError("PINE_STREAM_UNSUPPORTED: chart event runtime required")
+            from .chart_signal_input import symbol
+            request={**request,"context":{**request["context"],"symbol":symbol(request["context"],request.get("signal_chart") or {})}}
         self.events=event_state
         if request.get("event_request_contract") is not None:
             self.events=self.events or EventRequests(request)
@@ -104,6 +110,7 @@ class Stream:
         self.engine = program.external_session(input_overrides=parameters or None,
             chart_symbol=request["context"]["symbol"], chart_timeframe=request["context"]["timeframe"],
             request_bars=environment(request), scheduled=True,
+            **({"ordered_chart":True} if self.chart_events else {}),
             **({"closing_ticks": True} if request.get("closing_ticks") is True else {}),
             **annotations, **risk_options(request, analysis))
         self.skip=0
@@ -137,7 +144,13 @@ class Stream:
             bar = request["bar"]
             if type(bar.get("time")) is not int:
                 raise ValueError("PINE_STREAM_INVALID: exact integer chart seconds required")
-            self.engine.begin_bar(engine_bars([bar])[0], bar_state=request["bar_state"])
+            native=engine_bars([bar])[0]
+            if self.chart_events:
+                clock=bar.get("chart_time_ms")
+                if type(clock) is not int or clock<0:raise ValueError("PINE_STREAM_INVALID: real chart milliseconds required")
+                native={key:value for key,value in native.items() if key!='chart_time_ms'}
+                native['time']=clock
+            self.engine.begin_bar(native, bar_state=request["bar_state"])
             self.passes, self.state = 0, request["bar_state"]
             result = {"intents": [], "intent_base": self.intents}
         elif operation == "stream_observe":
@@ -161,6 +174,12 @@ class Stream:
                 observation=self.events.observe(observation,self.engine.cursor,self.skip,_owned=True)
                 evaluation=observation["evaluation"]
             observation["evaluation"] = engine_pass(evaluation)
+            if self.chart_events:
+                clock=evaluation['bar'].get('chart_time_ms')
+                if type(clock) is not int or clock<0:raise ValueError("PINE_STREAM_INVALID: real chart milliseconds required")
+                observation['evaluation']['bar']={key:value for key,value in observation['evaluation']['bar'].items() if key!='chart_time_ms'}
+                observation['evaluation']['bar']['time']=clock
+                observation['evaluation']['account']['time']=clock
             try:
                 result = self.engine.observe(observation, snapshot=False)
             except ValueError:

@@ -34,15 +34,25 @@ class PineChartBarKernel(PineBarKernel):
         self.source_sequence, self.source_time_ms, self.chart_bar_count = state["sequence"], state["time_ms"], state["bar_count"]
 
     def run(self, events, strategy, *, warmup_events=0, finalize=False,
-            checkpoint_callback=None, fill_callback=None, vertex_callback=None, **options):
+            checkpoint_callback=None, fill_callback=None, vertex_callback=None, chart_event_callbacks=None, **options):
         if fill_callback is None or warmup_events or options:
             raise MarketDatasetError("chart BAR path requires its explicit callback clock", code="FIDELITY_UNSUPPORTED")
         active = None
         prior_reporter = self.execution_reporter
 
+        prior_observer = self.market_observer
+        if chart_event_callbacks is not None:
+            def observed(point):
+                if 'price' in point.payload:
+                    chart_event_callbacks.prepare_path(active,point)
+                if prior_observer is not None:prior_observer(point)
+            self.market_observer=observed
+
         def apply(plan, point):
-            self._record_decision(plan, point)
-            self._enqueue_many(plan, current_sequence=point.sequence)
+            from .chart_decisions import decision_plans
+            for item in decision_plans(plan):
+                self._record_decision(item, point)
+                self._enqueue_many(item, current_sequence=point.sequence)
 
         def report(value):
             self.account.mark = Decimal(self._last_event.payload["price"])
@@ -83,7 +93,8 @@ class PineChartBarKernel(PineBarKernel):
                     self.ambiguity_count += 1
                 active = event
                 self.walk_bar(event, close, on_vertex=(
-                    (lambda point, index: vertex_callback(active, point, index)) if vertex_callback is not None else None))
+                    (lambda point,index:apply(chart_event_callbacks.after_path(active,point),point)) if chart_event_callbacks is not None else (
+                    (lambda point, index: vertex_callback(active, point, index)) if vertex_callback is not None else None)))
                 self.source_sequence, self.source_time_ms = event.sequence, event.event_time_ms
                 self.chart_bar_count += 1
                 if checkpoint_callback is not None:
@@ -91,5 +102,6 @@ class PineChartBarKernel(PineBarKernel):
             if finalize:
                 self.finalize_orders()
         finally:
+            self.market_observer = prior_observer
             self.execution_reporter = prior_reporter
         return self.result()
