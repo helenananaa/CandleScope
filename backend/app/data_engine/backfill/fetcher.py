@@ -334,7 +334,10 @@ class HistoricalFetcher:
                         else 'failed' if isinstance(result, BaseException)
                         else result.status.value))
             if isinstance(result, (FetchResult, FetchReceipt)):
-                route.update(history_lane=result.metadata.get('history_lane', 'rest'),
+                # Routed archive results do not set history_lane. Preserve
+                # that absence instead of mislabelling archive+REST as REST.
+                route.update(reported_history_lane=result.metadata.get('history_lane'),
+                    history_sources=list(result.metadata.get('history_sources', ())),
                     archive_import_rows=result.metadata.get('archive_import_rows', 0),
                     archive_download_bytes=result.metadata.get('archive_download_bytes', 0),
                     archive_parse_elapsed_ms=result.metadata.get('archive_parse_elapsed_ms', 0),

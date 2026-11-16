@@ -925,6 +925,8 @@ def test_bounded_prime_page_does_not_prefill_ledger_parent_archives(tmp_path, mo
             assert receipt['selected_object_count'] == 0
             assert receipt['fetched_rows'] == 3
             assert receipt['rest_pages'] == 1
+            assert receipt['reported_history_lane'] == 'rest'
+            assert receipt['history_sources'] == results[0].metadata['history_sources']
             assert fetcher.snapshot()['recent_source_routes'] == [receipt]
         finally:
             await router.close()
