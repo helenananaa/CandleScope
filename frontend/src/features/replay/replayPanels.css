@@ -15,23 +15,6 @@
 
 .replay-history-boundary-notice button { border: 0; color: inherit; background: transparent; font-size: var(--font-size-lg); }
 
-.replay-integrity-heading h2, .replay-integrity-section-heading h3 { margin: 3px 0 8px; color: var(--text-primary); }
-
-.replay-integrity-heading button, .replay-integrity-panel button, .replay-integrity-panel a { padding: 6px 9px; border: 1px solid var(--border-color); border-radius: var(--radius-control); color: var(--text-primary); background: var(--bg-tertiary); text-decoration: none; }
-
-.replay-integrity-summary strong { overflow: hidden; color: var(--text-primary); text-overflow: ellipsis; }
-
-.replay-portfolio-curve > p { margin: 8px 0; line-height: 1.5; }
-
-.replay-capital-controls label { display: grid; gap: 4px; }
-
-.replay-review-controls label { display: grid; flex: 1 1 340px; gap: 4px; }
-
-.replay-rule-forms label, .replay-rule-reason, .replay-marker-form label { display: grid; gap: 4px; }
-
-.replay-review-timeline button { display: grid; flex: 0 0 210px; gap: 3px; text-align: left; }
-.replay-review-timeline button.active { border-color: var(--accent-cyan); background: color-mix(in srgb, var(--accent-cyan) 20%, transparent); }
-
 .replay-review-right-rail h3 { margin: 5px 0 10px; color: var(--text-primary); }
 
 .replay-note-editor p { margin: 0; color: var(--text-secondary); font-size: var(--font-size-xs); }

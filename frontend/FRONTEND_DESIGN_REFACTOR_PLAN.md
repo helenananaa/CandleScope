@@ -455,6 +455,13 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - Ending a run is a kit `Dialog` on the overlay stack (取消 focused, danger confirm), replacing a hand-built dialog with its own focus trap.
 - The capabilities view is one row per capability with a short state badge (精确, 近似, 不可用) instead of a grid of tiles whose state codes overflowed.
 
+**Phase 5f4 is done (branch `design/phase-5f4-replay-review`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_5F4.md`](../docs/FRONTEND_DESIGN_QA_PHASE_5F4.md).
+
+- The 复盘与完整性 and training results drawers share one frame: a header with icon buttons and a scrolling body of sections separated by dividers; the eyebrows are gone.
+- 复盘与完整性: the six code tiles are labelled facts (mode and disclosure in words); the rule revision forms and history, the audit events and the proof hashes are folded into disclosures; kit fields and buttons throughout, with 不可逆揭示时间 as a danger button and the review timeline as rows.
+- Training results: kit stats and trade rows with side badges and tinted P&L, instead of a nearly unstyled panel.
+- About 60 old panel rules (one `!important`, an element rule that restyled every button in the drawer) are replaced by token-based drawer rules.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.
