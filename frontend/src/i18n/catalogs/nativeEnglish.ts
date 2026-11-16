@@ -221,7 +221,7 @@ export const nativeEnglish = {
   "native.replay.restore": "Restore checkpoint",
   "native.replay.resume": "Resume saved replay",
   "native.external.title": "CandleScope matching feedback",
-  "native.external.description": "Bar-close decisions with subsequent market execution. Market, limit, stop, stop-limit, partial exits, brackets and cancellation; one net position. Host account and fee settings apply.",
+  "native.external.description": "Bar-close decisions with subsequent market execution. Market, limit, stop, stop-limit, partial exits, brackets and cancellation; one net position. The account and fee settings here apply.",
   "native.external.run": "Run backtest with CandleScope matching",
   "native.external.authority": "CandleScope matching keeps all fills and account state. Pine reads the matching results and creates no fills of its own.",
   "native.external.equity": "CandleScope account equity",

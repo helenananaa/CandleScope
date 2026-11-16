@@ -6,6 +6,7 @@ import { useLocale } from "../../i18n/useLocale.js";
 import { PermissionRows, ProviderRows, PaperRows, TrustRequestMatrix, TrustModeControl } from "./PluginManagementSections.js";
 import { pluginStatus } from "./pluginCenterModel.js";
 import type { PluginCatalogPlugin, PluginManagementDetail, PluginPlatformRuntime, PluginProviderContribution, PluginPaperContribution } from "./pluginPlatformTypes.js";
+import { sandboxStatusLabel, trustModeLabel } from "./pluginLabels.js";
 export default function PluginDetail({ selected, detail, loading, error, runtime, reload, onBack, onDiscover }: {
   selected: PluginCatalogPlugin; detail: PluginManagementDetail | null; loading: boolean; error: string | null;
   runtime: PluginPlatformRuntime; reload(): Promise<void>; onBack(): void; onDiscover(): void;
@@ -90,7 +91,7 @@ export default function PluginDetail({ selected, detail, loading, error, runtime
                             {trust.source.signatureRoot ? t("plugin.signedRoot", { root: trust.source.signatureRoot }) : t("plugin.unsignedLocal")}
                           </p>
                           <p>
-                            {t("plugin.modeSandbox", { mode: trust.mode, status: trust.authorization.sandbox.status })}
+                            {t("plugin.modeSandbox", { mode: trustModeLabel(trust.mode), status: sandboxStatusLabel(trust.authorization.sandbox.status) })}
                             {` · ${trust.decisionRecorded ? t("plugin.hasDecision") : t("plugin.defaultPolicy")}`}
                           </p>
                           {trust.authorization.entrypoints.map((item) => (

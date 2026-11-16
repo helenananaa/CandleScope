@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import type { JsonValue, PluginManagementDetail, PluginPlatformRuntime, PluginProviderContribution, PluginPaperContribution, PluginMarketplaceStatus, PluginRuntimeRegistryStatus, PluginTrustSummary, PluginLocalInstallCandidate, PluginTrustReview, PluginTrustChangeReview } from "./pluginPlatformTypes.js";
+import { permissionDecisionLabel, permissionKindLabel, releaseChannelLabel, releaseChannelOrder, runtimeVerificationLabel, sandboxStatusLabel, trustModeLabel } from "./pluginLabels.js";
 export function PermissionRows({ runtime, detail, reload }: {
   runtime: PluginPlatformRuntime;
   detail: PluginManagementDetail;
@@ -31,7 +32,7 @@ export function PermissionRows({ runtime, detail, reload }: {
     <div className="plugin-permissions">
       {permissions.map((permission) => (
         <article key={permission.permissionId}>
-          <div><strong>{permission.permissionId}</strong><span>{permission.kind} · {permission.decision}</span></div>
+          <div><strong>{permission.permissionId}</strong><span>{permissionKindLabel(permission.kind)} · {permissionDecisionLabel(permission.decision)}</span></div>
           <pre>{JSON.stringify(permission.requestedScope, null, 2)}</pre>
           <div className="plugin-action-row">
             {permission.decision !== "granted" && <button type="button" disabled={pending || !runtime.view.managementAvailable} onClick={() => void decide(permission.permissionId, "grant", permission.requestedScope)}>{t("plugin.host.grantScope")}</button>}
@@ -202,7 +203,7 @@ export function MarketplacePanel({
       <details className="plugin-technical-details">
         <summary>{t("plugin.market.policy")}</summary>
         <p>{t("plugin.market.policyHint")}</p>
-        {catalog.rollout && <p>{t("plugin.market.channel", { channel: catalog.rollout.channel })}</p>}
+        {catalog.rollout && <p>{t("plugin.market.channel", { channel: releaseChannelLabel(catalog.rollout.channel), order: releaseChannelOrder() })}</p>}
         {status?.telemetry && (
           <p data-marketplace-telemetry={status.telemetry.enabled ? "enabled" : "disabled"}>
             {t("plugin.market.telemetry", {
@@ -410,7 +411,7 @@ export function RuntimeRegistryPanel({ status }: { status: PluginRuntimeRegistry
       {status.runtimes.map((item) => (
         <article key={`${item.runtimeId}:${item.kind}:${item.os}:${item.arch}`} className="plugin-runtime-registry-row">
           <strong>{item.runtimeId} · {item.version}</strong>
-          <p>{item.kind} · {item.os}/{item.arch} · {size(item.size)} · {item.verificationStatus}</p>
+          <p>{item.kind} · {item.os}/{item.arch} · {size(item.size)} · {runtimeVerificationLabel(item.verificationStatus)}</p>
           <small>
             {t("plugin.host.runtimeFingerprint", {
               owner: t("plugin.host.hostManaged"),
@@ -604,8 +605,8 @@ export function LocalTrustInstallPanel({ runtime, onPendingChange }: { runtime: 
           ))}
           <p data-sandbox-status={candidate.preview.authorization.sandbox.status}>
             {t("plugin.trust.sandboxMode", {
-              status: candidate.preview.authorization.sandbox.status,
-              mode: candidate.preview.authorization.mode,
+              status: sandboxStatusLabel(candidate.preview.authorization.sandbox.status),
+              mode: trustModeLabel(candidate.preview.authorization.mode),
             })}
           </p>
           <TrustRequestMatrix trust={candidate.preview.requests} />
@@ -745,10 +746,10 @@ export function TrustModeControl({
         <div className="plugin-trust-diffs" data-trust-change-preview={review.previewSha256}>
           <div>
             <strong>{t("plugin.trust.frozenBoundary")}</strong>
-            <span>{review.preview.to.mode} · {review.preview.to.sandbox.status}</span>
+            <span>{trustModeLabel(review.preview.to.mode)} · {sandboxStatusLabel(review.preview.to.sandbox.status)}</span>
             <small>
               {t("plugin.diff.runtime", { state: changedLabel(review.preview.runtimeDiff.changed) })}
-              {` · kind/id ${changedLabel(review.preview.runtimeDiff.kindOrIdChanged)}`}
+              {` · ${t("plugin.host.kindOrId", { state: changedLabel(review.preview.runtimeDiff.kindOrIdChanged) })}`}
               {` · ${t("plugin.diff.sigRoot", { state: changedLabel(review.preview.runtimeDiff.signatureRootChanged) })}`}
               {` · ${t("plugin.diff.sysPath", { state: changedLabel(review.preview.runtimeDiff.systemRuntimePathChanged) })}`}
             </small>
@@ -764,7 +765,7 @@ export function TrustModeControl({
       )}
       <div className="plugin-action-row">
         <button type="button" disabled={busy || !allAccepted || reason.trim().length < 12 || review !== null} onClick={() => void begin()}>
-          {t("plugin.trust.firstReviewTarget", { target })}
+          {t("plugin.trust.firstReviewTarget", { target: trustModeLabel(target) })}
         </button>
         <button type="button" disabled={busy || review === null} onClick={() => void confirm()}>
           {t("plugin.trust.secondApply")}
