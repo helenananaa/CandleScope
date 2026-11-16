@@ -1025,13 +1025,13 @@ async function performSoakInteraction(cdp, iteration, cellCount, timeoutMs) {
 
   if (iteration % 6 === 0) {
     await runAction("indicator-remove-add", async () => {
-      await evaluate(cdp, `document.querySelector('.indicator-toggle-btn[title="指标 (Indicators)"]')?.click()`);
+      await evaluate(cdp, `document.querySelector('.indicator-toggle-btn:not(.alert-toggle-btn)')?.click()`);
       await waitForBrowserValue(cdp, `() => ({
         ready: Boolean(document.querySelector('.indicator-tab-bar')),
       })`, timeoutMs, "indicator panel");
       await evaluate(cdp, `(() => {
-        const tab = Array.from(document.querySelectorAll('.indicator-tab')).find((item) => item.textContent?.includes('指标库'));
-        if (tab instanceof HTMLButtonElement && !tab.classList.contains('active')) tab.click();
+        const tab = Array.from(document.querySelectorAll('.indicator-tab-bar [role="tab"]')).find((item) => item.textContent?.includes('指标库'));
+        if (tab instanceof HTMLButtonElement && tab.getAttribute('aria-selected') !== 'true') tab.click();
       })()`);
       await waitForBrowserValue(cdp, `() => ({
         ready: Boolean(document.querySelector('.indicator-preset-item[data-indicator-id="ma"] .indicator-add-btn.added')),

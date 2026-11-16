@@ -22,6 +22,12 @@ export const HOOK_CLASSES = new Set([
   "indicator-editor-run", // frontendScript browser test runs the script
   "replay-public-time", // replay workspace test reads the public clock
   "pc-navigation", // scripts/trusted-extensions-desktop-smoke.mjs finds the plugin center's tabs
+  "indicator-add-btn", // scripts/smoke.mjs and multi-chart-capacity.mjs add and remove indicators (with .added)
+  "indicator-panel-close", // scripts/multi-chart-capacity.mjs closes the indicator drawer
+  "indicator-tab-bar", // scripts/smoke.mjs and multi-chart-capacity.mjs find the drawer's tabs
+  "indicator-tab-create", // frontendScript browser test opens the custom indicator editor
+  "indicator-visibility-btn", // scripts/smoke.mjs toggles an active study
+  "indicator-editor-save", // frontendScript browser test saves the custom indicator
 ]);
 
 function walk(dir) {

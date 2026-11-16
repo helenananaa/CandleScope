@@ -419,6 +419,13 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - Fired alerts go through `notify()`: they show above dialogs and can be clicked while one is open (the 3a known gap), with 打开警报 as the action.
 - `alerts.css` went from 1,500 lines to about 370; the late-loading `alertToasts.css` is merged and deleted; 21 unused keys are gone.
 
+**Phase 5d is done (branch `design/phase-5d-indicators`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_5D.md`](../docs/FRONTEND_DESIGN_QA_PHASE_5D.md).
+
+- The indicator drawer uses kit tabs (the count is the 已添加 badge) with 自定义 as a small button beside them. A library row is the name, one line of description and pane, and an add toggle; the 内置 / 主图 / 副图 pills on every row are gone, leaving badges for exceptions (自定义, 行情数据, unavailable in replay).
+- Added indicators show their parameters as kit fields, two per row (one in a narrow drawer), with compact colour swatches; errors and notices are `InlineAlert`s.
+- The script editor has one toolbar (title and name, actions, close), kit fields, no uppercase labels (they turned `ta.timeframe` into "TA. TIMEFRAME"), and Pine's advanced inputs as closed disclosures with labelled monospace text areas. It had 40 inline styles and has none.
+- `indicators.css` went from 957 lines to 437 with no hard-coded colours; the late-loading `indicatorEditorToolbar.css` is merged and deleted; two unused keys are gone.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.

@@ -7,6 +7,9 @@ import { pineCurrencyParams, parsePineCurrencyRates } from "./pineCurrencyModel.
 /** Editor for hosted and frontend indicator scripts. */
 import { describeError } from "../../i18n/serverErrors.js";
 import { Icon } from "../../components/icons/Icon.js";
+import { Button, IconButton } from "../../components/ui/Button.js";
+import { Disclosure, InlineAlert } from "../../components/ui/Display.js";
+import { Checkbox, Field, Input, Select, Textarea } from "../../components/ui/Field.js";
 import { lazy, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -25,7 +28,7 @@ import {
   runtimeForScriptLanguage,
 } from "./scriptRuntimeCatalog.js";
 import { createScriptEditorDraft, editScriptEditorSource, scriptEditorSource, switchScriptEditorLanguage } from "./scriptEditorDraft.js";
-import type { ChangeEvent } from "react";
+import type { ChangeEvent, ReactNode } from "react";
 import type {
   IndicatorDefinition,
   IndicatorParams,
@@ -301,36 +304,56 @@ export default function IndicatorEditor({
     };
   }, []);
 
+  const languageLabel = displayedLanguage?.name || requestedLanguageId || t("indicator.editor.fallbackLanguage");
+  const actionsDisabled = !languageReady || (selectedLanguage?.id === "pine" && !librariesValid);
+  // One status line under the editor; its tone colours the text.
+  const status: { tone: "muted" | "danger" | "accent" | "success"; text: ReactNode } = readOnly
+    ? { tone: "muted", text: t("indicator.editor.builtinHint") }
+    : !languageReady
+      ? { tone: "danger", text: runtimeCatalogError
+        ? t("indicator.editor.noRuntime")
+        : allowedRuntimeCatalog && requestedLanguageId
+          ? t("indicator.editor.savedLangUnavailable", { language: requestedLanguageId })
+          : allowedRuntimeCatalog
+            ? t("indicator.editor.noRuntimeAvailable")
+            : t("indicator.editor.discovering") }
+      : previewState?.error
+        ? { tone: "danger", text: previewState.error }
+        : previewState?.isComputing
+          ? { tone: "accent", text: t("indicator.editor.computingData") }
+          : previewState?.id
+            ? { tone: "success", text: t("indicator.editor.runOk") }
+            : { tone: "muted", text: editorProfile?.pineEnhancements
+              ? <>{t("indicator.editor.pineApiHint")} <code>ta.sma()</code> <code>plot()</code> <code>plotshape()</code> <code>input.int()</code></>
+              : t("indicator.editor.communityRuntime", { language: selectedLanguage?.name || t("indicator.editor.fallbackLanguage"), runtime: selectedRuntime?.name || "plugin" }) };
+
   return (
-    <div className="indicator-editor" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Toolbar */}
-      <div className="indicator-editor-toolbar" style={{ padding: '12px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, flexWrap: 'wrap', gap: '10px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px 16px', flexWrap: 'wrap', flex: '1 1 240px', minWidth: 0 }}>
-          <span className="indicator-editor-title" style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)', letterSpacing: '0.5px' }}>
-            {readOnly
-              ? t("indicator.editor.builtinRef")
-              : t("indicator.editor.title", { language: displayedLanguage?.name || requestedLanguageId || t("indicator.editor.fallbackLanguage") })}
+    <div className="indicator-editor">
+      <div className="indicator-editor-toolbar">
+        <div className="indicator-editor-heading">
+          <span className="indicator-editor-title">
+            {readOnly ? t("indicator.editor.builtinRef") : t("indicator.editor.title", { language: languageLabel })}
           </span>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)', overflowWrap: 'anywhere' }}>{name}</span>
+          <span className="indicator-editor-subtitle">{name}</span>
         </div>
 
-        <div className="indicator-editor-toolbar-actions" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+        <div className="indicator-editor-toolbar-actions">
           {previewState?.id && !readOnly && (
-            <button
+            <IconButton
+              size="sm"
+              label={previewState.visible ? t("indicator.editor.hideOnChart") : t("indicator.editor.showOnChart")}
+              icon={<Icon name={previewState.visible ? "eye" : "eye-off"} size={15} />}
               onClick={() => {
                 if (previewState.id) onToggleVisibility(previewState.id);
               }}
-              style={{ background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'all 0.15s' }}
-              title={previewState.visible ? t("indicator.editor.hideOnChart") : t("indicator.editor.showOnChart")}
-              aria-label={previewState.visible ? t("indicator.editor.hideOnChart") : t("indicator.editor.showOnChart")}
-            >
-              <Icon name={previewState.visible ? "eye" : "eye-off"} size={16} />
-            </button>
+            />
           )}
           {readOnly ? (
-            <button
+            <Button
+              size="sm"
+              variant="primary"
               className="indicator-editor-save"
-              disabled={!languageReady || (selectedLanguage?.id === "pine" && !librariesValid)}
+              disabled={actionsDisabled}
               onClick={() => {
                 if (!selectedLanguage || !editorProfile) return;
                 onForkBuiltin?.({
@@ -341,136 +364,112 @@ export default function IndicatorEditor({
                   language: selectedLanguage.id,
                 });
               }}
-              style={{ background: 'var(--accent-blue)', color: 'var(--text-on-accent)', border: 'none', padding: '6px 16px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '13px', boxShadow: '0 2px 8px rgba(59, 130, 246, 0.3)', transition: 'all 0.2s ease', marginLeft: '8px' }}
             >
               {t("indicator.editor.fork")}
-            </button>
+            </Button>
           ) : (
             <>
-              <button
-                className="indicator-editor-run"
-                disabled={!languageReady || (selectedLanguage?.id === "pine" && !librariesValid)}
-                onClick={handlePreview}
-                style={{ background: 'var(--bg-tertiary)', color: 'var(--accent-blue)', border: '1px solid var(--accent-blue)', padding: '6px 16px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '13px', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', gap: '6px' }}
-              >
+              <Button size="sm" className="indicator-editor-run" disabled={actionsDisabled} onClick={handlePreview}>
                 {previewState?.isComputing ? t("indicator.editor.computing") : t("indicator.editor.run")}
-              </button>
-              <button
-                className="indicator-editor-save"
-                disabled={!languageReady || (selectedLanguage?.id === "pine" && !librariesValid)}
-                onClick={handleSave}
-                style={{ background: 'var(--accent-blue)', color: 'var(--text-on-accent)', border: 'none', padding: '6px 16px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '13px', boxShadow: '0 2px 8px rgba(59, 130, 246, 0.3)', transition: 'all 0.2s ease', marginLeft: '8px' }}
-              >
+              </Button>
+              <Button size="sm" variant="primary" className="indicator-editor-save" disabled={actionsDisabled} onClick={handleSave}>
                 {t("indicator.editor.save")}
-              </button>
+              </Button>
             </>
           )}
-          <div style={{ width: '1px', height: '20px', background: 'var(--border-color)', margin: '0 8px' }}></div>
-          <button
-            className="indicator-editor-back"
+          <span className="indicator-editor-divider" aria-hidden="true" />
+          <IconButton
+            size="sm"
+            label={t("indicator.editor.close")}
+            icon={<Icon name="close" size={15} />}
             onClick={onBack}
-            style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '4px', lineHeight: 1 }}
-            title={t("indicator.editor.close")}
-            aria-label={t("indicator.editor.close")}
-          >
-            <Icon name="close" size={14} />
-          </button>
+          />
         </div>
       </div>
 
-      <div style={{ padding: '24px', flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-        {/* Name input */}
-        <div className="indicator-editor-field" style={{ marginBottom: '8px' }}>
-          <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: 500 }}>{t("indicator.editor.name")}</label>
-          <input
-            type="text"
+      <div className="indicator-editor-body">
+        <Field label={t("indicator.editor.name")}>
+          <Input
             value={name}
             onChange={(e) => {
               if (!readOnly) setName(e.target.value);
             }}
             readOnly={readOnly}
-            className="indicator-editor-name-input"
-            style={{ width: '100%', padding: '12px 16px', background: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', fontSize: '15px', outline: 'none', transition: 'all 0.2s', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)' }}
           />
-        </div>
+        </Field>
 
-        {language === "pine" && <details>
-          <summary>{t("pine.host.title")}</summary>
-          <p>{t("pine.host.hint")}</p>
-          <label>{t("pine.host.json")}<textarea value={hostText} readOnly={readOnly} spellCheck={false}
-            style={{ width: "100%", minHeight: 100 }} onChange={(event) => setHostText(event.target.value)} /></label>
-          {hostConfig.error && <p role="alert">{hostConfig.error}</p>}
-          <button type="button" disabled={readOnly} onClick={() => setSessionEpoch(crypto.randomUUID())}>{t("pine.host.reset")}</button>
-          <p>{t("pine.host.resetHint")}</p>
-          <label><input type="checkbox" checked={pineAlerts} disabled={readOnly} onChange={(event) => setPineAlerts(event.target.checked)} />{t("pine.host.alerts")}</label>
-          <p>{t("pine.host.alertHint")}</p>
-        </details>}
-        {/* Code editor */}
-        {selectedLanguage?.id === FRONTEND_SCRIPT_LANGUAGE && (
-          <p style={{ color: "var(--text-muted)", fontSize: "12px" }}>
-            {t("indicator.editor.frontendWindow")}
-          </p>
-        )}
-        <div className="indicator-editor-code-label" style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '8px', marginBottom: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-            <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>
-              {t("indicator.editor.script", { language: displayedLanguage?.name || requestedLanguageId || t("indicator.editor.fallbackLanguage") })}
-            </span>
-            {!readOnly && (
-              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                {t("indicator.editor.language")}
-                <select
-                  value={selectedLanguage?.id || requestedLanguageId}
-                  onChange={handleLanguageChange}
-                  disabled={!allowedRuntimeCatalog || allowedRuntimeCatalog.languages.length === 0}
-                  style={{ background: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '4px 8px', fontSize: '12px' }}
+        <div className="indicator-editor-script-head">
+          <span className="indicator-editor-script-label">{t("indicator.editor.script", { language: languageLabel })}</span>
+          {!readOnly && (
+            <Select
+              size="sm"
+              aria-label={t("indicator.editor.language")}
+              value={selectedLanguage?.id || requestedLanguageId}
+              onChange={handleLanguageChange}
+              disabled={!allowedRuntimeCatalog || allowedRuntimeCatalog.languages.length === 0}
+            >
+              {missingRequestedLanguage && (
+                <option value={requestedLanguageId} disabled>
+                  {t("indicator.editor.languageUnavailable", { language: requestedLanguageId })}
+                </option>
+              )}
+              {allowedRuntimeCatalog?.languages.map((descriptor) => (
+                <option
+                  key={`${descriptor.runtimeId || "legacy"}:${descriptor.id}`}
+                  value={descriptor.id}
+                  disabled={!descriptor.available}
                 >
-                  {missingRequestedLanguage && (
-                    <option value={requestedLanguageId} disabled>
-                      {t("indicator.editor.languageUnavailable", { language: requestedLanguageId })}
-                    </option>
-                  )}
-                  {allowedRuntimeCatalog?.languages.map((descriptor) => (
-                    <option
-                      key={`${descriptor.runtimeId || "legacy"}:${descriptor.id}`}
-                      value={descriptor.id}
-                      disabled={!descriptor.available}
-                    >
-                      {descriptor.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-
-
-            {selectedRuntime && (
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                {selectedRuntime.name} {selectedRuntime.version}
-              </span>
-            )}
-          </div>
-          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-            {editorProfile?.pineEnhancements
-                ? <>{t("indicator.editor.hintPine")} <code>ta.</code> <code>timeframe.</code> {t("indicator.editor.hintComplete")} </>
-              : selectedLanguage?.id === FRONTEND_SCRIPT_LANGUAGE ? null : <>{t("indicator.editor.hintPlugin")} </>}
-            <kbd style={{ background: 'var(--bg-tertiary)', padding: '1px 5px', borderRadius: '3px', fontSize: 'var(--font-size-2xs)', border: '1px solid var(--border-color)' }}>Ctrl+Enter</kbd> {t("indicator.editor.runKbd")}
-          </span>
+                  {descriptor.name}
+                </option>
+              ))}
+            </Select>
+          )}
+          {selectedRuntime && (
+            <span className="indicator-editor-runtime">{selectedRuntime.name} {selectedRuntime.version}</span>
+          )}
         </div>
+        <p className="indicator-editor-hint">
+          {editorProfile?.pineEnhancements
+            ? <>{t("indicator.editor.hintPine")} <code>ta.</code> <code>timeframe.</code> {t("indicator.editor.hintComplete")} </>
+            : selectedLanguage?.id === FRONTEND_SCRIPT_LANGUAGE ? null : <>{t("indicator.editor.hintPlugin")} </>}
+          <kbd>Ctrl+Enter</kbd> {t("indicator.editor.runKbd")}
+        </p>
+        {selectedLanguage?.id === FRONTEND_SCRIPT_LANGUAGE && (
+          <p className="indicator-editor-hint">{t("indicator.editor.frontendWindow")}</p>
+        )}
         {!readOnly && allowedRuntimeCatalog && !languageReady && (
-          <div role="status" style={{ marginBottom: 8, color: "var(--text-secondary)", fontSize: 12 }}>
-            {t("indicator.editor.runtimeUnavailableHelp")} {t("native.platformHelp")}
-          </div>
+          <InlineAlert tone="warning">{t("indicator.editor.runtimeUnavailableHelp")} {t("native.platformHelp")}</InlineAlert>
         )}
         {runtimeCatalogError && (
-          <div style={{ marginBottom: '8px', color: 'var(--text-danger)', fontSize: '12px' }}>
-            {t("indicator.editor.runtimeMissing", { error: runtimeCatalogError })}
+          <InlineAlert tone="danger">{t("indicator.editor.runtimeMissing", { error: runtimeCatalogError })}</InlineAlert>
+        )}
+
+        {(language === "pine" || selectedLanguage?.id === "pine") && (
+          <div className="indicator-editor-advanced">
+            {language === "pine" && (
+              <Disclosure summary={t("pine.host.title")}>
+                <div className="indicator-editor-advanced-body">
+                  <p className="indicator-editor-hint">{t("pine.host.hint")}</p>
+                  <Field label={t("pine.host.json")} {...(hostConfig.error ? { error: hostConfig.error } : {})}>
+                    <Textarea className="indicator-editor-json" value={hostText} readOnly={readOnly} spellCheck={false} rows={5}
+                      onChange={(event) => setHostText(event.target.value)} />
+                  </Field>
+                  <div>
+                    <Button size="sm" disabled={readOnly} onClick={() => setSessionEpoch(crypto.randomUUID())}>{t("pine.host.reset")}</Button>
+                    <p className="indicator-editor-hint">{t("pine.host.resetHint")}</p>
+                  </div>
+                  <Checkbox label={t("pine.host.alerts")} description={t("pine.host.alertHint")} checked={pineAlerts} disabled={readOnly}
+                    onChange={(event) => setPineAlerts(event.target.checked)} />
+                </div>
+              </Disclosure>
+            )}
+            {selectedLanguage?.id === "pine" && <PineLibraryInputs value={libraryJson} onChange={setLibraryJson} readOnly={readOnly} />}
+            {selectedLanguage?.id === "pine" && <PineContextInputs value={contextJson} onChange={setContextJson} readOnly={readOnly} />}
+            {selectedLanguage?.id === "pine" && <PineCurrencyInputs value={currencyJson} onChange={setCurrencyJson} readOnly={readOnly} />}
           </div>
         )}
-        {selectedLanguage?.id === "pine" && <PineLibraryInputs value={libraryJson} onChange={setLibraryJson} readOnly={readOnly} />}
-        {selectedLanguage?.id === "pine" && <PineContextInputs value={contextJson} onChange={setContextJson} readOnly={readOnly} />}
-        {selectedLanguage?.id === "pine" && <PineCurrencyInputs value={currencyJson} onChange={setCurrencyJson} readOnly={readOnly} />}
-        <div style={{ flex: 1, minHeight: 0, border: "1px solid rgba(255, 255, 255, 0.1)", borderRadius: "10px", overflow: "hidden", boxShadow: "0 8px 32px rgba(0, 0, 0, 0.2), inset 0 2px 4px rgba(0, 0, 0, 0.2)" }}>
+
+        <div className="indicator-editor-code">
           <Suspense fallback={null}><Editor
             height="100%"
             path={`candlescope-indicator-${encodeURIComponent(modelId)}.${selectedLanguage?.id || "txt"}`}
@@ -491,36 +490,10 @@ export default function IndicatorEditor({
             } : {})}
           /></Suspense>
         </div>
-
       </div>
 
-      {/* Error Console */}
-      <div className="indicator-editor-console" style={{ padding: '8px 24px', background: 'var(--bg-primary)', borderTop: '1px solid var(--border-color)', minHeight: '40px', flexShrink: 0, display: 'flex', alignItems: 'center', fontFamily: "'JetBrains Mono', monospace", fontSize: '12px', overflowY: 'auto' }}>
-        {readOnly ? (
-          <span style={{ color: 'var(--text-muted)' }}>{t("indicator.editor.builtinHint")}</span>
-        ) : !languageReady ? (
-          <span style={{ color: 'var(--text-danger)' }}>
-            {runtimeCatalogError
-              ? t("indicator.editor.noRuntime")
-              : allowedRuntimeCatalog && requestedLanguageId
-                ? t("indicator.editor.savedLangUnavailable", { language: requestedLanguageId })
-                : allowedRuntimeCatalog
-                  ? t("indicator.editor.noRuntimeAvailable")
-                  : t("indicator.editor.discovering")}
-          </span>
-        ) : previewState?.error ? (
-          <span style={{ color: 'var(--text-danger)', whiteSpace: 'pre-wrap' }}>{previewState.error}</span>
-        ) : previewState?.isComputing ? (
-          <span style={{ color: 'var(--accent-blue)' }}>{t("indicator.editor.computingData")}</span>
-        ) : previewState?.id ? (
-          <span style={{ color: 'var(--text-success)' }}>{t("indicator.editor.runOk")}</span>
-        ) : (
-          <span style={{ color: 'var(--text-muted)' }}>
-            {editorProfile?.pineEnhancements
-                ? <>{t("indicator.editor.pineApiHint")} <code>ta.sma()</code> <code>plot()</code> <code>plotshape()</code> <code>input.int()</code></>
-              : t("indicator.editor.communityRuntime", { language: selectedLanguage?.name || t("indicator.editor.fallbackLanguage"), runtime: selectedRuntime?.name || "plugin" })}
-          </span>
-        )}
+      <div className="indicator-editor-console" data-tone={status.tone} role="status">
+        {status.text}
       </div>
     </div>
   );
