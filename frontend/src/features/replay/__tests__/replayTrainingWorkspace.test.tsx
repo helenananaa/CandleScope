@@ -55,7 +55,7 @@ test("v2 workspace owns the same source-neutral market slots without legacy repl
   ].map(source).join("\n");
   for (const owner of [
     "MarketPageFrame",
-    "MarketTopBarFrame",
+    "AppHeader",
     "IntervalSelector",
     "MarketChartWorkspace",
     "MarketStatusBar",
@@ -70,7 +70,8 @@ test("v2 workspace owns the same source-neutral market slots without legacy repl
   assert.doesNotMatch(workspace, /ReplayRightRail/);
   assert.match(workspace, /replay\.shell\.reviewTools/);
   assert.match(workspace, /review === null \? viewer\.seriesStore : reviewSeriesStore/);
-  assert.match(workspace, /aria-controls="replay-integrity-drawer"/);
+  // The integrity toggle is a header action that controls the drawer.
+  assert.match(workspace, /controls: "replay-integrity-drawer"/);
   assert.match(workspace, /integrityOpen &&/);
   // The integrity drawer is a right-hand drawer on the overlay stack, which owns its Escape.
   assert.match(workspace, /<OverlayLayer kind="drawer" side="right" onClose=\{\(\) => setIntegrityOpen\(false\)\}/);

@@ -4469,6 +4469,7 @@ export const sv = {
   "common.cancel": "Avbryt",
   "common.close": "Stäng",
   "common.notifications": "Aviseringar",
+  "shell.moreActions": "Fler åtgärder",
   "serverError.code.historyOriginUnavailable": "Det gick inte att läsa var börsens historik börjar. Försök igen strax.",
   "serverError.code.subscribeFailed": "Det gick inte att prenumerera på realtidsdata",
   "local.qualityStatus.accepted": "Godkänd",

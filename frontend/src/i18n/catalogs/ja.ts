@@ -4813,6 +4813,7 @@ export const ja = {
   "common.cancel": "キャンセル",
   "common.close": "閉じる",
   "common.notifications": "通知",
+  "shell.moreActions": "その他の操作",
   "serverError.code.historyOriginUnavailable": "取引所の履歴の開始点を読み取れませんでした。しばらくしてから再試行してください。",
   "serverError.code.subscribeFailed": "リアルタイムデータの購読に失敗しました",
   "local.qualityStatus.accepted": "合格",

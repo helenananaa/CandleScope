@@ -4469,6 +4469,7 @@ export const it = {
   "common.cancel": "Annulla",
   "common.close": "Chiudi",
   "common.notifications": "Notifiche",
+  "shell.moreActions": "Altre azioni",
   "serverError.code.historyOriginUnavailable": "Impossibile leggere l’inizio dello storico dell’exchange. Riprova tra poco.",
   "serverError.code.subscribeFailed": "Sottoscrizione ai dati in tempo reale non riuscita",
   "local.qualityStatus.accepted": "Accettato",

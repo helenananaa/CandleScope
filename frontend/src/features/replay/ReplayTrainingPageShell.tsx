@@ -12,7 +12,7 @@ import type { TickMarkType } from "../../chart-adapter/chartAdapterTypes.js";
 import MarketChartWorkspace from "../../app/MarketChartWorkspace.js";
 import MarketPageFrame from "../../app/MarketPageFrame.js";
 import MarketStatusBar from "../../app/MarketStatusBar.js";
-import MarketTopBarFrame from "../../app/MarketTopBarFrame.js";
+import AppHeader from "../../app/AppHeader.js";
 import { AlertRailIcon, ProfileRailIcon } from "../../app/marketRailIcons.js";
 import type { ChartSurfaceActions, ChartSurfaceHandle, ChartSurfaceVisibleRange } from "../../chart-adapter/useChartSurfaceRuntime.js";
 import type { RefObject, ComponentType, ReactNode } from "react";
@@ -193,7 +193,7 @@ export default function ReplayTrainingPageShell({
   } = useCustomIntervals();
   const { intervalNotice, showIntervalNotice } = useIntervalNoticeRuntime();
   const lastRemovedIntervalRef = useRef<CustomIntervalRecord | null>(null);
-  const integrityToggleRef = useRef<HTMLButtonElement | null>(null);
+  const integrityToggleRef = useRef<HTMLElement | null>(null);
   const integrityDrawerRef = useRef<HTMLElement | null>(null);
   const [priceScale] = useState(() => {
     const preferences = loadUserPrefs();
@@ -1218,11 +1218,11 @@ export default function ReplayTrainingPageShell({
       toolbar={drawingToolbar}
       rightRail={rightRail}
       topBar={(
-        <MarketTopBarFrame
+        <AppHeader
           source="replay"
           className="replay-top-bar"
-          navigation={<span className="replay-mode-badge">{t("replay.kicker.training")}</span>}
-          identity={config && (
+          badge={<span className="replay-mode-badge">{t("replay.kicker.training")}</span>}
+          context={config && (
             <button className="replay-identity-readonly" type="button" title={t("replay.shell.identityImmutable")}>
               {review === null
                 ? `${activeSelectedTrack?.exchange ?? config.exchange} · ${activeSelectedTrack?.market_type ?? config.market_type} · ${displayedSymbol} · ${t("replay.shell.accountTracks", { count: viewer.marketTracks?.tracks.length ?? 1 })} · ${t("replay.baseInterval", { interval: config.base_interval })}`
@@ -1234,14 +1234,7 @@ export default function ReplayTrainingPageShell({
                 })}
             </button>
           )}
-          intervals={replayIntervalSelector}
-          controls={<>
-            {cell?.controls}
-            {dateNavigation.available && <button type="button" className="ui-control"
-              onClick={() => dateNavigation.setOpen(true)}>{t("study.viewDate")}</button>}
-            <button type="button" className="settings-btn indicator-toggle-btn"
-              aria-label={t("shell.settings")} title={t("shell.settings")}
-              onClick={() => setChartSettingsOpen(true)}><Icon name="palette" size={18} /></button>
+          panels={<>
             <button
               className={`indicator-toggle-btn ${indicatorPanelOpen ? "active" : ""}`}
               type="button"
@@ -1262,10 +1255,13 @@ export default function ReplayTrainingPageShell({
               <span aria-hidden="true" style={{ display: "flex" }}><AlertRailIcon /></span>
             </button>
           </>}
-          quote={last && (
+          settings={{ onOpen: () => setChartSettingsOpen(true) }}
+          extras={cell?.controls}
+          tools={<>
+            {replayIntervalSelector}
+            {last && (
             <div className="price-info"><span className={`current-price ${isUp ? "price-up" : "price-down"}`}>{last.close}</span><span className="price-change">{isUp ? "▲" : "▼"} {t("replay.priceLabel")}</span></div>
           )}
-          marketMetrics={(
             <div className="advanced-market-summary" aria-label={t("replay.derivativesAria")}>
               {(["MARK_PRICE", "INDEX_PRICE", "BASIS"] as const).map((id) => (
                 <div className="advanced-market-chip" key={id} data-market-metric={id.toLowerCase()} data-capability-state={capabilities[id].state}>
@@ -1275,41 +1271,28 @@ export default function ReplayTrainingPageShell({
                 </div>
               ))}
             </div>
-          )}
-          trailing={<>
-            {active && (
-              <button
-                ref={integrityToggleRef}
-                className="replay-integrity-toggle ui-control"
-                type="button"
-                data-replay-action="toggle-integrity"
-                data-review-active={review === null ? "false" : "true"}
-                aria-controls="replay-integrity-drawer"
-                aria-expanded={integrityOpen}
-                onClick={() => {
-                  setTrainingResultsOpen(false);
-                  setIntegrityOpen((open) => !open);
-                }}
-              >
-                {review === null ? t("replay.shell.integrity") : t("replay.shell.reviewing")}
-              </button>
-            )}
-            {active && integrityRuntime.runId !== null && (
-              <button
-                className="replay-integrity-toggle ui-control"
-                type="button"
-                data-replay-action="toggle-training-results"
-                aria-controls="replay-training-results-drawer"
-                aria-expanded={trainingResultsOpen}
-                onClick={() => {
-                  setIntegrityOpen(false);
-                  setTrainingResultsOpen((open) => !open);
-                }}
-              >{t("replay.shell.results")}</button>
-            )}
-            {active && viewer.viewerState?.run_id !== undefined && <button className="replay-return-hub ui-control" type="button" disabled={returningToHub || review !== null} title={review !== null ? t("replay.shell.exitReviewFirst") : returnToHubError ?? t("replay.shell.returnHubHint")} onClick={() => void returnToHub()}>{returningToHub ? t("replay.shell.saving") : t("replay.shell.hub")}</button>}
-            <a className="replay-live-link ui-control" href="/" target="_blank" rel="noopener noreferrer">{t("replay.shell.liveLink")}</a>
           </>}
+          actions={[
+            ...(dateNavigation.available ? [{ id: "view-date", label: t("study.viewDate"), hasPopup: "dialog" as const, onSelect: () => dateNavigation.setOpen(true) }] : []),
+            ...(active ? [{
+              id: "integrity", label: review === null ? t("replay.shell.integrity") : t("replay.shell.reviewing"),
+              expanded: integrityOpen, controls: "replay-integrity-drawer", anchorRef: integrityToggleRef,
+              data: { "replay-action": "toggle-integrity", "review-active": review === null ? "false" : "true" },
+              onSelect: () => { setTrainingResultsOpen(false); setIntegrityOpen((open) => !open); },
+            }] : []),
+            ...(active && integrityRuntime.runId !== null ? [{
+              id: "results", label: t("replay.shell.results"), expanded: trainingResultsOpen, controls: "replay-training-results-drawer",
+              data: { "replay-action": "toggle-training-results" },
+              onSelect: () => { setIntegrityOpen(false); setTrainingResultsOpen((open) => !open); },
+            }] : []),
+            ...(active && viewer.viewerState?.run_id !== undefined ? [{
+              id: "return-hub", label: returningToHub ? t("replay.shell.saving") : t("replay.shell.hub"),
+              disabled: returningToHub || review !== null,
+              title: review !== null ? t("replay.shell.exitReviewFirst") : returnToHubError ?? t("replay.shell.returnHubHint"),
+              onSelect: () => void returnToHub(),
+            }] : []),
+            { id: "live", label: t("replay.shell.liveLink"), href: "/", onSelect: () => undefined },
+          ]}
         />
       )}
       intervalSelector={null}

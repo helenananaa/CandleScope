@@ -4469,6 +4469,7 @@ export const pl = {
   "common.cancel": "Anuluj",
   "common.close": "Zamknij",
   "common.notifications": "Powiadomienia",
+  "shell.moreActions": "Więcej działań",
   "serverError.code.historyOriginUnavailable": "Nie udało się odczytać początku historii giełdy. Spróbuj ponownie za chwilę.",
   "serverError.code.subscribeFailed": "Nie udało się zasubskrybować danych na żywo",
   "local.qualityStatus.accepted": "Zaakceptowano",

@@ -357,6 +357,14 @@ Still outside the stack, and moved when each is rebuilt:
 - `describeError` gives frequent codes a message of their own: the replay "provider history boundary" error and the trade-flow `SUBSCRIBE_FAILED` now read in the user's language, and the replay chart's load errors go through it. Dataset quality statuses and the strategy toolbar's "source bars" and "dataEpoch" are translated.
 - Not done here, and moved to Phase 6: internal terms in the replay session (status bar `REPLAY`/`PAUSED`, `AGG_TRADE · EXACT`, `Controller`), "Run" in the replay opening message, and uncoded backend messages, which still show as sent.
 
+**Phase 4 lands in three PRs:** 4a puts every page on one `AppHeader`; 4b groups the market top bar, sets the rail width rules and reworks the status bar, reviewed at 1440, 1366 and 1024 px; 4c moves per-chart appearance into each chart's header menu with the override marker (§5.1).
+
+**Phase 4a is done (branch `design/phase-4-shell`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_4A.md`](../docs/FRONTEND_DESIGN_QA_PHASE_4A.md).
+
+- `AppHeader` replaces `MarketTopBarFrame` on the market, strategy, replay hub, replay session, backtest research and local pages, and the backtest landing page now has a header.
+- Regions: brand and navigation, then context and tools on the left; actions, extras, panels and Settings on the right. Settings is always the last control; on the market page it used to sit between the intervals and the panel toggles.
+- Page actions are data and collapse into a 更多 menu when space runs out: 历史研究 and 跳转到日期 on the market page, the saved accounts and run history on the strategy page, and the replay session's five actions.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.

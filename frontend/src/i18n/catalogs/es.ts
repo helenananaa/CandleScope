@@ -4479,6 +4479,7 @@ export const es = {
   "common.cancel": "Cancelar",
   "common.close": "Cerrar",
   "common.notifications": "Notificaciones",
+  "shell.moreActions": "Más acciones",
   "serverError.code.historyOriginUnavailable": "No se pudo leer dónde empieza el historial del exchange. Inténtalo de nuevo en breve.",
   "serverError.code.subscribeFailed": "No se pudo suscribir a los datos en tiempo real",
   "local.qualityStatus.accepted": "Aceptado",

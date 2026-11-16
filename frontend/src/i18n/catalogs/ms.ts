@@ -4469,6 +4469,7 @@ export const ms = {
   "common.cancel": "Batal",
   "common.close": "Tutup",
   "common.notifications": "Pemberitahuan",
+  "shell.moreActions": "Tindakan lain",
   "serverError.code.historyOriginUnavailable": "Tidak dapat membaca permulaan sejarah bursa. Cuba lagi sebentar lagi.",
   "serverError.code.subscribeFailed": "Gagal melanggan data masa nyata",
   "local.qualityStatus.accepted": "Diterima",

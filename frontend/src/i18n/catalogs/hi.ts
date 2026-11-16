@@ -4469,6 +4469,7 @@ export const hi = {
   "common.cancel": "रद्द करें",
   "common.close": "बंद करें",
   "common.notifications": "सूचनाएँ",
+  "shell.moreActions": "और कार्रवाइयाँ",
   "serverError.code.historyOriginUnavailable": "एक्सचेंज इतिहास की शुरुआत नहीं पढ़ी जा सकी। थोड़ी देर में फिर कोशिश करें।",
   "serverError.code.subscribeFailed": "लाइव डेटा की सदस्यता विफल रही",
   "local.qualityStatus.accepted": "स्वीकृत",

@@ -1,9 +1,7 @@
 import { useContext, useState } from "react";
 import type { ReactNode } from "react";
-import MarketTopBarFrame from "./MarketTopBarFrame.js";
-import { CapabilityRailIcon } from "./marketRailIcons.js";
+import AppHeader from "./AppHeader.js";
 import PageSettingsDialog from "./PageSettingsDialog.js";
-import { t } from "../i18n/index.js";
 import { PageSettingsContext } from "./pageSettingsContext.js";
 
 /**
@@ -17,6 +15,7 @@ export default function AppPageShell({
   children,
 }: {
   source: "live" | "replay" | "research";
+  /** Inline controls at the right of the header. */
   trailing?: ReactNode;
   children: ReactNode;
 }) {
@@ -24,24 +23,10 @@ export default function AppPageShell({
   const [settingsOpen, setSettingsOpen] = useState(false);
   return (
     <div className="app-page">
-      <MarketTopBarFrame
+      <AppHeader
         source={source}
-        trailing={(
-          <>
-            {trailing}
-            {settingsRuntime && (
-              <button
-                type="button"
-                className="settings-btn indicator-toggle-btn"
-                onClick={() => setSettingsOpen(true)}
-                title={t("shell.settings")}
-                aria-label={t("shell.settings")}
-              >
-                <span aria-hidden="true" style={{ display: "flex" }}><CapabilityRailIcon /></span>
-              </button>
-            )}
-          </>
-        )}
+        extras={trailing}
+        {...(settingsRuntime ? { settings: { onOpen: () => setSettingsOpen(true) } } : {})}
       />
       <div className="app-page-body">{children}</div>
       {settingsRuntime && settingsOpen && (

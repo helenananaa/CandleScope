@@ -4469,6 +4469,7 @@ export const vi = {
   "common.cancel": "Hủy",
   "common.close": "Đóng",
   "common.notifications": "Thông báo",
+  "shell.moreActions": "Thêm thao tác",
   "serverError.code.historyOriginUnavailable": "Không đọc được điểm bắt đầu lịch sử của sàn. Vui lòng thử lại sau ít phút.",
   "serverError.code.subscribeFailed": "Không đăng ký được dữ liệu thời gian thực",
   "local.qualityStatus.accepted": "Đã chấp nhận",

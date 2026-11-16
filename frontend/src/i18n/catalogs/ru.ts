@@ -4470,6 +4470,7 @@ export const ru = {
   "common.cancel": "Отмена",
   "common.close": "Закрыть",
   "common.notifications": "Уведомления",
+  "shell.moreActions": "Другие действия",
   "serverError.code.historyOriginUnavailable": "Не удалось прочитать начало истории биржи. Повторите попытку чуть позже.",
   "serverError.code.subscribeFailed": "Не удалось подписаться на данные в реальном времени",
   "local.qualityStatus.accepted": "Принято",

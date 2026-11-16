@@ -4469,6 +4469,7 @@ export const ptPT = {
   "common.cancel": "Cancelar",
   "common.close": "Fechar",
   "common.notifications": "Notificações",
+  "shell.moreActions": "Mais ações",
   "serverError.code.historyOriginUnavailable": "Não foi possível ler onde começa o histórico da corretora. Tente novamente dentro de instantes.",
   "serverError.code.subscribeFailed": "Falha ao subscrever os dados em tempo real",
   "local.qualityStatus.accepted": "Aceite",
