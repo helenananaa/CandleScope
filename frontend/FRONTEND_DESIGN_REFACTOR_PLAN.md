@@ -596,6 +596,20 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - Settings appearance drops its English in parentheses; replay and indicator messages lose 投影, 不可变, 显式 and 前端.
 - The internal-terms check also rejects "Host", and in Chinese 宿主, 回执, 载荷, 投影, 不可变, 显式, 前端, Live and Paper; none is left in either source catalog.
 
+**Phase 7 lands in three PRs** (split decided 2026-11-16, when it started: contrast, keyboard and layout are separate passes over every surface, each with its own evidence):
+
+| PR | Scope |
+|---|---|
+| 7a | Contrast and the light theme: a rendered-contrast audit (`scripts/design-contrast.mjs`) over the design states in both themes, fixes for text below WCAG AA, the light theme's visual pass, and a light theme for the code editor (dark only until now, Phase 5d) |
+| 7b | Keyboard and motion: every overlay and menu operable by keyboard (open, move, Escape, focus return), visible focus on every control, keyboard paths through the market page, and reduced motion |
+| 7c | Widths and languages: 1024 / 1366 / 1440 / 1920 and the longest languages (English, German, Russian) — truncated rail tabs, the chart header's link group, order book controls, replay session cards (§2.8, Phase 4b) |
+
+**Phase 7a is done (branch `design/phase-7a-contrast`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_7A.md`](../docs/FRONTEND_DESIGN_QA_PHASE_7A.md).
+
+- `npm run design:contrast` audits the rendered text of every design state in both themes against WCAG AA; before: 108 elements below AA (8 dark, 100 light), after: none. Both design tools refuse writes to the local service.
+- Fixes: chart legend prices stay readable on any chart background (`legibleOn`), the logo's "Scope" and link-group labels use readable colours in the light theme, and the code editors follow the app theme (new light script theme; readable dark line numbers). The light theme was reviewed state by state.
+- The hard-coded colour ratchet uses the real counts (16 hex, 49 rgb()).
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.

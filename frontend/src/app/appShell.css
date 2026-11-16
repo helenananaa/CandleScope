@@ -52,7 +52,7 @@
   letter-spacing: -0.025em;
 }
 .brand-wordmark-scope {
-  color: #12bfae;
+  color: var(--brand-scope);
 }
 
 /* ── 价格信息 ────────────────────────────────────────────── */

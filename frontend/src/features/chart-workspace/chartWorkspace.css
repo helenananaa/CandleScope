@@ -244,16 +244,22 @@
   --chart-link-group-color: var(--text-muted);
 }
 :is(.multi-chart-cell-link, .workspace-link-controls)[data-link-group="A"] {
-  --chart-link-group-color: var(--accent-blue);
+  --chart-link-group-color: var(--text-accent);
 }
 :is(.multi-chart-cell-link, .workspace-link-controls)[data-link-group="B"] {
-  --chart-link-group-color: var(--color-warning);
+  --chart-link-group-color: var(--text-warning);
 }
 :is(.multi-chart-cell-link, .workspace-link-controls)[data-link-group="C"] {
-  --chart-link-group-color: #a855f7;
+  --chart-link-group-color: var(--text-purple);
 }
 :is(.multi-chart-cell-link, .workspace-link-controls)[data-link-group="D"] {
-  --chart-link-group-color: var(--color-success);
+  --chart-link-group-color: var(--text-success);
+}
+/* A group's colour comes from the group itself; as text on the light theme it is mixed toward the
+   text colour so it keeps WCAG AA on a white header. */
+[data-theme='light'] :is(.multi-chart-cell-link, .multi-chart-cell-link-role, .multi-chart-cell-link select,
+  .workspace-link-group-select select, .workspace-link-advanced > summary) {
+  color: color-mix(in srgb, var(--chart-link-group-color) 60%, var(--text-primary));
 }
 .multi-chart-cell-link {
   display: flex;

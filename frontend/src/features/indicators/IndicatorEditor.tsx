@@ -19,7 +19,7 @@ import {
   configurePineHostCapabilities,
   registerPineLanguageSupport,
 } from "../../editor/pineLanguage";
-import { registerScriptTheme, getScriptEditorOptions } from "../../editor/scriptTheme";
+import { registerScriptTheme, getScriptEditorOptions, useScriptEditorTheme } from "../../editor/scriptTheme";
 import { fetchScriptRuntimes } from "../../services/indicatorApi.js";
 import { FRONTEND_SCRIPT_LANGUAGE, withFrontendScriptRuntime } from "./frontendScriptContract.js";
 import {
@@ -90,6 +90,7 @@ export default function IndicatorEditor({
 }: IndicatorEditorProps) {
   useLocale();
   const extensionEditorTheme = useExtensionEditorTheme("");
+  const scriptEditorTheme = useScriptEditorTheme();
   const [name, setName] = useState(indicator?.name || "My Indicator");
   const [draft, setDraft] = useState(() => createScriptEditorDraft(indicator.script, Boolean(indicator.id)));
   const modelId = useId();
@@ -474,7 +475,7 @@ export default function IndicatorEditor({
             height="100%"
             path={`candlescope-indicator-${encodeURIComponent(modelId)}.${selectedLanguage?.id || "txt"}`}
             language={editorProfile?.monacoLanguage || "plaintext"}
-            theme={extensionEditorTheme || editorProfile?.theme || "vs-dark"}
+            theme={extensionEditorTheme || scriptEditorTheme}
             value={script}
             onChange={(value) => {
               if (!readOnly) setDraft((current) => editScriptEditorSource(current, selectedLanguage?.id || language, value || ""));
