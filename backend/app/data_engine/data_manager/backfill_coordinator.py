@@ -63,6 +63,7 @@ from .backfill_contracts import (
     RepairReportSummary,
     RepairRequest,
     RepairRetryDeferred,
+    RepairChunkSplit,
     RepairWrittenRangeSummary,
     ScanReport,
     _merge_derived_repair_targets,
@@ -771,6 +772,7 @@ class BackfillCoordinator:
         tail_series: Iterable[RepairSeries] | None = None,
         detailed: bool = False,
         repair_wait_seconds: float = 0,
+        interior_exclusions: Iterable[RepairSeries] = (),
     ) -> ScanReport:
         # Manual and periodic audits advance the same bounded cursors. They
         # share the repair scheduler, never create a second repair queue.
@@ -778,6 +780,7 @@ class BackfillCoordinator:
             report = await self._audit_storage_series(
                 series, scan_limit=scan_limit, max_gaps=max_gaps,
                 repair=repair, tail_series=tail_series, detailed=detailed,
+                interior_exclusions=interior_exclusions,
             )
         if detailed and repair:
             await self._verify_audit_repairs(report, wait_seconds=repair_wait_seconds)
@@ -792,6 +795,7 @@ class BackfillCoordinator:
         repair: bool,
         tail_series: Iterable[RepairSeries] | None,
         detailed: bool,
+        interior_exclusions: Iterable[RepairSeries] = (),
     ) -> ScanReport:
         """Scan exact series and optionally queue repairs.
 
@@ -826,6 +830,7 @@ class BackfillCoordinator:
                 continue
             normalized_series.append(key)
         normalized_tail_series = {repair_series_key(*raw) for raw in tail_series or ()}
+        excluded_interiors = {repair_series_key(*raw) for raw in interior_exclusions}
 
         async def _queue_scan_gaps(
             scan: dict[str, Any],
@@ -1150,6 +1155,10 @@ class BackfillCoordinator:
                                 tail_exc,
                             )
 
+                if series_key in excluded_interiors:
+                    # Sparse canonical inputs of composed history have no
+                    # dense historical demand. Tail checks above remain live.
+                    continue
                 cursor_ms = self._gap_audit_cursors.get(series_key)
                 scan_kwargs: dict[str, Any] = {
                     "symbol": symbol,
@@ -2283,12 +2292,71 @@ class BackfillCoordinator:
             self._complete(request, outcome)
             return request.request_id, future
 
+        self._qualify_large_history_repair(prepared.request)
         canonical_id, future = self._scheduler.submit(prepared.request)
         if canonical_id != request.request_id:
             self._request_id_aliases[request.request_id] = canonical_id
             self._request_id_alias_expires_at[request.request_id] = None
             self._prune_retained_state()
         return canonical_id, future
+
+    def _qualify_large_history_repair(self, request: RepairRequest) -> None:
+        """Keep automatic large repairs on the enabled provider-qualified route.
+
+        Query/tail repairs need the same bounded splitting as composed HTTP
+        demands; a planning limit must not silently become dense base history.
+        Custom reducers, identities, calendars and disabled mixed work stay on
+        their original route. Explicit caller contracts are never replaced.
+        """
+        metadata = request.metadata
+        engine = self._engine
+        config = getattr(engine, 'config', None)
+        planner = getattr(engine, 'planner', None)
+        reconciler = getattr(engine, 'reconciler', None)
+        resolver = getattr(planner, '_interval_resolver', None)
+        if (metadata.get('required_history_composition') is not None
+                or metadata.get('bounded_history_batch_contract') is not None
+                or metadata.get('history_calendar_id') != 'crypto.24x7.utc'
+                or metadata.get('history_exclusions')
+                or not getattr(config, 'mixed_custom_history', False)
+                or not getattr(config, 'reconcile_generate_custom', False)
+                or getattr(config, 'custom_alignment_mode', None) != 'epoch'
+                or getattr(config, 'alignment_epoch_ms', 0)
+                or resolver is None or reconciler is None
+                or getattr(planner, '_custom_alignment_fn', None) is not None
+                or getattr(planner, '_custom_decomposition_fn', None) is not None
+                or request.interval in getattr(planner, '_interval_mappings', {})
+                or getattr(reconciler, '_custom_aggregator', None) is not None
+                or getattr(reconciler, '_custom_dedup_fn', None) is not None):
+            return
+        identity = identity_from_metadata(request.exchange, metadata)
+        if identity is not None and not identity.is_legacy_default_for(request.exchange):
+            return
+        from app.data_engine.interval_resolution import IntervalPurpose, IntervalResolutionError
+        from app.data_engine.interval_policy import parse_interval_spec
+        try:
+            declaration = resolver.history_composition_routes(exchange=request.exchange,
+                market_type=request.market_type, interval=request.interval)
+            if declaration is None:
+                return
+            route = resolver.resolve(exchange=request.exchange, market_type=request.market_type,
+                interval=request.interval, purpose=IntervalPurpose.HISTORY)
+        except IntervalResolutionError:
+            return
+        base = parse_interval_spec(route.base_interval)
+        if (base is None or route.spec.phase_ms or route.spec.calendar_unit is not None
+                or (route.spec.floor_ms(request.end_ms) - route.spec.floor_ms(request.start_ms)
+                    + route.spec.nominal_ms) <= base.nominal_ms * max(1, config.fetch_batch_size)
+                or route.spec.next_ms(route.spec.floor_ms(request.end_ms)) > int(time.time()*1000)):
+            return
+        if route.spec.nominal_ms > base.nominal_ms * max(1, config.fetch_batch_size):
+            metadata.update(required_history_composition=declaration[0].contract_id,
+                history_composition_selected_by='coordinator_large_repair')
+        else:
+            # A prime-period page can need a larger scheduling batch while
+            # ordinary fine REST remains cheaper than a mixed source cover.
+            metadata.update(bounded_history_batch_contract=declaration[0].contract_id,
+                history_composition_selected_by='coordinator_large_page_batch')
 
     def _demand_rejection_reason(self, request: RepairRequest) -> str | None:
         metadata = request.metadata or {}
@@ -2430,6 +2498,11 @@ class BackfillCoordinator:
                        if scheduled_request._native_progress is not None else {}),
                 )
                 await self._notify_source_storage(request, report)
+                if (self._is_failed(report.status) and request.metadata.get('required_history_composition')
+                        and request.end_ms > request.start_ms and not getattr(report, 'fetch_results', ())
+                        and (getattr(report, 'metadata', {}) or {}).get('mixed_plan_fallback')
+                            in {'source_row_budget', 'refined_source_row_budget', 'planning_work_budget', 'task_work_budget'}):
+                    raise RepairChunkSplit('mixed canonical source work requires a smaller chunk')
                 if self._is_failed(report.status) and attempt < self._max_retries:
                     delay = self._backoff(attempt)
                     await self._ledger_mark_retry_wait(
@@ -2542,6 +2615,8 @@ class BackfillCoordinator:
                         or self._report_retryable(report)
                     ),
                 )
+            except RepairChunkSplit:
+                raise
             except RepairRetryDeferred:
                 raise
             except RateLimitDeferred as exc:
@@ -3660,7 +3735,30 @@ class BackfillCoordinator:
             written_range_count=len(report_ranges),
             written_ranges=tuple(range_summaries),
             elapsed_ms=int(getattr(report, "elapsed_ms", 0) or 0),
+            network_free=cls._report_network_free(report, fetch_results),
         )
+
+    @staticmethod
+    def _report_network_free(report: Any, fetch_results: list[Any]) -> bool:
+        """Whether a completed run wrote bars entirely from local data.
+
+        REST pages and archive downloads are the engine's exchange traffic.
+        Anything unfinished, failed, empty or unknown counts as network work.
+        """
+        status = getattr(report, "status", None)
+        if getattr(status, "value", status) != "completed":
+            return False
+        reconcile = getattr(report, "reconcile_result", None)
+        if (int(getattr(reconcile, "bars_written", 0) or 0)
+                + int(getattr(reconcile, "custom_bars_written", 0) or 0)) <= 0:
+            return False
+        for result in fetch_results:
+            metadata = getattr(result, "metadata", None)
+            downloaded = metadata.get("archive_download_bytes", 0) if isinstance(metadata, dict) else 0
+            if (int(getattr(result, "pages_fetched", 0) or 0) or int(downloaded or 0)
+                    or getattr(result, "errors", None)):
+                return False
+        return True
 
     @staticmethod
     def _report_fetch_results(report: Any) -> list[Any]:

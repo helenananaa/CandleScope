@@ -167,7 +167,6 @@ def init_revision_storage(conn):
         footprint = _block_change_sql(values, watermark_predicate, revision,
                                       f"{alias}.open_time", f"{alias}.open_time")
         source_derived_predicate = " AND ".join(f"s.{name}={alias}.{name}" for name in IDENTITY_COLUMNS)
-        derived_predicate = " AND ".join(f"d.{name}=klines.{name}" for name in IDENTITY_COLUMNS)
         family_predicate = " AND ".join(f"{name}={alias}.{name}" for name in IDENTITY_COLUMNS if name != "interval")
         mode = "(SELECT mode FROM kline_mutation_context WHERE singleton=1)"
         direct = f"{mode} NOT IN ('bar_delivery', 'derived_materialization')"
@@ -199,6 +198,9 @@ def init_revision_storage(conn):
         mutation_condition = "(" + " OR ".join(f"NEW.{name} IS NOT OLD.{name}" for name in changed_fields) + ") AND " if operation == "update" else ""
         # Avoid a K-line range scan for every row of an ordinary native import
         # when the semantic family has no registered derived projections.
+        # When it has them, name their intervals: an inequality on interval
+        # ends the primary-key seek at symbol, so every mutated source row
+        # would read the whole family instead of only its derived series.
         _execute_schema(conn, f"""
             DROP TRIGGER IF EXISTS kline_dependents_{operation};
             CREATE TRIGGER IF NOT EXISTS kline_dependents_{operation}
@@ -210,8 +212,8 @@ def init_revision_storage(conn):
             BEGIN
                 UPDATE kline_projection_invalidation SET depth=depth+1 WHERE singleton=1;
                 DELETE FROM klines WHERE {family_predicate}
-                    AND interval<>{alias}.interval
-                    AND EXISTS(SELECT 1 FROM kline_derived_series d WHERE {derived_predicate})
+                    AND interval IN (SELECT d.interval FROM kline_derived_series d
+                                     WHERE {dependent_family} AND d.interval<>{alias}.interval)
                     AND NOT EXISTS(SELECT 1 FROM kline_derived_series s WHERE {source_derived_predicate})
                     AND open_time<=COALESCE({alias}.close_time,{alias}.open_time)
                     AND COALESCE(close_time,open_time)>={alias}.open_time;
@@ -248,7 +250,6 @@ def init_empty_coverage_revision_triggers(conn, table: str, *, native: bool = Fa
         migration_end = "COMMIT;"
         family = " AND ".join(f"d.{name}={value}" for name, value in zip(IDENTITY_COLUMNS, values) if name != "interval")
         selected_family = " AND ".join(f"{name}={value}" for name, value in zip(IDENTITY_COLUMNS, values) if name != "interval")
-        match = " AND ".join(f"d.{name}=klines.{name}" for name in IDENTITY_COLUMNS)
         predicate = " AND ".join(f"{name}={value}" for name, value in zip(IDENTITY_COLUMNS, values))
         readback = _readback_receipt_sql(",".join(values), head, f"{alias}.start_ms", f"{alias}.end_ms")
         conn.executescript(f"""
@@ -266,7 +267,7 @@ def init_empty_coverage_revision_triggers(conn, table: str, *, native: bool = Fa
                 {readback}
                 UPDATE kline_projection_invalidation SET depth=depth+1 WHERE singleton=1;
                 DELETE FROM klines WHERE {selected_family} AND
-                    EXISTS(SELECT 1 FROM kline_derived_series d WHERE {match} AND {family} AND d.interval<>{interval})
+                    interval IN (SELECT d.interval FROM kline_derived_series d WHERE {family} AND d.interval<>{interval})
                     AND open_time<={alias}.end_ms AND COALESCE(close_time,open_time)>={alias}.start_ms
                     AND (SELECT mode FROM kline_mutation_context WHERE singleton=1)<>'retention';
                 UPDATE kline_projection_invalidation SET depth=depth-1 WHERE singleton=1;
@@ -362,16 +363,22 @@ class ScopedRevisionRead:
 
 
 class RevisionStore:
-    def __init__(self, connect):
+    def __init__(self, connect, *, reads=None):
         self.connect = connect
+        # Optional ReusableReads for this store's own self-contained reads.
+        # Writers, fences and scoped readers keep their own connections.
+        self._reads = reads
         self.observed_revision = 0
         from .prefix_watches import PrefixWatchStore
         self.prefix_watches = PrefixWatchStore(connect)
 
+    def _reading(self):
+        return self._reads.reading() if self._reads is not None else closing(self.connect())
+
     def changes_since(self, revision, *, limit=4096):
         # Head and changes belong to the same read transaction. A bounded
         # overrun tells the consumer to clear its projection and use the head.
-        with closing(self.connect()) as conn, conn:
+        with self._reading() as conn, conn:
             conn.execute("BEGIN")
             head = current_revision(conn)
             keys = ",".join(IDENTITY_COLUMNS)
@@ -386,7 +393,7 @@ class RevisionStore:
                     "changes": [dict(row) for row in rows[:limit]]}
 
     def head(self):
-        with closing(self.connect()) as conn:
+        with self._reading() as conn:
             self.observed_revision = current_revision(conn)
             return self.observed_revision
 
@@ -397,7 +404,7 @@ class RevisionStore:
         deletions. Unrelated series writes do not change a source's token.
         Consumers still fence their entire acquisition before publication.
         """
-        with closing(self.connect()) as conn:
+        with self._reading() as conn:
             return self._read_versions(conn, tuple(series))
 
     def read_series_changes(self, series):
@@ -409,7 +416,7 @@ class RevisionStore:
         values = tuple(series)
         if not 1 <= len(values) <= 32:
             raise ValueError("one to 32 source dependencies required")
-        with closing(self.connect()) as conn, conn:
+        with self._reading() as conn, conn:
             conn.execute("BEGIN")
             return current_revision(conn), tuple(
                 dict(row) if (row := series_change(conn, key)) is not None else None
@@ -435,7 +442,7 @@ class RevisionStore:
         """Read B130 versions and invalidation evidence from one snapshot."""
         if len(series) > 32:
             raise ValueError("at most 32 source dependencies per revision view")
-        with closing(self.connect()) as conn, conn:
+        with self._reading() as conn, conn:
             conn.execute("BEGIN")
             head = current_revision(conn)
             versions = self._versions(conn, series)
@@ -472,6 +479,7 @@ class Acquisition:
     accepted: dict[tuple, int] = field(default_factory=dict)
     native_history_views: list = field(default_factory=list, repr=False)
     derived_target_views: list = field(default_factory=list, repr=False)
+    mixed_target_views: list = field(default_factory=list, repr=False)
     warmup_view: WarmupView | None = field(default=None, repr=False)
     lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
 
@@ -540,7 +548,13 @@ def guarded_write(conn, values, *, commit=True, native_rows=None, source=None, n
         if view is None and commit and native_empty_ranges is not None:
             view = matching_empty_view(scope, values, native_empty_ranges)
         computation = matching_computation(scope, values, native_rows, source) if commit else None
+        if computation is None and commit:
+            from .mixed_history_fence import matching_computation as matching_mixed_computation
+            computation = matching_mixed_computation(scope, values, native_rows, source)
         targets = affected_targets(scope, values, native_rows) if view is not None else ()
+        if view is not None:
+            from .mixed_history_fence import affected_targets as affected_mixed_targets
+            targets += affected_mixed_targets(scope, values, native_rows)
         warmup = scope.warmup_view
         # Native range permission still belongs to this warmup acquisition.
         # Record its own source commits so subsequent derived writes do not
@@ -650,11 +664,32 @@ async def prepare_native_history_views(storage, tasks):
                       _acquisition.get(), tasks)
 
 
-async def prepare_derived_targets(storage, plan):
+async def prepare_planned_write_views(storage, windows):
+    from app.core.executors import run_storage
+    from .native_history_fence import capture_planned_write_views
+    await run_storage(capture_planned_write_views, getattr(storage, "revision_store", None),
+                      _acquisition.get(), windows)
+    from .mixed_history_fence import extend_standard_targets
+    await run_storage(extend_standard_targets, getattr(storage, "revision_store", None),
+                      _acquisition.get(), windows)
+
+
+async def prepare_derived_targets(storage, plan, *, allow_standard=False):
     from app.core.executors import run_storage
     from .derived_history_fence import capture_targets
     await run_storage(capture_targets, getattr(storage, 'revision_store', None),
                       _acquisition.get(), plan)
+    from .mixed_history_fence import capture_targets as capture_mixed_targets
+    await run_storage(capture_mixed_targets, getattr(storage, 'revision_store', None),
+                      _acquisition.get(), plan, allow_standard)
+
+
+async def prepare_mixed_computation(storage, decomp):
+    from app.core.executors import run_storage
+    from .mixed_history_fence import capture_computations, computation_scope
+    views = await run_storage(capture_computations, getattr(storage, 'revision_store', None),
+                              _acquisition.get(), decomp)
+    return computation_scope(views)
 
 
 async def prepare_derived_inputs(storage, decomp, grouped):

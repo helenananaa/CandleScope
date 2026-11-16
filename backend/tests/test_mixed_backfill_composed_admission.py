@@ -94,6 +94,8 @@ def test_unsupported_composed_mode_never_enters_the_legacy_reader(composed_dm, m
 
 def test_planning_work_limit_retains_stored_partial_without_new_repair(composed_dm, monkeypatch):
     manager = composed_dm
+    # Exercise planning/budget fallback rather than the earlier canonical read.
+    monkeypatch.setattr(manager.query_engine, '_closed_target_snapshot', lambda *a, **kw: None)
     enough_count_to_reach_cover(manager)
     manager.query_engine.storage.upsert_bars('BTCUSDT', '10007m', [row(0, WIDTH)],
         source='backfill_aggregated', market_type='futures')
@@ -230,7 +232,7 @@ def test_existing_source_aware_scheduler_completes_the_full_composed_demand(comp
                 **options(manager), 'end_ms': 8 * WIDTH - 1, 'limit': 8})
             assert result.complete and len(result.bars) == 8
             assert all(bar.trusted_final and bar.volume == bar.trades == 10007 for bar in result.bars)
-            assert {task.metadata['chunk_sequence'] for task in upstream.calls} == set(range(8))
+            assert {task.metadata['chunk_sequence'] for task in upstream.calls} == {0}
             assert all(task.metadata['required_history_composition'] == CONTRACT for task in upstream.calls)
             assert len(upstream.calls) < 40
         finally:
@@ -264,6 +266,8 @@ def test_required_composition_reuses_complete_fine_inputs_without_fetch(composed
 @pytest.mark.parametrize('explicit', [False, True])
 def test_obvious_local_coverage_shortage_skips_cover_planning_without_losing_partial(composed_dm, monkeypatch, partial_targets, explicit):
     manager = composed_dm
+    # Exercise planning/budget fallback rather than the earlier canonical read.
+    monkeypatch.setattr(manager.query_engine, '_closed_target_snapshot', lambda *a, **kw: None)
     if partial_targets:
         manager.query_engine.storage.upsert_bars('BTCUSDT', '10007m',
             [row(index * WIDTH, WIDTH) for index in range(128-partial_targets, 128)],
@@ -392,6 +396,10 @@ def test_latest_stream_start_failure_preserves_bounded_targets_without_repair(co
         manager.query_engine.storage.upsert_bars('BTCUSDT', '89m',
             [row(index*width, width) for index in range(stored_targets)],
             source='backfill_aggregated', market_type='futures')
+        # set_storage() polled the cache revision before this write. A read that
+        # starts just inside that 50 ms poll window is a legitimate
+        # storage_revision_conflict with no bars; this test is not about that.
+        manager.query_engine._cache.revision_consumer.sync(force=True)
     monkeypatch.setattr(manager.query_engine.custom_intervals, '_base_query', forbidden)
     monkeypatch.setattr(manager.query_engine.custom_intervals, '_base_query_before', forbidden)
     manager.set_backfill_trigger(forbidden)

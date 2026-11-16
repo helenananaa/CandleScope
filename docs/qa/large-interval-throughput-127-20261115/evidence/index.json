@@ -1,0 +1,520 @@
+[
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold/acceptance.json",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-acceptance.json.gz",
+    "sha256": "82895ea28b69a4d4dcf63e2a87634f342e972a635997e40a0a08c50486f66d77"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold/ambient-load-before.txt",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-ambient-load-before.txt.gz",
+    "sha256": "65287647f8a5063421d5745b4f04d0332531a24d252cbc01155e02c2febaa82b"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold/driver.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-driver.log.gz",
+    "sha256": "8258ab10dd1b20464616d7d26679dc359dac72c9142d0f76af9b29700546494a"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold/resource-samples.jsonl",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-resource-samples.jsonl.gz",
+    "sha256": "b46f1d7ae797671e4434766fb266307a1108d867a4dd2e152c1f8cbce666f2af"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold/profile/logs/backend-sidecar.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-profile-logs-backend-sidecar.log.gz",
+    "sha256": "7991c8a3f80deb86b58032aa4b92967ffcfc4b3728952f30bb65d37fcd967074"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-2/acceptance.json",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-2-acceptance.json.gz",
+    "sha256": "e2375ccf41c4b9af8833305cd6b0307925df5acbb4b08ba3d73e7fec6dbdb74e"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-2/ambient-load-before.txt",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-2-ambient-load-before.txt.gz",
+    "sha256": "ae13e8187e43caf7aef395fd0a467572ad82470b3e8e44618f063b54bd9c7827"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-2/driver.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-2-driver.log.gz",
+    "sha256": "8258ab10dd1b20464616d7d26679dc359dac72c9142d0f76af9b29700546494a"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-2/resource-samples.jsonl",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-2-resource-samples.jsonl.gz",
+    "sha256": "824db93fd524706a0fe9c9b041f979e1851d9140d3b353a0a01c18d0137bdb4b"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-2/profile/logs/backend-sidecar.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-2-profile-logs-backend-sidecar.log.gz",
+    "sha256": "867e3793a766316c20cdd9d65a7dc1303de07338a3a362f2bd02a8322e8cf4f7"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-3/acceptance.json",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-3-acceptance.json.gz",
+    "sha256": "21f8d0556cb8a7310e7cccd3393fff0d471962a9e44a36a9295c63af9cfec914"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-3/ambient-load-before.txt",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-3-ambient-load-before.txt.gz",
+    "sha256": "378365308b4c08b2fe9d488b1a1453fbbf7e07d2128d1eb47b640bc5960edffe"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-3/driver.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-3-driver.log.gz",
+    "sha256": "8258ab10dd1b20464616d7d26679dc359dac72c9142d0f76af9b29700546494a"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-3/resource-samples.jsonl",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-3-resource-samples.jsonl.gz",
+    "sha256": "75ac5a020e0a8da5a344dd22fe11d3e8fa6c49247b9d8a5216b50303396bced4"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-3/profile/logs/backend-sidecar.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-3-profile-logs-backend-sidecar.log.gz",
+    "sha256": "94adc3364f8074dfd8c361679fa6b46ecc3bdfc158cb002aeb62e8efb9c3c98d"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-4/acceptance.json",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-4-acceptance.json.gz",
+    "sha256": "e3dfbc6a03fb34ac668b0250ec754202aacf5774366ee4b9cf9c39a3a2a72aa4"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-4/ambient-load-before.txt",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-4-ambient-load-before.txt.gz",
+    "sha256": "f7464531540d11061ae9e0218437b1cdfeb9fc95d8c76ca011c0c17266dec91c"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-4/driver.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-4-driver.log.gz",
+    "sha256": "8258ab10dd1b20464616d7d26679dc359dac72c9142d0f76af9b29700546494a"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-4/resource-samples.jsonl",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-4-resource-samples.jsonl.gz",
+    "sha256": "1a23584e4bd5f65533d92b3e04b11efebd5d6eb67ec5b65fb8e40904ce5074b5"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-4/profile/logs/backend-sidecar.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-4-profile-logs-backend-sidecar.log.gz",
+    "sha256": "e2791a14f21245f2de2588f1edbedf4bd631bffb11eab32e76cc1d58c97d7d45"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-5/acceptance.json",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-5-acceptance.json.gz",
+    "sha256": "87fa7b4788a7146387a3a9609aa558bd3e9fd54bd5f56a3ad9e88a256b8a7450"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-5/ambient-load-before.txt",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-5-ambient-load-before.txt.gz",
+    "sha256": "a92af2dc35a3c52ad109d6b21db2a00e05294a50f03f08ee89f23d8792f52bf0"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-5/driver.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-5-driver.log.gz",
+    "sha256": "8258ab10dd1b20464616d7d26679dc359dac72c9142d0f76af9b29700546494a"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-5/resource-samples.jsonl",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-5-resource-samples.jsonl.gz",
+    "sha256": "98b82281b6bab135558808db1835889af2f94419e1915e80209f9c0c58e18af9"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-5/profile/logs/backend-sidecar.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-5-profile-logs-backend-sidecar.log.gz",
+    "sha256": "bdf65e3dc7895a5f09f9d69bc934df1060ae047e006d7807dcaa34c5590f3060"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-6/acceptance.json",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-6-acceptance.json.gz",
+    "sha256": "388b45a9ff6db595a28539052265d21341c08b6b1168b2272dd75ceb0a5b59b2"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-6/ambient-load-before.txt",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-6-ambient-load-before.txt.gz",
+    "sha256": "62e93967c6a250b8b13e7c9f27cd6b917ff5d80184287bfcdf79c66f684b98bf"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-6/driver.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-6-driver.log.gz",
+    "sha256": "8258ab10dd1b20464616d7d26679dc359dac72c9142d0f76af9b29700546494a"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-6/resource-samples.jsonl",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-6-resource-samples.jsonl.gz",
+    "sha256": "0128cc354a4d50340c37edd2af1e3507c6f37895baf48c11d6ff7a3059ac0e7f"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-6/profile/logs/backend-sidecar.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-6-profile-logs-backend-sidecar.log.gz",
+    "sha256": "3165021191e9c49a8d11fc5b5dd42294679d38e542464960c212b2ecf999a1a1"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-7/acceptance.json",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-7-acceptance.json.gz",
+    "sha256": "f310d3c5a00dddd6371e9035c7c822a7cdff16fa00a8104b35f4d604af46451e"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-7/ambient-load-before.txt",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-7-ambient-load-before.txt.gz",
+    "sha256": "705672f8215804e7144e68bd5fc791fed3ed152792113cd709ed0352bfdc7b56"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-7/driver.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-7-driver.log.gz",
+    "sha256": "8258ab10dd1b20464616d7d26679dc359dac72c9142d0f76af9b29700546494a"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-7/resource-samples.jsonl",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-7-resource-samples.jsonl.gz",
+    "sha256": "607be3cde99dbac4ecff38472cf61ecefbb9e390fc527b611f4fa157b1d9b228"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-7/profile/logs/backend-sidecar.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-7-profile-logs-backend-sidecar.log.gz",
+    "sha256": "8dc5a65b57f07210701bcfbcf77683f1f9b50fdc88cc1bcd9320b32c9d245135"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-8/acceptance.json",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-8-acceptance.json.gz",
+    "sha256": "aef34e77ed3df7c35387eb2f0bfabc667ff23d0026756f181c082ee654e9667c"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-8/ambient-load-before.txt",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-8-ambient-load-before.txt.gz",
+    "sha256": "569bba82b893b7bb2576db82936295e8a6ce2f11065f54b2069a14a61f4681fb"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-8/driver.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-8-driver.log.gz",
+    "sha256": "953d948ff4759cb5e1ce41b88633225b2016eefa734223efe42d0efe3f70835a"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-8/resource-samples.jsonl",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-8-resource-samples.jsonl.gz",
+    "sha256": "8fb55c86498be622148e1eb0a8fd93444787e6ca4b1a17cfcdd8f1f1b0ff8204"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-8/profile/logs/backend-sidecar.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-8-profile-logs-backend-sidecar.log.gz",
+    "sha256": "67799a7689299e886fe51dc2b16eaae3859621b175bbcd41ff6a02d97894b516"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-9/acceptance.json",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-9-acceptance.json.gz",
+    "sha256": "53f65d89602acf47de01e9505884cb02ca32c7d7d1952d3a32630c3e41ea075e"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-9/ambient-load-before.txt",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-9-ambient-load-before.txt.gz",
+    "sha256": "a57c1ab057edd3d172e8db947987b3d2c3a516ea9c5ea65267272d984d6bd1f7"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-9/driver.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-9-driver.log.gz",
+    "sha256": "62e4901de2d8fffbce5970902a7fd1e053d1d702e4ee9a65816601f5170ecbfe"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-9/resource-samples.jsonl",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-9-resource-samples.jsonl.gz",
+    "sha256": "5af2ea7677d688cd26cacf5346cc37119dc0a2a4dc3807eca6e794841f79902e"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-9/profile/logs/backend-sidecar.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-9-profile-logs-backend-sidecar.log.gz",
+    "sha256": "f4991cfa7effe1a064b1730eeeb8c869ba62349c8513dfd17cd707186031953d"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-10/acceptance.json",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-10-acceptance.json.gz",
+    "sha256": "9e84f2340340b54c5bb7f489cd95e83cd9151dd296c8dfbda14bc39a480478c4"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-10/ambient-load-before.txt",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-10-ambient-load-before.txt.gz",
+    "sha256": "d1c3a07c9ee5e605b44f93d658b60ef19c3472233658ef5ec58f0b9fd9feb0e2"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-10/driver.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-10-driver.log.gz",
+    "sha256": "711f07e6fbe0c6be4a36540784e81eee832507d4bbcc97d247b6886ae288c3a7"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-10/resource-samples.jsonl",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-10-resource-samples.jsonl.gz",
+    "sha256": "b4fe6bd11847ba4e2fdcaecae39156beb5b139dfb31adf94558e12bd77c5fb9a"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-10/profile/logs/backend-sidecar.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-10-profile-logs-backend-sidecar.log.gz",
+    "sha256": "6561a7f4aa2d682945b3ae69d901dc1e52eb4cc851c243a505291f218df60825"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-11/acceptance.json",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-11-acceptance.json.gz",
+    "sha256": "39e7bcdba85c00c4bd973d06599bae23b362e8f0d85e0952a76414320ea4e306"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-11/ambient-load-before.txt",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-11-ambient-load-before.txt.gz",
+    "sha256": "dce38eaf1662719c21e11c035b206d3370e450a72587beaf4c59bee79547171a"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-11/driver.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-11-driver.log.gz",
+    "sha256": "62e4901de2d8fffbce5970902a7fd1e053d1d702e4ee9a65816601f5170ecbfe"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-11/resource-samples.jsonl",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-11-resource-samples.jsonl.gz",
+    "sha256": "cb0130b9a14d404503bbfa149f9d10d42f047df6dc8fe109cfb92a7e2fbc20b1"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-11/profile/logs/backend-sidecar.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-11-profile-logs-backend-sidecar.log.gz",
+    "sha256": "8558f8fb47e24367f013ee10ef786ccb1b88ba8af5127c61ff3fa257e4cadd0f"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-11/strict-range-final-responses.json",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-11-strict-range-final-responses.json.gz",
+    "sha256": "942cb92c887e514f857d54cd511b36ab67bfbc677de9ccdafa444e19182ba751"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-13/acceptance.json",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-13-acceptance.json.gz",
+    "sha256": "3f39eaa7a3d91a82c12f12c437dcea9bb81f9474d02178e32c9fc55212e1f6ef"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-13/ambient-load-before.txt",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-13-ambient-load-before.txt.gz",
+    "sha256": "f08ffe5fc2212ff58377dc24a0a776a5e8385d7ec66cd6c5b43d0db04a08f808"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-13/driver.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-13-driver.log.gz",
+    "sha256": "cd26fc5a86d1e8b0df56920fd5942d6494924829de9c3e471405da1e749dce8c"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-13/resource-samples.jsonl",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-13-resource-samples.jsonl.gz",
+    "sha256": "06c710598d1f0f847697fe0da18f722a387c5623de67802764d363682c36dac6"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-13/profile/logs/backend-sidecar.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-13-profile-logs-backend-sidecar.log.gz",
+    "sha256": "a02b8fc3d06c2364eba70cf78afaf80edabc35beefedaaf7c60033018a292527"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-13/pre-controls-snapshot.json",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-13-pre-controls-snapshot.json.gz",
+    "sha256": "ac2eeeefa7ebbe9865b0ea7da2edab516b3419d8a2da9054893f0ccef1e326f4"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-four-cold-13/strict-range-final-responses.json",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/native-four-cold-13-strict-range-final-responses.json.gz",
+    "sha256": "d20ad6593daed226dd6d89f25bec323e2e50264e6c2a80137fadee667f1a5e6b"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/candidate-8/package-source-manifest.json",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/candidate-8-package-source-manifest.json.gz",
+    "sha256": "697be65b59028a17154c157562bb576347533207ae8e4164282f8c459298e3bc"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/candidate-8/sign.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/candidate-8-sign.log.gz",
+    "sha256": "8fbf97db9c6f93b0d8f1241d9946d7ead6bf92b59b0a2a2a34ca5fa090107323"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/candidate-8/sign-verify.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/candidate-8-sign-verify.log.gz",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/candidate-8/sign-after.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/candidate-8-sign-after.log.gz",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/candidate-8/package-after.json",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/candidate-8-package-after.json.gz",
+    "sha256": "e010cebe4f4cf8493cc3429787d9b5078744d9c83062abe5a3e17e0a21287634"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/candidate-10/package-source-manifest.json",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/candidate-10-package-source-manifest.json.gz",
+    "sha256": "0bf3a57767a14790049ff8b18ff5581d9943851d2ed20ba27d4c9722b7ac6de5"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/candidate-10/sign.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/candidate-10-sign.log.gz",
+    "sha256": "e745a9419acd0bba595059ac10e95fe13769434b9390aa49b956579cd46270f3"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/candidate-10/sign-verify.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/candidate-10-sign-verify.log.gz",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/candidate-11/package-source-manifest.json",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/candidate-11-package-source-manifest.json.gz",
+    "sha256": "df35268b6361540131f4a48416ad7e7113042b86eadb348c57162bb24d82c0aa"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/candidate-11/sign.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/candidate-11-sign.log.gz",
+    "sha256": "185c14b49ef7c99ccadc67528769df79e57b258d05453be5c31ff14a9f4279e2"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/candidate-11/sign-verify.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/candidate-11-sign-verify.log.gz",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/candidate-13/package-source-manifest.json",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/candidate-13-package-source-manifest.json.gz",
+    "sha256": "41d80723347e06f061866e656d9da0a4cf8d34ea2567532e48938051d5fa152e"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/candidate-13/sign.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/candidate-13-sign.log.gz",
+    "sha256": "fe74f5b915b7e935520585c0dc16e6e78c076c0967855dd64e30c33c8b0bfff7"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/candidate-13/sign-verify.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/candidate-13-sign-verify.log.gz",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/candidate-13/sign-after.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/candidate-13-sign-after.log.gz",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/candidate-13/package-after.json",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/candidate-13-package-after.json.gz",
+    "sha256": "af69b1f3bd81fbff0c7b4f361aefe9a018486cede9eb686afb30a9485ac85a8e"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/backend-regression-final.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/backend-regression-final.log.gz",
+    "sha256": "ed3f3cb22c1eebe7bed0ab334129181455e18ca9a7921452028e08ba552bfbe0"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/regression-modules-final.json",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/regression-modules-final.json.gz",
+    "sha256": "ec90591b5a149a75ef3355077d2062867836759bfe6609eae5efd3d71560d158"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/regression-result.json",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/regression-result.json.gz",
+    "sha256": "f13aca898c1cd674ae88ac80e1dfb31c82a51c9e72fa24a965a69c5e4aa26b69"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/run-final-regression.py",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/run-final-regression.py.gz",
+    "sha256": "f9e754ce33dd772eacff6f6590c5f8730768d6e2ff39e6bd26b4a67b9bd44adb"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/retain-evidence.py",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/retain-evidence.py.gz",
+    "sha256": "43fed37734e15d38a8a6f6e1b7b9cdc3f6d95245b2b31290bd17cc05b91480af"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/verify-candidate.py",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/verify-candidate.py.gz",
+    "sha256": "ecf763cc1d0bf1f990ace2762d9e1b348247c42b8f5ecac6cac7de336a4b3fec"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/regression-after-native.py",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/regression-after-native.py.gz",
+    "sha256": "c3713b0c2a2a8fe383fb4d21832abd664b081b197a2feebba14065cdbc809f90"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/replay-warm-query.py",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/replay-warm-query.py.gz",
+    "sha256": "674d8185c7cf72beb9d1b3351ff6876c86ec97f1c446ae7a38de6cce59e81d5b"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/warm-query-diagnostic.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/warm-query-diagnostic.log.gz",
+    "sha256": "c06564267e8a152ad31f93b75a78e36bcf544161b78eb1e2585d98b0bbba2af2"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/large-repair-qualification-final.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/large-repair-qualification-final.log.gz",
+    "sha256": "a62bc98557b94107d059dda5813cc0d5b30541f950186a2c779826fa26e988cf"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/archive-source-budget-final.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/archive-source-budget-final.log.gz",
+    "sha256": "570cfb53031139c418d9c1b4c3fb7571f8988de2b76a51743bfe76de94275d12"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/closed-target-snapshot-final-verified.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/closed-target-snapshot-final-verified.log.gz",
+    "sha256": "23f2455df832b3d0631c62760bb59cd6ab7cab49193c715766de9d3566eea7a6"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/read-proof-and-preview-final.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/read-proof-and-preview-final.log.gz",
+    "sha256": "4c8760cc6f1a1bed547860dd31a53614e3860b6522eabe78345f9322d052960e"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/backend-regression-before-preview-recheck.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/backend-regression-before-preview-recheck.log.gz",
+    "sha256": "de57ffc96c29df2f7bc0faec0b7a59fdb018746e98c990bd40cca2f76cd61b74"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/regression-before-preview-recheck.json",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/regression-before-preview-recheck.json.gz",
+    "sha256": "6185586b5d85db9c40951fc1953fcdd74d23ccd48ac22bcdaf5f62e4820dabe5"
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-warm-diagnostic-11/acceptance.json",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/diagnostic-native-warm-diagnostic-11-acceptance.json.gz",
+    "sha256": "2c966ca66789905dd4d49302e1727067a6de88e7d2b9b6fa605b046d92be882d",
+    "qualification": false
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-warm-diagnostic-11/profile/logs/backend-sidecar.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/diagnostic-native-warm-diagnostic-11-profile-logs-backend-sidecar.log.gz",
+    "sha256": "8271ecc1a60db6387cd6f42990f6541beb17358f795bc2c7b134fd4590a9a91e",
+    "qualification": false
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-cold-diagnostic-12/acceptance.json",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/diagnostic-native-cold-diagnostic-12-acceptance.json.gz",
+    "sha256": "e0120582387cbffdd28f17bcd211fce791efdc3ccc9569ddd1768ce3c7c1f19b",
+    "qualification": false
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/native-cold-diagnostic-12/profile/logs/backend-sidecar.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/diagnostic-native-cold-diagnostic-12-profile-logs-backend-sidecar.log.gz",
+    "sha256": "0cca32a1062b910eea4381cb27478b44934e092e19af62be8c0e87124d113fdc",
+    "qualification": false
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/warm-diagnostic-probe.mjs",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/diagnostic-warm-diagnostic-probe.mjs.gz",
+    "sha256": "51833eb89e2e7a4b6d858ab2822cd67057b2f896dfd4c73bc1c104e42f82574e",
+    "qualification": false
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/warm-trace-bootstrap/sitecustomize.py",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/diagnostic-warm-trace-bootstrap-sitecustomize.py.gz",
+    "sha256": "ca9069da42cacb1067b75c4053de2a59a7e18ed748bd2928fb382d06bdc369ab",
+    "qualification": false
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/replay-warm-query-11.py",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/diagnostic-replay-warm-query-11.py.gz",
+    "sha256": "8bac887257fe5069f450f8814d2de67f120ad3cf705fb88e7491eeb6fc38d725",
+    "qualification": false
+  },
+  {
+    "source": "output/large-interval-throughput-127-20261115/warm-query-diagnostic-11.log",
+    "archive": "docs/qa/large-interval-throughput-127-20261115/evidence/diagnostic-warm-query-diagnostic-11.log.gz",
+    "sha256": "c0e3ac740b54238b889e494324a5063419b501e384d63be01f80a5d0e4dc303f",
+    "qualification": false
+  }
+]

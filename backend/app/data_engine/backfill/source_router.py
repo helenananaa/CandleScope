@@ -36,6 +36,13 @@ from .models import BackfillTask, FetchedBar
 
 logger = logging.getLogger("backfill.HistoricalSourceRouter")
 
+# Match the bounded native write-view footprints. Object count alone allows
+# three minute-grid monthly ZIPs to turn a 1,000-row task into 130,000 rows.
+MAX_USDM_ARCHIVE_OBJECT_ROWS = 8192
+MAX_USDM_ARCHIVE_ROUTE_ROWS = 32768
+MAX_COMPOSED_ARCHIVE_AMPLIFICATION = 4
+SMALL_COMPOSED_ARCHIVE_ROWS = 256
+
 
 @dataclass(frozen=True, slots=True)
 class ArchiveObjectResult:
@@ -335,6 +342,10 @@ class HistoricalSourceRouter:
                     rest_page_size=capabilities.rest_page_size,
                     minimum_pages=max(1, self._cfg.history_archive_min_rest_pages),
                 )
+                if exchange == 'binance' and market_type == 'futures':
+                    bounded = _bounded_usdm_archive_candidates(candidates, run, interval)
+                    self._metrics.inc('archive_source_budget_skips', len(candidates)-len(bounded))
+                    candidates = bounded
                 if not candidates:
                     continue
                 # Local ZIPs are usable without contacting the resolver or
@@ -1036,10 +1047,69 @@ def _filter_daily_candidates(
     return monthly + daily
 
 
+def _bounded_history_page(tasks):
+    return bool(tasks) and all(task.exchange == 'binance' and task.market_type == 'futures'
+        and task.metadata.get('bounded_history_batch_contract') == 'binance.usdm.trade-klines/base-utc/1'
+        for task in tasks)
+
+
+def _bounded_usdm_archive_candidates(refs, tasks, interval):
+    """Bound imports/prefetch by native rows and the current work envelope.
+
+    A persistent warm ZIP is not free reduction work. Oversized monthly or
+    distant parent objects stay out of this page's acquisition; normal bounded
+    REST pages remain available. The shared archive cache is left untouched.
+    """
+    width = parse_interval_ms(interval)
+    if not width or not tasks:
+        return []
+    first, last = min(task.start_ms for task in tasks), max(task.end_ms for task in tasks)
+    ordered = sorted(refs, key=lambda ref: _range_distance(first, last, ref.start_ms, ref.end_ms))
+    selected, rows = [], 0
+    composed = all(task.metadata.get('history_composition_contract') for task in tasks) or _bounded_history_page(tasks)
+    for ref in ordered:
+        count = (ref.end_ms-ref.start_ms)//width+1
+        lo, hi = min(first, ref.start_ms), max(last, ref.end_ms)
+        if (count > MAX_USDM_ARCHIVE_OBJECT_ROWS or rows+count > MAX_USDM_ARCHIVE_ROUTE_ROWS
+                or (hi-lo)//width+1 > MAX_USDM_ARCHIVE_ROUTE_ROWS):
+            continue
+        if composed:
+            needed = _composed_archive_slots(tasks, ref, width)
+            if (needed == 0 or count > max(SMALL_COMPOSED_ARCHIVE_ROWS,
+                                           MAX_COMPOSED_ARCHIVE_AMPLIFICATION * needed)):
+                continue
+        selected.append(ref)
+        rows += count
+        first, last = lo, hi
+    return selected
+
+
+def _composed_archive_slots(tasks, ref, width):
+    """Price exact canonical windows, excluding HTTP read-ahead holes."""
+    spans = []
+    for task in tasks:
+        windows = task.metadata.get('mixed_fetch_windows', [(task.start_ms, task.end_ms)])
+        if not isinstance(windows, (list, tuple)) or len(spans)+len(windows) > 4096:
+            return 0
+        for first, last in windows:
+            lo, hi = max(first, ref.start_ms), min(last, ref.end_ms)
+            if lo <= hi:
+                spans.append((lo, hi))
+    merged = []
+    for lo, hi in sorted(spans):
+        if merged and lo <= merged[-1][1]+width:
+            merged[-1] = (merged[-1][0], max(hi, merged[-1][1]))
+        else:
+            merged.append((lo, hi))
+    return sum((hi-lo)//width+1 for lo, hi in merged)
+
+
 def _archive_decision_range(tasks: list[BackfillTask]) -> tuple[int, int]:
     """Recover the scheduler parent range carried by page-bounded tasks."""
     actual_start = min(task.start_ms for task in tasks)
     actual_end = max(task.end_ms for task in tasks)
+    if _bounded_history_page(tasks):
+        return actual_start, actual_end
     starts = [actual_start]
     ends = [actual_end]
     for task in tasks:

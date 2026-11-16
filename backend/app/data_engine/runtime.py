@@ -287,6 +287,10 @@ class DataEngineRuntime:
             self.backfill_transport.stop(),
             step_timeout,
         )
+        # Idle read connections outlive their callers. Release them last, so
+        # closing the database still checkpoints the WAL as it did before.
+        from app.data_engine.storage.klines_repo import close_idle_reads
+        close_idle_reads()
 
     async def _cancel_background_task(self, task: asyncio.Task | None, name: str) -> None:
         if task is None or task.done():
@@ -1222,12 +1226,12 @@ async def _background_gap_audit_loop(
             get_series = getattr(dm, "gap_audit_series", None)
             if callable(get_series_async) or callable(get_series):
                 get_tail_series = getattr(dm, "gap_audit_tail_series", None)
+                inventory = await get_series_async() if callable(get_series_async) else get_series()
+                input_only = getattr(dm, "gap_audit_input_only_series", None)
+                options = ({"interior_exclusions": input_only(inventory)} if callable(input_only) else {})
                 report = await backfill_coordinator.audit_storage_series(
-                    (
-                        await get_series_async()
-                        if callable(get_series_async)
-                        else get_series()
-                    ),
+                    inventory,
+                    **options,
                     scan_limit=50_000,
                     max_gaps=100,
                     repair=True,

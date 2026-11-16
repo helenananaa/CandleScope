@@ -25,6 +25,9 @@ export type LocalIndicatorExecutionResolution =
 export function resolveLocalIndicatorExecution(
   indicator: IndicatorDefinition | null | undefined,
 ): LocalIndicatorExecutionResolution {
+  if (indicator?.language?.trim().toLowerCase() === "pyne") {
+    return { kind: "invalid", error: "PYNE_RETIRED: Pyne scripts are no longer supported" };
+  }
   if (indicator?.executionTarget !== "local" && !isFrontendScript(indicator)) {
     return isWsHostedIndicator(indicator)
       ? { kind: "hosted" }

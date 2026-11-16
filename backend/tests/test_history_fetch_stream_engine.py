@@ -181,8 +181,8 @@ def test_cancellation_waits_for_physical_sqlite_work_before_releasing_page_admis
     asyncio.run(check())
 
 
-@pytest.mark.parametrize('mutation', ['delete','amend'])
-def test_external_change_between_pages_does_not_grant_old_request_more_write_permission(mixed_query,monkeypatch,mutation):
+@pytest.mark.parametrize('mutation', ['delete','amend','future_amend'])
+def test_external_change_between_pages_respects_each_captured_native_window(mixed_query,monkeypatch,mutation):
     from app.core.executors import run_storage
     from app.data_engine.storage.revisions import acquisition_scope
     engine, transport = native_engine(mixed_query)
@@ -198,7 +198,9 @@ def test_external_change_between_pages_does_not_grant_old_request_more_write_per
                     if mutation == 'delete':
                         mixed_query.storage.delete_bars('BTCUSDT','1m',0,0,market_type='futures')
                     else:
-                        rows = mixed_query.storage.query_bars('BTCUSDT','1m',0,0,market_type='futures')
+                        from tests.test_mixed_history_reader import row
+                        opened = 40*60_000 if mutation == 'future_amend' else 0
+                        rows = [row(opened, 60_000)]
                         rows[0]['volume'] = 91
                         mixed_query.storage.upsert_bars('BTCUSDT','1m',rows,
                             source='data_manager_amended',market_type='futures')
@@ -207,11 +209,18 @@ def test_external_change_between_pages_does_not_grant_old_request_more_write_per
     monkeypatch.setattr(engine._storage,'upsert_bars',mutate)
     async def check():
         report = await repair(engine)
-        assert report.status == BackfillStatus.PARTIAL and report.reconcile_result.write_errors
+        if mutation == 'amend':
+            # This page has already committed. Other independent native
+            # windows may complete, without touching the amended first page.
+            assert report.status == BackfillStatus.COMPLETED
+        else:
+            assert report.status == BackfillStatus.PARTIAL and report.reconcile_result.write_errors
         rows = mixed_query.storage.query_bars('BTCUSDT','1m',0,129*60_000,market_type='futures')
-        assert len(rows) == (31 if mutation == 'delete' else 32)
+        assert len(rows) == {'delete': 31, 'amend': 130, 'future_amend': 99}[mutation]
         if mutation == 'delete': assert all(row['open_time'] != 0 for row in rows)
-        else: assert next(row for row in rows if row['open_time'] == 0)['volume'] == 91
+        else:
+            opened = 40*60_000 if mutation == 'future_amend' else 0
+            assert next(row for row in rows if row['open_time'] == opened)['volume'] == 91
         assert mixed_query.memory_budget.snapshot()['reserved_bytes'] == 0
     asyncio.run(check())
 
@@ -251,3 +260,32 @@ def test_partial_fetch_work_budget_is_not_reported_as_completed(mixed_query):
     assert [item.bars_count for item in report.fetch_results] == [3,3,3,3,2]
     assert all(item.retryable and not item.source_complete for item in report.fetch_results[:4])
     assert report.fetch_results[-1].status == BackfillStatus.COMPLETED
+
+
+def test_amendment_inside_a_partly_consumed_native_window_stops_its_remaining_pages(mixed_query, monkeypatch):
+    from app.core.executors import run_storage
+    from app.data_engine.storage.revisions import acquisition_scope
+    engine, transport = native_engine(mixed_query)
+    transport._page_cap = 8
+    original = engine._storage.upsert_bars
+    once = True
+    async def mutate(*args, **kwargs):
+        nonlocal once
+        result = await original(*args, **kwargs)
+        if once:
+            once = False
+            def external():
+                with acquisition_scope(None):
+                    rows = mixed_query.storage.query_bars('BTCUSDT', '1m', 0, 0, market_type='futures')
+                    rows[0]['volume'] = 91
+                    mixed_query.storage.upsert_bars('BTCUSDT', '1m', rows,
+                        source='data_manager_amended', market_type='futures')
+            await run_storage(external)
+        return result
+    monkeypatch.setattr(engine._storage, 'upsert_bars', mutate)
+    report = asyncio.run(repair(engine))
+    assert report.status == BackfillStatus.PARTIAL and report.reconcile_result.write_errors
+    rows = mixed_query.storage.query_bars('BTCUSDT', '1m', 0, 129*60_000, market_type='futures')
+    assert len(rows) == 106  # Eight accepted rows of this window plus 98 independent rows.
+    assert next(row for row in rows if row['open_time'] == 0)['volume'] == 91
+    assert not any(8*60_000 <= row['open_time'] < 32*60_000 for row in rows)

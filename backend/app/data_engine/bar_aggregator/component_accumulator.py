@@ -163,6 +163,17 @@ class ComponentAccumulator:
             self.tail = _Summary.leaf(row)
             self.tail_unique = True
             self.appends += 1
+        elif (shape_ok and previous is None and self.tail is not None
+              and snapshots.get(self.tail_key) is self.tail_snapshot
+              and row['open_time_ms'] < self.tail.first
+              and (self.prefix is None or row['open_time_ms'] > self.prefix.last)):
+            # Cooperative warm replay can receive its newer live tail before
+            # all historical components. Extend the ordered prefix without
+            # sorting/rebuilding it for every earlier closed component.
+            self._append_prefix(_Summary.leaf(row))
+            self._refresh_prefix()
+            key, row = self.tail_key, self.tail_snapshot
+            self.appends += 1
         else:
             def order(key):
                 value = snapshots[key]

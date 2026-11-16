@@ -131,7 +131,7 @@ class BackfillConfig:
     # Legacy generic REST concurrency. Kept for compatibility and as the
     # default for global/exchange-specific fields when they are not set.
     fetch_concurrency: int = field(
-        default_factory=lambda: _env_int("BACKFILL_FETCH_CONCURRENCY", 2),
+        default_factory=lambda: _env_int("BACKFILL_FETCH_CONCURRENCY", 3),
     )
     # Process-wide REST fetch concurrency. This is local resource protection,
     # not an exchange quota.
@@ -143,11 +143,10 @@ class BackfillConfig:
     fetch_binance_spot_concurrency: int | None = field(
         default_factory=lambda: _env_optional_int("BACKFILL_FETCH_BINANCE_SPOT_CONCURRENCY"),
     )
-    # Binance Futures applies strict IP-level request limits. Serialize
-    # futures backfills by default so a multi-interval repair cannot fan out
-    # into a burst of REST calls.
+    # Bounded USD-M overlap avoids serial round trips for mixed source edges.
+    # Physical public admission still enforces shared IP weight/cooldowns.
     fetch_binance_futures_concurrency: int = field(
-        default_factory=lambda: _env_int("BACKFILL_FETCH_BINANCE_FUTURES_CONCURRENCY", 1),
+        default_factory=lambda: _env_int("BACKFILL_FETCH_BINANCE_FUTURES_CONCURRENCY", 3),
     )
     # Exchange-specific concurrency override for OKX.
     # OKX public market endpoints are easy to hit with 429s during

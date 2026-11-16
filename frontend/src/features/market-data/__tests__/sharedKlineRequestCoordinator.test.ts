@@ -371,3 +371,18 @@ test("history batches stay bounded and preserve semantic identity and independen
   assert.equal(outcomes[1]?.status, "rejected");
   assert.equal(coordinator.diagnostics().physicalInflight, 0);
 });
+
+test("a reconnect cannot join a pre-gap physical request in the same chart epoch", async () => {
+  const work = deferred<KlineFetchResult>();
+  const calls = { value: 0 };
+  const coordinator = new SharedKlineRequestCoordinator(fakeApi(() => work.promise, calls));
+  const requests = [1, 2, 2].map(transportGeneration => coordinator.fetchLatestKlines(
+    "BTCUSDT", "1m", 2, "spot", "binance", "auto",
+    { clientContext: { epoch: 1, transportGeneration } },
+  ));
+  await Promise.resolve();
+  assert.equal(calls.value, 2, "only post-gap callers may share the new physical read");
+  work.resolve(result);
+  await Promise.all(requests);
+  assert.equal(coordinator.diagnostics().physicalInflight, 0);
+});

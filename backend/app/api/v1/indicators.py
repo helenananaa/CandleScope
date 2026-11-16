@@ -1508,6 +1508,9 @@ def _resolve_compute_route(
     req: ComputeRequestLike,
 ) -> tuple[str | None, str | None, dict[str, Any] | None]:
     """Resolve legacy and explicit compute modes without doing any work."""
+    if str(req.language or '').strip().lower() == 'pyne':
+        return None, None, build_error_payload(
+            'PYNE_RETIRED', 'Pyne scripts and runtimes are no longer supported')
     mode = req.mode.strip().lower() if req.mode else None
     if mode and mode not in {"builtin", "script"}:
         return None, None, build_error_payload(

@@ -89,10 +89,11 @@ def test_source_continuation_crosses_original_overlay_compaction_and_target_boun
             await feed(manager, '137m', replace(incoming(index, quote=quote, closed=closed, ref=ref),
                                                source=BarInputSource.REALTIME))
             clock[0] += 1
-        async def wait_latest(state):
+        async def wait_latest(state, expected):
             clock[0] += 2000
             async with asyncio.timeout(5):
-                while state.preview_published_version < state.preview_input_version:
+                while (state.preview_published_version < state.preview_input_version
+                       or not observed or observed[-1] != expected):
                     await asyncio.sleep(.01)
         try:
             for index in range(6, 136):
@@ -106,7 +107,7 @@ def test_source_continuation_crosses_original_overlay_compaction_and_target_boun
             state = agg.get_pipeline('137m').bar_state.get_active('binance', 'futures', 'BTCUSDT', 0)
             assert state._source_recovery.version.through_ms > 6 * W
             assert len(state.source_snapshots) <= 128
-            await wait_latest(state)
+            await wait_latest(state, ('bar.updated', 0, 535.0))
             assert observed[-1] == ('bar.updated', 0, 535.0)
             clock[0] = 137 * W + 1000
             await send(136, 4.0, True)
@@ -119,7 +120,7 @@ def test_source_continuation_crosses_original_overlay_compaction_and_target_boun
             await send(137, 2.0)
             await send(137, 3.0)
             next_state = agg.get_pipeline('137m').bar_state.get_active('binance', 'futures', 'BTCUSDT', 137 * W)
-            await wait_latest(next_state)
+            await wait_latest(next_state, ('bar.updated', 137 * W, 3.0))
             assert observed[-1] == ('bar.updated', 137 * W, 3.0)
             assert stored == klines_repo.query_klines('BTCUSDT', '137m', market_type='futures')
         finally:

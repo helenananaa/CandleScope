@@ -74,6 +74,10 @@ def _merge_derived_repair_targets(*values: Any) -> list[dict[str, Any]]:
     return list(merged.values())[-_MAX_DERIVED_REPAIR_TARGETS:]
 
 
+class RepairChunkSplit(Exception):
+    """Qualified planning exceeded its work bound before any acquisition."""
+
+
 class RepairRetryDeferred(Exception):
     """Retryable work yields its worker without settling the caller's future."""
 
@@ -297,6 +301,8 @@ class RepairReportSummary:
     written_range_count: int
     written_ranges: tuple[RepairWrittenRangeSummary, ...]
     elapsed_ms: int
+    # True only when the run wrote bars and proved it made no exchange or archive request.
+    network_free: bool = False
 
 
 @dataclass(slots=True)

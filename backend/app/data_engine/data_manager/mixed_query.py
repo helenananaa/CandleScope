@@ -19,6 +19,7 @@ from app.data_engine.memory_budget import reserve_work
 from app.data_engine.storage.revisions import acquisition_revision, StaleAcquisition
 from .models import BarData, QueryResult, QuerySource
 from .mixed_precedence import MixedPrecedence, BATCH_TARGETS, WORK_BYTES
+from .config import CUSTOM_HISTORY_MAX_BASE_PAGES, CUSTOM_HISTORY_SOURCE_PAGE_ROWS
 
 
 def query_closed_mixed(engine, key, *, start_ms=None, end_ms=None, before_ms=None,
@@ -100,7 +101,9 @@ def query_closed_mixed(engine, key, *, start_ms=None, end_ms=None, before_ms=Non
                   mixed_contract=policy.contract_id)
     expected_base_rows = (stop - first) // base_spec.nominal_ms if base_spec is not None else 0
     if (base_spec is not None and first % base_spec.nominal_ms == 0
-            and stop % base_spec.nominal_ms == 0 and 0 < expected_base_rows <= engine._cfg.max_limit
+            and stop % base_spec.nominal_ms == 0 and 0 < expected_base_rows
+            <= CUSTOM_HISTORY_MAX_BASE_PAGES * min(config.max_limit, CUSTOM_HISTORY_SOURCE_PAGE_ROWS)
+            and (expected_base_rows <= config.max_limit or (stop-first)//spec.nominal_ms > 1)
             and callable(getattr(storage, "count_bars", None))):
         report["mixed_count_reads"] += 1
         try:
@@ -112,7 +115,9 @@ def query_closed_mixed(engine, key, *, start_ms=None, end_ms=None, before_ms=Non
             report.update(mixed_count_failures=1, mixed_fallback_reason="local_cost_probe_failed")
             return None
         report["mixed_count_rows"] = 1
-        if count >= expected_base_rows and composition_contract is None:
+        near_complete_stream = (expected_base_rows > config.max_limit and count > 0
+            and 0 < expected_base_rows-count <= min(config.max_limit, CUSTOM_HISTORY_SOURCE_PAGE_ROWS))
+        if (count >= expected_base_rows or near_complete_stream) and composition_contract is None:
             # Only a cost preference: the original executor still validates
             # every actual row, gap, field, grid, finality and acquisition.
             report["mixed_fallback_reason"] = "local_single_base_preferred"

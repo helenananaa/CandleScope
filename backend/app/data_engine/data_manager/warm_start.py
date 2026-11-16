@@ -7,6 +7,8 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from app.core.executors import run_storage
+
 from app.data_engine.interval_policy import (
     is_monthly_interval,
     parse_custom_interval,
@@ -219,7 +221,10 @@ class AggregatorWarmStartService:
             # components. Do not expand/replay its already-owned old prefix.
             fetch_start_ms = bucket_start_ms
 
-        rows = storage.query_bars(
+        target_source = SeriesKey.create(symbol, base_interval, exchange=exchange,
+                                         market_type=market_type, identity=series_identity)
+        target_token = self._bar_aggregator.history_target_token(target_source, interval)
+        rows = await run_storage(storage.query_bars,
             symbol=symbol,
             interval=base_interval,
             start_ms=fetch_start_ms,
@@ -229,6 +234,10 @@ class AggregatorWarmStartService:
             market_type=market_type,
             series_identity=series_identity,
         )
+        if self._bar_aggregator.history_target_token(target_source, interval) != target_token:
+            # An unsubscribe/re-subscribe must not adopt the old read into the
+            # new target, even when its market identity is unchanged.
+            return
         base_key = SeriesKey.create(
             symbol,
             base_interval,
@@ -353,6 +362,18 @@ class AggregatorWarmStartService:
             market_type=market_type,
             series_identity=series_identity,
         )
+        if current_state is not None and current_state._source_recovery is not None:
+            # A canonical prefix may have been adopted while storage ran in
+            # its worker. Preserve that newer owner rather than expiring it.
+            self._keep_source_recovery(current_state, base_interval, base_seconds, now_ms,
+                focus_scope, subscription_tier)
+            return
+        if current_state is not None and current_state._history_prefix is not None:
+            key = SeriesKey.create(symbol, interval, exchange=exchange,
+                                   market_type=market_type, identity=series_identity)
+            await self._cache.apply_protected(self._cache.upsert_if_accepted, key,
+                                             BarData.from_bar_state(current_state))
+            return
         components: list[BarInput] = []
         for row in rows:
             open_time_ms = int(row["open_time"])

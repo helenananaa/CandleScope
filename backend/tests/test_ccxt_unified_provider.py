@@ -1801,7 +1801,7 @@ def test_bybit_mid_bucket_repair_joins_the_live_close(tmp_path, monkeypatch, rep
     ("binance", "spot", "BTCUSDT"), ("binance", "futures", "BTCUSDT"),
     ("okx", "spot", "BTC-USDT"), ("okx", "futures", "BTC-USDT-SWAP"),
 ])
-@pytest.mark.parametrize("requester", ["warm_start_custom_tail", "warm_start_custom_seed", "klines_history", "klines_history_before", "klines_range", "mixed_reads", "mixed_refresh", "explicit_refresh"])
+@pytest.mark.parametrize("requester", ["warm_start_custom_tail", "warm_start_custom_seed", "klines_history", "klines_history_before", "klines_range", "mixed_reads", "mixed_tail", "mixed_refresh", "explicit_refresh"])
 def test_native_warmup_reuses_committed_components(tmp_path, monkeypatch, requester, venue, product, symbol):
     from app.data_engine.backfill import BackfillConfig, BackfillEngine, BackfillStatus
     from app.data_engine.storage import klines_repo
@@ -1849,13 +1849,14 @@ def test_native_warmup_reuses_committed_components(tmp_path, monkeypatch, reques
             await storage.upsert_bars(symbol, "5m", [bar(0), bar(2)],
                                       source="bybit_ws_confirmed" if venue == "bybit" else "backfill", **market)
             await storage.upsert_bars(symbol, "5m", [bar(3, 999)], source="manual", **market)
-            derived = requester in {"warm_start_custom_tail", "klines_history", "klines_history_before", "klines_range", "mixed_reads", "mixed_refresh"}
+            derived = requester in {"warm_start_custom_tail", "klines_history", "klines_history_before", "klines_range", "mixed_reads", "mixed_tail", "mixed_refresh"}
             interval = "10m" if derived else "5m"
             end = start + (2 if derived else 3) * step
             metadata = {"requester": requester, "history_calendar_id": "crypto.24x7.utc",
                         "requires_trusted_finality": requester != "warm_start_custom_tail"}
             if requester.startswith("mixed_"):
                 metadata.update(requester="mixed", requester_kinds=["klines_history",
+                    "warm_start_custom_tail" if requester == "mixed_tail" else
                     "klines_range" if requester == "mixed_reads" else "explicit_refresh"])
             report = await engine.run(symbol, [interval], start, end, **market, metadata=metadata)
             assert report.status is BackfillStatus.COMPLETED

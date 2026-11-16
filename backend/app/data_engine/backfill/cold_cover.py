@@ -4,9 +4,16 @@ Proposals grant no availability or write permission. Existing canonical reads,
 finer precedence, acquisition fences and materialization still decide adoption.
 """
 from dataclasses import dataclass
+from .models import BackfillTask
+from .fetch_windows import coalesce_mixed_fetches
 import math
 
 from app.data_engine.history.cover_plan import CoverUnavailable, CoverBudgetExceeded, plan_fixed_batch
+
+# A request has fixed transport/admission overhead; fetched rows incur decoding
+# and selected canonical rows also incur journaling/index/materialization work.
+# Do not give one fewer request unlimited priority over thousands of writes.
+REQUEST_ROW_COST = 256
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,7 +26,7 @@ class ColdCoverChoice:
     reason: str | None
 
 
-def _candidates(sources, base_width):
+def _candidates(sources, base_width, *, allow_pairs=False):
     widths = sorted({source.width_ms for source in sources}, reverse=True)
     seen = set()
     # Prefixes retain the ordinary exact-cover choices. Coarsest/intermediate/
@@ -29,6 +36,9 @@ def _candidates(sources, base_width):
     groups.extend(tuple(source for source in sources
                         if source.width_ms in {widths[0], middle, widths[-1]})
                   for middle in widths[1:-1])
+    if allow_pairs:
+        groups.extend(tuple(source for source in sources if source.width_ms in {width, widths[-1]})
+                      for width in widths[:-1])
     for group in groups:
         if group not in seen:
             seen.add(group)
@@ -66,13 +76,14 @@ def choose_cold_sources(target, first, stop, sources, *, required_fields,
     spent = tried = 0
     reason = 'source_row_budget'
     targets = (stop - first) // target_width
-    for candidate in _candidates(sources, base_width):
+    for candidate in _candidates(sources, base_width, allow_pairs=targets > 1):
         if targets * _minimum_rows(target_width, candidate) > max_rows:
             continue
         width = max(source.width_ms for source in candidate)
         cursor, rows, requests, tasks = first, 0, 0, 0
         tried += 1
         valid = True
+        proposals = []
         while cursor < stop:
             remaining = max_positions - spent
             if remaining <= 0:
@@ -89,8 +100,13 @@ def choose_cold_sources(target, first, stop, sources, *, required_fields,
                 break
             spent += batch.explored_positions
             rows += batch.planned_rows
-            requests += sum(math.ceil(span.rows / page_size)
-                            for cover in batch.covers for span in cover.spans)
+            for cover in batch.covers:
+                for span in cover.spans:
+                    proposals.append(BackfillTask(symbol=target.symbol,
+                        interval=span.source.series.interval, start_ms=span.start_ms,
+                        end_ms=span.end_ms-span.source.width_ms, estimated_bars=span.rows,
+                        exchange=target.exchange, market_type=target.market_type,
+                        metadata={'history_composition_contract': 'cost-proposal', 'custom_interval': target.interval}))
             # In an empty view each missing source run creates both the
             # original reconciliation window and fetch tasks, before dedup.
             tasks += 2 * sum(math.ceil(span.rows / task_page_size)
@@ -102,11 +118,15 @@ def choose_cold_sources(target, first, stop, sources, *, required_fields,
                 valid = False
                 break
         if valid:
-            score = requests, rows, -width
+            coalesced = coalesce_mixed_fetches(proposals, page_size=page_size, row_budget=max_rows)
+            requests = sum(math.ceil(task.estimated_bars/page_size) for task in coalesced)
+            fetched_rows = sum(task.estimated_bars for task in coalesced)
+            work_cost = requests * min(page_size, REQUEST_ROW_COST) + fetched_rows + rows
+            score = work_cost, requests, fetched_rows, rows, -width
             if best_score is None or score < best_score:
                 best, best_score = candidate, score
         if spent >= max_positions:
             break
     return ColdCoverChoice(best, spent, tried,
-        best_score[0] if best_score else None, best_score[1] if best_score else None,
+        best_score[1] if best_score else None, best_score[3] if best_score else None,
         None if best is not None else reason)

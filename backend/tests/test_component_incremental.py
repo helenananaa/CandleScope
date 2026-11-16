@@ -19,6 +19,34 @@ from app.data_engine.memory_budget import retained_size
 MINUTE = 60_000
 
 
+@pytest.mark.parametrize('detach', [False, True])
+def test_component_replay_yields_and_preserves_target_generation_and_live_tail(detach, monkeypatch):
+    monkeypatch.setattr("app.data_engine.bar_aggregator.aggregator.time.time", lambda: 128 * 60 + 1)
+    async def run():
+        agg = BarAggregator(BarAggregatorConfig(update_throttle_ms=0))
+        agg.add_target('BTCUSDT', '10007m')
+        rows = [component(i) for i in range(128)]
+        rows.append(component(128, closed=False, source=BarInputSource.REALTIME, sequence=1))
+        replay = asyncio.create_task(agg.replay_components('BTCUSDT', '10007m', rows,
+                                                          bucket_start_ms=0))
+        await asyncio.sleep(0)
+        state = agg.get_bucket_state('BTCUSDT', '10007m', 0)
+        assert state is not None and len(state.source_snapshots) == 32
+        if detach:
+            agg.remove_target('BTCUSDT', '10007m')
+            agg.add_target('BTCUSDT', '10007m')
+            assert await replay is None
+            assert agg.get_bucket_state('BTCUSDT', '10007m', 0) is None
+        else:
+            tail = replace(rows[-1], sequence=2, close=500, high=501, volume=42)
+            await agg.ingest_bar_input('binance', 'spot', 'BTCUSDT', '10007m', tail)
+            state = await replay
+            assert state.close == 500
+            assert state.source_snapshots[tail.input_key]['sequence'] == 2
+            assert state.volume == pytest.approx(sum(row.volume for row in rows[:-1]) + 42)
+    asyncio.run(run())
+
+
 def component(index, *, closed=True, sequence=1, **changes):
     p = 100 + math.sin(index / 11)
     row = BarInput(symbol='BTCUSDT', source_interval='1m', open_time_ms=index * MINUTE,
@@ -279,3 +307,23 @@ def test_public_pipeline_keeps_close_amend_order_and_published_snapshot_isolatio
         return trace
     fast, slow = asyncio.run(run(True)), asyncio.run(run(False))
     assert fast == slow
+
+
+def test_ordered_history_before_an_accepted_live_tail_has_bounded_rebuild_work():
+    fast, slow = engine(10007), engine(10007, incremental=False)
+    tail = component(512, closed=False, sequence=42, source=BarInputSource.REALTIME)
+    apply(fast, tail)
+    apply(slow, tail)
+    for index in range(512):
+        incoming = component(index)
+        apply(fast, incoming)
+        apply(slow, incoming)
+    state = fast.get_active('binance','spot','BTCUSDT',0)
+    equal(state, slow.get_active('binance','spot','BTCUSDT',0))
+    accumulator = state._component_accumulator
+    assert accumulator.rebuilds <= 1
+    assert accumulator.rebuilt_components <= 1
+    assert accumulator.appends == 512
+    apply(fast, replace(tail, sequence=43, volume=100))
+    apply(slow, replace(tail, sequence=43, volume=100))
+    equal(fast.get_active('binance','spot','BTCUSDT',0), slow.get_active('binance','spot','BTCUSDT',0))

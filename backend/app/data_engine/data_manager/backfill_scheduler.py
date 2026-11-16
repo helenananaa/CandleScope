@@ -26,6 +26,7 @@ from .backfill_contracts import (
     RepairOutcome,
     RepairRequest,
     RepairRetryDeferred,
+    RepairChunkSplit,
     _merge_derived_repair_targets,
     repair_status_value,
 )
@@ -108,6 +109,7 @@ class _FetchChunk:
     defer_count: int = 0
     public_demand: PublicDemand | None = None
     dispatch_bypasses: int = 0
+    dispatched_at_monotonic: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -270,6 +272,13 @@ class BackfillScheduler:
         self.fairness_rotations = 0
         self.max_dispatch_bypass = 8
         self.aged_dispatches = 0
+        # A chunk served entirely from local data takes well under a second.
+        # Its owner may keep its turn for this long, so such chunks do not
+        # each wait a full rotation behind another owner's network work.
+        self.local_burst_seconds = 2.0
+        self.local_burst_dispatches = 0
+        self.mixed_chunk_refinements = 0
+        self._local_burst: dict[tuple[int, bool], tuple[str, float]] = {}
 
     def submit(self, request: RepairRequest) -> tuple[str, asyncio.Future[RepairOutcome]]:
         if self._shutdown:
@@ -875,6 +884,8 @@ class BackfillScheduler:
             "foreground_reserve_dispatches": self.foreground_reserve_dispatches,
             "covered_chunks_skipped": self.covered_chunks_skipped,
             "fairness_rotations": self.fairness_rotations,
+            "local_burst_dispatches": self.local_burst_dispatches,
+            "mixed_chunk_refinements": self.mixed_chunk_refinements,
             "aged_dispatches": self.aged_dispatches,
             "max_dispatch_bypass": self.max_dispatch_bypass,
             "running_background_chunks": self._running_background_count(),
@@ -1006,19 +1017,23 @@ class BackfillScheduler:
                 source_padding_bars=3,
                 purpose=IntervalPurpose.HISTORY,
             )
-            if plan.effective_target_bars > 0:
+            declaration = self._interval_resolver.history_composition_routes(
+                exchange=request.exchange, market_type=request.market_type, interval=request.interval)
+            qualified = (declaration is not None and declaration[0].contract_id in (
+                request.metadata.get("required_history_composition"), request.metadata.get("bounded_history_batch_contract")))
+            targets = min(16, max(1, int(requested_target_bars))) if qualified else 1
+            if plan.effective_target_bars > 0 and (not qualified or plan.effective_target_bars >= targets):
                 return plan
-            # One derived candle can legitimately exceed the ordinary source
-            # page size (for example a monthly target sourced from minutes).
-            # Admit exactly one target with an explicit, finite source budget
-            # instead of falling back to the old unbounded target chunk.
-            minimum_budget = max(1, (plan.source_padding_bars + 1) * plan.source_factor)
+            # Qualified pages use the same bounded target batch for 89m and
+            # 10007m. Retain larger ordinary native batches when they already
+            # fit; the engine still enforces mixed-source budgets/refinement.
+            minimum_budget = max(1, (plan.source_padding_bars + targets) * plan.source_factor)
             return resolve_interval_work_plan(
                 self._interval_resolver,
                 exchange=request.exchange,
                 market_type=request.market_type,
                 interval=request.interval,
-                requested_target_bars=1,
+                requested_target_bars=targets,
                 source_row_budget=minimum_budget,
                 source_padding_bars=plan.source_padding_bars,
                 purpose=IntervalPurpose.HISTORY,
@@ -1111,7 +1126,7 @@ class BackfillScheduler:
             return state.last_dispatch_sequence if state is not None else 0
         if aged:
             item = min(aged, key=lambda row: row[2])
-        else:
+        elif (item := self._local_burst_candidate()) is None:
             # Avoiding only the immediately previous owner alternates the
             # first two large requests forever ahead of a third/fourth chart.
             # Store one turn on the existing request owner, not another queue.
@@ -1121,6 +1136,42 @@ class BackfillScheduler:
         self._ready.remove(item)
         heapq.heapify(self._ready)
         return item
+
+    def _fairness_lane(self, request: RepairRequest) -> tuple[int, bool]:
+        return int(request.priority or 100), self._is_background(request)
+
+    def _continues_local_burst(self, request: RepairRequest, now_monotonic: float) -> bool:
+        burst = self._local_burst.get(self._fairness_lane(request))
+        return (burst is not None and burst[0] == self._fairness_owner(request)
+                and now_monotonic - burst[1] < self.local_burst_seconds)
+
+    def _local_burst_candidate(self):
+        """The burst owner's next ready chunk, while its slice lasts.
+
+        Only among the best-priority work, and only after aged chunks, whose
+        handling is unchanged. The slice is what bounds a burst.
+        """
+        if not self._local_burst or not self._ready:
+            return None
+        now_monotonic = time.monotonic()
+        best = min(row[0] for row in self._ready)
+        rows = [row for row in self._ready
+                if row[0] == best and (chunk := self._chunks.get(row[3])) is not None
+                and chunk.eligible_at_monotonic <= now_monotonic
+                and self._continues_local_burst(chunk.request, now_monotonic)]
+        return min(rows, key=lambda row: row[2]) if rows else None
+
+    def _note_local_burst(self, chunk: _FetchChunk, outcome: RepairOutcome | None) -> None:
+        """Start, keep or end the owner's burst from what its chunk just did."""
+        lane, owner = self._fairness_lane(chunk.request), self._fairness_owner(chunk.request)
+        current = self._local_burst.get(lane)
+        if (outcome is not None and not self._is_failed(outcome.status)
+                and getattr(outcome.report, "network_free", False) is True):
+            if current is None or current[0] != owner:
+                # The slice includes this first chunk's own time on the lane.
+                self._local_burst[lane] = (owner, chunk.dispatched_at_monotonic or time.monotonic())
+        elif current is not None and current[0] == owner:
+            del self._local_burst[lane]
 
     @staticmethod
     def _shared_gap_input(request: RepairRequest) -> tuple[tuple[str, ...], int, int] | None:
@@ -1155,13 +1206,15 @@ class BackfillScheduler:
         skipped: list[tuple[int, int, int, str]] = []
         next_delay: float | None = None
         try:
-            # The extra candidate slot exists only for the deliberately
-            # single-lane configuration. It is admitted below solely for one
-            # interactive request while maintenance occupies that lane.
-            candidate_capacity = self._max_concurrency + (
-                1 if self._max_concurrency == 1 else 0
-            )
-            while len(self._tasks) < candidate_capacity and self._ready:
+            # Inspect the queue only when some work can dispatch. A full
+            # foreground lane cannot use the maintenance reserve; cycling
+            # every queued chunk after each new demand is quadratic work.
+            # Recheck after dispatch so a newly started maintenance job can
+            # still admit its one interactive reserve in this same drain.
+            while self._ready and (
+                len(self._tasks) < self._max_concurrency
+                or self._has_foreground_reserve_capacity()
+            ):
                 item = self._pop_ready()
                 chunk = self._chunks.get(item[3])
                 if chunk is None:
@@ -1196,16 +1249,16 @@ class BackfillScheduler:
                 ):
                     skipped.append(item)
                     continue
-                fairness_lane = (
-                    int(chunk.request.priority or 100),
-                    self._is_background(chunk.request),
-                )
+                fairness_lane = self._fairness_lane(chunk.request)
                 fairness_owner = self._fairness_owner(chunk.request)
-                if (
+                repeats_owner = (
                     chunk.dispatch_bypasses < self.max_dispatch_bypass
                     and self._last_dispatch_owner.get(fairness_lane) == fairness_owner
                     and self._has_fairness_alternative(chunk, lane=fairness_lane)
-                ):
+                )
+                continues_burst = repeats_owner and self._continues_local_burst(
+                    chunk.request, now_monotonic)
+                if repeats_owner and not continues_burst:
                     self.fairness_rotations += 1
                     skipped.append(item)
                     continue
@@ -1222,6 +1275,12 @@ class BackfillScheduler:
                 chunk.retry_at_ms = None
                 chunk.defer_reason = None
                 chunk.rate_limit_bucket = None
+                chunk.dispatched_at_monotonic = now_monotonic
+                if continues_burst:
+                    self.local_burst_dispatches += 1
+                elif (burst := self._local_burst.get(fairness_lane)) is not None and burst[0] != fairness_owner:
+                    # Another owner has the lane now; a later burst starts afresh.
+                    del self._local_burst[fairness_lane]
                 series.active = chunk.parent_id
                 if chunk.parent_id in series.pending:
                     series.pending.remove(chunk.parent_id)
@@ -1309,10 +1368,12 @@ class BackfillScheduler:
     def _can_use_foreground_reserve(self, request: RepairRequest) -> bool:
         """Admit one visible request beside one single-lane maintenance task."""
 
+        return self._is_interactive(request) and self._has_foreground_reserve_capacity()
+
+    def _has_foreground_reserve_capacity(self) -> bool:
         if (
             self._max_concurrency != 1
             or len(self._tasks) != 1
-            or not self._is_interactive(request)
         ):
             return False
         active_chunk_id = next(iter(self._tasks), None)
@@ -1492,11 +1553,18 @@ class BackfillScheduler:
                 get_public_admission().forget(chunk.public_demand)
                 with public_demand(chunk.public_demand):
                     outcome = await self._execute(chunk.request)
+            except RepairChunkSplit as exc:
+                self._note_local_burst(chunk, None)
+                if self._refine_mixed_chunk(chunk):
+                    return
+                outcome = RepairOutcome(request=chunk.request, status='failed', error=str(exc))
             except RepairRetryDeferred as exc:
                 chunk.request._retry_attempt = exc.attempt + 1
+                self._note_local_burst(chunk, None)
                 await self._defer_chunk(chunk, exc)
                 return
             except RateLimitDeferred as exc:
+                self._note_local_burst(chunk, None)
                 if chunk.public_demand is not None:
                     get_public_admission().protect(
                         chunk.public_demand, exc.bucket_key,
@@ -1518,6 +1586,7 @@ class BackfillScheduler:
                     status="failed",
                     error=str(exc),
                 )
+            self._note_local_burst(chunk, outcome)
             await self._finish_chunk(chunk, outcome)
         finally:
             if foreground_chunk or not self._is_background(chunk.request):
@@ -1528,6 +1597,46 @@ class BackfillScheduler:
             if chunk.public_demand is not None and not chunk.public_demand.alive():
                 get_public_admission().forget(chunk.public_demand)
             self._drain()
+
+    def _refine_mixed_chunk(self, chunk):
+        """Replace one unacquired work item by two on the same parent queue.
+
+        Existing finer canonical history can make a cold 16-target proposal
+        exceed its row bound. Refinement preserves leases, cancellation, quota
+        ownership, deletion floor and final verification; it creates no queue.
+        """
+        state = self._requests.get(chunk.parent_id)
+        width = parse_interval_ms(chunk.request.interval)
+        if (state is None or state.stale or state.cancel_requested or not width
+                or not chunk.request.metadata.get('required_history_composition')
+                or chunk.request.end_ms <= chunk.request.start_ms
+                or self._chunks.get(chunk.chunk_id) is not chunk):
+            return False
+        count = (chunk.request.end_ms-chunk.request.start_ms)//width+1
+        middle = chunk.request.start_ms + (count//2)*width
+        children = []
+        next_sequence = max((self._chunks[c].sequence for c in state.chunk_ids if c in self._chunks), default=chunk.sequence)+1
+        for index, (first, last) in enumerate(((chunk.request.start_ms, middle-width), (middle, chunk.request.end_ms))):
+            work = self._source_aware_chunk_plan(chunk.request, (last-first)//width+1)
+            sequence = chunk.sequence if index == 0 else next_sequence
+            request = replace(chunk.request, start_ms=first, end_ms=last, _retry_attempt=1,
+                metadata={**chunk.request.metadata, **work.to_metadata(), 'chunk_sequence': sequence})
+            children.append(_FetchChunk(chunk.chunk_id+f':split{index}', chunk.parent_id, request, sequence))
+        position = state.chunk_ids.index(chunk.chunk_id)
+        state.chunk_ids[position:position+1] = [child.chunk_id for child in children]
+        self._chunks.pop(chunk.chunk_id)
+        series = self._series.get(chunk.request.series_key)
+        if series is not None:
+            series.active = None
+            if chunk.parent_id not in series.pending:
+                series.pending.append(chunk.parent_id)
+        for child in (reversed(children) if self._newest_first(chunk.request) else children):
+            self._chunks[child.chunk_id] = child
+            self._push_ready(child)
+        state.progress_revision += 1
+        self.mixed_chunk_refinements += 1
+        self._publish_progress(state, status='chunk_refined', details={'source_chunk': chunk.chunk_id})
+        return True
 
     async def _defer_chunk(
         self,

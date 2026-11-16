@@ -120,7 +120,7 @@ from .auto_gc import (
 from .cache import BarCache
 from .config import DataManagerConfig
 from .coordinator import IngestionFactory, StreamCoordinator
-from .continuity import CONTROLS, ContinuityConsumer, ContinuityPolicy, SourceGapRegistry
+from .continuity import CONTROLS, ContinuityConsumer, ContinuityPolicy, SourceGap, SourceGapRegistry
 from app.data_engine.consumer_recovery import RecoveryCallback
 from .event_bus import DataEventBus, MiddlewareHook
 from .facades import (
@@ -451,7 +451,7 @@ class DataManager(DataManagerCore):
                                       ("durable-delivery", self.aggregator_bridge.delivery, 16 * 1024 * 1024)):
             self.memory_budget.register(owner, limit_bytes=self._cfg.memory_owner_budgets.get(owner, limit), usage=service.memory_usage,
                                         roots=service._memory_roots)
-        self.memory_budget.register("history-query", limit_bytes=self._cfg.memory_owner_budgets.get("history-query", 64 * 1024 * 1024),
+        self.memory_budget.register("history-query", limit_bytes=self._cfg.memory_owner_budgets.get("history-query", 192 * 1024 * 1024),
                                     usage=lambda: {"estimated_bytes": 0})
         self.memory_budget.register("history-backfill", limit_bytes=self._cfg.memory_owner_budgets.get("history-backfill", 64 * 1024 * 1024),
                                     usage=lambda: {"estimated_bytes": 0})
@@ -681,6 +681,37 @@ class DataManager(DataManagerCore):
             logger.exception("Failed to list storage series for gap audit")
         return sorted((item for item in series if item[2] and item[3]), key=repair_series_order)
 
+    def gap_audit_input_only_series(self, inventory) -> set[RepairSeries]:
+        """Sparse mixed inputs do not request dense automatic source history.
+
+        Explicit range queries/manual audits retain ordinary repair semantics.
+        Periodic auditing still checks tracked live tails of these sources.
+        Stored composed targets retain this intent across release/restart.
+        """
+        inputs = set()
+        if not self._cfg.query.mixed_custom_history:
+            return inputs
+        for key in set(inventory) | self._gap_audit_tracked_series():
+            exchange, market_type, symbol, interval = key[:4]
+            identity = key[4] if len(key) == 5 else None
+            if identity is not None and not identity.is_legacy_default_for(exchange):
+                continue
+            try:
+                declaration = self.interval_resolver.history_composition_routes(
+                    exchange=exchange, market_type=market_type, interval=interval)
+                if declaration is None:
+                    continue
+                route = self.interval_resolver.resolve(exchange=exchange, market_type=market_type,
+                    interval=interval, purpose=IntervalPurpose.HISTORY)
+            except IntervalResolutionError:
+                continue  # Unsupported inventory retains the ordinary audit path.
+            base = parse_interval_spec(route.base_interval)
+            if base is None or route.spec.nominal_ms <= base.nominal_ms*self._cfg.query.max_limit:
+                continue
+            inputs.update(repair_series_key(exchange, market_type, symbol, source.canonical_interval)
+                          for source in declaration[1])
+        return inputs
+
     def gap_audit_tail_series(self) -> list[RepairSeries]:
         """Return live/prewarm series whose closed tail should stay current."""
         return sorted((item for item in self._gap_audit_tracked_series() if item[2] and item[3]), key=repair_series_order)
@@ -779,29 +810,76 @@ class DataManager(DataManagerCore):
             if route.base_interval == key.interval:
                 targets.add(SeriesKey.create(symbol, interval, exchange=exchange,
                                             market_type=market, identity=key.identity))
-        for target in sorted(targets, key=str):
-            target_spec = parse_interval_spec(target.interval)
-            if target == key:
-                # Native exchange calendars may use an anchor different from
-                # the generic interval grid (for example Binance futures 3d).
-                lower, upper, expected = start, end, expected_opens
-            else:
-                lower, upper = target_spec.floor_ms(start), target_spec.floor_ms(end)
-                expected = (tuple(sorted({target_spec.floor_ms(opened) for opened in expected_opens}))
-                            if expected_opens is not None else None)
-            await self._open_source_gap(target, lower, upper, expected)
+        source_gap = await self._open_source_gap(key, start, end, expected_opens)
+        for target in sorted(targets - {key}, key=str):
+            await self._project_source_gap(target, source_gap)
+        await self._retire_forming_source_dependents(key)
+
+    async def _project_source_gap(self, target: SeriesKey, source_gap: SourceGap) -> None:
+        spec = parse_interval_spec(target.interval)
+        lower, upper = spec.floor_ms(source_gap.start_ms), spec.floor_ms(source_gap.end_ms)
+        expected = tuple(sorted({spec.floor_ms(opened) for opened in source_gap.expected}))
+        forming = spec.floor_ms(int(time.time() * 1000))
+        if lower <= forming <= upper:
+            if lower < forming:
+                closed = tuple(opened for opened in expected if opened < forming)
+                await self._open_source_gap(target, lower, spec.previous_ms(forming), closed or None)
+            await self._open_source_gap(target, forming, forming, (forming,), source_gap=source_gap)
+            if upper > forming:
+                future = tuple(opened for opened in expected if opened > forming)
+                await self._open_source_gap(target, spec.next_ms(forming), upper, future or None)
+        else:
+            await self._open_source_gap(target, lower, upper, expected or None)
+
+    async def _retire_forming_source_dependents(self, source_key: SeriesKey) -> None:
+        for gap in tuple(self.source_gaps.pending()):
+            if not gap.forming_source_gap_ids:
+                continue
+            sources = [self.source_gaps.gaps.get(gap_id) for gap_id in gap.forming_source_gap_ids]
+            if not any(source is not None and source.key == source_key for source in sources):
+                continue
+            if any(source is None or source.error for source in sources):
+                continue
+            pending_ids = {source.id for source in sources if source.completed_at is None}
+            if pending_ids:
+                gap.forming_source_gap_ids.intersection_update(pending_ids)
+                continue
+            spec = parse_interval_spec(gap.key.interval)
+            if gap.start_ms != gap.end_ms or spec.floor_ms(int(time.time() * 1000)) != gap.start_ms:
+                # A now-closed target needs its own final repair, once.
+                await self._open_source_gap(gap.key, gap.start_ms, gap.end_ms, tuple(sorted(gap.expected)))
+                continue
+            if self.source_gaps.require_snapshot(gap):
+                event = gap.event()
+                event.detail.update(requires_snapshot=True, reason="forming_source_repaired")
+                await self.event_bus.emit(event)
 
     async def _open_source_gap(self, target: SeriesKey, lower: int, upper: int,
-                               expected: tuple[int, ...] | None = None) -> None:
+                               expected: tuple[int, ...] | None = None, *,
+                               source_gap: SourceGap | None = None) -> SourceGap:
         gap, created = self.source_gaps.open(target, lower, upper, expected)
-        if not created:
-            return
+        if (source_gap is not None and (created or gap.forming_source_gap_ids)
+                and source_gap.id not in gap.forming_source_gap_ids):
+            gap.forming_source_gap_ids.add(source_gap.id)
+            def source_finished(_future):
+                if (source_gap.error and source_gap.id in gap.forming_source_gap_ids
+                        and self.source_gaps.gaps.get(gap.id) is gap and gap.completed_at is None):
+                    gap.fail(source_gap.error)
+            source_gap.future.add_done_callback(source_finished)
+        became_closed = (not created and source_gap is None and bool(gap.forming_source_gap_ids)
+                         and upper < parse_interval_spec(target.interval).floor_ms(int(time.time() * 1000)))
+        if became_closed:
+            gap.forming_source_gap_ids.clear()
+        if not created and not became_closed:
+            return gap
         # Signal before the post-gap bar, even without a repair backend.
         await self.event_bus.emit(gap.event())
+        if source_gap is not None:
+            return gap  # The physical source owns repair; this bucket is still forming.
         if self._backfill_trigger is None:
             gap.fail("source_repair_unavailable")
             await self.event_bus.emit(gap.event())
-            return
+            return gap
         metadata = {"requires_trusted_finality": True, "source_gap_id": gap.id}
         if not target.identity.is_legacy_default_for(target.exchange):
             metadata["series_identity"] = target.identity.to_dict()
@@ -815,11 +893,14 @@ class DataManager(DataManagerCore):
             gap.fail("source_repair_submission_failed")
             await self.event_bus.emit(gap.event())
             logger.exception("Failed to submit source repair for %s", target)
+        return gap
 
     async def _annotate_source_continuity(self, event: DataEvent) -> DataEvent:
         # Quote subscriptions share lifecycle delivery, not candle continuity.
         if event.key.interval == "price":
             return event
+        if event.event_type == DataEventType.SOURCE_GAP_RESOLVED:
+            await self._retire_forming_source_dependents(event.key)
         if event.event_type == DataEventType.BACKFILL_COMPLETED:
             await self._refresh_source_gap_proof(event.key)
         elif (event.event_type in {DataEventType.BAR_CLOSED, DataEventType.BAR_AMENDED}
@@ -843,16 +924,13 @@ class DataManager(DataManagerCore):
                 interval=event.key.interval, purpose=IntervalPurpose.REALTIME,
             )
             if route.base_interval:
-                spec = parse_interval_spec(event.key.interval)
                 for base_gap in self.source_gaps.pending():
                     if (base_gap.key.exchange, base_gap.key.market_type, base_gap.key.symbol,
                         base_gap.key.interval, base_gap.key.identity) != (
                             event.key.exchange, event.key.market_type, event.key.symbol,
                             route.base_interval, event.key.identity):
                         continue
-                    opens = tuple(sorted({spec.floor_ms(opened) for opened in base_gap.expected}))
-                    await self._open_source_gap(event.key, spec.floor_ms(base_gap.start_ms),
-                                                spec.floor_ms(base_gap.end_ms), opens or None)
+                    await self._project_source_gap(event.key, base_gap)
         if event.bar is not None:
             pending = self.source_gaps.pending(event.key)
             if pending or self.source_gaps.overflowed:

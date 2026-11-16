@@ -5576,6 +5576,67 @@ def test_default_identity_aliases_join_one_active_warm_and_history_repair(explic
     asyncio.run(run())
 
 
+@pytest.mark.parametrize("max_concurrency", [1, 2])
+@pytest.mark.parametrize("pending_requests", [16, 64])
+def test_full_foreground_capacity_does_not_rescan_every_waiting_chunk(
+    monkeypatch, max_concurrency, pending_requests,
+) -> None:
+    """Blocked admissions have bounded queue work as chart demands arrive."""
+    async def run():
+        release = asyncio.Event()
+        calls = []
+
+        class Engine:
+            async def run(self, **kwargs):
+                calls.append(kwargs["symbol"])
+                if len(calls) <= max_concurrency:
+                    await release.wait()
+                return _RepairReport(status="completed")
+
+        dm = _DataManager()
+        coord = BackfillCoordinator(storage=_Storage(), bars_backfilled=dm.on_bars_backfilled,
+            emit_event=dm.event_bus.emit, engine=Engine(), loop=asyncio.get_running_loop(),
+            max_concurrency=max_concurrency, base_delay_seconds=0)
+        ids = []
+        inspections = 0
+        original = coord._scheduler._pop_ready
+
+        def pop_ready():
+            nonlocal inspections
+            inspections += 1
+            return original()
+
+        def submit(index):
+            request = _request(0, 0)
+            request.symbol = f"SYMBOL{index}USDT"
+            request.reason, request.priority = "initial_history", 10
+            return coord.request(request)
+
+        try:
+            ids.extend(submit(index) for index in range(max_concurrency))
+            await _wait_until(lambda: len(calls) == max_concurrency)
+            monkeypatch.setattr(coord._scheduler, "_pop_ready", pop_ready)
+            ids.extend(submit(index + max_concurrency) for index in range(pending_requests))
+            assert len(calls) == max_concurrency
+            assert coord.snapshot()["running_chunks"] == max_concurrency
+            assert coord.snapshot()["ready_chunks"] == pending_requests
+            # A linear decision-work budget permits different implementations;
+            # repeatedly cycling all N queued chunks after every enqueue does not.
+            assert inspections <= 2 * pending_requests, {
+                "queue_inspections": inspections, "pending": pending_requests,
+            }
+            release.set()
+            outcomes = await asyncio.wait_for(asyncio.gather(
+                *(coord.wait_for_request(identifier) for identifier in ids)), 3)
+            assert all(outcome.status == "completed" for outcome in outcomes)
+            assert len(calls) == max_concurrency + pending_requests
+        finally:
+            release.set()
+            await coord.shutdown()
+
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize("changed", [
     {"provider_id": "another-provider"}, {"venue": "another-venue"},
     {"asset_class": "equity"}, {"series_variant": "synthetic"},
@@ -5617,4 +5678,27 @@ def test_repair_identity_alias_normalization_keeps_each_semantic_dimension_isola
             release.set()
             await coord.shutdown()
 
+    asyncio.run(run())
+
+
+def test_periodic_input_exclusion_preserves_tail_and_manual_interior_audits():
+    async def run():
+        class Storage:
+            def __init__(self): self.calls = []
+            def scan_gaps(self, **kwargs):
+                self.calls.append(kwargs)
+                return {'gaps': [], 'truncated': False}
+            def get_bounds(self, *args, **kwargs):
+                return {'earliest_open_time': 0, 'latest_open_time': 60000}
+        storage, dm = Storage(), _DataManager()
+        coordinator = BackfillCoordinator(storage=storage, bars_backfilled=dm.on_bars_backfilled,
+            emit_event=dm.event_bus.emit, loop=asyncio.get_running_loop())
+        source = ('binance', 'futures', 'BTCUSDT', '1m')
+        await coordinator.audit_storage_series([source], tail_series=[source], repair=False,
+                                               interior_exclusions=[source])
+        assert len(storage.calls) == 1 and 'end_ms' in storage.calls[0]
+        storage.calls.clear()
+        await coordinator.audit_storage_series([source], repair=False)
+        assert len(storage.calls) == 1 and 'end_ms' not in storage.calls[0]
+        await coordinator.shutdown()
     asyncio.run(run())

@@ -236,6 +236,7 @@ export async function checkIndicatorDataFlow() {
     await until(() => { const item = latest.get("left")?.view.activeIndicators.find(item => item.id === "offline-ema"); return Boolean(item?.lines?.length && !item.error); }, "backend result did not recover");
     assert(value("right") === 10 && JSON.stringify(hosts[1]!.chart.timeScale().getVisibleRange()) === viewport, "transport failure changed unrelated chart");
     checks.push("failed backend work cannot poison a pending real JS worker; backend recovery preserves the other chart");
+    await until(() => !latest.get("left")!.status.computing, "backend recovery did not settle its forced computation");
     const beforeCancellation = browserExecutions;
     cancelNextBrowser = true; latest.get("left")!.actions.recompute(true);
     await until(() => browserExecutions > beforeCancellation, "cancelled computation did not run");

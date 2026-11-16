@@ -30,6 +30,9 @@ test("restored frontend script uses browser ownership and provided replay bars",
   assert.equal(isWsHostedIndicator(restored), false);
   assert.equal(resolveLocalIndicatorExecution(restored).kind, "local");
   assert.equal(resolveLocalIndicatorExecution({ ...restored, engineName: "MA" }).kind, "invalid");
+  const retired = resolveLocalIndicatorExecution({ ...restored, engineName: "EMA", language: " PyNe ", executionTarget: "local" });
+  assert.equal(retired.kind, "invalid");
+  if (retired.kind === "invalid") assert.match(retired.error, /PYNE_RETIRED/);
   assert.equal(prepareProvidedBarsIndicator(restored)?.language, FRONTEND_SCRIPT_LANGUAGE);
   assert.notEqual(buildIndicatorComputeJobKey({ indicator: restored, lifecycleKey: "before", params: {} }),
     buildIndicatorComputeJobKey({ indicator: restored, lifecycleKey: "rewound", params: {} }));
@@ -64,5 +67,5 @@ test("mixed batch never sends browser source to backend and retains per-item ide
   assert.deepEqual(result.results.map(row => row.clientId), ["js", "native"]);
   assert.equal(result.results[0]!.payload.error, "syntax error");
   assert.equal(result.results[1]!.payload.ok, true);
-  assert.deepEqual(publications, ["js"]);
+  assert.deepEqual(publications, ["js", "native"]);
 });

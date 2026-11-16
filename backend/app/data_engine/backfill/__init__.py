@@ -47,6 +47,7 @@ Usage::
 from __future__ import annotations
 
 from app.data_engine.storage.revisions import (fenced_acquisition, prepare_native_history_views, StaleAcquisition,
+                                               prepare_planned_write_views,
                                                prepare_derived_targets, prepare_warmup_view)
 from app.data_engine.memory_budget import budgeted_work, reserve_work, MemoryBudgetExceeded
 
@@ -108,7 +109,9 @@ def _is_read_repair(metadata: dict[str, Any]) -> bool:
         return True
     kinds = metadata.get("requester_kinds")
     return (requester == "mixed" and isinstance(kinds, (list, tuple))
-            and 0 < len(kinds) <= 32 and all(isinstance(kind, str) and kind in _READ_REPAIR_REQUESTERS for kind in kinds))
+            and 0 < len(kinds) <= 32
+            and all(isinstance(kind, str) and kind in _READ_REPAIR_REQUESTERS | {"warm_start_custom_tail"} for kind in kinds)
+            and any(kind in _READ_REPAIR_REQUESTERS for kind in kinds))
 
 __all__ = [
     # Engine
@@ -424,11 +427,12 @@ class BackfillEngine:
                         enabled=self._cfg.mixed_custom_history and self._cfg.reconcile_generate_custom
                             and self._cfg.custom_alignment_mode == 'epoch' and not self._cfg.alignment_epoch_ms)
             plan = await build_mixed_backfill_plan(self, gaps, metadata, mixed_diagnostics)
+            metadata.update(mixed_diagnostics)
             if plan is None:
                 if required_contract is not None:
                     raise IntervalResolutionError(
                         IntervalResolutionErrorCode.HISTORY_COMPOSITION_UNAVAILABLE,
-                        'Qualified composed history could not admit this bounded repair',
+                        'Qualified composed history could not admit this bounded repair: ' + str(mixed_diagnostics.get('mixed_plan_fallback', 'unsupported_gap_shape')),
                         exchange=exchange, market_type=market_type, interval=gaps[0].interval,
                         purpose=IntervalPurpose.HISTORY)
                 plan = self.planner.plan(gaps)
@@ -482,7 +486,16 @@ class BackfillEngine:
                     (self._cfg.reconcile_dedup_strategy,self._cfg.reconcile_generate_custom))
             status = BackfillStatus.FETCHING
             await prepare_native_history_views(self._storage, plan.tasks)
-            await prepare_derived_targets(self._storage, plan)
+            await prepare_derived_targets(self._storage, plan, allow_standard=(
+                self.reconciler._custom_aggregator is None and self.reconciler._custom_dedup_fn is None
+                and self._cfg.custom_alignment_mode == 'epoch' and not self._cfg.alignment_epoch_ms
+                and self.planner._custom_alignment_fn is None and self.planner._custom_decomposition_fn is None))
+            # Archive routing decides what a task really writes. Capture those
+            # windows as soon as the built-in fetcher knows them.
+            if getattr(self.fetcher.fetch, '__func__', None) is HistoricalFetcher.fetch:
+                async def capture_planned_windows(windows):
+                    await prepare_planned_write_views(self._storage, windows)
+                page_options = {**page_options, 'on_write_windows': capture_planned_windows}
             if plan.derived_source_windows:
                 prepare_warmup_view(plan.derived_source_windows)
                 fetch_results = await self.fetcher.fetch(plan.tasks, on_deferred=self._commit_warmup_progress, **page_options)

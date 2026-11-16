@@ -1,4 +1,4 @@
-import { computeFrontendScript } from "../../features/indicators/frontendScriptRuntime.js";
+import { computeFrontendScript, frontendScriptRuntimeDiagnostics, releaseIdleFrontendScriptHosts } from "../../features/indicators/frontendScriptRuntime.js";
 import { FRONTEND_SCRIPT_STARTER } from "../../features/indicators/frontendScriptContract.js";
 import type { IndicatorComputeRequest } from "../../features/indicators/indicatorTypes.js";
 import { createRoot } from "react-dom/client";
@@ -50,6 +50,7 @@ export async function checkFrontendScripts() {
   }
   checks.push("runtime, syntax, nonfinite and forged output errors clear plots");
 
+  releaseIdleFrontendScriptHosts();
   const append = document.body.append;
   document.body.append = function (...nodes: (Node | string)[]) {
     if (nodes.some(node => node instanceof HTMLIFrameElement && node.title === "Frontend indicator isolation")) {
@@ -78,8 +79,21 @@ export async function checkFrontendScripts() {
   first.abort(); second.abort();
   assert((await Promise.all(tasks)).every(value => value === "AbortError"), "running cancellation did not reject");
   const final = await computeFrontendScript(request);
-  assert(final.ok && document.querySelectorAll("iframe").length === 0, "cancelled work leaked owners or prevented next compute");
-  checks.push("queued/running cancellation releases both slots and all frames; new work succeeds");
+  assert(final.ok && frontendScriptRuntimeDiagnostics().running === 0 && frontendScriptRuntimeDiagnostics().queued === 0,
+    "cancelled work leaked execution slots or prevented next compute");
+  checks.push("queued/running cancellation drains both slots; new work succeeds");
+  const hosts = [...document.querySelectorAll('iframe[title="Frontend indicator isolation"]')];
+  const dirty = await computeFrontendScript({ ...request, script: 'globalThis.__priorJob = 123; plot("x",bars.map(()=>1));' });
+  assert(dirty.ok, "state isolation setup failed");
+  for (let i = 0; i < 40; i++) {
+    const next = await computeFrontendScript({ ...request, script: 'if (globalThis.__priorJob !== undefined) throw Error("shared worker state"); plot("x",bars.map(()=>1));' });
+    assert(next.ok, "reused host leaked user worker state");
+  }
+  const after = [...document.querySelectorAll('iframe[title="Frontend indicator isolation"]')];
+  assert(after.length <= 2 && after.every(frame => hosts.includes(frame)), "continuous computations recreated isolation documents");
+  releaseIdleFrontendScriptHosts();
+  assert(frontendScriptRuntimeDiagnostics().hosts === 0, "idle hosts did not release");
+  checks.push("forty computations reuse bounded opaque hosts with fresh script globals; idle hosts release");
   checks.push(...await checkReactReplayLifecycle());
   checks.push(...await checkLiveWindowTicks());
   return { checks, parentTimerBeats: beats, remainingFrames: document.querySelectorAll("iframe").length };
@@ -151,8 +165,10 @@ async function checkLiveWindowTicks(): Promise<string[]> {
     const feed = setInterval(() => tick(100 + ++feedSequence / 100), 20);
     try {
       await until(() => Boolean(latest?.view.activeIndicators[0]?.error?.includes("execution limit")));
+      const failedStarts = frontendScriptRuntimeDiagnostics().started;
       await new Promise(resolve => setTimeout(resolve, 500));
-      assert(document.querySelectorAll("iframe").length === 0, "live ticks continually retried a failed program");
+      assert(frontendScriptRuntimeDiagnostics().running === 0 && frontendScriptRuntimeDiagnostics().started === failedStarts,
+        "live ticks continually retried a failed program");
     } finally { clearInterval(feed); }
     const recoveredClose = store.last()!.close;
     flushSync(() => latest!.actions.updateIndicatorScript("live", 'plot("close",bars.map(bar=>bar.close))', "frontend-js"));
@@ -168,18 +184,19 @@ async function checkLiveWindowTicks(): Promise<string[]> {
     assert(cachedBeforeHide !== undefined, "replacement window did not establish its own cache identity");
     flushSync(() => latest!.actions.toggleVisibility("live"));
     tick(80);
+    const hiddenStarts = frontendScriptRuntimeDiagnostics().started;
     await new Promise(resolve => setTimeout(resolve, 500));
-    assert(document.querySelectorAll("iframe").length === 0
+    assert(frontendScriptRuntimeDiagnostics().running === 0 && frontendScriptRuntimeDiagnostics().started === hiddenStarts
       && getCachedIndicatorMetadata(latest!.view.activeIndicators[0]!, hiddenCacheContext)?.contentVersion === cachedBeforeHide, "hidden script kept running on ticks");
     flushSync(() => latest!.actions.toggleVisibility("live"));
     await until(() => value() === 80);
     flushSync(() => latest!.actions.updateIndicatorScript("live", 'const until=Date.now()+400; while(Date.now()<until) {} plot("stale-owner",bars.map(bar=>bar.close+1000));', "frontend-js"));
-    await until(() => document.querySelectorAll("iframe").length > 0);
+    await until(() => frontendScriptRuntimeDiagnostics().running > 0);
     // Deliberately leave the React context unchanged: lifecycle-only fencing
     // cannot observe this same-reader ownership ABA before its next render.
     owner.activate(owner.prepareSelection("other"));
     owner.activate(owner.prepareSelection("live-js-ticks"));
-    await until(() => document.querySelectorAll("iframe").length === 0);
+    await until(() => frontendScriptRuntimeDiagnostics().running === 0);
     assert(value() !== 1080 && !getCachedIndicatorMetadata(latest!.view.activeIndicators[0]!, cacheContext()),
       "an old owned input published or populated shared cache after selection ABA");
     return ["real live runtime follows stable-identity store ticks and makes progress during a continuous stream",

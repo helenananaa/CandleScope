@@ -165,6 +165,8 @@ class QueryEngine:
         self._interval_resolver = interval_resolver or IntervalResolver()
 
         # Metrics
+        self._local_closed_repair_lock = threading.Lock()
+        self._local_closed_repair_epoch = 0
         self._metrics_lock = threading.Lock()
         self._queries = 0
         self._query_before_calls = 0
@@ -270,6 +272,240 @@ class QueryEngine:
     def read_history_blocks(self, source: SeriesKey, start_ms: int, end_ms: int, **options):
         """Lease-scoped H127 canonical history page; publish only after context exit."""
         return self.history_blocks.read(source, start_ms, end_ms, **options)
+
+    def _closed_target_snapshot(self, *, key, route, start_ms, end_ms, limit, composition_contract, io_metrics, started_at, auto_backfill):
+        """Read an already persisted closed page without reacquiring its inputs."""
+        from app.data_engine.history import AlwaysOpenCalendar
+        from app.data_engine.interval_policy import parse_interval_spec
+        if (not self._cfg.mixed_custom_history
+                or not key.identity.is_legacy_default_for(key.exchange)):
+            return None
+        base = parse_interval_spec(route.base_interval)
+        spec = route.spec
+        if base is None or spec.phase_ms or spec.calendar_unit is not None:
+            return None
+        calendar = self._calendar_for(key)
+        if calendar is not None and not isinstance(calendar, AlwaysOpenCalendar):
+            return None
+        declaration = self._interval_resolver.history_composition_routes(exchange=key.exchange,
+            market_type=key.market_type, interval=key.interval)
+        if declaration is None:
+            return None
+        if composition_contract is not None:
+            self._interval_resolver.require_history_composition(exchange=key.exchange,
+                market_type=key.market_type, interval=key.interval, contract_id=composition_contract,
+                identity=key.identity, enabled=True)
+        now_ms = int(time.time()*1000)
+        if start_ms is None and end_ms is None and type(limit) is int and 2 <= limit <= 512:
+            # Latest reads own the same bounded closed tail plus forming
+            # preview as an explicit range. They need no fresh base reduction.
+            end_ms = spec.floor_ms(now_ms)
+            start_ms = end_ms-(min(limit,self._cfg.max_limit)-1)*spec.nominal_ms
+        if start_ms is None or end_ms is None:
+            return None
+        first, last = spec.floor_ms(start_ms), spec.floor_ms(end_ms)
+        if first < start_ms:
+            first = spec.next_ms(first)
+        current_open = spec.floor_ms(now_ms)
+        preview = None
+        preview_snapshot = None
+        preview_cache = self._cache
+        if last == current_open and first < last:
+            # A current preview must never force reacquisition of the entire
+            # immutable closed prefix. It is an immutable cache value, remains
+            # explicitly forming, and grants no storage/write authority.
+            preview_snapshot = preview_cache.bar_snapshot(key, last//1000)
+            preview = preview_snapshot[1] if preview_snapshot is not None else None
+            if preview is None or preview.is_closed:
+                return None
+            last -= spec.nominal_ms
+        count = (last-first)//spec.nominal_ms+1
+        if count*spec.nominal_ms <= base.nominal_ms*self._cfg.max_limit:
+            return None
+        effective_limit = min(limit or self._cfg.default_limit, self._cfg.max_limit)
+        reader = getattr(self._storage, 'read_closed_target_snapshot', None)
+        consumer = self._cache.revision_consumer
+        if (not callable(reader) or consumer is None or not 0 < count <= 512
+                or count + int(preview is not None) > effective_limit):
+            return None
+        values = (key.exchange,key.market_type,key.symbol,key.interval,*key.identity.storage_values)
+        if first < 0 or last+spec.nominal_ms > now_ms:
+            return None
+        proofs = []
+        def load():
+            snapshot = reader(consumer.store, values, first, last, spec.nominal_ms, count, now_ms)
+            if snapshot is None:
+                return []
+            rows, proof = snapshot
+            if proof is not None:
+                proofs.append(proof)
+            return rows
+        repair_epoch = self._local_closed_repair_epoch
+        rows = self._measure_storage_read(io_metrics, load)
+        if not proofs:
+            return None
+        proof = proofs[0]
+        bars = self._storage_rows_to_bars(key, rows, io_metrics)
+        if (not bars or any(not bar.trusted_final or not bar.is_closed for bar in bars)
+                or composition_contract is not None and any(
+                    getattr(bar, field, None) is None for bar in bars for field in declaration[0].fields)):
+            return None
+        stored_count = len(bars)
+        present = {bar.time_ms for bar in bars}
+        local_reports = []
+        local_probes = 0
+        local_probe_ms = 0.0
+        local_allowance = min(2048, self._cfg.max_limit)
+        local_budget = local_allowance
+        written = 0
+        batch_counter = getattr(self._storage, 'count_final_bars', None)
+        counter = batch_counter or getattr(self._storage, 'count_bars', None)
+        # One local reducer per engine: competing readers keep their own
+        # pending snapshot/proof instead of duplicating physical reconstruction.
+        repair_acquired = self._local_closed_repair_lock.acquire(blocking=False)
+        did_reduce = False
+        try:
+            if (repair_acquired and stored_count != count
+                    and repair_epoch != self._local_closed_repair_epoch):
+                proofs.clear()
+                rows = self._measure_storage_read(io_metrics, load)
+                if not proofs:
+                    return None
+                proof = proofs[0]
+                bars = self._storage_rows_to_bars(key, rows, io_metrics)
+                if (not bars or any(not bar.trusted_final or not bar.is_closed for bar in bars)
+                        or composition_contract is not None and any(
+                            getattr(bar, field, None) is None for bar in bars for field in declaration[0].fields)):
+                    return None
+                stored_count = len(bars)
+                present = {bar.time_ms for bar in bars}
+
+            if (repair_acquired and stored_count != count and callable(counter)
+                    and spec.nominal_ms % base.nominal_ms == 0):
+                fine_count = spec.nominal_ms//base.nominal_ms
+                absent = [opened for opened in range(first,last+1,spec.nominal_ms) if opened not in present]
+                cursor = 0
+                def count_local(begin, end):
+                    nonlocal local_probes, local_probe_ms
+                    local_probes += 1
+                    began = time.monotonic()
+                    value = counter(key.symbol,route.base_interval,begin,end+spec.nominal_ms-1,
+                        exchange=key.exchange,market_type=key.market_type)
+                    local_probe_ms += (time.monotonic()-began)*1000
+                    return value
+                while cursor < len(absent):
+                    capacity = local_budget//fine_count-3
+                    if not callable(batch_counter):
+                        capacity = min(capacity, 1)
+                    if capacity < 1:
+                        break
+                    opened = absent[cursor]
+                    size = 1
+                    while (size < capacity and cursor+size < len(absent)
+                           and absent[cursor+size] == opened+size*spec.nominal_ms):
+                        size += 1
+                    end = opened+(size-1)*spec.nominal_ms
+                    # Counts only admit a bounded attempt; the normal reducer
+                    # still acquires and validates every source/write proof.
+                    available = count_local(opened,end)
+                    if available < size*fine_count:
+                        if size > 1:
+                            size, end = 1, opened
+                            available = count_local(opened,end)
+                        if available < fine_count:
+                            cursor += 1
+                            continue
+                    local_budget -= (size+3)*fine_count
+                    from app.data_engine.storage.revisions import (
+                        acquisition_scope, acquisition_delete_floor, acquisition_revision)
+                    deletion_floor = acquisition_delete_floor(acquisition_revision())
+                    consumer.sync(force=True)
+                    did_reduce = True
+                    with acquisition_scope(consumer.store.acquisition(revision=deletion_floor)):
+                        local = self.custom_intervals.query_from_base(symbol=key.symbol, interval=key.interval,
+                            start_ms=opened,end_ms=end,limit=size,started_at=started_at,
+                            exchange=key.exchange,market_type=key.market_type,auto_backfill=False,
+                            route=route,composition_contract=composition_contract)
+                    if local is not None:
+                        local_reports.append({'open_ms':opened,'end_ms':end,'target_count':size,
+                            'complete':local.complete,'storage_reads':local.metadata.get('storage_reads',0),
+                            'storage_rows':local.metadata.get('storage_rows',0),
+                            'storage_read_ms':local.metadata.get('storage_read_ms',0),
+                            'written':local.metadata.get('target_materialized_written',0)})
+                        written += int(local.metadata.get('target_materialized_written',0))
+                    cursor += size
+        finally:
+            if repair_acquired:
+                if did_reduce:
+                    self._local_closed_repair_epoch += 1
+                self._local_closed_repair_lock.release()
+        if written:
+            # Adopt only a new canonical snapshot after the reducer's
+            # independent writes, including every surviving row/absence.
+            proofs.clear()
+            rows = self._measure_storage_read(io_metrics, load)
+            if not proofs:
+                return None
+            proof = proofs[0]
+            bars = self._storage_rows_to_bars(key, rows, io_metrics)
+            if (not bars or any(not bar.trusted_final or not bar.is_closed for bar in bars)
+                    or composition_contract is not None and any(
+                        getattr(bar, field, None) is None for bar in bars for field in declaration[0].fields)):
+                return None
+            stored_count = len(bars)
+            present = {bar.time_ms for bar in bars}
+        # Any nonempty valid canonical page is a read frontier. Missing rows
+        # stay explicitly pending; their count does not justify rereading every
+        # surviving target's source. Empty cold pages still take acquisition.
+        broad_partial = count-stored_count > min(8, count//4)
+        # A finer source commit can withdraw a handful of dependent targets.
+        # Do not re-aggregate the surviving page or merge the holes into a
+        # source budget that a single target already nearly consumes.
+        absent = [opened for opened in range(first, last+1, spec.nominal_ms) if opened not in present]
+        runs = []
+        for opened in absent:
+            if broad_partial and runs and opened == runs[-1][1]+spec.nominal_ms:
+                runs[-1][1] = opened
+            else:
+                runs.append([opened, opened])
+        missing = [gap for index, (begin, end) in enumerate(runs) if (gap := self._trigger_backfill(
+            key, begin, end, reason='query_empty',
+            missing_bars=(end-begin)//spec.nominal_ms+1,
+            submit=auto_backfill and repair_acquired and (not broad_partial or index < 8))) is not None]
+        partial = stored_count != count
+        if preview is not None:
+            bars.append(preview)
+            from dataclasses import replace
+            proof = replace(proof, preview_check=lambda: self._cache is preview_cache
+                and preview_cache.bar_snapshot_current(key, preview_snapshot))
+        result = QueryResult(bars=bars,symbol=key.symbol,interval=key.interval,exchange=key.exchange,
+            market_type=key.market_type,**key.identity.to_dict(),
+            source=QuerySource.MIXED if preview is not None else QuerySource.STORAGE,total=len(bars),
+            has_more=first > 0, next_before_ms=first if first > 0 else None,
+            complete=not partial, retryable=partial, history_state='pending' if partial else 'ready',
+            missing_ranges=missing, backfill_triggered=bool(missing and auto_backfill and repair_acquired and self._backfill_trigger),
+            metadata={'all_rows_final':preview is None,'expected_closed_rows':count,
+                'expected_closed_through_ms':last,'target_materialized':not partial,'canonical_target_snapshot':True,
+                'canonical_target_partial':partial,
+                'canonical_target_preview':preview is not None,
+                'storage_reads':1,'storage_rows':stored_count,'target_materialized_rows':stored_count,
+                'target_materialized_written':written,'derived_from':route.base_interval,
+                'canonical_local_probe_reads':local_probes,
+                'canonical_local_probe_ms':round(local_probe_ms,2),
+                'canonical_local_repair_source_budget':local_allowance-local_budget,
+                'canonical_local_repair_source_limit':local_allowance,
+                'canonical_local_repair_busy':not repair_acquired,
+                'canonical_local_repair_reports':local_reports,
+                'elapsed_ms':round((time.monotonic()-started_at)*1000,2)},
+            _closed_target_read=proof.bind(rows, bars))
+        result.metadata.update({'target_'+name:value for name,value in io_metrics.metadata().items()})
+        result = self._attach_io_metrics(result, io_metrics)
+        # Overall work includes local reductions; target_* remains the bounded
+        # snapshot-only accounting. Count probes do not decode candle rows.
+        result.metadata['storage_reads'] += local_probes + sum(item['storage_reads'] for item in local_reports)
+        result.metadata['storage_rows'] += sum(item['storage_rows'] for item in local_reports)
+        result.metadata['storage_read_ms'] += round(local_probe_ms + sum(item['storage_read_ms'] for item in local_reports),2)
+        return result
 
     def _query_closed_mixed(self, key, **options):
         from .mixed_query import query_closed_mixed
@@ -385,6 +621,12 @@ class QueryEngine:
                     interval=interval,
                     purpose=IntervalPurpose.HISTORY,
                 )
+            result = self._closed_target_snapshot(key=SeriesKey(symbol, interval, exchange=exchange,
+                market_type=market_type, **identity.to_dict()), route=route, start_ms=start_ms,
+                end_ms=end_ms, limit=limit, composition_contract=composition_contract, io_metrics=io_metrics, started_at=t0,
+                auto_backfill=allow_backfill)
+            if result is not None:
+                return result
             result = self.custom_intervals.query_from_base(
                 symbol=symbol,
                 interval=interval,
@@ -398,6 +640,10 @@ class QueryEngine:
                 route=route,
                 composition_contract=composition_contract,
             )
+            if io_metrics.storage_reads:
+                for name, value in io_metrics.metadata().items():
+                    result.metadata[name] = result.metadata.get(name, 0) + value
+                    result.metadata['target_'+name] = result.metadata.get('target_'+name, 0) + value
             key = SeriesKey(symbol, interval, exchange=exchange, market_type=market_type)
             return self._apply_custom_finality_contract(result, key, end_ms=end_ms)
 
@@ -756,6 +1002,7 @@ class QueryEngine:
         composition_contract: str | None = None,
     ) -> QueryResult:
         """Query bars strictly before a timestamp (for pagination)."""
+        t0 = time.monotonic()
         io_metrics = _QueryIOMetrics()
         with self._metrics_lock:
             self._query_before_calls += 1
@@ -792,6 +1039,15 @@ class QueryEngine:
                     interval=interval,
                     purpose=IntervalPurpose.HISTORY,
                 )
+            effective_limit = min(limit or self._cfg.default_limit, self._cfg.max_limit)
+            last = route.spec.floor_ms(int(before_ms)-1)
+            result = self._closed_target_snapshot(key=SeriesKey(symbol, interval, exchange=exchange,
+                market_type=market_type, **identity.to_dict()), route=route,
+                start_ms=max(0, last-(effective_limit-1)*route.spec.nominal_ms), end_ms=last,
+                limit=effective_limit, composition_contract=composition_contract,
+                io_metrics=io_metrics, started_at=t0, auto_backfill=allow_backfill)
+            if result is not None:
+                return result
             result = self.custom_intervals.query_before(
                 symbol,
                 interval,

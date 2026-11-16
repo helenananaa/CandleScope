@@ -29,6 +29,7 @@ from app.data_engine.market_data.models import MarketChannel
 from app.exchanges import get_exchange_registry
 from .models import BackfillPlan, IntervalComponent, IntervalDecomposition
 from .cold_cover import choose_cold_sources
+from .fetch_windows import coalesce_mixed_fetches
 
 MAX_SOURCE_ROWS = 16_384
 MAX_TARGETS = 512
@@ -100,13 +101,22 @@ class _MixedBinding:
 
 async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
     cfg, storage = engine._cfg, engine._storage
-    if (not getattr(cfg, "mixed_custom_history", False) or not cfg.reconcile_generate_custom or len(gaps) != 1
+    if (not getattr(cfg, "mixed_custom_history", False) or not cfg.reconcile_generate_custom or not gaps
             or cfg.custom_alignment_mode != "epoch" or cfg.alignment_epoch_ms
             or metadata.get("history_calendar_id") not in (None, "crypto.24x7.utc")
             or not all(callable(getattr(storage, name, None)) for name in
                        ("query_bars_range_presence", "query_canonical_page"))):
         return None
     gap = gaps[0]
+    if len(gaps) > 1:
+        if any((item.symbol, item.interval, item.exchange, item.market_type) !=
+               (gap.symbol, gap.interval, gap.exchange, gap.market_type) for item in gaps):
+            return None
+        spec = parse_interval_spec(gap.interval)
+        if spec is None or spec.nominal_ms <= 0:
+            return None
+        first, last = min(item.start_ms for item in gaps), max(item.end_ms for item in gaps)
+        gap = replace(gap, start_ms=first, end_ms=last, missing_bars=(last-first)//spec.nominal_ms+1)
     detector = engine.detector
     resolve_calendar = getattr(detector, "_resolve_calendar", None)
     if not callable(resolve_calendar):
@@ -177,9 +187,9 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
     if count >= (stop - first) // base.nominal_ms and not required_contract:
         diagnostics["mixed_plan_fallback"] = "local_single_base_preferred"
         return None
-    _, changes = await run_storage(store.read_series_changes, keys)
-    if any(change and change["revision"] > floor for change in changes):
-        raise StaleAcquisition("mixed planning sources changed after acquisition")
+    planning_head, changes = await run_storage(store.read_series_changes, keys)
+    from app.data_engine.storage.range_changes import check_store_range
+    await run_storage(check_store_range, store, keys, first, stop, floor)
     mutations = {key: change for (key, _), change in zip(precedences, changes)}
     versions = tuple(change["revision"] if change else 0 for change in changes)
     budget = getattr(engine, "memory_budget", None)
@@ -189,13 +199,14 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
     try:
         with work:
             cold = all(change is None or change['start_ms'] >= stop for change in changes)
-            if cold:
+            if cold or (stop-first) // spec.nominal_ms > 1:
                 planning = budget.reserve("history-backfill", PLAN_BYTES) if budget else nullcontext()
                 with planning:
                     choice = await run_preparation(choose_cold_sources, target, first, stop, sources,
                         required_fields=frozenset(policy.fields), target_width=spec.nominal_ms,
                         base_width=0 if required_contract else base.nominal_ms, page_size=page_size,
-                        task_page_size=max(1, cfg.fetch_batch_size), max_rows=MAX_SOURCE_ROWS,
+                        task_page_size=max(1, cfg.fetch_batch_size),
+                        max_rows=MAX_SOURCE_ROWS if cold else max(0, MAX_SOURCE_ROWS-count),
                         max_tasks=MAX_TASKS, max_positions=MAX_POSITION_WORK // 2)
                 builder.positions(choice.positions)
                 diagnostics.update(mixed_cold_candidates=choice.candidates,
@@ -225,14 +236,17 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
                 await builder.prefetch(batch)
                 for cover in batch:
                     await builder.refine(cover)
-            tasks = planner._deduplicate_tasks(builder.tasks)
+            tasks = coalesce_mixed_fetches(planner._deduplicate_tasks(builder.tasks),
+                page_size=page_size, row_budget=MAX_SOURCE_ROWS)
             windows = planner._deduplicate_tasks(builder.windows)
             requests = sum(math.ceil(task.estimated_bars / page_size) for task in tasks)
             if requests > baseline_requests:
                 raise _DeclineMixed("rest_request_cost")
             _, current = await run_storage(store.read_versions, keys)
-            if tuple(current) != versions or engine._storage is not storage or engine._cfg is not cfg:
-                raise StaleAcquisition("mixed planning sources or bindings changed")
+            if tuple(current) != versions:
+                await run_storage(check_store_range, store, keys, first, stop, planning_head)
+            if engine._storage is not storage or engine._cfg is not cfg:
+                raise StaleAcquisition("mixed planning bindings changed")
             if (detector._calendar_resolver is not calendar_resolver
                     or detector._resolve_calendar(target.exchange, target.market_type, target.symbol) != calendar):
                 raise StaleAcquisition("mixed planning calendar changed")
@@ -424,15 +438,20 @@ async def checked_mixed_windows(storage, target, policy, windows):
     keys = tuple((key.exchange, key.market_type, key.symbol, key.interval, *key.identity.storage_values)
                  for key, _ in precedences)
     store = storage.revision_store
-    _, changes = await run_storage(store.read_series_changes, keys)
+    read_head, changes = await run_storage(store.read_series_changes, keys)
     mutations = {key: change for (key, _), change in zip(precedences, changes)}
     versions = tuple(change["revision"] if change else 0 for change in changes)
     result = []
     if len(windows) > MAX_TASKS:
         raise StaleAcquisition("mixed materialization windows exceed their bound")
-    for offset in range(0, len(windows), 64):
+    pending = deque(windows)
+    positions = seen = 0
+    while pending:
         batch, presence = [], {}
-        for window in windows[offset:offset + 64]:
+        for window in (pending.popleft() for _ in range(min(64, len(pending)))):
+            seen += 1
+            if seen > MAX_TASKS:
+                raise StaleAcquisition("mixed canonical refinement exceeds task bound")
             interval, first, last, identity = window
             if interval not in selected_widths or (identity and not identity.is_legacy_default_for(target.exchange)):
                 raise StaleAcquisition("mixed materialization source identity changed")
@@ -453,7 +472,25 @@ async def checked_mixed_windows(storage, target, policy, windows):
             if not any(deleted or presence[(source, lo, hi)] for source, lo, hi, deleted
                        in finer_requirements(span, precedences, mutations)):
                 result.append(window)
+            else:
+                # Read-ahead can make a finer canonical grid authoritative in
+                # a formerly coarse span. Refine locally before reducing;
+                # never ignore those rows or redownload the entire target.
+                finer = tuple(FixedHistorySource(replace(target, interval=interval), width, 0,
+                    ((span.start_ms, span.end_ms),), frozenset(policy.fields), policy.contract_id)
+                    for interval, width in selected_widths.items() if width < span.source.width_ms)
+                if not finer:
+                    continue
+                cover = await run_preparation(plan_fixed_range, target, span.start_ms, span.end_ms,
+                    finer, required_fields=frozenset(policy.fields), max_positions=MAX_POSITION_WORK-positions)
+                positions += cover.explored_positions
+                pending.extend((part.source.series.interval, part.start_ms,
+                    part.end_ms-part.source.width_ms, window[3]) for part in cover.spans)
     _, current = await run_storage(store.read_versions, keys)
     if tuple(current) != versions:
-        raise StaleAcquisition("mixed post-commit canonical inputs changed")
+        from app.data_engine.storage.range_changes import check_store_range
+        lower = min(first for _, first, _, _ in windows)
+        upper = max(last + selected_widths[interval] for interval, _, last, _ in windows)
+        await run_storage(check_store_range, store, keys, lower, upper, read_head)
     return result
+

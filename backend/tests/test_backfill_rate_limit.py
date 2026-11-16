@@ -109,7 +109,7 @@ def test_binance_futures_backfill_defaults_are_conservative() -> None:
 
     assert fetcher._base_delay_for_task(task) == cfg.fetch_binance_futures_rate_limit_delay
     assert fetcher._get_exchange_semaphore(task)._value == cfg.fetch_binance_futures_concurrency
-    assert cfg.fetch_binance_futures_concurrency == 1
+    assert cfg.fetch_binance_futures_concurrency == 3
     assert cfg.fetch_429_backoff_seconds >= 30
 
 

@@ -30,7 +30,7 @@ from app.data_engine.series_identity import (
 
 from .revisions import (IDENTITY_COLUMNS, RevisionStore, guarded_write, init_revision_storage,
                         mark_deleted, series_values, register_derived, current_revision, mutation_mode)
-from .sqlite_runtime import SQLiteConnectionPolicy, open_sqlite
+from .sqlite_runtime import ReusableReads, SQLiteConnectionPolicy, open_sqlite
 
 # Valid market types
 VALID_MARKET_TYPES = ("spot", "futures", "swap")
@@ -188,6 +188,20 @@ def _connect(
     )
 
 
+# Self-contained reads borrow one idle connection per thread instead of opening
+# a new one, which would parse the whole schema again. See ReusableReads.
+_READS = ReusableReads(lambda: _connect(), lambda: KLINES_DB_PATH)
+_REVISION_READS = ReusableReads(
+    lambda: _connect(timeout_seconds=0.1, configure_journal_mode=False),
+    lambda: KLINES_DB_PATH,
+)
+
+
+def close_idle_reads() -> int:
+    """Release idle read connections at shutdown or before file-level work."""
+    return _READS.close_idle() + _REVISION_READS.close_idle()
+
+
 def _migrate_kline_series_identity(conn: sqlite3.Connection) -> None:
     """Rebuild legacy K-line tables with the complete semantic primary key."""
 
@@ -343,6 +357,7 @@ def _migrate_gate_linear_volume(conn: sqlite3.Connection) -> None:
 
 
 def init_klines_storage() -> None:
+    close_idle_reads()
     Path(KLINES_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     with _connect() as conn:
         # Step 1: Create the table if it doesn't exist (fresh install)
@@ -669,7 +684,8 @@ def import_history_archive(
 
     with _ARCHIVE_IMPORT_WRITE_LOCK:
         with _connect() as conn:
-            with guarded_write(conn, series_values(symbol, interval, exchange, market_type, identity)):
+            with guarded_write(conn, series_values(symbol, interval, exchange, market_type, identity),
+                               native_rows=rows, source=source):
                 existing = conn.execute(
                     "SELECT content_sha256, import_version, row_count "
                     "FROM history_archive_imports WHERE object_key = ?",
@@ -1016,7 +1032,7 @@ def query_klines(
         sql += " LIMIT ?"
         params.append(limit)
 
-    with _connect() as conn:
+    with _READS.reading() as conn:
         rows = conn.execute(sql, params).fetchall()
 
     return [dict(r) for r in rows]
@@ -1068,7 +1084,7 @@ def query_kline_bar_components(
         sql += " LIMIT ?"
         params.append(limit)
 
-    with _connect(use_row_factory=False) as conn:
+    with _READS.reading(rows=False) as conn:
         rows = conn.execute(sql, params).fetchall()
 
     return rows
@@ -1569,7 +1585,7 @@ def _query_bars_range_presence(symbol, interval, ranges, *, exchange, market_typ
         symbol=symbol, interval=interval, series_identity=series_identity)
     slots = ",".join(f"({index},?,?)" for index in range(len(ranges)))
     values = [value for bounds in ranges for value in bounds]
-    with _connect() as conn:
+    with _READS.reading() as conn:
         rows = conn.execute(f"""
             WITH requested(slot, lo, hi) AS (VALUES {slots})
             SELECT slot, EXISTS(SELECT 1 FROM klines WHERE {' AND '.join(where)}
@@ -1656,7 +1672,8 @@ class KlinesRepoAdapter:
         self._series_identity = series_identity
         self._calendar_resolver = calendar_resolver
         self._calendar_registry = calendar_registry
-        self.revision_store = RevisionStore(lambda: _connect(timeout_seconds=0.1, configure_journal_mode=False))
+        self.revision_store = RevisionStore(
+            lambda: _connect(timeout_seconds=0.1, configure_journal_mode=False), reads=_REVISION_READS)
         from .bar_delivery import BarDeliveryJournal
         self.bar_delivery = BarDeliveryJournal(
             lambda: _connect(timeout_seconds=1.0, configure_journal_mode=False), upsert_klines)
@@ -1696,6 +1713,11 @@ class KlinesRepoAdapter:
             market_type=market_type or self._market_type,
             series_identity=series_identity or self._series_identity,
         )
+
+    def read_closed_target_snapshot(self, store, key, first, last, width, count, now_ms):
+        from .closed_target_read import read_closed_target
+        from .revisions import _acquisition
+        return read_closed_target(self, store, _acquisition.get(), key, first, last, width, count, now_ms)
 
     def query_bar_components(
         self,
@@ -1782,6 +1804,10 @@ class KlinesRepoAdapter:
             series_identity=series_identity or self._series_identity,
         )
 
+    def count_final_bars(self, *args, **kwargs) -> int:
+        """Count trusted source labels; not a coverage, close-time or write proof."""
+        return self.count_bars(*args, **kwargs, trusted_final_only=True)
+
     def count_bars(
         self,
         symbol: str,
@@ -1791,6 +1817,7 @@ class KlinesRepoAdapter:
         exchange: str | None = None,
         market_type: str | None = None,
         series_identity: KlineSeriesIdentity | None = None,
+        *, trusted_final_only: bool = False,
     ) -> int:
         """Count one exact series range without materialising its rows."""
         resolved_exchange = exchange or self._exchange
@@ -1804,7 +1831,12 @@ class KlinesRepoAdapter:
         )
         where.extend(("open_time >= ?", "open_time <= ?"))
         params.extend((int(start_ms), int(end_ms)))
-        with _connect() as conn:
+        if trusted_final_only:
+            from app.data_engine.kline_quality import SOURCE_QUALITY
+            trusted = [name for name, quality in SOURCE_QUALITY.items() if quality.trusted_final]
+            where.append("LOWER(TRIM(source)) IN (" + ",".join("?" for _ in trusted) + ")")
+            params.extend(trusted)
+        with _READS.reading() as conn:
             row = conn.execute(
                 f"""
                 SELECT COUNT(*) AS cnt
@@ -2151,7 +2183,8 @@ class AsyncKlinesRepoAdapter:
 
     @property
     def revision_store(self):
-        return RevisionStore(lambda: _connect(timeout_seconds=0.1, configure_journal_mode=False))
+        return RevisionStore(
+            lambda: _connect(timeout_seconds=0.1, configure_journal_mode=False), reads=_REVISION_READS)
 
     async def query_bars_range_presence(
         self, symbol: str, interval: str, ranges: tuple[tuple[int, int], ...], *,
@@ -2320,7 +2353,7 @@ class AsyncKlinesRepoAdapter:
             )
             where.extend(("open_time >= ?", "open_time <= ?"))
             params.extend((start_ms, end_ms))
-            with _connect() as conn:
+            with _READS.reading() as conn:
                 row = conn.execute(
                     f"SELECT COUNT(*) AS cnt FROM klines WHERE {' AND '.join(where)}",
                     params,

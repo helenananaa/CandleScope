@@ -841,6 +841,19 @@ class BarCache:
                 return None
             return series.get_bar_at(time_seconds)
 
+    def bar_snapshot(self, key: SeriesKey, time_seconds: int) -> tuple[int, BarData] | None:
+        """Capture an immutable preview and its cache incarnation atomically."""
+        with self._lock:
+            series = self._touch(key)
+            bar = series.get_bar_at(time_seconds) if series is not None else None
+            return (series.generation, bar) if series is not None and bar is not None else None
+
+    def bar_snapshot_current(self, key: SeriesKey, snapshot: tuple[int, BarData]) -> bool:
+        with self._lock:
+            series = self._series.get(key)
+            return (series is not None and series.generation == snapshot[0]
+                    and series.get_bar_at(snapshot[1].time) is snapshot[1])
+
     def has_series(self, key: SeriesKey) -> bool:
         """Check whether a series exists in cache."""
         with self._lock:
