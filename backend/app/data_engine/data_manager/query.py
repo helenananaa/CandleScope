@@ -29,6 +29,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass
+from contextvars import ContextVar
 from typing import Any, Callable
 
 from app.data_engine.interval_policy import (
@@ -87,6 +88,9 @@ logger = logging.getLogger("data_manager.query")
 # Signature for the optional backfill trigger callback
 BackfillTrigger = Callable[[str, str, int, int, str, str], None]
 StorageQueryRow = dict[str, Any] | tuple[Any, ...]
+
+# Temporary proof for local reconstruction through the existing target writer.
+_local_closed_write = ContextVar("local_closed_target_write", default=None)
 
 
 @dataclass
@@ -157,6 +161,7 @@ class QueryEngine:
     ) -> None:
         self._cache = cache
         self._storage = storage
+        self._storage_binding_revision = 0
         store = getattr(storage, "revision_store", None)
         self._cache.revision_consumer = CacheRevisionConsumer(self._cache, store) if store is not None else None
         self._cfg = config or QueryConfig()
@@ -211,6 +216,7 @@ class QueryEngine:
     def set_storage(self, storage: StorageBackend | None) -> None:
         """Set or clear the storage backend used by query operations."""
         self._storage = storage
+        self._storage_binding_revision += 1
         store = getattr(storage, "revision_store", None)
         self._cache.revision_consumer = CacheRevisionConsumer(self._cache, store) if store is not None else None
         blocks = getattr(self, "shared_blocks", None)
@@ -264,6 +270,10 @@ class QueryEngine:
     def _write_materialized_target(self, *args: Any, **kwargs: Any) -> int:
         """Persist a verified derived page through the configured backend."""
         storage = self._storage
+        local = _local_closed_write.get()
+        if local is not None and local[0] is self:
+            local[2]()
+            storage = local[1]
         writer = getattr(storage, "upsert_bars", None)
         if not callable(writer):
             return 0
@@ -273,24 +283,28 @@ class QueryEngine:
         """Lease-scoped H127 canonical history page; publish only after context exit."""
         return self.history_blocks.read(source, start_ms, end_ms, **options)
 
-    def _closed_target_snapshot(self, *, key, route, start_ms, end_ms, limit, composition_contract, io_metrics, started_at, auto_backfill):
+    def _closed_target_snapshot(self, *, key, route, start_ms, end_ms, limit, composition_contract, io_metrics, started_at, auto_backfill, report=None):
         """Read an already persisted closed page without reacquiring its inputs."""
+        report = report if report is not None else {}
+        def decline(reason):
+            report['canonical_snapshot_fallback_reason'] = reason
+            return None
         from app.data_engine.history import AlwaysOpenCalendar
         from app.data_engine.interval_policy import parse_interval_spec
         if (not self._cfg.mixed_custom_history
                 or not key.identity.is_legacy_default_for(key.exchange)):
-            return None
+            return decline('rollout_or_identity')
         base = parse_interval_spec(route.base_interval)
         spec = route.spec
         if base is None or spec.phase_ms or spec.calendar_unit is not None:
-            return None
+            return decline('unsupported_grid')
         calendar = self._calendar_for(key)
         if calendar is not None and not isinstance(calendar, AlwaysOpenCalendar):
-            return None
+            return decline('unsupported_calendar')
         declaration = self._interval_resolver.history_composition_routes(exchange=key.exchange,
             market_type=key.market_type, interval=key.interval)
         if declaration is None:
-            return None
+            return decline('no_composition_route')
         if composition_contract is not None:
             self._interval_resolver.require_history_composition(exchange=key.exchange,
                 market_type=key.market_type, interval=key.interval, contract_id=composition_contract,
@@ -302,35 +316,48 @@ class QueryEngine:
             end_ms = spec.floor_ms(now_ms)
             start_ms = end_ms-(min(limit,self._cfg.max_limit)-1)*spec.nominal_ms
         if start_ms is None or end_ms is None:
-            return None
+            return decline('unbounded_request')
         first, last = spec.floor_ms(start_ms), spec.floor_ms(end_ms)
         if first < start_ms:
             first = spec.next_ms(first)
         current_open = spec.floor_ms(now_ms)
+        preview_requested = last == current_open and first < last
+        preview_pending = False
         preview = None
         preview_snapshot = None
         preview_cache = self._cache
-        if last == current_open and first < last:
+        if preview_requested:
             # A current preview must never force reacquisition of the entire
             # immutable closed prefix. It is an immutable cache value, remains
             # explicitly forming, and grants no storage/write authority.
             preview_snapshot = preview_cache.bar_snapshot(key, last//1000)
             preview = preview_snapshot[1] if preview_snapshot is not None else None
             if preview is None or preview.is_closed:
-                return None
+                # The existing warm-start/live owner supplies this overlay.
+                # Its absence must not re-read every closed historical input
+                # or manufacture a final target repair for the current bucket.
+                preview, preview_pending = None, True
             last -= spec.nominal_ms
         count = (last-first)//spec.nominal_ms+1
-        if count*spec.nominal_ms <= base.nominal_ms*self._cfg.max_limit:
-            return None
         effective_limit = min(limit or self._cfg.default_limit, self._cfg.max_limit)
         reader = getattr(self._storage, 'read_closed_target_snapshot', None)
         consumer = self._cache.revision_consumer
         if (not callable(reader) or consumer is None or not 0 < count <= 512
-                or count + int(preview is not None) > effective_limit):
-            return None
+                or count + int(preview_requested) > effective_limit):
+            return decline('snapshot_unavailable_or_limit')
+        owner = (self._storage, self._cache, consumer, self._cfg, self.custom_intervals,
+                 self._interval_resolver, self.history_policy, self._storage_binding_revision)
+        def check_local_owner():
+            current = (self._storage, self._cache, self._cache.revision_consumer, self._cfg,
+                       self.custom_intervals, self._interval_resolver, self.history_policy,
+                       self._storage_binding_revision)
+            if any(old is not new for old, new in zip(owner[:-1], current[:-1])) or owner[-1] != current[-1]:
+                from app.data_engine.storage.revisions import StaleAcquisition
+                owner[1].invalidate(key)
+                raise StaleAcquisition('local target repair binding changed')
         values = (key.exchange,key.market_type,key.symbol,key.interval,*key.identity.storage_values)
         if first < 0 or last+spec.nominal_ms > now_ms:
-            return None
+            return decline('not_closed_range')
         proofs = []
         def load():
             snapshot = reader(consumer.store, values, first, last, spec.nominal_ms, count, now_ms)
@@ -343,17 +370,18 @@ class QueryEngine:
         repair_epoch = self._local_closed_repair_epoch
         rows = self._measure_storage_read(io_metrics, load)
         if not proofs:
-            return None
+            return decline('no_trusted_persisted_targets')
         proof = proofs[0]
         bars = self._storage_rows_to_bars(key, rows, io_metrics)
         if (not bars or any(not bar.trusted_final or not bar.is_closed for bar in bars)
                 or composition_contract is not None and any(
                     getattr(bar, field, None) is None for bar in bars for field in declaration[0].fields)):
-            return None
+            return decline('target_fields_unqualified')
         stored_count = len(bars)
         present = {bar.time_ms for bar in bars}
         local_reports = []
         local_probes = 0
+        local_probe_limit = 8
         local_probe_ms = 0.0
         local_allowance = min(2048, self._cfg.max_limit)
         local_budget = local_allowance
@@ -370,13 +398,13 @@ class QueryEngine:
                 proofs.clear()
                 rows = self._measure_storage_read(io_metrics, load)
                 if not proofs:
-                    return None
+                    return decline('repair_reload_unavailable')
                 proof = proofs[0]
                 bars = self._storage_rows_to_bars(key, rows, io_metrics)
                 if (not bars or any(not bar.trusted_final or not bar.is_closed for bar in bars)
                         or composition_contract is not None and any(
                             getattr(bar, field, None) is None for bar in bars for field in declaration[0].fields)):
-                    return None
+                    return decline('repair_reload_fields_unqualified')
                 stored_count = len(bars)
                 present = {bar.time_ms for bar in bars}
 
@@ -393,7 +421,7 @@ class QueryEngine:
                         exchange=key.exchange,market_type=key.market_type)
                     local_probe_ms += (time.monotonic()-began)*1000
                     return value
-                while cursor < len(absent):
+                while cursor < len(absent) and local_probes < local_probe_limit:
                     capacity = local_budget//fine_count-3
                     if not callable(batch_counter):
                         capacity = min(capacity, 1)
@@ -410,6 +438,8 @@ class QueryEngine:
                     available = count_local(opened,end)
                     if available < size*fine_count:
                         if size > 1:
+                            if local_probes >= local_probe_limit:
+                                break
                             size, end = 1, opened
                             available = count_local(opened,end)
                         if available < fine_count:
@@ -421,19 +451,60 @@ class QueryEngine:
                     deletion_floor = acquisition_delete_floor(acquisition_revision())
                     consumer.sync(force=True)
                     did_reduce = True
-                    with acquisition_scope(consumer.store.acquisition(revision=deletion_floor)):
-                        local = self.custom_intervals.query_from_base(symbol=key.symbol, interval=key.interval,
-                            start_ms=opened,end_ms=end,limit=size,started_at=started_at,
-                            exchange=key.exchange,market_type=key.market_type,auto_backfill=False,
-                            route=route,composition_contract=composition_contract)
+                    check_local_owner()
+                    token = _local_closed_write.set((self, owner[0], check_local_owner))
+                    try:
+                        with acquisition_scope(consumer.store.acquisition(revision=deletion_floor)):
+                            local = owner[4].query_from_base(symbol=key.symbol, interval=key.interval,
+                                start_ms=opened,end_ms=end,limit=size,started_at=started_at,
+                                exchange=key.exchange,market_type=key.market_type,auto_backfill=False,
+                                route=route,composition_contract=composition_contract)
+                        check_local_owner()
+                    finally:
+                        _local_closed_write.reset(token)
                     if local is not None:
                         local_reports.append({'open_ms':opened,'end_ms':end,'target_count':size,
                             'complete':local.complete,'storage_reads':local.metadata.get('storage_reads',0),
                             'storage_rows':local.metadata.get('storage_rows',0),
                             'storage_read_ms':local.metadata.get('storage_read_ms',0),
+                            'base_storage_reads':local.metadata.get('base_storage_reads',0),
+                            'base_storage_rows':local.metadata.get('base_storage_rows',0),
+                            'source_interval':route.base_interval,
+                            'source_start_ms':opened,'source_end_ms':end+spec.nominal_ms-1,
                             'written':local.metadata.get('target_materialized_written',0)})
                         written += int(local.metadata.get('target_materialized_written',0))
                     cursor += size
+            # Reuse the ordinary bounded reducer for the current bucket only.
+            # Larger overlays remain with warm-start/live prefix ownership;
+            # neither path expands into the closed historical page.
+            preview_cost = 4*(spec.nominal_ms//base.nominal_ms)
+            if (repair_acquired and preview_pending and spec.nominal_ms % base.nominal_ms == 0
+                    and 0 < preview_cost <= local_budget):
+                check_local_owner()
+                local_budget -= preview_cost
+                token = _local_closed_write.set((self, owner[0], check_local_owner))
+                try:
+                    current = owner[4].query_from_base(symbol=key.symbol, interval=key.interval,
+                        start_ms=current_open,end_ms=current_open,limit=1,started_at=started_at,
+                        exchange=key.exchange,market_type=key.market_type,auto_backfill=False,
+                        route=route,composition_contract=composition_contract)
+                    check_local_owner()
+                finally:
+                    _local_closed_write.reset(token)
+                local_reports.append({'open_ms':current_open,'end_ms':current_open,'target_count':1,
+                    'kind':'forming_preview','complete':current.complete,
+                    'storage_reads':current.metadata.get('storage_reads',0),
+                    'storage_rows':current.metadata.get('storage_rows',0),
+                    'storage_read_ms':current.metadata.get('storage_read_ms',0),
+                    'base_storage_reads':current.metadata.get('base_storage_reads',0),
+                    'base_storage_rows':current.metadata.get('base_storage_rows',0),
+                    'source_interval':route.base_interval,'source_start_ms':current_open,
+                    'source_end_ms':current_open+spec.nominal_ms-1,'written':0})
+                if current.metadata.get('base_rows_fetched',0):
+                    preview_snapshot = preview_cache.bar_snapshot(key,current_open//1000)
+                    candidate = preview_snapshot[1] if preview_snapshot is not None else None
+                    if candidate is not None and not candidate.is_closed:
+                        preview, preview_pending = candidate, False
         finally:
             if repair_acquired:
                 if did_reduce:
@@ -445,13 +516,15 @@ class QueryEngine:
             proofs.clear()
             rows = self._measure_storage_read(io_metrics, load)
             if not proofs:
-                return None
+                from app.data_engine.storage.revisions import StaleAcquisition
+                raise StaleAcquisition('canonical target unavailable after local repair')
             proof = proofs[0]
             bars = self._storage_rows_to_bars(key, rows, io_metrics)
             if (not bars or any(not bar.trusted_final or not bar.is_closed for bar in bars)
                     or composition_contract is not None and any(
                         getattr(bar, field, None) is None for bar in bars for field in declaration[0].fields)):
-                return None
+                from app.data_engine.storage.revisions import StaleAcquisition
+                raise StaleAcquisition('canonical target fields changed after local repair')
             stored_count = len(bars)
             present = {bar.time_ms for bar in bars}
         # Any nonempty valid canonical page is a read frontier. Missing rows
@@ -472,7 +545,8 @@ class QueryEngine:
             key, begin, end, reason='query_empty',
             missing_bars=(end-begin)//spec.nominal_ms+1,
             submit=auto_backfill and repair_acquired and (not broad_partial or index < 8))) is not None]
-        partial = stored_count != count
+        closed_partial = stored_count != count
+        partial = closed_partial or preview_pending
         if preview is not None:
             bars.append(preview)
             from dataclasses import replace
@@ -485,12 +559,18 @@ class QueryEngine:
             complete=not partial, retryable=partial, history_state='pending' if partial else 'ready',
             missing_ranges=missing, backfill_triggered=bool(missing and auto_backfill and repair_acquired and self._backfill_trigger),
             metadata={'all_rows_final':preview is None,'expected_closed_rows':count,
-                'expected_closed_through_ms':last,'target_materialized':not partial,'canonical_target_snapshot':True,
-                'canonical_target_partial':partial,
+                'expected_closed_through_ms':last,'target_materialized':not closed_partial,'canonical_target_snapshot':True,
+                'canonical_target_partial':closed_partial,
+                'canonical_target_start_ms':first,'canonical_target_end_ms':last,
+                'canonical_target_preview_pending':preview_pending,
                 'canonical_target_preview':preview is not None,
                 'storage_reads':1,'storage_rows':stored_count,'target_materialized_rows':stored_count,
                 'target_materialized_written':written,'derived_from':route.base_interval,
+                'base_storage_reads':sum(item['base_storage_reads'] for item in local_reports),
+                'base_storage_rows':sum(item['base_storage_rows'] for item in local_reports),
                 'canonical_local_probe_reads':local_probes,
+                'canonical_local_probe_limit':local_probe_limit,
+                'canonical_local_probe_deferred':closed_partial and local_probes >= local_probe_limit,
                 'canonical_local_probe_ms':round(local_probe_ms,2),
                 'canonical_local_repair_source_budget':local_allowance-local_budget,
                 'canonical_local_repair_source_limit':local_allowance,
@@ -621,10 +701,11 @@ class QueryEngine:
                     interval=interval,
                     purpose=IntervalPurpose.HISTORY,
                 )
+            snapshot_report = {}
             result = self._closed_target_snapshot(key=SeriesKey(symbol, interval, exchange=exchange,
                 market_type=market_type, **identity.to_dict()), route=route, start_ms=start_ms,
                 end_ms=end_ms, limit=limit, composition_contract=composition_contract, io_metrics=io_metrics, started_at=t0,
-                auto_backfill=allow_backfill)
+                auto_backfill=allow_backfill, report=snapshot_report)
             if result is not None:
                 return result
             result = self.custom_intervals.query_from_base(
@@ -640,6 +721,7 @@ class QueryEngine:
                 route=route,
                 composition_contract=composition_contract,
             )
+            result.metadata.update(snapshot_report)
             if io_metrics.storage_reads:
                 for name, value in io_metrics.metadata().items():
                     result.metadata[name] = result.metadata.get(name, 0) + value
@@ -1041,11 +1123,12 @@ class QueryEngine:
                 )
             effective_limit = min(limit or self._cfg.default_limit, self._cfg.max_limit)
             last = route.spec.floor_ms(int(before_ms)-1)
+            snapshot_report = {}
             result = self._closed_target_snapshot(key=SeriesKey(symbol, interval, exchange=exchange,
                 market_type=market_type, **identity.to_dict()), route=route,
                 start_ms=max(0, last-(effective_limit-1)*route.spec.nominal_ms), end_ms=last,
                 limit=effective_limit, composition_contract=composition_contract,
-                io_metrics=io_metrics, started_at=t0, auto_backfill=allow_backfill)
+                io_metrics=io_metrics, started_at=t0, auto_backfill=allow_backfill, report=snapshot_report)
             if result is not None:
                 return result
             result = self.custom_intervals.query_before(
@@ -1060,6 +1143,10 @@ class QueryEngine:
                 composition_contract=composition_contract,
             )
             key = SeriesKey(symbol, interval, exchange=exchange, market_type=market_type)
+            result.metadata.update(snapshot_report)
+            for name, value in io_metrics.metadata().items():
+                result.metadata[name] = result.metadata.get(name, 0) + value
+                result.metadata['target_'+name] = result.metadata.get('target_'+name, 0) + value
             return self._apply_custom_finality_contract(
                 result,
                 key,

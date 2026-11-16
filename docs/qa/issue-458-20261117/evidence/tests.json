@@ -1,0 +1,244 @@
+{
+  "product_backend": "7aaf4b7d1516f87773735bf7d750f0f4098dbe42",
+  "final_selection": {
+    "passed": 665,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": 165.44
+  },
+  "new_cases": 18,
+  "baseline": "Three initial real-SQLite reproductions fail on base #465.",
+  "development_failures": "Intermediate new-fixture binding initialization, changed forming expectation, missing compatibility metrics, and unproven forming enhanced-field expectations were corrected. Reports retained; not labelled pre-existing.",
+  "query_module_sha256": "b73375ad5b5ba1128851c7941b548cc01b233a37f74cb986ca5cd2d4a2eb8a10",
+  "reports": [
+    {
+      "artifact": "acceptance-tests.xml.gz",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "10",
+      "skipped": "0",
+      "tests": "662",
+      "time": "141.989",
+      "timestamp": "2026-11-17T03:12:46.287345",
+      "hostname": "Ryans-MacBook-Air.local",
+      "failure_cases": [
+        {
+          "case": "test_regular_sqlite_history_matches_batch_and_materializes[range-45m-15m-3]",
+          "message": "KeyError: 'base_storage_reads'"
+        },
+        {
+          "case": "test_regular_sqlite_history_matches_batch_and_materializes[range-90m-30m-3]",
+          "message": "KeyError: 'base_storage_reads'"
+        },
+        {
+          "case": "test_regular_sqlite_history_matches_batch_and_materializes[range-2d-1d-2]",
+          "message": "KeyError: 'base_storage_reads'"
+        },
+        {
+          "case": "test_regular_sqlite_history_matches_batch_and_materializes[range-4d-1d-4]",
+          "message": "KeyError: 'base_storage_reads'"
+        },
+        {
+          "case": "test_regular_sqlite_history_matches_batch_and_materializes[range-5d-1d-5]",
+          "message": "KeyError: 'base_storage_reads'"
+        },
+        {
+          "case": "test_regular_sqlite_history_matches_batch_and_materializes[before-45m-15m-3]",
+          "message": "KeyError: 'base_storage_reads'"
+        },
+        {
+          "case": "test_regular_sqlite_history_matches_batch_and_materializes[before-90m-30m-3]",
+          "message": "KeyError: 'base_storage_reads'"
+        },
+        {
+          "case": "test_regular_sqlite_history_matches_batch_and_materializes[before-2d-1d-2]",
+          "message": "KeyError: 'base_storage_reads'"
+        },
+        {
+          "case": "test_regular_sqlite_history_matches_batch_and_materializes[before-4d-1d-4]",
+          "message": "KeyError: 'base_storage_reads'"
+        },
+        {
+          "case": "test_regular_sqlite_history_matches_batch_and_materializes[before-5d-1d-5]",
+          "message": "KeyError: 'base_storage_reads'"
+        }
+      ]
+    },
+    {
+      "artifact": "baseline.xml.gz",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "3",
+      "skipped": "0",
+      "tests": "3",
+      "time": "8.527",
+      "timestamp": "2026-11-17T03:06:57.461840",
+      "hostname": "Ryans-MacBook-Air.local",
+      "failure_cases": [
+        {
+          "case": "test_small_latest_page_reuses_closed_tail_and_existing_preview",
+          "message": "Failed: reacquired closed inputs for a small latest page"
+        },
+        {
+          "case": "test_missing_current_preview_keeps_closed_prefix_without_reacquiring_it",
+          "message": "Failed: missing preview reacquired the closed historical prefix"
+        },
+        {
+          "case": "test_missing_local_inputs_cap_probe_work_without_losing_discrete_holes",
+          "message": "AssertionError: assert 64 <= 8\n +  where 64 = len([(('BTCUSDT', '1m', 5340000, 10679999), {'exchange': 'binance', 'market_type': 'futures'}), (('BTCUSDT', '1m', 1602000...et_type': 'futures'}), (('BTCUSDT', '1m', 58740000, 64079999), {'exchange': 'binance', 'market_type': 'futures'}), ...])"
+        }
+      ]
+    },
+    {
+      "artifact": "scoped-first.xml.gz",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "1",
+      "skipped": "0",
+      "tests": "67",
+      "time": "62.896",
+      "timestamp": "2026-11-17T03:07:50.806205",
+      "hostname": "Ryans-MacBook-Air.local",
+      "failure_cases": [
+        {
+          "case": "test_canonical_fast_read_requires_closed_trusted_untruncated_rows[forming]",
+          "message": "AssertionError: assert not True\n +  where True = <built-in method get of dict object at 0x11a53db80>('canonical_target_snapshot')\n +    where <built-in method get of dict object at 0x11a53db80> = {'all_rows_final': True, 'canonical_local_probe_deferred': False, 'canonical_local_probe_limit': 8, 'canonical_local_probe_ms': 0.0, ...}.get\n +      wher"
+        }
+      ]
+    },
+    {
+      "artifact": "scoped-new-fixed.xml.gz",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "15",
+      "time": "9.420",
+      "timestamp": "2026-11-17T03:11:31.524380",
+      "hostname": "Ryans-MacBook-Air.local",
+      "failure_cases": []
+    },
+    {
+      "artifact": "scoped-new.xml.gz",
+      "name": "pytest",
+      "errors": "15",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "15",
+      "time": "2.154",
+      "timestamp": "2026-11-17T03:10:52.267729",
+      "hostname": "Ryans-MacBook-Air.local",
+      "failure_cases": [
+        {
+          "case": "test_small_latest_page_reuses_closed_tail_and_existing_preview",
+          "message": "failed on setup with \"AttributeError: 'QueryEngine' object has no attribute '_storage_binding_revision'\""
+        },
+        {
+          "case": "test_missing_current_preview_keeps_closed_prefix_without_reacquiring_it",
+          "message": "failed on setup with \"AttributeError: 'QueryEngine' object has no attribute '_storage_binding_revision'\""
+        },
+        {
+          "case": "test_missing_local_inputs_cap_probe_work_without_losing_discrete_holes",
+          "message": "failed on setup with \"AttributeError: 'QueryEngine' object has no attribute '_storage_binding_revision'\""
+        },
+        {
+          "case": "test_missing_preview_recovers_on_existing_live_frame_without_source_reads[2-89]",
+          "message": "failed on setup with \"AttributeError: 'QueryEngine' object has no attribute '_storage_binding_revision'\""
+        },
+        {
+          "case": "test_missing_preview_recovers_on_existing_live_frame_without_source_reads[2-97]",
+          "message": "failed on setup with \"AttributeError: 'QueryEngine' object has no attribute '_storage_binding_revision'\""
+        },
+        {
+          "case": "test_missing_preview_recovers_on_existing_live_frame_without_source_reads[2-101]",
+          "message": "failed on setup with \"AttributeError: 'QueryEngine' object has no attribute '_storage_binding_revision'\""
+        },
+        {
+          "case": "test_missing_preview_recovers_on_existing_live_frame_without_source_reads[2-10007]",
+          "message": "failed on setup with \"AttributeError: 'QueryEngine' object has no attribute '_storage_binding_revision'\""
+        },
+        {
+          "case": "test_missing_preview_recovers_on_existing_live_frame_without_source_reads[128-89]",
+          "message": "failed on setup with \"AttributeError: 'QueryEngine' object has no attribute '_storage_binding_revision'\""
+        },
+        {
+          "case": "test_missing_preview_recovers_on_existing_live_frame_without_source_reads[128-97]",
+          "message": "failed on setup with \"AttributeError: 'QueryEngine' object has no attribute '_storage_binding_revision'\""
+        },
+        {
+          "case": "test_missing_preview_recovers_on_existing_live_frame_without_source_reads[128-101]",
+          "message": "failed on setup with \"AttributeError: 'QueryEngine' object has no attribute '_storage_binding_revision'\""
+        },
+        {
+          "case": "test_missing_preview_recovers_on_existing_live_frame_without_source_reads[128-10007]",
+          "message": "failed on setup with \"AttributeError: 'QueryEngine' object has no attribute '_storage_binding_revision'\""
+        },
+        {
+          "case": "test_local_repair_cannot_write_through_a_rebound_storage_owner[False]",
+          "message": "failed on setup with \"AttributeError: 'QueryEngine' object has no attribute '_storage_binding_revision'\""
+        },
+        {
+          "case": "test_local_repair_cannot_write_through_a_rebound_storage_owner[True]",
+          "message": "failed on setup with \"AttributeError: 'QueryEngine' object has no attribute '_storage_binding_revision'\""
+        },
+        {
+          "case": "test_failed_post_repair_proof_does_not_spend_a_second_source_budget",
+          "message": "failed on setup with \"AttributeError: 'QueryEngine' object has no attribute '_storage_binding_revision'\""
+        },
+        {
+          "case": "test_local_cancel_releases_repair_lock_and_writer_binding",
+          "message": "failed on setup with \"AttributeError: 'QueryEngine' object has no attribute '_storage_binding_revision'\""
+        }
+      ]
+    },
+    {
+      "artifact": "scoped-tail.xml.gz",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "3",
+      "skipped": "0",
+      "tests": "18",
+      "time": "7.967",
+      "timestamp": "2026-11-17T03:15:12.798216",
+      "hostname": "Ryans-MacBook-Air.local",
+      "failure_cases": [
+        {
+          "case": "test_missing_preview_reduces_only_available_current_inputs_and_never_persists_forming[89]",
+          "message": "AssertionError: assert 2.0 == None\n +  where 2.0 = BarData(time=683520, open=100.0, high=102.0, low=99.0, close=101.0, volume=2.0, is_closed=False, quote_volume=None, trades=None, taker_buy_base=None, taker_buy_quote=None, source='').volume\n +  and   None = BarData(time=683520, open=100.0, high=102.0, low=99.0, close=101.0, volume=2.0, is_closed=Fa"
+        },
+        {
+          "case": "test_missing_preview_reduces_only_available_current_inputs_and_never_persists_forming[97]",
+          "message": "AssertionError: assert 2.0 == None\n +  where 2.0 = BarData(time=744960, open=100.0, high=102.0, low=99.0, close=101.0, volume=2.0, is_closed=False, quote_volume=None, trades=None, taker_buy_base=None, taker_buy_quote=None, source='').volume\n +  and   None = BarData(time=744960, open=100.0, high=102.0, low=99.0, close=101.0, volume=2.0, is_closed=Fa"
+        },
+        {
+          "case": "test_missing_preview_reduces_only_available_current_inputs_and_never_persists_forming[101]",
+          "message": "AssertionError: assert 2.0 == None\n +  where 2.0 = BarData(time=775680, open=100.0, high=102.0, low=99.0, close=101.0, volume=2.0, is_closed=False, quote_volume=None, trades=None, taker_buy_base=None, taker_buy_quote=None, source='').volume\n +  and   None = BarData(time=775680, open=100.0, high=102.0, low=99.0, close=101.0, volume=2.0, is_closed=Fa"
+        }
+      ]
+    },
+    {
+      "artifact": "tail-streaming.xml.gz",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "61",
+      "time": "17.461",
+      "timestamp": "2026-11-17T03:16:03.115020",
+      "hostname": "Ryans-MacBook-Air.local",
+      "failure_cases": []
+    },
+    {
+      "artifact": "final-acceptance-tests.xml.gz",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "665",
+      "time": "165.412",
+      "timestamp": "2026-11-17T03:17:03.662768",
+      "hostname": "Ryans-MacBook-Air.local",
+      "failure_cases": []
+    }
+  ]
+}

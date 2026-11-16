@@ -228,7 +228,15 @@ def test_canonical_fast_read_requires_closed_trusted_untruncated_rows(mixed_quer
         result = query.query('BTCUSDT','10007m',start_ms=0,end_ms=4*WIDTH-1,limit=3,
                              market_type='futures',auto_backfill=False)
     else: result = read(query)
-    assert not result.metadata.get('canonical_target_snapshot')
+    if invalid == 'forming':
+        # A wrongly finalized current row cannot authorize the overlay. The
+        # verified closed prefix remains reusable while the live owner catches up.
+        assert result.metadata['canonical_target_snapshot']
+        assert result.metadata['canonical_target_preview_pending']
+        assert not result.complete and result.retryable
+        assert [bar.time_ms for bar in result.bars] == [0, WIDTH, 2*WIDTH]
+    else:
+        assert not result.metadata.get('canonical_target_snapshot')
 
 
 @pytest.mark.parametrize('mode', ['range', 'before'])
