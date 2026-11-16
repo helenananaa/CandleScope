@@ -6,6 +6,9 @@ test("colours parse as the browser reports them and composite over their backgro
   assert.deepEqual(parseColor("rgb(23, 24, 27)"), [23, 24, 27, 1]);
   assert.deepEqual(parseColor("rgba(0, 0, 0, 0.5)"), [0, 0, 0, 0.5]);
   assert.equal(parseColor("transparent"), null);
+  // color-mix(in srgb, ...) is reported in the color() syntax, channels from 0 to 1.
+  assert.deepEqual(parseColor("color(srgb 0.6 0 0)"), [153, 0, 0, 1]);
+  assert.deepEqual(parseColor("color(srgb 1 0 0 / 0.5)"), [255, 0, 0, 0.5]);
   assert.deepEqual(composite([0, 0, 0, 0.5], [255, 255, 255, 1]), [127.5, 127.5, 127.5, 1]);
 });
 

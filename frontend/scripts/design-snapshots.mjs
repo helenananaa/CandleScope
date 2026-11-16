@@ -35,7 +35,8 @@ export const STATES = [
     { key: "shell.settings" }, { selector: ".st-nav-item", index: 3 }, { key: "settings.workbench.open" }] },
   { name: "rail-tape", page: "/", steps: [{ key: "rail.expandView", params: { title: { key: "rail.tape" } } }] },
   { name: "rail-accounts", page: "/", steps: [{ key: "rail.expandView", params: { title: { key: "rail.accounts" } } }] },
-  { name: "chart-tester", page: "/", steps: [{ key: "chartTester.entryHint" }] },
+  // The tester loads the code editor on open; give it time before capturing or auditing.
+  { name: "chart-tester", page: "/", steps: [{ key: "chartTester.entryHint" }], settleMs: 5000 },
   // Extensions are managed in Settings → 插件与扩展; the recovery notice shows only in recovery mode or after a failure.
   { name: "extension-recovery", page: "/?extensions=off", steps: [{ selector: ".ui-toast .ui-btn" }] },
   { name: "replay-hub", page: "/replay.html" },
@@ -218,7 +219,7 @@ export async function visitState(browser, args, state) {
     });
     const outcome = result.result?.exceptionDetails ? `error: ${result.result.exceptionDetails.text}` : result.result?.result?.value;
     if (outcome !== "ok") problems.push(String(outcome));
-    await wait(args.settleMs);
+    await wait(state.settleMs ?? args.settleMs);
   }
   return problems;
 }

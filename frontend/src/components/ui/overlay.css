@@ -66,7 +66,7 @@
 }
 
 .ui-dialog:focus-visible {
-  outline: 2px solid var(--accent-blue);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -145,7 +145,7 @@
 }
 
 .ui-drawer:focus-visible {
-  outline: 2px solid var(--accent-blue);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 
@@ -328,13 +328,4 @@
   overflow-wrap: anywhere;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .ui-dialog,
-  .ui-dialog-backdrop,
-  .ui-drawer,
-  .ui-popover,
-  .ui-tooltip,
-  .ui-toast {
-    animation: none;
-  }
-}
+/* Reduced motion: the global rule in reset.css stops these animations. */

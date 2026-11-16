@@ -5,7 +5,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { DialogSurface } from "../Overlays.js";
 import { createOverlayStack, type OverlayEntry } from "../overlay/overlayStack.js";
 import { placePopover } from "../overlay/position.js";
-import { escapeClosesTopLayer, trappedFocusTarget } from "../overlay/overlayRuntime.js";
+import { escapeClosesTopLayer, focusLeavesPopup, trappedFocusTarget } from "../overlay/overlayRuntime.js";
+import { isContextMenuKey, moveMenuFocus } from "../helpers.js";
 import { MAX_TOASTS, createToastStore } from "../overlay/toastStore.js";
 
 function entry(id: string, kind: OverlayEntry["kind"], extra: Partial<OverlayEntry> = {}, closed: string[] = []): OverlayEntry {
@@ -127,6 +128,56 @@ test("Tab wraps inside a focus trap", () => {
   assert.equal(trappedFocusTarget(items, b ?? null, false), null, "native Tab moves within the trap");
   assert.equal(trappedFocusTarget(items, null, false), a, "focus outside the trap comes back in");
   assert.equal(trappedFocusTarget([], null, false), null);
+});
+
+test("a page popup closes when focus moves on to the page, not into a layer it opened", () => {
+  const node = (inside: Element[] = [], overlay = false): Element => {
+    const self = {
+      contains: (other: unknown) => other === self || inside.includes(other as Element),
+      closest: (selector: string) => (overlay && selector.includes("data-overlay-root") ? {} : null),
+    };
+    return self as unknown as Element;
+  };
+  const item = node();
+  const popup = node([item]);
+  const trigger = node();
+  const page = node();
+  const confirmation = node([], true);
+  assert.equal(focusLeavesPopup(item, popup, trigger), false, "within the popup");
+  assert.equal(focusLeavesPopup(trigger, popup, trigger), false, "back to its trigger");
+  assert.equal(focusLeavesPopup(confirmation, popup, trigger), false, "into a confirmation it opened");
+  assert.equal(focusLeavesPopup(null, popup, trigger), false, "focus left the window");
+  assert.equal(focusLeavesPopup(page, popup, trigger), true, "Tab past the last control");
+});
+
+test("menus move with the arrow keys, Home and End, skipping what cannot be chosen", () => {
+  let active: unknown = null;
+  const items = ["copy", "move", "remove"].map((id) => {
+    const item = { id, focus: () => { active = item; }, getClientRects: () => [1], matches: () => id === "move" };
+    return item;
+  });
+  active = items[0];
+  const globals = globalThis as unknown as { document?: unknown };
+  const previous = globals.document;
+  globals.document = { get activeElement() { return active; } };
+  try {
+    const container = { querySelectorAll: () => items } as unknown as HTMLElement;
+    let prevented = 0;
+    const press = (key: string) => moveMenuFocus({ key, preventDefault: () => { prevented += 1; } }, container);
+    assert.equal(press("ArrowDown"), true);
+    assert.equal(active, items[2], "the disabled item is skipped");
+    press("ArrowDown");
+    assert.equal(active, items[0], "wraps around");
+    press("End");
+    assert.equal(active, items[2]);
+    assert.equal(press("a"), false, "other keys are left alone");
+    assert.equal(prevented, 3);
+  } finally {
+    globals.document = previous;
+  }
+  assert.equal(isContextMenuKey({ key: "F10", shiftKey: true }), true);
+  assert.equal(isContextMenuKey({ key: "ContextMenu", shiftKey: false }), true);
+  assert.equal(isContextMenuKey({ key: "F10", shiftKey: false }), false);
 });
 
 test("toasts keep the newest few and dismiss by id", () => {

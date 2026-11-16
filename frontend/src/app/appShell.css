@@ -3,7 +3,7 @@
 .workspace-navigation { display: flex; align-items: center; gap: 3px; flex: 0 0 auto; }
 .workspace-navigation :is(a, button, span) { display: inline-flex; align-items: center; min-height: 32px; padding: 6px 9px; border: 0; border-radius: var(--radius-control); color: var(--text-secondary); background: transparent; text-decoration: none; font: 500 var(--font-size-sm)/1.4 var(--font-sans); white-space: nowrap; }
 .workspace-navigation [aria-current='page'] { color: var(--text-accent); background: var(--bg-hover); }
-.workspace-navigation :is(a,button):focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
+.workspace-navigation :is(a,button):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .workspace-navigation button:disabled, .workspace-navigation [aria-disabled='true'] { opacity: .5; }
 
 
@@ -139,4 +139,16 @@
 }
 @media (max-width: 980px) {
   .top-bar .interval-btn:not(.active) { display: none; }
+}
+
+/* "Skip to chart": off screen until it has keyboard focus, then over the top-left corner. */
+.skip-to-chart {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: var(--z-menu);
+  transform: translateY(calc(-100% - 16px));
+}
+.skip-to-chart:focus-visible {
+  transform: none;
 }

@@ -5,7 +5,7 @@ import {
 import { createPortal } from "react-dom";
 import { t } from "../../i18n/index.js";
 import { IconButton } from "./Button.js";
-import { choiceKeyTarget } from "./helpers.js";
+import { moveMenuFocus } from "./helpers.js";
 import { overlayHost, useOverlayLayer } from "./overlay/overlayRuntime.js";
 import { placePopover, type Placement } from "./overlay/position.js";
 import type { DrawerSide, OverlayKind } from "./overlay/overlayStack.js";
@@ -290,12 +290,9 @@ export function Menu({ open, onClose, anchorRef, label, items, placement = "bott
   const firstRef = useRef<HTMLButtonElement>(null);
   const firstEnabled = items.findIndex((item) => !item.disabled);
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const buttons = [...(listRef.current?.querySelectorAll<HTMLButtonElement>("[role='menuitem']") ?? [])];
-    const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
-    const target = choiceKeyTarget(event.key, index < 0 ? -1 : index, buttons.map((b) => b.disabled));
-    if (target == null) return;
-    event.preventDefault();
-    buttons[target]?.focus();
+    // Tab leaves the menu: it closes and focus goes back to the trigger.
+    if (event.key === "Tab") { event.preventDefault(); onClose(); return; }
+    moveMenuFocus(event, listRef.current);
   };
   return (
     <Popover open={open} onClose={onClose} anchorRef={anchorRef} label={label} role="menu" placement={placement} initialFocusRef={firstRef} className="ui-menu">

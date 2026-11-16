@@ -14,7 +14,7 @@
 .plugin-center button:not(.ui-btn):where(:not(.ui-tab, .ui-icon-btn, .ui-segment)) { min-height: 34px; padding: 6px 12px; border: 1px solid var(--border-color); border-radius: var(--radius-md); color: var(--text-primary); background: var(--bg-secondary); cursor: pointer; }
 .plugin-center button:not(.ui-btn):where(:not(.ui-tab, .ui-icon-btn, .ui-segment)):hover:not(:disabled) { background: var(--bg-hover); border-color: var(--accent-blue); }
 .plugin-center button:not(.ui-btn):where(:not(.ui-tab, .ui-icon-btn, .ui-segment)):disabled { cursor: not-allowed; opacity: .5; }
-.plugin-center :is(button,input,select,textarea,summary):where(:not(.ui-btn, .ui-tab, .ui-icon-btn, .ui-segment, .ui-input, .ui-check-input, .ui-disclosure-summary)):focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 3px; }
+.plugin-center :is(button,input,select,textarea,summary):where(:not(.ui-btn, .ui-tab, .ui-icon-btn, .ui-segment, .ui-input, .ui-check-input, .ui-disclosure-summary)):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
 .plugin-center input:not([type=checkbox]):where(:not(.ui-input, .ui-file-drop-input)), .plugin-center select:where(:not(.ui-input)), .plugin-center textarea:where(:not(.ui-input)) { min-height: 36px; max-width: 100%; min-width: 0; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-primary); color: var(--text-primary); }
 .plugin-center input::placeholder { color: var(--pc-secondary); }
 .plugin-center .pc-danger { color: var(--text-on-accent); background: var(--color-danger); }
@@ -22,7 +22,7 @@
 .pc-tools .ui-input:not(.ui-select) { flex: 1; }
 .pc-tools .ui-select { flex: 0 1 180px; }
 .pc-content { min-width: 0; display: grid; gap: 16px; align-content: start; }
-.pc-content:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
+.pc-content:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .pc-library { display: grid; grid-template-columns: minmax(230px, 28%) minmax(0, 1fr); min-height: 300px; border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: clip; }
 .pc-library-empty { display: block; min-height: 0; }
 .pc-list { background: var(--bg-primary); padding: 8px; border-inline-end: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 4px; max-height: 480px; overflow: auto; }

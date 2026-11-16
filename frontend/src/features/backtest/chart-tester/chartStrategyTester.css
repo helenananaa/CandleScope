@@ -336,7 +336,7 @@
 .chart-strategy-start-columns h3 { margin: 0 0 8px; color: var(--text-secondary); font: 600 11px/1.4 var(--font-sans); }
 .chart-strategy-start-list { display: flex; flex-direction: column; border-top: 1px solid var(--border-color); }
 .chart-strategy-start-row { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 9px 8px; border: 0; border-bottom: 1px solid var(--border-color); color: var(--text-primary); background: transparent; font: inherit; text-align: left; cursor: pointer; }
-.chart-strategy-start-row:hover, .chart-strategy-start-row:focus-visible { background: var(--bg-hover); outline: 0; box-shadow: inset 2px 0 0 var(--accent-blue); }
+.chart-strategy-start-row:hover, .chart-strategy-start-row:focus-visible { background: var(--bg-hover); outline: 0; box-shadow: inset 2px 0 0 var(--focus-ring); }
 .chart-strategy-start-list strong { font-weight: 600; }
 .chart-strategy-start-list span { overflow: hidden; color: var(--text-secondary); font-size: 11px; line-height: 1.5; text-overflow: ellipsis; }
 .chart-strategy-start-empty { margin: 0; padding: 10px 0; border-top: 1px solid var(--border-color); color: var(--text-secondary); font-size: 11px; line-height: 1.5; }

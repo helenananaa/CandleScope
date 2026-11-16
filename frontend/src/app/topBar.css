@@ -24,7 +24,10 @@
   align-items: center;
   gap: 12px;
   min-width: 0;
-  overflow: clip;
+  /* Clip sideways only: what does not fit is cut at the edge, while a panel that opens below
+     the header (the interval picker) still shows. overflow: clip on both axes hid it. */
+  overflow-x: clip;
+  overflow-y: visible;
   overflow-clip-margin: 4px;
 }
 

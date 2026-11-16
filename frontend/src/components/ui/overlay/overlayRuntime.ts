@@ -182,3 +182,53 @@ export function useOverlayLayer({ open, kind, side, onClose, closeOnEscape = tru
 
   return zIndex;
 }
+
+export interface AnchoredPopupOptions {
+  open: boolean;
+  onClose: () => void;
+  /** The popup's root element; it must unmount when the popup closes. */
+  popupRef: RefObject<HTMLElement | null>;
+  /** Gets focus back when the popup closes; defaults to whatever had focus when it opened. */
+  triggerRef?: RefObject<HTMLElement | null>;
+  /** Element focused on open; defaults to the popup's first control. */
+  initialFocusRef?: RefObject<HTMLElement | null>;
+  closeOnEscape?: boolean;
+  /** Close when focus moves on to the page (Tab past the last control). Default true, so the
+   * popup never covers the control that has focus. */
+  closeOnFocusOut?: boolean;
+}
+
+/** Whether focus moving from a popup to `next` leaves it for the page: not into the popup, its
+ * trigger, another overlay layer (a confirmation it opened) or a native modal dialog. */
+export function focusLeavesPopup(next: Element | null, popup: Element | null, trigger: Element | null): boolean {
+  if (!next || !popup) return false;
+  if (popup.contains(next) || trigger?.contains(next)) return false;
+  return !next.closest("[data-overlay-root], dialog[open]");
+}
+
+/**
+ * A popup a page draws in place, next to what opened it (a header picker, a chart's menu, a
+ * context menu), instead of through the overlay host. It joins the overlay stack as a popover:
+ * Escape closes it before anything under it, focus moves into it when it opens and back to the
+ * trigger when it closes, and it closes when focus moves on to the page. Its position and
+ * z-index stay the page's.
+ */
+export function useAnchoredPopup({ open, onClose, popupRef, triggerRef, initialFocusRef, closeOnEscape, closeOnFocusOut = true }: AnchoredPopupOptions): void {
+  useOverlayLayer({
+    open, kind: "popover", onClose, layerRef: popupRef,
+    ...(triggerRef ? { returnFocusRef: triggerRef } : {}),
+    ...(initialFocusRef ? { initialFocusRef } : {}),
+    ...(closeOnEscape === undefined ? {} : { closeOnEscape }),
+  });
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    const popup = popupRef.current;
+    if (!open || !closeOnFocusOut || !popup) return undefined;
+    const onFocusOut = (event: FocusEvent) => {
+      if (focusLeavesPopup(event.relatedTarget instanceof Element ? event.relatedTarget : null, popup, triggerRef?.current ?? null)) onCloseRef.current();
+    };
+    popup.addEventListener("focusout", onFocusOut);
+    return () => popup.removeEventListener("focusout", onFocusOut);
+  }, [open, closeOnFocusOut, popupRef, triggerRef]);
+}

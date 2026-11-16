@@ -138,9 +138,11 @@
   font-size: var(--font-size-2xs);
   opacity: 0.8;
 }
+/* Fixed, placed under its button by IntervalSelector: the header clips what overflows it, and a
+   fixed panel is not clipped by it. Above the page and its drawers, under modals. */
 .interval-panel {
-  position: absolute;
-  top: calc(100% + 8px);
+  position: fixed;
+  top: 56px;
   left: 0;
   width: min(400px, calc(100vw - 32px));
   max-height: min(520px, calc(100vh - 132px));
@@ -153,7 +155,7 @@
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
   transform-origin: top left;
   animation: interval-panel-in 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-  z-index: 30;
+  z-index: var(--z-panel);
 }
 @keyframes interval-panel-in {
   from { opacity: 0; transform: translateY(-6px) scale(0.98); }
@@ -406,7 +408,7 @@
   background: var(--bg-tertiary);
 }
 .interval-split:focus-within {
-  border-color: var(--accent-blue);
+  border-color: var(--focus-ring);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-blue) 12%, transparent);
 }
 .interval-number-input {

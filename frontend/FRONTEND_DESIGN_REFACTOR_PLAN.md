@@ -610,6 +610,13 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - Fixes: chart legend prices stay readable on any chart background (`legibleOn`), the logo's "Scope" and link-group labels use readable colours in the light theme, and the code editors follow the app theme (new light script theme; readable dark line numbers). The light theme was reviewed state by state.
 - The hard-coded colour ratchet uses the real counts (16 hex, 49 rgb()).
 
+**Phase 7b is done (branch `design/phase-7b-keyboard`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_7B.md`](../docs/FRONTEND_DESIGN_QA_PHASE_7B.md).
+
+- `npm run design:keyboard` uses every design state with the keyboard only (Tab walk, focus visibility and 3:1 rings, popups on Enter / arrows / Escape / focus return, pointer-only controls, reduced motion); before: problems in 11 of 22 states per theme (invisible and covered focus, 57 light-theme rings under 3:1, 5 popups, mouse-only watchlist rows, 1,838 elements moving with reduced motion); after: none in either theme.
+- The interval picker could not be seen since Phase 4a (the header's clip hid it below its row); it is fixed-positioned now.
+- Popups a page draws in place join the overlay stack through `useAnchoredPopup` (Escape, focus in and back, close when focus moves on); menus share `moveMenuFocus`. Watchlist rows, their menus and the drawing tools' variants work from the keyboard (Shift+F10, →); "跳到图表" is the first Tab stop on chart pages.
+- Focus rings use a `--focus-ring` token (darker in the light theme, 3:1 on every surface) and reach text fields and selects outside the kit. Reduced motion is one rule in `reset.css`; spinners keep turning, slower.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.

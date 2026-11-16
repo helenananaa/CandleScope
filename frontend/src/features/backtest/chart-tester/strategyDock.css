@@ -37,7 +37,7 @@
 .strategy-dock-content .native-strategy-panel { flex: 1 1 0; height: auto; min-height: 0; max-height: none; box-shadow: none; border-top: 0; width: 100%; box-sizing: border-box; }
 .strategy-dock .chart-strategy-resize-handle { display: none; }
 /* The dock's own raw controls; kit controls draw their own focus ring. */
-.strategy-dock :is(button, select, summary):where(:not(.ui-btn, .ui-icon-btn, .ui-tab, .ui-segment, .ui-input, .ui-disclosure-summary)):focus-visible { outline: 2px solid var(--accent-blue); outline-offset: -2px; }
+.strategy-dock :is(button, select, summary):where(:not(.ui-btn, .ui-icon-btn, .ui-tab, .ui-segment, .ui-input, .ui-disclosure-summary)):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 
 /* Strategy switcher */
 .strategy-switcher { position: relative; display: flex; align-items: center; min-width: 0; }
@@ -121,7 +121,7 @@
 .strategy-trade-navigation { display: flex; align-items: center; gap: var(--space-2); padding: 6px 0; color: var(--text-secondary); }
 .strategy-trade-navigation span { min-width: 80px; text-align: center; font-variant-numeric: tabular-nums; }
 .native-table tr[data-selected="true"] { background: color-mix(in srgb, var(--accent-blue) 16%, transparent); outline: 1px solid var(--accent-blue); outline-offset: -1px; }
-.native-table tr:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: -2px; }
+.native-table tr:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 .native-table .positive { color: var(--text-up); }
 .native-table .negative { color: var(--text-down); }
 

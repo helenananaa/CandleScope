@@ -10,11 +10,12 @@ export type { ChoiceOption, SegmentedControlProps, TabPanelProps, TabsProps } fr
 export { Badge, Disclosure, InlineAlert, Section, Stat } from "./Display.js";
 export type { BadgeProps, DisclosureProps, InlineAlertProps, SectionProps, StatProps, Tone } from "./Display.js";
 export { DateTimeInput, FileDrop } from "./Inputs.js";
-export { buttonClassName, choiceKeyTarget, fromDateTimeInputValue, fromDateTimeText, tabId, tabPanelId, toDateTimeInputValue, toDateTimeText } from "./helpers.js";
+export { buttonClassName, choiceKeyTarget, fromDateTimeInputValue, isContextMenuKey, moveMenuFocus, fromDateTimeText, tabId, tabPanelId, toDateTimeInputValue, toDateTimeText } from "./helpers.js";
 export type { DateTimeInputProps, FileDropProps } from "./Inputs.js";
 export { Dialog, DialogSurface, Drawer, Menu, OverlayLayer, Popover, Tooltip } from "./Overlays.js";
 export type { DialogProps, DrawerProps, MenuItem, MenuProps, OverlayLayerProps, PopoverProps, TooltipProps } from "./Overlays.js";
-export { hasOpenOverlay } from "./overlay/overlayRuntime.js";
+export { hasOpenOverlay, useAnchoredPopup } from "./overlay/overlayRuntime.js";
+export type { AnchoredPopupOptions } from "./overlay/overlayRuntime.js";
 export { ConfirmDialog, ToastRegion } from "./Feedback.js";
 export type { ConfirmDialogProps } from "./Feedback.js";
 export { confirmAction, dismissToast, notify } from "./overlay/overlayApi.js";

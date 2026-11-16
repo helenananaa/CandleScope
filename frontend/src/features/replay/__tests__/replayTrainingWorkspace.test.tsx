@@ -743,8 +743,9 @@ test("Phase 10 release surface exposes soak telemetry and an accessible danger d
   assert.match(integrity, /data-replay-panel="report"/);
   assert.match(integrity, /downloadReplayTrainingReport\(report, "json"\)/);
   assert.match(integrity, /downloadReplayTrainingReport\(report, "csv"\)/);
-  assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
-  assert.match(styles, /\.replay-loading-spinner \{ animation: none !important; \}/);
+  // Reduced motion is one app-wide rule (reset.css); the loading spinner keeps turning, slower.
+  assert.match(styles, /@media \(prefers-reduced-motion: reduce\)[\s\S]*animation-duration: var\(--motion-reduced-duration, 0\.01ms\) !important/);
+  assert.match(styles, /\.replay-loading-spinner \{[^}]*--motion-reduced-duration: 1\.6s; --motion-reduced-iterations: infinite;/);
 });
 
 test("toolbar keeps idle time visible and scopes progress to an active cancelable advance", () => {

@@ -41,8 +41,12 @@ html:is(:lang(zh), :lang(ja), :lang(ko)) * {
 }
 
 /* Keyboard focus is always visible. Many older rules set outline: none for mouse
- * clicks; :focus-visible only matches keyboard focus, so this does not affect them. */
-:is(button, a[href], summary, [role="tab"], [role="button"], [tabindex]:not([tabindex="-1"])):focus-visible {
-  outline: 2px solid var(--accent-blue) !important;
+ * clicks; :focus-visible only matches keyboard focus, so this does not affect them.
+ * Text fields and selects match :focus-visible on any focus; the kit's own fields (.ui-*)
+ * draw their own ring, the symbol search field marks its header, and the code editor its caret. */
+:is(button, a[href], summary, [role="tab"], [role="button"], [tabindex]:not([tabindex="-1"]),
+  input:not([type="hidden"], .ui-input, .ui-check-input, .ui-switch, .sym-modal-search-input, .monaco-editor *),
+  select:not(.ui-input), textarea:not(.ui-input, .monaco-editor *)):focus-visible {
+  outline: 2px solid var(--focus-ring) !important;
   outline-offset: 1px;
 }

@@ -411,6 +411,7 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
   return <>
     {import.meta.env.DEV && focusTiming && <span hidden data-replay-focus-cell={focusTiming.id} data-replay-focus-ms={focusTiming.durationMs} />}
     <MarketPageFrame
+      skipToChart
       rootRef={pageExportRef}
       topBar={<div ref={hostRefs.topBar} className="replay-workspace-host" />}
       intervalSelector={<div ref={hostRefs.intervalSelector} className="replay-workspace-host" />}

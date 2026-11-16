@@ -239,7 +239,7 @@
 button.research-row { cursor: pointer; }
 button.research-row:hover { background: var(--surface-2); }
 button.research-row:focus-visible {
-  outline: 2px solid var(--accent-blue);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 .research-row[data-active="true"] {
@@ -508,7 +508,7 @@ button.research-row:focus-visible {
 }
 .research-mode-item:hover:enabled { color: var(--text-primary); background: var(--surface-2); }
 .research-mode-item:focus-visible {
-  outline: 2px solid var(--accent-blue);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 .research-mode-item[aria-current="page"] {

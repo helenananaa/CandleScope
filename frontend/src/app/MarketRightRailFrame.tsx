@@ -17,6 +17,7 @@ import {
 import { t } from "../i18n/index.js";
 import { useLocale } from "../i18n/useLocale.js";
 import type { MarketRailViewDescriptor } from "./marketRailTypes.js";
+import { scrollBehavior } from "../utils/reducedMotion.js";
 
 type RailCssVars = CSSProperties & Record<`--${string}`, string | number>;
 
@@ -202,7 +203,7 @@ export default function MarketRightRailFrame({
       const top = Math.max(0, section.offsetTop - 6);
       const bottom = section.offsetTop + section.offsetHeight;
       if (top < panel.scrollTop || bottom > panel.scrollTop + panel.clientHeight) {
-        panel.scrollTo({ top, behavior: "smooth" });
+        panel.scrollTo({ top, behavior: scrollBehavior() });
       }
       pendingRevealRef.current = null;
     });

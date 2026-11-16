@@ -59,7 +59,7 @@
 }
 
 .ui-input:focus-visible {
-  border-color: var(--accent-blue);
+  border-color: var(--focus-ring);
   outline: 2px solid color-mix(in srgb, var(--accent-blue) 35%, transparent);
   outline-offset: 0;
 }
@@ -140,7 +140,7 @@
 }
 
 .ui-datetime-picker:focus-visible {
-  outline: 2px solid var(--accent-blue);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 0;
 }
 
@@ -256,7 +256,7 @@
 
 .ui-switch:focus-visible .ui-switch-track,
 .ui-check-input:focus-visible {
-  outline: 2px solid var(--accent-blue);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -282,7 +282,7 @@
 }
 
 .ui-file-drop:focus-within {
-  outline: 2px solid var(--accent-blue);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
