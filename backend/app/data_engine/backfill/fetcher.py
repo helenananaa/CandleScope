@@ -339,7 +339,7 @@ class HistoricalFetcher:
                     archive_download_bytes=result.metadata.get('archive_download_bytes', 0),
                     archive_parse_elapsed_ms=result.metadata.get('archive_parse_elapsed_ms', 0),
                     fetch_elapsed_ms=result.elapsed_ms)
-                result.metadata['source_route'] = route
+                result.metadata['source_route'] = deepcopy(route)
             self._recent_source_routes.append(route)
             del self._recent_source_routes[:-64]
 

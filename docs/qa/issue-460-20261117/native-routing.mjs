@@ -396,15 +396,15 @@ try {
   phase='cold-four-source-routing';
   // Polls are read-only and serialized. Their wall cost remains in the run.
   let sampling=true, poll;
-  const timeline=[];
+  let sampleCount=0;
   poll=(async()=>{
     while(sampling) {
       const at=Date.now();
       try {
-        const diagnostics=await api('/api/v1/settings/cache-diagnostics');
+        const diagnostics=await api('/api/v1/settings/storage/health');
         const workspace=await q.inspect();
         const sample={at,observedAt:Date.now(),workspace,diagnostics};
-        timeline.push(sample);
+        sampleCount++;
         await fs.appendFile(path.join(q.s.root,'source-timeline.jsonl'),JSON.stringify(sample)+'\n');
       } catch(error) {
         await fs.appendFile(path.join(q.s.root,'source-timeline-errors.jsonl'),JSON.stringify({at,error:String(error)})+'\n');

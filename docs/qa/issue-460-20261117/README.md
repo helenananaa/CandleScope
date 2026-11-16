@@ -3,8 +3,10 @@
 Adjacent qualified and legacy native tasks previously entered one archive run.
 The all-tasks qualification then became false and restored the legacy parent
 ledger range for the qualified small task. The regression reproduces the defect
-with either ordering. Source routing now separates those contracts while
-preserving legacy parent prefill and required mixed-history routing.
+with either ordering. Source routing now separates bounded-page, exact-slot
+composition and legacy contracts. A legacy neighbour also cannot erase the
+required mixed route's amplification guard. Legacy parent prefill and the
+required mixed route's own original envelope are preserved.
 
 Route receipts correlate task/parent/decision/archive ranges, rejection counts,
 physical REST pages, fetched rows and archive import rows/bytes. The fetcher

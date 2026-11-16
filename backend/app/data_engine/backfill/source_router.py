@@ -984,7 +984,7 @@ def _task_runs(tasks: list[BackfillTask], interval: str) -> list[list[BackfillTa
     runs: list[list[BackfillTask]] = []
     for task in ordered:
         if (not runs or task.start_ms > runs[-1][-1].end_ms + interval_ms
-                or _bounded_history_page([task]) != _bounded_history_page([runs[-1][-1]])):
+                or _archive_run_policy(task) != _archive_run_policy(runs[-1][-1])):
             # A neighbouring legacy demand must not revoke a qualified page's
             # actual-task envelope by making the all-tasks contract false.
             runs.append([task])
@@ -1091,6 +1091,14 @@ def _bounded_history_page(tasks):
         for task in tasks)
 
 
+def _archive_run_policy(task):
+    # Both qualifications are evaluated over all tasks in a run. A legacy
+    # neighbour must not erase either the bounded envelope or the exact-slot
+    # amplification limit used by required mixed-history sources.
+    return (_bounded_history_page([task]),
+            bool(task.metadata.get('history_composition_contract')))
+
+
 def _bounded_usdm_archive_candidates(refs, tasks, interval, *, rejected=None):
     """Bound imports/prefetch by native rows and the current work envelope.
 
@@ -1179,7 +1187,8 @@ def _route_decision(task: BackfillTask) -> dict[str, Any]:
     parent = parent if isinstance(parent, dict) else {}
     return dict(task_key=task.task_key, exchange=task.exchange,
         market_type=task.market_type, symbol=task.symbol, interval=task.interval,
-        requested_interval=str(task.metadata.get('requested_interval', task.interval))[:64],
+        requested_interval=str(task.metadata.get('custom_interval')
+            or task.metadata.get('requested_interval') or task.interval)[:64],
         task_start_ms=task.start_ms, task_end_ms=task.end_ms,
         ledger_start_ms=parent.get('start_ms') if type(parent.get('start_ms')) is int else None,
         ledger_end_ms=parent.get('end_ms') if type(parent.get('end_ms')) is int else None,

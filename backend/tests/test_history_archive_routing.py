@@ -947,13 +947,15 @@ def test_route_receipts_are_bounded_and_snapshot_cannot_mutate_them(tmp_path, mo
         try:
             for i in range(65):
                 task = BackfillTask('BTCUSDT', '1m', i*MINUTE_MS, i*MINUTE_MS)
-                await fetcher.fetch([task])
+                results = await fetcher.fetch([task])
             snapshot = fetcher.snapshot()
             assert snapshot['source_route_sequence'] == 65
             assert len(snapshot['recent_source_routes']) == 64
             assert snapshot['recent_source_routes'][0]['sequence'] == 2
             snapshot['recent_source_routes'][0]['selected_objects'].append('changed')
             assert not fetcher.snapshot()['recent_source_routes'][0]['selected_objects']
+            results[0].metadata['source_route']['selected_objects'].append('callback-mutated')
+            assert not fetcher.snapshot()['recent_source_routes'][-1]['selected_objects']
         finally:
             await router.close()
 
@@ -961,8 +963,9 @@ def test_route_receipts_are_bounded_and_snapshot_cannot_mutate_them(tmp_path, mo
 
 
 @pytest.mark.parametrize('bounded_first', [True, False])
+@pytest.mark.parametrize('contract', ['bounded_history_batch_contract', 'history_composition_contract'])
 def test_adjacent_bounded_and_legacy_tasks_keep_separate_archive_envelopes(
-    tmp_path, monkeypatch, bounded_first,
+    tmp_path, monkeypatch, bounded_first, contract,
 ):
     async def run():
         start = _ms(datetime(2024, 1, 1, tzinfo=UTC))
@@ -983,13 +986,18 @@ def test_adjacent_bounded_and_legacy_tasks_keep_separate_archive_envelopes(
                                  'start_ms': start, 'end_ms': start+14*1440*MINUTE_MS-1}})
                  for i in range(2)]
         bounded = tasks[0 if bounded_first else 1]
-        bounded.metadata['bounded_history_batch_contract'] = 'binance.usdm.trade-klines/base-utc/1'
+        bounded.metadata[contract] = 'binance.usdm.trade-klines/base-utc/1'
+        bounded.metadata['custom_interval'] = '10007m'
         try:
-            await router.prepare(tasks)
+            plan = await router.prepare(tasks)
+            bounded_range = ((bounded.start_ms, bounded.end_ms)
+                if contract == 'bounded_history_batch_contract'
+                else (start, start+14*1440*MINUTE_MS-1))
             assert sorted(calls) == sorted([
-                (bounded.start_ms, bounded.end_ms),
+                bounded_range,
                 (start, start+14*1440*MINUTE_MS-1),
             ]), 'a legacy neighbour must not restore the parent envelope for a bounded page'
+            assert plan.decisions_by_task[bounded.task_key]['requested_interval'] == '10007m'
         finally:
             await router.close()
 
