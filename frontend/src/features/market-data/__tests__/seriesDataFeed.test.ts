@@ -4267,3 +4267,27 @@ test("an unproven capped parent retains its window owner until a full external p
   assert.equal(feed.pendingRepairCount(series), 0);
   assert.equal(buffer.hasPending("cap"), false);
 });
+
+test("a same-epoch stale readback retains its unresolved initial callback until a fresh proof", async () => {
+  const series = { ...SERIES, interval: "10007m" };
+  let cleared = 0, calls = 0;
+  const feed = new SeriesDataFeed({ getActiveSeries: () => series, commitMergedChartData: () => {} });
+  const start = epochSeconds(1_200), end = epochSeconds(601_620);
+  const getRange = feed.getRange.bind(feed);
+  feed.getRange = async () => ++calls === 1
+    ? { data: [], rows: [], stale: true, active: true, complete: false, retryable: true,
+      history_state: "pending", start_ms: start*1000, end_ms: end*1000 }
+    : { ...resolvedQuality, data: rows([start,end]), rows: rows([start,end]),
+      start_ms: start*1000, end_ms: end*1000 };
+  feed.trackPendingResultRepair(series, { data: [], start_ms: start*1000, end_ms: end*1000,
+    complete: false, retryable: true, history_state: "pending" }, () => { cleared += 1; });
+  try {
+    await feed.pollPendingRepairs(series, { force: true, maxRequests: 1 });
+    assert.equal(cleared, 0, "a rejected read cannot release the original loading owner");
+    assert.equal(feed.pendingRepairCount(series), 1, "stale evidence cannot erase an unresolved obligation");
+    await feed.pollPendingRepairs(series, { force: true, maxRequests: 1 });
+    assert.equal(calls, 2);
+    assert.equal(cleared, 1);
+    assert.equal(feed.pendingRepairCount(series), 0);
+  } finally { feed.getRange = getRange; }
+});

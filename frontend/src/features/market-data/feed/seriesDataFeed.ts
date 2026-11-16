@@ -2059,8 +2059,17 @@ export class SeriesDataFeed {
       if (this.currentGapRepairGeneration(series) !== repairGeneration) return true;
       const tracked = this.pendingGapRepairs.get(key);
       if (tracked) tracked.failureAttempts = 0;
-      if (result.stale || result.active === false) {
+      if (result.active === false || !this.isCurrent(series, epoch) || !this.shouldCommitActive(series)) {
         this.deletePendingGapRepair(key);
+        return true;
+      }
+      if (result.stale) {
+        // New stream/storage versions can reject a same-epoch readback. That
+        // is not coverage: preserve its original callback and indicator owner
+        // until a fresh proof settles them, or an epoch change cancels them.
+        if (tracked) tracked.nextPollAt = Math.max(tracked.nextPollAt, Date.now()
+          + ((parseIntervalSeconds(series.interval) ?? 0) > 10_000*60
+            ? LARGE_EXACT_REPAIR_POLL_MS : ACTIVE_EXACT_REPAIR_POLL_MS));
         return true;
       }
       this.updatePendingGapRepairFromResult(series, range, result, attempts, dormant);
