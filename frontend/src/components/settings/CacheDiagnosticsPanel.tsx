@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { getLocale, t, type MessageKey } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import type { GcVictim } from "../../features/cache-gc/cacheGcTypes.js";
+import { cacheEntryLabel } from "./cacheEntryLabel.js";
 import type {
   BackendDiagnosticsResult,
   BackendGcVictim,
@@ -94,7 +95,7 @@ function GcPlanRows({ victims = [] }: GcPlanRowsProps) {
     <div className="st-diagnostics-list">
       {victims.slice(0, 8).map((entry) => (
         <div key={`${entry.owner}:${entry.key}`} className="st-diagnostics-row st-diagnostics-row-wide">
-          <span className="st-diagnostics-row-key">{entry.key}</span>
+          <span className="st-diagnostics-row-key" title={entry.key}>{cacheEntryLabel(entry.key)}</span>
           <span>{reasonLabel(entry.reason)}</span>
           <span>{formatBytes(entry.estimatedBytes ?? entry.estimated_bytes ?? entry.would_free_estimated_bytes)}</span>
         </div>
@@ -121,7 +122,7 @@ function TopEntries({ entries = [], metric = "bars" }: TopEntriesProps) {
     <div className="st-diagnostics-list">
       {sorted.map((entry) => (
         <div key={entry.key} className="st-diagnostics-row">
-          <span className="st-diagnostics-row-key">{entry.key}</span>
+          <span className="st-diagnostics-row-key" title={entry.key}>{cacheEntryLabel(entry.key)}</span>
           <span>{formatNumber(entry[metric])}</span>
         </div>
       ))}
@@ -360,7 +361,7 @@ export default function CacheDiagnosticsPanel({
                 <div className="st-diagnostics-list">
                   {storageGcPlan.series.slice(0, 8).map((entry) => (
                     <div key={`${entry.owner}:${entry.key}`} className="st-diagnostics-row st-diagnostics-row-storage">
-                      <span className="st-diagnostics-row-key">{entry.key}</span>
+                      <span className="st-diagnostics-row-key" title={entry.key}>{cacheEntryLabel(entry.key)}</span>
                       <span>{reasonLabel(entry.reason)}</span>
                       <span>{t("settings.diag.rows", { count: formatNumber(entry.would_delete_rows) })}</span>
                       <span>{riskLabel(entry.risk_flags)}</span>

@@ -36,7 +36,7 @@ test("replay starts paused with a server cursor and no future account output", (
     result: null, snapshots: [], error: null,
   }} />);
   assert.match(html, /0 \/ 200/);
-  assert.ok(html.includes(t("research.state.paused")));
+  assert.ok(html.includes(t("common.state.paused")));
   assert.doesNotMatch(html, /PAUSED/);
   assert.doesNotMatch(html, /<svg/);
 });

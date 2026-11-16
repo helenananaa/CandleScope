@@ -543,7 +543,7 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - The read-only account dock is on the kit: toned sync badge, kit buttons and password fields, wrapping pressed view buttons, disclosures and alerts in the overview, reconciliation, trade review and journal.
 - `tradingAccounts.css` (628 → 381 lines), `readonlyAccount.css` (no element rules left) and `chartAccountOverlay.css` load with the global stylesheet. Left for Phase 6: fact kinds and exchange ids shown as codes, `binance spot` in the journal.
 
-**Phase 6 lands in four PRs** (split decided 2026-11-15, when it started: the copy left by Phase 5 spans every surface, and each reworded message changes all 30 catalogs):
+**Phase 6 lands in four PRs** (split decided 2026-11-15, when it started: the copy left by Phase 5 spans every surface, and each reworded message changes all 30 catalogs; 6b2, 6c2 and 6d2 were split off when their rows started):
 
 | PR | Scope |
 |---|---|
@@ -553,6 +553,7 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 | 6c | Strategy research: tools, status bar, run states, fidelity and engine names, times as epoch ms, the strategy tester, local data and CSV import (72 / 108 entries, plus codes from data) |
 | 6c2 | Strategy research's remaining copy: codes rendered from data (run states such as `DRAFT`, fidelity tiers such as `BAR_APPROX`, engine and model ids), times shown as epoch milliseconds, and about 150 messages with English words outside the check's term list ("Run", "fold", "holdout", "authority"…) |
 | 6d | Data and plugins: Settings storage and maintenance, the data workbench and repair, the plugin center and live control, the extension text helper moved into the catalogs (42 / 60 entries); the baseline is empty after it, so the check becomes a plain rule |
+| 6d2 | The plugin center's and live control's remaining copy ("Host" / 宿主, Live and Paper, trust, market and runtime wording), Settings appearance, network and AI MCP copy with English words, codes rendered from data in the plugin center, and the check extended with the Chinese terms still in use elsewhere (宿主, 回执, 载荷, 投影, 不可变, 显式, 前端) |
 
 **Phase 6a is done (branch `design/phase-6-copy`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_6A.md`](../docs/FRONTEND_DESIGN_QA_PHASE_6A.md).
 
@@ -582,6 +583,12 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - `describeError` no longer repeats a code or a bare HTTP status ("该功能当前不可用", not "…（BACKTEST_API_UNAVAILABLE: backtest API 503）").
 - 305 unused messages (the rest of the retired backtest workbench) deleted from all 30 catalogs; 31 new or rewritten in all 30; 111 research messages reworded in Chinese and English (运行, 参数研究, CandleScope / 撮合, 服务端, 固定, 复盘连接…); 94 strategy-page messages translated into Japanese.
 - The internal-terms check also rejects Run, Study, trace, manifest, warm-up, provider, snapshot, tick and 权威 in Chinese and "holdout" in both languages; the baseline stays 42 / 60 (6d).
+
+**Phase 6d is done (branch `design/phase-6d-data-plugins`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_6D.md`](../docs/FRONTEND_DESIGN_QA_PHASE_6D.md). Row 6d2 was added when it started: the plugin center and Settings show about 110 more messages with English words outside the term list, so they follow on their own.
+
+- The internal-terms list is empty and gone: `check:i18n` now fails any `zh-CN` or `en` message with a listed term (no baseline file, no regeneration flag).
+- Settings storage and maintenance, about and support, the data workbench, repair, maintenance errors and the plugin live control say local service, cleanup, compact, local database, log file and one-time confirmation instead of backend, GC, VACUUM, SQLite, WAL and receipt; 25 short labels changed in every language; cache entries read as markets (`cacheEntryLabel`); download jobs name their state; the credits pass library names as a placeholder.
+- The extension manager's 49 messages moved from Chinese/English pairs in the component into the catalogs (`extensions.*`, all 30 languages); 33 unused messages deleted; the 6c2 state names are shared as `common.state.*`.
 
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 

@@ -8,7 +8,6 @@ import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import PluginAdvanced from "./PluginAdvanced.js";
 import ExtensionManager from "../extensions/ExtensionManager.js";
-import { useExtensionText } from "../extensions/hooks.js";
 import PluginDetail from "./PluginDetail.js";
 import PluginInstallFlow from "./PluginInstallFlow.js";
 import { MarketplacePanel } from "./PluginManagementSections.js";
@@ -29,7 +28,6 @@ export function PluginSettingsPanel({ runtime, initialSection = "installed", onB
   runtime: PluginPlatformRuntime; initialSection?: PluginCenterSection; onBusyChange?: (busy: boolean) => void;
 }) {
   const locale = useLocale();
-  const extensionText = useExtensionText();
   const [section, setSection] = useState<PluginCenterSection>(initialSection);
   const [installBusy, setInstallBusy] = useState(false);
   const [query, setQuery] = useState("");
@@ -95,7 +93,7 @@ export function PluginSettingsPanel({ runtime, initialSection = "installed", onB
         tabs={TABS.map((item) => ({
           value: item,
           disabled: installBusy,
-          label: item === "extensions" ? extensionText("可信扩展", "Trusted extensions") : t(`pc.${item}`),
+          label: item === "extensions" ? t("extensions.title") : t(`pc.${item}`),
           ...(item === "installed" ? { badge: plugins.length } : {}),
         }))} />
       <div className="pc-toolbar-actions">

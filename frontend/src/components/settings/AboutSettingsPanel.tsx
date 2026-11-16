@@ -4,12 +4,22 @@ import { Field, Select, Textarea } from "../ui/Field.js";
 import { buttonClassName } from "../ui/helpers.js";
 import { useEffect, useState } from "react";
 import { shortcutModifier } from "../../shared/shortcutModifier.js";
-import { t } from "../../i18n/index.js";
+import { getDateTimeLocale, t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import BrandMark from "../brand/BrandMark.js";
 import { Icon } from "../icons/Icon.js";
 import { APP_BUILD, APP_VERSION, SUPPORT_REPOSITORY, createSupportBundle, downloadSupportBundle,
     environmentInfo, fetchBackendSupport, issueUrl, type BackendSupport } from "../../features/settings/supportDiagnostics.js";
+
+/** Open-source projects CandleScope is built on, named in the credits (names, not translated). */
+const CREDITED_LIBRARIES = ["React", "Lightweight Charts", "FastAPI", "SQLite"];
+
+/** The names as a list in the current language; Chinese gets a space between "和" and a Latin name. */
+function creditedLibraries(): string {
+    return new Intl.ListFormat(getDateTimeLocale(), { style: "long", type: "conjunction" })
+        .format(CREDITED_LIBRARIES)
+        .replace(/(?<=[A-Za-z0-9])(和|及)(?=[A-Za-z0-9])/g, " $1 ");
+}
 
 export type AboutSettingsPanelProps = Record<string, never>;
 
@@ -101,7 +111,7 @@ export default function AboutSettingsPanel(props: AboutSettingsPanelProps) {
                 ].map(([path, label]) => <a key={label} href={`${SUPPORT_REPOSITORY}${path}`} target="_blank" rel="noopener noreferrer">{label}<span aria-hidden="true" className="st-external-icon"><Icon name="external" size={12} /></span></a>)}
             </div>
             <Disclosure summary={t("settings.support.help")} className="st-support-export">
-                <p className="st-support-hint">{t("settings.support.credits")}</p>
+                <p className="st-support-hint">{t("settings.support.credits", { libraries: creditedLibraries() })}</p>
                 <div className="st-about-stack">
                     {[
                         [`${modifier} + K`, t("settings.about.shortcutSearch")],

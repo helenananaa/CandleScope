@@ -1,4 +1,5 @@
 /** Plan-first download form model. Public input never includes end_ms. */
+import { t, type LocaleId, type MessageKey } from "../../i18n/index.js";
 
 export interface ManualHistoryFormState {
   exchange: string;
@@ -79,6 +80,25 @@ export function canStartDownload(plan: { can_start?: boolean; canStart?: boolean
 
 export function isGreenCompleteState(state: string | undefined): boolean {
   return state === "SUCCEEDED";
+}
+
+const JOB_STATE_KEYS: Readonly<Record<string, MessageKey>> = {
+  QUEUED: "common.state.queued",
+  RUNNING: "common.state.running",
+  SEALING: "common.state.completing",
+  CANCELLING: "common.state.cancelling",
+  CANCELLED: "common.state.cancelled",
+  SUCCEEDED: "common.state.completed",
+  COMPLETED: "common.state.completed",
+  FAILED: "common.state.failed",
+  READY: "common.state.ready",
+};
+
+/** A download job's or target's state by name; a state without one is shown as sent. */
+export function manualHistoryStateLabel(state: string | undefined, locale?: LocaleId): string {
+  if (!state) return "—";
+  const key = JOB_STATE_KEYS[state];
+  return key ? t(key, {}, locale) : state;
 }
 
 export function parentStateTone(state: string | undefined): "success" | "warning" | "danger" | "neutral" {

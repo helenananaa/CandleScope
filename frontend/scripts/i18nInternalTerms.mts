@@ -1,10 +1,8 @@
 // Internal terms in user-facing copy (Phase 6, see COPY_GUIDELINES.md).
 //
 // The source catalogs (zh-CN, en) must not show engineering vocabulary: status codes,
-// storage and runtime internals, or English jargon inside Chinese text. Messages that still
-// do are listed in i18n-internal-terms-baseline.json while Phase 6 rewrites them surface by
-// surface; the check fails on any new one and on a listed one that no longer needs listing,
-// so the list only shrinks.
+// storage and runtime internals, or English jargon inside Chinese text. Phase 6 rewrote every
+// message that did, so the check is a plain rule: any message using a term below fails.
 
 /** Terms that are jargon in both source locales. Placeholders such as {revision} are ignored. */
 const SHARED_TERMS: ReadonlyArray<readonly [string, RegExp]> = [
@@ -71,7 +69,6 @@ const CHINESE_TERMS: ReadonlyArray<readonly [string, RegExp]> = [
 
 export const SOURCE_LOCALES = ["zh-CN", "en"] as const;
 export type SourceLocale = typeof SOURCE_LOCALES[number];
-export type InternalTermsBaseline = Readonly<Record<SourceLocale, readonly string[]>>;
 
 /** Names of the internal terms a message uses, in list order. */
 export function internalTerms(locale: SourceLocale, message: string): string[] {
@@ -94,23 +91,16 @@ export function internalTermKeys(
   return result;
 }
 
-/** New internal terms, and baseline entries that no longer need listing. */
+/** One problem per source message that uses an internal term. */
 export function internalTermProblems(
   catalogs: Readonly<Record<string, Readonly<Record<string, string>>>>,
-  baseline: InternalTermsBaseline,
 ): string[] {
   const problems: string[] = [];
   const found = internalTermKeys(catalogs);
   for (const locale of SOURCE_LOCALES) {
-    const listed = new Set(baseline[locale] ?? []);
     for (const key of found[locale]) {
-      if (listed.has(key)) continue;
       const terms = internalTerms(locale, catalogs[locale]![key]!).join(", ");
       problems.push(`internal term in ${locale}:${key} (${terms}); use the user term from COPY_GUIDELINES.md`);
-    }
-    const current = new Set(found[locale]);
-    for (const key of listed) {
-      if (!current.has(key)) problems.push(`remove ${locale}:${key} from scripts/i18n-internal-terms-baseline.json (no internal term left)`);
     }
   }
   return problems;
