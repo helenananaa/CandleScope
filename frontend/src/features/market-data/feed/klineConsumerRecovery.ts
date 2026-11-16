@@ -98,11 +98,12 @@ export class KlineConsumerRecovery {
           const result = await feed.getRange(checkpoint.series, {
             startSec: start,
             endSec: end,
-            source: "consumer-resync", strict: true, maxPages: 20,
+            source: "consumer-resync", strict: true, maxPages: 20, commit: "none",
             signal: this.abort.signal,
           });
           const times = new Set(result.data.map((row) => Number(row.time)));
           let latest = result.data.at(-1);
+          let publishForming: (() => void) | undefined;
           if (this.pending.get(key) === checkpoint && !result.stale && hasVerifiedRangeCoverage(result)
             && !times.has(end) && formingEnd === end && times.has(start)
             && checkpoint.times.every((time) => time === end || times.has(time))
@@ -125,9 +126,11 @@ export class KlineConsumerRecovery {
                 && tailVersion?.stable === true && sameStream(closedVersion, tailVersion)
                 && tailVersion.barrier === closedVersion.barrier && tailVersion.sequence >= closedVersion.sequence
                 && closedVersion.observed_at_ms > 0 && tailVersion.observed_at_ms >= closedVersion.observed_at_ms) {
-                feed.applyResult(checkpoint.series, { ...tail, data: [row] }, {
-                  epoch: checkpoint.epoch, source: "consumer-resync-forming", mode: "tick", commit: "patch-active",
-                });
+                publishForming = () => {
+                  feed.applyResult(checkpoint.series, { ...tail, data: [row] }, {
+                    epoch: checkpoint.epoch, source: "consumer-resync-forming", mode: "tick", commit: "patch-active",
+                  });
+                };
                 times.add(end);
                 latest = row;
               }
@@ -138,7 +141,15 @@ export class KlineConsumerRecovery {
             && times.has(start) && times.has(end)
             && checkpoint.times.every((time) => times.has(time))) {
             this.pending.delete(key);
-            if (checkpoint.discoverTail && latest) resumed.push({ series: checkpoint.series, latest });
+            // A suspended consumer owns one full snapshot obligation. Publishing
+            // partial pages would create deferred indicator owners with no
+            // independent repair callback, especially across repeated gaps.
+            feed.applyResult(checkpoint.series, result, {
+              epoch: checkpoint.epoch, source: "consumer-resync", mode: "range", commit: "active",
+            });
+            publishForming?.();
+            if (checkpoint.discoverTail && latest && !this.pending.has(key)
+              && feed.isCurrent(checkpoint.series, checkpoint.epoch)) resumed.push({ series: checkpoint.series, latest });
           } else if (this.pending.get(key) === checkpoint && !result.stale) {
             const decision = recoveryRetryDecision(result, Date.now());
             if (decision) checkpoint.retryAt = decision.retryAt;
