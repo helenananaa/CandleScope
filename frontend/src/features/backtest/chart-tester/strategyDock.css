@@ -103,22 +103,9 @@
 .strategy-settings-section:last-child { border-bottom: 0; }
 .strategy-settings-section > h3 { margin: 0; font: 600 12px/1.4 var(--font-sans); color: var(--text-primary); }
 .strategy-settings-section p { margin: 0; color: var(--text-secondary); font-size: 11px; line-height: 1.5; }
-:is(.strategy-dock, .native-strategy-panel) .strategy-settings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px 12px; }
-:is(.strategy-dock, .native-strategy-panel) .strategy-settings-grid label { display: flex; flex-direction: column; gap: 5px; min-width: 0; color: var(--text-secondary); font-size: 11px; }
-:is(.strategy-dock, .native-strategy-panel) .strategy-settings-check { display: inline-flex; align-items: center; gap: 8px; color: var(--text-primary); font-size: 12px; }
-:is(.strategy-dock, .native-strategy-panel) .strategy-settings-check small { color: var(--text-secondary); font-size: 11px; }
-:is(.strategy-dock, .native-strategy-panel) .strategy-engine-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
-:is(.strategy-dock, .native-strategy-panel) .strategy-engine-options button { display: flex; flex-direction: column; gap: 5px; padding: 12px; border: 1px solid var(--border-color); border-radius: var(--radius-md); color: var(--text-primary); background: var(--bg-primary); font: inherit; text-align: left; cursor: pointer; }
-:is(.strategy-dock, .native-strategy-panel) .strategy-engine-options button:hover:not(:disabled) { border-color: var(--text-secondary); }
-:is(.strategy-dock, .native-strategy-panel) .strategy-engine-options button[aria-checked=true] { border-color: var(--accent-blue); background: color-mix(in srgb, var(--accent-blue) 8%, var(--bg-primary)); }
-:is(.strategy-dock, .native-strategy-panel) .strategy-engine-options button:disabled { cursor: not-allowed; opacity: .6; }
-:is(.strategy-dock, .native-strategy-panel) .strategy-engine-options strong { font-weight: 600; }
-:is(.strategy-dock, .native-strategy-panel) .strategy-engine-options button[aria-checked=true] strong::before { content: "● "; color: var(--accent-blue); }
-:is(.strategy-dock, .native-strategy-panel) .strategy-engine-options span { color: var(--text-secondary); font-size: 11px; line-height: 1.5; }
-
-:is(.strategy-dock, .native-strategy-panel) .strategy-segmented { display: inline-flex; padding: 2px; border: 1px solid var(--border-color); border-radius: var(--radius-control); background: var(--bg-primary); }
-:is(.strategy-dock, .native-strategy-panel) .strategy-segmented button { padding: 3px 12px; border: 0; border-radius: var(--radius-sm); color: var(--text-secondary); background: transparent; font: inherit; cursor: pointer; }
-:is(.strategy-dock, .native-strategy-panel) .strategy-segmented button[aria-checked=true] { color: var(--text-primary); background: var(--bg-tertiary); font-weight: 600; }
+:is(.strategy-dock, .native-strategy-panel) .strategy-settings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--space-3); }
+.strategy-settings-section > .ui-check, .strategy-settings-section > .ui-file-drop { max-width: 640px; }
+.strategy-settings-action { justify-self: start; }
 
 @container strategy-dock (max-width: 1080px) {
   .strategy-summary > span:nth-child(n+2) { display: none; }

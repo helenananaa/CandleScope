@@ -280,8 +280,8 @@ export default function ChartStrategyTesterPanel(props: ChartStrategyTesterPanel
       </Suspense>
     </StrategyDockPane>}
     {(mode === "CANDLESCOPE" || visited.has("CANDLESCOPE")) && <StrategyDockPane hidden={mode !== "CANDLESCOPE"}>
-      {availability === "error" && <StrategyDockSlot name="notice"><InlineAlert className="strategy-dock-alert">{t("indicator.editor.runtimeUnavailableHelp")}</InlineAlert></StrategyDockSlot>}
-      {availability === "unavailable" && <StrategyDockSlot name="notice"><InlineAlert className="strategy-dock-alert">{t("native.platformHelp")}</InlineAlert></StrategyDockSlot>}
+      {availability === "error" && <StrategyDockSlot name="notice"><InlineAlert>{t("indicator.editor.runtimeUnavailableHelp")}</InlineAlert></StrategyDockSlot>}
+      {availability === "unavailable" && <StrategyDockSlot name="notice"><InlineAlert>{t("native.platformHelp")}</InlineAlert></StrategyDockSlot>}
       <CandleScopeStrategyTesterPanel {...props} active={props.active !== false && mode === "CANDLESCOPE"}
         continuousChartActive={mode === "CANDLESCOPE" && !!props.continuousChartActive} />
     </StrategyDockPane>}
@@ -833,15 +833,15 @@ export function CandleScopeStrategyTesterPanel({
       </StrategyDockSlot>
       <StrategyDockSlot name="notice">
         {currentAttachment && autoRunPauseReason && (
-          <div className="strategy-dock-alert" data-auto-run-pause={autoRunPauseReason}>
+          <div data-auto-run-pause={autoRunPauseReason}>
             <InlineAlert tone="warning" title={t("chartTester.autoRun.paused")}>{t(autoRunPauseKey(autoRunPauseReason))}</InlineAlert>
           </div>
         )}
         {!result && resultLoading && (
-          <InlineAlert className="strategy-dock-alert">{t("chartTester.result.loading")}</InlineAlert>
+          <InlineAlert>{t("chartTester.result.loading")}</InlineAlert>
         )}
         {!result && resultError && (
-          <InlineAlert className="strategy-dock-alert" tone="danger" title={t("chartTester.result.unavailable")}>{resultError}</InlineAlert>
+          <InlineAlert tone="danger" title={t("chartTester.result.unavailable")}>{resultError}</InlineAlert>
         )}
       </StrategyDockSlot>
 

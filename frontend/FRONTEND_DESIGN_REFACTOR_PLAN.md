@@ -520,6 +520,11 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - The parameters and conditions editors use kit fields; the result views use kit buttons, disclosures and alerts; the trade explanation is the kit dialog (the chart's 回到实时 showed through the old popover). `IconButton` takes a `ref`.
 - The dock and tester stylesheets drop the replaced rules and 4 `!important`s; their element rules, and the native panel's until 5g7, skip kit controls.
 
+**Phase 5g7 is done (branch `design/phase-5g7-native-panel`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_5G7.md`](../docs/FRONTEND_DESIGN_QA_PHASE_5G7.md). With it the strategy research row (5g–5g7) is complete.
+
+- The native Pine panel's body is on the kit: the code view's language as a segmented control, settings for both engines on kit fields, file drops, checkboxes and disclosures (the engines stay choice cards), run history with state badges, the report's switches, navigation and disclosures, the incremental replay controls and the strategy comparison.
+- `nativeStrategy.css` is rewritten on tokens without element rules; the dock stylesheet drops the retired settings rules. Left for Phase 6: fidelity options, run states and engine names shown as codes.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.

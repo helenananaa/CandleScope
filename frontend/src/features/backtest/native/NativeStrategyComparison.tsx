@@ -1,3 +1,4 @@
+import { Button, Checkbox, Disclosure, Field, InlineAlert, Input, SegmentedControl } from "../../../components/ui/index.js";
 import { NativeStrategyReport } from "./NativeStrategyReport.js";
 import { useEffect, useId, useRef, useState } from "react";
 import { t } from "../../../i18n/index.js";
@@ -71,23 +72,25 @@ export default function NativeStrategyComparison({ items, context, onOpen, saved
   const date = (time: number) => new Date(time * 1000).toLocaleDateString(locale);
   return <section className="native-comparison" aria-label={t("strategyCompare.title")}>
     {inspected ? <>
-      <div className="native-comparison-run"><button onClick={() => setInspected(null)}>{t("strategyCompare.back")}</button><strong>{inspected.name}</strong><code>{inspected.run.run_id}</code></div>
-      <details><summary>{t("native.source")}</summary><pre>{inspected.run.config?.source}</pre><pre>{JSON.stringify(inspected.run.config?.parameters, null, 2)}</pre></details>
+      <div className="native-comparison-run"><Button size="sm" variant="ghost" onClick={() => setInspected(null)}>{t("strategyCompare.back")}</Button><strong>{inspected.name}</strong><code>{inspected.run.run_id}</code></div>
+      <Disclosure summary={t("native.source")}><pre className="native-source">{inspected.run.config?.source}</pre><pre className="native-source">{JSON.stringify(inspected.run.config?.parameters, null, 2)}</pre></Disclosure>
       <NativeStrategyReport run={inspected.run} active={false} />
     </> : <>
-    <label className="native-strategy-name">{t("strategyCompare.groupName")}<input maxLength={80} value={selection.name} placeholder={t("strategyCompare.title")}
-      onChange={(event) => saveSelection({ ...selectionRef.current, name: event.target.value })} /></label>
+    <Field label={t("strategyCompare.groupName")} className="native-strategy-name">
+      <Input size="sm" maxLength={80} value={selection.name} placeholder={t("strategyCompare.title")}
+        onChange={(event) => saveSelection({ ...selectionRef.current, name: event.target.value })} />
+    </Field>
     <fieldset className="native-comparison-picker"><legend>{t("strategyCompare.pick")}</legend>
-      {candidates.map((item) => <label key={item.id}><input type="checkbox" checked={pinned.some((p) => p.id === item.id)}
+      {candidates.map((item) => <Checkbox key={item.id} checked={pinned.some((p) => p.id === item.id)}
         disabled={!item.runId || (pinned.length >= 4 && !pinned.some((p) => p.id === item.id))}
-        onChange={(event) => { if (event.target.checked && item.runId) setPinned((value) => [...value, { ...item, runId: item.runId! }]); else setPinned((value) => value.filter((p) => p.id !== item.id)); }} />
-        {item.name}{!item.runId && ` · ${t("strategyReview.status.idle")}`}</label>)}
-      <button disabled={!pinned.length} onClick={() => setPinned((value) => value.map((item) => {
+        onChange={(event) => { if (event.target.checked && item.runId) setPinned((value) => [...value, { ...item, runId: item.runId! }]); else setPinned((value) => value.filter((p) => p.id !== item.id)); }}
+        label={`${item.name}${item.runId ? "" : ` · ${t("strategyReview.status.idle")}`}`} />)}
+      <Button size="sm" disabled={!pinned.length} onClick={() => setPinned((value) => value.map((item) => {
         const latest = candidates.find((c) => c.id === item.id); return latest?.runId ? { ...latest, runId: latest.runId } : item;
-      }))}>{t("strategyCompare.refresh")}</button>
+      }))}>{t("strategyCompare.refresh")}</Button>
     </fieldset>
     <p className="native-comparison-note">{t("strategyCompare.frozen")}</p>
-    {pinned.length < 2 && <p role="status">{t("strategyCompare.empty")}</p>}
+    {pinned.length < 2 && <p className="native-comparison-note" role="status">{t("strategyCompare.empty")}</p>}
     {pinned.map((item) => {
       const state = reports[item.id];
       const latest = candidates.find((c) => c.id === item.id);
@@ -95,17 +98,20 @@ export default function NativeStrategyComparison({ items, context, onOpen, saved
         <strong>{item.name}</strong> <code>{item.runId}</code>
         {latest?.runId && latest.runId !== item.runId && <span>{t("strategyCompare.older")}</span>}
         {!state && <span role="status">{t("native.loading")}</span>}
-        {state?.error && <span role="alert">{state.error}</span>}
+        {state?.error && <InlineAlert tone="danger">{state.error}</InlineAlert>}
         {state?.run && (state.run.state !== "COMPLETED" || !state.run.result) && <span>{state.run.state} · {t("strategyCompare.unavailable")}</span>}
-        <button disabled={!state?.run?.result} onClick={() => { if (state?.run) setInspected({ name: item.name, run: state.run }); }}>{t("strategyCompare.exactRun")}</button>
-        <button disabled={!latest} onClick={() => onOpen(item.id)}>{t("strategyCompare.current")}</button>
-        <button onClick={() => setPinned((value) => value.filter((p) => p.id !== item.id))}>{t("strategyCollection.remove")}</button>
+        <span className="native-comparison-actions">
+          <Button size="sm" disabled={!state?.run?.result} onClick={() => { if (state?.run) setInspected({ name: item.name, run: state.run }); }}>{t("strategyCompare.exactRun")}</Button>
+          <Button size="sm" variant="ghost" disabled={!latest} onClick={() => onOpen(item.id)}>{t("strategyCompare.current")}</Button>
+          <Button size="sm" variant="ghost" onClick={() => setPinned((value) => value.filter((p) => p.id !== item.id))}>{t("strategyCollection.remove")}</Button>
+        </span>
       </div>;
     })}
     {ready.length > 0 && <>
       <div className="native-comparison-table"><table><thead><tr><th>{t("strategyCompare.metric")}</th>{ready.map(({ item, index }) => <th key={item.id}><span style={{ color: COLORS[index] }}>━</span> {item.name}</th>)}</tr></thead>
         <tbody>{(["returns", "maxDrawdown", "trades", "winRate"] as const).map((key) => <tr key={key}><th>{t(`strategyCompare.${key}`)}</th>{ready.map(({ item, metrics }) => <td key={item.id}>{key === "trades" ? metrics.trades : format(metrics[key])}</td>)}</tr>)}</tbody></table></div>
-      <div className="native-comparison-chart-actions">{(["returnPct", "drawdownPct"] as const).map((key) => <button key={key} aria-pressed={key === metric} onClick={() => setMetric(key)}>{t(`strategyCompare.${key}`)}</button>)}</div>
+      <SegmentedControl className="native-comparison-chart-actions" size="sm" label={t("strategyCompare.title")} value={metric} onChange={setMetric}
+        options={(["returnPct", "drawdownPct"] as const).map((key) => ({ value: key, label: t(`strategyCompare.${key}`) }))} />
       {points.length > 1 && <svg className="native-comparison-chart" viewBox="0 0 940 205" role="img" aria-label={t(`strategyCompare.${metric}`)}>
         {[0, .5, 1].map((fraction) => <g key={fraction}><line x1="58" x2="922" y1={16 + fraction * 150} y2={16 + fraction * 150} stroke="currentColor" opacity=".15" /><text x="50" y={20 + fraction * 150} textAnchor="end" fill="currentColor">{format(yMax - (yMax - yMin) * fraction)}</text></g>)}
         {ready.map(({ item, metrics, index }) => <path key={item.id} fill="none" stroke={COLORS[index]} strokeWidth="2" strokeDasharray={index % 2 ? "6 3" : undefined}
@@ -114,11 +120,11 @@ export default function NativeStrategyComparison({ items, context, onOpen, saved
       </svg>}
       <p className="native-comparison-note">{t("strategyCompare.basis")}</p>
       <p className="native-comparison-note">{t("strategyCompare.caution")}</p>
-      <details><summary>{t("strategyCompare.conditions")} · {t(`strategyCompare.${overall}`)}</summary>
+      <Disclosure summary={`${t("strategyCompare.conditions")} · ${t(`strategyCompare.${overall}`)}`}>
         <div className="native-comparison-table"><table><thead><tr><th>{t("strategyCompare.metric")}</th><th>{t("strategyCompare.check")}</th>{ready.map(({ item }) => <th key={item.id}>{item.name}</th>)}</tr></thead><tbody>
           {CONDITION_KEYS.map((key) => <tr key={key}><th>{t(`strategyCompare.condition.${key}`)}</th><td>{t(`strategyCompare.${conditionStatus(ready.map((entry) => entry.conditions[key] ?? null))}`)}</td>{ready.map(({ item, conditions }) => <td key={item.id}>{conditions[key] ?? "—"}</td>)}</tr>)}
         </tbody></table></div>
-      </details>
+      </Disclosure>
     </>}
     </>}
   </section>;

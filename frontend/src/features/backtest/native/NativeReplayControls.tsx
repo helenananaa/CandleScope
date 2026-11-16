@@ -1,3 +1,4 @@
+import { Button, InlineAlert, Input } from "../../../components/ui/index.js";
 import { useEffect, useId, useState } from "react";
 import { useControlCommands } from "../../app-control/useControlCommands.js";
 import { command as controlCommand } from "../../app-control/commandRegistry.js";
@@ -69,25 +70,25 @@ export function NativeReplayControls({ runId, replay, onChange, hostAccount = fa
   return <section className="native-replay-controls" aria-label={title}>
     <strong>{title}</strong>
     {replay && <p>{t(replay.method === "HOST_ACCOUNT_CHECKPOINT" ? "native.replay.host" : replay.method === "FIXED_HORIZON_INCREMENTAL" ? "native.replay.incremental" : "native.replay.method")}</p>}
-    {!replay ? <button disabled={busy} onClick={() => void command("create")}>{t("native.replay.start")}</button> : <>
-      <p role="status">{replay.cursor} / {replay.total} · {replay.state}</p>
+    {!replay ? <Button size="sm" variant="primary" disabled={busy} onClick={() => void command("create")}>{t("native.replay.start")}</Button> : <>
+      <p className="native-replay-position" role="status">{replay.cursor} / {replay.total} · {replay.state}</p>
       <div className="native-toolbar">
-        <button disabled={busy || running || replay.cursor >= replay.total} onClick={() => void command("step")}>{t("native.replay.step")}</button>
-        <button disabled={busy || running || replay.cursor >= replay.total} onClick={() => void command("play")}>{t("native.replay.play")}</button>
-        <button disabled={busy || !running} onClick={() => void command("pause")}>{t("native.replay.pause")}</button>
-        <button disabled={busy || running} onClick={() => void command("snapshot")}>{t("native.replay.snapshot")}</button>
-        <input type="number" min="0" max={replay.total} value={target} aria-label={t("native.replay.cursor")} onChange={(event) => setTarget(event.target.value)} />
-        <button disabled={busy || running || !Number.isInteger(Number(target)) || Number(target) < 0 || Number(target) > replay.total} onClick={() => void command("seek", { target: Number(target) })}>{t("native.replay.seek")}</button>
-        <button disabled={running || busy} onClick={() => onChange(null)}>{t("native.replay.batch")}</button>
+        <Button size="sm" disabled={busy || running || replay.cursor >= replay.total} onClick={() => void command("step")}>{t("native.replay.step")}</Button>
+        <Button size="sm" variant="primary" disabled={busy || running || replay.cursor >= replay.total} onClick={() => void command("play")}>{t("native.replay.play")}</Button>
+        <Button size="sm" disabled={busy || !running} onClick={() => void command("pause")}>{t("native.replay.pause")}</Button>
+        <Button size="sm" disabled={busy || running} onClick={() => void command("snapshot")}>{t("native.replay.snapshot")}</Button>
+        <Input size="sm" className="native-replay-target" type="number" min="0" max={replay.total} value={target} aria-label={t("native.replay.cursor")} onChange={(event) => setTarget(event.target.value)} />
+        <Button size="sm" disabled={busy || running || !Number.isInteger(Number(target)) || Number(target) < 0 || Number(target) > replay.total} onClick={() => void command("seek", { target: Number(target) })}>{t("native.replay.seek")}</Button>
+        <Button size="sm" variant="ghost" disabled={running || busy} onClick={() => onChange(null)}>{t("native.replay.batch")}</Button>
       </div>
-      {replay.snapshots.map((item) => <button key={item.snapshot_id} disabled={running || busy} onClick={() => void command("restore", { snapshot_id: item.snapshot_id })}>
+      {replay.snapshots.length > 0 && <div className="native-toolbar">{replay.snapshots.map((item) => <Button size="sm" variant="ghost" key={item.snapshot_id} disabled={running || busy} onClick={() => void command("restore", { snapshot_id: item.snapshot_id })}>
         {t("native.replay.restore")} · {item.cursor}
-      </button>)}
-      {replay.error && <p role="alert">{replay.error.message}</p>}
+      </Button>)}</div>}
+      {replay.error && <InlineAlert tone="danger">{replay.error.message}</InlineAlert>}
     </>}
-    {!replay && history.map((item) => <button key={item.replay_id} disabled={busy} onClick={() => {
+    {!replay && history.length > 0 && <div className="native-toolbar">{history.map((item) => <Button size="sm" variant="ghost" key={item.replay_id} disabled={busy} onClick={() => {
       void nativeApi<NativeReplayRecord>(`/native/replays/${item.replay_id}`).then(onChange).catch((reason) => setError(String(reason)));
-    }}>{t("native.replay.resume")} · {item.cursor} / {item.total}</button>)}
-    {error && <p role="alert">{error}</p>}
+    }}>{t("native.replay.resume")} · {item.cursor} / {item.total}</Button>)}</div>}
+    {error && <InlineAlert tone="danger">{error}</InlineAlert>}
   </section>;
 }
