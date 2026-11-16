@@ -1467,6 +1467,22 @@ test("AGG initial market picker discloses unknown full-day download size", () =>
   assert.doesNotMatch(html, /合格窗口/);
 });
 
+test("the initial market picker lists markets as rows on the kit, with the run's constraints on one line", () => {
+  const run = parseTrainingRunListResponse(listResponse([runCard({
+    state: "AWAITING_MARKET",
+    last_symbol: null,
+    adapter_session_id: null,
+    resume_action: "SELECT_MARKET",
+  })])).items[0];
+  assert.ok(run);
+  const html = renderToStaticMarkup(<ReplayInitialMarketPicker run={run} onInitialized={() => {}} />);
+  assert.match(html, /<dl class="replay-market-picker-commit"[^>]*><div><dt>开局时间<\/dt>/);
+  assert.match(html, /<label class="ui-field-label"[^>]*>搜索商品<\/label><input class="ui-input" type="search"/);
+  assert.match(html, /<label class="ui-check replay-market-picker-toggle"><input type="checkbox" class="ui-check-input"[^>]*checked=""/);
+  assert.doesNotMatch(html, /training-hub-brand|training-hub-kicker|training-hub-filter-chips|>T0</, "no decorative mark, eyebrow or chip filters");
+  assert.match(html, /<a class="ui-btn ui-btn-ghost" href="\/replay.html">返回大厅<\/a>/);
+});
+
 test("hub markup exposes saves, native actions, filters and explicit unavailable capability reasons", () => {
   const catalog = blindCatalog();
   const draft = createTrainingRunDraft(catalog);

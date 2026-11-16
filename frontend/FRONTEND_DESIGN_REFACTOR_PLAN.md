@@ -440,6 +440,12 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - 新建训练 is a kit `Dialog` on the overlay stack: numbered sections, choices as segmented controls with the chosen description (no BAR / AGG_TRADE / RANDOM / MANUAL codes as labels), kit fields, UTC dates as `DateTimeInput` text, the advanced part a `Disclosure`, and a summary column. Deleting a run uses the kit `ConfirmDialog`.
 - The two hub stylesheets are merged into `trainingHub.css` (582 → 534 lines; it still carries the frame the market picker, storage and status pages use); the old rules that styled bare buttons and inputs no longer reach kit controls. Kit: `Dialog` renders in place without a DOM (like `OverlayLayer`), `Disclosure` can be controlled and take an `id`, `DateTimeInput` takes `earliest`. 12 unused keys are gone.
 
+**Phase 5f2 is done (branch `design/phase-5f2-replay-storage`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_5F2.md`](../docs/FRONTEND_DESIGN_QA_PHASE_5F2.md).
+
+- 存储管理 is a kit `Dialog` instead of a panel above the run list: the release decision and alerts are `InlineAlert`s, each storage category is one row with used / limit and its percentage, and the counts, objects and the source matrix sit in closed disclosures. The cleanup dry run, its confirmation and the verified trade days use kit fields, a checkbox and a danger button; the "keep until" time is UTC text.
+- The initial market picker drops its mark, eyebrow and tiles: the run's constraints are one line, the filters are a kit search field, a segmented market type and a checkbox, and markets are rows with venue · interval · coverage and 选择.
+- The storage and picker rules move from three stylesheets into `trainingHub.css`; the late-loading `trainingHubMarketPicker.css` is deleted.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.

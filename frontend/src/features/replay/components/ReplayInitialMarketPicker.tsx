@@ -5,6 +5,7 @@ import { useControlCommands } from "../../app-control/useControlCommands.js";
 import { command } from "../../app-control/commandRegistry.js";
 import { bool, choice, empty, nullable, object, text } from "../../app-control/commandSchema.js";
 import { t } from "../../../i18n/index.js";
+import { Button, Checkbox, EmptyState, Field, InlineAlert, Input, SegmentedControl, Select } from "../../../components/ui/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import type { ReplayCatalog, ReplayCatalogEntry } from "../replayTypes.js";
 import type { TrainingRunCard } from "../replayV2Types.js";
@@ -75,26 +76,19 @@ function ReplayMarketPickerRow({
       data-recommended={recommended ? "true" : "false"}
     >
       <div className="replay-market-picker-row-main">
-        <div className="replay-market-picker-identity">
-          <strong>{entry.identity.symbol}</strong>
-          <span>{trainingVenueLabel(entry)}</span>
-        </div>
-        <dl>
-          <div>
-            <dt>{t("replay.picker.interval")}</dt>
-            <dd>{entry.selected_base_interval ?? "—"}</dd>
-          </div>
-          <div>
-            <dt>{t("replay.picker.coverage")}</dt>
-            <dd>{coverage}</dd>
-          </div>
-        </dl>
+        <strong>{entry.identity.symbol}</strong>
+        <p>
+          {trainingVenueLabel(entry)}
+          {" · "}{t("replay.picker.interval")} {entry.selected_base_interval ?? "—"}
+          {" · "}{t("replay.picker.coverage")} {coverage}
+        </p>
+        {!available && <p className="replay-market-picker-reason">{reason}</p>}
       </div>
-      {available ? (
-        <button
-          className="training-hub-primary-button"
+      {available && (
+        <Button
+          size="sm"
+          variant="primary"
           aria-label={`${t("replay.picker.select")} ${entry.identity.symbol}`}
-          type="button"
           disabled={selecting}
           onClick={onSelect}
         >
@@ -103,9 +97,7 @@ function ReplayMarketPickerRow({
               ? t("replay.picker.downloading")
               : t("replay.picker.init")
             : t("replay.picker.select")}
-        </button>
-      ) : (
-        <p className="replay-market-picker-reason">{reason}</p>
+        </Button>
       )}
     </article>
   );
@@ -249,183 +241,165 @@ export default function ReplayInitialMarketPicker({
       command("confirmDowngrade", "Confirm only the currently pending domain-generated downgrade.", object({ confirmed: choice([true]) }), () => { if (!downgrade) throw new Error("DOWNGRADE_UNAVAILABLE"); return selectMarket(downgrade.entry, true); }, { available: () => downgrade !== null && selecting === null }),
       command("cancelDowngrade", "Cancel the pending downgrade.", empty, () => setDowngrade(null)),
     ] }));
+  const marketTypeValue = marketType === null ? "all" : marketTypeKey(marketType);
+  const marketTypeOptions = [
+    { value: "all", label: t("replay.picker.allMarkets") },
+    ...marketTypes.map((filter) => ({
+      value: marketTypeKey(filter),
+      label: `${trainingExchangeLabel(filter.exchange)} ${trainingMarketTypeLabel(filter.marketType)}`,
+    })),
+  ];
+  const chooseMarketType = (value: string) => setMarketType(marketTypes.find((filter) => marketTypeKey(filter) === value) ?? null);
   return (
     <main
       className="training-hub-page replay-market-picker"
       data-replay-run-state="AWAITING_MARKET"
     >
-      <section className="training-hub-shell">
+      <section className="training-hub-shell training-hub-runs">
         <header className="training-hub-heading">
-          <div className="training-hub-brand">
-            <div className="training-hub-brand-mark" aria-hidden="true">T0</div>
-            <div>
-              <span className="training-hub-kicker">{t("replay.picker.kicker")}</span>
-              <h1>{run.name}</h1>
-              <p>{t("replay.picker.intro")}</p>
-            </div>
+          <div>
+            <h1>{run.name}</h1>
+            <p>{t("replay.picker.intro")}</p>
           </div>
           <div className="training-hub-heading-actions">
-            <button type="button" onClick={loadCatalog} disabled={selecting !== null}>{t("replay.picker.refresh")}</button>
-            <a href="/replay.html">{t("replay.picker.backToHub")}</a>
+            <Button onClick={loadCatalog} disabled={selecting !== null}>{t("replay.picker.refresh")}</Button>
+            <a className="ui-btn ui-btn-ghost" href="/replay.html">{t("replay.picker.backToHub")}</a>
           </div>
         </header>
 
-        <section className="replay-market-picker-commit" aria-label={t("replay.picker.constraints")}>
-          <div><span>{t("replay.picker.startTime")}</span><strong>{committedTimeLabel}</strong></div>
-          <div><span>{t("replay.picker.settlement")}</span><strong>{run.settlement_asset}</strong></div>
-          <div><span>{t("replay.picker.source")}</span><strong>{trainingSourceKindLabel(run.source_kind)}</strong></div>
-          {hedgeLocked && <div><span>{t("replay.picker.position")}</span><strong>{t("replay.picker.hedge")}</strong></div>}
-        </section>
+        <dl className="replay-market-picker-commit" aria-label={t("replay.picker.constraints")}>
+          <div><dt>{t("replay.picker.startTime")}</dt><dd>{committedTimeLabel}</dd></div>
+          <div><dt>{t("replay.picker.settlement")}</dt><dd>{run.settlement_asset}</dd></div>
+          <div><dt>{t("replay.picker.source")}</dt><dd>{trainingSourceKindLabel(run.source_kind)}</dd></div>
+          {hedgeLocked && <div><dt>{t("replay.picker.position")}</dt><dd>{t("replay.picker.hedge")}</dd></div>}
+        </dl>
 
         {run.source_kind === "AGG_TRADE" && !catalog?.entries.some(entry => entry.quality === "USER_MARKET_TRADE_COVERAGE") && (
-          <div className="replay-info-note" data-replay-agg-trade-download-note>
-            {t("replay.picker.firstDownload")}
+          <div data-replay-agg-trade-download-note>
+            <InlineAlert tone="info">{t("replay.picker.firstDownload")}</InlineAlert>
           </div>
         )}
         {hedgeLocked && (
-          <div className="replay-info-note" data-replay-hedge-lock-note>
-            {t("replay.picker.hedgeLocked")}
+          <div data-replay-hedge-lock-note>
+            <InlineAlert tone="info">{t("replay.picker.hedgeLocked")}</InlineAlert>
           </div>
         )}
 
         <div className="replay-market-picker-toolbar">
-          <label className="replay-market-picker-search">
-            <span>{t("replay.picker.search")}</span>
-            <input
+          <Field label={t("replay.picker.search")} className="replay-market-picker-search">
+            <Input
+              type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder={t("replay.picker.searchPh")}
               autoFocus
             />
-          </label>
-          {marketTypes.length > 1 && (
-            <div className="training-hub-filter-chips" role="group" aria-label={t("replay.picker.marketType")}>
-              <button
-                type="button"
-                aria-pressed={marketType === null}
-                onClick={() => setMarketType(null)}
-              >
-                {t("replay.picker.allMarkets")}
-              </button>
-              {marketTypes.map((filter) => (
-                <button
-                  key={marketTypeKey(filter)}
-                  type="button"
-                  aria-pressed={marketType !== null && sameMarketType(marketType, filter)}
-                  onClick={() => setMarketType(filter)}
-                >
-                  {trainingExchangeLabel(filter.exchange)} {trainingMarketTypeLabel(filter.marketType)}
-                </button>
-              ))}
+          </Field>
+          {marketTypes.length > 1 && (marketTypeOptions.length <= 5 ? (
+            <div className="training-hub-choice">
+              <span className="ui-field-label">{t("replay.picker.marketType")}</span>
+              <SegmentedControl label={t("replay.picker.marketType")} value={marketTypeValue} options={marketTypeOptions} onChange={chooseMarketType} />
             </div>
-          )}
-          <label className="replay-market-picker-toggle">
-            <input
-              type="checkbox"
-              checked={availableOnly}
-              onChange={(event) => {
-                setAvailableOnly(event.target.checked);
-                if (event.target.checked) setUnavailableOpen(false);
-              }}
-            />
-            {t("replay.picker.availableOnly")}
-          </label>
+          ) : (
+            <Field label={t("replay.picker.marketType")}>
+              <Select value={marketTypeValue} onChange={(event) => chooseMarketType(event.target.value)}>
+                {marketTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </Select>
+            </Field>
+          ))}
+          <Checkbox
+            className="replay-market-picker-toggle"
+            label={t("replay.picker.availableOnly")}
+            checked={availableOnly}
+            onChange={(event) => {
+              setAvailableOnly(event.target.checked);
+              if (event.target.checked) setUnavailableOpen(false);
+            }}
+          />
         </div>
 
-        {error !== null && <div className="replay-error-summary" role="alert">{error}</div>}
+        {error !== null && <InlineAlert tone="danger">{error}</InlineAlert>}
         {downgrade !== null && (
-          <section className="replay-error-summary" role="alert" data-replay-market-downgrade="HEDGE_HYBRID">
-            <strong>{t("replay.picker.confirmDowngrade", { symbol: downgrade.entry.identity.symbol })}</strong>
-            <span>{downgrade.message}</span>
-            <div>
-              <button
-                type="button"
-                disabled={selecting !== null}
-                onClick={() => void selectMarket(downgrade.entry, true)}
-              >
-                {t("replay.picker.confirmHybrid")}
-              </button>
-              <button type="button" disabled={selecting !== null} onClick={() => setDowngrade(null)}>
-                {t("replay.hub.cancel")}
-              </button>
-            </div>
-          </section>
+          <div data-replay-market-downgrade="HEDGE_HYBRID">
+            <InlineAlert
+              tone="warning"
+              title={t("replay.picker.confirmDowngrade", { symbol: downgrade.entry.identity.symbol })}
+              action={<>
+                <Button size="sm" variant="primary" disabled={selecting !== null}
+                  onClick={() => void selectMarket(downgrade.entry, true)}>{t("replay.picker.confirmHybrid")}</Button>
+                <Button size="sm" disabled={selecting !== null} onClick={() => setDowngrade(null)}>{t("replay.hub.cancel")}</Button>
+              </>}
+            >
+              {downgrade.message}
+            </InlineAlert>
+          </div>
         )}
 
         {catalog === null ? (
-          <div className="training-hub-empty"><div className="replay-loading-spinner" />{t("replay.picker.loading")}</div>
+          <EmptyState icon={<span className="replay-loading-spinner" />} title={t("replay.picker.loading")} />
         ) : entries.length === 0 ? (
-          <div className="training-hub-empty">
-            <strong>{t("replay.picker.noMatch")}</strong>
-            <span>{t("replay.picker.noMatchHint")}</span>
-          </div>
+          <EmptyState title={t("replay.picker.noMatch")} description={t("replay.picker.noMatchHint")} />
         ) : availableEntries.length === 0 && visibleBlocked.length === 0 ? (
-          <div className="training-hub-empty">
-            <strong>{t("replay.picker.noneReady")}</strong>
-            <span>{t("replay.picker.noneReadyHint")}</span>
-            <div className="replay-market-picker-empty-actions">
+          <EmptyState
+            title={t("replay.picker.noneReady")}
+            description={t("replay.picker.noneReadyHint")}
+            action={<>
               {blockedEntries.length > 0 && (
-                <button type="button" onClick={() => {
-                  setAvailableOnly(false);
-                  setUnavailableOpen(true);
-                }}
-                >
+                <Button onClick={() => { setAvailableOnly(false); setUnavailableOpen(true); }}>
                   {t("replay.picker.viewBlocked", { count: blockedEntries.length })}
-                </button>
+                </Button>
               )}
-              <a href="/replay.html">{t("replay.picker.newRun")}</a>
-            </div>
-          </div>
+              <a className="ui-btn ui-btn-ghost" href="/replay.html">{t("replay.picker.newRun")}</a>
+            </>}
+          />
         ) : (
           <div className="replay-market-picker-list">
             {availableEntries.length > 0 && (
               <section aria-label={t("replay.picker.available")}>
-                <header>
-                  <h2>{t("replay.picker.availableH")}</h2>
-                  <span>{availableEntries.length}</span>
-                </header>
-                {availableEntries.map((entry, index) => (
-                  <ReplayMarketPickerRow
-                    key={trainingMarketKey(entry)}
-                    entry={entry}
-                    available
-                    recommended={index === 0}
-                    selecting={selecting === trainingMarketKey(entry)}
-                    sourceKind={run.source_kind}
-                    coverage={formatReplayMarketCoverage(entry, catalog.blind_mode)}
-                    onSelect={() => void selectMarket(entry)}
-                  />
-                ))}
+                <h2>{t("replay.picker.availableH")} <span>{availableEntries.length}</span></h2>
+                <div className="replay-market-picker-rows">
+                  {availableEntries.map((entry, index) => (
+                    <ReplayMarketPickerRow
+                      key={trainingMarketKey(entry)}
+                      entry={entry}
+                      available
+                      recommended={index === 0}
+                      selecting={selecting === trainingMarketKey(entry)}
+                      sourceKind={run.source_kind}
+                      coverage={formatReplayMarketCoverage(entry, catalog.blind_mode)}
+                      onSelect={() => void selectMarket(entry)}
+                    />
+                  ))}
+                </div>
               </section>
             )}
             {visibleBlocked.length > 0 && (
               <section aria-label={t("replay.picker.blocked")}>
-                <header>
-                  <h2>{t("replay.picker.blockedH")}</h2>
-                  <span>{visibleBlocked.length}</span>
-                </header>
-                {visibleBlocked.map((entry) => (
-                  <ReplayMarketPickerRow
-                    key={trainingMarketKey(entry)}
-                    entry={entry}
-                    available={false}
-                    recommended={false}
-                    selecting={false}
-                    sourceKind={run.source_kind}
-                    coverage={formatReplayMarketCoverage(entry, catalog.blind_mode)}
-                    onSelect={() => undefined}
-                  />
-                ))}
+                <h2>{t("replay.picker.blockedH")} <span>{visibleBlocked.length}</span></h2>
+                <div className="replay-market-picker-rows">
+                  {visibleBlocked.map((entry) => (
+                    <ReplayMarketPickerRow
+                      key={trainingMarketKey(entry)}
+                      entry={entry}
+                      available={false}
+                      recommended={false}
+                      selecting={false}
+                      sourceKind={run.source_kind}
+                      coverage={formatReplayMarketCoverage(entry, catalog.blind_mode)}
+                      onSelect={() => undefined}
+                    />
+                  ))}
+                </div>
               </section>
             )}
             {blockedEntries.length > 0 && (
               <div className="replay-market-picker-more">
                 {availableOnly && !unavailableOpen && (
-                  <button type="button" onClick={() => setUnavailableOpen(true)}>
+                  <Button variant="ghost" onClick={() => setUnavailableOpen(true)}>
                     {t("replay.picker.showBlocked", { count: blockedEntries.length })}
-                  </button>
+                  </Button>
                 )}
-                <a href="/replay.html">{t("replay.picker.newRun")}</a>
+                <a className="ui-btn ui-btn-ghost" href="/replay.html">{t("replay.picker.newRun")}</a>
               </div>
             )}
           </div>

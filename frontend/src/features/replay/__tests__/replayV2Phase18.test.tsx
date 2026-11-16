@@ -401,4 +401,12 @@ test("storage panel exposes HOLD, protected Review evidence and exact plan confi
   assert.match(html, /按 checksum 重新水化/);
   assert.equal((html.match(/执行此计划/g) ?? []).length, 1);
   assert.doesNotMatch(html, /objects\/secret/);
+  // Layout (5f2): a kit dialog; one row per category with its figure, the rest behind closed disclosures.
+  assert.match(html, /<section role="dialog"[^>]*class="ui-dialog ui-dialog-lg replay-storage-governance"/);
+  assert.equal((html.match(/<article class="replay-storage-category"/g) ?? []).length, 4);
+  assert.match(html, /<span class="replay-storage-figure">[0-9.]+%<\/span>/);
+  assert.doesNotMatch(html, /<details[^>]*open/, "details and the source matrix start closed");
+  assert.match(html, /<input type="checkbox" class="ui-check-input"[^>]*\/><span class="ui-check-text"><span class="ui-check-label">我已核对上述 exact plan hash/);
+  assert.match(html, /<button[^>]*class="ui-btn ui-btn-danger[^"]*"[^>]*>执行此计划<\/button>/);
+  assert.doesNotMatch(html, /replay-storage-category-grid|replay-storage-gc-form|training-hub-kicker/);
 });
