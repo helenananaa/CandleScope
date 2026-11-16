@@ -1,5 +1,6 @@
 import { clearIndicatorLineData, mergeIndicatorLines, replaceIndicatorLinesRange } from "./indicatorPayloadRuntime.js";
 import { isFrontendScript } from "./frontendScriptContract.js";
+import { withPartialSeed } from "./indicatorSeedState.js";
 import type {
   IndicatorCacheResult,
   IndicatorDefinition,
@@ -94,14 +95,15 @@ export function hydrateIndicatorDefinitionsFromCache(
         indicator.lines === lines
         && indicator.error === null
         && indicator.paramSchema === schema
+        && indicator.partialSeed === cached.partialSeed
       ) return indicator;
       changed = true;
-      return {
+      return withPartialSeed({
         ...indicator,
         lines,
         error: null,
         ...(cached.schema.length > 0 ? { paramSchema: cached.schema } : {}),
-      };
+      }, cached.partialSeed ?? []);
     }
     if (!clearMissing) return indicator;
     const lines = indicator.lines || [];
@@ -117,13 +119,14 @@ export function hydrateIndicatorDefinitionsFromCache(
       nextLines === lines
       && !hasRuntimeData
       && (preserveError || indicator.error === null)
+      && indicator.partialSeed === undefined
     ) return indicator;
     changed = true;
-    return {
+    return withPartialSeed({
       ...indicator,
       lines: nextLines,
       ...(preserveError ? {} : { error: null }),
-    };
+    }, []);
   });
   return changed ? next : indicators;
 }

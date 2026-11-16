@@ -18,7 +18,9 @@ import type { SeriesWindowView } from "../features/market-data/window/seriesWind
 import type { PaneCrosshairStore } from "./paneCrosshairStore.js";
 import {
   groupChartPaneLegendValues,
+  partialSeedLegendNotice,
   resolveChartPaneLegendValues,
+  selectLegendPartialSeed,
   type ChartPaneLegendValue,
 } from "./chartPaneLegendModel.js";
 
@@ -116,6 +118,20 @@ function LegendValues({
   );
 }
 
+/** Values computed from the earliest stored bar may move once older history loads. */
+function PartialSeedMarker({ notice }: { notice: string }) {
+  return (
+    <span className="chart-legend-seed-marker" role="img" aria-label={notice} title={notice}>
+      ≈
+    </span>
+  );
+}
+
+function partialSeedNotice(entries: readonly ChartPaneLegendValue[]): string | null {
+  const range = selectLegendPartialSeed(entries);
+  return range ? partialSeedLegendNotice(range) : null;
+}
+
 export const MainChartLegend = memo(function MainChartLegend({
   allowSourceCrosshairFallback,
   crosshair,
@@ -163,7 +179,10 @@ export const MainChartLegend = memo(function MainChartLegend({
     [crosshairTime, lines],
   );
   const indicatorRows = useMemo(
-    () => groupChartPaneLegendValues(indicatorEntries),
+    () => groupChartPaneLegendValues(indicatorEntries).map((row) => ({
+      ...row,
+      seedNotice: partialSeedNotice(row.entries),
+    })),
     [indicatorEntries],
   );
 
@@ -184,7 +203,11 @@ export const MainChartLegend = memo(function MainChartLegend({
     })
     : t("legend.indicatorsAria");
 
-  const fullLabel = [ariaLabel, ...indicatorEntries.map((entry) => `${entry.label} ${formatLegendValue(entry)}`)].join("，");
+  const fullLabel = [
+    ariaLabel,
+    ...indicatorEntries.map((entry) => `${entry.label} ${formatLegendValue(entry)}`),
+    ...indicatorRows.flatMap((row) => row.seedNotice ? [row.seedNotice] : []),
+  ].join("，");
 
   return (
     <div className="chart-main-legend pane-overlay-anchor" data-pane-id="main" role="group" aria-label={fullLabel} title={fullLabel} tabIndex={0}>
@@ -211,6 +234,7 @@ export const MainChartLegend = memo(function MainChartLegend({
       {indicatorRows.map((row) => (
         <div className="chart-main-indicator-row" key={row.id}>
           <LegendValues entries={row.entries} showLineNames />
+          {row.seedNotice && <PartialSeedMarker notice={row.seedNotice} />}
         </div>
       ))}
     </div>
@@ -236,9 +260,11 @@ const IndicatorPaneLabel = memo(function IndicatorPaneLabel({
   const noHistoricalData = crosshairTime !== null
     && entries.length > 0
     && entries.every((entry) => entry.value === null);
-  const ariaLabel = entries.length > 0
+  const seedNotice = partialSeedNotice(entries);
+  const valuesLabel = entries.length > 0
     ? `${pane.label}：${entries.map((entry) => `${entry.label} ${formatLegendValue(entry)}`).join("，")}`
     : pane.label;
+  const ariaLabel = seedNotice ? `${valuesLabel}，${seedNotice}` : valuesLabel;
 
   return (
     <div
@@ -251,6 +277,7 @@ const IndicatorPaneLabel = memo(function IndicatorPaneLabel({
     >
       <span className="chart-pane-label-heading">{pane.label}</span>
       {entries.length > 0 && <LegendValues entries={entries} showLineNames={entries.length > 1} />}
+      {seedNotice && <PartialSeedMarker notice={seedNotice} />}
       {noHistoricalData && <span className="chart-pane-label-status">{t("legend.noData")}</span>}
     </div>
   );

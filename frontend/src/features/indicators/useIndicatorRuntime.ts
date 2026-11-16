@@ -138,6 +138,7 @@ import {
   replaceIndicatorLinesRange,
   stringSignature,
 } from "./indicatorPayloadRuntime.js";
+import { updatePartialSeedRanges, withPartialSeed } from "./indicatorSeedState.js";
 import type {
   DeferredRightCatchupPlan,
   IndicatorDefinition,
@@ -1161,6 +1162,7 @@ export function useIndicatorRuntime(
         {
           ...(payload.range !== undefined ? { range: payload.range } : {}),
           ...(dataRevision !== null ? { revision: dataRevision } : {}),
+          ...(payload.seed !== undefined ? { seed: payload.seed } : {}),
         },
       );
     }
@@ -1168,7 +1170,7 @@ export function useIndicatorRuntime(
     setActiveIndicators((prev) =>
       prev.map((indicator) =>
         indicator.id === indicatorId
-          ? {
+          ? withPartialSeed({
               ...indicator,
               lines: reapplyProvisionalIndicatorPreview(
                 indicator,
@@ -1178,7 +1180,9 @@ export function useIndicatorRuntime(
               error,
               runtimeNotice: pineRuntimeNotice(payload.meta, indicator.runtimeNotice),
               ...(schema.length > 0 ? { paramSchema: schema } : {}),
-            }
+            }, error ? indicator.partialSeed ?? [] : updatePartialSeedRanges(
+              indicator.partialSeed, "snapshot", payload.range, payload.seed, normalized.lines,
+            ))
           : indicator
       )
     );
@@ -1213,6 +1217,7 @@ export function useIndicatorRuntime(
       indicatorResults.patch(indicator, getIndicatorCacheContext(), normalized, {
         range: payload?.range,
         revision: dataRevision,
+        ...(payload.seed !== undefined ? { seed: payload.seed } : {}),
       });
       if (hostedPendingResumePatchIdsRef.current.has(String(indicatorId))) {
         markHostedSubscriptionReady(indicatorId);
@@ -1222,7 +1227,7 @@ export function useIndicatorRuntime(
     setActiveIndicators((prev) =>
       prev.map((indicator) =>
         indicator.id === indicatorId
-          ? {
+          ? withPartialSeed({
               ...indicator,
               lines: reapplyProvisionalIndicatorPreview(
                 indicator,
@@ -1231,7 +1236,9 @@ export function useIndicatorRuntime(
               ),
               error: payload?.ok === false ? formatIndicatorError(payload) : null,
               runtimeNotice: pineRuntimeNotice(payload.meta, indicator.runtimeNotice),
-            }
+            }, updatePartialSeedRanges(
+              indicator.partialSeed, "merge", payload.range, payload.seed, normalized.lines,
+            ))
           : indicator
       )
     );
@@ -1276,13 +1283,14 @@ export function useIndicatorRuntime(
     if (payload?.ok !== false || resolvedEmpty) {
       indicatorResults.replaceRange(indicator, getIndicatorCacheContext(), normalized, range, {
         revision: dataRevision,
+        ...(payload.seed !== undefined ? { seed: payload.seed } : {}),
       });
     }
 
     setActiveIndicators((prev) =>
       prev.map((indicator) =>
         indicator.id === indicatorId
-          ? {
+          ? withPartialSeed({
               ...indicator,
               lines: reapplyProvisionalIndicatorPreview(
                 indicator,
@@ -1290,7 +1298,9 @@ export function useIndicatorRuntime(
                 payload,
               ),
               error: payload?.ok === false && !resolvedEmpty ? formatIndicatorError(payload) : null,
-            }
+            }, updatePartialSeedRanges(
+              indicator.partialSeed, "replace-range", range, payload.seed, normalized.lines,
+            ))
           : indicator
       )
     );
