@@ -39,6 +39,7 @@ class SourceGap:
     repaired: dict[int, BarData] = field(default_factory=dict)
     completed_at: float | None = None
     error: str | None = None
+    forming_source_gap_ids: set[str] = field(default_factory=set)
 
     def event(self, resolved: bool = False) -> DataEvent:
         return DataEvent(
@@ -153,6 +154,20 @@ class SourceGapRegistry:
                 gap.fail("source_stream_restarted")
                 del self.gaps[gap_id]
         self._changed.set()
+
+    def require_snapshot(self, gap: SourceGap) -> bool:
+        """Retire a forming dependency without claiming a final target candle.
+
+        Its physical input gaps have canonical proof, but the target is still
+        forming. Existing strict consumers must obtain fresh state; no final
+        replay row or SOURCE_GAP_RESOLVED is fabricated for the target.
+        """
+        if self.gaps.get(gap.id) is not gap or gap.error or gap.completed_at is not None:
+            return False
+        gap.fail("source_gap_snapshot_required")
+        del self.gaps[gap.id]
+        self._changed.set()
+        return True
 
     def snapshot(self) -> dict:
         return {"tracking_exhausted": self.overflowed, "retained_gaps": len(self.gaps),
