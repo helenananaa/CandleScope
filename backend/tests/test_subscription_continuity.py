@@ -971,3 +971,27 @@ async def test_forming_target_waits_for_all_native_gaps_and_closed_target_keeps_
         assert len([r for r in requests if r[1].get("requester") == "ingestion_gap"]) == 1
     finally:
         await _close(dm, factory)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("reason", ["source_repair_failed", "source_stream_restarted"])
+async def test_forming_dependency_wakes_when_physical_source_fails_or_retires(tmp_path, monkeypatch, reason):
+    monkeypatch.setattr("app.data_engine.data_manager.manager.time.time", lambda: (T + 180_000) / 1000)
+    dm, store, factory, requests = await manager(tmp_path, monkeypatch)
+    source = SeriesKey(**IDENTITY)
+    target = SeriesKey(**{**IDENTITY, "interval": "10007m"})
+    try:
+        base, _ = dm.source_gaps.open(source, T, T)
+        await dm._project_source_gap(target, base)
+        dependent = dm.source_gaps.pending(target)[0]
+        waiting = asyncio.create_task(dm.wait_for_source_continuity(target, fail_on_error=True))
+        await asyncio.sleep(0)
+        if reason == "source_stream_restarted":
+            dm.source_gaps.retire(source)
+        else:
+            base.fail(reason)
+        with pytest.raises(ConsumerRecoveryRequired, match=reason):
+            await asyncio.wait_for(waiting, 1)
+        assert dependent.completed_at is None and dependent.repaired == {}
+    finally:
+        await _close(dm, factory)

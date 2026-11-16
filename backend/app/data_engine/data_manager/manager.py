@@ -834,8 +834,14 @@ class DataManager(DataManagerCore):
                                expected: tuple[int, ...] | None = None, *,
                                source_gap: SourceGap | None = None) -> SourceGap:
         gap, created = self.source_gaps.open(target, lower, upper, expected)
-        if source_gap is not None and (created or gap.forming_source_gap_ids):
+        if (source_gap is not None and (created or gap.forming_source_gap_ids)
+                and source_gap.id not in gap.forming_source_gap_ids):
             gap.forming_source_gap_ids.add(source_gap.id)
+            def source_finished(_future):
+                if (source_gap.error and source_gap.id in gap.forming_source_gap_ids
+                        and self.source_gaps.gaps.get(gap.id) is gap and gap.completed_at is None):
+                    gap.fail(source_gap.error)
+            source_gap.future.add_done_callback(source_finished)
         became_closed = (not created and source_gap is None and bool(gap.forming_source_gap_ids)
                          and upper < parse_interval_spec(target.interval).floor_ms(int(time.time() * 1000)))
         if became_closed:
