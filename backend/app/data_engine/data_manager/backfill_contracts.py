@@ -138,13 +138,12 @@ class RepairRequest:
     @property
     def series_key(self) -> tuple[str, ...]:
         identity = identity_from_metadata(self.exchange, self.metadata)
-        base = (
-            self.exchange.lower().strip(),
-            self.market_type.lower().strip(),
-            self.symbol.upper().strip(),
-            self.interval,
-        )
-        return base + (identity.storage_values if identity is not None else ())
+        # The API shorthand and an explicit default identity name the same
+        # durable series. Use the ledger/audit normalization for its scheduler
+        # owner too; non-default semantics retain every identity dimension.
+        return repair_series_order(repair_series_key(
+            self.exchange, self.market_type, self.symbol, self.interval, identity,
+        ))
 
     def merged_with(self, other: RepairRequest) -> RepairRequest:
         """Return a range that covers both requests for the same series."""

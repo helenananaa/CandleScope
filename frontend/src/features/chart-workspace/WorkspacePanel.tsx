@@ -1,3 +1,4 @@
+import { OverlayLayer } from "../../components/ui/Overlays.js";
 import { shortcutModifier } from "../../shared/shortcutModifier.js";
 import { Icon } from "../../components/icons/Icon.js";
 import {
@@ -324,6 +325,7 @@ export default function WorkspacePanel({
   };
 
   return (
+    <OverlayLayer kind="drawer" side="right" onClose={onClose}>
     <div className={`workspace-panel-overlay right-drawer-overlay ${isResizing ? "is-resizing" : ""}`}
       onClick={(event) => { if (event.target === event.currentTarget && !isResizing) onClose(); }}
     >
@@ -358,6 +360,7 @@ export default function WorkspacePanel({
             <button
               type="button"
               className="workspace-panel-close"
+              data-overlay-close=""
               onClick={onClose}
               aria-label={t("workspace.close")}
             >
@@ -873,5 +876,6 @@ export default function WorkspacePanel({
         </div>
       </aside>
     </div>
+    </OverlayLayer>
   );
 }

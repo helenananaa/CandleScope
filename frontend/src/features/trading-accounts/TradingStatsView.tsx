@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { Icon } from "../../components/icons/Icon.js";
+import { Badge, Button, InlineAlert, SegmentedControl, Stat as KitStat } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import {
   formatAmount,
@@ -43,36 +45,26 @@ export default function TradingStatsView({ account, revision }: TradingStatsView
   return (
     <div className="trading-stats" aria-busy={loading}>
       <div className="trading-stats-filters">
-        <div className="trading-segmented" role="group" aria-label={t("trading.stats.period")}>
-          {PERIODS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              data-active={period.id === item.id}
-              aria-pressed={period.id === item.id}
-              onClick={() => setPeriod({
-                id: item.id,
-                fromMs: item.days === null ? null : Date.now() - item.days * DAY_MS,
-              })}
-            >
-              {t(`trading.stats.period.${item.id}` as const)}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          className="trading-stats-period"
+          size="sm"
+          fullWidth
+          label={t("trading.stats.period")}
+          value={period.id}
+          onChange={(id) => {
+            const days = PERIODS.find((item) => item.id === id)?.days ?? null;
+            setPeriod({ id, fromMs: days === null ? null : Date.now() - days * DAY_MS });
+          }}
+          options={PERIODS.map((item) => ({ value: item.id, label: t(`trading.stats.period.${item.id}` as const) }))}
+        />
         {tag !== null && (
-          <button
-            type="button"
-            className="trading-badge trading-stats-chip"
-            data-tone="accent"
-            aria-label={t("trading.stats.clearTag", { tag })}
-            onClick={() => setTag(null)}
-          >
+          <Button size="sm" className="trading-stats-chip" aria-label={t("trading.stats.clearTag", { tag })} onClick={() => setTag(null)}>
             {t("trading.stats.tagFilter", { tag })}
-            <span aria-hidden="true">×</span>
-          </button>
+            <Icon name="close" size={12} />
+          </Button>
         )}
       </div>
-      {error && <p className="trading-error" role="alert">{error}</p>}
+      {error && <InlineAlert tone="danger">{error}</InlineAlert>}
       {stats === null
         ? !error && <p className="trading-empty-line">{t("trading.stats.loading")}</p>
         : <StatsBody stats={stats} onTag={tag === null ? setTag : null} />}
@@ -176,24 +168,25 @@ interface StatProps {
   lowSample?: number | null;
 }
 
+/** A kit stat in a tile; gains and losses follow the chart's up and down colours. */
 function Stat({ label, value, tone, sub, title, lowSample = null }: StatProps) {
   return (
     <div className="trading-stat" title={title}>
-      <span>
-        {label}
-        {lowSample !== null && <LowSampleBadge threshold={lowSample} />}
-      </span>
-      <strong data-tone={tone}>{value}</strong>
-      {sub && <small>{sub}</small>}
+      <KitStat
+        label={<>{label}{lowSample !== null && <LowSampleBadge threshold={lowSample} />}</>}
+        value={value}
+        {...(sub ? { hint: sub } : {})}
+        {...(tone && tone !== "flat" ? { className: `trading-stat-${tone}` } : {})}
+      />
     </div>
   );
 }
 
 function LowSampleBadge({ threshold }: { threshold: number }) {
   return (
-    <em className="trading-badge" data-tone="warning" title={t("trading.stats.lowSampleMark", { count: threshold })}>
+    <Badge tone="warning" title={t("trading.stats.lowSampleMark", { count: threshold })}>
       {t("trading.stats.lowSample")}
-    </em>
+    </Badge>
   );
 }
 
@@ -300,14 +293,15 @@ function Breakdown<K extends string | null>({ title, hint, groups, label, thresh
               <tr key={key ?? ""} data-low-sample={group.lowSample} data-empty={empty}>
                 <th scope="row" title={name}>
                   {onSelect && key !== null ? (
-                    <button
-                      type="button"
-                      className="trading-link"
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="trading-stats-tag"
                       title={t("trading.stats.filterTag", { tag: key })}
                       onClick={() => onSelect(key)}
                     >
                       {name}
-                    </button>
+                    </Button>
                   ) : name}
                 </th>
                 <td>

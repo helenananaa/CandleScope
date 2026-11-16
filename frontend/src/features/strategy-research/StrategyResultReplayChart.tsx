@@ -1,4 +1,5 @@
 import { useId, useState, type MouseEvent } from "react";
+import { Button, Checkbox, Disclosure, Field, InlineAlert, Select } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { formatIntervalLabel } from "../../utils/intervals.js";
 import type { BacktestResultReplayFrame, BacktestResultReplayMA } from "../backtest/backtestTypes.js";
@@ -90,7 +91,7 @@ function ReplayCandles({ bars, ma, display, markers, drawings, firstPoint, onDra
 function ReplayMaLegend({ ma }: { ma: BacktestResultReplayMA | undefined }) {
   if (!ma) return null;
   const last = ma.points.at(-1);
-  return <p data-testid="strategy-replay-ma" data-period={ma.period} data-value={last?.value}>
+  return <p className="strategy-result-replay-ohlc" data-testid="strategy-replay-ma" data-period={ma.period} data-value={last?.value}>
     {t("replay.indicator.sma.name")} ({ma.period}) · {last?.value.toLocaleString(undefined, { maximumSignificantDigits: 12 }) ?? "—"}
   </p>;
 }
@@ -142,58 +143,49 @@ export function StrategyResultReplayChart({ slot, chart, frame, display, disable
   };
   return <section aria-label={`${symbol} · ${interval}`} data-testid={`strategy-replay-${slot}-chart`}
     data-dataset-epoch={chart.data_epoch} data-candle-style={display.candleStyle}>
-    <strong>{symbol} · {interval}</strong>
-    <details>
-      <summary>{t("workspace.link.chartStyle")}</summary>
+    <h3 className="strategy-result-replay-chart-title">{symbol} · {interval}</h3>
+    <Disclosure className="strategy-result-replay-style" summary={t("workspace.link.chartStyle")}>
       <fieldset className="strategy-result-replay-view-controls" disabled={disabled}>
-        <label>{t("workspace.link.chartStyle")}
-          <select value={display.candleStyle} data-testid="strategy-replay-candle-style"
+        <Field label={t("workspace.link.chartStyle")}>
+          <Select size="sm" value={display.candleStyle} data-testid="strategy-replay-candle-style"
             onChange={event => onChange(slot, "candleStyle", event.target.value === "hollow" ? "hollow" : "solid")}>
             <option value="solid">{t("drawing.variant.candlestick")}</option>
             <option value="hollow">{t("drawing.variant.hollow-candlestick")}</option>
-          </select>
-        </label>
+          </Select>
+        </Field>
         {([["upColor", "settings.appearance.upColor"], ["downColor", "settings.appearance.downColor"]] as const).map(([field, key]) =>
-          <label key={field}>{t(key)}
+          <label key={field} className="strategy-result-replay-color">
+            <span>{t(key)}</span>
             <input type="color" value={display[field]} onChange={event => onChange(slot, field, event.target.value)} />
           </label>)}
         {([["fills", "researchBatch.replayFillMarkers"], ["notes", "researchBatch.replayNoteMarkers"]] as const).map(([field, key]) =>
-          <label key={field}>
-            <input type="checkbox" data-testid={`strategy-replay-show-${field}`} disabled={!ownsMarkers} checked={display[field]}
-              onChange={event => onChange(slot, field, event.target.checked)} />
-            {t(key)}
-          </label>)}
-        {chart.ma && <label>
-          <input type="checkbox" data-testid="strategy-replay-show-ma" checked={display.showMa}
-            onChange={event => onChange(slot, "showMa", event.target.checked)} />
-          {t("replay.indicator.sma.name")}
-        </label>}
+          <Checkbox key={field} data-testid={`strategy-replay-show-${field}`} disabled={!ownsMarkers} checked={display[field]}
+            onChange={event => onChange(slot, field, event.target.checked)} label={t(key)} />)}
+        {chart.ma && <Checkbox data-testid="strategy-replay-show-ma" checked={display.showMa}
+          onChange={event => onChange(slot, "showMa", event.target.checked)} label={t("replay.indicator.sma.name")} />}
       </fieldset>
-      {!ownsMarkers && <p>{t("researchBatch.replayReferenceMarkers")}</p>}
+      {!ownsMarkers && <p className="strategy-research-note">{t("researchBatch.replayReferenceMarkers")}</p>}
       {drawingControl && <fieldset className="strategy-result-replay-view-controls" disabled={disabled}>
         <legend>{t("workspace.link.drawings")}</legend>
-        <label>
-          <input type="checkbox" data-testid="strategy-replay-show-drawings" checked={display.showDrawings}
-            onChange={event => onChange(slot, "showDrawings", event.target.checked)} />
-          {t("drawing.showAll")}
-        </label>
-        {(Object.keys(drawingToolLabels) as DrawingTool[]).map(kind => <button type="button" key={kind}
+        <Checkbox data-testid="strategy-replay-show-drawings" checked={display.showDrawings}
+          onChange={event => onChange(slot, "showDrawings", event.target.checked)} label={t("drawing.showAll")} />
+        {(Object.keys(drawingToolLabels) as DrawingTool[]).map(kind => <Button size="sm" key={kind}
           data-testid={`strategy-replay-draw-${kind}`} aria-pressed={tool === kind} disabled={!canDraw}
           onClick={() => { setTool(tool === kind ? null : kind); setPending(null); setDrawingLimit(false); }}>
           {t(drawingToolLabels[kind])}
-        </button>)}
-        {drawings.map((drawing, index) => <button type="button" key={drawing.id} disabled={drawingControl.locked}
+        </Button>)}
+        {drawings.map((drawing, index) => <Button size="sm" variant="ghost" key={drawing.id} disabled={drawingControl.locked}
           data-testid="strategy-replay-remove-drawing" onClick={() => { drawingControl.edit({ remove: drawing.id }); setDrawingLimit(false); }}>
           {t("workspace.delete")} · {t(drawingToolLabels[drawing.points.length === 1 ? "horizontal" : "segment"])} #{index + 1}
-        </button>)}
-        {drawingLimit && <span role="alert">{t("drawing.objects.failed")}</span>}
+        </Button>)}
+        {drawingLimit && <InlineAlert tone="danger">{t("drawing.objects.failed")}</InlineAlert>}
       </fieldset>}
-    </details>
+    </Disclosure>
     <ReplayCandles bars={chart.bars} ma={ma} display={display} markers={markers}
       drawings={display.showDrawings ? drawings : []} firstPoint={firstPoint}
       onDrawingPoint={canDraw && tool !== null ? addPoint : undefined} />
     <ReplayMaLegend ma={ma} />
-    {last && <p data-testid={slot === "primary" ? "strategy-replay-last-ohlc" : `strategy-replay-${slot}-ohlc`}>
+    {last && <p className="strategy-result-replay-ohlc" data-testid={slot === "primary" ? "strategy-replay-last-ohlc" : `strategy-replay-${slot}-ohlc`}>
       {last.open} / {last.high} / {last.low} / {last.close}
     </p>}
   </section>;

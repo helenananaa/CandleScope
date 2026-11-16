@@ -1,0 +1,154 @@
+/* Page layout, page navigation and shared shell rules. */
+
+.workspace-navigation { display: flex; align-items: center; gap: 3px; flex: 0 0 auto; }
+.workspace-navigation :is(a, button, span) { display: inline-flex; align-items: center; min-height: 32px; padding: 6px 9px; border: 0; border-radius: var(--radius-control); color: var(--text-secondary); background: transparent; text-decoration: none; font: 500 var(--font-size-sm)/1.4 var(--font-sans); white-space: nowrap; }
+.workspace-navigation [aria-current='page'] { color: var(--text-accent); background: var(--bg-hover); }
+.workspace-navigation :is(a,button):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.workspace-navigation button:disabled, .workspace-navigation [aria-disabled='true'] { opacity: .5; }
+
+
+/* ── 布局容器 ────────────────────────────────────────────── */
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+/* ── 主内容区：自选侧栏 + 图表 ── */
+.main-content-area {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: var(--font-size-lg);
+  color: var(--text-primary);
+  user-select: none;
+}
+.logo-icon {
+  width: 24px;
+  height: 24px;
+  background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-base);
+}
+
+.logo-text {
+  color: var(--text-primary);
+}
+.brand-wordmark {
+  display: inline-flex;
+  letter-spacing: -0.025em;
+}
+.brand-wordmark-scope {
+  color: var(--brand-scope);
+}
+
+/* ── 价格信息 ────────────────────────────────────────────── */
+.price-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-left: 8px;
+}
+
+.current-price {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+}
+.price-up {
+  color: var(--text-up);
+}
+.price-down {
+  color: var(--text-down);
+}
+
+.change-positive {
+  color: var(--text-up);
+  background: var(--candle-up-light);
+}
+.change-negative {
+  color: var(--text-down);
+  background: var(--candle-down-light);
+}
+
+.status-left,
+.status-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+@keyframes pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* Header panel toggles (indicators, alerts): kit icon buttons that show when their panel is open. */
+.panel-toggle { position: relative; }
+.panel-toggle[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--accent-blue) 14%, transparent);
+  color: var(--text-accent);
+}
+.alert-toggle-btn.panel-toggle[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--color-warning) 14%, transparent);
+  color: var(--text-warning);
+}
+
+@media (max-width: 1280px) {
+  .top-bar[data-runtime-source="live"] .price-info {
+    display: none;
+  }
+
+  .workspace-switcher-trigger {
+    width: 116px;
+  }
+}
+@media (max-width: 1050px) {
+  .workspace-switcher-trigger {
+    width: 104px;
+  }
+
+  .workspace-link-setting {
+    padding-inline: 4px;
+  }
+}
+
+.top-bar .symbol-name {
+  max-width: none;
+  overflow: visible;
+}
+@media (max-width: 980px) {
+  .top-bar .interval-btn:not(.active) { display: none; }
+}
+
+/* "Skip to chart": off screen until it has keyboard focus, then over the top-left corner. */
+.skip-to-chart {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: var(--z-menu);
+  transform: translateY(calc(-100% - 16px));
+}
+.skip-to-chart:focus-visible {
+  transform: none;
+}

@@ -1,0 +1,16 @@
+{
+  "base": "bbd7087ac9fb8885121cb0fdcab5264a73f247a3",
+  "product_head": "cf2957c639477eb0f042270a765acdd6a293ec0f",
+  "files": {
+    ".github/workflows/pine-host-contracts.yml": "8540e0c3d1d176674f880ebf9c962d2c2202e13f4c6c8cd22e84647896093e15",
+    "backend/app/data_engine/bar_aggregator/aggregator.py": "48127e20d1d8f68421a3a7d7417c5383e7eef55d4f9373cbc912cfebcea73726",
+    "backend/app/data_engine/bar_aggregator/bar_state.py": "bb566f67c4d6d44a73a80322f57b3dcbbf09eed3b63931ccf93521be57641a7c",
+    "backend/app/data_engine/bar_aggregator/config.py": "1f9f5f22811c724dbc326b7b4fa41fe087de4565975f11d82eee4fb16a401c88",
+    "backend/app/data_engine/bar_aggregator/history_prefix_runtime.py": "3d88ba18168adc898999bba4bfc9f8eb03fc9cb6c4fa5b5421e348aa780e4f03",
+    "backend/app/data_engine/bar_aggregator/models.py": "d04fdeb41511424f50de7a5a2d71dbde06c5eda048a43337c55670b42a16d76a",
+    "backend/scripts/ccxt_contracts/integration.py": "f74d907a5bb8896b75b49ccdc52262653b2f62b3a547aa64b28b208ddfd105f1",
+    "backend/tests/test_closed_component_retention.py": "2c5a04491ba03f783274425d4edff6bd4bab10e7694ebbc8384c3cf9170d3e6e",
+    "backend/tests/test_closed_component_retention_sources.py": "50cddce6652ec4ffa1b3cfdedc6d5e7564195ca71b01f57f964f632cb70eb6e4",
+    "packages/candlescope-plugin-pine-compat/scripts/qualify_host_contracts.py": "db6f89edda95183fc8e150069ba271fc28c4ce394200607c3d59ff2d028060fd"
+  }
+}

@@ -154,6 +154,7 @@ export class SharedKlineRequestCoordinator implements KlineApi {
       options.demandGeneration ?? null,
       ...readBoundary(options),
       ...(options.materializedOnly ? ["materialized-only"] : []),
+      ...(options.compositionContract !== undefined ? ["composed-history", options.compositionContract] : []),
     ];
     return this.join(
       "history",
@@ -177,6 +178,7 @@ export class SharedKlineRequestCoordinator implements KlineApi {
             options: {
               ...(options.countBack === undefined ? {} : { countBack: options.countBack }),
               ...(options.materializedOnly === undefined ? {} : { materializedOnly: options.materializedOnly }),
+              ...(options.compositionContract === undefined ? {} : { compositionContract: options.compositionContract }),
               ...(options.maxWaitMs === undefined ? {} : { maxWaitMs: options.maxWaitMs }),
               ...(options.intent === undefined ? {} : { intent: options.intent }),
               ...(options.demandScope === undefined ? {} : { demandScope: options.demandScope }),
@@ -210,6 +212,7 @@ export class SharedKlineRequestCoordinator implements KlineApi {
       options.demandScope ?? null,
       options.demandGeneration ?? null,
       ...readBoundary(options),
+      ...(options.compositionContract !== undefined ? ["composed-history", options.compositionContract] : []),
     ];
     return this.join(
       "before",
@@ -249,6 +252,7 @@ export class SharedKlineRequestCoordinator implements KlineApi {
       options.demandScope ?? null,
       options.demandGeneration ?? null,
       ...readBoundary(options),
+      ...(options.compositionContract !== undefined ? ["composed-history", options.compositionContract] : []),
     ];
     return this.join(
       "range",

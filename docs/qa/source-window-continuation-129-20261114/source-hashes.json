@@ -1,0 +1,7 @@
+{
+  "backend/app/data_engine/bar_aggregator/bar_state.py": "d07d1dd6fd22ed7f757578f6e9fada8d5e512e9ed8e4c7c7edbcf4887754f50b",
+  "backend/app/data_engine/data_manager/aggregator_bridge.py": "7976c41e7609672073d8afe171947b40f71a6e9c498369f086660506d992426c",
+  "backend/app/data_engine/storage/kline_sources.py": "1eff4f647e287813942e6aed78077b9dc1b80baa750b2a44adcd8f62475c03f9",
+  "backend/tests/test_deferred_component_preview_continuation.py": "038574ec3a7960a1d41cab663a9d8f6bf4d59611fb42206810b1c149a5fc1129",
+  "packages/candlescope-plugin-pine-compat/scripts/qualify_host_contracts.py": "5f53535ff7ec8902a5370162a75508ea796407216df035678b27e53416f306cc"
+}

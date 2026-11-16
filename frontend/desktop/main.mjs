@@ -13,7 +13,7 @@ import { startProfileAssetServer } from "./profile-origin.mjs";
 import { LocalMcpHost } from "./local-mcp-host.mjs";
 import { ElectronWindowManager } from "./electron-window-manager.mjs";
 import { AppWorkBudgetHub } from "./app-work-budget-hub.mjs";
-import { DESKTOP_IPC, validateTopologyPayload } from "./ipc-contract.mjs";
+import { DESKTOP_IPC, validateAppearancePayload, validateTopologyPayload } from "./ipc-contract.mjs";
 import { createEvidenceSession } from "./evidence-harness-loader.mjs";
 import { SidecarSupervisor } from "./sidecar-supervisor.mjs";
 import { SeriesSnapshotHub } from "./series-snapshot-hub.mjs";
@@ -246,6 +246,10 @@ async function boot() {
   });
   trustedIpc.on(DESKTOP_IPC.aiControlReply, (event, value) => {
     localMcp.broker.reply(manager.assertTrustedSender(event), value);
+  });
+
+  trustedIpc.on(DESKTOP_IPC.appearance, (event, payload) => {
+    manager.setAppearance(event.sender, validateAppearancePayload(payload).background);
   });
 
   trustedIpc.on(DESKTOP_IPC.backendEndpoint, (event) => {

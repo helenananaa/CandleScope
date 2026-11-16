@@ -3828,3 +3828,20 @@ def test_continuity_endpoint_returns_storage_gap_report() -> None:
         "market_type": "spot",
         "limit": 50_000,
     }]
+
+
+@pytest.mark.parametrize("max_wait_ms,admitted", [(0, False), (1500, True)])
+def test_viewport_recovery_must_opt_into_repair_admission(max_wait_ms, admitted) -> None:
+    calls = []
+    dm = DataManager()
+    dm.set_backfill_trigger(lambda *args, **kwargs: calls.append((args, kwargs)))
+    response = _client(dm).get("/api/v1/klines/history", params={
+        "symbol": "ETHUSDT", "interval": "1m", "count_back": 3,
+        "exchange": "binance", "market_type": "spot",
+        "intent": "viewport", "max_wait_ms": max_wait_ms,
+    })
+    assert response.status_code == 200
+    assert bool(calls) is admitted
+    assert response.json()["complete"] is False
+    if admitted:
+        assert calls[0][1]["reason"] == "initial_history"

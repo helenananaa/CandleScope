@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button } from "../../components/ui/Button.js";
+import { Button, Field, Input, Select } from "../../components/ui/index.js";
 import { getNumberLocale, t } from "../../i18n/index.js";
 import type { MessageKey } from "../../i18n/index.js";
 import { PreparationApiError } from "../data-preparation/api.js";
@@ -157,13 +157,13 @@ export function TradeFlowHistory({ identity }: { identity: TradeFlowIdentity }) 
   return (
     <div className="tf-history">
       <div className="tf-history-actions">
-        <label>{t("trade.history.date")} <input type="date" value={day} max={today}
-          onChange={(event) => setDay(event.target.value)} /></label>
-        <label>{t("trade.history.hour")} <select value={hour} onChange={(event) => setHour(event.target.value)}>
+        <Field label={t("trade.history.date")}><Input size="sm" type="date" value={day} max={today}
+          onChange={(event) => setDay(event.target.value)} /></Field>
+        <Field label={t("trade.history.hour")}><Select size="sm" value={hour} onChange={(event) => setHour(event.target.value)}>
           {Array.from({ length: 24 }, (_, index) => String(index).padStart(2, "0")).map((value) => (
             <option key={value} value={value}>{value}:00</option>
           ))}
-        </select></label>
+        </Select></Field>
       </div>
       {!archiveSupported && <div className="tf-history-status">{t("trade.history.localOnly")}</div>}
       {archiveSupported && day === today && <div className="tf-history-status">{t("trade.history.unpublished")}</div>}

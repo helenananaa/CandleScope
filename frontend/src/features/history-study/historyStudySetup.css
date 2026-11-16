@@ -1,0 +1,24 @@
+@layer features {
+/* History study setup popover. Controls come from the kit; this file only lays them out. */
+.ui-popover.history-study-setup {
+  width: min(380px, calc(100vw - 16px));
+  max-width: min(380px, calc(100vw - 16px));
+  padding: 0;
+}
+.history-study-setup form { display: grid; gap: var(--space-4); padding: var(--space-4); }
+.history-study-setup-head { display: grid; gap: 6px; }
+.history-study-setup-head h2 { display: flex; align-items: baseline; gap: 8px; margin: 0; color: var(--text-primary); font: 600 var(--font-size-base)/1.4 var(--font-sans); }
+.history-study-setup-head h2 span { color: var(--text-secondary); font: 500 var(--font-size-sm)/1.4 var(--font-sans); }
+.history-study-setup-head p,
+.history-study-setup-note { margin: 0; color: var(--text-secondary); font: var(--font-size-sm)/1.6 var(--font-sans); }
+.history-study-setup-note { color: var(--text-muted); font-size: var(--font-size-xs); }
+.history-study-setup-library { display: grid; gap: 6px; }
+.history-study-setup-library h3 { margin: 0; color: var(--text-secondary); font: 600 var(--font-size-xs)/1.4 var(--font-sans); }
+.history-study-setup-library ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.history-study-setup-library li { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); background: var(--surface-0); }
+.history-study-setup-library li > span { display: grid; flex: 1 1 auto; gap: 2px; min-width: 0; }
+.history-study-setup-library strong { color: var(--text-primary); font: 600 var(--font-size-sm)/1.4 var(--font-sans); }
+.history-study-setup-library small { overflow: hidden; color: var(--text-muted); font: var(--font-size-xs)/1.4 var(--font-sans); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.history-study-setup-fields { display: grid; gap: var(--space-3); }
+.history-study-setup-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: var(--space-3); border-top: 1px solid var(--border-subtle); }
+}

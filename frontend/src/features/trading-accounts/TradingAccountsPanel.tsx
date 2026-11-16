@@ -1,4 +1,6 @@
-import { Fragment, useCallback, useState } from "react";
+import { Fragment, useCallback, useId, useState, type ReactNode } from "react";
+import { Icon } from "../../components/icons/Icon.js";
+import { Badge, Button, EmptyState, IconButton, InlineAlert, Select, TabPanel, Tabs } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import AddAccountDialog from "./AddAccountDialog.js";
@@ -18,9 +20,14 @@ import {
 } from "./tradingFormat.js";
 import type { QuickReplayRequest, Trade, TradingChartContext } from "./tradingTypes.js";
 import { useTradingAccountsRuntime } from "./useTradingAccountsRuntime.js";
-import "./tradingAccounts.css";
 
 type Tab = "trade" | "positions" | "history" | "journal" | "stats";
+const TABS: readonly Tab[] = ["trade", "positions", "history", "journal", "stats"];
+
+/** Long and short follow the chart's up and down colours, which the user may swap. */
+export function DirectionBadge({ direction, children }: { direction: "long" | "short"; children: ReactNode }) {
+  return <Badge className={`trading-dir-${direction}`}>{children}</Badge>;
+}
 
 export interface TradingAccountsPanelProps {
   context: TradingChartContext;
@@ -35,6 +42,7 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
   const [tab, setTab] = useState<Tab>("trade");
   const [adding, setAdding] = useState(false);
   const [journal, setJournal] = useState<JournalTarget | null>(null);
+  const tabsId = useId();
 
   const refresh = runtime.actions.refresh;
   const openReplay = useCallback((trade: Trade) => {
@@ -80,7 +88,7 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
   if (runtime.view.unavailable) {
     return (
       <div className="trading-panel">
-        <p className="trading-empty">{t("trading.unavailable")}</p>
+        <EmptyState className="trading-empty" tone="warning" title={t("trading.title")} description={t("trading.unavailable")} />
       </div>
     );
   }
@@ -95,7 +103,8 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
     <div className="trading-panel" data-account-kind={selected?.kind ?? "none"}>
       <header className="trading-panel-header">
         {runtime.view.accounts.length > 0 ? (
-          <select
+          <Select
+            size="sm"
             className="trading-account-select"
             aria-label={t("trading.account")}
             value={selected?.id ?? ""}
@@ -104,27 +113,29 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
             {runtime.view.accounts.map((account) => (
               <option key={account.id} value={account.id}>{account.name}</option>
             ))}
-          </select>
+          </Select>
         ) : (
           <strong className="trading-panel-title">{t("trading.title")}</strong>
         )}
-        <button type="button" className="trading-icon-button" aria-label={t("trading.add.title")} title={t("trading.add.title")} onClick={() => setAdding(true)}>+</button>
+        <IconButton size="sm" label={t("trading.add.title")} title={t("trading.add.title")} icon={<Icon name="plus" size={16} />} onClick={() => setAdding(true)} />
         {onRequestClose && (
-          <button type="button" className="trading-icon-button" aria-label={t("trading.close")} onClick={onRequestClose}>×</button>
+          <IconButton size="sm" label={t("trading.close")} icon={<Icon name="close" size={16} />} onClick={onRequestClose} />
         )}
       </header>
 
       {selected === null ? (
-        <div className="trading-empty">
-          <p>{t("trading.empty")}</p>
-          <button type="button" className="trading-button" data-variant="primary" onClick={() => setAdding(true)}>{t("trading.add.title")}</button>
-        </div>
+        <EmptyState
+          className="trading-empty"
+          title={t("trading.title")}
+          description={t("trading.empty")}
+          action={<Button variant="primary" size="sm" onClick={() => setAdding(true)}>{t("trading.add.title")}</Button>}
+        />
       ) : (
         <>
           <div className="trading-mode">
-            <span className="trading-badge" data-tone={selected.kind === "practice" ? "accent" : "muted"}>
+            <Badge tone={selected.kind === "practice" ? "accent" : "neutral"}>
               {t(selected.kind === "practice" ? "trading.mode.practice" : "trading.mode.manual")}
-            </span>
+            </Badge>
             {summary && selected.kind === "practice" && (
               <span className="trading-equity">
                 {t("trading.equity")} <strong>{formatAmount(summary.equity)}</strong>
@@ -138,37 +149,35 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
             )}
           </div>
           {feedsBehind.map((feed) => (
-            <p key={`${feed.exchange}:${feed.marketType}:${feed.symbol}`} className="trading-warning" role="status">
+            <InlineAlert key={`${feed.exchange}:${feed.marketType}:${feed.symbol}`} tone="warning" className="trading-notice">
               {t(feed.status === "catching_up" ? "trading.feed.catchingUp" : "trading.feed.unavailable", { symbol: feed.symbol })}
-            </p>
+            </InlineAlert>
           ))}
           {runtime.view.error && (
-            <p className="trading-error" role="alert">
+            <InlineAlert
+              tone="danger"
+              className="trading-notice"
+              action={<Button size="sm" variant="ghost" onClick={runtime.actions.clearError}>{t("trading.dismiss")}</Button>}
+            >
               {runtime.view.error}
-              <button type="button" className="trading-link" onClick={runtime.actions.clearError}>{t("trading.dismiss")}</button>
-            </p>
+            </InlineAlert>
           )}
-          <nav className="trading-tabs" role="tablist" aria-label={t("trading.title")}>
-            {(["trade", "positions", "history", "journal", "stats"] as const).map((item) => (
-              <button
-                key={item}
-                type="button"
-                role="tab"
-                aria-selected={tab === item}
-                onClick={() => setTab(item)}
-              >
-                {t(`trading.tab.${item}` as const)}
-                {item === "positions" && summary && summary.positions.length > 0 && (
-                  <span className="trading-count">{summary.positions.length}</span>
-                )}
-                {item === "history" && closedTrades.some((trade) => trade.needsReview) && (
-                  <span className="trading-dot" aria-label={t("trading.needsReview")} />
-                )}
-              </button>
-            ))}
-          </nav>
+          <Tabs
+            id={tabsId}
+            className="trading-tabs"
+            label={t("trading.title")}
+            value={tab}
+            onChange={setTab}
+            tabs={TABS.map((item) => ({
+              value: item,
+              label: item === "history" && closedTrades.some((trade) => trade.needsReview)
+                ? <>{t("trading.tab.history")}<span className="trading-dot" role="img" aria-label={t("trading.needsReview")} /></>
+                : t(`trading.tab.${item}` as const),
+              ...(item === "positions" && summary && summary.positions.length > 0 ? { badge: summary.positions.length } : {}),
+            }))}
+          />
 
-          <div className="trading-tab-body" role="tabpanel">
+          <TabPanel tabsId={tabsId} value={tab} className="trading-tab-body">
             {tab === "trade" && (
               selected.kind === "practice" ? (
                 <PracticeOrderTicket
@@ -190,19 +199,19 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
                   <article key={trade.id} className="trading-row">
                     <div className="trading-row-main">
                       <strong>{trade.symbol}</strong>
-                      <span className="trading-badge" data-tone={trade.direction === "long" ? "up" : "down"}>
+                      <DirectionBadge direction={trade.direction}>
                         {t(trade.direction === "long" ? "trading.long" : "trading.short")} {formatQty(trade.openQty)}
-                      </span>
+                      </DirectionBadge>
                       <span data-tone={pnlTone(trade.unrealizedPnl)} className="trading-row-pnl">{formatSigned(trade.unrealizedPnl)}</span>
                     </div>
                     <div className="trading-row-sub">
                       {t("trading.positions.avgMark", { avg: formatPrice(trade.avgEntryPrice), mark: formatPrice(trade.markPrice) })}
                     </div>
                     <div className="trading-row-actions">
-                      <button type="button" className="trading-link" onClick={() => setJournal({ kind: "trade", tradeId: trade.id })}>{t("trading.note")}</button>
-                      <button type="button" className="trading-link" onClick={() => openReplay(trade)}>{t("trading.replay.short")}</button>
+                      <Button size="sm" variant="ghost" onClick={() => setJournal({ kind: "trade", tradeId: trade.id })}>{t("trading.note")}</Button>
+                      <Button size="sm" variant="ghost" onClick={() => openReplay(trade)}>{t("trading.replay.short")}</Button>
                       {selected.kind === "practice" && (
-                        <button type="button" className="trading-link" data-tone="down" onClick={() => { void closePosition(trade); }}>{t("trading.positions.close")}</button>
+                        <Button size="sm" variant="ghost" className="trading-close-position" onClick={() => { void closePosition(trade); }}>{t("trading.positions.close")}</Button>
                       )}
                     </div>
                   </article>
@@ -212,13 +221,13 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
                   <article key={order.id} className="trading-row" data-compact="true">
                     <div className="trading-row-main">
                       <strong>{order.symbol}</strong>
-                      <span className="trading-badge" data-tone={order.side === "buy" ? "up" : "down"}>
+                      <DirectionBadge direction={order.side === "buy" ? "long" : "short"}>
                         {t(`trading.orderTag.${order.tag === "stop_loss" ? "stopLoss" : order.tag === "take_profit" ? "takeProfit" : order.type}` as const)}
-                      </span>
+                      </DirectionBadge>
                       <span>{formatQty(order.qty)} @ {formatPrice(order.limitPrice ?? order.stopPrice)}</span>
                     </div>
                     <div className="trading-row-actions">
-                      <button type="button" className="trading-link" onClick={() => { void cancelOrder(order.id); }}>{t("trading.cancel")}</button>
+                      <Button size="sm" variant="ghost" onClick={() => { void cancelOrder(order.id); }}>{t("trading.cancel")}</Button>
                     </div>
                   </article>
                 ))}
@@ -233,20 +242,20 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
                     <button type="button" className="trading-row-button" onClick={() => setJournal({ kind: "trade", tradeId: trade.id })}>
                       <div className="trading-row-main">
                         <strong>{trade.symbol}</strong>
-                        <span className="trading-badge" data-tone={trade.direction === "long" ? "up" : "down"}>
+                        <DirectionBadge direction={trade.direction}>
                           {t(trade.direction === "long" ? "trading.long" : "trading.short")}
-                        </span>
+                        </DirectionBadge>
                         <span data-tone={pnlTone(trade.netPnl)} className="trading-row-pnl">
                           {formatSigned(trade.netPnl)}{trade.metrics?.netR ? ` · ${trade.metrics.netR}R` : ""}
                         </span>
                       </div>
                       <div className="trading-row-sub">
                         {formatDateTime(trade.openedAtMs)}
-                        {trade.needsReview && <em className="trading-badge" data-tone="warning">{t("trading.needsReview")}</em>}
+                        {trade.needsReview && <Badge tone="warning">{t("trading.needsReview")}</Badge>}
                       </div>
                     </button>
                     <div className="trading-row-actions">
-                      <button type="button" className="trading-link" onClick={() => openReplay(trade)}>{t("trading.replay.short")}</button>
+                      <Button size="sm" variant="ghost" onClick={() => openReplay(trade)}>{t("trading.replay.short")}</Button>
                     </div>
                   </article>
                 ))}
@@ -256,9 +265,9 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
             {tab === "journal" && (
               <div className="trading-list">
                 <div className="trading-actions">
-                  <button type="button" className="trading-button" data-variant="primary" onClick={() => planTrade(null)}>
+                  <Button size="sm" variant="primary" onClick={() => planTrade(null)}>
                     {t("trading.journal.newPlan", { symbol: context.symbol })}
-                  </button>
+                  </Button>
                 </div>
                 {entries.length === 0 && <p className="trading-empty-line">{t("trading.journal.empty")}</p>}
                 {entries.map((entry) => {
@@ -276,15 +285,15 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
                       >
                         <div className="trading-row-main">
                           <strong>{entry.symbol}</strong>
-                          <span className="trading-badge" data-tone={entry.kind === "note" && !entry.tradeId ? "info" : "muted"}>
+                          <Badge tone={entry.kind === "note" && !entry.tradeId ? "accent" : "neutral"}>
                             {entry.kind === "quick"
                               ? t("trading.journal.quick")
                               : entry.tradeId ? t("trading.journal.tradeNote") : t("trading.journal.plan")}
-                          </span>
+                          </Badge>
                           {plan?.direction && (
-                            <span className="trading-badge" data-tone={plan.direction === "long" ? "up" : "down"}>
+                            <DirectionBadge direction={plan.direction}>
                               {t(plan.direction === "long" ? "trading.long" : "trading.short")}
-                            </span>
+                            </DirectionBadge>
                           )}
                           <time>{formatDateTime(entry.createdAtMs)}</time>
                         </div>
@@ -308,7 +317,7 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
             {tab === "stats" && (
               <TradingStatsView key={selected.id} account={selected} revision={statsRevision} />
             )}
-          </div>
+          </TabPanel>
         </>
       )}
 

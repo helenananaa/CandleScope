@@ -1,0 +1,5 @@
+{
+  "backend/app/data_engine/storage/bar_delivery.py": "3b647750dee96828134404fcbc2e91e0f4d31fcf67ed76eb93900426a3358b7b",
+  "backend/app/data_engine/data_manager/bar_delivery.py": "abc031d09a3b393b772c1d803b2f20864aa238ba85f83315bf2f0b931ef9a7b1",
+  "backend/tests/test_bar_delivery_pending_page.py": "cf760613d14cd2c170379b1ab05da9a7679521f30fea5f5bed0983e9879e1a5b"
+}

@@ -161,6 +161,7 @@ export interface KlineHistoryRequestOptions extends KlineRequestOptions {
   countBack?: number | null;
   /** Target cache/storage probe: no base aggregation, repair or prewarm. */
   materializedOnly?: boolean;
+  compositionContract?: string;
   /** Backend wait budget for the requested history window. */
   maxWaitMs?: number;
   /** Distinguishes the first visible window from active-series hydration. */
@@ -181,6 +182,7 @@ export type KlineHistoryBatchOutcome =
   | { ok: false; error: Error };
 
 export interface KlineBeforeRequestOptions extends KlineRequestOptions {
+  compositionContract?: string;
   /** Backend long-poll budget. Validation probes use zero to stay non-blocking. */
   maxWaitMs?: number;
 }
@@ -191,6 +193,7 @@ export interface StorageRevisionFloor {
 }
 
 export interface KlineRangeRequestOptions extends KlineRequestOptions {
+  compositionContract?: string;
   storageRevisionFloor?: StorageRevisionFloor;
   repair?: string;
   waitMs?: number;
@@ -294,6 +297,8 @@ export type KlineStreamFactory = (
 ) => KlineStreamController;
 
 export interface SeriesDataFeedConfig {
+  /** undefined keeps ordinary admission; null restricts history to stored targets. */
+  historyCompositionContractFor?: (series: MarketSeries) => string | null | undefined;
   api?: KlineApi | null;
   chartWorkScheduler?: ChartWorkScheduler | null;
   chartWorkSchedulerCellId?: string | null;

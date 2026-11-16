@@ -17,6 +17,7 @@ import { computeIndicatorBatch } from "../../services/indicatorApi.js";
 import { isFrontendScript } from "./frontendScriptContract.js";
 import { routeIndicatorComputeBatch } from "./frontendScriptBatch.js";
 import { awaitIndicatorComputations } from "./indicatorComputeSettlement.js";
+import { standaloneIndicatorResults, type IndicatorResultManager } from "./indicatorResultManager.js";
 import { cachedIndicatorComputeResult } from "./indicatorCachedCompute.js";
 import { markPerf, recordPerfEvent } from "../../runtime/performance/perfMarks.js";
 import {
@@ -38,7 +39,6 @@ import {
 } from "./indicatorComputeJobRuntime.js";
 import {
   buildIndicatorCacheContext,
-  cacheIndicatorSnapshot,
   removeCachedIndicatorResult,
 } from "./indicatorResultCacheStore.js";
 import type { ChartDataCommitMeta } from "../market-data/useChartDataRuntime.js";
@@ -54,6 +54,8 @@ import type {
 
 export type IndicatorComputeBatchExecutor = (options: {
   jobs: IndicatorComputeBatchJob[];
+  /** Explicit recompute bypasses completed semantic results. */
+  force?: boolean;
   signal?: AbortSignal;
   /** Independent results may publish before slower jobs in the same batch. */
   onResults?: (results: IndicatorComputeBatchItem[]) => void;
@@ -80,6 +82,7 @@ export interface UseIndicatorComputeControllerOptions {
   /** Whole live demand route, including browser scripts; replay retains its executor. */
   executeBatch?: IndicatorComputeBatchExecutor | undefined;
   inputSnapshot?: StableSeriesSnapshot;
+  resultManager?: IndicatorResultManager | undefined;
   onComputePendingChange?(delta: 1 | -1): void;
   forceHostedSubscriptions(): void;
   historyLimit?: number;
@@ -165,6 +168,7 @@ export function useIndicatorComputeController({
   inputSource,
   computeBatch = computeIndicatorBatch,
   executeBatch,
+  resultManager = standaloneIndicatorResults,
   onComputePendingChange,
   inputSnapshot,
   forceHostedSubscriptions,
@@ -322,6 +326,15 @@ export function useIndicatorComputeController({
           symbol: context.symbol,
         })
       : null;
+    const resultEpoch = jobCoordinator.snapshot().epoch;
+    const resultTasks = cacheContext === null ? null : new Map([...targetByJobKey].map(([jobKey, target]) => [jobKey,
+      resultManager.begin(target.indicator, cacheContext, jobKey, () => {
+        if (!inputIsCurrent() || committedRuntimeRef.current.lifecycleKey !== lifecycleKey || jobCoordinator.snapshot().epoch !== resultEpoch) return false;
+        const current = activeIndicatorsRef.current.find(indicator => indicator.id === target.indicator.id);
+        return Boolean(current && buildIndicatorComputeJobKey({ indicator: current, lifecycleKey,
+          params: buildIndicatorComputeParams(current, { candleUpColor: candleUpColorRef.current, candleDownColor: candleDownColorRef.current }),
+        }) === jobKey);
+      })]));
     const submittedJobKeys = new Set<string>();
     const publishedJobKeys = new Set<string>();
     const publishResults = (results: IndicatorComputeBatchItem[]) => {
@@ -331,6 +344,7 @@ export function useIndicatorComputeController({
         if (publishedJobKeys.has(result.jobKey)) return [];
         const target = targetByJobKey.get(result.jobKey);
         if (!target || result.clientId !== target.indicator.id) return [];
+        if (resultTasks && !resultTasks.get(result.jobKey)?.isCurrent()) return [];
         const currentIndicator = activeIndicatorsRef.current.find(
           (indicator) => indicator.id === target.indicator.id,
         );
@@ -383,13 +397,14 @@ export function useIndicatorComputeController({
         // A separately provided builtin viewport cannot certify the larger
         // script-input cache identity. Its completed job can still publish.
         const cacheable = jobKey !== undefined && targetByJobKey.get(jobKey)?.job.request.ohlcv === ohlcv;
-        const cached = cacheContext === null || !cacheable || cacheIndicatorSnapshot(
+        const cached = cacheContext === null || !cacheable || resultManager.snapshot(
           indicatorById.get(id),
           cacheContext,
           normalized,
           newParamSchemas[id],
           { ...(inputVersion ? { inputVersion } : {}),
             range: { start: Number(providedRows[0]!.time), end: Number(providedRows.at(-1)!.time) } },
+          resultTasks?.get(jobKey!),
         );
         if (cached && jobKey) cachedJobKeys.push(jobKey);
       }
@@ -485,7 +500,7 @@ export function useIndicatorComputeController({
             onComputePendingChange?.(1);
             const responses = await awaitIndicatorComputations(
               chunks.map(async (chunk) => {
-                const request = { jobs: chunk, signal, onResults: publish };
+                const request = { jobs: chunk, signal, onResults: publish, force };
                 const response = await (executeBatch ? executeBatch(request) : routeIndicatorComputeBatch(request, computeBatch));
                 publish(response.results);
                 return response;
@@ -595,6 +610,7 @@ export function useIndicatorComputeController({
     onComputePendingChange,
     outputDispatch,
     resultCacheMode,
+    resultManager,
     setActiveIndicators,
   ]);
 

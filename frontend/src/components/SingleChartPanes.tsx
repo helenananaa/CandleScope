@@ -6,6 +6,7 @@ import type { ChartDisplayScheduler } from "../features/market-data/chartDisplay
 import { drawingDocumentSessionRegistry } from "../features/drawings/core/drawingDocumentStore.js";
 import { describeError } from "../i18n/serverErrors.js";
 import PanePriceScaleMenu from "./PanePriceScaleMenu.js";
+import { ChartLoadingStatus } from "./ChartLoadingStatus.js";
 import { PineScenePrimitive } from "../chart-adapter/pineScenePrimitive.js";
 import { usePanePriceScaleMenu } from "./usePanePriceScaleMenu.js";
 import NativePaneDrawingHost from "./NativePaneDrawingHost.js";
@@ -205,6 +206,7 @@ import { useDrawingFontMetricRevision } from "../features/drawings/text/drawingF
 import {
   axisTimeKey,
   bindSurfaceViewportSourceAnchor,
+  buildSurfaceViewportCacheKey,
   buildDisplaySourceTimeIndex,
   buildSurfaceViewportSnapshot,
   findDisplayIndexForAxisAnchor,
@@ -2179,6 +2181,10 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   const jumpToLatest = useCallback(() => {
     const lastIndex = displayRowsRef.current.length - 1;
     if (lastIndex < 0) return;
+    // Explicit follow-latest retires the remembered historical intent too;
+    // revisiting this dataset must not resurrect it after late history arrives.
+    const rememberedKey = buildSurfaceViewportCacheKey(datasetKeyRef.current, surfaceConfigKeyRef.current);
+    if (rememberedKey) surfaceViewportCacheRef.current.delete(rememberedKey);
     transferredHistoryRef.current = null;
     pendingSurfaceViewportRef.current = null;
     boundSurfaceViewportAnchorRef.current = null;
@@ -2207,11 +2213,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     latestWindowScrollGateRef.current.request(store, store.version, () => {
       if (datasetKeyRef.current !== requestedDatasetKey || seriesStoreRef.current !== store
         || leftHistoryInteractionGenerationRef.current !== interactionGeneration) return;
-      if (followLatestRef.current && displayRowsRef.current.length > 0) {
-        jumpToLatest();
-      } else {
-        chartRef.current?.timeScale().scrollToRealTime?.();
-      }
+      jumpToLatest();
     });
   }, [jumpToLatest]);
 
@@ -5637,12 +5639,14 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       {indicatorStatusText && !loading && (
         <div className="chart-indicator-status" role="status">{indicatorStatusText}</div>
       )}
-      {loading && (
-        <div className="loading-overlay">
-          <div className="loading-spinner" />
-          <span className="loading-text">{t("chart.loadingKlines", { symbol, interval: formatIntervalLabel(interval) }, locale)}</span>
-        </div>
-      )}
+      <ChartLoadingStatus
+        loading={loading}
+        text={t("chart.loadingKlines", { symbol, interval: formatIntervalLabel(interval) }, locale)}
+        datasetKey={datasetKey}
+        dataMeta={dataMeta}
+        seriesStore={seriesStore}
+        paintedDatasetKey={drawingSurfaceDataKey}
+      />
     </div>
     </div>
   );

@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { confirmAction } from "../../components/ui/overlay/overlayApi.js";
+import { Badge } from "../../components/ui/Display.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { RuntimeRegistryPanel } from "./PluginManagementSections.js";
@@ -28,11 +30,11 @@ export default function PluginAdvanced({ runtime }: { runtime: PluginPlatformRun
   const applyCompatibility = async () => {
     if (!compatibilityPreview?.available || !compatibilityPreview.previewSha256) return;
     const action = compatibilityPreview.action;
-    if (!window.confirm(
-      action === "import"
-        ? t("plugin.host.v1ImportConfirm")
-        : t("plugin.host.v1RollbackConfirm"),
-    )) return;
+    if (!(await confirmAction({
+      title: action === "import" ? t("plugin.host.v1ImportConfirm") : t("plugin.host.v1RollbackConfirm"),
+      confirmLabel: t("plugin.host.compatApply", { action }),
+      tone: action === "import" ? "primary" : "danger",
+    }))) return;
     setCompatibilityBusy(action);
     try {
       if (action === "import") {
@@ -64,7 +66,7 @@ export default function PluginAdvanced({ runtime }: { runtime: PluginPlatformRun
               <h3>{t("plugin.scriptRuntimes")}</h3>
               <p>{t("plugin.runtimeDesc")}</p>
             </div>
-            <span className={`plugin-state-pill ${availableRuntimeCount > 0 ? "is-ready" : "is-muted"}`}>{t("plugin.availableCount", { count: availableRuntimeCount })}</span>
+            <Badge tone={availableRuntimeCount > 0 ? "success" : "neutral"}>{t("plugin.availableCount", { count: availableRuntimeCount })}</Badge>
           </header>
           <div className="plugin-runtime-list">
             {compatibility.contributions.map((contribution) => (
@@ -78,9 +80,9 @@ export default function PluginAdvanced({ runtime }: { runtime: PluginPlatformRun
                       {contribution.imported ? t("plugin.imported") : t("plugin.liveDiscover")}
                     </span>
                   </div>
-                  <span className={`plugin-state-pill ${contribution.available ? "is-ready" : "is-muted"}`}>
+                  <Badge tone={contribution.available ? "success" : "neutral"}>
                     {contribution.available ? t("plugin.available") : t("plugin.unavailable")}
-                  </span>
+                  </Badge>
                 </div>
                 <details className="plugin-technical-details">
                   <summary>{t("plugin.techDetails")}</summary>

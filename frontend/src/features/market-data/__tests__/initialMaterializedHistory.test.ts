@@ -8,6 +8,7 @@ import { useChartInitialLoad, type UseChartInitialLoadOptions } from "../useChar
 import type { KlineApi, KlineFetchResult, KlineHistoryRequestOptions } from "../klineContracts.js";
 import type { KlineBar } from "../marketDataTypes.js";
 import { epochSeconds } from "../../../test/testHelpers.js";
+import type { ComposedHistoryCapability } from "../composedHistoryAdmission.js";
 
 const series = { exchange: "binance", marketType: "futures", symbol: "BTCUSDT", interval: "10007m" };
 const ready: KlineFetchResult = {
@@ -16,7 +17,7 @@ const ready: KlineFetchResult = {
   all_rows_final: true, verified_contiguous: true, has_tail_gap: false, missing_ranges: [],
 };
 
-function harness(response: () => Promise<KlineFetchResult>, interval = "10007m") {
+function harness(response: () => Promise<KlineFetchResult>, interval = "10007m", historyComposition: ComposedHistoryCapability | null = null) {
   const activeSeries = { ...series, interval };
   const calls: KlineHistoryRequestOptions[] = [];
   const commits: KlineBar[][] = [];
@@ -40,13 +41,14 @@ function harness(response: () => Promise<KlineFetchResult>, interval = "10007m")
   const feed = new SeriesDataFeed({ api, getActiveSeries: () => activeSeries,
     commitMergedChartData: (_symbol, _interval, rows) => { commits.push(rows); },
   });
-  if (interval === "10007m") {
+  if (interval === "10007m" && !historyComposition) {
     feed.repairVisibleGaps = async () => { throw new Error("probe must not admit gap repair"); };
   }
   const noop = () => {};
   const options: UseChartInitialLoadOptions = {
     enabled: true, exchange: "binance", marketType: "futures",
     nativeIntervalValues: ["1m", "3m", "5m", "15m", "30m", "1h", "1d"],
+    historyComposition,
     getFromCache: () => [], seriesDataFeed: feed,
     activateCachedChartData: () => null, detachActiveChartData: noop,
     replaceChartData: noop, markChartDataTransition: noop,
@@ -80,6 +82,18 @@ for (const interval of ["45m", "90m", "2d", "4d", "5d"]) {
     assert.equal(h.pending.at(-1), false);
   });
 }
+
+test("qualified over-budget initial history carries its contract through the real hook and feed", async () => {
+  const h = harness(async () => ready, "10007m", {
+    contractId: "qualified-v1", sourceWidthsSeconds: [86400, 14400, 3600, 900, 300, 60],
+  });
+  await h.load("BTCUSDT", "10007m");
+  assert.equal(h.calls.length, 1);
+  assert.equal(h.calls[0]?.countBack, 128);
+  assert.equal(h.calls[0]?.compositionContract, "qualified-v1");
+  assert.notEqual(h.calls[0]?.materializedOnly, true);
+  assert.deepEqual(h.commits.filter(rows => rows.length), [ready.data]);
+});
 
 test("over-budget initial history paints a trusted stored target using one read-only probe", async () => {
   const h = harness(async () => ready);

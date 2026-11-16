@@ -49,6 +49,21 @@ function feedWith(getBars: (...args: unknown[]) => Promise<KlineFetchResult>): S
   } as unknown as SeriesDataFeed;
 }
 
+test("active hydration preserves the composed permission after its validated viewport", async () => {
+  const calls: { countBack?: number; compositionContract?: string }[] = [];
+  const feed = feedWith(async (...args) => {
+    calls.push(args[1] as { countBack?: number; compositionContract?: string });
+    return settledResult();
+  });
+  const outcome = await runActiveHistoryHydration({ series: SERIES, sessionKey: "composed",
+    targetCountBack: 406, validatedCountBack: 128, compositionContract: "qualified-v1",
+    seriesDataFeed: feed, priorityGate: new ForegroundPreloadGate(), commitMergedChartData: () => {},
+  });
+  assert.equal(outcome, "complete");
+  assert.equal(calls[0]?.countBack, 406);
+  assert.equal(calls[0]?.compositionContract, "qualified-v1");
+});
+
 test("hydration starts only after the viewport contract is validated", () => {
   const decision = (validatedCountBack: number | null) => shouldStartActiveHistoryHydration({
     enabled: true,

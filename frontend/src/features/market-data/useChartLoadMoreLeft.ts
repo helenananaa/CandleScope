@@ -12,6 +12,7 @@ import {
 } from "./marketDataTypes.js";
 import type { SeriesDataFeed } from "./feed/seriesDataFeed.js";
 import { planTargetBarRequest } from "./intervalRequestBudget.js";
+import { planComposedHistoryPage, type ComposedHistoryCapability } from "./composedHistoryAdmission.js";
 import type { KlineSeriesIdentityInput } from "./klineSeriesIdentity.js";
 
 const LOAD_MORE_PAGE_SIZE = 500;
@@ -127,6 +128,7 @@ export interface UseChartLoadMoreLeftOptions {
   seriesIdentity?: KlineSeriesIdentityInput;
   nativeIntervalValues: readonly IntervalString[];
   tradeCandlesAvailable?: boolean;
+  historyComposition?: ComposedHistoryCapability | null;
   chartData: KlineBar[];
   loading: boolean;
   dataSource: string | null;
@@ -138,14 +140,20 @@ export function planLoadMorePageSize(
   interval: IntervalString,
   nativeIntervalValues: readonly IntervalString[],
   tradeCandlesAvailable = false,
+  historyComposition?: ComposedHistoryCapability | null,
 ): number {
-  return planTargetBarRequest({
+  const plan = planTargetBarRequest({
     desiredTargetBars: LOAD_MORE_PAGE_SIZE,
     interval,
     nativeIntervals: nativeIntervalValues,
     tradeCandlesAvailable,
     sourceRowBudget: LOAD_MORE_SOURCE_ROW_BUDGET,
-  })?.targetBars ?? LOAD_MORE_PAGE_SIZE;
+  });
+  if (plan.blockedReason === null && plan.targetBars === 0) {
+    return planComposedHistoryPage(interval, historyComposition, LOAD_MORE_PAGE_SIZE,
+      LOAD_MORE_SOURCE_ROW_BUDGET)?.targetBars ?? 0;
+  }
+  return plan.targetBars;
 }
 
 export interface ChartLoadMoreLeftRuntime {
@@ -168,6 +176,7 @@ export function useChartLoadMoreLeft({
   seriesIdentity,
   nativeIntervalValues,
   tradeCandlesAvailable = false,
+  historyComposition,
   chartData,
   loading,
   dataSource,
@@ -218,7 +227,7 @@ export function useChartLoadMoreLeft({
   }, []);
 
   const oldestChartTime = chartData[0]?.time ?? null;
-  const loadMorePageSize = planLoadMorePageSize(interval, nativeIntervalValues, tradeCandlesAvailable);
+  const loadMorePageSize = planLoadMorePageSize(interval, nativeIntervalValues, tradeCandlesAvailable, historyComposition);
 
   const resetPagination = useCallback(() => {
     sessionGenerationRef.current += 1;

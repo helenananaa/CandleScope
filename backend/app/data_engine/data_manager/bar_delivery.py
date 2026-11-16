@@ -184,15 +184,44 @@ class DurableBarDelivery:
             await self.flush()
         return "accepted"
 
+    async def flush_pending(self):
+        """Reach the original dispatcher's empty boundary for a fenced reader.
+
+        One flush handles at most 64 receipts. History callers already own a
+        finite deadline; admission alone or one page cannot prove their native
+        predecessor has committed. No new worker, queue or writer is created.
+        Errors/rebinding remain explicit and durable receipts stay recoverable.
+        """
+        journal=self.journal
+        if journal is None:
+            return
+        while True:
+            if self._closing or self.journal is not journal:
+                raise BarDeliveryUnavailable('native delivery barrier owner changed')
+            await self.flush()
+            if self._closing or self.journal is not journal:
+                raise BarDeliveryUnavailable('native delivery barrier owner changed')
+            if self._last_error:
+                raise BarDeliveryUnavailable('native delivery barrier could not drain: '+self._last_error)
+            if await self._retry(journal.pending_count)==0:
+                return
+
     async def flush(self):
         journal = self.journal
         if journal is None:
             return
         async with self._dispatcher:
             try:
-                records = await self._retry(journal.pending)
-                self._dispatch_records = records
-                self._pending = await self._retry(journal.pending_count)
+                page = getattr(journal, 'pending_page', None)
+                snapshot = await self._retry(page) if callable(page) else None
+                if snapshot is None:
+                    records = await self._retry(journal.pending)
+                    self._dispatch_records = records
+                    self._pending = await self._retry(journal.pending_count)
+                else:
+                    records, self._pending = snapshot
+                    snapshot = None
+                    self._dispatch_records = records
                 acknowledgements = []
                 acknowledgement_started = None
 
@@ -272,7 +301,7 @@ class DurableBarDelivery:
         value = record["payload"]
         key = cls._key(record)
         current = record["canonical_row"]
-        superseded = any(current.get(k) != v for k, v in value["storage_row"].items() if k != "source_refs") or current["source"] != value["bar"]["source"]
+        superseded = any(current.get(k) != v for k, v in value["storage_row"].items() if k not in {"source_refs", "source_window"}) or current["source"] != value["bar"]["source"]
         return DataEvent(DataEventType.BAR_AMENDED if superseded else DataEventType(value["event_type"]), key,
                          BarData.from_storage_row(current) if superseded else BarData.from_dict(value["bar"]),
                          BarData.from_dict(value["previous_bar"]) if value.get("previous_bar") and not superseded else None,

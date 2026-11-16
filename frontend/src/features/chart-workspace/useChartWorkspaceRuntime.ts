@@ -1,6 +1,6 @@
 import type { ChartAccountOverlaySettings } from "./chartAccountOverlaySettings.js";
 import type { QuickReplayChange, UpdateChartQuickReplay } from "./chartQuickReplayState.js";
-import { pickCellChartSettings } from "./chartWorkspaceChartSettings.js";
+import { pickCellChartSettings, withoutCellAppearanceOverrides } from "./chartWorkspaceChartSettings.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import type { NativeStrategyCollection } from "../backtest/native/nativeStrategyCollection.js";
 import {
@@ -183,6 +183,8 @@ export interface ChartWorkspaceRuntime {
     setLayoutRatio(splitId: string, ratio: number): void;
     updateCellSession(cellId: ChartCellId, session: ChartSession): void;
     updateCellChartSettings(cellId: ChartCellId, settings: ChartSettings | ChartCellChartSettings): void;
+    /** Every chart in the active workspace follows the application's appearance again. */
+    resetCellAppearance(): void;
     updateCellQuickReplay(workspaceId: ChartWorkspaceId, cellId: ChartCellId, update: UpdateChartQuickReplay, change: QuickReplayChange): void;
     updateCellAccountOverlay(cellId: ChartCellId, settings: ChartAccountOverlaySettings): void;
     updateCellPriceScale(cellId: ChartCellId, priceScale: ChartCellPriceScale): void;
@@ -947,6 +949,10 @@ export function useChartWorkspaceRuntime(
     updateActiveDocument((current) => applyLinkedChartSettingsUpdate(current, cellId, chartSettings));
   }, [updateActiveDocument]);
 
+  const resetCellAppearance = useCallback(() => {
+    updateActiveDocument((current) => withoutCellAppearanceOverrides(current, Object.keys(current.cells) as ChartCellId[]));
+  }, [updateActiveDocument]);
+
   const updateCellQuickReplay = useCallback((workspaceId: ChartWorkspaceId, cellId: ChartCellId, update: UpdateChartQuickReplay, change: QuickReplayChange) => {
     updateActiveDocument(current => applyQuickReplayUpdate(current, cellId, update, change), workspaceId);
   }, [updateActiveDocument]);
@@ -1186,6 +1192,7 @@ export function useChartWorkspaceRuntime(
       setLayoutRatio,
       updateCellSession,
       updateCellChartSettings,
+      resetCellAppearance,
       updateCellQuickReplay,
       updateCellAccountOverlay,
       updateCellPriceScale,

@@ -108,6 +108,7 @@ class BarSeries:
         "_revision",
         "_access_revision",
         "_time_index",
+        "_key_estimated_bytes",
     )
 
     def __init__(self, max_bars: int = 5000, *, generation: int = 0) -> None:
@@ -119,6 +120,7 @@ class BarSeries:
         self._access_revision = 0
         # Separate sorted list of timestamps for fast bisect lookups
         self._time_index: list[int] = []
+        self._key_estimated_bytes = 0
 
     # ── Properties ───────────────────────────────────────────
 
@@ -1030,18 +1032,35 @@ class BarCache:
 
     def memory_usage(self):
         from .gc import BAR_ESTIMATED_BYTES
+        from .revisions import _key_estimated_bytes
+        consumer = self.revision_consumer
+        # Revision sync holds consumer -> cache. Never acquire the consumer
+        # while holding the cache lock, including opt-in heap diagnostics.
+        revision = consumer.memory_usage() if consumer is not None else {}
         with self._lock:
             count = sum(series.count for series in self._series.values())
+            tokens = sum(len(values) for values in self._read_tokens.values())
+            metadata = (sum(512 + series._key_estimated_bytes for series in self._series.values())
+                + sum(128 + _key_estimated_bytes(key) for key in self._history_capacities)
+                + sum(256 + _key_estimated_bytes(key) + len(values) * 256
+                      for key, values in self._read_tokens.items())
+                + revision.get("revision_estimated_bytes", 0))
             return {"bars": count, "series": len(self._series),
-                    "estimated_bytes": count * BAR_ESTIMATED_BYTES,
-                    "estimate_basis": "record, scalar referents and list slots; conservative"}
+                    "active_read_tokens": tokens, "history_capacity_entries": len(self._history_capacities),
+                    **revision, "metadata_estimated_bytes": metadata,
+                    "estimated_bytes": count * BAR_ESTIMATED_BYTES + metadata,
+                    "estimate_basis": "records/index slots plus series, scoped tokens, capacity and revision metadata; shared values may be overcounted"}
 
     def _memory_roots(self):
+        consumer = self.revision_consumer
+        revisions = consumer._memory_roots() if consumer is not None else []
         with self._lock:
-            # Copy containers, share immutable records. No caller can mutate
-            # cache storage through diagnostic roots.
-            return [(key, list(series._bars), list(series._time_index))
-                    for key, series in self._series.items()]
+            # Private diagnostic traversal; shared records/keys are immutable.
+            return [[(key, series, list(series._bars), list(series._time_index))
+                     for key, series in self._series.items()],
+                    dict(self._history_capacities),
+                    [(key, list(tokens)) for key, tokens in self._read_tokens.items()],
+                    *revisions]
 
     def health_snapshot(self) -> dict[str, int]:
         """Return the constant-size counters needed by ``/health``."""
@@ -1090,6 +1109,8 @@ class BarCache:
             max_bars=max_bars,
             generation=self._next_series_generation,
         )
+        from .revisions import _key_estimated_bytes
+        series._key_estimated_bytes = _key_estimated_bytes(key)
         self._series[key] = series
         return series
 

@@ -1,0 +1,20 @@
+{
+  "policy": "only ephemeral control context strings; numeric active_read_tokens remain intact",
+  "paths": {
+    "initial-c67": [
+      "/steps/2/evidence/action/contextToken",
+      "/steps/3/evidence/action/contextToken",
+      "/steps/11/evidence/action/contextToken"
+    ],
+    "final-ef030": [
+      "/steps/2/evidence/action/contextToken",
+      "/steps/3/evidence/action/contextToken",
+      "/steps/11/evidence/action/contextToken"
+    ],
+    "legacy-0bba": [
+      "/steps/2/evidence/action/contextToken",
+      "/steps/3/evidence/action/contextToken",
+      "/steps/11/evidence/action/contextToken"
+    ]
+  }
+}

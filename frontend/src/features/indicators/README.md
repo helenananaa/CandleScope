@@ -115,6 +115,16 @@ and [opaque sandbox origins](https://developer.mozilla.org/en-US/docs/Web/HTML/R
 
 ## Work, Cache, and Hydration Ownership
 
+Live and speculative outputs enter the workspace `IndicatorDataManager.results`
+service before projection-cache publication. It checks input owner/version and
+captured compute-task ownership, commits immutable results, then notifies result
+subscribers. Successful JS output can also be reused across later exact-input
+demands without inheriting a chart ID. Completed semantic results are capped at
+80 entries / 4 MiB encoded keys and output; forming previews and errors are not
+retained there. Hosted script sessions keep private projection ownership.
+See [the four-runtime adapter matrix](../../../../docs/qa/indicator-results-161-164-20261111/README.md)
+for sharing, invalidation, cancellation, recovery and verification boundaries.
+
 The explicit-local lifecycle includes the dataset and normalized chart context,
 the exact bounded OHLCV content sent to the backend, and the local execution
 plan. Each bounded job key also includes indicator id, mode, name, script,

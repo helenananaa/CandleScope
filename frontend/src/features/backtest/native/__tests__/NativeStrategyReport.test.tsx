@@ -52,6 +52,6 @@ test("long trade reports bound rendered rows and jump input to the actual result
 test("empty trade results disable the jump form and both trade navigation actions", () => {
   const html = report([], 0, "trades");
   assert.match(html, /<input(?=[^>]*name="trade")(?=[^>]*disabled="")[^>]*>/);
-  assert.match(html, /type="submit" disabled=""/);
+  assert.match(html, /type="submit"[^>]*disabled=""/);
   assert.doesNotMatch(html, /data-selected="false"/);
 });

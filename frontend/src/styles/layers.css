@@ -1,0 +1,11 @@
+/* Cascade layer order, lowest priority first. Every entry page loads this file before any
+ * other stylesheet, so later layers win regardless of selector specificity:
+ *   reset       element defaults
+ *   tokens      design tokens (custom properties) and themes
+ *   primitives  shared components (src/components/ui)
+ *   patterns    layouts built from primitives
+ *   features    feature CSS; also Monaco's CSS and extension stylesheets, which competed
+ *               with feature CSS by specificity before layers existed
+ *   overrides   deliberate cross-cutting overrides
+ * Keep in sync with CSS_LAYERS in scripts/vite-css-layers.mjs (checked by check:css-layers). */
+@layer reset, tokens, primitives, patterns, features, overrides;

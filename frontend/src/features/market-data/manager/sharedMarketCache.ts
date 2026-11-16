@@ -325,10 +325,14 @@ export class SharedMarketCache {
     const entry = this.entries.get(String(buildSeriesWindowKey(series)));
     if (!entry?.historyDemand || !entry.health.version) return 0;
     const status = entry.health.status(true);
-    // The tick hot path inspects bounded proof metadata, not a 1,500-row
-    // snapshot. Requested count/range sufficiency is checked only on reads.
+    // Inspect the demanded range with a binary index and bounded proof metadata;
+    // never allocate or copy a 1,500-row snapshot on the tick hot path. A latest
+    // read can prove the tail while an earlier correction revoked the history.
     const expected = entry.expectedClosedTime;
-    const covered = expected !== null && entry.proofs.some(proof => proof.from <= expected && proof.to >= expected);
+    const end = expected === null ? 0 : lowerBound(entry.times, expected + 1);
+    const from = entry.times[end - entry.historyDemand];
+    const covered = expected !== null && from !== undefined
+      && entry.proofs.some(proof => proof.from <= from && proof.to >= expected);
     return status.subscribed && (!status.continuous || !covered) ? entry.historyDemand : 0;
   }
 

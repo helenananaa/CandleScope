@@ -1,0 +1,285 @@
+/* Order book dock. */
+
+.order-book-dock {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  contain: layout paint style;
+  container: rail-dock / size;
+}
+
+.order-book-dock.collapsed {
+  flex-basis: 36px;
+}
+.ob-header {
+  display: flex;
+  flex: 0 0 36px;
+  align-items: center;
+  min-width: 0;
+  height: 36px;
+  padding: 0 8px 0 6px;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.04);
+  border-bottom: 1px solid var(--border-color);
+}
+.order-book-dock.collapsed .ob-header {
+  border-bottom: 0;
+}
+.ob-title {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.ob-symbol {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ob-delivery-mode {
+  overflow: hidden;
+  padding: 2px 5px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ob-status {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+.ob-status-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+.ob-status-live { color: var(--wl-up-text); }
+.ob-status-live .ob-status-dot {
+  background: var(--wl-up-color);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--wl-up-color) 18%, transparent);
+}
+.ob-status-connecting .ob-status-dot,
+.ob-status-reconnecting .ob-status-dot {
+  background: var(--accent-blue);
+  animation: ob-status-pulse 1.2s ease-in-out infinite;
+}
+.ob-status-stale,
+.ob-status-error { color: var(--text-warning); }
+.ob-status-stale .ob-status-dot,
+.ob-status-error .ob-status-dot { background: var(--color-warning); }
+@keyframes ob-status-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+/* Narrow rails put the mode switch on its own row so no select value is clipped in any
+   language; a wide rail fits all four controls on one row. */
+.ob-controls {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: center;
+  min-width: 0;
+  padding: 4px 6px;
+  gap: 5px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.ob-controls > .ui-segmented { grid-column: 1 / -1; }
+@container rail (min-width: 380px) {
+  .ob-controls { grid-template-columns: minmax(120px, auto) repeat(3, minmax(0, 1fr)); }
+  .ob-controls > .ui-segmented { grid-column: auto; }
+}
+.ob-history-note {
+  padding: 2px 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.ob-controls label {
+  min-width: 0;
+}
+.ob-controls .ui-select { width: 100%; font-size: var(--font-size-xs); }
+/* Dock selects are compact: values such as "自动 0.1" and "1000 ms" stay whole in a 300 px rail. */
+:is(.ob-controls, .ob-range-controls, .tf-controls) .ui-select { padding-left: 6px; padding-right: 18px; background-position: right 5px center; }
+
+.ob-column-header,
+.ob-level-row {
+  display: grid;
+  grid-template-columns: minmax(92px, 1.2fr) minmax(58px, 0.85fr) minmax(58px, 0.85fr);
+  align-items: center;
+  padding: 0 8px;
+  column-gap: 5px;
+}
+.ob-column-header {
+  flex: 0 0 25px;
+  height: 25px;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  user-select: none;
+}
+.ob-column-header span:not(:first-child),
+.ob-level-row span:not(:first-child) {
+  text-align: right;
+}
+.ob-book-scroll {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+}
+.ob-levels {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overflow-anchor: none;
+  overscroll-behavior: contain;
+  contain: strict;
+}
+.ob-levels-window {
+  flex: 0 0 auto;
+  position: relative;
+  width: 100%;
+}
+.ob-asks .ob-levels-window {
+  margin-top: auto;
+}
+.ob-level-row {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 22px;
+  min-height: 22px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 22px;
+  cursor: default;
+  contain: layout paint style;
+}
+.ob-level-row:hover { background: var(--bg-hover); }
+.ob-level-row > span:not(.ob-depth-bar) { position: relative; z-index: 1; }
+.ob-level-row .ob-price { text-align: left; }
+.ob-ask .ob-price { color: var(--wl-down-text); }
+.ob-bid .ob-price { color: var(--wl-up-text); }
+.ob-depth-bar {
+  position: absolute;
+  inset: 1px 0 1px auto;
+  max-width: 100%;
+  pointer-events: none;
+}
+.ob-ask .ob-depth-bar { background: color-mix(in srgb, var(--wl-down-color) 11%, transparent); }
+.ob-bid .ob-depth-bar { background: color-mix(in srgb, var(--wl-up-color) 11%, transparent); }
+/* Depth beyond the confirmed range: hatched instead of explained in prose */
+.ob-depth-bar.ob-depth-bar-partial {
+  background-image: repeating-linear-gradient(135deg, transparent 0 3px, color-mix(in srgb, var(--text-muted) 22%, transparent) 3px 4px);
+}
+.ob-coverage-info {
+  display: inline-flex;
+  vertical-align: -2px;
+  margin-left: var(--space-1);
+  color: var(--text-muted);
+  cursor: help;
+}
+.ob-coverage-info.is-partial { color: var(--text-warning); }
+.ob-coverage-info:hover,
+.ob-coverage-info:focus-visible { color: var(--text-primary); }
+.ob-spread-row {
+  display: grid;
+  grid-template-columns: minmax(84px, auto) 1fr auto;
+  align-items: center;
+  min-height: 34px;
+  padding: 4px 8px;
+  gap: 8px;
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+}
+.ob-mid-price {
+  color: var(--text-primary);
+  font-size: var(--font-size-md);
+  font-weight: 700;
+}
+/* Box and type come from .ui-empty (src/components/ui/EmptyState) */
+.ob-empty-state {
+  flex: 1 1 auto;
+}
+
+/* Order book kept on screen while its feed is stale */
+.ob-book-scroll.is-stale {
+  opacity: 0.45;
+  filter: grayscale(0.6);
+}
+
+.ob-stale-bar span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Range controls, the stale bar and the narrow rail (merged from orderBookControls.css in Phase 5i). */
+.ob-range-controls {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px 4px;
+  min-height: 28px;
+  padding: 2px 8px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid var(--border-color);
+}
+.ob-range-controls label { display: inline-flex; align-items: center; gap: 4px; }
+.ob-range-controls .ui-select { width: auto; max-width: 110px; font-size: var(--font-size-xs); }
+.ob-range-controls > span { margin-left: auto; white-space: nowrap; }
+
+.ob-stale-bar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 4px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-warning) 40%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 10%, var(--surface-1));
+  color: var(--text-warning);
+  font-size: var(--font-size-xs);
+}
+
+
+/* Order book in a narrow rail: keep the title on one line, drop the delivery
+ * label, and put the four controls on two rows instead of truncating them. */
+.ob-title,
+.ob-status {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+@container rail (max-width: 280px) {
+  .ob-delivery-mode { display: none; }
+}

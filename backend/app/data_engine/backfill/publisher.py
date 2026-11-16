@@ -23,6 +23,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
+from contextlib import contextmanager
 from typing import Callable, Awaitable, Any
 
 from ..ingestion.metrics import LayerMetrics
@@ -31,6 +32,7 @@ from .models import (
     BackfillPlan,
     BackfillStatus,
     FetchResult,
+    FetchReceipt,
     ReconcileResult,
     RepairReport,
 )
@@ -54,6 +56,29 @@ class RepairPublisher:
         self._report_callbacks: list[ReportCallback] = []
         self._report_formatter: ReportFormatter | None = None
         self._report_filter: ReportFilter | None = None
+        self._receipt_runs = 0
+
+    @contextmanager
+    def receipt_scope(self):
+        """Freeze payload demand for the explicit receipt API only.
+
+        Existing payload observers/preview select the ordinary complete path.
+        New payload registrations must happen between active receipt runs.
+        Ordinary run()/publish() keep their existing dynamic callbacks.
+        """
+        enabled = not (self._report_callbacks or self._report_formatter is not None or self._report_filter is not None
+                       or self._cfg.publish_include_data_preview)
+        if enabled:
+            self._receipt_runs += 1
+        try:
+            yield enabled
+        finally:
+            if enabled:
+                self._receipt_runs -= 1
+
+    def _check_payload_registration(self):
+        if self._receipt_runs:
+            raise RuntimeError('register payload report consumers between active receipt runs')
 
     # ── Public: Metrics / Snapshot ───────────────────────────
 
@@ -85,6 +110,7 @@ class RepairPublisher:
                                  json=report.to_dict())
             publisher.on_report(webhook_handler)
         """
+        self._check_payload_registration()
         self._report_callbacks.append(callback)
 
     def remove_report_callback(self, callback: ReportCallback) -> None:
@@ -110,6 +136,7 @@ class RepairPublisher:
                 }
             publisher.set_report_formatter(compact_format)
         """
+        self._check_payload_registration()
         self._report_formatter = fn
 
     def set_report_filter(self, fn: ReportFilter) -> None:
@@ -124,6 +151,7 @@ class RepairPublisher:
                 lambda r: r.status in (BackfillStatus.FAILED, BackfillStatus.PARTIAL)
             )
         """
+        self._check_payload_registration()
         self._report_filter = fn
 
     # ── Public: Build Report ─────────────────────────────────
@@ -134,11 +162,12 @@ class RepairPublisher:
         exchange: str,
         status: BackfillStatus,
         plan: BackfillPlan | None,
-        fetch_results: list[FetchResult],
+        fetch_results: list[FetchResult | FetchReceipt],
         reconcile_result: ReconcileResult | None,
         started_at_ms: int,
         errors: list[str] | None = None,
         metadata: dict[str, Any] | None = None,
+        receipt_mode: bool = False,
     ) -> RepairReport:
         """Build a ``RepairReport`` from pipeline results.
 
@@ -149,7 +178,7 @@ class RepairPublisher:
 
         # Build data preview
         preview: list[dict] = []
-        if self._cfg.publish_include_data_preview:
+        if self._cfg.publish_include_data_preview and not receipt_mode:
             preview = self._build_preview(fetch_results)
 
         report = RepairReport(

@@ -1,0 +1,60 @@
+/* Element reset and scrollbars. */
+
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+/* Reduced motion: nothing slides, fades or pulses, and scrolling jumps; every change is
+ * immediate. Marked important in the reset layer, these declarations outrank every other layer.
+ * A spinner keeps turning, slower, because the turning is what says "loading": it sets
+ * --motion-reduced-duration and --motion-reduced-iterations on itself. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-delay: 0s !important;
+    animation-duration: var(--motion-reduced-duration, 0.01ms) !important;
+    animation-iteration-count: var(--motion-reduced-iterations, 1) !important;
+    transition-delay: 0s !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+body {
+  font-family: var(--font-sans);
+  /* Fixed-width digits so prices, sizes and timers do not shift as they tick */
+  font-variant-numeric: tabular-nums;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+/* ── 滚动条 ──────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+/* One scrollbar style everywhere. Do not set scrollbar-color or scrollbar-width: thin:
+ * scrollbar-color is inherited and makes Chromium ignore these rules for the whole
+ * subtree, which brings back the platform scrollbar with arrow buttons. */
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-muted) 40%, transparent);
+  border-radius: var(--radius-xs);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
