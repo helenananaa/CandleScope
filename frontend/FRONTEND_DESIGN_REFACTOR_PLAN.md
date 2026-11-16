@@ -48,7 +48,7 @@ A second failure mode sits behind some of these: **borrowing another feature's c
 - **Wrong stacking order.** The Symbol Search modal rendered under the Alerts drawer ([05-symbol-search](../docs/assets/frontend-design-audit-20261111/05-symbol-search.jpg)).
 - **Escape is inconsistent.** The Alerts drawer has no Escape handler, and 21 other files each implement their own.
 - **Plugin Center swaps out the Settings modal** for a differently designed modal with its own header, its own tab style, and a text "返回" link ([14-settings-plugins](../docs/assets/frontend-design-audit-20261111/14-settings-plugins.jpg)).
-- **The Extension Recovery button covers other controls on every page.** It is `position: fixed; z-index: var(--z-modal)` and overlaps the status bar, the Alerts "创建警报" CTA, and the rail's "收起" control. It is a safety tool, but it is permanently on screen.
+- **The Extension Recovery button covers other controls on every page.** It is `position: fixed; z-index: var(--z-modal)` and overlaps the status bar, the Alerts "创建警报" CTA, and the rail's "收起" control. It is a safety tool, but it is permanently on screen. *(Fixed in 3c: it appears only when needed.)*
 - **The code reflects this.** There are 26 `role="dialog"` and 8 `<dialog>` implementations with no shared focus trap, scroll lock, or return focus. There are also 9 `window.confirm` and 2 `window.alert` calls.
 
 ### 2.3 Typography (P0/P1)
@@ -349,6 +349,13 @@ Still outside the stack, and moved when each is rebuilt:
 - The history study setup is a popover anchored to its top-bar button, on the overlay stack.
 - `DateTimeInput` writes times as `2026-01-02 09:30` in every locale and opens the browser's calendar from a button; `FileDrop` has a one-row `compact` form. No bare file input is left on these surfaces.
 - Unstyled class names: 110 → 1. The scan no longer counts values compared inside `className` expressions, test and script hooks are declared, and dead modifier classes are gone. The one left is the desktop-only AI control panel in Settings, rebuilt in Phase 5.
+
+**Phase 3c is done (branch `design/phase-3c-recovery-errors`), which completes Phase 3.** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_3C.md`](../docs/FRONTEND_DESIGN_QA_PHASE_3C.md).
+
+- The always-visible 扩展恢复 button is gone. Extensions are managed in Settings → 插件与扩展 → 可信扩展. When an extension fails to load or extensions are off, a notice appears with 管理扩展, which opens the same management in a dialog outside the replaceable slots.
+- Extension management is rebuilt from the kit; the English "Choose file" picker is a `FileDrop`.
+- `describeError` gives frequent codes a message of their own: the replay "provider history boundary" error and the trade-flow `SUBSCRIBE_FAILED` now read in the user's language, and the replay chart's load errors go through it. Dataset quality statuses and the strategy toolbar's "source bars" and "dataEpoch" are translated.
+- Not done here, and moved to Phase 6: internal terms in the replay session (status bar `REPLAY`/`PAUSED`, `AGG_TRADE · EXACT`, `Controller`), "Run" in the replay opening message, and uncoded backend messages, which still show as sent.
 
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 

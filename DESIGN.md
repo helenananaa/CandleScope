@@ -65,7 +65,9 @@ Brand marks (`public/brand/`) use ink `#07182b`, blue `#1473e6` and teal `#12bfa
 
 - Sentence case. Name things by what the user recognises: "Order book", not "L2 snapshot reconciler".
 - Buttons state the action ("Create alert", "Save changes"); results confirm it ("Alert created").
-- Never show raw error codes or English backend messages in another locale; map them through `describeError` in `frontend/src/i18n/serverErrors.ts`.
+- Never show raw error codes or English backend messages in another locale; map them through `describeError` in `frontend/src/i18n/serverErrors.ts`. A code users meet often gets a message of its own there (`CODE_KEYS`), which replaces the server text; other codes show a localized summary with the server text in brackets.
+- Status values from the server (`accepted`, `accepted_with_gaps`) get labels, as `formatQualityStatus` does; an unknown value is shown as sent rather than hidden.
+- Text written by an extension or by the host for support (extension load failures, registry errors) stays as written, set apart as technical detail.
 - Keep internal QA, runtime and contract terms out of default views.
 
 ## Components
@@ -92,6 +94,7 @@ Build surfaces from the primitives in `frontend/src/components/ui` (import from 
 | A side panel next to the chart | `Drawer` (one per side; opening another replaces it) |
 | Options anchored to a control | `Popover`, for a short form or choice tied to the button that opens it (the history study setup); `Menu` for a list of actions |
 | A short description of an icon control | `Tooltip` (hover and keyboard focus) |
+| Something users need to know about only when it goes wrong (an extension failed, recovery mode) | A toast through `notify({ durationMs: 0, action })` while it lasts, opening the fix. Never a permanent floating button. |
 | An existing overlay that is not rebuilt yet | `OverlayLayer` around its markup: it joins the stack and keeps its look. Rebuilt surfaces use the primitives above. |
 
 Overlays share one stack (`components/ui/overlay`): drawers, then modals, then popovers and menus, with toasts above modals. Every overlay renders in the overlay host outside the app root, so no page container can trap it under another.

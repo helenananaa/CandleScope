@@ -29,6 +29,15 @@ const SUMMARY_KEYS: Record<ServerErrorKind, MessageKey> = {
   generic: "serverError.generic",
 };
 
+/**
+ * Codes with a message of their own. It replaces both the generic summary and the English
+ * server text, which would only repeat it.
+ */
+const CODE_KEYS: Readonly<Partial<Record<string, MessageKey>>> = {
+  HISTORY_ORIGIN_UNAVAILABLE: "serverError.code.historyOriginUnavailable",
+  SUBSCRIBE_FAILED: "serverError.code.subscribeFailed",
+};
+
 const CODE_PATTERN = /^[A-Z][A-Z0-9_]{2,127}$/;
 
 function errorCode(reason: unknown): string | null {
@@ -42,13 +51,16 @@ export function serverErrorKind(code: string): ServerErrorKind {
 }
 
 /**
- * Display text for a caught error. Coded backend errors get a localized summary
- * plus the original message; anything else keeps its message, or the fallback.
+ * Display text for a caught error. A code with its own message shows only that; other coded
+ * backend errors get a localized summary plus the original message; anything else keeps its
+ * message, or the fallback.
  */
 export function describeError(reason: unknown, fallback: string): string {
   const message = reason instanceof Error ? reason.message : null;
   const code = errorCode(reason);
   if (code === null) return message ?? fallback;
+  const own = CODE_KEYS[code];
+  if (own) return t(own);
   const summary = t(SUMMARY_KEYS[serverErrorKind(code)]);
   const detail = message && message !== code ? message : code;
   return t("serverError.withDetail", { summary, detail });

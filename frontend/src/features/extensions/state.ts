@@ -9,8 +9,10 @@ export interface ExtensionState {
   errors: Record<string, string>;
   reloadRequired: boolean;
   running: RunningExtension[];
+  /** The registry says extensions are off for this launch (desktop recovery mode). */
+  safeMode: boolean;
 }
-let state: ExtensionState = { revision: 0, theme: null, layout: null, slots: new Map(), errors: {}, reloadRequired: false, running: [] };
+let state: ExtensionState = { revision: 0, theme: null, layout: null, slots: new Map(), errors: {}, reloadRequired: false, running: [], safeMode: false };
 export const getExtensionState = (): ExtensionState => state;
 export const subscribeExtensions = (listener: () => void): (() => void) => {
   listeners.add(listener);

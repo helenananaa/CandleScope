@@ -6,7 +6,7 @@ import type {
   LocalDatasetRevision,
   LocalRevisionComparison,
 } from "./researchDataApi.js";
-import { formatResearchDate, formatResearchRows } from "./researchDataFormat.js";
+import { formatQualityStatus, formatResearchDate, formatResearchRows } from "./researchDataFormat.js";
 
 export function ResearchDatasetRevisions({
   revisions,
@@ -30,7 +30,7 @@ export function ResearchDatasetRevisions({
           <li key={revision.data_epoch} data-current={revision.current ? "true" : undefined}>
             <span>
               <code>{revision.data_epoch.slice(7, 17)}</code>
-              <small>{t("local.revisionRows", { date: formatResearchDate(revision.imported_at), rows: formatResearchRows(revision.rows), status: revision.quality_status })}</small>
+              <small>{t("local.revisionRows", { date: formatResearchDate(revision.imported_at), rows: formatResearchRows(revision.rows), status: formatQualityStatus(revision.quality_status) })}</small>
             </span>
             {revision.current ? <Badge tone="accent">{t("local.current")}</Badge> : <span className="local-revision-actions">
               <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => onCompare(revision.data_epoch)}>{t("local.compare")}</Button>
