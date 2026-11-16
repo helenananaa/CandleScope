@@ -1,11 +1,10 @@
-@layer features {
-.chart-account-overlay-trigger { border: 1px solid var(--border-color); border-radius: 5px; background: var(--bg-secondary); color: var(--text-secondary); padding: 3px 6px; white-space: nowrap; font-size: 11px; cursor: pointer; }
+/* The chart cell's 交易与笔记 trigger and its popover. */
+/* Sized like the chart header's other small controls. */
+.chart-account-overlay-trigger { height: 22px; padding: 0 var(--space-2); font-size: var(--font-size-xs); font-weight: 500; white-space: nowrap; }
 .chart-account-overlay-trigger[aria-expanded="true"] { color: var(--text-primary); border-color: var(--accent-blue); }
 .chart-account-overlay-trigger[data-error="true"] { border-color: var(--color-danger); }
-.chart-account-overlay-menu { position: fixed; z-index: var(--z-menu); width: 280px; max-height: calc(100vh - 16px); overflow: auto; display: grid; gap: 12px; padding: 14px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); color: var(--text-primary); box-shadow: var(--shadow-md); font-size: 13px; }
-.chart-account-overlay-menu > label { display: grid; gap: 6px; }
-.chart-account-overlay-menu select { width: 100%; min-width: 0; padding: 6px; color: var(--text-primary); background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; }
-.chart-account-overlay-menu > .chart-account-overlay-toggle { display: flex; align-items: center; gap: 8px; }
-.chart-account-overlay-menu > button { justify-self: end; padding: 4px 10px; }
-.chart-account-overlay-menu > p { margin: 0; overflow-wrap: anywhere; }
-}
+.chart-account-overlay-menu { display: grid; gap: var(--space-3); width: 280px; overflow: auto; padding: var(--space-3) var(--space-4); font-size: var(--font-size-sm); }
+/* The note filters (shared with replay) are a label around a select. */
+.chart-account-overlay-menu > label:not(.ui-check) { display: grid; gap: var(--space-1); color: var(--text-secondary); font-size: var(--font-size-xs); }
+.chart-account-overlay-status { margin: 0; color: var(--text-warning); font-size: var(--font-size-xs); overflow-wrap: anywhere; }
+.chart-account-overlay-close { justify-self: end; }

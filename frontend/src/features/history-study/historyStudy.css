@@ -5,9 +5,10 @@
 .history-study .trading-quick-notes time { display: block; }
 .history-study-controls, .study-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px; }
 .history-study-controls { border-top: 1px solid var(--border-subtle); background: var(--surface-1); }
-.history-study-controls label { display: flex; align-items: center; gap: 6px; }
-.history-study input, .history-study textarea { color: var(--text-primary); background: var(--surface-2); border: 1px solid var(--border-strong); padding: 6px; }
-.study-note-editor textarea { width: 100%; min-height: 150px; resize: vertical; box-sizing: border-box; }
+.history-study-controls label { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); }
+.history-study-controls label .ui-input { width: auto; }
+.study-note-editor { display: grid; gap: var(--space-2); }
+.study-note-editor .ui-textarea { min-height: 150px; resize: vertical; }
 .history-study-identity { display: inline-flex; align-items: center; gap: 8px; color: var(--text-primary); }
 .history-study-identity span, .history-study-interval { color: var(--text-secondary); }
 .history-study-mask { position: absolute; inset: 0; z-index: var(--z-overlay); background: var(--surface-1); display: grid; place-content: center; gap: 8px; }

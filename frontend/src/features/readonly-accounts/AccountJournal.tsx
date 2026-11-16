@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
+import { Button, Disclosure, Field, InlineAlert, Input, Select, Textarea } from "../../components/ui/index.js";
 import { AccountApiError, getJournal, saveJournal, type JournalVersion } from "./accountApi.js";
 import { JOURNAL_DRAFT_KEY as DRAFT_KEY, draftFromVersion, draftTags, draftSignature as signature, newJournalDraft as newDraft,
   parseJournalDraft, reconcileJournalDraft, startLinkedJournalDraft, type LinkedNoteRequest, type JournalDraft as Draft } from "./journalDraft.js";
@@ -94,27 +95,31 @@ export default function AccountJournal({ newNoteRequest, onRequestHandled }: { n
     } catch (failure) { setError(failure instanceof AccountApiError ? failure.code : "ACCOUNT_SYNC_FAILED"); }
   };
 
-  return <section>
+  return <section className="readonly-account-section">
     <p className="readonly-account-help">{t("account.noteHelp", {}, locale)}</p>
-    {newNoteRequest && <div role="status"><p>{t("account.pendingFillNote", { id: newNoteRequest.fillId }, locale)}</p>
-      <button type="button" onClick={onRequestHandled}>{t("account.cancelNewNote", {}, locale)}</button></div>}
-    <button type="button" disabled={Boolean(newNoteRequest) || saving || Boolean(draft.text.trim() && !saved)} onClick={() => { setDraft(newDraft()); setError(null); }}>{t("account.newNote", {}, locale)}</button>
-    <label>{t("account.journal", {}, locale)}<select value={draft.kind} onChange={(event) => setDraft({ ...draft, kind: event.target.value as Draft["kind"] })}>
-      {(["plan", "note", "review"] as const).map((kind) => <option key={kind} value={kind}>{t(`account.${kind}`, {}, locale)}</option>)}
-    </select></label>
-    <label>{t("account.eventTime", {}, locale)}<input type="datetime-local" value={localDateTime(draft.eventMs)} onChange={(event) => {
-      const value = new Date(event.target.value).getTime(); if (Number.isFinite(value)) setDraft({ ...draft, eventMs: value });
-    }} /></label>
+    {newNoteRequest && <InlineAlert tone="info" action={<Button size="sm" variant="ghost" onClick={onRequestHandled}>{t("account.cancelNewNote", {}, locale)}</Button>}>
+      {t("account.pendingFillNote", { id: newNoteRequest.fillId }, locale)}</InlineAlert>}
+    <div className="readonly-account-actions">
+      <Button size="sm" disabled={Boolean(newNoteRequest) || saving || Boolean(draft.text.trim() && !saved)} onClick={() => { setDraft(newDraft()); setError(null); }}>{t("account.newNote", {}, locale)}</Button>
+    </div>
+    <div className="readonly-account-row">
+      <Field label={t("account.journal", {}, locale)}><Select size="sm" value={draft.kind} onChange={(event) => setDraft({ ...draft, kind: event.target.value as Draft["kind"] })}>
+        {(["plan", "note", "review"] as const).map((kind) => <option key={kind} value={kind}>{t(`account.${kind}`, {}, locale)}</option>)}
+      </Select></Field>
+      <Field label={t("account.eventTime", {}, locale)}><Input size="sm" type="datetime-local" value={localDateTime(draft.eventMs)} onChange={(event) => {
+        const value = new Date(event.target.value).getTime(); if (Number.isFinite(value)) setDraft({ ...draft, eventMs: value });
+      }} /></Field>
+    </div>
     {draft.fillId && <p className="readonly-account-help">{t("account.linkedFill", { id: draft.fillId }, locale)}</p>}
-    <label>{t("account.noteText", {}, locale)}<textarea value={draft.text} maxLength={8000} rows={6} onChange={(event) => setDraft({ ...draft, text: event.target.value })} /></label>
-    <label>{t("account.tags", {}, locale)}<input value={draft.tags} maxLength={800} onChange={(event) => setDraft({ ...draft, tags: event.target.value })} /></label>
-    <div className="readonly-account-actions"><button type="button" disabled={saving || saved || !loaded || !draft.text.trim()} onClick={() => { void save(); }}>{t(saving ? "account.working" : "account.save", {}, locale)}</button>
-      <span role="status">{t(saved ? "account.saved" : "account.unsaved", {}, locale)}</span></div>
-    {storageError && <p role="alert">{t("account.draftStorageError", {}, locale)}</p>}
-    {error && <div role="alert"><p>{t(error === "JOURNAL_VERSION_CONFLICT" ? "account.saveConflict" : "account.errorHelp", {}, locale)}</p><code>{error}</code><button type="button" onClick={() => { void reload(); }}>{t("account.restoreDraft", {}, locale)}</button></div>}
-    {latest.map((row) => <details key={row.noteId} className="readonly-account-card">
-      <summary>{t(`account.${row.payload.kind}`, {}, locale)} · {date(row.eventMs)} · {row.payload.text.slice(0, 48)}</summary>
-      <button type="button" disabled={saving || Boolean(draft.text.trim() && !saved)} onClick={() => load(row)}>{t("account.restoreDraft", {}, locale)}</button>
+    <Field label={t("account.noteText", {}, locale)}><Textarea value={draft.text} maxLength={8000} rows={6} onChange={(event) => setDraft({ ...draft, text: event.target.value })} /></Field>
+    <Field label={t("account.tags", {}, locale)}><Input size="sm" value={draft.tags} maxLength={800} onChange={(event) => setDraft({ ...draft, tags: event.target.value })} /></Field>
+    <div className="readonly-account-actions"><Button size="sm" variant="primary" disabled={saving || saved || !loaded || !draft.text.trim()} onClick={() => { void save(); }}>{t(saving ? "account.working" : "account.save", {}, locale)}</Button>
+      <span className="readonly-account-save-state" role="status">{t(saved ? "account.saved" : "account.unsaved", {}, locale)}</span></div>
+    {storageError && <InlineAlert tone="danger">{t("account.draftStorageError", {}, locale)}</InlineAlert>}
+    {error && <InlineAlert tone="danger" action={<Button size="sm" onClick={() => { void reload(); }}>{t("account.restoreDraft", {}, locale)}</Button>}>
+      {t(error === "JOURNAL_VERSION_CONFLICT" ? "account.saveConflict" : "account.errorHelp", {}, locale)} <code>{error}</code></InlineAlert>}
+    {latest.map((row) => <Disclosure key={row.noteId} className="readonly-account-note" summary={<>{t(`account.${row.payload.kind}`, {}, locale)} · {date(row.eventMs)} · {row.payload.text.slice(0, 48)}</>}>
+      <Button size="sm" disabled={saving || Boolean(draft.text.trim() && !saved)} onClick={() => load(row)}>{t("account.restoreDraft", {}, locale)}</Button>
       {versions.filter((item) => item.noteId === row.noteId).sort((a, b) => b.version - a.version).map((item) => <article key={item.version}>
         <strong>{t("account.version", { version: item.version }, locale)}</strong>
         <p className="readonly-account-help">{t("account.recordedTime", { time: date(item.recordedMs) }, locale)}</p>
@@ -123,6 +128,6 @@ export default function AccountJournal({ newNoteRequest, onRequestHandled }: { n
         {item.payload.tags.length > 0 && <p className="readonly-account-help">{item.payload.tags.join(", ")}</p>}
         <p className="readonly-account-note-text">{item.payload.text}</p>
       </article>)}
-    </details>)}
+    </Disclosure>)}
   </section>;
 }

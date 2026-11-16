@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { t, type MessageKey } from '../../i18n/index.js';
 import { useLocale } from '../../i18n/useLocale.js';
+import { Badge, Button, InlineAlert } from '../../components/ui/index.js';
 import { AccountApiError } from './accountApi.js';
 import { accountErrorHelp } from './accountErrors.js';
 import { getReconciliation, type Reconciliation } from './reconciliationApi.js';
@@ -20,12 +21,14 @@ export default function AccountReconciliation() {
   const label = (key: MessageKey) => t(key, {}, locale);
   const date = (ms: number | null) => ms === null ? label('account.unknown') : new Date(ms).toLocaleString(locale);
   const pair = (key: MessageKey, value: string | number | null, currency = '') => <><dt>{label(key)}</dt><dd>{value ?? '—'} {currency}</dd></>;
-  return <div aria-label={label('account.reconcile')}>
+  return <div className="readonly-account-section" aria-label={label('account.reconcile')}>
     <p className="readonly-account-help">{label('account.reconcileHelp')}</p>
-    <button type="button" disabled={busy} onClick={() => { void read(); }}>{label(busy ? 'account.loading' : 'account.refresh')}</button>
-    {error && <p role="alert">{label(accountErrorHelp(error))} <code>{error}</code></p>}
+    <div className="readonly-account-actions">
+      <Button size="sm" disabled={busy} onClick={() => { void read(); }}>{label(busy ? 'account.loading' : 'account.refresh')}</Button>
+    </div>
+    {error && <InlineAlert tone="danger">{label(accountErrorHelp(error))} <code>{error}</code></InlineAlert>}
     {report && <>
-      <p role="status">{label(`account.check.${report.status}`)} · {date(report.generatedMs)}</p>
+      <p role="status"><Badge tone={report.status === 'matched' ? 'success' : 'warning'}>{label(`account.check.${report.status}`)}</Badge> {date(report.generatedMs)}</p>
       {(!report.current || !report.historyReady) && <p>{label('account.check.historyUnavailable')}</p>}
       {report.truncated && <p>{label('account.check.truncated')}</p>}
       <p>{label('account.check.fillFees')}: {report.fees.checked} / {report.fees.total} · {label(`account.check.${report.fees.status}`)}</p>
@@ -34,20 +37,20 @@ export default function AccountReconciliation() {
       <p>{label('account.check.fundingAssigned')}: {report.counts.assignedFunding} / {report.counts.funding}</p>
       <h4>{label('account.check.cashChain')}</h4>
       <p className="readonly-account-help">{label('account.check.openingHelp')}</p>
-      {report.cash.map(row => <article className="readonly-account-card" key={row.currency}><strong>{row.currency} · {label(`account.check.${row.status}`)}</strong>
+      {report.cash.map(row => <article className="readonly-account-card" key={row.currency}><strong>{row.currency} <Badge tone={row.status === 'matched' ? 'success' : 'warning'}>{label(`account.check.${row.status}`)}</Badge></strong>
         {row.reason && <p>{label(`account.check.${row.reason}`)}</p>}<dl>
           {pair('account.check.openingDerived', row.openingDerived)}{pair('account.amount', row.change)}{pair('account.check.closing', row.closing)}
           {pair('account.cash', row.snapshot)}{pair('account.check.difference', row.difference)}{pair('account.check.tolerance', row.tolerance)}{pair('account.check.breaks', row.breaks)}
         </dl><p>{t('account.snapshotTime', { time: date(row.snapshotMs) }, locale)}</p></article>)}
       <h4>{label('account.check.closedPositions')}</h4>
       {report.positions.map((row, i) => <article className="readonly-account-card" key={`${row.id}:${i}`}>
-        <strong>{row.instrument} · {label(`account.${row.positionSide}`)} · {label(`account.check.${row.status}`)}</strong>
+        <strong>{row.instrument} · {label(`account.${row.positionSide}`)} <Badge tone={row.status === 'matched' ? 'success' : 'warning'}>{label(`account.check.${row.status}`)}</Badge></strong>
         <p>{date(row.startMs)} – {date(row.endMs)}</p>
         {row.reason && <p>{label(`account.check.${row.reason}`)}</p>}<dl>
           {pair('account.check.computedPnl', row.computedPnl, row.currency)}{pair('account.check.exchangePnl', row.exchangePnl, row.currency)}
           {pair('account.check.difference', row.pnlDifference, row.currency)}{pair('account.check.tolerance', row.tolerance, row.currency)}
           {pair('account.fee', row.fee, row.currency)}{pair('account.check.funding', row.funding, row.currency)}{pair('account.check.net', row.net, row.currency)}
-        </dl><p>{label('account.check.positionSource')}: {row.id}</p>
+        </dl><p className="readonly-account-help">{label('account.check.positionSource')}: {row.id}</p>
       </article>)}
       <h4>{label('account.check.fundingAssigned')}</h4>
       <p className="readonly-account-help">{label('account.check.attributionHelp')}</p>
@@ -55,7 +58,7 @@ export default function AccountReconciliation() {
         <strong>{row.instrument} · {row.positionSide ? label(`account.${row.positionSide}`) : label('account.unknown')}</strong>
         <p>{date(row.eventTimeMs)} · {row.amount} {row.currency}</p>
         <p>{row.reason ? label(`account.check.${row.reason}`) : `${label('account.check.positionSource')}: ${row.positionId}`}</p>
-        <small>{row.billId}</small>
+        <small className="readonly-account-id">{row.billId}</small>
       </article>)}
     </>}
   </div>;
