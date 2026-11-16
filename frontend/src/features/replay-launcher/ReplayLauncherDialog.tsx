@@ -1,3 +1,4 @@
+import { OverlayLayer } from "../../components/ui/Overlays.js";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -113,6 +114,7 @@ export default function ReplayLauncherDialog({
   });
 
   return (
+    <OverlayLayer kind="modal" onClose={onRequestClose} initialFocusRef={overlayRef}>
     <div
       ref={overlayRef}
       className="replay-launcher-overlay"
@@ -181,5 +183,6 @@ export default function ReplayLauncherDialog({
         onPrepareData={() => setPreparingData(true)}
       />}
     </div>
+    </OverlayLayer>
   );
 }

@@ -92,8 +92,13 @@ Build surfaces from the primitives in `frontend/src/components/ui` (import from 
 | A side panel next to the chart | `Drawer` (one per side; opening another replaces it) |
 | Options anchored to a control | `Popover`; `Menu` for a list of actions |
 | A short description of an icon control | `Tooltip` (hover and keyboard focus) |
+| An existing overlay that is not rebuilt yet | `OverlayLayer` around its markup: it joins the stack and keeps its look. Rebuilt surfaces use the primitives above. |
 
-Overlays share one stack (`components/ui/overlay`): drawers, then modals, then popovers and menus, with toasts above modals. Escape closes the topmost layer only, focus returns to the control that opened it, and a modal makes everything beneath it inert.
+Overlays share one stack (`components/ui/overlay`): drawers, then modals, then popovers and menus, with toasts above modals. Every overlay renders in the overlay host outside the app root, so no page container can trap it under another.
+
+- **Escape** goes first to the focused control: an editor, a nested picker or a field that cancels its edit uses it and calls `preventDefault`. If nothing used it, the topmost layer closes, and only that one. A native modal `<dialog>` keeps its own Escape. Page shortcuts on Escape (restoring a maximised chart, leaving a drawing tool) wait until no layer is open.
+- **Focus** moves into a layer when it opens (its first control, skipping close buttons marked `data-overlay-close` and resize handles) and returns to the control that opened it.
+- **A modal** makes everything beneath it inert and keeps Tab inside. A layer with unsaved work can refuse Escape (`closeOnEscape`), as the indicator editor does.
 
 ## Stylesheets and cascade layers
 

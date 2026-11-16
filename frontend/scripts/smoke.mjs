@@ -1461,7 +1461,7 @@ async function openSettings(cdp) {
     waitForPerfTiming(cdp, "settingsOpenMs", 5_000, 25),
     waitForExpression(
       cdp,
-      "Boolean(document.querySelector('.st-overlay .st-panel') && document.querySelector('.st-sidebar') && document.querySelector('.st-btn-close'))",
+      "Boolean(document.querySelector('.st-overlay .st-panel[role=dialog]') && document.querySelector('.st-sidebar') && document.querySelector('.st-sidebar-footer button'))",
       5_000,
       25,
     ),

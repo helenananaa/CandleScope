@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { createPortal } from "react-dom";
+import { OverlayLayer } from "../../components/ui/Overlays.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import {
@@ -282,7 +282,14 @@ export default function TradeJournalDrawer({
     );
   };
 
-  return createPortal(
+  // Save first, then close: from the close button, Escape, or another right-hand drawer opening.
+  const requestClose = () => {
+    if (!editorState.ready) { onClose(); return; }
+    void flush().then((saved) => { if (saved) onClose(); });
+  };
+
+  return (
+    <OverlayLayer kind="drawer" side="right" onClose={requestClose}>
     <aside className="trading-drawer" role="dialog" aria-label={t("trading.journal.title")}>
       <header className="trading-drawer-header">
         <div>
@@ -300,10 +307,7 @@ export default function TradeJournalDrawer({
             : saveState === "saved" ? t("trading.journal.saved")
               : saveState === "failed" ? t("trading.journal.saveFailed") : ""}
         </span>
-        <button type="button" className="trading-icon-button" aria-label={t("trading.close")} onClick={() => {
-          if (!editorState.ready) { onClose(); return; }
-          void flush().then((saved) => { if (saved) onClose(); });
-        }}>×</button>
+        <button type="button" className="trading-icon-button" aria-label={t("trading.close")} onClick={requestClose} data-overlay-close="">×</button>
       </header>
       <div className="trading-drawer-body">
         {(error || editorError) && <p className="trading-error" role="alert">{editorError ?? error}</p>}
@@ -410,8 +414,8 @@ export default function TradeJournalDrawer({
         </section>
         </fieldset>
       </div>
-    </aside>,
-    document.body,
+    </aside>
+    </OverlayLayer>
   );
 }
 

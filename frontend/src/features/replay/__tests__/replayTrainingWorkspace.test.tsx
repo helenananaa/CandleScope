@@ -72,7 +72,8 @@ test("v2 workspace owns the same source-neutral market slots without legacy repl
   assert.match(workspace, /review === null \? viewer\.seriesStore : reviewSeriesStore/);
   assert.match(workspace, /aria-controls="replay-integrity-drawer"/);
   assert.match(workspace, /integrityOpen &&/);
-  assert.match(workspace, /event\.key !== "Escape"/);
+  // The integrity drawer is a right-hand drawer on the overlay stack, which owns its Escape.
+  assert.match(workspace, /<OverlayLayer kind="drawer" side="right" onClose=\{\(\) => setIntegrityOpen\(false\)\}/);
   assert.doesNotMatch(workspace, /<header\s+className="top-bar replay-top-bar"/);
 });
 

@@ -1,3 +1,4 @@
+import { OverlayLayer } from "../../components/ui/Overlays.js";
 import { Button } from "../../components/ui/Button.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -34,12 +35,6 @@ export function PluginSettingsPanel({ runtime, onClose, initialSection = "instal
   const marketRequest = useRef(0);
   const { openManager, closeManager } = runtime.actions;
   useEffect(() => { openManager(); return closeManager; }, [openManager, closeManager]);
-  useEffect(() => {
-    if (!onClose) return;
-    const previous = document.activeElement;
-    panel.current?.focus();
-    return () => { if (previous instanceof HTMLElement && previous.isConnected) previous.focus(); };
-  }, [onClose]);
   const plugins = useMemo(() => (runtime.view.catalog?.plugins ?? []).map((plugin) => ({
     ...plugin, contributions: plugin.contributions.map((item) => localizePluginContribution(item, locale)),
   })), [runtime.view.catalog?.plugins, locale]);
@@ -74,14 +69,11 @@ export function PluginSettingsPanel({ runtime, onClose, initialSection = "instal
   const content = <div className="plugin-center" data-testid="plugin-manager" ref={panel} tabIndex={-1}
     role={onClose ? "dialog" : undefined} aria-modal={onClose ? true : undefined} aria-label={t("plugin.title")} inert={!!runtime.view.openSettingsId}
     onKeyDown={(event) => {
-      if (!onClose || runtime.view.openSettingsId) return;
-      if (event.key === "Escape") { event.stopPropagation(); if (installBusy) return; if (section === "install") navigate("installed"); else onClose(); }
-      if (event.key === "Tab") {
-        const elements = Array.from(panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex="0"]') ?? []).filter((element) => element.getClientRects().length > 0);
-        const first = elements[0]; const last = elements.at(-1);
-        if (event.shiftKey && (document.activeElement === first || document.activeElement === panel.current)) { event.preventDefault(); last?.focus(); }
-        else if (!event.shiftKey && (document.activeElement === last || document.activeElement === panel.current)) { event.preventDefault(); first?.focus(); }
-      }
+      // Escape steps back from the install page first; the overlay layer handles focus and Tab.
+      if (!onClose || runtime.view.openSettingsId || event.key !== "Escape") return;
+      event.stopPropagation();
+      if (installBusy) return;
+      if (section === "install") navigate("installed"); else onClose();
     }}>
     <header className="pc-header">
       <div>{onClose && <button className="pc-return" type="button" disabled={installBusy} onClick={onClose}>{t("pc.back")}</button>}<h2>{t("plugin.title")}</h2></div>
@@ -131,5 +123,7 @@ export function PluginSettingsPanel({ runtime, onClose, initialSection = "instal
       {section === "install" && platformEnabled && <PluginInstallFlow runtime={runtime} onPendingChange={setInstallBusy} onDone={() => { navigate("installed"); setFilter("all"); }} />}
     </div>
   </div>;
-  return onClose ? <div className="pc-overlay">{content}</div> : content;
+  return onClose
+    ? <OverlayLayer kind="modal" onClose={onClose} closeOnEscape={!installBusy} initialFocusRef={panel}><div className="pc-overlay">{content}</div></OverlayLayer>
+    : content;
 }

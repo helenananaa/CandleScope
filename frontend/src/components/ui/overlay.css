@@ -6,6 +6,18 @@
   display: contents;
 }
 
+/* OverlayLayer: an existing overlay's own markup inside a stack layer. The layer covers
+ * the viewport for stacking only; its children take the clicks. */
+.ui-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ui-layer > * {
+  pointer-events: auto;
+}
+
 @keyframes ui-fade-in {
   from { opacity: 0; }
 }

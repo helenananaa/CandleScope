@@ -13,8 +13,9 @@ export interface OverlayEntry {
   side?: DrawerSide;
   /** Called when the stack closes this layer (Escape, or replaced by another drawer). */
   requestClose: () => void;
-  /** False for layers that must stay until the user decides (a running task). Default true. */
-  closeOnEscape?: boolean;
+  /** False for layers that must stay until the user decides (a running task). Default true.
+   * A function is read on each Escape, so the answer can change while the layer is open. */
+  closeOnEscape?: boolean | (() => boolean);
 }
 
 /** Stacking bands, lowest first. Matches the --z-* tokens: overlay < modal < menu. */
@@ -72,7 +73,8 @@ export function createOverlayStack(): OverlayStack {
       for (let i = list.length - 1; i >= 0; i--) {
         const entry = list[i];
         if (!entry) continue;
-        if (entry.closeOnEscape === false) return false; // the top layer keeps focus; nothing below closes
+        const allowed = typeof entry.closeOnEscape === "function" ? entry.closeOnEscape() : entry.closeOnEscape !== false;
+        if (!allowed) return false; // the top layer keeps focus; nothing below closes
         entry.requestClose();
         return true;
       }

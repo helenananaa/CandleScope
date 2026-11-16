@@ -1,3 +1,4 @@
+import { OverlayLayer } from "../../components/ui/Overlays.js";
 import PageSettingsDialog from "../../app/PageSettingsDialog.js";
 import { useReplayOperations } from "./useReplayOperations.js";
 import { useExportRuntime } from "../export/useExportRuntime.js";
@@ -243,22 +244,6 @@ export default function ReplayTrainingPageShell({
   useEffect(() => {
     if (review !== null) setIndicatorPanelOpen(false);
   }, [review]);
-  useEffect(() => {
-    if (!integrityOpen) return undefined;
-    const drawer = integrityDrawerRef.current;
-    const toggle = integrityToggleRef.current;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      setIntegrityOpen(false);
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    requestAnimationFrame(() => drawer?.focus());
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      requestAnimationFrame(() => toggle?.focus());
-    };
-  }, [integrityOpen]);
   const liveDrawingScopeBase = cell?.drawingScope ?? (integrityRuntime.runId === null
     ? `replay-run:pending`
     : `replay-run:${integrityRuntime.runId}`);
@@ -1364,7 +1349,7 @@ export default function ReplayTrainingPageShell({
         )}
         {review === null && <ReplayBottomControlDock runtime={runtime} viewer={cell?.controlViewer ?? viewer} publicTimeLabel={publicTime} independentCharts={cell !== undefined} />}
         {review === null && indicatorPanelOpen && (
-          <div id="replay-indicator-panel" className="replay-shared-indicator-panel">
+          <div id="replay-indicator-panel">
             <IndicatorPanel
               allowedScriptLanguages={["pine", "frontend-js"]}
               isOpen
@@ -1393,7 +1378,9 @@ export default function ReplayTrainingPageShell({
             />
           </div>
         )}
+        {/* Right-hand drawers on the overlay stack (with indicators): opening one closes the other. */}
         {integrityOpen && (
+          <OverlayLayer kind="drawer" side="right" onClose={() => setIntegrityOpen(false)} initialFocusRef={integrityDrawerRef} returnFocusRef={integrityToggleRef}>
           <aside
             ref={integrityDrawerRef}
             id="replay-integrity-drawer"
@@ -1408,8 +1395,10 @@ export default function ReplayTrainingPageShell({
               onClose={() => setIntegrityOpen(false)}
             />
           </aside>
+          </OverlayLayer>
         )}
         {trainingResultsOpen && integrityRuntime.runId !== null && (
+          <OverlayLayer kind="drawer" side="right" onClose={() => setTrainingResultsOpen(false)}>
           <aside
             id="replay-training-results-drawer"
             className="replay-integrity-drawer replay-training-results-drawer"
@@ -1423,6 +1412,7 @@ export default function ReplayTrainingPageShell({
               onClose={() => setTrainingResultsOpen(false)}
             />
           </aside>
+          </OverlayLayer>
         )}
       </> : null}
       statusBar={(

@@ -1,3 +1,4 @@
+import { OverlayLayer } from "../../components/ui/Overlays.js";
 import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { useControlCommands } from "../app-control/useControlCommands.js";
 import { command } from "../app-control/commandRegistry.js";
@@ -295,6 +296,7 @@ export default function DataWorkbenchModal({
         : t("workbench.summaryNoGaps", {}, locale);
 
   return (
+    <OverlayLayer kind="modal" onClose={onClose}>
     <div className="dw-overlay" onClick={onClose}>
       <section
         aria-label={t("settings.workbench.name", {}, locale)}
@@ -309,7 +311,7 @@ export default function DataWorkbenchModal({
             <h2 className="dw-title">{t("settings.workbench.name", {}, locale)}</h2>
             <p className="dw-subtitle">{t("workbench.subtitle", {}, locale)}</p>
           </div>
-          <button aria-label={t("workbench.close", {}, locale)} className="dw-close" onClick={onClose} type="button"><Icon name="close" size={14} /></button>
+          <button aria-label={t("workbench.close", {}, locale)} className="dw-close" onClick={onClose} type="button" data-overlay-close=""><Icon name="close" size={14} /></button>
         </header>
 
         <div className="dw-body">
@@ -575,5 +577,6 @@ export default function DataWorkbenchModal({
       </section>
       <DataWorkbenchStyles />
     </div>
+    </OverlayLayer>
   );
 }

@@ -319,6 +319,30 @@ Sixteen of the new files hold rules that must load later than their feature's ma
 - All 9 `window.confirm` and 2 `window.alert` calls are replaced.
 - Existing drawers and modals move onto the stack in Phase 3; that is where the overlapping drawers and Escape fixes land.
 
+**Phase 3 lands in three PRs:** 3a puts the existing overlays on the stack; 3b styles the unstyled surfaces (§2.1) and rebuilds the history study as a popover; 3c moves Extension Recovery into Settings and translates the raw errors.
+
+**Phase 3a is done (branch `design/phase-3-p0-fixes`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_3A.md`](../docs/FRONTEND_DESIGN_QA_PHASE_3A.md).
+
+- Every drawer and modal from before the kit is on the overlay stack through `OverlayLayer`, with its own look unchanged. This covers:
+  - Alerts, Indicators and Workspace;
+  - Settings, with Plugin Center and the data workbench as layers above it, and the page Settings dialog;
+  - Symbol Search and the replay launcher;
+  - the trading account dialog and the trade journal;
+  - plugin dialogs and plugin side panels;
+  - the strategy page's research data, saved accounts and run history drawers;
+  - the replay page's integrity and results drawers.
+- That fixes the §2.2 findings:
+  - Only one right-hand drawer is open at a time.
+  - Symbol Search no longer opens under a drawer.
+  - Alerts, the data workbench and plugin side panels close on Escape.
+  - Escape closes one layer at a time.
+- Escape now reaches the focused control first, so a field that cancels its edit or a nested picker keeps working inside a layer.
+
+Still outside the stack, and moved when each is rebuilt:
+
+- **Surfaces that open as native modal `<dialog>`s:** Export, jump to date, history study (3b), research return, replay screenshots, and the drawing property panels. The browser keeps them above everything and gives them their own Escape; the stack leaves Escape to them.
+- **The replay hub's create and end-session dialogs, and the trade explanation inside the strategy tester.**
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.

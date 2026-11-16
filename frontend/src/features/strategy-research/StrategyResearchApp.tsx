@@ -1,3 +1,4 @@
+import { OverlayLayer } from "../../components/ui/Overlays.js";
 import { useNativeAvailability } from "../backtest/native/useNativeAvailability.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import {
@@ -646,13 +647,16 @@ export default function StrategyResearchApp({
   );
   const extraSurfaces = (
     <>
-      {accountsOpen && <aside className="research-data-drawer continuous-reader-drawer" role="dialog" aria-label={t("reader.title")}
-        onKeyDown={(event) => { if (event.key === "Escape") setAccountsOpen(false); }}>
-        <header><strong>{t("reader.title")}</strong><button type="button" onClick={() => setAccountsOpen(false)}>{t("backtest.close")}</button></header>
+      {/* Right-hand drawers on the overlay stack: opening one closes the others. */}
+      {accountsOpen && <OverlayLayer kind="drawer" side="right" onClose={() => setAccountsOpen(false)}>
+      <aside className="research-data-drawer continuous-reader-drawer" role="dialog" aria-label={t("reader.title")}>
+        <header><strong>{t("reader.title")}</strong><button type="button" onClick={() => setAccountsOpen(false)} data-overlay-close="">{t("backtest.close")}</button></header>
         <Suspense fallback={<p>{t("reader.loading")}</p>}><SavedContinuousAccounts /></Suspense>
-      </aside>}
-      {historyOpen && <aside className="research-data-drawer" role="dialog" aria-label={t("ux.history")}>
-        <header><strong>{t("ux.history")}</strong><button type="button" onClick={() => setHistoryOpen(false)}>{t("backtest.close")}</button></header>
+      </aside>
+      </OverlayLayer>}
+      {historyOpen && <OverlayLayer kind="drawer" side="right" onClose={() => setHistoryOpen(false)}>
+      <aside className="research-data-drawer" role="dialog" aria-label={t("ux.history")}>
+        <header><strong>{t("ux.history")}</strong><button type="button" onClick={() => setHistoryOpen(false)} data-overlay-close="">{t("backtest.close")}</button></header>
         <Suspense fallback={<p>{t("research.loading")}</p>}><StrategyRunHistory manager={researchRun.historyManager} draftId={state.script.draftId} currentRunId={researchRun.result?.run.run_id ?? null} onOpen={(runId) => { dispatch({ type: "result/viewHistory", runId }); setNativeMode(false); setHistoryOpen(false); }} /></Suspense>
         <ResearchBatchResults jobs={batchState.jobs} storageFailed={batchState.storageFailed}
           onResume={(id, retry) => researchRun.batch.resume(id, retry)}
@@ -666,7 +670,8 @@ export default function StrategyResearchApp({
             setHistoryOpen(false);
           }} />
         <Suspense fallback={null}><PreparationJobsPanel /></Suspense>
-      </aside>}
+      </aside>
+      </OverlayLayer>}
       {intent.kind === "handoff" && !handoff && <p role="alert">{t("ux.handoffMissing")}</p>}
       {(intent.page === "local" || intent.page === "backtest") ? (
         <StrategyResearchCompatNotice page={intent.page} />

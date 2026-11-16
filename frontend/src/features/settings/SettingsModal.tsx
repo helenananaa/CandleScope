@@ -1,5 +1,6 @@
 import { Button } from "../../components/ui/Button.js";
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { OverlayLayer } from "../../components/ui/Overlays.js";
+import { useCallback, useId, useRef, useState } from 'react';
 import { PluginSettingsPanel } from '../plugins/PluginCenter.js';
 import DataWorkbenchModal from '../data-workbench/DataWorkbenchModal.js';
 import { t } from '../../i18n/index.js';
@@ -64,28 +65,9 @@ export default function SettingsModal({
         trimChartDataCacheEntries,
     });
   const { view, actions } = settingsRuntime;
+    // The overlay layer moves focus to the panel, returns it on close and handles Escape.
+    // Plugin center and the data workbench are their own layers above this one.
     const panelRef = useRef<HTMLDivElement>(null);
-    const nestedOpen = pluginCenterOpen || dataWorkbenchOpen;
-
-    // Move focus into the dialog on open and give it back to the opener on close.
-    useEffect(() => {
-        if (!isOpen) return undefined;
-        const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-        panelRef.current?.focus();
-        return () => { opener?.focus(); };
-    }, [isOpen]);
-
-    // Escape closes Settings; nested surfaces handle their own Escape first.
-    useEffect(() => {
-        if (!isOpen || nestedOpen) return undefined;
-        const onKeyDown = (event: KeyboardEvent) => {
-            if (event.key !== 'Escape' || event.defaultPrevented) return;
-            event.preventDefault();
-            onClose();
-        };
-        window.addEventListener('keydown', onKeyDown);
-        return () => window.removeEventListener('keydown', onKeyDown);
-    }, [isOpen, nestedOpen, onClose]);
   // Instance identity allows several cells to open settings for the same symbol.
   const controlId = useId();
   useControlCommands(() => maintenanceCommands(controlId, settingsRuntime, backendFeaturesEnabled), isOpen);
@@ -113,6 +95,7 @@ export default function SettingsModal({
     return (
       <>
         {/* Hidden, not unmounted, while the plugin center is open so 返回 restores this state */}
+        <OverlayLayer kind="modal" onClose={onClose} initialFocusRef={panelRef}>
         <div className="st-overlay" hidden={pluginCenterOpen} inert={pluginCenterOpen} onClick={onClose}>
             <div
                 ref={panelRef}
@@ -169,6 +152,7 @@ export default function SettingsModal({
             </div>
             <SettingsModalStyles />
         </div>
+        </OverlayLayer>
         {pluginCenterOpen && plugins && <PluginSettingsPanel runtime={plugins} onClose={closePluginCenter} />}
         {dataWorkbenchEnabled && <DataWorkbenchModal
             currentExchange={currentExchange}

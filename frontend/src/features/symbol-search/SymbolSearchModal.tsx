@@ -1,3 +1,4 @@
+import { OverlayLayer } from "../../components/ui/Overlays.js";
 import { watchlistDisplayName } from "../watchlist/watchlistDisplayName.js";
 import { Icon } from "../../components/icons/Icon.js";
 import { shortcutModifier } from "../../shared/shortcutModifier.js";
@@ -78,6 +79,7 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
   if (!open) return null;
 
   return (
+    <OverlayLayer kind="modal" onClose={onClose} initialFocusRef={inputRef}>
     <div className="sym-modal-overlay" onClick={onClose}>
       <div
         className="sym-modal"
@@ -352,5 +354,6 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
         </div>
       )}
     </div>
+    </OverlayLayer>
   );
 }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { createPortal } from "react-dom";
+import { OverlayLayer } from "../../components/ui/Overlays.js";
 import { t, type MessageKey } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { tradingErrorMessage } from "./useTradingAccountsRuntime.js";
@@ -51,7 +51,8 @@ export default function AddAccountDialog({
     }
   };
 
-  return createPortal(
+  return (
+    <OverlayLayer kind="modal" onClose={onClose} closeOnEscape={!busy}>
     <div className="trading-modal-backdrop" role="presentation" onMouseDown={onClose}>
       <div
         className="trading-modal"
@@ -59,11 +60,10 @@ export default function AddAccountDialog({
         aria-modal="true"
         aria-labelledby="trading-add-title"
         onMouseDown={(event) => event.stopPropagation()}
-        onKeyDown={(event) => { if (event.key === "Escape") onClose(); }}
       >
         <header className="trading-modal-header">
           <h2 id="trading-add-title">{t("trading.add.title")}</h2>
-          <button type="button" className="trading-icon-button" aria-label={t("trading.close")} onClick={onClose}>×</button>
+          <button type="button" className="trading-icon-button" aria-label={t("trading.close")} onClick={onClose} data-overlay-close="">×</button>
         </header>
         <div className="trading-preset-grid" role="radiogroup" aria-label={t("trading.add.kind")}>
           {PRESETS.map((item) => (
@@ -136,7 +136,7 @@ export default function AddAccountDialog({
           </button>
         </footer>
       </div>
-    </div>,
-    document.body,
+    </div>
+    </OverlayLayer>
   );
 }

@@ -8,7 +8,7 @@ import { IconButton } from "./Button.js";
 import { choiceKeyTarget } from "./helpers.js";
 import { overlayHost, useOverlayLayer } from "./overlay/overlayRuntime.js";
 import { placePopover, type Placement } from "./overlay/position.js";
-import type { DrawerSide } from "./overlay/overlayStack.js";
+import type { DrawerSide, OverlayKind } from "./overlay/overlayStack.js";
 
 function CloseGlyph() {
   return (
@@ -126,6 +126,45 @@ function DrawerLayer({ open, onClose, title, side = "right", children, footer, a
       {footer ? <footer className="ui-drawer-foot">{footer}</footer> : null}
     </aside>
   );
+}
+
+export interface OverlayLayerProps {
+  kind: OverlayKind;
+  /** Drawers only. */
+  side?: DrawerSide;
+  onClose: () => void;
+  /** False while work runs that Escape must not interrupt. */
+  closeOnEscape?: boolean;
+  /** Focused on open; defaults to the first control that is not a close button or resize handle. */
+  initialFocusRef?: RefObject<HTMLElement | null>;
+  /** Focused on close; defaults to whatever had focus on open. */
+  returnFocusRef?: RefObject<HTMLElement | null>;
+  children: ReactNode;
+}
+
+/**
+ * Puts an existing overlay on the stack without restyling it. Its markup moves into the
+ * overlay host inside a full-screen layer that takes the stack's z-index band, so its own
+ * z-index values only order its parts. The layer joins the Escape order, returns focus to
+ * the opener and, for modals, makes the page inert and keeps Tab inside.
+ * New surfaces use Dialog, Drawer or Popover instead.
+ */
+export function OverlayLayer(props: OverlayLayerProps) {
+  // Without a DOM (static rendering) the markup renders in place, unmanaged.
+  if (typeof document === "undefined") return <>{props.children}</>;
+  return createPortal(<ManagedLayer {...props} />, overlayHost());
+}
+
+function ManagedLayer({ kind, side, onClose, closeOnEscape = true, initialFocusRef, returnFocusRef, children }: OverlayLayerProps) {
+  const layerRef = useRef<HTMLDivElement>(null);
+  const zIndex = useOverlayLayer({
+    open: true, kind, onClose, closeOnEscape, layerRef,
+    ...(side ? { side } : {}),
+    ...(kind === "modal" ? { trapRef: layerRef } : {}),
+    ...(initialFocusRef ? { initialFocusRef } : {}),
+    ...(returnFocusRef ? { returnFocusRef } : {}),
+  });
+  return <div ref={layerRef} className="ui-layer" data-overlay-kind={kind} style={{ zIndex }}>{children}</div>;
 }
 
 export interface PopoverProps {
