@@ -5,7 +5,7 @@ import asyncio
 import logging
 import time
 from collections import OrderedDict
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -91,6 +91,7 @@ class ArchiveRoutePlan:
         ...,
     ] = ()
     foreground_demand: bool = True
+    decisions_by_task: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def refs_for(self, task: BackfillTask) -> tuple[ArchiveObjectRef, ...]:
         return self.refs_by_task.get(task.task_key, ())
@@ -270,8 +271,9 @@ class HistoricalSourceRouter:
             return {"enabled": False, "reason": str(exc)[:500]}
 
     async def prepare(self, tasks: list[BackfillTask]) -> ArchiveRoutePlan:
+        decisions = {task.task_key: _route_decision(task) for task in tasks}
         if not self._cfg.history_archive_enabled or not tasks:
-            return ArchiveRoutePlan({}, {}, {})
+            return ArchiveRoutePlan({}, {}, {}, decisions_by_task=decisions)
         bootstrap_default_adapters()
         refs_by_task: dict[str, list[ArchiveObjectRef]] = {}
         futures: dict[str, asyncio.Task[ArchiveObjectResult]] = {}
@@ -314,18 +316,27 @@ class HistoricalSourceRouter:
 
         for (exchange, market_type, symbol, interval), group in groups.items():
             if exchange in self._disabled_providers:
+                for task in group:
+                    decisions[task.task_key]['reason'] = 'provider_disabled'
                 continue
             provider = self._provider(exchange)
             if provider is None:
+                for task in group:
+                    decisions[task.task_key]['reason'] = self._source_reasons[exchange]
                 self._metrics.set("last_route_skip_reason", f"{self._source_reasons[exchange]}:{exchange}")
                 continue
             capabilities = provider.capabilities(market_type)
             if not capabilities.supports(market_type=market_type, interval=interval):
+                for task in group:
+                    decisions[task.task_key]['reason'] = 'unsupported_interval'
                 self._metrics.set("last_route_skip_reason", f"unsupported:{exchange}:{market_type}:{interval}")
                 continue
 
             for run in _task_runs(group, interval):
                 route_start_ms, route_end_ms = _archive_decision_range(run)
+                for task in run:
+                    decisions[task.task_key].update(route_start_ms=route_start_ms,
+                        route_end_ms=route_end_ms, reason='no_published_archive')
                 candidates = provider.plan_objects(
                     market_type=market_type,
                     symbol=symbol,
@@ -334,6 +345,7 @@ class HistoricalSourceRouter:
                     end_ms=route_end_ms,
                     now_ms=now_ms,
                 )
+                planned_count = len(candidates)
                 candidates = _filter_daily_candidates(
                     candidates,
                     range_start_ms=route_start_ms,
@@ -342,10 +354,19 @@ class HistoricalSourceRouter:
                     rest_page_size=capabilities.rest_page_size,
                     minimum_pages=max(1, self._cfg.history_archive_min_rest_pages),
                 )
+                threshold_count = len(candidates)
+                rejected = {}
                 if exchange == 'binance' and market_type == 'futures':
-                    bounded = _bounded_usdm_archive_candidates(candidates, run, interval)
+                    bounded = _bounded_usdm_archive_candidates(candidates, run, interval,
+                                                               rejected=rejected)
                     self._metrics.inc('archive_source_budget_skips', len(candidates)-len(bounded))
                     candidates = bounded
+                for task in run:
+                    decisions[task.task_key].update(candidate_objects=planned_count,
+                        below_rest_threshold_objects=planned_count-threshold_count,
+                        eligible_objects=len(candidates), archive_rejections=dict(rejected))
+                    if planned_count and not candidates:
+                        decisions[task.task_key]['reason'] = 'archive_cost_rejected'
                 if not candidates:
                     continue
                 # Local ZIPs are usable without contacting the resolver or
@@ -530,6 +551,19 @@ class HistoricalSourceRouter:
             task_key: tuple(_unique_refs(values))
             for task_key, values in refs_by_task.items()
         }
+        for task in tasks:
+            refs = normalized_refs.get(task.task_key, ())
+            decision = decisions[task.task_key]
+            if refs:
+                decision['reason'] = 'archive_selected'
+            elif decision['eligible_objects']:
+                decision['reason'] = 'archive_unavailable_or_deferred'
+            decision['selected_object_count'] = len(refs)
+            decision['selected_objects'] = [dict(object_key=ref.object_key,
+                interval=ref.interval, start_ms=ref.start_ms, end_ms=ref.end_ms,
+                owns_import=owner_task_by_object.get(ref.object_key) == task.task_key)
+                for ref in refs[:32]]
+            decision['selected_objects_truncated'] = len(refs) > 32
         self._metrics.inc("archive_route_plans")
         self._metrics.inc("archive_objects_planned", len(scheduled_object_keys))
         self._metrics.set(
@@ -542,6 +576,7 @@ class HistoricalSourceRouter:
             owner_task_by_object,
             tuple(deferred_prefetch.values()),
             foreground_demand,
+            decisions,
         )
 
     def start_deferred_prefetch(self, route_plan: ArchiveRoutePlan) -> None:
@@ -948,7 +983,10 @@ def _task_runs(tasks: list[BackfillTask], interval: str) -> list[list[BackfillTa
     ordered = sorted(tasks, key=lambda item: (item.start_ms, item.end_ms))
     runs: list[list[BackfillTask]] = []
     for task in ordered:
-        if not runs or task.start_ms > runs[-1][-1].end_ms + interval_ms:
+        if (not runs or task.start_ms > runs[-1][-1].end_ms + interval_ms
+                or _archive_run_policy(task) != _archive_run_policy(runs[-1][-1])):
+            # A neighbouring legacy demand must not revoke a qualified page's
+            # actual-task envelope by making the all-tasks contract false.
             runs.append([task])
         else:
             runs[-1].append(task)
@@ -1053,7 +1091,15 @@ def _bounded_history_page(tasks):
         for task in tasks)
 
 
-def _bounded_usdm_archive_candidates(refs, tasks, interval):
+def _archive_run_policy(task):
+    # Both qualifications are evaluated over all tasks in a run. A legacy
+    # neighbour must not erase either the bounded envelope or the exact-slot
+    # amplification limit used by required mixed-history sources.
+    return (_bounded_history_page([task]),
+            bool(task.metadata.get('history_composition_contract')))
+
+
+def _bounded_usdm_archive_candidates(refs, tasks, interval, *, rejected=None):
     """Bound imports/prefetch by native rows and the current work envelope.
 
     A persistent warm ZIP is not free reduction work. Oversized monthly or
@@ -1070,14 +1116,22 @@ def _bounded_usdm_archive_candidates(refs, tasks, interval):
     for ref in ordered:
         count = (ref.end_ms-ref.start_ms)//width+1
         lo, hi = min(first, ref.start_ms), max(last, ref.end_ms)
-        if (count > MAX_USDM_ARCHIVE_OBJECT_ROWS or rows+count > MAX_USDM_ARCHIVE_ROUTE_ROWS
-                or (hi-lo)//width+1 > MAX_USDM_ARCHIVE_ROUTE_ROWS):
-            continue
-        if composed:
+        reason = None
+        if count > MAX_USDM_ARCHIVE_OBJECT_ROWS:
+            reason = 'object_row_budget'
+        elif rows+count > MAX_USDM_ARCHIVE_ROUTE_ROWS:
+            reason = 'route_row_budget'
+        elif (hi-lo)//width+1 > MAX_USDM_ARCHIVE_ROUTE_ROWS:
+            reason = 'route_envelope_budget'
+        elif composed:
             needed = _composed_archive_slots(tasks, ref, width)
             if (needed == 0 or count > max(SMALL_COMPOSED_ARCHIVE_ROWS,
                                            MAX_COMPOSED_ARCHIVE_AMPLIFICATION * needed)):
-                continue
+                reason = 'source_amplification' if needed else 'no_required_slots'
+        if reason:
+            if rejected is not None:
+                rejected[reason] = rejected.get(reason, 0) + 1
+            continue
         selected.append(ref)
         rows += count
         first, last = lo, hi
@@ -1105,7 +1159,7 @@ def _composed_archive_slots(tasks, ref, width):
 
 
 def _archive_decision_range(tasks: list[BackfillTask]) -> tuple[int, int]:
-    """Recover the scheduler parent range carried by page-bounded tasks."""
+    """Use qualified task envelopes; preserve legacy parent prefill."""
     actual_start = min(task.start_ms for task in tasks)
     actual_end = max(task.end_ms for task in tasks)
     if _bounded_history_page(tasks):
@@ -1125,6 +1179,23 @@ def _archive_decision_range(tasks: list[BackfillTask]) -> tuple[int, int]:
             starts.append(parent_start)
             ends.append(parent_end)
     return min(starts), max(ends)
+
+
+def _route_decision(task: BackfillTask) -> dict[str, Any]:
+    """Scalar provenance only: no payloads, owners or arbitrary metadata."""
+    parent = task.metadata.get('ledger_range')
+    parent = parent if isinstance(parent, dict) else {}
+    return dict(task_key=task.task_key, exchange=task.exchange,
+        market_type=task.market_type, symbol=task.symbol, interval=task.interval,
+        requested_interval=str(task.metadata.get('custom_interval')
+            or task.metadata.get('requested_interval') or task.interval)[:64],
+        task_start_ms=task.start_ms, task_end_ms=task.end_ms,
+        ledger_start_ms=parent.get('start_ms') if type(parent.get('start_ms')) is int else None,
+        ledger_end_ms=parent.get('end_ms') if type(parent.get('end_ms')) is int else None,
+        route_start_ms=task.start_ms, route_end_ms=task.end_ms,
+        bounded_history_page=_bounded_history_page([task]),
+        candidate_objects=0, eligible_objects=0, selected_object_count=0,
+        selected_objects=[], reason='archive_disabled')
 
 
 def _unique_refs(values: list[ArchiveObjectRef]) -> list[ArchiveObjectRef]:

@@ -30,6 +30,7 @@ import asyncio
 import logging
 import time
 from contextlib import nullcontext
+from copy import deepcopy
 from dataclasses import dataclass, replace
 from typing import Callable, Awaitable, Any
 
@@ -109,6 +110,8 @@ class HistoricalFetcher:
         self._ingestion_cfg = ingestion_config or IngestionConfig()
         self._metrics = LayerMetrics("HistoricalFetcher")
         self._last_history_diagnostics: dict[str, Any] = {}
+        self._source_route_sequence = 0
+        self._recent_source_routes: list[dict[str, Any]] = []
 
         # Concurrency control
         self._semaphore = asyncio.Semaphore(self._global_fetch_concurrency())
@@ -165,6 +168,8 @@ class HistoricalFetcher:
                 }
             ),
             "last_history_request": dict(self._last_history_diagnostics),
+            "recent_source_routes": deepcopy(self._recent_source_routes),
+            "source_route_sequence": self._source_route_sequence,
             "metrics": self._metrics.snapshot(),
         }
 
@@ -314,6 +319,32 @@ class HistoricalFetcher:
         coros = [self._fetch_rest_task(task, consume=on_native_page) if stream
                  else self._fetch_task(task, route_plan) for task, stream in zip(tasks, streaming)]
         raw_results = await asyncio.gather(*coros, return_exceptions=True)
+
+        # Attach scalar route provenance before quota control flow hands
+        # completed siblings to reconciliation. Retain at most 64 receipts,
+        # including failed/deferred tasks, without retaining market payloads.
+        for task, result in zip(tasks, raw_results):
+            self._source_route_sequence += 1
+            route = dict(route_plan.decisions_by_task.get(task.task_key, {}))
+            route.update(sequence=self._source_route_sequence,
+                task_key=task.task_key, observed_at_ms=int(time.time()*1000),
+                fetched_rows=getattr(result, 'bars_count', 0),
+                rest_pages=getattr(result, 'pages_fetched', 0),
+                status=('deferred' if isinstance(result, RateLimitDeferred)
+                        else 'failed' if isinstance(result, BaseException)
+                        else result.status.value))
+            if isinstance(result, (FetchResult, FetchReceipt)):
+                # Routed archive results do not set history_lane. Preserve
+                # that absence instead of mislabelling archive+REST as REST.
+                route.update(reported_history_lane=result.metadata.get('history_lane'),
+                    history_sources=list(result.metadata.get('history_sources', ())),
+                    archive_import_rows=result.metadata.get('archive_import_rows', 0),
+                    archive_download_bytes=result.metadata.get('archive_download_bytes', 0),
+                    archive_parse_elapsed_ms=result.metadata.get('archive_parse_elapsed_ms', 0),
+                    fetch_elapsed_ms=result.elapsed_ms)
+                result.metadata['source_route'] = deepcopy(route)
+            self._recent_source_routes.append(route)
+            del self._recent_source_routes[:-64]
 
         deferred = [
             result for result in raw_results if isinstance(result, RateLimitDeferred)

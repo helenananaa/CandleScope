@@ -1,0 +1,81 @@
+{
+  "final_selected_tests": 63,
+  "final_selected_passed": 63,
+  "broader_selection_clean": false,
+  "results": [
+    {
+      "artifact": "routing.xml",
+      "tests": 19,
+      "failures": 0,
+      "errors": 0,
+      "sha256": "12adaa7bb805796bf47dc6d3f0e0ffaf762f36d4ba53aca21d380f68893a6945",
+      "failure_cases": []
+    },
+    {
+      "artifact": "integration.xml",
+      "tests": 95,
+      "failures": 3,
+      "errors": 0,
+      "sha256": "58572178ee37ddb53c7e753ca6a9ebdbd910c1d0072363221f4fbe7a8fa8d5f2",
+      "failure_cases": [
+        "test_replay_uses_saved_pool_and_reopens_import_offline",
+        "test_failed_fetch_report_keeps_summary_and_task_location",
+        "test_backfill_engine_returns_partial_when_reconciler_write_fails"
+      ]
+    },
+    {
+      "artifact": "replay-recheck.xml",
+      "tests": 1,
+      "failures": 1,
+      "errors": 0,
+      "sha256": "3ec4fed24ac022f933961692c71a8bfcdfe64e11a940fb931035dcdc1f91b5fe",
+      "failure_cases": [
+        "test_replay_uses_saved_pool_and_reopens_import_offline"
+      ]
+    },
+    {
+      "artifact": "final-routing-integration.xml",
+      "tests": 63,
+      "failures": 0,
+      "errors": 0,
+      "sha256": "03a30bdb1da53d31d9e1650fa6210081e7cbd928c5174c8e4d689f89d9594d05",
+      "failure_cases": []
+    },
+    {
+      "artifact": "final-routing-integration-2.xml",
+      "tests": 63,
+      "failures": 0,
+      "errors": 0,
+      "sha256": "309189abc4b0ff3dad7c5a08cfe5d84bbdc8be4ab989b0559d62b3fc23f5fd96",
+      "failure_cases": []
+    },
+    {
+      "artifact": "issue460-baseline.xml",
+      "baseline_commit": "fd577a37ca1b191f91caf0fbf414f528dd41e183",
+      "tests": 2,
+      "failures": 2,
+      "sha256": "4794a9553155fc9039f01313745c05f4b345a7984ff89ff143243c47367af8eb",
+      "failure_cases": [
+        "test_failed_fetch_report_keeps_summary_and_task_location",
+        "test_backfill_engine_returns_partial_when_reconciler_write_fails"
+      ]
+    },
+    {
+      "artifact": "issue460-baseline-replay.xml",
+      "baseline_commit": "fd577a37ca1b191f91caf0fbf414f528dd41e183",
+      "tests": 1,
+      "failures": 1,
+      "sha256": "688df5d173f035455943ad9b003b0985dc95101d268aedda8218c838ce0d77dc",
+      "failure_cases": [
+        "test_replay_uses_saved_pool_and_reopens_import_offline"
+      ]
+    }
+  ],
+  "final_validation_artifact": "final-routing-integration-3.xml.gz",
+  "post_native_change": "Only diagnostic history-lane reporting changed after fbfabd5a3; routing contracts unchanged. Final source selection rerun passed. No final-source native qualification claimed.",
+  "routing_native_product": "fbfabd5a3d76c46ae5c42fff582964b8a5e68fb0",
+  "validated_backend_files": {
+    "backend/app/data_engine/backfill/source_router.py": "549fa6b35b07b636265dfd9b27910962cc3448aaa8360ef8302f06075c35b831",
+    "backend/app/data_engine/backfill/fetcher.py": "74d592b10418c48aaf85432dedc35e7d491e3115927a3dcbfd884da0b6aa5545"
+  }
+}
