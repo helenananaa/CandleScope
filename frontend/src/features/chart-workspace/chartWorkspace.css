@@ -391,14 +391,14 @@
   color: var(--text-muted);
   font-size: var(--font-size-xs);
 }
-.workspace-cell-layout-popover label {
+.workspace-cell-layout-popover label:where(:not(.ui-check)) {
   display: flex;
   align-items: center;
   gap: 4px;
   color: var(--text-secondary);
   font-size: var(--font-size-xs);
 }
-.workspace-cell-layout-popover input {
+.workspace-cell-layout-popover input:where(:not(.ui-check-input)) {
   margin: 0;
   accent-color: var(--accent-blue);
 }
@@ -415,7 +415,8 @@
 .workspace-cell-swap-actions > div {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
-.workspace-cell-layout-popover button {
+/* Kit controls (the appearance section) style themselves. */
+.workspace-cell-layout-popover button:where(:not(.ui-btn, .ui-segment, .ui-icon-btn)) {
   min-height: 27px;
   padding: 0 7px;
   border: 1px solid var(--border-color);
@@ -425,7 +426,7 @@
   font-size: var(--font-size-xs);
   cursor: pointer;
 }
-.workspace-cell-layout-popover button:hover:not(:disabled) {
+.workspace-cell-layout-popover button:where(:not(.ui-btn, .ui-segment, .ui-icon-btn)):hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--accent-blue) 50%, var(--border-color));
   color: var(--text-primary);
   background: var(--bg-hover);
@@ -434,6 +435,66 @@
 .workspace-cell-layout-popover fieldset:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+/* A chart's own appearance, first in its menu. */
+.chart-appearance-section {
+  display: grid;
+  gap: 7px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--border-color);
+}
+.chart-appearance-section h4 {
+  margin: 0;
+  color: var(--text-accent);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+}
+.chart-appearance-colors {
+  display: grid;
+  gap: 6px;
+}
+.workspace-cell-layout-popover .chart-appearance-color {
+  justify-content: space-between;
+  gap: 8px;
+}
+.chart-appearance-color input[type='color'] {
+  flex: none;
+  width: 32px;
+  height: 22px;
+  padding: 0 2px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-0);
+  cursor: pointer;
+}
+.chart-appearance-section .ui-check {
+  font-size: var(--font-size-xs);
+}
+.chart-appearance-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+}
+/* Marker on a chart with its own appearance, beside its menu button. */
+.chart-appearance-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-accent);
+  cursor: pointer;
+}
+.chart-appearance-marker:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+.chart-appearance-marker:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 1px;
 }
 .workspace-cell-layout-popover .workspace-cell-close-action {
   color: var(--text-down);

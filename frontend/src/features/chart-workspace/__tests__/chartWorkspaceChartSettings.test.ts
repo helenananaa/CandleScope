@@ -5,8 +5,11 @@ import {
   applicationSettingsPatch,
   buildAppearanceTargets,
   cellAppearanceOverride,
+  cellsWithAppearanceOverride,
   nextCellChartSettings,
+  sharedCellAppearanceTheme,
   withCellAppearanceOverride,
+  withoutCellAppearanceOverrides,
 } from "../chartWorkspaceChartSettings.js";
 import { applyLinkedChartSettingsUpdate, cloneChartLinkSettings } from "../chartWorkspaceLinkModel.js";
 import { createDefaultChartWorkspace, normalizeChartWorkspaceWithDiagnostics } from "../chartWorkspaceStorage.js";
@@ -126,4 +129,27 @@ test("returning a style-linked chart to the app theme clears its linked peers to
   assert.equal(own.cells['cell-2']!.chartSettings.theme, 'light');
   const reset = applyLinkedChartSettingsUpdate(own, source.id, withCellAppearanceOverride(own.cells['cell-1']!.chartSettings, null));
   for (const id of ['cell-1', 'cell-2']) assert.equal(Object.hasOwn(reset.cells[id]!.chartSettings, 'theme'), false);
+});
+
+test("workspace appearance overrides can be counted, reset together, and recognised as one shared theme", () => {
+  const base = createDefaultChartWorkspace();
+  const cell = base.cells["cell-1"]!;
+  const document = {
+    ...base,
+    cells: {
+      "cell-1": { ...cell, chartSettings: { ...cell.chartSettings, theme: "light" as const } },
+      "cell-2": { ...cell, id: "cell-2", chartSettings: { ...cell.chartSettings, theme: "light" as const } },
+      "cell-3": { ...cell, id: "cell-3", chartSettings: { ...cell.chartSettings } },
+    },
+  };
+  assert.deepEqual(cellsWithAppearanceOverride(document, ["cell-1", "cell-2", "cell-3"]), ["cell-1", "cell-2"]);
+  // A chart that follows the app means the layout does not share one override.
+  assert.equal(sharedCellAppearanceTheme(document, ["cell-1", "cell-2", "cell-3"]), null);
+  assert.equal(sharedCellAppearanceTheme(document, ["cell-1", "cell-2"]), "light");
+  const custom = { ...document, cells: { ...document.cells, "cell-2": { ...document.cells["cell-2"], chartSettings: { ...cell.chartSettings, theme: "custom" as const, customBg: "#123456" } } } };
+  assert.equal(sharedCellAppearanceTheme(custom, ["cell-1", "cell-2"]), null);
+  const reset = withoutCellAppearanceOverrides(document, ["cell-1", "cell-2", "cell-3"]);
+  assert.deepEqual(cellsWithAppearanceOverride(reset, ["cell-1", "cell-2", "cell-3"]), []);
+  assert.equal(Object.hasOwn(reset.cells["cell-1"]!.chartSettings, "theme"), false);
+  assert.equal(withoutCellAppearanceOverrides(reset, ["cell-1"]), reset, "nothing to reset keeps the same document");
 });

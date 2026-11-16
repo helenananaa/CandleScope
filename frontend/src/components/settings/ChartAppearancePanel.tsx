@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { SegmentedControl } from "../ui/Choice.js";
+import { Button } from "../ui/Button.js";
 import { Icon } from "../icons/Icon.js";
 import type { IconName } from "../icons/Icon.js";
 import type {
@@ -33,13 +33,6 @@ const THEME_OPTIONS: ThemeOption[] = [
 
 // The app theme has no custom background; custom backgrounds belong to individual charts.
 const APP_THEME_OPTIONS = THEME_OPTIONS.filter((option) => option.value !== "custom");
-const CHART_THEME_OPTIONS = THEME_OPTIONS.filter((option) => option.value !== "system");
-
-function effectiveScheme(theme: ChartTheme): "dark" | "light" {
-    if (theme === "light") return "light";
-    if (theme === "system" && typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: light)").matches) return "light";
-    return "dark";
-}
 
 function priceBoxSizeMode(value: string): PriceBoxSizeMode {
     return value === "traditional" ? "traditional" : "atr";
@@ -47,7 +40,7 @@ function priceBoxSizeMode(value: string): PriceBoxSizeMode {
 
 export interface ChartAppearancePanelProps {
     appearanceScope?: "chart" | "application";
-    /** Present when opened from a chart: app theme and colours go to the app, own appearance to the chart. */
+    /** Present when opened from a chart: the app theme and colours go to the app; charts set their own appearance in their menu. */
     appearanceTargets?: AppearanceTargets;
     settings: ChartSettings;
     onUpdate(settings: ChartSettings): void;
@@ -87,9 +80,7 @@ export default function ChartAppearancePanel({ settings, onUpdate, appearanceSco
         application ? application.update(colors) : onUpdate({ ...settings, ...colors })
     );
     const themeOptions = legacyChartScope ? THEME_OPTIONS : APP_THEME_OPTIONS;
-    const chart = appearanceTargets?.chart;
-    const chartOverride = chart?.override ?? {};
-    const chartHasOwnAppearance = Object.keys(chartOverride).length > 0;
+    const workspace = appearanceTargets?.workspace;
     const greenUpActive = sameColor(appColors.upColor, GREEN) && sameColor(appColors.downColor, RED);
     const redUpActive = sameColor(appColors.upColor, RED) && sameColor(appColors.downColor, GREEN);
 
@@ -138,53 +129,13 @@ export default function ChartAppearancePanel({ settings, onUpdate, appearanceSco
                 </div>
             </div>
 
-            {chart && (
-                <div className="st-group" data-settings-chart-appearance="true">
-                    <div className="st-group-title">{t("settings.appearance.chartAppearanceTitle")}</div>
-                    <div className="st-group-desc">{t("settings.appearance.cellThemeDescription")}</div>
-                    <SegmentedControl
-                        label={t("settings.appearance.chartAppearanceTitle")}
-                        value={chartHasOwnAppearance ? "own" : "follow"}
-                        onChange={(next) => {
-                            if (next === "follow") chart.set(null);
-                            else if (!chartHasOwnAppearance) chart.set({ theme: effectiveScheme(appTheme) });
-                        }}
-                        options={[
-                            { value: "follow", label: t("settings.appearance.followApp") },
-                            { value: "own", label: t("settings.appearance.ownAppearance") },
-                        ]}
-                    />
-                    {chartHasOwnAppearance && (
-                        <div className="st-theme-grid st-appearance-theme-grid">
-                            {CHART_THEME_OPTIONS.map((theme) => (
-                                <button
-                                    key={theme.value}
-                                    type="button"
-                                    className={`st-theme-card ${chartOverride.theme === theme.value ? 'active' : ''}`}
-                                    aria-pressed={chartOverride.theme === theme.value}
-                                    onClick={() => chart.set({
-                                        ...chartOverride,
-                                        theme: theme.value,
-                                        ...(theme.value === "custom" && !chartOverride.customBg ? { customBg: application?.customBg ?? settings.customBg } : {}),
-                                    })}
-                                >
-                                    <span className="st-theme-icon"><Icon name={theme.icon} size={22} /></span>
-                                    <span className="st-theme-label">{t(theme.value === "custom" ? "settings.appearance.customBg" : theme.labelKey)}</span>
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                    {chartOverride.theme === "custom" && (
-                        <div className="st-color-row">
-                            <input
-                                type="color"
-                                aria-label={t("settings.appearance.customBg")}
-                                value={chartOverride.customBg ?? settings.customBg}
-                                onChange={(event) => chart.set({ ...chartOverride, customBg: event.target.value })}
-                            />
-                            <code className="st-color-code">{chartOverride.customBg ?? settings.customBg}</code>
-                        </div>
-                    )}
+            {/* Charts with a header menu set their own appearance there; Settings only counts them. */}
+            {workspace && workspace.overrides > 0 && (
+                <div className="st-group" data-settings-chart-overrides={workspace.overrides}>
+                    <div className="st-chart-overrides">
+                        <span>{t("chartAppearance.overrides", { count: workspace.overrides })}</span>
+                        <Button size="sm" onClick={workspace.resetAll}>{t("chartAppearance.resetAll")}</Button>
+                    </div>
                 </div>
             )}
 

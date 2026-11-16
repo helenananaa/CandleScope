@@ -240,6 +240,19 @@ html[lang="ru"] .st-preset-btn {
 }
 
 /* ── Theme cards ────────────────────────────────────────── */
+/* Charts with their own appearance: a count and one way back to the app theme. */
+.st-chart-overrides {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  color: var(--text-secondary);
+  font-size: var(--font-size-md);
+}
+
 .st-theme-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

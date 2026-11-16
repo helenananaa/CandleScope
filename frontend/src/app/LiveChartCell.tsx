@@ -4,7 +4,8 @@ import { useChartTimeNavigation } from "../features/market-data/useChartTimeNavi
 import { useHistoryStudy } from "../features/history-study/useHistoryStudy.js";
 import { historyStudyOwner } from "../features/history-study/historyStudyOwner.js";
 import "../features/history-study/historyStudy.css";
-import { applicationSettingsPatch, buildAppearanceTargets, nextCellChartSettings } from "../features/chart-workspace/chartWorkspaceChartSettings.js";
+import { applicationSettingsPatch, buildAppearanceTargets, hasCellAppearanceOverride, nextCellChartSettings } from "../features/chart-workspace/chartWorkspaceChartSettings.js";
+import ChartAppearanceSection from "../components/settings/ChartAppearanceSection.js";
 import { useCellChartTheme } from "../features/settings/chartAppearanceSettings.js";
 import { ChartIntervalUnavailable } from "./ChartIntervalUnavailable.js";
 import { resolveStrategyTesterMode } from "../features/backtest/chart-tester/chartStrategyMode.js";
@@ -199,6 +200,10 @@ export interface LiveChartCellProps {
   onToggleMaximize(cellId: ChartCellId): void;
   onSessionChange(cellId: ChartCellId, session: ChartSession): void;
   onChartSettingsChange(cellId: ChartCellId, settings: ChartCellChartSettings): void;
+  /** Charts in the workspace that use their own appearance, and a way to return them all to the app theme. */
+  appearanceWorkspace?: { overrides: number; resetAll(): void };
+  /** Other charts that take this chart's appearance through chart style linking. */
+  styleLinkedCharts?: number;
   onQuickReplayChange(workspaceId: ChartWorkspaceId, cellId: ChartCellId, update: UpdateChartQuickReplay, change: QuickReplayChange): void;
   onAccountOverlayChange(cellId: ChartCellId, settings: ChartAccountOverlaySettings): void;
   onDrawingsHiddenChange(cellId: ChartCellId, hidden: boolean): void;
@@ -247,6 +252,8 @@ function LiveChartCell({
   onToggleMaximize,
   onSessionChange,
   onChartSettingsChange,
+  appearanceWorkspace,
+  styleLinkedCharts = 0,
   onQuickReplayChange,
   onAccountOverlayChange,
   onDrawingsHiddenChange,
@@ -574,7 +581,10 @@ function LiveChartCell({
     setApplication: globalSettings.setSettings,
     cell: cell.chartSettings,
     setCell: (next) => onChartSettingsChange(cell.id, next),
-  }), [cell.id, cell.chartSettings, globalSettings.settings, globalSettings.setSettings, onChartSettingsChange]);
+    linkedCharts: styleLinkedCharts,
+    ...(appearanceWorkspace ? { workspace: appearanceWorkspace } : {}),
+  }), [cell.id, cell.chartSettings, globalSettings.settings, globalSettings.setSettings, onChartSettingsChange, styleLinkedCharts, appearanceWorkspace]);
+  const ownAppearance = hasCellAppearanceOverride(cell.chartSettings);
 
   const priceScale = cell.priceScale;
   const setInvertScale = useCallback((invertScale: boolean) => {
@@ -1128,9 +1138,12 @@ function LiveChartCell({
           </button>}
           <span className="chart-cell-drawing-controls" ref={setDrawingControlsHost} hidden={!!replay.key || study.masked} />
           <WorkspaceCellLayoutMenu
+            portal
             cellId={cell.id}
             layoutCellIds={layoutCellIds}
             maxCellsPerWindow={maxCellsPerWindow}
+            appearance={<ChartAppearanceSection targets={appearanceTargets} />}
+            customized={ownAppearance}
             disabled={layoutEditingDisabled || maximized}
             onSplit={onSplitCell}
             onClose={onCloseCell}

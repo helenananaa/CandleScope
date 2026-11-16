@@ -58,6 +58,8 @@ Brand marks (`public/brand/`) use ink `#07182b`, blue `#1473e6` and teal `#12bfa
 
 - **App theme** (Settings → Appearance): dark, light or follow system. It styles the whole interface and every chart that follows it.
 - **Chart appearance** (per chart): follow the app theme (default), or its own dark, light or custom background, with optional up/down colours. The app theme never overrides a chart's own appearance; a reset returns the chart to following the app.
+- **Where each is set.** The app theme is in Settings only. A chart's appearance is in its header ⋯ menu (图 N 外观与布局), under 图表外观, first in the menu; it stays available when the layout is locked or the chart is maximized. A chart with its own appearance shows a palette marker beside its menu button, which opens the menu. When charts have their own appearance, Settings says how many, with 全部恢复跟随应用.
+- With chart style linking on, a chart's appearance goes to its linked charts, and the menu says how many.
 - Chart text and grid colours follow the chart's effective background, so any custom background stays readable.
 - An installed theme extension takes the app theme's place.
 
@@ -80,7 +82,7 @@ Build surfaces from the primitives in `frontend/src/components/ui` (import from 
 | A toolbar pill or picker | `.ui-control` (with `.is-active` or `aria-expanded`) |
 | Text, number, choice or time input | `Field` around `Input`, `Select`, `Textarea` or `DateTimeInput`. `DateTimeInput` writes times as `2026-01-02 09:30` in every locale (the browser's own control follows the browser's language, not the app's), opens the browser's calendar from its button, and always shows its zone, UTC by default. Pass `zoneLabel={false}` only when the field's label already names the zone. |
 | On/off | `Switch` for settings that apply at once; `Checkbox` in forms that are submitted |
-| One of two to five options | `SegmentedControl` |
+| One of two to five options | `SegmentedControl`. A label too long for its share wraps (hyphenated where the language allows) instead of running under the next option. |
 | Switching views | `Tabs` with `TabPanel` |
 | A status word or count | `Badge` with a tone |
 | A titled group | `Section` |
