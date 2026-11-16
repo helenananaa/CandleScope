@@ -130,6 +130,8 @@ export interface KlineRequestContext {
   /** Recovery/readback must not be answered by previously accepted local data. */
   cacheMode?: "prefer-cache" | "network-only";
   epoch?: number;
+  /** Stream reconnections fence in-flight reads within the same chart epoch. */
+  transportGeneration?: number;
   realtimeVersion?: number;
   scope?: string;
   /** Lower values sponsor queued physical work first. */
