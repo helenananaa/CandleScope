@@ -1047,6 +1047,12 @@ def _filter_daily_candidates(
     return monthly + daily
 
 
+def _bounded_history_page(tasks):
+    return bool(tasks) and all(task.exchange == 'binance' and task.market_type == 'futures'
+        and task.metadata.get('bounded_history_batch_contract') == 'binance.usdm.trade-klines/base-utc/1'
+        for task in tasks)
+
+
 def _bounded_usdm_archive_candidates(refs, tasks, interval):
     """Bound imports/prefetch by native rows and the current work envelope.
 
@@ -1060,7 +1066,7 @@ def _bounded_usdm_archive_candidates(refs, tasks, interval):
     first, last = min(task.start_ms for task in tasks), max(task.end_ms for task in tasks)
     ordered = sorted(refs, key=lambda ref: _range_distance(first, last, ref.start_ms, ref.end_ms))
     selected, rows = [], 0
-    composed = all(task.metadata.get('history_composition_contract') for task in tasks)
+    composed = all(task.metadata.get('history_composition_contract') for task in tasks) or _bounded_history_page(tasks)
     for ref in ordered:
         count = (ref.end_ms-ref.start_ms)//width+1
         lo, hi = min(first, ref.start_ms), max(last, ref.end_ms)
@@ -1102,6 +1108,8 @@ def _archive_decision_range(tasks: list[BackfillTask]) -> tuple[int, int]:
     """Recover the scheduler parent range carried by page-bounded tasks."""
     actual_start = min(task.start_ms for task in tasks)
     actual_end = max(task.end_ms for task in tasks)
+    if _bounded_history_page(tasks):
+        return actual_start, actual_end
     starts = [actual_start]
     ends = [actual_end]
     for task in tasks:

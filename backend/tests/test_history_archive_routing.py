@@ -893,3 +893,31 @@ def test_sparse_composed_edges_do_not_import_a_whole_coarse_month():
     day = SimpleNamespace(start_ms=0,end_ms=24*hour-1)
     task.metadata['mixed_fetch_windows'] = [(0,0)]
     assert _bounded_usdm_archive_candidates([day],[task],'1h') == [day]
+
+def test_bounded_prime_page_does_not_prefill_ledger_parent_archives(tmp_path, monkeypatch):
+    async def run():
+        provider = BinanceKlineArchiveProvider()
+        start = _ms(datetime(2024, 1, 1, tzinfo=UTC))
+        monkeypatch.setattr('app.data_engine.backfill.source_router.time.time', lambda: (start+15*1440*MINUTE_MS)/1000)
+        refs = provider.plan_objects(market_type='futures', symbol='BTCUSDT', interval='1m',
+            start_ms=start, end_ms=start+1440*MINUTE_MS-1, now_ms=start+50*1440*MINUTE_MS)
+        ref = next(item for item in refs if item.period == '2024-01-01')
+        http = _ArchiveHttp(ref, _archive_payload(ref, 3))
+        cfg = _config(tmp_path)
+        router = HistoricalSourceRouter(cfg, http=http)
+        router._foreground_archive_ready = True
+        rest = _RestTransport(_rest_rows(start, 3))
+        fetcher = HistoricalFetcher(cfg, rest, IngestionConfig(), source_router=router)
+        task = _task(ref, 0, 2)
+        task.market_type = 'futures'
+        task.metadata['ledger_range']['end_ms'] = start+14*1440*MINUTE_MS-1
+        task.metadata['bounded_history_batch_contract'] = 'binance.usdm.trade-klines/base-utc/1'
+        try:
+            results = await fetcher.fetch([task])
+            assert sum(item.bars_count for item in results) == 3
+            assert http.downloads == 0, 'a three-row chunk must not import its month-long ledger parent'
+            assert len(rest.requests) == 1
+            assert results[0].metadata['history_lane'] == 'rest'
+        finally:
+            await router.close()
+    asyncio.run(run())
