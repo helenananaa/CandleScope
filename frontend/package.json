@@ -141,6 +141,7 @@
     "preview": "vite preview",
     "smoke": "tsx scripts/smoke.mjs",
     "design:snapshots": "node scripts/design-snapshots.mjs",
+    "design:contrast": "node scripts/design-contrast.mjs",
     "smoke:replay": "node scripts/replay-soak.mjs --allow-short --duration-ms 10000 --cycles 1 --projection-events 10000 --sample-ms 5000",
     "smoke:replay:v2": "node scripts/replay-soak.mjs --allow-short --duration-ms 10000 --cycles 1 --projection-events 10000 --sample-ms 5000",
     "stress:replay:orders": "node scripts/replay-soak.mjs --allow-short --duration-ms 10000 --cycles 10 --projection-events 10000 --sample-ms 5000 --out ../docs/perf-baselines/replay-v2-order-advisory-stress.json",

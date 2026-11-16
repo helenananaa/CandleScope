@@ -10,6 +10,7 @@ import type { ChartTime } from "./chartAdapterTypes.js";
 import { CHART_CROSSHAIR_COLORS, CHART_FONT_FAMILY, CHART_THEME_COLORS, chartSchemeForBackground } from "./chartPalette.js";
 import { getDateTimeLocale } from "../i18n/index.js";
 import { getExtensionState } from "../features/extensions/state.js";
+import { legibleOn } from "./legibleColor.js";
 
 type AdapterTickMarkFormatter = (
   time: ChartTime,
@@ -204,9 +205,10 @@ export function chartPaneCssVariables(options: PaneAppearanceOptions & {
   upColor: string; downColor: string;
 }): Record<`--${string}`, string> {
   const colors = getPaneThemeColors(options);
+  // The legend writes prices in the candle colours; they must stay readable on this chart's background.
   return {
-    "--text-up": options.upColor,
-    "--text-down": options.downColor,
+    "--text-up": legibleOn(options.upColor, colors.bgColor),
+    "--text-down": legibleOn(options.downColor, colors.bgColor),
     ...(options.inheritApplicationTheme === false ? {
       "--text-primary": colors.textColor,
       "--text-secondary": colors.textColor,

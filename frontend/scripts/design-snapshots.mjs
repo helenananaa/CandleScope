@@ -170,6 +170,19 @@ export async function openBrowser(chromePath) {
   return { send, close };
 }
 
+/** Installed before the app loads: captures only read, so opening a panel cannot start a run or save anything. */
+export const BLOCK_WRITES = `(() => {
+  const original = window.fetch.bind(window);
+  window.fetch = async (input, init = {}) => {
+    const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, location.href);
+    const method = String(init.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+    if (url.pathname.startsWith("/api/") && method !== "GET") {
+      return new Response(JSON.stringify({ detail: { code: "DESIGN_CAPTURE_READ_ONLY", message: "writes are refused during design captures" } }), { status: 503, headers: { "content-type": "application/json" } });
+    }
+    return original(input, init);
+  };
+})();`;
+
 // Runs in the page: resolves a step against the app's own i18n module and clicks the match.
 export const CLICK_STEP = `async (step) => {
   const { t } = await import("/src/i18n/index.ts");
@@ -225,6 +238,7 @@ async function capture(args) {
         source: `try { const k = ${JSON.stringify(SETTINGS_KEY)}; const s = JSON.parse(localStorage.getItem(k) || "{}");
           s.theme = ${JSON.stringify(theme)}; s.locale = ${JSON.stringify(args.locale)}; localStorage.setItem(k, JSON.stringify(s)); } catch {}`,
       });
+      await browser.send("Page.addScriptToEvaluateOnNewDocument", { source: BLOCK_WRITES });
       for (const viewport of args.viewports) {
         await browser.send("Emulation.setDeviceMetricsOverride", { ...viewport, deviceScaleFactor: 1, mobile: false });
         for (const state of states) {
