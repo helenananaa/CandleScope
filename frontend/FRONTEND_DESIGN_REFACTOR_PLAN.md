@@ -340,8 +340,15 @@ Sixteen of the new files hold rules that must load later than their feature's ma
 
 Still outside the stack, and moved when each is rebuilt:
 
-- **Surfaces that open as native modal `<dialog>`s:** Export, jump to date, history study (3b), research return, replay screenshots, and the drawing property panels. The browser keeps them above everything and gives them their own Escape; the stack leaves Escape to them.
+- **Surfaces that open as native modal `<dialog>`s:** Export, jump to date, research return, replay screenshots, and the drawing property panels. The browser keeps them above everything and gives them their own Escape; the stack leaves Escape to them. (The history study moved to a popover in 3b.)
 - **The replay hub's create and end-session dialogs, and the trade explanation inside the strategy tester.**
+
+**Phase 3b is done (branch `design/phase-3b-unstyled-surfaces`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_3B.md`](../docs/FRONTEND_DESIGN_QA_PHASE_3B.md).
+
+- The §2.1 surfaces are rebuilt from the kit: the event markers and their CSV import, dataset management and revisions, the strategy toolbar's custom interval, the replay hub's resume button, the replay and strategy chart errors, the strategy language picker, and the data workbench's interval group.
+- The history study setup is a popover anchored to its top-bar button, on the overlay stack.
+- `DateTimeInput` writes times as `2026-01-02 09:30` in every locale and opens the browser's calendar from a button; `FileDrop` has a one-row `compact` form. No bare file input is left on these surfaces.
+- Unstyled class names: 110 → 1. The scan no longer counts values compared inside `className` expressions, test and script hooks are declared, and dead modifier classes are gone. The one left is the desktop-only AI control panel in Settings, rebuilt in Phase 5.
 
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 

@@ -741,7 +741,6 @@ function IntervalSelector({
           className={clsx(
             "interval-chip",
             active && "active",
-            item.isCustom && "custom",
             !available && "unavailable",
             highlighted && "highlighted",
           )}

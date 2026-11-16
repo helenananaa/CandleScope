@@ -58,3 +58,22 @@ export function fromDateTimeInputValue(value: string, utc: boolean): number | nu
   const sameDay = utc ? check.getUTCDate() === d && check.getUTCMonth() === mo - 1 : check.getDate() === d && check.getMonth() === mo - 1;
   return Number.isFinite(time) && sameDay ? time : null;
 }
+
+/** The same time as text the user reads and types: `2026-01-02 03:04` (or with `:05` seconds). */
+export function toDateTimeText(epochMs: number | null, utc: boolean, seconds = false): string {
+  return toDateTimeInputValue(epochMs, utc, seconds).replace("T", " ");
+}
+
+/**
+ * Epoch time for typed text, or null when it is empty or invalid. Accepts `-` or `/` between the
+ * date parts, a space or `T` before the time, single-digit month, day and hour, optional seconds,
+ * and a date on its own (midnight).
+ */
+export function fromDateTimeText(text: string, utc: boolean): number | null {
+  const match = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/.exec(text.trim());
+  if (!match) return null;
+  const [y = "", mo = "", d = "", h = "0", mi = "0", s = "0"] = match.slice(1).map((part) => part ?? undefined);
+  if (Number(h) > 23 || Number(mi) > 59 || Number(s) > 59) return null;
+  const pad = (value: string) => value.padStart(2, "0");
+  return fromDateTimeInputValue(`${y}-${pad(mo)}-${pad(d)}T${pad(h)}:${pad(mi)}:${pad(s)}`, utc);
+}

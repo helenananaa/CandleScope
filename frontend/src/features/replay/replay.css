@@ -2185,6 +2185,10 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
 .replay-training-results-error {
   color: var(--text-danger);
 }
+.replay-training-results-notice {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
 
 .replay-market-picker-commit {
   display: grid;
@@ -2312,7 +2316,8 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
 .replay-chart-cell .multi-chart-cell-header > button { margin-left: auto; }
 .replay-chart-cell .multi-chart-cell-header > button + .workspace-cell-layout-menu { margin-left: 0; }
 
-.replay-chart-error { padding: 8px; color: var(--text-danger); font-size: var(--font-size-sm); }
+.replay-chart-error, .replay-workspace-error { flex: 0 0 auto; margin: 8px; }
+.replay-chart-loading { flex: 0 0 auto; padding: 6px 10px; color: var(--text-muted); font-size: var(--font-size-xs); }
 
 .replay-chart-cell { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 

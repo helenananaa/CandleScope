@@ -442,7 +442,7 @@ function LogicGroupEditor({ node, onAction, depth = 0, path, canDelete = false }
       </div>
 
       {children.map((child, index) => (
-        <div key={child.id} className="alert-logic-node">
+        <div key={child.id}>
           {index > 0 && <LogicConnector value={node.op || "AND"} />}
           {child.type === "group" ? (
             <LogicGroupEditor
@@ -485,7 +485,7 @@ function NestedLogicBuilder({ expression, onAction }: NestedLogicBuilderProps) {
   if (expression.type === "group" && only && only.type !== "group") {
     const single = only;
     return (
-      <div className="alert-logic-builder simple">
+      <div className="alert-logic-builder">
         <ConditionCard node={single} index="1" onAction={onAction} canDelete={false} />
         <div className="alert-logic-footer">
           <Button onClick={() => onAction({ type: "add-condition", nodeId: expression.id })}>{t("alert.addCondition")}</Button>

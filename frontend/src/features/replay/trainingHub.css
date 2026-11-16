@@ -54,6 +54,25 @@
   gap: 14px;
   min-width: 0;
 }
+.training-hub-brand-mark {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent-blue) 14%, transparent);
+  color: var(--text-accent);
+  font: 700 var(--font-size-md)/1 var(--font-mono);
+}
+/* Eyebrow above a replay page or panel heading. */
+.training-hub-kicker {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--text-muted);
+  font: 600 var(--font-size-xs)/1.4 var(--font-sans);
+  letter-spacing: .02em;
+}
 
 .training-hub-stats {
   display: grid;

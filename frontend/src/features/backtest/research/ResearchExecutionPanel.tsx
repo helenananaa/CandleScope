@@ -27,7 +27,7 @@ export default function ResearchExecutionPanel({ runtime }: { runtime: BacktestR
       </dl>
       <ResearchChartBookInputs runtime={runtime} onLoadingChange={setImporting} />
       {advancedEnabled && (
-        <details open className="research-advanced-details research-execution-draft">
+        <details open className="research-advanced-details">
           <summary>{t("research.execution.draft")}</summary>
           <p className="research-panel-copy">{t("research.execution.authority")}</p>
           <textarea

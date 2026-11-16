@@ -1,3 +1,4 @@
+import { Button, InlineAlert } from "../../components/ui/index.js";
 import ChartNoteFilterFields from "../chart-workspace/ChartNoteFilterFields.js";
 import { normalizeChartAccountOverlay } from "../chart-workspace/chartAccountOverlaySettings.js";
 import { applicationSettingsPatch, buildAppearanceTargets, nextCellChartSettings } from "../chart-workspace/chartWorkspaceChartSettings.js";
@@ -220,9 +221,8 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
       data-replay-boundary-ms={projection.boundaryMs ?? ""} data-replay-cell-bars={projection.seriesStore.barCount}
       data-replay-cell-interval={cell.session.interval} data-replay-cell-error={projection.error ?? ""} />
     {projection.loading && <div role="status" className="replay-chart-loading">{t("replay.opening")}</div>}
-    {projection.error && <div role="alert" className="replay-chart-error">{projection.error}
-      <button type="button" onClick={projection.retry}>{t("replay.retry")}</button>
-    </div>}
+    {projection.error && <InlineAlert tone="danger" className="replay-chart-error"
+      action={<Button size="sm" onClick={projection.retry}>{t("replay.retry")}</Button>}>{projection.error}</InlineAlert>}
     <ReplayTrainingPageShell runtime={runtime} viewer={viewer} indicators={indicators}
       chartSurfaceRef={surface.ref} chartSurfaceActions={surface.actions}
       pageExportRef={pageExportRef} preparePageDrawingExport={preparePageDrawingExport}
@@ -492,8 +492,10 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
           }} />}
       />}
       featureSurfaces={<><div ref={hostRefs.featureSurfaces} className="replay-workspace-host" />
-        {drawings.error && <div role="alert">{drawings.error}<button type="button" onClick={drawings.retry}>{t("replay.retry")}</button></div>}
-        {error && <div role="alert">{error}<button type="button" onClick={() => { setError(null); setSelectionAttempt((attempt) => attempt + 1); }}>{t("replay.retry")}</button></div>}
+        {drawings.error && <InlineAlert tone="danger" className="replay-workspace-error"
+          action={<Button size="sm" onClick={drawings.retry}>{t("replay.retry")}</Button>}>{drawings.error}</InlineAlert>}
+        {error && <InlineAlert tone="danger" className="replay-workspace-error"
+          action={<Button size="sm" onClick={() => { setError(null); setSelectionAttempt((attempt) => attempt + 1); }}>{t("replay.retry")}</Button>}>{error}</InlineAlert>}
       </>}
       statusBar={<div ref={hostRefs.statusBar} className="replay-workspace-host" />}
     />

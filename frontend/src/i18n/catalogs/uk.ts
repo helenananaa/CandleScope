@@ -4469,6 +4469,8 @@ export const uk = {
   "common.cancel": "Скасувати",
   "common.close": "Закрити",
   "common.notifications": "Сповіщення",
+  "common.working": "Обробка…",
+  "common.pickDateTime": "Вибрати дату й час",
   "status.barCount.few": "{count} свічки",
   "status.barCount.many": "{count} свічок",
   "status.exchangeLimitationCount.few": "{count} обмеження біржі",

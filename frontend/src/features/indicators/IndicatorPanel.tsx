@@ -837,7 +837,7 @@ export default function IndicatorPanel({
             <div className="indicator-panel-content">
               {/* ── Presets tab ── */}
               {tab === "presets" && (
-                <div className="indicator-presets">
+                <div>
                   <div className="indicator-search-wrapper">
                     <input
                       className="indicator-search"

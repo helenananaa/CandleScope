@@ -4469,6 +4469,8 @@ export const pl = {
   "common.cancel": "Anuluj",
   "common.close": "Zamknij",
   "common.notifications": "Powiadomienia",
+  "common.working": "Przetwarzanie…",
+  "common.pickDateTime": "Wybierz datę i godzinę",
   "pane.flow.gaps.few": "{count} luki czasowe",
   "pane.flow.gaps.many": "{count} luk czasowych",
   "pane.flow.missing.few": "{count} niedostępne świece",

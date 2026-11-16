@@ -265,7 +265,7 @@ function TradeFlowProfileBody({ runtime }: { runtime: TradeFlowRuntime }) {
   ]);
   const profile = useMemo(() => buildTradeFlowProfile(records), [records]);
   return (
-    <div className="tf-body tf-profile-body">
+    <div className="tf-body">
       <TradeFlowSummary snapshot={snapshot} />
       <div className="tf-profile-caption">
         <span>{t("trade.footprint")}</span>

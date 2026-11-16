@@ -128,6 +128,14 @@
   font-size: 12px;
 }
 
+/* Flag-off local page top bar (LocalApp). */
+.local-top-identity { display: inline-flex; align-items: baseline; gap: 8px; min-width: 0; }
+.local-top-identity span { overflow: hidden; color: var(--text-secondary); font-size: var(--font-size-sm); text-overflow: ellipsis; white-space: nowrap; }
+.local-offline-badge { padding: 2px 8px; border: 1px solid var(--border-subtle); border-radius: var(--radius-full); color: var(--text-secondary); font-size: var(--font-size-xs); white-space: nowrap; }
+.local-network-truth { color: var(--text-muted); font-size: var(--font-size-xs); }
+.strategy-research-page-alert { flex: 0 0 auto; margin: 8px 16px; }
+.local-chart-error { flex: 0 0 auto; margin: 8px; }
+.local-empty-icon { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; height: 28px; padding: 0 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-full); color: var(--text-muted); font: 600 var(--font-size-xs)/1 var(--font-mono); letter-spacing: .04em; }
 .local-chart-empty {
   min-height: 240px;
   display: flex;
@@ -153,11 +161,12 @@
   box-shadow: 0 12px 48px #0003;
 }
 
-/* A common, source-neutral surface for the independent research entry. */
-.strategy-research-shell :where(.strategy-research-first-open, .strategy-research-script, .strategy-research-result-slot) :where(button),
-.research-data-drawer button,
-.research-data-drawer input,
-.research-data-drawer select {
+/* A common, source-neutral surface for the independent research entry.
+   Element rules here skip kit controls (components/ui), which style themselves. */
+.strategy-research-shell :where(.strategy-research-first-open, .strategy-research-script, .strategy-research-result-slot) :where(button:not(.ui-btn, .ui-icon-btn, .ui-datetime-picker)),
+.research-data-drawer button:where(:not(.ui-btn, .ui-icon-btn, .ui-datetime-picker)),
+.research-data-drawer input:where(:not(.ui-input, .ui-file-drop-input, .ui-datetime-native)),
+.research-data-drawer select:where(:not(.ui-input, .ui-file-drop-input, .ui-datetime-native)) {
   min-height: 34px;
   padding: 7px 12px;
   border: 1px solid var(--border-color);
@@ -167,24 +176,24 @@
   font: 500 13px/1.4 var(--font-sans);
 }
 .strategy-research-shell button, .research-data-drawer button { cursor: pointer; }
-.strategy-research-shell button:not(.ui-control):hover:not(:disabled), .research-data-drawer button:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--strategy-link); }
-.strategy-research-shell button:disabled, .research-data-drawer button:disabled { opacity: .55; cursor: not-allowed; }
+.strategy-research-shell button:not(.ui-control):where(:not(.ui-btn, .ui-icon-btn, .ui-datetime-picker)):hover:not(:disabled), .research-data-drawer button:where(:not(.ui-btn, .ui-icon-btn, .ui-datetime-picker)):hover:not(:disabled) { background: var(--bg-hover); border-color: var(--strategy-link); }
+.strategy-research-shell button:where(:not(.ui-btn, .ui-icon-btn, .ui-datetime-picker)):disabled, .research-data-drawer button:where(:not(.ui-btn, .ui-icon-btn, .ui-datetime-picker)):disabled { opacity: .55; cursor: not-allowed; }
 /* The drawer takes focus on open for keyboard users; it is a container, not a control. */
 .research-data-drawer:focus { outline: none; }
-.strategy-research-shell :is(button, a, input, select, summary):focus-visible,
-.research-data-drawer :is(button, a, input, select, summary):focus-visible { outline: 2px solid var(--strategy-link); outline-offset: 3px; }
+.strategy-research-shell :is(button, a, input, select, summary):where(:not(.ui-btn, .ui-icon-btn, .ui-datetime-picker, .ui-input, .ui-disclosure-summary)):focus-visible,
+.research-data-drawer :is(button, a, input, select, summary):where(:not(.ui-btn, .ui-icon-btn, .ui-datetime-picker, .ui-input, .ui-disclosure-summary)):focus-visible { outline: 2px solid var(--strategy-link); outline-offset: 3px; }
 /* Content links only; the shared top bar keeps its own navigation colors */
 .strategy-research-shell a:not(.top-bar a) { color: var(--strategy-link); font-size: 13px; }
 .strategy-research-shell .research-primary,
 .strategy-research-shell [data-testid='strategy-research-run'],
-.research-data-drawer button[type='submit'] { background: var(--accent-solid); color: white; border-color: var(--accent-solid); }
+.research-data-drawer button[type='submit']:where(:not(.ui-btn, .ui-icon-btn, .ui-datetime-picker)) { background: var(--accent-solid); color: white; border-color: var(--accent-solid); }
 .strategy-research-shell button.research-primary:hover:not(:disabled),
 .strategy-research-shell button[data-testid='strategy-research-run']:hover:not(:disabled),
-.research-data-drawer button[type='submit']:hover:not(:disabled) { background: var(--accent-solid-hover); color: white; }
+.research-data-drawer button[type='submit']:where(:not(.ui-btn, .ui-icon-btn, .ui-datetime-picker)):hover:not(:disabled) { background: var(--accent-solid-hover); color: white; }
 /* A dimmed blue still reads as clickable; disabled primaries go neutral instead. */
 .strategy-research-shell .research-primary:disabled,
 .strategy-research-shell [data-testid='strategy-research-run']:disabled,
-.research-data-drawer button[type='submit']:disabled { opacity: 1; background: var(--bg-tertiary); border-color: var(--border-color); color: var(--text-muted); }
+.research-data-drawer button[type='submit']:where(:not(.ui-btn, .ui-icon-btn, .ui-datetime-picker)):disabled { opacity: 1; background: var(--bg-tertiary); border-color: var(--border-color); color: var(--text-muted); }
 .research-data-source-bar { display: flex; gap: 12px; align-items: center; color: var(--text-secondary); font-size: 13px; }
 .research-data-source-bar > span { max-width: min(32vw, 420px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* A status value, not a tab: labelled and set off from the navigation */
@@ -273,12 +282,32 @@
 .local-dataset-list button.active { border-color: var(--strategy-link); background: var(--bg-hover); }
 .local-dataset-list em, .local-dataset-list small { display: block; margin-top: 5px; font-size: 12px; font-weight: 400; font-style: normal; color: var(--text-secondary); }
 .local-dataset-empty { padding: 14px 0; color: var(--text-secondary); font-size: 13px; line-height: 1.7; }
-.local-library-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.local-library-actions input { flex: 1; min-width: 120px; }
-.local-quality-card { margin-block: 16px; padding: 12px; background: var(--bg-secondary); border-radius: var(--radius-control); font-size: 13px; }
-.local-quality-card dl { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
-.local-quality-card dt { color: var(--text-secondary); }
-.local-project-import { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; font-size: 13px; }
+/* Dataset management: controls come from the kit; these rules lay them out. */
+.local-dataset-management { display: grid; gap: var(--space-4); padding-bottom: 8px; }
+.local-dataset-busy { margin: 0; color: var(--text-muted); font-size: var(--font-size-xs); }
+.local-library-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.local-library-actions .ui-input { flex: 1 1 160px; width: auto; }
+.local-dataset-trash { color: var(--text-danger); }
+.local-quality-card { padding: 12px; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); background: var(--surface-0); font-size: var(--font-size-sm); }
+.local-quality-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.local-quality-head span { color: var(--text-secondary); }
+.local-quality-head strong { color: var(--text-primary); font-weight: 600; }
+.local-quality-card dl { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0 0; }
+.local-quality-card dl > div { display: grid; gap: 2px; }
+.local-quality-card dt { color: var(--text-muted); font-size: var(--font-size-xs); }
+.local-quality-card dd { margin: 0; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.local-quality-card ul { margin: 10px 0 0; padding-left: 16px; color: var(--text-secondary); font-size: var(--font-size-xs); }
+.local-revisions, .local-trash-list { display: grid; gap: 6px; }
+.local-revisions h4, .local-trash-list h4 { margin: 0; color: var(--text-secondary); font: 600 var(--font-size-xs)/1.4 var(--font-sans); }
+.local-revision-list, .local-trash-list ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.local-revision-list li, .local-trash-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; padding: 6px 6px 6px 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-control); background: var(--surface-0); }
+.local-revision-list li[data-current='true'] { border-color: color-mix(in srgb, var(--accent-blue) 45%, var(--border-subtle)); }
+.local-revision-list li > span:first-child, .local-trash-list li > span { display: grid; gap: 2px; min-width: 0; }
+.local-revision-list code { color: var(--text-primary); font: 600 var(--font-size-sm)/1.4 var(--font-mono); }
+.local-revision-list small, .local-trash-list small { overflow: hidden; color: var(--text-muted); font-size: var(--font-size-xs); text-overflow: ellipsis; white-space: nowrap; }
+.local-trash-list strong { overflow: hidden; color: var(--text-primary); font: 600 var(--font-size-sm)/1.4 var(--font-sans); text-overflow: ellipsis; white-space: nowrap; }
+.local-revision-actions { display: flex; flex: 0 0 auto; gap: 4px; }
+.local-project-export { justify-self: start; }
 .local-import-progress { display: grid; gap: 8px; font-size: 13px; }
 .local-import-progress > div { display: flex; justify-content: space-between; }
 .local-import-progress progress { width: 100%; }
@@ -287,13 +316,15 @@
 .research-library-tabs { display: flex; gap: 8px; margin-bottom: 18px; }
 .research-library-tabs button[aria-selected='true'] { color: var(--strategy-link); border-color: var(--strategy-link); }
 .local-interval-selector { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.local-interval-selector input { min-width: 0; max-width: 90px; }
 .local-interval-buttons { display: flex; gap: 4px; flex-wrap: wrap; }
 .local-interval-buttons button { padding: 6px 9px; border: 1px solid var(--border-color); border-radius: var(--radius-control); color: var(--text-primary); background: var(--bg-secondary); font: 12px var(--font-sans); }
 .local-interval-buttons button.active { color: var(--strategy-link); border-color: var(--strategy-link); }
 .local-interval-buttons small { margin-left: 4px; color: var(--text-secondary); font-size: var(--font-size-xs); }
-.local-custom-interval label { font-size: 12px; color: var(--text-secondary); }
-.local-custom-interval input { padding: 6px; margin-inline: 8px; border: 1px solid var(--border-color); border-radius: var(--radius-control); background: var(--bg-primary); color: var(--text-primary); }
+.local-custom-interval { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.local-custom-interval-field { display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: var(--font-size-sm); white-space: nowrap; }
+.local-custom-interval-field > .ui-input { width: 72px; }
+.local-custom-interval .ui-check { font-size: var(--font-size-sm); white-space: nowrap; }
+.local-custom-interval .ui-select { width: auto; }
 .local-interval-feedback { font-size: 12px; color: var(--text-secondary); }
 .local-interval-feedback:empty { display: none; }
 @media (max-width: 850px) {

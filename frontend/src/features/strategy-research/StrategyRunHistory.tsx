@@ -114,7 +114,7 @@ export default function StrategyRunHistory({ manager, draftId, currentRunId, onO
   const openComparison = (pair: Pair) => { setSelected(pair); setRequested(pair); };
   const metric = (value: unknown) => formatDecimal(typeof value === "number" || typeof value === "string" ? String(value) : "—");
 
-  return <section className="strategy-run-history" aria-label={t("ux.history")}>
+  return <section aria-label={t("ux.history")}>
     {historyError && <p role="alert">{historyError}</p>}
     {!history.length && <p>{t("ux.historyEmpty")}</p>}
     <div className="strategy-history-list">{history.map(({ run, config }) => <article key={run.run_id}>

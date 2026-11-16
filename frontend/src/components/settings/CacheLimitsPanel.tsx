@@ -351,7 +351,7 @@ export default function CacheLimitsPanel({
                             className={`st-preset-card ${currentPreset === preset.key ? 'active' : ''}`}
                             onClick={() => handlePresetChange(preset.key)}
                         >
-                            <span className="st-preset-icon st-preset-level" aria-hidden="true">{[1, 2, 3, 4].map((step) => <span key={step} className={step <= preset.level ? "on" : undefined} />)}</span>
+                            <span className="st-preset-level" aria-hidden="true">{[1, 2, 3, 4].map((step) => <span key={step} className={step <= preset.level ? "on" : undefined} />)}</span>
                             <span className="st-preset-name">{t(preset.labelKey)}</span>
                             <span className="st-preset-desc">{t(preset.descKey)}</span>
                         </button>

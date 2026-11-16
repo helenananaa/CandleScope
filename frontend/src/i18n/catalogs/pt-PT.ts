@@ -4469,6 +4469,8 @@ export const ptPT = {
   "common.cancel": "Cancelar",
   "common.close": "Fechar",
   "common.notifications": "Notificações",
+  "common.working": "A processar…",
+  "common.pickDateTime": "Escolher data e hora",
   "status.barCount.many": "{count} de barras",
   "status.exchangeLimitationCount.many": "{count} de limitações da exchange",
   "workbench.intervalCount.many": "{count} de intervalos",

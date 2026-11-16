@@ -391,6 +391,35 @@
 .replay-order-card-actions button[data-variant="danger"] {
   color: var(--trade-negative);
 }
+/* Editing a working order: quantity and price fields, then confirm and cancel. */
+.replay-order-replace-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 6px;
+  padding-top: 6px;
+}
+.replay-order-replace-form label {
+  display: grid;
+  flex: 1 1 110px;
+  gap: 4px;
+  color: var(--trade-secondary);
+  font-size: var(--font-size-xs);
+}
+.replay-order-replace-form input {
+  width: 100%;
+  min-width: 0;
+}
+.replay-order-replace-form button {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--trade-radius-pill);
+  color: var(--trade-secondary);
+  background: var(--trade-pill-secondary-bg);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
 
 .replay-risk-card > header,
 .replay-risk-card > summary {

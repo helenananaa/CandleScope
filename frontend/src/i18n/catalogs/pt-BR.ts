@@ -5084,6 +5084,8 @@ export const ptBR = {
   "common.cancel": "Cancelar",
   "common.close": "Fechar",
   "common.notifications": "Notificações",
+  "common.working": "Processando…",
+  "common.pickDateTime": "Escolher data e hora",
   "strategyReview.navigation": "Revisão de operações",
   "strategyReview.previous": "Operação anterior",
   "strategyReview.select": "Selecione uma operação",

@@ -4470,6 +4470,8 @@ export const ru = {
   "common.cancel": "Отмена",
   "common.close": "Закрыть",
   "common.notifications": "Уведомления",
+  "common.working": "Обработка…",
+  "common.pickDateTime": "Выбрать дату и время",
   "status.barCount.few": "{count} свечи",
   "status.barCount.many": "{count} свечей",
   "status.exchangeLimitationCount.few": "{count} ограничения биржи",

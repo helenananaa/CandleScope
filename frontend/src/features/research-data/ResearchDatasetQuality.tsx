@@ -13,7 +13,7 @@ export function ResearchDatasetQuality({
 }) {
   return (
     <div className="local-quality-card" data-testid="research-dataset-quality">
-      <div><span>{t("local.quality")}</span><strong>{details?.quality.status ?? t("local.reading")}</strong></div>
+      <div className="local-quality-head"><span>{t("local.quality")}</span><strong>{details?.quality.status ?? t("local.reading")}</strong></div>
       <dl>
         <div><dt>{t("local.rowsLabel")}</dt><dd>{formatResearchRows(details?.quality.rows ?? manifest.rows)}</dd></div>
         <div><dt>{t("local.gapsLabel")}</dt><dd>{details?.quality.excluded_ranges.length ?? manifest.excluded_range_count}</dd></div>

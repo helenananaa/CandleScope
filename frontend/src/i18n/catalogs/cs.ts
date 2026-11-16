@@ -4469,6 +4469,8 @@ export const cs = {
   "common.cancel": "Zrušit",
   "common.close": "Zavřít",
   "common.notifications": "Oznámení",
+  "common.working": "Zpracování…",
+  "common.pickDateTime": "Vybrat datum a čas",
   "status.barCount.few": "{count} svíčky",
   "status.barCount.many": "{count} svíček",
   "status.exchangeLimitationCount.few": "{count} omezení burzy",

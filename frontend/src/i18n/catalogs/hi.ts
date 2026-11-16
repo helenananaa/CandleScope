@@ -4469,6 +4469,8 @@ export const hi = {
   "common.cancel": "रद्द करें",
   "common.close": "बंद करें",
   "common.notifications": "सूचनाएँ",
+  "common.working": "प्रोसेस हो रहा है…",
+  "common.pickDateTime": "तारीख और समय चुनें",
   "settings.category.ai": "AI MCP",
   "aiControl.workflows": "Enable optional desktop workflow tools for this permission session",
   "aiControl.workflowScope": "The separate stdio connection can read mounted application data, script drafts, reports, screenshots and exported files. Control access can also edit drawings, alerts, datasets, strategies, training and plugins, run simulations and transfer bounded files. Existing domain checks apply. Plugin trust and live trading still require separate launch scopes. Choose Read or Control to apply this selection. Revocation, mode changes and restart invalidate the connection.",

@@ -4813,6 +4813,8 @@ export const ja = {
   "common.cancel": "キャンセル",
   "common.close": "閉じる",
   "common.notifications": "通知",
+  "common.working": "処理中…",
+  "common.pickDateTime": "日時を選択",
   "strategyReview.navigation": "取引レビュー",
   "strategyReview.previous": "前の取引",
   "strategyReview.select": "取引を選択",

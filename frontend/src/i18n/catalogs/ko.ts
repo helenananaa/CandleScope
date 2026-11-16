@@ -5015,6 +5015,8 @@ export const ko = {
   "common.cancel": "취소",
   "common.close": "닫기",
   "common.notifications": "알림 방식",
+  "common.working": "처리 중…",
+  "common.pickDateTime": "날짜 및 시간 선택",
   "strategyReview.navigation": "거래 검토",
   "strategyReview.previous": "이전 거래",
   "strategyReview.select": "거래 선택",

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Button } from "../../../components/ui/index.js";
 import { t, getDateTimeLocale, type MessageKey } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import UtcReplayStartInput from "./UtcReplayStartInput.js";
@@ -760,8 +761,8 @@ export default function TrainingHubDialog({
         {recent && <section className="training-hub-resume">
           <div><span>{t("replay.hub.recent")}</span><h2>{recent.name}</h2>
             <p>{recent.last_symbol ?? t("replay.hub.unselected")} · {trainingRunStateLabel(recent.state)}</p></div>
-          <button className="training-hub-primary-button" type="button" disabled={busy}
-            onClick={() => runtime.actions.continueRun(recent)}>{trainingRunPrimaryActionLabel(recent)}</button>
+          <Button variant="primary" disabled={busy}
+            onClick={() => runtime.actions.continueRun(recent)}>{trainingRunPrimaryActionLabel(recent)}</Button>
         </section>}
         <PreparationJobsPanel summary onReady={runtime.actions.refresh} />
 

@@ -1051,7 +1051,7 @@ export function CandleScopeStrategyTesterPanel({
               onChange={(settings) => { const { executionOverrides: _previous, ...base } = currentAttachment; void _previous; onAttachmentChange({ ...base, ...settings }); }}
             />
             <section className="strategy-settings-section">
-              <label className="strategy-settings-check chart-strategy-auto-run-setting">
+              <label className="strategy-settings-check">
                 <input
                   type="checkbox"
                   checked={currentAttachment.autoRun}

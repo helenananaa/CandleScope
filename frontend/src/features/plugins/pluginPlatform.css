@@ -524,6 +524,40 @@ button.plugin-platform-notice:focus-visible { outline: 2px solid var(--accent-bl
   border-radius: var(--radius-lg);
   background: var(--bg-primary);
 }
+/* Host-managed runtimes and symbol providers: one row each, like the runtime list. */
+.plugin-runtime-registry-card {
+  gap: 10px;
+}
+.plugin-provider-list {
+  display: grid;
+  gap: 8px;
+}
+.plugin-runtime-registry-row,
+.plugin-provider-list > article {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--bg-primary);
+  overflow-wrap: anywhere;
+}
+.plugin-runtime-registry-row strong,
+.plugin-provider-list > article strong {
+  color: var(--text-primary);
+}
+.plugin-runtime-registry-row :is(p, small),
+.plugin-provider-list > article :is(p, span) {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+}
+.plugin-provider-list > article > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
 .plugin-runtime-main {
   display: flex;
   align-items: center;

@@ -17,7 +17,7 @@ export function NativeCostSensitivity({ matrix }: { matrix: NativeCostMatrix | u
     COSTS_PLUS_50_PERCENT: "native.cost.plus50", LATENCY_PLUS_ONE_TIER: "native.cost.latency", PARTICIPATION_DOWN_ONE_TIER: "native.cost.participation" };
   const number = new Intl.NumberFormat(locale, { maximumFractionDigits: 8 });
   const display = (value: unknown) => value == null || value === "" || !Number.isFinite(Number(value)) ? "—" : number.format(Number(value));
-  return <details className="native-report-disclosure native-cost-matrix" open>
+  return <details className="native-report-disclosure" open>
     <summary>{t("native.cost.title")}</summary><p>{t("native.cost.help")}</p>
     <div className="native-table"><table><thead><tr><th>{t("backtest.scenario")}</th><th>{t("native.cost.fills")}</th>
       <th>{t("native.cost.fees")}</th><th>{t("native.cost.equity")}</th><th>{t("native.cost.position")}</th><th>{t("native.cost.status")}</th></tr></thead>

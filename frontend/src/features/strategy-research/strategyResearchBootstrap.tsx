@@ -7,6 +7,8 @@ import { RESEARCH_DATA_LIBRARY_ENABLED } from "../research-data/researchDataFlag
 import { bindDocumentLocale, initializeLocale } from "../../i18n/index.js";
 import { readPersistedLocale } from "../settings/chartAppearanceSettings.js";
 import "./strategyResearch.css";
+// Event markers on imported data (LocalAnalysisPanel, which tests import, so it cannot import CSS itself).
+import "../local-data/localAnalysis.css";
 import "../backtest/research/backtestResearch.css";
 import "../backtest/chart-tester/chartStrategyTester.css";
 import "../backtest/continuous/continuousStrategy.css";

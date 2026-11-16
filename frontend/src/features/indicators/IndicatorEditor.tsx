@@ -407,7 +407,7 @@ export default function IndicatorEditor({
         </details>}
         {/* Code editor */}
         {selectedLanguage?.id === FRONTEND_SCRIPT_LANGUAGE && (
-          <p className="indicator-editor-frontend-help" style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+          <p style={{ color: "var(--text-muted)", fontSize: "12px" }}>
             {t("indicator.editor.frontendWindow")}
           </p>
         )}
@@ -470,7 +470,7 @@ export default function IndicatorEditor({
         {selectedLanguage?.id === "pine" && <PineLibraryInputs value={libraryJson} onChange={setLibraryJson} readOnly={readOnly} />}
         {selectedLanguage?.id === "pine" && <PineContextInputs value={contextJson} onChange={setContextJson} readOnly={readOnly} />}
         {selectedLanguage?.id === "pine" && <PineCurrencyInputs value={currencyJson} onChange={setCurrencyJson} readOnly={readOnly} />}
-        <div className="indicator-editor-monaco" style={{ flex: 1, minHeight: 0, border: "1px solid rgba(255, 255, 255, 0.1)", borderRadius: "10px", overflow: "hidden", boxShadow: "0 8px 32px rgba(0, 0, 0, 0.2), inset 0 2px 4px rgba(0, 0, 0, 0.2)" }}>
+        <div style={{ flex: 1, minHeight: 0, border: "1px solid rgba(255, 255, 255, 0.1)", borderRadius: "10px", overflow: "hidden", boxShadow: "0 8px 32px rgba(0, 0, 0, 0.2), inset 0 2px 4px rgba(0, 0, 0, 0.2)" }}>
           <Suspense fallback={null}><Editor
             height="100%"
             path={`candlescope-indicator-${encodeURIComponent(modelId)}.${selectedLanguage?.id || "txt"}`}

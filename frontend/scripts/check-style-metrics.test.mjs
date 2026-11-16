@@ -13,6 +13,15 @@ test("TSX class extraction reads plain and conditional className values", () => 
   assert.deepEqual([...names].sort(), ["badge", "is-active", "panel", "panel-wide", "tab", "ui-btn"]);
 });
 
+test("TSX class extraction skips values that are compared to choose a class", () => {
+  const names = classNamesInTsx(`
+    <small className={side === "short" ? "negative" : side === "long" ? "positive" : undefined} />
+    <td className={["profit", "net_pnl"].includes(column) ? "signed" : undefined} />
+    <path className={"drawdown" === metric ? "line-down" : "line"} />
+  `);
+  assert.deepEqual([...names].sort(), ["line", "line-down", "negative", "positive", "signed"]);
+});
+
 test("CSS extraction ignores comments and finds every selector class", () => {
   const names = classNamesInCss("/* .ghost */ .panel > .tab:hover, .badge { color: red }");
   assert.deepEqual([...names].sort(), ["badge", "panel", "tab"]);

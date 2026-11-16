@@ -139,7 +139,7 @@ const DrawingToolbar = lazy(() => {
 const RightMarketRail = lazy(() => import("./RightMarketRail.js"));
 const QuickReplayOverlay = lazy(() => import("../features/trading-accounts/QuickReplayOverlay.js"));
 const HistoryStudyOverlay = lazy(() => import("../features/history-study/HistoryStudyOverlay.js"));
-const HistoryStudySetupDialog = lazy(() => import("../features/history-study/HistoryStudySetupDialog.js"));
+const HistoryStudySetupPopover = lazy(() => import("../features/history-study/HistoryStudySetupPopover.js"));
 const loadChartStrategyTesterCellBridge = () => import(
   "../features/backtest/chart-tester/ChartStrategyTesterCellBridge.js"
 );
@@ -906,6 +906,7 @@ function LiveChartCell({
     if (!studyMaskedRef.current) openSavedReplay(request);
   }, [openSavedReplay]);
   const [studySetup, setStudySetup] = useState(false);
+  const studyButtonRef = useRef<HTMLButtonElement>(null);
   const timeNavigation = useChartTimeNavigation({ active, enabled: !obscured && !replay.key && !study.masked,
     cellId: cell.id, workspaceId, sessionKey: chartSession.view.sessionKey,
     marketData: sourceMarketData, surface: chartSurface.actions, links: linkCoordinator });
@@ -1261,8 +1262,9 @@ function LiveChartCell({
           extensionControls={(
             <>
               {workspaceControls}
-              {!study.active && <button type="button" className="ui-control" disabled={study.pending || study.busy || !!replay.key}
-                onClick={() => { if (!study.view) study.retry(); else setStudySetup(true); }}>{t("study.title")}</button>}
+              {!study.active && <button ref={studyButtonRef} type="button" className="ui-control" disabled={study.pending || study.busy || !!replay.key}
+                aria-haspopup="dialog" aria-expanded={studySetup}
+                onClick={() => { if (!study.view) study.retry(); else setStudySetup(open => !open); }}>{t("study.title")}</button>}
               {timeNavigation.available && <button type="button" className="ui-control"
                 title={t("chartTime.shortcut")} onClick={() => timeNavigation.setOpen(true)}>{t("chartTime.title")}</button>}
               <PluginUiErrorBoundary>
@@ -1307,7 +1309,8 @@ function LiveChartCell({
           {timeNavigation.open && <Suspense fallback={null}><ChartTimeNavigationDialog
             key={chartSession.view.sessionKey} cellId={cell.id} onClose={() => timeNavigation.setOpen(false)}
             onSubmit={timeNavigation.submit} /></Suspense>}
-          {studySetup && marketWorkspaceResources && <Suspense fallback={null}><HistoryStudySetupDialog key={`${workspaceId}:${cell.id}`}
+          {studySetup && marketWorkspaceResources && <Suspense fallback={null}><HistoryStudySetupPopover key={`${workspaceId}:${cell.id}`}
+            anchorRef={studyButtonRef}
             owner={studyOwner} manager={marketWorkspaceResources.dataManager.historyStudy} onSelect={selectStudy}
             series={liveSourceSession} bars={sourceMarketData.view.bars} busy={study.busy ?? false} error={study.error}
             onCapture={captureStudy} onClose={() => setStudySetup(false)} /></Suspense>}

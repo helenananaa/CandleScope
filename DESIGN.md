@@ -76,7 +76,7 @@ Build surfaces from the primitives in `frontend/src/components/ui` (import from 
 |---|---|
 | An action | `Button`: `primary` for the one main action in a view, `secondary` (default), `ghost` for low emphasis, `danger` for destructive actions; `size="sm"` in dense panels. `IconButton` when there is no room for text; it always has a label. |
 | A toolbar pill or picker | `.ui-control` (with `.is-active` or `aria-expanded`) |
-| Text, number, choice or time input | `Field` around `Input`, `Select`, `Textarea` or `DateTimeInput` (always shows its zone, UTC by default) |
+| Text, number, choice or time input | `Field` around `Input`, `Select`, `Textarea` or `DateTimeInput`. `DateTimeInput` writes times as `2026-01-02 09:30` in every locale (the browser's own control follows the browser's language, not the app's), opens the browser's calendar from its button, and always shows its zone, UTC by default. Pass `zoneLabel={false}` only when the field's label already names the zone. |
 | On/off | `Switch` for settings that apply at once; `Checkbox` in forms that are submitted |
 | One of two to five options | `SegmentedControl` |
 | Switching views | `Tabs` with `TabPanel` |
@@ -85,12 +85,12 @@ Build surfaces from the primitives in `frontend/src/components/ui` (import from 
 | A key figure | `Stat` |
 | Secondary detail, diagnostics | `Disclosure` (closed by default) |
 | A message inside a panel | `InlineAlert`; `EmptyState` when the panel has nothing to show |
-| Choosing a file | `FileDrop` |
+| Choosing a file | `FileDrop`; `compact` for one row in a narrow panel. Never a bare `<input type="file">`, whose "Choose file" text is in the browser's language. |
 | A task that needs full attention | `Dialog` (modal) |
 | Asking before an action that cannot be undone | `confirmAction({ title, confirmLabel, tone: "danger" })`, or `ConfirmDialog` when rendering one yourself. Never `window.confirm`. |
 | The result of an action (saved, failed) | `notify({ tone, title, message })`. Never `window.alert`. |
 | A side panel next to the chart | `Drawer` (one per side; opening another replaces it) |
-| Options anchored to a control | `Popover`; `Menu` for a list of actions |
+| Options anchored to a control | `Popover`, for a short form or choice tied to the button that opens it (the history study setup); `Menu` for a list of actions |
 | A short description of an icon control | `Tooltip` (hover and keyboard focus) |
 | An existing overlay that is not rebuilt yet | `OverlayLayer` around its markup: it joins the stack and keeps its look. Rebuilt surfaces use the primitives above. |
 
@@ -114,6 +114,8 @@ Every app stylesheet sits in a cascade layer. The order is set once, in `fronten
 | `overrides` | Deliberate cross-cutting overrides (empty for now) |
 
 A later layer wins regardless of selector specificity, so no `html` prefixes or `!important` are needed to beat feature rules.
+
+The other side of that rule: a feature's element selectors (`.panel button`, `.drawer input`) beat kit controls inside the panel. Older feature CSS that styles bare elements skips kit controls inside `:where()`, so its specificity does not change, for example `.research-data-drawer button:where(:not(.ui-btn, .ui-icon-btn, .ui-datetime-picker))`. New feature CSS styles its own classes, not bare elements.
 
 - **Feature CSS lives next to its feature.** `src/index.css` only lists files, each with `layer(…)`; within a layer, the listed order still breaks ties.
 - **CSS imported from a lazy module wraps itself** in `@layer features { … }`.

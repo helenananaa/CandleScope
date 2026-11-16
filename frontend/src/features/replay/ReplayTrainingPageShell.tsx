@@ -1266,7 +1266,7 @@ export default function ReplayTrainingPageShell({
             <div className="price-info"><span className={`current-price ${isUp ? "price-up" : "price-down"}`}>{last.close}</span><span className="price-change">{isUp ? "▲" : "▼"} {t("replay.priceLabel")}</span></div>
           )}
           marketMetrics={(
-            <div className="advanced-market-summary advanced-market-summary-unsupported" aria-label={t("replay.derivativesAria")}>
+            <div className="advanced-market-summary" aria-label={t("replay.derivativesAria")}>
               {(["MARK_PRICE", "INDEX_PRICE", "BASIS"] as const).map((id) => (
                 <div className="advanced-market-chip" key={id} data-market-metric={id.toLowerCase()} data-capability-state={capabilities[id].state}>
                   <span className="advanced-market-chip-label">{capabilities[id].label}</span>
@@ -1401,7 +1401,7 @@ export default function ReplayTrainingPageShell({
           <OverlayLayer kind="drawer" side="right" onClose={() => setTrainingResultsOpen(false)}>
           <aside
             id="replay-training-results-drawer"
-            className="replay-integrity-drawer replay-training-results-drawer"
+            className="replay-integrity-drawer"
             aria-label={t("replay.shell.results")}
             tabIndex={-1}
           >

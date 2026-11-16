@@ -791,6 +791,24 @@ export default function DataWorkbenchStyles() {
   font-size: 12px;
 }
 
+.dw-manual fieldset legend {
+  padding: 0 4px;
+  color: var(--dw-label);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dw-manual fieldset input[type='checkbox'] {
+  margin: 0;
+  accent-color: var(--accent-blue);
+}
+
+/* Sits in the grid cell beside the custom interval field, level with its input. */
+.dw-manual-add-interval {
+  align-self: end;
+  justify-self: start;
+}
+
 .dw-manual h4 {
   margin: 0 0 8px;
   color: var(--dw-ink);

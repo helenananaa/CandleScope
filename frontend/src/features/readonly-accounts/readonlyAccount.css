@@ -28,4 +28,7 @@
 .readonly-review-stats { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; }
 .readonly-review-stats dd { margin: 0; font-variant-numeric: tabular-nums; }
 .readonly-review details { margin: 10px 0; }
+.readonly-account-list { display: grid; gap: 6px; margin: 8px 0; padding: 0; list-style: none; }
+.readonly-account-list > li { padding: 8px 10px; border: 1px solid var(--border-subtle); border-radius: 4px; background: var(--surface-1); }
+.readonly-account-list > li p { margin: 2px 0 0; color: var(--text-secondary); font-size: var(--font-size-xs); }
 }

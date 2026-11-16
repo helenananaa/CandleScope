@@ -122,7 +122,7 @@ export function TradeExplanationPopover({
                     </div>
                   )}
                   {Object.keys(explanation.variables).length > 0 && (
-                    <div className="chart-strategy-explain-block variables">
+                    <div className="chart-strategy-explain-block">
                       <strong>{t("chartTester.explain.variables")}</strong>
                       {Object.entries(explanation.variables).map(([name, value]) => (
                         <div key={name}><code>{name}</code><span>{explanationVariable(value)}</span></div>

@@ -4832,6 +4832,8 @@ export const en = {
   "common.cancel": "Cancel",
   "common.close": "Close",
   "common.notifications": "Notifications",
+  "common.working": "Working…",
+  "common.pickDateTime": "Choose date and time",
   "strategyReview.navigation": "Trade review",
   "strategyReview.previous": "Previous trade",
   "strategyReview.select": "Select a trade",

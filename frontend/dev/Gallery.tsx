@@ -72,7 +72,8 @@ export default function Gallery() {
           <Field label="Symbol" hint="Exchange symbol, for example BTCUSDT"><Input placeholder="BTCUSDT" /></Field>
           <Field label="Price" error="Enter a number greater than 0" required><Input defaultValue="-3" inputMode="decimal" /></Field>
           <Field label="Interval"><Select defaultValue="1h"><option value="1m">1 minute</option><option value="1h">1 hour</option></Select></Field>
-          <Field label="Start" hint="Times are shown in UTC"><DateTimeInput value={time} onChange={setTime} /></Field>
+          <Field label="Start" hint="Type 2026-01-02 09:30 or use the calendar"><DateTimeInput value={time} onChange={setTime} /></Field>
+          <Field label="Replay time (UTC)" hint="The label names the zone, so the field does not repeat it"><DateTimeInput value={time} onChange={setTime} seconds zoneLabel={false} size="sm" /></Field>
           <Field label="Notes"><Textarea placeholder="Why this setup?" /></Field>
           <Field label="Disabled"><Input disabled defaultValue="Read only" /></Field>
         </div>
@@ -82,6 +83,7 @@ export default function Gallery() {
           <Switch checked={sync} onChange={setSync} label="Sync linked charts" description="Symbol and interval follow the group" />
         </Row>
         <FileDrop label="Drop a CSV file or choose one" hint="OHLCV columns, up to 50 MB" accept=".csv" onFiles={(list) => setFiles(list.map((f) => f.name))} />
+        <FileDrop compact label="Import a project package" hint=".csproject" accept=".csproject" onFiles={(list) => setFiles(list.map((f) => f.name))} />
         {files.length ? <p className="gallery-note">Chosen: {files.join(", ")}</p> : null}
       </Section>
 
