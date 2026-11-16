@@ -9,6 +9,8 @@ export interface ChoiceOption<T extends string> {
   disabled?: boolean;
   /** Accessible name when the label is an icon only. */
   ariaLabel?: string;
+  /** Tooltip, e.g. why the option is disabled. */
+  title?: string;
 }
 
 function useRovingKeys<T extends string>(options: readonly ChoiceOption<T>[], value: T, onChange: (value: T) => void) {
@@ -56,6 +58,7 @@ export function SegmentedControl<T extends string>({ label, value, options, onCh
           role="radio"
           aria-checked={option.value === value}
           aria-label={option.ariaLabel}
+          title={option.title}
           tabIndex={tabIndexFor(option)}
           disabled={option.disabled}
           className="ui-segment"

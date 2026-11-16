@@ -1,4 +1,6 @@
+import { Badge, Button, Disclosure, buttonClassName } from "../../../components/ui/index.js";
 import { t } from "../../../i18n/index.js";
+import { researchStateTone } from "./researchStateTone.js";
 import { researchReplayHref } from "./backtestResearchAdvancedModel.js";
 import type { BacktestResearchRuntime } from "./backtestResearchTypes.js";
 import ResearchPanelFrame from "./ResearchPanelFrame.js";
@@ -14,27 +16,27 @@ export default function ResearchReplayPanel({ runtime }: { runtime: BacktestRese
     <ResearchPanelFrame eyebrow={t("research.replay.eyebrow")} title={typeof reviewBridge?.bridgeId === "string" ? reviewBridge.bridgeId : t("research.replay.none")}>
       <p className="research-panel-copy">{t("research.replay.copy")}</p>
       <dl className="research-facts">
-        <div><dt>{t("research.replay.sourceRun")}</dt><dd>{activeRun?.run_id ?? "—"}</dd></div>
+        <div><dt>{t("research.replay.sourceRun")}</dt><dd title={activeRun?.run_id}>{activeRun?.run_id ?? "—"}</dd></div>
         <div><dt>{t("research.replay.window")}</dt><dd>{startTimeMs} → {endTimeMs}</dd></div>
-        <div><dt>{t("research.replay.flag")}</dt><dd>{bridgeEnabled ? "ON" : "OFF"}</dd></div>
-        <div><dt>{t("research.replay.runtime")}</dt><dd>{replayTrainingAvailable ? "AVAILABLE" : "UNAVAILABLE"}</dd></div>
-        <div><dt>{t("research.replay.state")}</dt><dd>{bridgeState ?? "—"}</dd></div>
+        <div><dt>{t("research.replay.flag")}</dt><dd><Badge tone={bridgeEnabled ? "success" : "neutral"}>{bridgeEnabled ? "ON" : "OFF"}</Badge></dd></div>
+        <div><dt>{t("research.replay.runtime")}</dt><dd><Badge tone={replayTrainingAvailable ? "success" : "neutral"}>{replayTrainingAvailable ? "AVAILABLE" : "UNAVAILABLE"}</Badge></dd></div>
+        <div><dt>{t("research.replay.state")}</dt><dd>{bridgeState ? <Badge tone={researchStateTone(bridgeState)}>{bridgeState}</Badge> : "—"}</dd></div>
       </dl>
       {advancedEnabled && (
         <div className="research-button-row">
-          <button type="button" disabled={busy || !replayEnabled || activeRun?.state !== "COMPLETED"} onClick={() => void runtime.actions.createReviewBridge()}>{t("research.replay.create")}</button>
-          <button type="button" disabled={busy || bridgeState !== "BLINDED"} onClick={() => void runtime.actions.revealReviewBridge()}>{t("research.replay.reveal")}</button>
+          <Button size="sm" variant="primary" disabled={busy || !replayEnabled || activeRun?.state !== "COMPLETED"} onClick={() => void runtime.actions.createReviewBridge()}>{t("research.replay.create")}</Button>
+          <Button size="sm" disabled={busy || bridgeState !== "BLINDED"} onClick={() => void runtime.actions.revealReviewBridge()}>{t("research.replay.reveal")}</Button>
         </div>
       )}
-      {href && <a className="research-replay-link" href={href} target="_blank" rel="noreferrer">{t("research.replay.open")}</a>}
-      {reviewBridge && <pre className="research-json-readout">{JSON.stringify({
+      {href && <a className={buttonClassName({ size: "sm", className: "research-replay-link" })} href={href} target="_blank" rel="noreferrer">{t("research.replay.open")}</a>}
+      {reviewBridge && <Disclosure summary={t("plugin.techDetails")}><pre className="research-json-readout">{JSON.stringify({
         bridgeId: reviewBridge.bridgeId,
         trainingRunId: reviewBridge.trainingRunId ?? (reviewBridge.trainingRun as Record<string, unknown> | undefined)?.run_id,
         state: reviewBridge.state,
         isolation: reviewBridge.isolation,
         strategyProjection: reviewBridge.strategyProjection,
         comparison: reviewBridge.comparison,
-      }, null, 2)}</pre>}
+      }, null, 2)}</pre></Disclosure>}
     </ResearchPanelFrame>
   );
 }

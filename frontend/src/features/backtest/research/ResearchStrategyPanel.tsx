@@ -1,4 +1,5 @@
 import { lazy, Suspense, useMemo, useState } from "react";
+import { Button, Disclosure, Field, Input, Select, Textarea } from "../../../components/ui/index.js";
 import { t } from "../../../i18n/index.js";
 import { defaultBacktestApi } from "../backtestApi.js";
 import { isPythonStrategyEntryEnabled } from "../backtestFlags.js";
@@ -55,38 +56,45 @@ export default function ResearchStrategyPanel({ runtime }: { runtime: BacktestRe
       )}
       {advancedEnabled ? (
         <>
-          <label className="research-field">
-            <span>{t("research.strategy.revision")}</span>
-            <select value={selectedRevisionId} onChange={(event) => runtime.actions.selectRevision(event.target.value)}>
+          <Field label={t("research.strategy.revision")}>
+            <Select size="sm" value={selectedRevisionId} onChange={(event) => runtime.actions.selectRevision(event.target.value)}>
               {revisions.map((revision) => <option key={revision.revision_id} value={revision.revision_id}>{revision.label}</option>)}
-            </select>
-          </label>
-          <ResearchExternalProviderPanel runtime={runtime} />
+            </Select>
+          </Field>
           <div className="research-button-row">
-            <button type="button" disabled={busy || !snapshot} onClick={() => void runtime.actions.smokeStrategyRevision()}>{t("research.strategy.smoke")}</button>
-            <button type="button" disabled={busy || !selectedRevisionId} onClick={() => void runtime.actions.copyStrategyRevision()}>{t("research.strategy.copy")}</button>
-            <button type="button" disabled={busy || !selectedRevisionId} onClick={() => void runtime.actions.archiveStrategyRevision()}>{t("research.strategy.archive")}</button>
+            <Button size="sm" disabled={busy || !snapshot} onClick={() => void runtime.actions.smokeStrategyRevision()}>{t("research.strategy.smoke")}</Button>
+            <Button size="sm" variant="ghost" disabled={busy || !selectedRevisionId} onClick={() => void runtime.actions.copyStrategyRevision()}>{t("research.strategy.copy")}</Button>
+            <Button size="sm" variant="ghost" disabled={busy || !selectedRevisionId} onClick={() => void runtime.actions.archiveStrategyRevision()}>{t("research.strategy.archive")}</Button>
           </div>
-          <details className="research-advanced-details">
-            <summary>{t("research.strategy.create")}</summary>
-            <label className="research-field"><span>{t("research.strategy.name")}</span><input value={revisionName} onChange={(event) => setRevisionName(event.target.value)} /></label>
-            <label className="research-field"><span>{t("research.strategy.language")}</span><select value={revisionLanguage} onChange={(event) => setRevisionLanguage(event.target.value)}><option value="BUILTIN_TEMPLATE">{t("research.strategy.template")}</option><option value="PINE">{t("research.strategy.pine")}</option>{runtime.view.capabilities?.flags.BACKTEST_EXTERNAL_PROVIDER_ENABLED && <option value="EXTERNAL_PROVIDER">{t("research.external.title")}</option>}</select></label>
-            <label className="research-field"><span>{t(revisionLanguage === "EXTERNAL_PROVIDER" ? "research.external.manifest" : "research.strategy.source")}</span><textarea rows={6} value={revisionSource} onChange={(event) => setRevisionSource(event.target.value)} /></label>
-            <button type="button" disabled={busy || !revisionName.trim()} onClick={() => void runtime.actions.createStrategyRevision({
-              name: revisionName,
-              language: revisionLanguage,
-              base_revision_id: revisionLanguage === "BUILTIN_TEMPLATE" ? "builtin-rsi-wilder-long-short-v1" : null,
-              source_text: revisionSource,
-              parameter_schema: revisionLanguage === "BUILTIN_TEMPLATE" ? [
-                { name: "length", type: "integer", default: 24, minimum: 2 },
-                { name: "oversold", type: "number", default: 30 },
-                { name: "overbought", type: "number", default: 70 },
-              ] : [],
-            })}>{t("research.strategy.compile")}</button>
-          </details>
+          <ResearchExternalProviderPanel runtime={runtime} />
+          <Disclosure summary={t("research.strategy.create")}>
+            <div className="research-form">
+              <Field label={t("research.strategy.name")}><Input size="sm" value={revisionName} onChange={(event) => setRevisionName(event.target.value)} /></Field>
+              <Field label={t("research.strategy.language")}>
+                <Select size="sm" value={revisionLanguage} onChange={(event) => setRevisionLanguage(event.target.value)}>
+                  <option value="BUILTIN_TEMPLATE">{t("research.strategy.template")}</option>
+                  <option value="PINE">{t("research.strategy.pine")}</option>
+                  {runtime.view.capabilities?.flags.BACKTEST_EXTERNAL_PROVIDER_ENABLED && <option value="EXTERNAL_PROVIDER">{t("research.external.title")}</option>}
+                </Select>
+              </Field>
+              <Field label={t(revisionLanguage === "EXTERNAL_PROVIDER" ? "research.external.manifest" : "research.strategy.source")}>
+                <Textarea className="research-json-editor" rows={6} spellCheck={false} value={revisionSource} onChange={(event) => setRevisionSource(event.target.value)} />
+              </Field>
+              <Button size="sm" variant="primary" disabled={busy || !revisionName.trim()} onClick={() => void runtime.actions.createStrategyRevision({
+                name: revisionName,
+                language: revisionLanguage,
+                base_revision_id: revisionLanguage === "BUILTIN_TEMPLATE" ? "builtin-rsi-wilder-long-short-v1" : null,
+                source_text: revisionSource,
+                parameter_schema: revisionLanguage === "BUILTIN_TEMPLATE" ? [
+                  { name: "length", type: "integer", default: 24, minimum: 2 },
+                  { name: "oversold", type: "number", default: 30 },
+                  { name: "overbought", type: "number", default: 70 },
+                ] : [],
+              })}>{t("research.strategy.compile")}</Button>
+            </div>
+          </Disclosure>
           {selectedTask === "PYTHON_MODEL" && (
-            <details open className="research-python-studio">
-              <summary>{t("research.strategy.pythonTitle")}</summary>
+            <Disclosure defaultOpen summary={t("research.strategy.pythonTitle")}>
               {pythonEnabled ? (
                 <Suspense fallback={<p className="research-empty">{t("research.strategy.pythonLoading")}</p>}>
                   <PythonStudioPanel
@@ -115,20 +123,19 @@ export default function ResearchStrategyPanel({ runtime }: { runtime: BacktestRe
                   />
                 </Suspense>
               ) : <p className="research-empty">{t("research.strategy.pythonDisabled")}</p>}
-            </details>
+            </Disclosure>
           )}
         </>
       ) : (
-        <details>
-          <summary>{t("research.strategy.revisions")} · {revisions.length}</summary>
-          <div className="research-compact-list">
+        <Disclosure summary={`${t("research.strategy.revisions")} · ${revisions.length}`}>
+          <ul className="research-row-list">
             {revisions.slice(0, 10).map((revision) => (
-              <span key={revision.revision_id} data-active={revision.revision_id === selectedRevisionId}>
-                <strong>{revision.label}</strong><small>{revision.revision_id}</small>
-              </span>
+              <li key={revision.revision_id} className="research-row" data-active={revision.revision_id === selectedRevisionId}>
+                <span><strong>{revision.label}</strong><small>{revision.revision_id}</small></span>
+              </li>
             ))}
-          </div>
-        </details>
+          </ul>
+        </Disclosure>
       )}
     </ResearchPanelFrame>
   );

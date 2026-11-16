@@ -1,3 +1,5 @@
+import { Icon } from "../../../components/icons/Icon.js";
+import { Badge, buttonClassName, IconButton, InlineAlert, SegmentedControl } from "../../../components/ui/index.js";
 import { ResearchModeLayout } from "./ResearchModeLayout.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useControlCommands } from "../../app-control/useControlCommands.js";
@@ -195,8 +197,8 @@ export default function ResearchMarketChart({ runtime }: { runtime: BacktestRese
   );
   const rightPanels = (
     <aside className="research-right-rail" aria-label={t("research.aria.controls")}>
-      {runtime.view.operationError && <p className="research-operation-message error" role="alert">{runtime.view.operationError}</p>}
-      {runtime.view.notice && <p className="research-operation-message" role="status">{runtime.view.notice}</p>}
+      {runtime.view.operationError && <InlineAlert tone="danger" className="research-operation-message">{runtime.view.operationError}</InlineAlert>}
+      {runtime.view.notice && <InlineAlert tone="info" className="research-operation-message">{runtime.view.notice}</InlineAlert>}
       {backtestResearchHasPanel(task, "EXECUTION") && <ResearchExecutionPanel runtime={runtime} />}
       {backtestResearchHasPanel(task, "RUN") && <ResearchRunPanel runtime={runtime} />}
       {backtestResearchHasPanel(task, "STUDY") && <ResearchStudyPanel runtime={runtime} />}
@@ -239,19 +241,24 @@ export default function ResearchMarketChart({ runtime }: { runtime: BacktestRese
             </div>
           )}
           tools={(
-            <div className="research-source-switch" role="group" aria-label={t("research.aria.chartSource")}>
-              <button type="button" disabled={runtime.view.runtimeMode === "LOCAL_OFFLINE"} title={runtime.view.runtimeMode === "LOCAL_OFFLINE" ? t("research.source.liveOffline") : ""} data-active={effectiveSourceMode === "LIVE_REFERENCE"} onClick={() => runtime.actions.selectSourceMode("LIVE_REFERENCE")}>{t("research.source.live")}</button>
-              <button type="button" disabled={frozenDisabled} title={frozenDisabled ? t("research.source.frozenUnavailable") : ""} data-active={effectiveSourceMode === "FROZEN_SNAPSHOT"} onClick={() => runtime.actions.selectSourceMode("FROZEN_SNAPSHOT")}>{t("research.source.frozen")}</button>
-              <button type="button" disabled={runModeDisabled} title={runModeDisabled ? t("research.source.runUnavailable") : ""} data-active={effectiveSourceMode === "RUN_RESULT"} onClick={() => runtime.actions.selectSourceMode("RUN_RESULT")}>{t("research.source.run")}</button>
-            </div>
+            <SegmentedControl
+              size="sm"
+              className="research-source-switch"
+              label={t("research.aria.chartSource")}
+              value={effectiveSourceMode}
+              options={[
+                { value: "LIVE_REFERENCE", label: t("research.source.live"), disabled: runtime.view.runtimeMode === "LOCAL_OFFLINE", ...(runtime.view.runtimeMode === "LOCAL_OFFLINE" ? { title: t("research.source.liveOffline") } : {}) },
+                { value: "FROZEN_SNAPSHOT", label: t("research.source.frozen"), disabled: frozenDisabled, ...(frozenDisabled ? { title: t("research.source.frozenUnavailable") } : {}) },
+                { value: "RUN_RESULT", label: t("research.source.run"), disabled: runModeDisabled, ...(runModeDisabled ? { title: t("research.source.runUnavailable") } : {}) },
+              ]}
+              onChange={runtime.actions.selectSourceMode}
+            />
           )}
           extras={(
             <div className="research-top-actions">
-              <span className="research-advanced-state" data-enabled={runtime.view.advancedEnabled}>
-                {runtime.view.advancedEnabled ? t("research.advanced.on") : t("research.advanced.off")}
-              </span>
-              <button type="button" onClick={runtime.actions.refresh}>{t("research.refresh")}</button>
-              <a href={runtime.view.returnHref}>{t("research.return")}</a>
+              {!runtime.view.advancedEnabled && <Badge tone="warning">{t("research.advanced.off")}</Badge>}
+              <IconButton size="sm" label={t("research.refresh")} icon={<Icon name="refresh" size={14} />} onClick={runtime.actions.refresh} />
+              <a className={buttonClassName({ size: "sm", variant: "ghost" })} href={runtime.view.returnHref}>{t("research.return")}</a>
             </div>
           )}
         />
@@ -288,7 +295,7 @@ export default function ResearchMarketChart({ runtime }: { runtime: BacktestRese
               data-research-task={task}
             >
               <div className="research-chart-context">
-                <span data-source-mode={activeSource.mode}>{sourceLabel(activeSource.mode)}</span>
+                <span data-source-mode={activeSource.mode}><Badge tone="accent">{sourceLabel(activeSource.mode)}</Badge></span>
                 <small>{rangeText}</small>
               </div>
               <MarketChartSurface

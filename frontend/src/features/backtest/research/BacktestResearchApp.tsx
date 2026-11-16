@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { Button, buttonClassName, EmptyState } from "../../../components/ui/index.js";
 import { t } from "../../../i18n/index.js";
 import AppPageShell from "../../../app/AppPageShell.js";
 import ResearchMarketChart from "./ResearchMarketChart.js";
@@ -17,13 +18,18 @@ function ResearchStatus({
 }) {
   return (
     <main className="research-status-page" data-state={error ? "error" : "loading"}>
-      <section>
-        <span>{t("research.kicker")}</span>
-        <h1>{error ? t("research.errorTitle") : t("research.loading")}</h1>
-        {error && <p>{error}</p>}
-        {error && <button type="button" onClick={onRetry}>{t("research.retry")}</button>}
-        <a href="/">{t("research.live")}</a>
-      </section>
+      <EmptyState
+        tone={error ? "danger" : "neutral"}
+        role={error ? "alert" : "status"}
+        title={error ? t("research.errorTitle") : t("research.loading")}
+        description={error ?? undefined}
+        action={(
+          <span className="research-status-actions">
+            {error && <Button size="sm" variant="primary" onClick={onRetry}>{t("research.retry")}</Button>}
+            <a className={buttonClassName({ size: "sm", variant: "ghost" })} href="/">{t("research.live")}</a>
+          </span>
+        )}
+      />
     </main>
   );
 }

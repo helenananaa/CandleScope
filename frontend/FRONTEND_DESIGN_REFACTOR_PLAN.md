@@ -494,6 +494,12 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - `backtest.html` and `local.html` rewrite themselves to `strategy.html` in the matching mode (`?mode=precise`, `?source=imported`), keeping run, study and context links; links the app builds (chart tester, results, preparation jobs) point at `strategy.html?mode=…` directly. Every URL carries the 策略研究 title.
 - Still to do in this row: the research tools' panels and copy (5g3), the strategy page (5g4), local data and CSV import (5g5).
 
+**Phase 5g3 is done (branch `design/phase-5g3-research-tools`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_5G3.md`](../docs/FRONTEND_DESIGN_QA_PHASE_5G3.md).
+
+- The five research tools are on the kit: a segmented chart-source switch, panels as sections with a plain heading and the object in mono, kit fields and buttons (the creating step primary), run and study rows with state badges, raw JSON behind closed 技术详情 disclosures, results as kit stats and tabs (概览, 交易, 信号轨迹, 对比, 数据质量), the Python studio and the status page on kit pieces.
+- `backtest.css` (983 lines, only loaded by `backtest.html`, styling the retired workbench) is deleted with the unused `BacktestResultChart`; `backtestResearch.css` is rewritten on tokens. The quick test's external model form moved onto the kit with them.
+- Left for Phase 6: the tools' internal terms (`BAR_APPROX`, "Study V2", "Phase 11", "runtime receipt", the status bar's "独立研究 runtime"), epoch-millisecond times; the JSON drafts stay text areas.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.
