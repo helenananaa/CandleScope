@@ -6,8 +6,7 @@
   .training-hub-page *,
   .training-hub-page *::before,
   .training-hub-page *::after,
-  .replay-control-stack *,
-  .replay-right-rail * {
+  .replay-control-stack * {
     scroll-behavior: auto !important;
     animation-duration: .01ms !important;
     animation-iteration-count: 1 !important;

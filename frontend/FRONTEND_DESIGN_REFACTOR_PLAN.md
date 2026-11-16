@@ -471,6 +471,12 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - Review rail: the "复核 · 只读" eyebrow is a badge, the facts are one list, status notices are alerts.
 - About 120 old rules (including element rules that restyled every button in the notes panel and the watchlist) are replaced by 95 token-based ones.
 
+**Phase 5f6 is done (branch `design/phase-5f6-replay-trading`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_5F6.md`](../docs/FRONTEND_DESIGN_QA_PHASE_5F6.md). This completes the replay row (5f–5f6).
+
+- 下单: 开仓 / 平仓 is a segmented control and the order type kit tabs whose panel holds the price and size fields; fields are kit inputs with the unit inside; leverage and the size unit are kit selects; 25–100 % are small buttons; the risk plan is a kit checkbox that opens its fields (before, an oversized label and a browser select); equity and available are stats. Buy and sell keep the user's candle colours.
+- 仓位: equity, available and floating P&L are stats; the record tabs are kit tabs with counts; a position is one card with side, margin mode and leverage as badges, its figures in two columns and kit buttons (市价全平 as danger); orders and fills are rows with side, type and status badges; empty tabs are `EmptyState`s; the risk tab is sections with dividers; closed trades, the ledger and liquidation recoveries are kit disclosures.
+- The legacy rail stylesheet is gone: about 410 rules for the ticket, the account view and rail markup nothing renders any more (old tabs, tables, chips, the `--replay-rail-*` aliases), including 7 `!important`, are replaced by 99 token-based rules; `replayPanels.css` is down to 42 lines. The liquidation timeline uses global tokens (its `--trade-*` colours were undefined inside the integrity drawer).
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.

@@ -863,7 +863,7 @@ test("replay watchlist searches the Run catalog and adds products through track 
   assert.match(paper, /simulated-account-liquidation/);
   assert.match(paper, /reconciliation_delta/);
   assert.match(paper, /replay\.wb\.modelNoQueue|replay\.dock\.bookOffHint|不含盘口排队/);
-  assert.match(paper, /data-replay-rail-tab/);
+  assert.match(paper, /label=\{t\("replay\.wb\.recordsAria"\)\}/);
   assert.doesNotMatch(paper, /BAR v1 不支持/);
   const integrity = readFileSync(
     resolve(testDirectory, "../components/ReplayIntegrityReviewPanel.tsx"),

@@ -169,7 +169,8 @@ The replay rail (回放笔记, 自选, 市场) sets the pattern for a view in a 
 - **The rail frame names the view**: its title and a short subtitle that says something new (计划与复盘), never the title again. The view itself has no eyebrow or second heading.
 - **The view's main action comes first**, as a small primary button, with refresh as a quiet button at the other end.
 - **Data the source does not have is an `EmptyState`** with the reason (未启用历史盘口). A warning alert is for something that broke, with the action that repairs it (重新校验并同步).
-- **Rows, not cards.** The open item has an accent edge and a light tint; actions every row has are an icon button or small ghost buttons at its end.
+- **Rows, not cards.** The open item has an accent edge and a light tint; actions every row has are an icon button or small ghost buttons at its end. A card is kept for a unit with its own controls (an open position).
+- **Trading views** (下单, 仓位): a figure's unit sits inside its input; 开仓 / 平仓 is a `SegmentedControl` and the order type `Tabs` whose panel holds the fields; figures are `Stat`s and two-column label/value lists in mono. Buy and sell are the one pair of buttons outside the kit: filled with the user's candle colours, and tinted rather than grey when disabled so the sides stay recognisable.
 
 ## Search and export dialogs
 
