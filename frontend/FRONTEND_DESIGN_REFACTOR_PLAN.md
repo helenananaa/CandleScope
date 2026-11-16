@@ -590,6 +590,12 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - Settings storage and maintenance, about and support, the data workbench, repair, maintenance errors and the plugin live control say local service, cleanup, compact, local database, log file and one-time confirmation instead of backend, GC, VACUUM, SQLite, WAL and receipt; 25 short labels changed in every language; cache entries read as markets (`cacheEntryLabel`); download jobs name their state; the credits pass library names as a placeholder.
 - The extension manager's 49 messages moved from Chinese/English pairs in the component into the catalogs (`extensions.*`, all 30 languages); 33 unused messages deleted; the 6c2 state names are shared as `common.state.*`.
 
+**Phase 6d2 is done (branch `design/phase-6d2-plugin-copy`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_6D2.md`](../docs/FRONTEND_DESIGN_QA_PHASE_6D2.md). With it Phase 6 is complete.
+
+- The plugin center and live control name the codes they showed (`pluginLabels.ts`: live modes, release channels, permission decisions, runtime verification, sandbox status, trust modes) and say CandleScope, 实盘 and 模拟 instead of "Host" / 宿主, Live and Paper; the channel order and the default exit group are placeholders.
+- Settings appearance drops its English in parentheses; replay and indicator messages lose 投影, 不可变, 显式 and 前端.
+- The internal-terms check also rejects "Host", and in Chinese 宿主, 回执, 载荷, 投影, 不可变, 显式, 前端, Live and Paper; none is left in either source catalog.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.

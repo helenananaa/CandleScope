@@ -58,6 +58,12 @@ Internal term → what users see. "Technical details only" terms may appear insi
 | provider (evidence source) | 数据源 | source | |
 | clone | 复制 | copy | |
 | frontend (前端) | 界面, 浏览器缓存 | the app, browser cache | |
+| Host, 宿主 (the app hosting plugins) | CandleScope | CandleScope | "managed by CandleScope" |
+| Live, Paper (trading modes) | 实盘, 模拟 | live, paper (lowercase in sentences) | |
+| projection (投影) | 视图, or the value it shows (预估强平价) | view, or the value | |
+| immutable (不可变) | 永久, 固定 | permanent, fixed | |
+| explicit (显式) | 手动, 明确 | yourself, manual | |
+| generation, diff (plugins) | 运行代次, 差异 | generation, changes | |
 | receipt (live control) | 单次确认 | one-time confirmation | |
 | policy epoch, generation | 权限策略版本, 控制代次 | policy version, control generation | |
 | WAL, checkpoint | 日志文件, 写回数据库 | log file, written back to the database | |

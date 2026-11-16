@@ -37,6 +37,7 @@ const SHARED_TERMS: ReadonlyArray<readonly [string, RegExp]> = [
   ["queue exact", /\bqueue exact\b/i],
   ["raw trade", /\braw trades?\b/i],
   ["holdout", /\bholdout\b/i],
+  ["Host", /\bHost\b/],
 ];
 
 /** English words that are jargon inside Chinese text, and Chinese engineering terms. */
@@ -59,6 +60,14 @@ const CHINESE_TERMS: ReadonlyArray<readonly [string, RegExp]> = [
   ["snapshot", /\bsnapshots?\b/i],
   ["tick", /\bticks?\b/i],
   ["后端", /后端/],
+  ["前端", /前端/],
+  ["宿主", /宿主/],
+  ["回执", /回执/],
+  ["载荷", /载荷/],
+  ["投影", /投影/],
+  ["不可变", /不可变/],
+  ["显式", /显式/],
+  ["Live / Paper", /\b(?:Live|LIVE|Paper)\b/],
   ["影子", /影子/],
   ["权威", /权威/],
   ["信任门", /信任门/],

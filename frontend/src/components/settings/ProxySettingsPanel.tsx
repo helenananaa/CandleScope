@@ -13,6 +13,9 @@ import type {
     ProxyPoolStatus,
 } from "../../features/settings/proxySettingsRuntime.js";
 
+/** The exit group a new route starts in; the help names it, so it is passed in, not translated. */
+const DEFAULT_EGRESS_GROUP = "shared";
+
 interface ProxyModeOption {
     value: ProxyMode;
     icon: IconName;
@@ -110,7 +113,7 @@ export default function ProxySettingsPanel({
 
             {proxyMode === 'pool' && (
                 <div className="st-proxy-pool">
-                    <Field label={t("settings.proxy.strategy")} hint={t("settings.proxy.poolHelp")}>
+                    <Field label={t("settings.proxy.strategy")} hint={t("settings.proxy.poolHelp", { group: DEFAULT_EGRESS_GROUP })}>
                         <Select value={proxyStrategy} disabled={proxyLoading}
                             onChange={(event) => onProxyStrategyChange?.(event.target.value === "balanced" ? "balanced" : "failover")}>
                             <option value="failover">{t("settings.proxy.failover")}</option>
@@ -202,7 +205,7 @@ export default function ProxySettingsPanel({
                     <div>
                         <Button disabled={proxyLoading || proxyRoutes.length >= 16}
                             onClick={() => onProxyRoutesChange?.([...proxyRoutes, { id: crypto.randomUUID(), name: "", url: "",
-                                egress_group: "shared", enabled: true, exchanges: [], max_concurrency: 4, max_ws_subscriptions: 64 }])}>
+                                egress_group: DEFAULT_EGRESS_GROUP, enabled: true, exchanges: [], max_concurrency: 4, max_ws_subscriptions: 64 }])}>
                             {t("settings.proxy.add")}
                         </Button>
                     </div>

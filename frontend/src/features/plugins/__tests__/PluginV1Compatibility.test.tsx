@@ -190,7 +190,7 @@ test("enabled platform exposes separate import and rollback previews", () => {
   assert.match(manager, /预览兼容层回滚/);
   assert.doesNotMatch(manager, /data-plugin-install-input/);
   assert.match(manager, /data-runtime-registry-revision="1"/);
-  assert.match(manager, /宿主管理的运行时/);
+  assert.match(manager, /CandleScope 管理的运行环境/);
   assert.match(manager, /temurin-21\.0\.12\.8/);
   assert.match(manager, /自动网络更新已关闭/);
   assert.doesNotMatch(manager, /Apply exact import preview/);

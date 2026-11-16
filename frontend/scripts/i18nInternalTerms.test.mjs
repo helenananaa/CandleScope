@@ -24,6 +24,11 @@ test("English words that are jargon in Chinese text are ordinary words in Englis
   assert.deepEqual(internalTerms("en", "Created run {id}."), []);
   assert.deepEqual(internalTerms("zh-CN", "正在从后端读取规则"), ["后端"]);
   assert.deepEqual(internalTerms("en", "Reading rules from the backend"), ["backend"]);
+  // Plugins and replay (Phase 6d2): the host app's name, live and paper trading, engineering Chinese.
+  assert.deepEqual(internalTerms("en", "Host verifies publisher identity"), ["Host"]);
+  assert.deepEqual(internalTerms("en", "Open localhost:8080 in the browser"), []);
+  assert.deepEqual(internalTerms("zh-CN", "恢复 Paper 订单提交？宿主风险检查仍然有效"), ["宿主", "Live / Paper"]);
+  assert.deepEqual(internalTerms("zh-CN", "不可变复盘时间线"), ["不可变"]);
 });
 
 test("every source message with an internal term is a problem", () => {
