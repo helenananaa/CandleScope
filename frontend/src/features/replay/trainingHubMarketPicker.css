@@ -1,0 +1,55 @@
+/* Training hub market picker and narrow hub layout.
+ * Loads later than features/replay/replay.css on purpose: these rules depend on files imported
+ * in between (cascade order). They move into that file when this surface is rebuilt (design
+ * refactor Phase 5). */
+
+.replay-market-picker-commit strong {
+  display: block;
+  overflow: hidden;
+  margin-top: 6px;
+  color: var(--hub-text);
+  font-size: var(--font-size-base);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.replay-market-picker-row-main dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.replay-market-picker-row-main dd { margin: 4px 0 0; overflow: hidden; color: var(--hub-text); font: 600 var(--font-size-sm)/1.2 "JetBrains Mono", monospace; text-overflow: ellipsis; white-space: nowrap; }
+
+.replay-market-picker-more :is(button, a),
+.replay-market-picker-empty-actions :is(button, a) {
+  min-height: 36px;
+  padding: 8px 14px;
+  border: 1px solid var(--hub-border-strong);
+  border-radius: var(--radius-full);
+  color: var(--hub-text);
+  background: var(--hub-chip);
+  text-decoration: none;
+}
+
+.replay-chart-cell .multi-chart-cell-header > button { color: inherit; background: transparent; border: 0; }
+
+.replay-note-history > div + div { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-subtle); }
+
+@media (max-width: 560px) {
+  .training-hub-card-head { flex-wrap: wrap; }
+  .training-hub-heading-actions :is(button, a) { flex: 1 1 auto; justify-content: center; text-align: center; }
+  .training-hub-stats { grid-template-columns: 1fr 1fr; }
+  .training-hub-filters { align-items: stretch; flex-direction: column; width: 100%; }
+  .training-hub-filter-chips { width: 100%; }
+  .training-hub-filters > label { justify-content: space-between; }
+  .training-hub-choice-grid { grid-template-columns: 1fr; }
+  .training-hub-create-steps { display: grid; grid-template-columns: 1fr 1fr; }
+  .training-hub-create-steps button { justify-content: flex-start; }
+  .replay-market-picker-commit { grid-template-columns: 1fr; }
+  .replay-market-picker-row { grid-template-columns: 1fr; }
+  .replay-market-picker-row .training-hub-primary-button { width: 100%; }
+  .replay-market-picker-reason { max-width: none; text-align: left; }
+  .replay-market-picker-row-main dd { white-space: normal; }
+}

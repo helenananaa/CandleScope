@@ -1,3 +1,4 @@
+@layer features {
 /* CandleScope backtest workstation — matches live/replay chrome density. */
 
 .backtest-app {
@@ -978,4 +979,5 @@
   .backtest-top-bar .backtest-credibility {
     display: none;
   }
+}
 }

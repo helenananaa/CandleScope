@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readAppStyles } from "../../../test/appStyles.js";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -222,7 +223,7 @@ test("Phase 8 workspace exposes explainable plans and fail-closed aggregate trad
 test("paper trading dock owns a complete readable surface in both app themes", () => {
   const rail = source("src/features/replay/components/ReplayRightRail.tsx");
   const marketRail = source("src/features/replay/components/ReplayRightMarketRail.tsx");
-  const styles = source("src/index.css");
+  const styles = readAppStyles();
   assert.match(rail, /className="replay-paper-trading"/);
   assert.match(rail, /role="tablist"/);
   assert.match(rail, /role="tabpanel"/);
@@ -302,7 +303,7 @@ test("right-rail trading workstation keeps positions and account history out of 
   const rail = source("src/features/replay/components/ReplayRightRail.tsx");
   const marketRail = source("src/features/replay/components/ReplayRightMarketRail.tsx");
   const shell = source("src/features/replay/ReplayTrainingPageShell.tsx");
-  const styles = source("src/index.css");
+  const styles = readAppStyles();
 
   assert.doesNotMatch(shell, /bottomPanel=/);
   assert.doesNotMatch(shell, /ReplayTradingWorkbench/);
@@ -683,7 +684,7 @@ test("replay preserves whole-panel collapse after every accordion body is closed
 
 test("replay rail shows one full-height view chosen from the activity bar", () => {
   const marketRail = source("src/features/replay/components/ReplayRightMarketRail.tsx");
-  const styles = source("src/index.css");
+  const styles = readAppStyles();
   assert.match(marketRail, /layoutMode="single-view"/);
   assert.match(marketRail, /onToggleView=\{onActivateView\}/);
   assert.match(marketRail, /actions\.activateView\(/);
@@ -716,7 +717,7 @@ test("Phase 10 release surface exposes soak telemetry and an accessible danger d
   const workspace = source("src/features/replay/ReplayTrainingPageShell.tsx");
   const controls = source("src/features/replay/components/ReplayControlBar.tsx");
   const integrity = source("src/features/replay/components/ReplayIntegrityReviewPanel.tsx");
-  const styles = source("src/index.css");
+  const styles = readAppStyles();
 
   assert.match(workspace, /data-replay-order-count/);
   assert.match(workspace, /data-replay-fill-count/);
@@ -734,7 +735,7 @@ test("Phase 10 release surface exposes soak telemetry and an accessible danger d
 
 test("toolbar keeps idle time visible and scopes progress to an active cancelable advance", () => {
   const controls = source("src/features/replay/components/ReplayControlBar.tsx");
-  const styles = source("src/index.css");
+  const styles = readAppStyles();
 
   assert.match(controls, /const cancelableAdvancePending = replayAdvanceIsCancelable\(/);
   assert.match(controls, /\{cancelableAdvancePending && \(\s*<span className="replay-advance-progress"/s);

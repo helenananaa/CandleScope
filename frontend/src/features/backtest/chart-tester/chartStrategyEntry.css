@@ -1,3 +1,4 @@
+@layer features {
 /* The visible chart entry must be styled before the tester is lazily loaded. */
 /* Semantic foregrounds stay legible on the selected theme's surfaces. */
 :root {
@@ -28,3 +29,4 @@
 .chart-strategy-entry-button span { max-width: 140px; overflow: hidden; color: var(--text-secondary); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .chart-strategy-entry-button[data-state="error"] span { color: var(--strategy-error); }
 .chart-strategy-entry-button[aria-expanded=true] { border-color: var(--accent-blue); }
+}

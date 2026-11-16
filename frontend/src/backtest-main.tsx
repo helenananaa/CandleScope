@@ -1,3 +1,4 @@
+import "./styles/layers.css";
 import "./styles/fonts.js";
 import "./index.css";
 import "./features/backtest/backtest.css";

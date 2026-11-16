@@ -1,0 +1,5 @@
+/* Settings → Data navigation buttons. */
+
+.settings-data-navigation { display: flex; gap: 8px; margin-bottom: 24px; }
+.settings-data-navigation button { border: 1px solid var(--border-color); padding: 9px 16px; border-radius: var(--radius-control); color: var(--text-primary); background: var(--bg-secondary); cursor: pointer; }
+.settings-data-navigation button[aria-pressed='true'] { color: var(--text-accent); border-color: var(--accent-blue); }

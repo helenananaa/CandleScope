@@ -4,6 +4,7 @@ export default function SettingsModalStyles(props: SettingsModalStylesProps) {
   void props;
   return (
     <style>{`
+@layer features {
 
 /* ═══════════════════════════════════════════════════════════
    Settings Panel — Full-page sidebar + content layout
@@ -2432,6 +2433,7 @@ a.st-btn {
   flex: 1;
   text-align: right;
 }
-    `}</style>
+}
+`}</style>
   );
 }

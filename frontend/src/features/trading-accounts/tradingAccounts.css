@@ -1,3 +1,4 @@
+@layer features {
 /* Trading accounts rail, journal drawer and quick replay. Tokens only. */
 
 .trading-panel {
@@ -624,3 +625,4 @@
 .trading-stats-table tr[data-empty="true"] :is(th, td) { color: var(--text-muted); }
 .trading-stats-table .trading-link { max-width: 100%; font-size: inherit; text-align: left; overflow-wrap: anywhere; }
 .trading-stats-mark { margin-left: 2px; color: var(--text-warning); text-decoration: none; cursor: help; }
+}

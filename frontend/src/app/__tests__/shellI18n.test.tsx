@@ -15,6 +15,7 @@ import { getLocale, setLocale, t } from "../../i18n/index.js";
 import MarketRightRailFrame from "../MarketRightRailFrame.js";
 import StatusBar from "../StatusBar.js";
 import type { MarketRailViewDescriptor } from "../marketRailTypes.js";
+import { readAppStyles } from "../../test/appStyles.js";
 
 function withLocale<T>(locale: string, run: () => T): T {
   const previous = getLocale();
@@ -408,7 +409,8 @@ test("status bar, right rail, and appearance chrome switch to Spanish", () => {
 });
 
 test("Russian layout CSS keeps long chrome wrapping and a Cyrillic-capable font stack", () => {
-  const css = fs.readFileSync(new URL("../../index.css", import.meta.url), "utf8");
+  const manifest = fs.readFileSync(new URL("../../index.css", import.meta.url), "utf8");
+  const css = readAppStyles();
   const settingsCss = fs.readFileSync(
     new URL("../../features/settings/SettingsModalStyles.tsx", import.meta.url),
     "utf8",
@@ -416,7 +418,7 @@ test("Russian layout CSS keeps long chrome wrapping and a Cyrillic-capable font 
   const tokens = fs.readFileSync(new URL("../../styles/tokens.css", import.meta.url), "utf8");
   assert.match(tokens, /--font-sans:[^;]*Segoe UI/);
   assert.match(tokens, /--font-sans:[^;]*Noto Sans/);
-  assert.match(css, /@import "\.\/styles\/tokens\.css";/);
+  assert.match(manifest, /@import "\.\/styles\/tokens\.css" layer\(tokens\);/);
   assert.match(css, /html\[lang="ru"\] \.market-rail-accordion-trigger strong/);
   const main = fs.readFileSync(new URL("../../main.tsx", import.meta.url), "utf8");
   assert.match(main, /\.\/styles\/fonts\.js/);

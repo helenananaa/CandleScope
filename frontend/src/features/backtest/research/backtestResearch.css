@@ -1,3 +1,4 @@
+@layer features {
 .research-task-home,
 .research-status-page {
   min-height: 100vh;
@@ -176,3 +177,4 @@
 .research-external-provider h3 { margin: 0 0 8px; font-size: 13px; }
 .research-external-provider p,
 .research-external-provider code { overflow-wrap: anywhere; }
+}

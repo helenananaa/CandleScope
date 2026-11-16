@@ -1,0 +1,47 @@
+/* Market top bar.
+ * Loads later than app/appShell.css on purpose: these rules depend on files imported in
+ * between (cascade order). They move into that file when this surface is rebuilt (design
+ * refactor Phase 5). */
+
+/* ── 顶部导航栏 ──────────────────────────────────────────── */
+.top-bar {
+  display: flex;
+  align-items: center;
+  height: 48px;
+  padding: 0 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  gap: 12px;
+  flex-shrink: 0;
+  z-index: var(--z-topbar);
+}
+
+.brand-mark {
+  display: block;
+  flex: 0 0 auto;
+  user-select: none;
+}
+
+.price-change {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.top-bar .interval-toolbar-wrap {
+  flex-shrink: 1;
+  min-width: 0;
+  z-index: auto;
+}
+
+/* ── Top bar at narrow widths ─────────────────────────────────
+ * The symbol never truncates; lower-priority items give way first.
+ * Hidden intervals stay reachable from the interval picker (▾). */
+.top-bar .symbol-selector {
+  flex-shrink: 0;
+  min-width: max-content;
+}

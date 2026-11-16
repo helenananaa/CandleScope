@@ -1,0 +1,38 @@
+/* Pane cursor overlays, price scale menu checks and pane scrolling.
+ * Loads later than components/chartPanes.css on purpose: these rules depend on files imported
+ * in between (cascade order). They move into that file when this surface is rebuilt (design
+ * refactor Phase 5). */
+
+.chart-pane-cursor-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background: var(--accent-blue);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--accent-blue) 18%, transparent),
+    0 0 12px color-mix(in srgb, var(--accent-blue) 55%, transparent);
+}
+.chart-pane-cursor-highlighter {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-warning) 28%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 42%, transparent);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--color-warning) 22%, transparent);
+}
+[data-theme='light'] .chart-pane-cursor-highlighter {
+  background: color-mix(in srgb, var(--color-warning) 20%, transparent);
+  border-color: color-mix(in srgb, var(--color-warning) 36%, transparent);
+}
+
+.price-scale-menu-check {
+  width: 16px;
+  text-align: center;
+  font-size: var(--font-size-md);
+  flex-shrink: 0;
+}
+
+.chart-pane-scroll-viewport > .multi-pane-chart {
+  flex: 1 0 0px;
+  height: 0;
+}

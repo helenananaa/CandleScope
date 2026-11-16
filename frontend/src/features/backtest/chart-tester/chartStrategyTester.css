@@ -1,6 +1,7 @@
 @import "../native/nativeStrategy.css";
 @import "./chartStrategyEntry.css";
 @import "./strategyDock.css";
+@layer features {
 
 /* Keep both modes in the workspace's column layout, including the resizable tester. */
 .chart-strategy-mode-container { display: contents; }
@@ -441,4 +442,5 @@
 .chart-strategy-result-context { margin: 0 0 10px; }
 @container strategy-dock (max-width: 720px) {
   .chart-strategy-start-columns { grid-template-columns: 1fr; }
+}
 }

@@ -11,6 +11,7 @@ import MarketTopBarFrame from "../MarketTopBarFrame.js";
 import MarketStatusBar from "../MarketStatusBar.js";
 import MarketRightRailFrame from "../MarketRightRailFrame.js";
 import type { MarketRailViewDescriptor } from "../marketRailTypes.js";
+import { readAppStyles } from "../../test/appStyles.js";
 
 const sampleViews: MarketRailViewDescriptor[] = [
   {
@@ -259,7 +260,7 @@ test("multi-chart rail portal forwards independent card-close and panel-collapse
 });
 
 test("right rail grows independent accordion cards inside one outer scrolling surface", () => {
-  const styles = readFileSync(resolve(process.cwd(), "src/index.css"), "utf8");
+  const styles = readAppStyles();
   assert.match(styles, /\.market-rail-panel \{[\s\S]*?overflow-y: auto;/);
   assert.match(styles, /\.market-rail-panel \{[\s\S]*?overscroll-behavior-y: contain;/);
   assert.match(styles, /\.market-rail-accordion-section \{[\s\S]*?flex: 0 0 auto;/);
@@ -271,7 +272,7 @@ test("right rail grows independent accordion cards inside one outer scrolling su
 });
 
 test("replay activity buttons do not leave frozen transition timelines retaining old rails", () => {
-  const styles = readFileSync(resolve(process.cwd(), "src/index.css"), "utf8");
+  const styles = readAppStyles();
   assert.match(
     styles,
     /\.right-market-rail\[data-runtime-source="replay"\] \.market-activity-item \{[\s\S]*?transition: none;/,

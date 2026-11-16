@@ -261,7 +261,7 @@ Each phase lands as one or more reviewable PRs, and ends with before/after scree
 |---|---|---|---|
 | **0. Baseline and tooling** | Add the snapshot script and the unstyled-class scan (warn mode). Install skills. Run `impeccable document` to draft `DESIGN.md`. | Baseline captured for every state; checks report numbers in CI. | 1–2 d |
 | **1. Direction and tokens** | Decide palette, typeface, scale, and density (decisions in §8). Tokens v2 (Graphite dark and light), keeping the legacy aliases. Switch the interface font to IBM Plex Sans and fix the CJK font stack. Theme model (§5.1): Settings becomes app scope, the app theme covers chrome and following charts, existing chart overrides are kept and resettable, plus the migration and the Electron window colour. | `DESIGN.md` approved. Chinese text renders in one font family. Switching the app theme restyles the chrome and every following chart. Charts with their own appearance keep it. A light custom chart background stays readable. | 2–3 d |
-| **2. Primitives and overlay system** | Build the kit in §5.3, the overlay manager, and `@layer`. Remove the `html :is()` patches. | Kit documented with a dev-only gallery page; overlay behaviour has tests. | 4–6 d |
+| **2. Primitives and overlay system** | In three PRs. **2a:** `@layer` and the split of `index.css` into feature files, with no visual change. **2b:** the kit in §5.3 with a dev-only gallery; move `.ui-*` into `primitives`; remove the `html :is()` patches and `!important` as `Button` replaces `.st-btn` and `.alert-btn`. **2c:** the overlay manager. | Kit documented with a dev-only gallery page; overlay behaviour has tests. | 4–6 d |
 | **3. P0 fixes** (parallel with Phase 2 once `Button`/`Field`/`Dialog` land) | Style the surfaces in §2.1. Fix overlay stacking and Escape. Move Extension Recovery into Settings → 插件与扩展 and show a small toast only when an extension has failed or safe mode is on. Translate raw errors. Rebuild the history study as an anchored popover. | 0 unstyled clusters; no overlay overlap; no English strings in the zh UI. | 2–3 d |
 | **4. Shell and market workspace** | Unified `AppHeader`. Top bar grouped into symbol, intervals, chart tools, panels, and workspace, with overflow at narrow widths. Rail width rules and label handling. Status bar. Move per-chart appearance into each chart's header menu, with an override marker (§5.1). | Market page reviewed at three widths; header shared by all five pages. | 3–5 d |
 | **5. Surface migration** | In order: Settings (Plugin Center moves inside the Settings frame) → Alerts → Indicators and editor → Symbol search → Export → Replay hub and session → Strategy research merged with backtest (§6.1), local data, CSV import → Data workbench → Order book, trade flow, and account docks → Extension manager. For each: primitives only, `clarify`/`distill` the copy, put diagnostics behind disclosures, delete dead CSS. | Each surface passes `critique` and the Vercel review with no P0/P1 findings, plus a before/after snapshot. | 2–3 wk |
@@ -290,6 +290,21 @@ Not done yet:
 
 - The IBM Plex Mono comparison.
 - Moving hard-coded component colours (alert cards, exchange tiles) onto tokens. This now belongs to each surface's migration in Phase 5.
+
+**Phase 2a is done (branch `design/phase-2a-css-layers`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_2A.md`](../docs/FRONTEND_DESIGN_QA_PHASE_2A.md).
+
+- `src/styles/layers.css` sets `reset, tokens, primitives, patterns, features, overrides`; every entry page loads it first.
+- `src/index.css` (15,859 lines) became a manifest: 37 new feature files plus `styles/reset.css`, imported after the existing tokens, components, plugin center and extension stylesheets. Feature CSS loaded from JavaScript, the Settings and Data Workbench style strings, Monaco's CSS and extension stylesheets join `features`.
+- No computed style changes: `npm run css:cascade` finds no winner change across 23,702 declarations, and a live check that swaps the old CSS in place on the same page found no differing computed value in any snapshot state.
+- `npm run check:css-layers` keeps new CSS inside a layer.
+
+Moved to 2b, because each changes how some controls look:
+
+- **The `html :is()` patches.** Moving them to `overrides` changes about 1,300 rule pairs; for example, disabled primary buttons in Settings would look enabled.
+- **Removing `!important`.**
+- **Moving `.ui-*` into `primitives`.**
+
+Sixteen of the new files hold rules that must load later than their feature's main file, because rules in between depend on the order. Each says so in its header and merges into the main file when its surface is rebuilt in Phase 5.
 
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 

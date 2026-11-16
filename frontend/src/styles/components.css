@@ -2,6 +2,8 @@
  * Built only from tokens.css. Feature styles may add layout
  * (margins, widths, grid placement) but should not restyle the
  * box, color or type of these primitives.
+ * Imported into the features layer for now, with the feature CSS it was written against;
+ * design refactor Phase 2b moves the primitives into the primitives layer.
  * ──────────────────────────────────────────────────────────── */
 
 /* Toolbar control: pills, pickers and toggles in bars and headers */

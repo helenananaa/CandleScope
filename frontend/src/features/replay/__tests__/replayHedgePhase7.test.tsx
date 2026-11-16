@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { getLocale, setLocale } from "../../../i18n/index.js";
 import ReplayLiquidationTimeline from "../components/ReplayLiquidationTimeline.js";
 import { parseReplayLiquidationCases } from "../replayV2Types.js";
+import { readAppStyles } from "../../../test/appStyles.js";
 
 const digest = `sha256:${"a".repeat(64)}`;
 
@@ -173,7 +174,7 @@ test("Phase 7 timeline parser rejects queue-exact claims and unknown private fie
 
 test("Phase 7 entry and narrow-rail layout have no gray gate or horizontal overflow trap", () => {
   const entrySource = readFileSync(new URL("../useReplayEntryCapability.ts", import.meta.url), "utf8");
-  const css = readFileSync(new URL("../../../index.css", import.meta.url), "utf8");
+  const css = readAppStyles();
 
   assert.doesNotMatch(entrySource, /VITE_REPLAY_ENTRY_ENABLED/);
   assert.doesNotMatch(entrySource, /hidden/);
