@@ -124,6 +124,7 @@ class IndicatorRangeResultService:
             "evictions": 0,
             "singleflightJoins": 0,
             "computes": 0,
+            "partialSeedComputes": 0,
             "cancelledOrphanComputes": 0,
             "barsHits": 0,
             "barsMisses": 0,
@@ -586,6 +587,9 @@ class IndicatorRangeResultService:
         compute: Callable[[], Awaitable[dict[str, Any]]],
     ) -> dict[str, Any]:
         payload = await compute()
+        seed = payload.get("seed") if isinstance(payload, dict) else None
+        if isinstance(seed, dict) and seed.get("state") == "partial":
+            self._stats["partialSeedComputes"] += 1
         actual_range = payload.get("range") if isinstance(payload, dict) else None
         actual_start = int(actual_range.get("start", start)) if isinstance(actual_range, dict) else start
         actual_end = int(actual_range.get("end", end)) if isinstance(actual_range, dict) else end
