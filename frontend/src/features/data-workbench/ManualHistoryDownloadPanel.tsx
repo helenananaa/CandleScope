@@ -14,6 +14,7 @@ import {
   isGreenCompleteState,
   isPlanFirstReady,
   MANUAL_HISTORY_INTERVAL_CHOICES,
+  manualHistoryStateLabel,
   normalizeCustomInterval,
   parentStateTone,
   parseSymbolList,
@@ -291,7 +292,7 @@ export function ManualHistoryDownloadPanel({
           ? copyText("blocked")
           : jobState === "FAILED"
             ? copyText("failed")
-            : copyText("jobState", { state: jobState });
+            : copyText("jobState", { state: manualHistoryStateLabel(jobState, locale) });
 
   return (
     <section className="dw-manual" data-testid="manual-history-download-panel" aria-label={copyText("title")}>
@@ -481,7 +482,7 @@ export function ManualHistoryDownloadPanel({
             <ul className="dw-manual-list" data-testid="manual-history-job-targets">
               {jobTargets.map((target) => (
                 <li key={`${String(target.symbol)}:${String(target.canonical_interval)}`}>
-                  {String(target.symbol)} · {String(target.canonical_interval)} · {String(target.state)}
+                  {String(target.symbol)} · {String(target.canonical_interval)} · {manualHistoryStateLabel(String(target.state), locale)}
                   {` · ${copyText("sealedEnd")}: ${String(target.sealed_end_open_ms ?? copyText("unknown"))}`}
                 </li>
               ))}

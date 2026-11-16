@@ -26,14 +26,15 @@ test("English words that are jargon in Chinese text are ordinary words in Englis
   assert.deepEqual(internalTerms("en", "Reading rules from the backend"), ["backend"]);
 });
 
-test("the baseline only shrinks: new terms and stale entries both fail", () => {
+test("every source message with an internal term is a problem", () => {
   const catalogs = {
-    "zh-CN": { listed: "存储 GC 预演", fixed: "已重写", added: "预览 lane 已满" },
-    en: { listed: "Storage GC dry-run", fixed: "Rewritten", added: "Fine" },
+    "zh-CN": { storage: "存储 GC 预演", fixed: "已重写", preview: "预览 lane 已满" },
+    en: { storage: "Storage GC dry-run", fixed: "Rewritten", preview: "Fine" },
   };
-  assert.deepEqual(internalTermKeys(catalogs), { "zh-CN": ["added", "listed"], en: ["listed"] });
-  assert.deepEqual(internalTermProblems(catalogs, { "zh-CN": ["fixed", "listed"], en: ["listed"] }), [
-    "internal term in zh-CN:added (lane); use the user term from COPY_GUIDELINES.md",
-    "remove zh-CN:fixed from scripts/i18n-internal-terms-baseline.json (no internal term left)",
+  assert.deepEqual(internalTermKeys(catalogs), { "zh-CN": ["preview", "storage"], en: ["storage"] });
+  assert.deepEqual(internalTermProblems(catalogs), [
+    "internal term in zh-CN:preview (lane); use the user term from COPY_GUIDELINES.md",
+    "internal term in zh-CN:storage (GC); use the user term from COPY_GUIDELINES.md",
+    "internal term in en:storage (dry-run, GC); use the user term from COPY_GUIDELINES.md",
   ]);
 });

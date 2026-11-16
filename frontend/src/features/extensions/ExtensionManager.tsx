@@ -2,7 +2,8 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { Badge, Button, Checkbox, Dialog, Field, FileDrop, InlineAlert, Select } from "../../components/ui/index.js";
 import { notify } from "../../components/ui/overlay/overlayApi.js";
 import { toastStore } from "../../components/ui/overlay/toastStore.js";
-import { useExtensionText } from "./hooks.js";
+import { t } from "../../i18n/index.js";
+import { useLocale } from "../../i18n/useLocale.js";
 import { extensionManagementRequest, pluginManagementAvailable, stageTrustedExtension } from "../plugins/pluginPlatformApi.js";
 import type { ExtensionCatalog, ExtensionDiagnostics, ExtensionManifest } from "./contracts.js";
 import { recoveryNotice } from "./recoveryNotice.js";
@@ -11,7 +12,6 @@ import { refreshExtensions } from "./runtime.js";
 import { extensionSafeMode, getExtensionState, subscribeExtensions } from "./state.js";
 
 interface Review { digest: string; manifest: ExtensionManifest; signed: false }
-type Text = ReturnType<typeof useExtensionText>;
 const realms = ["frontend", "backend", "desktop"] as const;
 async function readSnapshot() {
   const [catalog, desktop] = await Promise.all([
@@ -34,14 +34,14 @@ function reloadExtensions(off: boolean): void {
 }
 
 /** Recovery actions that work even when an extension has broken the page. */
-function RecoveryActions({ text }: { text: Text }) {
+function RecoveryActions() {
   return extensionSafeMode()
-    ? <Button size="sm" variant="ghost" onClick={() => reloadExtensions(false)}>{text("正常重新加载", "Reload with extensions")}</Button>
-    : <Button size="sm" variant="ghost" onClick={() => reloadExtensions(true)}>{text("不加载扩展并刷新", "Reload without extensions")}</Button>;
+    ? <Button size="sm" variant="ghost" onClick={() => reloadExtensions(false)}>{t("extensions.reloadWith")}</Button>
+    : <Button size="sm" variant="ghost" onClick={() => reloadExtensions(true)}>{t("extensions.reloadWithout")}</Button>;
 }
 
 export default function ExtensionManager() {
-  const text = useExtensionText();
+  useLocale();
   const [catalog, setCatalog] = useState<ExtensionCatalog | null>(null);
   const [desktop, setDesktop] = useState<ExtensionDiagnostics | null>(null);
   const [review, setReview] = useState<Review | null>(null);
@@ -72,16 +72,16 @@ export default function ExtensionManager() {
   }
   const actual = { frontend: state.running, backend: catalog?.backendActive, desktop: desktop?.active };
   const realmErrors = { frontend: state.errors, backend: catalog?.backendErrors, desktop: desktop?.errors };
-  const realmLabels = { frontend: text("当前窗口", "This window"), backend: text("后端", "Backend"), desktop: text("桌面", "Desktop") };
+  const realmLabels = { frontend: t("extensions.realm.frontend"), backend: t("extensions.realm.backend"), desktop: t("extensions.realm.desktop") };
   const statuses = {
-    "safe-mode": text("恢复模式，未加载", "Skipped in recovery mode"),
-    "unavailable": text("运行状态不可用", "Runtime status unavailable"),
-    "pending-stop": text("仍在运行，重启后停用", "Still running; restart to stop"),
-    "pending-restart": text("运行旧版本，重启后切换", "Previous activation running; restart to apply"),
-    "failed": text("加载失败", "Failed to load"),
-    "running": text("运行中", "Running"),
-    "pending-start": text("等待加载或重启", "Awaiting load or restart"),
-    "stopped": text("未运行", "Stopped"),
+    "safe-mode": t("extensions.status.safeMode"),
+    "unavailable": t("extensions.status.unavailable"),
+    "pending-stop": t("extensions.status.pendingStop"),
+    "pending-restart": t("extensions.status.pendingRestart"),
+    "failed": t("extensions.status.failed"),
+    "running": t("extensions.status.running"),
+    "pending-start": t("extensions.status.pendingStart"),
+    "stopped": t("extensions.status.stopped"),
   };
   const locked = busy || !available;
   const runtimeErrors = [
@@ -92,64 +92,64 @@ export default function ExtensionManager() {
   return <section className="extension-manager" aria-busy={busy}>
     <header className="extension-manager-head">
       <div>
-        <h3>{text("可信扩展", "Trusted extensions")}</h3>
-        <p>{text("安装主题、布局和完整功能扩展。代码扩展可以访问宿主与当前用户的本地资源。", "Install themes, layouts and host extensions. Code extensions can access the host and local resources available to your user.")}</p>
+        <h3>{t("extensions.title")}</h3>
+        <p>{t("extensions.description")}</p>
       </div>
       {/* Outside the locked fieldset: leaving or entering recovery must work even when management cannot. */}
-      {!extensionSafeMode() && <RecoveryActions text={text} />}
+      {!extensionSafeMode() && <RecoveryActions />}
     </header>
-    {(extensionSafeMode() || catalog?.safeMode || state.safeMode) && <InlineAlert tone="warning" action={extensionSafeMode() ? <RecoveryActions text={text} /> : undefined}>
-      {text("恢复模式：扩展暂不运行，可以停用或回退版本。", "Recovery mode: extensions are not running. Disable or roll back a version here.")}
+    {(extensionSafeMode() || catalog?.safeMode || state.safeMode) && <InlineAlert tone="warning" action={extensionSafeMode() ? <RecoveryActions /> : undefined}>
+      {t("extensions.safeMode")}
     </InlineAlert>}
-    {!available && <InlineAlert>{text("请在桌面版中管理扩展。", "Manage extensions in the desktop app.")}</InlineAlert>}
-    {runtimeErrors.map((item) => <InlineAlert key={item.realm ?? "window"} tone="danger" title={item.realm ? `${item.realm}：${text("扩展运行环境出错", "Extension runtime error")}` : text("扩展运行环境出错", "Extension runtime error")}>
+    {!available && <InlineAlert>{t("extensions.desktopOnly")}</InlineAlert>}
+    {runtimeErrors.map((item) => <InlineAlert key={item.realm ?? "window"} tone="danger" title={item.realm ? t("extensions.realmError", { realm: item.realm }) : t("extensions.runtimeError")}>
       <code className="extension-detail">{item.message}</code>
     </InlineAlert>)}
-    {catalog && [...catalog.backendActive ?? [], ...desktop?.active ?? []].some((entry) => !catalog.plugins.some((item) => item.manifest.id === entry.id)) && <InlineAlert>{text("已卸载扩展的后台代码仍在运行，请重启应用完成卸载。", "An uninstalled extension still has background code running. Restart the app to finish removal.")}</InlineAlert>}
-    {state.reloadRequired && <InlineAlert action={<Button size="sm" onClick={() => location.reload()}>{text("重新加载", "Reload")}</Button>}>
-      {text("代码扩展已变更，重新加载窗口以清除全部运行状态。", "Code extensions changed. Reload the window to clear all runtime state.")}
+    {catalog && [...catalog.backendActive ?? [], ...desktop?.active ?? []].some((entry) => !catalog.plugins.some((item) => item.manifest.id === entry.id)) && <InlineAlert>{t("extensions.orphanRunning")}</InlineAlert>}
+    {state.reloadRequired && <InlineAlert action={<Button size="sm" onClick={() => location.reload()}>{t("extensions.reload")}</Button>}>
+      {t("extensions.reloadRequired")}
     </InlineAlert>}
     <fieldset className="extension-manager-body" disabled={locked}>
       <div className="extension-toolbar">
-        <FileDrop compact label={text("导入扩展包", "Import extension package")} accept=".csext" disabled={locked}
+        <FileDrop compact label={t("extensions.import")} accept=".csext" disabled={locked}
           onFiles={([file]) => { if (file) void run(async () => { setReview(null); setAccepted(false); setReview(await stageTrustedExtension(file) as Review); }); }} />
         <div className="extension-actions">
-          <Button size="sm" onClick={() => void run(async () => { await change("disable-all", ""); })}>{text("停用全部扩展", "Disable all extensions")}</Button>
-          <Button size="sm" variant="ghost" onClick={() => void run(reload)}>{text("刷新", "Refresh")}</Button>
+          <Button size="sm" onClick={() => void run(async () => { await change("disable-all", ""); })}>{t("extensions.disableAll")}</Button>
+          <Button size="sm" variant="ghost" onClick={() => void run(reload)}>{t("extensions.refresh")}</Button>
         </div>
       </div>
-      {review && <div className="extension-review" role="region" aria-label={text("扩展授权", "Extension approval")}>
+      {review && <div className="extension-review" role="region" aria-label={t("extensions.approval")}>
         <strong>{review.manifest.name} · {review.manifest.version}</strong>
         <p>{review.manifest.description}</p>
         <InlineAlert tone={review.manifest.trust === "full-trust" ? "warning" : "info"}>
           {review.manifest.trust === "full-trust"
-            ? text("完全可信：允许此版本的代码进入应用。它可以更改界面、访问数据，以及执行声明的后端或桌面代码。", "Full trust: allow this version to execute inside the app, change the UI, access data, and run its declared backend or desktop code.")
-            : text("此包只提供主题数据，不执行扩展代码。", "This package provides theme data without executing extension code.")}
+            ? t("extensions.fullTrust")
+            : t("extensions.themeOnly")}
         </InlineAlert>
         <dl className="extension-facts">
-          <div><dt>{text("执行位置", "Execution realms")}</dt><dd>{Object.keys(review.manifest.entries ?? {}).join(", ") || text("无", "None")}</dd></div>
-          <div><dt>{text("来源", "Source")}</dt><dd>{text("本地导入，发布者签名未验证。", "Local import; publisher signature is not verified.")}</dd></div>
+          <div><dt>{t("extensions.realms")}</dt><dd>{Object.keys(review.manifest.entries ?? {}).map((realm) => realm in realmLabels ? realmLabels[realm as keyof typeof realmLabels] : realm).join(" · ") || t("extensions.none")}</dd></div>
+          <div><dt>{t("extensions.source")}</dt><dd>{t("extensions.localImport")}</dd></div>
           <div><dt>SHA-256</dt><dd><code className="extension-detail">{review.digest}</code></dd></div>
         </dl>
-        <Checkbox checked={accepted} onChange={(event) => setAccepted(event.target.checked)} label={text("我信任并启用这个版本", "I trust and enable this version")} />
+        <Checkbox checked={accepted} onChange={(event) => setAccepted(event.target.checked)} label={t("extensions.accept")} />
         <div className="extension-actions">
           <Button size="sm" variant="primary" disabled={!accepted} onClick={() => void run(async () => {
             await extensionManagementRequest("/change", { action: "activate", id: review.manifest.id, digest: review.digest, acknowledgement: `${review.manifest.trust}:${review.digest}` });
             setReview(null); setAccepted(false); await refreshExtensions(true);
-          })}>{text("确认启用", "Enable this version")}</Button>
-          <Button size="sm" variant="ghost" onClick={() => setReview(null)}>{text("取消", "Cancel")}</Button>
+          })}>{t("extensions.confirm")}</Button>
+          <Button size="sm" variant="ghost" onClick={() => setReview(null)}>{t("common.cancel")}</Button>
         </div>
       </div>}
       <div className="extension-choices">
-        <Field label={text("主题", "Theme")}>
+        <Field label={t("extensions.theme")}>
           <Select size="sm" value={catalog?.theme ?? ""} onChange={(event) => void run(() => change("theme", event.target.value))}>
-            <option value="">{text("应用默认", "App default")}</option>
+            <option value="">{t("extensions.appDefault")}</option>
             {catalog?.plugins.filter((item) => item.enabled && !item.error && item.manifest.theme).map((item) => <option key={item.manifest.id} value={item.manifest.id}>{item.manifest.name}</option>)}
           </Select>
         </Field>
-        <Field label={text("布局", "Layout")}>
+        <Field label={t("extensions.layout")}>
           <Select size="sm" value={catalog?.layout ?? ""} onChange={(event) => void run(() => change("layout", event.target.value))}>
-            <option value="">{text("应用默认", "App default")}</option>
+            <option value="">{t("extensions.appDefault")}</option>
             {catalog?.plugins.filter((item) => item.enabled && !item.error && item.manifest.layout).map((item) => <option key={item.manifest.id} value={item.manifest.id}>{item.manifest.name}</option>)}
           </Select>
         </Field>
@@ -157,9 +157,9 @@ export default function ExtensionManager() {
       {catalog?.plugins.map((item) => <article className="extension-item" key={item.manifest.id}>
         <header>
           <strong>{item.manifest.name} · {item.manifest.version}</strong>
-          <Badge tone={item.enabled ? "success" : "neutral"}>{item.enabled ? text("已启用", "Enabled") : text("已停用", "Disabled")}</Badge>
+          <Badge tone={item.enabled ? "success" : "neutral"}>{item.enabled ? t("extensions.enabled") : t("extensions.disabled")}</Badge>
         </header>
-        {Object.keys(item.manifest.entries ?? {}).some((key) => key !== "frontend") && <p className="extension-note">{text("后端和桌面入口的启用、停用及升级需重启应用生效。", "Restart the app to apply backend and desktop entry changes.")}</p>}
+        {Object.keys(item.manifest.entries ?? {}).some((key) => key !== "frontend") && <p className="extension-note">{t("extensions.restartNote")}</p>}
         {item.error && <InlineAlert tone="danger"><code className="extension-detail">{item.error}</code></InlineAlert>}
         <dl className="extension-realms">
           {realms.filter((realm) => item.manifest.entries?.[realm] || actual[realm]?.some((entry) => entry.id === item.manifest.id)).map((realm) => {
@@ -175,9 +175,9 @@ export default function ExtensionManager() {
           })}
         </dl>
         <div className="extension-actions">
-          <Button size="sm" onClick={() => void run(() => item.enabled ? change("disable", item.manifest.id) : openReview(item.digest))}>{item.enabled ? text("停用", "Disable") : text("启用", "Enable")}</Button>
-          <Button size="sm" variant="ghost" className="extension-uninstall" onClick={() => void run(() => change("uninstall", item.manifest.id))}>{text("卸载", "Uninstall")}</Button>
-          {item.history.filter((digest) => digest !== item.digest).map((digest) => <Button size="sm" variant="ghost" key={digest} onClick={() => void run(() => openReview(digest))}>{text("查看旧版本", "Review previous version")} {digest.slice(0, 8)}</Button>)}
+          <Button size="sm" onClick={() => void run(() => item.enabled ? change("disable", item.manifest.id) : openReview(item.digest))}>{item.enabled ? t("extensions.disable") : t("extensions.enable")}</Button>
+          <Button size="sm" variant="ghost" className="extension-uninstall" onClick={() => void run(() => change("uninstall", item.manifest.id))}>{t("extensions.uninstall")}</Button>
+          {item.history.filter((digest) => digest !== item.digest).map((digest) => <Button size="sm" variant="ghost" key={digest} onClick={() => void run(() => openReview(digest))}>{t("extensions.reviewPrevious")} {digest.slice(0, 8)}</Button>)}
         </div>
       </article>)}
     </fieldset>
@@ -190,11 +190,11 @@ export default function ExtensionManager() {
  * Day to day, extensions are managed in Settings → 插件与扩展 → 可信扩展.
  */
 export function ExtensionRecovery() {
-  const text = useExtensionText();
+  useLocale();
   const [open, setOpen] = useState(false);
   const state = useSyncExternalStore(subscribeExtensions, getExtensionState, getExtensionState);
-  const notice = recoveryNotice(state, extensionSafeMode(), text);
-  const manageLabel = text("管理扩展", "Manage extensions");
+  const notice = recoveryNotice(state, extensionSafeMode());
+  const manageLabel = t("extensions.manage");
   const { tone, title, message } = notice ?? {};
   // One notice per situation; a newly failed extension shows it again after a dismissal.
   useEffect(() => {
@@ -202,7 +202,7 @@ export function ExtensionRecovery() {
     const id = notify({ tone, title, ...(message ? { message } : {}), action: { label: manageLabel, onClick: () => setOpen(true) }, durationMs: 0 });
     return () => toastStore.dismiss(id);
   }, [tone, title, message, manageLabel]);
-  return <Dialog open={open} onClose={() => setOpen(false)} size="lg" title={text("扩展恢复", "Extension recovery")}>
+  return <Dialog open={open} onClose={() => setOpen(false)} size="lg" title={t("extensions.recoveryTitle")}>
     <ExtensionManager />
   </Dialog>;
 }

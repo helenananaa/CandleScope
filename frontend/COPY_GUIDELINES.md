@@ -57,6 +57,11 @@ Internal term → what users see. "Technical details only" terms may appear insi
 | profile (offline) | 模式 | mode | |
 | provider (evidence source) | 数据源 | source | |
 | clone | 复制 | copy | |
+| frontend (前端) | 界面, 浏览器缓存 | the app, browser cache | |
+| receipt (live control) | 单次确认 | one-time confirmation | |
+| policy epoch, generation | 权限策略版本, 控制代次 | policy version, control generation | |
+| WAL, checkpoint | 日志文件, 写回数据库 | log file, written back to the database | |
+| series, entry, miss (cache) | 序列, 条目, 未命中 | series, entries, misses | Chinese only |
 | fork | 分叉 | fork | |
 | revision | 版本 | version | |
 | smoke run | 快速试运行 | quick test run | |
@@ -96,6 +101,6 @@ Internal term → what users see. "Technical details only" terms may appear insi
 
 `npm run check:i18n` (part of `npm run check`) enforces the catalogs: every key in every locale, matching placeholders, no Chinese in English, Traditional Chinese without Simplified remnants, and **no internal terms** in `zh-CN` and `en` (`scripts/i18nInternalTerms.mts` holds the term list above).
 
-While Phase 6 rewrites the remaining surfaces, the messages that still use internal terms are listed in `scripts/i18n-internal-terms-baseline.json`. A new internal term fails the check; so does a listed message that no longer needs its entry. After rewriting a surface, run `npx tsx scripts/check-i18n.mts --write-internal-terms-baseline` and check that the diff only removes lines.
+There is no exception list: any `zh-CN` or `en` message that uses a listed term fails the check. A name that must appear as it is (a library in the credits, a setting someone types) goes in through a placeholder, which the check ignores.
 
 When a message's meaning changes in `zh-CN` and `en`, update the same key in every catalog in the same change, so all languages say the same thing. When only a term changes (an English word inside Chinese, a code dropped from a label), fix every catalog that shows that term; languages that already use their own word can stay as they are.

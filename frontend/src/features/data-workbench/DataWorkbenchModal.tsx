@@ -307,7 +307,7 @@ export default function DataWorkbenchModal({
             <div className="dw-filter-title-row">
               <h3>{t("workbench.filterTitle", {}, locale)}</h3>
               <div className="dw-live-badges">
-                <Badge tone="success">LIVE</Badge>
+                <Badge tone="success">{t("workbench.live", {}, locale)}</Badge>
                 <Badge tone="accent">{t("workbench.readonly", {}, locale)}</Badge>
               </div>
             </div>
@@ -362,7 +362,7 @@ export default function DataWorkbenchModal({
             onToggle={() => setSnapshotOpen((value) => !value)}
           >
             <div className="dw-stat-grid">
-              <Stat label={t("workbench.physical", {}, locale)} value={payload ? formatBytes(payload.snapshot.physicalSizeBytes) : "--"} hint="DB + WAL" />
+              <Stat label={t("workbench.physical", {}, locale)} value={payload ? formatBytes(payload.snapshot.physicalSizeBytes) : "--"} hint={t("workbench.physicalHint", {}, locale)} />
               <Stat label={t("workbench.allSeries", {}, locale)} value={payload ? payload.inventory.totalSeries.toLocaleString(locale) : "--"}
                 hint={payload ? t("settings.diag.rows", { count: payload.inventory.totalRows.toLocaleString(locale) }, locale) : t("workbench.realSummary", {}, locale)} />
               <Stat label={t("workbench.currentFilter", {}, locale)} value={payload ? payload.inventory.matchingSeries.toLocaleString(locale) : "--"}
