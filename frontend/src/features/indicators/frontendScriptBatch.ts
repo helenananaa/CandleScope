@@ -11,6 +11,7 @@ function liveBuiltinExecutor(hosted: IndicatorComputeBatchExecutor): IndicatorCo
   if (!executor) {
     executor = createIncrementalBuiltinCompute(hosted, {
       supports: request => request.name === "EMA" && request.replayContext === undefined,
+      allowSparseSeed: true,
       maxEntries: 8, maxCachedBars: 20_000, eventName: "indicator.builtin.incremental",
     });
     liveBuiltinExecutors.set(hosted, executor);

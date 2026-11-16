@@ -76,3 +76,34 @@ test("a validated builtin never relabels retired or other script execution as EM
   }
   assert.equal(languages.length, 5);
 });
+
+for (const gapAfter of [10, reference.seed_count - 1]) {
+test(`Python-validated sparse live EMA seeds reuse an unchanged prefix (gap at ${gapAfter})`, async () => {
+  let calls = 0;
+  const shiftTime = (time: number) => time >= fixture.bars[gapAfter]!.time ? time + 60 : time;
+  const seed = parseIndicatorPayloadEnvelope(reference.seed);
+  const payload = { ...seed,
+    lines: seed.lines.map(line => ({ ...line, data: line.data.map(point => ({ ...point, time: shiftTime(point.time) })) })),
+    series: seed.series.map(series => ({ ...series, data: series.data.map(point => ({ ...point, time: shiftTime(point.time) })) })),
+  };
+  const remote: IndicatorComputeBatchExecutor = async ({ jobs }) => {
+    calls++;
+    return { ok: true, results: jobs.map(job => ({ clientId: job.clientId, jobKey: job.jobKey, payload })) };
+  };
+  // Timestamp-only gaps preserve the one-shot Python EMA arithmetic from the
+  // parity fixture. Canonical replay's reset/reseed contract stays separate.
+  const bars = fixture.bars.map(bar => ({ ...bar, time: shiftTime(bar.time) }));
+  for (let count = reference.seed_count; count <= bars.length; count++) {
+    const result = await routeIndicatorComputeBatch({ jobs: [{ clientId: "sparse-live", jobKey: String(count),
+      request: { mode: "builtin", name: "EMA", interval: "1m", ohlcv: bars.slice(0, count) } }] }, remote);
+    assert.deepEqual(result.results[0]!.payload.lines[0]!.data,
+      reference.outputs.ema!.filter(point => point.time <= fixture.bars[count - 1]!.time)
+        .map(point => ({ ...point, time: shiftTime(point.time) })));
+  }
+  assert.equal(calls, 1, "a gap already validated by Python is not a new gap on every tick");
+  const newlyGapped = [...bars, { ...bars.at(-1)!, time: bars.at(-1)!.time + 120 }];
+  await routeIndicatorComputeBatch({ jobs: [{ clientId: "sparse-live", jobKey: "new-gap",
+    request: { mode: "builtin", name: "EMA", interval: "1m", ohlcv: newlyGapped } }] }, remote);
+  assert.equal(calls, 2, "a newly introduced gap still requires authoritative reseeding");
+});
+}

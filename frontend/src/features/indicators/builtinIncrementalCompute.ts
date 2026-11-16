@@ -73,7 +73,8 @@ export class BuiltinIncrementalState {
   private outputs: IndicatorValuePoint[][] = [[], [], []];
   private outputColors: IndicatorColorPoint[][] = [[], [], []];
   private seedWindow: number[] = [];
-  constructor(private readonly request: IndicatorComputeRequest, seed?: BuiltinIncrementalSeed) {
+  constructor(private readonly request: IndicatorComputeRequest, seed?: BuiltinIncrementalSeed,
+    private readonly allowSparseSeed = false) {
     if (seed !== undefined) this.states = [this.restoreSeed(seed)];
   }
 
@@ -168,11 +169,13 @@ export class BuiltinIncrementalState {
     const stable = Math.max(0, this.rows.length - 1);
     // Canonical history resets mathematics at declared gaps. A new gap cannot
     // be extended using the preceding uninterrupted seed; ask that authority.
-    if (this.request.interval) {
+    if (this.request.interval && !(this.allowSparseSeed && this.rows.length === 0)) {
       const timeline = createIntervalTimeline(this.request.interval);
       if (!timeline) return false;
       for (let i = Math.max(1, stable); i < rows.length; i++) {
-        if (!timeline.isSuccessor(rows[i - 1]!.time, rows[i]!.time)) return false;
+        if (!timeline.isSuccessor(rows[i - 1]!.time, rows[i]!.time)
+          && !(this.allowSparseSeed && this.rows[i - 1]?.time === rows[i - 1]!.time
+            && this.rows[i]?.time === rows[i]!.time)) return false;
       }
     }
     for (let i = 0; i < stable; i++) {
@@ -320,7 +323,9 @@ export class BuiltinIncrementalState {
 export function createIncrementalBuiltinCompute(remote: IndicatorComputeBatchExecutor = computeIndicatorBatch,
   options: { seedForPayload?: (payload: IndicatorPayloadEnvelope) => BuiltinIncrementalSeed | undefined;
     sourceKey?: () => string; supports?: (request: IndicatorComputeRequest) => boolean;
-    maxEntries?: number; maxCachedBars?: number; eventName?: string } = {}): IndicatorComputeBatchExecutor {
+    maxEntries?: number; maxCachedBars?: number; eventName?: string;
+    /** One-shot HTTP builtins accept supplied sparse bars; canonical replay does not. */
+    allowSparseSeed?: boolean } = {}): IndicatorComputeBatchExecutor {
   const cache = new Map<string, { state: BuiltinIncrementalState; template: IndicatorPayloadEnvelope }>();
   const supports = (request: IndicatorComputeRequest) => BuiltinIncrementalState.supports(request)
     && (options.supports?.(request) ?? true);
@@ -363,9 +368,8 @@ export function createIncrementalBuiltinCompute(remote: IndicatorComputeBatchExe
             // A seed is accepted only after its complete rendered output agrees
             // with the authoritative Python result. Unknown versions stay remote.
             try {
-              const state = new BuiltinIncrementalState(job.request, options.seedForPayload?.(item.payload));
-              state.advance(job.request.ohlcv);
-              if (state.matches(item.payload)) cache.set(key, { state, template: item.payload });
+              const state = new BuiltinIncrementalState(job.request, options.seedForPayload?.(item.payload), options.allowSparseSeed);
+              if (state.advance(job.request.ohlcv) && state.matches(item.payload)) cache.set(key, { state, template: item.payload });
             } catch (error) {
               if (!(error instanceof TypeError)) throw error;
             }
