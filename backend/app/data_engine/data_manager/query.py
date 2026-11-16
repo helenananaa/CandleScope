@@ -165,6 +165,8 @@ class QueryEngine:
         self._interval_resolver = interval_resolver or IntervalResolver()
 
         # Metrics
+        self._local_closed_repair_lock = threading.Lock()
+        self._local_closed_repair_epoch = 0
         self._metrics_lock = threading.Lock()
         self._queries = 0
         self._query_before_calls = 0
@@ -331,6 +333,7 @@ class QueryEngine:
             if proof is not None:
                 proofs.append(proof)
             return rows
+        repair_epoch = self._local_closed_repair_epoch
         rows = self._measure_storage_read(io_metrics, load)
         if not proofs:
             return None
@@ -345,51 +348,18 @@ class QueryEngine:
         local_reports = []
         local_probes = 0
         local_probe_ms = 0.0
-        local_budget = self._cfg.max_limit
+        local_allowance = min(2048, self._cfg.max_limit)
+        local_budget = local_allowance
         written = 0
-        counter = getattr(self._storage, 'count_bars', None)
-        # Rebuild only a handful of closed holes whose fine inputs are already
-        # present. The count is merely an admission hint: the ordinary reducer
-        # must acquire/validate its own source and write proofs. A snapshot read
-        # never grants write authority. Include the normal source padding in
-        # this per-query budget and never perform network work here.
-        if (stored_count != count and callable(counter)
-                and spec.nominal_ms % base.nominal_ms == 0):
-            fine_count = spec.nominal_ms//base.nominal_ms
-            cost = 4*fine_count
-            for opened in range(first, last+1, spec.nominal_ms):
-                if opened in present or cost > local_budget:
-                    continue
-                local_probes += 1
-                probe_started = time.monotonic()
-                available = counter(key.symbol,route.base_interval,opened,opened+spec.nominal_ms-1,
-                    exchange=key.exchange,market_type=key.market_type)
-                local_probe_ms += (time.monotonic()-probe_started)*1000
-                if available < fine_count:
-                    continue
-                local_budget -= cost
-                from app.data_engine.storage.revisions import (
-                    acquisition_scope, acquisition_delete_floor, acquisition_revision)
-                # Reacquire all inputs for this independent local reduction.
-                # Keep the caller's deletion floor: a newer view must never
-                # renew permission revoked by a concurrent explicit deletion.
-                deletion_floor = acquisition_delete_floor(acquisition_revision())
-                consumer.sync(force=True)
-                with acquisition_scope(consumer.store.acquisition(revision=deletion_floor)):
-                    local = self.custom_intervals.query_from_base(symbol=key.symbol, interval=key.interval,
-                        start_ms=opened,end_ms=opened,limit=1,started_at=started_at,
-                        exchange=key.exchange,market_type=key.market_type,auto_backfill=False,
-                        route=route,composition_contract=composition_contract)
-                if local is not None:
-                    local_reports.append({'open_ms':opened,'complete':local.complete,
-                        'storage_reads':local.metadata.get('storage_reads',0),
-                        'storage_rows':local.metadata.get('storage_rows',0),
-                        'storage_read_ms':local.metadata.get('storage_read_ms',0),
-                        'written':local.metadata.get('target_materialized_written',0)})
-                    written += int(local.metadata.get('target_materialized_written',0))
-            if written:
-                # Adopt only a new canonical snapshot after the reducer's
-                # independent writes, including every surviving row/absence.
+        batch_counter = getattr(self._storage, 'count_final_bars', None)
+        counter = batch_counter or getattr(self._storage, 'count_bars', None)
+        # One local reducer per engine: competing readers keep their own
+        # pending snapshot/proof instead of duplicating physical reconstruction.
+        repair_acquired = self._local_closed_repair_lock.acquire(blocking=False)
+        did_reduce = False
+        try:
+            if (repair_acquired and stored_count != count
+                    and repair_epoch != self._local_closed_repair_epoch):
                 proofs.clear()
                 rows = self._measure_storage_read(io_metrics, load)
                 if not proofs:
@@ -402,13 +372,85 @@ class QueryEngine:
                     return None
                 stored_count = len(bars)
                 present = {bar.time_ms for bar in bars}
-        # Sparse canonical pages are useful as a bounded local repair frontier,
-        # not as a shortcut around cold source acquisition. Expose a broader
-        # partial snapshot only after a bounded local reduction attempt. A declined
-        # source must stay pending without spending another full-window budget.
+
+            if (repair_acquired and stored_count != count and callable(counter)
+                    and spec.nominal_ms % base.nominal_ms == 0):
+                fine_count = spec.nominal_ms//base.nominal_ms
+                absent = [opened for opened in range(first,last+1,spec.nominal_ms) if opened not in present]
+                cursor = 0
+                def count_local(begin, end):
+                    nonlocal local_probes, local_probe_ms
+                    local_probes += 1
+                    began = time.monotonic()
+                    value = counter(key.symbol,route.base_interval,begin,end+spec.nominal_ms-1,
+                        exchange=key.exchange,market_type=key.market_type)
+                    local_probe_ms += (time.monotonic()-began)*1000
+                    return value
+                while cursor < len(absent):
+                    capacity = local_budget//fine_count-3
+                    if not callable(batch_counter):
+                        capacity = min(capacity, 1)
+                    if capacity < 1:
+                        break
+                    opened = absent[cursor]
+                    size = 1
+                    while (size < capacity and cursor+size < len(absent)
+                           and absent[cursor+size] == opened+size*spec.nominal_ms):
+                        size += 1
+                    end = opened+(size-1)*spec.nominal_ms
+                    # Counts only admit a bounded attempt; the normal reducer
+                    # still acquires and validates every source/write proof.
+                    available = count_local(opened,end)
+                    if available < size*fine_count:
+                        if size > 1:
+                            size, end = 1, opened
+                            available = count_local(opened,end)
+                        if available < fine_count:
+                            cursor += 1
+                            continue
+                    local_budget -= (size+3)*fine_count
+                    from app.data_engine.storage.revisions import (
+                        acquisition_scope, acquisition_delete_floor, acquisition_revision)
+                    deletion_floor = acquisition_delete_floor(acquisition_revision())
+                    consumer.sync(force=True)
+                    did_reduce = True
+                    with acquisition_scope(consumer.store.acquisition(revision=deletion_floor)):
+                        local = self.custom_intervals.query_from_base(symbol=key.symbol, interval=key.interval,
+                            start_ms=opened,end_ms=end,limit=size,started_at=started_at,
+                            exchange=key.exchange,market_type=key.market_type,auto_backfill=False,
+                            route=route,composition_contract=composition_contract)
+                    if local is not None:
+                        local_reports.append({'open_ms':opened,'end_ms':end,'target_count':size,
+                            'complete':local.complete,'storage_reads':local.metadata.get('storage_reads',0),
+                            'storage_rows':local.metadata.get('storage_rows',0),
+                            'storage_read_ms':local.metadata.get('storage_read_ms',0),
+                            'written':local.metadata.get('target_materialized_written',0)})
+                        written += int(local.metadata.get('target_materialized_written',0))
+                    cursor += size
+        finally:
+            if repair_acquired:
+                if did_reduce:
+                    self._local_closed_repair_epoch += 1
+                self._local_closed_repair_lock.release()
+        if written:
+            # Adopt only a new canonical snapshot after the reducer's
+            # independent writes, including every surviving row/absence.
+            proofs.clear()
+            rows = self._measure_storage_read(io_metrics, load)
+            if not proofs:
+                return None
+            proof = proofs[0]
+            bars = self._storage_rows_to_bars(key, rows, io_metrics)
+            if (not bars or any(not bar.trusted_final or not bar.is_closed for bar in bars)
+                    or composition_contract is not None and any(
+                        getattr(bar, field, None) is None for bar in bars for field in declaration[0].fields)):
+                return None
+            stored_count = len(bars)
+            present = {bar.time_ms for bar in bars}
+        # Any nonempty valid canonical page is a read frontier. Missing rows
+        # stay explicitly pending; their count does not justify rereading every
+        # surviving target's source. Empty cold pages still take acquisition.
         broad_partial = count-stored_count > min(8, count//4)
-        if broad_partial and not local_reports:
-            return None
         # A finer source commit can withdraw a handful of dependent targets.
         # Do not re-aggregate the surviving page or merge the holes into a
         # source budget that a single target already nearly consumes.
@@ -422,7 +464,7 @@ class QueryEngine:
         missing = [gap for index, (begin, end) in enumerate(runs) if (gap := self._trigger_backfill(
             key, begin, end, reason='query_empty',
             missing_bars=(end-begin)//spec.nominal_ms+1,
-            submit=auto_backfill and (not broad_partial or index < 8))) is not None]
+            submit=auto_backfill and repair_acquired and (not broad_partial or index < 8))) is not None]
         partial = stored_count != count
         if preview is not None:
             bars.append(preview)
@@ -434,7 +476,7 @@ class QueryEngine:
             source=QuerySource.MIXED if preview is not None else QuerySource.STORAGE,total=len(bars),
             has_more=first > 0, next_before_ms=first if first > 0 else None,
             complete=not partial, retryable=partial, history_state='pending' if partial else 'ready',
-            missing_ranges=missing, backfill_triggered=bool(missing and auto_backfill and self._backfill_trigger),
+            missing_ranges=missing, backfill_triggered=bool(missing and auto_backfill and repair_acquired and self._backfill_trigger),
             metadata={'all_rows_final':preview is None,'expected_closed_rows':count,
                 'expected_closed_through_ms':last,'target_materialized':not partial,'canonical_target_snapshot':True,
                 'canonical_target_partial':partial,
@@ -443,7 +485,9 @@ class QueryEngine:
                 'target_materialized_written':written,'derived_from':route.base_interval,
                 'canonical_local_probe_reads':local_probes,
                 'canonical_local_probe_ms':round(local_probe_ms,2),
-                'canonical_local_repair_source_budget':self._cfg.max_limit-local_budget,
+                'canonical_local_repair_source_budget':local_allowance-local_budget,
+                'canonical_local_repair_source_limit':local_allowance,
+                'canonical_local_repair_busy':not repair_acquired,
                 'canonical_local_repair_reports':local_reports,
                 'elapsed_ms':round((time.monotonic()-started_at)*1000,2)},
             _closed_target_read=proof.bind(rows, bars))

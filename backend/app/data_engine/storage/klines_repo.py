@@ -1804,6 +1804,10 @@ class KlinesRepoAdapter:
             series_identity=series_identity or self._series_identity,
         )
 
+    def count_final_bars(self, *args, **kwargs) -> int:
+        """Count trusted source labels; not a coverage, close-time or write proof."""
+        return self.count_bars(*args, **kwargs, trusted_final_only=True)
+
     def count_bars(
         self,
         symbol: str,
@@ -1813,6 +1817,7 @@ class KlinesRepoAdapter:
         exchange: str | None = None,
         market_type: str | None = None,
         series_identity: KlineSeriesIdentity | None = None,
+        *, trusted_final_only: bool = False,
     ) -> int:
         """Count one exact series range without materialising its rows."""
         resolved_exchange = exchange or self._exchange
@@ -1826,6 +1831,11 @@ class KlinesRepoAdapter:
         )
         where.extend(("open_time >= ?", "open_time <= ?"))
         params.extend((int(start_ms), int(end_ms)))
+        if trusted_final_only:
+            from app.data_engine.kline_quality import SOURCE_QUALITY
+            trusted = [name for name, quality in SOURCE_QUALITY.items() if quality.trusted_final]
+            where.append("LOWER(TRIM(source)) IN (" + ",".join("?" for _ in trusted) + ")")
+            params.extend(trusted)
         with _READS.reading() as conn:
             row = conn.execute(
                 f"""

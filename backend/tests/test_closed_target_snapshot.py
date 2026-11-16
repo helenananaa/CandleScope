@@ -21,7 +21,7 @@ def test_canonical_page_rebuilds_only_local_closed_holes_before_waiting_for_sche
     original = query.custom_intervals.query_from_base
     def bounded(**options):
         calls.append((options['start_ms'],options['end_ms'],options['limit'],options['auto_backfill']))
-        assert options['limit'] == 1, 'never recompute the surviving page'
+        assert options['limit'] == 2 and options['end_ms'] == width, 'only the missing contiguous pair'
         return original(**options)
     monkeypatch.setattr(query.custom_intervals,'query_from_base',bounded)
     if preview:
@@ -49,8 +49,8 @@ def test_canonical_page_rebuilds_only_local_closed_holes_before_waiting_for_sche
     if preview:
         assert result.bars[-1] == forming and not result.metadata['all_rows_final']
     assert result.metadata['canonical_target_snapshot'] and result.metadata['target_materialized_written'] == (0 if preview else 2)
-    assert result.metadata['canonical_local_repair_source_budget'] == (0 if preview else 8*period) <= query._cfg.max_limit
-    assert calls == [(0,0,1,False),(width,width,1,False)]
+    assert result.metadata['canonical_local_repair_source_budget'] == (0 if preview else 5*period) <= query._cfg.max_limit
+    assert calls == [(0,width,2,False)]
     assert all((bar.volume,bar.trades) == (period,period) for bar in result.bars[:128])
 
 
@@ -154,7 +154,7 @@ def test_large_source_window_reuses_canonical_targets_even_when_each_bar_is_smal
         else query.query('BTCUSDT',f'{period}m',start_ms=0,end_ms=128*width-1,**options))
     assert result.metadata['canonical_target_snapshot']
     assert result.metadata['target_storage_reads'] == 1 and result.metadata['storage_rows'] == 128-len(holes)
-    assert result.metadata['storage_reads'] == 1+len(holes)
+    assert result.metadata['storage_reads'] == 1+(len(holes)+1 if holes else 0)
     assert [bar.time_ms for bar in result.bars] == [n*width for n in range(128) if n not in holes]
     assert result.complete is (not holes)
     assert [(gap.start_ms,gap.end_ms) for gap in result.missing_ranges] == [(n*width,n*width) for n in holes]
@@ -299,9 +299,11 @@ def test_sparse_fast_path_caps_repair_fanout_and_defers_cold_pages(mixed_query, 
         market_type='futures',source='backfill_aggregated')
     result = query.query('BTCUSDT','10007m',start_ms=0,end_ms=32*WIDTH-1,limit=32,
         market_type='futures',auto_backfill=False)
-    assert bool(result.metadata.get('canonical_target_partial')) is (missing == 8)
-    if missing == 8:
-        assert len(result.missing_ranges) == 8 and not result.complete
+    assert bool(result.metadata.get('canonical_target_partial')) is (missing < 32)
+    if missing < 32:
+        assert len(result.bars) == 32-missing and not result.complete and result.retryable
+        assert sum(gap.missing_bars for gap in result.missing_ranges) == missing
+        assert len(result.missing_ranges) <= 8
 
 
 def test_partial_closed_prefix_keeps_forming_preview_explicit(mixed_query, monkeypatch):
@@ -417,14 +419,15 @@ def test_sparse_withdrawn_page_advances_local_repair_with_bounded_work(mixed_que
     calls = []
     original = query.custom_intervals.query_from_base
     def bounded(**options):
-        assert options['limit'] == 1 and options['start_ms'] == options['end_ms']
+        assert options['end_ms'] < 104*width, 'never include surviving target rows'
+        assert options['limit'] == (options['end_ms']-options['start_ms'])//width+1
         assert not options['auto_backfill']
-        calls.append(options['start_ms'])
+        calls.extend(range(options['start_ms'],options['end_ms']+1,width))
         return original(**options)
     monkeypatch.setattr(query.custom_intervals,'query_from_base',bounded)
     monkeypatch.setattr(query,'_query_closed_mixed',lambda *a, **k: pytest.fail('recomputed whole withdrawn page'))
     previous = 24
-    for attempt in range(8):
+    for attempt in range(64):
         result = query.query('BTCUSDT',f'{period}m',start_ms=0,end_ms=128*width-1,limit=128,
             market_type='futures',auto_backfill=False)
         assert result.metadata['canonical_target_snapshot']
@@ -452,9 +455,9 @@ def test_sparse_local_progress_preserves_live_preview_fence(mixed_query, monkeyp
         market_type='futures',source='backfill_aggregated')
     monkeypatch.setattr('time.time',lambda: (128*width+MINUTE)/1000)
     key = SeriesKey('BTCUSDT','89m',exchange='binance',market_type='futures')
-    for attempt in range(8):
+    for attempt in range(64):
         query._cache.revision_consumer.sync(force=True)
-        forming = BarData(time=128*width//1000,open=100,high=110,low=99,close=101+attempt,
+        forming = BarData(time=128*width//1000,open=100,high=200,low=99,close=101+attempt,
                           volume=1,is_closed=False,source='ws')
         query._cache.bulk_load(key,[forming])
         result = query.query('BTCUSDT','89m',start_ms=0,end_ms=128*width,limit=129,
@@ -501,4 +504,101 @@ def test_sparse_untrusted_local_inputs_do_not_fall_through_to_second_source_budg
     assert not result.complete and result.retryable and len(result.bars) == 24
     assert result.metadata['target_materialized_written'] == 0
     assert result.metadata['canonical_local_repair_source_budget'] <= query._cfg.max_limit
-    assert all(not item['complete'] for item in result.metadata['canonical_local_repair_reports'])
+    assert result.metadata['canonical_local_probe_reads'] > 0
+    assert result.metadata['canonical_local_repair_source_budget'] == 0
+    assert result.metadata['canonical_local_repair_reports'] == []
+
+
+def test_competing_reader_does_not_wait_or_duplicate_local_repair(mixed_query, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    import threading
+    query = mixed_query
+    width = 89*MINUTE
+    query.storage.upsert_bars('BTCUSDT','1m',[row(n*MINUTE,MINUTE) for n in range(128*89)],
+        market_type='futures',source='backfill')
+    query.storage.upsert_bars('BTCUSDT','89m',[row(n*width,width) for n in range(104,128)],
+        market_type='futures',source='backfill_aggregated')
+    entered, release = threading.Event(), threading.Event()
+    original = query.custom_intervals.query_from_base
+    calls = []
+    def blocked(**options):
+        calls.append(options)
+        entered.set()
+        assert release.wait(5)
+        return original(**options)
+    monkeypatch.setattr(query.custom_intervals,'query_from_base',blocked)
+    def read_page():
+        return query.query('BTCUSDT','89m',start_ms=0,end_ms=128*width-1,limit=128,
+            market_type='futures',auto_backfill=False)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(read_page)
+        try:
+            assert entered.wait(3)
+            other = pool.submit(read_page).result(timeout=1)
+            assert not other.complete and other.retryable and len(other.bars) == 24
+            assert other.metadata['canonical_local_repair_busy']
+            assert other.metadata['canonical_local_repair_source_budget'] == 0
+            assert len(calls) == 1
+        finally:
+            release.set()
+        result = first.result(timeout=3)
+    assert result.metadata['target_materialized_written'] > 0
+    assert query._local_closed_repair_lock.acquire(blocking=False)
+    query._local_closed_repair_lock.release()
+
+
+def test_local_repair_exception_releases_owner(mixed_query, monkeypatch):
+    query = mixed_query
+    width = 89*MINUTE
+    query.storage.upsert_bars('BTCUSDT','1m',[row(n*MINUTE,MINUTE) for n in range(89)],
+        market_type='futures',source='backfill')
+    query.storage.upsert_bars('BTCUSDT','89m',[row(n*width,width) for n in range(1,128)],
+        market_type='futures',source='backfill_aggregated')
+    def fail(**options):
+        raise RuntimeError('forced local reducer failure')
+    monkeypatch.setattr(query.custom_intervals,'query_from_base',fail)
+    with pytest.raises(RuntimeError,match='forced local reducer failure'):
+        query.query('BTCUSDT','89m',start_ms=0,end_ms=128*width-1,limit=128,
+            market_type='futures',auto_backfill=False)
+    assert query._local_closed_repair_lock.acquire(blocking=False)
+    query._local_closed_repair_lock.release()
+
+
+def test_stale_reader_reloads_repair_frontier_before_becoming_owner(mixed_query, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    import threading
+    query = mixed_query
+    width = 89*MINUTE
+    query.storage.upsert_bars('BTCUSDT','1m',[row(n*MINUTE,MINUTE) for n in range(128*89)],
+        market_type='futures',source='backfill')
+    query.storage.upsert_bars('BTCUSDT','89m',[row(n*width,width) for n in range(104,128)],
+        market_type='futures',source='backfill_aggregated')
+    entered, release = threading.Event(), threading.Event()
+    reader = query.storage.read_closed_target_snapshot
+    def delayed(*args):
+        snapshot = reader(*args)
+        if threading.current_thread().name.startswith('stale') and not entered.is_set():
+            entered.set()
+            assert release.wait(5)
+        return snapshot
+    monkeypatch.setattr(query.storage,'read_closed_target_snapshot',delayed)
+    original = query.custom_intervals.query_from_base
+    calls = []
+    def record(**options):
+        calls.append((options['start_ms'],options['end_ms']))
+        return original(**options)
+    monkeypatch.setattr(query.custom_intervals,'query_from_base',record)
+    def read_page():
+        return query.query('BTCUSDT','89m',start_ms=0,end_ms=128*width-1,limit=128,
+            market_type='futures',auto_backfill=False)
+    with ThreadPoolExecutor(max_workers=1,thread_name_prefix='stale') as pool:
+        waiting = pool.submit(read_page)
+        try:
+            assert entered.wait(3)
+            fresh = read_page()
+            assert fresh.metadata['target_materialized_written'] > 0
+        finally:
+            release.set()
+        result = waiting.result(timeout=3)
+    assert len(calls) == 2 and calls[0][1] < calls[1][0]
+    assert len(result.bars) > len(fresh.bars)
