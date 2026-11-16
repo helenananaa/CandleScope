@@ -24,8 +24,12 @@ available it reports net time as unknown and the gate as not passed; cumulative
 request durations are never subtracted from wall time.
 
 Full joint numeric, ten-minute live, hide/restore, switching and saved restart
-qualification remains #463. No issue is closed by a source regression or this
-diagnostic driver. Raw output is retained under `output/issue-460-20261117`.
+qualification remains #463. Under the user's clarified 2026-11-17 split-task
+policy, #458-#462 close independently when their own implementation and focused
+validation are complete. #460 is complete on that basis: routing fixes, 63
+focused tests and real-source range receipts. Overall <=3-second readiness is
+not a prerequisite for its closure. PR review/merge/release status remains
+separate. Raw output is retained under `output/issue-460-20261117`.
 
 ## Retained results
 
@@ -68,9 +72,13 @@ that cumulative number is not the per-chart local critical path.
 Net readiness is **unknown / not qualified**: exact external blocking
 attribution is not certified, and cumulative public request durations are not
 subtracted. Neither the <=3-second gate nor #463's full same-product matrix
-passed, so **#460 remains open**. Later runs must retain the original data,
-numeric and lifecycle requirements rather than treating these partial counts
-as acceptance.
+passed. Those remain #463's acceptance work; **#460 is closed as scoped work
+completed**, under the user's clarified split-task policy. Its implementation,
+focused regression and actual routing evidence are delivered. Overall readiness
+failure does not undo that delivery. Later joint runs must retain the original
+data, numeric and lifecycle requirements rather than treating partial counts
+as acceptance. Original run receipts saying "#460 cannot close" retain the old
+interpretation as historical evidence, not the current closure rule.
 
 After run 2, a diagnostic-only correction stopped defaulting an absent result
 `history_lane` to `rest` for archive-routed results. New receipts expose

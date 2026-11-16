@@ -442,7 +442,7 @@ try {
     await q.screenshot('source-routing');
     q.s.receipt.passed=false;
     q.s.receipt.failure=ready?'Source routing observed; 3-second net readiness and full #463 lifecycle remain unqualified.'
-      :'Charts did not become ready within the diagnostic observation window; #460 cannot close.';
+      :'Charts did not become ready within the diagnostic observation window; #463 joint readiness remains unqualified.';
   } finally {
     sampling=false;
     await poll;
