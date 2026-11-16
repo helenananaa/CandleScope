@@ -17,14 +17,7 @@ import type {
   TrainingRunCompatibility,
 } from "../replayV2Types.js";
 import type { TrainingHubRuntime } from "../useTrainingHub.js";
-import {
-  formatTrainingEquity,
-  trainingCompatibilityLabel,
-  trainingIntegrityLabel,
-  trainingRunStateLabel,
-  trainingSourceKindLabel,
-  trainingTimeDisclosureLabel,
-} from "../trainingHubLabels.js";
+import { formatTrainingEquity, trainingCompatibilityLabel, trainingExchangeLabel, trainingIntegrityLabel, trainingRunStateLabel, trainingSourceKindLabel, trainingTimeDisclosureLabel } from "../trainingHubLabels.js";
 import ReplayStorageGovernancePanel from "./ReplayStorageGovernancePanel.js";
 import { applyTrainingPreset } from "../trainingPresets.js";
 import PreparationJobsPanel from "../../data-preparation/PreparationJobsPanel.js";
@@ -562,7 +555,7 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
               <div><dt>{t("replay.hub.timeDisclosure")}</dt><dd>{trainingTimeDisclosureLabel(draft.timeDisclosurePolicy)}</dd></div>
               <div><dt>{t("replay.hub.equityLeverage")}</dt><dd>{draft.initialEquity} · {draft.maxLeverage}×</dd></div>
               <div><dt>{t("replay.hub.posMargin")}</dt><dd>{draft.positionMode === "HEDGE" ? t("replay.hub.hedgeShort") : t("replay.hub.oneWayShort")} · {draft.marginMode === "ISOLATED" ? t("replay.hub.isolatedShort") : t("replay.hub.crossShort")}</dd></div>
-              <div><dt>{t("replay.hub.symbol")}</dt><dd>{runtime.automaticPreparationAvailable ? `${draft.exchange} · ${draft.symbol}` : t("replay.hub.pickAfterRun")}</dd></div>
+              <div><dt>{t("replay.hub.symbol")}</dt><dd>{runtime.automaticPreparationAvailable ? `${trainingExchangeLabel(draft.exchange)} · ${draft.symbol}` : t("replay.hub.pickAfterRun")}</dd></div>
             </dl>
           </section>
           <section className="training-hub-summary-card">

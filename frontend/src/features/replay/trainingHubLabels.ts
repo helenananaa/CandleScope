@@ -132,3 +132,38 @@ export function formatReplayMarketCoverage(
   if (bounds === null) return t("replay.coverage.pending");
   return `${formatReplayUtcDate(bounds.earliest_open_ms)} – ${formatReplayUtcDate(bounds.latest_closed_open_ms)}`;
 }
+
+/** A run's or session's state for the status bar; loading phases read as opening, unknown values as-is. */
+export function replayStateLabel(state: string | null | undefined): string {
+  switch (state) {
+    case "AWAITING_MARKET": return t("replay.state.awaiting");
+    case "PAUSED": return t("replay.state.paused");
+    case "PLAYING": return t("replay.state.playing");
+    case "ADVANCING": return t("replay.state.advancing");
+    case "ENDED":
+    case "STOPPED": return t("replay.state.ended");
+    case "ERROR":
+    case "ENTRY_ERROR": return t("replay.state.error");
+    case "INITIALIZING":
+    case "IDLE":
+    case "LOADING_CAPABILITIES":
+    case "VALIDATING_SESSION":
+    case "CONNECTING_SESSION":
+    case "ACTIVE":
+    case null:
+    case undefined: return t("replay.opening");
+    default: return state;
+  }
+}
+
+/** How faithful the run's history is: exact or approximate. */
+export function replayQualityLabel(mode: string | null | undefined): string {
+  return mode === "best_effort" ? t("replay.capability.approx") : t("replay.capability.exact");
+}
+
+/** A capability's level: exact, approximate, or not available. */
+export function replayCapabilityStateLabel(state: string): string {
+  if (state === "AVAILABLE_EXACT") return t("replay.capability.exact");
+  if (state === "AVAILABLE_APPROX") return t("replay.capability.approx");
+  return t("replay.capability.unsupported");
+}

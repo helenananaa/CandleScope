@@ -99,6 +99,7 @@ import { captureReplayNoteChart } from "./replayNoteChartCapture.js";
 import type { ReplayNoteContext } from "./replayNotes.js";
 import ReplayNotesPanel from "./components/ReplayNotesPanel.js";
 import { t } from "../../i18n/index.js";
+import { replayCapabilityStateLabel, replayQualityLabel, replayStateLabel, trainingExchangeLabel, trainingMarketTypeLabel, trainingSourceKindLabel } from "./trainingHubLabels.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { Icon } from "../../components/icons/Icon.js";
 import { useChartTimeNavigation } from "../market-data/useChartTimeNavigation.js";
@@ -1226,7 +1227,7 @@ export default function ReplayTrainingPageShell({
           context={config && (
             <button className="replay-identity-readonly" type="button" title={t("replay.shell.identityImmutable")}>
               {review === null
-                ? `${activeSelectedTrack?.exchange ?? config.exchange} · ${activeSelectedTrack?.market_type ?? config.market_type} · ${displayedSymbol} · ${t("replay.shell.accountTracks", { count: viewer.marketTracks?.tracks.length ?? 1 })} · ${t("replay.baseInterval", { interval: config.base_interval })}`
+                ? `${trainingExchangeLabel(activeSelectedTrack?.exchange ?? config.exchange)} · ${trainingMarketTypeLabel(activeSelectedTrack?.market_type ?? config.market_type)} · ${displayedSymbol} · ${t("replay.shell.accountTracks", { count: viewer.marketTracks?.tracks.length ?? 1 })} · ${t("replay.baseInterval", { interval: config.base_interval })}`
                 : t("replay.reviewIdentity", {
                   symbol: String(review.projection.tracks.find((track) => (
                     track.track_id === review.projection.viewer_state.selected_track_id
@@ -1248,7 +1249,7 @@ export default function ReplayTrainingPageShell({
               onToggle={() => setIndicatorPanelOpen((open) => !open)}
             />
             <PanelToggle className="indicator-toggle-btn alert-toggle-btn" disabled open={false} onToggle={() => undefined}
-              label={t("shell.alerts")} title={capabilities.ALERTS.state} icon={<AlertRailIcon />} />
+              label={t("shell.alerts")} title={capabilities.ALERTS.detail} icon={<AlertRailIcon />} />
           </>}
           settings={{ onOpen: () => setChartSettingsOpen(true) }}
           extras={cell?.controls}
@@ -1262,7 +1263,7 @@ export default function ReplayTrainingPageShell({
                 <div className="advanced-market-chip" key={id} data-market-metric={id.toLowerCase()} data-capability-state={capabilities[id].state}>
                   <span className="advanced-market-chip-label">{capabilities[id].label}</span>
                   <span className="advanced-market-chip-value">--</span>
-                  <span className="advanced-market-chip-suffix">{capabilities[id].state}</span>
+                  <span className="advanced-market-chip-suffix">{replayCapabilityStateLabel(capabilities[id].state)}</span>
                 </div>
               ))}
             </div>
@@ -1452,7 +1453,7 @@ export default function ReplayTrainingPageShell({
           }}
           left={<>
             <span><span className={`status-dot ${runtime.store.connectionState === "connected" ? "connected" : "loading"}`} />{t("replay.shell.status")}</span>
-            <span>{review === null ? effectiveState ?? runtime.phase : `REVIEW ${review.playback_state}`}</span>
+            <span>{review === null ? replayStateLabel(effectiveState ?? runtime.phase) : t("replay.shell.reviewState", { state: replayStateLabel(review.playback_state) })}</span>
             <span>{t("replay.displayBars", { count: viewerBarCount })}</span>
             {review === null && history.loading && <span>{t("replay.loadingOlder")}</span>}
             {review === null && history.historyEpoch !== null && !history.hasMore && !history.loading && !history.error && <span>{t("replay.shell.historyStart")}</span>}
@@ -1465,7 +1466,7 @@ export default function ReplayTrainingPageShell({
           </>}
           right={<>
             <span>{review === null ? t("replay.shell.controller", { who: ownsController ? t("replay.shell.controllerHere") : runtime.store.controllerClientId ? t("replay.shell.controllerOther") : t("replay.shell.controllerNone") }) : t("replay.originalControllerIsolated")}</span>
-            <span>{config?.source_kind.toUpperCase() ?? "BAR"} · {config?.quality_mode.toUpperCase() ?? "EXACT"}</span>
+            <span>{config?.source_kind === "agg_trade" ? trainingSourceKindLabel("AGG_TRADE") : trainingSourceKindLabel("BAR")} · {replayQualityLabel(config?.quality_mode)}</span>
             <span>{t("replay.shell.isolated")}</span>
           </>}
         />

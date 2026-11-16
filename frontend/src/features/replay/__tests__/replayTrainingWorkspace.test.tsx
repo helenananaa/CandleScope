@@ -176,15 +176,16 @@ test("capability surface never renders unsupported history as numeric zero or st
   assert.equal(model.AGG_TRADE_TAPE.state, "UNSUPPORTED_SOURCE_MODE");
   assert.equal(model.ORDER_FLOW.state, "AVAILABLE_APPROX");
   assert.equal(model.ORDER_FLOW.value, "KLINE_TAKER_PROXY");
-  assert.match(model.ORDER_FLOW.detail, /taker buy volume/);
+  assert.match(model.ORDER_FLOW.detail, /主动买入量/);
   assert.equal(model.ORDER_BOOK.value, "--");
-  assert.match(model.FUNDING.detail, /交易所历史 funding\/mark/);
+  assert.match(model.FUNDING.detail, /交易所的历史资金费与标记价格/);
   assert.match(model.FUNDING.detail, /近似账户模拟/);
   const html = renderToStaticMarkup(<ReplayCapabilitySurface capabilities={model} />);
   assert.match(html, /UNSUPPORTED_NO_HISTORY/);
   assert.doesNotMatch(html, />0(?:\.0+)?</);
   // One row per capability: the state is a short badge; the code stays in data-capability-state.
-  assert.match(html, /<li data-replay-capability="ORDER_BOOK" data-capability-state="UNSUPPORTED_NO_HISTORY">/);
+  assert.match(html, /<li data-replay-capability="ORDER_BOOK" data-capability-state="UNSUPPORTED_NO_HISTORY" data-capability-value="--">/);
+  assert.doesNotMatch(html, /<code>/);
   assert.match(html, /<span class="ui-badge"[^>]*data-tone="success"[^>]*>精确<\/span>/);
   assert.match(html, /<span class="ui-badge"[^>]*>不可用<\/span>/);
   assert.doesNotMatch(html, /<code>(AVAILABLE|UNSUPPORTED)_/, "state codes are not shown as text");
@@ -195,8 +196,8 @@ test("capability surface never renders unsupported history as numeric zero or st
   assert.equal(tape.AGG_TRADE_TAPE.state, "AVAILABLE_EXACT");
   assert.match(tape.OHLCV.detail, /官方 K 线不同/);
   assert.equal(tape.ORDER_FLOW.state, "AVAILABLE_APPROX");
-  assert.match(tape.AGG_TRADE_TAPE.detail, /不是交易所 raw fills/);
-  assert.match(tape.ORDER_FLOW.detail, /buyer-maker/);
+  assert.match(tape.AGG_TRADE_TAPE.detail, /不是交易所的逐笔原始成交/);
+  assert.match(tape.ORDER_FLOW.detail, /买方挂单/);
 
   const book = buildReplayCapabilityModel("AGG_TRADE", {
     mode: "BOOK_ASSISTED_REQUIRED",

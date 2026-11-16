@@ -549,6 +549,7 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 |---|---|
 | 6a | Foundations and the market page: `COPY_GUIDELINES.md` (voice, Chinese and English rules, glossary), `describeError` for uncoded failures, the internal-terms check in `check:i18n` with a shrinking baseline, and the market page's copy (watchlist, order book, trade flow, workspace, indicators, alerts, export, account docks) |
 | 6b | Replay: hub options, storage, session status bar, end dialog, integrity drawer, rail, ticket and account (57 zh-CN / 57 en baseline entries, plus codes rendered from data) |
+| 6b2 | Replay's technical panels: codes rendered from data in the integrity and review drawer, the liquidation timeline, storage governance and raw-trade retention, and the remaining replay messages with English words (about 100, outside the check's term list) |
 | 6c | Strategy research: tools, status bar, run states, fidelity and engine names, times as epoch ms, the strategy tester, local data and CSV import (72 / 108 entries, plus codes from data) |
 | 6d | Data and plugins: Settings storage and maintenance, the data workbench and repair, the plugin center and live control, the extension text helper moved into the catalogs (42 / 60 entries); the baseline is empty after it, so the check becomes a plain rule |
 
@@ -558,6 +559,11 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - `describeError` gives uncoded failures a translated summary: by HTTP status, for requests that never reached the local service, and for services still starting (a new message in all 30 catalogs); a coded error's JSON detail shows only its message.
 - `check:i18n` rejects internal terms (status codes, storage and runtime internals, class names, "backend", English jargon in Chinese) in the zh-CN and en catalogs. Today's 171 zh-CN and 225 en messages are listed in `scripts/i18n-internal-terms-baseline.json`; a new one fails, and so does a listed one that no longer needs its entry.
 - The market page's 29 messages with internal terms are rewritten in all 30 catalogs (pt-BR's untranslated "FULL" tier label too); the journal shows the exchange and market by name, and the read-only views name fact kinds.
+
+**Phase 6b is done (branch `design/phase-6b-replay-copy`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_6B.md`](../docs/FRONTEND_DESIGN_QA_PHASE_6B.md). Row 6b2 was added when it started: replay has about 190 messages with English or codes and its technical panels render more codes from data, so the panels follow on their own.
+
+- Replay is off the internal-terms baseline (zh-CN 171 → 114, en 225 → 168): codes dropped from option labels in every language (HIDE_DAY, ONE_WAY, APPROX_PROXY…), review mode named in each language, and 20 sentences rewritten in all 30 catalogs (the end dialog, hedge and order-book hints, storage cleanup).
+- The session's default view names things: the header reads "Binance · 永续 · BTCUSDT", the status bar "K 线回放 · 已暂停 · 控制权：本页 · 成交 · 精确" (was "REPLAY", "PAUSED", "Controller:", "AGG_TRADE · EXACT"); capability names and levels are translated (new `replay.capName.*`), and value codes moved to a tooltip.
 
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 

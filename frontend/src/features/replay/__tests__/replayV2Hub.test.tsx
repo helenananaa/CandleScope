@@ -442,8 +442,8 @@ test("initial HEDGE hybrid selection requires an explicit funding downgrade conf
       },
     },
   });
-  assert.match(prepared.downgradeConfirmation ?? "", /HEDGE_HYBRID/);
-  assert.match(prepared.downgradeConfirmation ?? "", /资金费.*OFF/);
+  assert.match(prepared.downgradeConfirmation ?? "", /近似输入的双向持仓/);
+  assert.match(prepared.downgradeConfirmation ?? "", /历史资金费关闭/);
   assert.equal(selectionCalls, 0);
 });
 
@@ -479,7 +479,7 @@ test("initial preparation refreshes one stale epoch before showing HEDGE confirm
   assert.equal(prepared.selection.catalog_epoch, epoch);
   assert.equal(prepared.catalog, fresh);
   assert.equal(prepared.entry, fresh.entries[0]);
-  assert.match(prepared.downgradeConfirmation ?? "", /HEDGE_HYBRID/);
+  assert.match(prepared.downgradeConfirmation ?? "", /近似输入的双向持仓/);
   assert.equal(selected, 0);
 });
 
@@ -535,7 +535,7 @@ test("selection drift to hybrid inputs requires confirmation of the refreshed pl
     assert.ok(reason instanceof ReplayInitialMarketDowngradeRequired);
     assert.equal(reason.catalog, fresh);
     assert.equal(reason.entry, fresh.entries[0]);
-    assert.match(reason.message, /HEDGE_HYBRID/);
+    assert.match(reason.message, /近似输入的双向持仓/);
     return true;
   });
   assert.equal(selected, 1, "the refreshed hybrid selection must wait for the explicit prompt");
@@ -1149,11 +1149,11 @@ test("create model defaults to a selectable ONE_WAY run and exposes fail-closed 
   const evaluation = evaluateTrainingRunSetupDraft(draft, capabilities);
   assert.equal(evaluation.canSubmit, true);
   assert.deepEqual(evaluation.unsupported, {
-    account_history: "精确账户只接受服务端已校验并固定的 mark/index/funding/规则归档；公开 K 线代理不算 exact",
-    funding: "HEDGE 优先使用 pinned historical funding；缺失时可明确降级为 OFF 或 Sandbox 固定模型",
-    historical_l2: "仅连续、可 pin、已验证的 Binance USD-M 历史 L2 可开启；不含真实盘口排队",
-    rule_changes: "费率、杠杆与 Sandbox 固定资金费可按白名单审计变更",
-    isolated_margin: "CROSS 与 ISOLATED 均可用；逐仓开仓前必须显式分配保证金",
+    account_history: "精确账户只接受服务端已校验并固定的标记价格、指数价格、资金费与规则归档；公开 K 线代理不算精确",
+    funding: "双向持仓优先使用固定的历史资金费；缺失时可明确降级为关闭或沙盒固定模型",
+    historical_l2: "仅连续、可固定、已验证的币安 U 本位历史 L2 可开启；不含真实盘口排队",
+    rule_changes: "费率、杠杆与沙盒固定资金费可按白名单审计变更",
+    isolated_margin: "全仓与逐仓均可用；逐仓开仓前必须明确分配保证金",
   });
   const request = buildTrainingRunCreateRequest(draft, evaluation);
   assert.equal(request.protocol, "replay.v3");
@@ -1419,7 +1419,7 @@ test("Phase 9 create model enables BOOK_ASSISTED only with an exact server plan"
   };
   const unavailable = evaluateTrainingRunDraft(draft, capabilities, catalog);
   assert.equal(unavailable.canSubmit, false);
-  assert.match(unavailable.errors.join("\n"), /exact L2/);
+  assert.match(unavailable.errors.join("\n"), /精确还原 L2/);
   const exactBook = {
     feature_enabled: true,
     requested_mode: "BOOK_ASSISTED_REQUIRED",
@@ -1590,18 +1590,18 @@ test("hub markup exposes saves, native actions, filters and explicit unavailable
   assert.match(html, /新建训练/);
   assert.match(html, /待选商品|已暂停|已结束/);
   assert.doesNotMatch(html, />AWAITING_MARKET<|>PAUSED<|>ENDED</);
-  assert.match(html, /资金费.*OFF/);
+  assert.match(html, /降级为关闭/);
   assert.match(html, /完整性模式/);
   assert.match(html, /HIDE_MINUTE/);
   assert.match(html, /Practice 可审计变更白名单/);
-  assert.match(html, /历史盘口.*连续、可 pin/);
+  assert.match(html, /历史盘口.*连续、可固定/);
   assert.match(html, /创建训练后选择商品/);
   assert.match(html, /创建时确定开始时间，暂不绑定商品、交易所、市场类型、基础周期或数据集/);
   assert.match(html, /检查通过后才会加入训练/);
-  assert.match(html, /缺少可近似项时自动使用清楚标记的 HEDGE_HYBRID/);
+  assert.match(html, /缺少的项目会近似并明确标出，不会改成单向/);
   assert.match(html, /HEDGE 会优先绑定完整历史输入/);
   assert.doesNotMatch(html, /DETERMINISTIC_SIMULATION[^<]*disabled|APPROX_PROXY[^<]*disabled/);
-  assert.match(html, /公开 K 线代理不算 exact/);
+  assert.match(html, /公开 K 线代理不算精确/);
   assert.match(html, /指标预热 BAR/);
   assert.match(html, /全部可用（默认，按需加载）/);
   assert.match(html, /像实时行情一样向左按需分页/);

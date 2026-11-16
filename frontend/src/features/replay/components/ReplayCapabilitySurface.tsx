@@ -1,3 +1,4 @@
+import { replayCapabilityStateLabel } from "../trainingHubLabels.js";
 import React from "react";
 import { Badge } from "../../../components/ui/index.js";
 import { t } from "../../../i18n/index.js";
@@ -10,12 +11,13 @@ export interface ReplayCapabilitySurfaceProps {
 }
 
 function stateBadge(state: ReplayCapabilityState): { tone: "success" | "warning" | "neutral"; label: string } {
-  if (state === "AVAILABLE_EXACT") return { tone: "success", label: t("replay.capability.exact") };
-  if (state === "AVAILABLE_APPROX") return { tone: "warning", label: t("replay.capability.approx") };
-  return { tone: "neutral", label: t("replay.capability.unsupported") };
+  const label = replayCapabilityStateLabel(state);
+  if (state === "AVAILABLE_EXACT") return { tone: "success", label };
+  if (state === "AVAILABLE_APPROX") return { tone: "warning", label };
+  return { tone: "neutral", label };
 }
 
-/** What this run's history can show: one row per capability, its state as a badge and why. The state code stays in data-capability-state. */
+/** What this run's history can show: one row per capability, its level as a badge and why. The state and value codes stay in data attributes (the value also as a tooltip). */
 function ReplayCapabilitySurface({ capabilities }: ReplayCapabilitySurfaceProps) {
   useLocale();
   return (
@@ -28,10 +30,10 @@ function ReplayCapabilitySurface({ capabilities }: ReplayCapabilitySurfaceProps)
         {Object.entries(capabilities).map(([id, capability]) => {
           const badge = stateBadge(capability.state);
           return (
-            <li key={id} data-replay-capability={id} data-capability-state={capability.state}>
+            <li key={id} data-replay-capability={id} data-capability-state={capability.state}
+              data-capability-value={capability.value} {...(capability.value !== "--" ? { title: capability.value } : {})}>
               <div className="replay-capability-head">
                 <strong>{capability.label}</strong>
-                {capability.value !== "--" && <code>{capability.value}</code>}
                 <Badge tone={badge.tone}>{badge.label}</Badge>
               </div>
               <p>{capability.detail}</p>
