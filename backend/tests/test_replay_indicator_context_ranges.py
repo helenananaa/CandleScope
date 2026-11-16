@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from app.data_preparation import replay_context
-from app.indicator.warmup import indicator_warmup_bars
+from app.indicator.warmup import replay_display_warmup_bars
 from app.replay.bars.builder import ReplayDisplayBar
 from app.replay.catalog import ReplaySeriesIdentity
 from app.replay.display_time import SourceBucketTimeMapper
@@ -61,7 +61,7 @@ async def test_prepared_viewport_reads_bounded_requested_range(
         rows = page["bars"][20:40]
         assert len(rows) == 20
         params = {"period": period}
-        warmup = indicator_warmup_bars(name, params)
+        warmup = replay_display_warmup_bars(name, params)
         projected = []
         original = replay_context.project_context
 

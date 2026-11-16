@@ -15,6 +15,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from app.api.v1.stream_indicator_payloads import (
     _indicator_event_to_ws_message,
     _patch_from_snapshot,
+    builtin_indicator_seed_limit,
     confirmed_indicator_seed_bars,
     store_indicator_seed_cache,
 )
@@ -595,6 +596,7 @@ async def _handle_indicator_subscribe(
             hint="请检查指标名称是否存在于 /api/v1/indicators/registry。",
         ))
         return
+    seed_limit = builtin_indicator_seed_limit(history_limit, indicator_name, params)
 
     await _unsubscribe_indicator_client(
         client_id,
@@ -629,7 +631,7 @@ async def _handle_indicator_subscribe(
             "symbol": symbol,
             "interval": interval,
         }
-        seed_cache_key = (exchange, market_type, symbol, interval, history_limit)
+        seed_cache_key = (exchange, market_type, symbol, interval, seed_limit)
         current_revision = None
         query_bars: list[Any] = []
         seed_attempts = (
@@ -677,7 +679,7 @@ async def _handle_indicator_subscribe(
                     dm.query_latest,
                     symbol,
                     interval,
-                    limit=history_limit + 1,
+                    limit=seed_limit + 1,
                     exchange=exchange,
                     market_type=market_type,
                     auto_backfill=False,
@@ -692,7 +694,7 @@ async def _handle_indicator_subscribe(
                 else current_revision
             )
             confirmed_query_bars = confirmed_indicator_seed_bars(query_bars)[
-                -history_limit:
+                -seed_limit:
             ]
             confirmed_query_end = max(
                 (int(bar.time) for bar in confirmed_query_bars),
@@ -726,7 +728,7 @@ async def _handle_indicator_subscribe(
                 })
             break
 
-        seed_bars = confirmed_indicator_seed_bars(query_bars)[-history_limit:]
+        seed_bars = confirmed_indicator_seed_bars(query_bars)[-seed_limit:]
         def adopt_subscription(pair):
             subscribed_key, _ = pair
             subscribed[client_id] = subscribed_key
@@ -751,7 +753,7 @@ async def _handle_indicator_subscribe(
             bars=seed_bars,
             exchange=exchange,
             data_revision=current_revision,
-            desired_seed_bars=history_limit,
+            desired_seed_bars=seed_limit,
             adopt=adopt_subscription,
         )
     except BaseException as exc:

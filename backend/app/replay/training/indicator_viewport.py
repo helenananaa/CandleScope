@@ -15,7 +15,7 @@ from time import monotonic
 from app.data_engine.interval_policy import compute_bucket_start_ms, parse_interval_ms
 from app.indicator.serialization import serialize_indicator_result
 from app.indicator.types import IndicatorKey
-from app.indicator.warmup import indicator_warmup_bars
+from app.indicator.warmup import replay_display_warmup_bars
 
 from .indicator_checkpoint import (
     BUILTINS,
@@ -116,7 +116,7 @@ class ViewportReplayIndicators:
         params = normalized_parameters(name, params)
         render_bars = validated_render_bars(history, rows)
         before = rows[0].open_time_ms
-        warmup = indicator_warmup_bars(name, params)
+        warmup = replay_display_warmup_bars(name, params)
         lower = preceding_boundary(history, before, max(warmup, ANCHOR_STRIDE))
         identity = checkpoint_key(
             {**history.identity, "display_math": SCHEMA},

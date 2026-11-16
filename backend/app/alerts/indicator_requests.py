@@ -12,7 +12,7 @@ ALIASES = {
 def request_for(target, fields):
     return IndicatorQuery(SeriesKey(target['symbol'], target['interval'],
         exchange=target['exchange'], market_type=target['marketType']),
-        tuple(ALIASES[field] for field in sorted(fields)), source_slots=250)
+        tuple(ALIASES[field] for field in sorted(fields)))
 
 
 def values_from(snapshot):
