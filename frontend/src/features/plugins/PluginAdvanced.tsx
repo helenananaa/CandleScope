@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { confirmAction } from "../../components/ui/overlay/overlayApi.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { RuntimeRegistryPanel } from "./PluginManagementSections.js";
@@ -28,11 +29,11 @@ export default function PluginAdvanced({ runtime }: { runtime: PluginPlatformRun
   const applyCompatibility = async () => {
     if (!compatibilityPreview?.available || !compatibilityPreview.previewSha256) return;
     const action = compatibilityPreview.action;
-    if (!window.confirm(
-      action === "import"
-        ? t("plugin.host.v1ImportConfirm")
-        : t("plugin.host.v1RollbackConfirm"),
-    )) return;
+    if (!(await confirmAction({
+      title: action === "import" ? t("plugin.host.v1ImportConfirm") : t("plugin.host.v1RollbackConfirm"),
+      confirmLabel: t("plugin.host.compatApply", { action }),
+      tone: action === "import" ? "primary" : "danger",
+    }))) return;
     setCompatibilityBusy(action);
     try {
       if (action === "import") {

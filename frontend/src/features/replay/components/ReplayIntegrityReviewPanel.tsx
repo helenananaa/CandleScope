@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { confirmAction } from "../../../components/ui/overlay/overlayApi.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 
@@ -193,11 +194,11 @@ export default function ReplayIntegrityReviewPanel({
                   data-replay-action="reveal-time"
                   disabled={!canReveal}
                   title={ownsController ? t("replay.integrity.revealTitle") : t("replay.integrity.needLease")}
-                  onClick={() => {
-                    if (window.confirm(t("replay.integrity.revealConfirm"))) {
+                  onClick={() => void (async () => {
+                    if (await confirmAction({ title: t("replay.integrity.revealConfirm"), confirmLabel: t("replay.integrity.reveal"), tone: "danger" })) {
                       void integrityRuntime.actions.revealTime(reason).catch(() => undefined);
                     }
-                  }}
+                  })()}
                 >{t("replay.integrity.reveal")}</button>
               )}
               {integrity.revealed && <p className="replay-revealed">{t("replay.integrity.revealed")}</p>}

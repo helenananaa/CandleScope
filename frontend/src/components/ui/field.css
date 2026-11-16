@@ -133,6 +133,10 @@
   text-align: left;
 }
 
+.ui-check-label {
+  overflow-wrap: anywhere;
+}
+
 .ui-check-description {
   color: var(--text-muted);
   font-size: var(--font-size-xs);

@@ -1,4 +1,5 @@
 import { Button } from "../ui/Button.js";
+import { confirmAction } from "../ui/overlay/overlayApi.js";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { useControlCommands } from "../../features/app-control/useControlCommands.js";
 import { command } from "../../features/app-control/commandRegistry.js";
@@ -1596,9 +1597,9 @@ export default function AlertsPanel({
                   onEdit={() => editRule(rule)}
                   onToggle={() => toggleRule(rule)}
                   onDuplicate={() => duplicateRule(rule)}
-                  onDelete={() => {
-                    if (window.confirm(t("alert.deleteConfirm", { name: rule.name }))) void removeRule(rule);
-                  }}
+                  onDelete={() => void (async () => {
+                    if (await confirmAction({ title: t("alert.deleteConfirm", { name: rule.name }), confirmLabel: t("alert.delete"), tone: "danger" })) void removeRule(rule);
+                  })()}
                 />
               ))}
 

@@ -312,6 +312,13 @@ Sixteen of the new files hold rules that must load later than their feature's ma
 - Settings, Alerts and plugin center buttons use `Button`; the `html :is()` patches are gone.
 - The chart appearance switch is a `SegmentedControl`, so the faint selected state from Phase 1 is fixed.
 
+**Phase 2c is done (branch `design/phase-2c-overlays`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_2C.md`](../docs/FRONTEND_DESIGN_QA_PHASE_2C.md).
+
+- One overlay stack with these rules: one drawer per side, modals above drawers, popovers above both, Escape closes the top layer, focus returns to the opener, and a modal makes the page inert.
+- `Dialog`, `ConfirmDialog` (also `confirmAction()`), `Drawer`, `Popover`, `Menu`, `Tooltip`, and toasts through `notify()`.
+- All 9 `window.confirm` and 2 `window.alert` calls are replaced.
+- Existing drawers and modals move onto the stack in Phase 3; that is where the overlapping drawers and Escape fixes land.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.

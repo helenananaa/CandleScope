@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode, Ref } from "react";
 import { buttonClassName } from "./helpers.js";
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
@@ -10,12 +10,13 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: ReactNode;
   /** Stretch to the container's width (dialog footers, narrow panels). */
   fullWidth?: boolean;
+  ref?: Ref<HTMLButtonElement>;
 }
 
 /** Shared button; styles live in button.css (primitives layer). */
-export function Button({ variant = "secondary", size = "md", icon, fullWidth = false, className, type = "button", children, ...rest }: ButtonProps) {
+export function Button({ variant = "secondary", size = "md", icon, fullWidth = false, className, type = "button", children, ref, ...rest }: ButtonProps) {
   return (
-    <button type={type} className={buttonClassName({ variant, size, fullWidth, className })} {...rest}>
+    <button ref={ref} type={type} className={buttonClassName({ variant, size, fullWidth, className })} {...rest}>
       {icon ? <span className="ui-btn-icon" aria-hidden="true">{icon}</span> : null}
       {children}
     </button>

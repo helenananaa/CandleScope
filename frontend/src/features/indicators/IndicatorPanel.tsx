@@ -6,6 +6,7 @@
  * - View & manage active indicators (toggle visibility, remove, edit params)
  * - Open code editor for custom indicators
  */
+import { confirmAction, notify } from "../../components/ui/overlay/overlayApi.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import { Icon } from "../../components/icons/Icon.js";
 import { useCallback, useId, useState } from "react";
@@ -481,7 +482,11 @@ export default function IndicatorPanel({
 
   const handleDeleteCustomPreset = useCallback(async (preset: CatalogIndicator) => {
     if (isBuiltinIndicator(preset)) return;
-    const confirmed = window.confirm(t("indicator.deleteConfirm", { name: preset.name ?? preset.id }));
+    const confirmed = await confirmAction({
+      title: t("indicator.deleteConfirm", { name: preset.name ?? preset.id }),
+      confirmLabel: t("indicator.deleteCustom"),
+      tone: "danger",
+    });
     if (!confirmed) return;
 
     try {
@@ -491,7 +496,7 @@ export default function IndicatorPanel({
       }
     } catch (err: unknown) {
       console.error("Failed to delete custom indicator:", err);
-      window.alert(t("indicator.deleteFailed", { error: err instanceof Error ? describeError(err, err.message) : String(err) }));
+      notify({ tone: "danger", title: t("indicator.deleteFailed", { error: err instanceof Error ? describeError(err, err.message) : String(err) }) });
     }
   }, [activeIndicators, deleteCustomIndicator, onRemoveIndicator]);
 
@@ -597,9 +602,9 @@ export default function IndicatorPanel({
       });
     } catch (err) {
       console.error("Failed to save custom indicator:", err);
-      window.alert(t("indicator.saveFailed", {
+      notify({ tone: "danger", title: t("indicator.saveFailed", {
         error: err instanceof Error ? describeError(err, err.message) : String(err),
-      }));
+      }) });
       return;
     }
 

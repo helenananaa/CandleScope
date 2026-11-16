@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { confirmAction } from "../../components/ui/overlay/overlayApi.js";
 import { useControlCommands } from "../app-control/useControlCommands.js";
 import { command } from "../app-control/commandRegistry.js";
 import { empty, object, text } from "../app-control/commandSchema.js";
@@ -139,14 +140,14 @@ export function ResearchDatasetManagement({
               await updateLocalDataset(manifest.dataset_id, { archived: true });
               await onChanged();
             })}>{t("local.archive")}</button>
-            <button type="button" className="danger" disabled={busy !== null} onClick={() => {
-              if (!window.confirm(t("local.trashConfirm", { name: manifest.name }))) return;
+            <button type="button" className="danger" disabled={busy !== null} onClick={() => void (async () => {
+              if (!(await confirmAction({ title: t("local.trashConfirm", { name: manifest.name }), confirmLabel: t("local.trash"), tone: "danger" }))) return;
               void run("trashing", async () => {
                 await trashLocalDataset(manifest.dataset_id);
                 await onChanged();
                 await reloadMetadata();
               });
-            }}>{t("local.trash")}</button>
+            })()}>{t("local.trash")}</button>
           </div>
           <ResearchDatasetQuality
             manifest={manifest}
