@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef } from "react";
 import Editor from "@monaco-editor/react";
 import type * as Monaco from "monaco-editor";
 import "../../../editor/localMonaco.js";
 
 import { registerPineLanguageSupport } from "../../../editor/pineLanguage.js";
-import { getScriptEditorOptions, registerScriptTheme } from "../../../editor/scriptTheme.js";
+import { getScriptEditorOptions, registerScriptTheme, useScriptEditorTheme } from "../../../editor/scriptTheme.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import { useExtensionEditorTheme } from "../../../editor/extensionTheme.js";
@@ -52,14 +52,7 @@ export default function StrategyScriptWorkspace({
   // models must belong to an editor instance, not to a shared language path.
   const modelId = useId();
   const extensionEditorTheme = useExtensionEditorTheme("");
-  const [editorTheme, setEditorTheme] = useState("script-dark");
-  useEffect(() => {
-    const update = () => setEditorTheme(document.documentElement.dataset.theme === "light" ? "vs" : "script-dark");
-    update();
-    const observer = new MutationObserver(update);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-    return () => observer.disconnect();
-  }, []);
+  const editorTheme = useScriptEditorTheme();
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof Monaco | null>(null);
   const runActionCleanupRef = useRef<Monaco.IDisposable | null>(null);

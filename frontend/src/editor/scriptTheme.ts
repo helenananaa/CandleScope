@@ -1,15 +1,91 @@
 /**
- * Script Editor Theme — custom dark theme for the CandleScope indicator editor.
+ * Script editor themes — dark and light themes for the CandleScope script editors
+ * (indicators and strategies), following the app theme.
  *
  * Highlights Script keywords (ta, input, color, plot, etc.)
  * with distinctive colors to make scripts more readable.
  */
 
+import { useEffect, useState } from "react";
 import type * as Monaco from "monaco-editor";
 import { bindExtensionEditorTheme } from "./extensionTheme.js";
 
+export const SCRIPT_THEME_DARK = "script-dark";
+export const SCRIPT_THEME_LIGHT = "script-light";
+
 /**
- * Define and register the Script dark theme on a Monaco instance.
+ * Light counterpart of the dark theme: the light surface and text tokens, and syntax colours
+ * that keep WCAG AA (4.5:1) on white.
+ */
+const LIGHT_THEME: Monaco.editor.IStandaloneThemeData = {
+  base: "vs",
+  inherit: true,
+  rules: [
+    { token: "keyword", foreground: "a626a4" },
+    { token: "keyword.control", foreground: "a626a4" },
+    { token: "string", foreground: "a31515" },
+    { token: "string.escape", foreground: "8a4a00" },
+    { token: "number", foreground: "0b7a4b" },
+    { token: "comment", foreground: "3f6b3f", fontStyle: "italic" },
+    { token: "identifier", foreground: "0f4c81" },
+    { token: "type", foreground: "1d6f7a" },
+    { token: "operator", foreground: "17181b" },
+    { token: "delimiter", foreground: "4a4d55" },
+    { token: "tag", foreground: "0f5bbd" },
+  ],
+  colors: {
+    "editor.background": "#ffffff",
+    "editor.foreground": "#17181b",
+    "editor.selectionBackground": "#0f5bbd33",
+    "editor.inactiveSelectionBackground": "#0f5bbd1f",
+    "editor.lineHighlightBackground": "#f0f1f3",
+    "editor.lineHighlightBorder": "#00000000",
+    "editorLineNumber.foreground": "#5b5f69",
+    "editorLineNumber.activeForeground": "#17181b",
+    "editorCursor.foreground": "#0f5bbd",
+    "editorGutter.background": "#ffffff",
+    "editorIndentGuide.background": "#e2e3e7",
+    "editorIndentGuide.activeBackground": "#c8cad0",
+    "editorBracketMatch.background": "#12703a22",
+    "editorBracketMatch.border": "#12703a66",
+    "editorWidget.background": "#f7f7f8",
+    "editorWidget.border": "#c8cad0",
+    "editorWidget.foreground": "#17181b",
+    "editorSuggestWidget.background": "#f7f7f8",
+    "editorSuggestWidget.border": "#c8cad0",
+    "editorSuggestWidget.foreground": "#17181b",
+    "editorSuggestWidget.highlightForeground": "#0f5bbd",
+    "editorSuggestWidget.selectedBackground": "#0f5bbd22",
+    "editorHoverWidget.background": "#f7f7f8",
+    "editorHoverWidget.border": "#c8cad0",
+    "editorHoverWidget.foreground": "#17181b",
+    "scrollbarSlider.background": "#5b5f6933",
+    "scrollbarSlider.hoverBackground": "#5b5f6955",
+    "scrollbarSlider.activeBackground": "#5b5f6988",
+    "minimap.background": "#ffffff",
+  },
+};
+
+/** The script theme for the app theme: light when the document is in the light theme. */
+export function scriptThemeForDocument(): string {
+  return typeof document !== "undefined" && document.documentElement.dataset.theme === "light" ? SCRIPT_THEME_LIGHT : SCRIPT_THEME_DARK;
+}
+
+/** Follows the app theme (the document's data-theme) and returns the script editor theme to use. */
+export function useScriptEditorTheme(): string {
+  const [theme, setTheme] = useState(scriptThemeForDocument);
+  useEffect(() => {
+    const update = () => setTheme(scriptThemeForDocument());
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
+  }, []);
+  return theme;
+}
+
+/**
+ * Define and register the script dark and light themes on a Monaco instance.
  *
  * @param {import('monaco-editor')} monaco
  */
@@ -57,7 +133,7 @@ export function registerScriptTheme(monaco: typeof Monaco): void {
       "editor.lineHighlightBorder": "#00000000",
 
       // Line numbers
-      "editorLineNumber.foreground": "#484f5866",
+      "editorLineNumber.foreground": "#7d8590",
       "editorLineNumber.activeForeground": "#8b949e",
 
       // Cursor
@@ -100,7 +176,8 @@ export function registerScriptTheme(monaco: typeof Monaco): void {
       "minimap.background": "#0d1117",
     },
   };
-  monaco.editor.defineTheme("script-dark", theme);
+  monaco.editor.defineTheme(SCRIPT_THEME_DARK, theme);
+  monaco.editor.defineTheme(SCRIPT_THEME_LIGHT, LIGHT_THEME);
   bindExtensionEditorTheme(monaco);
 }
 
