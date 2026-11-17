@@ -216,6 +216,7 @@ class DataManagerConfig:
         # Four charts may plan together (~20 MiB each); qualified streamed
         # sources keep only page payloads plus the bounded compute claim.
         "history-backfill": 192 * 1024 * 1024,
+        "history-backfill-plans": 32 * 1024 * 1024,
         "durable-delivery": 16 * 1024 * 1024,
         "aggregation-blocks": 16 * 1024 * 1024,
     })

@@ -251,7 +251,10 @@ class BackfillEngine:
         admission = {key:memory[key] for key in ('work_grants','work_waits','work_resizes','work_waiters','work_phase_bytes')
                      if key in memory}
         owner = memory.get('owners',{}).get('history-backfill',{})
+        plans=memory.get('owners',{}).get('history-backfill-plans',{})
         admission.update(reserved_bytes=owner.get('reserved_bytes',0),limit_bytes=owner.get('limit_bytes',0))
+        admission.update(plan_reserved_bytes=plans.get('reserved_bytes',0),plan_limit_bytes=plans.get('limit_bytes',0),
+            shared_limit_bytes=memory.get('limit_bytes',0),shared_reserved_bytes=memory.get('reserved_bytes',0))
         return {
             "component": "BackfillEngine",
             "working_set_admission":admission,

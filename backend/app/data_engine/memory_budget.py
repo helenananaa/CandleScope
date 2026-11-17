@@ -141,7 +141,7 @@ class MemoryWorkPool:
             raise MemoryBudgetExceeded('execution working set exceeds the owner budget')
         await self.budget._acquire_pool(self.owner,size,size,pool=self)
 
-    async def stage(self, size, maximum):
+    async def stage(self, size, maximum, *, retained=None):
         """Return scratch before queueing the next phase's known claim.
 
         Retained plan/value children stay charged. The next maximum is declared
@@ -151,7 +151,8 @@ class MemoryWorkPool:
             limit=min(self.budget.total_bytes,self.budget._owners[self.owner][0])
             if not self.children <= size <= maximum <= limit:
                 raise MemoryBudgetExceeded('execution working set exceeds the owner budget')
-            trim=max(0,self.allocated-size)
+            held=max(self.children,min(size,size if retained is None else retained))
+            trim=max(0,self.allocated-held)
             self.budget._reserved[self.owner]-=trim
             self.allocated-=trim
             self.maximum=maximum
@@ -318,9 +319,16 @@ class MemoryBudget:
             self._owners[owner] = (int(limit_bytes), usage, roots)
             self._reserved[owner] = 0
 
+    def ensure_owner(self,owner,*,limit_bytes,usage):
+        """Atomically add accounting for an optional transient work owner."""
+        with self._lock:
+            if owner not in self._owners:
+                self.register(owner,limit_bytes=limit_bytes,usage=usage)
+
     def unregister(self, owner):
         with self._lock:
-            if self._reserved.get(owner, 0) or any(w.owner==owner for w in self._pool_waiters):
+            if (self._reserved.get(owner, 0) or any(w.owner==owner for w in self._pool_waiters)
+                    or any(p.owner==owner for p in self._work_pools)):
                 raise RuntimeError("cannot unregister an owner with active leases")
             self._owners.pop(owner, None)
             self._reserved.pop(owner, None)

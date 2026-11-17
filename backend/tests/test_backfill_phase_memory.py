@@ -72,6 +72,37 @@ def test_cancelled_phase_handoff_releases_retained_plan_claim():
     asyncio.run(run())
 
 
+def test_all_planners_return_scratch_before_large_execution_waits():
+    async def run():
+        owner=budget(64)
+        owner.register('plans',limit_bytes=8,usage=lambda:dict(estimated_bytes=0))
+        all_planned=asyncio.Event();count=0
+        async def execute():
+            nonlocal count
+            async with work_pool(owner,1,owner='plans',maximum=1),work_pool(owner,20,maximum=20) as pool:
+                count+=1
+                if count==3:all_planned.set()
+                await all_planned.wait()
+                await pool.stage(0,0,retained=0)
+                await pool.stage(60,60,retained=0)
+                await asyncio.sleep(0)
+        await asyncio.wait_for(asyncio.gather(*(execute() for _ in range(3))),2)
+        assert owner.snapshot()['reserved_bytes']==0 and not owner._work_pools
+    asyncio.run(run())
+
+
+def test_zero_scratch_handoff_keeps_owner_alive_until_work_scope_exits():
+    async def run():
+        owner=budget(10)
+        pool=await owner._acquire_pool('history-backfill',1,1)
+        await pool.stage(0,0,retained=0)
+        assert owner.snapshot()['reserved_bytes']==0
+        with pytest.raises(RuntimeError):owner.unregister('history-backfill')
+        pool.close()
+        owner.unregister('history-backfill')
+    asyncio.run(run())
+
+
 from tests.test_backfill_dependency_pipeline import setup_pipeline,request,mixed_query,MINUTE
 
 

@@ -3,7 +3,7 @@ from functools import wraps
 from contextlib import asynccontextmanager
 import math
 
-from app.data_engine.memory_budget import work_pool, current_work_pool
+from app.data_engine.memory_budget import work_pool, current_work_pool, retained_size,MemoryBudgetExceeded
 from .input_subscriptions import current_input_adoption
 from .fetch_stream import PAGE_BYTES_PER_ROW, stream_grid
 
@@ -16,11 +16,19 @@ def admitted_work(function):
         initial = (WORK_BYTES+PLAN_BYTES if any(i not in self._cfg.standard_intervals
                    for i in intervals or ()) else 1024*1024)
         scope = current_input_adoption()
+        budget=getattr(self,'memory_budget',None)
+        managed=bool(scope and scope.managed)
+        if budget is not None and managed:
+            budget.ensure_owner('history-backfill-plans',limit_bytes=min(budget.total_bytes,32*1024*1024),
+                usage=lambda:dict(estimated_bytes=0))
         carry = scope.memory_pool if scope is not None and scope._release else None
-        async with work_pool(getattr(self,'memory_budget',None),initial,
-                             managed=bool(scope and scope.managed),carry=carry,maximum=initial,phase='planning') as pool:
+        async with work_pool(budget,64*1024,owner='history-backfill-plans',maximum=WORK_BYTES,
+                             managed=managed,phase='plan_metadata') as plan_pool, work_pool(budget,initial,
+                             managed=managed,carry=carry,maximum=initial,phase='planning') as pool:
             if scope is not None:
                 scope.memory_pool = pool
+            if pool is not None:
+                pool.plan_pool=plan_pool
             try:
                 return await function(self,*args,**kwargs)
             finally:
@@ -48,6 +56,14 @@ async def admit_execution(engine,plan,*,streaming=False):
     if pool is None:
         return
     from .mixed_plan import WORK_BYTES,PLAN_BYTES
+    # Release the entire scratch claim before waiting on plan accounting or
+    # execution. No collection of planners can retain the work capacity that
+    # their completed plans need in order to finish.
+    await pool.stage(0,0,retained=0)
+    plan_bytes=max(64*1024,retained_size((plan,))[0])
+    if plan_bytes>WORK_BYTES:
+        raise MemoryBudgetExceeded('retained plan exceeds its admitted metadata bound')
+    await pool.plan_pool.stage(plan_bytes,WORK_BYTES)
     rows = max(1,plan.estimated_bars,plan.metadata.get('mixed_source_rows',0))
     payload = bitmap = 0
     batch = min(1000,engine.config.fetch_batch_size)
@@ -71,7 +87,7 @@ async def admit_execution(engine,plan,*,streaming=False):
     base = WORK_BYTES+bitmap
     size = base if streaming else base+retained+payload
     maximum = max(size,compute if streaming else size+compute-retained)
-    await pool.stage(size,maximum)
+    await pool.stage(size,maximum,retained=0)
     pool.phase='fetch'
     pool.reconcile_bytes=maximum
     pool.normalized_bytes=retained

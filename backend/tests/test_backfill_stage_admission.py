@@ -82,7 +82,7 @@ def test_deferred_attempt_drops_page_loans_before_another_planner_needs_capacity
         @admitted_work
         async def attempt(self,**kwargs):
             pool=current_work_pool(owner)
-            await pool.resize(8*1024*1024)
+            await pool.stage(8*1024*1024,8*1024*1024,retained=0)
             scope.retain(pool.reserve(6*1024*1024).close)
             raise RuntimeError('external quota or view deferral')
         with scope:
