@@ -1,0 +1,186 @@
+# 统一插件体系实施与交付记录
+
+关联：[#182](https://github.com/helenananaa/CandleScope/issues/182)、
+[#349](https://github.com/helenananaa/CandleScope/issues/349)、
+[#350](https://github.com/helenananaa/CandleScope/issues/350)、
+[#351](https://github.com/helenananaa/CandleScope/issues/351)。
+
+盘点基线：`39f8a8ade3c6691d67e1f306f2c7ec3ff2ca726a`，2026-11-18。
+原 issue 的关闭标准不变。本文件记录分阶段交付，不以创建子项、合入 PR
+或源码测试通过代替实际安装版验收。
+
+## 本批交付边界
+
+- 提供候选清单 `candlescope.unified-plugin/1`、不可变元数据类型、依赖预检、
+  包级激活身份，以及只读元数据检查工具。
+- 提供同包前端/后端/桌面三个入口的**契约样本**，尚不是可安装运行的插件。
+- 新代码不接入生产启动或旧安装器，不新增生产注册表，不读取或迁移用户数据。
+- 清单验证只证明元数据合法，不证明文件存在、摘要、签名、隔离、权限授权、
+  启动、清理、回放或平台支持；CLI 明确输出 `productionInstallable: false`。
+- 该 schema 尚未作为发布版契约冻结；后续包验证和执行器接入若揭示缺口，
+  在本轮重构发布前同步修订样本、测试和规范，不能暗中猜测缺失信息。
+
+## 1. 统一清单与包身份
+
+以 [workbench 样本](../examples/unified-plugins/workbench/manifest.json) 为准：
+
+| 字段 | 契约 |
+| --- | --- |
+| `schema` | 必须为 `candlescope.unified-plugin/1`；不推断旧 schema 的含义 |
+| `id` / `version` | 一份包身份；version 使用精确 SemVer，依赖版本不使用范围 |
+| `name` | 展示名称，不能作为身份或授权依据 |
+| `hostApiVersion` | 本轮为整数 1；不接受布尔值或未知版本 |
+| `trust` | `restricted` 或 `full-trust`；声明不等于已经获得授权 |
+| `entries` | 1–32 个入口，入口 ID 在包内唯一，共用包版本与安装状态 |
+| `dependencies` | 其他插件 ID → 精确版本；最多 32 个，不允许自依赖 |
+| `permissions` | 最多 64 个唯一的版本化 capability ID；仅为声明，不产生权限句柄 |
+
+入口分别声明 `id`、`kind`、`path`。`kind` 为 `frontend`、`backend`、
+`desktop`、`sandbox-view`、`sidecar` 或 `data`。
+宿主前端/桌面入口为 `.mjs`，后端为 `.py`，sandbox-view 为 `.html`，
+data 为 `.json`。sidecar 必须显式声明受支持的 runtime kind：
+`python-module`、`native-executable`、`java-jar`、`node-module` 或 `wasm-component`。
+**这些枚举不表示已完成各运行时接入或所有平台资格。** sidecar 的启动描述、
+运行时供应绑定和目标平台资格由后续包验证/执行器工作交付，不能直接凭路径执行。
+
+受限模式拒绝 frontend/backend/desktop 宿主代码；sandbox-view、sidecar、
+data 在通过各自内容验证和权限/隔离检查后才能使用。未知字段、执行模式、
+运行时、重复 JSON key、非有限数、超限输入和不安全跨平台路径一律拒绝。
+
+包继续使用 `.cspkg` 作为用户导入文件后缀；schema 和经过校验的包内容决定
+其含义，不能凭后缀选择旧执行路线。统一 envelope 的全部文件摘要、归档限制、
+运行时制品和目标平台验证在第 2 批交付。可复用既有安全检查，但新包不经旧包
+转换器或旧安装器运行。数据主题与布局的内容验证也必须保留。
+
+### 依赖预检
+
+`activation_order()` 的输入是**变更后的完整拟启用集合**，不是单个新插件。
+同一 ID 不能出现两个版本；缺失依赖、精确版本不符、循环和超限集合在启动任何
+入口前拒绝。预检覆盖安装/升级，以及仍有消费者时的停用/卸载。独立节点按 ID
+确定顺序，依赖先启动、逆序停止。初期单次计划上限为 256 个插件，是有界准入
+限制，不是性能或任意规模承诺；未来扩容须另做预算和验收。
+
+预检不获取依赖，不导入插件，不操作注册表，不执行启动 hook。清单排序不等于
+服务替换冲突已经解决；#350 仍须在实际构建前验证替换计划。
+
+## 2. 生命周期和状态契约
+
+后续唯一 lifecycle owner 负责包级变更，执行器只消费它发布的激活计划，
+不得再各写一份“当前启用版本”。可复用独立执行器和运行时制品缓存，不能保留
+独立安装/启停 owner。建议实现顺序：
+
+1. `inspect/stage`：有界校验归档、全部摘要、清单和依赖，不导入代码。
+2. `approve`：绑定包摘要与信任模式；旧批准不能自动覆盖新字节或权限提升。
+3. `commit desired`：锁内复核预期 registry revision，以可恢复事务发布完整计划。
+4. `reconcile`：各执行器校验身份，按依赖顺序启动，报告各入口实际状态。
+5. `revoke/stop`：先撤销结果采用资格，再停止与清理；失败有明确回执。
+
+包级 `ActivationIdentity` 包含 ID、版本、完整包 SHA-256 和正安全整数 generation。
+generation 由唯一 owner 持久分配；重启中断恢复、重新启用、回滚、卸载重装都不能
+复用曾撤销身份。重启恢复是否延续同一激活与新进程 instance 必须明确区分，
+不能把全局 generation 和进程启动次数混为一谈。
+
+所有入口共用包激活身份；执行请求/回执另绑定 entry ID 和进程/窗口 instance。
+输入只来自受限 API 允许的范围。结果发布同时校验当前激活、入口 instance 和
+调用上下文；比较 ID/版本或声明同一个摘要都不足以接纳旧结果。
+
+| 状态维度 | 必须表达的内容 |
+| --- | --- |
+| 期望配置 | 安装版本、包摘要、期望启停、批准记录、registry revision/generation |
+| 实际运行 | 每入口运行版本、instance、启动中/运行/失败/停止中/已停止 |
+| 协调状态 | 待重启、待恢复、中断事务、依赖阻塞、实际旧版本仍运行 |
+
+后端/桌面加载后不能宣称任意热卸载。期望升级已提交但旧代码仍在内存时，显示
+待重启和实际版本；不能显示全部已更新。某入口启动失败不能把其他仍运行入口
+伪装成已回滚；需要停止、补偿或独立恢复启动，并如实报告。
+
+回滚代码必须使用新激活身份；不盲目回滚用户数据或插件外部副作用。新数据的
+旧版可读边界须由迁移明确规定；不能读取时停止并解释，禁止静默误读或删除。
+
+## 3. 旧入口、调用者和替代路径
+
+此表是源码盘点，不判定所列旧功能已取得最终资格。目标路径按稳定接口依赖，
+不要求 #165/#166/#181 整条先关闭。
+
+| 现有入口/状态 | 主要调用者 | 去向与删除门槛 |
+| --- | --- | --- |
+| `app/plugin_runtime/bundle.py`：schema-1 `.cspkg`、`candlescope.script-runtime/1` | Pine/Python 的 `scripts/build_bundle.py`，旧 installer CLI | #351 重新打包并原生调用；拒绝旧包执行，保留脚本与历史制品 |
+| `app/plugin_runtime/installer.py`、`registry.py`：`runtime-registry.json` | `first_party_plugin_bootstrap.py`、`plugin_core_v2/runtime_install.py`、desktop prepare 脚本 | #349 提供共同安装 owner，#351 迁完消费者后删除旧写入和启动接线 |
+| `app/plugin_runtime/service.py`、`supervisor.py`、`app/plugin_host/` | `main.py`、`indicator/runtime_service.py` | 复用必要进程监控/传输组件；删除旧注册表驱动的独立生命周期，不盲删可复用机制 |
+| `app/plugin_installer_v2/bundle.py`、`installer.py`、`registry.py`：平台包及 `platform-registry-v2.json` | `plugin_core_v2`、marketplace、import CLI | 复用制品校验、原子存储、供应绑定和回滚机制，收敛到唯一包/激活记录 |
+| `app/plugin_core_v2/runtime_install.py`：自动分流旧 runtime bundle | `plugin_core_v2/api.py` 安装/review/confirm | #351 删除分流；旧包返回需更新，不能经旧 installer 偷跑 |
+| `app/plugin_compat_v1/bridge.py`：旧运行时目录投影及 import/rollback | `main.py`、core API、前端兼容区 | #351 原生迁移完成后删除桥、相关 API 和可执行 UI，不以统一目录代替统一生命周期 |
+| `app/trusted_extensions/store.py`：`.csext`、`candlescope.extension/1`、`trusted-extensions-v1/state.json` | extension API、前端 ExtensionManager、Python/Desktop host | #349 统一身份/安装；复用摘要批准、主题/布局验证、资源身份和恢复机制，最终删除独立 registry |
+| `app/trusted_extensions/runtime.py`：prepare/activate、factory wrapper | `main.py` 的 data-engine/replay/alert-delivery/indicator-range 构建 | #350 改用统一激活计划；必须证明所有实际消费者使用替换依赖 |
+| `frontend/src/features/extensions/`：运行时、slots、资源/管理 UI | App shell、设置入口 | #349 接共同计划与管理 API；#350 保留根布局接管、冲突检测和替换 UI 外的恢复入口 |
+| `frontend/desktop/trusted-extension-host.mjs`、`main.mjs` | Electron 启动、诊断 IPC、safe-mode CLI | #349 读共同计划；#350 统一恢复启动，marker/IPC 身份校验不能回退 |
+| `frontend/src/features/plugins/`、`plugin_core_v2/api.py` | 插件中心、能力调用、管理会话 | 统一展示/操作与 entry 诊断；原 loopback/Origin/CSRF、权限和实盘确认边界保留 |
+| `app/plugin_market_v2/chart_contexts.py`：当前仅 live | 插件 chart-context API、chart layers/market consumers | #351 消费多图和各回放上下文，输入/结果受可见时间与修订约束 |
+| `app/plugin_runtime_registry_v3/` 和 runtime provider 供应缓存 | 平台安装器、Python/Node/Java/WASM provider | 属于执行环境供应，可复用；不能误当成用户插件第二套安装/启停 owner |
+| `packages/candlescope-plugin-pine-compat/` | 图表指标、策略和 Pine host inputs | #351 保留引擎与语言语义，改用新生命周期；不把包名中的 compat 当作 Pyne 兼容 |
+| Pyne 拒绝规则及 `backend/tests/test_pyne_removal.py` | API、策略编译、旧已安装运行时启动过滤 | 永久保留退役回归；新契约显式拒绝退役身份/运行时，不转换、不删除原始数据 |
+
+最终删除前逐项 `rg` 检查直接/间接调用者、启动环境变量、构建/发布输入、CLI、
+文档及工作区恢复。现有历史 QA 只归档引用，不为了“零匹配”删除历史文本。
+旧格式文件可以留存供用户导出和查看，但不再构成可执行安装/注册路线。
+
+## 4. 既有实现与证据映射
+
+| 能力 | 可复用实现/历史证据 | 当前不能据此宣称 |
+| --- | --- | --- |
+| 可信扩展 | PR #71；`docs/trusted-extensions.md`；backend `test_trusted_extensions.py`、frontend extension runtime tests、desktop host tests | 统一包/生命周期已实现；终端样本只注册状态，不证明全部架构替换 |
+| 通用包安装/权限/回滚 | `plugin_installer_v2`、`plugin_security_v2` 及相应 tests；`docs/PLUGIN_PLATFORM_ROLLBACK_RUNBOOK_zh.md` | 新多入口包事务和安装版恢复已通过 |
+| Pine/Python 现有接线 | #81/#210；`docs/qa/FRONTEND_CLOSEOUT_20261103_zh.md` | 新体系原生适配已完成；旧包数量不构成迁移资格 |
+| Pine 会话隔离 | `docs/qa/pine-compatibility-main267-20261107/README.md` / `receipt.json` | 原记录包含并发相同 clientId 隔离失败，不可引用为全部通过；须重查最终候选 |
+| macOS 原生源/重启/回滚 | `docs/qa/frontend-architecture-acceptance-20261111/README.md` | 所有结果同一最终提交、统一生命周期或 Windows 合格；原文保留各提交及未测边界 |
+| 本批候选清单与预检 | SDK `tests/test_unified_manifest.py`、只读 inspector | 已安装/启动、已实现 generation 围栏、可信替换或原生保存重启 |
+
+历史证据按各自提交/输入/运行时/平台使用；未在本批重跑的旧测试不填写本批通过。
+财务一致性、数据正确性、隔离、无未来泄露和保存重启要求不降级。
+
+## 5. 后续 PR 顺序与退出条件
+
+| 批次 | 关联 | 交付与退出条件 | 状态 |
+| --- | --- | --- | --- |
+| 1 | #349 | 候选清单/依赖/身份、旧入口与证据映射、只读检查和回归 | 本批实现；本地结果见下节 |
+| 2 | #349 | 统一 envelope/不可变包存储/激活 registry/可恢复变更；真实临时目录故障注入，无半安装执行 | 待实施 |
+| 3 | #349 | 前后端/桌面/sidecar 接共同 owner，统一 API/UI；同包多入口生命周期真实运行，旧代结果拒绝 | 待实施 |
+| 4 | #350 | 构建前依赖计划/真实替换/冲突与资源清理；独立恢复启动能救回故意失败插件 | 待实施 |
+| 5 | #351 | 图/运行/模式/数据修订/可见时间贯通；跨图/回放/迟到结果和无未来泄露验证 | 待实施 |
+| 6 | #351 | Pine 原生打包、发现/调用/发布和状态恢复；固定引擎/输入的指标/策略/图形回归 | 待实施 |
+| 7 | #351/#182 | 其余受支持消费者迁完、删除旧执行协议/安装注册入口；最终候选安装版联合验收 | 待实施 |
+
+不等待整个关联 issue 完成才开发；按稳定接口交付。每批局部检查通过后可继续下一批，
+云端 CI 不作为开始下一批的阻塞；合并 main 前检查最终提交 CI 和该批适用验收。
+父 #182 保持开放，直到只有一套生命周期、Pine 原生适配、可信接管与独立恢复均合格。
+
+## 6. 检查与最终证据要求
+
+只读检查：
+
+```sh
+python3 backend/scripts/inspect_unified_plugin.py \
+  examples/unified-plugins/workbench/manifest.json
+```
+
+SDK 测试（在 `packages/candlescope-plugin-sdk/` 下运行）：
+
+```sh
+python3 -m pytest -q tests/test_unified_manifest.py tests/test_package_architecture.py
+```
+
+本批最终源码本地验证：全 SDK **242 项通过**（Python 3.12 / macOS arm64），
+覆盖新清单与依赖拒绝、CLI 不执行/不写用户目录、既有 v1/v2/v3 契约和 SDK 架构检查。
+变更 Python 文件的 Ruff、样本 ESM 语法、workflow YAML 解析及 diff whitespace 检查通过。
+新增 CI 在 Linux Python 3.11/3.12、macOS Python 3.12、Windows Python 3.12 运行全 SDK；
+云端结果以 PR 最终提交状态为准，不因配置了矩阵就宣称跨平台已通过。
+这些不包含生产后端/前端/desktop 接入或安装版资格，不关闭 #349。
+
+后续故障矩阵至少覆盖归档/依赖/权限拒绝、stage/commit/启动中断、部分入口失败、
+升级/回滚/停用/卸载并发、迟到请求及清理失败。#350 须沿真实服务调用链断言替换实例；
+#351 须固定数据/引擎参考并检验输入和输出的可见时间边界。
+
+最终每条要求记录产品源码 SHA、包摘要、插件/运行时版本、输入指纹、平台/机器、
+场景、原始日志及结论。macOS 与 Windows 安装/更新/保存/完整退出/重启分别验收；
+浏览器、组件、源码 replay 不替代安装版证据。性能先固定输入、规模和预算，
+报告启动/计算/发布/停用延迟、内存/磁盘与残留进程，不预填未测收益。
