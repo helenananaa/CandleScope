@@ -3574,8 +3574,8 @@ export const zhCN = {
   "pane.flow.buy": "主动买",
   "pane.flow.sell": "主动卖",
   "pane.flow.deltaDesc": "主动买量 - 主动卖量",
-  "pane.flow.buyDesc": "Taker buy base volume",
-  "pane.flow.sellDesc": "Taker sell base volume（图中为负轴）",
+  "pane.flow.buyDesc": "主动买入的基础资产成交量",
+  "pane.flow.sellDesc": "主动卖出的基础资产成交量（图中为负轴）",
   "pane.flow.singleBar": "单根 K 线",
 
   "orderBook.rt.binanceOnly": "订单簿目前仅支持 Binance",
