@@ -102,8 +102,8 @@ def test_binance_backfill_advances_start_time_past_first_page() -> None:
     assert len(transport.requests) == 3
     assert [request.start_ms for request in transport.requests] == [
         0,
-        999 * interval_ms + 1,
-        1_999 * interval_ms + 1,
+        1_000 * interval_ms,
+        2_000 * interval_ms,
     ]
     assert [bar.open_time for bar in results[0].bars] == [
         idx * interval_ms for idx in range(total_bars)

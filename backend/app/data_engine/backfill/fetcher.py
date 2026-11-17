@@ -29,7 +29,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from contextlib import nullcontext
+from contextlib import nullcontext, ExitStack
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from typing import Callable, Awaitable, Any
@@ -70,6 +70,9 @@ from .models import (
 )
 from .fetch_stream import PageConsumer, PAGE_BYTES_PER_ROW, stream_grid, disjoint_source_spans
 from .source_router import ArchiveRoutePlan, HistoricalSourceRouter
+from app.data_engine.memory_budget import MemoryBudgetExceeded
+from app.core.bounded_executor import ExecutorBusyError
+from .input_subscriptions import InputSubscriptions, input_adoption, retain_input_payload
 
 logger = logging.getLogger("backfill.Fetcher")
 
@@ -115,6 +118,12 @@ class HistoricalFetcher:
 
         # Concurrency control
         self._semaphore = asyncio.Semaphore(self._global_fetch_concurrency())
+        from app.data_engine.storage.kline_sources import input_receipts_current
+        from app.core.executors import run_storage
+        async def receipts_current(messages):
+            refs = [message.payload['_source_receipt']['ref'] for message in messages]
+            return await run_storage(input_receipts_current, refs)
+        self._inputs = InputSubscriptions(receipts_current=receipts_current)
         self._rate_limit_manager = get_shared_rate_limit_manager()
         self._source_router = source_router
         if (
@@ -144,6 +153,7 @@ class HistoricalFetcher:
         from app.exchanges.public_admission import get_public_admission
         return {
             "component": "HistoricalFetcher",
+            "input_subscriptions": self._inputs.snapshot(),
             "public_admission": get_public_admission(self._rate_limit_manager).snapshot(),
             "concurrency": self._cfg.fetch_concurrency,
             "global_concurrency": self._global_fetch_concurrency(),
@@ -183,6 +193,7 @@ class HistoricalFetcher:
             self._source_router.request_cleanup()
 
     async def close(self) -> None:
+        await self._inputs.close()
         if self._source_router is not None:
             await self._source_router.close()
 
@@ -330,6 +341,7 @@ class HistoricalFetcher:
                 task_key=task.task_key, observed_at_ms=int(time.time()*1000),
                 fetched_rows=getattr(result, 'bars_count', 0),
                 rest_pages=getattr(result, 'pages_fetched', 0),
+                rest_pages_scope='logical pages including shared inputs; physical pages counted by fetcher',
                 status=('deferred' if isinstance(result, RateLimitDeferred)
                         else 'failed' if isinstance(result, BaseException)
                         else result.status.value))
@@ -365,6 +377,18 @@ class HistoricalFetcher:
                 if completed:
                     raise FetchBatchDeferred(latest, completed)
             raise latest
+
+        capacity = next((item for item in raw_results if isinstance(item, (MemoryBudgetExceeded,ExecutorBusyError))), None)
+        from .input_subscriptions import current_input_adoption
+        adoption = current_input_adoption()
+        if (capacity is not None and adoption is not None and adoption.managed
+                and (isinstance(capacity,ExecutorBusyError) or capacity.waitable)):
+            if on_deferred is not None:
+                admitted = [item for item in raw_results if isinstance(item, FetchResult)
+                    and item.status in {BackfillStatus.COMPLETED, BackfillStatus.PARTIAL}]
+                if admitted:
+                    await on_deferred(admitted)
+            raise capacity
 
         # Handle any unexpected exceptions returned by gather
         results: list[FetchResult] = []
@@ -410,6 +434,142 @@ class HistoricalFetcher:
 
     # ── Internal: Single task execution ──────────────────────
 
+    def _input_binding(self):
+        return (id(self._transport),id(self._cfg),id(self._ingestion_cfg),
+            id(self._custom_rate_limiter),self._cfg.fetch_batch_size,
+            self._ingestion_cfg.ccxt_fork_kline_enabled)
+
+    def _check_input_binding(self,binding):
+        if binding is not None and binding != self._input_binding():
+            from app.data_engine.storage.revisions import StaleAcquisition
+            raise StaleAcquisition('historical input owner binding changed')
+
+    async def _http_page(self, task, req, payload_owner=None, binding=None):
+        """Take execution capacity only for this physical page, never a subscriber."""
+        async with self._semaphore:
+            self._check_input_binding(binding)
+            with ExitStack() as payload:
+                if self.memory_budget is not None:
+                    payload.enter_context(self.memory_budget.reserve('history-backfill',
+                        min(req.limit or self._cfg.fetch_batch_size,1000)*PAGE_BYTES_PER_ROW+32*1024))
+                # Check without consuming before the endpoint gate. The
+                # consuming admission happens after the gate so a request
+                # queued behind an in-flight 418 cannot slip through with
+                # a stale reservation.
+                await self._rate_limit_admission(task, req)
+                physical = (callable(getattr(self._transport, "manages_physical_admission", None))
+                            and self._transport.manages_physical_admission(req))
+                exchange_semaphore = self._get_exchange_semaphore(task, req)
+                async with exchange_semaphore:
+                    quota_reservation: RateLimitReservation | None = None
+                    if self._custom_rate_limiter is None and not physical:
+                        quota_reservation = await self._rate_limit(task, req)
+                    req.quota_acquired = True
+                    req.defer_on_rate_limit = True
+                    req.quota_semaphore_held = True
+                    req.quota_reservation = quota_reservation
+                    try:
+                        raw_messages = await self._transport.http_fetch(req)
+                    except asyncio.CancelledError:
+                        if (
+                            quota_reservation is not None
+                            and not quota_reservation.settled
+                        ):
+                            quota_reservation.record_response(
+                                response_unknown=True,
+                            )
+                        raise
+                    except TransportError as exc:
+                        if (
+                            quota_reservation is not None
+                            and not quota_reservation.settled
+                        ):
+                            quota_reservation.record_response(
+                                status_code=exc.status_code,
+                                headers=exc.headers,
+                                body_code=exc.body_code,
+                                retry_after=exc.retry_after,
+                                fallback_cooldown_seconds=(
+                                    quota_reservation.rule.cooldown_seconds
+                                ),
+                            )
+                            exc.rate_limit_recorded = True
+                        await self._record_rate_limit_cooldown(task, exc, req)
+                        if self._is_rate_limited(exc):
+                            raise await self._rate_limit_deferred(
+                                task,
+                                req,
+                                reservation=quota_reservation,
+                            ) from exc
+                        raise
+                    except Exception:
+                        if (
+                            quota_reservation is not None
+                            and not quota_reservation.settled
+                        ):
+                            quota_reservation.record_response(
+                                response_unknown=True,
+                            )
+                        raise
+                    finally:
+                        if req.quota_reservation is quota_reservation:
+                            req.quota_reservation = None
+                    if (
+                        quota_reservation is not None
+                        and not quota_reservation.settled
+                    ):
+                        if raw_messages:
+                            message = raw_messages[0]
+                            quota_reservation.record_response(
+                                status_code=getattr(message, "http_status", None),
+                                headers=getattr(message, "http_headers", None),
+                                body_code=getattr(message, "http_body_code", None),
+                            )
+                        else:
+                            quota_reservation.record_response(status_code=200)
+                self._metrics.inc("http_pages_fetched")
+                self._metrics.inc("physical_messages_received",len(raw_messages))
+                self._check_input_binding(binding)
+                if payload_owner is not None:
+                    payload_owner.payload_lease = payload.pop_all()
+                else:
+                    retain_input_payload(payload)
+                return raw_messages
+
+    async def _fetch_page(self, task, request):
+        # Split only the qualified closed native forward page contract. Other
+        # adapters retain their existing pagination and response semantics.
+        from app.data_engine.interval_resolution import IntervalPurpose, IntervalResolver
+        from app.data_engine.storage.revisions import acquisition_permission_floor
+        spec = parse_interval_spec(task.interval)
+        identity = resolve_kline_series_identity(task.exchange,request.descriptor.series_identity)
+        binding = self._input_binding()
+        key = (*binding,task.exchange,task.market_type,task.symbol,
+            task.interval,*identity.storage_values,acquisition_permission_floor(),
+            bool(task.metadata.get('requires_trusted_finality')),request.history,
+            request.history_projection,self._cfg.fetch_batch_size)
+        async def exact():
+            return await self._inputs.acquire_exact(request,key=key,
+                fetch=lambda req,owner:self._http_page(task,req,payload_owner=owner,binding=binding))
+        if (task.exchange != 'binance' or task.market_type not in {'spot','futures'}
+                or spec is None or spec.alignment is not IntervalAlignment.FIXED_EPOCH
+                or spec.phase_ms or not 60_000 <= spec.nominal_ms <= 86_400_000
+                or request.start_ms is None or request.end_ms is None
+                or not 0 < request.limit <= 1000 or request.from_id is not None):
+            return await exact()
+        route = IntervalResolver().resolve(exchange=task.exchange,market_type=task.market_type,
+            interval=task.interval,purpose=IntervalPurpose.HISTORY)
+        if not route.is_native:
+            return await exact()
+        width = spec.nominal_ms
+        first = ((request.start_ms+width-1)//width)*width
+        last = min((request.end_ms//width)*width, first+(request.limit-1)*width)
+        if first > last or last+width > int(time.time()*1000):
+            return await exact()
+        part = replace(request,start_ms=first,end_ms=last,limit=(last-first)//width+1)
+        return await self._inputs.acquire(part,key=key,width=width,
+            fetch=lambda req,owner:self._http_page(task,req,payload_owner=owner,binding=binding))
+
     async def _fetch_task(
         self,
         task: BackfillTask,
@@ -423,18 +583,18 @@ class HistoricalFetcher:
 
     async def _fetch_rest_task(self, task: BackfillTask, *, consume=None) -> FetchResult | FetchReceipt:
         """Fetch all REST pages for a single task."""
-        async with self._semaphore:
-            if consume is None:
+        if consume is None:
+            with input_adoption(inherit=True):
                 return await self._fetch_rest_task_inner(task)
-            width, slots = stream_grid(task, self._cfg.fetch_batch_size)
-            allowance = self._cfg.fetch_batch_size * PAGE_BYTES_PER_ROW + (slots+7)//8 + 32*1024
-            scope = (self.memory_budget.reserve('history-backfill', allowance)
-                     if self.memory_budget is not None else nullcontext())
-            with scope:
-                return await self._fetch_rest_task_inner(task, collector=PageConsumer(
-                    task, self._cfg.fetch_batch_size, consume))
+        width, slots = stream_grid(task, self._cfg.fetch_batch_size)
+        allowance = (slots+7)//8 + 32*1024  # page payload is admitted by its physical owner
+        scope = (self.memory_budget.reserve('history-backfill', allowance)
+                 if self.memory_budget is not None else nullcontext())
+        with scope, input_adoption() as adoption:
+            return await self._fetch_rest_task_inner(task, collector=PageConsumer(
+                task, self._cfg.fetch_batch_size, consume), adoption=adoption)
 
-    async def _fetch_rest_task_inner(self, task: BackfillTask, *, collector=None) -> FetchResult | FetchReceipt:
+    async def _fetch_rest_task_inner(self, task: BackfillTask, *, collector=None, adoption=None) -> FetchResult | FetchReceipt:
         """Inner fetch logic with pagination and retry."""
         start_time = time.monotonic()
         all_bars: list[FetchedBar] = []
@@ -521,82 +681,9 @@ class HistoricalFetcher:
 
             while retry_count < max_attempts:
                 try:
-                    # Check without consuming before the endpoint gate. The
-                    # consuming admission happens after the gate so a request
-                    # queued behind an in-flight 418 cannot slip through with
-                    # a stale reservation.
-                    await self._rate_limit_admission(task, req)
-                    physical = (callable(getattr(self._transport, "manages_physical_admission", None))
-                                and self._transport.manages_physical_admission(req))
-                    exchange_semaphore = self._get_exchange_semaphore(task, req)
-                    async with exchange_semaphore:
-                        quota_reservation: RateLimitReservation | None = None
-                        if self._custom_rate_limiter is None and not physical:
-                            quota_reservation = await self._rate_limit(task, req)
-                        req.quota_acquired = True
-                        req.defer_on_rate_limit = True
-                        req.quota_semaphore_held = True
-                        req.quota_reservation = quota_reservation
-                        try:
-                            raw_messages = await self._transport.http_fetch(req)
-                        except asyncio.CancelledError:
-                            if (
-                                quota_reservation is not None
-                                and not quota_reservation.settled
-                            ):
-                                quota_reservation.record_response(
-                                    response_unknown=True,
-                                )
-                            raise
-                        except TransportError as exc:
-                            if (
-                                quota_reservation is not None
-                                and not quota_reservation.settled
-                            ):
-                                quota_reservation.record_response(
-                                    status_code=exc.status_code,
-                                    headers=exc.headers,
-                                    body_code=exc.body_code,
-                                    retry_after=exc.retry_after,
-                                    fallback_cooldown_seconds=(
-                                        quota_reservation.rule.cooldown_seconds
-                                    ),
-                                )
-                                exc.rate_limit_recorded = True
-                            await self._record_rate_limit_cooldown(task, exc, req)
-                            if self._is_rate_limited(exc):
-                                raise await self._rate_limit_deferred(
-                                    task,
-                                    req,
-                                    reservation=quota_reservation,
-                                ) from exc
-                            raise
-                        except Exception:
-                            if (
-                                quota_reservation is not None
-                                and not quota_reservation.settled
-                            ):
-                                quota_reservation.record_response(
-                                    response_unknown=True,
-                                )
-                            raise
-                        finally:
-                            if req.quota_reservation is quota_reservation:
-                                req.quota_reservation = None
-                        if (
-                            quota_reservation is not None
-                            and not quota_reservation.settled
-                        ):
-                            if raw_messages:
-                                message = raw_messages[0]
-                                quota_reservation.record_response(
-                                    status_code=getattr(message, "http_status", None),
-                                    headers=getattr(message, "http_headers", None),
-                                    body_code=getattr(message, "http_body_code", None),
-                                )
-                            else:
-                                quota_reservation.record_response(status_code=200)
-                    self._metrics.inc("http_pages_fetched")
+                    raw_messages = await self._fetch_page(task, req)
+
+                    self._metrics.inc("logical_pages_delivered")
 
                     for msg in raw_messages:
                         if isinstance(msg.payload, dict) and msg.payload.get("trade_candle_page") == f"{task.exchange}.{task.market_type}":
@@ -635,6 +722,9 @@ class HistoricalFetcher:
                     if now + exc.retry_after_seconds > page_budget_deadline:
                         raise
                     await asyncio.sleep(exc.retry_after_seconds)
+
+                except (MemoryBudgetExceeded,ExecutorBusyError):
+                    raise
 
                 except TransportError as exc:
                     retry_count += 1
@@ -705,13 +795,15 @@ class HistoricalFetcher:
             else:
                 try:
                     await collector.accept(page_bars)
-                except RateLimitDeferred:
+                except (RateLimitDeferred, MemoryBudgetExceeded, ExecutorBusyError):
                     raise
                 except Exception as exc:
                     errors.append(f'page_consumption_failed: {exc}')
                     break
                 collector.absorb_errors(errors)
                 errors = []
+                if adoption is not None:
+                    adoption.acknowledge()
             await self._fire_progress(task, collector.raw_count if collector is not None else len(all_bars), estimated_total)
 
             current_request = pagination_policy.next_request(

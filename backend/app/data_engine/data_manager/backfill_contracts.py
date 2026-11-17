@@ -91,6 +91,28 @@ class RepairRetryDeferred(Exception):
         self.bucket_key = None
 
 
+class RepairExecutorDeferred(RepairRetryDeferred):
+    """The existing bounded executor refused admission; yield and retry."""
+    def __init__(self, attempt):
+        super().__init__(0.05, attempt)
+        self.reason = 'local_executor_admission'
+
+
+class RepairReplanDeferred(RepairRetryDeferred):
+    """A rejected optimistic view needs a fresh read, with the same permission."""
+    def __init__(self, attempt):
+        super().__init__(0.05, attempt)
+        self.reason = 'local_revision_replan'
+
+
+class RepairCapacityDeferred(RepairRetryDeferred):
+    """A lower resource owner parks work without consuming a failure attempt."""
+    def __init__(self, error, attempt):
+        super().__init__(0, attempt)
+        self.reason = "local_memory_admission"
+        self.wait_for_capacity = error.wait_for_capacity
+
+
 RepairSeries = tuple[str, str, str, str] | tuple[str, str, str, str, KlineSeriesIdentity]
 
 

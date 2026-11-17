@@ -12,6 +12,7 @@ from itertools import islice
 
 from app.core.bounded_executor import ExecutorBusyError
 from app.core.executors import run_storage
+from app.data_engine.backfill.input_subscriptions import InputAdoption, current_input_adoption
 from app.data_engine.history.calendar import (
     TradingCalendar,
     expected_bucket_end_ms,
@@ -63,6 +64,9 @@ from .backfill_contracts import (
     RepairReportSummary,
     RepairRequest,
     RepairRetryDeferred,
+    RepairCapacityDeferred,
+    RepairReplanDeferred,
+    RepairExecutorDeferred,
     RepairChunkSplit,
     RepairWrittenRangeSummary,
     ScanReport,
@@ -174,7 +178,7 @@ class BackfillCoordinator:
         max_retries: int = 3,
         base_delay_seconds: float = 5.0,
         gap_ledger: GapLedgerLike | None = None,
-        max_concurrency: int = 4,
+        max_concurrency: int = 0,
         chunk_bars: int = 1000,
         history_service: HistoryAvailabilityService | None = None,
         history_policy_resolver: HistoryPolicyResolver | None = None,
@@ -226,6 +230,7 @@ class BackfillCoordinator:
         self._shutdown = False
         self._scheduler = BackfillScheduler(
             execute=self._run_with_retries,
+            execution_scope_factory=InputAdoption,
             future_for=self._future_for,
             complete=self._complete,
             finalize=self._ledger_finalize_parent,
@@ -2477,6 +2482,19 @@ class BackfillCoordinator:
 
         for attempt in range(next_attempt, self._max_retries + 1):
             try:
+                inputs = current_input_adoption()
+                if inputs is not None and inputs.permission_floor is None:
+                    floor = request.metadata.get('acquisition_revision')
+                    store = getattr(self._storage,'revision_store',None)
+                    if floor is None and callable(getattr(store,'head',None)):
+                        floor = await run_storage(store.head)
+                    inputs.remember_permission(floor)
+                if inputs is not None and inputs.permission_floor is not None:
+                    # Persist original deletion permission before physical
+                    # acquisition. Retried read heads may refresh, permission
+                    # may not. The engine still captures and checks its views.
+                    request.metadata.setdefault('acquisition_revision',inputs.permission_floor)
+                    scheduled_request.metadata.setdefault('acquisition_revision',inputs.permission_floor)
                 await self._ledger_mark_started(request, attempt=attempt)
                 run_engine = (self._engine.run_receipt
                     if callable(getattr(type(self._engine),'run_receipt',None)) else self._engine.run)
@@ -2497,7 +2515,19 @@ class BackfillCoordinator:
                     **({"native_progress": scheduled_request._native_progress}
                        if scheduled_request._native_progress is not None else {}),
                 )
+                failures = getattr(getattr(report,'reconcile_result',None),'failed_batches',()) or ()
+                revision_conflict = ((getattr(report,'metadata',{}) or {}).get('revision_conflict') is True
+                    or any(failure.get('revision_conflict') is True for failure in failures))
+                if inputs is not None and not revision_conflict:
+                    inputs.acknowledge()
                 await self._notify_source_storage(request, report)
+                can_replan = ((getattr(report,'metadata',{}) or {}).get('revision_replan') is True
+                    or bool(failures) and all(failure.get('revision_replan') is True for failure in failures))
+                if can_replan and not any(getattr(item,'errors',())
+                        for item in getattr(report,'fetch_results',()) or ()):
+                    await self._ledger_mark_retry_wait(request, attempt=max(0,attempt-1),
+                        error='local_revision_replan', delay_seconds=0.05)
+                    raise RepairReplanDeferred(attempt-1)
                 if (self._is_failed(report.status) and request.metadata.get('required_history_composition')
                         and request.end_ms > request.start_ms and not getattr(report, 'fetch_results', ())
                         and (getattr(report, 'metadata', {}) or {}).get('mixed_plan_fallback')
@@ -2639,6 +2669,18 @@ class BackfillCoordinator:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
+                from app.data_engine.memory_budget import MemoryBudgetExceeded
+                from app.core.bounded_executor import ExecutorBusyError
+                if isinstance(exc,ExecutorBusyError):
+                    await self._ledger_mark_retry_wait(request, attempt=max(0,attempt-1),
+                        error='local_executor_admission', delay_seconds=0.05)
+                    raise RepairExecutorDeferred(attempt-1) from exc
+                if isinstance(exc, MemoryBudgetExceeded) and exc.waitable:
+                    if (inputs := current_input_adoption()) is not None:
+                        inputs.acknowledge()
+                    await self._ledger_mark_retry_wait(request, attempt=max(0, attempt-1),
+                        error="local_memory_admission", delay_seconds=0)
+                    raise RepairCapacityDeferred(exc, attempt-1) from exc
                 last_error = str(exc)
                 logger.error(
                     "Backfill task error for %s@%s attempt %d/%d: %s",

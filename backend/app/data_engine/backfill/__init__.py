@@ -95,6 +95,7 @@ from .native_progress import NativeBackfillDeferred, NativeBackfillProgress
 from .reconciler import Reconciler
 from .publisher import RepairPublisher
 from .fetch_stream import stream_plan, StreamReconcile, StreamBackfillDeferred
+from .input_subscriptions import adopts_inputs
 
 logger = logging.getLogger("backfill.Engine")
 
@@ -281,6 +282,7 @@ class BackfillEngine:
 
     @fenced_acquisition
     @budgeted_work
+    @adopts_inputs
     async def run(
         self,
         symbol: str,
@@ -487,7 +489,8 @@ class BackfillEngine:
             status = BackfillStatus.FETCHING
             await prepare_native_history_views(self._storage, plan.tasks)
             await prepare_derived_targets(self._storage, plan, allow_standard=(
-                self.reconciler._custom_aggregator is None and self.reconciler._custom_dedup_fn is None
+                self._storage is not None and type(self.planner) is BackfillPlanner
+                and self.reconciler._custom_aggregator is None and self.reconciler._custom_dedup_fn is None
                 and self._cfg.custom_alignment_mode == 'epoch' and not self._cfg.alignment_epoch_ms
                 and self.planner._custom_alignment_fn is None and self.planner._custom_decomposition_fn is None))
             # Archive routing decides what a task really writes. Capture those
@@ -613,7 +616,19 @@ class BackfillEngine:
                 raise StreamBackfillDeferred(exc,streamed.result) from exc
             raise
         except Exception as exc:
+            from .input_subscriptions import current_input_adoption
+            scope = current_input_adoption()
+            from app.core.bounded_executor import ExecutorBusyError
+            if (scope is not None and scope.managed and (isinstance(exc,ExecutorBusyError)
+                    or isinstance(exc, MemoryBudgetExceeded) and exc.waitable)):
+                if plan is not None:
+                    plan.mixed_binding = None
+                raise
             status = BackfillStatus.FAILED
+            if isinstance(exc,StaleAcquisition):
+                metadata['revision_conflict'] = True
+                if exc.can_replan:
+                    metadata['revision_replan'] = True
             errors.append(str(exc))
             self._metrics.inc("run_errors")
             logger.error(

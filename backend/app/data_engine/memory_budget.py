@@ -12,6 +12,7 @@ from functools import wraps
 from collections.abc import Mapping
 from dataclasses import fields, is_dataclass
 import sys
+import asyncio
 import threading
 
 
@@ -24,7 +25,18 @@ class RetainedMetadata:
 
 
 class MemoryBudgetExceeded(RuntimeError):
-    pass
+    def __init__(self, message, *, budget=None, owner=None, bytes_needed=None):
+        super().__init__(message)
+        self.budget, self.owner, self.bytes_needed = budget, owner, bytes_needed
+
+    @property
+    def waitable(self):
+        return (self.budget is not None and self.owner in self.budget._owners
+                and 0 < self.bytes_needed <= min(self.budget.total_bytes,
+                    self.budget._owners[self.owner][0]))
+
+    async def wait_for_capacity(self):
+        await self.budget.wait_for_capacity(self.owner, self.bytes_needed)
 
 
 class MemoryReservation:
@@ -50,6 +62,7 @@ class MemoryReservation:
             self.budget._reserved[self.owner] -= self.size
             self.size = 0
             self.active = False
+            self.budget._notify_capacity()
 
 
 _work_leases = ContextVar("market_data_memory_leases", default=None)
@@ -133,6 +146,7 @@ class MemoryBudget:
         self._reserved = {}
         self._lock = threading.RLock()
         self.rejections = 0
+        self._capacity_waiters = set()
 
     def register(self, owner, *, limit_bytes, usage, roots=None):
         """usage returns cheap estimated bytes/counts; roots is diagnostic only."""
@@ -195,7 +209,37 @@ class MemoryBudget:
             if not shortfall or max(self._shortfall(owner, delta)) == 0:
                 return
         self.rejections += 1
-        raise MemoryBudgetExceeded(f"{operation} admission deferred for {owner}")
+        raise MemoryBudgetExceeded(f"{operation} admission deferred for {owner}",
+            budget=self, owner=owner, bytes_needed=delta)
+
+    def _notify_capacity(self):
+        for loop, event in tuple(self._capacity_waiters):
+            if not loop.is_closed():
+                loop.call_soon_threadsafe(event.set)
+
+    async def wait_for_capacity(self, owner, bytes_needed):
+        """Wait outside execution slots; admission is checked again on use.
+
+        Reservation releases wake waiters across storage threads. The bounded
+        timeout also observes owner cache eviction without traversing its heap.
+        """
+        loop, event = asyncio.get_running_loop(), asyncio.Event()
+        waiter = (loop, event)
+        with self._lock:
+            self._capacity_waiters.add(waiter)
+        try:
+            while True:
+                with self._lock:
+                    event.clear()
+                    if max(self._shortfall(owner, bytes_needed)) <= 0:
+                        return
+                try:
+                    await asyncio.wait_for(event.wait(), 1.0)
+                except TimeoutError:
+                    pass
+        finally:
+            with self._lock:
+                self._capacity_waiters.discard(waiter)
 
     @contextmanager
     def reserve(self, owner, bytes_needed, *, reclaim=None, reclaim_shared=True):
@@ -222,3 +266,4 @@ class MemoryBudget:
                 self._reserved[owner] -= lease.size
                 lease.size = 0
                 lease.active = False
+                self._notify_capacity()

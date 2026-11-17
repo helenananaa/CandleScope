@@ -434,6 +434,14 @@ def pending(descriptor: StreamDescriptor, limit: int = 500, *, include_history=F
         return result
 
 
+def input_receipts_current(refs: list[dict]) -> bool:
+    """Read-only preflight; projection still validates inside its transaction."""
+    with closing(klines_repo._connect()) as conn:
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='kline_source_heads'").fetchone() is None:
+            return False
+        return references_current(conn, refs)
+
+
 def references_current(conn, refs: list[dict]) -> bool:
     for ref in refs:
         row = conn.execute(

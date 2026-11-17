@@ -916,13 +916,13 @@ STORAGE_THREAD_PENDING = int(os.getenv("STORAGE_THREAD_PENDING", "128"))
 BAR_DELIVERY_ACK_BATCH_SIZE = max(1, min(64, int(os.getenv("BAR_DELIVERY_ACK_BATCH_SIZE", "16"))))
 PREPARATION_THREAD_WORKERS = int(os.getenv("PREPARATION_THREAD_WORKERS", "2"))
 PREPARATION_THREAD_PENDING = int(os.getenv("PREPARATION_THREAD_PENDING", "64"))
-# Backfill chunks perform SQLite projection and reconciliation in the same
-# process as the async API. Keep the coordinator serialized by default so a
-# 16-series repair burst cannot occupy every storage worker and starve control
-# plane/WebSocket scheduling. Endpoint fetchers retain their own rate limits.
+# Independent logical demand must reach input subscription even while another
+# chart awaits network. Physical fetchers, bounded executors, memory admission
+# and revision fences retain their respective execution limits. A positive
+# override explicitly caps logical jobs for alternate embeddings.
 BACKFILL_COORDINATOR_MAX_CONCURRENCY = max(
-    1,
-    int(os.getenv("BACKFILL_COORDINATOR_MAX_CONCURRENCY", "1")),
+    0,
+    int(os.getenv("BACKFILL_COORDINATOR_MAX_CONCURRENCY", "0")),
 )
 
 # Indicator history reuse.  These caches only hold data derived from K-lines;

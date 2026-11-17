@@ -39,7 +39,7 @@ class TargetView:
     def check(self, conn, scope):
         check_deletions(conn, scope, self.key, self.input_key)
         if fingerprint(conn, self.key, self.start, self.end) != self.digest:
-            raise StaleAcquisition('derived target changed during acquisition')
+            raise StaleAcquisition('derived target changed during acquisition', details={'reason':'target_window_changed'})
 
 
 @dataclass
@@ -52,7 +52,7 @@ class ComputationView:
     def check(self, conn, scope):
         self.target.check(conn, scope)
         if fingerprint(conn, self.target.input_key, self.start, self.end) != self.digest:
-            raise StaleAcquisition('derived canonical inputs changed during computation')
+            raise StaleAcquisition('derived canonical inputs changed during computation', details={'reason':'canonical_input_changed'})
 
 
 def capture_targets(store, scope, plan):

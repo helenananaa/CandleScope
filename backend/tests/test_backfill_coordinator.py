@@ -146,6 +146,7 @@ def test_backfill_coordinator_merges_pending_requests_for_same_series() -> None:
             engine=engine,
             loop=asyncio.get_running_loop(),
             base_delay_seconds=0,
+            max_concurrency=1,  # Exercise an explicitly limited embedding.
         )
 
         first_id = coord.request(_request(0, 100_000, request_id="current"))
@@ -467,6 +468,7 @@ def test_backfill_coordinator_waits_for_cross_thread_merged_request() -> None:
             engine=engine,
             loop=asyncio.get_running_loop(),
             base_delay_seconds=0,
+            max_concurrency=1,  # Exercise an explicitly limited embedding.
         )
 
         coord.request(_request(0, 100_000, request_id="current"))
@@ -617,6 +619,7 @@ def test_backfill_coordinator_preserves_highest_priority_when_merging_pending() 
             engine=engine,
             loop=asyncio.get_running_loop(),
             base_delay_seconds=0,
+            max_concurrency=1,  # Exercise an explicitly limited embedding.
         )
 
         coord.request(_request(0, 60_000, request_id="current"))
@@ -1257,6 +1260,7 @@ def test_backfill_scheduler_wakes_after_rate_limit_without_new_submit() -> None:
             engine=engine,
             loop=asyncio.get_running_loop(),
             base_delay_seconds=0,
+            max_concurrency=1,  # Exercise an explicitly limited embedding.
         )
         request = _request(0, 60_000, request_id="rate-limited")
         bucket = coord._scheduler._bucket_for(request)
@@ -5701,4 +5705,197 @@ def test_periodic_input_exclusion_preserves_tail_and_manual_interior_audits():
         await coordinator.audit_storage_series([source], repair=False)
         assert len(storage.calls) == 1 and 'end_ms' not in storage.calls[0]
         await coordinator.shutdown()
+    asyncio.run(run())
+
+
+def test_memory_capacity_wait_yields_worker_and_does_not_exhaust_retries():
+    from app.data_engine.memory_budget import MemoryBudget
+
+    async def run():
+        budget = MemoryBudget(100)
+        budget.register('history-backfill', limit_bytes=100, usage=lambda: {'estimated_bytes': 0})
+        held = budget.reserve('history-backfill', 100)
+        held.__enter__()
+        ledger = _Ledger()
+        calls = []
+        class Engine:
+            async def run(self, **kwargs):
+                calls.append(kwargs['symbol'])
+                if kwargs['symbol'] == 'BTCUSDT':
+                    with budget.reserve('history-backfill', 100):
+                        return _RepairReport(status='completed')
+                return _RepairReport(status='completed')
+        coord = BackfillCoordinator(storage=_Storage(), engine=Engine(), gap_ledger=ledger,
+            bars_backfilled=_DataManager().on_bars_backfilled, emit_event=_EventBus().emit,
+            max_concurrency=1, max_retries=1, base_delay_seconds=0)
+        tasks = []
+        try:
+            tasks.append(asyncio.create_task(coord.request_and_wait(_request(0,0))))
+            await _wait_until(lambda: len(budget._capacity_waiters) == 1, timeout=5)
+            assert coord.snapshot()['running_chunks'] == 0
+            eth = _request(0,0)
+            eth.symbol = 'ETHUSDT'
+            tasks.append(asyncio.create_task(coord.request_and_wait(eth)))
+            assert (await asyncio.wait_for(tasks[-1],1)).status == 'completed'
+            await asyncio.sleep(.05)
+            assert calls == ['BTCUSDT','ETHUSDT'], 'capacity waiting must not replan in a busy loop'
+            # Release from the storage-thread side of the budget owner.
+            await asyncio.to_thread(held.__exit__, None, None, None)
+            result = await asyncio.wait_for(tasks[0],1)
+            assert result.status == 'completed' and result.attempts == 1
+            assert [value['attempt'] for name,value in ledger.events if name == 'started'] == [1,1,1]
+            assert not budget._capacity_waiters
+        finally:
+            held.__exit__(None,None,None)
+            await coord.shutdown()
+            await asyncio.gather(*tasks, return_exceptions=True)
+    asyncio.run(run())
+
+
+def test_cancel_capacity_wait_does_not_resurrect_or_leak_waiters():
+    from app.data_engine.memory_budget import MemoryBudget
+    async def run():
+        budget = MemoryBudget(100)
+        budget.register('history-backfill', limit_bytes=100, usage=lambda: {'estimated_bytes': 0})
+        class Engine:
+            calls = 0
+            async def run(self, **kwargs):
+                self.calls += 1
+                with budget.reserve('history-backfill', 100):
+                    return _RepairReport(status='completed')
+        engine = Engine()
+        coord = BackfillCoordinator(storage=_Storage(), engine=engine,
+            bars_backfilled=_DataManager().on_bars_backfilled, emit_event=_EventBus().emit,
+            max_retries=1, base_delay_seconds=0)
+        with budget.reserve('history-backfill', 100):
+            task = asyncio.create_task(coord.request_and_wait(_request(0,0)))
+            await _wait_until(lambda: len(budget._capacity_waiters) == 1, timeout=5)
+            await coord.shutdown()
+            assert (await task).error == 'cancelled'
+        await asyncio.sleep(.05)
+        assert not budget._capacity_waiters and engine.calls == 1
+    asyncio.run(run())
+
+
+def test_default_parent_chunks_subscribe_concurrently_and_finalize_once_after_all_adopt():
+    async def run():
+        first_started, release = asyncio.Event(), asyncio.Event()
+        calls, finalized = [], []
+        class Engine:
+            async def run(self, **kwargs):
+                opened=kwargs['range_start_ms']
+                calls.append(opened)
+                if opened==0:
+                    first_started.set()
+                    await release.wait()
+                return _RepairReport(status='completed')
+        coord=BackfillCoordinator(storage=_Storage(),engine=Engine(),chunk_bars=1,
+            bars_backfilled=_DataManager().on_bars_backfilled,emit_event=_EventBus().emit,
+            base_delay_seconds=0)
+        async def finalize(request,outcome):
+            finalized.append(outcome)
+        coord._scheduler._finalize=finalize
+        task=asyncio.create_task(coord.request_and_wait(_request(0,120_000)))
+        try:
+            await asyncio.wait_for(first_started.wait(),10)
+            await _wait_until(lambda: len(calls)==3)
+            await asyncio.sleep(.02)
+            assert sorted(calls)==[0,60_000,120_000]
+            assert not task.done() and not finalized
+            release.set()
+            assert (await asyncio.wait_for(task,2)).status=='completed'
+            assert len(finalized)==1 and not coord.snapshot()['active']
+        finally:
+            release.set()
+            await coord.shutdown()
+            await asyncio.gather(task,return_exceptions=True)
+    asyncio.run(run())
+
+
+def test_parallel_parent_failure_drains_sibling_ownership_before_single_finalization():
+    async def run():
+        release=asyncio.Event()
+        calls,finalized=[],[]
+        class Engine:
+            async def run(self,**kwargs):
+                opened=kwargs['range_start_ms'];calls.append(opened)
+                if opened==0:
+                    return _RepairReport(status='failed',errors=['original failure'])
+                await release.wait()
+                return _RepairReport(status='completed')
+        coord=BackfillCoordinator(storage=_Storage(),engine=Engine(),chunk_bars=1,max_retries=1,
+            bars_backfilled=_DataManager().on_bars_backfilled,emit_event=_EventBus().emit,
+            base_delay_seconds=0)
+        async def finalize(request,outcome):finalized.append(outcome)
+        coord._scheduler._finalize=finalize
+        # Newest chunks start first and remain in flight when the oldest fails.
+        request=_request(0,120_000);request.reason='initial_history'
+        task=asyncio.create_task(coord.request_and_wait(request))
+        try:
+            await _wait_until(lambda: len(calls)==3)
+            await asyncio.sleep(.02)
+            assert not task.done() and not finalized
+            release.set()
+            result=await asyncio.wait_for(task,2)
+            assert result.status=='failed' and result.error=='original failure'
+            assert len(finalized)==1 and not coord.snapshot()['active']
+        finally:
+            release.set()
+            await coord.shutdown()
+            await asyncio.gather(task,return_exceptions=True)
+    asyncio.run(run())
+
+
+def test_cancelling_parallel_parent_waits_for_every_subscription_to_release():
+    async def run():
+        active=set(); cancelled=[]; finalized=[]
+        class Engine:
+            async def run(self,**kwargs):
+                opened=kwargs['range_start_ms'];active.add(opened)
+                try:
+                    await asyncio.Event().wait()
+                finally:
+                    active.remove(opened);cancelled.append(opened)
+        coord=BackfillCoordinator(storage=_Storage(),engine=Engine(),chunk_bars=1,
+            bars_backfilled=_DataManager().on_bars_backfilled,emit_event=_EventBus().emit,
+            base_delay_seconds=0)
+        async def finalize(request,outcome):
+            assert not active
+            finalized.append(outcome)
+        coord._scheduler._finalize=finalize
+        request=_request(0,120_000)
+        request.metadata['demand_owner_id']='parallel-chart'
+        task=asyncio.create_task(coord.request_and_wait(request))
+        try:
+            await _wait_until(lambda: len(active)==3,timeout=10)
+            await coord.release_demand(request.request_id,owner_id='parallel-chart')
+            result=await asyncio.wait_for(task,2)
+            assert result.status=='cancelled' and sorted(cancelled)==[0,60_000,120_000]
+            assert len(finalized)==1
+        finally:
+            await coord.shutdown()
+            await asyncio.gather(task,return_exceptions=True)
+    asyncio.run(run())
+
+
+def test_local_revision_replans_keep_demand_alive_without_renewing_permission():
+    async def run():
+        seen=[]
+        class Engine:
+            async def run(self,**kwargs):
+                seen.append(kwargs['metadata']['acquisition_revision'])
+                if len(seen)<=7:
+                    return SimpleNamespace(status='failed',errors=['changed view'],
+                        metadata={'revision_conflict':True,'revision_replan':True},reconcile_result=None)
+                return _RepairReport(status='completed')
+        coord=BackfillCoordinator(storage=_Storage(),engine=Engine(),max_retries=1,
+            bars_backfilled=_DataManager().on_bars_backfilled,emit_event=_EventBus().emit,
+            base_delay_seconds=0)
+        request=_request(0,0);request.metadata['acquisition_revision']=3
+        try:
+            result=await asyncio.wait_for(coord.request_and_wait(request),10)
+            assert result.status=='completed' and result.attempts==1
+            assert seen==[3]*8
+        finally:
+            await coord.shutdown()
     asyncio.run(run())
