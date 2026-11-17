@@ -24,6 +24,7 @@ from app.plugin_security_v2.storage import (
 )
 
 from .bundle import CHUNK, MAX_PACKAGE_BYTES, VerifiedPackage, verify_package
+from .paths import is_link
 
 REGISTRY_SCHEMA = "candlescope.unified-registry/1"
 TRANSACTION_SCHEMA = "candlescope.unified-transaction/1"
@@ -79,8 +80,10 @@ class PackageStore:
         for part in (None, *relative.parts):
             if part is not None:
                 current = current / part
-            if current.is_symlink():
-                raise LifecycleError("store paths must not contain symlinks")
+            if is_link(current):
+                raise LifecycleError(
+                    "store paths must not contain symlinks or reparse points"
+                )
             if current != path and current.exists() and not current.is_dir():
                 raise LifecycleError("store path parent is not a directory")
 

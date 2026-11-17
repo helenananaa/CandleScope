@@ -12,6 +12,7 @@ import sys
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from app.plugin_lifecycle import (
@@ -566,3 +567,40 @@ def test_cli_build_stage_review_and_desired_activation_are_explicit_and_inert(tm
     run("uninstall", "--root", root, "example.workbench", "--expected-revision", "2")
     assert run("list", "--root", root)["result"]["plugins"] == {}
     assert not (root / "backend.py").exists()
+
+
+@pytest.mark.parametrize("target_name", ["", "packages"])
+def test_windows_reparse_metadata_is_refused_even_when_not_a_posix_symlink(
+    tmp_path, monkeypatch, target_name
+):
+    root = tmp_path / "store"
+    root.mkdir()
+    (root / "packages").mkdir()
+    target = root / target_name
+    original = Path.lstat
+
+    def reparse(path, *args, **kwargs):
+        metadata = original(path, *args, **kwargs)
+        if path == target:
+            return SimpleNamespace(st_mode=metadata.st_mode, st_file_attributes=0x400)
+        return metadata
+
+    monkeypatch.setattr(Path, "lstat", reparse)
+    with pytest.raises(LifecycleError, match="reparse"):
+        PackageStore(root).snapshot()
+    assert not (root / "registry.json").exists()
+
+
+def test_package_reparse_metadata_is_refused_before_any_read(tmp_path, monkeypatch):
+    source = package(tmp_path)
+    original = Path.lstat
+
+    def reparse(path, *args, **kwargs):
+        metadata = original(path, *args, **kwargs)
+        if path == source:
+            return SimpleNamespace(st_mode=metadata.st_mode, st_file_attributes=0x400)
+        return metadata
+
+    monkeypatch.setattr(Path, "lstat", reparse)
+    with pytest.raises(PackageError, match="regular file"):
+        verify_package(source)

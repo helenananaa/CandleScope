@@ -235,14 +235,14 @@ python3 backend/scripts/unified_plugin.py list --root /tmp/candlescope-unified-d
 ```
 
 构建输出必须位于源目录之外，不覆盖已有文件。根路径、内部目录/registry/journal/
-lock 和包文件拒绝符号链接。CLI 的批准字串只是对审阅字节和信任模式的绑定，不是
+lock 和包文件拒绝符号链接或 Windows reparse point。CLI 的批准字串只是对审阅字节和信任模式的绑定，不是
 管理身份验证；生产接入仍须使用原 loopback/Origin/CSRF/会话和权限控制。
 
 第 2 批测试位于 `backend/tests/test_unified_plugin_store.py`，用真实 ZIP/文件系统、
 锁竞争、提交前后 `os._exit` 子进程终止及新 owner 重开检验恢复。不是安装版应用
 保存重启证据；各平台 CI 与 macOS/Windows 原生资格继续分别记录。
 
-本地最终源码 **38 项通过**（Python 3.12.15 / macOS arm64）；一次预期的重复 ZIP
+本地最终源码 **41 项通过**（Python 3.12.15 / macOS arm64，含 Windows reparse 元数据模拟）；一次预期的重复 ZIP
 文件名警告来自恶意归档测试。变更 Python Ruff、workflow YAML 解析及 diff whitespace
 检查通过。CI 矩阵增加同一套存储测试，尚不据此填写其他平台通过。
 从 `backend/` 运行：`PYTHONPATH=. python3 -m pytest -q tests/test_unified_plugin_store.py`。

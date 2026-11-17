@@ -20,6 +20,8 @@ from candlescope_plugin_sdk.platform_v2 import (
 from candlescope_plugin_sdk.unified import Manifest, ManifestError
 from candlescope_plugin_sdk.unified.manifest import MAX_MANIFEST_BYTES, package_path
 
+from .paths import is_link
+
 BUNDLE_SCHEMA = "candlescope.unified-bundle/1"
 MAX_PACKAGE_BYTES = 512 * 1024 * 1024
 MAX_TOTAL_BYTES = 1024 * 1024 * 1024
@@ -116,7 +118,7 @@ def verify_package(path: Path | str) -> VerifiedPackage:
     No extraction, dependency installation, source import or probe execution.
     """
     path = Path(path)
-    if path.is_symlink() or not path.is_file():
+    if is_link(path) or not path.is_file():
         raise PackageError("package must be a regular file, not a symlink or device")
     try:
         with path.open("rb") as stream:
@@ -243,19 +245,19 @@ def build_package(source: Path | str, destination: Path | str) -> VerifiedPackag
     are never replaced; source symlinks and pre-existing envelopes are rejected.
     """
     source, destination = Path(source), Path(destination)
-    if source.is_symlink() or not source.is_dir():
+    if is_link(source) or not source.is_dir():
         raise PackageError("package source must be a regular directory")
     source = source.resolve()
     destination = destination.absolute()
     if destination.resolve().is_relative_to(source):
         raise PackageError("package output must be outside its source directory")
-    if destination.exists() or destination.is_symlink():
+    if destination.exists() or is_link(destination):
         raise PackageError("package output already exists")
     files = []
     for scanned, path in enumerate(source.rglob("*"), 1):
         if scanned > MAX_FILES * 2:
             raise PackageError("source tree exceeds its path budget")
-        if path.is_symlink():
+        if is_link(path):
             raise PackageError("package source must not contain symlinks")
         if path.is_dir():
             continue
