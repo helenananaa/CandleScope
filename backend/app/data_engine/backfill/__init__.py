@@ -248,7 +248,7 @@ class BackfillEngine:
         """Return a JSON-serializable snapshot of the entire engine state."""
         budget = getattr(self,'memory_budget',None)
         memory = budget.snapshot() if budget is not None else {}
-        admission = {key:memory[key] for key in ('work_grants','work_waits','work_resizes','work_waiters')
+        admission = {key:memory[key] for key in ('work_grants','work_waits','work_resizes','work_waiters','work_phase_bytes')
                      if key in memory}
         owner = memory.get('owners',{}).get('history-backfill',{})
         admission.update(reserved_bytes=owner.get('reserved_bytes',0),limit_bytes=owner.get('limit_bytes',0))
@@ -466,14 +466,13 @@ class BackfillEngine:
                 await self.publisher.publish(report)
                 return report
 
-            from .resource_scope import admit_execution
+            from .resource_scope import admit_execution,admit_reconcile,streaming_plan,normalized_bytes
+            page_mode=streaming_plan(self,plan,_receipt_mode,native_progress)
             try:
-                await admit_execution(self,plan)
+                await admit_execution(self,plan,streaming=page_mode)
             except MemoryBudgetExceeded:
                 metadata['mixed_plan_fallback'] = 'memory_work_budget'
                 raise
-            reserve_work(getattr(self, "memory_budget", None), "history-backfill",
-                         max(1, plan.estimated_bars, plan.metadata.get("mixed_source_rows", 0)) * 2048)
             # ── Phase 3: Fetch ──
             # Set market_type on all tasks so the fetcher routes correctly
             for task in plan.tasks:
@@ -488,14 +487,19 @@ class BackfillEngine:
                     and (bybit_derived_gap or metadata.get("requester") == "warm_start_custom_tail"
                          or _is_read_repair(metadata))):
                 await self._reuse_derived_components(plan, metadata, bybit_gap=bybit_derived_gap)
-            page_mode = (_receipt_mode and native_progress is None and stream_plan(plan,self._cfg.fetch_batch_size)
-                         and getattr(self._storage,'revision_store',None) is not None
-                         and getattr(self.fetcher.fetch,'__func__',None) is HistoricalFetcher.fetch
-                         and getattr(self.reconciler.reconcile,'__func__',None) is Reconciler.reconcile
-                         and self.reconciler._custom_dedup_fn is None
-                         and self.reconciler._custom_aggregator is None)
             page_options = {'on_native_page':consume_native_page} if page_mode else {}
             if page_mode:
+                full_task_admitted=False
+                async def admit_full_task(task):
+                    nonlocal full_task_admitted
+                    if not full_task_admitted:
+                        try:
+                            await admit_execution(self,plan,streaming=False)
+                        except MemoryBudgetExceeded:
+                            metadata['mixed_plan_fallback']='memory_work_budget'
+                            raise
+                        full_task_admitted=True
+                page_options['on_full_task']=admit_full_task
                 self.fetcher.memory_budget = getattr(self,'memory_budget',None)
                 page_binding = ((self._storage,self._cfg,self._reconciler,self._fetcher,
                     getattr(self,'memory_budget',None),self._reconciler._custom_dedup_fn,
@@ -573,6 +577,9 @@ class BackfillEngine:
                 errors.extend(fetch_error_summaries)
                 # ── Phase 4: Reconcile ──
                 status = BackfillStatus.RECONCILING
+                await admit_reconcile(self,plan)
+                reserve_work(getattr(self, "memory_budget", None), "history-backfill",
+                    normalized_bytes(self,plan))
                 receipts = tuple(item for item in fetch_results if isinstance(item,FetchReceipt))
                 if receipts:
                     # A failed native commit must not regenerate targets from

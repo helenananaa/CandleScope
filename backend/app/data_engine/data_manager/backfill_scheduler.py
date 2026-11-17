@@ -1721,6 +1721,9 @@ class BackfillScheduler:
                     chunk.execution_scope = self._execution_scope_factory(state.request)
                     if hasattr(chunk.execution_scope,'resource_observer'):
                         chunk.execution_scope.resource_observer = self._resource_observer(chunk)
+                    if hasattr(chunk.execution_scope,'resource_owner'):
+                        chunk.execution_scope.resource_owner = (int(chunk.request.priority or 100),
+                            self._fairness_owner(chunk.request))
                 with (chunk.execution_scope or nullcontext()), public_demand(chunk.public_demand):
                     outcome = await self._execute(chunk.request)
             except RepairChunkSplit as exc:

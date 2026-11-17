@@ -4,6 +4,7 @@ from contextvars import ContextVar
 
 enabled = ContextVar('resource_admission_enabled', default=False)
 observer = ContextVar('resource_wait_observer', default=None)
+claim_owner = ContextVar('resource_claim_owner', default=(100, 'anonymous'))
 
 
 @asynccontextmanager

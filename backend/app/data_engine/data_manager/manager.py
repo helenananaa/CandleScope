@@ -453,7 +453,7 @@ class DataManager(DataManagerCore):
                                         roots=service._memory_roots)
         self.memory_budget.register("history-query", limit_bytes=self._cfg.memory_owner_budgets.get("history-query", 192 * 1024 * 1024),
                                     usage=lambda: {"estimated_bytes": 0})
-        self.memory_budget.register("history-backfill", limit_bytes=self._cfg.memory_owner_budgets.get("history-backfill", 64 * 1024 * 1024),
+        self.memory_budget.register("history-backfill", limit_bytes=self._cfg.memory_owner_budgets.get("history-backfill", 192 * 1024 * 1024),
                                     usage=lambda: {"estimated_bytes": 0})
         self.query_engine.memory_budget = self.memory_budget
         from app.data_engine.aggregation.blocks import SharedBlockManager
