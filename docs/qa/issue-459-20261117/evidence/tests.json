@@ -1,0 +1,142 @@
+{
+  "product_backend": "9258f0d2f9fe6aaf799b728ef0ce98eab9f62ada",
+  "broad_selection": {
+    "passed": 866,
+    "failures": 0,
+    "skipped": 0,
+    "seconds": 154.29
+  },
+  "supplementary_cheaper_coarse_cases": 1,
+  "new_cases": 70,
+  "baseline": "Five coverage/coalescing/overlap regressions fail before fix. A separate local-burst fairness regression fails before aging correction. Retained, not labelled unrelated.",
+  "scheduler_sha256": "99e883515c2faac0a9f3e23d9a6c640e5ed526d0229298e0e6c0603b5126f932",
+  "reports": [
+    {
+      "artifact": "acceptance-tests.xml.gz",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "866",
+      "time": "154.187",
+      "timestamp": "2026-11-17T03:46:36.362791",
+      "hostname": "Ryans-MacBook-Air.local",
+      "failure_cases": []
+    },
+    {
+      "artifact": "baseline.xml.gz",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "5",
+      "skipped": "0",
+      "tests": "5",
+      "time": "10.502",
+      "timestamp": "2026-11-17T03:36:34.856026",
+      "hostname": "Ryans-MacBook-Air.local",
+      "failure_cases": [
+        {
+          "case": "test_active_envelope_cannot_swallow_a_hole_outside_its_actual_plan",
+          "message": "AssertionError: envelope coverage is not planned coverage\nassert 'parent' != 'parent'"
+        },
+        {
+          "case": "test_pending_envelope_merge_keeps_incoming_hole_in_actual_work",
+          "message": "AssertionError: covered consumer hole was dropped\nassert False\n +  where False = any(<generator object test_pending_envelope_merge_keeps_incoming_hole_in_actual_work.<locals>.run.<locals>.<genexpr> at 0x116df2dc0>)"
+        },
+        {
+          "case": "test_active_plain_parent_cannot_consume_a_different_execution_contract[required_history_composition]",
+          "message": "AssertionError: source/batch contract was lost to envelope dedupe\nassert 'plain' != 'plain'"
+        },
+        {
+          "case": "test_active_plain_parent_cannot_consume_a_different_execution_contract[bounded_history_batch_contract]",
+          "message": "AssertionError: source/batch contract was lost to envelope dedupe\nassert 'plain' != 'plain'"
+        },
+        {
+          "case": "test_overlapping_planned_ranges_execute_each_requested_open_once",
+          "message": "assert Counter({1200... 1, 60000: 1}) == Counter({0: 1...1, 480000: 1})\n  Omitting 6 identical items, use -vv to show\n  Differing items:\n  {180000: 2} != {180000: 1}\n  {240000: 2} != {240000: 1}\n  {120000: 2} != {120000: 1}\n  Use -v to get more diff"
+        }
+      ]
+    },
+    {
+      "artifact": "cheaper-coarse.xml.gz",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "1",
+      "time": "8.484",
+      "timestamp": "2026-11-17T03:54:04.920266",
+      "hostname": "Ryans-MacBook-Air.local",
+      "failure_cases": []
+    },
+    {
+      "artifact": "fairness.xml.gz",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "1",
+      "skipped": "0",
+      "tests": "1",
+      "time": "7.575",
+      "timestamp": "2026-11-17T03:43:30.122755",
+      "hostname": "Ryans-MacBook-Air.local",
+      "failure_cases": [
+        {
+          "case": "test_four_chart_bursts_and_maintenance_keep_bounded_turns_and_concurrency",
+          "message": "AssertionError: ['89m', '97m', '97m', '89m', '97m', '89m', ...]\nassert False\n +  where False = all(<generator object test_four_chart_bursts_and_maintenance_keep_bounded_turns_and_concurrency.<locals>.run.<locals>.<genexpr> at 0x11896bd30>)"
+        }
+      ]
+    },
+    {
+      "artifact": "fixed-first.xml.gz",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "5",
+      "time": "5.761",
+      "timestamp": "2026-11-17T03:37:33.139210",
+      "hostname": "Ryans-MacBook-Air.local",
+      "failure_cases": []
+    },
+    {
+      "artifact": "scheduling-first.xml.gz",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "130",
+      "time": "13.730",
+      "timestamp": "2026-11-17T03:39:57.885066",
+      "hostname": "Ryans-MacBook-Air.local",
+      "failure_cases": []
+    },
+    {
+      "artifact": "scheduling-fixed.xml.gz",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "193",
+      "time": "36.648",
+      "timestamp": "2026-11-17T03:44:12.271354",
+      "hostname": "Ryans-MacBook-Air.local",
+      "failure_cases": []
+    },
+    {
+      "artifact": "scoped.xml.gz",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "1",
+      "skipped": "0",
+      "tests": "68",
+      "time": "32.002",
+      "timestamp": "2026-11-17T03:41:59.409196",
+      "hostname": "Ryans-MacBook-Air.local",
+      "failure_cases": [
+        {
+          "case": "test_four_chart_bursts_and_maintenance_keep_bounded_turns_and_concurrency",
+          "message": "assert False\n +  where False = all(<generator object test_four_chart_bursts_and_maintenance_keep_bounded_turns_and_concurrency.<locals>.run.<locals>.<genexpr> at 0x10a28d990>)"
+        }
+      ]
+    }
+  ]
+}

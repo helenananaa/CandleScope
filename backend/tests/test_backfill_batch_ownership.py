@@ -258,3 +258,16 @@ def test_public_admission_deferral_keeps_queue_and_ineligible_time_separate():
         finally:
             await scheduler.shutdown()
     asyncio.run(run())
+
+
+def test_qualified_batch_keeps_a_cheaper_larger_coarse_source_page():
+    scheduler=scheduler_for(None)
+    contract=scheduler._interval_resolver.history_composition_routes(
+        exchange='binance',market_type='futures',interval='45m')[0].contract_id
+    chunks=scheduler._split_request(request(0,202,name='coarse',interval='45m',
+        metadata={'bounded_history_batch_contract':contract}))
+    assert len(chunks)==1
+    plan=chunks[0].request.metadata['interval_work_plan']
+    assert plan['base_interval']=='15m' and plan['source_factor']==3
+    assert plan['effective_target_bars']==203 and plan['planned_source_rows']==618
+    assert plan['source_row_budget']==1000
