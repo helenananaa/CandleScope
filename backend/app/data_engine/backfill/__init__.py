@@ -618,8 +618,9 @@ class BackfillEngine:
         except Exception as exc:
             from .input_subscriptions import current_input_adoption
             scope = current_input_adoption()
-            if (isinstance(exc, MemoryBudgetExceeded) and exc.waitable
-                    and scope is not None and scope.managed):
+            from app.core.bounded_executor import ExecutorBusyError
+            if (scope is not None and scope.managed and (isinstance(exc,ExecutorBusyError)
+                    or isinstance(exc, MemoryBudgetExceeded) and exc.waitable)):
                 if plan is not None:
                     plan.mixed_binding = None
                 raise

@@ -71,6 +71,7 @@ from .models import (
 from .fetch_stream import PageConsumer, PAGE_BYTES_PER_ROW, stream_grid, disjoint_source_spans
 from .source_router import ArchiveRoutePlan, HistoricalSourceRouter
 from app.data_engine.memory_budget import MemoryBudgetExceeded
+from app.core.bounded_executor import ExecutorBusyError
 from .input_subscriptions import InputSubscriptions, input_adoption, retain_input_payload
 
 logger = logging.getLogger("backfill.Fetcher")
@@ -377,10 +378,11 @@ class HistoricalFetcher:
                     raise FetchBatchDeferred(latest, completed)
             raise latest
 
-        capacity = next((item for item in raw_results if isinstance(item, MemoryBudgetExceeded)), None)
+        capacity = next((item for item in raw_results if isinstance(item, (MemoryBudgetExceeded,ExecutorBusyError))), None)
         from .input_subscriptions import current_input_adoption
         adoption = current_input_adoption()
-        if capacity is not None and capacity.waitable and adoption is not None and adoption.managed:
+        if (capacity is not None and adoption is not None and adoption.managed
+                and (isinstance(capacity,ExecutorBusyError) or capacity.waitable)):
             if on_deferred is not None:
                 admitted = [item for item in raw_results if isinstance(item, FetchResult)
                     and item.status in {BackfillStatus.COMPLETED, BackfillStatus.PARTIAL}]
@@ -721,7 +723,7 @@ class HistoricalFetcher:
                         raise
                     await asyncio.sleep(exc.retry_after_seconds)
 
-                except MemoryBudgetExceeded:
+                except (MemoryBudgetExceeded,ExecutorBusyError):
                     raise
 
                 except TransportError as exc:
@@ -793,7 +795,7 @@ class HistoricalFetcher:
             else:
                 try:
                     await collector.accept(page_bars)
-                except (RateLimitDeferred, MemoryBudgetExceeded):
+                except (RateLimitDeferred, MemoryBudgetExceeded, ExecutorBusyError):
                     raise
                 except Exception as exc:
                     errors.append(f'page_consumption_failed: {exc}')

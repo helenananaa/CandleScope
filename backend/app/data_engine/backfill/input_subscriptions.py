@@ -16,6 +16,7 @@ from functools import wraps
 from itertools import count, islice
 
 from app.data_engine.memory_budget import MemoryBudgetExceeded
+from app.core.bounded_executor import ExecutorBusyError
 from app.exchanges.public_admission import PublicDemand, TrafficClass, current_demand, public_demand
 
 _adoption = ContextVar('historical_input_adoption',default=None)
@@ -101,7 +102,8 @@ def current_input_adoption():
 
 def propagate_capacity_wait(error):
     scope = current_input_adoption()
-    if isinstance(error, MemoryBudgetExceeded) and error.waitable and scope is not None and scope.managed:
+    if (scope is not None and scope.managed and (isinstance(error, ExecutorBusyError)
+            or isinstance(error, MemoryBudgetExceeded) and error.waitable)):
         raise error
 
 

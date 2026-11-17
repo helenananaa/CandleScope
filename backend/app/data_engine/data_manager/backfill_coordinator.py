@@ -66,6 +66,7 @@ from .backfill_contracts import (
     RepairRetryDeferred,
     RepairCapacityDeferred,
     RepairReplanDeferred,
+    RepairExecutorDeferred,
     RepairChunkSplit,
     RepairWrittenRangeSummary,
     ScanReport,
@@ -2669,6 +2670,11 @@ class BackfillCoordinator:
                 raise
             except Exception as exc:
                 from app.data_engine.memory_budget import MemoryBudgetExceeded
+                from app.core.bounded_executor import ExecutorBusyError
+                if isinstance(exc,ExecutorBusyError):
+                    await self._ledger_mark_retry_wait(request, attempt=max(0,attempt-1),
+                        error='local_executor_admission', delay_seconds=0.05)
+                    raise RepairExecutorDeferred(attempt-1) from exc
                 if isinstance(exc, MemoryBudgetExceeded) and exc.waitable:
                     if (inputs := current_input_adoption()) is not None:
                         inputs.acknowledge()

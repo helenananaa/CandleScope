@@ -221,3 +221,46 @@ def test_repeated_typed_view_rejections_reuse_received_input_until_canonical_ado
             await transport.stop()
             await server.cleanup()
     asyncio.run(run())
+
+
+@pytest.mark.parametrize('loop_kind',['asyncio','uvloop'])
+def test_saturated_storage_executor_defers_then_completes_without_consuming_attempt(mixed_query,monkeypatch,loop_kind):
+    import threading
+    from app.core import executors
+    from app.core.bounded_executor import BoundedExecutor
+    async def run():
+        coordinator,engine,transport,server,started,release,calls=await setup_pipeline(mixed_query,monkeypatch)
+        coordinator._max_retries=1
+        original_pool=executors._storage_executor
+        pool=BoundedExecutor('dependency-saturation-test',max_workers=1,max_pending=0)
+        held_started,held_release=threading.Event(),threading.Event()
+        def held():held_started.set();held_release.wait()
+        occupied=pool.submit(held)
+        await asyncio.to_thread(held_started.wait)
+        monkeypatch.setattr(executors,'_storage_executor',pool)
+        task=None
+        try:
+            task=asyncio.create_task(coordinator.request_and_wait(request(89)))
+            deadline=asyncio.get_running_loop().time()+5
+            while not any(d.get('reason')=='local_executor_admission' for d in coordinator.snapshot()['deferred']):
+                assert not task.done(),task.result() if task.done() else None
+                assert asyncio.get_running_loop().time()<deadline
+                await asyncio.sleep(.01)
+            assert not calls and coordinator.snapshot()['running_chunks']==0
+            held_release.set()
+            await asyncio.wrap_future(occupied)
+            release.set()
+            result=await asyncio.wait_for(task,20)
+            assert result.status=='completed' and result.attempts==1,result.error
+            assert len(calls)==1
+        finally:
+            held_release.set();release.set()
+            await coordinator.shutdown()
+            if task is not None:await asyncio.gather(task,return_exceptions=True)
+            monkeypatch.setattr(executors,'_storage_executor',original_pool)
+            pool.shutdown(wait=True)
+            await engine.close()
+            await transport.stop()
+            await server.cleanup()
+    factory = None if loop_kind=='asyncio' else __import__('uvloop').new_event_loop
+    asyncio.run(run(),loop_factory=factory)
