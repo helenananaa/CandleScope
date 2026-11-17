@@ -161,6 +161,9 @@ def test_retired_pyne_is_explicitly_rejected_without_translation(changes):
         b'{"deep":' + b"[" * 16 + b"0" + b"]" * 16 + b"}",
         b" " * (256 * 1024 + 1),
     ],
+    # Pytest exports the node id through PYTEST_CURRENT_TEST. Embedding the
+    # oversized payload itself exceeds Windows' per-environment-value limit.
+    ids=["duplicate-key", "non-finite", "invalid-utf8", "too-deep", "too-large"],
 )
 def test_raw_json_has_size_depth_encoding_and_duplicate_key_limits(payload):
     with pytest.raises(PlatformContractError):
