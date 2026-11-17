@@ -52,3 +52,25 @@ test("research handoffs survive a reload within a bounded desktop namespace", as
     assert.throws(() => restored.setItem(key(65), "x".repeat(2049)), /Invalid/);
   } finally { await rm(root, {recursive: true, force: true}); }
 });
+
+test("current v9 workspace chart and indicator configuration survives native restart", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "cs-workspace-v9-"));
+  try {
+    const source = await readFile(new URL("../src/features/chart-workspace/chartWorkspaceStorage.ts", import.meta.url), "utf8");
+    const key = source.match(/CHART_WORKSPACE_V9_STORAGE_KEY = "([^"]+)"/)[1];
+    const file = path.join(root, "strategy-storage.json");
+    const store = new DesktopStrategyStorage(file);
+    const workspace = JSON.stringify({schemaVersion: 9, revision: 1,
+      cells: {"cell-1": {id: "cell-1", session: {symbol: "BTCUSDT", interval: "89m"},
+        indicators: [{id: "ema-20", name: "EMA", params: {period: 20}},
+          {id: "js-close", language: "frontend-js", script: 'plot("close", bars.map(bar => bar.close));'}]}}});
+    assert.equal(store.getItem(key), null);
+    await store.setItem(key, workspace);
+    await store.flush();
+    const reopened = new DesktopStrategyStorage(file);
+    await reopened.load();
+    assert.equal(reopened.getItem(key), workspace);
+    assert.throws(() => reopened.setItem(key, "x".repeat(16*1024*1024+1)), /Invalid/);
+    assert.throws(() => reopened.getItem("candlescope-chart-workspace-v10"), /Unsupported/);
+  } finally { await rm(root, {recursive: true, force: true}); }
+});

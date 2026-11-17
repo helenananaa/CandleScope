@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 
 const KEYS = new Set([
   "candlescope-strategy-drafts-v1", "candlescope:strategy-research:v1",
-  "candlescope-chart-workspace-v8", "candlescope-chart-workspace-v7",
+  "candlescope-chart-workspace-v9", "candlescope-chart-workspace-v8", "candlescope-chart-workspace-v7",
 ]);
 const MAX_VALUE_BYTES = 16 * 1024 * 1024;
 const RESEARCH_BATCH_KEY = "candlescope:strategy-research-batch:v1";

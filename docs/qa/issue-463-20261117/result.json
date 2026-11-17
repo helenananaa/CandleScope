@@ -1,0 +1,54 @@
+{
+  "verdict": "NOT_ACCEPTED",
+  "issue_463": "keep_open",
+  "issue_447": "keep_open",
+  "children_A_E": "independently_complete_no_automatic_reopening",
+  "product_head": "88cfeb9e826ac3040bf68952da192d76dd2694fd",
+  "pre_demand_canonical_rows": 0,
+  "startup_elapsed_ms": 25363,
+  "actual_cold_lifecycle_elapsed_ms": 961068,
+  "net_3s_passed": false,
+  "exact_net_readiness_ms": null,
+  "required_local_queue_lower_bound_ms": {
+    "89m": 315008,
+    "97m": 300403,
+    "101m": 327517,
+    "10007m": 416675
+  },
+  "candidate_first_ready_elapsed_ms": {
+    "89m": 421323,
+    "97m": 421356,
+    "101m": 454904,
+    "10007m": 454937
+  },
+  "candidate_first_ready_scope": "Application flags and indicator numeric observation; not full source/viewport/current/paint certification",
+  "closed_source_numeric_passed": true,
+  "closed_targets_verified": 747,
+  "nominal_all_four_correct": 9,
+  "nominal_samples": 11,
+  "supplemental_settled_values_observed": true,
+  "full_input_ws_screen_chain": false,
+  "native_actual_hide_show_update": "observed_pass_in_same_profile_continuation",
+  "restart": "configuration_and_anchors_restored_but_10007_current_bar_not_qualified",
+  "resources": "recorded_without_paired_benefit_claim",
+  "owned_candidate_processes_remaining": 0,
+  "evidence_artifacts_verified": 56,
+  "artifact_sha256_and_decompressed_hashes": "all_verified",
+  "driver_sha256": "matches_both_receipts",
+  "hardware": {
+    "model": "MacBookAir10,1",
+    "cpu": "Apple M1",
+    "memory_bytes": 17179869184,
+    "os": "macOS-26.6.2-arm64-arm-64bit"
+  },
+  "not_qualified": [
+    "exact_full_external_critical_path_attribution",
+    "cold_10007_viewport_current_adoption",
+    "restart_10007_current_bar",
+    "all_11_input_ws_screen_samples",
+    "full_revision_recovery_matrix",
+    "event_loop_and_per_tick_latency",
+    "paired_resource_improvement",
+    "fresh_release_runtime_build"
+  ]
+}
