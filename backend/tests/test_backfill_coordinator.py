@@ -146,6 +146,7 @@ def test_backfill_coordinator_merges_pending_requests_for_same_series() -> None:
             engine=engine,
             loop=asyncio.get_running_loop(),
             base_delay_seconds=0,
+            max_concurrency=1,  # Exercise an explicitly limited embedding.
         )
 
         first_id = coord.request(_request(0, 100_000, request_id="current"))
@@ -467,6 +468,7 @@ def test_backfill_coordinator_waits_for_cross_thread_merged_request() -> None:
             engine=engine,
             loop=asyncio.get_running_loop(),
             base_delay_seconds=0,
+            max_concurrency=1,  # Exercise an explicitly limited embedding.
         )
 
         coord.request(_request(0, 100_000, request_id="current"))
@@ -617,6 +619,7 @@ def test_backfill_coordinator_preserves_highest_priority_when_merging_pending() 
             engine=engine,
             loop=asyncio.get_running_loop(),
             base_delay_seconds=0,
+            max_concurrency=1,  # Exercise an explicitly limited embedding.
         )
 
         coord.request(_request(0, 60_000, request_id="current"))
@@ -1257,6 +1260,7 @@ def test_backfill_scheduler_wakes_after_rate_limit_without_new_submit() -> None:
             engine=engine,
             loop=asyncio.get_running_loop(),
             base_delay_seconds=0,
+            max_concurrency=1,  # Exercise an explicitly limited embedding.
         )
         request = _request(0, 60_000, request_id="rate-limited")
         bucket = coord._scheduler._bucket_for(request)

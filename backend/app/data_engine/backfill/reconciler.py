@@ -1224,6 +1224,8 @@ class Reconciler:
             "end_ms": max(open_times) if open_times else None,
             "error": str(error),
         }
+        if isinstance(error,StaleAcquisition):
+            detail['revision_conflict'] = True
         for key, value in list(getattr(error, 'fence_details', {}).items())[:12]:
             if type(value) in (int, float, bool, type(None), str):
                 detail['fence_'+str(key)[:40]] = value[:160] if isinstance(value, str) else value

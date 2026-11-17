@@ -516,6 +516,14 @@ def acquisition_revision():
     return scope.revision if scope is not None else None
 
 
+def acquisition_permission_floor():
+    """Original deletion permission, distinct from a refreshed read head."""
+    scope = _acquisition.get()
+    if scope is None:
+        return None
+    return scope.revision if scope.delete_revision is None else scope.delete_revision
+
+
 @contextmanager
 def acquisition_scope(acquisition):
     token = _acquisition.set(acquisition)
