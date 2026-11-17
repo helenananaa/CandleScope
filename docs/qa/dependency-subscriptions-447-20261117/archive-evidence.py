@@ -7,7 +7,7 @@ destination = Path(__file__).resolve().parent / 'evidence'
 assert not destination.exists(), 'Preserve existing evidence instead of overwriting'
 destination.mkdir()
 paths = list(source.glob('*.log')) + list(source.glob('*.xml')) + [source/'ui-plan.json',source/'regression-identity.json']
-for candidate in ('candidate','candidate-final','candidate-concurrent','candidate-replan'):
+for candidate in ('candidate','candidate-final','candidate-concurrent','candidate-replan','candidate-executor'):
     paths += [source/candidate/name for name in ('package-source-manifest.json','sign.log','verify.log')]
 for name in ('native-cold', 'native-cold-final','native-cold-concurrent','native-cold-replan'):
     paths += [p for p in (source/name).iterdir() if p.is_file()]

@@ -64,5 +64,19 @@ for line in (root/'acceptance-timeline.jsonl').open():
  record=json.loads(line); d=record['diagnostics']; b=d.get('backfill',{}); f=d.get('backfill_engine',{}).get('fetcher',{}).get('input_subscriptions',{})
  for name,value in [('max_running_chunks',b.get('running_chunks',0)),('max_capacity_waiting_chunks',b.get('capacity_waiting_chunks',0)),('max_shared_subscriptions',f.get('shared_page_subscriptions',0)),('max_stale_inputs_retired',f.get('stale_inputs_retired',0))]:
   result['diagnostic_observations'][name]=max(result['diagnostic_observations'][name],value)
+# Overlap of sampled execution spans proves logical parent-chunk concurrency.
+# Missing ring receipts only reduce this bound; this is not physical I/O timing.
+parent_spans=collections.defaultdict(list)
+for chunk in chunks.values():
+ parent=(chunk['observed_app_pid'],chunk['request_id'])
+ if chunk['finished_at_ms']>chunk['started_at_ms']:
+  parent_spans[parent].extend([(chunk['started_at_ms'],1),(chunk['finished_at_ms'],-1)])
+parent_peaks=[]
+for events in parent_spans.values():
+ active=peak=0
+ for at,delta in sorted(events):
+  active+=delta;peak=max(peak,active)
+ parent_peaks.append(peak)
+result['max_observed_parent_workers_lower_bound']=max(parent_peaks,default=0)
 (root/'summary.json').write_text(json.dumps(result,indent=2)+'\n')
 print(json.dumps({k:v for k,v in result.items() if k not in {'states','steady','outcomes','first_ready','traceback_terminal_lines'}}))
