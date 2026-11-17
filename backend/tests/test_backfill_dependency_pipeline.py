@@ -212,6 +212,8 @@ def test_repeated_typed_view_rejections_reuse_received_input_until_canonical_ado
             outcome=await asyncio.wait_for(coordinator.request_and_wait(request(89)),20)
             assert outcome.status=='completed' and outcome.attempts==1,outcome.error
             assert len(rejected)==4 and len(calls)==1,calls
+            assert engine.fetcher.snapshot()['metrics']['counters']['source_journal_pages_reused']==4
+            assert engine.fetcher.snapshot()['input_subscriptions']['registered_inputs']==0
             result=mixed_query.query('BTCUSDT','89m',start_ms=0,end_ms=89*MINUTE-1,
                 market_type='futures',limit=1,min_revision=mixed_query.storage.revision_store.head())
             assert result.complete and result.bars[0].trusted_final and result.bars[0].trades==89
@@ -242,11 +244,12 @@ def test_saturated_storage_executor_defers_then_completes_without_consuming_atte
         try:
             task=asyncio.create_task(coordinator.request_and_wait(request(89)))
             deadline=asyncio.get_running_loop().time()+5
-            while not any(d.get('reason')=='local_executor_admission' for d in coordinator.snapshot()['deferred']):
+            while not any(str(d.get('reason','')).startswith('executor:') for d in coordinator.snapshot()['deferred']):
                 assert not task.done(),task.result() if task.done() else None
                 assert asyncio.get_running_loop().time()<deadline
                 await asyncio.sleep(.01)
             assert not calls and coordinator.snapshot()['running_chunks']==0
+            assert pool.snapshot()['rejected']==0
             held_release.set()
             await asyncio.wrap_future(occupied)
             release.set()
@@ -264,3 +267,206 @@ def test_saturated_storage_executor_defers_then_completes_without_consuming_atte
             await server.cleanup()
     factory = None if loop_kind=='asyncio' else __import__('uvloop').new_event_loop
     asyncio.run(run(),loop_factory=factory)
+
+
+def test_resource_wait_after_planning_resumes_same_engine_and_plan(mixed_query,monkeypatch):
+    async def run():
+        coordinator,engine,transport,server,started,release,calls=await setup_pipeline(mixed_query,monkeypatch)
+        plans=[];held=[];entered_fetch=[]
+        original=engine.planner.plan
+        budget=engine.memory_budget
+        def plan(*args,**kwargs):
+            result=original(*args,**kwargs)
+            plans.append(result)
+            if len(plans)>1:
+                return result
+            snapshot=budget.snapshot()['owners']['history-backfill']
+            lease=budget.reserve('history-backfill',snapshot['limit_bytes']-snapshot['reserved_bytes'])
+            # The test saturates capacity independently of the current work's credit.
+            from app.data_engine.memory_budget import _pools
+            token=_pools.set(())
+            try:lease.__enter__()
+            finally:_pools.reset(token)
+            held.append(lease)
+            return result
+        monkeypatch.setattr(engine.planner,'plan',plan)
+        original_fetch=engine.fetcher.fetch
+        async def fetch(*args,**kwargs):
+            entered_fetch.append((len(plans),engine.metrics.snapshot()['counters']['runs']))
+            assert args[0][0] is plans[-1].tasks[0]
+            return await original_fetch(*args,**kwargs)
+        monkeypatch.setattr(engine.fetcher,'fetch',fetch)
+        pending=None
+        try:
+            req=RepairRequest('BTCUSDT','1m',0,999*MINUTE,exchange='binance',market_type='futures',
+                reason='initial_history',metadata={'requires_trusted_finality':True})
+            pending=asyncio.create_task(coordinator.request_and_wait(req))
+            deadline=asyncio.get_running_loop().time()+10
+            while not held or not coordinator.snapshot()['capacity_waiting_chunks']:
+                assert not pending.done(),pending.result() if pending.done() else None
+                assert asyncio.get_running_loop().time()<deadline
+                await asyncio.sleep(.01)
+            assert engine.metrics.snapshot()['counters']['runs']==1 and len(plans)==1 and not calls
+            await asyncio.sleep(.05)
+            assert engine.metrics.snapshot()['counters']['runs']==1 and len(plans)==1
+            held.pop().__exit__(None,None,None)
+            release.set()
+            result=await asyncio.wait_for(pending,20)
+            assert result.status=='completed',result.error
+            assert entered_fetch[0]==(1,1), 'resource wait must resume the existing plan'
+            assert not any(c.get('defer_reason')=='local_memory_admission'
+                for c in coordinator.snapshot()['recent_chunks'])
+            assert len(calls)==1
+        finally:
+            for lease in held:lease.__exit__(None,None,None)
+            release.set()
+            await coordinator.shutdown()
+            if pending is not None:await asyncio.gather(pending,return_exceptions=True)
+            await engine.close();await transport.stop();await server.cleanup()
+    asyncio.run(run())
+
+
+def test_preparation_queue_wait_preserves_mixed_planning_cursor(mixed_query,monkeypatch):
+    import threading
+    from app.core import executors
+    from app.core.bounded_executor import BoundedExecutor
+    from app.data_engine.backfill import mixed_plan
+    async def run():
+        coordinator,engine,transport,server,started,release,calls=await setup_pipeline(mixed_query,monkeypatch)
+        original_pool=executors._preparation_executor
+        pool=BoundedExecutor('preparation-stage-test',max_workers=1,max_pending=0)
+        held_release=threading.Event()
+        preparation_calls=[];at_fetch=[]
+        original_fetch=engine.fetcher.fetch
+        async def fetch(*args,**kwargs):
+            at_fetch.append(preparation_calls.count('choose_cold_sources'))
+            return await original_fetch(*args,**kwargs)
+        monkeypatch.setattr(engine.fetcher,'fetch',fetch)
+        original=mixed_plan.run_preparation
+        async def prepare(function,*args,**kwargs):
+            preparation_calls.append(function.__name__)
+            return await original(function,*args,**kwargs)
+        monkeypatch.setattr(mixed_plan,'run_preparation',prepare)
+        monkeypatch.setattr(executors,'_preparation_executor',pool)
+        occupied=pool.submit(held_release.wait)
+        task=None
+        try:
+            task=asyncio.create_task(coordinator.request_and_wait(request(10007)))
+            deadline=asyncio.get_running_loop().time()+10
+            while not pool.snapshot()['admission_waiters']:
+                assert not task.done(),task.result() if task.done() else None
+                assert asyncio.get_running_loop().time()<deadline
+                await asyncio.sleep(.01)
+            assert preparation_calls==['choose_cold_sources']
+            assert engine.planner.metrics.snapshot()['counters']['mixed_proposals']==1
+            assert coordinator.snapshot()['running_chunks']==0
+            held_release.set();release.set()
+            result=await asyncio.wait_for(task,25)
+            assert result.status=='completed',result.error
+            assert at_fetch[0]==1
+            assert pool.snapshot()['rejected']==0
+        finally:
+            held_release.set();release.set()
+            await coordinator.shutdown()
+            if task is not None:await asyncio.gather(task,return_exceptions=True)
+            monkeypatch.setattr(executors,'_preparation_executor',original_pool)
+            pool.shutdown(wait=True)
+            await engine.close();await transport.stop();await server.cleanup()
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('deleted_interval',['1m','89m'])
+def test_memory_grant_cannot_renew_original_permission_after_wait(mixed_query,monkeypatch,deleted_interval):
+    async def run():
+        coordinator,engine,transport,server,started,release,calls=await setup_pipeline(mixed_query,monkeypatch)
+        coordinator._max_retries=1
+        budget=engine.memory_budget
+        capacity=budget.snapshot()['owners']['history-backfill']['limit_bytes']
+        held=budget.reserve('history-backfill',capacity);held.__enter__()
+        pending=None
+        try:
+            req=request(89);req.metadata['acquisition_revision']=mixed_query.storage.revision_store.head()
+            pending=asyncio.create_task(coordinator.request_and_wait(req))
+            deadline=asyncio.get_running_loop().time()+5
+            while not coordinator.snapshot()['capacity_waiting_chunks']:
+                assert asyncio.get_running_loop().time()<deadline
+                await asyncio.sleep(.01)
+            mixed_query.storage.delete_bars('BTCUSDT',deleted_interval,0,0,
+                exchange='binance',market_type='futures')
+            held.__exit__(None,None,None);release.set()
+            outcome=await asyncio.wait_for(pending,15)
+            assert outcome.status!='completed'
+            assert mixed_query.storage.count_bars('BTCUSDT',deleted_interval,0,0,market_type='futures')==0
+            assert not calls
+        finally:
+            held.__exit__(None,None,None);release.set()
+            await coordinator.shutdown()
+            if pending is not None:await asyncio.gather(pending,return_exceptions=True)
+            await engine.close();await transport.stop();await server.cleanup()
+    asyncio.run(run())
+
+
+def test_cancelling_original_grant_owner_keeps_shared_input_funded_until_adoption(mixed_query,monkeypatch):
+    async def run():
+        coordinator,engine,transport,server,started,release,calls=await setup_pipeline(mixed_query,monkeypatch)
+        first=request(89);first.metadata['demand_owner_id']='chart:original-grant'
+        second=request(97);second.metadata['demand_owner_id']='chart:shared-grant'
+        a=b=None
+        try:
+            a=asyncio.create_task(coordinator.request_and_wait(first))
+            await asyncio.wait_for(started.wait(),5)
+            b=asyncio.create_task(coordinator.request_and_wait(second))
+            deadline=asyncio.get_running_loop().time()+5
+            while engine.fetcher.snapshot()['input_subscriptions']['shared_page_subscriptions']<1:
+                assert asyncio.get_running_loop().time()<deadline
+                await asyncio.sleep(.01)
+            assert await coordinator.release_demand(first.request_id,owner_id='chart:original-grant')
+            assert (await asyncio.wait_for(a,5)).status=='cancelled'
+            assert not b.done()
+            release.set()
+            outcome=await asyncio.wait_for(b,15)
+            assert outcome.status=='completed',outcome.error
+            assert engine.fetcher.snapshot()['input_subscriptions']['registered_inputs']==0
+            assert engine.memory_budget.snapshot()['reserved_bytes']==0
+            assert not engine.memory_budget._work_pools
+            opens=[at for _,interval,start,end in calls if interval=='1m' for at in range(start,end+1,MINUTE)]
+            assert len(opens)==len(set(opens))==97
+        finally:
+            release.set()
+            await coordinator.shutdown()
+            await asyncio.gather(*(task for task in [a,b] if task is not None),return_exceptions=True)
+            await engine.close();await transport.stop();await server.cleanup()
+    asyncio.run(run())
+
+
+def test_explicit_embedding_limit_does_not_hold_executor_permits_for_a_second_logical_job(mixed_query,monkeypatch):
+    import threading
+    from app.core import executors
+    from app.core.bounded_executor import BoundedExecutor
+    async def run():
+        coordinator,engine,transport,server,started,release,calls=await setup_pipeline(mixed_query,monkeypatch)
+        coordinator._scheduler._max_concurrency=1
+        original=executors._storage_executor
+        pool=BoundedExecutor('explicit-embedding-test',max_workers=1,max_pending=0)
+        gate=threading.Event();occupied=pool.submit(gate.wait)
+        monkeypatch.setattr(executors,'_storage_executor',pool)
+        tasks=[]
+        try:
+            tasks.append(asyncio.create_task(coordinator.request_and_wait(request(89))))
+            deadline=asyncio.get_running_loop().time()+5
+            while not pool.snapshot()['admission_waiters']:
+                assert asyncio.get_running_loop().time()<deadline
+                await asyncio.sleep(.01)
+            tasks.append(asyncio.create_task(coordinator.request_and_wait(request(97,'ETHUSDT'))))
+            await asyncio.sleep(.02)
+            assert coordinator.snapshot()['running_chunks']==1
+            gate.set();release.set();await asyncio.wrap_future(occupied)
+            outcomes=await asyncio.wait_for(asyncio.gather(*tasks),25)
+            assert all(o.status=='completed' for o in outcomes)
+        finally:
+            gate.set();release.set();await coordinator.shutdown()
+            await asyncio.gather(*tasks,return_exceptions=True)
+            monkeypatch.setattr(executors,'_storage_executor',original)
+            pool.shutdown()
+            await engine.close();await transport.stop();await server.cleanup()
+    asyncio.run(run())

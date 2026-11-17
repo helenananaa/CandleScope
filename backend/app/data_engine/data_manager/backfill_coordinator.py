@@ -2531,7 +2531,7 @@ class BackfillCoordinator:
                 if (self._is_failed(report.status) and request.metadata.get('required_history_composition')
                         and request.end_ms > request.start_ms and not getattr(report, 'fetch_results', ())
                         and (getattr(report, 'metadata', {}) or {}).get('mixed_plan_fallback')
-                            in {'source_row_budget', 'refined_source_row_budget', 'planning_work_budget', 'task_work_budget'}):
+                            in {'source_row_budget', 'refined_source_row_budget', 'planning_work_budget', 'task_work_budget', 'memory_work_budget'}):
                     raise RepairChunkSplit('mixed canonical source work requires a smaller chunk')
                 if self._is_failed(report.status) and attempt < self._max_retries:
                     delay = self._backoff(attempt)

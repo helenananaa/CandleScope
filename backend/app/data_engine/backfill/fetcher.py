@@ -450,8 +450,14 @@ class HistoricalFetcher:
             self._check_input_binding(binding)
             with ExitStack() as payload:
                 if self.memory_budget is not None:
-                    payload.enter_context(self.memory_budget.reserve('history-backfill',
-                        min(req.limit or self._cfg.fetch_batch_size,1000)*PAGE_BYTES_PER_ROW+32*1024))
+                    size = min(req.limit or self._cfg.fetch_batch_size,1000)*PAGE_BYTES_PER_ROW+32*1024
+                    donors = list(getattr(payload_owner,'work_pools',{}).values())
+                    donor = next((p for p in donors if p is not None and p.active
+                        and p.budget is self.memory_budget and p.available >= size),None)
+                    if donor is not None:
+                        payload.callback(donor.reserve(size).close)
+                    else:
+                        payload.enter_context(self.memory_budget.reserve('history-backfill',size))
                 # Check without consuming before the endpoint gate. The
                 # consuming admission happens after the gate so a request
                 # queued behind an in-flight 418 cannot slip through with
@@ -567,6 +573,21 @@ class HistoricalFetcher:
         if first > last or last+width > int(time.time()*1000):
             return await exact()
         part = replace(request,start_ms=first,end_ms=last,limit=(last-first)//width+1)
+        from app.data_engine.memory_budget import current_work_pool
+        pool = current_work_pool(self.memory_budget)
+        if (pool is not None and request.history_projection
+                and self._ingestion_cfg.ccxt_fork_kline_enabled
+                and identity.is_legacy_default_for(task.exchange)):
+            from app.core.executors import run_storage
+            from app.data_engine.storage.kline_sources import history_projection_inputs
+            with ExitStack() as payload:
+                payload.callback(pool.reserve(part.limit*PAGE_BYTES_PER_ROW+32*1024).close)
+                messages = await run_storage(history_projection_inputs,part.descriptor,first,last,width)
+                self._check_input_binding(binding)
+                if messages is not None:
+                    retain_input_payload(payload)
+                    self._metrics.inc('source_journal_pages_reused')
+                    return messages
         return await self._inputs.acquire(part,key=key,width=width,
             fetch=lambda req,owner:self._http_page(task,req,payload_owner=owner,binding=binding))
 

@@ -29,6 +29,8 @@ class InputAdoption:
         self._request_metadata = request.metadata if request is not None else None
         self.permission_floor = (self._request_metadata or {}).get('acquisition_revision')
         self._tokens = []
+        self.resource_observer = None
+        self.memory_pool = None
 
     def remember_permission(self,floor):
         # Sibling chunks may have captured their read heads concurrently. The
@@ -41,11 +43,17 @@ class InputAdoption:
             self._request_metadata.setdefault('acquisition_revision',self.permission_floor)
 
     def __enter__(self):
-        self._tokens.append(_adoption.set(self))
+        from app.core.resource_wait import observer,enabled
+        self._tokens.append((_adoption.set(self),observer.set(self.resource_observer or observer.get()),
+                             enabled.set(self.managed or enabled.get())))
         return self
 
     def __exit__(self,*args):
-        _adoption.reset(self._tokens.pop())
+        from app.core.resource_wait import observer,enabled
+        adoption_token,observer_token,enabled_token = self._tokens.pop()
+        enabled.reset(enabled_token)
+        observer.reset(observer_token)
+        _adoption.reset(adoption_token)
 
     def retain(self, release):
         self._release.append(release)
@@ -118,6 +126,7 @@ class _Input:
     payload_lease: object | None = None
     request: object | None = None
     observed_revision: int | None = None
+    work_pools: dict = field(default_factory=dict)
 
 
 def _opened(message):
@@ -192,8 +201,13 @@ class InputSubscriptions:
         item.demand.dependencies[:] = list(dict.fromkeys(item.consumers.values()))
 
     async def _run(self, item, request, fetch):
-        with public_demand(item.demand):
-            return await fetch(request,item)
+        from app.core.resource_wait import observer
+        token = observer.set(None)  # shared physical work has no single logical owner
+        try:
+            with public_demand(item.demand):
+                return await fetch(request,item)
+        finally:
+            observer.reset(token)
 
     async def acquire_exact(self,request,*,key,fetch):
         return await self.acquire(request,key=('exact',*key,request.start_ms,request.end_ms,
@@ -288,7 +302,9 @@ class InputSubscriptions:
             self.residuals += int(overlap)
         token = object()
         for item,_,_,owned in selected:
+            from app.data_engine.memory_budget import current_work_pool
             item.consumers[token] = current_demand()
+            item.work_pools[token] = current_work_pool()
             self._update_demand(item)
             self._subscriptions += 1
             self.joined += int(not owned)
@@ -353,6 +369,7 @@ class InputSubscriptions:
     def _release(self,selected,token):
         for item,_,_,_ in selected:
             item.consumers.pop(token,None)
+            item.work_pools.pop(token,None)
             self._update_demand(item)
             self._subscriptions -= 1
             if not item.consumers:

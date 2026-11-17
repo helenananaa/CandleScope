@@ -37,7 +37,13 @@ async def _run(
     target = args[0] if operation_is_dispatch_wrapper(func, args) else func
     operation = str(getattr(target, "__qualname__", None) or getattr(target, "__name__", None) or type(target).__name__)
     context = copy_context()
-    physical = executor.submit(functools.partial(context.run, func, *args, **kwargs), operation=operation)
+    from app.core.resource_wait import enabled
+    if enabled.get():
+        async with executor.admission() as permit:
+            physical = executor.submit(functools.partial(context.run, func, *args, **kwargs),
+                                       operation=operation,admission=permit)
+    else:
+        physical = executor.submit(functools.partial(context.run, func, *args, **kwargs), operation=operation)
     future = asyncio.wrap_future(physical)
     try:
         return await asyncio.shield(future)
