@@ -5775,3 +5775,104 @@ def test_cancel_capacity_wait_does_not_resurrect_or_leak_waiters():
         await asyncio.sleep(.05)
         assert not budget._capacity_waiters and engine.calls == 1
     asyncio.run(run())
+
+
+def test_default_parent_chunks_subscribe_concurrently_and_finalize_once_after_all_adopt():
+    async def run():
+        first_started, release = asyncio.Event(), asyncio.Event()
+        calls, finalized = [], []
+        class Engine:
+            async def run(self, **kwargs):
+                opened=kwargs['range_start_ms']
+                calls.append(opened)
+                if opened==0:
+                    first_started.set()
+                    await release.wait()
+                return _RepairReport(status='completed')
+        coord=BackfillCoordinator(storage=_Storage(),engine=Engine(),chunk_bars=1,
+            bars_backfilled=_DataManager().on_bars_backfilled,emit_event=_EventBus().emit,
+            base_delay_seconds=0)
+        async def finalize(request,outcome):
+            finalized.append(outcome)
+        coord._scheduler._finalize=finalize
+        task=asyncio.create_task(coord.request_and_wait(_request(0,120_000)))
+        try:
+            await asyncio.wait_for(first_started.wait(),10)
+            await _wait_until(lambda: len(calls)==3)
+            await asyncio.sleep(.02)
+            assert sorted(calls)==[0,60_000,120_000]
+            assert not task.done() and not finalized
+            release.set()
+            assert (await asyncio.wait_for(task,2)).status=='completed'
+            assert len(finalized)==1 and not coord.snapshot()['active']
+        finally:
+            release.set()
+            await coord.shutdown()
+            await asyncio.gather(task,return_exceptions=True)
+    asyncio.run(run())
+
+
+def test_parallel_parent_failure_drains_sibling_ownership_before_single_finalization():
+    async def run():
+        release=asyncio.Event()
+        calls,finalized=[],[]
+        class Engine:
+            async def run(self,**kwargs):
+                opened=kwargs['range_start_ms'];calls.append(opened)
+                if opened==0:
+                    return _RepairReport(status='failed',errors=['original failure'])
+                await release.wait()
+                return _RepairReport(status='completed')
+        coord=BackfillCoordinator(storage=_Storage(),engine=Engine(),chunk_bars=1,max_retries=1,
+            bars_backfilled=_DataManager().on_bars_backfilled,emit_event=_EventBus().emit,
+            base_delay_seconds=0)
+        async def finalize(request,outcome):finalized.append(outcome)
+        coord._scheduler._finalize=finalize
+        # Newest chunks start first and remain in flight when the oldest fails.
+        request=_request(0,120_000);request.reason='initial_history'
+        task=asyncio.create_task(coord.request_and_wait(request))
+        try:
+            await _wait_until(lambda: len(calls)==3)
+            await asyncio.sleep(.02)
+            assert not task.done() and not finalized
+            release.set()
+            result=await asyncio.wait_for(task,2)
+            assert result.status=='failed' and result.error=='original failure'
+            assert len(finalized)==1 and not coord.snapshot()['active']
+        finally:
+            release.set()
+            await coord.shutdown()
+            await asyncio.gather(task,return_exceptions=True)
+    asyncio.run(run())
+
+
+def test_cancelling_parallel_parent_waits_for_every_subscription_to_release():
+    async def run():
+        active=set(); cancelled=[]; finalized=[]
+        class Engine:
+            async def run(self,**kwargs):
+                opened=kwargs['range_start_ms'];active.add(opened)
+                try:
+                    await asyncio.Event().wait()
+                finally:
+                    active.remove(opened);cancelled.append(opened)
+        coord=BackfillCoordinator(storage=_Storage(),engine=Engine(),chunk_bars=1,
+            bars_backfilled=_DataManager().on_bars_backfilled,emit_event=_EventBus().emit,
+            base_delay_seconds=0)
+        async def finalize(request,outcome):
+            assert not active
+            finalized.append(outcome)
+        coord._scheduler._finalize=finalize
+        request=_request(0,120_000)
+        request.metadata['demand_owner_id']='parallel-chart'
+        task=asyncio.create_task(coord.request_and_wait(request))
+        try:
+            await _wait_until(lambda: len(active)==3,timeout=10)
+            await coord.release_demand(request.request_id,owner_id='parallel-chart')
+            result=await asyncio.wait_for(task,2)
+            assert result.status=='cancelled' and sorted(cancelled)==[0,60_000,120_000]
+            assert len(finalized)==1
+        finally:
+            await coord.shutdown()
+            await asyncio.gather(task,return_exceptions=True)
+    asyncio.run(run())

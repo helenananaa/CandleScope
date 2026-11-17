@@ -30,6 +30,10 @@ class InputAdoption:
         self._tokens = []
 
     def remember_permission(self,floor):
+        # Sibling chunks may have captured their read heads concurrently. The
+        # first physical acquisition fixes the original parent's permission.
+        if self._request_metadata is not None:
+            floor = self._request_metadata.get('acquisition_revision',floor)
         if floor is not None and self.permission_floor is None:
             self.permission_floor = floor
         if self._request_metadata is not None and self.permission_floor is not None:

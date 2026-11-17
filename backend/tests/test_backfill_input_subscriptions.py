@@ -520,3 +520,12 @@ def test_superseded_source_receipt_is_retired_before_retry_adoption():
         finally:
             await owner.close()
     asyncio.run(run())
+
+
+def test_parallel_siblings_keep_first_parent_acquisition_permission():
+    from app.data_engine.backfill.input_subscriptions import InputAdoption
+    parent=RepairRequest('BTCUSDT','89m',0,0)
+    first,second=InputAdoption(parent),InputAdoption(parent)
+    first.remember_permission(3)
+    second.remember_permission(9)
+    assert first.permission_floor==second.permission_floor==parent.metadata['acquisition_revision']==3
