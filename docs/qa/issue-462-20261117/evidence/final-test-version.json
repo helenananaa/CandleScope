@@ -1,0 +1,9 @@
+{
+  "product_commit": "4a732f172bf693a5b763d3b53048b7f20b7f31b9",
+  "selected_test_modules": 24,
+  "passed": 439,
+  "elapsed_seconds": 118.42,
+  "source_replay_scenarios": 4,
+  "contract_checks": 36,
+  "scope": "focused regression; not all repository tests, CI or full native qualification"
+}

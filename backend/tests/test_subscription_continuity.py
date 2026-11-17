@@ -995,3 +995,78 @@ async def test_forming_dependency_wakes_when_physical_source_fails_or_retires(tm
         assert dependent.completed_at is None and dependent.repaired == {}
     finally:
         await _close(dm, factory)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('interval', ['89m', '97m', '101m', '10007m'])
+async def test_forming_repair_repeated_notice_and_new_consumer_resume_real_updates(tmp_path, monkeypatch, interval):
+    now = [T + 180_000]
+    monkeypatch.setattr('app.data_engine.data_manager.manager.time.time', lambda: now[0] / 1000)
+    dm, store, factory, _ = await manager(tmp_path, monkeypatch)
+    await dm.bar_aggregator.start()
+    identity = {**IDENTITY, 'interval': interval}
+    target = SeriesKey(**identity)
+    source = SeriesKey(**IDENTITY)
+    events, errors = [], []
+
+    async def receive(event):
+        events.append(event)
+
+    async def recover(error):
+        errors.append(error)
+
+    async def live(price):
+        now[0] += 1000
+        opened = T + 180_000
+        payload = dict(e='kline', E=now[0], k=dict(
+            t=opened, T=opened + 59_999, i='1m', o='102', h=str(price),
+            l='102', c=str(price), v=str(price-92), q=str(2*(price-92)),
+            n=price-98, V='6', Q='12', x=False,
+        ))
+        await factory.pipeline.normalize.ingest(RawMessage(
+            payload=payload, source=DataSource.WEBSOCKET,
+            stream_type=StreamType.KLINE, received_at_ms=now[0],
+        ))
+
+    try:
+        await dm.ensure_stream(**identity)
+        await factory.emit(T, 99)
+        await factory.emit(T + 120_000, 101)
+        gap = dm.source_gaps.pending(target)[0]
+        source_gap = dm.source_gaps.pending(source)[0]
+        dm.subscribe(receive, **identity, event_types={DataEventType.BAR_CREATED, DataEventType.BAR_UPDATED}, on_recovery=recover)
+        await dm._project_source_gap(target, source_gap)
+        assert gap.forming_source_gap_ids == {source_gap.id}
+        await _history_repair(dm, store, T + 60_000, 100)
+        await _until(lambda: bool(errors))
+        assert errors[0].reason == 'source_gap_snapshot_required'
+        await dm._retire_forming_source_dependents(source)
+        diagnostics = dm.source_gaps.snapshot()
+        assert diagnostics['forming_snapshots_required'] == 1
+        assert diagnostics['last_forming_snapshot']['gap_id'] == gap.id
+        assert not dm.source_gaps.pending(target)
+        assert gap.completed_at is None and gap.repaired == {}
+        # Use the existing seed/snapshot and subscribe entry points after resync.
+        await dm.warm_start.seed_if_needed('BTCUSDT', interval, exchange='binance', market_type='futures', had_stream=True)
+        snapshot = dm.query_latest(**identity, limit=2, auto_backfill=False)
+        resumed, resumed_errors = [], []
+        async def receive_resumed(event):
+            resumed.append(event)
+        async def recover_resumed(error):
+            resumed_errors.append(error)
+        dm.subscribe(receive_resumed, **identity,
+                     event_types={DataEventType.BAR_CREATED, DataEventType.BAR_UPDATED}, on_recovery=recover_resumed)
+        await live(102)
+        await _until(lambda: any(e.bar.close == 102 for e in resumed))
+        await live(103)
+        await _until(lambda: any(e.bar.close == 103 for e in resumed))
+        bars = [e.bar for e in resumed]
+        assert all(not bar.is_closed for bar in bars)
+        assert len({bar.time for bar in bars}) == 1
+        assert resumed_errors == []
+        assert gap.event().event_type == DataEventType.SOURCE_GAP
+        assert snapshot.bars and not snapshot.bars[-1].is_closed
+        assert len({bar.time for bar in snapshot.bars}) == len(snapshot.bars)
+        assert bars[-1].volume == 41, 'three final inputs plus the latest cumulative tail, once'
+    finally:
+        await _close(dm, factory)

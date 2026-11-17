@@ -73,7 +73,8 @@ class HistoryPrefixRuntime:
                             closed_compactions=0, closed_compacted_components=0,
                             closed_compaction_deferred=0, closed_compaction_pages=0,
                             forming_compactions=0, forming_compacted_components=0, forming_compaction_deferred=0,
-                            component_jobs_scheduled=0, component_jobs_refused=0, component_jobs_peak=0)
+                            component_jobs_scheduled=0, component_jobs_refused=0, component_jobs_peak=0,
+                            handoff_rebinds=0)
 
     def snapshot(self):
         return {**self.metrics, 'targets': len(self.targets), 'tasks': len(self.tasks),
@@ -832,10 +833,25 @@ class HistoryPrefixRuntime:
         if slot is None:
             yield None
             return
-        async with self._task(), slot.lock:
-            if not self._current(slot):
-                raise BlockRevisionChanged('history target generation expired')
-            yield slot
+        token = slot.token
+        async with self._task():
+            while slot is not None:
+                async with slot.lock:
+                    if self._current(slot):
+                        yield slot
+                        return
+                    if (self.closing or
+                            self.aggregator.history_target_token(slot.source, interval) != token):
+                        raise BlockRevisionChanged('history target generation expired')
+                    # Failed optional compaction may release its temporary slot
+                    # while this input waits for the lock. That is not a target
+                    # detach. Rejoin the current owner under the original epoch;
+                    # the ordinary input path still checks its source fences.
+                    self.metrics['handoff_rebinds'] += 1
+                    slot = self.targets.get(key)
+                    if slot is not None and slot.token != token:
+                        raise BlockRevisionChanged('history target generation expired')
+        yield None
 
     async def before_input(self, slot, pipeline, incoming, *, emit_events):
         """Called under hold; returns whether the fine input remains applicable."""

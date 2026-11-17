@@ -500,3 +500,76 @@ def test_new_bucket_warm_fallback_does_not_expand_an_owned_previous_prefix(dm, m
                                           market_type='futures', had_stream=True)
         assert calls and all(call['start_ms'] >= 121 * DAY for call in calls)
     asyncio.run(check())
+
+
+@pytest.mark.parametrize('replacement', ['none', 'same_epoch', 'new_epoch', 'shutdown'])
+def test_waiting_input_distinguishes_optional_slot_release_from_target_lifetime(dm, runtime, replacement):
+    """A failed optional compaction can retire its slot ahead of a lock waiter."""
+    from app.data_engine.bar_aggregator.history_prefix_runtime import _Target
+    from app.data_engine.aggregation.blocks import BlockRevisionChanged
+
+    agg, service, recovery = runtime
+
+    async def check():
+        tail = replace(read_rows(dm)[-1], time=120 * DAY // 1000, volume=4)
+        await feed(agg, tail)
+        token = agg.history_target_token(KEY, '121d')
+        slot = _Target(KEY, token)
+        service.targets[token[0]] = slot
+        await slot.lock.acquire()
+        task = asyncio.create_task(feed(agg, replace(tail, volume=9)))
+        await asyncio.sleep(0)
+        assert not task.done()
+        # The optional owner releases a slot which never adopted a prefix.
+        service.targets.pop(token[0])
+        if replacement == 'same_epoch':
+            service.targets[token[0]] = _Target(KEY, token)
+        elif replacement == 'new_epoch':
+            agg.remove_target('BTCUSDT', '121d', market_type='futures')
+            agg.add_target('BTCUSDT', '121d', market_type='futures')
+        elif replacement == 'shutdown':
+            service.closing = True
+        slot.lock.release()
+        if replacement in {'new_epoch', 'shutdown'}:
+            with pytest.raises(BlockRevisionChanged):
+                await task
+            if replacement == 'new_epoch':
+                assert actual(agg) is None
+                await feed(agg, replace(tail, volume=11))
+                assert actual(agg).volume == 11
+        else:
+            await task
+            assert actual(agg).volume == 9
+            assert service.snapshot()['handoff_rebinds'] == 1
+        assert recovery == []
+        await service.close()
+
+    asyncio.run(check())
+
+
+def test_released_optional_slot_leaves_normal_recovery_owner_available(dm, runtime):
+    from app.data_engine.bar_aggregator.history_prefix_runtime import _Target
+    agg, service, _ = runtime
+
+    async def check():
+        token = agg.history_target_token(KEY, '121d')
+        slot = _Target(KEY, token)
+        service.targets[token[0]] = slot
+        await slot.lock.acquire()
+        entered = asyncio.Event()
+        async def handoff():
+            entered.set()
+            async with service.hold('binance', 'futures', 'BTCUSDT', '121d', KEY.identity) as current:
+                assert current is None
+                # The ordinary fallback may enter the existing canonical-close
+                # recovery owner. A retired history slot must not hold it open.
+                async with service._task():
+                    pass
+        task = asyncio.create_task(handoff())
+        await entered.wait()
+        service.targets.pop(token[0])
+        slot.lock.release()
+        await task
+        assert not service.tasks
+        await service.close()
+    asyncio.run(check())
