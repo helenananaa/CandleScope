@@ -191,3 +191,33 @@ def test_real_pipeline_resumes_after_local_memory_backpressure(mixed_query,monke
             await transport.stop()
             await server.cleanup()
     asyncio.run(run())
+
+
+def test_repeated_typed_view_rejections_reuse_received_input_until_canonical_adoption(mixed_query,monkeypatch):
+    from app.data_engine.storage.revisions import StaleAcquisition
+    async def run():
+        coordinator,engine,transport,server,started,release,calls=await setup_pipeline(mixed_query,monkeypatch)
+        coordinator._max_retries=1
+        rejected=[]
+        original=engine.reconciler.reconcile
+        async def reconcile(*args,**kwargs):
+            if len(rejected)<4:
+                rejected.append(True)
+                raise StaleAcquisition('injected optimistic view rejection',
+                    details={'reason':'canonical_window_changed'})
+            return await original(*args,**kwargs)
+        monkeypatch.setattr(engine.reconciler,'reconcile',reconcile)
+        release.set()
+        try:
+            outcome=await asyncio.wait_for(coordinator.request_and_wait(request(89)),20)
+            assert outcome.status=='completed' and outcome.attempts==1,outcome.error
+            assert len(rejected)==4 and len(calls)==1,calls
+            result=mixed_query.query('BTCUSDT','89m',start_ms=0,end_ms=89*MINUTE-1,
+                market_type='futures',limit=1,min_revision=mixed_query.storage.revision_store.head())
+            assert result.complete and result.bars[0].trusted_final and result.bars[0].trades==89
+        finally:
+            await coordinator.shutdown()
+            await engine.close()
+            await transport.stop()
+            await server.cleanup()
+    asyncio.run(run())

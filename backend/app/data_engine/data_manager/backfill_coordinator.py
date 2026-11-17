@@ -65,6 +65,7 @@ from .backfill_contracts import (
     RepairRequest,
     RepairRetryDeferred,
     RepairCapacityDeferred,
+    RepairReplanDeferred,
     RepairChunkSplit,
     RepairWrittenRangeSummary,
     ScanReport,
@@ -2519,6 +2520,13 @@ class BackfillCoordinator:
                 if inputs is not None and not revision_conflict:
                     inputs.acknowledge()
                 await self._notify_source_storage(request, report)
+                can_replan = ((getattr(report,'metadata',{}) or {}).get('revision_replan') is True
+                    or bool(failures) and all(failure.get('revision_replan') is True for failure in failures))
+                if can_replan and not any(getattr(item,'errors',())
+                        for item in getattr(report,'fetch_results',()) or ()):
+                    await self._ledger_mark_retry_wait(request, attempt=max(0,attempt-1),
+                        error='local_revision_replan', delay_seconds=0.05)
+                    raise RepairReplanDeferred(attempt-1)
                 if (self._is_failed(report.status) and request.metadata.get('required_history_composition')
                         and request.end_ms > request.start_ms and not getattr(report, 'fetch_results', ())
                         and (getattr(report, 'metadata', {}) or {}).get('mixed_plan_fallback')

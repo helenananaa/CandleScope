@@ -9,10 +9,10 @@ def check_range_since(conn, keys, start, stop, revision):
         return
     receipts = block_change_receipts(conn, revision, current_revision(conn))
     if not receipts:
-        raise StaleAcquisition('dependency range receipt suffix is unavailable')
+        raise StaleAcquisition('dependency range receipt suffix is unavailable', details={'reason':'range_receipt_suffix_unavailable'})
     if any(tuple(row[name] for name in IDENTITY_COLUMNS) in changed
            and row['start_ms'] < stop and row['end_ms'] >= start for row in receipts):
-        raise StaleAcquisition('canonical dependency range changed during acquisition')
+        raise StaleAcquisition('canonical dependency range changed during acquisition', details={'reason':'canonical_range_changed'})
 
 
 def check_store_range(store, keys, start, stop, revision):

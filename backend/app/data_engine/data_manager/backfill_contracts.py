@@ -91,6 +91,13 @@ class RepairRetryDeferred(Exception):
         self.bucket_key = None
 
 
+class RepairReplanDeferred(RepairRetryDeferred):
+    """A rejected optimistic view needs a fresh read, with the same permission."""
+    def __init__(self, attempt):
+        super().__init__(0.05, attempt)
+        self.reason = 'local_revision_replan'
+
+
 class RepairCapacityDeferred(RepairRetryDeferred):
     """A lower resource owner parks work without consuming a failure attempt."""
     def __init__(self, error, attempt):

@@ -328,6 +328,12 @@ class Reconciler:
         except Exception as exc:
             from .input_subscriptions import propagate_capacity_wait
             propagate_capacity_wait(exc)
+            from .input_subscriptions import current_input_adoption
+            scope = current_input_adoption()
+            if (isinstance(exc,StaleAcquisition) and exc.can_replan
+                    and scope is not None and scope.managed and not result.errors
+                    and all(item.get('revision_replan') is True for item in result.failed_batches)):
+                raise
             result.errors.append(str(exc))
             self._metrics.inc("reconcile_errors")
             logger.error("Reconciliation error: %s", exc, exc_info=True)
@@ -1232,6 +1238,8 @@ class Reconciler:
         }
         if isinstance(error,StaleAcquisition):
             detail['revision_conflict'] = True
+            if error.can_replan:
+                detail['revision_replan'] = True
         for key, value in list(getattr(error, 'fence_details', {}).items())[:12]:
             if type(value) in (int, float, bool, type(None), str):
                 detail['fence_'+str(key)[:40]] = value[:160] if isinstance(value, str) else value

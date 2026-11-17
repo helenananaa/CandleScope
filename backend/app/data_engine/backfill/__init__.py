@@ -626,6 +626,8 @@ class BackfillEngine:
             status = BackfillStatus.FAILED
             if isinstance(exc,StaleAcquisition):
                 metadata['revision_conflict'] = True
+                if exc.can_replan:
+                    metadata['revision_replan'] = True
             errors.append(str(exc))
             self._metrics.inc("run_errors")
             logger.error(

@@ -37,6 +37,17 @@ class StaleAcquisition(RuntimeError):
         super().__init__(message)
         self.fence_details = dict(details or {})
 
+    @property
+    def can_replan(self):
+        # Only typed content/view conflicts may refresh a read head. A new
+        # view never grants new deletion, binding or identity permission.
+        return self.fence_details.get('reason') in {
+            'canonical_window_changed', 'target_window_changed',
+            'canonical_input_changed', 'canonical_range_changed',
+            'range_receipt_suffix_unavailable', 'warmup_receipt_suffix_unavailable',
+            'warmup_overlapping_change', 'mixed_receipt_suffix_unavailable',
+            'mixed_overlapping_change'}
+
 
 def _execute_schema(conn, script):
     """Execute trigger DDL without sqlite3.executescript's implicit commit."""

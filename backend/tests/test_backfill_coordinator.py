@@ -5876,3 +5876,26 @@ def test_cancelling_parallel_parent_waits_for_every_subscription_to_release():
             await coord.shutdown()
             await asyncio.gather(task,return_exceptions=True)
     asyncio.run(run())
+
+
+def test_local_revision_replans_keep_demand_alive_without_renewing_permission():
+    async def run():
+        seen=[]
+        class Engine:
+            async def run(self,**kwargs):
+                seen.append(kwargs['metadata']['acquisition_revision'])
+                if len(seen)<=7:
+                    return SimpleNamespace(status='failed',errors=['changed view'],
+                        metadata={'revision_conflict':True,'revision_replan':True},reconcile_result=None)
+                return _RepairReport(status='completed')
+        coord=BackfillCoordinator(storage=_Storage(),engine=Engine(),max_retries=1,
+            bars_backfilled=_DataManager().on_bars_backfilled,emit_event=_EventBus().emit,
+            base_delay_seconds=0)
+        request=_request(0,0);request.metadata['acquisition_revision']=3
+        try:
+            result=await asyncio.wait_for(coord.request_and_wait(request),10)
+            assert result.status=='completed' and result.attempts==1
+            assert seen==[3]*8
+        finally:
+            await coord.shutdown()
+    asyncio.run(run())
