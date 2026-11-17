@@ -24,6 +24,7 @@ _adoption = ContextVar('historical_input_adoption',default=None)
 class InputAdoption:
     def __init__(self,request=None):
         self._release = []
+        self.managed = request is not None or bool(getattr(_adoption.get(), 'managed', False))
         self._request_metadata = request.metadata if request is not None else None
         self.permission_floor = (self._request_metadata or {}).get('acquisition_revision')
         self._tokens = []
@@ -94,6 +95,12 @@ def current_input_adoption():
     return _adoption.get()
 
 
+def propagate_capacity_wait(error):
+    scope = current_input_adoption()
+    if isinstance(error, MemoryBudgetExceeded) and error.waitable and scope is not None and scope.managed:
+        raise error
+
+
 @dataclass(eq=False)
 class _Input:
     key: tuple
@@ -131,7 +138,9 @@ class InputSubscriptions:
     MAX_INPUTS = 4096
     MAX_SUBSCRIPTIONS = 8192
 
-    def __init__(self):
+    def __init__(self, *, receipts_current=None):
+        self._receipts_current = receipts_current
+        self.stale_inputs_retired = 0
         self._inputs: dict[tuple, list[_Input]] = {}
         self._tasks: set[asyncio.Task] = set()
         self._ids = count()
@@ -158,6 +167,7 @@ class InputSubscriptions:
             abandoned_pages_cancelled=self.cancelled,
             completed_pages_awaiting_adoption=completed,active_input_sample=samples,
             metadata_budget_rejections=self.metadata_budget_rejections,
+            stale_inputs_retired=self.stale_inputs_retired,
             scope='historical input requests and pending adoption; range slicing only for qualified closed native pages; no canonical coverage or write permission')
 
     def _retire(self, item):
@@ -191,6 +201,26 @@ class InputSubscriptions:
         selected = []
         from app.data_engine.storage.revisions import acquisition_revision
         revision = acquisition_revision()
+        # Validate retained raw frames before retry adoption. A newer source
+        # selection can supersede a receipt even without a canonical write.
+        # The transactional projection guard remains the final authority.
+        from app.exchanges.ccxt_ext.fork_kline import SCHEMAS
+        validated = set()
+        def receipted(messages):
+            return bool(messages) and all(isinstance(message.payload,dict)
+                and message.payload.get('schema') in SCHEMAS
+                and isinstance(message.payload.get('_source_receipt',{}).get('ref'),dict)
+                for message in messages)
+        if self._receipts_current is not None:
+            for item in tuple(self._inputs.get(key, ())):
+                if item.task.done() and not item.task.cancelled() and item.task.exception() is None:
+                    messages = item.task.result()
+                    if receipted(messages):
+                        if await self._receipts_current(messages):
+                            validated.add(item)
+                        else:
+                            self._retire(item)
+                            self.stale_inputs_retired += 1
         # No await between coverage analysis and reservation: two logical
         # consumers on this event loop cannot both claim the same residual.
         for item in tuple(self._inputs.get(key, ())):
@@ -198,6 +228,9 @@ class InputSubscriptions:
                 continue
             if item.task.done() and (item.task.cancelled() or item.task.exception() is not None):
                 self._retire(item)
+                continue
+            if (self._receipts_current is not None and item.task.done()
+                    and receipted(item.task.result()) and item not in validated):
                 continue
             if item.observed_revision != revision:
                 # Across refreshed read heads, only journal-receipted native

@@ -616,6 +616,13 @@ class BackfillEngine:
                 raise StreamBackfillDeferred(exc,streamed.result) from exc
             raise
         except Exception as exc:
+            from .input_subscriptions import current_input_adoption
+            scope = current_input_adoption()
+            if (isinstance(exc, MemoryBudgetExceeded) and exc.waitable
+                    and scope is not None and scope.managed):
+                if plan is not None:
+                    plan.mixed_binding = None
+                raise
             status = BackfillStatus.FAILED
             if isinstance(exc,StaleAcquisition):
                 metadata['revision_conflict'] = True

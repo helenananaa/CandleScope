@@ -5706,3 +5706,72 @@ def test_periodic_input_exclusion_preserves_tail_and_manual_interior_audits():
         assert len(storage.calls) == 1 and 'end_ms' not in storage.calls[0]
         await coordinator.shutdown()
     asyncio.run(run())
+
+
+def test_memory_capacity_wait_yields_worker_and_does_not_exhaust_retries():
+    from app.data_engine.memory_budget import MemoryBudget
+
+    async def run():
+        budget = MemoryBudget(100)
+        budget.register('history-backfill', limit_bytes=100, usage=lambda: {'estimated_bytes': 0})
+        held = budget.reserve('history-backfill', 100)
+        held.__enter__()
+        ledger = _Ledger()
+        calls = []
+        class Engine:
+            async def run(self, **kwargs):
+                calls.append(kwargs['symbol'])
+                if kwargs['symbol'] == 'BTCUSDT':
+                    with budget.reserve('history-backfill', 100):
+                        return _RepairReport(status='completed')
+                return _RepairReport(status='completed')
+        coord = BackfillCoordinator(storage=_Storage(), engine=Engine(), gap_ledger=ledger,
+            bars_backfilled=_DataManager().on_bars_backfilled, emit_event=_EventBus().emit,
+            max_concurrency=1, max_retries=1, base_delay_seconds=0)
+        tasks = []
+        try:
+            tasks.append(asyncio.create_task(coord.request_and_wait(_request(0,0))))
+            await _wait_until(lambda: len(budget._capacity_waiters) == 1, timeout=5)
+            assert coord.snapshot()['running_chunks'] == 0
+            eth = _request(0,0)
+            eth.symbol = 'ETHUSDT'
+            tasks.append(asyncio.create_task(coord.request_and_wait(eth)))
+            assert (await asyncio.wait_for(tasks[-1],1)).status == 'completed'
+            await asyncio.sleep(.05)
+            assert calls == ['BTCUSDT','ETHUSDT'], 'capacity waiting must not replan in a busy loop'
+            # Release from the storage-thread side of the budget owner.
+            await asyncio.to_thread(held.__exit__, None, None, None)
+            result = await asyncio.wait_for(tasks[0],1)
+            assert result.status == 'completed' and result.attempts == 1
+            assert [value['attempt'] for name,value in ledger.events if name == 'started'] == [1,1,1]
+            assert not budget._capacity_waiters
+        finally:
+            held.__exit__(None,None,None)
+            await coord.shutdown()
+            await asyncio.gather(*tasks, return_exceptions=True)
+    asyncio.run(run())
+
+
+def test_cancel_capacity_wait_does_not_resurrect_or_leak_waiters():
+    from app.data_engine.memory_budget import MemoryBudget
+    async def run():
+        budget = MemoryBudget(100)
+        budget.register('history-backfill', limit_bytes=100, usage=lambda: {'estimated_bytes': 0})
+        class Engine:
+            calls = 0
+            async def run(self, **kwargs):
+                self.calls += 1
+                with budget.reserve('history-backfill', 100):
+                    return _RepairReport(status='completed')
+        engine = Engine()
+        coord = BackfillCoordinator(storage=_Storage(), engine=engine,
+            bars_backfilled=_DataManager().on_bars_backfilled, emit_event=_EventBus().emit,
+            max_retries=1, base_delay_seconds=0)
+        with budget.reserve('history-backfill', 100):
+            task = asyncio.create_task(coord.request_and_wait(_request(0,0)))
+            await _wait_until(lambda: len(budget._capacity_waiters) == 1, timeout=5)
+            await coord.shutdown()
+            assert (await task).error == 'cancelled'
+        await asyncio.sleep(.05)
+        assert not budget._capacity_waiters and engine.calls == 1
+    asyncio.run(run())

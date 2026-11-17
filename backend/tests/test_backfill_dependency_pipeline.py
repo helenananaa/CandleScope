@@ -155,3 +155,39 @@ def test_retried_shared_inputs_cannot_renew_permission_after_a_delete(mixed_quer
             await transport.stop()
             await server.cleanup()
     asyncio.run(run())
+
+
+def test_real_pipeline_resumes_after_local_memory_backpressure(mixed_query,monkeypatch):
+    async def run():
+        coordinator,engine,transport,server,started,release,calls=await setup_pipeline(mixed_query,monkeypatch)
+        coordinator._max_retries=1
+        budget=engine.memory_budget
+        capacity=budget.snapshot()['owners']['history-backfill']['limit_bytes']
+        lease=budget.reserve('history-backfill',capacity)
+        lease.__enter__()
+        task=None
+        try:
+            task=asyncio.create_task(coordinator.request_and_wait(request(89)))
+            deadline=asyncio.get_running_loop().time()+10
+            while not coordinator.snapshot()['capacity_waiting_chunks']:
+                assert not task.done(),task.result() if task.done() else None
+                assert asyncio.get_running_loop().time()<deadline
+                await asyncio.sleep(.01)
+            assert not calls and coordinator.snapshot()['running_chunks']==0
+            lease.__exit__(None,None,None)
+            release.set()
+            outcome=await asyncio.wait_for(task,20)
+            assert outcome.status=='completed' and outcome.attempts==1,outcome.error
+            result=mixed_query.query('BTCUSDT','89m',start_ms=0,end_ms=89*MINUTE-1,
+                market_type='futures',limit=1,min_revision=mixed_query.storage.revision_store.head())
+            assert result.complete and result.bars[0].trusted_final and result.bars[0].trades==89
+        finally:
+            lease.__exit__(None,None,None)
+            release.set()
+            await coordinator.shutdown()
+            if task is not None:
+                await asyncio.gather(task,return_exceptions=True)
+            await engine.close()
+            await transport.stop()
+            await server.cleanup()
+    asyncio.run(run())

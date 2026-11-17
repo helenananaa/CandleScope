@@ -64,6 +64,7 @@ from .backfill_contracts import (
     RepairReportSummary,
     RepairRequest,
     RepairRetryDeferred,
+    RepairCapacityDeferred,
     RepairChunkSplit,
     RepairWrittenRangeSummary,
     ScanReport,
@@ -2659,6 +2660,13 @@ class BackfillCoordinator:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
+                from app.data_engine.memory_budget import MemoryBudgetExceeded
+                if isinstance(exc, MemoryBudgetExceeded) and exc.waitable:
+                    if (inputs := current_input_adoption()) is not None:
+                        inputs.acknowledge()
+                    await self._ledger_mark_retry_wait(request, attempt=max(0, attempt-1),
+                        error="local_memory_admission", delay_seconds=0)
+                    raise RepairCapacityDeferred(exc, attempt-1) from exc
                 last_error = str(exc)
                 logger.error(
                     "Backfill task error for %s@%s attempt %d/%d: %s",

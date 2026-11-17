@@ -70,6 +70,7 @@ from .models import (
 )
 from .fetch_stream import PageConsumer, PAGE_BYTES_PER_ROW, stream_grid, disjoint_source_spans
 from .source_router import ArchiveRoutePlan, HistoricalSourceRouter
+from app.data_engine.memory_budget import MemoryBudgetExceeded
 from .input_subscriptions import InputSubscriptions, input_adoption, retain_input_payload
 
 logger = logging.getLogger("backfill.Fetcher")
@@ -116,7 +117,12 @@ class HistoricalFetcher:
 
         # Concurrency control
         self._semaphore = asyncio.Semaphore(self._global_fetch_concurrency())
-        self._inputs = InputSubscriptions()
+        from app.data_engine.storage.kline_sources import input_receipts_current
+        from app.core.executors import run_storage
+        async def receipts_current(messages):
+            refs = [message.payload['_source_receipt']['ref'] for message in messages]
+            return await run_storage(input_receipts_current, refs)
+        self._inputs = InputSubscriptions(receipts_current=receipts_current)
         self._rate_limit_manager = get_shared_rate_limit_manager()
         self._source_router = source_router
         if (
@@ -370,6 +376,17 @@ class HistoricalFetcher:
                 if completed:
                     raise FetchBatchDeferred(latest, completed)
             raise latest
+
+        capacity = next((item for item in raw_results if isinstance(item, MemoryBudgetExceeded)), None)
+        from .input_subscriptions import current_input_adoption
+        adoption = current_input_adoption()
+        if capacity is not None and capacity.waitable and adoption is not None and adoption.managed:
+            if on_deferred is not None:
+                admitted = [item for item in raw_results if isinstance(item, FetchResult)
+                    and item.status in {BackfillStatus.COMPLETED, BackfillStatus.PARTIAL}]
+                if admitted:
+                    await on_deferred(admitted)
+            raise capacity
 
         # Handle any unexpected exceptions returned by gather
         results: list[FetchResult] = []
@@ -704,6 +721,9 @@ class HistoricalFetcher:
                         raise
                     await asyncio.sleep(exc.retry_after_seconds)
 
+                except MemoryBudgetExceeded:
+                    raise
+
                 except TransportError as exc:
                     retry_count += 1
                     error_msg = f"Page fetch error (attempt {retry_count}/{max_attempts}): {exc}"
@@ -773,7 +793,7 @@ class HistoricalFetcher:
             else:
                 try:
                     await collector.accept(page_bars)
-                except RateLimitDeferred:
+                except (RateLimitDeferred, MemoryBudgetExceeded):
                     raise
                 except Exception as exc:
                     errors.append(f'page_consumption_failed: {exc}')

@@ -91,6 +91,14 @@ class RepairRetryDeferred(Exception):
         self.bucket_key = None
 
 
+class RepairCapacityDeferred(RepairRetryDeferred):
+    """A lower resource owner parks work without consuming a failure attempt."""
+    def __init__(self, error, attempt):
+        super().__init__(0, attempt)
+        self.reason = "local_memory_admission"
+        self.wait_for_capacity = error.wait_for_capacity
+
+
 RepairSeries = tuple[str, str, str, str] | tuple[str, str, str, str, KlineSeriesIdentity]
 
 

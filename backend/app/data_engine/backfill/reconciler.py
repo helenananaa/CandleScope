@@ -326,6 +326,8 @@ class Reconciler:
                 result.bars_cached = cached
 
         except Exception as exc:
+            from .input_subscriptions import propagate_capacity_wait
+            propagate_capacity_wait(exc)
             result.errors.append(str(exc))
             self._metrics.inc("reconcile_errors")
             logger.error("Reconciliation error: %s", exc, exc_info=True)
@@ -651,6 +653,8 @@ class Reconciler:
                     if n > 0:
                         await self._fire_write_batch(symbol, interval, n)
                 except Exception as exc:
+                    from .input_subscriptions import propagate_capacity_wait
+                    propagate_capacity_wait(exc)
                     logger.error(
                         "Write batch failed for %s@%s source=%s: %s",
                         symbol,
@@ -895,6 +899,8 @@ class Reconciler:
                     if written_range is not None:
                         written_ranges.append(written_range)
                 except Exception as exc:
+                    from .input_subscriptions import propagate_capacity_wait
+                    propagate_capacity_wait(exc)
                     logger.error(
                         "Custom bar write failed for %s@%s phase=%s: %s",
                         symbol,

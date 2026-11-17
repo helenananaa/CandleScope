@@ -479,3 +479,44 @@ def test_failed_shared_part_does_not_redownload_the_successful_residual():
             await asyncio.gather(first,second,return_exceptions=True)
             await owner.close()
     asyncio.run(run())
+
+
+def test_superseded_source_receipt_is_retired_before_retry_adoption():
+    from app.data_engine.backfill.input_subscriptions import InputSubscriptions
+    async def run():
+        calls, selected = [], {'revision': 1}
+        async def current(messages):
+            return all(message.payload['_source_receipt']['ref']['revision'] == selected['revision']
+                for message in messages)
+        owner = InputSubscriptions(receipts_current=current)
+        from dataclasses import dataclass
+        @dataclass
+        class Request:
+            start_ms: int = 0
+            end_ms: int = 0
+            limit: int = 1
+            from_id: object = None
+            quota_acquired: bool = False
+            quota_semaphore_held: bool = False
+            quota_reservation: object = None
+        request = Request()
+        async def fetch(request,item):
+            calls.append(selected['revision'])
+            return [RawMessage(payload={'schema':'candlescope.binance.usdm.kline.v1',
+                'timestamp':0,'_source_receipt':{'ref':{'series':'s','open_time':0,
+                'revision':selected['revision']}}}, source=DataSource.HTTP,
+                stream_type=StreamType.KLINE,received_at_ms=0)]
+        try:
+            with input_adoption():
+                first = await owner.acquire(request,key=('source',),width=60_000,fetch=fetch)
+                selected['revision'] = 2
+                second = await owner.acquire(request,key=('source',),width=60_000,fetch=fetch)
+                third = await owner.acquire(request,key=('source',),width=60_000,fetch=fetch)
+                assert calls == [1,2]
+                assert first[0].payload['_source_receipt']['ref']['revision'] == 1
+                assert second == third
+                assert owner.stale_inputs_retired == 1
+            assert owner.snapshot()['subscriptions'] == 0
+        finally:
+            await owner.close()
+    asyncio.run(run())

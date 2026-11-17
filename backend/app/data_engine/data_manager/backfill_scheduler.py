@@ -123,6 +123,7 @@ class _FetchChunk:
     bypasses_before_dispatch: int = 0
     execution_scope: Any = None
     executing: bool = False
+    resource_waiter: asyncio.Task | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -863,8 +864,12 @@ class BackfillScheduler:
             state.future.set_result(outcome)
 
         self._ready.clear()
+        resource_waiters = [chunk.resource_waiter for chunk in self._chunks.values()
+                            if chunk.resource_waiter is not None]
         for chunk_id in tuple(self._chunks):
             self._drop_chunk(chunk_id)
+        if resource_waiters:
+            await asyncio.gather(*resource_waiters, return_exceptions=True)
         self._chunks.clear()
         self._requests.clear()
         self._series.clear()
@@ -904,7 +909,7 @@ class BackfillScheduler:
                 "fairness_owner": self._fairness_owner(chunk.request),
             }
             for chunk in self._chunks.values()
-            if chunk.eligible_at_monotonic > now_monotonic
+            if chunk.eligible_at_monotonic > now_monotonic or chunk.resource_waiter is not None
         ]
 
         return {
@@ -936,6 +941,7 @@ class BackfillScheduler:
             "next_drain_in_ms": self._next_drain_in_ms(),
             "rate_limited_skips": self.rate_limited_skips,
             "exchange_rate_limit_deferrals": self.exchange_rate_limit_deferrals,
+            "capacity_waiting_chunks": sum(chunk.resource_waiter is not None for chunk in self._chunks.values()),
             "deferred_chunks": len(deferred),
             "deferred": sorted(
                 deferred,
@@ -1264,6 +1270,8 @@ class BackfillScheduler:
 
     def _drop_chunk(self, chunk_id, default=None):
         chunk = self._chunks.pop(chunk_id,default)
+        if chunk is not None and chunk.resource_waiter is not None:
+            chunk.resource_waiter.cancel()
         if chunk is not None and chunk.execution_scope is not None:
             chunk.execution_scope.close()
         return chunk
@@ -1295,6 +1303,9 @@ class BackfillScheduler:
                 state = self._requests.get(chunk.parent_id)
                 if state is None or state.stale or state.failed is not None:
                     self._drop_chunk(chunk.chunk_id, None)
+                    continue
+                if chunk.chunk_id in self._tasks or chunk.resource_waiter is not None:
+                    skipped.append(item)
                     continue
                 using_foreground_reserve = bool(self._max_concurrency and len(self._tasks) >= self._max_concurrency)
                 if (
@@ -1508,7 +1519,7 @@ class BackfillScheduler:
             if int(item[0]) != lane[0]:
                 continue
             candidate = self._chunks.get(item[3])
-            if candidate is None or candidate.eligible_at_monotonic > now:
+            if candidate is None or candidate.resource_waiter is not None or candidate.eligible_at_monotonic > now:
                 continue
             if self._is_background(candidate.request) != lane[1]:
                 continue
@@ -1534,7 +1545,7 @@ class BackfillScheduler:
             return True
         for item in (*self._ready, *tuple(extra)):
             chunk = self._chunks.get(item[3])
-            if (chunk is None or self._is_background(chunk.request)
+            if (chunk is None or chunk.resource_waiter is not None or self._is_background(chunk.request)
                     or chunk.eligible_at_monotonic > time.monotonic()):
                 continue
             state = self._requests.get(chunk.parent_id)
@@ -1852,7 +1863,19 @@ class BackfillScheduler:
                 "defer_count": chunk.defer_count,
             },
         )
-        self._schedule_drain(eligible_at - now_monotonic)
+        wait = getattr(exc, 'wait_for_capacity', None)
+        if wait is not None:
+            async def resume():
+                try:
+                    await wait()
+                finally:
+                    chunk.resource_waiter = None
+                if self._chunks.get(chunk.chunk_id) is chunk:
+                    chunk.eligible_at_monotonic = time.monotonic()
+                    self._drain()
+            chunk.resource_waiter = asyncio.create_task(resume(), name='backfill-resource-wait')
+        else:
+            self._schedule_drain(eligible_at - now_monotonic)
 
     async def _finish_chunk(self, chunk: _FetchChunk, outcome: RepairOutcome) -> None:
         self._drop_chunk(chunk.chunk_id, None)
@@ -2225,7 +2248,7 @@ class BackfillScheduler:
             chunk
             for chunk_id in state.chunk_ids
             if (chunk := self._chunks.get(chunk_id)) is not None
-            and chunk.eligible_at_monotonic > now_monotonic
+            and (chunk.eligible_at_monotonic > now_monotonic or chunk.resource_waiter is not None)
         ]
         payload = {
             "series": series,
@@ -2251,6 +2274,7 @@ class BackfillScheduler:
             "demand_details_truncated":len(state.demand_leases)>32,
             "persistent_interest": state.persistent_interest,
             "cancel_requested": state.cancel_requested,
+            "capacity_waiting_chunks": sum(chunk.resource_waiter is not None for chunk in deferred),
             "deferred_chunks": len(deferred),
             "retry_at_ms": min(
                 (
