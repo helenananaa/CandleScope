@@ -51,6 +51,7 @@ class SourceGap:
                 "state": "resolved" if resolved else "failed" if self.error else "recovering",
                 "missing_bars": 0 if self.completed_at is not None else len(self.expected - self.repaired.keys()),
                 "error": self.error,
+                "forming_source_gap_ids": sorted(self.forming_source_gap_ids),
             },
         )
 
@@ -67,6 +68,8 @@ class SourceGapRegistry:
         self.overflowed = False
         self._changed = asyncio.Event()
         self._closed = False
+        self.forming_snapshots_required = 0
+        self.last_forming_snapshot: dict | None = None
 
     async def wait_cleared(self, key: SeriesKey | frozenset[SeriesKey] | None = None, *, fail_on_error: bool = False) -> None:
         """Wait for repair or stream retirement before taking a fresh snapshot.
@@ -166,11 +169,20 @@ class SourceGapRegistry:
             return False
         gap.fail("source_gap_snapshot_required")
         del self.gaps[gap.id]
+        self.forming_snapshots_required += 1
+        self.last_forming_snapshot = {
+            "key": str(gap.key), "gap_id": gap.id,
+            "range_start_ms": gap.start_ms, "range_end_ms": gap.end_ms,
+            "forming_source_gap_ids": sorted(gap.forming_source_gap_ids),
+            "reason": gap.error,
+        }
         self._changed.set()
         return True
 
     def snapshot(self) -> dict:
         return {"tracking_exhausted": self.overflowed, "retained_gaps": len(self.gaps),
+                "forming_snapshots_required": self.forming_snapshots_required,
+                "last_forming_snapshot": deepcopy(self.last_forming_snapshot),
                 "pending": [gap.event().to_dict() for gap in self.pending()]}
 
     def initial_events(self, key: SeriesKey | None) -> tuple[DataEvent, ...]:
