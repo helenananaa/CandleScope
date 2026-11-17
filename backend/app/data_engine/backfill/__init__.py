@@ -96,6 +96,7 @@ from .reconciler import Reconciler
 from .publisher import RepairPublisher
 from .fetch_stream import stream_plan, StreamReconcile, StreamBackfillDeferred
 from .input_subscriptions import adopts_inputs
+from .resource_scope import admitted_work
 
 logger = logging.getLogger("backfill.Engine")
 
@@ -245,8 +246,15 @@ class BackfillEngine:
 
     def snapshot(self) -> dict:
         """Return a JSON-serializable snapshot of the entire engine state."""
+        budget = getattr(self,'memory_budget',None)
+        memory = budget.snapshot() if budget is not None else {}
+        admission = {key:memory[key] for key in ('work_grants','work_waits','work_resizes','work_waiters')
+                     if key in memory}
+        owner = memory.get('owners',{}).get('history-backfill',{})
+        admission.update(reserved_bytes=owner.get('reserved_bytes',0),limit_bytes=owner.get('limit_bytes',0))
         return {
             "component": "BackfillEngine",
+            "working_set_admission":admission,
             "config": self._cfg.snapshot(),
             "detector": self._detector.snapshot() if self._detector else None,
             "planner": self._planner.snapshot() if self._planner else None,
@@ -280,6 +288,7 @@ class BackfillEngine:
         with self.publisher.receipt_scope() as enabled:
             return await self.run(*args,**kwargs, _receipt_mode=enabled)
 
+    @admitted_work
     @fenced_acquisition
     @budgeted_work
     @adopts_inputs
@@ -457,6 +466,12 @@ class BackfillEngine:
                 await self.publisher.publish(report)
                 return report
 
+            from .resource_scope import admit_execution
+            try:
+                await admit_execution(self,plan)
+            except MemoryBudgetExceeded:
+                metadata['mixed_plan_fallback'] = 'memory_work_budget'
+                raise
             reserve_work(getattr(self, "memory_budget", None), "history-backfill",
                          max(1, plan.estimated_bars, plan.metadata.get("mixed_source_rows", 0)) * 2048)
             # ── Phase 3: Fetch ──

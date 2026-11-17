@@ -450,8 +450,14 @@ class HistoricalFetcher:
             self._check_input_binding(binding)
             with ExitStack() as payload:
                 if self.memory_budget is not None:
-                    payload.enter_context(self.memory_budget.reserve('history-backfill',
-                        min(req.limit or self._cfg.fetch_batch_size,1000)*PAGE_BYTES_PER_ROW+32*1024))
+                    size = min(req.limit or self._cfg.fetch_batch_size,1000)*PAGE_BYTES_PER_ROW+32*1024
+                    donors = list(getattr(payload_owner,'work_pools',{}).values())
+                    donor = next((p for p in donors if p is not None and p.active
+                        and p.budget is self.memory_budget and p.available >= size),None)
+                    if donor is not None:
+                        payload.callback(donor.reserve(size).close)
+                    else:
+                        payload.enter_context(self.memory_budget.reserve('history-backfill',size))
                 # Check without consuming before the endpoint gate. The
                 # consuming admission happens after the gate so a request
                 # queued behind an in-flight 418 cannot slip through with

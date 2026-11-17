@@ -5,6 +5,8 @@ import time
 from collections import OrderedDict, deque
 from concurrent.futures import Future, ThreadPoolExecutor
 from threading import RLock
+import asyncio
+from contextlib import asynccontextmanager
 
 
 class ExecutorBusyError(RuntimeError):
@@ -16,7 +18,7 @@ class ExecutorBusyError(RuntimeError):
 
 
 class BoundedExecutor:
-    """At most workers + pending admitted calls, with no admission waiters.
+    """At most workers + pending admitted calls; opt-in bounded permit waiters.
 
     The underlying pool receives only worker drainers. Logical jobs live in our
     removable queue, so repeated cancellation cannot grow its unbounded queue.
@@ -32,16 +34,21 @@ class BoundedExecutor:
         self._queue = OrderedDict()
         self._drainers = 0
         self._closed = False
+        self._admissions = OrderedDict()
+        self._admitted = set()
+        self._admission_sequence = 0
         self._counts = dict(submitted=0, started=0, completed=0, failed=0,
                             cancelled=0, rejected=0, active=0)
         self._queue_ms = self._run_ms = self._max_queue_ms = self._max_run_ms = 0.0
         self._slow = deque(maxlen=64)
 
-    def submit(self, function, *, operation: str | None = None) -> Future:
+    def submit(self, function, *, operation: str | None = None, admission=None) -> Future:
         with self._lock:
             if self._closed:
                 raise RuntimeError(f"{self.name} executor is shut down")
-            if len(self._queue) + self._counts["active"] >= self.max_workers + self.max_pending:
+            if admission in self._admitted:
+                self._admitted.remove(admission)
+            elif len(self._queue) + self._counts["active"] + len(self._admitted) >= self.max_workers + self.max_pending:
                 self._counts["rejected"] += 1
                 raise ExecutorBusyError(self.name)
             self._counts["submitted"] += 1
@@ -65,6 +72,7 @@ class BoundedExecutor:
             with self._lock:
                 self._queue.pop(sequence, None)
                 self._counts["cancelled"] += 1
+                self._grant_admissions()
 
     def _drain(self):
         while True:
@@ -92,6 +100,7 @@ class BoundedExecutor:
                 self._counts["active"] -= 1
                 self._counts["completed"] += 1
                 self._counts["failed"] += int(error is not None)
+                self._grant_admissions()
                 self._run_ms += run_ms
                 self._max_run_ms = max(self._max_run_ms, run_ms)
                 if run_ms >= 20 or wait_ms >= 20:
@@ -103,12 +112,56 @@ class BoundedExecutor:
             else:
                 future.set_exception(error)
 
+    def _grant_admissions(self):
+        if self._closed:
+            return
+        available = self.max_workers+self.max_pending-len(self._queue)-self._counts['active']-len(self._admitted)
+        while available > 0 and self._admissions:
+            token,(loop,future) = self._admissions.popitem(last=False)
+            if future.cancelled():
+                continue
+            self._admitted.add(token)
+            available -= 1
+            def deliver(future=future,token=token):
+                if not future.done():
+                    future.set_result(token)
+            loop.call_soon_threadsafe(deliver)
+
+    @asynccontextmanager
+    async def admission(self):
+        from app.core.resource_wait import resource_wait
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
+        with self._lock:
+            if self._closed:
+                raise RuntimeError(f'{self.name} executor is shut down')
+            if len(self._admissions)>=4096:
+                raise ExecutorBusyError(self.name)
+            self._admission_sequence += 1
+            token = self._admission_sequence
+            self._admissions[token] = (loop,future)
+            self._grant_admissions()
+            waiting = token not in self._admitted
+        try:
+            if waiting:
+                async with resource_wait('executor:'+self.name):
+                    await future
+            else:
+                await future
+            yield token
+        finally:
+            with self._lock:
+                self._admissions.pop(token,None)
+                self._admitted.discard(token)
+                self._grant_admissions()
+
     def snapshot(self):
         with self._lock:
             return dict(
                 name=self.name, max_workers=self.max_workers, max_pending=self.max_pending,
                 max_inflight=self.max_workers + self.max_pending, **self._counts,
                 pending=len(self._queue), queued=len(self._queue),
+                admission_waiters=len(self._admissions),reserved_admissions=len(self._admitted),
                 avg_queue_wait_ms=round(self._queue_ms / max(1, self._counts["started"]), 2),
                 max_queue_wait_ms=round(self._max_queue_ms, 2),
                 avg_run_ms=round(self._run_ms / max(1, self._counts["completed"]), 2),
@@ -118,6 +171,13 @@ class BoundedExecutor:
     def shutdown(self, *, wait=True, cancel_futures=False):
         with self._lock:
             self._closed = True
+            for loop,future in self._admissions.values():
+                def fail(future=future):
+                    if not future.done():
+                        future.set_exception(RuntimeError(f'{self.name} executor is shut down'))
+                if not loop.is_closed():
+                    loop.call_soon_threadsafe(fail)
+            self._admissions.clear()
             if cancel_futures:
                 for future, *_ in list(self._queue.values()):
                     future.cancel()
