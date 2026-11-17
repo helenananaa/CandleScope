@@ -460,7 +460,10 @@ export default function MarketRightRailFrame({
                       </span>
                       <strong>{view.title}</strong>
                       {view.collapsedSummary != null && (
-                        <span className="market-rail-accordion-summary">{view.collapsedSummary}</span>
+                        <span
+                          className="market-rail-accordion-summary"
+                          title={typeof view.collapsedSummary === "string" ? view.collapsedSummary : undefined}
+                        >{view.collapsedSummary}</span>
                       )}
                       {view.badge != null && view.badge !== "" && (
                         <span className="market-rail-accordion-badge">{view.badge}</span>

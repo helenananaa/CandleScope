@@ -603,6 +603,7 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 | 7a | Contrast and the light theme: a rendered-contrast audit (`scripts/design-contrast.mjs`) over the design states in both themes, fixes for text below WCAG AA, the light theme's visual pass, and a light theme for the code editor (dark only until now, Phase 5d) |
 | 7b | Keyboard and motion: every overlay and menu operable by keyboard (open, move, Escape, focus return), visible focus on every control, keyboard paths through the market page, and reduced motion |
 | 7c | Widths and languages: 1024 / 1366 / 1440 / 1920 and the longest languages (English, German, Russian) — truncated rail tabs, the chart header's link group, order book controls, replay session cards (§2.8, Phase 4b) |
+| 7c2 | Messages still in English (split from 7c, 2026-11-16): the 30 catalogs keep English in many messages (two or more words: German 206, Russian 115, Italian 213, Polish 208, French 131, Ukrainian 124, Spanish 121, Japanese 72), and the feature catalogs fall back to English; German shows its top navigation, "Go to date" and "Trades & notes" in English. Translate them, starting with German and Russian, then run `npm run design:layout` in both again |
 
 **Phase 7a is done (branch `design/phase-7a-contrast`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_7A.md`](../docs/FRONTEND_DESIGN_QA_PHASE_7A.md).
 
@@ -616,6 +617,13 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - The interval picker could not be seen since Phase 4a (the header's clip hid it below its row); it is fixed-positioned now.
 - Popups a page draws in place join the overlay stack through `useAnchoredPopup` (Escape, focus in and back, close when focus moves on); menus share `moveMenuFocus`. Watchlist rows, their menus and the drawing tools' variants work from the keyboard (Shift+F10, →); "跳到图表" is the first Tab stop on chart pages.
 - Focus rings use a `--focus-ring` token (darker in the light theme, 3:1 on every surface) and reach text fields and selects outside the kit. Reduced motion is one rule in `reset.css`; spinners keep turning, slower.
+
+**Phase 7c is done (branch `design/phase-7c-widths`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_7C.md`](../docs/FRONTEND_DESIGN_QA_PHASE_7C.md).
+
+- `npm run design:layout` opens every design state at 1024 / 1366 / 1440 / 1920 in Chinese, English, German and Russian and lists what does not fit as rendered: cut text, selects narrower than their option, text running over its neighbour, controls on top of each other; it marks a finding whose whole text is its title or accessible name. Before: 629 (434 without the text on hover; Russian 232, German 132, English 59, Chinese 11); after: 63, all data or messages with their whole text as the title.
+- The chart header's link group and the order book's selects are as wide as their value (`field-sizing: content`); the watchlist's number columns use short headings (the full name stays the title and accessible name; 4 messages in all 30 catalogs); the order book's and the tape's headers keep the status whole and let the data mode go first, down to the status dot; at 1024 px the tape drops the base-asset size and keeps the time with milliseconds; rail labels take three lines; the strategy page's source name and the tester's tabs give way instead of the buttons and the strategy name; the alerts' "Disable when the limit is reached" is shorter in 9 languages.
+- Design states: `replay-create` (the training hub's New training view; §2.8's summary cards fit in both builds); a step looks for its control for up to 8 s and skips disabled ones.
+- Not here: messages still in English (row 7c2), and the replay session, which cannot be opened without writing.
 
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
