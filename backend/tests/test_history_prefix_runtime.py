@@ -545,3 +545,31 @@ def test_waiting_input_distinguishes_optional_slot_release_from_target_lifetime(
         await service.close()
 
     asyncio.run(check())
+
+
+def test_released_optional_slot_leaves_normal_recovery_owner_available(dm, runtime):
+    from app.data_engine.bar_aggregator.history_prefix_runtime import _Target
+    agg, service, _ = runtime
+
+    async def check():
+        token = agg.history_target_token(KEY, '121d')
+        slot = _Target(KEY, token)
+        service.targets[token[0]] = slot
+        await slot.lock.acquire()
+        entered = asyncio.Event()
+        async def handoff():
+            entered.set()
+            async with service.hold('binance', 'futures', 'BTCUSDT', '121d', KEY.identity) as current:
+                assert current is None
+                # The ordinary fallback may enter the existing canonical-close
+                # recovery owner. A retired history slot must not hold it open.
+                async with service._task():
+                    pass
+        task = asyncio.create_task(handoff())
+        await entered.wait()
+        service.targets.pop(token[0])
+        slot.lock.release()
+        await task
+        assert not service.tasks
+        await service.close()
+    asyncio.run(check())

@@ -851,7 +851,7 @@ class HistoryPrefixRuntime:
                     slot = self.targets.get(key)
                     if slot is not None and slot.token != token:
                         raise BlockRevisionChanged('history target generation expired')
-            yield None
+        yield None
 
     async def before_input(self, slot, pipeline, incoming, *, emit_events):
         """Called under hold; returns whether the fine input remains applicable."""
