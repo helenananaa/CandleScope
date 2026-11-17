@@ -1,0 +1,6 @@
+{
+  "model": "MacBookAir10,1",
+  "cpu": "Apple M1",
+  "platform": "ProductName:\t\tmacOS\nProductVersion:\t\t26.6.2\nBuildVersion:\t\t25G83\n",
+  "scope": "local host for both retained-package witnesses"
+}
