@@ -9,6 +9,8 @@ import asyncio
 import heapq
 import logging
 import time
+from collections import deque
+from itertools import islice
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field, replace
 from typing import Any
@@ -63,6 +65,7 @@ _MAINTENANCE_BACKFILL_REASONS = (
 
 _SCHEDULER_OUTCOME_HISTORY_LIMIT = 256
 _PERSISTENT_INTEREST_LIMIT = 64
+_CHUNK_RECEIPT_LIMIT = 256
 _INTEREST_METADATA_KEYS = (
     "app_id", "workspace_id", "window_id", "cell_id", "demand_owner_id",
     "demand_scope", "demand_generation", "focus_scope", "subscription_tier",
@@ -110,6 +113,13 @@ class _FetchChunk:
     public_demand: PublicDemand | None = None
     dispatch_bypasses: int = 0
     dispatched_at_monotonic: float = 0.0
+    queued_at_ms: int = field(default_factory=lambda: int(time.time()*1000))
+    ready_since_monotonic: float = field(default_factory=time.monotonic)
+    started_at_ms: int = 0
+    ready_queue_ms: float = 0.0
+    not_eligible_wait_ms: float = 0.0
+    dispatch_attempt: int = 0
+    bypasses_before_dispatch: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -250,6 +260,8 @@ class BackfillScheduler:
         self._outcomes: dict[str, RepairOutcome] = {}
         self._max_retained_outcomes = _SCHEDULER_OUTCOME_HISTORY_LIMIT
         self._seq = 0
+        self._chunk_receipts = deque(maxlen=_CHUNK_RECEIPT_LIMIT)
+        self._chunk_receipt_sequence = 0
         self._shutdown = False
         self._drain_timer: asyncio.TimerHandle | None = None
         self._next_drain_at: float | None = None
@@ -891,6 +903,10 @@ class BackfillScheduler:
             "running_background_chunks": self._running_background_count(),
             "active": active,
             "pending": pending,
+            "chunk_receipt_limit": _CHUNK_RECEIPT_LIMIT,
+            "chunk_receipt_sequence": self._chunk_receipt_sequence,
+            "chunk_receipts_dropped": max(0,self._chunk_receipt_sequence-len(self._chunk_receipts)),
+            "recent_chunks": [dict(row, demand_owner_ids=list(row['demand_owner_ids'])) for row in self._chunk_receipts],
             "ready_chunks": len(self._ready),
             "running_chunks": len(self._tasks),
             "max_concurrency": self._max_concurrency,
@@ -1075,7 +1091,23 @@ class BackfillScheduler:
                 continue
             if start_ms <= end_ms:
                 ranges.append((start_ms, end_ms))
-        return ranges or [(int(request.start_ms), int(request.end_ms))]
+        if not ranges:
+            return [(int(request.start_ms), int(request.end_ms))]
+        spec = parse_interval_spec(request.interval)
+        merged = []
+        for start, end in sorted(ranges):
+            if merged:
+                previous = merged[-1][1]
+                # Adjacent target opens contain no omitted bucket. Off-grid
+                # bounds retain ordinary inclusive-range adjacency only.
+                edge = (spec.next_ms(previous) if spec is not None
+                        and spec.floor_ms(previous) == previous
+                        and spec.floor_ms(start) == start else previous+1)
+                if start <= edge:
+                    merged[-1] = (merged[-1][0], max(previous, end))
+                    continue
+            merged.append((start, end))
+        return merged
 
     @staticmethod
     def _newest_first(request: RepairRequest) -> bool:
@@ -1125,7 +1157,9 @@ class BackfillScheduler:
             state = self._requests.get(chunk.parent_id) if chunk is not None else None
             return state.last_dispatch_sequence if state is not None else 0
         if aged:
-            item = min(aged, key=lambda row: row[2])
+            # A local burst must not let the oldest two owners repeatedly
+            # win every aged turn ahead of charts that have never dispatched.
+            item = min(aged, key=lambda row: (turn(row), row[2]))
         elif (item := self._local_burst_candidate()) is None:
             # Avoiding only the immediately previous owner alternates the
             # first two large requests forever ahead of a third/fourth chart.
@@ -1271,6 +1305,11 @@ class BackfillScheduler:
                     skipped.append(item)
                     continue
 
+                eligible = max(chunk.ready_since_monotonic, chunk.eligible_at_monotonic)
+                chunk.ready_queue_ms = max(0.0, now_monotonic-eligible)*1000
+                chunk.not_eligible_wait_ms = max(0.0, min(now_monotonic,eligible)-chunk.ready_since_monotonic)*1000
+                chunk.started_at_ms = int(time.time()*1000)
+                chunk.dispatch_attempt += 1
                 chunk.eligible_at_monotonic = 0.0
                 chunk.retry_at_ms = None
                 chunk.defer_reason = None
@@ -1297,12 +1336,14 @@ class BackfillScheduler:
                 aged_dispatch = chunk.dispatch_bypasses >= self.max_dispatch_bypass
                 if aged_dispatch:
                     self.aged_dispatches += 1
+                chunk.bypasses_before_dispatch = chunk.dispatch_bypasses
                 chunk.dispatch_bypasses = 0
                 for pending in (*self._ready, *skipped):
                     waiting = self._chunks.get(pending[3])
                     if waiting is not None and waiting.eligible_at_monotonic <= now_monotonic:
-                        waiting.dispatch_bypasses = (0 if aged_dispatch else
-                            min(self.max_dispatch_bypass, waiting.dispatch_bypasses + 1))
+                        # Serving one aged chunk does not erase the waiting
+                        # debt of every other owner. Their own turn clears it.
+                        waiting.dispatch_bypasses = min(self.max_dispatch_bypass, waiting.dispatch_bypasses + 1)
                 self._last_dispatch_owner[fairness_lane] = fairness_owner
                 self._seq += 1
                 for owner_state in self._requests.values():
@@ -1533,6 +1574,8 @@ class BackfillScheduler:
         return max(0, int((self._next_drain_at - loop.time()) * 1000))
 
     async def _run_chunk(self, chunk: _FetchChunk) -> None:
+        kind, report = 'aborted', None
+        state = self._requests.get(chunk.parent_id)
         foreground_chunk = not self._is_background(chunk.request)
         if foreground_chunk:
             self._active_foreground_chunks.add(chunk.chunk_id)
@@ -1554,16 +1597,19 @@ class BackfillScheduler:
                 with public_demand(chunk.public_demand):
                     outcome = await self._execute(chunk.request)
             except RepairChunkSplit as exc:
+                kind = 'refined'
                 self._note_local_burst(chunk, None)
                 if self._refine_mixed_chunk(chunk):
                     return
                 outcome = RepairOutcome(request=chunk.request, status='failed', error=str(exc))
             except RepairRetryDeferred as exc:
+                kind = 'retry_deferred'
                 chunk.request._retry_attempt = exc.attempt + 1
                 self._note_local_burst(chunk, None)
                 await self._defer_chunk(chunk, exc)
                 return
             except RateLimitDeferred as exc:
+                kind = 'public_admission_deferred'
                 self._note_local_burst(chunk, None)
                 if chunk.public_demand is not None:
                     get_public_admission().protect(
@@ -1586,9 +1632,11 @@ class BackfillScheduler:
                     status="failed",
                     error=str(exc),
                 )
+            kind, report = repair_status_value(outcome.status), outcome.report
             self._note_local_burst(chunk, outcome)
             await self._finish_chunk(chunk, outcome)
         finally:
+            self._record_chunk_receipt(chunk, state, kind, report)
             if foreground_chunk or not self._is_background(chunk.request):
                 self._last_foreground_activity_at = time.monotonic()
             self._active_foreground_chunks.discard(chunk.chunk_id)
@@ -1597,6 +1645,45 @@ class BackfillScheduler:
             if chunk.public_demand is not None and not chunk.public_demand.alive():
                 get_public_admission().forget(chunk.public_demand)
             self._drain()
+
+    def _record_chunk_receipt(self, chunk, state, kind, report):
+        """Bounded diagnostics only, never coverage or quota authority.
+
+        Ineligible time includes retry/probe/quota delays. It is not certified
+        external blocking and must not be deducted from readiness wall time.
+        Reported phase times can overlap worker time; do not subtract/sum them.
+        """
+        self._chunk_receipt_sequence += 1
+        plan = chunk.request.metadata.get('interval_work_plan')
+        plan = plan if isinstance(plan, dict) else {}
+        reconcile = getattr(report, 'reconcile_result', None)
+        def scalar(value):
+            return value[:160] if isinstance(value,str) else value if type(value) in (int,float,bool,type(None)) else None
+        row = {'sequence':self._chunk_receipt_sequence,
+            'chunk_id':str(chunk.chunk_id)[:160], 'request_id':str(chunk.parent_id)[:160],
+            'interval':str(chunk.request.interval)[:160], 'symbol':str(chunk.request.symbol)[:160],
+            'exchange':str(chunk.request.exchange)[:160], 'market_type':str(chunk.request.market_type)[:160],
+            'start_ms':chunk.request.start_ms,'end_ms':chunk.request.end_ms,
+            'chunk_sequence':chunk.sequence,'dispatch_attempt':chunk.dispatch_attempt,
+            'bypasses_before_dispatch':chunk.bypasses_before_dispatch,
+            'status':kind,'queued_at_ms':chunk.queued_at_ms,'started_at_ms':chunk.started_at_ms,
+            'finished_at_ms':int(time.time()*1000),'ready_queue_ms':round(chunk.ready_queue_ms,3),
+            'not_eligible_wait_ms':round(chunk.not_eligible_wait_ms,3),
+            'worker_elapsed_ms':round(max(0,time.monotonic()-chunk.dispatched_at_monotonic)*1000,3),
+            'engine_reported_elapsed_ms':scalar(getattr(report,'elapsed_ms',None)),
+            'reconcile_reported_elapsed_ms':scalar(getattr(reconcile,'elapsed_ms',None)),
+            'defer_reason':scalar(chunk.defer_reason),'defer_bucket':scalar(chunk.rate_limit_bucket),
+            'retry_at_ms':chunk.retry_at_ms,'defer_count':chunk.defer_count,
+            'running_chunks':len(self._tasks),'ready_chunks':len(self._ready),
+            'fairness_owner':str(self._fairness_owner(chunk.request))[:160],
+            'demand_owner_ids':[str(owner)[:160] for owner in islice(state.demand_leases if state else (),32)],
+            'demand_count':len(state.demand_leases) if state else 0,
+            'cancel_requested':bool(state and state.cancel_requested),
+            'acquisition_revision':scalar(chunk.request.metadata.get('acquisition_revision'))}
+        for key in ('requested_target_bars','effective_target_bars','base_interval','source_factor',
+                    'source_padding_bars','planned_source_rows','source_row_budget'):
+            row[key] = scalar(plan.get(key))
+        self._chunk_receipts.append(row)
 
     def _refine_mixed_chunk(self, chunk):
         """Replace one unacquired work item by two on the same parent queue.
@@ -1682,6 +1769,7 @@ class BackfillScheduler:
             int(time.time() * 1000)
             + max(1, int((eligible_at - now_monotonic) * 1000))
         )
+        chunk.ready_since_monotonic = now_monotonic
         chunk.eligible_at_monotonic = eligible_at
         chunk.retry_at_ms = int(retry_at_ms)
         chunk.defer_reason = exc.reason
@@ -2103,6 +2191,13 @@ class BackfillScheduler:
             "active": active,
             "progress_revision": state.progress_revision,
             "demand_count": len(state.demand_leases),
+            "demand_details": [{'owner_id':lease.owner_id[:160], 'scope':lease.scope[:160] if lease.scope else None,
+                'generation':lease.generation,
+                'completed_chunks':sum(lease.scheduling is not None and lease.scheduling.overlaps_chunk(o.request) for o in state.outcomes),
+                'remaining_chunks':sum(lease.scheduling is not None and lease.scheduling.overlaps_chunk(chunk.request)
+                    for chunk_id in state.chunk_ids if (chunk:=self._chunks.get(chunk_id)) is not None)}
+                for lease in islice(state.demand_leases.values(),32)],
+            "demand_details_truncated":len(state.demand_leases)>32,
             "persistent_interest": state.persistent_interest,
             "cancel_requested": state.cancel_requested,
             "deferred_chunks": len(deferred),
@@ -2152,9 +2247,13 @@ class BackfillScheduler:
             "retryable": outcome.retryable,
         }
 
-    @staticmethod
-    def _covers(existing: RepairRequest, new: RepairRequest) -> bool:
-        return existing.start_ms <= new.start_ms and existing.end_ms >= new.end_ms
+    @classmethod
+    def _covers(cls, existing: RepairRequest, new: RepairRequest) -> bool:
+        if not (existing.start_ms <= new.start_ms and existing.end_ms >= new.end_ms):
+            return False
+        planned = cls._planned_ranges(existing)
+        return all(any(first <= start and end <= last for first, last in planned)
+                   for start, end in cls._planned_ranges(new))
 
     @classmethod
     def _should_merge(cls, existing: RepairRequest, new: RepairRequest) -> bool:
@@ -2184,7 +2283,12 @@ class BackfillScheduler:
                 if part.strip()
             }
 
-        return _is_active_hydration(existing) == _is_active_hydration(new)
+        # Required mixed execution and optional bounded fine-source batches
+        # are different contracts. A covered/merged consumer cannot silently
+        # lose either contract to a parent running under another one.
+        contracts = ('required_history_composition', 'bounded_history_batch_contract')
+        return (_is_active_hydration(existing) == _is_active_hydration(new)
+                and all(existing.metadata.get(key) == new.metadata.get(key) for key in contracts))
 
     @staticmethod
     def _is_failed(status: Any) -> bool:
