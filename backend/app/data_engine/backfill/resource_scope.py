@@ -20,7 +20,14 @@ def admitted_work(function):
                              managed=bool(scope and scope.managed),carry=carry) as pool:
             if scope is not None:
                 scope.memory_pool = pool
-            return await function(self,*args,**kwargs)
+            try:
+                return await function(self,*args,**kwargs)
+            finally:
+                # A deferred parent needs a fresh planning grant. Do not pin
+                # its old page loans while it waits for that grant: qualified
+                # received pages already belong to the source journal.
+                if scope is not None and scope.managed:
+                    scope.acknowledge()
     return run
 
 

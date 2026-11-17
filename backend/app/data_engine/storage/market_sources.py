@@ -25,14 +25,27 @@ def _schema(conn):
     conn.execute("""CREATE TABLE IF NOT EXISTS market_source_observations (
         id INTEGER PRIMARY KEY AUTOINCREMENT, stream_key TEXT NOT NULL,
         transport TEXT NOT NULL, received_at INTEGER NOT NULL, endpoint TEXT NOT NULL,
-        payload_json TEXT NOT NULL, sha256 TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0)""")
+        payload_json TEXT NOT NULL, sha256 TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0,
+        provenance_json TEXT)""")
     columns = {
         row[1] for row in conn.execute("PRAGMA table_info(market_source_observations)")
     }
     if "provenance_json" not in columns:
-        conn.execute(
-            "ALTER TABLE market_source_observations ADD COLUMN provenance_json TEXT"
-        )
+        # Concurrent first REST pages may discover the same old schema. Use
+        # the journal's writer lock and recheck before migrating once.
+        owned = not conn.in_transaction
+        if owned:
+            conn.execute('BEGIN IMMEDIATE')
+        try:
+            if 'provenance_json' not in {row[1] for row in conn.execute(
+                    'PRAGMA table_info(market_source_observations)')}:
+                conn.execute('ALTER TABLE market_source_observations ADD COLUMN provenance_json TEXT')
+            if owned:
+                conn.commit()
+        except BaseException:
+            if owned:
+                conn.rollback()
+            raise
     conn.execute(
         "CREATE INDEX IF NOT EXISTS market_source_age ON market_source_observations(archived,received_at)"
     )

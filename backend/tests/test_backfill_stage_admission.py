@@ -70,6 +70,32 @@ def test_shared_payload_stays_charged_after_original_work_closes():
     asyncio.run(run())
 
 
+def test_deferred_attempt_drops_page_loans_before_another_planner_needs_capacity():
+    from types import SimpleNamespace
+    from app.data_engine.backfill.resource_scope import admitted_work
+    from app.data_engine.backfill.input_subscriptions import InputAdoption
+    from app.data_engine.memory_budget import current_work_pool
+    async def run():
+        owner=budget(10*1024*1024)
+        engine=SimpleNamespace(memory_budget=owner,_cfg=SimpleNamespace(standard_intervals={'1m'}))
+        scope=InputAdoption(SimpleNamespace(metadata={}))
+        @admitted_work
+        async def attempt(self,**kwargs):
+            pool=current_work_pool(owner)
+            await pool.resize(8*1024*1024)
+            scope.retain(pool.reserve(6*1024*1024).close)
+            raise RuntimeError('external quota or view deferral')
+        with scope:
+            with pytest.raises(RuntimeError):
+                await attempt(engine,intervals=['1m'])
+            assert not scope._release
+            assert owner.snapshot()['reserved_bytes']==0
+            other=await asyncio.wait_for(owner._acquire_pool('history-backfill',8*1024*1024,10*1024*1024),1)
+            other.close()
+        assert not owner._work_pools
+    asyncio.run(run())
+
+
 def test_received_input_credit_survives_reopening_the_work_after_external_deferral():
     async def run():
         owner=budget()

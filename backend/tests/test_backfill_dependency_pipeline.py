@@ -212,6 +212,8 @@ def test_repeated_typed_view_rejections_reuse_received_input_until_canonical_ado
             outcome=await asyncio.wait_for(coordinator.request_and_wait(request(89)),20)
             assert outcome.status=='completed' and outcome.attempts==1,outcome.error
             assert len(rejected)==4 and len(calls)==1,calls
+            assert engine.fetcher.snapshot()['metrics']['counters']['source_journal_pages_reused']==4
+            assert engine.fetcher.snapshot()['input_subscriptions']['registered_inputs']==0
             result=mixed_query.query('BTCUSDT','89m',start_ms=0,end_ms=89*MINUTE-1,
                 market_type='futures',limit=1,min_revision=mixed_query.storage.revision_store.head())
             assert result.complete and result.bars[0].trusted_final and result.bars[0].trades==89

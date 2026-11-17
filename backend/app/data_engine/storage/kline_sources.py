@@ -434,6 +434,55 @@ def pending(descriptor: StreamDescriptor, limit: int = 500, *, include_history=F
         return result
 
 
+def history_projection_inputs(descriptor: StreamDescriptor, first: int, last: int,
+                              width: int) -> list[RawMessage] | None:
+    """Read a complete bounded closed REST page from the original journal.
+
+    This is input recovery, not a second cache or a deletion permission grant.
+    The caller retains its initiating acquisition floor and validates the
+    selected receipts again at projection. Missing/old/partial pages use REST.
+    """
+    from app.data_engine.series_identity import resolve_kline_series_identity
+    from app.exchanges.ccxt_ext.fork_kline import SCHEMAS
+    from .revisions import IDENTITY_COLUMNS, series_values
+    identity = resolve_kline_series_identity(descriptor.exchange,descriptor.series_identity)
+    if (not identity.is_legacy_default_for(descriptor.exchange) or width <= 0
+            or first > last or (last-first) % width or (last-first)//width >= 1000):
+        return None
+    with closing(klines_repo._connect()) as conn, conn:
+        conn.execute('BEGIN')
+        tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        if not {'kline_source_heads','kline_source_observations','kline_delete_permissions'} <= tables:
+            return None
+        if 'permission_floor' not in {row[1] for row in conn.execute('PRAGMA table_info(kline_source_heads)')}:
+            return None
+        deleted = conn.execute('SELECT revision FROM kline_delete_permissions WHERE '+
+            ' AND '.join(f'{name}=?' for name in IDENTITY_COLUMNS),
+            series_values(descriptor.symbol.upper(),descriptor.interval,descriptor.exchange,
+                          descriptor.market_type,identity)).fetchone()
+        floor = deleted[0] if deleted else 0
+        rows = conn.execute('''SELECT h.*,o.envelope_json,o.received_at FROM kline_source_heads h
+            JOIN kline_source_observations o ON h.observation_id=o.id
+            WHERE h.series=? AND h.open_time BETWEEN ? AND ? ORDER BY h.open_time LIMIT 1001''',
+            (series(descriptor),first,last)).fetchall()
+        if len(rows) != (last-first)//width+1:
+            return None
+        result = []
+        for expected,row in zip(range(first,last+1,width),rows,strict=True):
+            if (row['open_time'] != expected or not row['is_closed']
+                    or row['source'] not in {DataSource.HTTP.value,DataSource.HTTP_BACKFILL.value}
+                    or row['permission_floor'] < floor):
+                return None
+            payload = json.loads(row['envelope_json'])
+            if payload.get('schema') not in SCHEMAS:
+                return None
+            payload['_source_receipt'] = dict(status='selected',observation_id=row['observation_id'],
+                ref=_ref(row),permission_floor=row['permission_floor'])
+            result.append(RawMessage(payload,DataSource(row['source']),StreamType.KLINE,
+                row['received_at'],endpoint='source-journal://history-resume'))
+        return result
+
+
 def input_receipts_current(refs: list[dict]) -> bool:
     """Read-only preflight; projection still validates inside its transaction."""
     with closing(klines_repo._connect()) as conn:
