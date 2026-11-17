@@ -31,6 +31,8 @@ class InputAdoption:
         self._tokens = []
         self.resource_observer = None
         self.memory_pool = None
+        self.resource_owner = None
+        self.streaming_page = False
 
     def remember_permission(self,floor):
         # Sibling chunks may have captured their read heads concurrently. The
@@ -43,14 +45,16 @@ class InputAdoption:
             self._request_metadata.setdefault('acquisition_revision',self.permission_floor)
 
     def __enter__(self):
-        from app.core.resource_wait import observer,enabled
+        from app.core.resource_wait import observer,enabled,claim_owner
         self._tokens.append((_adoption.set(self),observer.set(self.resource_observer or observer.get()),
-                             enabled.set(self.managed or enabled.get())))
+                             enabled.set(self.managed or enabled.get()),
+                             claim_owner.set(self.resource_owner or claim_owner.get())))
         return self
 
     def __exit__(self,*args):
-        from app.core.resource_wait import observer,enabled
-        adoption_token,observer_token,enabled_token = self._tokens.pop()
+        from app.core.resource_wait import observer,enabled,claim_owner
+        adoption_token,observer_token,enabled_token,owner_token = self._tokens.pop()
+        claim_owner.reset(owner_token)
         enabled.reset(enabled_token)
         observer.reset(observer_token)
         _adoption.reset(adoption_token)

@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import inspect
 import time
 from contextlib import nullcontext, ExitStack
 from copy import deepcopy
@@ -326,7 +327,9 @@ class HistoricalFetcher:
         if on_native_page is not None and on_full_task is not None:
             for task, stream in zip(tasks, streaming):
                 if not stream:
-                    on_full_task(task)
+                    result=on_full_task(task)
+                    if inspect.isawaitable(result):
+                        await result
         coros = [self._fetch_rest_task(task, consume=on_native_page) if stream
                  else self._fetch_task(task, route_plan) for task, stream in zip(tasks, streaming)]
         raw_results = await asyncio.gather(*coros, return_exceptions=True)
@@ -446,7 +449,8 @@ class HistoricalFetcher:
 
     async def _http_page(self, task, req, payload_owner=None, binding=None):
         """Take execution capacity only for this physical page, never a subscriber."""
-        async with self._semaphore:
+        from .resource_scope import page_credit
+        async with page_credit(self.memory_budget,req.limit or self._cfg.fetch_batch_size) as credit, self._semaphore:
             self._check_input_binding(binding)
             with ExitStack() as payload:
                 if self.memory_budget is not None:
@@ -454,7 +458,9 @@ class HistoricalFetcher:
                     donors = list(getattr(payload_owner,'work_pools',{}).values())
                     donor = next((p for p in donors if p is not None and p.active
                         and p.budget is self.memory_budget and p.available >= size),None)
-                    if donor is not None:
+                    if credit is not None:
+                        payload.callback(credit.reserve(credit.available).close)
+                    elif donor is not None:
                         payload.callback(donor.reserve(size).close)
                     else:
                         payload.enter_context(self.memory_budget.reserve('history-backfill',size))
@@ -580,14 +586,17 @@ class HistoricalFetcher:
                 and identity.is_legacy_default_for(task.exchange)):
             from app.core.executors import run_storage
             from app.data_engine.storage.kline_sources import history_projection_inputs
-            with ExitStack() as payload:
-                payload.callback(pool.reserve(part.limit*PAGE_BYTES_PER_ROW+32*1024).close)
-                messages = await run_storage(history_projection_inputs,part.descriptor,first,last,width)
-                self._check_input_binding(binding)
-                if messages is not None:
-                    retain_input_payload(payload)
-                    self._metrics.inc('source_journal_pages_reused')
-                    return messages
+            from .resource_scope import page_credit
+            async with page_credit(self.memory_budget,part.limit) as credit:
+                with ExitStack() as payload:
+                    allowance=credit.available if credit else part.limit*PAGE_BYTES_PER_ROW+32*1024
+                    payload.callback((credit or pool).reserve(allowance).close)
+                    messages = await run_storage(history_projection_inputs,part.descriptor,first,last,width)
+                    self._check_input_binding(binding)
+                    if messages is not None:
+                        retain_input_payload(payload)
+                        self._metrics.inc('source_journal_pages_reused')
+                        return messages
         return await self._inputs.acquire(part,key=key,width=width,
             fetch=lambda req,owner:self._http_page(task,req,payload_owner=owner,binding=binding))
 
@@ -612,6 +621,7 @@ class HistoricalFetcher:
         scope = (self.memory_budget.reserve('history-backfill', allowance)
                  if self.memory_budget is not None else nullcontext())
         with scope, input_adoption() as adoption:
+            adoption.streaming_page=True
             return await self._fetch_rest_task_inner(task, collector=PageConsumer(
                 task, self._cfg.fetch_batch_size, consume), adoption=adoption)
 
@@ -823,9 +833,8 @@ class HistoricalFetcher:
                     break
                 collector.absorb_errors(errors)
                 errors = []
-                if adoption is not None:
-                    adoption.acknowledge()
-            await self._fire_progress(task, collector.raw_count if collector is not None else len(all_bars), estimated_total)
+            if collector is None:
+                await self._fire_progress(task,len(all_bars),estimated_total)
 
             current_request = pagination_policy.next_request(
                 task,
@@ -837,6 +846,10 @@ class HistoricalFetcher:
                 # No fetched page/result survives to the next physical read.
                 page_bars = []
                 raw_messages = []
+                msg=event=bar=None
+                if adoption is not None:
+                    adoption.acknowledge()
+                await self._fire_progress(task,collector.raw_count,estimated_total)
 
         if collector is not None:
             receipt = collector.finish(errors=errors, pages=pages_fetched,

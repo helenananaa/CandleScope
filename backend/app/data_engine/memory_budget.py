@@ -14,6 +14,7 @@ from dataclasses import fields, is_dataclass
 import sys
 import asyncio
 import threading
+import time
 from collections import OrderedDict
 from dataclasses import dataclass
 
@@ -111,6 +112,7 @@ class MemoryWorkPool:
         self.allocated, self.maximum = size, maximum
         self.children = 0
         self.active = True
+        self.phase = 'work'
 
     @property
     def available(self):
@@ -138,6 +140,31 @@ class MemoryWorkPool:
         if size > self.maximum:
             raise MemoryBudgetExceeded('execution working set exceeds the owner budget')
         await self.budget._acquire_pool(self.owner,size,size,pool=self)
+
+    async def stage(self, size, maximum, *, retained=None):
+        """Return scratch before queueing the next phase's known claim.
+
+        Retained plan/value children stay charged. The next maximum is declared
+        before admitting more planners so future growth cannot deadlock.
+        """
+        with self.budget._lock:
+            limit=min(self.budget.total_bytes,self.budget._owners[self.owner][0])
+            if not self.children <= size <= maximum <= limit:
+                raise MemoryBudgetExceeded('execution working set exceeds the owner budget')
+            held=max(self.children,min(size,size if retained is None else retained))
+            trim=max(0,self.allocated-held)
+            self.budget._reserved[self.owner]-=trim
+            self.allocated-=trim
+            self.maximum=maximum
+            self.active=False
+            self.budget._notify_capacity()
+        try:
+            await self.budget._acquire_pool(self.owner,size,maximum,pool=self)
+        except BaseException:
+            with self.budget._lock:
+                self.active=True
+                self.close()
+            raise
 
     def close(self):
         with self.budget._lock:
@@ -169,19 +196,23 @@ class _PoolWaiter:
     loop: object
     pool: object = None
     granted: object = None
+    fairness: tuple = (100, 'anonymous')
+    queued_at: float = 0
 
 
 @asynccontextmanager
-async def work_pool(budget, size, *, owner='history-backfill', managed=True, carry=None):
+async def work_pool(budget, size, *, owner='history-backfill', managed=True, carry=None, maximum=None, phase='work'):
     if budget is None or not managed:
         yield None
         return
     state = budget.snapshot()['owners'][owner]
-    maximum = min(budget.total_bytes,state['limit_bytes']-state.get('estimated_bytes',0))
+    maximum = min(budget.total_bytes,state['limit_bytes']-state.get('estimated_bytes',0),
+                  maximum if maximum is not None else budget.total_bytes)
     needed = min(size,maximum)+(carry.children if carry is not None else 0)
     if needed > maximum:
         raise MemoryBudgetExceeded('retained inputs and planning exceed the owner budget')
     pool = await budget._acquire_pool(owner,needed,maximum,pool=carry)
+    pool.phase=phase
     try:
         with pool.activate():
             yield pool
@@ -275,6 +306,8 @@ class MemoryBudget:
         self._work_pools = set()
         self._work_pollers = {}
         self.work_grants = self.work_waits = self.work_resizes = 0
+        self._work_turns = OrderedDict()
+        self._work_turn = 0
 
     def register(self, owner, *, limit_bytes, usage, roots=None):
         """usage returns cheap estimated bytes/counts; roots is diagnostic only."""
@@ -286,9 +319,16 @@ class MemoryBudget:
             self._owners[owner] = (int(limit_bytes), usage, roots)
             self._reserved[owner] = 0
 
+    def ensure_owner(self,owner,*,limit_bytes,usage):
+        """Atomically add accounting for an optional transient work owner."""
+        with self._lock:
+            if owner not in self._owners:
+                self.register(owner,limit_bytes=limit_bytes,usage=usage)
+
     def unregister(self, owner):
         with self._lock:
-            if self._reserved.get(owner, 0) or any(w.owner==owner for w in self._pool_waiters):
+            if (self._reserved.get(owner, 0) or any(w.owner==owner for w in self._pool_waiters)
+                    or any(p.owner==owner for p in self._work_pools)):
                 raise RuntimeError("cannot unregister an owner with active leases")
             self._owners.pop(owner, None)
             self._reserved.pop(owner, None)
@@ -297,6 +337,9 @@ class MemoryBudget:
         with self._lock:
             owners = dict(self._owners)
             reserved = dict(self._reserved)
+            phase_bytes={}
+            for pool in self._work_pools:
+                phase_bytes[pool.phase]=phase_bytes.get(pool.phase,0)+pool.allocated
         result = {}
         seen = set()
         # Owners may construct temporary diagnostic containers. Keep their
@@ -320,6 +363,7 @@ class MemoryBudget:
                 "admission_rejections": self.rejections, "owners": result,
                 "work_grants":self.work_grants,"work_waits":self.work_waits,
                 "work_resizes":self.work_resizes,"work_waiters":len(self._pool_waiters),
+                "work_phase_bytes":phase_bytes,
                 "heap_measurement": "deduplicated reachable Python values; excludes allocator/RSS and external memory" if measure_heap else "not_requested"}
 
     def _shortfall(self, owner, delta):
@@ -379,7 +423,14 @@ class MemoryBudget:
 
     def _grant_pools(self):
         blocked = set()
-        for waiter in sorted(tuple(self._pool_waiters),key=lambda w:not (w.pool is not None and w.pool.active)):
+        pending=list(self._pool_waiters)
+        while pending:
+            now=time.monotonic()
+            waiter=min(pending,key=lambda w:(
+                not (w.pool is not None and w.pool.active),
+                0 if now-w.queued_at>=2 else w.fairness[0],
+                self._work_turns.get((w.owner,w.fairness),0),w.queued_at))
+            pending.remove(waiter)
             if waiter.future.cancelled() or waiter.loop.is_closed():
                 self._pool_waiters.pop(waiter,None)
                 continue
@@ -399,6 +450,12 @@ class MemoryBudget:
                 self.work_resizes += 1
             self._reserved[waiter.owner] += waiter.size-previous
             waiter.granted = pool
+            self._work_turn+=1
+            key=(waiter.owner,waiter.fairness)
+            self._work_turns[key]=self._work_turn
+            self._work_turns.move_to_end(key)
+            while len(self._work_turns)>8192:
+                self._work_turns.popitem(last=False)
             self._pool_waiters.pop(waiter,None)
             def deliver(waiter=waiter,pool=pool):
                 if not waiter.future.done():
@@ -422,9 +479,11 @@ class MemoryBudget:
         self._work_pollers.clear()
 
     async def _acquire_pool(self, owner, size, maximum, pool=None):
-        from app.core.resource_wait import resource_wait
+        from app.core.resource_wait import resource_wait,claim_owner
         loop = asyncio.get_running_loop()
         waiter = _PoolWaiter(owner,size,maximum,loop.create_future(),loop,pool)
+        waiter.fairness=claim_owner.get()
+        waiter.queued_at=time.monotonic()
         with self._lock:
             if len(self._pool_waiters) >= 4096:
                 raise MemoryBudgetExceeded('work admission metadata budget exhausted')
