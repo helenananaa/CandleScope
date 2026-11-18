@@ -18,7 +18,7 @@ jobs:
   appcontainer:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: windows-latest
-    timeout-minutes: 18
+    timeout-minutes: 45
     env:
       PYTHONUTF8: '1'
       PYTHONPATH: 'backend;packages/candlescope-plugin-sdk/src'
@@ -31,6 +31,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.23'
       - name: Install contract dependencies
         run: python -m pip install fastapi==0.115.6 jsonschema==4.25.1
       - name: Build the pinned Rust packages
@@ -49,3 +55,34 @@ jobs:
             "$env:RUNNER_TEMP/aho-corasick.cspkg" `
             "$env:RUNNER_TEMP/legacy/release/candlescope-aho-corasick-adapter.exe" `
             --require-appcontainer
+      - name: Package the Windows desktop with locked inputs
+        shell: pwsh
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          npm --prefix frontend ci --ignore-scripts
+          $lock = Get-Content backend/ccxt-fork.lock.json | ConvertFrom-Json
+          $wheel = Join-Path $env:RUNNER_TEMP ([System.IO.Path]::GetFileName($lock.wheel_url))
+          Invoke-WebRequest -Uri $lock.wheel_url -OutFile $wheel -MaximumRetryCount 2 -RetryIntervalSec 4
+          $env:CANDLESCOPE_CCXT_WHEEL = $wheel
+          npm --prefix frontend run desktop:package:dir -- --win --x64 --publish never "--config.directories.output=$env:RUNNER_TEMP/desktop-build"
+      - name: Install and restart the restricted plugin in the packaged application
+        shell: pwsh
+        run: |
+          $output = "$env:RUNNER_TEMP/windows-unified-plugin"
+          New-Item -ItemType Directory -Path $output | Out-Null
+          npm install --prefix "$env:RUNNER_TEMP/driver" --ignore-scripts --no-package-lock playwright-core@1.56.1
+          node examples/unified-plugins/aho-corasick/verify_installed.mjs `
+            "$env:RUNNER_TEMP/desktop-build/win-unpacked/CandleScope.exe" `
+            "$env:RUNNER_TEMP/aho-corasick.cspkg" `
+            "$env:RUNNER_TEMP/driver/node_modules/playwright-core" `
+            $output
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-unified-plugin-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/windows-unified-plugin/*.json
+            ${{ runner.temp }}/windows-unified-plugin/*.png
+          if-no-files-found: ignore
+          retention-days: 14
