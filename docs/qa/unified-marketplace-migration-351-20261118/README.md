@@ -51,6 +51,11 @@ macOS arm64 和 Windows x64 的退役候选均完成安装、健康升级、迁�
 通过核对。回执记录各自的包摘要和进程回收结果。
 [macOS arm64](macos-arm64-retired.json) · [Windows x64](windows-x64-retired.json)。
 
+同一份迁移配置随后由历史版 macOS 应用重新打开，旧制品记录、原数据摘要及保留的
+统一主题均可读取。[历史应用回执](macos-arm64-predecessor.json)。
+Windows 工作流可通过 `verify_predecessor` 复验同一配置，启动历史应用并调用旧命令，
+将结果写入 `previous-app.json`。
+
 ## 重跑
 
 将签名后的 macOS 应用复制到测试目录。用能运行后端测试的 Python 环境生成数据，再用

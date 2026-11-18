@@ -6,7 +6,7 @@ const { execFileSync } = require("node:child_process");
 const { setTimeout: delay } = require("node:timers/promises");
 const { _electron } = require(process.env.CANDLESCOPE_QA_PLAYWRIGHT || "playwright-core");
 
-const [appPath, qaPath, receiptPath] = process.argv.slice(2);
+const [appPath, qaPath, receiptPath, mode] = process.argv.slice(2);
 const api = "/api/v2/plugins";
 const market = api + "/manage/marketplace";
 const unified = api + "/manage/unified";
@@ -238,6 +238,25 @@ async function main() {
     for (const [relative, expected] of Object.entries(fixtures.sources)) {
       assert.equal(sha(await fs.readFile(path.join(profile, relative))), expected, relative);
     }
+  }
+
+  if (mode === "--verify-restored-predecessor") {
+    await inSession("reuse retained data in the previous application", async q => {
+      q.result.retainedAppearance = await q.color(fixtures.upgrade.color);
+      const original = plugin(await q.oldCatalog(), fixtures.legacy.id);
+      assert.equal(original.version, fixtures.legacy.version);
+      assert.equal(original.enabled, true);
+      assert.equal(original.available, windows, JSON.stringify(original));
+      if (windows) {
+        assert.equal((await q.invokeLegacy()).result.message, "Hello, Marketplace!");
+        q.result.restoredCommand = "passed";
+      }
+      await preserved();
+      q.result.legacyFilesByteIdentical = true;
+    });
+    receipt.ok = true;
+    await record();
+    return;
   }
 
   await inSession("install, update and migrate", async q => {

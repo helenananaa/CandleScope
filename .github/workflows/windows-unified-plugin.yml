@@ -17,6 +17,11 @@ on:
       - 'docs/qa/unified-plugin-takeover-350-20261118/accept_installed.mjs'
       - 'examples/unified-plugins/aho-corasick/**'
   workflow_dispatch:
+    inputs:
+      verify_predecessor:
+        description: Reopen the migrated profile in the preceding packaged application
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -29,7 +34,7 @@ jobs:
   appcontainer:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       PYTHONUTF8: '1'
       PYTHONPATH: 'backend;packages/candlescope-plugin-sdk/src'
@@ -121,6 +126,30 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $env:CANDLESCOPE_QA_PLAYWRIGHT = "$env:RUNNER_TEMP/driver/node_modules/playwright-core"
           node "$qa/accept_installed.cjs" "$package/CandleScope.exe" "$env:RUNNER_TEMP/marketplace" "$output/marketplace.json"
+      - name: Check out the qualified predecessor application
+        if: github.event_name == 'workflow_dispatch' && inputs.verify_predecessor
+        uses: actions/checkout@v4
+        with:
+          ref: 6f054d9d322594ed8f02828b803f6a70d93f092a
+          path: plugin-rollback-predecessor
+          persist-credentials: false
+      - name: Check retained rollback data in the previous packaged application
+        if: github.event_name == 'workflow_dispatch' && inputs.verify_predecessor
+        working-directory: plugin-rollback-predecessor
+        shell: pwsh
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          npm --prefix frontend ci --ignore-scripts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $lock = Get-Content backend/ccxt-fork.lock.json | ConvertFrom-Json
+          $env:CANDLESCOPE_CCXT_WHEEL = Join-Path $env:RUNNER_TEMP ([System.IO.Path]::GetFileName($lock.wheel_url))
+          $previous = "$env:RUNNER_TEMP/rollback-app"
+          npm --prefix frontend run desktop:package:dir -- --win --x64 --publish never "--config.directories.output=$previous"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $qa = "$env:GITHUB_WORKSPACE/docs/qa/unified-marketplace-migration-351-20261118"
+          $env:CANDLESCOPE_QA_PLAYWRIGHT = "$env:RUNNER_TEMP/driver/node_modules/playwright-core"
+          node "$qa/accept_installed.cjs" "$previous/win-unpacked/CandleScope.exe" "$env:RUNNER_TEMP/marketplace" "$env:RUNNER_TEMP/windows-unified-plugin/previous-app.json" --verify-restored-predecessor
       - uses: actions/upload-artifact@v4
         if: always()
         with:
