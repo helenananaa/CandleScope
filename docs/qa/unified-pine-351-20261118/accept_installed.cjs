@@ -18,12 +18,19 @@ const executable = windows ? application : path.join(application, "Contents", "M
 const versionDescriptor = path.join(res, "python-runtime", "plugins", "unified-pine.json");
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const hash = data => createHash("sha256").update(data).digest("hex");
-const children = () => (windows
+const processTable = () => (windows
   ? execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
-    "Get-CimInstance Win32_Process | ForEach-Object { '{0} {1}' -f $_.ProcessId,$_.ParentProcessId }"],
+    "Get-CimInstance Win32_Process | Where-Object CreationDate | ForEach-Object { '{0} {1} {2} {3}' -f $_.ProcessId,$_.ParentProcessId,$_.CreationDate.ToFileTimeUtc(),$_.Name }"],
   { encoding: "utf8" })
-  : execFileSync("ps", ["-axo", "pid=,ppid="], { encoding: "utf8" }))
-  .trim().split("\n").map(line => line.trim().split(/\s+/).map(Number));
+  : execFileSync("ps", ["-axo", "pid=,ppid=,lstart=,comm="], {
+    encoding: "utf8", env: { ...process.env, LC_ALL: "C" },
+  }))
+  .trim().split("\n").flatMap(line => {
+    const match = line.trim().match(windows ? /^(\d+)\s+(\d+)\s+(\d+)\s+(.+)$/ : /^(\d+)\s+(\d+)\s+(.{24})\s+(.+)$/);
+    if (!match) return [];
+    const [, pid, parent, started, name] = match;
+    return [{ pid: Number(pid), parent: Number(parent), started, name }];
+  });
 
 (async () => {
   const qaRoot = await fs.mkdtemp(path.join(os.tmpdir(), "candlescope-pine351-native-"));
@@ -124,11 +131,24 @@ const children = () => (windows
       const health = await invoke("/health");
       assert.equal(health.runtime_mode, "LOCAL_OFFLINE");
       assert.equal(health.local_offline.network.blocked_attempts, 0);
-      const processTree = new Set([identity.pid]);
+      // Process IDs can be reused between enumerations, especially by the
+      // Windows process that takes the snapshot itself.
+      const processTree = new Map();
       const observeProcesses = () => {
-        const all = children();
+        const all = processTable();
+        const current = new Map(all.map(process => [process.pid, process]));
+        if (!processTree.size) {
+          const root = current.get(identity.pid);
+          assert.ok(root, "packaged app process is missing");
+          processTree.set(identity.pid, root);
+        }
         for (let i = 0; i < 10; i++) {
-          for (const [pid, ppid] of all) if (processTree.has(ppid)) processTree.add(pid);
+          for (const process of all) {
+            const owner = processTree.get(process.parent);
+            if (owner && current.get(owner.pid)?.started === owner.started) {
+              processTree.set(process.pid, process);
+            }
+          }
         }
       };
       observeProcesses();
@@ -167,7 +187,8 @@ const children = () => (windows
         await app.close();
         app = undefined;
         for (let attempt = 0; attempt < 10; attempt++) {
-          phase.remainingOwnedProcesses = children().filter(([pid]) => processTree.has(pid)).map(([pid]) => pid);
+          phase.remainingOwnedProcesses = processTable()
+            .filter(process => processTree.get(process.pid)?.started === process.started);
           if (!phase.remainingOwnedProcesses.length) break;
           await pause(250);
         }
