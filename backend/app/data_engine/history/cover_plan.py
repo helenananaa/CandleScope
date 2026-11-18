@@ -6,11 +6,23 @@ and revisions through D126/K130/B130 before adopting any output.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields, replace
 import math
 
 from app.data_engine.series_key import SeriesKey
 from app.data_engine.interval_policy import IntervalAlignment, parse_interval_spec
+
+
+_FAMILY_FIELDS = tuple(item.name for item in fields(SeriesKey) if item.name != "interval")
+
+
+def _same_family(series: SeriesKey, target: SeriesKey) -> bool:
+    """``replace(series, interval=target.interval) == target`` without rebuilding a key.
+
+    Both keys are already normalized, and identity normalization does not
+    depend on the interval, so only the other fields need to match.
+    """
+    return all(getattr(series, name) == getattr(target, name) for name in _FAMILY_FIELDS)
 
 
 class CoverUnavailable(ValueError):
@@ -220,7 +232,7 @@ def plan_fixed_range(
     if type(max_positions) is not int or not 1 <= max_positions <= 131_072:
         raise ValueError("bounded planning position budget required")
     candidates = [source for source in sources
-                  if replace(source.series, interval=target.interval) == target
+                  if _same_family(source.series, target)
                   and required_fields <= source.fields]
     # Width is a deterministic tie-breaker, not a substitute for actual cost.
     candidates.sort(key=lambda source: (source.cost_per_row / source.width_ms,
@@ -252,12 +264,16 @@ def plan_fixed_range(
         raise CoverUnavailable("qualified source grids cannot exactly tile this target",
                                explored_positions=explored)
 
-    spans = []
+    # Merge adjacent pieces of one grid; a target can hold hundreds of them.
+    runs: list[list] = []
     for piece in path:
-        if spans and spans[-1].source == piece.source and spans[-1].end_ms == piece.start_ms:
-            spans[-1] = replace(spans[-1], end_ms=piece.end_ms)
+        last = runs[-1] if runs else None
+        if (last is not None and last[2] == piece.start_ms
+                and (last[0] is piece.source or last[0] == piece.source)):
+            last[2] = piece.end_ms
         else:
-            spans.append(piece)
+            runs.append([piece.source, piece.start_ms, piece.end_ms])
+    spans = [HistoryReadSpan(source, start, end) for source, start, end in runs]
     try:
         cost = math.fsum(piece.source.cost_per_row for piece in path)
     except OverflowError as error:

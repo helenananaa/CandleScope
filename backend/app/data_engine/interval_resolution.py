@@ -339,7 +339,8 @@ class IntervalResolver:
             bootstrap_default_adapters()
             registry = get_exchange_registry()
         try:
-            return registry.get_capabilities(exchange)
+            view = getattr(registry, "capabilities_view", None)
+            return view(exchange) if callable(view) else registry.get_capabilities(exchange)
         except KeyError as exc:
             raise self._error(
                 IntervalResolutionErrorCode.UNKNOWN_EXCHANGE,

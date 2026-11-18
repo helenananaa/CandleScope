@@ -4,6 +4,7 @@ This module plans/reads only. Fetching, native commits, reconciliation, target
 ownership, quota and publication remain with their existing owners.
 """
 from collections import deque
+from functools import lru_cache
 from contextlib import nullcontext
 from dataclasses import dataclass, replace
 import math
@@ -52,10 +53,29 @@ def reusable_component(row, width, now_ms, fields):
             return False
         if not row_is_closed(row):
             return False
-        values = chart_field_summary((row,), validate_ohlcv=True).project(enhanced_complete=True)
-        return all(values.get(field) is not None for field in fields)
+        return _complete_k130_fields(tuple(row[name] for name in _OHLCV_FIELDS)
+                                     + tuple(row.get(name) for name in _ENHANCED_FIELDS), tuple(fields))
     except (KeyError, TypeError, ValueError, OverflowError):
         return False
+
+
+_OHLCV_FIELDS = ("open", "high", "low", "close", "volume")
+_ENHANCED_FIELDS = ("quote_volume", "trades", "taker_buy_base", "taker_buy_quote")
+
+
+@lru_cache(maxsize=65_536)
+def _complete_k130_fields(values, fields):
+    """K130 validation of one row's field values; a pure function of them.
+
+    The same committed minutes are rechecked by every chart and every retry,
+    so the result is cached by value. Rows that K130 rejects are not complete.
+    """
+    row = dict(zip(_OHLCV_FIELDS + _ENHANCED_FIELDS, values))
+    try:
+        summary = chart_field_summary((row,), validate_ohlcv=True).project(enhanced_complete=True)
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return False
+    return all(summary.get(field) is not None for field in fields)
 
 
 @dataclass(frozen=True)
@@ -170,7 +190,9 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
                         for r in precedence_routes)
     keys = tuple((key.exchange, key.market_type, key.symbol, key.interval, *key.identity.storage_values)
                  for key, _ in precedences)
-    channel = get_exchange_registry().get_capabilities(target.exchange).channel_capability(
+    registry = get_exchange_registry()
+    view = getattr(registry, "capabilities_view", None)
+    channel = (view(target.exchange) if callable(view) else registry.get_capabilities(target.exchange)).channel_capability(
         MarketChannel.KLINE, target.market_type)
     if channel.history_composition != policy:
         return None

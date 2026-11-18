@@ -4,7 +4,8 @@ import sqlite3
 import time
 import logging
 import threading
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, Callable
 
@@ -30,7 +31,7 @@ from app.data_engine.series_identity import (
 
 from .revisions import (IDENTITY_COLUMNS, RevisionStore, guarded_write, init_revision_storage,
                         mark_deleted, series_values, register_derived, current_revision, mutation_mode)
-from .sqlite_runtime import ReusableReads, SQLiteConnectionPolicy, open_sqlite
+from .sqlite_runtime import ReusableReads, SQLiteConnectionPolicy, close_idle_connections, open_sqlite
 
 # Valid market types
 VALID_MARKET_TYPES = ("spot", "futures", "swap")
@@ -176,6 +177,8 @@ def _connect(
     configure_journal_mode: bool = True,
     use_row_factory: bool = True,
 ) -> sqlite3.Connection:
+    # Inside ``_connected`` the connection is reusable: its ``close`` hands it
+    # back for this thread's next open. Every other caller gets its own.
     return open_sqlite(
         KLINES_DB_PATH,
         policy=SQLiteConnectionPolicy(
@@ -185,7 +188,30 @@ def _connect(
             configure_journal_mode=configure_journal_mode,
         ),
         logger=logger,
+        reuse=_REUSE_CONNECTION.get(),
     )
+
+
+_REUSE_CONNECTION: ContextVar[bool] = ContextVar("klines_reuse_connection", default=False)
+
+
+@contextmanager
+def _connected(**kwargs):
+    """``with _connect() as conn`` that also closes, so the connection is reused.
+
+    The block commits or rolls back exactly as ``with conn`` does; closing then
+    hands the connection back for this thread's next open.
+    """
+    token = _REUSE_CONNECTION.set(True)
+    try:
+        conn = _connect(**kwargs)
+    finally:
+        _REUSE_CONNECTION.reset(token)
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
 
 
 # Self-contained reads borrow one idle connection per thread instead of opening
@@ -198,8 +224,8 @@ _REVISION_READS = ReusableReads(
 
 
 def close_idle_reads() -> int:
-    """Release idle read connections at shutdown or before file-level work."""
-    return _READS.close_idle() + _REVISION_READS.close_idle()
+    """Release idle connections at shutdown or before file-level work."""
+    return _READS.close_idle() + _REVISION_READS.close_idle() + close_idle_connections()
 
 
 def _migrate_kline_series_identity(conn: sqlite3.Connection) -> None:
@@ -494,7 +520,7 @@ def upsert_klines(
         else nullcontext()
     )
     with write_guard:
-        with (nullcontext(_connection) if _connection is not None else _connect()) as conn:
+        with (nullcontext(_connection) if _connection is not None else _connected()) as conn:
             with guarded_write(conn, series_values(symbol, interval, exchange, market_type, identity),
                                commit=_connection is None, native_rows=rows, source=source):
                 if source in {"backfill_aggregated", "data_manager_composite_closed", "settings_manual_repair", "repair_derived_verified", "manual_history_derived"}:
@@ -683,7 +709,7 @@ def import_history_archive(
     ]
 
     with _ARCHIVE_IMPORT_WRITE_LOCK:
-        with _connect() as conn:
+        with _connected() as conn:
             with guarded_write(conn, series_values(symbol, interval, exchange, market_type, identity),
                                native_rows=rows, source=source):
                 existing = conn.execute(
@@ -875,7 +901,7 @@ def get_history_archive_import_proofs(
             "history-archive-import.v1", str(item.get("cache_generation") or ""),
         )
     ]
-    with _connect() as conn:
+    with _connected() as conn:
         if conn.execute(
             "SELECT 1 FROM sqlite_master WHERE type = 'table' "
             "AND name = 'history_archive_import_commits'",
@@ -922,7 +948,7 @@ def record_history_archive_imports(receipts: list[dict[str, Any]]) -> int:
         )
         for item in receipts
     ]
-    with _connect() as conn:
+    with _connected() as conn:
         conn.executemany(
             """
             INSERT INTO history_archive_imports (
@@ -961,7 +987,7 @@ def invalidate_archive_dependents(receipts: list[dict[str, Any]]) -> int:
     if not revised:
         return 0
     deleted = 0
-    with _connect() as conn:
+    with _connected() as conn:
         for item in revised:
             exchange = str(item["exchange"])
             identity = KlineSeriesIdentity.for_exchange(exchange)
@@ -1109,7 +1135,7 @@ def fetch_before(
     )
     where.append("open_time < ?")
     params.extend((before_ms, limit))
-    with _connect() as conn:
+    with _connected() as conn:
         rows = conn.execute(
             f"""
             SELECT exchange, market_type, provider_id, venue, asset_class,
@@ -1150,7 +1176,7 @@ def fetch_before_kline_bar_components(
     )
     where.append("open_time < ?")
     params.extend((before_ms, limit))
-    with _connect(use_row_factory=False) as conn:
+    with _connected(use_row_factory=False) as conn:
         rows = conn.execute(
             f"""
             SELECT {_BAR_COMPONENT_PROJECTION}
@@ -1181,7 +1207,7 @@ def get_bounds(
         interval=interval,
         series_identity=series_identity,
     )
-    with _connect() as conn:
+    with _connected() as conn:
         row = conn.execute(
             f"""
             SELECT
@@ -1264,7 +1290,7 @@ def list_series_summaries(
             conn.execute("PRAGMA query_only=ON")
             rows = conn.execute(sql, params).fetchall()
     else:
-        with _connect() as conn:
+        with _connected() as conn:
             rows = conn.execute(sql, params).fetchall()
 
     return [dict(r) for r in rows]
@@ -1436,7 +1462,7 @@ def scan_klines_gaps(
     """
     params.append(max(1, limit + 1))
 
-    with _connect() as conn:
+    with _connected() as conn:
         rows = conn.execute(sql, params).fetchall()
 
     opens = [int(row["open_time"]) for row in rows[:limit]]
@@ -1773,7 +1799,7 @@ class KlinesRepoAdapter:
         exchange, market_type = exchange or self._exchange, market_type or self._market_type
         identity = series_identity or self._series_identity or KlineSeriesIdentity.for_exchange(exchange)
         values = series_values(symbol, interval, exchange, market_type, identity)
-        with _connect() as conn, acquisition_scope(Acquisition(expected_revision)):
+        with _connected() as conn, acquisition_scope(Acquisition(expected_revision)):
             with guarded_write(conn, values):
                 where, params, _ = _series_where(exchange=exchange, market_type=market_type,
                     symbol=symbol, interval=interval, series_identity=identity)
@@ -1925,7 +1951,7 @@ class KlinesRepoAdapter:
         expected_count = 0
         where.extend(("open_time >= ?", "open_time <= ?"))
         params.extend((range_start, range_end))
-        with _connect() as conn:
+        with _connected() as conn:
             cursor = conn.execute(
                 f"""
                 SELECT open_time
@@ -2380,7 +2406,7 @@ class AsyncKlinesRepoAdapter:
             )
             where.extend(("open_time >= ?", "open_time <= ?"))
             params.extend((start_ms, end_ms))
-            with _connect() as conn:
+            with _connected() as conn:
                 rows = conn.execute(
                     f"SELECT open_time FROM klines WHERE {' AND '.join(where)}",
                     params,
@@ -2407,7 +2433,7 @@ def has_older_than(
     )
     where.append("open_time < ?")
     params.append(open_time_ms)
-    with _connect() as conn:
+    with _connected() as conn:
         row = conn.execute(
             f"""
             SELECT 1
@@ -2446,7 +2472,7 @@ def delete_klines(
         params.append(end_ms)
 
     sql = f"DELETE FROM klines WHERE {' AND '.join(where)}"
-    with _connect() as conn:
+    with _connected() as conn:
         conn.execute("BEGIN IMMEDIATE")
         cur = conn.execute(sql, params)
         mark_deleted(conn, series_values(symbol, interval, exchange, market_type, series_identity), start_ms, end_ms)
@@ -2487,7 +2513,7 @@ def delete_oldest_klines(
         series_identity=series_identity,
     )
     predicate = " AND ".join(where)
-    with _connect() as conn:
+    with _connected() as conn:
         # First check total count
         count_row = conn.execute(
             f"SELECT COUNT(*) AS cnt FROM klines WHERE {predicate}",
@@ -2549,7 +2575,7 @@ def count_klines_before(
     )
     where.append("open_time < ?")
     params.append(int(before_ms))
-    with _connect() as conn:
+    with _connected() as conn:
         row = conn.execute(
             f"SELECT COUNT(*) AS cnt FROM klines WHERE {' AND '.join(where)}",
             params,
@@ -2585,7 +2611,7 @@ def delete_oldest_klines_batch(
     # Storage GC is ordered with stream/subscription activation.  Fail fast on
     # lock contention instead of holding that ordering guard through SQLite's
     # normal 30-second busy timeout.
-    with _connect(
+    with _connected(
         timeout_seconds=0.05,
         configure_journal_mode=False,
     ) as conn:

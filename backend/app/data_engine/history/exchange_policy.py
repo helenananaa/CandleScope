@@ -98,7 +98,8 @@ class ExchangeHistoryPolicyResolver:
     def resolve(self, key: HistorySeriesKey, *, now_ms: int | None = None) -> ResolvedHistoryContext:
         bootstrap_default_adapters()
         registry = get_exchange_registry()
-        capabilities = registry.get_capabilities(key.exchange)
+        view = getattr(registry, "capabilities_view", None)
+        capabilities = view(key.exchange) if callable(view) else registry.get_capabilities(key.exchange)
         channel = capabilities.channel_capability(key.channel, key.market_type)
         policy = channel.history_policy if channel is not None and channel.history else None
         from app.data_engine.history.native_seconds import native_second_history_start
