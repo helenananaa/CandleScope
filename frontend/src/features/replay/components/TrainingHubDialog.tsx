@@ -17,7 +17,7 @@ import type {
   TrainingRunCompatibility,
 } from "../replayV2Types.js";
 import type { TrainingHubRuntime } from "../useTrainingHub.js";
-import { formatTrainingEquity, replayMutationLabel, trainingCompatibilityLabel, trainingExchangeLabel, trainingIntegrityLabel, trainingRunStateLabel, trainingSourceKindLabel, trainingTimeDisclosureLabel } from "../trainingHubLabels.js";
+import { formatTrainingEquity, replayMutationLabel, trainingCompatibilityLabel, trainingExchangeLabel, trainingIntegrityLabel, trainingRunStateLabel, trainingRunStatusLabel, trainingSourceKindLabel, trainingTimeDisclosureLabel } from "../trainingHubLabels.js";
 import ReplayStorageGovernancePanel from "./ReplayStorageGovernancePanel.js";
 import { applyTrainingPreset } from "../trainingPresets.js";
 import PreparationJobsPanel from "../../data-preparation/PreparationJobsPanel.js";
@@ -38,13 +38,6 @@ function patchDraft(
 ): void {
   if (runtime.draft === null) return;
   runtime.actions.setDraft({ ...runtime.draft, ...patch });
-}
-
-function trainingRunStatusMessage(card: TrainingRunCard): string {
-  if (card.state !== "ENDED") return card.status.message;
-  return card.resume_action === "UNAVAILABLE"
-    ? t("replay.hub.endedUnavailable")
-    : t("replay.hub.endedReviewable");
 }
 
 function trainingRunPrimaryActionLabel(card: TrainingRunCard): string {
@@ -627,7 +620,7 @@ function TrainingRunRow({ card, busy, onContinue, onDelete }: {
         </div>
         <p className="training-hub-card-line">{details.join(" · ")}</p>
         <p className="training-hub-card-line training-hub-card-status">
-          {trainingRunStatusMessage(card)} · {t("replay.hub.updated")} <time dateTime={updated.toISOString()}>{updated.toLocaleString(getDateTimeLocale())}</time>
+          {trainingRunStatusLabel(card)} · {t("replay.hub.updated")} <time dateTime={updated.toISOString()}>{updated.toLocaleString(getDateTimeLocale())}</time>
         </p>
       </div>
       <div className="training-hub-card-equity">

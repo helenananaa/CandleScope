@@ -41,8 +41,9 @@
 .tf-controls {
   display: grid;
   flex: 0 0 auto;
-  /* Narrow rails stack the side switch above the two filters so option text is never clipped. */
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* Narrow rails stack the side switch above the two filters so option text is never clipped;
+     the filters share the row by content, so a longer label (Spanish "Burbujas") takes room from the shorter one. */
+  grid-template-columns: repeat(2, auto);
   align-items: center;
   min-width: 0;
   padding: 5px 6px;
