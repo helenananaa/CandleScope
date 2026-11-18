@@ -20,6 +20,12 @@
 - 该 schema 尚未作为发布版契约冻结；后续包验证和执行器接入若揭示缺口，
   在本轮重构发布前同步修订样本、测试和规范，不能暗中猜测缺失信息。
 
+第 2 批在上述契约上新增候选 `app/plugin_lifecycle`：统一归档校验、确定性构建、
+不可变包存储和有恢复日志的期望配置事务，提供显式隔离 root 的 CLI。
+尚未接入生产 API/启动，也不默认定位或迁移用户现有注册表；所有 CLI 回执均包含
+`executorsAttached: false`。期望配置启用不等于插件代码已运行。第 3 批继续接执行器
+和统一管理界面，不能将候选 owner 永久作为第四套生产生命周期并行维护。
+
 ## 1. 统一清单与包身份
 
 以 [workbench 样本](../examples/unified-plugins/workbench/manifest.json) 为准：
@@ -48,8 +54,8 @@ data 在通过各自内容验证和权限/隔离检查后才能使用。未知�
 运行时、重复 JSON key、非有限数、超限输入和不安全跨平台路径一律拒绝。
 
 包继续使用 `.cspkg` 作为用户导入文件后缀；schema 和经过校验的包内容决定
-其含义，不能凭后缀选择旧执行路线。统一 envelope 的全部文件摘要、归档限制、
-运行时制品和目标平台验证在第 2 批交付。可复用既有安全检查，但新包不经旧包
+其含义，不能凭后缀选择旧执行路线。第 2 批交付统一 envelope 的全部文件摘要与
+归档限制；运行时制品供应和目标平台接线仍由第 3 批完成。可复用既有安全检查，但新包不经旧包
 转换器或旧安装器运行。数据主题与布局的内容验证也必须保留。
 
 ### 依赖预检
@@ -143,7 +149,7 @@ generation 由唯一 owner 持久分配；重启中断恢复、重新启用、�
 | 批次 | 关联 | 交付与退出条件 | 状态 |
 | --- | --- | --- | --- |
 | 1 | #349 | 候选清单/依赖/身份、旧入口与证据映射、只读检查和回归 | 本批实现；本地结果见下节 |
-| 2 | #349 | 统一 envelope/不可变包存储/激活 registry/可恢复变更；真实临时目录故障注入，无半安装执行 | 待实施 |
+| 2 | #349 | 统一 envelope/不可变包存储/期望激活 registry/可恢复变更；真实临时目录故障注入，无半安装执行 | 候选 owner 已实现；执行器未接入 |
 | 3 | #349 | 前后端/桌面/sidecar 接共同 owner，统一 API/UI；同包多入口生命周期真实运行，旧代结果拒绝 | 待实施 |
 | 4 | #350 | 构建前依赖计划/真实替换/冲突与资源清理；独立恢复启动能救回故意失败插件 | 待实施 |
 | 5 | #351 | 图/运行/模式/数据修订/可见时间贯通；跨图/回放/迟到结果和无未来泄露验证 | 待实施 |
@@ -184,3 +190,59 @@ python3 -m pytest -q tests/test_unified_manifest.py tests/test_package_architect
 场景、原始日志及结论。macOS 与 Windows 安装/更新/保存/完整退出/重启分别验收；
 浏览器、组件、源码 replay 不替代安装版证据。性能先固定输入、规模和预算，
 报告启动/计算/发布/停用延迟、内存/磁盘与残留进程，不预填未测收益。
+
+## 7. 第 2 批候选存储与事务
+
+`bundle.json` 的 schema 为 `candlescope.unified-bundle/1`，`files` 必须逐一列出
+归档中除自身以外全部文件（含 `manifest.json`）的 `sha256` 和整数 `size`。
+摘要标识确切字节，不证明发布者身份。未知 envelope、漏列/多列、大小/摘要差异、
+入口文件缺失、旧包一律拒绝，不自动分流到旧 installer。
+
+验证先有界解析 ZIP central directory，避免 `ZipFile` 在文件数检查之前分配大量
+对象；不接受多卷、ZIP64 end record、archive comment 或尾随字节。实际预算不需要
+ZIP64：归档最多 512MiB、1024 项；单文件 256MiB、总展开 1GiB、压缩比最多 100。
+路径须跨平台安全，无大小写/文件目录冲突、链接、加密或非普通文件。所有内容流式
+校验，不解包、不 import、不执行探针。文件大小预算沿用既有平台，未宣称性能收益。
+
+候选 store 持有唯一 `registry.json` 和单条 `transaction.json`。变更前先复核
+调用者的 `expected_revision`、确切摘要/信任批准及完整拟启用集合；先持久写 intent，
+原子替换 registry，再清理 intent。原子替换是提交点：
+
+- 提交前进程退出：重开观察到 before，撤销未提交 intent，保留旧配置。
+- 提交后进程退出：重开观察到 after，保留新配置并清理 intent。
+- 当前状态既不是 before 也不是 after，或 journal 损坏：明确拒绝，保留原文件；
+  不覆盖未知更新，不自动清空注册表，不执行代码来“恢复”。
+
+提交返回异常可能已跨过提交点，调用者必须重新读取 revision，不能盲目重放旧命令。
+每次成功变更推进全局持久 generation；包记录保存自己的最近代次。回滚/重新启用/
+卸载重装均不会恢复旧激活身份。这里证明的是期望配置持久性，实际运行实例、迟到
+结果采用和多入口补偿仍需第 3 批接入后验证。
+
+更新/停用/卸载会检查启用中的反向依赖；旧制品继续留存。缓存初期上限 2GiB /
+1024 个文件，崩溃留下的 stage 临时文件也计入预算；容量不足时拒绝新 stage，
+不自动删除旧包或用户数据。该候选工具无自动 GC/下载/插件执行，也不假称有签名认证。
+
+示例只在显式隔离目录操作：
+
+```sh
+python3 backend/scripts/unified_plugin.py build \
+  examples/unified-plugins/workbench /tmp/workbench-unified.cspkg
+python3 backend/scripts/unified_plugin.py stage \
+  --root /tmp/candlescope-unified-demo /tmp/workbench-unified.cspkg
+python3 backend/scripts/unified_plugin.py list --root /tmp/candlescope-unified-demo
+# review 返回 registryRevision；activate 需显式提供该 revision 和 trust:sha256:<digest>。
+# 此处仅修改期望配置，不启动任何入口。
+```
+
+构建输出必须位于源目录之外，不覆盖已有文件。根路径、内部目录/registry/journal/
+lock 和包文件拒绝符号链接或 Windows reparse point。CLI 的批准字串只是对审阅字节和信任模式的绑定，不是
+管理身份验证；生产接入仍须使用原 loopback/Origin/CSRF/会话和权限控制。
+
+第 2 批测试位于 `backend/tests/test_unified_plugin_store.py`，用真实 ZIP/文件系统、
+锁竞争、提交前后 `os._exit` 子进程终止及新 owner 重开检验恢复。不是安装版应用
+保存重启证据；各平台 CI 与 macOS/Windows 原生资格继续分别记录。
+
+本地最终源码 **41 项通过**（Python 3.12.15 / macOS arm64，含 Windows reparse 元数据模拟）；一次预期的重复 ZIP
+文件名警告来自恶意归档测试。变更 Python Ruff、workflow YAML 解析及 diff whitespace
+检查通过。CI 矩阵增加同一套存储测试，尚不据此填写其他平台通过。
+从 `backend/` 运行：`PYTHONPATH=. python3 -m pytest -q tests/test_unified_plugin_store.py`。
