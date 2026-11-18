@@ -192,7 +192,7 @@ test("advanced settings retain runtime suppliers and retire compatibility mutati
   assert.doesNotMatch(manager, /Apply exact import preview/);
 });
 
-test("Phase 6 trust UX replaces direct install with an explicit double-confirmation surface", () => {
+test("the install action opens unified package review with a legacy trust profile present", () => {
   const value = runtime(true);
   if (!value.view.catalog) assert.fail("catalog missing");
   value.view.catalog.trustUx = {
@@ -213,11 +213,9 @@ test("Phase 6 trust UX replaces direct install with an explicit double-confirmat
     highRiskAuthorityIndependent: true,
   };
   const manager = renderToStaticMarkup(<PluginSettingsPanel runtime={value} initialSection="install" />);
-  assert.match(manager, /data-plugin-trust-flow="itemized-double-confirmation"/);
-  assert.match(manager, /完成两次独立确认后才首次执行插件代码/);
-  assert.match(manager, /准备阶段不会运行语义探针或插件进程/);
-  assert.match(manager, /选择 \.cspkg 并生成审阅单/);
-  assert.doesNotMatch(manager, /经过摘要校验的本地插件包/);
+  assert.match(manager, /<section class="extension-manager"/);
+  assert.match(manager, /accept="\.cspkg"/);
+  assert.doesNotMatch(manager, /data-plugin-trust-flow|data-plugin-install-input/);
 });
 
 test("Marketplace v2 renders publisher, maintenance, sandbox, and permission assurances separately", () => {

@@ -1,5 +1,4 @@
 """Event requests on actual realtime Host accounts, with discarded trial ledgers."""
-from copy import deepcopy
 from decimal import Decimal
 import json
 import os
@@ -31,15 +30,7 @@ plot(request.security(syminfo.tickerid,timeframe.period,close))
 '''
 
 
-@pytest.fixture
-def event_worker(monkeypatch):
-    from app.backtest import native
-    launch=dict(command=[os.environ["PINE_EVENT_TEST_PYTHON"],"-I","-m","candlescope_plugin_pine_compat.native_strategy"],
-        plugin_id="candlescope.pine-compat")
-    monkeypatch.setattr(native,"resolve_plugin",lambda language:deepcopy(launch))
-
-
-def test_chart_realtime_event_windows_preserve_partial_prices_and_discard_trial_fills(service,event_worker):
+def test_chart_realtime_event_windows_preserve_partial_prices_and_discard_trial_fills(service):
     value=payload(service,SOURCE,cost_sensitivity_mode="FULL",execution_model_revision="EXECUTION_REALISM_V2",participation_rate="1")
     provider=PineEngineProvider()
     completed=execute(service,service.create_run(value,idempotency_key="event-realtime",now_ms=3),provider)
@@ -57,7 +48,7 @@ def test_chart_realtime_event_windows_preserve_partial_prices_and_discard_trial_
     finally:restored.close()
 
 
-def test_chart_realtime_event_checkpoint_resumes_open_bar_without_rematching_discarded_trials(service,event_worker):
+def test_chart_realtime_event_checkpoint_resumes_open_bar_without_rematching_discarded_trials(service):
     value=payload(service,SOURCE,cost_sensitivity_mode="SKIP")
     baseline=execute(service,service.create_run(value,idempotency_key="event-realtime-base",now_ms=3))
     run=service.create_run(value,idempotency_key="event-realtime-stop",now_ms=3)

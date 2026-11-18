@@ -166,13 +166,15 @@ def main(argv=None):
                "PINE_EVENT_TEST_PYTHON": str(python),
                "CANDLESCOPE_TEST_QUALIFIED_PINE_DESCRIPTOR": str(descriptor),
                "CANDLESCOPE_NATIVE_RUNTIME_REGISTRY": str(registry)}
+        excluded = ["test_native_windows_path"] if os.name != "nt" else []
+        receipt["platform_excluded_modules"] = excluded
         command = [sys.executable, "-u", "-m", "pytest",
-                   *(f"backend/tests/{name}.py" for name in MODULES),
+                   *(f"backend/tests/{name}.py" for name in MODULES if name not in excluded),
                    "-v", "-x", "--tb=short", "-k", "not pyne",
                    "-o", "usefixtures=qualified_pine_reference", f"--junitxml={output / 'tests.xml'}"]
         receipt["command"] = command
         save()
-        print(f"Running {len(MODULES)} modules; evidence: {output}", flush=True)
+        print(f"Running {len(MODULES) - len(excluded)} modules; evidence: {output}", flush=True)
         with (output / "tests.log").open("w", encoding="utf-8") as log:
             process = subprocess.Popen(command, cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)
             receipt["pytest_pid"] = process.pid

@@ -1,0 +1,24 @@
+{
+  "packageSha256": "sha256:c316f49ae9fc6184460c49c3e51a8f232f37fee50bc8e9403d77bac8a264ab64",
+  "platform": "win32",
+  "arch": "x64",
+  "pythonIndicator": {
+    "sourceSha256": "7d665c6b4aae3fcfbb385794e50508fce56dd513c49b28326b00cd5fa2fd4629",
+    "barsSha256": "f2257eb03d58a923ceec7768f8817c6d71ab984c3fd9a33683f0ba6d0cd94d11",
+    "invalidSourceRejected": true,
+    "values": [
+      22,
+      24
+    ],
+    "formingBarsExcluded": 1,
+    "restart": "passed"
+  },
+  "installedSearch": "passed",
+  "helloPackageSha256": "sha256:18f2a6b0a6d4465682cdadecb69796a9443b93310a4246ddd5d73bf3fb9599af",
+  "installedHello": "passed",
+  "restartSearch": "passed",
+  "restartHello": "passed",
+  "result": "passed",
+  "sourceCommit": "6d7928acfe13116a5fc36f990af5a6005bb001ae",
+  "workflowRun": 44296566648
+}

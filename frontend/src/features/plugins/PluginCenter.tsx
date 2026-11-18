@@ -10,7 +10,6 @@ import PluginAdvanced from "./PluginAdvanced.js";
 import ExtensionManager from "../extensions/ExtensionManager.js";
 import UnifiedPluginManager from "../extensions/UnifiedPluginManager.js";
 import PluginDetail from "./PluginDetail.js";
-import PluginInstallFlow from "./PluginInstallFlow.js";
 import { MarketplacePanel } from "./PluginManagementSections.js";
 import { filterPlugins, pluginStatus, type PluginFilter } from "./pluginCenterModel.js";
 import { localizePluginContribution } from "./pluginLocalization.js";
@@ -102,7 +101,7 @@ export function PluginSettingsPanel({ runtime, initialSection = "installed", onB
         }))} />
       <div className="pc-toolbar-actions">
         <Button size="sm" disabled={runtime.view.loading || installBusy} onClick={refreshAll}>{t("alert.refresh")}</Button>
-        {platformEnabled && management && <Button size="sm" variant="primary" disabled={installBusy} onClick={() => navigate("install")}>{t("pc.install")}</Button>}
+        {management && <Button size="sm" variant="primary" disabled={installBusy} onClick={() => navigate("install")}>{t("pc.install")}</Button>}
       </div>
     </div>
     {!management && <InlineAlert>{t("pc.readonly")}</InlineAlert>}
@@ -125,7 +124,7 @@ export function PluginSettingsPanel({ runtime, initialSection = "installed", onB
             {selected && <PluginDetail key={selected.id} selected={selected} {...detailState} runtime={runtime} onBack={() => setMobileDetail(false)} onDiscover={() => navigate("discover")} />}
           </> : unifiedCount ? null : <div className="pc-empty"><h3>{query || filter !== "all" ? t("pc.noResults") : t("plugin.empty")}</h3>
             <p>{query || filter !== "all" ? t("pc.search") : t("pc.emptyHint")}</p>
-            {query || filter !== "all" ? <Button onClick={() => { setQuery(""); setFilter("all"); }}>{t("interval.clear")}</Button> : platformEnabled && management && <Button variant="primary" onClick={() => navigate("install")}>{t("pc.install")}</Button>}
+            {query || filter !== "all" ? <Button onClick={() => { setQuery(""); setFilter("all"); }}>{t("interval.clear")}</Button> : management && <Button variant="primary" onClick={() => navigate("install")}>{t("pc.install")}</Button>}
           </div>}
         </div>
       </>}
@@ -135,7 +134,8 @@ export function PluginSettingsPanel({ runtime, initialSection = "installed", onB
       </>}
       {section === "extensions" && <ExtensionManager />}
       {section === "advanced" && <PluginAdvanced runtime={runtime} />}
-      {section === "install" && platformEnabled && <PluginInstallFlow runtime={runtime} onPendingChange={setInstallBusy} onDone={() => { navigate("installed"); setFilter("all"); }} />}
+      {section === "install" && <UnifiedPluginManager installOnly onPendingChange={setInstallBusy}
+        onInstalled={() => { setSection("installed"); setQuery(""); setFilter("all"); }} />}
     </>)}
   </div>;
 }

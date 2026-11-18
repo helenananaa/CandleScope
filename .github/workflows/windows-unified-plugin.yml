@@ -12,8 +12,16 @@ on:
       - 'backend/app/plugin_marketplace_v2/**'
       - 'docs/qa/unified-marketplace-migration-351-20261118/*.cjs'
       - 'docs/qa/unified-marketplace-migration-351-20261118/*.py'
+      - 'docs/qa/unified-pine-351-20261118/accept_installed.cjs'
+      - 'docs/qa/unified-pine-351-20261118/build_upgrade.py'
+      - 'docs/qa/unified-plugin-takeover-350-20261118/accept_installed.mjs'
       - 'examples/unified-plugins/aho-corasick/**'
   workflow_dispatch:
+    inputs:
+      verify_predecessor:
+        description: Reopen the migrated profile in the preceding packaged application
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -26,7 +34,7 @@ jobs:
   appcontainer:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       PYTHONUTF8: '1'
       PYTHONPATH: 'backend;packages/candlescope-plugin-sdk/src'
@@ -56,6 +64,8 @@ jobs:
           cargo fetch --locked --manifest-path $legacy
           cargo build --release --locked --offline --manifest-path $legacy --target-dir "$env:RUNNER_TEMP/legacy"
           python examples/unified-plugins/aho-corasick/build_candidate.py "$env:RUNNER_TEMP/aho-corasick.cspkg"
+      - name: Build the self-contained Hello Command candidate
+        run: python backend/scripts/unified_plugin.py build examples/unified-plugins/hello-command "$env:RUNNER_TEMP/hello-command.cspkg"
       - name: Verify the restricted package and legacy search output
         shell: pwsh
         run: |
@@ -74,7 +84,7 @@ jobs:
           Invoke-WebRequest -Uri $lock.wheel_url -OutFile $wheel -MaximumRetryCount 2 -RetryIntervalSec 4
           $env:CANDLESCOPE_CCXT_WHEEL = $wheel
           npm --prefix frontend run desktop:package:dir -- --win --x64 --publish never "--config.directories.output=$env:RUNNER_TEMP/desktop-build"
-      - name: Install and restart the restricted plugin in the packaged application
+      - name: Install, invoke and restart both plugins in the packaged application
         shell: pwsh
         run: |
           $output = "$env:RUNNER_TEMP/windows-unified-plugin"
@@ -84,11 +94,29 @@ jobs:
             "$env:RUNNER_TEMP/desktop-build/win-unpacked/CandleScope.exe" `
             "$env:RUNNER_TEMP/aho-corasick.cspkg" `
             "$env:RUNNER_TEMP/driver/node_modules/playwright-core" `
-            $output
+            $output `
+            "$env:RUNNER_TEMP/hello-command.cspkg"
+      - name: Verify startup takeover and independent recovery in the installed app
+        shell: pwsh
+        run: |
+          $package = "$env:RUNNER_TEMP/desktop-build/win-unpacked"
+          $qa = "docs/qa/unified-plugin-takeover-350-20261118"
+          node "$qa/accept_installed.mjs" "$env:GITHUB_WORKSPACE" "$package/CandleScope.exe" "python" "$env:RUNNER_TEMP/windows-unified-plugin/takeover.json"
+      - name: Verify the bundled Pine lifecycle and saved strategy in the installed app
+        shell: pwsh
+        run: |
+          $package = "$env:RUNNER_TEMP/desktop-build/win-unpacked"
+          $output = "$env:RUNNER_TEMP/windows-unified-plugin"
+          $qa = "docs/qa/unified-pine-351-20261118"
+          $env:CANDLESCOPE_QA_PLAYWRIGHT = "$env:RUNNER_TEMP/driver/node_modules/playwright-core"
+          python "$qa/build_upgrade.py" "$package/resources/python-runtime/plugins/unified-pine.json" "$env:RUNNER_TEMP/pine-upgrade.cspkg"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node "$qa/accept_installed.cjs" "$package/CandleScope.exe" "$output/pine.json" "$env:RUNNER_TEMP/pine-upgrade.cspkg"
       - name: Verify installed marketplace migration and rollback
         shell: pwsh
         env:
           UV_OFFLINE: '1'
+          CANDLESCOPE_QA_LEGACY_EXECUTION_RETIRED: '1'
         run: |
           $package = "$env:RUNNER_TEMP/desktop-build/win-unpacked"
           $output = "$env:RUNNER_TEMP/windows-unified-plugin"
@@ -98,6 +126,30 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $env:CANDLESCOPE_QA_PLAYWRIGHT = "$env:RUNNER_TEMP/driver/node_modules/playwright-core"
           node "$qa/accept_installed.cjs" "$package/CandleScope.exe" "$env:RUNNER_TEMP/marketplace" "$output/marketplace.json"
+      - name: Check out the qualified predecessor application
+        if: github.event_name == 'workflow_dispatch' && inputs.verify_predecessor
+        uses: actions/checkout@v4
+        with:
+          ref: 6f054d9d322594ed8f02828b803f6a70d93f092a
+          path: plugin-rollback-predecessor
+          persist-credentials: false
+      - name: Check retained rollback data in the previous packaged application
+        if: github.event_name == 'workflow_dispatch' && inputs.verify_predecessor
+        working-directory: plugin-rollback-predecessor
+        shell: pwsh
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          npm --prefix frontend ci --ignore-scripts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $lock = Get-Content backend/ccxt-fork.lock.json | ConvertFrom-Json
+          $env:CANDLESCOPE_CCXT_WHEEL = Join-Path $env:RUNNER_TEMP ([System.IO.Path]::GetFileName($lock.wheel_url))
+          $previous = "$env:RUNNER_TEMP/rollback-app"
+          npm --prefix frontend run desktop:package:dir -- --win --x64 --publish never "--config.directories.output=$previous"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $qa = "$env:GITHUB_WORKSPACE/docs/qa/unified-marketplace-migration-351-20261118"
+          $env:CANDLESCOPE_QA_PLAYWRIGHT = "$env:RUNNER_TEMP/driver/node_modules/playwright-core"
+          node "$qa/accept_installed.cjs" "$previous/win-unpacked/CandleScope.exe" "$env:RUNNER_TEMP/marketplace" "$env:RUNNER_TEMP/windows-unified-plugin/previous-app.json" --verify-restored-predecessor
       - uses: actions/upload-artifact@v4
         if: always()
         with:

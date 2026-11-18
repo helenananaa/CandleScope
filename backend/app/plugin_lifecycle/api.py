@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import mimetypes
 import tempfile
+from contextlib import nullcontext
 from pathlib import Path
 
 from candlescope_plugin_sdk.platform_v2 import (
@@ -132,18 +133,31 @@ def create_unified_router():
                 "revision",
                 "acknowledgement",
             }:
-                review = await asyncio.to_thread(runtime.store.review, body["digest"])
                 from candlescope_plugin_sdk.unified import Manifest
 
-                await asyncio.to_thread(
-                    runtime.validate_activation, Manifest.from_wire(review["manifest"])
+                platform = getattr(request.app.state, "plugin_platform_v2", None)
+                marketplace = getattr(platform, "marketplace", None)
+                cutover = (
+                    marketplace.cutover_lock
+                    if marketplace is not None
+                    else nullcontext()
                 )
-                result = await asyncio.to_thread(
-                    runtime.store.activate,
-                    body["digest"],
-                    expected_revision=body["revision"],
-                    acknowledgement=body["acknowledgement"],
-                )
+                async with cutover:
+                    review = await asyncio.to_thread(
+                        runtime.store.review, body["digest"]
+                    )
+                    manifest = Manifest.from_wire(review["manifest"])
+                    if marketplace is not None:
+                        await asyncio.to_thread(
+                            marketplace.assert_legacy_inactive, manifest.id
+                        )
+                    await asyncio.to_thread(runtime.validate_activation, manifest)
+                    result = await asyncio.to_thread(
+                        runtime.store.activate,
+                        body["digest"],
+                        expected_revision=body["revision"],
+                        acknowledgement=body["acknowledgement"],
+                    )
             elif action == "select-appearance" and set(body) == {
                 "action",
                 "id",

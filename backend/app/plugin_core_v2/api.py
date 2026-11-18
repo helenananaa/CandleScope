@@ -105,6 +105,39 @@ async def _guarded_platform(request: Request) -> CorePluginPlatform:
     return platform
 
 
+def _legacy_package_update() -> HTTPException:
+    return HTTPException(
+        status_code=410,
+        detail={
+            "code": "PLUGIN_PLATFORM_PACKAGE_UPDATE_REQUIRED",
+            "message": "Install an updated unified package in the plugin center.",
+        },
+    )
+
+
+async def _guarded_legacy_platform(request: Request) -> CorePluginPlatform:
+    platform = await _guarded_platform(request)
+    if not platform.allow_legacy_execution:
+        raise _legacy_package_update()
+    return platform
+
+
+def _reject_legacy_install(request: Request) -> None:
+    if getattr(request.app.state, "unified_plugin_runtime", None) is not None:
+        raise _legacy_package_update()
+
+
+async def _reject_staged_legacy_change(
+    platform: CorePluginPlatform, request: Request, plugin_id: str
+) -> None:
+    if getattr(request.app.state, "unified_plugin_runtime", None) is not None:
+        source = await asyncio.to_thread(
+            platform.installer.capture_activation_state, plugin_id
+        )
+        if source.activation is not None and source.activation.state == "staged":
+            _reject_legacy_install(request)
+
+
 async def _background_platform(request: Request) -> CorePluginPlatform:
     platform = _platform(request)
     guard = getattr(request.app.state, "plugin_platform_v2_management_guard", None)
@@ -344,6 +377,8 @@ def create_core_plugin_router() -> APIRouter:
             platform, CorePluginPlatform
         ) or not _endpoint_request_is_local(request):
             raise HTTPException(status_code=404, detail="plugin endpoint unavailable")
+        if not platform.allow_legacy_execution:
+            raise _legacy_package_update()
         try:
             maximum, methods = platform.integration.endpoints.limits(
                 plugin_id, endpoint_id
@@ -467,7 +502,7 @@ def create_core_plugin_router() -> APIRouter:
         )
         await platform.reconcile_plugin(plugin_id)
         runtime_ready = False
-        if record.enabled:
+        if record.enabled and platform.allow_legacy_execution:
             try:
                 await platform.observe_plugin_health(plugin_id)
                 runtime_ready = True
@@ -834,7 +869,7 @@ def create_core_plugin_router() -> APIRouter:
 
     @router.post("/manage/files/open")
     async def open_user_file(request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
         parameters = request.query_params.multi_items()
         if len(parameters) != 2 or {key for key, _value in parameters} != {
             "contributionId",
@@ -866,7 +901,7 @@ def create_core_plugin_router() -> APIRouter:
 
     @router.post("/manage/files/save")
     async def save_user_file(request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
         value = await _body(request, required={"contributionId", "field"})
         if not all(isinstance(value[key], str) for key in value):
             raise HTTPException(
@@ -886,7 +921,7 @@ def create_core_plugin_router() -> APIRouter:
 
     @router.post("/manage/files/download")
     async def download_user_file(request: Request) -> Response:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
         value = await _body(request, required={"pluginId", "downloadId"})
         if not all(isinstance(value[key], str) for key in value):
             raise HTTPException(status_code=400, detail="file download body is invalid")
@@ -914,7 +949,8 @@ def create_core_plugin_router() -> APIRouter:
 
     @router.post("/manage/install")
     async def install(request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
+        _reject_legacy_install(request)
         if platform.trust_ux_enabled:
             raise HTTPException(
                 status_code=409,
@@ -955,7 +991,8 @@ def create_core_plugin_router() -> APIRouter:
 
     @router.post("/manage/install/prepare")
     async def prepare_local_install(request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
+        _reject_legacy_install(request)
         upload = None
         try:
             upload, expected_sha256 = await _bundle_upload(request, platform)
@@ -982,7 +1019,8 @@ def create_core_plugin_router() -> APIRouter:
 
     @router.post("/manage/install/review")
     async def review_local_install(request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
+        _reject_legacy_install(request)
         value = await _body(
             request,
             required={
@@ -1015,7 +1053,8 @@ def create_core_plugin_router() -> APIRouter:
 
     @router.post("/manage/install/confirm")
     async def confirm_local_install(request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
+        _reject_legacy_install(request)
         value = await _body(
             request,
             required={"candidateId", "previewSha256", "confirmationToken"},
@@ -1037,7 +1076,7 @@ def create_core_plugin_router() -> APIRouter:
 
     @router.post("/manage/{plugin_id}/trust/review")
     async def review_trust_change(plugin_id: str, request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
         value = await _body(
             request,
             required={"targetMode", "reason", "acknowledgements"},
@@ -1065,7 +1104,7 @@ def create_core_plugin_router() -> APIRouter:
 
     @router.post("/manage/{plugin_id}/trust/confirm")
     async def confirm_trust_change(plugin_id: str, request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
         value = await _body(
             request,
             required={"changeId", "previewSha256", "confirmationToken"},
@@ -1553,21 +1592,25 @@ def create_core_plugin_router() -> APIRouter:
 
     @router.post("/manage/{plugin_id}/enable")
     async def enable(plugin_id: str, request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
         try:
             async with platform.marketplace.cutover_lock:
+                await _reject_staged_legacy_change(platform, request, plugin_id)
                 await asyncio.to_thread(platform.assert_legacy_mutable, plugin_id)
                 result = await asyncio.to_thread(platform.installer.enable, plugin_id)
                 await platform.reconcile_plugin(plugin_id)
                 return {"stateChange": result.to_wire()}
+        except HTTPException:
+            raise
         except Exception as exc:
             _raise_api_error(exc)
 
     @router.post("/manage/{plugin_id}/disable")
     async def disable(plugin_id: str, request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
         try:
             async with platform.marketplace.cutover_lock:
+                await _reject_staged_legacy_change(platform, request, plugin_id)
                 await asyncio.to_thread(platform.assert_legacy_mutable, plugin_id)
                 action = request.state.plugin_user_action
                 await platform.revoke_live_authority(
@@ -1579,12 +1622,14 @@ def create_core_plugin_router() -> APIRouter:
                 result = await asyncio.to_thread(platform.installer.disable, plugin_id)
                 await platform.reconcile_plugin(plugin_id)
                 return {"stateChange": result.to_wire()}
+        except HTTPException:
+            raise
         except Exception as exc:
             _raise_api_error(exc)
 
     @router.post("/manage/{plugin_id}/rollback")
     async def rollback(plugin_id: str, request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
         try:
             async with platform.marketplace.cutover_lock:
                 await asyncio.to_thread(platform.assert_legacy_mutable, plugin_id)
@@ -1608,7 +1653,7 @@ def create_core_plugin_router() -> APIRouter:
 
     @router.post("/manage/{plugin_id}/uninstall")
     async def uninstall(plugin_id: str, request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
         try:
             async with platform.marketplace.cutover_lock:
                 await asyncio.to_thread(platform.assert_legacy_mutable, plugin_id)
@@ -1634,7 +1679,7 @@ def create_core_plugin_router() -> APIRouter:
         decision: str,
         request: Request,
     ) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
         if decision not in {"grant", "deny", "revoke"}:
             raise HTTPException(
                 status_code=404, detail="permission decision is unknown"
@@ -1692,7 +1737,7 @@ def create_core_plugin_router() -> APIRouter:
 
     @router.post("/manage/commands/{contribution_id:path}/invoke")
     async def invoke_command(contribution_id: str, request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
         try:
             value = await _body(request, required={"input"}, optional={"locale"})
             if not isinstance(value["input"], dict):
@@ -1715,7 +1760,7 @@ def create_core_plugin_router() -> APIRouter:
 
     @router.post("/manage/jobs/{contribution_id:path}/run")
     async def run_job(contribution_id: str, request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
         try:
             if await request.body():
                 raise HTTPException(
@@ -1731,7 +1776,7 @@ def create_core_plugin_router() -> APIRouter:
 
     @router.get("/manage/settings/{contribution_id:path}")
     async def read_settings(contribution_id: str, request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
         try:
             return {"settings": await platform.read_settings(contribution_id)}
         except Exception as exc:
@@ -1739,7 +1784,7 @@ def create_core_plugin_router() -> APIRouter:
 
     @router.put("/manage/settings/{contribution_id:path}")
     async def write_settings(contribution_id: str, request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
+        platform = await _guarded_legacy_platform(request)
         try:
             value = await _body(request, required={"value"})
             if not isinstance(value["value"], dict):

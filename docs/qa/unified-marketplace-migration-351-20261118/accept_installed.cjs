@@ -6,30 +6,28 @@ const { execFileSync } = require("node:child_process");
 const { setTimeout: delay } = require("node:timers/promises");
 const { _electron } = require(process.env.CANDLESCOPE_QA_PLAYWRIGHT || "playwright-core");
 
-const [appPath, qaPath, receiptPath] = process.argv.slice(2);
+const [appPath, qaPath, receiptPath, mode] = process.argv.slice(2);
 const api = "/api/v2/plugins";
 const market = api + "/manage/marketplace";
 const unified = api + "/manage/unified";
 const sha = bytes => "sha256:" + createHash("sha256").update(bytes).digest("hex");
 const windows = process.platform === "win32";
-const proc = () => (windows
-  ? execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
-    "Get-CimInstance Win32_Process | ForEach-Object { '{0} {1}' -f $_.ProcessId,$_.ParentProcessId }"],
-  { encoding: "utf8" })
-  : execFileSync("ps", ["-axo", "pid=,ppid="], { encoding: "utf8" }))
-  .trim().split("\n").map(row => row.trim().split(/\s+/).map(Number));
+const retired = process.env.CANDLESCOPE_QA_LEGACY_EXECUTION_RETIRED === "1";
+const legacyRuns = windows && !retired;
+const { trackInstalledProcesses } = require("../unified-installed-processes.cjs");
 const read = async file => JSON.parse(await fs.readFile(file, "utf8"));
 
 async function main() {
   const qa = await fs.realpath(qaPath);
+  const installed = await fs.realpath(appPath);
   const profile = path.join(qa, "profile");
   const home = path.join(qa, "home");
   await fs.mkdir(home, { recursive: true });
   const fixtures = await read(path.join(qa, "fixtures.json"));
-  const resources = windows ? path.join(path.dirname(appPath), "resources")
-    : path.join(appPath, "Contents", "Resources");
-  const executable = windows ? appPath : path.join(appPath, "Contents", "MacOS", "CandleScope");
-  if (!windows) execFileSync("codesign", ["--verify", "--deep", "--strict", appPath]);
+  const resources = windows ? path.join(path.dirname(installed), "resources")
+    : path.join(installed, "Contents", "Resources");
+  const executable = windows ? installed : path.join(installed, "Contents", "MacOS", "CandleScope");
+  if (!windows) execFileSync("codesign", ["--verify", "--deep", "--strict", installed]);
   const receipt = {
     platform: process.platform, architecture: process.arch, signatureVerified: windows ? null : true,
     appAsar: sha(await fs.readFile(path.join(resources, "app.asar"))),
@@ -65,7 +63,7 @@ async function main() {
     const result = { name };
     receipt.sessions.push(result);
     let electron;
-    const pids = new Set();
+    let processTree;
     try {
       electron = await _electron.launch({
         executablePath: executable,
@@ -77,7 +75,7 @@ async function main() {
         packaged: app.isPackaged, pid: process.pid, userData: app.getPath("userData"),
         electron: process.versions.electron,
       }));
-      pids.add(identity.pid);
+      processTree = trackInstalledProcesses(identity.pid);
       assert.equal(identity.packaged, true);
       assert.equal(path.resolve(identity.userData), profile);
       result.electron = identity.electron;
@@ -123,8 +121,8 @@ async function main() {
         page, result, request,
         catalog: () => request(unified),
         oldCatalog: () => request(api + "/catalog"),
-        invokeLegacy: () => request(api + "/manage/commands/" + fixtures.legacy.id + ".hello/invoke",
-          { body: { input: { name: "Marketplace" } } }),
+        invokeLegacy: (status = 200) => request(api + "/manage/commands/" + fixtures.legacy.id + ".hello/invoke",
+          { body: { input: { name: "Marketplace" } }, status }),
         index: async sequence => request(`${market}/${fixtures.marketplaceId}/index`, {
           bytes: await fs.readFile(path.join(qa, `index-${sequence}.json`)),
         }),
@@ -210,17 +208,16 @@ async function main() {
     } finally {
       try {
         if (electron) {
-          const tree = proc();
-          for (let level = 0; level < 10; level++) {
-            for (const [pid, parent] of tree) if (pids.has(parent)) pids.add(pid);
-          }
+          if (processTree) processTree.observe();
           await electron.close();
-          for (let attempt = 0; attempt < 10; attempt++) {
-            result.remainingOwnedProcesses = proc().filter(([pid]) => pids.has(pid)).map(([pid]) => pid);
-            if (!result.remainingOwnedProcesses.length) break;
-            await delay(250);
+          if (processTree) {
+            for (let attempt = 0; attempt < 10; attempt++) {
+              result.remainingOwnedProcesses = processTree.remaining();
+              if (!result.remainingOwnedProcesses.length) break;
+              await delay(250);
+            }
+            assert.deepEqual(result.remainingOwnedProcesses, []);
           }
-          assert.deepEqual(result.remainingOwnedProcesses, []);
         }
       } finally {
         await record();
@@ -237,13 +234,37 @@ async function main() {
     }
   }
 
+  if (mode === "--verify-restored-predecessor") {
+    await inSession("reuse retained data in the previous application", async q => {
+      q.result.retainedAppearance = await q.color(fixtures.upgrade.color);
+      const original = plugin(await q.oldCatalog(), fixtures.legacy.id);
+      assert.equal(original.version, fixtures.legacy.version);
+      assert.equal(original.enabled, true);
+      assert.equal(original.available, windows, JSON.stringify(original));
+      if (windows) {
+        assert.equal((await q.invokeLegacy()).result.message, "Hello, Marketplace!");
+        q.result.restoredCommand = "passed";
+      }
+      await preserved();
+      q.result.legacyFilesByteIdentical = true;
+    });
+    receipt.ok = true;
+    await record();
+    return;
+  }
+
   await inSession("install, update and migrate", async q => {
     await q.openMarket();
     const old = plugin(await q.oldCatalog(), fixtures.legacy.id);
     assert.equal(old.version, fixtures.legacy.version);
     q.result.legacyAvailable = old.available;
-    assert.equal(old.available, windows, JSON.stringify(old));
-    if (windows) assert.equal((await q.invokeLegacy()).result.message, "Hello, Marketplace!");
+    assert.equal(old.available, legacyRuns, JSON.stringify(old));
+    if (legacyRuns) assert.equal((await q.invokeLegacy()).result.message, "Hello, Marketplace!");
+    if (retired) {
+      assert.equal(old.unavailableReason, "PLUGIN_PLATFORM_PACKAGE_UPDATE_REQUIRED");
+      assert.equal((await q.invokeLegacy(410)).detail.code, old.unavailableReason);
+      q.result.legacyExecutionBlocked = true;
+    }
     const initial = await q.activate(fixtures.initial, { checkCancel: true });
     q.result.installGeneration = initial.activation.generation;
     await q.select(fixtures.initial.id);
@@ -290,10 +311,10 @@ async function main() {
     const restored = await response;
     q.result.manualRollback = await restored.json();
     assert.equal(restored.status(), 200, JSON.stringify(q.result.manualRollback));
-    assert.deepEqual(q.result.manualRollback, { restoredVersion: fixtures.legacy.version, runtimeReady: windows });
+    assert.deepEqual(q.result.manualRollback, { restoredVersion: fixtures.legacy.version, runtimeReady: legacyRuns });
     assert.equal(plugin(await q.catalog(), fixtures.legacy.id), undefined);
     assert.equal(plugin(await q.oldCatalog(), fixtures.legacy.id).version, fixtures.legacy.version);
-    if (windows) {
+    if (legacyRuns) {
       assert.equal((await q.invokeLegacy()).result.message, "Hello, Marketplace!");
       q.result.legacyCommandAfterRollback = "passed";
     }
@@ -323,9 +344,13 @@ async function main() {
     assert.ok(theme.entries.find(item => item.id === "theme").observed.some(item => item.state === "ready"));
     assert.equal(plugin(await q.catalog(), fixtures.legacy.id), undefined);
     assert.equal(plugin(await q.oldCatalog(), fixtures.legacy.id).version, fixtures.legacy.version);
-    if (windows) {
+    if (legacyRuns) {
       assert.equal((await q.invokeLegacy()).result.message, "Hello, Marketplace!");
       q.result.legacyCommandAfterRestart = "passed";
+    }
+    if (retired) {
+      assert.equal((await q.invokeLegacy(410)).detail.code, "PLUGIN_PLATFORM_PACKAGE_UPDATE_REQUIRED");
+      q.result.legacyExecutionBlockedAfterRestart = true;
     }
     assert.equal(await fs.readFile(path.join(migratedStorage, "qa-new-data.txt"), "utf8"), "new version data\n");
     await preserved();

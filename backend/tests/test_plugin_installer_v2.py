@@ -419,9 +419,14 @@ def test_required_permissions_remain_staged_until_explicit_grant(
                 '{"symbols":["BTCUSDT"]}',
             ]
         )
-        == 0
+        == 1
     )
-    granted = json.loads(capsys.readouterr().out)["permissionChange"]
+    rejected = json.loads(capsys.readouterr().err)
+    assert rejected["error"]["code"] == "PLUGIN_PLATFORM_PACKAGE_UPDATE_REQUIRED"
+    assert installer.registry_path.read_bytes() == registry_before
+    granted = installer.grant_permission(
+        installed.plugin_id, "market.bars.read", scope={"symbols": ["BTCUSDT"]}
+    ).to_wire()
     assert granted["activationReady"] is True
     assert granted["activationState"] == "staged"
     assert installer.enable(installed.plugin_id).state == "active"

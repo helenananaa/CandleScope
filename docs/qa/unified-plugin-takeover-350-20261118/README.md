@@ -20,5 +20,16 @@
 相关前端 71 项。通过 TypeScript、前端架构、插件边界、i18n、变更文件 lint 和生产构建。
 源码测试覆盖冲突拒绝、受限包拒绝根布局声明、依赖者原子禁用、资源保留到退出以及 Pyne 拒绝。
 
-本次安装版结果覆盖 macOS 的离线回放和主窗口 shell。live 模式的其余工厂、其他窗口的
-交互验收和 Windows 安装版仍待验证。Windows 连接尝试两次均返回 429，未启动候选。
+本次安装版结果覆盖 macOS 的离线回放和主窗口 shell。LIVE 模式的其余工厂和其他窗口的
+交互验收未覆盖。下方记录随后完成的 Windows 安装版验证。
+
+源码 `9aad9388020760569fff608e9de9ec7c35fdae9c` 的 macOS 打包版又在 LIVE 模式
+跑完同一四步。实际回放 API 和主窗口均采用可信包的替换结果，故障包触发退出码 3，
+独立禁用和随后的普通重启恢复内置实现，私有脚本摘要一致。设置
+`CANDLESCOPE_QA_RUNTIME_MODE=LIVE` 可用同一驱动复验。[macOS LIVE 回执](macos-arm64-live.json)。
+
+## Windows x64 安装版
+
+GitHub Windows runner 的实际打包应用完成同一四步离线验收。故障包使后端以 3 退出，
+独立禁用参数恢复窗口和回放服务，正常重启保持停用。原包及故障包仍可复核，
+私有脚本摘要保持一致。[Windows x64 回执](windows-x64.json)。
