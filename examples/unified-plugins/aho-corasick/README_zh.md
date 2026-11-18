@@ -25,3 +25,5 @@ PYTHONPATH=backend:packages/candlescope-plugin-sdk/src \
 本地浏览器用共享命令面板和实际管理 API 验证了发现、执行、无效参数后重试、1 万条结果显示、停用及重新启用。验证使用临时存储及显式批准的 full-trust 测试包，其原生二进制与受限候选字节相同。
 
 macOS 的产品运行时拒绝启动缺少合格隔离环境的受限原生 sidecar。市场重发仍需 Windows AppContainer、旧安装回滚验收和原发布者签名。
+
+Windows runner 使用同一个探针并加 `--require-appcontainer`。这个模式还会在临时存储中通过统一生命周期批准受限候选，核对真实 AppContainer 的进程限制，调用同一参考搜索，并检查停用后的命令撤销、进程退出和启动文件清理。

@@ -8,6 +8,7 @@ import tomllib
 import uuid
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 
 from app.plugin_host.errors import PlatformHostRemoteError
 from app.plugin_lifecycle import LifecycleError, PackageStore
@@ -201,11 +202,59 @@ async def verify_entry(verified, root, storage, invocations):
     assert not any(storage.iterdir())
 
 
+async def verify_appcontainer(store, verified, invocations):
+    runtime = UnifiedRuntime(SimpleNamespace(state=SimpleNamespace()), store)
+    manifest = verified.manifest
+    (command,) = manifest.commands
+    store.activate(
+        verified.sha256,
+        expected_revision=store.snapshot()["revision"],
+        acknowledgement=f"restricted:{verified.sha256}",
+    )
+    try:
+        await runtime.start()
+        run = runtime.running.get((manifest.id, command.entry_id))
+        assert run is not None, runtime.errors
+        transport = run.executor.transport
+        policy = transport.process_spec.sandbox_policy
+        assert transport.process_spec.trust_level == "untrusted" and policy is not None
+        (launch,) = policy.runtime_directory.glob("launch-*/config.json")
+        config = json.loads(launch.read_bytes())
+        assert config["appContainerSid"].startswith("S-1-15-2-")
+        assert config["limits"]["activeProcesses"] == 1
+        assert Path(config["command"][0]) == transport.process_spec.executable
+        (listed,) = runtime.command_catalog()
+        assert (listed["identity"], listed["instanceId"]) == (
+            run.identity.to_wire(),
+            run.instance,
+        )
+        process = transport.process
+        for payload, expected in invocations:
+            assert (
+                await runtime.invoke_command(
+                    manifest.id, command.id, listed["identity"], run.instance, payload
+                )
+                == expected
+            )
+        store.disable(manifest.id, expected_revision=store.snapshot()["revision"])
+        await runtime.reconcile()
+        assert not runtime.command_catalog()
+        assert process.returncode is not None
+        assert not policy.runtime_directory.exists()
+    finally:
+        await runtime.stop()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("package", type=Path, help="locally built .cspkg to execute")
     parser.add_argument(
         "legacy_binary", type=Path, help="legacy reference built from this checkout"
+    )
+    parser.add_argument(
+        "--require-appcontainer",
+        action="store_true",
+        help="also require successful restricted activation through the Windows lifecycle",
     )
     args = parser.parse_args()
     with TemporaryDirectory(prefix="candlescope-aho-verify-") as temporary:
@@ -216,6 +265,8 @@ def main():
         restricted_available = restricted_runtime_profile(
             "native-executable"
         ).supported()
+        if args.require_appcontainer and not restricted_available:
+            parser.error("a supported Windows AppContainer host is required")
         if not restricted_available:
             try:
                 UnifiedRuntime(None, store).validate_marketplace(verified.manifest)
@@ -237,6 +288,8 @@ def main():
         finally:
             store.release_materialization(root, files)
         assert not root.exists()
+        if args.require_appcontainer:
+            asyncio.run(verify_appcontainer(store, verified, invocations))
 
     print(
         json.dumps(
@@ -246,6 +299,11 @@ def main():
                 "supplyMetadataChecked": True,
                 "unifiedInvocationsMatched": len(invocations),
                 "unifiedExecutorProbe": "passed",
+                **(
+                    {"restrictedAppContainerProbe": "passed"}
+                    if args.require_appcontainer
+                    else {}
+                ),
                 "marketplaceWithoutIsolation": "not exercised"
                 if restricted_available
                 else "rejected",

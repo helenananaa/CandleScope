@@ -1,0 +1,51 @@
+name: Windows unified plugin
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - '.github/workflows/windows-unified-plugin.yml'
+      - 'backend/app/plugin_lifecycle/**'
+      - 'backend/app/plugin_security_v2/**'
+      - 'backend/app/plugin_host/**'
+      - 'examples/unified-plugins/aho-corasick/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  appcontainer:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: windows-latest
+    timeout-minutes: 18
+    env:
+      PYTHONUTF8: '1'
+      PYTHONPATH: 'backend;packages/candlescope-plugin-sdk/src'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install contract dependencies
+        run: python -m pip install fastapi==0.115.6 jsonschema==4.25.1
+      - name: Build the pinned Rust packages
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal
+          rustup override set 1.97.1
+          $legacy = "examples/plugins/aho-corasick-adapter/Cargo.toml"
+          cargo fetch --locked --manifest-path $legacy
+          cargo build --release --locked --offline --manifest-path $legacy --target-dir "$env:RUNNER_TEMP/legacy"
+          python examples/unified-plugins/aho-corasick/build_candidate.py "$env:RUNNER_TEMP/aho-corasick.cspkg"
+      - name: Verify the restricted package and legacy search output
+        shell: pwsh
+        run: |
+          python examples/unified-plugins/aho-corasick/verify_candidate.py `
+            "$env:RUNNER_TEMP/aho-corasick.cspkg" `
+            "$env:RUNNER_TEMP/legacy/release/candlescope-aho-corasick-adapter.exe" `
+            --require-appcontainer

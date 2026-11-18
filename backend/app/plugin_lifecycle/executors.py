@@ -7,6 +7,7 @@ import importlib.util
 import inspect
 import shutil
 import sys
+import tempfile
 import uuid
 from contextvars import ContextVar
 from pathlib import Path
@@ -236,6 +237,15 @@ class SidecarEntry:
                 if entry.runtime == "wasm-component"
                 else (str(path),)
             )
+        policy = None
+        if context.trust == "restricted":
+            scratch = tempfile.TemporaryDirectory(prefix="candlescope-sandbox-")
+            try:
+                policy = restricted_policy(context, executable, Path(scratch.name))
+            except BaseException:
+                scratch.cleanup()
+                raise
+            context.track(scratch.cleanup)
         self.transport = PlatformV2Transport(
             SidecarProcessSpec(
                 identity=f"{context.id}:{entry.id}",
@@ -247,9 +257,7 @@ class SidecarEntry:
                 trust_level="untrusted"
                 if context.trust == "restricted"
                 else "local-trusted",
-                sandbox_policy=restricted_policy(context, executable)
-                if context.trust == "restricted"
-                else None,
+                sandbox_policy=policy,
             ),
             plugin_id=context.id,
             entrypoint_id=entry.id,
@@ -297,23 +305,25 @@ class SidecarEntry:
     async def stop(self):
         self.context.disposed = True
         await self.transport.close()
-        await self.context.dispose()
+        errors = await self.context.dispose()
+        if errors:
+            raise LifecycleError("; ".join(errors))
 
 
-def restricted_policy(context, executable):
+def restricted_policy(context, executable, launch_directory):
     profile = restricted_runtime_profile(context.entry.runtime)
     if not profile.supported():
         raise LifecycleError(
             "restricted sidecar requires a qualified isolated runtime; unavailable"
         )
-    if context.entry.runtime in {"python-module", "native-executable"}:
-        runtime = Path(sys.base_prefix)
+    if context.entry.runtime == "python-module":
         extras = (
-            (Path(sys.prefix),)
-            if context.entry.runtime == "python-module"
-            and sys.prefix != sys.base_prefix
-            else ()
+            (Path(sys.base_prefix), Path(sys.prefix))
+            if sys.prefix != sys.base_prefix
+            else (Path(sys.base_prefix),)
         )
+    elif context.entry.runtime == "native-executable":
+        extras = ()
     else:
         runtime = Path(executable).resolve().parent
         if context.entry.runtime == "java-jar":
@@ -327,7 +337,7 @@ def restricted_policy(context, executable):
         ),
         installation_directory=context.root,
         private_directory=context.storage,
-        runtime_directory=runtime,
+        runtime_directory=launch_directory,
         additional_read_only_paths=extras,
         memory_limit_bytes=profile.memory_limit_bytes,
         cpu_rate_percent=profile.cpu_rate_percent,
