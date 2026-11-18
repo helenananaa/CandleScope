@@ -37,3 +37,6 @@ Windows 私有连接返回 404，未运行安装包。实时与各回放窗口�
 Windows 打包工作流使用同样的四根 K 线验证 Python 指标，检查无效脚本、只输出
 已收盘窗口内的 22 和 24，以及完全退出重启后结果一致。结果记录在
 `windows-unified-plugin` 工件的 `installed.json`。
+
+后续退役候选在 macOS arm64 的同一组固定输入也通过了重启验收。
+[回执](macos-arm64-python-restart.json)记录了应用摘要、运行包摘要及精确输出。
