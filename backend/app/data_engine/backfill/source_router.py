@@ -459,9 +459,15 @@ class HistoricalSourceRouter:
                     if is_fresh
                 }
                 cold_new_keys = newly_prefetched_keys - fresh_new_keys
+                composed_run = bool(
+                    run and all(task.metadata.get("history_composition_contract") for task in run)
+                )
                 parent_prefill = (
-                    route_start_ms < actual_start_ms
-                    or route_end_ms > actual_end_ms
+                    not composed_run
+                    and (
+                        route_start_ms < actual_start_ms
+                        or route_end_ms > actual_end_ms
+                    )
                 )
                 warm_parent_batch = (
                     parent_prefill
@@ -1115,25 +1121,7 @@ def _filter_daily_candidates(
             ref.end_ms,
         )
     )
-    daily_composed_windows = 0
-    if composed_tasks:
-        daily_envelope = ArchiveObjectRef(
-            provider_id=daily[0].provider_id,
-            exchange=daily[0].exchange,
-            market_type=daily[0].market_type,
-            symbol=daily[0].symbol,
-            interval=daily[0].interval,
-            granularity=daily[0].granularity,
-            period="daily-range",
-            start_ms=min(ref.start_ms for ref in daily),
-            end_ms=max(ref.end_ms for ref in daily),
-            url=daily[0].url,
-        )
-        daily_composed_windows = _composed_archive_window_stats(
-            tasks, daily_envelope, interval_ms
-        )[1]
-    if (_ceil_div(daily_bars, rest_page_size) < minimum_pages
-            and daily_composed_windows < max(2, minimum_pages)):
+    if _ceil_div(daily_bars, rest_page_size) < minimum_pages:
         return monthly
     return monthly + daily
 

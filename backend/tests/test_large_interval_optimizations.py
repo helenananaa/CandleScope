@@ -380,6 +380,57 @@ def test_composed_10007m_multi_edge_tasks_group_into_monthly_archives(tmp_path, 
 
     asyncio.run(_run())
 
+    # Composed tasks in the current unclosed month must reject tiny 1-row daily 1d archives
+    # instead of downloading dozens of single-day ZIPs, and must use intersecting monthly
+    # archives immediately on cold start without parent_prefill REST bypass.
+    from app.data_engine.backfill.source_router import _filter_daily_candidates
+
+    wide_parent_tasks = [
+        BackfillTask(
+            symbol="BTCUSDT",
+            interval="1d",
+            start_ms=_ms(datetime(2024, 3, 2, tzinfo=UTC)),
+            end_ms=_ms(datetime(2024, 3, 28, tzinfo=UTC)),
+            estimated_bars=27,
+            exchange="binance",
+            market_type="futures",
+            metadata={
+                "requester": "klines_history",
+                "reason": "initial_history",
+                "custom_interval": "10007m",
+                "history_composition_contract": CONTRACT,
+                "mixed_fetch_windows": [
+                    (_ms(datetime(2024, 3, 2, tzinfo=UTC)), _ms(datetime(2024, 3, 7, tzinfo=UTC))),
+                    (_ms(datetime(2024, 3, 10, tzinfo=UTC)), _ms(datetime(2024, 3, 15, tzinfo=UTC))),
+                    (_ms(datetime(2024, 3, 18, tzinfo=UTC)), _ms(datetime(2024, 3, 28, tzinfo=UTC))),
+                ],
+                "ledger_range": {
+                    "start_ms": _ms(datetime(2024, 3, 1, tzinfo=UTC)),
+                    "end_ms": _ms(datetime(2024, 3, 30, tzinfo=UTC)),
+                },
+            },
+        )
+    ]
+    march_now_ms = _ms(datetime(2024, 3, 30, tzinfo=UTC))
+    daily_1d_candidates = provider.plan_objects(
+        market_type="futures",
+        symbol="BTCUSDT",
+        interval="1d",
+        start_ms=_ms(datetime(2024, 3, 2, tzinfo=UTC)),
+        end_ms=_ms(datetime(2024, 3, 28, tzinfo=UTC)),
+        now_ms=march_now_ms,
+    )
+    assert daily_1d_candidates
+    assert _filter_daily_candidates(
+        daily_1d_candidates,
+        range_start_ms=_ms(datetime(2024, 3, 2, tzinfo=UTC)),
+        range_end_ms=_ms(datetime(2024, 3, 28, tzinfo=UTC)),
+        interval="1d",
+        rest_page_size=1500,
+        minimum_pages=3,
+        tasks=wide_parent_tasks,
+    ) == []
+
 
 def test_near_tail_1m_bars_split_16_bar_10007m_chunk_in_one_pass(tmp_path, monkeypatch):
     database = tmp_path / "split_one_pass.sqlite"
