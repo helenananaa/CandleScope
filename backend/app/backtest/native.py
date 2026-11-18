@@ -76,6 +76,15 @@ def resolve_plugin(language):
     env = runtime_environment()
     if env.get("CANDLESCOPE_PLUGIN_HOST_ENABLED", "1").lower() in {"0", "false", "off"}:
         raise BacktestError("FLAG_DISABLED", "plugin host is disabled")
+    from app.plugin_lifecycle.pine import strategy_launch
+    from app.plugin_lifecycle.store import LifecycleError
+
+    try:
+        unified = strategy_launch()
+    except LifecycleError as exc:
+        raise BacktestError("NATIVE_RUNTIME_UNAVAILABLE", str(exc)) from exc
+    if unified is not None:
+        return unified
     default = default_runtime_registry_path(env)
     native_registry = default.with_name("native-strategy-registry.json")
     path = env.get("CANDLESCOPE_NATIVE_RUNTIME_REGISTRY") or env.get("CANDLESCOPE_RUNTIME_REGISTRY")
@@ -89,8 +98,21 @@ def resolve_plugin(language):
             "installation": spec.managed.to_wire() if spec.managed else None}
 
 
+def pin_native_launch(plugin, *, restore=False):
+    from app.plugin_lifecycle.pine import pin_strategy_launch
+    from app.plugin_lifecycle.store import LifecycleError
+
+    try:
+        return pin_strategy_launch(plugin, restore=restore)
+    except LifecycleError as exc:
+        raise BacktestError("NATIVE_RUNTIME_UNAVAILABLE", str(exc)) from exc
+
+
 def invoke(plugin, payload, cancelled=None, timeout=120):
     """File-backed IPC bounds memory; timeout/cancellation kill and reap the child."""
+    from app.plugin_lifecycle.pine import track_strategy_process, untrack_strategy_process
+
+    plugin = pin_native_launch(plugin)
     raw = encoded(payload).encode("utf-8")
     if len(raw) > MAX_BYTES:
         raise BacktestError("BUDGET_EXCEEDED", "native input exceeds 64 MiB")
@@ -103,6 +125,7 @@ def invoke(plugin, payload, cancelled=None, timeout=120):
                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         deadline = time.monotonic() + timeout
         try:
+            track_strategy_process(plugin, process)
             while process.poll() is None:
                 if cancelled is not None and cancelled.is_set():
                     raise BacktestError("NATIVE_CANCELLED", "native execution cancelled")
@@ -124,11 +147,15 @@ def invoke(plugin, payload, cancelled=None, timeout=120):
             if not isinstance(response, dict) or response.get("ok") is not True:
                 raise BacktestError("NATIVE_EXECUTION_FAILED", "native engine rejected the run",
                                     details={"diagnostics": response.get("diagnostics", []) if isinstance(response, dict) else []})
+            pin_native_launch(plugin)
             return response
         finally:
-            if process.poll() is None:
-                process.kill()
-            process.wait()
+            try:
+                if process.poll() is None:
+                    process.kill()
+                process.wait()
+            finally:
+                untrack_strategy_process(plugin, process)
 
 
 class NativeBacktests:

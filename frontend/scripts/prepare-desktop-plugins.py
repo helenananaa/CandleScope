@@ -181,6 +181,9 @@ def main():
                 shutil.copytree(Path(temporary) / f"{name}-{engine['commit']}" / "tests/fixtures",
                                 suite / "tests/fixtures", dirs_exist_ok=True)
 
+    sys.path[:0] = [str(REPO / "backend"), str(REPO / "packages" / "candlescope-plugin-sdk" / "src")]
+    from app.plugin_lifecycle.pine_bundle import build_pine_package
+
     # Current SDK/bridge source is always built, so source edits cannot be
     # hidden by a same-version cached wheel from an earlier package.
     with tempfile.TemporaryDirectory(prefix="bridges-", dir=args.cache) as temporary:
@@ -228,7 +231,17 @@ def main():
             lock_path = args.output / f"{engine['bridge']}.lock.json"
             lock_path.write_text(json.dumps(lock, indent=2) + "\n")
             bundle = args.output / f"{engine['bridge']}-{lock['plugin']['version']}-{target}.cspkg"
-            result = builder.build_locked_bundle([records[p].path for p in lock["wheels"]], bundle, lock_path=lock_path)
+            locked_paths = [records[p].path for p in lock["wheels"]]
+            if not args.qualification:
+                locked = builder.collect_locked_wheels(locked_paths, lock)
+                bundle = args.output / f"candlescope-pine-unified-{lock['plugin']['version']}-{target}.cspkg"
+                result = build_pine_package([wheel.path for wheel in locked], lock["plugin"]["version"], bundle)
+                (args.output / "unified-pine.json").write_text(json.dumps({
+                    "schema": "candlescope.bundled-unified-pine/1", "filename": bundle.name,
+                    "sha256": result.sha256, "size": result.size,
+                }, indent=2) + "\n")
+                continue
+            result = builder.build_locked_bundle(locked_paths, bundle, lock_path=lock_path)
             entries.append({
                 "runtimeId": lock["plugin"]["id"], "package": lock["plugin"]["package"],
                 "version": lock["plugin"]["version"], "filename": bundle.name,
@@ -265,9 +278,8 @@ def main():
         manifest = {"schemaVersion": 2, "releaseStatus": "desktop-source-build-unpublished", "plugins": entries}
         (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
         shutil.copy2(RECIPE, sources_out / RECIPE.name)
-    # Check both installers/protocol probes before publishing the runtime stage.
-    # The isolated root is temporary; no acceptance/user activation is changed.
-    sys.path[:0] = [str(REPO / "backend"), str(REPO / "packages" / "candlescope-plugin-sdk" / "src")]
+    # Probe the remaining legacy Python package in an isolated root.
+    # Qualification exports still produce the historical Pine artifact separately.
     from app.plugin_runtime.installer import PluginInstaller
     with tempfile.TemporaryDirectory(prefix="probe-", dir=args.cache) as temporary:
         installer = PluginInstaller(root=Path(temporary), python_executable=Path(sys.executable),

@@ -44,6 +44,7 @@ def build_runtime_host_from_environment(
     host_name: str,
     host_version: str,
     environ: Mapping[str, str] | None = None,
+    excluded_runtime_ids: frozenset[str] = frozenset(),
 ) -> RuntimeHostService:
     env = runtime_environment() if environ is None else environ
     enabled = _environment_bool(env, PLUGIN_HOST_ENABLED_ENV, default=True)
@@ -68,7 +69,7 @@ def build_runtime_host_from_environment(
     # Retired first-party engines must not auto-start from an older installation.
     registry = replace(registry, plugins=tuple(
         plugin for plugin in registry.plugins
-        if plugin.runtime_id != "candlescope.pyne"
+        if plugin.runtime_id != "candlescope.pyne" and plugin.runtime_id not in excluded_runtime_ids
     ))
     return RuntimeHostService(
         registry,

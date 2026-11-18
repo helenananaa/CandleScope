@@ -15,16 +15,19 @@ module.exports = async (context) => {
   }
   const pluginsRoot = path.join(root, "plugins");
   const plugins = JSON.parse(fs.readFileSync(path.join(pluginsRoot, "manifest.json"), "utf8"));
-  const expected = new Set(["candlescope.pine-compat", "candlescope.python-indicator"]);
-  const ids = Array.isArray(plugins.plugins) ? plugins.plugins.map(plugin => plugin?.runtimeId) : [];
-  if (plugins.schemaVersion !== 2 || ids.length !== expected.size
-      || new Set(ids).size !== expected.size || ids.some(id => !expected.has(id))) {
-    throw new Error("Prepare the bundled first-party runtimes (Pine and Python) before packaging.");
+  const pine = JSON.parse(fs.readFileSync(path.join(pluginsRoot, "unified-pine.json"), "utf8"));
+  if (plugins.schemaVersion !== 2 || !Array.isArray(plugins.plugins) || plugins.plugins.length !== 1
+      || plugins.plugins[0]?.runtimeId !== "candlescope.python-indicator"
+      || pine?.schema !== "candlescope.bundled-unified-pine/1") {
+    throw new Error("Prepare the bundled first-party runtimes (unified Pine and Python) before packaging.");
   }
-  for (const plugin of plugins.plugins) {
+  for (const [id, plugin] of [["candlescope.pine-compat", pine], ["candlescope.python-indicator", plugins.plugins[0]]]) {
+    if (typeof plugin.filename !== "string" || !/^[a-zA-Z0-9_.-]+[.]cspkg$/.test(plugin.filename)) {
+      throw new Error(`Bundled runtime filename is invalid: ${id}`);
+    }
     const bytes = fs.readFileSync(path.join(pluginsRoot, plugin.filename));
     if (bytes.length !== plugin.size || `sha256:${createHash("sha256").update(bytes).digest("hex")}` !== plugin.sha256) {
-      throw new Error(`Bundled runtime hash mismatch: ${plugin.runtimeId}`);
+      throw new Error(`Bundled runtime hash mismatch: ${id}`);
     }
   }
 };

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import collections
 import hashlib
+import os
 import secrets
 import time
 import uuid
@@ -29,6 +30,7 @@ from .executors import (
     default_executables,
 )
 from .paths import is_link
+from .pine_bundle import PINE_ENTRY, PINE_ID
 from .store import LifecycleError, PackageStore
 
 
@@ -80,6 +82,8 @@ class UnifiedRuntime:
         self.composition = StartupComposition(store)
         self.prepared = {}
         self.retained = {}
+        self.pine_host_disabled = False
+        self.bundled_pine = False
 
     def _current(self, run):
         if (
@@ -174,6 +178,12 @@ class UnifiedRuntime:
             run.active = False
             if run.entry.kind == "backend":
                 self.dirty_backend.add(plugin_id)
+        if plugin_id == PINE_ID:
+            from .pine import revoke_strategy_processes
+
+            for run in runs:
+                if run.entry.id == PINE_ENTRY:
+                    await asyncio.to_thread(revoke_strategy_processes, run.instance)
         for task, owner in list(self.calls.items()):
             if owner == plugin_id and task is not asyncio.current_task():
                 task.cancel()
@@ -200,8 +210,9 @@ class UnifiedRuntime:
             except (ValueError, OSError) as exc:
                 self.errors[plugin_id] = f"execution files retained for recovery: {exc}"
 
-    async def reconcile(self):
+    async def reconcile(self, *, start_only=None):
         async with self.lock:
+            previous_pine = self.running.get((PINE_ID, PINE_ENTRY))
             snapshot = await asyncio.to_thread(self.store.snapshot)
             for run in self.running.values():
                 if run.entry.kind == "sidecar" and not self._current(run):
@@ -209,7 +220,11 @@ class UnifiedRuntime:
                         "sidecar exited or lost its activation"
                     )
                     self.changed = True
-            if snapshot["revision"] == self.revision and not self.changed:
+            if (
+                start_only is None
+                and snapshot["revision"] == self.revision
+                and not self.changed
+            ):
                 return
             self.changed = False
             revision, plan = await asyncio.to_thread(self.store.execution_plan)
@@ -218,6 +233,8 @@ class UnifiedRuntime:
                 if self.safe_mode
                 else {manifest.id: (manifest, identity) for manifest, identity in plan}
             )
+            if self.pine_host_disabled:
+                desired.pop(PINE_ID, None)
             for key in set(self.attempted) - desired.keys():
                 self.attempted.pop(key, None)
                 if key not in self.dirty_backend and key not in self.quarantined:
@@ -247,7 +264,7 @@ class UnifiedRuntime:
                         != desired.get(plugin_id, (None, None))[1]
                     ):
                         self.errors.pop(plugin_id, None)
-            if not self.ready:
+            if not self.ready and start_only is None:
                 return
             total_entries = sum(
                 len(manifest.entries) for manifest, _ in desired.values()
@@ -256,6 +273,8 @@ class UnifiedRuntime:
                 self.revision = revision
                 raise LifecycleError("active execution plan exceeds 256 entries")
             for plugin_id, (manifest, identity) in desired.items():
+                if start_only is not None and plugin_id != start_only:
+                    continue
                 if self.packages.get(plugin_id, {}).get("coreReady"):
                     continue
                 if (
@@ -324,7 +343,13 @@ class UnifiedRuntime:
                 except Exception as exc:  # noqa: BLE001 -- arbitrary plugin activation is isolated
                     await self._stop_package(plugin_id)
                     self.errors[plugin_id] = str(exc)
-            self.revision = revision
+            if start_only is None:
+                self.revision = revision
+            current_pine = self.running.get((PINE_ID, PINE_ENTRY))
+            if self.bundled_pine and previous_pine is not current_pine:
+                indicators = getattr(self.app.state, "indicator_runtime_service", None)
+                if indicators is not None:
+                    await indicators.refresh_runtime(PINE_ID)
 
     async def _materialize(self, manifest, identity):
         root, files = await asyncio.to_thread(
@@ -341,6 +366,10 @@ class UnifiedRuntime:
             "pendingOutputs": collections.deque(maxlen=32),
         }
         self.packages[manifest.id] = package
+        if self.bundled_pine and manifest.id == PINE_ID:
+            from .pine import import_pine_observations
+
+            await asyncio.to_thread(import_pine_observations, package["storage"], os.environ)
         self.metadata[identity.package_sha256] = manifest.to_wire()
         return package
 
@@ -378,7 +407,7 @@ class UnifiedRuntime:
         lock.__enter__()
         self.owner_lock = lock
 
-    async def prepare_startup(self, *, recovery_target=None):
+    async def prepare_startup(self, *, recovery_target=None, bundled_pine=None):
         """Load only declared trusted startup hooks before the app builds services."""
         self._lock_owner()
         if recovery_target is not None:
@@ -389,6 +418,14 @@ class UnifiedRuntime:
             print(
                 f"[startup] Unified recovery disabled: {', '.join(disabled) or 'already disabled'}"
             )
+        self.bundled_pine = bundled_pine is not None
+        if bundled_pine and not self.safe_mode and not self.pine_host_disabled:
+            from .pine import stage_bundled_pine
+
+            try:
+                await asyncio.to_thread(stage_bundled_pine, self, bundled_pine)
+            except (OSError, ValueError) as exc:
+                self.errors[PINE_ID] = str(exc)
         if not self.safe_mode:
             _, plan = await asyncio.to_thread(self.store.execution_plan)
             if sum(len(manifest.entries) for manifest, _ in plan) > 256:
@@ -441,6 +478,8 @@ class UnifiedRuntime:
                     self.attempted[manifest.id] = identity
                     self.errors[manifest.id] = str(exc)
         self.composition.frozen = True
+        if bundled_pine and not self.safe_mode and PINE_ID not in self.errors:
+            await self.reconcile(start_only=PINE_ID)
 
     async def start(self):
         self._lock_owner()

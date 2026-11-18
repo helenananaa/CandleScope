@@ -445,6 +445,11 @@ async def _start_plugin_plane() -> None:
         build_runtime_host_from_environment,
     )
 
+    from app.plugin_lifecycle.pine import PINE_ID, PineRuntimeHost, bundled_path
+
+    unified_pine = bundled_path(os.environ) is not None
+    excluded = frozenset({PINE_ID}) if unified_pine else frozenset()
+
     app.state.plugin_plane = {"status": "ok", "issues": []}
     first_party_bootstrap = FirstPartyPluginBootstrapResult(
         status="skipped",
@@ -459,6 +464,7 @@ async def _start_plugin_plane() -> None:
     try:
         first_party_bootstrap = await asyncio.to_thread(
             ensure_first_party_plugins_from_environment,
+            excluded_runtime_ids=excluded,
             host_name=APP_NAME,
             host_version=APP_VERSION,
         )
@@ -472,6 +478,7 @@ async def _start_plugin_plane() -> None:
 
     try:
         plugin_runtime_host = build_runtime_host_from_environment(
+            excluded_runtime_ids=excluded,
             host_name=APP_NAME,
             host_version=APP_VERSION,
         )
@@ -486,9 +493,13 @@ async def _start_plugin_plane() -> None:
         )
         await plugin_runtime_host.start()
 
+    chart_runtime_host = (
+        PineRuntimeHost(getattr(app.state, "unified_plugin_runtime", None), plugin_runtime_host)
+        if unified_pine else plugin_runtime_host
+    )
     try:
         indicator_runtime_service = build_indicator_runtime_service_from_environment(
-            host=plugin_runtime_host,
+            host=chart_runtime_host,
         )
         await indicator_runtime_service.start()
     except Exception as exc:
@@ -497,7 +508,7 @@ async def _start_plugin_plane() -> None:
         await _stop_plugin_owner(indicator_runtime_service)
         indicator_runtime_service = IndicatorRuntimeService(
             IndicatorRuntimeRoutes.first_party_sidecar_default(),
-            host=plugin_runtime_host,
+            host=chart_runtime_host,
             legacy_languages=frozenset(),
         )
         await indicator_runtime_service.start()
@@ -515,6 +526,7 @@ async def _start_plugin_plane() -> None:
             ),
             indicator_source=indicator_runtime_service,
             runtime_host=plugin_runtime_host,
+            excluded_runtime_ids=excluded,
         )
         indicator_runtime_service.bind_catalog_projector(
             v1_compatibility.project_indicator_catalog
@@ -533,6 +545,7 @@ async def _start_plugin_plane() -> None:
                 root=default_platform_root(os.environ),
                 indicator_source=indicator_runtime_service,
                 runtime_host=plugin_runtime_host,
+                excluded_runtime_ids=excluded,
             )
         try:
             indicator_runtime_service.bind_catalog_projector(

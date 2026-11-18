@@ -72,8 +72,29 @@ profile，目前仅其支持的平台可准入；不支持时拒绝，绝不回�
 后端入口 `compute_chart(ctx, {scope, bars, input})` 和 sidecar 的 `chart.compute` 都返回
 `{points: [{timeMs, value}]}`。返回点的时间必须是同次请求中的 K 线开盘时间。
 后端计算不得将结果通过通用 `ctx.publish` 发布。图表调用返回活跃执行实例、包身份和
-原 scope，调用方只采用身份仍然匹配的回执。当前结果是有界点序列，Pine 的渲染类型和
-原生接线由后续迁移补齐。示例见 workbench 的 `chart-probe` 命令和 Python worker。
+原 scope，调用方只采用身份仍然匹配的回执。示例见 workbench 的 `chart-probe`
+命令和 Python worker。
+
+## 桌面内置 Pine
+
+桌面包从锁定的 Pine 引擎、桥接代码和 SDK 构建统一归档。随包的 `unified-pine.json`
+声明归档名称、摘要和字节数。首次启动登记内置 Pine。后续桌面版本可以替换仍启用的
+上一个内置默认版本。用户停用、卸载或挑选历史版本后，由用户决定何时再次激活。
+
+图表指标服务通过 `candlescope.unified-entry/1` 的 Pine 入口发送完整输入窗口，继续使用
+现有 Pine 主机数据输入和完整 Render IR。每次响应都检查激活身份，结果快照只属于当前
+执行实例。受限 `chart.compute` 使用已揭示 K 线和 `{source, parameters}`，返回与
+K 线对齐的单条曲线点序列。完整图形和跨市场输入走图表指标服务。
+
+策略和策略回放从同一激活记录派生执行命令，沿用 Pine 策略、图形和账本接口。
+启用新版本或停用 Pine 会撤销旧计算并结束该激活持有的策略进程。可执行策略回放
+需要保存时的包摘要，同摘要重启后可以绑定到新的实例。旧运行的记录和输出保留，
+需要重新执行旧运行时，可以用原脚本和相同输入在统一 Pine 中重跑。
+
+Pine 观察日志保存在 `private/candlescope.pine-compat/observations-v1.sqlite3`。首次发现旧
+日志时通过 SQLite 一致性备份复制，保留原日志。隔离桌面配置可用
+`CANDLESCOPE_PINE_JOURNAL` 显式指定自己的迁移源。源码环境可以通过
+`CANDLESCOPE_BUNDLED_UNIFIED_PINE` 选择同一归档契约。
 
 ## 管理、状态与恢复
 
