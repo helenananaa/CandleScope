@@ -51,7 +51,7 @@ def main():
         "test_native_calendar_basis.py", "test_native_fixed_anchor.py",
         "test_pine_prefix_reply.py", "test_pyne_removal.py", "test_native_chart_indicator_input.py",
         "test_chart_signal_native_runs.py", "test_chart_event_series.py",
-        "test_pine_chart_events.py", "test_native_chart_events.py",
+        "test_pine_chart_events.py", "test_native_chart_events.py", "test_chart_pine_bar_callbacks.py",
         "test_preview_update_requirements.py", "test_event_bus_routing_index.py",
         "test_deferred_component_preview.py", "test_deferred_component_preview_pipeline.py",
         "test_deferred_component_preview_prefix.py",
