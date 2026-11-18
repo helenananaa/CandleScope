@@ -44,7 +44,7 @@ class StaleAcquisition(RuntimeError):
         # view never grants new deletion, binding or identity permission.
         return self.fence_details.get('reason') in {
             'canonical_window_changed', 'target_window_changed',
-            'canonical_input_changed', 'canonical_range_changed',
+            'canonical_input_changed', 'canonical_range_changed', 'canonical_family_content_changed',
             'range_receipt_suffix_unavailable', 'warmup_receipt_suffix_unavailable',
             'warmup_overlapping_change', 'mixed_receipt_suffix_unavailable',
             'mixed_overlapping_change'}
@@ -688,6 +688,7 @@ class Acquisition:
     # Only the active job's written series are retained. Persistent jobs keep
     # their initial revision on disk; after restart re-read/recompute inputs.
     accepted: dict[tuple, int] = field(default_factory=dict)
+    minute_read_heads: dict[tuple, int] = field(default_factory=dict, repr=False)
     native_history_views: list = field(default_factory=list, repr=False)
     derived_target_views: list = field(default_factory=list, repr=False)
     mixed_target_views: list = field(default_factory=list, repr=False)
@@ -699,14 +700,22 @@ class Acquisition:
         # built from a source deleted/repaired after acquisition, even when
         # that target did not exist at deletion time.
         family = [(name, value) for name, value in zip(IDENTITY_COLUMNS, values) if name != "interval"]
+        changed = None
         for row in conn.execute("SELECT * FROM kline_series_changes WHERE " +
                                 " AND ".join(f"{name}=?" for name, _ in family),
                                 tuple(value for _, value in family)):
             key = tuple(row[name] for name in IDENTITY_COLUMNS)
             allowed = self.accepted.get(key, self.revision)
             delete_floor = self.revision if self.delete_revision is None else self.delete_revision
-            if int(row["revision"]) > allowed or int(row["delete_revision"]) > max(delete_floor, self.accepted.get(key, 0)):
-                raise StaleAcquisition("canonical series family changed after acquisition began")
+            if int(row["delete_revision"]) > max(delete_floor, self.accepted.get(key, 0)):
+                raise StaleAcquisition("canonical series family changed after acquisition began: deleted", details={
+                    'reason': 'deletion_permission_changed', 'interval': key[3]})
+            if int(row["revision"]) > allowed:
+                changed = key[3]
+        # Examine every member for deletions before classifying a retry.
+        if changed is not None:
+            raise StaleAcquisition("canonical series family changed after acquisition began", details={
+                'reason': 'canonical_family_content_changed', 'interval': changed})
 
     def accept(self, conn, values):
         row = series_change(conn, values)
@@ -715,6 +724,10 @@ class Acquisition:
 
 
 _acquisition: ContextVar[Acquisition | None] = ContextVar("kline_acquisition", default=None)
+
+
+def current_acquisition():
+    return _acquisition.get()
 
 
 def acquisition_revision():

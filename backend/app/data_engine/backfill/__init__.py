@@ -95,8 +95,11 @@ from .native_progress import NativeBackfillDeferred, NativeBackfillProgress
 from .reconciler import Reconciler
 from .publisher import RepairPublisher
 from .fetch_stream import stream_plan, StreamReconcile, StreamBackfillDeferred
-from .input_subscriptions import adopts_inputs
+from .input_subscriptions import adopts_inputs, current_input_adoption
 from .resource_scope import admitted_work
+from .canonical_minute_work import (
+    CanonicalMinuteWork, claimed_windows, eligible_tasks, minute_key, reuse_committed_minutes,
+)
 
 logger = logging.getLogger("backfill.Engine")
 
@@ -169,6 +172,7 @@ class BackfillEngine:
         self._cache = cache
         self._ingestion_cfg = ingestion_config
         self._metrics = LayerMetrics("BackfillEngine")
+        self._minute_work = CanonicalMinuteWork()
 
         # Lazily initialized sub-components
         self._detector: GapDetector | None = None
@@ -345,6 +349,9 @@ class BackfillEngine:
         status = BackfillStatus.PENDING
         streamed = StreamReconcile() if _receipt_mode else None
         page_binding = None
+        minute_claim = None
+        reused = 0
+        adoption = current_input_adoption()
 
         def check_page_binding():
             if page_binding is None:
@@ -369,6 +376,12 @@ class BackfillEngine:
             reconcile_result = streamed.result
             check_page_binding()
             if part.errors:
+                if (adoption is not None and adoption.managed
+                        and part.failed_batches and len(part.failed_batches) == len(part.errors)
+                        and all(failure.get('revision_replan') for failure in part.failed_batches)):
+                    failure = part.failed_batches[0]
+                    raise StaleAcquisition(failure['error'], details={
+                        'reason': failure.get('fence_reason')})
                 raise RuntimeError('native page reconciliation failed: '+str(part.errors[0])[:500])
 
         try:
@@ -469,15 +482,10 @@ class BackfillEngine:
                 await self.publisher.publish(report)
                 return report
 
-            from .resource_scope import admit_execution,admit_reconcile,streaming_plan,normalized_bytes
-            page_mode=streaming_plan(self,plan,_receipt_mode,native_progress)
-            try:
-                await admit_execution(self,plan,streaming=page_mode)
-            except MemoryBudgetExceeded:
-                metadata['mixed_plan_fallback'] = 'memory_work_budget'
-                raise
-            # ── Phase 3: Fetch ──
-            # Set market_type on all tasks so the fetcher routes correctly
+            from .resource_scope import (
+                admit_execution, admit_reconcile, streaming_plan, normalized_bytes, retain_execution_plan,
+            )
+            # Set the native route before sharing or sizing its work.
             for task in plan.tasks:
                 task.exchange = exchange
                 task.market_type = market_type
@@ -486,7 +494,30 @@ class BackfillEngine:
                 # so archive routing can still decide from the complete user
                 # demand (not from a single ~1000-source-row chunk).
                 task.metadata = {**metadata, **task.metadata}
-            if (self._cfg.reconcile_generate_custom and len(intervals or ()) == 1
+            minute_tasks = (eligible_tasks(self, plan) if adoption is not None and adoption.managed
+                            and _is_read_repair(metadata) and not repair_requires_trusted_finality(metadata)
+                            else ())
+            try:
+                # Never hold an independent coarse fetch behind a minute owner.
+                # A mixed run can still adopt already committed minute coverage.
+                if minute_tasks and len(minute_tasks) == len(plan.tasks):
+                    await retain_execution_plan(self, plan)
+                    key = minute_key(minute_tasks[0])
+                    wait_started = time.monotonic()
+                    minute_claim = await self._minute_work.claim(key, claimed_windows(minute_tasks))
+                    self._metrics.inc('minute_claim_wait_ms', int((time.monotonic()-wait_started)*1000))
+                page_mode=streaming_plan(self,plan,_receipt_mode,native_progress)
+                await admit_execution(self,plan,streaming=page_mode)
+            except MemoryBudgetExceeded:
+                metadata['mixed_plan_fallback'] = 'memory_work_budget'
+                raise
+            if minute_tasks:
+                key = minute_key(minute_tasks[0])
+                reused = await reuse_committed_minutes(self._storage, plan, minute_tasks, key)
+                self._metrics.inc('minute_rows_reused_after_admission', reused)
+                plan.metadata['minute_rows_reused_after_admission'] = reused
+            # ── Phase 3: Fetch ──
+            if (not reused and self._cfg.reconcile_generate_custom and len(intervals or ()) == 1
                     and (bybit_derived_gap or metadata.get("requester") == "warm_start_custom_tail"
                          or _is_read_repair(metadata))):
                 await self._reuse_derived_components(plan, metadata, bybit_gap=bybit_derived_gap)
@@ -641,7 +672,6 @@ class BackfillEngine:
                 raise StreamBackfillDeferred(exc,streamed.result) from exc
             raise
         except Exception as exc:
-            from .input_subscriptions import current_input_adoption
             scope = current_input_adoption()
             from app.core.bounded_executor import ExecutorBusyError
             if (scope is not None and scope.managed and (isinstance(exc,ExecutorBusyError)
@@ -659,6 +689,9 @@ class BackfillEngine:
             logger.error(
                 "Backfill run failed for %s: %s", symbol, exc, exc_info=True,
             )
+        finally:
+            if minute_claim is not None:
+                self._minute_work.release(minute_claim)
 
         # Runtime fences must not keep engine/storage owners alive through
         # retained reports after this run has completed.

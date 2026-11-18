@@ -51,11 +51,11 @@ def streaming_plan(engine,plan,receipt_mode,native_progress):
         and engine.reconciler._custom_dedup_fn is None and engine.reconciler._custom_aggregator is None)
 
 
-async def admit_execution(engine,plan,*,streaming=False):
+async def retain_execution_plan(engine,plan):
     pool = current_work_pool(getattr(engine,'memory_budget',None))
     if pool is None:
         return
-    from .mixed_plan import WORK_BYTES,PLAN_BYTES
+    from .mixed_plan import WORK_BYTES
     # Release the entire scratch claim before waiting on plan accounting or
     # execution. No collection of planners can retain the work capacity that
     # their completed plans need in order to finish.
@@ -64,6 +64,14 @@ async def admit_execution(engine,plan,*,streaming=False):
     if plan_bytes>WORK_BYTES:
         raise MemoryBudgetExceeded('retained plan exceeds its admitted metadata bound')
     await pool.plan_pool.stage(plan_bytes,WORK_BYTES)
+    return pool
+
+
+async def admit_execution(engine,plan,*,streaming=False):
+    from .mixed_plan import WORK_BYTES,PLAN_BYTES
+    pool = await retain_execution_plan(engine,plan)
+    if pool is None:
+        return
     rows = max(1,plan.estimated_bars,plan.metadata.get('mixed_source_rows',0))
     payload = bitmap = 0
     batch = min(1000,engine.config.fetch_batch_size)

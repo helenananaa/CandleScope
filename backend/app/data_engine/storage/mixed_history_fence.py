@@ -106,6 +106,14 @@ class MixedComputation:
                         'change_end_ms': int(span['end_ms'])})
 
 
+def _check_initial_range(conn, scope, keys, start, stop):
+    by_head = {}
+    for key in keys:
+        by_head.setdefault(scope.minute_read_heads.get(key, scope.revision), set()).add(key)
+    for revision, grouped in by_head.items():
+        check_range_since(conn, grouped, start, stop, revision)
+
+
 def capture_targets(store, scope, plan, allow_standard=False):
     if store is None or scope is None or scope.mixed_target_views:
         return
@@ -135,7 +143,7 @@ def capture_targets(store, scope, plan, allow_standard=False):
         with scope.lock, closing(store.connect()) as conn, conn:
             conn.execute('BEGIN')
             check_deletions(conn, scope, key, *dependencies)
-            check_range_since(conn, {*dependencies, key}, start, stop, scope.revision)
+            _check_initial_range(conn, scope, {*dependencies, key}, start, stop)
             view = MixedTarget(key, dependencies, start, stop-duration, duration,
                                fingerprint(conn, key, start, stop-duration))
             view.check(conn, scope)
@@ -230,7 +238,7 @@ def capture_standard_targets(store, scope, plan):
         with scope.lock, closing(store.connect()) as conn, conn:
             conn.execute('BEGIN')
             check_deletions(conn, scope, key, *dependencies)
-            check_range_since(conn, {*dependencies, key}, start, end+spec.nominal_ms, scope.revision)
+            _check_initial_range(conn, scope, {*dependencies, key}, start, end+spec.nominal_ms)
             view = MixedTarget(key, dependencies, start, end, spec.nominal_ms, fingerprint(conn, key, start, end))
             view.check(conn, scope)
             scope.mixed_target_views.append(view)
@@ -263,6 +271,6 @@ def extend_standard_targets(store, scope, windows):
             if (end-start)//target.duration+1 > 512:
                 continue
             target.check(conn, scope)
-            check_range_since(conn, {target.key, *target.dependencies}, start, end+target.duration, scope.revision)
+            _check_initial_range(conn, scope, {target.key, *target.dependencies}, start, end+target.duration)
             target.start, target.end = start, end
             target.digest = fingerprint(conn, target.key, start, end)

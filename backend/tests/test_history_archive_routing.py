@@ -1004,3 +1004,22 @@ def test_adjacent_bounded_and_legacy_tasks_keep_separate_archive_envelopes(
             await router.close()
 
     asyncio.run(run())
+
+
+def test_composed_daily_route_prefers_one_rest_page_over_month_objects(tmp_path):
+    async def run():
+        start = _ms(datetime(2024, 1, 1, tzinfo=UTC))
+        last = _ms(datetime(2024, 3, 1, tzinfo=UTC)) - 86_400_000
+        router = HistoricalSourceRouter(_config(tmp_path))
+        task = BackfillTask('BTCUSDT', '1d', start, last, exchange='binance', market_type='futures',
+            metadata={'history_composition_contract': 'binance.usdm.trade-klines/base-utc/1',
+                      'custom_interval': '10007m',
+                      'ledger_range': {'start_ms': start, 'end_ms': last + 86_400_000 - 1}})
+        try:
+            result = await router.prepare([task])
+            assert not result.refs_for(task)
+            assert result.decisions_by_task[task.task_key]['reason'] == 'composed_daily_rest_cheaper'
+            assert router.snapshot()['metrics']['counters']['archive_composed_daily_rest_preferred'] == 2
+        finally:
+            await router.close()
+    asyncio.run(run())

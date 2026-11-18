@@ -371,6 +371,21 @@ class HistoricalSourceRouter:
                         decisions[task.task_key]['reason'] = 'archive_cost_rejected'
                 if not candidates:
                     continue
+                # A composed daily window often fits one REST page even when
+                # it straddles two months. Avoid extra archive transactions
+                # and whole-object imports without changing canonical slots.
+                if (exchange == 'binance' and market_type == 'futures' and interval == '1d'
+                        and all(_composed_group_key(task) for task in run)
+                        and (page_size := min(self._cfg.fetch_batch_size, capabilities.rest_page_size)) > 0
+                        and sum(_ceil_div((task.end_ms-task.start_ms)//86_400_000+1, page_size)
+                                for task in run) <= len(candidates)):
+                    self._metrics.inc('archive_composed_daily_rest_preferred', len(candidates))
+                    for task in run:
+                        decisions[task.task_key].update(
+                            reason='composed_daily_rest_cheaper', eligible_objects=0,
+                            archive_rejections={**rejected, 'composed_daily_rest_cheaper': len(candidates)},
+                        )
+                    continue
                 # Local ZIPs are usable without contacting the resolver or
                 # acquiring any proxy route (even with no enabled routes).
                 cached = await asyncio.gather(*(self._cache.resolve_fresh(ref) for ref in candidates))

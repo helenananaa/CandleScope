@@ -37,6 +37,7 @@ from typing import Callable, Awaitable, Any
 
 from app.data_engine.market_data.kline_metrics import declared_enhanced_fields
 from app.data_engine.series_identity import identity_from_metadata, resolve_kline_series_identity
+from app.data_engine.storage.revisions import StaleAcquisition
 from app.exchanges import (
     HistoricalRequest,
     RateLimitDeferred,
@@ -73,7 +74,7 @@ from .fetch_stream import PageConsumer, PAGE_BYTES_PER_ROW, stream_grid, disjoin
 from .source_router import ArchiveRoutePlan, HistoricalSourceRouter
 from app.data_engine.memory_budget import MemoryBudgetExceeded
 from app.core.bounded_executor import ExecutorBusyError
-from .input_subscriptions import InputSubscriptions, input_adoption, retain_input_payload
+from .input_subscriptions import InputSubscriptions, current_input_adoption, input_adoption, retain_input_payload
 
 logger = logging.getLogger("backfill.Fetcher")
 
@@ -382,7 +383,6 @@ class HistoricalFetcher:
             raise latest
 
         capacity = next((item for item in raw_results if isinstance(item, (MemoryBudgetExceeded,ExecutorBusyError))), None)
-        from .input_subscriptions import current_input_adoption
         adoption = current_input_adoption()
         if (capacity is not None and adoption is not None and adoption.managed
                 and (isinstance(capacity,ExecutorBusyError) or capacity.waitable)):
@@ -392,6 +392,15 @@ class HistoricalFetcher:
                 if admitted:
                     await on_deferred(admitted)
             raise capacity
+
+        # Do not turn a typed streamed write conflict into a transport
+        # failure. Successful siblings here are already committed receipts.
+        if adoption is not None and adoption.managed and any(streaming):
+            conflicts = [r for r in raw_results if isinstance(r, StaleAcquisition) and r.can_replan]
+            if conflicts and all((isinstance(r, StaleAcquisition) and r.can_replan)
+                    or (isinstance(r, FetchReceipt) and r.status == BackfillStatus.COMPLETED and not r.errors)
+                    for r in raw_results):
+                raise conflicts[0]
 
         # Handle any unexpected exceptions returned by gather
         results: list[FetchResult] = []
@@ -444,7 +453,6 @@ class HistoricalFetcher:
 
     def _check_input_binding(self,binding):
         if binding is not None and binding != self._input_binding():
-            from app.data_engine.storage.revisions import StaleAcquisition
             raise StaleAcquisition('historical input owner binding changed')
 
     async def _http_page(self, task, req, payload_owner=None, binding=None):
@@ -828,6 +836,12 @@ class HistoricalFetcher:
                     await collector.accept(page_bars)
                 except (RateLimitDeferred, MemoryBudgetExceeded, ExecutorBusyError):
                     raise
+                except StaleAcquisition as exc:
+                    adoption = current_input_adoption()
+                    if adoption is not None and adoption.managed and exc.can_replan:
+                        raise
+                    errors.append(f'page_consumption_failed: {exc}')
+                    break
                 except Exception as exc:
                     errors.append(f'page_consumption_failed: {exc}')
                     break

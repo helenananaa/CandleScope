@@ -289,3 +289,34 @@ def test_amendment_inside_a_partly_consumed_native_window_stops_its_remaining_pa
     assert len(rows) == 106  # Eight accepted rows of this window plus 98 independent rows.
     assert next(row for row in rows if row['open_time'] == 0)['volume'] == 91
     assert not any(8*60_000 <= row['open_time'] < 32*60_000 for row in rows)
+
+
+@pytest.mark.parametrize('reason, fast', [
+    ('canonical_family_content_changed', True),
+    ('deletion_permission_changed', False),
+])
+def test_managed_streamed_writes_preserve_conflict_classification(mixed_query, monkeypatch, reason, fast):
+    from types import SimpleNamespace
+
+    from app.data_engine.backfill.input_subscriptions import InputAdoption
+    from app.data_engine.storage.revisions import StaleAcquisition
+
+    engine, _ = native_engine(mixed_query)
+    original = engine._storage.upsert_bars
+
+    async def conflict(symbol, interval, rows, **kwargs):
+        if rows[0]["open_time"] == 32*60_000:
+            raise StaleAcquisition('controlled conflict', details={'reason': reason})
+        return await original(symbol, interval, rows, **kwargs)
+
+    async def run():
+        with InputAdoption(SimpleNamespace(metadata={})):
+            return await repair(engine)
+
+    monkeypatch.setattr(engine._storage, 'upsert_bars', conflict)
+    report = asyncio.run(run())
+    assert bool(report.metadata.get('revision_replan')) is fast
+    assert report.status == (BackfillStatus.FAILED if fast else BackfillStatus.PARTIAL)
+    assert report.reconcile_result.bars_written >= 32
+    assert mixed_query.storage.count_bars('BTCUSDT', '1m', 0, 0, market_type='futures') == 1
+    assert mixed_query.memory_budget.snapshot()['reserved_bytes'] == 0
