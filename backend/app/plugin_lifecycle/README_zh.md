@@ -36,7 +36,7 @@ CLI 的 `activate --root ...` 只提交隔离存储的期望配置，没有内�
 | desktop | Electron 主进程 ESM，full-trust | 同 JS hook；ctx 含 electron/host、包身份、入口/实例、root/storage、track |
 | sidecar | 既有进程监督与 JSON-RPC 传输，新统一协议 | 下述 activate/invoke；停止由宿主管理进程树 |
 | sandbox-view | 唯一 opaque iframe 网关 | sandbox allow-scripts、无 same-origin、无宿主 SDK；资源可撤销；挂载前 ready，加载后 running |
-| data | 有界 JSON 校验与读取 | ready；尚不自动应用为主题或布局 |
+| data | 有界 JSON 校验与读取 | ready。主题与布局可在可信扩展页选择 |
 
 Python ctx 暴露 app、identity、entry_id、root、storage、ensure_current、publish、track、task。
 `task` 的未处理异常会使包失败；track 资源逆序清理。
@@ -72,8 +72,49 @@ profile，目前仅其支持的平台可准入；不支持时拒绝，绝不回�
 后端入口 `compute_chart(ctx, {scope, bars, input})` 和 sidecar 的 `chart.compute` 都返回
 `{points: [{timeMs, value}]}`。返回点的时间必须是同次请求中的 K 线开盘时间。
 后端计算不得将结果通过通用 `ctx.publish` 发布。图表调用返回活跃执行实例、包身份和
-原 scope，调用方只采用身份仍然匹配的回执。当前结果是有界点序列，Pine 的渲染类型和
-原生接线由后续迁移补齐。示例见 workbench 的 `chart-probe` 命令和 Python worker。
+原 scope，调用方只采用身份仍然匹配的回执。示例见 workbench 的 `chart-probe`
+命令和 Python worker。
+
+## 桌面内置脚本指标
+
+桌面包从锁定的 Pine 引擎、Python 指标执行器和 SDK 构建统一归档。随包的
+`unified-pine.json` 和 `unified-python.json` 声明归档名称、摘要和字节数。
+首次启动登记内置脚本运行时。后续桌面版本可以替换仍启用的上一个内置默认版本。
+用户停用、卸载或挑选历史版本后，由用户决定何时再次激活。
+
+图表指标服务通过 `candlescope.unified-entry/1` 的 Pine 入口发送完整输入窗口，继续使用
+现有 Pine 主机数据输入和完整 Render IR。每次响应都检查激活身份，结果快照只属于当前
+执行实例。受限 `chart.compute` 使用已揭示 K 线和 `{source, parameters}`，返回与
+K 线对齐的单条曲线点序列。完整图形和跨市场输入走图表指标服务。
+
+Python 图表指标走同一个宿主，沿用声明窗口、只计算已收盘窗口、每批新进程及 line/histogram
+渲染契约。Python 策略的执行路径独立。
+
+策略和策略回放从同一激活记录派生执行命令，沿用 Pine 策略、图形和账本接口。
+启用新版本或停用 Pine 会撤销旧计算并结束该激活持有的策略进程。可执行策略回放
+需要保存时的包摘要，同摘要重启后可以绑定到新的实例。旧运行的记录和输出保留，
+需要重新执行旧运行时，可以用原脚本和相同输入在统一 Pine 中重跑。
+
+Pine 观察日志保存在 `private/candlescope.pine-compat/observations-v1.sqlite3`。首次发现旧
+日志时通过 SQLite 一致性备份复制，保留原日志。隔离桌面配置可用
+`CANDLESCOPE_PINE_JOURNAL` 显式指定自己的迁移源。源码环境可以通过
+`CANDLESCOPE_BUNDLED_UNIFIED_PINE` 和 `CANDLESCOPE_BUNDLED_UNIFIED_PYTHON`
+指定随包描述符，或用统一管理入口安装对应制品。
+
+应用启动和策略解析只读取统一激活记录。旧 `runtime-registry.json`、旧归档和已保存
+脚本留在原地。普通桌面构建使用统一归档，旧的脚本安装命令和应用安装端点会提示更新。
+源码中的历史资格构建仍可生成旧测试制品。
+
+## 主题、布局和旧扩展
+
+统一包通过保留 ID 为 `theme` 或 `layout` 的 `data` 入口贡献外观。
+主题声明 `candlescope.theme/1`、基础色系和允许的视图 token。布局声明
+`candlescope.layout/1` 和完整的宿主槽位顺序，需要完全信任。选择与启用记录同事务保存。
+停用、卸载或换成无该贡献的版本会清除对应选择。恢复模式使用默认外观。
+
+可信扩展页列出历史安装供核对。纯外观包可以从原摘要生成待审核的统一数据包，
+确认后重新选择外观。含代码的扩展需要更新版统一归档。旧制品、记录及被扩展写入的
+文件保留。旧加载 API 返回更新提示。
 
 ## 管理、状态与恢复
 

@@ -121,16 +121,20 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runtime-python", type=Path, required=True)
     parser.add_argument("--runtime-registry", type=Path, required=True)
+    parser.add_argument("--unified-pine-descriptor", type=Path,
+                        help="built unified-pine.json, defaults to the file beside the reference registry")
     parser.add_argument("--output", type=Path, required=True, help="new receipt directory; never overwritten")
     args = parser.parse_args(argv)
     # Preserve venv launcher symlinks: resolving them selects system Python on POSIX.
     python = Path(os.path.abspath(args.runtime_python))
     registry, output = args.runtime_registry.resolve(), args.output.resolve()
+    descriptor = (args.unified_pine_descriptor or registry.with_name("unified-pine.json")).resolve()
     output.mkdir(parents=True, exist_ok=False)
     receipt = {"schema": "candlescope.pine-host-qualification/1", "profile": "historical-realtime-bar-print-book-tick-event-window-recovery",
                "status": "RUNNING", "host_head": subprocess.check_output(
                    ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
                "runtime_python": str(python), "runtime_registry": str(registry),
+               "unified_pine_descriptor": str(descriptor),
                "scope": "controlled installed-worker regression; no packaged-app or official oracle claim"}
 
     def save():
@@ -144,18 +148,28 @@ def main(argv=None):
         if (runtime["schemas"] != SCHEMAS or not runtime["files"]
                 or runtime.get("realtime_window_plan") is not True or runtime.get("typed_request_failure") is not True):
             raise ValueError("installed runtime does not expose the required Pine Host contracts")
+        declared = json.loads(descriptor.read_text(encoding="utf-8"))
+        archive = (descriptor.parent / declared["filename"]).resolve()
+        if (declared.get("schema") != "candlescope.bundled-unified-pine/1"
+                or archive.parent != descriptor.parent
+                or "sha256:" + digest(archive) != declared["sha256"]):
+            raise ValueError("unified Pine package does not match its descriptor")
+        descriptor_hash = digest(descriptor)
         sources = source_snapshot()
         registry_hash = digest(registry)
         (output / "sources.json").write_text(json.dumps(sources, indent=2) + "\n", encoding="utf-8")
         receipt.update(runtime=runtime, runtime_registry_sha256=registry_hash,
+                       unified_pine=declared, unified_pine_descriptor_sha256=descriptor_hash,
                        source_files=len(sources), selection="not pyne")
         env = {**os.environ, "PYTHONPATH": str(ROOT / "backend"),
                "NATIVE_TEST_PYTHON": str(python), "NATIVE_TEST_PINE_PYTHON": str(python),
                "PINE_EVENT_TEST_PYTHON": str(python),
+               "CANDLESCOPE_TEST_QUALIFIED_PINE_DESCRIPTOR": str(descriptor),
                "CANDLESCOPE_NATIVE_RUNTIME_REGISTRY": str(registry)}
         command = [sys.executable, "-u", "-m", "pytest",
                    *(f"backend/tests/{name}.py" for name in MODULES),
-                   "-v", "-x", "--tb=short", "-k", "not pyne", f"--junitxml={output / 'tests.xml'}"]
+                   "-v", "-x", "--tb=short", "-k", "not pyne",
+                   "-o", "usefixtures=qualified_pine_reference", f"--junitxml={output / 'tests.xml'}"]
         receipt["command"] = command
         save()
         print(f"Running {len(MODULES)} modules; evidence: {output}", flush=True)
@@ -168,9 +182,13 @@ def main(argv=None):
         receipt["source_unchanged"] = source_snapshot() == sources
         receipt["runtime_unchanged"] = all(digest(Path(name)) == value for name, value in runtime["files"].items())
         receipt["registry_unchanged"] = digest(registry) == registry_hash
+        receipt["unified_pine_unchanged"] = (
+            digest(descriptor) == descriptor_hash and "sha256:" + digest(archive) == declared["sha256"]
+        )
         passed = (receipt["exit_code"] == 0 and receipt["tests"]["passed"] > 0
                   and not any(receipt["tests"][key] for key in ("failures", "errors", "skipped"))
-                  and all(receipt[key] for key in ("source_unchanged", "runtime_unchanged", "registry_unchanged")))
+                  and all(receipt[key] for key in ("source_unchanged", "runtime_unchanged", "registry_unchanged",
+                                                   "unified_pine_unchanged")))
         receipt["status"] = "PASSED" if passed else "FAILED"
     except Exception as exc:
         receipt.update(status="FAILED", error=f"{type(exc).__name__}: {exc}")

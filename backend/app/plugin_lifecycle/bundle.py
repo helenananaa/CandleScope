@@ -20,6 +20,7 @@ from candlescope_plugin_sdk.platform_v2 import (
 from candlescope_plugin_sdk.unified import Manifest, ManifestError
 from candlescope_plugin_sdk.unified.manifest import MAX_MANIFEST_BYTES, package_path
 
+from .appearance import MAX_APPEARANCE_BYTES, appearance_kind, parse_appearance
 from .paths import is_link
 
 BUNDLE_SCHEMA = "candlescope.unified-bundle/1"
@@ -134,6 +135,14 @@ def verify_package(path: Path | str) -> VerifiedPackage:
                 infos = archive.infolist()
                 if not 2 <= len(infos) <= MAX_FILES:
                     raise PackageError("archive file count is outside its budget")
+                names = {info.filename for info in infos}
+                if "manifest.json" in names and "bundle.json" not in names:
+                    # Preserve the retired-language diagnostic for historical manifests.
+                    with archive.open("manifest.json") as source:
+                        Manifest.from_json(source.read(MAX_MANIFEST_BYTES + 1))
+                    raise PackageError(
+                        "unified bundle.json is required; update old packages"
+                    )
                 files = {}
                 folded = set()
                 total = 0
@@ -177,14 +186,13 @@ def verify_package(path: Path | str) -> VerifiedPackage:
                     raise PackageError(
                         "unified manifest.json and bundle.json are required; update old packages"
                     )
-                # Reject a retired/legacy manifest explicitly before processing its envelope.
                 if files["manifest.json"].file_size > MAX_MANIFEST_BYTES:
                     raise PackageError("manifest exceeds its byte budget")
-                manifest = Manifest.from_json(archive.read(files["manifest.json"]))
                 if "bundle.json" not in files:
                     raise PackageError(
                         "unified bundle.json is required; update old packages"
                     )
+                manifest = Manifest.from_json(archive.read(files["manifest.json"]))
                 if files["bundle.json"].file_size > MAX_DESCRIPTOR_BYTES:
                     raise PackageError("bundle descriptor exceeds its byte budget")
                 envelope = loads_strict(
@@ -227,6 +235,14 @@ def verify_package(path: Path | str) -> VerifiedPackage:
                     raise PackageError(
                         "every entry must reference a pinned archive file"
                     )
+                for entry in manifest.entries:
+                    if kind := appearance_kind(entry):
+                        with archive.open(files[entry.path]) as source:
+                            parse_appearance(
+                                kind,
+                                source.read(MAX_APPEARANCE_BYTES + 1),
+                                manifest.trust,
+                            )
             return VerifiedPackage(manifest, sha256, size)
     except PackageError:
         raise

@@ -1,4 +1,4 @@
-"""Command-line interface for building and managing runtime plugin bundles."""
+"""Read-only inspection of retired runtime plugin packages and registries."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .bundle import build_plugin_bundle, inspect_plugin_bundle
+from .bundle import inspect_plugin_bundle
 from .errors import PluginHostError, PluginInstallerError
 from .installer import PluginInstaller
 
@@ -16,7 +16,7 @@ from .installer import PluginInstaller
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="candlescope-plugin",
-        description="Build, inspect, install, check, list, and roll back .cspkg runtime plugins.",
+        description="Inspect archived .cspkg files and list historical script runtime records.",
     )
     parser.add_argument(
         "--root",
@@ -48,7 +48,7 @@ def _parser() -> argparse.ArgumentParser:
     inspect_command.add_argument("bundle", type=Path)
 
     build_command = commands.add_parser(
-        "build", help="build a deterministic bundle from a manifest template and wheels"
+        "build", help=argparse.SUPPRESS
     )
     build_command.add_argument("--manifest", type=Path, required=True)
     build_command.add_argument("--wheel", type=Path, action="append", required=True)
@@ -56,7 +56,7 @@ def _parser() -> argparse.ArgumentParser:
     build_command.add_argument("--force", action="store_true")
 
     install_command = commands.add_parser(
-        "install", help="verify, isolate, probe, and atomically activate a local bundle"
+        "install", help=argparse.SUPPRESS
     )
     install_command.add_argument("bundle", type=Path)
     install_command.add_argument(
@@ -70,7 +70,7 @@ def _parser() -> argparse.ArgumentParser:
 
     check_command = commands.add_parser(
         "check",
-        help="verify an active managed environment and rerun its protocol probe",
+        help=argparse.SUPPRESS,
     )
     check_command.add_argument("runtime_id")
 
@@ -79,7 +79,7 @@ def _parser() -> argparse.ArgumentParser:
     )
 
     rollback_command = commands.add_parser(
-        "rollback", help="restore this runtime's exact previous activation"
+        "rollback", help=argparse.SUPPRESS
     )
     rollback_command.add_argument("runtime_id")
     return parser
@@ -109,32 +109,11 @@ def _execute(args: argparse.Namespace) -> dict[str, Any]:
             "ok": True,
             "bundle": _bundle_payload(inspect_plugin_bundle(args.bundle)),
         }
-    if args.command == "build":
-        bundle = build_plugin_bundle(
-            args.manifest,
-            tuple(args.wheel),
-            args.output,
-            force=args.force,
-        )
-        return {"ok": True, "bundle": _bundle_payload(bundle)}
-
-    installer = _installer(args)
-    if args.command == "install":
-        result = installer.install(
-            args.bundle,
-            expected_sha256=args.sha256,
-            enabled=not args.disabled,
-            auto_start=args.auto_start,
-            required=args.required,
-        )
-        return {"ok": True, "installation": result.to_wire()}
-    if args.command == "check":
-        return {"ok": True, "check": installer.check(args.runtime_id).to_wire()}
     if args.command == "list":
-        return {"ok": True, "plugins": list(installer.list_plugins())}
-    if args.command == "rollback":
-        return {"ok": True, "rollback": installer.rollback(args.runtime_id).to_wire()}
-    raise PluginInstallerError(f"unsupported command: {args.command}")
+        return {"ok": True, "plugins": list(_installer(args).list_plugins())}
+    raise PluginInstallerError(
+        "This script installer is retired. Use the unified plugin CLI with an updated package."
+    )
 
 
 def _emit(payload: dict[str, Any], *, compact: bool, stream: Any) -> None:

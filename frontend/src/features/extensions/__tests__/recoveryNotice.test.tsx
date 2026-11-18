@@ -31,7 +31,7 @@ test("extension management keeps the names the desktop qualification drives", ()
   assert.match(html, /<h3>(可信扩展|Trusted extensions)<\/h3>/);
   // The package picker is a labelled file input, not the browser's untranslated "Choose file" control.
   assert.match(html, /<label for="[^"]+" class="ui-file-drop ui-file-drop-compact"/);
-  assert.match(html, /class="ui-file-drop-label">(导入扩展包|Import extension package)</);
+  assert.match(html, /class="ui-file-drop-label">(安装插件|Install plugin)</);
   assert.match(html, />(不加载扩展并刷新|Reload without extensions)</);
 });
 
@@ -39,6 +39,6 @@ test("extension management speaks every language from the catalogs, not only Chi
   setLocale("de");
   const html = renderToStaticMarkup(<ExtensionManager />);
   assert.match(html, /Vertrauenswürdige Erweiterungen/);
-  assert.match(html, /Erweiterungspaket importieren/);
+  assert.match(html, /Plugin installieren/);
   setLocale("zh-CN");
 });

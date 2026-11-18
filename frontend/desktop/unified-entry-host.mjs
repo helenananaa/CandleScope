@@ -1,13 +1,17 @@
 import { createReadStream } from "node:fs";
-import { lstat, realpath } from "node:fs/promises";
+import { lstat, mkdir, readFile, realpath } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { writeMarker } from "./activation-marker.mjs";
 import { UnifiedEntryLifecycle } from "./unified-entry-lifecycle.mjs";
 
 export class UnifiedDesktopHost {
-  constructor({ request, context }) {
+  constructor({ request, context, markerPath }) {
     this.request = request;
+    this.markerPath = markerPath;
+    this.blockedStartup = null;
+    this.loading = null;
     this.clientId = randomUUID();
     this.host = new UnifiedEntryLifecycle({
       load: async (item) => {
@@ -26,6 +30,10 @@ export class UnifiedDesktopHost {
           if (hash.digest("hex") !== digest) throw new Error("Plugin integrity check failed");
         }
         if (!Object.hasOwn(item.files, item.entry.path)) throw new Error("Unpinned desktop entry");
+        if (this.markerPath) {
+          await writeMarker(this.markerPath, this.marker(item));
+          this.loading = item.instanceId;
+        }
         return import(`${pathToFileURL(path.resolve(root, item.entry.path)).href}?instance=${item.instanceId}`);
       },
       createContext: (item, guard) => {
@@ -46,9 +54,25 @@ export class UnifiedDesktopHost {
           if (errors.length) throw new globalThis.AggregateError(errors, "Plugin cleanup failed");
         } };
       },
-      report: (plan, item, state, error) => request("/report", { sessionId: plan.sessionId,
-        instanceId: item.instanceId, state, ...(error ? { error } : {}) }),
+      report: async (plan, item, state, error) => {
+        if (this.loading === item.instanceId) {
+          await writeMarker(this.markerPath, this.blockedStartup ?? {});
+          this.loading = null;
+        }
+        return request("/report", { sessionId: plan.sessionId,
+          instanceId: item.instanceId, state, ...(error ? { error } : {}) });
+      },
     });
+  }
+
+  marker(item) {
+    const { pluginId, packageSha256, generation } = item.identity;
+    return { pluginId, packageSha256, generation, entryId: item.entry.id };
+  }
+
+  blocked(item) {
+    const marker = this.marker(item);
+    return this.blockedStartup && Object.keys(marker).every((key) => marker[key] === this.blockedStartup[key]);
   }
 
   async refresh() {
@@ -56,17 +80,36 @@ export class UnifiedDesktopHost {
     if (this.refreshing) return this.refreshing;
     this.refreshing = (async () => {
       const plan = await this.request("/realm", { clientId: this.clientId, realm: "desktop" });
-      if (!this.stopped) await this.host.reconcile(plan);
+      if (this.stopped) return;
+      const entries = [];
+      for (const item of plan.entries) {
+        if (!this.blocked(item)) { entries.push(item); continue; }
+        const error = "Previous desktop startup was interrupted; disable or reapprove this activation";
+        this.host.errors[item.pluginId] = error;
+        await this.request("/report", { sessionId: plan.sessionId, instanceId: item.instanceId, state: "failed", error });
+      }
+      if (!this.stopped) await this.host.reconcile({ ...plan, entries });
     })().catch((error) => { this.host.errors.runtime = String(error); }).finally(() => { this.refreshing = null; });
     return this.refreshing;
   }
   async start() {
+    if (this.markerPath) {
+      try {
+        await mkdir(path.dirname(this.markerPath), { recursive: true });
+        this.blockedStartup = JSON.parse(await readFile(this.markerPath, "utf8"));
+        if (!this.blockedStartup || typeof this.blockedStartup !== "object" || Array.isArray(this.blockedStartup)) {
+          throw new Error("Invalid desktop plugin startup marker");
+        }
+      } catch (error) {
+        if (error.code !== "ENOENT") { this.host.errors.runtime = String(error); return; }
+      }
+    }
     await this.refresh();
     if (this.stopped) return;
     this.timer = setInterval(() => { void this.refresh(); }, 5000);
     this.timer.unref?.();
   }
-  diagnostics() { return this.host.diagnostics(); }
+  diagnostics() { return { ...this.host.diagnostics(), safeMode: Boolean(this.host.plan.safeMode) }; }
   async stop() {
     this.stopped = true;
     clearInterval(this.timer);

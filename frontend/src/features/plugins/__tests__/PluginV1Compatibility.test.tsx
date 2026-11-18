@@ -162,7 +162,7 @@ function runtime(platformEnabled: boolean): PluginPlatformRuntime {
   } as unknown as PluginPlatformRuntime;
 }
 
-test("v1-only mode keeps one product directory without exposing v2 mutations", () => {
+test("retired script records do not appear in the product directory", () => {
   const value = runtime(false);
   const toolbar = renderToStaticMarkup(<PluginPlatformToolbar runtime={value} />);
   assert.equal(toolbar, "");
@@ -172,22 +172,18 @@ test("v1-only mode keeps one product directory without exposing v2 mutations", (
   );
 
   const manager = renderToStaticMarkup(<PluginSettingsPanel runtime={value} />);
-  assert.match(manager, /脚本运行时/);
-  assert.match(manager, /data-v1-runtime="candlescope.pyne"/);
-  assert.match(manager, /candlescope\.script-runtime\/1/);
+  assert.doesNotMatch(manager, /data-v1-runtime/);
+  assert.doesNotMatch(manager, /candlescope\.script-runtime\/1/);
   assert.match(manager, /启用插件平台后/);
   assert.doesNotMatch(manager, /data-plugin-install-input/);
   assert.doesNotMatch(manager, /<iframe/);
 });
 
-test("enabled platform exposes separate import and rollback previews", () => {
+test("advanced settings retain runtime suppliers and retire compatibility mutations", () => {
   const manager = renderToStaticMarkup(
     <PluginSettingsPanel runtime={runtime(true)} initialSection="advanced" />,
   );
-  assert.match(manager, /data-v1-compatibility-preview="import"/);
-  assert.match(manager, /data-v1-compatibility-preview="rollback"/);
-  assert.match(manager, /预览注册表导入/);
-  assert.match(manager, /预览兼容层回滚/);
+  assert.doesNotMatch(manager, /data-v1-compatibility-preview/);
   assert.doesNotMatch(manager, /data-plugin-install-input/);
   assert.match(manager, /data-runtime-registry-revision="1"/);
   assert.match(manager, /CandleScope 管理的运行环境/);
@@ -329,7 +325,7 @@ test("default plugin center prioritizes the library and keeps maintenance and in
   assert.match(manager, /我的插件/);
   assert.match(manager, /发现插件/);
   assert.match(manager, /高级管理/);
-  assert.match(manager, /data-v1-runtime="candlescope.pyne"/);
+  assert.doesNotMatch(manager, /data-v1-runtime/);
   assert.doesNotMatch(manager, /data-v1-compatibility-preview|data-runtime-registry-revision|data-plugin-install-input/);
 });
 
@@ -361,14 +357,12 @@ test("twenty installed plugins render a searchable directory without mounting th
 });
 
 
-test("mixed script runtime availability names only the unavailable engine", () => {
+test("historical compatibility contributions never advertise a runtime", () => {
   const value = runtime(false);
   const contributions = value.view.catalog!.compatibility!.contributions;
   const pyne = contributions[0]!;
   pyne.available = false;
   contributions.push({ ...pyne, id: "compat.pine", runtimeId: "pine", title: "Pine Runtime", available: true });
   const html = renderToStaticMarkup(<PluginSettingsPanel runtime={value} />);
-  assert.match(html, /不可用: Pyne Runtime/);
-  assert.doesNotMatch(html, /脚本运行时当前不可用|不可用: Pine Runtime/);
-  assert.match(html, /Pine Runtime/);
+  assert.doesNotMatch(html, /Pyne Runtime|Pine Runtime|data-v1-runtime/);
 });

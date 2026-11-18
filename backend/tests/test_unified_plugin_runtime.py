@@ -348,7 +348,7 @@ async def test_guarded_http_lifecycle_uses_actual_bootstrap_and_rejects_stale_in
     store = PackageStore(tmp_path / "store")
     prepare_unified(app, store=store)
     guard = LocalManagementGuard(["http://127.0.0.1:15173"])
-    app.state.trusted_extension_management_guard = guard
+    app.state.unified_management_guard = guard
     await activate_unified(app)
     try:
         async with httpx.AsyncClient(
@@ -526,7 +526,7 @@ export async function activate(ctx) {
     )
     prepare_unified(app, store=store)
     guard = LocalManagementGuard(["http://127.0.0.1:15173"])
-    app.state.trusted_extension_management_guard = guard
+    app.state.unified_management_guard = guard
 
     @asynccontextmanager
     async def lifespan(application):
@@ -689,7 +689,7 @@ async def test_restricted_view_serves_opaque_assets_and_revokes_tickets(tmp_path
     )
     prepare_unified(app, store=store)
     guard = LocalManagementGuard(["http://127.0.0.1:15173"])
-    app.state.trusted_extension_management_guard = guard
+    app.state.unified_management_guard = guard
     await activate_unified(app)
     try:
         async with httpx.AsyncClient(

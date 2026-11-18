@@ -17,7 +17,6 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 
 from app.plugin_installer_v2.errors import PlatformInstallerBaseError
-from app.plugin_installer_v2.bundle import verify_platform_bundle
 from app.plugin_live_v2 import LiveBrokerError
 from app.plugin_marketplace_v2 import MarketplaceError
 from app.plugin_marketplace_v2.models import MAX_INDEX_BYTES
@@ -26,7 +25,7 @@ from app.plugin_security_v2.errors import PlatformSecurityError
 from app.plugin_security_v2.management import LocalManagementGuard
 
 from app.plugin_runtime.errors import PluginHostError
-from .runtime_install import is_runtime_bundle, install_runtime_bundle, review_runtime_bundle
+from .local_bundle import verify_local_platform_bundle
 from .errors import CorePluginError
 from .runtime import CorePluginPlatform, DisabledCorePluginPlatform
 
@@ -114,16 +113,6 @@ async def _background_platform(request: Request) -> CorePluginPlatform:
         raise HTTPException(status_code=503, detail="plugin platform v2 is disabled")
     await guard.authorize_background(request)
     return platform
-
-
-def _v1_compatibility(platform: CorePluginPlatform) -> Any:
-    compatibility = getattr(platform, "v1_compatibility", None)
-    if compatibility is None:
-        raise HTTPException(
-            status_code=503,
-            detail="v1 script runtime compatibility bridge is unavailable",
-        )
-    return compatibility
 
 
 async def _body(
@@ -439,58 +428,6 @@ def create_core_plugin_router() -> APIRouter:
         except Exception as exc:
             _raise_api_error(exc)
 
-    @router.get("/manage/compatibility/v1/status")
-    async def v1_compatibility_status(request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
-        try:
-            return await asyncio.to_thread(_v1_compatibility(platform).public_catalog)
-        except Exception as exc:
-            _raise_api_error(exc)
-
-    @router.get("/manage/compatibility/v1/import-preview")
-    async def v1_compatibility_import_preview(request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
-        try:
-            return await asyncio.to_thread(_v1_compatibility(platform).import_preview)
-        except Exception as exc:
-            _raise_api_error(exc)
-
-    @router.post("/manage/compatibility/v1/import")
-    async def v1_compatibility_import(request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
-        payload = await _body(request, required={"previewSha256"})
-        try:
-            return await asyncio.to_thread(
-                platform.apply_v1_compatibility_import,
-                payload["previewSha256"],
-                trace_id=f"management-{request.state.plugin_user_action}",
-            )
-        except Exception as exc:
-            _raise_api_error(exc)
-
-    @router.get("/manage/compatibility/v1/rollback-preview")
-    async def v1_compatibility_rollback_preview(
-        request: Request,
-    ) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
-        try:
-            return await asyncio.to_thread(_v1_compatibility(platform).rollback_preview)
-        except Exception as exc:
-            _raise_api_error(exc)
-
-    @router.post("/manage/compatibility/v1/rollback")
-    async def v1_compatibility_rollback(request: Request) -> dict[str, Any]:
-        platform = await _guarded_platform(request)
-        payload = await _body(request, required={"previewSha256"})
-        try:
-            return await asyncio.to_thread(
-                platform.apply_v1_compatibility_rollback,
-                payload["previewSha256"],
-                trace_id=f"management-{request.state.plugin_user_action}",
-            )
-        except Exception as exc:
-            _raise_api_error(exc)
-
     @router.get("/manage/marketplace/status")
     async def marketplace_status(request: Request) -> dict[str, Any]:
         platform = await _guarded_platform(request)
@@ -794,14 +731,8 @@ def create_core_plugin_router() -> APIRouter:
         upload = None
         try:
             upload, expected_sha256 = await _bundle_upload(request, platform)
-            if await asyncio.to_thread(is_runtime_bundle, upload):
-                result = await asyncio.to_thread(
-                    install_runtime_bundle, upload, expected_sha256,
-                    platform.installer.host_version,
-                )
-                return {"kind": "script-runtime", "installation": result.to_wire()}
             bundle = await asyncio.to_thread(
-                verify_platform_bundle,
+                verify_local_platform_bundle,
                 upload,
                 expected_sha256=expected_sha256,
                 host_version=platform.installer.host_version,
@@ -832,9 +763,8 @@ def create_core_plugin_router() -> APIRouter:
         upload = None
         try:
             upload, expected_sha256 = await _bundle_upload(request, platform)
-            runtime_bundle = await asyncio.to_thread(is_runtime_bundle, upload)
             bundle = await asyncio.to_thread(
-                review_runtime_bundle if runtime_bundle else verify_platform_bundle,
+                verify_local_platform_bundle,
                 upload,
                 expected_sha256=expected_sha256,
                 host_version=platform.installer.host_version,

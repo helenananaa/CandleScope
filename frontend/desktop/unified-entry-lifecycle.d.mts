@@ -10,7 +10,11 @@ export interface UnifiedItem {
   instanceId: string; manifest: UnifiedManifest; assetBase: string;
   state: string; root?: string; files?: Record<string,string>;
 }
-export interface UnifiedPlan { sessionId: string; hostInstance: string; safeMode?: boolean; entries: UnifiedItem[]; errors?: Record<string,string> }
+export interface UnifiedAppearance {
+  theme: { base: "dark" | "light"; tokens: Record<string, string> } | null;
+  layout: { page: string[]; workspace: string[] } | null;
+}
+export interface UnifiedPlan { sessionId: string; hostInstance: string; safeMode?: boolean; entries: UnifiedItem[]; appearance?: UnifiedAppearance; errors?: Record<string,string> }
 export interface UnifiedOwned { context: {track(cleanup: () => void | Promise<void>): void}; dispose(): unknown }
 export class UnifiedEntryLifecycle {
   constructor(options: {

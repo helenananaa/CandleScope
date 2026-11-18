@@ -6,14 +6,8 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-
 from app import main as main_module
-from app.first_party_plugin_bootstrap import (
-    FirstPartyPluginBootstrapError,
-    FirstPartyPluginBootstrapResult,
-)
-from app.plugin_runtime import RuntimeHostService
-from app.plugin_runtime.registry import RuntimeRegistry
+from app.plugin_lifecycle.script_runtime import ScriptRuntimeHost
 
 
 def test_lifecycle_print_literals_are_windows_console_safe() -> None:
@@ -63,38 +57,12 @@ class _LagMonitor:
         return {"status": "ok"}
 
 
-class _Host(RuntimeHostService):
-    def __init__(self) -> None:
-        super().__init__(
-            RuntimeRegistry(),
-            host_name="CandleScope",
-            host_version="0.3.0",
-        )
-        self.start_calls = 0
-        self.stop_calls = 0
-
-    async def start(self) -> None:
-        self.start_calls += 1
-
-    async def stop(self) -> None:
-        self.stop_calls += 1
-
-    def health_summary(self) -> dict[str, Any]:
-        return {
-            "status": "ok",
-            "configured": 1,
-            "enabled": 1,
-            "ready": 1,
-            "failed": 0,
-        }
-
-
 class _RoutingService:
     def __init__(self) -> None:
         self.start_calls = 0
         self.stop_calls = 0
         self.fail_start = False
-        self.catalog_projector: Any | None = None
+        self.host: ScriptRuntimeHost | None = None
 
     async def start(self) -> None:
         self.start_calls += 1
@@ -103,17 +71,6 @@ class _RoutingService:
 
     async def stop(self) -> None:
         self.stop_calls += 1
-
-    def bind_catalog_projector(self, projector: Any) -> None:
-        self.catalog_projector = projector
-
-    def compatibility_source_catalog(self) -> dict[str, Any]:
-        return {
-            "schemaVersion": 1,
-            "defaultLanguage": "pine",
-            "languages": [],
-            "runtimes": [],
-        }
 
     def snapshot(self) -> dict[str, Any]:
         return {
@@ -132,15 +89,14 @@ class _RoutingService:
 
 def _patch_startup_dependencies(
     monkeypatch: pytest.MonkeyPatch,
-    host: _Host,
     platform_root: Path,
     routing: _RoutingService | None = None,
 ) -> _RoutingService:
-    from starlette.datastructures import State
-    from app.core import config
-    import app.plugin_runtime as plugin_runtime_module
     import app.first_party_plugin_bootstrap as first_party_bootstrap_module
     import app.indicator.runtime_service as runtime_service_module
+    import app.plugin_runtime as plugin_runtime_module
+    from app.core import config
+    from starlette.datastructures import State
 
     routing = routing or _RoutingService()
 
@@ -152,7 +108,9 @@ def _patch_startup_dependencies(
     monkeypatch.setattr(main_module, "KLINES_DB_PATH", data_root / "candlescope.db")
     monkeypatch.setattr(main_module, "LOCAL_DATA_DIR", data_root / "local-data")
     monkeypatch.setattr(main_module, "RUNTIME_MODE", "LIVE")
-    monkeypatch.setattr(main_module, "BACKTEST_SETTINGS", SimpleNamespace(enabled=False))
+    monkeypatch.setattr(
+        main_module, "BACKTEST_SETTINGS", SimpleNamespace(enabled=False)
+    )
     monkeypatch.setattr(main_module, "RESEARCH_DATA_LIBRARY_ENABLED", False)
 
     for name in (
@@ -168,7 +126,7 @@ def _patch_startup_dependencies(
     monkeypatch.setattr(
         main_module,
         "initialize_market_storage",
-        lambda **_kwargs: SimpleNamespace(to_dict=lambda: {}),
+        lambda **_kwargs: SimpleNamespace(to_dict=dict),
     )
 
     async def _init_replay_runtime() -> None:
@@ -180,30 +138,34 @@ def _patch_startup_dependencies(
 
     async def _init_data_manager() -> None:
         from app.data_engine.data_manager.core import DataManagerCore
+
         main_module.app.state.data_manager = None
         main_module.app.state.data_manager_core = DataManagerCore()
 
     monkeypatch.setattr(main_module, "_init_replay_runtime", _init_replay_runtime)
     monkeypatch.setattr(main_module, "_init_alert_delivery", _init_alert_delivery)
     monkeypatch.setattr(main_module, "_init_data_manager", _init_data_manager)
+
+    def forbid_legacy(**_kwargs):
+        pytest.fail("normal startup entered the retired script runtime")
+
     monkeypatch.setattr(
         first_party_bootstrap_module,
         "ensure_first_party_plugins_from_environment",
-        lambda **_kwargs: FirstPartyPluginBootstrapResult(
-            status="ready",
-            runtime_id="candlescope.pine-compat",
-            version="0.2.0",
-        ),
+        forbid_legacy,
     )
     monkeypatch.setattr(
-        plugin_runtime_module,
-        "build_runtime_host_from_environment",
-        lambda **_kwargs: host,
+        plugin_runtime_module, "build_runtime_host_from_environment", forbid_legacy
     )
+
+    def bind_routing(*, host):
+        routing.host = host
+        return routing
+
     monkeypatch.setattr(
         runtime_service_module,
         "build_indicator_runtime_service_from_environment",
-        lambda **_kwargs: routing,
+        bind_routing,
     )
 
     async def _refresh() -> dict[str, int]:
@@ -211,7 +173,7 @@ def _patch_startup_dependencies(
 
     import app.exchanges.symbol_catalog as symbols_module
 
-    monkeypatch.setattr(symbols_module, "initialize_exchange_metadata_cache", lambda: {})
+    monkeypatch.setattr(symbols_module, "initialize_exchange_metadata_cache", dict)
     monkeypatch.setattr(symbols_module, "refresh_exchange_metadata", _refresh)
     return routing
 
@@ -225,25 +187,32 @@ async def test_startup_prepared_history_uses_provider_origin_and_retention_polic
     from app.data_preparation.models import PreparationError
     from app.replay.catalog import ReplaySeriesIdentity
 
-    _patch_startup_dependencies(monkeypatch, _Host(), tmp_path / "plugins")
+    _patch_startup_dependencies(monkeypatch, tmp_path / "plugins")
     calls = []
     identity = ReplaySeriesIdentity("binance", "spot", "QAORIGINUSDT")
 
     class Provider:
         async def fetch_market(self, descriptor, **kwargs):
             calls.append((descriptor, kwargs))
-            return [SimpleNamespace(
-                exchange=identity.exchange, market_type=identity.market_type,
-                symbol=identity.symbol, event_type=StreamType.KLINE,
-                data={"open_time": 180_000},
-            )]
+            return [
+                SimpleNamespace(
+                    exchange=identity.exchange,
+                    market_type=identity.market_type,
+                    symbol=identity.symbol,
+                    event_type=StreamType.KLINE,
+                    data={"open_time": 180_000},
+                )
+            ]
 
     policy = SimpleNamespace(
         series_key=lambda **kwargs: kwargs,
-        resolve=lambda _: SimpleNamespace(availability=SimpleNamespace(
-            rolling_retention_ms=60_000 if rolling else None,
-            data_start=None, upstream_start=None,
-        )),
+        resolve=lambda _: SimpleNamespace(
+            availability=SimpleNamespace(
+                rolling_retention_ms=60_000 if rolling else None,
+                data_start=None,
+                upstream_start=None,
+            )
+        ),
     )
     replay = SimpleNamespace()
 
@@ -256,10 +225,13 @@ async def test_startup_prepared_history_uses_provider_origin_and_retention_polic
 
     async def init_data():
         from app.data_engine.data_manager.core import DataManagerCore
+
         main_module.app.state.data_manager_core = DataManagerCore()
         main_module.app.state.data_manager = SimpleNamespace(history_policy=policy)
         main_module.app.state.data_engine_runtime = SimpleNamespace(
-            ingestion_factory=Provider(), backfill_coordinator=None, shutdown=no_op,
+            ingestion_factory=Provider(),
+            backfill_coordinator=None,
+            shutdown=no_op,
         )
 
     monkeypatch.setattr(main_module, "_init_replay_runtime", init_replay)
@@ -277,12 +249,17 @@ async def test_startup_prepared_history_uses_provider_origin_and_retention_polic
             assert len(calls) == 1
             assert calls[0][0].symbol == identity.symbol
             assert calls[0][1] == {
-                "limit": 1, "start_ms": 0, "end_ms": 3_059_999,
-                "history": True, "defer_on_rate_limit": True,
+                "limit": 1,
+                "start_ms": 0,
+                "end_ms": 3_059_999,
+                "history": True,
+                "defer_on_rate_limit": True,
             }
             # Wiring a provider must not turn unknown pagination into a proof.
             with pytest.raises(PreparationError, match="verified history origin"):
-                await resolver(ReplaySeriesIdentity("other", "spot", identity.symbol), 3_000_000)
+                await resolver(
+                    ReplaySeriesIdentity("other", "spot", identity.symbol), 3_000_000
+                )
             assert len(calls) == 1
     finally:
         await main_module.shutdown_event()
@@ -293,23 +270,24 @@ async def test_application_lifecycle_owns_plugin_host_and_health_summary(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    host = _Host()
-    routing = _patch_startup_dependencies(monkeypatch, host, tmp_path / "plugins")
+    routing = _patch_startup_dependencies(monkeypatch, tmp_path / "plugins")
 
     await main_module.startup_event()
     try:
         assert main_module.app.state.data_preparation_service.repository.path == (
             tmp_path / "runtime-data" / "data-preparation.sqlite3"
         )
-        assert host.start_calls == 1
         assert routing.start_calls == 1
-        assert callable(routing.catalog_projector)
-        assert main_module.app.state.plugin_runtime_host is host
+        assert isinstance(routing.host, ScriptRuntimeHost)
+        owner = main_module.app.state.unified_plugin_runtime
+        assert routing.host.runtime is owner
         assert main_module.app.state.indicator_runtime_service is routing
-        assert main_module.app.state.plugin_v1_compatibility.indicator_source is routing
-        assert main_module.app.state.plugin_platform_v2.health_summary()["status"] == "ok"
         health = await main_module.health_check()
-        assert health["plugin_runtimes"] == host.health_summary()
+        assert health["unified_plugins"] == {
+            "executors_attached": True,
+            "safe_mode": False,
+            "errors": 0,
+        }
         assert health["plugin_platform_v2"] == {
             "status": "ok",
             "enabled": True,
@@ -320,20 +298,6 @@ async def test_application_lifecycle_owns_plugin_host_and_health_summary(
             "subscriptions": 0,
             "jobs": 0,
             "failedPlugins": 0,
-        }
-        assert set(health["plugin_runtimes"]) == {
-            "status",
-            "configured",
-            "enabled",
-            "ready",
-            "failed",
-        }
-        assert health["first_party_plugin_bootstrap"] == {
-            "status": "ready",
-            "runtimeId": "candlescope.pine-compat",
-            "version": "0.2.0",
-            "changed": False,
-            "downloaded": False,
         }
         assert health["plugin_plane"]["status"] == "ok"
         assert health["indicator_runtime_routing"]["routes"] == [
@@ -346,7 +310,7 @@ async def test_application_lifecycle_owns_plugin_host_and_health_summary(
         assert health["indicator_runtime_routing"]["unavailable"] == []
     finally:
         await main_module.shutdown_event()
-    assert host.stop_calls == 1
+    assert not main_module.app.state.unified_plugin_runtime.ready
     assert routing.stop_calls == 1
 
 
@@ -355,8 +319,7 @@ async def test_startup_failure_reclaims_started_plugin_host(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    host = _Host()
-    routing = _patch_startup_dependencies(monkeypatch, host, tmp_path / "plugins")
+    routing = _patch_startup_dependencies(monkeypatch, tmp_path / "plugins")
 
     async def _fail_data_manager() -> None:
         raise RuntimeError("fatal data-engine configuration")
@@ -365,8 +328,7 @@ async def test_startup_failure_reclaims_started_plugin_host(
     with pytest.raises(RuntimeError, match="fatal data-engine configuration"):
         await main_module.startup_event()
 
-    assert host.start_calls == 1
-    assert host.stop_calls == 1
+    assert main_module.app.state.unified_plugin_runtime.owner_lock is None
     assert routing.start_calls == 1
     assert routing.stop_calls == 1
     lag_monitor = main_module.app.state.event_loop_lag_monitor
@@ -374,47 +336,14 @@ async def test_startup_failure_reclaims_started_plugin_host(
 
 
 @pytest.mark.anyio
-async def test_plugin_host_startup_failure_does_not_abort_core_runtime(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    host = _Host()
-    routing = _patch_startup_dependencies(monkeypatch, host, tmp_path / "plugins")
-
-    async def _fail_start() -> None:
-        host.start_calls += 1
-        raise RuntimeError("required plugin failed")
-
-    monkeypatch.setattr(host, "start", _fail_start)
-    await main_module.startup_event()
-    try:
-        assert host.start_calls == 1
-        assert host.stop_calls == 1
-        assert routing.start_calls == 1
-        assert main_module.app.state.plugin_runtime_host is not host
-        assert main_module.app.state.plugin_runtime_host.health_summary()["status"] == (
-            "disabled"
-        )
-        health = await main_module.health_check()
-        assert health["status"] == "degraded"
-        assert health["plugin_plane"]["status"] == "degraded"
-        assert health["plugin_plane"]["reasonCode"] == "RuntimeError"
-        assert main_module.app.state.event_loop_lag_monitor.stopped is False
-    finally:
-        await main_module.shutdown_event()
-
-
-@pytest.mark.anyio
 async def test_indicator_routing_startup_failure_does_not_abort_core_runtime(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    host = _Host()
     routing = _RoutingService()
     routing.fail_start = True
     _patch_startup_dependencies(
         monkeypatch,
-        host,
         tmp_path / "plugins",
         routing,
     )
@@ -423,9 +352,6 @@ async def test_indicator_routing_startup_failure_does_not_abort_core_runtime(
     try:
         assert routing.start_calls == 1
         assert routing.stop_calls == 1
-        assert host.start_calls == 1
-        assert host.stop_calls == 0
-        assert main_module.app.state.plugin_runtime_host is host
         assert main_module.app.state.indicator_runtime_service is not routing
         health = await main_module.health_check()
         assert health["status"] == "degraded"
@@ -436,41 +362,22 @@ async def test_indicator_routing_startup_failure_does_not_abort_core_runtime(
 
 
 @pytest.mark.anyio
-async def test_first_party_bootstrap_failure_does_not_abort_core_runtime(
+async def test_invalid_bundled_script_does_not_abort_core_runtime(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    host = _Host()
-    routing = _patch_startup_dependencies(monkeypatch, host, tmp_path / "plugins")
-    import app.first_party_plugin_bootstrap as first_party_bootstrap_module
+    routing = _patch_startup_dependencies(monkeypatch, tmp_path / "plugins")
+    descriptor = tmp_path / "invalid.json"
+    descriptor.write_text("invalid manifest")
+    monkeypatch.setenv("CANDLESCOPE_BUNDLED_UNIFIED_PYTHON", str(descriptor))
 
-    def _fail_bootstrap(**_kwargs: object) -> FirstPartyPluginBootstrapResult:
-        raise FirstPartyPluginBootstrapError(
-            "the pinned official plugin bundle does not support this host platform",
-            details={
-                "expected": {"system": "Windows"},
-                "actual": {"system": "Linux"},
-            },
-        )
-
-    monkeypatch.setattr(
-        first_party_bootstrap_module,
-        "ensure_first_party_plugins_from_environment",
-        _fail_bootstrap,
-    )
     await main_module.startup_event()
     try:
-        assert host.start_calls == 1
         assert routing.start_calls == 1
         health = await main_module.health_check()
         assert health["status"] == "degraded"
-        assert health["first_party_plugin_bootstrap"]["status"] == "unavailable"
-        assert "does not support this host platform" in health[
-            "first_party_plugin_bootstrap"
-        ]["reason"]
-        assert health["plugin_plane"]["reasonCode"] == (
-            "FIRST_PARTY_PLUGIN_BOOTSTRAP_FAILED"
-        )
-        assert main_module.app.state.event_loop_lag_monitor.stopped is False
+        assert health["unified_plugins"]["errors"] == 1
+        assert health["unified_plugins"]["safe_mode"] is False
+        assert health["plugin_plane"]["reasonCode"] == "UNIFIED_PLUGIN_STARTUP_FAILED"
     finally:
         await main_module.shutdown_event()

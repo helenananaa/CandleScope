@@ -1,0 +1,35 @@
+{
+  "schema": "candlescope.unified-plugin/1",
+  "id": "candlescope.terminal-workbench",
+  "name": "Terminal Workbench / 终端工作台",
+  "version": "1.0.0",
+  "hostApiVersion": 1,
+  "trust": "full-trust",
+  "entries": [
+    {
+      "id": "theme",
+      "kind": "data",
+      "path": "theme.json"
+    },
+    {
+      "id": "layout",
+      "kind": "data",
+      "path": "layout.json"
+    },
+    {
+      "id": "frontend",
+      "kind": "frontend",
+      "path": "frontend.mjs"
+    },
+    {
+      "id": "backend",
+      "kind": "backend",
+      "path": "backend.py"
+    },
+    {
+      "id": "desktop",
+      "kind": "desktop",
+      "path": "desktop.mjs"
+    }
+  ]
+}

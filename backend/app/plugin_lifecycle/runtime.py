@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import collections
 import hashlib
+import os
 import secrets
 import time
 import uuid
@@ -20,6 +21,7 @@ from candlescope_plugin_sdk.unified.chart import (
 from app.plugin_security_v2.sandbox import restricted_runtime_profile
 from app.plugin_security_v2.storage import security_lock
 
+from .appearance import APPEARANCE_KINDS, appearance_kind, parse_appearance
 from .composition import StartupComposition
 from .executors import (
     BackendEntry,
@@ -29,6 +31,7 @@ from .executors import (
     default_executables,
 )
 from .paths import is_link
+from .script_bundle import PINE_ENTRY, PINE_ID, SCRIPT_BUNDLES
 from .store import LifecycleError, PackageStore
 
 
@@ -80,6 +83,8 @@ class UnifiedRuntime:
         self.composition = StartupComposition(store)
         self.prepared = {}
         self.retained = {}
+        self.script_host_disabled = False
+        self.bundled_pine = False
 
     def _current(self, run):
         if (
@@ -174,6 +179,12 @@ class UnifiedRuntime:
             run.active = False
             if run.entry.kind == "backend":
                 self.dirty_backend.add(plugin_id)
+        if plugin_id == PINE_ID:
+            from .pine import revoke_strategy_processes
+
+            for run in runs:
+                if run.entry.id == PINE_ENTRY:
+                    await asyncio.to_thread(revoke_strategy_processes, run.instance)
         for task, owner in list(self.calls.items()):
             if owner == plugin_id and task is not asyncio.current_task():
                 task.cancel()
@@ -200,8 +211,12 @@ class UnifiedRuntime:
             except (ValueError, OSError) as exc:
                 self.errors[plugin_id] = f"execution files retained for recovery: {exc}"
 
-    async def reconcile(self):
+    async def reconcile(self, *, start_only=None):
         async with self.lock:
+            previous_scripts = {
+                runtime_id: self.running.get((runtime_id, spec.entry))
+                for runtime_id, spec in SCRIPT_BUNDLES.items()
+            }
             snapshot = await asyncio.to_thread(self.store.snapshot)
             for run in self.running.values():
                 if run.entry.kind == "sidecar" and not self._current(run):
@@ -209,7 +224,11 @@ class UnifiedRuntime:
                         "sidecar exited or lost its activation"
                     )
                     self.changed = True
-            if snapshot["revision"] == self.revision and not self.changed:
+            if (
+                start_only is None
+                and snapshot["revision"] == self.revision
+                and not self.changed
+            ):
                 return
             self.changed = False
             revision, plan = await asyncio.to_thread(self.store.execution_plan)
@@ -218,6 +237,9 @@ class UnifiedRuntime:
                 if self.safe_mode
                 else {manifest.id: (manifest, identity) for manifest, identity in plan}
             )
+            if self.script_host_disabled:
+                for runtime_id in SCRIPT_BUNDLES:
+                    desired.pop(runtime_id, None)
             for key in set(self.attempted) - desired.keys():
                 self.attempted.pop(key, None)
                 if key not in self.dirty_backend and key not in self.quarantined:
@@ -247,7 +269,7 @@ class UnifiedRuntime:
                         != desired.get(plugin_id, (None, None))[1]
                     ):
                         self.errors.pop(plugin_id, None)
-            if not self.ready:
+            if not self.ready and start_only is None:
                 return
             total_entries = sum(
                 len(manifest.entries) for manifest, _ in desired.values()
@@ -256,6 +278,8 @@ class UnifiedRuntime:
                 self.revision = revision
                 raise LifecycleError("active execution plan exceeds 256 entries")
             for plugin_id, (manifest, identity) in desired.items():
+                if start_only is not None and plugin_id not in start_only:
+                    continue
                 if self.packages.get(plugin_id, {}).get("coreReady"):
                     continue
                 if (
@@ -267,6 +291,12 @@ class UnifiedRuntime:
                 self.errors.pop(plugin_id, None)
                 try:
                     self.validate(manifest)
+                    if any(
+                        entry.kind == "backend" for entry in manifest.entries
+                    ) and self.composition.interrupted(identity):
+                        raise LifecycleError(
+                            "previous startup failed; disable or reapprove this activation"
+                        )
                     if plugin_id in self.quarantined:
                         raise LifecycleError(
                             "previous cleanup incomplete; restart required"
@@ -298,17 +328,27 @@ class UnifiedRuntime:
                             )
 
                             with (root / entry.path).open("rb") as content:
-                                self.packages[plugin_id]["data"][entry.id] = (
-                                    loads_strict(
-                                        content.read(256 * 1024 + 1),
-                                        limits=JsonLimits(max_message_bytes=256 * 1024),
-                                    )
+                                raw = content.read(256 * 1024 + 1)
+                            if (
+                                hashlib.sha256(raw).hexdigest()
+                                != package["files"][entry.path]
+                            ):
+                                raise LifecycleError(
+                                    "data entry changed after verified extraction"
                                 )
+                            kind = appearance_kind(entry)
+                            package["data"][entry.id] = (
+                                parse_appearance(kind, raw, manifest.trust)
+                                if kind
+                                else loads_strict(
+                                    raw, limits=JsonLimits(max_message_bytes=256 * 1024)
+                                )
+                            )
                             continue
                         run = self.running.get((plugin_id, entry.id))
                         if run is None:
                             run = self._entry(package, entry)
-                        if entry.startup:
+                        if entry.kind == "backend":
                             with self.composition.executing(identity):
                                 await run.executor.start()
                         else:
@@ -324,7 +364,14 @@ class UnifiedRuntime:
                 except Exception as exc:  # noqa: BLE001 -- arbitrary plugin activation is isolated
                     await self._stop_package(plugin_id)
                     self.errors[plugin_id] = str(exc)
-            self.revision = revision
+            if start_only is None:
+                self.revision = revision
+            indicators = getattr(self.app.state, "indicator_runtime_service", None)
+            if indicators is not None:
+                for runtime_id, spec in SCRIPT_BUNDLES.items():
+                    current = self.running.get((runtime_id, spec.entry))
+                    if current is not previous_scripts[runtime_id]:
+                        await indicators.refresh_runtime(runtime_id)
 
     async def _materialize(self, manifest, identity):
         root, files = await asyncio.to_thread(
@@ -341,6 +388,12 @@ class UnifiedRuntime:
             "pendingOutputs": collections.deque(maxlen=32),
         }
         self.packages[manifest.id] = package
+        if self.bundled_pine and manifest.id == PINE_ID:
+            from .pine import import_pine_observations
+
+            await asyncio.to_thread(
+                import_pine_observations, package["storage"], os.environ
+            )
         self.metadata[identity.package_sha256] = manifest.to_wire()
         return package
 
@@ -378,7 +431,7 @@ class UnifiedRuntime:
         lock.__enter__()
         self.owner_lock = lock
 
-    async def prepare_startup(self, *, recovery_target=None):
+    async def prepare_startup(self, *, recovery_target=None, bundled=None):
         """Load only declared trusted startup hooks before the app builds services."""
         self._lock_owner()
         if recovery_target is not None:
@@ -389,11 +442,24 @@ class UnifiedRuntime:
             print(
                 f"[startup] Unified recovery disabled: {', '.join(disabled) or 'already disabled'}"
             )
+        bundled = bundled or {}
+        self.bundled_pine = PINE_ID in bundled
+        if bundled and not self.safe_mode and not self.script_host_disabled:
+            from app.plugin_security_v2.errors import PlatformSecurityError
+
+            from .script_runtime import stage_bundled_script
+
+            for runtime_id, descriptor in bundled.items():
+                try:
+                    await asyncio.to_thread(
+                        stage_bundled_script, self, runtime_id, descriptor
+                    )
+                except (OSError, ValueError, PlatformSecurityError) as exc:
+                    self.errors[runtime_id] = str(exc)
         if not self.safe_mode:
             _, plan = await asyncio.to_thread(self.store.execution_plan)
             if sum(len(manifest.entries) for manifest, _ in plan) > 256:
                 raise LifecycleError("active execution plan exceeds 256 entries")
-            legacy = getattr(self.app.state, "trusted_extension_factories", {})
             for manifest, identity in plan:
                 entries = [
                     entry
@@ -410,14 +476,6 @@ class UnifiedRuntime:
                         )
                     if any(dep in self.errors for dep, _ in manifest.dependencies):
                         raise LifecycleError("startup dependency failed")
-                    if any(
-                        target in legacy
-                        for entry in entries
-                        for target in entry.startup
-                    ):
-                        raise LifecycleError(
-                            "startup target is already owned by a legacy extension"
-                        )
                     package = await self._materialize(manifest, identity)
                     for entry in entries:
                         run = self._entry(package, entry)
@@ -441,6 +499,8 @@ class UnifiedRuntime:
                     self.attempted[manifest.id] = identity
                     self.errors[manifest.id] = str(exc)
         self.composition.frozen = True
+        if not self.safe_mode and not self.script_host_disabled:
+            await self.reconcile(start_only=SCRIPT_BUNDLES.keys())
 
     async def start(self):
         self._lock_owner()
@@ -640,6 +700,30 @@ class UnifiedRuntime:
             and record["packageSha256"] == value["identity"]["packageSha256"]
         )
 
+    def active_appearance(self):
+        snapshot = self.store.snapshot()
+        selections = snapshot.get("appearance", {})
+        result = dict.fromkeys(APPEARANCE_KINDS)
+        for kind in APPEARANCE_KINDS:
+            plugin_id = selections.get(kind)
+            package = self.packages.get(plugin_id)
+            if (
+                self.safe_mode
+                or not package
+                or not package["coreReady"]
+                or plugin_id in self.errors
+            ):
+                continue
+            record = snapshot["plugins"][plugin_id]
+            identity = package["identity"]
+            if (
+                record["enabled"]
+                and record["generation"] == identity.generation
+                and record["packageSha256"] == identity.package_sha256
+            ):
+                result[kind] = package["data"].get(kind)
+        return result
+
     async def realm_plan(self, client_id, realm):
         await self.reconcile()
         session = self._session(client_id, realm)
@@ -685,6 +769,7 @@ class UnifiedRuntime:
             "hostInstance": self.instance,
             "safeMode": self.safe_mode,
             "entries": entries,
+            **({"appearance": self.active_appearance()} if realm == "frontend" else {}),
             "errors": dict(self.errors),
         }
 
@@ -902,5 +987,6 @@ class UnifiedRuntime:
             "executorsAttached": self.ready,
             "plugins": plugins,
             "orphaned": orphaned,
+            "appearance": snapshot.get("appearance", {}),
             "errors": dict(self.errors),
         }

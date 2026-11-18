@@ -280,8 +280,8 @@ class Peer:
             scope = {**scope, 'client': ('127.0.0.1', 50000)}
         await self.app(scope, receive, send)
 with TestClient(Peer(app), base_url='http://127.0.0.1:18080') as client:
-    assert app.state.extension_offline_probe == 'guarded'
-    assert not app.state.trusted_extension_host.errors
+    assert not hasattr(app.state, 'extension_offline_probe')
+    assert client.get('/health').json()['local_offline']['network']['installed']
     bound_replay = app.state.data_manager_core.replay.service
     assert type(bound_replay).__name__ == 'TakeoverReplayService'
     assert bound_replay is app.state.replay_runtime.service
@@ -289,13 +289,14 @@ with TestClient(Peer(app), base_url='http://127.0.0.1:18080') as client:
     assert not app.state.unified_plugin_runtime.errors
     route = '/api/v2/plugins/manage/extensions'
     assert client.get(route).status_code == 403
-    headers = app.state.trusted_extension_management_guard.trusted_headers()
-    result = client.get(route, headers=headers)
+    headers = app.state.unified_management_guard.trusted_headers()
+    assert client.get(route, headers=headers).status_code == 410
+    assert client.get(route + '/plan', headers=headers).status_code == 410
+    assert client.get(route + '/desktop', headers=headers).status_code == 410
+    result = client.get('/api/v2/plugins/manage/unified/legacy-extensions', headers=headers)
     assert result.status_code == 200, result.text
-    assert len(result.json()['backendLoaded']) == 1
+    assert len(result.json()) == 1 and not result.json()[0]['appearanceOnly']
     assert client.get('/api/v2/plugins/manage/catalog', headers=headers).status_code == 403
-    revision = result.json()['revision']
-    assert client.get(route + '/plan', params={'afterRevision': revision}, headers=headers).json() == {'unchanged': True}
 assert not hasattr(app.state, 'extension_offline_probe')
 """
     environment = source_checkout_environment()

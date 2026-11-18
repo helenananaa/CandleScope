@@ -30,17 +30,18 @@ function fixture(t, platform = "darwin", arch = "arm64") {
     sha256: `sha256:${createHash("sha256").update(bytes).digest("hex")}`,
   };
   fs.writeFileSync(path.join(pluginsRoot, plugin.filename), bytes);
-  const writeManifest = (value) => fs.writeFileSync(
-    path.join(pluginsRoot, "manifest.json"), JSON.stringify(value),
-  );
   const pythonBytes = Buffer.from("isolated Python indicator bundle fixture");
-  const python = { runtimeId: "candlescope.python-indicator", filename: "python.cspkg", size: pythonBytes.length,
+  const python = { schema: "candlescope.bundled-unified-python/1", filename: "python.cspkg", size: pythonBytes.length,
     sha256: `sha256:${createHash("sha256").update(pythonBytes).digest("hex")}` };
   fs.writeFileSync(path.join(pluginsRoot, python.filename), pythonBytes);
-  writeManifest({ schemaVersion: 2, plugins: [plugin, python] });
+  const writePine = value => fs.writeFileSync(path.join(pluginsRoot, "unified-pine.json"), JSON.stringify(value));
+  const pine = { schema: "candlescope.bundled-unified-pine/1", filename: plugin.filename, size: plugin.size, sha256: plugin.sha256 };
+  const writePython = value => fs.writeFileSync(path.join(pluginsRoot, "unified-python.json"), JSON.stringify(value));
+  writePython(python);
+  writePine(pine);
   return {
     context: { packager: { projectDir }, electronPlatformName: platform, arch: Arch[arch] },
-    plugin, python, pluginsRoot, writeManifest, controlRoot,
+    pine, python, pluginsRoot, writePython, writePine, controlRoot,
   };
 }
 
@@ -51,23 +52,22 @@ for (const [platform, arch] of [["darwin", "arm64"], ["darwin", "x64"], ["win32"
   });
 }
 
-test("packaging rejects absent, malformed, duplicate, and retired runtime selections", async (t) => {
-  const { context, plugin, python, writeManifest } = fixture(t);
-  for (const plugins of [undefined, null, {}, [], [null], [plugin], [python], [plugin, plugin], [python, python], [plugin, null],
-    [{ ...plugin, runtimeId: "candlescope.pyne" }],
-    [plugin, { ...plugin, runtimeId: "candlescope.pyne" }], [plugin, python, python]]) {
-    writeManifest({ schemaVersion: 2, plugins });
-    await assert.rejects(checkDesktopRuntime(context), /bundled first-party runtimes/);
-  }
-  writeManifest({ schemaVersion: 1, plugins: [plugin] });
-  await assert.rejects(checkDesktopRuntime(context), /bundled first-party runtimes/);
+test("packaging rejects missing unified descriptors and retired script manifests", async (t) => {
+  const { context, pluginsRoot, python, writePython } = fixture(t);
+  fs.unlinkSync(path.join(pluginsRoot, "unified-python.json"));
+  await assert.rejects(checkDesktopRuntime(context), /bundled first-party runtime/);
+  writePython({ ...python, schema: "candlescope.bundled-unified-pyne/1" });
+  await assert.rejects(checkDesktopRuntime(context), /descriptor is invalid/);
+  writePython(python);
+  fs.writeFileSync(path.join(pluginsRoot, "manifest.json"), JSON.stringify({ schemaVersion: 2 }));
+  await assert.rejects(checkDesktopRuntime(context), /Retired script runtime manifest/);
 });
 
 test("packaging still enforces bundle size and hash", async (t) => {
-  const { context, plugin, python, pluginsRoot, writeManifest } = fixture(t);
-  writeManifest({ schemaVersion: 2, plugins: [{ ...plugin, size: plugin.size + 1 }, python] });
+  const { context, pine, python, pluginsRoot, writePine } = fixture(t);
+  writePine({ ...pine, size: pine.size + 1 });
   await assert.rejects(checkDesktopRuntime(context), /Bundled runtime hash mismatch/);
-  writeManifest({ schemaVersion: 2, plugins: [plugin, python] });
+  writePine(pine);
   fs.writeFileSync(path.join(pluginsRoot, python.filename), Buffer.alloc(python.size));
   await assert.rejects(checkDesktopRuntime(context), /Bundled runtime hash mismatch: candlescope.python-indicator/);
 });

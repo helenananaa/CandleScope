@@ -17,13 +17,14 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from app.plugin_security_v2.management import LocalManagementGuard
 
 from .bundle import MAX_PACKAGE_BYTES
+from .legacy_extensions import legacy_extensions, stage_legacy_appearance
 from .store import LifecycleError
 
 
 async def _runtime(request, *, background=False):
     guard = getattr(request.app.state, "plugin_platform_v2_management_guard", None)
     if not isinstance(guard, LocalManagementGuard):
-        guard = getattr(request.app.state, "trusted_extension_management_guard", None)
+        guard = getattr(request.app.state, "unified_management_guard", None)
     if not isinstance(guard, LocalManagementGuard):
         raise HTTPException(503, "Plugin management is unavailable")
     await (guard.authorize_background(request) if background else guard(request))
@@ -59,6 +60,41 @@ def create_unified_router():
         await runtime.reconcile()
         async with runtime.lock:
             return await asyncio.to_thread(runtime.catalog)
+
+    @router.get("/manage/unified/legacy-extensions")
+    async def legacy(request: Request):
+        runtime = await _runtime(request)
+        try:
+            return await asyncio.to_thread(legacy_extensions, runtime.store)
+        except (ValueError, OSError) as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @router.post("/manage/unified/stage-appearance")
+    async def migrate_appearance(request: Request):
+        runtime = await _runtime(request)
+        body = await _body(request)
+        if set(body) != {"digest"}:
+            raise HTTPException(400, "A reviewed legacy digest is required")
+        try:
+            return await asyncio.to_thread(
+                stage_legacy_appearance, runtime.store, body["digest"]
+            )
+        except (ValueError, OSError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @router.api_route(
+        "/manage/extensions", methods=["GET", "POST"], include_in_schema=False
+    )
+    @router.api_route(
+        "/manage/extensions/{operation:path}",
+        methods=["GET", "POST"],
+        include_in_schema=False,
+    )
+    async def retired_extensions(request: Request):
+        await _runtime(request)
+        raise HTTPException(
+            410, "Trusted extensions require an updated unified plugin package"
+        )
 
     @router.post("/manage/unified/stage")
     async def stage(request: Request):
@@ -106,6 +142,18 @@ def create_unified_router():
                     body["digest"],
                     expected_revision=body["revision"],
                     acknowledgement=body["acknowledgement"],
+                )
+            elif action == "select-appearance" and set(body) == {
+                "action",
+                "id",
+                "kind",
+                "revision",
+            }:
+                result = await asyncio.to_thread(
+                    runtime.store.select_appearance,
+                    body["kind"],
+                    body["id"],
+                    expected_revision=body["revision"],
                 )
             elif action in {"disable", "uninstall"} and set(body) == {
                 "action",

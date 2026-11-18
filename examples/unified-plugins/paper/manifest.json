@@ -1,0 +1,15 @@
+{
+  "schema": "candlescope.unified-plugin/1",
+  "id": "candlescope.paper",
+  "name": "Paper / 纸白",
+  "version": "1.0.0",
+  "hostApiVersion": 1,
+  "trust": "restricted",
+  "entries": [
+    {
+      "id": "theme",
+      "kind": "data",
+      "path": "theme.json"
+    }
+  ]
+}

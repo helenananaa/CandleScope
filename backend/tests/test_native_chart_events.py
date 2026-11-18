@@ -1,9 +1,17 @@
 """Actual isolated Pine + real matching + resumable special-chart event clocks."""
 
 import pytest
-from tests.test_native_backtests import runtime, terminal, pytestmark
+from app.backtest.native import resolve_plugin
 from tests.test_external_replay import payload
+from tests.test_native_backtests import pytestmark, runtime_at, terminal
 from tests.test_native_replay import settle
+
+
+@pytest.fixture
+def runtime(tmp_path, qualified_pine):
+    for host, request in runtime_at(tmp_path):
+        host.native.resolver = resolve_plugin
+        yield host, request
 
 
 def source(ticks, fills):

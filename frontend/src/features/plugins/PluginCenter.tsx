@@ -1,5 +1,5 @@
 import { Button } from "../../components/ui/Button.js";
-import { Badge, InlineAlert } from "../../components/ui/Display.js";
+import { InlineAlert } from "../../components/ui/Display.js";
 import { Input, Select } from "../../components/ui/Field.js";
 import { TabPanel, Tabs } from "../../components/ui/Choice.js";
 import { describeError } from "../../i18n/serverErrors.js";
@@ -53,8 +53,6 @@ export function PluginSettingsPanel({ runtime, initialSection = "installed", onB
   const visible = filterPlugins(plugins, query, filter);
   const selected = visible.find((item) => item.id === selectedId) ?? visible[0] ?? null;
   const detailState = usePluginDetail(runtime, selected?.id ?? null);
-  const compatibility = runtime.view.catalog?.compatibility;
-  const engines = (compatibility?.contributions ?? []).filter((item) => `${item.title} ${item.runtimeId} ${item.languages.map((language) => language.name).join(" ")}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   const platformEnabled = runtime.view.catalog?.platform.enabled === true;
   const loadMarket = runtime.actions.loadMarketplaceStatus;
   const management = runtime.view.managementAvailable;
@@ -126,14 +124,6 @@ export function PluginSettingsPanel({ runtime, initialSection = "installed", onB
             {query || filter !== "all" ? <Button onClick={() => { setQuery(""); setFilter("all"); }}>{t("interval.clear")}</Button> : platformEnabled && management && <Button variant="primary" onClick={() => navigate("install")}>{t("pc.install")}</Button>}
           </div>}
         </div>
-        {engines.length > 0 && filter === "all" && <section className="pc-engines"><header><div><h3>{t("plugin.scriptRuntimes")}</h3><p>{t("pc.enginesHint")}</p></div><span>{engines.length}</span></header>
-          {engines.some((engine) => !engine.available) && <p role="status">{t("plugin.unavailable")}: {engines.filter((engine) => !engine.available).map((engine) => engine.title).join(", ")}. {t("native.platformHelp")}</p>}
-          <div className="pc-engine-grid">{engines.map((engine) => <article key={engine.id} data-v1-runtime={engine.runtimeId}>
-            <div><strong>{engine.title}</strong><Badge tone={engine.available ? "success" : "neutral"}>{engine.available ? t("plugin.available") : t("plugin.unavailable")}</Badge></div>
-            <p>{engine.languages.map((item) => item.name).join(" · ")} · {engine.version}</p>
-            <details className="plugin-technical-details"><summary>{t("plugin.techDetails")}</summary><dl><dt>{t("plugin.runtime")}</dt><dd>{engine.runtimeId}</dd><dt>{t("plugin.protocol")}</dt><dd>{engine.protocol}</dd></dl></details>
-          </article>)}</div>
-        </section>}
       </>}
       {section === "discover" && <>
         {marketplaceError && <InlineAlert tone="danger" action={<Button size="sm" onClick={() => void runMarketplace("refresh-status", () => runtime.actions.refresh())}>{t("shell.retry")}</Button>}>{marketplaceError}</InlineAlert>}

@@ -19,6 +19,7 @@ from app.plugin_security_v2.sandbox import (
     sandbox_profile_name,
 )
 
+from .script_bundle import SCRIPT_BUNDLES
 from .store import LifecycleError
 
 PROTOCOL = "candlescope.unified-entry/1"
@@ -222,6 +223,7 @@ class SidecarEntry:
             arguments = (
                 (
                     "-I",
+                    "-B",
                     "-u",
                     "-c",
                     "import runpy,sys;sys.path.insert(0,sys.argv[1]);runpy.run_path(sys.argv[2],run_name='__main__')",
@@ -235,6 +237,15 @@ class SidecarEntry:
                 if entry.runtime == "wasm-component"
                 else (str(path),)
             )
+        script = SCRIPT_BUNDLES.get(context.id)
+        max_processes = 1
+        if (
+            script is not None
+            and context.trust == "full-trust"
+            and entry.runtime == "python-module"
+            and entry.id == script.entry
+        ):
+            max_processes = script.max_processes
         self.transport = PlatformV2Transport(
             SidecarProcessSpec(
                 identity=f"{context.id}:{entry.id}",
@@ -242,6 +253,7 @@ class SidecarEntry:
                 arguments=arguments,
                 working_directory=root,
                 manage_process_tree=True,
+                max_processes=max_processes,
                 terminate_on_cancel=True,
                 trust_level="untrusted"
                 if context.trust == "restricted"

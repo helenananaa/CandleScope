@@ -63,7 +63,7 @@ def test_application_shutdown_keeps_both_sqlite_owners_until_cleanup_finishes(
         monkeypatch.setattr(replay.store, 'create_session', held_registration)
         monkeypatch.setattr(main_module, 'app', SimpleNamespace(state=SimpleNamespace(
             data_manager_core=core, trading_accounts=service, replay_runtime=runtime)))
-        monkeypatch.setattr(main_module, 'stop_extensions', noop)
+        monkeypatch.setattr(main_module, 'stop_unified', noop)
         monkeypatch.setattr(symbol_catalog, 'cancel_exchange_metadata_refreshes', noop)
         monkeypatch.setattr(symbol_catalog, 'configure_exchange_metadata_foreground_probe', lambda _: None)
         monkeypatch.setattr(history_worker, 'shutdown_builtin_history', noop)
@@ -153,7 +153,7 @@ def test_application_shutdown_drains_physical_account_read_before_closing_ledger
         store.close = close_ledger
         monkeypatch.setattr(main_module, 'app', SimpleNamespace(state=SimpleNamespace(
             data_manager_core=core, trading_accounts=service)))
-        monkeypatch.setattr(main_module, 'stop_extensions', noop)
+        monkeypatch.setattr(main_module, 'stop_unified', noop)
         monkeypatch.setattr(symbol_catalog, 'cancel_exchange_metadata_refreshes', noop)
         monkeypatch.setattr(symbol_catalog, 'configure_exchange_metadata_foreground_probe', lambda _: None)
         monkeypatch.setattr(history_worker, 'shutdown_builtin_history', noop)
