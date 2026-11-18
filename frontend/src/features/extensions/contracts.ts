@@ -1,3 +1,4 @@
+import type { PluginChartReceipt, PluginChartScope } from "../plugins/unifiedChartContext.js";
 import type * as React from "react";
 
 export interface ExtensionManifest {
@@ -45,6 +46,13 @@ export type Dispose = () => void | Promise<void>;
 
 /** Window-scoped API. Application background work belongs in a backend entry. */
 export interface ExtensionContext {
+  /** Available on unified frontend entries. The host binds reads and results to the selected chart observation. */
+  charts?: {
+    list(): PluginChartScope[];
+    isCurrent(scope: PluginChartScope): boolean;
+    invoke(scope: PluginChartScope, entryId: string, input?: unknown): Promise<PluginChartReceipt>;
+  };
+
   apiVersion: 1;
   id: string;
   React: typeof React;

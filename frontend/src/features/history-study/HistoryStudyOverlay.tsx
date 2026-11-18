@@ -1,3 +1,4 @@
+import { MAX_PLUGIN_CHART_BARS, observePluginBar, usePluginChartSource } from "../plugins/unifiedChartContext.js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Badge, Button, InlineAlert, Input } from "../../components/ui/index.js";
 import { useChartSurfaceRuntime } from "../../chart-adapter/useChartSurfaceRuntime.js";
@@ -115,6 +116,20 @@ export default function HistoryStudyOverlay({ cellId, revision, workspaceId, lin
   }, [active, changePlaying, editor, onMove, playback, playing]);
   const version = Number(store.version);
   const rows = store.snapshot();
+  usePluginChartSource(`${workspaceId}:${cellId}`, !busy && !error && rows.length ? {
+    observe: () => Number(store.version) === version ? {
+      mode: "history-study", runId: input.id, trackId: cellId, seriesId: store.seriesKey ?? `study:${input.id}`,
+      symbol: series.symbol, interval: series.interval,
+      dataRevision: `${input.id}:${revision}:${version}`, visibleThroughMs: cursorMs,
+    } : null,
+    bars: ({ visibleThroughMs }) => rows.slice(-MAX_PLUGIN_CHART_BARS).flatMap(bar => {
+      const open = Number(bar.time) * 1000;
+      const end = open + (store.intervalSeconds ?? 0) * 1000 - 1;
+      return end <= visibleThroughMs && bar.is_closed === true ? observePluginBar(open, end, true, bar) : [];
+    }),
+    subscribe: listener => store.subscribe(listener),
+  } : null);
+
   const renderedVersion = useRef(version);
   useLayoutEffect(() => { renderedVersion.current = version; }, [version]);
   const linkedSurface = useMemo(() => createStudyLinkSurface(playback, () => renderedVersion.current, surface.actions), [playback, surface.actions]);

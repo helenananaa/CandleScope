@@ -1,3 +1,4 @@
+import { MAX_PLUGIN_CHART_BARS, observePluginBar, usePluginChartSource } from "../plugins/unifiedChartContext.js";
 import { useId, useState, type MouseEvent } from "react";
 import { Button, Checkbox, Disclosure, Field, InlineAlert, Select } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
@@ -120,6 +121,22 @@ export function StrategyResultReplayChart({ slot, chart, frame, display, disable
   const markers = replayChartMarkers(frame, chart.bars, ownsMarkers, display);
   const ma = display.showMa ? chart.ma : undefined;
   const last = chart.bars.at(-1);
+  const chartInstance = useId();
+  usePluginChartSource(`strategy:${chartInstance}:${slot}`, !disabled && frame.time_ms !== null && chart.bars.length ? {
+    observe: () => ({
+      mode: "strategy-replay", runId: frame.run_id, trackId: chart.dataset_id ?? slot,
+      seriesId: JSON.stringify([chart.dataset_id, symbol, chart.interval]), symbol, interval: chart.interval,
+      dataRevision: JSON.stringify([frame.snapshot_hash, frame.report_hash, chart.data_epoch, frame.cursor, frame.source_sequence]),
+      visibleThroughMs: frame.time_ms!,
+    }),
+    bars: ({ visibleThroughMs }) => chart.bars.slice(-MAX_PLUGIN_CHART_BARS).flatMap((bar, index, rows) => {
+      // The saved frame carries the last contributing event's time.
+      if (bar.close_time_ms === undefined || bar.close_time_ms > visibleThroughMs
+        || !bar.closed && index !== rows.length - 1) return [];
+      return observePluginBar(bar.open_time_ms, bar.close_time_ms, bar.closed, bar);
+    }),
+  } : null);
+
   const [tool, setTool] = useState<DrawingTool | null>(null);
   const [pending, setPending] = useState<{ owner: string; cursor: number; interval: string; point: ReplayDrawingPoint } | null>(null);
   const [drawingLimit, setDrawingLimit] = useState(false);

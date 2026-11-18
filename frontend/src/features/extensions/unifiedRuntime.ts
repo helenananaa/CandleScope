@@ -2,6 +2,7 @@ import { UnifiedEntryLifecycle, type UnifiedItem, type UnifiedPlan } from "../..
 import { pluginManagementAvailable, unifiedAssetBase, unifiedBackgroundRequest } from "../plugins/pluginPlatformApi.js";
 import { createExtensionContext, loadUnifiedFrontend } from "./runtime.js";
 import { extensionSafeMode } from "./state.js";
+import { pluginChartOwner, type PluginChartScope } from "../plugins/unifiedChartContext.js";
 
 const listeners = new Set<() => void>();
 let snapshot = { revision: 0, restartRequired: false, errors: {} as Record<string, string>, views: [] as UnifiedItem[] };
@@ -64,7 +65,32 @@ const host = new UnifiedEntryLifecycle({
     const owned = createExtensionContext({ manifest: { id: item.pluginId, internalApiVersion: 1 }, assetBase: item.assetBase }, guard, unifiedAssetBase, async () => {
       await unifiedBackgroundRequest("/check", { sessionId: currentPlan?.sessionId, instanceId: item.instanceId });
     }, (name) => name !== "shell" || startupInstances.has(item.instanceId));
-    Object.assign(owned.context, { identity: item.identity, entryId: item.entry.id, instanceId: item.instanceId });
+    Object.assign(owned.context, {
+      identity: item.identity, entryId: item.entry.id, instanceId: item.instanceId,
+      charts: {
+        list() {
+          guard();
+          return pluginChartOwner.list();
+        },
+        isCurrent(scope: PluginChartScope) {
+          guard();
+          return pluginChartOwner.isCurrent(scope);
+        },
+        async invoke(scope: PluginChartScope, entryId: string, input: unknown) {
+          guard();
+          if (!currentPlan) throw new Error("Plugin window is unavailable");
+          const result = await pluginChartOwner.invoke(scope, {
+            sessionId: currentPlan.sessionId, frontendInstanceId: item.instanceId, entryId,
+          }, input);
+          guard();
+          if (result.identity.pluginId !== item.identity.pluginId || result.identity.generation !== item.identity.generation
+            || result.identity.packageSha256 !== item.identity.packageSha256 || result.identity.version !== item.identity.version) {
+            throw new Error("Plugin activation changed");
+          }
+          return result;
+        },
+      },
+    });
     return owned;
   },
   report: reportEntry,
@@ -76,7 +102,6 @@ async function reportEntry(plan: UnifiedPlan, item: UnifiedItem, state: string, 
   if (item.entry.startup?.length && state === "running") sessionStorage.removeItem(startupMarker);
   return response;
 }
-let clientId = "";
 let started = false;
 let refreshing: Promise<void> | null = null;
 let currentPlan: UnifiedPlan | null = null;
@@ -91,9 +116,8 @@ export function prepareUnifiedShell(): Promise<void> {
 
 function syncPlan(beforeRender: boolean): Promise<void> {
   if (!pluginManagementAvailable()) return Promise.resolve();
-  clientId ||= crypto.randomUUID();
   refreshing ??= (async () => {
-    const plan = parseUnifiedPlan(await unifiedBackgroundRequest("/realm", { clientId, realm: "frontend" }));
+    const plan = parseUnifiedPlan(await unifiedBackgroundRequest("/realm", { clientId: pluginChartOwner.id, realm: "frontend" }));
     host.errors = { ...host.errors, ...plan.errors };
     currentPlan = plan;
     if (extensionSafeMode() || plan.safeMode) {

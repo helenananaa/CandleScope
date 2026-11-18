@@ -19,3 +19,11 @@ def activate(context):
 
 def invoke(context, payload):
     return {"identity": context.identity.to_wire(), "input": payload}
+
+
+def compute_chart(context, request):
+    context.ensure_current()
+    return {"points": [
+        {"timeMs": bar["openTimeMs"], "value": bar["close"]}
+        for bar in request["bars"]
+    ]}

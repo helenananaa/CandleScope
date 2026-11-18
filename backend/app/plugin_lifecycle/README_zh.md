@@ -55,6 +55,26 @@ Python 模块与 Node 模块、Java JAR、native executable、wasmtime 的启动
 profile，目前仅其支持的平台可准入；不支持时拒绝，绝不回退 full-trust。
 统一 restricted capability 授权尚未接通，非空声明拒绝。
 
+## 图表计算
+
+统一前端入口通过 `ctx.charts.list()` 获取当前文档的图表身份。按选中的 scope 调用
+`ctx.charts.invoke(scope, entryId, input)`，可将该图表的已揭示窗口交给同一激活的
+后端或 sidecar。宿主可以通过同一管理入口显式选择执行实例；这要求现有可信管理会话，
+且图表必须属于该窗口会话。受限 iframe 没有这些宿主句柄。该入口不增加任意历史查询权限。
+
+`candlescope.unified-chart/1` scope 绑定文档、图表、图表实例、模式、运行、轨道、
+序列、品种、粒度、数据修订和 `visibleThroughMs`。实时模式无运行和轨道，回放模式必填。
+宿主从各图实际使用的行情投影读取最多 256 根 K 线，同时传 `openTimeMs`、已知截至时间
+`observedThroughMs` 和 `closed`，禁止包含超出可见边界的行。回放形成中的最后一根
+只能使用当前投影已经揭示的数据。切图、改数据版本、回退或关闭后撤销在途结果。
+延迟调用方如要稍后采用回执，应再次调用 `ctx.charts.isCurrent(receipt.scope)`。
+
+后端入口 `compute_chart(ctx, {scope, bars, input})` 和 sidecar 的 `chart.compute` 都返回
+`{points: [{timeMs, value}]}`。返回点的时间必须是同次请求中的 K 线开盘时间。
+后端计算不得将结果通过通用 `ctx.publish` 发布。图表调用返回活跃执行实例、包身份和
+原 scope，调用方只采用身份仍然匹配的回执。当前结果是有界点序列，Pine 的渲染类型和
+原生接线由后续迁移补齐。示例见 workbench 的 `chart-probe` 命令和 Python worker。
+
 ## 管理、状态与恢复
 
 `/api/v2/plugins/manage/unified` 的目录、stage/review/change/invoke 使用既有

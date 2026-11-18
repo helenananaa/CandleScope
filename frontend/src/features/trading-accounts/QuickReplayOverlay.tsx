@@ -1,3 +1,4 @@
+import { MAX_PLUGIN_CHART_BARS, observePluginBar, pluginProjectionRevision, usePluginChartSource } from "../plugins/unifiedChartContext.js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ChartErrorBoundary } from "../../app/AppProviders.js";
 import { createPriceLineSource } from "../../chart-adapter/externalPriceLineSource.js";
@@ -55,6 +56,7 @@ function stepSeconds(step: string, fallback: number): number {
 
 export default function QuickReplayOverlay({
   request,
+  pluginChartId,
   style,
   indicatorDefinitions,
   accountOverlay,
@@ -66,6 +68,7 @@ export default function QuickReplayOverlay({
   onExit,
 }: {
   request: QuickReplayRequest;
+  pluginChartId?: string;
   style: QuickReplayChartStyle;
   indicatorDefinitions: readonly IndicatorDefinition[];
   accountOverlay?: ChartAccountOverlaySettings | undefined;
@@ -207,6 +210,21 @@ export default function QuickReplayOverlay({
   const version = useSyncExternalStore(subscribe, getVersion, getVersion);
   const snapshot = useMemo(() => { void version; return store.snapshot(); }, [store, version]);
   const lastVisible = shown.at(-1)?.time ?? null;
+  usePluginChartSource(pluginChartId ?? "", pluginChartId && !loading && !loadFailed && !timeOutsideHistory && shown.length ? {
+    observe: () => ({
+      mode: "quick-replay", runId: `${request.accountId}:${trade.id}`, trackId: trade.symbol,
+      seriesId: JSON.stringify([instrument.exchange, instrument.marketType, instrument.symbol, request.interval]),
+      symbol: instrument.symbol, interval: request.interval,
+      dataRevision: `${step}:${pluginProjectionRevision(shown)}`,
+      visibleThroughMs: cursor * 1000,
+    }),
+    bars: ({ visibleThroughMs }) => shown.slice(-MAX_PLUGIN_CHART_BARS).flatMap(bar => {
+      const open = bar.time * 1000;
+      const end = (bar.time + intervalSec) * 1000 - 1;
+      return observePluginBar(open, Math.min(end, visibleThroughMs), end < visibleThroughMs, bar);
+    }),
+  } : null);
+
   const dataMeta = useMemo<ChartDataCommitMeta>(() => {
     const description = store.describe();
     return {

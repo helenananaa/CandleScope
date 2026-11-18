@@ -21,6 +21,11 @@ for line in sys.stdin:
         }
     elif method == "invoke":
         response["result"] = {"input": params["input"]}
+    elif method == "chart.compute":
+        response["result"] = {"points": [
+            {"timeMs": bar["openTimeMs"], "value": bar["close"]}
+            for bar in params["bars"]
+        ]}
     else:
         response["error"] = {
             "code": -32601,

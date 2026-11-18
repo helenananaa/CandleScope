@@ -83,7 +83,7 @@ try {
   server = await preview({ root, build: { outDir: destination }, preview: { host: "127.0.0.1", port: 0, strictPort: false } });
   const url = server.resolvedUrls.local[0] + "scripts/" + fixture
     + (replayNotes ? "?backend=" + encodeURIComponent(process.env.CANDLESCOPE_QA_BACKEND_URL ?? "") : "");
-  const log = fs.openSync(path.join(output, "chrome.log"), "a");
+  const log = fs.openSync(path.join(output, "chrome.log"), "w");
   let args = ["--headless=new", "--remote-debugging-port=0", "--no-first-run", "--no-default-browser-check", `--user-data-dir=${profile}`, url];
   if (native) {
     const host = path.join(output, "electron-host.cjs");
@@ -101,10 +101,9 @@ app.on("window-all-closed",()=>app.quit());
     Math.max(10_000, Number(process.env.CANDLESCOPE_TEST_BROWSER_START_TIMEOUT_MS) || 10_000));
   while (Date.now() < browserStartDeadline) {
     try { lines = fs.readFileSync(path.join(profile, "DevToolsActivePort"), "utf8").trim().split("\n"); break; } catch { /* browser not ready */ }
-    if (native) {
-      const match = fs.readFileSync(path.join(output, "chrome.log"), "utf8").match(/DevTools listening on ws:\/\/127\.0\.0\.1:(\d+)(\/devtools\/browser\/[^\s]+)/);
-      if (match) { lines = [match[1], match[2]]; break; }
-    }
+    // macOS Chrome can announce CDP before it writes a port file.
+    const match = fs.readFileSync(path.join(output, "chrome.log"), "utf8").match(/DevTools listening on ws:\/\/127\.0\.0\.1:(\d+)(\/devtools\/browser\/[^\s]+)/);
+    if (match) { lines = [match[1], match[2]]; break; }
     await sleep(100);
   }
   if (!lines) throw new Error("Owned test browser did not start");
