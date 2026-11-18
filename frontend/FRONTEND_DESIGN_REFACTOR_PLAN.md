@@ -648,6 +648,12 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - Layout in Spanish and French (184 visits): the one cut the app writes itself was the Spanish tape's bubble threshold in the narrow rail, already cut before; the tape's two filters now share the row by content, and Spanish "off" there is "Ninguna". No screens: the local backend stopped answering after the audits (QA, Known gaps).
 - Next: row 7c4's remaining 17 languages, two per PR: 7c5 Italian and Portuguese (PT).
 
+**Phase 7c5 is done (branch `design/phase-7c5-it-pt`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_7C5.md`](../docs/FRONTEND_DESIGN_QA_PHASE_7C5.md).
+
+- Italian and European Portuguese have their own feature files (`catalogs/italianFeatureMessages.ts`, `catalogs/europeanPortugueseFeatureMessages.ts`: the seven feature blocks, 1,218 messages each, loaded only with their language), their inline English translated (215 Italian, 163 Portuguese), and the 27 English duplicates that hid the native block removed. The Portuguese starts from the Brazilian blocks, converted to Portugal's usage and the pre-1990 spelling `pt-PT.ts` uses, and reviewed against the current English. Messages shown in English: Italian 1,209 → 25, Portuguese 1,134 → 26; what is left is names and trading terms that read the same.
+- Layout in Italian and Portuguese (152 visits, the 19 states that open without the local service, which kept hanging): the one cut the app writes itself was the CSV import's volume option, already cut before; it is shorter now. The rail's tab titles fit.
+- Next: row 7c4's remaining 15 languages, two per PR: 7c6 Dutch and Polish.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.
