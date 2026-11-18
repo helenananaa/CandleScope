@@ -9,6 +9,7 @@ from pathlib import Path
 
 from app.plugin_core_v2.private_storage import StorageNamespace
 from app.plugin_core_v2.runtime import CorePluginPlatform
+from app.plugin_installer_v2.errors import PlatformInstallerBaseError
 from app.plugin_lifecycle.bundle import BUNDLE_SCHEMA, build_package
 from app.plugin_marketplace_v2 import encode_base64url
 from app.plugin_security_v2.storage import atomic_write_json
@@ -147,7 +148,12 @@ def main(root: Path) -> None:
     )
     # This seeds the disk installation and its signed authorization evidence.
     # The macOS product applies its normal sandbox execution gate on launch.
-    platform.installer.install(old.path, expected_sha256=old.sha256, enabled=True)
+    try:
+        platform.installer.install(old.path, expected_sha256=old.sha256, enabled=True)
+    except PlatformInstallerBaseError as exc:
+        raise RuntimeError(
+            f"unable to seed the tested predecessor: {exc.to_dict()}"
+        ) from exc
     publisher_identity = f"publisher-key:{builder.publisher['keyId']}"
     platform.grant_store.reconcile(
         old.manifest,
