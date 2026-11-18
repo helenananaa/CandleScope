@@ -20,6 +20,7 @@ from candlescope_plugin_sdk.platform_v2 import (
 from candlescope_plugin_sdk.unified import Manifest, ManifestError
 from candlescope_plugin_sdk.unified.manifest import MAX_MANIFEST_BYTES, package_path
 
+from .appearance import MAX_APPEARANCE_BYTES, appearance_kind, parse_appearance
 from .paths import is_link
 
 BUNDLE_SCHEMA = "candlescope.unified-bundle/1"
@@ -234,6 +235,14 @@ def verify_package(path: Path | str) -> VerifiedPackage:
                     raise PackageError(
                         "every entry must reference a pinned archive file"
                     )
+                for entry in manifest.entries:
+                    if kind := appearance_kind(entry):
+                        with archive.open(files[entry.path]) as source:
+                            parse_appearance(
+                                kind,
+                                source.read(MAX_APPEARANCE_BYTES + 1),
+                                manifest.trust,
+                            )
             return VerifiedPackage(manifest, sha256, size)
     except PackageError:
         raise

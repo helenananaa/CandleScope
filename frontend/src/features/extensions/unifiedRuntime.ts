@@ -1,14 +1,20 @@
-import { UnifiedEntryLifecycle, type UnifiedItem, type UnifiedPlan } from "../../../desktop/unified-entry-lifecycle.mjs";
+import { UnifiedEntryLifecycle, type UnifiedAppearance, type UnifiedItem, type UnifiedPlan } from "../../../desktop/unified-entry-lifecycle.mjs";
 import { pluginManagementAvailable, unifiedAssetBase, unifiedBackgroundRequest } from "../plugins/pluginPlatformApi.js";
 import { createExtensionContext, loadUnifiedFrontend } from "./runtime.js";
-import { extensionSafeMode } from "./state.js";
+import { applyExtensionTheme, extensionSafeMode, getExtensionState, publishExtensions } from "./state.js";
 import { pluginChartOwner, type PluginChartScope } from "../plugins/unifiedChartContext.js";
 
 const listeners = new Set<() => void>();
 let snapshot = { revision: 0, restartRequired: false, errors: {} as Record<string, string>, views: [] as UnifiedItem[] };
 const views = new Map<string, UnifiedItem>();
 const startupInstances = new Set<string>();
-const startupMarker = "candlescope-unified-shell-loading";
+const loading = new Set<string>();
+function startupMarker(item: UnifiedItem): string {
+  return `candlescope-unified-loading:${item.pluginId}:${item.entry.id}`;
+}
+function activationKey(item: UnifiedItem): string {
+  return `${item.identity.packageSha256}:${item.identity.generation}`;
+}
 export const getUnifiedState = () => snapshot;
 export const subscribeUnified = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 function changed() {
@@ -50,11 +56,11 @@ const host = new UnifiedEntryLifecycle({
       views.set(item.instanceId, item); changed();
       return () => { views.delete(item.instanceId); changed(); };
     } };
-    if (item.entry.startup?.length) {
-      const identity = `${item.identity.packageSha256}:${item.identity.generation}`;
-      if (sessionStorage.getItem(startupMarker) === identity) throw new Error("Previous shell startup was interrupted");
-      sessionStorage.setItem(startupMarker, identity);
-    }
+    const marker = startupMarker(item);
+    const identity = activationKey(item);
+    if (sessionStorage.getItem(marker) === identity) throw new Error("Previous plugin startup was interrupted");
+    sessionStorage.setItem(marker, identity);
+    loading.add(item.instanceId);
     return loadUnifiedFrontend(`${unifiedAssetBase(item.assetBase)}${item.entry.path}`);
   },
   createContext(item, guard) {
@@ -97,10 +103,13 @@ const host = new UnifiedEntryLifecycle({
 });
 
 async function reportEntry(plan: UnifiedPlan, item: UnifiedItem, state: string, error?: string) {
-  const response = await unifiedBackgroundRequest("/report", { sessionId: plan.sessionId, instanceId: item.instanceId,
+  const marker = startupMarker(item);
+  if (state !== "pending-restart" && loading.delete(item.instanceId)
+    && sessionStorage.getItem(marker) === activationKey(item)) {
+    sessionStorage.removeItem(marker);
+  }
+  return await unifiedBackgroundRequest("/report", { sessionId: plan.sessionId, instanceId: item.instanceId,
     state: item.entry.kind === "sandbox-view" && state === "running" ? "ready" : state, ...(error ? { error } : {}) });
-  if (item.entry.startup?.length && state === "running") sessionStorage.removeItem(startupMarker);
-  return response;
 }
 let started = false;
 let refreshing: Promise<void> | null = null;
@@ -114,6 +123,15 @@ export function prepareUnifiedShell(): Promise<void> {
   return syncPlan(true);
 }
 
+function applyAppearance(appearance: UnifiedAppearance | undefined, safeMode: boolean): void {
+  const { theme, layout } = safeMode || !appearance ? { theme: null, layout: null } : appearance;
+  const state = getExtensionState();
+  if (JSON.stringify(state.theme) !== JSON.stringify(theme)) applyExtensionTheme(theme);
+  if (JSON.stringify(state.theme) !== JSON.stringify(theme) || JSON.stringify(state.layout) !== JSON.stringify(layout) || state.safeMode !== safeMode) {
+    publishExtensions({ theme, layout, safeMode });
+  }
+}
+
 function syncPlan(beforeRender: boolean): Promise<void> {
   if (!pluginManagementAvailable()) return Promise.resolve();
   refreshing ??= (async () => {
@@ -121,6 +139,7 @@ function syncPlan(beforeRender: boolean): Promise<void> {
     host.errors = { ...host.errors, ...plan.errors };
     currentPlan = plan;
     if (extensionSafeMode() || plan.safeMode) {
+      applyAppearance(undefined, true);
       await host.reconcile({ ...plan, safeMode: true, entries: [] });
       return;
     }
@@ -145,6 +164,7 @@ function syncPlan(beforeRender: boolean): Promise<void> {
       }
     }
     await host.reconcile({ ...plan, entries });
+    applyAppearance(plan.appearance, false);
   })().catch((error: unknown) => { host.errors.runtime = String(error); changed(); }).finally(() => { refreshing = null; });
   return refreshing;
 }

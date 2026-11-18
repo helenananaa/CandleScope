@@ -30,6 +30,7 @@ from app.plugin_security_v2.storage import (
     security_lock,
 )
 
+from .appearance import APPEARANCE_KINDS, appearance_kind
 from .bundle import CHUNK, MAX_PACKAGE_BYTES, VerifiedPackage, verify_package
 from .paths import is_link
 
@@ -125,7 +126,11 @@ class PackageStore:
     def _validate(self, state: dict) -> dict:
         if (
             not isinstance(state, dict)
-            or set(state) != {"schema", "revision", "generation", "plugins"}
+            or set(state)
+            not in (
+                {"schema", "revision", "generation", "plugins"},
+                {"schema", "revision", "generation", "plugins", "appearance"},
+            )
             or state["schema"] != REGISTRY_SCHEMA
             or not _safe_integer(state["revision"])
             or not _safe_integer(state["generation"])
@@ -133,6 +138,17 @@ class PackageStore:
             or len(state["plugins"]) > 256
         ):
             raise LifecycleError("invalid unified registry")
+        appearance = state.get("appearance", {})
+        if (
+            not isinstance(appearance, dict)
+            or set(appearance) - set(APPEARANCE_KINDS)
+            or any(
+                value is not None
+                and (not isinstance(value, str) or value not in state["plugins"])
+                for value in appearance.values()
+            )
+        ):
+            raise LifecycleError("invalid unified appearance selection")
         generations = set()
         for plugin_id, record in state["plugins"].items():
             identifier(plugin_id, "registry.pluginId")
@@ -207,6 +223,18 @@ class PackageStore:
                 )
             manifests.append(manifest)
         activation_order(manifests)
+        enabled = {manifest.id: manifest for manifest in manifests}
+        for kind, plugin_id in state.get("appearance", {}).items():
+            if plugin_id is not None and (
+                plugin_id not in enabled
+                or not any(
+                    appearance_kind(entry) == kind
+                    for entry in enabled[plugin_id].entries
+                )
+            ):
+                raise LifecycleError(
+                    "appearance selection must reference an enabled contribution"
+                )
 
     def _recover(self) -> None:
         if not self.journal.exists():
@@ -466,6 +494,28 @@ class PackageStore:
                 "generation": after["generation"],
                 "history": [item for item in history if item != digest][:8],
             }
+            for kind, selected in after.get("appearance", {}).items():
+                if selected == manifest.id and not any(
+                    appearance_kind(entry) == kind for entry in manifest.entries
+                ):
+                    after["appearance"][kind] = None
+            self._commit(before, after)
+            return copy.deepcopy(after)
+
+    def select_appearance(
+        self, kind: str, plugin_id: str | None, *, expected_revision: int
+    ) -> dict:
+        if kind not in APPEARANCE_KINDS:
+            raise LifecycleError("unsupported appearance kind")
+        if plugin_id is not None:
+            identifier(plugin_id, "pluginId")
+        with self._locked() as before:
+            after = self._next(before, expected_revision)
+            if plugin_id is not None and not after["plugins"].get(plugin_id, {}).get(
+                "enabled"
+            ):
+                raise LifecycleError("appearance provider must be enabled")
+            after.setdefault("appearance", {})[kind] = plugin_id
             self._commit(before, after)
             return copy.deepcopy(after)
 
@@ -501,6 +551,9 @@ class PackageStore:
             # The disabled flag revokes every dependent. Each later activation
             # allocates a fresh generation through the normal approval flow.
             after["plugins"][plugin_id]["generation"] = after["generation"]
+            for kind, selected in after.get("appearance", {}).items():
+                if selected in disabled:
+                    after["appearance"][kind] = None
             self._commit(before, after)
             return tuple(sorted(disabled))
 
@@ -520,6 +573,9 @@ class PackageStore:
             else:
                 after["plugins"][plugin_id]["enabled"] = False
                 after["plugins"][plugin_id]["generation"] = after["generation"]
+            for kind, selected in after.get("appearance", {}).items():
+                if selected == plugin_id:
+                    after["appearance"][kind] = None
             self._commit(before, after)
             return copy.deepcopy(after)
 

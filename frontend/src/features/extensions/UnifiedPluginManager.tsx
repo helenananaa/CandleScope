@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { UnifiedIdentity, UnifiedManifest, UnifiedItem } from "../../../desktop/unified-entry-lifecycle.mjs";
-import { Badge, Button, Checkbox, FileDrop, InlineAlert } from "../../components/ui/index.js";
+import { Badge, Button, Checkbox, Field, FileDrop, InlineAlert, Select } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { OpaquePluginFrame } from "../plugins/SandboxPluginFrame.js";
@@ -8,8 +8,11 @@ import { pluginManagementAvailable, stageUnifiedPackage, unifiedAssetBase, unifi
 import { getUnifiedState, subscribeUnified, refreshUnified, reportUnifiedView } from "./unifiedRuntime.js";
 
 interface Review { packageSha256: string; manifest: UnifiedManifest; registryRevision: number; publisherVerified: false }
+const appearanceKinds = ["theme", "layout"] as const;
+type AppearanceKind = typeof appearanceKinds[number];
+interface LegacyExtension { id: string; name: string; version: string | null; digest: string; error: string | null; appearanceOnly: boolean }
 interface Catalog {
-  revision: number; safeMode: boolean; errors: Record<string,string>;
+  revision: number; safeMode: boolean; errors: Record<string,string>; appearance?: Partial<Record<AppearanceKind, string | null>>;
   orphaned?: {pluginId:string;entryId:string;state:string}[];
   plugins: { id: string; manifest?: UnifiedManifest; error?: string; desired: {enabled:boolean;packageSha256:string;history:string[]};
     entries: {id:string;kind:string; observed:{state:string;identity:UnifiedIdentity;instanceId:string}[]}[] }[];
@@ -21,11 +24,12 @@ function SandboxView({ item }: {item: UnifiedItem}) {
     onLoad={() => reportUnifiedView(item, "running")} />;
 }
 
-export default function UnifiedPluginManager({ onCountChange, query = "", filter = "all" }: {
-  onCountChange?: (count: number) => void; query?: string; filter?: string;
+export default function UnifiedPluginManager({ onCountChange, query = "", filter = "all", showAppearance = false }: {
+  onCountChange?: (count: number) => void; query?: string; filter?: string; showAppearance?: boolean;
 }) {
   useLocale();
   const [catalog, setCatalog] = useState<Catalog | null>(null);
+  const [legacy, setLegacy] = useState<LegacyExtension[]>([]);
   const [review, setReview] = useState<Review | null>(null);
   const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -43,6 +47,14 @@ export default function UnifiedPluginManager({ onCountChange, query = "", filter
     const timer = window.setInterval(read, 5000);
     return () => { mounted = false; clearInterval(timer); };
   }, [available]);
+  useEffect(() => {
+    if (!available || !showAppearance) return;
+    let mounted = true;
+    void unifiedManagementRequest("/legacy-extensions").then((value) => {
+      if (mounted) setLegacy(value as LegacyExtension[]);
+    }).catch((failure: unknown) => { if (mounted) setError(String(failure)); });
+    return () => { mounted = false; };
+  }, [available, showAppearance]);
   async function run(action: () => Promise<unknown>) {
     setBusy(true); setError("");
     try { await action(); await refreshUnified(); await reload(); }
@@ -76,6 +88,31 @@ export default function UnifiedPluginManager({ onCountChange, query = "", filter
     {!!catalog?.orphaned?.length && <InlineAlert>{t("extensions.orphanRunning")}</InlineAlert>}
     <FileDrop compact label={t("pc.install")} accept=".cspkg" disabled={!available || busy}
       onFiles={([file]) => { if (file) void run(async () => { setAccepted(false); setReview(await stageUnifiedPackage(file) as Review); }); }} />
+    {showAppearance && catalog && <div className="extension-toolbar">
+      {appearanceKinds.map((kind) => <Field label={t(`extensions.${kind}`)} key={kind}>
+        <Select aria-label={t(`extensions.${kind}`)} value={catalog.appearance?.[kind] ?? ""} disabled={!available || busy}
+          onChange={(event) => {
+            const id = event.currentTarget.value || null;
+            void run(() => unifiedManagementRequest("/change", {
+              action: "select-appearance", kind, id, revision: catalog.revision,
+            }));
+          }}>
+          <option value="">{t("extensions.appDefault")}</option>
+          {catalog.plugins.filter((plugin) => plugin.desired.enabled && plugin.entries.some((entry) => entry.kind === "data" && entry.id === kind))
+            .map((plugin) => <option key={plugin.id} value={plugin.id}>{plugin.manifest?.name ?? plugin.id}</option>)}
+        </Select>
+      </Field>)}
+    </div>}
+    {showAppearance && legacy.filter((item) => !catalog?.plugins.some((plugin) => plugin.id === item.id)).map((item) => <article className="extension-item" key={item.id}>
+      <header><strong>{item.name} {item.version}</strong></header>
+      {item.error && <InlineAlert tone="warning">{item.error}</InlineAlert>}
+      {item.appearanceOnly
+        ? <Button size="sm" disabled={!available || busy} onClick={() => void run(async () => {
+          setAccepted(false);
+          setReview(await unifiedManagementRequest("/stage-appearance", { digest: item.digest }) as Review);
+        })}>{t("unified.migrateAppearance")}</Button>
+        : <p>{t("unified.legacyUpgrade")}</p>}
+    </article>)}
     {review && <div className="extension-review">
       <strong>{review.manifest.name} · {review.manifest.version}</strong>
       <InlineAlert tone={review.manifest.trust === "full-trust" ? "warning" : "info"}>{review.manifest.trust === "full-trust" ? t("extensions.fullTrust") : t("unified.restricted")}</InlineAlert>

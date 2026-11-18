@@ -7,7 +7,6 @@ import inspect
 from contextlib import contextmanager
 
 from app.plugin_security_v2.storage import atomic_write_json, read_json
-from app.trusted_extensions.runtime import extension_factory
 
 from .store import LifecycleError
 
@@ -89,7 +88,4 @@ class StartupComposition:
 
 def startup_factory(app, target, default):
     runtime = getattr(app.state, "unified_plugin_runtime", None)
-    composed = runtime.composition.resolve(target, default) if runtime else default
-    return (
-        composed if composed is not default else extension_factory(app, target, default)
-    )
+    return runtime.composition.resolve(target, default) if runtime else default

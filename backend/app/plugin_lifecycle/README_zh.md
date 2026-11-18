@@ -36,7 +36,7 @@ CLI 的 `activate --root ...` 只提交隔离存储的期望配置，没有内�
 | desktop | Electron 主进程 ESM，full-trust | 同 JS hook；ctx 含 electron/host、包身份、入口/实例、root/storage、track |
 | sidecar | 既有进程监督与 JSON-RPC 传输，新统一协议 | 下述 activate/invoke；停止由宿主管理进程树 |
 | sandbox-view | 唯一 opaque iframe 网关 | sandbox allow-scripts、无 same-origin、无宿主 SDK；资源可撤销；挂载前 ready，加载后 running |
-| data | 有界 JSON 校验与读取 | ready；尚不自动应用为主题或布局 |
+| data | 有界 JSON 校验与读取 | ready。主题与布局可在可信扩展页选择 |
 
 Python ctx 暴露 app、identity、entry_id、root、storage、ensure_current、publish、track、task。
 `task` 的未处理异常会使包失败；track 资源逆序清理。
@@ -104,6 +104,17 @@ Pine 观察日志保存在 `private/candlescope.pine-compat/observations-v1.sqli
 应用启动和策略解析只读取统一激活记录。旧 `runtime-registry.json`、旧归档和已保存
 脚本留在原地。普通桌面构建使用统一归档，旧的脚本安装命令和应用安装端点会提示更新。
 源码中的历史资格构建仍可生成旧测试制品。
+
+## 主题、布局和旧扩展
+
+统一包通过保留 ID 为 `theme` 或 `layout` 的 `data` 入口贡献外观。
+主题声明 `candlescope.theme/1`、基础色系和允许的视图 token。布局声明
+`candlescope.layout/1` 和完整的宿主槽位顺序，需要完全信任。选择与启用记录同事务保存。
+停用、卸载或换成无该贡献的版本会清除对应选择。恢复模式使用默认外观。
+
+可信扩展页列出历史安装供核对。纯外观包可以从原摘要生成待审核的统一数据包，
+确认后重新选择外观。含代码的扩展需要更新版统一归档。旧制品、记录及被扩展写入的
+文件保留。旧加载 API 返回更新提示。
 
 ## 管理、状态与恢复
 

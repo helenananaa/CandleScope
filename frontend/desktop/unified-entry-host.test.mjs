@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -136,4 +136,50 @@ test("an owner rejecting activation acknowledgement prevents local adoption",asy
   await lifecycle.reconcile(plan(item()));
   assert.equal(lifecycle.diagnostics().active.length,0);
   assert.deepEqual(events,["cleanup","disposed"]);
+});
+
+
+test("an interrupted desktop activation stays blocked while unrelated entries start", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "unified-desktop-recovery-"));
+  try {
+    const markerPath = path.join(root, "marker.json");
+    const code = "export function activate(ctx) { ctx.host.events.push(ctx.id); }";
+    const files = {};
+    for (const name of ["one.mjs", "other.mjs"]) {
+      await writeFile(path.join(root, name), code);
+      files[name] = createHash("sha256").update(code).digest("hex");
+    }
+    const blocked = { ...item(), root, files };
+    const allowed = { ...item("other"), root, files, pluginId: "example.other" };
+    allowed.identity.pluginId = allowed.pluginId;
+    allowed.manifest.id = allowed.pluginId;
+    const marker = {
+      pluginId: blocked.pluginId,
+      packageSha256: blocked.identity.packageSha256,
+      generation: blocked.identity.generation,
+      entryId: blocked.entry.id,
+    };
+    await writeFile(markerPath, JSON.stringify(marker));
+    const events = [];
+    const reports = [];
+    const host = new UnifiedDesktopHost({
+      markerPath, context: { host: { events } },
+      request: async (route, body) => {
+        if (route === "/realm") return plan(blocked, allowed);
+        reports.push(body);
+        return { ok: true };
+      },
+    });
+    try {
+      await host.start();
+      assert.deepEqual(events, ["example.other"]);
+      assert.match(host.diagnostics().errors[blocked.pluginId], /interrupted/);
+      assert.ok(reports.some((r) => r.instanceId === blocked.instanceId && r.state === "failed"));
+      assert.deepEqual(JSON.parse(await readFile(markerPath, "utf8")), marker);
+    } finally {
+      await host.stop();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

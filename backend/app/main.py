@@ -121,13 +121,10 @@ app = FastAPI(
     version=APP_VERSION,
 )
 app.include_router(support_router)
-from app.trusted_extensions.api import create_extension_router
-from app.trusted_extensions.runtime import prepare_extensions, activate_extensions, stop_extensions
 from app.plugin_lifecycle.api import create_unified_router
 from app.plugin_lifecycle.bootstrap import prepare_unified, prepare_unified_startup, activate_unified, stop_unified
 from app.plugin_lifecycle.composition import startup_factory
 
-app.include_router(create_extension_router())
 app.include_router(create_unified_router())
 
 
@@ -507,7 +504,6 @@ async def startup_event() -> None:
         if core is not None:
             await core.shutdown_strategy()
         await stop_unified(app)
-        await stop_extensions(app)
         raise
 
 
@@ -518,7 +514,6 @@ async def _startup_event_impl() -> None:
     app.state.event_loop_lag_monitor = lag_monitor
     app.state.runtime_mode = RUNTIME_MODE
     if RUNTIME_MODE != "LOCAL_OFFLINE":
-        await prepare_extensions(app)
         prepare_unified(app)
         await prepare_unified_startup(app)
 
@@ -538,7 +533,6 @@ async def _startup_event_impl() -> None:
             from app.data_engine.data_manager.core import DataManagerCore
             app.state.data_manager_core = DataManagerCore()
             app.state.local_data_runtime = local_runtime.data
-            await prepare_extensions(app)
             prepare_unified(app)
             await prepare_unified_startup(app)
             if BACKTEST_SETTINGS.enabled:
@@ -584,12 +578,10 @@ async def _startup_event_impl() -> None:
             if local_runtime is not None:
                 local_runtime.shutdown()
             await stop_unified(app)
-            await stop_extensions(app)
             await lag_monitor.stop()
             raise
         logger.info("Started LOCAL_OFFLINE runtime at %s", LOCAL_DATA_DIR)
         print("[startup] LOCAL_OFFLINE runtime [ok]")
-        await activate_extensions(app)
         await activate_unified(app)
         freeze_startup_heap(enabled=GC_FREEZE_STARTUP_HEAP)
         return
@@ -781,7 +773,6 @@ async def _startup_event_impl() -> None:
     # 5. Refresh exchange symbols in the background. Product search can serve
     # its last-known-good process cache while this best-effort task is pending.
     _schedule_symbol_catalog_refresh()
-    await activate_extensions(app)
     await activate_unified(app)
 
     # Keep the startup heap out of later full GC passes (see gc_policy).
@@ -897,7 +888,6 @@ async def _shutdown_components() -> None:
                 backtest_service.shutdown()
         local_runtime.shutdown()
         await stop_unified(app)
-        await stop_extensions(app)
         lag_monitor = getattr(app.state, "event_loop_lag_monitor", None)
         if lag_monitor is not None:
             await lag_monitor.stop()
@@ -1019,7 +1009,6 @@ async def _shutdown_components() -> None:
         await replay_runtime.shutdown(step_timeout=5)
 
     await stop_unified(app)
-    await stop_extensions(app)
     unfreeze_startup_heap()
     print("[shutdown] All components shut down")
 

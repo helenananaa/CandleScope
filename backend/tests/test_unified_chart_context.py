@@ -48,7 +48,6 @@ def chart_host(tmp_path):
     app = FastAPI()
     app.include_router(create_unified_router())
     guard = LocalManagementGuard(["http://127.0.0.1:15173"])
-    app.state.trusted_extension_management_guard = guard
     store = PackageStore(tmp_path / "store")
     candidate = tmp_path / "workbench.cspkg"
     sample = Path(__file__).resolve().parents[2] / "examples/unified-plugins/workbench"
@@ -60,6 +59,7 @@ def chart_host(tmp_path):
         acknowledgement=f"full-trust:{review.sha256}",
     )
     prepare_unified(app, store=store)
+    app.state.unified_management_guard = guard
     return app, app.state.unified_plugin_runtime, guard.trusted_headers()
 
 

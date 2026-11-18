@@ -21,6 +21,7 @@ from candlescope_plugin_sdk.unified.chart import (
 from app.plugin_security_v2.sandbox import restricted_runtime_profile
 from app.plugin_security_v2.storage import security_lock
 
+from .appearance import APPEARANCE_KINDS, appearance_kind, parse_appearance
 from .composition import StartupComposition
 from .executors import (
     BackendEntry,
@@ -290,6 +291,12 @@ class UnifiedRuntime:
                 self.errors.pop(plugin_id, None)
                 try:
                     self.validate(manifest)
+                    if any(
+                        entry.kind == "backend" for entry in manifest.entries
+                    ) and self.composition.interrupted(identity):
+                        raise LifecycleError(
+                            "previous startup failed; disable or reapprove this activation"
+                        )
                     if plugin_id in self.quarantined:
                         raise LifecycleError(
                             "previous cleanup incomplete; restart required"
@@ -321,17 +328,27 @@ class UnifiedRuntime:
                             )
 
                             with (root / entry.path).open("rb") as content:
-                                self.packages[plugin_id]["data"][entry.id] = (
-                                    loads_strict(
-                                        content.read(256 * 1024 + 1),
-                                        limits=JsonLimits(max_message_bytes=256 * 1024),
-                                    )
+                                raw = content.read(256 * 1024 + 1)
+                            if (
+                                hashlib.sha256(raw).hexdigest()
+                                != package["files"][entry.path]
+                            ):
+                                raise LifecycleError(
+                                    "data entry changed after verified extraction"
                                 )
+                            kind = appearance_kind(entry)
+                            package["data"][entry.id] = (
+                                parse_appearance(kind, raw, manifest.trust)
+                                if kind
+                                else loads_strict(
+                                    raw, limits=JsonLimits(max_message_bytes=256 * 1024)
+                                )
+                            )
                             continue
                         run = self.running.get((plugin_id, entry.id))
                         if run is None:
                             run = self._entry(package, entry)
-                        if entry.startup:
+                        if entry.kind == "backend":
                             with self.composition.executing(identity):
                                 await run.executor.start()
                         else:
@@ -443,7 +460,6 @@ class UnifiedRuntime:
             _, plan = await asyncio.to_thread(self.store.execution_plan)
             if sum(len(manifest.entries) for manifest, _ in plan) > 256:
                 raise LifecycleError("active execution plan exceeds 256 entries")
-            legacy = getattr(self.app.state, "trusted_extension_factories", {})
             for manifest, identity in plan:
                 entries = [
                     entry
@@ -460,14 +476,6 @@ class UnifiedRuntime:
                         )
                     if any(dep in self.errors for dep, _ in manifest.dependencies):
                         raise LifecycleError("startup dependency failed")
-                    if any(
-                        target in legacy
-                        for entry in entries
-                        for target in entry.startup
-                    ):
-                        raise LifecycleError(
-                            "startup target is already owned by a legacy extension"
-                        )
                     package = await self._materialize(manifest, identity)
                     for entry in entries:
                         run = self._entry(package, entry)
@@ -692,6 +700,30 @@ class UnifiedRuntime:
             and record["packageSha256"] == value["identity"]["packageSha256"]
         )
 
+    def active_appearance(self):
+        snapshot = self.store.snapshot()
+        selections = snapshot.get("appearance", {})
+        result = dict.fromkeys(APPEARANCE_KINDS)
+        for kind in APPEARANCE_KINDS:
+            plugin_id = selections.get(kind)
+            package = self.packages.get(plugin_id)
+            if (
+                self.safe_mode
+                or not package
+                or not package["coreReady"]
+                or plugin_id in self.errors
+            ):
+                continue
+            record = snapshot["plugins"][plugin_id]
+            identity = package["identity"]
+            if (
+                record["enabled"]
+                and record["generation"] == identity.generation
+                and record["packageSha256"] == identity.package_sha256
+            ):
+                result[kind] = package["data"].get(kind)
+        return result
+
     async def realm_plan(self, client_id, realm):
         await self.reconcile()
         session = self._session(client_id, realm)
@@ -737,6 +769,7 @@ class UnifiedRuntime:
             "hostInstance": self.instance,
             "safeMode": self.safe_mode,
             "entries": entries,
+            **({"appearance": self.active_appearance()} if realm == "frontend" else {}),
             "errors": dict(self.errors),
         }
 
@@ -954,5 +987,6 @@ class UnifiedRuntime:
             "executorsAttached": self.ready,
             "plugins": plugins,
             "orphaned": orphaned,
+            "appearance": snapshot.get("appearance", {}),
             "errors": dict(self.errors),
         }

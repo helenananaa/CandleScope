@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 
 from app.plugin_security_v2.errors import PlatformSecurityError
+from app.plugin_security_v2.management import LocalManagementGuard
 
 from .pine import bind_strategy_runtime
 from .runtime import UnifiedRuntime
@@ -25,6 +26,23 @@ def prepare_unified(app, *, store=None):
         os.environ.get("CANDLESCOPE_EXTENSIONS_SAFE_MODE") == "1"
         or os.environ.get("CANDLESCOPE_PLUGIN_PLATFORM_V2_ENABLED", "1") == "0"
     )
+    app.state.unified_management_guard = None
+    session = os.environ.get("CANDLESCOPE_DESKTOP_PLUGIN_SESSION")
+    csrf = os.environ.get("CANDLESCOPE_DESKTOP_PLUGIN_CSRF")
+    if (
+        session
+        and csrf
+        and os.environ.get("CANDLESCOPE_PLUGIN_PLATFORM_V2_ENABLED", "1") != "0"
+    ):
+        origins = os.environ.get(
+            "CANDLESCOPE_PLUGIN_PLATFORM_V2_MANAGEMENT_ORIGINS",
+            "http://127.0.0.1:15173",
+        )
+        app.state.unified_management_guard = LocalManagementGuard(
+            (origin.strip() for origin in origins.split(",") if origin.strip()),
+            session_token=session,
+            csrf_token=csrf,
+        )
     app.state.unified_plugin_runtime = UnifiedRuntime(app, store, safe_mode=safe)
     app.state.unified_plugin_runtime.script_host_disabled = os.environ.get(
         "CANDLESCOPE_PLUGIN_HOST_ENABLED", "1"
