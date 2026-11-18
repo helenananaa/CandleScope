@@ -1,0 +1,17 @@
+{
+  "schema": "candlescope.unified-plugin/1",
+  "id": "candlescope.aho-corasick",
+  "name": "aho-corasick Search",
+  "version": "0.2.0",
+  "hostApiVersion": 1,
+  "trust": "restricted",
+  "permissions": [],
+  "entries": [
+    {
+      "id": "main",
+      "kind": "sidecar",
+      "path": "runtime/aho-corasick",
+      "runtime": "native-executable"
+    }
+  ]
+}
