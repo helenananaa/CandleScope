@@ -173,7 +173,7 @@ def verify_package(path: Path | str) -> VerifiedPackage:
                         "/".join(parts[:end]) in folded for end in range(1, len(parts))
                     ):
                         raise PackageError("archive file/directory paths collide")
-                if "manifest.json" not in files or "bundle.json" not in files:
+                if "manifest.json" not in files:
                     raise PackageError(
                         "unified manifest.json and bundle.json are required; update old packages"
                     )
@@ -181,6 +181,10 @@ def verify_package(path: Path | str) -> VerifiedPackage:
                 if files["manifest.json"].file_size > MAX_MANIFEST_BYTES:
                     raise PackageError("manifest exceeds its byte budget")
                 manifest = Manifest.from_json(archive.read(files["manifest.json"]))
+                if "bundle.json" not in files:
+                    raise PackageError(
+                        "unified bundle.json is required; update old packages"
+                    )
                 if files["bundle.json"].file_size > MAX_DESCRIPTOR_BYTES:
                     raise PackageError("bundle descriptor exceeds its byte budget")
                 envelope = loads_strict(

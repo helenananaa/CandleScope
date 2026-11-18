@@ -1,3 +1,4 @@
+import { unifiedMessages } from "./unifiedMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { continuousKorean } from "./continuousMessages.js";
 import { tradeHistoryKorean } from "./tradeHistoryMessages.js";
@@ -10,6 +11,7 @@ import { tradingAccountsKo } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
+  ...unifiedMessages["ko"],
   ...syntheticEnglish,
   ...continuousKorean,
   ...tradeHistoryKorean,

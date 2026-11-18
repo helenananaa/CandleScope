@@ -1,3 +1,4 @@
+import { unifiedMessages } from "./unifiedMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { continuousPortuguese } from "./continuousMessages.js";
 import { tradeHistoryBrazilian } from "./tradeHistoryMessages.js";
@@ -10,6 +11,7 @@ import { tradingAccountsPtBR } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
+  ...unifiedMessages["pt-BR"],
   ...syntheticEnglish,
   ...continuousPortuguese,
   ...tradeHistoryBrazilian,

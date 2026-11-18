@@ -1,3 +1,4 @@
+import { unifiedMessages } from "./unifiedMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { continuousJapanese } from "./continuousMessages.js";
 import { tradeHistoryJapanese } from "./tradeHistoryMessages.js";
@@ -11,6 +12,7 @@ import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsJa } from "./tradingAccountsMessages.js";
 
 export const ja = {
+  ...unifiedMessages["ja"],
   ...syntheticEnglish,
   ...continuousJapanese,
   ...tradeHistoryJapanese,

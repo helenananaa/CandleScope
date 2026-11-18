@@ -24,7 +24,8 @@ async function boundedActivation<T>(work: Promise<T>): Promise<T> {
   } finally { if (timer !== undefined) clearTimeout(timer); }
 }
 
-export function createExtensionContext(item: ExtensionRecord): { context: ExtensionContext; dispose: Dispose } {
+export function createExtensionContext(item: { manifest: {id: string; internalApiVersion?: 1}; assetBase?: string },
+  guard: () => void = () => {}, resolveAssets = trustedExtensionAssetBase, validateResult?: () => Promise<void>): { context: ExtensionContext; dispose: Dispose } {
   const cleanups: Dispose[] = [];
   let disposed = false;
   const id = item.manifest.id;
@@ -35,11 +36,13 @@ export function createExtensionContext(item: ExtensionRecord): { context: Extens
   const context: ExtensionContext = {
     id, apiVersion: 1, React, track,
     assetUrl(path) {
+      guard();
       if (!/^[A-Za-z0-9_./-]+$/.test(path) || path.split("/").some((part) => !part || part === "." || part === "..")) throw new Error("Invalid extension asset path");
-      return `${trustedExtensionAssetBase(item.assetBase ?? "")}${path}`;
+      return `${resolveAssets(item.assetBase ?? "")}${path}`;
     },
     ui: {
       replaceSlot(name, component) {
+        guard();
         if (!validSlots.has(name) || slotOwners.has(name)) throw new Error(`Slot unavailable or already replaced: ${name}`);
         slotOwners.set(name, id);
         const slots = new Map(getExtensionState().slots);
@@ -54,6 +57,7 @@ export function createExtensionContext(item: ExtensionRecord): { context: Extens
         });
       },
       stylesheet(css) {
+        guard();
         const element = document.createElement("style");
         element.dataset.extensionOwner = id;
         // Extension CSS joins the app's features layer, so it competes with feature CSS by
@@ -65,12 +69,21 @@ export function createExtensionContext(item: ExtensionRecord): { context: Extens
     },
     commands: {
       register(name, handler) {
+        guard();
         const key = `${id}.${name}`;
         if (commands.has(key)) throw new Error(`Duplicate command: ${key}`);
-        commands.set(key, handler);
-        track(() => { if (commands.get(key) === handler) commands.delete(key); });
+        const checked = (payload?: unknown) => {
+          guard();
+          const value = handler(payload);
+          if (validateResult) return Promise.resolve(value).then(async (result: unknown) => { guard(); await validateResult(); guard(); return result; });
+          if (value instanceof Promise) return value.then((result: unknown) => { guard(); return result; });
+          guard(); return value;
+        };
+        commands.set(key, checked);
+        track(() => { if (commands.get(key) === checked) commands.delete(key); });
       },
       execute(name, payload) {
+        guard();
         const handler = commands.get(name);
         if (!handler) throw new Error(`Command unavailable: ${name}`);
         return handler(payload);
@@ -78,15 +91,17 @@ export function createExtensionContext(item: ExtensionRecord): { context: Extens
     },
     events: {
       on(name, listener) {
+        guard();
         track(subscribeHostEvent(name, (payload) => {
-          try { void Promise.resolve(listener(payload)).catch((error) => report(id, error)); } catch (error) { report(id, error); }
+          try { guard(); void Promise.resolve(listener(payload)).catch((error) => report(id, error)); } catch (error) { report(id, error); }
         }));
       },
-      emit: emitHostEvent,
+      emit(name, payload) { guard(); emitHostEvent(name, payload); },
     },
     services: {
-      get: getHostService,
+      get<T>(name: string) { guard(); return getHostService<T>(name); },
       register(name, value) {
+        guard();
         const key = `${id}.${name}`;
         if (serviceOwners.has(key)) throw new Error(`Duplicate service: ${key}`);
         serviceOwners.set(key, id);
@@ -105,6 +120,11 @@ export function createExtensionContext(item: ExtensionRecord): { context: Extens
     cleanups.length = 0;
     if (errors.length) throw new AggregateError(errors, `Failed to dispose ${id}`);
   } };
+}
+
+/** Both package systems reuse this host-code gateway during the staged migration. */
+export async function loadUnifiedFrontend(url: string): Promise<ExtensionModule> {
+  return import(/* @vite-ignore */ url) as Promise<ExtensionModule>;
 }
 
 async function reconcile(): Promise<void> {

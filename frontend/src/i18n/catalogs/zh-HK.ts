@@ -1,3 +1,4 @@
+import { unifiedMessages } from "./unifiedMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { continuousEnglish } from "./continuousMessages.js";
 import { tradeHistoryTraditional } from "./tradeHistoryMessages.js";
@@ -10,6 +11,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const zhHK = {
+  ...unifiedMessages["zh-HK"],
   ...syntheticEnglish,
   ...continuousEnglish,
   ...tradeHistoryTraditional,

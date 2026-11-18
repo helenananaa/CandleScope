@@ -332,6 +332,33 @@ export async function extensionManagementRequest(path: string, body?: unknown): 
   });
 }
 
+export async function unifiedManagementRequest(path: string, body?: unknown): Promise<unknown> {
+  return managementRequest(`/manage/unified${path}`, body === undefined ? {} : {
+    method: "POST", body, action: "unified-plugin-ui",
+  });
+}
+
+export async function unifiedBackgroundRequest(path: string, body: unknown): Promise<unknown> {
+  return backgroundManagementRequest(`/manage/unified${path}`, body, "POST", AbortSignal.timeout(10000));
+}
+
+export async function stageUnifiedPackage(file: Blob): Promise<unknown> {
+  const session = consumeManagementSession();
+  if (!session) throw new PluginPlatformApiError("A trusted desktop session is required", 403);
+  const response = await fetch(`${session.apiBase}/manage/unified/stage`, {
+    method: "POST", credentials: "omit", body: file,
+    headers: { "Content-Type": "application/octet-stream", "X-CandleScope-Plugin-Session": session.sessionToken,
+      "X-CandleScope-CSRF": session.csrfToken, "X-CandleScope-User-Action": actionId("unified-stage") },
+  });
+  return responseJson(response);
+}
+
+export function unifiedAssetBase(path: string): string {
+  const session = consumeManagementSession();
+  if (!session || !/^\/api\/v2\/plugins\/unified-assets\/[A-Za-z0-9_-]{40,64}\/$/.test(path)) throw new Error("Invalid plugin asset identity");
+  return new URL(path, session.apiBase).href;
+}
+
 export async function stageTrustedExtension(file: Blob): Promise<unknown> {
   const session = consumeManagementSession();
   if (!session) throw new PluginPlatformApiError("A trusted desktop session is required", 403);
@@ -358,6 +385,8 @@ export function trustedExtensionAssetBase(path: string): string {
 async function backgroundManagementRequest(
   path: string,
   body: unknown,
+  method = "PUT",
+  signal?: AbortSignal,
 ): Promise<unknown> {
   const session = consumeManagementSession();
   if (!session) {
@@ -367,7 +396,8 @@ async function backgroundManagementRequest(
     );
   }
   const response = await fetch(`${session.apiBase}${path}`, {
-    method: "PUT",
+    method,
+    ...(signal ? { signal } : {}),
     headers: {
       "Content-Type": "application/json",
       "X-CandleScope-Plugin-Session": session.sessionToken,

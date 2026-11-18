@@ -2,13 +2,18 @@ name: Unified plugin contract
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'packages/candlescope-plugin-sdk/**'
       - 'backend/scripts/inspect_unified_plugin.py'
       - 'backend/scripts/plugin_sdk_isolation.py'
       - 'backend/app/plugin_lifecycle/**'
+      - 'backend/app/local_data/runtime.py'
       - 'backend/app/plugin_security_v2/**'
       - 'backend/tests/test_unified_plugin_store.py'
+      - 'backend/tests/test_unified_plugin_runtime.py'
+      - 'frontend/desktop/unified-entry*'
+      - 'frontend/tests/fixtures/unified-runtime-client.mjs'
       - 'backend/tests/conftest.py'
       - 'backend/scripts/unified_plugin.py'
       - 'examples/unified-plugins/**'
@@ -20,8 +25,12 @@ on:
       - 'backend/scripts/inspect_unified_plugin.py'
       - 'backend/scripts/plugin_sdk_isolation.py'
       - 'backend/app/plugin_lifecycle/**'
+      - 'backend/app/local_data/runtime.py'
       - 'backend/app/plugin_security_v2/**'
       - 'backend/tests/test_unified_plugin_store.py'
+      - 'backend/tests/test_unified_plugin_runtime.py'
+      - 'frontend/desktop/unified-entry*'
+      - 'frontend/tests/fixtures/unified-runtime-client.mjs'
       - 'backend/tests/conftest.py'
       - 'backend/scripts/unified_plugin.py'
       - 'examples/unified-plugins/**'
@@ -33,6 +42,7 @@ permissions:
 
 jobs:
   contract:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     strategy:
       fail-fast: false
       matrix:
@@ -50,8 +60,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - name: Install contract test dependencies
-        run: python -m pip install pytest==7.4.4 jsonschema==4.25.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install contract and runtime test dependencies
+        run: python -m pip install pytest==7.4.4 jsonschema==4.25.1 fastapi==0.115.6 httpx==0.28.1 anyio==4.15.1 python-dotenv==1.0.1 uvicorn==0.34.0
       - name: Run SDK contracts and architecture tests
         working-directory: packages/candlescope-plugin-sdk
         run: python -m pytest -q
@@ -61,4 +74,7 @@ jobs:
         working-directory: backend
         env:
           PYTHONPATH: '.'
-        run: python -m pytest -q tests/test_unified_plugin_store.py
+        run: python -m pytest -q tests/test_unified_plugin_store.py tests/test_unified_plugin_runtime.py
+      - name: Verify shared window and desktop lifecycle
+        working-directory: frontend
+        run: node --test desktop/unified-entry-host.test.mjs

@@ -8,6 +8,7 @@ import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import PluginAdvanced from "./PluginAdvanced.js";
 import ExtensionManager from "../extensions/ExtensionManager.js";
+import UnifiedPluginManager from "../extensions/UnifiedPluginManager.js";
 import PluginDetail from "./PluginDetail.js";
 import PluginInstallFlow from "./PluginInstallFlow.js";
 import { MarketplacePanel } from "./PluginManagementSections.js";
@@ -30,6 +31,7 @@ export function PluginSettingsPanel({ runtime, initialSection = "installed", onB
   const locale = useLocale();
   const [section, setSection] = useState<PluginCenterSection>(initialSection);
   const [installBusy, setInstallBusy] = useState(false);
+  const [unifiedCount, setUnifiedCount] = useState(0);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<PluginFilter>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -94,7 +96,7 @@ export function PluginSettingsPanel({ runtime, initialSection = "installed", onB
           value: item,
           disabled: installBusy,
           label: item === "extensions" ? t("extensions.title") : t(`pc.${item}`),
-          ...(item === "installed" ? { badge: plugins.length } : {}),
+          ...(item === "installed" ? { badge: plugins.length + unifiedCount } : {}),
         }))} />
       <div className="pc-toolbar-actions">
         <Button size="sm" disabled={runtime.view.loading || installBusy} onClick={refreshAll}>{t("alert.refresh")}</Button>
@@ -110,6 +112,7 @@ export function PluginSettingsPanel({ runtime, initialSection = "installed", onB
       {section === "installed" && <Select aria-label={t("pc.filter")} value={filter} onChange={(event) => { setFilter(event.target.value as PluginFilter); setMobileDetail(false); }}>{(["all", "active", "disabled", "attention"] as const).map((value) => <option key={value} value={value}>{t(value === "all" ? "trade.all" : `pc.${value}`)}</option>)}</Select>}
     </div>}
     {sectionBody(<>
+      {section === "installed" && <UnifiedPluginManager onCountChange={setUnifiedCount} query={query} filter={filter} />}
       {runtime.view.loading && !runtime.view.catalog && <p role="status">{t("plugin.loadingDetail")}</p>}
       {section === "installed" && runtime.view.catalog && <>
         <div className={`pc-library ${mobileDetail ? "pc-show-detail" : ""} ${visible.length ? "" : "pc-library-empty"}`}>
@@ -118,7 +121,7 @@ export function PluginSettingsPanel({ runtime, initialSection = "installed", onB
               <span className="pc-list-title">{plugin.name}</span><span>{plugin.publisher} · {plugin.version}</span><small>{t(`pc.${pluginStatus(plugin)}`)}</small>
             </button>)}</nav>
             {selected && <PluginDetail key={selected.id} selected={selected} {...detailState} runtime={runtime} onBack={() => setMobileDetail(false)} onDiscover={() => navigate("discover")} />}
-          </> : <div className="pc-empty"><h3>{query || filter !== "all" ? t("pc.noResults") : t("plugin.empty")}</h3>
+          </> : unifiedCount ? null : <div className="pc-empty"><h3>{query || filter !== "all" ? t("pc.noResults") : t("plugin.empty")}</h3>
             <p>{query || filter !== "all" ? t("pc.search") : t("pc.emptyHint")}</p>
             {query || filter !== "all" ? <Button onClick={() => { setQuery(""); setFilter("all"); }}>{t("interval.clear")}</Button> : platformEnabled && management && <Button variant="primary" onClick={() => navigate("install")}>{t("pc.install")}</Button>}
           </div>}
