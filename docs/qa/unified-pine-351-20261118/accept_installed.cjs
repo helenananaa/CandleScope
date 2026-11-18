@@ -205,6 +205,34 @@ const children = () => (windows
     const data = { dataset_id: dataset.dataset_id, data_epoch: dataset.data_epoch,
       start_time_ms: start, end_time_ms: start + prices.length * 60_000 - 1, interval: "1m" };
     const frozen = await q.post("/api/v1/backtests/datasets/snapshot", data);
+
+    const queuedData = { ...data, end_time_ms: start + 30 * 60_000 - 1 };
+    const queuedFrozen = await q.post("/api/v1/backtests/datasets/snapshot", {
+      ...queuedData, fidelity_mode: "BAR_APPROX", exchange: "binance", market_type: "usdm",
+    });
+    const queuedScript = script.replace("initial_capital=10000", "initial_capital=10000,calc_on_order_fills=true");
+    const revision = await q.post("/api/v1/backtests/strategy-revisions", {
+      language: "PINE_ENGINE", name: "Installed queued Pine callbacks", source_text: queuedScript,
+    });
+    await q.post("/api/v1/backtests/strategy-revisions/" + revision.revision_id + "/smoke", {
+      dataset_id: data.dataset_id, snapshot_hash: queuedFrozen.snapshot_hash,
+      start_time_ms: queuedData.start_time_ms, end_time_ms: queuedData.end_time_ms, parameters: {},
+    });
+    const queued = await q.post("/api/v1/backtests/runs", {
+      ...queuedData, snapshot_hash: queuedFrozen.snapshot_hash, strategy_revision_id: revision.revision_id,
+      fidelity_mode: "BAR_APPROX", source_event_kind: "BAR", exchange: "binance", market_type: "usdm",
+      symbol: "BTCUSDT", output_mode: "ORDER_INTENT", account_model: "LINEAR_PERP_ONE_WAY_V1",
+      initial_balance: "10000", slippage_bps: "0", taker_fee_bps: "0",
+    }, { "Idempotency-Key": "installed-queued-pine" });
+    const queuedResult = await q.poll(() => q.invoke("/api/v1/backtests/runs/" + queued.run_id),
+      run => ["FAILED", "COMPLETED"].includes(run.state));
+    assert.equal(queuedResult.state, "COMPLETED", JSON.stringify(queuedResult));
+    const queuedReport = await q.invoke("/api/v1/backtests/runs/" + queued.run_id + "/report");
+    assert.ok(queuedReport.fills.length > 0);
+    assert.ok(queuedReport.strategy.pineExecution.fillCallbackCount > 0);
+    q.phase.queuedChart = { id: queued.run_id, sourceHash: hash(queuedScript), bars: 30,
+      fills: queuedReport.fills.length, fillCallbacks: queuedReport.strategy.pineExecution.fillCallbackCount };
+
     const body = { ...data, language: "pine", parameters: {},
       snapshot_hash: frozen.snapshot_hash, context: { symbol: "BINANCE:BTCUSDT", timeframe: "1" } };
     const invalidResponse = await q.post(originPath + "/runs", { ...body, source: "invalid()" }, { "Idempotency-Key": "invalid-pine" });
