@@ -8,6 +8,8 @@ import path from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 
 const [repo, executable, python, receiptPath] = process.argv.slice(2);
+const runtimeMode = process.env.CANDLESCOPE_QA_RUNTIME_MODE ?? "LOCAL_OFFLINE";
+assert.ok(["LOCAL_OFFLINE", "LIVE"].includes(runtimeMode));
 const evidence = mkdtempSync(path.join(os.tmpdir(), "candlescope-takeover-native-"));
 console.log("Evidence directory", evidence);
 const store = path.join(evidence, "plugins", "unified");
@@ -36,7 +38,7 @@ const fingerprint = (file) => createHash("sha256").update(readFileSync(file)).di
 const before = fingerprint(fixtureFile);
 const resources = path.join(path.dirname(executable),
   process.platform === "win32" ? "resources" : "../Resources");
-const receipt = {platform: process.platform, arch: process.arch, evidence,
+const receipt = {platform: process.platform, arch: process.arch, runtimeMode, evidence,
   asarSha256: fingerprint(path.join(resources, "app.asar")),
   good: good.packageSha256, before, phases: []};
 const profile = path.join(evidence, "profile");
@@ -91,7 +93,7 @@ async function launch(name, args = []) {
     CANDLESCOPE_DESKTOP_USER_DATA: profile,
     CANDLESCOPE_PLUGIN_PLATFORM_V2_ROOT: path.dirname(store),
     CANDLESCOPE_PLUGIN_PLATFORM_V2_ENABLED: "1",
-    CANDLESCOPE_RUNTIME_MODE: "LOCAL_OFFLINE",
+    CANDLESCOPE_RUNTIME_MODE: runtimeMode,
     CANDLESCOPE_DESKTOP_UI_PORT: "0",
     CANDLESCOPE_DESKTOP_BACKEND_PORT: String(backendPort),
     CANDLESCOPE_DESKTOP_SIDECAR_TIMEOUT_MS: "90000",

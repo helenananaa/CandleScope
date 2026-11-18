@@ -123,7 +123,7 @@ async function verifyPython(session) {
     }).catch((error) => ({ error: error.message }));
     const runtime = await fetch(new URL("/api/v1/indicators/diagnostics", session.health))
       .then((response) => response.json())
-      .then(({ runtimeRouting, runtime }) => runtimeRouting ?? runtime ?? null)
+      .then(({ scriptRuntimeRouting }) => scriptRuntimeRouting ?? null)
       .catch((error) => ({ error: error.message }));
     assert.fail(JSON.stringify({ result, managed, runtime }));
   }
