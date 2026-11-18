@@ -1,10 +1,10 @@
-# 统一插件宿主（第 3 批）
+# 统一插件宿主
 
 共同 owner 保存唯一的包期望配置，执行器消费同一份验证后的计划。
 默认存储位于既有平台 root 的 `unified/`；可用
 `CANDLESCOPE_PLUGIN_PLATFORM_V2_ROOT` 改平台 root。live/offline 均接入。
-本指南对应 #349 的执行器批次；#350 构建前依赖接管、独立恢复，#351 Pine/
-旧消费者迁移和旧协议退役仍未交付。旧注册表暂时服务其既有消费者，统一包不会绕到旧执行器。
+本指南覆盖 #349 的执行器和 #350 的可信接管。#351 负责迁移 Pine 及其余受支持的旧消费者，
+迁移完成后删除旧注册表和旧协议。
 
 ## 构建与使用
 
@@ -65,8 +65,30 @@ LocalManagementGuard；realm/report/check 使用同一会话、Origin/CSRF 的�
 后端版本变更同样等待进程重启。断联客户端到期显示 unavailable，不伪装为已停止。
 多窗口各有独立实例。核心 owner 持有进程生命周期锁，防止同一 root 被重复执行。
 
-`--extensions-safe-mode` / `CANDLESCOPE_EXTENSIONS_SAFE_MODE=1` 跳过统一代码执行，
-保留管理恢复；现有外层恢复通知也展示统一执行错误。独立原生恢复、崩溃 marker 与启动前
-依赖替换的完整证明属于 #350，不能用本批源码测试替代。
+完全信任入口可以在清单声明 `startup` 目标。后端入口的 `prepare(ctx)` 必须调用
+`ctx.wrap_factory(target, wrapper)` 注册每个目标，应用随后执行 `wrapper(default, ...)`。
+统一期望配置事务拒绝重复目标。宿主在服务构建前拒绝与已加载的旧工厂冲突。
+支持的目标是 `data-engine`、`replay`、`alert-delivery`、`indicator-range`、
+`market-storage`（市场存储初始化）和 `local-data`（live 的本地数据运行时）。
+各目标仍受相应运行模式和功能开关控制。退出先停止消费者，再清理已经注入的资源。
+运行中停用立即撤销插件实例的调用和结果，已构建服务持有的依赖要退出后才释放。
+
+窗口入口声明 `startup: ["shell"]`，在首次 React 渲染前调用
+`ctx.ui.replaceSlot("shell", Component)`。首次渲染之后新启用的根布局要重开窗口。
+恢复通知位于可替换布局之外。示例见 [startup-takeover](../../../examples/unified-plugins/startup-takeover/)。
+
+独立恢复可在完全退出应用后使用原生启动参数。例如 macOS 安装在默认路径时：
+
+```sh
+open -na /Applications/CandleScope.app --args --extensions-safe-mode
+open -na /Applications/CandleScope.app --args --disable-unified-plugin=example.startup-takeover
+```
+
+Windows 将参数传给同一份 CandleScope 安装程序目录里的 `CandleScope.exe`。
+`--disable-unified-plugin=ID` 按原子事务停用明确指定的包及它的已启用依赖者，
+同时以安全模式启动。完全退出后按常规方式重开。包、脚本和私有数据保留。
+后端 startup marker 绑定摘要与 generation，阻止自动重试同一失败激活；通过恢复禁用，
+或者明确重新批准后使用新 generation。恢复流程可用于无法进入正常窗口的情况。
+完全信任代码含任意进程级副作用，安装版的恢复验收独立于源码与组件检查。
 
 Pyne 已退役：显式拒绝其旧归档和入口，不转成 Pine/Python，不删除原始文件或历史证据。

@@ -732,3 +732,142 @@ async def test_restricted_view_serves_opaque_assets_and_revokes_tickets(tmp_path
             ).status_code == 404
     finally:
         await stop_unified(app)
+
+
+@pytest.mark.anyio
+async def test_startup_claim_is_frozen_and_retained_until_consumers_stop(tmp_path):
+    from app.plugin_lifecycle.composition import startup_factory
+
+    store = PackageStore(tmp_path / "store")
+    entries = [
+        {
+            "id": "service",
+            "kind": "backend",
+            "path": "backend.py",
+            "startup": ["replay"],
+        }
+    ]
+    source = """
+def prepare(ctx):
+    ctx.app.state.log.append('prepare')
+    ctx.track(lambda: ctx.app.state.log.append('released'))
+    async def wrap(default):
+        consumer = await default()
+        consumer['dependency'] = ctx.id
+        return consumer
+    ctx.wrap_factory('replay', wrap)
+def activate(ctx):
+    ctx.app.state.log.append('activate')
+"""
+    package = install(
+        store, bundle(tmp_path, entries=entries, assets={"backend.py": source})
+    )
+    conflict = store.stage(
+        bundle(
+            tmp_path,
+            entries=entries,
+            assets={"backend.py": source},
+            plugin_id="example.other",
+        )
+    )
+    with pytest.raises(ValueError, match="startup target replay claimed"):
+        store.activate(
+            conflict.sha256,
+            expected_revision=1,
+            acknowledgement=f"full-trust:{conflict.sha256}",
+        )
+
+    app = SimpleNamespace(state=SimpleNamespace(log=[]))
+    runtime = UnifiedRuntime(app, store)
+    app.state.unified_plugin_runtime = runtime
+    try:
+        await runtime.prepare_startup()
+
+        async def default():
+            assert app.state.log == ["prepare"]
+            return {"dependency": "builtin"}
+
+        built = await startup_factory(app, "replay", default)()
+        assert built["dependency"] == package.manifest.id
+        await runtime.start()
+        assert app.state.log == ["prepare", "activate"]
+        store.disable(package.manifest.id, expected_revision=1)
+        await runtime.reconcile()
+        assert not runtime.running
+        assert app.state.log == ["prepare", "activate"]
+        assert (
+            runtime.catalog()["plugins"][0]["entries"][0]["observed"][0]["state"]
+            == "pending-restart"
+        )
+    finally:
+        await runtime.stop()
+    assert app.state.log == ["prepare", "activate", "released"]
+
+
+@pytest.mark.anyio
+async def test_interrupted_factory_and_independent_disable_keep_package_data(tmp_path):
+    from app.plugin_lifecycle.composition import startup_factory
+
+    store = PackageStore(tmp_path / "store")
+    entries = [
+        {
+            "id": "service",
+            "kind": "backend",
+            "path": "backend.py",
+            "startup": ["replay"],
+        }
+    ]
+    source = """
+def prepare(ctx):
+    def fail(default):
+        raise RuntimeError('simulated startup failure')
+    ctx.wrap_factory('replay', fail)
+def activate(ctx):
+    pass
+"""
+    bad = install(
+        store, bundle(tmp_path, entries=entries, assets={"backend.py": source})
+    )
+    child = install(
+        store,
+        bundle(
+            tmp_path, plugin_id="example.child", dependencies={bad.manifest.id: "1.0.0"}
+        ),
+    )
+    private = store.private_directory(bad.manifest.id) / "script.pine"
+    private.write_text("preserve this script")
+    app = SimpleNamespace(state=SimpleNamespace())
+    runtime = UnifiedRuntime(app, store)
+    app.state.unified_plugin_runtime = runtime
+    try:
+        await runtime.prepare_startup()
+        with pytest.raises(RuntimeError, match="simulated startup failure"):
+            startup_factory(app, "replay", object)()
+    finally:
+        await runtime.stop()
+
+    retry = UnifiedRuntime(app, store)
+    try:
+        await retry.prepare_startup()
+        assert "previous startup failed" in retry.errors[bad.manifest.id]
+        assert not retry.composition.factories
+    finally:
+        await retry.stop()
+
+    recovery = UnifiedRuntime(app, store)
+    try:
+        await recovery.prepare_startup(recovery_target=bad.manifest.id)
+        await recovery.start()
+        assert recovery.safe_mode and not recovery.running
+        assert {
+            key
+            for key, record in store.snapshot()["plugins"].items()
+            if not record["enabled"]
+        } == {
+            bad.manifest.id,
+            child.manifest.id,
+        }
+        assert private.read_text() == "preserve this script"
+        assert store.review(bad.sha256)["packageSha256"] == bad.sha256
+    finally:
+        await recovery.stop()

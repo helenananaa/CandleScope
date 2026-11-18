@@ -49,6 +49,8 @@ test("sandbox entries remain opaque and never receive the frontend context",()=>
   assert.match(html,/credentialless=""/);
   assert.match(html,/referrerPolicy="no-referrer"/);
   assert.doesNotMatch(html,/allow-same-origin|allow-popups|allow-top-navigation|srcdoc/i);
+  Object.assign(value.entries[0]!.entry, { startup: ["shell"] });
+  assert.throws(() => parseUnifiedPlan(value, assets), /startup shell claim/);
 });
 
 test("revoked frontend commands reject an already pending result",async()=>{

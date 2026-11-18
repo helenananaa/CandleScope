@@ -23,6 +23,7 @@ def activation_order(manifests: Iterable[Manifest]) -> tuple[Manifest, ...]:
     Independent nodes are ordered by id; dependency providers always come first.
     """
     plugins: dict[str, Manifest] = {}
+    claims: dict[str, str] = {}
     for manifest in manifests:
         if not isinstance(manifest, Manifest):
             raise PlanError("activation plans require validated manifests")
@@ -31,6 +32,11 @@ def activation_order(manifests: Iterable[Manifest]) -> tuple[Manifest, ...]:
         if len(plugins) >= MAX_PLAN_PLUGINS:
             raise PlanError("activation plan exceeds 256 plugins")
         plugins[manifest.id] = manifest
+        for entry in manifest.entries:
+            for target in entry.startup:
+                if target in claims:
+                    raise PlanError(f"startup target {target} claimed by {claims[target]} and {manifest.id}/{entry.id}")
+                claims[target] = f"{manifest.id}/{entry.id}"
     for manifest in plugins.values():
         for dep_id, required_version in manifest.dependencies:
             provider = plugins.get(dep_id)

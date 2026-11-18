@@ -123,7 +123,7 @@ class BackendEntry:
         self.namespace = "candlescope_unified_" + uuid.uuid4().hex
         self.module = None
 
-    async def start(self):
+    def load(self):
         context = self.context
         path = context.root / context.entry.path
         spec = importlib.util.spec_from_file_location(
@@ -135,10 +135,26 @@ class BackendEntry:
         self.module = module
         sys.modules[self.namespace] = module
         spec.loader.exec_module(module)
+        return module
+
+    async def prepare(self, register):
+        module = self.load()
+        prepare = getattr(module, "prepare", None)
+        if not callable(prepare):
+            raise LifecycleError("startup entry must export prepare(context)")
+        self.context.wrap_factory = register
+        await self._run_hook(prepare)
+
+    async def start(self):
+        module = self.module if self.module is not None else self.load()
         activate = getattr(module, "activate", None)
         if not callable(activate):
             raise LifecycleError("backend entry must export activate(context)")
-        value = activate(context)
+        await self._run_hook(activate)
+
+    async def _run_hook(self, hook):
+        context = self.context
+        value = hook(context)
         if inspect.isawaitable(value):
 
             async def finish_activation():

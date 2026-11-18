@@ -36,6 +36,10 @@ RUNTIMES = frozenset(
     }
 )
 _HOST_KINDS = frozenset({"frontend", "backend", "desktop"})
+STARTUP_TARGETS = {
+    "backend": frozenset({"data-engine", "replay", "alert-delivery", "indicator-range", "market-storage", "local-data"}),
+    "frontend": frozenset({"shell"}),
+}
 _DEVICE = re.compile(r"(?:con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\..*)?", re.IGNORECASE)
 
 
@@ -95,12 +99,20 @@ class Entry:
     kind: str
     path: str
     runtime: str | None = None
+    startup: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         identifier(self.id, "entry.id")
         if not isinstance(self.kind, str) or self.kind not in KINDS:
             raise ManifestError("entry.kind is unsupported")
         package_path(self.path)
+        allowed = STARTUP_TARGETS.get(self.kind, frozenset())
+        if (
+            not isinstance(self.startup, tuple)
+            or any(not isinstance(target, str) or target not in allowed for target in self.startup)
+            or len(set(self.startup)) != len(self.startup)
+        ):
+            raise ManifestError("unsupported or duplicate startup target")
         if self.path.casefold().endswith(".pyne"):
             raise ManifestError("Pyne is retired; legacy scripts cannot be plugin entrypoints")
         if self.kind == "sidecar":
@@ -125,15 +137,20 @@ class Entry:
 
     @classmethod
     def from_wire(cls, raw: Any) -> Entry:
-        data = _object(raw, {"id", "kind", "path"}, {"runtime"}, "entry")
+        data = _object(raw, {"id", "kind", "path"}, {"runtime", "startup"}, "entry")
         if "runtime" in data and data["runtime"] is None:
             raise ManifestError("entry.runtime cannot be null")
-        return cls(data["id"], data["kind"], data["path"], data.get("runtime"))
+        startup = data.get("startup", [])
+        if not isinstance(startup, list) or len(startup) > 6:
+            raise ManifestError("entry.startup must be a bounded array of targets")
+        return cls(data["id"], data["kind"], data["path"], data.get("runtime"), tuple(startup))
 
     def to_wire(self) -> dict[str, Any]:
         result = {"id": self.id, "kind": self.kind, "path": self.path}
         if self.runtime is not None:
             result["runtime"] = self.runtime
+        if self.startup:
+            result["startup"] = list(self.startup)
         return result
 
 

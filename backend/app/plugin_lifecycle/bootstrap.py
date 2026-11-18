@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 
+from app.plugin_security_v2.errors import PlatformSecurityError
+
 from .runtime import UnifiedRuntime
 from .store import PackageStore
 
@@ -32,6 +34,19 @@ async def activate_unified(app):
         except Exception as exc:  # noqa: BLE001 -- a plugin must not prevent recovery startup
             await runtime.stop()
             runtime.errors["runtime"] = str(exc)
+
+
+async def prepare_unified_startup(app):
+    runtime = getattr(app.state, "unified_plugin_runtime", None)
+    if not runtime:
+        return
+    target = os.environ.get("CANDLESCOPE_DISABLE_UNIFIED_PLUGIN")
+    try:
+        await runtime.prepare_startup(recovery_target=target)
+    except (OSError, ValueError, PlatformSecurityError) as exc:
+        await runtime.stop()
+        runtime.safe_mode = True
+        runtime.errors["recovery" if target is not None else "runtime"] = str(exc)
 
 
 async def stop_unified(app):
