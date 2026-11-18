@@ -3,6 +3,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles/fonts.js";
 import AppProviders, { ChartErrorBoundary } from "./app/AppProviders.js";
+import { prepareUnifiedShell } from "./features/extensions/unifiedRuntime.js";
 import ReplayApp from "./features/replay/ReplayApp.js";
 import { replayEntryFromWindow } from "./features/replay/replayEntry.js";
 import { readPersistedLocale } from "./features/settings/chartAppearanceSettings.js";
@@ -19,6 +20,7 @@ async function boot(): Promise<void> {
   const root = document.getElementById("root");
   if (!(root instanceof HTMLElement)) throw new Error("Replay document root is missing");
 
+  await prepareUnifiedShell();
   createRoot(root).render(
     <StrictMode>
       <ChartErrorBoundary>

@@ -25,7 +25,10 @@ import { UnifiedDesktopHost } from "./unified-entry-host.mjs";
 import { WorkflowControlHost } from "./workflow-control-host.mjs";
 import { trackControlWindowLifecycle } from "./control-window-lifecycle.mjs";
 
-if (process.argv.includes("--extensions-safe-mode")) process.env.CANDLESCOPE_EXTENSIONS_SAFE_MODE = "1";
+const disableUnifiedFlag = process.argv.find((argument) => argument.startsWith("--disable-unified-plugin="));
+if (process.argv.includes("--extensions-safe-mode") || disableUnifiedFlag) {
+  process.env.CANDLESCOPE_EXTENSIONS_SAFE_MODE = "1";
+}
 
 const desktopDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(desktopDir, "../..");
@@ -156,6 +159,9 @@ function createSupervisor() {
       CANDLESCOPE_PLUGIN_PLATFORM_V2_MANAGEMENT_ORIGINS: new URL(appUrl).origin,
       CANDLESCOPE_DESKTOP_PLUGIN_SESSION: managementSession.sessionToken,
       CANDLESCOPE_DESKTOP_PLUGIN_CSRF: managementSession.csrfToken,
+      ...(disableUnifiedFlag ? {
+        CANDLESCOPE_DISABLE_UNIFIED_PLUGIN: disableUnifiedFlag.slice("--disable-unified-plugin=".length),
+      } : {}),
       PYTHONPATH: [
         path.join(runtimeRoot, "python-runtime", "site-packages"),
         path.join(runtimeRoot, "packages", "candlescope-plugin-sdk", "src"),

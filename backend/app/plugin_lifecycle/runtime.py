@@ -16,6 +16,7 @@ from candlescope_plugin_sdk.unified import ActivationIdentity, Entry
 from app.plugin_security_v2.sandbox import restricted_runtime_profile
 from app.plugin_security_v2.storage import security_lock
 
+from .composition import StartupComposition
 from .executors import (
     BackendEntry,
     OwnedContext,
@@ -72,6 +73,9 @@ class UnifiedRuntime:
         self.owner_lock = None
         self.watcher = None
         self.metadata = {}
+        self.composition = StartupComposition(store)
+        self.prepared = {}
+        self.retained = {}
 
     def _current(self, run):
         if (
@@ -144,7 +148,7 @@ class UnifiedRuntime:
         self.errors[plugin_id] = str(error)
         self.changed = True
 
-    async def _stop_package(self, plugin_id):
+    async def _stop_package(self, plugin_id, *, shutdown=False):
         # Revoke all remote assets/results before waiting on arbitrary cleanup.
         self.tickets = {
             key: value for key, value in self.tickets.items() if value[0] != plugin_id
@@ -171,13 +175,18 @@ class UnifiedRuntime:
                 task.cancel()
         for run in reversed(runs):
             self.running.pop((plugin_id, run.entry.id), None)
+            if not shutdown and run.entry.startup and plugin_id in self.prepared:
+                self.retained[(plugin_id, run.entry.id)] = run
+                continue
             try:
                 await bounded(run.executor.stop(), 10)
             except Exception as exc:  # noqa: BLE001 -- arbitrary plugin cleanup is isolated
                 self.quarantined.add(plugin_id)
                 self.errors[plugin_id] = f"cleanup failed; restart required: {exc}"
         package = self.packages.pop(plugin_id, None)
-        if package:
+        if package and not shutdown and plugin_id in self.prepared:
+            self.retained[(plugin_id, None)] = package
+        elif package:
             try:
                 await asyncio.to_thread(
                     self.store.release_materialization,
@@ -243,7 +252,7 @@ class UnifiedRuntime:
                 self.revision = revision
                 raise LifecycleError("active execution plan exceeds 256 entries")
             for plugin_id, (manifest, identity) in desired.items():
-                if plugin_id in self.packages:
+                if self.packages.get(plugin_id, {}).get("coreReady"):
                     continue
                 if (
                     self.attempted.get(plugin_id) == identity
@@ -264,20 +273,17 @@ class UnifiedRuntime:
                         e.kind == "backend" for e in manifest.entries
                     ):
                         raise LifecycleError("backend code changed; restart required")
-                    root, files = await asyncio.to_thread(
-                        self.store.materialize, identity.package_sha256
-                    )
-                    self.packages[plugin_id] = {
-                        "manifest": manifest,
-                        "identity": identity,
-                        "root": root,
-                        "files": files,
-                        "storage": self.store.private_directory(plugin_id),
-                        "data": {},
-                        "coreReady": False,
-                        "pendingOutputs": collections.deque(maxlen=32),
-                    }
-                    self.metadata[identity.package_sha256] = manifest.to_wire()
+                    package = self.packages.get(plugin_id)
+                    if package is None:
+                        if any(
+                            entry.kind == "backend" and entry.startup
+                            for entry in manifest.entries
+                        ):
+                            raise LifecycleError(
+                                "startup factory changed; restart required"
+                            )
+                        package = await self._materialize(manifest, identity)
+                    root = package["root"]
                     for entry in manifest.entries:
                         if entry.kind not in {"backend", "sidecar", "data"}:
                             continue
@@ -295,29 +301,14 @@ class UnifiedRuntime:
                                     )
                                 )
                             continue
-                        instance = uuid.uuid4().hex
-                        run = RunningEntry(identity, entry, instance, None)
-                        context = OwnedContext(
-                            self.app,
-                            identity,
-                            entry,
-                            root,
-                            lambda run=run: self._current(run),
-                            lambda value, run=run: self.publish(run, value),
-                        )
-                        context.storage = self.packages[plugin_id]["storage"]
-                        context.trust = manifest.trust
-                        context.timeout = self.execution_timeout
-                        context.failure = lambda error, pid=plugin_id: (
-                            self.entry_failed(pid, error)
-                        )
-                        run.executor = (
-                            BackendEntry(context)
-                            if entry.kind == "backend"
-                            else SidecarEntry(context, instance, self.executables)
-                        )
-                        self.running[(plugin_id, entry.id)] = run
-                        await run.executor.start()
+                        run = self.running.get((plugin_id, entry.id))
+                        if run is None:
+                            run = self._entry(package, entry)
+                        if entry.startup:
+                            with self.composition.executing(identity):
+                                await run.executor.start()
+                        else:
+                            await run.executor.start()
                         if not self._current(run):
                             raise LifecycleError("activation changed while starting")
                     self.packages[plugin_id]["coreReady"] = True
@@ -331,13 +322,124 @@ class UnifiedRuntime:
                     self.errors[plugin_id] = str(exc)
             self.revision = revision
 
-    async def start(self):
+    async def _materialize(self, manifest, identity):
+        root, files = await asyncio.to_thread(
+            self.store.materialize, identity.package_sha256
+        )
+        package = {
+            "manifest": manifest,
+            "identity": identity,
+            "root": root,
+            "files": files,
+            "storage": self.store.private_directory(manifest.id),
+            "data": {},
+            "coreReady": False,
+            "pendingOutputs": collections.deque(maxlen=32),
+        }
+        self.packages[manifest.id] = package
+        self.metadata[identity.package_sha256] = manifest.to_wire()
+        return package
+
+    def _entry(self, package, entry):
+        identity = package["identity"]
+        plugin_id = identity.plugin_id
+        run = RunningEntry(identity, entry, uuid.uuid4().hex, None)
+        context = OwnedContext(
+            self.app,
+            identity,
+            entry,
+            package["root"],
+            lambda: self._current(run),
+            lambda value: self.publish(run, value),
+        )
+        context.storage = package["storage"]
+        context.trust = package["manifest"].trust
+        context.timeout = self.execution_timeout
+        context.failure = lambda error: self.entry_failed(plugin_id, error)
+        run.executor = (
+            BackendEntry(context)
+            if entry.kind == "backend"
+            else SidecarEntry(context, run.instance, self.executables)
+        )
+        self.running[(plugin_id, entry.id)] = run
+        return run
+
+    def _lock_owner(self):
+        if self.owner_lock is not None:
+            return
         self.store.snapshot()
         path = self.store.root / "execution.lock"
         self.store._check_path(path)
         lock = security_lock(path, timeout_seconds=0)
         lock.__enter__()
         self.owner_lock = lock
+
+    async def prepare_startup(self, *, recovery_target=None):
+        """Load only declared trusted startup hooks before the app builds services."""
+        self._lock_owner()
+        if recovery_target is not None:
+            self.safe_mode = True
+            disabled = await asyncio.to_thread(
+                self.store.recover_disable, recovery_target
+            )
+            print(
+                f"[startup] Unified recovery disabled: {', '.join(disabled) or 'already disabled'}"
+            )
+        if not self.safe_mode:
+            _, plan = await asyncio.to_thread(self.store.execution_plan)
+            if sum(len(manifest.entries) for manifest, _ in plan) > 256:
+                raise LifecycleError("active execution plan exceeds 256 entries")
+            legacy = getattr(self.app.state, "trusted_extension_factories", {})
+            for manifest, identity in plan:
+                entries = [
+                    entry
+                    for entry in manifest.entries
+                    if entry.kind == "backend" and entry.startup
+                ]
+                if not entries:
+                    continue
+                try:
+                    self.validate(manifest)
+                    if self.composition.interrupted(identity):
+                        raise LifecycleError(
+                            "previous startup failed; disable or reapprove this activation"
+                        )
+                    if any(dep in self.errors for dep, _ in manifest.dependencies):
+                        raise LifecycleError("startup dependency failed")
+                    if any(
+                        target in legacy
+                        for entry in entries
+                        for target in entry.startup
+                    ):
+                        raise LifecycleError(
+                            "startup target is already owned by a legacy extension"
+                        )
+                    package = await self._materialize(manifest, identity)
+                    for entry in entries:
+                        run = self._entry(package, entry)
+                        with self.composition.executing(identity):
+                            await run.executor.prepare(
+                                lambda target, wrapper, run=run: (
+                                    self.composition.register(run, target, wrapper)
+                                )
+                            )
+                            if any(
+                                target not in self.composition.factories
+                                for target in entry.startup
+                            ):
+                                raise LifecycleError(
+                                    "prepare did not register all declared startup factories"
+                                )
+                    self.prepared[manifest.id] = identity
+                except Exception as exc:  # noqa: BLE001 -- use built-ins on prepare failure
+                    self.composition.discard(identity)
+                    await self._stop_package(manifest.id, shutdown=True)
+                    self.attempted[manifest.id] = identity
+                    self.errors[manifest.id] = str(exc)
+        self.composition.frozen = True
+
+    async def start(self):
+        self._lock_owner()
         self.ready = True
         self.revision = -1
         await self.reconcile()
@@ -360,7 +462,26 @@ class UnifiedRuntime:
         async with self.lock:
             self.ready = False
             for plugin_id in reversed(list(self.packages)):
-                await self._stop_package(plugin_id)
+                await self._stop_package(plugin_id, shutdown=True)
+            for (plugin_id, entry_id), value in reversed(list(self.retained.items())):
+                try:
+                    if entry_id is not None:
+                        await bounded(value.executor.stop(), 10)
+                except Exception as exc:  # noqa: BLE001 -- continue releasing other entries
+                    self.errors[plugin_id] = str(exc)
+            for (plugin_id, entry_id), value in self.retained.items():
+                if entry_id is None:
+                    try:
+                        await asyncio.to_thread(
+                            self.store.release_materialization,
+                            value["root"],
+                            value["files"],
+                        )
+                    except (ValueError, OSError) as exc:
+                        self.errors[plugin_id] = str(exc)
+            self.retained.clear()
+            self.prepared.clear()
+            self.composition.factories.clear()
             self.sessions.clear()
             self.expired.clear()
             self.tickets.clear()
@@ -376,6 +497,7 @@ class UnifiedRuntime:
         run = self.running.get((plugin_id, entry_id))
         if (
             run is None
+            or not self.packages.get(plugin_id, {}).get("coreReady")
             or run.identity.to_wire() != identity
             or run.instance != instance_id
             or not self._current(run)
@@ -595,8 +717,17 @@ class UnifiedRuntime:
                         "identity": run.identity.to_wire(),
                     }
                     for run in runs
-                    if self._current(run)
+                    if self._current(run) and self.packages[plugin_id]["coreReady"]
                 ]
+                retained = self.retained.get((plugin_id, entry["id"]))
+                if retained is not None:
+                    observed.append(
+                        {
+                            "state": "pending-restart",
+                            "instanceId": retained.instance,
+                            "identity": retained.identity.to_wire(),
+                        }
+                    )
                 if (
                     entry["kind"] == "data"
                     and plugin_id in self.packages
@@ -688,6 +819,16 @@ class UnifiedRuntime:
             for value in session["retired"].values()
             if value["pluginId"] not in snapshot["plugins"]
         ]
+        orphaned.extend(
+            {
+                "pluginId": plugin_id,
+                "entryId": entry_id,
+                "state": "pending-restart",
+                "identity": run.identity.to_wire(),
+            }
+            for (plugin_id, entry_id), run in self.retained.items()
+            if entry_id is not None and plugin_id not in snapshot["plugins"]
+        )
         return {
             "revision": snapshot["revision"],
             "hostInstance": self.instance,

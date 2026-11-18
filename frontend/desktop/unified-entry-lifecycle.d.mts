@@ -2,7 +2,7 @@ export interface UnifiedIdentity { pluginId: string; version: string; packageSha
 export interface UnifiedManifest {
   schema: "candlescope.unified-plugin/1"; id: string; name: string; version: string;
   trust: "restricted" | "full-trust"; hostApiVersion: 1;
-  entries: {id: string; kind: string; path: string; runtime?: string}[];
+  entries: {id: string; kind: string; path: string; runtime?: string; startup?: string[]}[];
   dependencies?: Record<string, string>; permissions?: string[];
 }
 export interface UnifiedItem {

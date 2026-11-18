@@ -472,6 +472,38 @@ class PackageStore:
     def disable(self, plugin_id: str, *, expected_revision: int) -> dict:
         return self._remove(plugin_id, expected_revision, uninstall=False)
 
+    def recover_disable(self, plugin_id: str) -> tuple[str, ...]:
+        """Disable an explicit recovery target and its enabled dependents atomically."""
+        identifier(plugin_id, "pluginId")
+        with self._locked() as before:
+            if plugin_id not in before["plugins"]:
+                raise LifecycleError("plugin is not installed")
+            if not before["plugins"][plugin_id]["enabled"]:
+                return ()
+            dependencies = {
+                key: self._package(record["packageSha256"]).manifest.dependencies
+                for key, record in before["plugins"].items()
+                if record["enabled"] and key != plugin_id
+            }
+            disabled = {plugin_id}
+            while True:
+                more = {
+                    key
+                    for key, deps in dependencies.items()
+                    if key not in disabled and any(dep in disabled for dep, _ in deps)
+                }
+                if not more:
+                    break
+                disabled.update(more)
+            after = self._next(before, before["revision"])
+            for key in disabled:
+                after["plugins"][key]["enabled"] = False
+            # The disabled flag revokes every dependent. Each later activation
+            # allocates a fresh generation through the normal approval flow.
+            after["plugins"][plugin_id]["generation"] = after["generation"]
+            self._commit(before, after)
+            return tuple(sorted(disabled))
+
     def uninstall(self, plugin_id: str, *, expected_revision: int) -> dict:
         return self._remove(plugin_id, expected_revision, uninstall=True)
 

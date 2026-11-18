@@ -53,6 +53,13 @@ def test_restricted_packages_cannot_request_host_execution(entry):
         Manifest.from_wire(manifest(trust="restricted", entries=[entry]))
 
 
+def test_restricted_view_cannot_claim_the_host_shell():
+    with pytest.raises(ManifestError, match="startup target"):
+        Manifest.from_wire(manifest(trust="restricted", entries=[
+            {"id": "ui", "kind": "sandbox-view", "path": "index.html", "startup": ["shell"]},
+        ]))
+
+
 def test_restricted_package_may_declare_data_sandbox_and_explicit_sidecar():
     parsed = Manifest.from_wire(
         manifest(

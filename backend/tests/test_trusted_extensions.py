@@ -259,10 +259,17 @@ async def test_catalog_distinguishes_desired_version_from_failed_or_running_back
 
 
 def test_local_offline_boot_keeps_network_guard_and_protects_extension_management(tmp_path):
+    from app.plugin_lifecycle import PackageStore, build_package
     from tests.source_checkout_testkit import BACKEND_ROOT, source_checkout_environment
     store = ExtensionStore(tmp_path / "plugins")
     enable(store, bundle(entries={"backend": "main.py"}, extra={"main.py":
         "import socket\ndef prepare(ctx):\n    try:\n        socket.getaddrinfo('example.com', 443)\n    except OSError:\n        ctx.replace_service('extension_offline_probe', 'guarded')\n    else:\n        raise RuntimeError('Network guard must precede extension startup')\n"}))
+    unified = PackageStore(tmp_path / "plugins" / "unified")
+    example = BACKEND_ROOT.parent / "examples" / "unified-plugins" / "startup-takeover"
+    source = tmp_path / "startup.cspkg"
+    build_package(example, source)
+    approved = unified.stage(source)
+    unified.activate(approved.sha256, expected_revision=0, acknowledgement=f"full-trust:{approved.sha256}")
     script = """
 from fastapi.testclient import TestClient
 from app.main import app
@@ -275,6 +282,8 @@ class Peer:
 with TestClient(Peer(app), base_url='http://127.0.0.1:18080') as client:
     assert app.state.extension_offline_probe == 'guarded'
     assert not app.state.trusted_extension_host.errors
+    assert client.get('/api/v1/replay/capabilities').json()['startupTakeover'] == 'example.startup-takeover'
+    assert not app.state.unified_plugin_runtime.errors
     route = '/api/v2/plugins/manage/extensions'
     assert client.get(route).status_code == 403
     headers = app.state.trusted_extension_management_guard.trusted_headers()
@@ -288,7 +297,7 @@ assert not hasattr(app.state, 'extension_offline_probe')
 """
     environment = source_checkout_environment()
     environment.update({
-        "CANDLESCOPE_RUNTIME_MODE": "LOCAL_OFFLINE", "BACKTEST_ENABLED": "0",
+        "CANDLESCOPE_RUNTIME_MODE": "LOCAL_OFFLINE", "BACKTEST_ENABLED": "0", "REPLAY_ENABLED": "1",
         "CANDLE_DATA_DIR": str(tmp_path / "data"),
         "CANDLESCOPE_LOCAL_DATA_DIR": str(tmp_path / "local-data"),
         "CANDLESCOPE_PLUGIN_PLATFORM_V2_ROOT": str(tmp_path / "plugins"),

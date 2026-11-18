@@ -25,7 +25,8 @@ async function boundedActivation<T>(work: Promise<T>): Promise<T> {
 }
 
 export function createExtensionContext(item: { manifest: {id: string; internalApiVersion?: 1}; assetBase?: string },
-  guard: () => void = () => {}, resolveAssets = trustedExtensionAssetBase, validateResult?: () => Promise<void>): { context: ExtensionContext; dispose: Dispose } {
+  guard: () => void = () => {}, resolveAssets = trustedExtensionAssetBase, validateResult?: () => Promise<void>,
+  allowSlot: (name: string) => boolean = () => true): { context: ExtensionContext; dispose: Dispose } {
   const cleanups: Dispose[] = [];
   let disposed = false;
   const id = item.manifest.id;
@@ -43,7 +44,7 @@ export function createExtensionContext(item: { manifest: {id: string; internalAp
     ui: {
       replaceSlot(name, component) {
         guard();
-        if (!validSlots.has(name) || slotOwners.has(name)) throw new Error(`Slot unavailable or already replaced: ${name}`);
+        if (!validSlots.has(name) || !allowSlot(name) || slotOwners.has(name)) throw new Error(`Slot unavailable or already replaced: ${name}`);
         slotOwners.set(name, id);
         const slots = new Map(getExtensionState().slots);
         slots.set(name, component);

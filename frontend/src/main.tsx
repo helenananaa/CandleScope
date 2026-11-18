@@ -7,6 +7,7 @@ import { ChartErrorBoundary } from './app/AppProviders'
 import { readPersistedLocale } from './features/settings/chartAppearanceSettings.js'
 import { bindDocumentLocale, initializeLocale } from './i18n/index.js'
 import { markPerf } from './runtime/performance/perfMarks'
+import { prepareUnifiedShell } from './features/extensions/unifiedRuntime.js'
 
 async function boot(): Promise<void> {
   await initializeLocale(readPersistedLocale())
@@ -19,6 +20,7 @@ async function boot(): Promise<void> {
   document.addEventListener('contextmenu', (e) => e.preventDefault())
 
   markPerf('app.boot.start')
+  await prepareUnifiedShell()
   markPerf('app.root.render.requested')
 
   createRoot(document.getElementById('root') as HTMLElement).render(

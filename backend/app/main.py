@@ -122,9 +122,10 @@ app = FastAPI(
 )
 app.include_router(support_router)
 from app.trusted_extensions.api import create_extension_router
-from app.trusted_extensions.runtime import prepare_extensions, activate_extensions, stop_extensions, extension_factory
+from app.trusted_extensions.runtime import prepare_extensions, activate_extensions, stop_extensions
 from app.plugin_lifecycle.api import create_unified_router
-from app.plugin_lifecycle.bootstrap import prepare_unified, activate_unified, stop_unified
+from app.plugin_lifecycle.bootstrap import prepare_unified, prepare_unified_startup, activate_unified, stop_unified
+from app.plugin_lifecycle.composition import startup_factory
 
 app.include_router(create_extension_router())
 app.include_router(create_unified_router())
@@ -195,7 +196,7 @@ async def _init_alert_delivery() -> None:
     """Start durable alert delivery independently from live market data."""
     from app.alerts.facade import AlertFacade
 
-    alert_facade = extension_factory(app, "alert-delivery", AlertFacade)()
+    alert_facade = startup_factory(app, "alert-delivery", AlertFacade)()
     await alert_facade.start()
     app.state.alert_facade = alert_facade
 
@@ -218,13 +219,13 @@ async def _init_data_manager() -> None:
         from app.indicator.series_revision import SeriesRevisionRegistry
         from app.core import config
 
-        runtime = await extension_factory(app, "data-engine", start_data_engine)()
+        runtime = await startup_factory(app, "data-engine", start_data_engine)()
         runtime.attach_to_app_state(app.state)
 
         indicator_engine = None
         try:
             revision_registry = SeriesRevisionRegistry()
-            indicator_range_service = extension_factory(app, "indicator-range", IndicatorRangeResultService.from_config)(
+            indicator_range_service = startup_factory(app, "indicator-range", IndicatorRangeResultService.from_config)(
                 revision_registry=revision_registry,
             )
             # One authoritative revision registry is shared by WS events,
@@ -361,7 +362,7 @@ async def _init_replay_runtime() -> None:
     async def refresh_instrument_metadata(exchange: str, market_type: str):
         return await refresh_exchange_metadata(exchange, market_type=market_type)
 
-    runtime = await extension_factory(app, "replay", start_replay_runtime)(
+    runtime = await startup_factory(app, "replay", start_replay_runtime)(
         instrument_metadata_resolver=get_cached_symbol_metadata,
         instrument_metadata_refresher=refresh_instrument_metadata,
     )
@@ -619,6 +620,7 @@ async def _startup_event_impl() -> None:
     if RUNTIME_MODE != "LOCAL_OFFLINE":
         await prepare_extensions(app)
         prepare_unified(app)
+        await prepare_unified_startup(app)
 
     if RUNTIME_MODE == "LOCAL_OFFLINE":
         local_runtime = None
@@ -638,6 +640,7 @@ async def _startup_event_impl() -> None:
             app.state.local_data_runtime = local_runtime.data
             await prepare_extensions(app)
             prepare_unified(app)
+            await prepare_unified_startup(app)
             if BACKTEST_SETTINGS.enabled:
                 from app.backtest.runtime import BacktestRuntime
 
@@ -663,7 +666,7 @@ async def _startup_event_impl() -> None:
                 replay_agg_trade_enabled=False, replay_agg_trade_origin_uri=None)
             imported_bars = LocalReplayBarRepository(local_runtime.service,
                 max_rows=offline_replay.max_bar_dataset_rows)
-            replay_runtime = await extension_factory(app, "replay", start_replay_runtime)(
+            replay_runtime = await startup_factory(app, "replay", start_replay_runtime)(
                 settings=offline_replay, repository=imported_bars,
                 native_intervals=imported_bars.native_intervals,
                 raw_trade_archive=LocalReplayTradeRepository(local_runtime.service))
@@ -674,14 +677,14 @@ async def _startup_event_impl() -> None:
         except BaseException:
             core=getattr(app.state,"data_manager_core",None)
             if core is not None:await core.shutdown_strategy()
-            await stop_unified(app)
-            await stop_extensions(app)
             if replay_runtime is not None:
                 await replay_runtime.shutdown()
             if backtest_runtime is not None:
                 backtest_runtime.shutdown()
             if local_runtime is not None:
                 local_runtime.shutdown()
+            await stop_unified(app)
+            await stop_extensions(app)
             await lag_monitor.stop()
             raise
         logger.info("Started LOCAL_OFFLINE runtime at %s", LOCAL_DATA_DIR)
@@ -697,7 +700,7 @@ async def _startup_event_impl() -> None:
     start_shared_ssl_context_warmup()
 
     # 1. Initialize registered market-storage schemas through one composition root.
-    storage_bootstrap = initialize_market_storage(
+    storage_bootstrap = startup_factory(app, "market-storage", initialize_market_storage)(
         klines_db_path=KLINES_DB_PATH,
         trade_flow_backend=TRADE_FLOW_ROLLUP_BACKEND,
         trade_flow_db_path=TRADE_FLOW_DB_PATH,
@@ -722,7 +725,7 @@ async def _startup_event_impl() -> None:
         if BACKTEST_SETTINGS.enabled or RESEARCH_DATA_LIBRARY_ENABLED:
             from app.local_data.runtime import LocalDataRuntime
 
-            data_runtime = LocalDataRuntime(LOCAL_DATA_DIR)
+            data_runtime = startup_factory(app, "local-data", LocalDataRuntime)(LOCAL_DATA_DIR)
             data_runtime.start()
             app.state.local_data_runtime = data_runtime
             app.state.local_data_service = data_runtime.service
@@ -973,8 +976,6 @@ async def _shutdown_components() -> None:
         await replay_core.synthetic.close()
         await replay_core.shutdown_strategy()
         await replay_core.shutdown_replay(step_timeout=5)
-    await stop_unified(app)
-    await stop_extensions(app)
     readonly_accounts = getattr(app.state, "readonly_account_service", None)
     if readonly_accounts is not None:
         core = getattr(app.state, "data_manager_core", None)
@@ -1004,6 +1005,8 @@ async def _shutdown_components() -> None:
             if backtest_service is not None:
                 backtest_service.shutdown()
         local_runtime.shutdown()
+        await stop_unified(app)
+        await stop_extensions(app)
         lag_monitor = getattr(app.state, "event_loop_lag_monitor", None)
         if lag_monitor is not None:
             await lag_monitor.stop()
@@ -1133,6 +1136,8 @@ async def _shutdown_components() -> None:
     if replay_runtime is not None:
         await replay_runtime.shutdown(step_timeout=5)
 
+    await stop_unified(app)
+    await stop_extensions(app)
     unfreeze_startup_heap()
     print("[shutdown] All components shut down")
 
