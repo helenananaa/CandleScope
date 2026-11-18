@@ -3,6 +3,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { createHash, randomUUID } = require("node:crypto");
 const { execFileSync } = require("node:child_process");
+const { setTimeout: delay } = require("node:timers/promises");
 const { _electron } = require(process.env.CANDLESCOPE_QA_PLAYWRIGHT || "playwright-core");
 
 const [appPath, qaPath, receiptPath] = process.argv.slice(2);
@@ -10,7 +11,12 @@ const api = "/api/v2/plugins";
 const market = api + "/manage/marketplace";
 const unified = api + "/manage/unified";
 const sha = bytes => "sha256:" + createHash("sha256").update(bytes).digest("hex");
-const proc = () => execFileSync("ps", ["-axo", "pid=,ppid="], { encoding: "utf8" })
+const windows = process.platform === "win32";
+const proc = () => (windows
+  ? execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
+    "Get-CimInstance Win32_Process | ForEach-Object { '{0} {1}' -f $_.ProcessId,$_.ParentProcessId }"],
+  { encoding: "utf8" })
+  : execFileSync("ps", ["-axo", "pid=,ppid="], { encoding: "utf8" }))
   .trim().split("\n").map(row => row.trim().split(/\s+/).map(Number));
 const read = async file => JSON.parse(await fs.readFile(file, "utf8"));
 
@@ -20,13 +26,33 @@ async function main() {
   const home = path.join(qa, "home");
   await fs.mkdir(home, { recursive: true });
   const fixtures = await read(path.join(qa, "fixtures.json"));
-  const resources = path.join(appPath, "Contents", "Resources");
-  execFileSync("codesign", ["--verify", "--deep", "--strict", appPath]);
+  const resources = windows ? path.join(path.dirname(appPath), "resources")
+    : path.join(appPath, "Contents", "Resources");
+  const executable = windows ? appPath : path.join(appPath, "Contents", "MacOS", "CandleScope");
+  if (!windows) execFileSync("codesign", ["--verify", "--deep", "--strict", appPath]);
   const receipt = {
-    platform: process.platform, architecture: process.arch, signatureVerified: true,
+    platform: process.platform, architecture: process.arch, signatureVerified: windows ? null : true,
     appAsar: sha(await fs.readFile(path.join(resources, "app.asar"))),
     fixtures, sessions: [],
   };
+  const env = {
+    ...process.env,
+    HOME: home, TMPDIR: qa,
+    CANDLESCOPE_RUNTIME_MODE: "LIVE", CANDLESCOPE_DESKTOP_USER_DATA: profile,
+    CANDLESCOPE_DESKTOP_UI_PORT: "0", CANDLESCOPE_DESKTOP_BACKEND_PORT: "0",
+    CANDLESCOPE_PLUGIN_PLATFORM_V2_ROOT: path.join(profile, "plugins"),
+    CANDLESCOPE_PLUGIN_PLATFORM_V2_MARKETPLACE_ENABLED: "1",
+    CANDLESCOPE_PLUGIN_PLATFORM_V2_MARKETPLACE_ROOTS: path.join(qa, "roots.json"),
+    CANDLE_DATA_DIR: path.join(profile, "data"),
+    CANDLESCOPE_LOCAL_DATA_DIR: path.join(profile, "library"),
+    HTTP_PROXY: "http://127.0.0.1:9", HTTPS_PROXY: "http://127.0.0.1:9",
+    ALL_PROXY: "http://127.0.0.1:9", NO_PROXY: "127.0.0.1,localhost",
+  };
+  for (const key of [
+    "ELECTRON_RUN_AS_NODE", "PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV",
+    "CANDLESCOPE_DESKTOP_URL", "CANDLESCOPE_DESKTOP_SKIP_SIDECAR",
+    "CANDLESCOPE_DESKTOP_SIDECAR_COMMAND_JSON", "CANDLESCOPE_PYTHON",
+  ]) delete env[key];
   const record = () => fs.writeFile(receiptPath, JSON.stringify(receipt, null, 2) + "\n");
   let migratedStorage;
   let healthyGeneration;
@@ -42,21 +68,10 @@ async function main() {
     const pids = new Set();
     try {
       electron = await _electron.launch({
-        executablePath: path.join(appPath, "Contents", "MacOS", "CandleScope"),
+        executablePath: executable,
         args: ["--lang=en-US"],
-        env: {
-          HOME: home, PATH: process.env.PATH, TMPDIR: qa,
-          CANDLESCOPE_RUNTIME_MODE: "LIVE", CANDLESCOPE_DESKTOP_USER_DATA: profile,
-          CANDLESCOPE_DESKTOP_UI_PORT: "0", CANDLESCOPE_DESKTOP_BACKEND_PORT: "0",
-          CANDLESCOPE_PLUGIN_PLATFORM_V2_ROOT: profile + "/plugins",
-          CANDLESCOPE_PLUGIN_PLATFORM_V2_MARKETPLACE_ENABLED: "1",
-          CANDLESCOPE_PLUGIN_PLATFORM_V2_MARKETPLACE_ROOTS: qa + "/roots.json",
-          CANDLE_DATA_DIR: profile + "/data",
-          CANDLESCOPE_LOCAL_DATA_DIR: profile + "/library",
-          HTTP_PROXY: "http://127.0.0.1:9", HTTPS_PROXY: "http://127.0.0.1:9",
-          ALL_PROXY: "http://127.0.0.1:9", NO_PROXY: "127.0.0.1,localhost",
-        },
-        timeout: 40000,
+        env,
+        timeout: 120000,
       });
       const identity = await electron.evaluate(({ app }) => ({
         packaged: app.isPackaged, pid: process.pid, userData: app.getPath("userData"),
@@ -64,9 +79,16 @@ async function main() {
       }));
       pids.add(identity.pid);
       assert.equal(identity.packaged, true);
-      assert.equal(identity.userData, profile);
+      assert.equal(path.resolve(identity.userData), profile);
       result.electron = identity.electron;
       const page = await electron.firstWindow({ timeout: 90000 });
+      await page.waitForURL(url => url.protocol === "http:" && url.hostname === "127.0.0.1", {
+        waitUntil: "load", timeout: 90000,
+      });
+      const bootstrap = await page.evaluate(() => window.candlescopeDesktop.getBootstrap());
+      const command = bootstrap.sidecar.command.replace(/^\\\\\?\\/, "");
+      const bundledPython = path.relative(path.join(resources, "python-runtime"), command);
+      assert.ok(bundledPython && !path.isAbsolute(bundledPython) && !bundledPython.startsWith(".."));
       const connection = await page.evaluate(() => ({
         backend: new URL(window.candlescopeDesktop.apiBase).origin,
         session: window.candlescopeDesktop.getPluginManagementSession(),
@@ -101,6 +123,8 @@ async function main() {
         page, result, request,
         catalog: () => request(unified),
         oldCatalog: () => request(api + "/catalog"),
+        invokeLegacy: () => request(api + "/manage/commands/" + fixtures.legacy.id + ".hello/invoke",
+          { body: { input: { name: "Marketplace" } } }),
         index: async sequence => request(`${market}/${fixtures.marketplaceId}/index`, {
           bytes: await fs.readFile(path.join(qa, `index-${sequence}.json`)),
         }),
@@ -191,7 +215,11 @@ async function main() {
             for (const [pid, parent] of tree) if (pids.has(parent)) pids.add(pid);
           }
           await electron.close();
-          result.remainingOwnedProcesses = proc().filter(([pid]) => pids.has(pid)).map(([pid]) => pid);
+          for (let attempt = 0; attempt < 10; attempt++) {
+            result.remainingOwnedProcesses = proc().filter(([pid]) => pids.has(pid)).map(([pid]) => pid);
+            if (!result.remainingOwnedProcesses.length) break;
+            await delay(250);
+          }
           assert.deepEqual(result.remainingOwnedProcesses, []);
         }
       } finally {
@@ -213,8 +241,9 @@ async function main() {
     await q.openMarket();
     const old = plugin(await q.oldCatalog(), fixtures.legacy.id);
     assert.equal(old.version, fixtures.legacy.version);
-    q.result.legacyReadyOnMac = old.available;
-    assert.equal(old.available, false);
+    q.result.legacyAvailable = old.available;
+    assert.equal(old.available, windows, JSON.stringify(old));
+    if (windows) assert.equal((await q.invokeLegacy()).result.message, "Hello, Marketplace!");
     const initial = await q.activate(fixtures.initial, { checkCancel: true });
     q.result.installGeneration = initial.activation.generation;
     await q.select(fixtures.initial.id);
@@ -261,9 +290,13 @@ async function main() {
     const restored = await response;
     q.result.manualRollback = await restored.json();
     assert.equal(restored.status(), 200, JSON.stringify(q.result.manualRollback));
-    assert.deepEqual(q.result.manualRollback, { restoredVersion: fixtures.legacy.version, runtimeReady: false });
+    assert.deepEqual(q.result.manualRollback, { restoredVersion: fixtures.legacy.version, runtimeReady: windows });
     assert.equal(plugin(await q.catalog(), fixtures.legacy.id), undefined);
     assert.equal(plugin(await q.oldCatalog(), fixtures.legacy.id).version, fixtures.legacy.version);
+    if (windows) {
+      assert.equal((await q.invokeLegacy()).result.message, "Hello, Marketplace!");
+      q.result.legacyCommandAfterRollback = "passed";
+    }
     await q.page.waitForFunction(() => !document.documentElement.dataset.extensionTheme);
     q.result.migratedAppearanceRemoved = true;
     await preserved();
@@ -290,6 +323,10 @@ async function main() {
     assert.ok(theme.entries.find(item => item.id === "theme").observed.some(item => item.state === "ready"));
     assert.equal(plugin(await q.catalog(), fixtures.legacy.id), undefined);
     assert.equal(plugin(await q.oldCatalog(), fixtures.legacy.id).version, fixtures.legacy.version);
+    if (windows) {
+      assert.equal((await q.invokeLegacy()).result.message, "Hello, Marketplace!");
+      q.result.legacyCommandAfterRestart = "passed";
+    }
     assert.equal(await fs.readFile(path.join(migratedStorage, "qa-new-data.txt"), "utf8"), "new version data\n");
     await preserved();
     q.result.bothVersionsDataPreserved = true;
