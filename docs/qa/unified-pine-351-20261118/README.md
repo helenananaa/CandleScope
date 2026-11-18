@@ -33,3 +33,12 @@ Windows 私有连接返回 429，未启动候选。实时图表及各回放窗�
 其余旧消费者迁移、旧协议退役和最终联合验收继续由 #351 跟踪。
 安装版测试的 0.4.1 是验证管理升级与回滚的合成包，桌面应用自身跨版本升级仍待实际验证。
 完整窗口传输的性能单独测量。旧版本策略运行保留原报告和输入，若要再次执行可在统一 Pine 中重跑。
+
+## 打包验收重跑
+
+`build_upgrade.py` 从应用内摘要已经验证的 Pine 归档构建测试升级包，只增加测试版本号。
+`accept_installed.cjs` 使用独立配置启动实际打包应用，核对内置 Python 和 Pine 摘要，
+验证图表边界、策略交易与图形、快照重启恢复、升级、回滚和停用。启动目标在 macOS
+上为 `CandleScope.app`，在 Windows 上为打包目录下的 `CandleScope.exe`。
+`CANDLESCOPE_QA_PLAYWRIGHT` 指定 Playwright Core 模块路径。Windows 工作流上传
+`pine.json`，其中记录应用摘要、策略样本和每次退出的进程回收结果。

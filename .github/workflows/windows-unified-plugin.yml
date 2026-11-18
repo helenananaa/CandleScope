@@ -12,6 +12,8 @@ on:
       - 'backend/app/plugin_marketplace_v2/**'
       - 'docs/qa/unified-marketplace-migration-351-20261118/*.cjs'
       - 'docs/qa/unified-marketplace-migration-351-20261118/*.py'
+      - 'docs/qa/unified-pine-351-20261118/accept_installed.cjs'
+      - 'docs/qa/unified-pine-351-20261118/build_upgrade.py'
       - 'examples/unified-plugins/aho-corasick/**'
   workflow_dispatch:
 
@@ -85,6 +87,16 @@ jobs:
             "$env:RUNNER_TEMP/aho-corasick.cspkg" `
             "$env:RUNNER_TEMP/driver/node_modules/playwright-core" `
             $output
+      - name: Verify the bundled Pine lifecycle and saved strategy in the installed app
+        shell: pwsh
+        run: |
+          $package = "$env:RUNNER_TEMP/desktop-build/win-unpacked"
+          $output = "$env:RUNNER_TEMP/windows-unified-plugin"
+          $qa = "docs/qa/unified-pine-351-20261118"
+          $env:CANDLESCOPE_QA_PLAYWRIGHT = "$env:RUNNER_TEMP/driver/node_modules/playwright-core"
+          python "$qa/build_upgrade.py" "$package/resources/python-runtime/plugins/unified-pine.json" "$env:RUNNER_TEMP/pine-upgrade.cspkg"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node "$qa/accept_installed.cjs" "$package/CandleScope.exe" "$output/pine.json" "$env:RUNNER_TEMP/pine-upgrade.cspkg"
       - name: Verify installed marketplace migration and rollback
         shell: pwsh
         env:
