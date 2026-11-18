@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   fetchPluginCatalog,
+  fetchUnifiedCommands,
   fetchPluginLiveControlStatus,
   fetchPluginManagementDetail,
   fetchPluginMarketplaceCatalog,
@@ -9,6 +10,7 @@ import {
   invalidatePluginControlReads,
   downloadPluginUserFile,
   invokePluginCommand,
+  invokeUnifiedCommand,
   PluginPlatformApiError,
   installPluginBundle,
   prepareLocalPluginInstall,
@@ -17,6 +19,7 @@ import {
   reviewPluginTrustChange,
   confirmPluginTrustChange,
   activatePluginMarketplaceRelease,
+  rollbackPluginMarketplaceMigration,
   applyPluginMarketplaceRelease,
   issueLiveConfirmation,
   killLiveControl,
@@ -55,6 +58,7 @@ import { buildPluginRegistries } from "./pluginRegistries.js";
 import type {
   JsonValue,
   PluginCatalog,
+  PluginCommandContribution,
   PluginMarketIdentity,
   PluginLiveControlStatus,
   PluginMarketplaceCatalog,
@@ -161,6 +165,7 @@ export function usePluginPlatformRuntime(identity: PluginMarketIdentity, liveCha
   const locale = useLocale();
   const { exchange, interval, marketType, symbol } = identity;
   const [catalog, setCatalog] = useState<PluginCatalog | null>(null);
+  const [unifiedCommands, setUnifiedCommands] = useState<PluginCommandContribution[]>([]);
   const [marketplaceCatalog, setMarketplaceCatalog] = useState<PluginMarketplaceCatalog | null>(null);
   const [snapshot, setSnapshot] = useState<PluginUiSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -182,6 +187,7 @@ export function usePluginPlatformRuntime(identity: PluginMarketIdentity, liveCha
   const catalogRef = useRef<PluginCatalog | null>(null);
   const snapshotRef = useRef<PluginUiSnapshot | null>(null);
   const catalogRefreshSequenceRef = useRef(0);
+  const commandRefreshSequenceRef = useRef(0);
   const snapshotRefreshSequenceRef = useRef(0);
   const marketplaceRefreshSequenceRef = useRef(0);
   const liveRefreshSequenceRef = useRef(0);
@@ -362,10 +368,21 @@ export function usePluginPlatformRuntime(identity: PluginMarketIdentity, liveCha
     }
   }, []);
 
+  const refreshUnifiedCommands = useCallback(async (signal?: AbortSignal) => {
+    if (!managementAvailable) return;
+    const sequence = ++commandRefreshSequenceRef.current;
+    const commands = await fetchUnifiedCommands(signal).catch(() => []);
+    if (signal?.aborted || sequence !== commandRefreshSequenceRef.current) return;
+    setUnifiedCommands((previous) => previous.length === commands.length && previous.every((command, index) => (
+      command.id === commands[index]?.id && command.unifiedTarget?.instanceId === commands[index]?.unifiedTarget?.instanceId
+    )) ? previous : commands);
+  }, [managementAvailable]);
+
   const refresh = useCallback(async (): Promise<void> => {
     const tasks = [
       refreshCatalogState({ includeSnapshot: true }),
       refreshLiveControlState(),
+      refreshUnifiedCommands(),
     ];
     if (managerOpen) tasks.push(refreshMarketplaceCatalogState());
     await awaitRefreshTasks(tasks);
@@ -374,6 +391,7 @@ export function usePluginPlatformRuntime(identity: PluginMarketIdentity, liveCha
     refreshCatalogState,
     refreshLiveControlState,
     refreshMarketplaceCatalogState,
+    refreshUnifiedCommands,
   ]);
 
   useEffect(() => {
@@ -396,6 +414,14 @@ export function usePluginPlatformRuntime(identity: PluginMarketIdentity, liveCha
     PLUGIN_CATALOG_REVALIDATE_MS,
     pageVisible,
   );
+
+  useEffect(() => {
+    if (!managementAvailable || !pageVisible) return undefined;
+    const request = new AbortController();
+    void refreshUnifiedCommands(request.signal);
+    return () => request.abort();
+  }, [managementAvailable, pageVisible, refreshUnifiedCommands]);
+  useAbortableInterval(refreshUnifiedCommands, 5_000, pageVisible && managementAvailable);
 
   const uiPollingEnabled = pluginCatalogNeedsUiPolling(catalog, snapshot);
   useAbortableInterval(
@@ -486,7 +512,9 @@ export function usePluginPlatformRuntime(identity: PluginMarketIdentity, liveCha
     symbol,
   ]);
 
-  const registries = useMemo(() => buildPluginRegistries(catalog, locale), [catalog, locale]);
+  const registries = useMemo(
+    () => buildPluginRegistries(catalog, locale, unifiedCommands), [catalog, locale, unifiedCommands],
+  );
   const error = errorCause === null ? null : errorMessage(errorCause);
   const notice = noticeMessage(noticeState);
   useEffect(() => {
@@ -513,6 +541,9 @@ export function usePluginPlatformRuntime(identity: PluginMarketIdentity, liveCha
   }, [refresh]);
 
   const invokeCommand = useCallback(async (id: string, input: Record<string, JsonValue> = {}) => {
+    const unified = unifiedCommands.find((command) => command.id === id)?.unifiedTarget;
+    if (unified) return invokeUnifiedCommand(unified, input);
+    if (id.includes("/")) throw new Error(t("plugin.host.operationFailed"));
     try {
       const result = await invokePluginCommand(id, input, locale);
       await refresh();
@@ -522,7 +553,7 @@ export function usePluginPlatformRuntime(identity: PluginMarketIdentity, liveCha
       setNoticeState({ kind: "error", cause: caught });
       throw caught;
     }
-  }, [locale, refresh]);
+  }, [locale, refresh, unifiedCommands]);
 
   const changeState = useCallback(async (
     pluginId: string,
@@ -736,9 +767,13 @@ export function usePluginPlatformRuntime(identity: PluginMarketIdentity, liveCha
         () => applyPluginMarketplaceRelease(pluginId),
         { kind: "message", key: "plugin.notice.marketplaceApplied" },
       ),
-      activateMarketplaceRelease: (pluginId) => withRefresh(
-        () => activatePluginMarketplaceRelease(pluginId),
+      activateMarketplaceRelease: (pluginId, approval) => withRefresh(
+        () => activatePluginMarketplaceRelease(pluginId, approval),
         { kind: "message", key: "plugin.notice.marketplaceActivated" },
+      ),
+      rollbackMarketplaceMigration: (pluginId, review) => withRefresh(
+        () => rollbackPluginMarketplaceMigration(pluginId, review),
+        { kind: "message", key: "plugin.notice.state.rollback" },
       ),
       installBundle: async (file) => {
         try {

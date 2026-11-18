@@ -242,11 +242,15 @@ export function MarketplacePanel({
           const candidate = status?.candidates.find((item) => item.pluginId === entry.pluginId) ?? null;
           const update = status?.updates.find((item) => item.pluginId === entry.pluginId) ?? null;
           const installed = runtime.view.catalog?.plugins.find((item) => item.id === entry.pluginId) ?? null;
-          const prepareAvailable = entry.installedVersion === null || update?.available === true;
-          const activationReady = installed?.permissions.activationReady === true;
+          const approval = candidate?.unifiedApproval;
+          const rollback = entry.legacyRollback;
+          const activationReady = approval !== undefined || installed?.permissions.activationReady === true;
           const selectedArtifact = entry.latest.artifacts?.find(
             (artifact) => artifact.artifactId === entry.assurances?.platform.artifactId,
           ) ?? entry.latest.artifact;
+          const prepareAvailable = selectedArtifact.packageFormat === "candlescope.unified-bundle/1"
+            || entry.installedVersion === null
+            || update?.available === true;
           return (
             <article key={entry.pluginId} data-marketplace-plugin={entry.pluginId}>
               <div className="plugin-marketplace-title">
@@ -359,15 +363,44 @@ export function MarketplacePanel({
                     onClick={() => void (async () => {
                       if (!(await confirmAction({
                         title: t("plugin.market.activateConfirm", { plugin: entry.pluginId, version: candidate.version }),
+                        ...(approval ? {
+                          message: [
+                            t("plugin.market.approveUnified", {
+                              digest: approval.packageSha256,
+                              permissions: approval.permissions.length
+                                ? `${t("plugin.market.chartScope")} (${approval.permissions.join(", ")})`
+                                : t("format.none"),
+                            }),
+                            approval.legacy ? t("plugin.market.copyLegacyData") : "",
+                          ].filter(Boolean).join(" "),
+                        } : {}),
                         confirmLabel: t("plugin.market.activateObserve"),
                       }))) return;
                       void run(
                         `activate:${entry.pluginId}`,
-                        () => runtime.actions.activateMarketplaceRelease(entry.pluginId),
+                        () => approval
+                          ? runtime.actions.activateMarketplaceRelease(entry.pluginId, approval)
+                          : runtime.actions.activateMarketplaceRelease(entry.pluginId),
                       );
                     })()}
                   >
                     {busy === `activate:${entry.pluginId}` ? t("plugin.market.activating") : t("plugin.market.activateObserve")}
+                  </button>
+                )}
+                {rollback && candidate?.phase !== "observing" && (
+                  <button
+                    type="button"
+                    data-marketplace-rollback={entry.pluginId}
+                    disabled={!runtime.view.managementAvailable || busy !== null}
+                    onClick={() => void (async () => {
+                      if (!(await confirmAction({
+                        title: t("plugin.rollbackAvailable", { target: `${entry.pluginId} ${rollback.version}` }),
+                        confirmLabel: t("plugin.rollback"),
+                      }))) return;
+                      void run(`rollback:${entry.pluginId}`, () => runtime.actions.rollbackMarketplaceMigration(entry.pluginId, rollback));
+                    })()}
+                  >
+                    {t("plugin.rollback")}
                   </button>
                 )}
               </div>

@@ -40,6 +40,25 @@ def test_multientry_manifest_is_an_immutable_package_identity():
         parsed.version = "2.0.0"
 
 
+def test_command_declarations_are_pinned_and_older_manifests_keep_their_wire_shape():
+    raw = manifest(entries=[{"id": "main", "kind": "sidecar", "path": "worker.py", "runtime": "python-module"}])
+    assert "commands" not in Manifest.from_wire(raw).to_wire()
+    command = {"id": "search", "title": "Search", "entryId": "main", "exampleInput": {"patterns": ["波浪"]}}
+    raw["commands"] = [command]
+    parsed = Manifest.from_wire(raw)
+    command["exampleInput"]["patterns"][0] = "changed"
+    assert parsed.to_wire()["commands"][0]["exampleInput"] == {"patterns": ["波浪"]}
+    assert Manifest.from_json(json.dumps(parsed.to_wire())) == parsed
+    with pytest.raises(ManifestError, match="duplicate command"):
+        Manifest.from_wire({**raw, "commands": [command, command]})
+    with pytest.raises(ManifestError, match="same package"):
+        Manifest.from_wire({**raw, "commands": [{**command, "entryId": "other"}]})
+    with pytest.raises(ManifestError, match="sidecar entry"):
+        Manifest.from_wire({**raw, "entries": [{"id": "main", "kind": "data", "path": "palette.json"}]})
+    with pytest.raises(ManifestError, match="bounded object"):
+        Manifest.from_wire({**raw, "commands": [{**command, "exampleInput": []}]})
+
+
 @pytest.mark.parametrize(
     "entry",
     [

@@ -55,6 +55,12 @@ Python 模块与 Node 模块、Java JAR、native executable、wasmtime 的启动
 profile，目前仅其支持的平台可准入；不支持时拒绝，绝不回退 full-trust。
 统一 restricted capability 授权尚未接通，非空声明拒绝。
 
+## 统一命令
+
+清单可选的 `commands` 最多声明 16 项。每项有包内唯一的 `id`、显示用的 `title` 和同包 backend 或 sidecar 的 `entryId`，可附一个有界的 `exampleInput` JSON 对象供命令面板编辑。
+
+可信桌面会话从 `GET /api/v2/plugins/manage/unified/commands` 发现已运行的命令。调用 `POST /api/v2/plugins/manage/unified/commands/invoke` 时必须有用户操作头，并提交 `pluginId`、`commandId`、`identity`、`instanceId` 和 JSON 对象 `input`。所有者从清单决定执行入口，并复核包版本、摘要、激活代次和实例。停用或升级会撤销旧调用，sidecar 返回的 JSON-RPC 无效参数错误会显示给用户，入口仍可继续接收有效请求。
+
 ## 图表计算
 
 统一前端入口通过 `ctx.charts.list()` 获取当前文档的图表身份。按选中的 scope 调用

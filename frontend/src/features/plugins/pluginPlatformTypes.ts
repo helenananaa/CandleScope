@@ -61,12 +61,21 @@ interface ContributionBase {
 
 export interface PluginCommandContribution extends ContributionBase {
   kind: "command/1";
+  unifiedTarget?: UnifiedCommandTarget;
+  exampleInput?: Record<string, JsonValue>;
   configuration: {
     requiresUserAction?: boolean;
     inputSchema?: PluginJsonSchema;
     fileInputs?: PluginCommandFileInput[];
     placements: PluginPlacement[];
   };
+}
+
+export interface UnifiedCommandTarget {
+  pluginId: string;
+  commandId: string;
+  identity: { pluginId: string; version: string; packageSha256: string; generation: number };
+  instanceId: string;
 }
 
 export interface PluginCommandFileInput {
@@ -564,6 +573,7 @@ export interface PluginCatalog {
 }
 
 export interface PluginMarketplaceArtifact {
+  packageFormat?: "candlescope.unified-bundle/1";
   fileName: string;
   url: string;
   sha256: string;
@@ -681,7 +691,25 @@ export interface PluginMarketplacePermissionDiff {
   }>;
 }
 
+export interface PluginMarketplaceRollbackReview {
+  version: string;
+  migrationGeneration: number;
+  registryRevision: number;
+}
+
+export interface PluginMarketplaceApproval {
+  packageSha256: string;
+  permissions: string[];
+  previousGeneration: number | null;
+  legacy?: {
+    legacyActivationId: string;
+    legacyBundleSha256: string;
+    legacyGrantSha256: string;
+  };
+}
+
 export interface PluginMarketplaceCandidate {
+  unifiedApproval?: PluginMarketplaceApproval;
   pluginId: string;
   version: string;
   marketplaceId: string;
@@ -791,6 +819,7 @@ export interface PluginMarketplaceCatalog {
     releaseCount: number;
     installedVersion: string | null;
     installable: boolean;
+    legacyRollback?: PluginMarketplaceRollbackReview;
   }>;
 }
 
@@ -1267,7 +1296,8 @@ export interface PluginPlatformRuntime {
     refreshMarketplace(marketplaceId: string): Promise<void>;
     prepareMarketplaceRelease(pluginId: string, version: string): Promise<void>;
     applyMarketplaceRelease(pluginId: string): Promise<void>;
-    activateMarketplaceRelease(pluginId: string): Promise<void>;
+    activateMarketplaceRelease(pluginId: string, approval?: PluginMarketplaceApproval): Promise<void>;
+    rollbackMarketplaceMigration(pluginId: string, review: PluginMarketplaceRollbackReview): Promise<void>;
     installBundle(file: File): Promise<{ restartRequired: boolean } | void>;
     prepareLocalInstall(file: File): Promise<PluginLocalInstallCandidate>;
     reviewLocalInstall(

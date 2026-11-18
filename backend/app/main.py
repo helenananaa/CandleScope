@@ -103,7 +103,7 @@ if RUNTIME_MODE == "LIVE":
     from app.api.v1.trading_accounts import router as trading_accounts_router
     from app.api.v1.local_data import router as local_data_router
     from app.data_engine.data_manager.capacity import build_capacity_snapshot
-    from app.plugin_core_v2 import create_core_plugin_router
+    from app.plugin_core_v2 import CorePluginPlatform, create_core_plugin_router
     from app.data_engine.storage import initialize_market_storage
     from app.readonly_accounts.api import router as readonly_accounts_router
 else:
@@ -715,6 +715,8 @@ async def _startup_event_impl() -> None:
                 refresh_exchange_metadata,
                 evictor=evict_exchange_metadata,
             )
+            if isinstance(plugin_platform_v2, CorePluginPlatform):
+                plugin_platform_v2.marketplace.bind_unified(app.state.unified_plugin_runtime)
             await plugin_platform_v2.start()
             plugin_platform_v2.publish_event(
                 "candlescope.app.ready/1",
@@ -724,6 +726,7 @@ async def _startup_event_impl() -> None:
             code, message = _plugin_plane_issue_from_exception(exc)
             _mark_plugin_plane_degraded(code=code, message=message)
             await _stop_plugin_owner(plugin_platform_v2)
+            app.state.unified_plugin_runtime.marketplace_policy = None
             from app.plugin_core_v2 import DisabledCorePluginPlatform
 
             plugin_platform_v2 = DisabledCorePluginPlatform()

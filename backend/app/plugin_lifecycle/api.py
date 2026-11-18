@@ -18,6 +18,7 @@ from app.plugin_security_v2.management import LocalManagementGuard
 
 from .bundle import MAX_PACKAGE_BYTES
 from .legacy_extensions import legacy_extensions, stage_legacy_appearance
+from .runtime import CommandInputError
 from .store import LifecycleError
 
 
@@ -34,15 +35,15 @@ async def _runtime(request, *, background=False):
     return runtime
 
 
-async def _body(request):
+async def _body(request, *, max_bytes=64 * 1024):
     body = bytearray()
     async for chunk in request.stream():
-        if len(body) + len(chunk) > 64 * 1024:
+        if len(body) + len(chunk) > max_bytes:
             raise HTTPException(413, "Plugin operation is too large")
         body.extend(chunk)
     try:
         value = loads_strict(
-            bytes(body), limits=JsonLimits(max_message_bytes=64 * 1024)
+            bytes(body), limits=JsonLimits(max_message_bytes=max_bytes)
         )
         if not isinstance(value, dict):
             raise TypeError("object required")
@@ -243,6 +244,42 @@ def create_unified_router():
                     body["input"],
                 ),
             }
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @router.get("/manage/unified/commands")
+    async def commands(request: Request):
+        runtime = await _runtime(request)
+        async with runtime.lock:
+            return {"commands": await asyncio.to_thread(runtime.command_catalog)}
+
+    @router.post("/manage/unified/commands/invoke")
+    async def invoke_command(request: Request):
+        runtime = await _runtime(request)
+        body = await _body(request, max_bytes=JsonLimits().max_message_bytes)
+        if set(body) != {"pluginId", "commandId", "identity", "instanceId", "input"}:
+            raise HTTPException(400, "Invalid unified command invocation")
+        job = asyncio.create_task(
+            runtime.invoke_command(
+                body["pluginId"],
+                body["commandId"],
+                body["identity"],
+                body["instanceId"],
+                body["input"],
+            )
+        )
+        try:
+            return {
+                "identity": body["identity"],
+                "instanceId": body["instanceId"],
+                "result": await job,
+            }
+        except asyncio.CancelledError:
+            if asyncio.current_task().cancelling():
+                raise
+            raise HTTPException(409, "Unified command was revoked") from None
+        except CommandInputError as exc:
+            raise HTTPException(400, str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(409, str(exc)) from exc
 

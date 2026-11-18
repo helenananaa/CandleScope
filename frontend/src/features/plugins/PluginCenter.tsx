@@ -73,7 +73,11 @@ export function PluginSettingsPanel({ runtime, initialSection = "installed", onB
     setMarketplaceBusy(key);
     setMarketplaceError(null);
     try { await operation(); setMarketplaceStatus(await loadMarket()); await detailState.reload(); }
-    catch (error) { setMarketplaceError(error instanceof Error ? describeError(error, error.message) : String(error)); }
+    catch (error) {
+      setMarketplaceError(error instanceof Error ? describeError(error, error.message) : String(error));
+      // The server can roll back an activation and return an error for the candidate.
+      await loadMarket().then(setMarketplaceStatus).catch(() => undefined);
+    }
     finally { setMarketplaceBusy(null); }
   };
   const refreshAll = () => void runtime.actions.refresh().then(() => detailState.reload()).catch(() => undefined);

@@ -1,0 +1,109 @@
+name: Windows unified plugin
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - '.github/workflows/windows-unified-plugin.yml'
+      - 'backend/app/plugin_lifecycle/**'
+      - 'backend/app/plugin_security_v2/**'
+      - 'backend/app/plugin_host/**'
+      - 'backend/app/plugin_core_v2/**'
+      - 'backend/app/plugin_marketplace_v2/**'
+      - 'docs/qa/unified-marketplace-migration-351-20261118/*.cjs'
+      - 'docs/qa/unified-marketplace-migration-351-20261118/*.py'
+      - 'examples/unified-plugins/aho-corasick/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-unified-plugin-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  appcontainer:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      PYTHONUTF8: '1'
+      PYTHONPATH: 'backend;packages/candlescope-plugin-sdk/src'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.12.23'
+      - name: Install contract dependencies
+        run: python -m pip install fastapi==0.115.6 jsonschema==4.25.1
+      - name: Build the pinned Rust packages
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal
+          rustup override set 1.97.1
+          $legacy = "examples/plugins/aho-corasick-adapter/Cargo.toml"
+          cargo fetch --locked --manifest-path $legacy
+          cargo build --release --locked --offline --manifest-path $legacy --target-dir "$env:RUNNER_TEMP/legacy"
+          python examples/unified-plugins/aho-corasick/build_candidate.py "$env:RUNNER_TEMP/aho-corasick.cspkg"
+      - name: Verify the restricted package and legacy search output
+        shell: pwsh
+        run: |
+          python examples/unified-plugins/aho-corasick/verify_candidate.py `
+            "$env:RUNNER_TEMP/aho-corasick.cspkg" `
+            "$env:RUNNER_TEMP/legacy/release/candlescope-aho-corasick-adapter.exe" `
+            --require-appcontainer
+      - name: Package the Windows desktop with locked inputs
+        shell: pwsh
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          npm --prefix frontend ci --ignore-scripts
+          $lock = Get-Content backend/ccxt-fork.lock.json | ConvertFrom-Json
+          $wheel = Join-Path $env:RUNNER_TEMP ([System.IO.Path]::GetFileName($lock.wheel_url))
+          Invoke-WebRequest -Uri $lock.wheel_url -OutFile $wheel -MaximumRetryCount 2 -RetryIntervalSec 4
+          $env:CANDLESCOPE_CCXT_WHEEL = $wheel
+          npm --prefix frontend run desktop:package:dir -- --win --x64 --publish never "--config.directories.output=$env:RUNNER_TEMP/desktop-build"
+      - name: Install and restart the restricted plugin in the packaged application
+        shell: pwsh
+        run: |
+          $output = "$env:RUNNER_TEMP/windows-unified-plugin"
+          New-Item -ItemType Directory -Path $output | Out-Null
+          npm install --prefix "$env:RUNNER_TEMP/driver" --ignore-scripts --no-package-lock playwright-core@1.56.1
+          node examples/unified-plugins/aho-corasick/verify_installed.mjs `
+            "$env:RUNNER_TEMP/desktop-build/win-unpacked/CandleScope.exe" `
+            "$env:RUNNER_TEMP/aho-corasick.cspkg" `
+            "$env:RUNNER_TEMP/driver/node_modules/playwright-core" `
+            $output
+      - name: Verify installed marketplace migration and rollback
+        shell: pwsh
+        env:
+          UV_OFFLINE: '1'
+        run: |
+          $package = "$env:RUNNER_TEMP/desktop-build/win-unpacked"
+          $output = "$env:RUNNER_TEMP/windows-unified-plugin"
+          $qa = "docs/qa/unified-marketplace-migration-351-20261118"
+          $env:PYTHONPATH = "$package/resources/backend;$package/resources/python-runtime/site-packages;backend;packages/candlescope-plugin-sdk/src"
+          & "$package/resources/python-runtime/python/python.exe" "$qa/seed_marketplace.py" "$env:RUNNER_TEMP/marketplace"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:CANDLESCOPE_QA_PLAYWRIGHT = "$env:RUNNER_TEMP/driver/node_modules/playwright-core"
+          node "$qa/accept_installed.cjs" "$package/CandleScope.exe" "$env:RUNNER_TEMP/marketplace" "$output/marketplace.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-unified-plugin-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/windows-unified-plugin/*.json
+            ${{ runner.temp }}/windows-unified-plugin/*.png
+          if-no-files-found: ignore
+          retention-days: 14
