@@ -6,8 +6,9 @@ import os
 
 from app.plugin_security_v2.errors import PlatformSecurityError
 
-from .pine import bind_strategy_runtime, bundled_path
+from .pine import bind_strategy_runtime
 from .runtime import UnifiedRuntime
+from .script_runtime import bundled_scripts
 from .store import PackageStore
 
 
@@ -25,12 +26,10 @@ def prepare_unified(app, *, store=None):
         or os.environ.get("CANDLESCOPE_PLUGIN_PLATFORM_V2_ENABLED", "1") == "0"
     )
     app.state.unified_plugin_runtime = UnifiedRuntime(app, store, safe_mode=safe)
-    selected_pine = bundled_path(os.environ) is not None
-    app.state.unified_plugin_runtime.pine_host_disabled = (
-        selected_pine
-        and os.environ.get("CANDLESCOPE_PLUGIN_HOST_ENABLED", "1").lower() in {"0", "false", "off"}
-    )
-    bind_strategy_runtime(app.state.unified_plugin_runtime, required=selected_pine)
+    app.state.unified_plugin_runtime.script_host_disabled = os.environ.get(
+        "CANDLESCOPE_PLUGIN_HOST_ENABLED", "1"
+    ).lower() in {"0", "false", "off"}
+    bind_strategy_runtime(app.state.unified_plugin_runtime, required=True)
 
 
 async def activate_unified(app):
@@ -50,7 +49,7 @@ async def prepare_unified_startup(app):
     target = os.environ.get("CANDLESCOPE_DISABLE_UNIFIED_PLUGIN")
     try:
         await runtime.prepare_startup(
-            recovery_target=target, bundled_pine=bundled_path(os.environ)
+            recovery_target=target, bundled=bundled_scripts(os.environ)
         )
     except (OSError, ValueError, PlatformSecurityError) as exc:
         await runtime.stop()

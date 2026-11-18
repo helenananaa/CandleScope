@@ -36,10 +36,6 @@ import {
   reconcileLiveExecution,
   preparePluginUserFileSave,
   preparePluginMarketplaceRelease,
-  previewV1CompatibilityImport,
-  applyV1CompatibilityImport,
-  previewV1CompatibilityRollback,
-  applyV1CompatibilityRollback,
   refreshPluginMarketplace,
   stagePluginUserFile,
   writePluginSettings,
@@ -743,16 +739,6 @@ export function usePluginPlatformRuntime(identity: PluginMarketIdentity, liveCha
       activateMarketplaceRelease: (pluginId) => withRefresh(
         () => activatePluginMarketplaceRelease(pluginId),
         { kind: "message", key: "plugin.notice.marketplaceActivated" },
-      ),
-      previewV1CompatibilityImport,
-      applyV1CompatibilityImport: (previewSha256) => withRefresh(
-        () => applyV1CompatibilityImport(previewSha256),
-        { kind: "message", key: "plugin.notice.v1Imported" },
-      ),
-      previewV1CompatibilityRollback,
-      applyV1CompatibilityRollback: (previewSha256) => withRefresh(
-        () => applyV1CompatibilityRollback(previewSha256),
-        { kind: "message", key: "plugin.notice.v1RolledBack" },
       ),
       installBundle: async (file) => {
         try {

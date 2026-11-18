@@ -18,11 +18,10 @@ from concurrent.futures import ThreadPoolExecutor
 
 from app.core.config import runtime_environment
 from app.data_engine.interval_policy import parse_interval_spec
-from app.plugin_runtime.registry import default_runtime_registry_path, load_runtime_registry
 from .errors import BacktestError
 
 PROTOCOL = "candlescope.native-strategy/1"
-MODULES = {"pine": ("candlescope.pine-compat", "candlescope_plugin_pine_compat.native_strategy")}
+NATIVE_LANGUAGES = ("pine",)
 TERMINAL = {"COMPLETED", "FAILED", "CANCELLED", "INTERRUPTED"}
 MAX_BYTES = 64 * 1024 * 1024
 _CANONICAL_ENCODER = json.JSONEncoder(sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
@@ -71,7 +70,7 @@ def frozen_boundaries(interval, bars):
 
 
 def resolve_plugin(language):
-    if language not in MODULES:
+    if language not in NATIVE_LANGUAGES:
         raise BacktestError("NATIVE_INPUT_UNSUPPORTED", "unsupported strategy language")
     env = runtime_environment()
     if env.get("CANDLESCOPE_PLUGIN_HOST_ENABLED", "1").lower() in {"0", "false", "off"}:
@@ -83,19 +82,7 @@ def resolve_plugin(language):
         unified = strategy_launch()
     except LifecycleError as exc:
         raise BacktestError("NATIVE_RUNTIME_UNAVAILABLE", str(exc)) from exc
-    if unified is not None:
-        return unified
-    default = default_runtime_registry_path(env)
-    native_registry = default.with_name("native-strategy-registry.json")
-    path = env.get("CANDLESCOPE_NATIVE_RUNTIME_REGISTRY") or env.get("CANDLESCOPE_RUNTIME_REGISTRY")
-    registry = load_runtime_registry(path or (native_registry if native_registry.exists() else default), allow_missing=True)
-    runtime_id, module = MODULES[language]
-    spec = registry.by_id().get(runtime_id)
-    if spec is None or not spec.enabled:
-        raise BacktestError("NATIVE_RUNTIME_UNAVAILABLE", f"install and enable {runtime_id} with native strategy support")
-    return {"command": [str(spec.executable), "-I", "-m", module],
-            "plugin_id": runtime_id, "plugin_version": spec.expected_version,
-            "installation": spec.managed.to_wire() if spec.managed else None}
+    return unified
 
 
 def pin_native_launch(plugin, *, restore=False):
@@ -188,7 +175,7 @@ class NativeBacktests:
 
     def capabilities(self):
         result = []
-        for language in MODULES:
+        for language in NATIVE_LANGUAGES:
             try:
                 plugin = self.resolver(language)
                 description = self.runner(plugin, {"operation": "describe"}, timeout=15)

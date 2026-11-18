@@ -16,9 +16,9 @@ from app.indicator.runtime_routes import IndicatorRuntimeRoute, IndicatorRuntime
 from app.plugin_runtime.bootstrap import build_runtime_host_from_environment
 
 
-def test_only_pine_is_a_default_first_party_script_route():
+def test_first_party_script_routes_reject_pyne():
     routes = IndicatorRuntimeRoutes.first_party_sidecar_default()
-    assert [route.language for route in routes.routes] == ["pine"]
+    assert [route.language for route in routes.routes] == ["pine", "python"]
     with pytest.raises(IndicatorRuntimeRoutesError, match="unsupported"):
         IndicatorRuntimeRoute("pyne", "sidecar", "candlescope.pyne")
 

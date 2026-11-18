@@ -22,14 +22,13 @@ from app.indicator.runtime_service import (
 )
 from app.plugin_compat_v1 import V1ScriptRuntimeCompatibilityBridge
 from app.plugin_lifecycle.pine import (
-    PINE_ENTRY,
     PINE_ID,
-    PineRuntimeHost,
     bind_strategy_runtime,
     import_pine_observations,
 )
-from app.plugin_lifecycle.pine_bundle import build_pine_package
 from app.plugin_lifecycle.runtime import UnifiedRuntime
+from app.plugin_lifecycle.script_bundle import PINE_ENTRY, build_pine_package
+from app.plugin_lifecycle.script_runtime import ScriptRuntimeHost
 from app.plugin_lifecycle.store import LifecycleError, PackageStore
 from app.plugin_runtime import RuntimeHostService
 from candlescope_plugin_sdk import (
@@ -143,10 +142,10 @@ async def test_bundled_pine_chart_strategy_and_restart(tmp_path):
     fixture = runtime_at(tmp_path)
     backtest, payload = next(fixture)
     try:
-        await runtime.prepare_startup(bundled_pine=descriptor)
+        await runtime.prepare_startup(bundled={PINE_ID: descriptor})
         assert not runtime.errors, runtime.errors
         run = runtime.running[(PINE_ID, PINE_ENTRY)]
-        host = PineRuntimeHost(runtime, None)
+        host = ScriptRuntimeHost(runtime)
         assert (await host.descriptor(PINE_ID)).id == PINE_ID
         assert (
             await host.analyze(PINE_ID, AnalyzeRequest(source=script, context=context))
@@ -249,7 +248,7 @@ async def test_bundled_pine_chart_strategy_and_restart(tmp_path):
         replacement = UnifiedRuntime(app, store)
         bind_strategy_runtime(replacement, required=True)
         try:
-            await replacement.prepare_startup(bundled_pine=descriptor)
+            await replacement.prepare_startup(bundled={PINE_ID: descriptor})
             assert replacement.running[(PINE_ID, PINE_ENTRY)].instance != run.instance
             rebound = pin_native_launch(launch, restore=True)
             assert rebound["installation"] == launch["installation"]
@@ -257,7 +256,7 @@ async def test_bundled_pine_chart_strategy_and_restart(tmp_path):
             legacy = RuntimeHostService.disabled(
                 host_name="CandleScope", host_version="test"
             )
-            replacement_host = PineRuntimeHost(replacement, legacy)
+            replacement_host = ScriptRuntimeHost(replacement)
             indicators = IndicatorRuntimeService(
                 IndicatorRuntimeRoutes.first_party_sidecar_default(),
                 host=replacement_host,

@@ -182,7 +182,7 @@ def main():
                                 suite / "tests/fixtures", dirs_exist_ok=True)
 
     sys.path[:0] = [str(REPO / "backend"), str(REPO / "packages" / "candlescope-plugin-sdk" / "src")]
-    from app.plugin_lifecycle.pine_bundle import build_pine_package
+    from app.plugin_lifecycle.script_bundle import PYTHON_ID, build_pine_package, build_script_package
 
     # Current SDK/bridge source is always built, so source edits cannot be
     # hidden by a same-version cached wheel from an earlier package.
@@ -254,14 +254,21 @@ def main():
         python_wheels = [next(built.glob("candlescope_plugin_python_indicator-*.whl")),
                          next(built.glob("candlescope_plugin_sdk-*.whl"))]
         python_bundle = args.output / f"candlescope-plugin-python-indicator-0.1.0-{target}.cspkg"
-        python_result = python_builder.build(python_wheels, python_bundle)
-        entries.append({
-            "runtimeId": "candlescope.python-indicator", "package": "candlescope-plugin-python-indicator",
-            "version": "0.1.0", "filename": python_bundle.name,
-            "sha256": python_result.sha256, "size": python_result.size,
-            "platform": {"system": platform.system(), "machine": platform.machine(),
-                         "implementation": platform.python_implementation(), "pythonVersion": python_version},
-        })
+        if args.qualification:
+            python_result = python_builder.build(python_wheels, python_bundle)
+            entries.append({
+                "runtimeId": PYTHON_ID, "package": "candlescope-plugin-python-indicator",
+                "version": "0.1.0", "filename": python_bundle.name,
+                "sha256": python_result.sha256, "size": python_result.size,
+                "platform": {"system": platform.system(), "machine": platform.machine(),
+                             "implementation": platform.python_implementation(), "pythonVersion": python_version},
+            })
+        else:
+            python_result = build_script_package(PYTHON_ID, python_wheels, "0.1.0", python_bundle)
+            (args.output / "unified-python.json").write_text(json.dumps({
+                "schema": "candlescope.bundled-unified-python/1", "filename": python_bundle.name,
+                "sha256": python_result.sha256, "size": python_result.size,
+            }, indent=2) + "\n")
         (args.output / "python-indicator.lock.json").write_text(json.dumps({
             "releaseStatus": "desktop-source-build-unpublished",
             "sourceSha256": source_digest(python_package),
@@ -275,17 +282,19 @@ def main():
                 {"language": "python", "mode": "sidecar", "runtimeId": "candlescope.python-indicator"},
             ],
         }, indent=2) + "\n")
-        manifest = {"schemaVersion": 2, "releaseStatus": "desktop-source-build-unpublished", "plugins": entries}
-        (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+        if args.qualification:
+            manifest = {"schemaVersion": 2, "releaseStatus": "desktop-source-build-unpublished", "plugins": entries}
+            (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
         shutil.copy2(RECIPE, sources_out / RECIPE.name)
-    # Probe the remaining legacy Python package in an isolated root.
-    # Qualification exports still produce the historical Pine artifact separately.
-    from app.plugin_runtime.installer import PluginInstaller
-    with tempfile.TemporaryDirectory(prefix="probe-", dir=args.cache) as temporary:
-        installer = PluginInstaller(root=Path(temporary), python_executable=Path(sys.executable),
-                                    host_name="CandleScope", host_version="0.3.0")
-        installer.install_many(tuple((args.output / e["filename"], e["sha256"]) for e in entries),
-                               enabled=True, auto_start=True, required=True)
+    if args.qualification:
+        # The release qualification command retains isolated historical probes.
+        from app.plugin_runtime.installer import PluginInstaller
+
+        with tempfile.TemporaryDirectory(prefix="probe-", dir=args.cache) as temporary:
+            installer = PluginInstaller(root=Path(temporary), python_executable=Path(sys.executable),
+                                        host_name="CandleScope", host_version="0.3.0")
+            installer.install_many(tuple((args.output / e["filename"], e["sha256"]) for e in entries),
+                                   enabled=True, auto_start=True, required=True)
     print(f"Built and verified bundled runtimes for {target}: {args.output}")
 
 

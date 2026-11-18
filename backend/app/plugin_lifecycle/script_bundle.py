@@ -1,4 +1,4 @@
-"""Build the signed-desktop Pine archive from its verified platform wheels."""
+"""Build desktop indicator packages from verified wheels."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import shutil
 import stat
 import tempfile
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 
 from candlescope_plugin_sdk.platform_v2 import canonical_dumps
@@ -15,10 +16,43 @@ from .bundle import MAX_FILE_BYTES, MAX_FILES, MAX_TOTAL_BYTES, build_package
 
 PINE_ID = "candlescope.pine-compat"
 PINE_ENTRY = "pine"
+PYTHON_ID = "candlescope.python-indicator"
+
+
+@dataclass(frozen=True)
+class BundledScript:
+    entry: str
+    label: str
+    module: str
+    exchange: str
+    environment: str
+
+
+SCRIPT_BUNDLES = {
+    PINE_ID: BundledScript(
+        PINE_ENTRY,
+        "Pine",
+        "candlescope_plugin_pine_compat",
+        "pine",
+        "CANDLESCOPE_BUNDLED_UNIFIED_PINE",
+    ),
+    PYTHON_ID: BundledScript(
+        "python",
+        "Python Indicators",
+        "candlescope_plugin_python_indicator",
+        "python",
+        "CANDLESCOPE_BUNDLED_UNIFIED_PYTHON",
+    ),
+}
 
 
 def build_pine_package(wheels, version, output):
-    with tempfile.TemporaryDirectory(prefix="candlescope-pine-unified-") as temporary:
+    return build_script_package(PINE_ID, wheels, version, output)
+
+
+def build_script_package(plugin_id, wheels, version, output):
+    spec = SCRIPT_BUNDLES[plugin_id]
+    with tempfile.TemporaryDirectory(prefix="candlescope-script-unified-") as temporary:
         source = Path(temporary)
         files = set()
         total = 0
@@ -40,34 +74,35 @@ def build_pine_package(wheels, version, output):
                         or info.file_size > MAX_FILE_BYTES
                     ):
                         raise ValueError(
-                            "unsafe or duplicate file in locked Pine wheels"
+                            "unsafe or duplicate file in locked script wheels"
                         )
                     total += info.file_size
                     files.add(name.casefold())
                     if len(files) > MAX_FILES - 3 or total > MAX_TOTAL_BYTES:
-                        raise ValueError("Pine wheel files exceed the package budget")
+                        raise ValueError("Script wheel files exceed the package budget")
                     destination = source / name
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     with archive.open(info) as content, destination.open("xb") as file:
                         shutil.copyfileobj(content, file)
-        (source / "pine-entry.py").write_text(
-            "from candlescope_plugin_pine_compat.unified_entry import main\nraise SystemExit(main())\n",
+        entry_path = f"{spec.entry}-entry.py"
+        (source / entry_path).write_text(
+            f"from {spec.module}.unified_entry import main\nraise SystemExit(main())\n",
             encoding="utf-8",
         )
         (source / "manifest.json").write_text(
             canonical_dumps(
                 {
                     "schema": "candlescope.unified-plugin/1",
-                    "id": PINE_ID,
+                    "id": plugin_id,
                     "version": version,
-                    "name": "Pine",
+                    "name": spec.label,
                     "hostApiVersion": 1,
                     "trust": "full-trust",
                     "entries": [
                         {
-                            "id": PINE_ENTRY,
+                            "id": spec.entry,
                             "kind": "sidecar",
-                            "path": "pine-entry.py",
+                            "path": entry_path,
                             "runtime": "python-module",
                         }
                     ],

@@ -1268,10 +1268,6 @@ export interface PluginPlatformRuntime {
     prepareMarketplaceRelease(pluginId: string, version: string): Promise<void>;
     applyMarketplaceRelease(pluginId: string): Promise<void>;
     activateMarketplaceRelease(pluginId: string): Promise<void>;
-    previewV1CompatibilityImport(): Promise<PluginV1CompatibilityPreview>;
-    applyV1CompatibilityImport(previewSha256: string): Promise<void>;
-    previewV1CompatibilityRollback(): Promise<PluginV1CompatibilityPreview>;
-    applyV1CompatibilityRollback(previewSha256: string): Promise<void>;
     installBundle(file: File): Promise<{ restartRequired: boolean } | void>;
     prepareLocalInstall(file: File): Promise<PluginLocalInstallCandidate>;
     reviewLocalInstall(

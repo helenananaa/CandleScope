@@ -148,7 +148,7 @@ function createSupervisor() {
       ))) : {}),
       ...(app.isPackaged ? {
         PYTHONNOUSERSITE: "1", PYTHONDONTWRITEBYTECODE: "1",
-        CANDLESCOPE_BUNDLED_PLUGIN_MANIFEST: path.join(runtimeRoot, "python-runtime", "plugins", "manifest.json"),
+        CANDLESCOPE_BUNDLED_UNIFIED_PYTHON: path.join(runtimeRoot, "python-runtime", "plugins", "unified-python.json"),
         CANDLESCOPE_BUNDLED_UNIFIED_PINE: path.join(runtimeRoot, "python-runtime", "plugins", "unified-pine.json"),
         CANDLESCOPE_BUNDLED_INDICATOR_RUNTIME_ROUTES: path.join(runtimeRoot, "python-runtime", "plugins", "indicator-runtime-routes.json"),
       } : {}),
