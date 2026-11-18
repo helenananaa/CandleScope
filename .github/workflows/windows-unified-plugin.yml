@@ -108,6 +108,7 @@ jobs:
         shell: pwsh
         env:
           UV_OFFLINE: '1'
+          CANDLESCOPE_QA_LEGACY_EXECUTION_RETIRED: '1'
         run: |
           $package = "$env:RUNNER_TEMP/desktop-build/win-unpacked"
           $output = "$env:RUNNER_TEMP/windows-unified-plugin"

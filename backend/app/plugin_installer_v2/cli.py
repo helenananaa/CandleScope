@@ -1,4 +1,4 @@
-"""Explicit ``candlescope-plugin v2`` command surface."""
+"""Build and inspect archived Plugin Platform v2 packages and records."""
 
 from __future__ import annotations
 
@@ -7,8 +7,6 @@ import json
 import sys
 from pathlib import Path
 from typing import Any
-
-from candlescope_plugin_sdk.platform_v2 import PlatformContractError, loads_strict
 
 from app.plugin_security_v2 import PlatformSecurityError
 
@@ -25,7 +23,7 @@ from .installer import PlatformPluginInstaller
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="candlescope-plugin v2",
-        description="Build and manage explicit CandleScope Plugin Platform schema-v2 bundles.",
+        description="Build and inspect archived CandleScope Plugin Platform bundles.",
     )
     parser.add_argument("--root", type=Path)
     parser.add_argument("--registry", type=Path)
@@ -57,14 +55,14 @@ def _parser() -> argparse.ArgumentParser:
     inspect.add_argument("bundle", type=Path)
 
     install = commands.add_parser(
-        "install", help="verify, isolate, probe, then atomically register a v2 bundle"
+        "install", help="retired; install an updated unified package"
     )
     install.add_argument("bundle", type=Path)
     install.add_argument("--sha256", required=True)
     install.add_argument("--enable", action="store_true")
 
     check = commands.add_parser(
-        "check", help="verify immutable content and rerun a fresh probe"
+        "check", help="retired; use inspect for an archived package"
     )
     check.add_argument("plugin_id")
     commands.add_parser(
@@ -79,24 +77,26 @@ def _parser() -> argparse.ArgumentParser:
     )
     permission_diff.add_argument("bundle", type=Path)
     permission_diff.add_argument("--sha256", required=True)
-    grant = commands.add_parser("grant", help="grant one declared permission")
+    grant = commands.add_parser(
+        "grant", help="retired; approve permissions with the unified package"
+    )
     grant.add_argument("plugin_id")
     grant.add_argument("permission_id")
     scope = grant.add_mutually_exclusive_group()
     scope.add_argument("--scope-json")
     scope.add_argument("--scope-file", type=Path)
     for command, help_text in (
-        ("deny", "deny one declared permission"),
-        ("revoke", "revoke one previously decided permission"),
+        ("deny", "retired"),
+        ("revoke", "retired"),
     ):
         item = commands.add_parser(command, help=help_text)
         item.add_argument("plugin_id")
         item.add_argument("permission_id")
     for command, help_text in (
-        ("enable", "enable a validated plugin after permission negotiation"),
-        ("disable", "disable a v2 activation"),
-        ("rollback", "restore the exact previous v2 activation"),
-        ("uninstall", "remove the v2 activation while retaining immutable content"),
+        ("enable", "retired; activate an updated unified package"),
+        ("disable", "retired"),
+        ("rollback", "retired; recover through the matching older application"),
+        ("uninstall", "retired; archived records are retained"),
     ):
         item = commands.add_parser(command, help=help_text)
         item.add_argument("plugin_id")
@@ -110,42 +110,6 @@ def _installer(args: argparse.Namespace) -> PlatformPluginInstaller:
         python_executable=args.python_executable,
         host_version=args.host_version,
     )
-
-
-def _grant_scope(args: argparse.Namespace) -> dict[str, Any] | None:
-    text: str | None = args.scope_json
-    if args.scope_file is not None:
-        source = args.scope_file.expanduser()
-        path = source.resolve(strict=False)
-        try:
-            valid = (
-                not source.is_symlink()
-                and path.is_file()
-                and path.stat().st_size <= 64 * 1024
-            )
-            if not valid:
-                raise PlatformInstallerError(
-                    "grant scope file must be a regular file no larger than 64 KiB"
-                )
-            text = path.read_text(encoding="utf-8")
-        except PlatformInstallerError:
-            raise
-        except (OSError, UnicodeError) as exc:
-            raise PlatformInstallerError(
-                f"unable to read grant scope file: {exc}"
-            ) from exc
-    if text is None:
-        return None
-    try:
-        value = loads_strict(text)
-    except PlatformContractError as exc:
-        raise PlatformInstallerError(
-            "grant scope must be strict JSON",
-            details={"contractCode": exc.code, "path": exc.path},
-        ) from exc
-    if not isinstance(value, dict):
-        raise PlatformInstallerError("grant scope must be a JSON object")
-    return value
 
 
 def _execute(args: argparse.Namespace) -> dict[str, Any]:
@@ -169,18 +133,12 @@ def _execute(args: argparse.Namespace) -> dict[str, Any]:
                 args.bundle, host_version=args.host_version
             ).to_wire(),
         }
+    if args.command not in {"list", "permissions", "permission-diff"}:
+        raise PlatformInstallerBaseError(
+            "PLUGIN_PLATFORM_PACKAGE_UPDATE_REQUIRED",
+            "Use 'candlescope-plugin unified' with an updated package, or recover through the matching older application.",
+        )
     installer = _installer(args)
-    if args.command == "install":
-        return {
-            "ok": True,
-            "installation": installer.install(
-                args.bundle,
-                expected_sha256=args.sha256,
-                enabled=args.enable,
-            ).to_wire(),
-        }
-    if args.command == "check":
-        return {"ok": True, "check": installer.check(args.plugin_id).to_wire()}
     if args.command == "list":
         return {"ok": True, "plugins": list(installer.list_plugins())}
     if args.command == "permissions":
@@ -196,39 +154,6 @@ def _execute(args: argparse.Namespace) -> dict[str, Any]:
                 expected_sha256=args.sha256,
             ).to_wire(),
         }
-    if args.command == "grant":
-        return {
-            "ok": True,
-            "permissionChange": installer.grant_permission(
-                args.plugin_id,
-                args.permission_id,
-                scope=_grant_scope(args),
-            ).to_wire(),
-        }
-    if args.command == "deny":
-        return {
-            "ok": True,
-            "permissionChange": installer.deny_permission(
-                args.plugin_id,
-                args.permission_id,
-            ).to_wire(),
-        }
-    if args.command == "revoke":
-        return {
-            "ok": True,
-            "permissionChange": installer.revoke_permission(
-                args.plugin_id,
-                args.permission_id,
-            ).to_wire(),
-        }
-    if args.command == "enable":
-        return {"ok": True, "change": installer.enable(args.plugin_id).to_wire()}
-    if args.command == "disable":
-        return {"ok": True, "change": installer.disable(args.plugin_id).to_wire()}
-    if args.command == "rollback":
-        return {"ok": True, "rollback": installer.rollback(args.plugin_id).to_wire()}
-    if args.command == "uninstall":
-        return {"ok": True, "change": installer.uninstall(args.plugin_id).to_wire()}
     raise PlatformInstallerError(f"unsupported v2 command: {args.command}")
 
 

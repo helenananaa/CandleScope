@@ -665,6 +665,7 @@ class PluginMarketplaceService:
         installer: PlatformPluginInstaller,
         roots: tuple[MarketplaceRoot, ...] = (),
         enabled: bool = False,
+        allow_legacy_execution: bool = True,
         fetcher: MarketplaceFetcher | None = None,
         managed_runtime_registry: Any | None = None,
         operating_system: str | None = None,
@@ -677,6 +678,7 @@ class PluginMarketplaceService:
         self.installer = installer
         self.roots = {item.marketplace_id: item for item in roots}
         self.enabled = enabled
+        self.allow_legacy_execution = allow_legacy_execution
         self.fetcher = fetcher or PinnedMarketplaceFetcher()
         self.managed_runtime_registry = (
             managed_runtime_registry
@@ -756,6 +758,8 @@ class PluginMarketplaceService:
         return plugin_id in self.legacy_fences()
 
     def assert_legacy_inactive(self, plugin_id: str) -> None:
+        if not self.allow_legacy_execution:
+            return
         previous = self._active_record(plugin_id)
         if previous is not None and previous.enabled:
             raise LifecycleError(
@@ -763,7 +767,9 @@ class PluginMarketplaceService:
             )
 
     def _require_current_install_format(self, artifact) -> None:
-        if self.unified is not None and not self._is_unified(artifact):
+        if (
+            self.unified is not None or not self.allow_legacy_execution
+        ) and not self._is_unified(artifact):
             raise MarketplaceError(
                 "PLUGIN_PLATFORM_PACKAGE_UPDATE_REQUIRED",
                 "The publisher must provide an updated unified marketplace package.",
@@ -2691,10 +2697,14 @@ class PluginMarketplaceService:
         with security_lock(self.lock_path):
             state = self._state()
             state_changed = False
-            registry = load_activation_registry(self.installer.registry_path)
             current_indexes = self._current_indexes()
-            fenced = self.legacy_fences()
-            for record in registry.plugins:
+            legacy_records = (
+                load_activation_registry(self.installer.registry_path).plugins
+                if self.allow_legacy_execution
+                else ()
+            )
+            fenced = self.legacy_fences() if legacy_records else set()
+            for record in legacy_records:
                 if record.state != "active" or record.plugin_id in fenced:
                     continue
                 known = self._release_for_digest(
@@ -2949,7 +2959,7 @@ class PluginMarketplaceService:
                     if not index.is_revoked(release, now=self._now())
                     and self._release_available_on_host(release)
                     and (
-                        self.unified is None
+                        (self.unified is None and self.allow_legacy_execution)
                         or self._is_unified(self._artifact_for_host(release))
                     )
                 ),

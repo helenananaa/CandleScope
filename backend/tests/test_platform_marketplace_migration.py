@@ -31,7 +31,10 @@ from tests.test_unified_marketplace import API, INDEX, MANAGE, sha, signed_packa
 
 
 @pytest.mark.asyncio
-async def test_republished_platform_package_preserves_data_and_rolls_back(tmp_path):
+@pytest.mark.parametrize("allow_legacy_execution", [True, False])
+async def test_republished_platform_package_preserves_data_and_rolls_back(
+    tmp_path, allow_legacy_execution
+):
     old = build_marketplace_bundle(tmp_path / "legacy").bundle
     plugin_id = old.manifest.plugin.id
     path = f"{MANAGE}/{plugin_id}"
@@ -50,6 +53,8 @@ async def test_republished_platform_package_preserves_data_and_rolls_back(tmp_pa
         root=tmp_path / "platform",
         host_name="CandleScope",
         host_version="0.4.0",
+        allow_legacy_execution=allow_legacy_execution,
+        approved_startup_plugins=(plugin_id,) if not allow_legacy_execution else (),
         marketplace_enabled=True,
         marketplace_roots=(builder.root,),
         marketplace_now_provider=lambda: MARKETPLACE_TEST_NOW,
@@ -152,6 +157,25 @@ async def test_republished_platform_package_preserves_data_and_rolls_back(tmp_pa
             assert platform.installer.capture_activation_state(plugin_id) == retained
             await platform.start()
             assert plugin_id in platform._records
+            if not allow_legacy_execution:
+                item = platform.catalog()["plugins"][0]
+                assert not item["available"]
+                assert (
+                    item["unavailableReason"]
+                    == "PLUGIN_PLATFORM_PACKAGE_UPDATE_REQUIRED"
+                )
+                assert not platform.manager.owner_keys()
+                assert platform.health_summary()["activeRecords"] == 0
+                assert platform.health_summary()["status"] == "ok"
+                for suffix in (
+                    f"{plugin_id}/enable",
+                    f"commands/{plugin_id}.hello/invoke",
+                ):
+                    denied = await post(f"{API}/manage/{suffix}")
+                    assert denied.status_code == 410, denied.text
+                assert (
+                    platform.installer.capture_activation_state(plugin_id) == retained
+                )
             review = await stage(failing, failing_bytes)
             assert review["legacy"] == {
                 "legacyActivationId": retained.activation.activation_id,
@@ -220,7 +244,8 @@ async def test_republished_platform_package_preserves_data_and_rolls_back(tmp_pa
                 existing.activation == retained.activation
                 and existing.grant == retained.grant
             )
-            assert (await post(f"{API}/manage/{plugin_id}/disable")).status_code == 409
+            disabled = await post(f"{API}/manage/{plugin_id}/disable")
+            assert disabled.status_code == (409 if allow_legacy_execution else 410)
             export = runtime.packages[plugin_id]["storage"] / "platform-v2"
             assert json.loads((export / "settings.json").read_bytes())["records"][0][
                 "value"
@@ -260,6 +285,12 @@ async def test_republished_platform_package_preserves_data_and_rolls_back(tmp_pa
             restored = await post(f"{path}/rollback-migration", json=approval)
             assert restored.status_code == 200, restored.text
             assert restored.json()["restoredVersion"] == old.manifest.plugin.version
+            if not allow_legacy_execution:
+                assert restored.json()["runtimeReady"] is False
+                assert not platform.manager.owner_keys()
+                assert (
+                    platform.installer.capture_activation_state(plugin_id) == retained
+                )
             assert plugin_id not in runtime.packages and plugin_id in platform._records
             assert store.identity(plugin_id) is None
             assert platform.private_storage.kv_get(namespace, "account")["value"] == {
@@ -373,9 +404,8 @@ async def test_local_successor_requires_exclusive_activation_and_keeps_old_data(
         root=tmp_path / "platform", host_name="CandleScope", host_version="0.4.0"
     )
     platform.installer.install(old.path, expected_sha256=old.sha256, force_staged=True)
-    assert (
-        grant := platform.installer.capture_activation_state(plugin_id).grant
-    ) is not None
+    grant = platform.installer.capture_activation_state(plugin_id).grant
+    assert grant is not None
     namespace = StorageNamespace(plugin_id, grant.publisher_identity)
     platform.private_storage.kv_put(namespace, "kept", {"saved": 7})
     store = PackageStore(tmp_path / "unified")

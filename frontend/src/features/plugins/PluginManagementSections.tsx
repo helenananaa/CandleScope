@@ -386,6 +386,7 @@ export function MarketplacePanel({
                     onClick={() => void (async () => {
                       if (!(await confirmAction({
                         title: t("plugin.rollbackAvailable", { target: `${entry.pluginId} ${rollback.version}` }),
+                        message: [t("plugin.dataRetentionHint"), t("unified.legacyUpgrade")].join(" "),
                         confirmLabel: t("plugin.rollback"),
                       }))) return;
                       void run(`rollback:${entry.pluginId}`, () => runtime.actions.rollbackMarketplaceMigration(entry.pluginId, rollback));

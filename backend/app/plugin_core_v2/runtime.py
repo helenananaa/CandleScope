@@ -183,6 +183,7 @@ class CorePluginPlatform:
         runtime_registry_network_updates_enabled: bool | None = None,
         managed_runtime_registry: ManagedRuntimeRegistryService | None = None,
         trust_ux_enabled: bool = False,
+        allow_legacy_execution: bool = True,
     ) -> None:
         if trust_level not in TRUST_LEVELS:
             raise ValueError("plugin platform trust level is invalid")
@@ -255,6 +256,7 @@ class CorePluginPlatform:
         self.live_testnet_execution_enabled = live_testnet_execution_enabled
         self.marketplace_enabled = marketplace_enabled
         self.trust_ux_enabled = trust_ux_enabled
+        self.allow_legacy_execution = allow_legacy_execution
         self._pinned_python_runtime: PinnedPythonRuntime | None = None
         if managed_runtime_registry is None:
             managed_runtime_registry = build_official_runtime_registry(
@@ -337,6 +339,7 @@ class CorePluginPlatform:
             installer=self.installer,
             roots=tuple(marketplace_roots),
             enabled=marketplace_enabled,
+            allow_legacy_execution=allow_legacy_execution,
             fetcher=marketplace_fetcher,
             managed_runtime_registry=managed_runtime_registry,
             now_provider=marketplace_now_provider,
@@ -739,6 +742,7 @@ class CorePluginPlatform:
                 for record in self._registry.plugins:
                     if (
                         record.state == "active"
+                        and record.plugin_id in self._bundles
                         and record.plugin_id in self.approved_startup_plugins
                     ):
                         manifest = self._bundles[record.plugin_id].manifest
@@ -829,6 +833,12 @@ class CorePluginPlatform:
         raw_summaries = await asyncio.to_thread(self.grant_store.summary)
         summaries_by_id = {item["pluginId"]: item for item in raw_summaries}
         for plugin_id, record in records.items():
+            summary = summaries_by_id.get(plugin_id)
+            permission_summaries[plugin_id] = self._safe_permission_summary(
+                record, summary
+            )
+            if not self.allow_legacy_execution:
+                continue
             try:
                 bundle, installation = await asyncio.to_thread(
                     self.installer.verify_activation_static, record
@@ -864,10 +874,6 @@ class CorePluginPlatform:
                 )
             except Exception as exc:
                 failures[plugin_id] = self._failure_wire(exc)
-            summary = summaries_by_id.get(plugin_id)
-            permission_summaries[plugin_id] = self._safe_permission_summary(
-                record, summary
-            )
 
         self._registry = registry
         self._records = records
@@ -1834,13 +1840,18 @@ class CorePluginPlatform:
             }
             await self._refresh_static_state()
             record = self._records.get(plugin_id)
-            if self._started and record is not None and record.state == "active":
+            active = (
+                record is not None
+                and record.state == "active"
+                and plugin_id in self._bundles
+            )
+            if self._started and active:
                 await self._add_live_plugin(plugin_id)
                 await self._register_work(plugin_id)
             if self._started:
                 event_id = (
                     "candlescope.plugin.enabled/1"
-                    if record is not None and record.state == "active"
+                    if active
                     else "candlescope.plugin.disabled/1"
                 )
                 self.events.publish(event_id, {"pluginId": plugin_id})
@@ -2009,7 +2020,9 @@ class CorePluginPlatform:
                 and plugin_id in live_plugin_ids
             )
             unavailable_reason = None
-            if failure is not None:
+            if not self.allow_legacy_execution:
+                unavailable_reason = "PLUGIN_PLATFORM_PACKAGE_UPDATE_REQUIRED"
+            elif failure is not None:
                 unavailable_reason = failure["code"]
             elif not self._started:
                 unavailable_reason = "PLUGIN_PLATFORM_NOT_STARTED"
@@ -2650,7 +2663,11 @@ class CorePluginPlatform:
         return results
 
     def health_summary(self) -> dict[str, Any]:
-        active_records = sum(item.state == "active" for item in self._records.values())
+        active_records = (
+            sum(item.state == "active" for item in self._records.values())
+            if self.allow_legacy_execution
+            else 0
+        )
         manager = self.manager.health_summary()
         return {
             "status": "degraded"
