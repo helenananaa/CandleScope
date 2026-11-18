@@ -5,10 +5,9 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
-const [executable, packagePath, driver, output] = process.argv.slice(2).map((value) => path.resolve(value));
+const [executable, packagePath, driver, output, helloPackage] = process.argv.slice(2).map((value) => path.resolve(value));
 const { _electron } = createRequire(import.meta.url)(driver);
 const profile = path.join(output, "desktop-profile");
-const pluginId = "candlescope.aho-corasick";
 const digest = "sha256:" + createHash("sha256").update(await readFile(packagePath)).digest("hex");
 const env = {
   ...process.env,
@@ -52,16 +51,37 @@ async function launch() {
   }
 }
 
-async function search(page) {
-  await page.locator("[data-plugin-command-palette]").first().click();
+async function invoke(page, title, input) {
   const palette = page.getByTestId("plugin-command-palette");
-  await palette.getByRole("button", { name: /Run aho-corasick Search/ }).click();
-  await palette.locator("form button[type=submit]").click();
-  const output = JSON.parse(await palette.locator(".plugin-unified-command-result").innerText());
+  if (!await palette.isVisible()) await page.locator("[data-plugin-command-palette]").first().click();
+  await palette.getByRole("button", { name: title }).click();
+  const form = palette.locator(".plugin-unified-command");
+  if (input) await form.locator("textarea").fill(JSON.stringify(input));
+  await form.locator("button[type=submit]").click();
+  return JSON.parse(await form.locator(".plugin-unified-command-result").innerText());
+}
+
+async function search(page) {
+  const output = await invoke(page, /Run aho-corasick Search/);
   assert.equal(output.schemaVersion, "candlescope.aho-corasick.matches/1");
   assert.equal(output.matches.length, 6);
   assert.ok(output.matches.some((match) => match.patternIndex === 3 && match.endByte - match.startByte === 6));
   return output;
+}
+
+async function install(page, archive) {
+  await page.locator(".pc-toolbar-actions").getByRole("button", { name: /Install|安装/ }).click();
+  await page.locator(".extension-manager input[type=file]").first().setInputFiles(archive);
+  const review = page.locator(".extension-review");
+  await review.locator("input[type=checkbox]").check();
+  await review.getByRole("button", { name: /Enable this version|确认启用/ }).click();
+  await review.waitFor({ state: "detached" });
+}
+
+async function verifyHello(page) {
+  assert.deepEqual(await invoke(page, /Say hello/, { name: "波浪" }), {
+    message: "Hello, 波浪!", contributionId: "hello",
+  });
 }
 
 let running;
@@ -72,15 +92,16 @@ try {
   const first = running.page;
   await first.locator(".settings-btn").first().click();
   await first.locator(".st-nav-item").filter({ hasText: /^\s*(Plugins|插件与扩展)\s*$/ }).click();
-  await first.locator(".pc-toolbar-actions").getByRole("button", { name: /Install|安装/ }).click();
-  await first.locator(".extension-manager input[type=file]").first().setInputFiles(packagePath);
-  const review = first.locator(".extension-review");
-  await review.locator("input[type=checkbox]").check();
-  await review.getByRole("button", { name: /Enable this version|确认启用/ }).click();
-  await review.waitFor({ state: "detached" });
+  await install(first, packagePath);
+  if (helloPackage) await install(first, helloPackage);
   await first.locator(".st-content-header button").click();
   const initial = await search(first);
   report.installedSearch = "passed";
+  if (helloPackage) {
+    await verifyHello(first);
+    report.helloPackageSha256 = "sha256:" + createHash("sha256").update(await readFile(helloPackage)).digest("hex");
+    report.installedHello = "passed";
+  }
   const health = running.health;
   await running.app.close();
   running = undefined;
@@ -94,6 +115,10 @@ try {
   running = await launch();
   assert.deepEqual(await search(running.page), initial);
   report.restartSearch = "passed";
+  if (helloPackage) {
+    await verifyHello(running.page);
+    report.restartHello = "passed";
+  }
   report.result = "passed";
 } catch (error) {
   report.result = "failed";

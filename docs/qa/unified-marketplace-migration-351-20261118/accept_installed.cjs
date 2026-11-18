@@ -24,14 +24,15 @@ const read = async file => JSON.parse(await fs.readFile(file, "utf8"));
 
 async function main() {
   const qa = await fs.realpath(qaPath);
+  const installed = await fs.realpath(appPath);
   const profile = path.join(qa, "profile");
   const home = path.join(qa, "home");
   await fs.mkdir(home, { recursive: true });
   const fixtures = await read(path.join(qa, "fixtures.json"));
-  const resources = windows ? path.join(path.dirname(appPath), "resources")
-    : path.join(appPath, "Contents", "Resources");
-  const executable = windows ? appPath : path.join(appPath, "Contents", "MacOS", "CandleScope");
-  if (!windows) execFileSync("codesign", ["--verify", "--deep", "--strict", appPath]);
+  const resources = windows ? path.join(path.dirname(installed), "resources")
+    : path.join(installed, "Contents", "Resources");
+  const executable = windows ? installed : path.join(installed, "Contents", "MacOS", "CandleScope");
+  if (!windows) execFileSync("codesign", ["--verify", "--deep", "--strict", installed]);
   const receipt = {
     platform: process.platform, architecture: process.arch, signatureVerified: windows ? null : true,
     appAsar: sha(await fs.readFile(path.join(resources, "app.asar"))),

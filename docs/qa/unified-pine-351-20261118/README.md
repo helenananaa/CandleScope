@@ -42,3 +42,7 @@ Windows 私有连接返回 429，未启动候选。实时图表及各回放窗�
 上为 `CandleScope.app`，在 Windows 上为打包目录下的 `CandleScope.exe`。
 `CANDLESCOPE_QA_PLAYWRIGHT` 指定 Playwright Core 模块路径。Windows 工作流上传
 `pine.json`，其中记录应用摘要、策略样本和每次退出的进程回收结果。
+
+[Windows x64 安装版回执](windows-x64.json)记录固定脚本和 600 根 K 线的批跑与回放。
+完全退出后从第 60 根的快照恢复，运行到末尾，交易、权益和图形输出与批跑一致。
+打包版完成 0.4.1 测试升级、回到 0.4.0、停用和停用后重启。

@@ -59,6 +59,8 @@ jobs:
           cargo fetch --locked --manifest-path $legacy
           cargo build --release --locked --offline --manifest-path $legacy --target-dir "$env:RUNNER_TEMP/legacy"
           python examples/unified-plugins/aho-corasick/build_candidate.py "$env:RUNNER_TEMP/aho-corasick.cspkg"
+      - name: Build the self-contained Hello Command candidate
+        run: python backend/scripts/unified_plugin.py build examples/unified-plugins/hello-command "$env:RUNNER_TEMP/hello-command.cspkg"
       - name: Verify the restricted package and legacy search output
         shell: pwsh
         run: |
@@ -77,7 +79,7 @@ jobs:
           Invoke-WebRequest -Uri $lock.wheel_url -OutFile $wheel -MaximumRetryCount 2 -RetryIntervalSec 4
           $env:CANDLESCOPE_CCXT_WHEEL = $wheel
           npm --prefix frontend run desktop:package:dir -- --win --x64 --publish never "--config.directories.output=$env:RUNNER_TEMP/desktop-build"
-      - name: Install and restart the restricted plugin in the packaged application
+      - name: Install, invoke and restart both plugins in the packaged application
         shell: pwsh
         run: |
           $output = "$env:RUNNER_TEMP/windows-unified-plugin"
@@ -87,7 +89,8 @@ jobs:
             "$env:RUNNER_TEMP/desktop-build/win-unpacked/CandleScope.exe" `
             "$env:RUNNER_TEMP/aho-corasick.cspkg" `
             "$env:RUNNER_TEMP/driver/node_modules/playwright-core" `
-            $output
+            $output `
+            "$env:RUNNER_TEMP/hello-command.cspkg"
       - name: Verify startup takeover and independent recovery in the installed app
         shell: pwsh
         run: |
