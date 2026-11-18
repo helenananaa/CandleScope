@@ -223,6 +223,8 @@ class SidecarEntry:
             arguments = (
                 (
                     "-I",
+                    "-X",
+                    "utf8",
                     "-B",
                     "-u",
                     "-c",
