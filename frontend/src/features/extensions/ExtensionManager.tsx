@@ -10,6 +10,8 @@ import { recoveryNotice } from "./recoveryNotice.js";
 import { extensionRuntimeStatus } from "./runtimeStatus.js";
 import { refreshExtensions } from "./runtime.js";
 import { extensionSafeMode, getExtensionState, subscribeExtensions } from "./state.js";
+import UnifiedPluginManager from "./UnifiedPluginManager.js";
+import { getUnifiedState, subscribeUnified } from "./unifiedRuntime.js";
 
 interface Review { digest: string; manifest: ExtensionManifest; signed: false }
 const realms = ["frontend", "backend", "desktop"] as const;
@@ -193,7 +195,8 @@ export function ExtensionRecovery() {
   useLocale();
   const [open, setOpen] = useState(false);
   const state = useSyncExternalStore(subscribeExtensions, getExtensionState, getExtensionState);
-  const notice = recoveryNotice(state, extensionSafeMode());
+  const unified = useSyncExternalStore(subscribeUnified, getUnifiedState, getUnifiedState);
+  const notice = recoveryNotice({ ...state, errors: { ...state.errors, ...unified.errors } }, extensionSafeMode());
   const manageLabel = t("extensions.manage");
   const { tone, title, message } = notice ?? {};
   // One notice per situation; a newly failed extension shows it again after a dismissal.
@@ -203,6 +206,7 @@ export function ExtensionRecovery() {
     return () => toastStore.dismiss(id);
   }, [tone, title, message, manageLabel]);
   return <Dialog open={open} onClose={() => setOpen(false)} size="lg" title={t("extensions.recoveryTitle")}>
+    <UnifiedPluginManager />
     <ExtensionManager />
   </Dialog>;
 }

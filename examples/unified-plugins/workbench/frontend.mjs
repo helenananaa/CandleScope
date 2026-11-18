@@ -1,4 +1,4 @@
-// Contract fixture only: the production host does not load unified packages yet.
 export function activate(context) {
-  context.track(() => {});
+  context.services.register("workbench", { identity: context.identity, entryId: context.entryId });
+  context.commands.register("probe", (input) => ({ identity: context.identity, input }));
 }

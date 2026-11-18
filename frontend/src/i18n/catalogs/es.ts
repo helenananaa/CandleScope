@@ -1,3 +1,4 @@
+import { unifiedMessages } from "./unifiedMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { continuousEnglish } from "./continuousMessages.js";
 import { tradeHistoryEnglish } from "./tradeHistoryMessages.js";
@@ -14,6 +15,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
  * libro de órdenes, tasa de financiación, prueba retrospectiva, reproducción.
  */
 export const es = {
+  ...unifiedMessages["es"],
   ...syntheticEnglish,
   ...continuousEnglish,
   ...tradeHistoryEnglish,

@@ -15,6 +15,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from candlescope_plugin_sdk.unified import PlanError
+
 from app.plugin_lifecycle import (
     LifecycleError,
     PackageError,
@@ -26,7 +28,6 @@ from app.plugin_lifecycle import (
 from app.plugin_lifecycle import bundle as bundle_module
 from app.plugin_lifecycle import store as store_module
 from app.plugin_lifecycle.bundle import BUNDLE_SCHEMA
-from candlescope_plugin_sdk.unified import PlanError
 
 
 def raw_package(
@@ -127,6 +128,19 @@ def test_rejected_archives_leave_no_registry_or_store(tmp_path):
     with pytest.raises(PackageError):
         store.stage(path)
     assert not store.root.exists()
+
+
+def test_old_pyne_archive_is_explicitly_retired_without_modifying_evidence(tmp_path):
+    path = tmp_path / "historical.cspkg"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr(
+            "manifest.json", '{"schemaVersion":1,"plugin":{"id":"candlescope.pyne"}}'
+        )
+        archive.writestr("runtime.whl", b"historical evidence")
+    before = path.read_bytes()
+    with pytest.raises(PackageError, match="Pyne is retired"):
+        verify_package(path)
+    assert path.read_bytes() == before
 
 
 @pytest.mark.parametrize(

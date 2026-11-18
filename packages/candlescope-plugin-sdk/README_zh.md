@@ -2,6 +2,11 @@
 
 [English](README.md)
 
+统一插件宿主现已接入共同存储、生命周期、管理界面和多入口执行器；
+`candlescope_plugin_sdk.unified` 仍只提供不执行代码的元数据与依赖契约。
+使用方法和本批限制见 [运行指南](../../backend/app/plugin_lifecycle/README_zh.md)。
+以下旧 API 的消费者由 #351 迁移，构建前接管与原生恢复由 #350 交付。
+
 `candlescope-plugin-sdk` 是社区开发 CandleScope sidecar 插件时使用的零运行时依赖
 Python 契约。现在公开两个互相隔离的命名空间：
 

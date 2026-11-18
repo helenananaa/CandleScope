@@ -3,11 +3,13 @@
 [简体中文](README_zh.md)
 
 The [unified plugin implementation](../../docs/UNIFIED_PLUGIN_IMPLEMENTATION_zh.md)
-is in progress under #349/#350/#351. The candidate
+is in progress under #349/#350/#351. The dependency-free
 `candlescope_plugin_sdk.unified` namespace provides metadata validation and
-dependency preflight only; production hosts do not install or execute its
-packages yet. The existing APIs described below remain the current execution
-paths until their consumers migrate and the legacy entry points are retired.
+dependency preflight. The unified host now consumes these contracts through its
+common store, lifecycle, management UI and entry executors; see the
+[host guide](../../backend/app/plugin_lifecycle/README_zh.md). The older APIs
+described below remain for consumers pending migration and retirement in #351.
+Native product qualification and pre-construction takeover remain separate gates.
 
 `candlescope-plugin-sdk` is the dependency-free Python contract for building
 CandleScope sidecar plugins. It now exposes two isolated public namespaces:

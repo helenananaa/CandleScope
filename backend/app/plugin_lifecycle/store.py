@@ -1,20 +1,27 @@
-"""Single candidate owner of immutable packages and recoverable desired activation.
+"""Storage owner for immutable packages and recoverable desired activation.
 
-All code is inert metadata/storage until executors attach in the next delivery.
-There is no fallback to any existing runtime registry or installer.
+Validation and desired state updates never execute package code.
 """
 
 from __future__ import annotations
 
 import copy
+import hashlib
 import os
 import re
+import shutil
 import tempfile
+import uuid
+import zipfile
 from contextlib import contextmanager
 from pathlib import Path
 
 from candlescope_plugin_sdk.platform_v2 import JsonLimits, canonical_dumps, loads_strict
-from candlescope_plugin_sdk.unified import ActivationIdentity, activation_order
+from candlescope_plugin_sdk.unified import (
+    ActivationIdentity,
+    Manifest,
+    activation_order,
+)
 from candlescope_plugin_sdk.unified.manifest import identifier, version
 
 from app.plugin_security_v2.storage import (
@@ -56,7 +63,7 @@ def _sha256(value) -> bool:
 
 
 class PackageStore:
-    """Explicit-root, serialized storage for the eventual unified lifecycle owner.
+    """Explicit-root, serialized storage for the unified lifecycle owner.
 
     Callers must authenticate management actions before invoking mutations. The
     acknowledgement binds reviewed bytes/trust; it is not an authentication token.
@@ -327,6 +334,111 @@ class PackageStore:
     def snapshot(self) -> dict:
         with self._locked() as state:
             return {**copy.deepcopy(state), "executorsAttached": False}
+
+    def execution_plan(
+        self,
+    ) -> tuple[int, tuple[tuple[Manifest, ActivationIdentity], ...]]:
+        """One verified snapshot for every executor, ordered by dependency."""
+        with self._locked() as state:
+            self._preflight(state)
+            manifests = [
+                self._package(record["packageSha256"]).manifest
+                for record in state["plugins"].values()
+                if record["enabled"]
+            ]
+            return state["revision"], tuple(
+                (
+                    manifest,
+                    ActivationIdentity(
+                        manifest.id,
+                        manifest.version,
+                        state["plugins"][manifest.id]["packageSha256"],
+                        state["plugins"][manifest.id]["generation"],
+                    ),
+                )
+                for manifest in activation_order(manifests)
+            )
+
+    def materialize(self, digest: str) -> tuple[Path, dict[str, str]]:
+        """Create a private, complete execution tree from verified bytes, never extractall."""
+        with self._locked():
+            verified = self._package(digest)
+            runs = self.root / "runs"
+            self._check_path(runs)
+            runs.mkdir(exist_ok=True)
+            # Interrupted execution trees remain inert and count toward the budget.
+            retained = 0
+            for count, path in enumerate(runs.rglob("*"), 1):
+                self._check_path(path)
+                if count > 16384:
+                    raise LifecycleError("execution tree path budget exhausted")
+                if path.is_file():
+                    retained += path.stat().st_size
+            if retained + verified.size > MAX_RETAINED_PACKAGE_BYTES:
+                raise LifecycleError("execution tree budget exhausted")
+            root = runs / uuid.uuid4().hex
+            root.mkdir()
+            try:
+                with zipfile.ZipFile(self._archive(digest)) as archive:
+                    descriptor = loads_strict(archive.read("bundle.json"))
+                    files = {}
+                    for name, expected in descriptor["files"].items():
+                        target = root / name
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        actual, size = hashlib.sha256(), 0
+                        with archive.open(name) as source, target.open("xb") as output:
+                            while block := source.read(CHUNK):
+                                size += len(block)
+                                if size > expected["size"]:
+                                    raise LifecycleError(
+                                        "execution asset grew while materializing"
+                                    )
+                                actual.update(block)
+                                output.write(block)
+                        if (
+                            size != expected["size"]
+                            or "sha256:" + actual.hexdigest() != expected["sha256"]
+                        ):
+                            raise LifecycleError("execution asset digest mismatch")
+                        files[name] = actual.hexdigest()
+                return root, files
+            except BaseException:
+                shutil.rmtree(root)
+                raise
+
+    def private_directory(self, plugin_id: str) -> Path:
+        identifier(plugin_id, "pluginId")
+        path = self.root / "private" / plugin_id
+        self._check_path(path)
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def release_materialization(self, root: Path, files: dict[str, str]) -> None:
+        """Remove unchanged pinned code, preserving user-created or modified files."""
+        if root.parent != self.root / "runs" or is_link(root):
+            raise LifecycleError("not an owned execution tree")
+        for name, expected in files.items():
+            target = root / name
+            self._check_path(target)
+            if not target.is_file():
+                continue
+            digest = hashlib.sha256()
+            with target.open("rb") as content:
+                while block := content.read(CHUNK):
+                    digest.update(block)
+            if digest.hexdigest() == expected:
+                target.unlink()
+        for path in sorted(
+            {(root / name).parent for name in files},
+            key=lambda p: len(p.parts),
+            reverse=True,
+        ):
+            while path.is_relative_to(root):
+                try:
+                    path.rmdir()
+                except OSError:
+                    break
+                path = path.parent
 
     def activate(
         self, digest: str, *, expected_revision: int, acknowledgement: str

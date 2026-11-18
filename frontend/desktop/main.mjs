@@ -21,6 +21,7 @@ import { DesktopShellStateStore } from "./shell-state-store.mjs";
 import { DesktopStrategyStorage } from "./strategy-storage.mjs";
 import { WorkspaceBusConflictError, WorkspaceBusHub } from "./workspace-bus-hub.mjs";
 import { TrustedDesktopExtensionHost } from "./trusted-extension-host.mjs";
+import { UnifiedDesktopHost } from "./unified-entry-host.mjs";
 import { WorkflowControlHost } from "./workflow-control-host.mjs";
 import { trackControlWindowLifecycle } from "./control-window-lifecycle.mjs";
 
@@ -62,6 +63,7 @@ let shutdownComplete = false;
 let shutdownPromise = null;
 const strategyStorage = new DesktopStrategyStorage(path.join(app.getPath("userData"), "strategy-storage-v1.json"));
 let desktopExtensions = null;
+let unifiedPlugins = null;
 let workflowControl = null;
 const registeredWorkflowContents = new WeakSet();
 const workflowScopes = ["observe", "workspace.edit", "app.edit", ...(process.argv.includes("--control-trust") ? ["app.trust"] : []), ...(process.argv.includes("--control-live") ? ["app.live"] : [])];
@@ -277,6 +279,21 @@ async function boot() {
   }
 
   trustedIpc.handle(DESKTOP_IPC.extensionDiagnostics, () => desktopExtensions.diagnostics());
+  if (supervisor) {
+    unifiedPlugins = new UnifiedDesktopHost({
+      context: { electron: { app, BrowserWindow, dialog, ipcMain, screen, shell }, host: { manager, workspaceBus, appWorkBudget, seriesSnapshots } },
+      request: async (route, body) => {
+        const response = await fetch(`http://127.0.0.1:${backendPort}/api/v2/plugins/manage/unified${route}`, {
+          method: "POST", headers: { "Content-Type": "application/json", "X-CandleScope-Plugin-Session": managementSession.sessionToken,
+            "X-CandleScope-CSRF": managementSession.csrfToken,
+            Origin: new URL(appUrl).origin }, body: JSON.stringify(body), signal: AbortSignal.timeout(10000),
+        });
+        if (!response.ok) throw new Error(`Plugin lifecycle unavailable: ${response.status}`);
+        return response.json();
+      },
+    });
+    await unifiedPlugins.start();
+  }
   trustedIpc.on(DESKTOP_IPC.managementSession, (event) => {
     event.returnValue = supervisor ? {
       apiBase: `http://127.0.0.1:${backendPort}/api/v2/plugins`,
@@ -480,7 +497,7 @@ app.on("before-quit", () => {
 app.on("will-quit", (event) => {
   if (shutdownComplete || (!supervisor && !assetServer && !localMcp.server)) return;
   event.preventDefault();
-  shutdownPromise ??= Promise.resolve(localMcp.close()).then(() => desktopExtensions?.stop()).then(() => Promise.all([supervisor?.stop(), assetServer?.close(), strategyStorage.flush()])).finally(() => {
+  shutdownPromise ??= Promise.resolve(localMcp.close()).then(() => unifiedPlugins?.stop()).then(() => desktopExtensions?.stop()).then(() => Promise.all([supervisor?.stop(), assetServer?.close(), strategyStorage.flush()])).finally(() => {
     shutdownComplete = true;
     app.quit();
   });

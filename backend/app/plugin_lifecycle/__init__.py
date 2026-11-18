@@ -1,4 +1,4 @@
-"""Candidate unified package owner; not attached to production startup or APIs."""
+"""Unified package validation and recoverable desired activation."""
 
 from .bundle import PackageError, VerifiedPackage, build_package, verify_package
 from .store import LifecycleError, PackageStore, RevisionConflict

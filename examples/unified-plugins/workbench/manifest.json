@@ -1,7 +1,7 @@
 {
   "schema": "candlescope.unified-plugin/1",
   "id": "example.workbench",
-  "name": "Unified workbench contract fixture",
+  "name": "Unified workbench example",
   "version": "1.0.0",
   "hostApiVersion": 1,
   "trust": "full-trust",
@@ -10,6 +10,7 @@
   "entries": [
     {"id": "ui", "kind": "frontend", "path": "frontend.mjs"},
     {"id": "services", "kind": "backend", "path": "backend.py"},
-    {"id": "desktop", "kind": "desktop", "path": "desktop.mjs"}
+    {"id": "desktop", "kind": "desktop", "path": "desktop.mjs"},
+    {"id": "worker", "kind": "sidecar", "path": "worker.py", "runtime": "python-module"}
   ]
 }

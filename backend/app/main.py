@@ -123,8 +123,11 @@ app = FastAPI(
 app.include_router(support_router)
 from app.trusted_extensions.api import create_extension_router
 from app.trusted_extensions.runtime import prepare_extensions, activate_extensions, stop_extensions, extension_factory
+from app.plugin_lifecycle.api import create_unified_router
+from app.plugin_lifecycle.bootstrap import prepare_unified, activate_unified, stop_unified
 
 app.include_router(create_extension_router())
+app.include_router(create_unified_router())
 
 
 @app.exception_handler(ExecutorBusyError)
@@ -602,6 +605,7 @@ async def startup_event() -> None:
         core = getattr(app.state, "data_manager_core", None)
         if core is not None:
             await core.shutdown_strategy()
+        await stop_unified(app)
         await stop_extensions(app)
         raise
 
@@ -614,6 +618,7 @@ async def _startup_event_impl() -> None:
     app.state.runtime_mode = RUNTIME_MODE
     if RUNTIME_MODE != "LOCAL_OFFLINE":
         await prepare_extensions(app)
+        prepare_unified(app)
 
     if RUNTIME_MODE == "LOCAL_OFFLINE":
         local_runtime = None
@@ -632,6 +637,7 @@ async def _startup_event_impl() -> None:
             app.state.data_manager_core = DataManagerCore()
             app.state.local_data_runtime = local_runtime.data
             await prepare_extensions(app)
+            prepare_unified(app)
             if BACKTEST_SETTINGS.enabled:
                 from app.backtest.runtime import BacktestRuntime
 
@@ -668,6 +674,7 @@ async def _startup_event_impl() -> None:
         except BaseException:
             core=getattr(app.state,"data_manager_core",None)
             if core is not None:await core.shutdown_strategy()
+            await stop_unified(app)
             await stop_extensions(app)
             if replay_runtime is not None:
                 await replay_runtime.shutdown()
@@ -680,6 +687,7 @@ async def _startup_event_impl() -> None:
         logger.info("Started LOCAL_OFFLINE runtime at %s", LOCAL_DATA_DIR)
         print("[startup] LOCAL_OFFLINE runtime [ok]")
         await activate_extensions(app)
+        await activate_unified(app)
         freeze_startup_heap(enabled=GC_FREEZE_STARTUP_HEAP)
         return
 
@@ -880,6 +888,7 @@ async def _startup_event_impl() -> None:
     # its last-known-good process cache while this best-effort task is pending.
     _schedule_symbol_catalog_refresh()
     await activate_extensions(app)
+    await activate_unified(app)
 
     # Keep the startup heap out of later full GC passes (see gc_policy).
     freeze_startup_heap(enabled=GC_FREEZE_STARTUP_HEAP)
@@ -964,6 +973,7 @@ async def _shutdown_components() -> None:
         await replay_core.synthetic.close()
         await replay_core.shutdown_strategy()
         await replay_core.shutdown_replay(step_timeout=5)
+    await stop_unified(app)
     await stop_extensions(app)
     readonly_accounts = getattr(app.state, "readonly_account_service", None)
     if readonly_accounts is not None:

@@ -28,10 +28,12 @@ class LocalOfflineProfileMiddleware:
             "/redoc",
             "/openapi.json",
             "/api/v2/plugins/manage/extensions",
+            "/api/v2/plugins/manage/unified",
         } or path.startswith(("/api/v1/local", "/api/v1/backtests",
                               "/api/v1/replay/",
                               "/api/v1/stream/replay/",
-                              "/api/v2/plugins/manage/extensions/", "/api/v2/plugins/extension-assets/"))
+                              "/api/v2/plugins/manage/extensions/", "/api/v2/plugins/extension-assets/",
+                              "/api/v2/plugins/manage/unified/", "/api/v2/plugins/unified-assets/"))
 
     async def __call__(self, scope: dict, receive: Any, send: Any) -> None:
         if not self.enabled or self._allowed(scope.get("path", "")):

@@ -1,3 +1,4 @@
+import { unifiedMessages } from "./unifiedMessages.js";
 import { syntheticEnglish } from "./syntheticMessages.js";
 import { continuousEnglish } from "./continuousMessages.js";
 import { tradeHistoryEnglish } from "./tradeHistoryMessages.js";
@@ -10,6 +11,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const hu = {
+  ...unifiedMessages["hu"],
   ...syntheticEnglish,
   ...continuousEnglish,
   ...tradeHistoryEnglish,

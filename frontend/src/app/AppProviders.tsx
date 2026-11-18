@@ -3,6 +3,7 @@ import type { ErrorInfo, PropsWithChildren, ReactNode } from "react";
 import { t } from "../i18n/index.js";
 import { ExtensionRecovery } from "../features/extensions/ExtensionManager.js";
 import { startTrustedExtensions } from "../features/extensions/runtime.js";
+import { startUnified } from "../features/extensions/unifiedRuntime.js";
 
 export type ChartErrorBoundaryProps = PropsWithChildren;
 
@@ -60,6 +61,6 @@ export class ChartErrorBoundary extends React.Component<
 }
 
 export default function AppProviders({ children }: PropsWithChildren): ReactNode {
-  useEffect(() => { startTrustedExtensions(); }, []);
+  useEffect(() => { startTrustedExtensions(); startUnified(); }, []);
   return <>{children}<ExtensionRecovery /></>;
 }
