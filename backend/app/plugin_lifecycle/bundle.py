@@ -324,7 +324,8 @@ def build_package(source: Path | str, destination: Path | str) -> VerifiedPackag
                 info, canonical_dumps({"schema": BUNDLE_SCHEMA, "files": declared})
             )
         verified = verify_package(temporary)
-        with temporary.open("rb") as stream:
+        # Windows requires a writable handle to flush file contents.
+        with temporary.open("r+b") as stream:
             os.fsync(stream.fileno())
         # Link is an atomic create-if-absent on the same filesystem. It cannot
         # overwrite an existing user artifact created during the build.
