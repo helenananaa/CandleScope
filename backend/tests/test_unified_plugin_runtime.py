@@ -523,6 +523,36 @@ for line in sys.stdin:
 
 
 @pytest.mark.anyio
+async def test_hello_command_sample_uses_unified_activation(tmp_path):
+    source = (
+        Path(__file__).resolve().parents[2] / "examples/unified-plugins/hello-command"
+    )
+    candidate = tmp_path / "hello-command.cspkg"
+    build_package(source, candidate)
+    async with owner(tmp_path) as (runtime, _):
+        package = install(runtime.store, candidate)
+        await runtime.reconcile()
+        (command,) = runtime.command_catalog()
+        target = (
+            package.manifest.id,
+            command["id"],
+            command["identity"],
+            command["instanceId"],
+        )
+        with pytest.raises(LifecycleError, match="non-empty string"):
+            await runtime.invoke_command(*target, {"name": ""})
+        assert await runtime.invoke_command(*target, {"name": " 波浪 "}) == {
+            "message": "Hello, 波浪!",
+            "contributionId": "hello",
+        }
+        runtime.store.disable(package.manifest.id, expected_revision=1)
+        await runtime.reconcile()
+        assert not runtime.command_catalog()
+        with pytest.raises(LifecycleError):
+            await runtime.invoke_command(*target, {})
+
+
+@pytest.mark.anyio
 async def test_async_activation_timeout_cleans_a_late_returned_resource(tmp_path):
     source = """import asyncio
 async def activate(ctx):
