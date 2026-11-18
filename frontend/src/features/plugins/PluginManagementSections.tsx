@@ -362,7 +362,7 @@ export function MarketplacePanel({
                           t("plugin.market.approveUnified", {
                             digest: approval.packageSha256,
                             permissions: approval.permissions.length
-                              ? t("plugin.market.chartScope")
+                              ? `${t("plugin.market.chartScope")} (${approval.permissions.join(", ")})`
                               : t("format.none"),
                           }),
                           approval.legacy ? t("plugin.market.copyLegacyData") : "",
