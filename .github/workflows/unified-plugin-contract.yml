@@ -1,0 +1,49 @@
+name: Unified plugin contract
+
+on:
+  pull_request:
+    paths:
+      - 'packages/candlescope-plugin-sdk/**'
+      - 'backend/scripts/inspect_unified_plugin.py'
+      - 'backend/scripts/plugin_sdk_isolation.py'
+      - 'examples/unified-plugins/**'
+      - '.github/workflows/unified-plugin-contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'packages/candlescope-plugin-sdk/**'
+      - 'backend/scripts/inspect_unified_plugin.py'
+      - 'backend/scripts/plugin_sdk_isolation.py'
+      - 'examples/unified-plugins/**'
+      - '.github/workflows/unified-plugin-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-latest, python: '3.11'}
+          - {os: ubuntu-latest, python: '3.12'}
+          - {os: macos-latest, python: '3.12'}
+          - {os: windows-latest, python: '3.12'}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install contract test dependencies
+        run: python -m pip install pytest==7.4.4 jsonschema==4.25.1
+      - name: Run SDK contracts and architecture tests
+        working-directory: packages/candlescope-plugin-sdk
+        run: python -m pytest -q
+      - name: Inspect multi-entry metadata without execution
+        run: python backend/scripts/inspect_unified_plugin.py examples/unified-plugins/workbench/manifest.json
