@@ -14,6 +14,7 @@ on:
       - 'docs/qa/unified-marketplace-migration-351-20261118/*.py'
       - 'docs/qa/unified-pine-351-20261118/accept_installed.cjs'
       - 'docs/qa/unified-pine-351-20261118/build_upgrade.py'
+      - 'docs/qa/unified-plugin-takeover-350-20261118/accept_installed.mjs'
       - 'examples/unified-plugins/aho-corasick/**'
   workflow_dispatch:
 
@@ -87,6 +88,12 @@ jobs:
             "$env:RUNNER_TEMP/aho-corasick.cspkg" `
             "$env:RUNNER_TEMP/driver/node_modules/playwright-core" `
             $output
+      - name: Verify startup takeover and independent recovery in the installed app
+        shell: pwsh
+        run: |
+          $package = "$env:RUNNER_TEMP/desktop-build/win-unpacked"
+          $qa = "docs/qa/unified-plugin-takeover-350-20261118"
+          node "$qa/accept_installed.mjs" "$env:GITHUB_WORKSPACE" "$package/CandleScope.exe" "python" "$env:RUNNER_TEMP/windows-unified-plugin/takeover.json"
       - name: Verify the bundled Pine lifecycle and saved strategy in the installed app
         shell: pwsh
         run: |
