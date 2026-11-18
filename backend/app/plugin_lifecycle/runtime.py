@@ -18,6 +18,7 @@ from candlescope_plugin_sdk.unified.chart import (
     validate_chart_result,
 )
 
+from app.plugin_host.errors import PlatformHostRemoteError
 from app.plugin_security_v2.sandbox import restricted_runtime_profile
 from app.plugin_security_v2.storage import security_lock
 
@@ -42,6 +43,10 @@ class RunningEntry:
     instance: str
     executor: object
     active: bool = True
+
+
+class CommandInputError(LifecycleError):
+    """The command rejected the user's input while its entry remained healthy."""
 
 
 class UnifiedRuntime:
@@ -88,7 +93,7 @@ class UnifiedRuntime:
         self.marketplace_policy = None
         self.marketplace_blocked = frozenset()
 
-    def _current(self, run, *, permission=None):
+    def _current(self, run, *, permission=None, snapshot=None):
         if (
             not run.active
             or self.running.get((run.identity.plugin_id, run.entry.id)) is not run
@@ -102,7 +107,9 @@ class UnifiedRuntime:
                 or transport.fatal_error
             ):
                 return False
-        record = self.store.snapshot()["plugins"].get(run.identity.plugin_id)
+        if snapshot is None:
+            snapshot = self.store.snapshot()
+        record = snapshot["plugins"].get(run.identity.plugin_id)
         return bool(
             record
             and record["enabled"]
@@ -662,11 +669,62 @@ class UnifiedRuntime:
                 self.owner_lock.__exit__(None, None, None)
                 self.owner_lock = None
 
-    async def invoke(
-        self, plugin_id, entry_id, identity, instance_id, payload, *, chart=False
+    def command_catalog(self):
+        if self.safe_mode:
+            return []
+        snapshot = self.store.snapshot()
+        commands = []
+        for plugin_id, package in self.packages.items():
+            if not package["coreReady"]:
+                continue
+            for command in package["manifest"].commands:
+                run = self.running.get((plugin_id, command.entry_id))
+                if run is not None and self._current(run, snapshot=snapshot):
+                    commands.append(
+                        {
+                            **command.to_wire(),
+                            "pluginId": plugin_id,
+                            "identity": run.identity.to_wire(),
+                            "instanceId": run.instance,
+                        }
+                    )
+        return commands
+
+    async def invoke_command(
+        self, plugin_id, command_id, identity, instance_id, payload
     ):
-        if not all(
-            isinstance(value, str) for value in (plugin_id, entry_id, instance_id)
+        if not isinstance(plugin_id, str) or not isinstance(command_id, str):
+            raise LifecycleError("invalid command target")
+        if not isinstance(payload, dict):
+            raise CommandInputError("command input must be a JSON object")
+        package = self.packages.get(plugin_id)
+        if self.safe_mode or package is None:
+            raise LifecycleError("unified command is unavailable")
+        declared = package["manifest"].commands
+        command = next((item for item in declared if item.id == command_id), None)
+        if command is None:
+            raise LifecycleError("unified command is unavailable")
+        return await self.invoke(
+            plugin_id, command.entry_id, identity, instance_id, payload, command=True
+        )
+
+    async def invoke(
+        self,
+        plugin_id,
+        entry_id,
+        identity,
+        instance_id,
+        payload,
+        *,
+        chart=False,
+        command=False,
+    ):
+        if (
+            not all(
+                isinstance(value, str) for value in (plugin_id, entry_id, instance_id)
+            )
+            or not isinstance(identity, dict)
+            or type(identity.get("generation")) is not int
         ):
             raise LifecycleError("invalid invocation identity")
         run = self.running.get((plugin_id, entry_id))
@@ -689,6 +747,13 @@ class UnifiedRuntime:
                 raise LifecycleError("late result from a revoked entry")
             return normalize_json(result)
         except Exception as exc:
+            if (
+                command
+                and isinstance(exc, PlatformHostRemoteError)
+                and exc.details.get("rpcCode") == -32602
+                and self._current(run)
+            ):
+                raise CommandInputError(str(exc)) from exc
             if not chart and self._current(run):
                 self.entry_failed(plugin_id, exc)
             raise LifecycleError(f"entry invocation failed: {exc}") from exc

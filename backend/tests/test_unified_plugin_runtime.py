@@ -13,8 +13,6 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
-from fastapi import FastAPI
-
 from app.local_data.runtime import LocalOfflineProfileMiddleware
 from app.plugin_lifecycle import LifecycleError, PackageStore, build_package
 from app.plugin_lifecycle.api import create_unified_router
@@ -26,6 +24,7 @@ from app.plugin_lifecycle.bootstrap import (
 from app.plugin_lifecycle.runtime import UnifiedRuntime
 from app.plugin_security_v2.management import LocalManagementGuard
 from app.plugin_security_v2.sandbox import restricted_runtime_profile
+from fastapi import FastAPI
 
 WORKER = """import json,sys,os
 for line in sys.stdin:
@@ -54,6 +53,7 @@ def bundle(
     plugin_id="example.multi",
     version="1.0.0",
     dependencies=None,
+    commands=None,
 ):
     folder = tmp_path / uuid.uuid4().hex
     folder.mkdir()
@@ -68,6 +68,8 @@ def bundle(
         "entries": entries,
         "dependencies": dependencies or {},
     }
+    if commands is not None:
+        manifest["commands"] = commands
     (folder / "manifest.json").write_text(json.dumps(manifest))
     for name, content in (assets or {"backend.py": BACKEND}).items():
         target = folder / name
@@ -410,6 +412,114 @@ async def test_guarded_http_lifecycle_uses_actual_bootstrap_and_rejects_stale_in
             assert (await client.get(base, headers=forwarded)).status_code == 403
     finally:
         await stop_unified(app)
+
+
+@pytest.mark.anyio
+async def test_unified_command_dispatch_is_guarded_declared_and_revocable(tmp_path):
+    worker = """import json,sys,time
+for line in sys.stdin:
+    request=json.loads(line)
+    params=request['params']
+    reply={key:request[key] for key in ('jsonrpc','id','generation')}
+    if request['method']=='activate':
+        reply['result']={key:params[key] for key in ('protocol','identity')}
+    elif 'invalid' in params['input']:
+        reply['error']={'code':-32602,'message':'invalid search','data':{'code':'INVALID_CONTRACT'}}
+    else:
+        if 'wait' in params['input']:
+            time.sleep(30)
+        reply['result']=params['input']
+    print(json.dumps(reply),flush=True)
+"""
+    source = bundle(
+        tmp_path,
+        entries=[
+            {
+                "id": "worker",
+                "kind": "sidecar",
+                "path": "worker.py",
+                "runtime": "python-module",
+            }
+        ],
+        assets={"worker.py": worker},
+        commands=[{"id": "search", "title": "Search", "entryId": "worker"}],
+    )
+    async with owner(tmp_path) as (runtime, _):
+        app = FastAPI()
+        app.state.unified_plugin_runtime = runtime
+        guard = LocalManagementGuard(["http://127.0.0.1:15173"])
+        app.state.unified_management_guard = guard
+        app.include_router(create_unified_router())
+        verified = install(runtime.store, source)
+        await runtime.reconcile()
+        base = "/api/v2/plugins/manage/unified"
+        headers = guard.trusted_headers(user_action="command-test")
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://127.0.0.1:18080"
+        ) as client:
+            assert (await client.get(base + "/commands")).status_code == 403
+            (command,) = (await client.get(base + "/commands", headers=headers)).json()[
+                "commands"
+            ]
+            assert command["entryId"] == "worker"
+            call = {
+                "pluginId": command["pluginId"],
+                "commandId": command["id"],
+                "identity": command["identity"],
+                "instanceId": command["instanceId"],
+                "input": {"text": "波" * 30_000},
+            }
+            url = base + "/commands/invoke"
+            assert (
+                await client.post(url, json=call, headers=guard.trusted_headers())
+            ).status_code == 403
+            assert (
+                await client.post(
+                    url, json={**call, "commandId": "worker"}, headers=headers
+                )
+            ).status_code == 409
+            invalid = await client.post(
+                url, json={**call, "input": {"invalid": True}}, headers=headers
+            )
+            assert (invalid.status_code, invalid.json()["detail"]) == (
+                400,
+                "invalid search",
+            )
+            result = await client.post(url, json=call, headers=headers)
+            assert result.json() == {
+                key: call[key] for key in ("identity", "instanceId")
+            } | {"result": call["input"]}
+            invalid_identity = {**call["identity"], "generation": True}
+            assert (
+                await client.post(
+                    url, json={**call, "identity": invalid_identity}, headers=headers
+                )
+            ).status_code == 409
+
+            pending = asyncio.create_task(
+                client.post(
+                    url, json={**call, "input": {"wait": True}}, headers=headers
+                )
+            )
+            async with asyncio.timeout(5):
+                while not runtime.calls:
+                    await asyncio.sleep(0.01)
+            runtime.store.disable(verified.manifest.id, expected_revision=1)
+            await runtime.reconcile()
+            assert (await pending).status_code == 409
+            assert (await client.get(base + "/commands", headers=headers)).json() == {
+                "commands": []
+            }
+            install(runtime.store, source)
+            await runtime.reconcile()
+            (current,) = (await client.get(base + "/commands", headers=headers)).json()[
+                "commands"
+            ]
+            assert current["instanceId"] != command["instanceId"]
+            assert current["identity"]["generation"] > command["identity"]["generation"]
+            assert (
+                await client.post(url, json=call, headers=headers)
+            ).status_code == 409
 
 
 @pytest.mark.anyio

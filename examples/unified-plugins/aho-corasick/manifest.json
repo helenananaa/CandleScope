@@ -2,7 +2,7 @@
   "schema": "candlescope.unified-plugin/1",
   "id": "candlescope.aho-corasick",
   "name": "aho-corasick Search",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "hostApiVersion": 1,
   "trust": "restricted",
   "permissions": [],
@@ -12,6 +12,20 @@
       "kind": "sidecar",
       "path": "runtime/aho-corasick",
       "runtime": "native-executable"
+    }
+  ],
+  "commands": [
+    {
+      "id": "candlescope-aho-corasick",
+      "entryId": "main",
+      "title": "Run aho-corasick Search",
+      "exampleInput": {
+        "haystack": "ushers 波浪-wave-WAVE",
+        "patterns": ["he", "she", "hers", "波浪", "wave"],
+        "asciiCaseInsensitive": true,
+        "overlapping": true,
+        "maxMatches": 100
+      }
     }
   ]
 }

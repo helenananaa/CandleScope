@@ -222,6 +222,18 @@
 }
 .plugin-command-form,
 .plugin-manager-detail { min-width: 0; overflow: auto; }
+.plugin-unified-command { display: grid; gap: 8px; justify-items: start; }
+.plugin-unified-command > .ui-field,
+.plugin-unified-command-result { width: 100%; min-width: 0; }
+.plugin-unified-command-result {
+  max-height: 240px;
+  overflow: auto;
+  margin: 0;
+  padding: 8px;
+  background: var(--surface-0);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
 .plugin-command-file {
   display: grid;
   gap: 6px;

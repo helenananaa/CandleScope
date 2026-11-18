@@ -57,7 +57,7 @@
         "pkg:cargo/candlescope-plugin-sdk-wasm@0.1.0",
         "pkg:cargo/aho-corasick@1.1.4"
       ],
-      "ref": "pkg:cargo/candlescope-aho-corasick-unified@0.2.0"
+      "ref": "pkg:cargo/candlescope-aho-corasick-unified@0.2.1"
     },
     {
       "dependsOn": [
@@ -76,7 +76,7 @@
   ],
   "metadata": {
     "component": {
-      "bom-ref": "pkg:cargo/candlescope-aho-corasick-unified@0.2.0",
+      "bom-ref": "pkg:cargo/candlescope-aho-corasick-unified@0.2.1",
       "licenses": [
         {
           "license": {
@@ -86,7 +86,7 @@
       ],
       "name": "candlescope.aho-corasick",
       "type": "application",
-      "version": "0.2.0"
+      "version": "0.2.1"
     }
   },
   "specVersion": "1.6",

@@ -17,6 +17,7 @@ import {
 import type {
   JsonValue,
   PluginCatalog,
+  PluginCommandContribution,
   PluginChartContextSnapshot,
   PluginFileSelection,
   PluginLiveConfirmationPreview,
@@ -32,6 +33,7 @@ import type {
   PluginUiSnapshot,
   PluginTrustChangeReview,
   PluginTrustReview,
+  UnifiedCommandTarget,
 } from "./pluginPlatformTypes.js";
 
 interface PluginManagementBootstrapV1 {
@@ -167,11 +169,13 @@ async function responseJson(response: Response): Promise<unknown> {
 const PLUGIN_CATALOG_READ_KEY = "control:plugin-catalog";
 const PLUGIN_UI_SNAPSHOT_READ_KEY = "control:plugin-ui-snapshot";
 const PLUGIN_LIVE_STATUS_READ_KEY = "control:plugin-live-status";
+const UNIFIED_COMMANDS_READ_KEY = "control:unified-commands";
 
 export function invalidatePluginControlReads(): void {
   invalidateSharedControlRead(PLUGIN_CATALOG_READ_KEY);
   invalidateSharedControlRead(PLUGIN_UI_SNAPSHOT_READ_KEY);
   invalidateSharedControlRead(PLUGIN_LIVE_STATUS_READ_KEY);
+  invalidateSharedControlRead(UNIFIED_COMMANDS_READ_KEY);
 }
 
 export async function fetchPluginCatalog(signal?: AbortSignal): Promise<PluginCatalog> {
@@ -301,7 +305,7 @@ function actionId(prefix: string): string {
 
 async function managementRequest(
   path: string,
-  options: { method?: "GET" | "POST" | "PUT"; body?: unknown; action?: string } = {},
+  options: { method?: "GET" | "POST" | "PUT"; body?: unknown; action?: string; signal?: AbortSignal } = {},
 ): Promise<unknown> {
   const session = consumeManagementSession();
   if (!session) throw new PluginPlatformApiError("Plugin management requires a trusted desktop session", 403);
@@ -318,6 +322,7 @@ async function managementRequest(
     method,
     headers,
     credentials: "omit",
+    ...(options.signal ? { signal: options.signal } : {}),
     ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
   });
   const payload = await responseJson(response);
@@ -388,14 +393,18 @@ function object(value: unknown, path: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function safeJson(value: unknown, path: string, depth = 0): JsonValue {
-  if (depth > 8) throw new Error(`Plugin Platform response is invalid at ${path}`);
+const LEGACY_JSON_LIMITS = { depth: 8, arrayItems: 256, objectItems: 64 };
+const COMMAND_EXAMPLE_LIMITS = { depth: 8, arrayItems: 256, objectItems: 256 };
+const COMMAND_JSON_LIMITS = { depth: 32, arrayItems: 10_000, objectItems: 10_000 };
+
+function safeJson(value: unknown, path: string, depth = 0, limits = LEGACY_JSON_LIMITS): JsonValue {
+  if (depth > limits.depth) throw new Error(`Plugin Platform response is invalid at ${path}`);
   if (value === null || typeof value === "string" || typeof value === "boolean") return value;
   if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (Array.isArray(value) && value.length <= 256) return value.map((item, index) => safeJson(item, `${path}[${index}]`, depth + 1));
+  if (Array.isArray(value) && value.length <= limits.arrayItems) return value.map((item, index) => safeJson(item, `${path}[${index}]`, depth + 1, limits));
   const data = object(value, path);
-  if (Object.keys(data).length > 64) throw new Error(`Plugin Platform response is invalid at ${path}`);
-  return Object.fromEntries(Object.entries(data).map(([key, item]) => [key, safeJson(item, `${path}.${key}`, depth + 1)]));
+  if (Object.keys(data).length > limits.objectItems) throw new Error(`Plugin Platform response is invalid at ${path}`);
+  return Object.fromEntries(Object.entries(data).map(([key, item]) => [key, safeJson(item, `${path}.${key}`, depth + 1, limits)]));
 }
 
 function parseFileSelection(value: unknown): PluginFileSelection {
@@ -442,6 +451,51 @@ export async function invokePluginCommand(id: string, input: Record<string, Json
     action: "invoke-command",
   }), "command");
   return safeJson(payload.result, "command.result");
+}
+
+function parseUnifiedCommand(value: unknown): PluginCommandContribution {
+  const command = object(value, "unified command");
+  const identity = object(command.identity, "unified command identity");
+  const { id, title, entryId, pluginId, instanceId } = command;
+  const { version, generation, packageSha256 } = identity;
+  if (typeof id !== "string" || typeof title !== "string" || typeof entryId !== "string"
+    || typeof pluginId !== "string" || typeof instanceId !== "string" || identity.pluginId !== pluginId
+    || typeof version !== "string" || typeof packageSha256 !== "string" || !/^sha256:[a-f0-9]{64}$/.test(packageSha256)
+    || !/^[a-f0-9]{32}$/.test(instanceId)
+    || typeof generation !== "number" || !Number.isSafeInteger(generation) || generation < 1) {
+    throw new Error("Invalid unified command");
+  }
+  const exampleInput = command.exampleInput === undefined
+    ? undefined : safeJson(command.exampleInput, "unified command example", 0, COMMAND_EXAMPLE_LIMITS);
+  if (exampleInput !== undefined && (exampleInput === null || typeof exampleInput !== "object" || Array.isArray(exampleInput))) {
+    throw new Error("Invalid unified command example");
+  }
+  return {
+    id: `${pluginId}/${id}`, localId: id, title, entrypointId: entryId, pluginId, available: true, kind: "command/1",
+    configuration: { placements: ["commandPalette"], requiresUserAction: true },
+    unifiedTarget: { pluginId, commandId: id, identity: { pluginId, version, generation, packageSha256 }, instanceId },
+    ...(exampleInput === undefined ? {} : { exampleInput }),
+  };
+}
+
+export async function fetchUnifiedCommands(signal?: AbortSignal): Promise<PluginCommandContribution[]> {
+  if (!pluginManagementAvailable()) return [];
+  return sharedControlRead(UNIFIED_COMMANDS_READ_KEY, 1_000, async () => {
+    const value = await managementRequest("/manage/unified/commands", { signal: AbortSignal.timeout(10_000) });
+    const payload = object(value, "unified command catalog");
+    if (!Array.isArray(payload.commands)) throw new Error("Invalid unified command catalog");
+    return payload.commands.map(parseUnifiedCommand);
+  }, signal);
+}
+
+export async function invokeUnifiedCommand(target: UnifiedCommandTarget, input: Record<string, JsonValue>): Promise<JsonValue> {
+  const reply = object(await unifiedManagementRequest("/commands/invoke", { ...target, input }), "unified command result");
+  const identity = object(reply.identity, "unified command result identity");
+  if (reply.instanceId !== target.instanceId || Object.keys(target.identity).length !== Object.keys(identity).length
+    || Object.entries(target.identity).some(([key, value]) => identity[key] !== value)) {
+    throw new Error("Unified command result identity changed");
+  }
+  return safeJson(reply.result, "unified command result", 0, COMMAND_JSON_LIMITS);
 }
 
 export async function readPluginSettings(id: string): Promise<Record<string, JsonValue>> {

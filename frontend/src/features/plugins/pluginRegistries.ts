@@ -1,5 +1,6 @@
 import type {
   PluginCatalog,
+  PluginCommandContribution,
   PluginRegistries,
   PluginUiContribution,
 } from "./pluginPlatformTypes.js";
@@ -19,10 +20,11 @@ export const EMPTY_PLUGIN_REGISTRIES: PluginRegistries = {
 export function buildPluginRegistries(
   catalog: PluginCatalog | null,
   locale: LocaleId = getLocale(),
+  unifiedCommands: PluginCommandContribution[] = [],
 ): PluginRegistries {
-  if (!catalog?.platform.enabled) return EMPTY_PLUGIN_REGISTRIES;
+  if (!catalog?.platform.enabled && unifiedCommands.length === 0) return EMPTY_PLUGIN_REGISTRIES;
   const values: PluginRegistries = {
-    commandPalette: [],
+    commandPalette: [...unifiedCommands],
     topToolbar: [],
     chartContextMenu: [],
     settings: [],
@@ -30,7 +32,8 @@ export function buildPluginRegistries(
     bottomPanel: [],
     statusArea: [],
   };
-  const contributions: PluginUiContribution[] = catalog.plugins
+  const legacyPlugins = catalog?.platform.enabled ? catalog.plugins : [];
+  const contributions: PluginUiContribution[] = legacyPlugins
     .filter((plugin) => plugin.available && plugin.enabled)
     .flatMap((plugin) => plugin.contributions.map((item) => localizePluginContribution(item, locale)))
     .filter((item): item is PluginUiContribution => (

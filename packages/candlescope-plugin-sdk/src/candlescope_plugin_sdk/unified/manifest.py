@@ -6,14 +6,18 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from ..platform_v2.json_codec import JsonLimits, loads_strict
+from ..platform_v2.json_codec import JsonLimits, canonical_dumps, loads_strict
 
 MANIFEST_SCHEMA = "candlescope.unified-plugin/1"
 MAX_MANIFEST_BYTES = 256 * 1024
 MAX_ENTRIES = 32
 MAX_DEPENDENCIES = 32
 MAX_PERMISSIONS = 64
+MAX_COMMANDS = 16
 MAX_API_VERSION = 1
+_COMMAND_EXAMPLE_LIMITS = JsonLimits(
+    max_message_bytes=8192, max_depth=8, max_container_items=256
+)
 
 ID_PATTERN = r"[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?"
 # Exact SemVer pins only. Ranges and dependency fetching belong to a future,
@@ -155,6 +159,45 @@ class Entry:
 
 
 @dataclass(frozen=True, slots=True)
+class Command:
+    id: str
+    title: str
+    entry_id: str
+    example_json: str | None = None
+
+    def __post_init__(self) -> None:
+        identifier(self.id, "command.id")
+        _text(self.title, "command.title", 200)
+        identifier(self.entry_id, "command.entryId")
+        if self.example_json is not None and (
+            not isinstance(self.example_json, str) or not isinstance(
+                loads_strict(self.example_json, limits=_COMMAND_EXAMPLE_LIMITS), dict
+            )
+        ):
+            raise ManifestError("command.exampleInput must be a bounded object")
+
+    @classmethod
+    def from_wire(cls, raw: Any) -> Command:
+        data = _object(raw, {"id", "title", "entryId"}, {"exampleInput"}, "command")
+        example_json = None
+        if "exampleInput" in data:
+            if not isinstance(data["exampleInput"], dict):
+                raise ManifestError("command.exampleInput must be a bounded object")
+            example_json = canonical_dumps(
+                data["exampleInput"], limits=_COMMAND_EXAMPLE_LIMITS
+            )
+        return cls(data["id"], data["title"], data["entryId"], example_json)
+
+    def to_wire(self) -> dict[str, Any]:
+        command = {"id": self.id, "title": self.title, "entryId": self.entry_id}
+        if self.example_json is not None:
+            command["exampleInput"] = loads_strict(
+                self.example_json, limits=_COMMAND_EXAMPLE_LIMITS
+            )
+        return command
+
+
+@dataclass(frozen=True, slots=True)
 class Manifest:
     id: str
     name: str
@@ -164,6 +207,7 @@ class Manifest:
     dependencies: tuple[tuple[str, str], ...] = ()
     permissions: tuple[str, ...] = ()
     host_api_version: int = 1
+    commands: tuple[Command, ...] = ()
 
     def __post_init__(self) -> None:
         identifier(self.id, "plugin.id")
@@ -199,9 +243,18 @@ class Manifest:
                 raise ManifestError("permissions require explicit versioned capability ids")
         if len(set(permissions)) != len(permissions):
             raise ManifestError("duplicate permission declaration")
+        commands = tuple(self.commands)
+        if len(commands) > MAX_COMMANDS or any(not isinstance(c, Command) for c in commands):
+            raise ManifestError("commands must contain at most 16 validated commands")
+        if len({command.id for command in commands}) != len(commands):
+            raise ManifestError("duplicate command id")
+        callable_entries = {entry.id for entry in entries if entry.kind in {"backend", "sidecar"}}
+        if any(command.entry_id not in callable_entries for command in commands):
+            raise ManifestError("command must target a backend or sidecar entry in the same package")
         object.__setattr__(self, "entries", entries)
         object.__setattr__(self, "dependencies", tuple(sorted(dependencies)))
         object.__setattr__(self, "permissions", tuple(sorted(permissions)))
+        object.__setattr__(self, "commands", commands)
 
     @classmethod
     def from_wire(cls, raw: Any) -> Manifest:
@@ -222,7 +275,7 @@ class Manifest:
         data = _object(
             raw,
             {"schema", "id", "name", "version", "hostApiVersion", "trust", "entries"},
-            {"dependencies", "permissions"},
+            {"dependencies", "permissions", "commands"},
             "manifest",
         )
         entries, dependencies, permissions = (
@@ -236,6 +289,9 @@ class Manifest:
             raise ManifestError("dependencies must be a bounded object")
         if not isinstance(permissions, list) or len(permissions) > MAX_PERMISSIONS:
             raise ManifestError("permissions must be a bounded array")
+        commands = data.get("commands", [])
+        if not isinstance(commands, list) or len(commands) > MAX_COMMANDS:
+            raise ManifestError("commands must be a bounded array")
         return cls(
             id=data["id"],
             name=data["name"],
@@ -245,6 +301,7 @@ class Manifest:
             dependencies=tuple(dependencies.items()),
             permissions=tuple(permissions),
             host_api_version=data["hostApiVersion"],
+            commands=tuple(Command.from_wire(command) for command in commands),
         )
 
     @classmethod
@@ -262,7 +319,7 @@ class Manifest:
         )
 
     def to_wire(self) -> dict[str, Any]:
-        return {
+        manifest = {
             "schema": MANIFEST_SCHEMA,
             "id": self.id,
             "name": self.name,
@@ -273,3 +330,6 @@ class Manifest:
             "dependencies": dict(self.dependencies),
             "permissions": list(self.permissions),
         }
+        if self.commands:
+            manifest["commands"] = [command.to_wire() for command in self.commands]
+        return manifest

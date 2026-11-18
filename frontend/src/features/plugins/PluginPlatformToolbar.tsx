@@ -6,20 +6,18 @@ import { liveModeLabel } from "./pluginLabels.js";
 export default function PluginPlatformToolbar({ runtime }: { runtime: PluginPlatformRuntime }) {
   useLocale();
   const { catalog, registries, managementAvailable } = runtime.view;
-  if (!catalog) return null;
-  if (!catalog.platform.enabled && catalog.compatibility.contributions.length === 0) return null;
-  const hasToolbarControls = catalog.platform.enabled && (
+  const legacyEnabled = catalog?.platform.enabled === true;
+  const hasToolbarControls = registries.commandPalette.length > 0 || (legacyEnabled && (
     registries.topToolbar.length > 0
-    || registries.commandPalette.length > 0
     || registries.sidePanel.length > 0
     || registries.bottomPanel.length > 0
     || registries.settings.length > 0
     || runtime.view.liveControl.mode !== "disabled"
-  );
+  ));
   if (!hasToolbarControls) return null;
   return (
     <div className="plugin-toolbar" data-plugin-slot="topToolbar">
-      {catalog.platform.enabled && registries.topToolbar.map((command) => {
+      {legacyEnabled && registries.topToolbar.map((command) => {
         const properties = command.configuration.inputSchema?.properties ?? {};
         const direct = Object.keys(properties).length === 0;
         return (
@@ -38,22 +36,22 @@ export default function PluginPlatformToolbar({ runtime }: { runtime: PluginPlat
           </button>
         );
       })}
-      {catalog.platform.enabled && registries.commandPalette.length > 0 && (
+      {registries.commandPalette.length > 0 && (
         <button type="button" data-plugin-command-palette onClick={runtime.actions.openPalette}>
           {t("plugin.host.commands")}
         </button>
       )}
-      {catalog.platform.enabled && [...registries.sidePanel, ...registries.bottomPanel].map((view) => (
+      {legacyEnabled && [...registries.sidePanel, ...registries.bottomPanel].map((view) => (
         <button type="button" key={view.id} data-plugin-view-button={view.id} onClick={() => runtime.actions.openView(view.id)}>
           {view.title}
         </button>
       ))}
-      {catalog.platform.enabled && registries.settings.map((settings) => (
+      {legacyEnabled && registries.settings.map((settings) => (
         <button type="button" key={settings.id} data-plugin-settings-button={settings.id} onClick={() => runtime.actions.openSettings(settings.id)}>
           {settings.title}
         </button>
       ))}
-      {catalog.platform.enabled && runtime.view.liveControl.mode !== "disabled" && (
+      {legacyEnabled && runtime.view.liveControl.mode !== "disabled" && (
         <button
           type="button"
           data-live-control-button

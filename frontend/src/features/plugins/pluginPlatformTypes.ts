@@ -61,12 +61,21 @@ interface ContributionBase {
 
 export interface PluginCommandContribution extends ContributionBase {
   kind: "command/1";
+  unifiedTarget?: UnifiedCommandTarget;
+  exampleInput?: Record<string, JsonValue>;
   configuration: {
     requiresUserAction?: boolean;
     inputSchema?: PluginJsonSchema;
     fileInputs?: PluginCommandFileInput[];
     placements: PluginPlacement[];
   };
+}
+
+export interface UnifiedCommandTarget {
+  pluginId: string;
+  commandId: string;
+  identity: { pluginId: string; version: string; packageSha256: string; generation: number };
+  instanceId: string;
 }
 
 export interface PluginCommandFileInput {
