@@ -72,6 +72,7 @@ try {
   const first = running.page;
   await first.locator(".settings-btn").first().click();
   await first.locator(".st-nav-item").filter({ hasText: /^\s*(Plugins|插件与扩展)\s*$/ }).click();
+  await first.locator(".pc-toolbar-actions").getByRole("button", { name: /Install|安装/ }).click();
   await first.locator(".extension-manager input[type=file]").first().setInputFiles(packagePath);
   const review = first.locator(".extension-review");
   await review.locator("input[type=checkbox]").check();

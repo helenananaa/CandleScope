@@ -105,6 +105,28 @@ async def _guarded_platform(request: Request) -> CorePluginPlatform:
     return platform
 
 
+def _reject_legacy_install(request: Request) -> None:
+    if getattr(request.app.state, "unified_plugin_runtime", None) is not None:
+        raise HTTPException(
+            status_code=410,
+            detail={
+                "code": "PLUGIN_PLATFORM_PACKAGE_UPDATE_REQUIRED",
+                "message": "Install an updated unified package in the plugin center.",
+            },
+        )
+
+
+async def _reject_staged_legacy_change(
+    platform: CorePluginPlatform, request: Request, plugin_id: str
+) -> None:
+    if getattr(request.app.state, "unified_plugin_runtime", None) is not None:
+        source = await asyncio.to_thread(
+            platform.installer.capture_activation_state, plugin_id
+        )
+        if source.activation is not None and source.activation.state == "staged":
+            _reject_legacy_install(request)
+
+
 async def _background_platform(request: Request) -> CorePluginPlatform:
     platform = _platform(request)
     guard = getattr(request.app.state, "plugin_platform_v2_management_guard", None)
@@ -915,6 +937,7 @@ def create_core_plugin_router() -> APIRouter:
     @router.post("/manage/install")
     async def install(request: Request) -> dict[str, Any]:
         platform = await _guarded_platform(request)
+        _reject_legacy_install(request)
         if platform.trust_ux_enabled:
             raise HTTPException(
                 status_code=409,
@@ -956,6 +979,7 @@ def create_core_plugin_router() -> APIRouter:
     @router.post("/manage/install/prepare")
     async def prepare_local_install(request: Request) -> dict[str, Any]:
         platform = await _guarded_platform(request)
+        _reject_legacy_install(request)
         upload = None
         try:
             upload, expected_sha256 = await _bundle_upload(request, platform)
@@ -983,6 +1007,7 @@ def create_core_plugin_router() -> APIRouter:
     @router.post("/manage/install/review")
     async def review_local_install(request: Request) -> dict[str, Any]:
         platform = await _guarded_platform(request)
+        _reject_legacy_install(request)
         value = await _body(
             request,
             required={
@@ -1016,6 +1041,7 @@ def create_core_plugin_router() -> APIRouter:
     @router.post("/manage/install/confirm")
     async def confirm_local_install(request: Request) -> dict[str, Any]:
         platform = await _guarded_platform(request)
+        _reject_legacy_install(request)
         value = await _body(
             request,
             required={"candidateId", "previewSha256", "confirmationToken"},
@@ -1556,10 +1582,13 @@ def create_core_plugin_router() -> APIRouter:
         platform = await _guarded_platform(request)
         try:
             async with platform.marketplace.cutover_lock:
+                await _reject_staged_legacy_change(platform, request, plugin_id)
                 await asyncio.to_thread(platform.assert_legacy_mutable, plugin_id)
                 result = await asyncio.to_thread(platform.installer.enable, plugin_id)
                 await platform.reconcile_plugin(plugin_id)
                 return {"stateChange": result.to_wire()}
+        except HTTPException:
+            raise
         except Exception as exc:
             _raise_api_error(exc)
 
@@ -1568,6 +1597,7 @@ def create_core_plugin_router() -> APIRouter:
         platform = await _guarded_platform(request)
         try:
             async with platform.marketplace.cutover_lock:
+                await _reject_staged_legacy_change(platform, request, plugin_id)
                 await asyncio.to_thread(platform.assert_legacy_mutable, plugin_id)
                 action = request.state.plugin_user_action
                 await platform.revoke_live_authority(
@@ -1579,6 +1609,8 @@ def create_core_plugin_router() -> APIRouter:
                 result = await asyncio.to_thread(platform.installer.disable, plugin_id)
                 await platform.reconcile_plugin(plugin_id)
                 return {"stateChange": result.to_wire()}
+        except HTTPException:
+            raise
         except Exception as exc:
             _raise_api_error(exc)
 

@@ -24,8 +24,9 @@ function SandboxView({ item }: {item: UnifiedItem}) {
     onLoad={() => reportUnifiedView(item, "running")} />;
 }
 
-export default function UnifiedPluginManager({ onCountChange, query = "", filter = "all", showAppearance = false }: {
+export default function UnifiedPluginManager({ onCountChange, query = "", filter = "all", showAppearance = false, installOnly = false, onPendingChange, onInstalled }: {
   onCountChange?: (count: number) => void; query?: string; filter?: string; showAppearance?: boolean;
+  installOnly?: boolean; onPendingChange?: (pending: boolean) => void; onInstalled?: () => void;
 }) {
   useLocale();
   const [catalog, setCatalog] = useState<Catalog | null>(null);
@@ -37,16 +38,18 @@ export default function UnifiedPluginManager({ onCountChange, query = "", filter
   const state = useSyncExternalStore(subscribeUnified, getUnifiedState, getUnifiedState);
   const available = pluginManagementAvailable();
   useEffect(() => { onCountChange?.(catalog?.plugins.length ?? 0); }, [catalog?.plugins.length, onCountChange]);
+  useEffect(() => { onPendingChange?.(busy); }, [busy, onPendingChange]);
+  useEffect(() => () => onPendingChange?.(false), [onPendingChange]);
   async function reload() { setCatalog(await unifiedManagementRequest("") as Catalog); }
   useEffect(() => {
-    if (!available) return;
+    if (!available || installOnly) return;
     let mounted = true;
     const read = () => { void unifiedManagementRequest("").then((value) => { if (mounted) setCatalog(value as Catalog); })
       .catch((failure: unknown) => { if (mounted) setError(String(failure)); }); };
     read();
     const timer = window.setInterval(read, 5000);
     return () => { mounted = false; clearInterval(timer); };
-  }, [available]);
+  }, [available, installOnly]);
   useEffect(() => {
     if (!available || !showAppearance) return;
     let mounted = true;
@@ -57,7 +60,7 @@ export default function UnifiedPluginManager({ onCountChange, query = "", filter
   }, [available, showAppearance]);
   async function run(action: () => Promise<unknown>) {
     setBusy(true); setError("");
-    try { await action(); await refreshUnified(); await reload(); }
+    try { await action(); await refreshUnified(); if (!installOnly) await reload(); }
     catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); }
     finally { setBusy(false); }
   }
@@ -79,8 +82,8 @@ export default function UnifiedPluginManager({ onCountChange, query = "", filter
     return true;
   }) ?? [];
   return <section className="extension-manager" aria-label={t("unified.title")} aria-busy={busy}>
-    <header className="extension-manager-head"><h3>{t("unified.title")}</h3>
-      <Button size="sm" disabled={!available || busy} onClick={() => void run(reload)}>{t("extensions.refresh")}</Button></header>
+    <header className="extension-manager-head"><h3>{t(installOnly ? "pc.install" : "unified.title")}</h3>
+      {!installOnly && <Button size="sm" disabled={!available || busy} onClick={() => void run(reload)}>{t("extensions.refresh")}</Button>}</header>
     {error && <InlineAlert tone="danger">{error}</InlineAlert>}
     {Object.values(catalog?.errors ?? {}).map((message, i) => <InlineAlert key={i} tone="danger">{message}</InlineAlert>)}
     {state.restartRequired && <InlineAlert action={<Button size="sm" onClick={() => location.reload()}>{t("extensions.reload")}</Button>}>{t("unified.restart")}</InlineAlert>}
@@ -124,6 +127,7 @@ export default function UnifiedPluginManager({ onCountChange, query = "", filter
         await unifiedManagementRequest("/change", { action: "activate", digest: review.packageSha256,
           revision: review.registryRevision, acknowledgement: `${review.manifest.trust}:${review.packageSha256}` });
         setReview(null); setAccepted(false);
+        onInstalled?.();
       })}>{t("extensions.confirm")}</Button>
       <Button size="sm" variant="ghost" onClick={() => setReview(null)}>{t("common.cancel")}</Button>
     </div>}
@@ -145,6 +149,6 @@ export default function UnifiedPluginManager({ onCountChange, query = "", filter
         {plugin.desired.history.map((digest) => <Button key={digest} size="sm" variant="ghost" disabled={busy} onClick={() => void run(() => openReview(digest))}>{t("extensions.reviewPrevious")}</Button>)}
       </div>
     </article>)}
-    {state.views.map((item) => <SandboxView key={item.instanceId} item={item} />)}
+    {!installOnly && state.views.map((item) => <SandboxView key={item.instanceId} item={item} />)}
   </section>;
 }

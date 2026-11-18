@@ -740,10 +740,35 @@ class PluginMarketplaceService:
     def legacy_fences(self) -> set[str]:
         if self.unified is None:
             return set()
-        return set(self.unified.store.snapshot().get("marketplaceMigrations", {}))
+        snapshot = self.unified.store.snapshot()
+        return (
+            set(snapshot.get("marketplaceMigrations", {}))
+            | {
+                plugin_id
+                for plugin_id, item in snapshot["plugins"].items()
+                if item["enabled"]
+            }
+            | set(self.unified.packages)
+            | set(self.unified.quarantined)
+        )
 
     def legacy_fenced(self, plugin_id: str) -> bool:
         return plugin_id in self.legacy_fences()
+
+    def assert_legacy_inactive(self, plugin_id: str) -> None:
+        previous = self._active_record(plugin_id)
+        if previous is not None and previous.enabled:
+            raise LifecycleError(
+                "Disable the existing Platform v2 plugin before activating a unified local package."
+            )
+
+    def _require_current_install_format(self, artifact) -> None:
+        if self.unified is not None and not self._is_unified(artifact):
+            raise MarketplaceError(
+                "PLUGIN_PLATFORM_PACKAGE_UPDATE_REQUIRED",
+                "The publisher must provide an updated unified marketplace package.",
+                status_code=410,
+            )
 
     def unified_execution_allowed(self, plugin_id: str, record: dict) -> bool:
         migration = (
@@ -2061,6 +2086,7 @@ class PluginMarketplaceService:
     ) -> dict[str, Any]:
         index, release, publisher = self._release(plugin_id, version)
         artifact = self._artifact_for_host(release)
+        self._require_current_install_format(artifact)
         self._assert_minimum_host(release)
         unified = self._is_unified(artifact)
         if unified:
@@ -2228,6 +2254,7 @@ class PluginMarketplaceService:
             )
         index, release, publisher = self._release(plugin_id, candidate["version"])
         artifact = self._artifact_for_host(release)
+        self._require_current_install_format(artifact)
         if (
             index.marketplace_id != candidate["marketplaceId"]
             or release.publisher_id != candidate["publisherId"]
@@ -2921,6 +2948,10 @@ class PluginMarketplaceService:
                     for index, release in releases
                     if not index.is_revoked(release, now=self._now())
                     and self._release_available_on_host(release)
+                    and (
+                        self.unified is None
+                        or self._is_unified(self._artifact_for_host(release))
+                    )
                 ),
                 None,
             )

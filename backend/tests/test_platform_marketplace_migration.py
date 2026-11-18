@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import httpx
 import pytest
 from app.plugin_core_v2.api import create_core_plugin_router
 from app.plugin_core_v2.private_storage import StorageNamespace
 from app.plugin_core_v2.runtime import CorePluginPlatform
-from app.plugin_lifecycle.bundle import BUNDLE_SCHEMA
+from app.plugin_lifecycle.api import create_unified_router
+from app.plugin_lifecycle.bundle import BUNDLE_SCHEMA, build_package
 from app.plugin_lifecycle.runtime import UnifiedRuntime
 from app.plugin_lifecycle.store import LifecycleError, PackageStore
+from app.plugin_marketplace_v2 import MarketplaceError
 from app.plugin_security_v2.management import LocalManagementGuard
 from app.plugin_security_v2.storage import atomic_write_json
 from candlescope_plugin_sdk.platform_v2 import canonical_sha256
@@ -99,6 +102,7 @@ async def test_republished_platform_package_preserves_data_and_rolls_back(tmp_pa
     )
     app.state.plugin_platform_v2 = platform
     app.state.plugin_platform_v2_management_guard = guard
+    app.state.unified_plugin_runtime = runtime
     app.include_router(create_core_plugin_router())
     platform.marketplace.bind_unified(runtime)
     await runtime.prepare_startup()
@@ -134,6 +138,18 @@ async def test_republished_platform_package_preserves_data_and_rolls_back(tmp_pa
                 headers={**headers, "Content-Type": "application/json"},
             )
             assert first_index.status_code == 200, first_index.text
+            for operation in ("", "/prepare", "/review", "/confirm"):
+                rejected = await post(f"{API}/manage/install{operation}")
+                assert rejected.status_code == 410, rejected.text
+                assert (
+                    rejected.json()["detail"]["code"]
+                    == "PLUGIN_PLATFORM_PACKAGE_UPDATE_REQUIRED"
+                )
+            legacy_prepare = await post(
+                f"{path}/prepare", json={"version": old.manifest.plugin.version}
+            )
+            assert legacy_prepare.status_code == 410, legacy_prepare.text
+            assert platform.installer.capture_activation_state(plugin_id) == retained
             await platform.start()
             assert plugin_id in platform._records
             review = await stage(failing, failing_bytes)
@@ -308,6 +324,135 @@ async def test_republished_platform_package_preserves_data_and_rolls_back(tmp_pa
                 plugin_id not in platform._records and plugin_id not in runtime.packages
             )
             assert copied.read_bytes() == b"new version data"
+    finally:
+        await runtime.stop()
+        await platform.stop()
+
+
+def test_legacy_marketplace_candidate_cannot_install_after_unified_cutover(tmp_path):
+    old = build_marketplace_bundle(tmp_path / "legacy").bundle
+    plugin_id = old.manifest.plugin.id
+    builder = SignedMarketplaceBuilder.create()
+    builder.add_release(old)
+    app = FastAPI()
+    platform = CorePluginPlatform(
+        root=tmp_path / "platform",
+        host_name="CandleScope",
+        host_version="0.4.0",
+        marketplace_enabled=True,
+        marketplace_roots=(builder.root,),
+        marketplace_now_provider=lambda: MARKETPLACE_TEST_NOW,
+    )
+    service = platform.marketplace
+    service.import_index(builder.index_bytes(), marketplace_id=MARKETPLACE_ID)
+    candidate = service.prepare(plugin_id, artifact_bytes=old.path.read_bytes())
+    assert candidate["phase"] == "verified-staged"
+    retained = platform.installer.capture_activation_state(plugin_id)
+    assert retained.activation is None
+    runtime = UnifiedRuntime(app, PackageStore(tmp_path / "unified"))
+    service.bind_unified(runtime)
+
+    assert not service.public_catalog()["plugins"][0]["installable"]
+    for operation in (service.prepare, service.apply, service.begin_activation):
+        with pytest.raises(MarketplaceError) as rejected:
+            operation(plugin_id)
+        assert rejected.value.code == "PLUGIN_PLATFORM_PACKAGE_UPDATE_REQUIRED"
+        assert rejected.value.status_code == 410
+    assert platform.installer.capture_activation_state(plugin_id) == retained
+    assert service.status()["candidates"][0]["bundleSha256"] == old.sha256
+
+
+@pytest.mark.asyncio
+async def test_local_successor_requires_exclusive_activation_and_keeps_old_data(
+    tmp_path,
+):
+    old = build_marketplace_bundle(tmp_path / "legacy").bundle
+    plugin_id = old.manifest.plugin.id
+    app = FastAPI()
+    platform = CorePluginPlatform(
+        root=tmp_path / "platform", host_name="CandleScope", host_version="0.4.0"
+    )
+    platform.installer.install(old.path, expected_sha256=old.sha256, force_staged=True)
+    assert (
+        grant := platform.installer.capture_activation_state(plugin_id).grant
+    ) is not None
+    namespace = StorageNamespace(plugin_id, grant.publisher_identity)
+    platform.private_storage.kv_put(namespace, "kept", {"saved": 7})
+    store = PackageStore(tmp_path / "unified")
+    runtime = UnifiedRuntime(app, store)
+    app.state.unified_plugin_runtime = runtime
+    app.state.plugin_platform_v2 = platform
+    guard = LocalManagementGuard(
+        ("http://127.0.0.1:5173",),
+        session_token="local-handover-session-0123456789abcdef",
+        csrf_token="local-handover-csrf-0123456789abcdef",
+    )
+    app.state.plugin_platform_v2_management_guard = guard
+    app.include_router(create_core_plugin_router())
+    app.include_router(create_unified_router())
+    platform.marketplace.bind_unified(runtime)
+    source = (
+        Path(__file__).resolve().parents[2]
+        / "examples"
+        / "unified-plugins"
+        / "hello-command"
+    )
+    candidate_path = tmp_path / "hello.cspkg"
+    package = build_package(source, candidate_path)
+    store.stage(candidate_path)
+    review = {
+        "action": "activate",
+        "digest": package.sha256,
+        "revision": store.snapshot()["revision"],
+        "acknowledgement": f"full-trust:{package.sha256}",
+    }
+    await runtime.prepare_startup()
+    await runtime.start()
+    try:
+        transport = httpx.ASGITransport(app=app, client=("127.0.0.1", 43212))
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://127.0.0.1"
+        ) as client:
+            headers = guard.trusted_headers(user_action="local-handover")
+            unified = f"{API}/manage/unified/change"
+            legacy = f"{API}/manage/{plugin_id}"
+            for action in ("enable", "disable"):
+                retired = await client.post(f"{legacy}/{action}", headers=headers)
+                assert retired.status_code == 410, retired.text
+            # Represent an installation that was already enabled before upgrading.
+            platform.installer.enable(plugin_id)
+            await platform.start()
+            conflict = await client.post(unified, json=review, headers=headers)
+            assert conflict.status_code == 409, conflict.text
+            assert store.identity(plugin_id) is None
+            assert (await client.post(f"{legacy}/disable", headers=headers)).is_success
+            accepted = await client.post(unified, json=review, headers=headers)
+            assert accepted.is_success, accepted.text
+            assert store.identity(plugin_id).package_sha256 == package.sha256
+            conflict = await client.post(f"{legacy}/enable", headers=headers)
+            assert conflict.status_code == 409, conflict.text
+            assert not platform.installer.capture_activation_state(
+                plugin_id
+            ).activation.enabled
+            stopped = await client.post(
+                unified,
+                json={
+                    "action": "disable",
+                    "id": plugin_id,
+                    "revision": accepted.json()["revision"],
+                },
+                headers=headers,
+            )
+            assert stopped.is_success, stopped.text
+            restored = await client.post(f"{legacy}/enable", headers=headers)
+            assert restored.is_success, restored.text
+            assert platform.installer.capture_activation_state(
+                plugin_id
+            ).activation.enabled
+            assert platform.private_storage.kv_get(namespace, "kept") == {
+                "found": True,
+                "value": {"saved": 7},
+            }
     finally:
         await runtime.stop()
         await platform.stop()
