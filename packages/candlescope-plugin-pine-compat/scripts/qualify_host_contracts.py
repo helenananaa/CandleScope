@@ -34,6 +34,7 @@ def main():
     }]}), encoding="utf-8")
     env = {**os.environ, "NATIVE_CALENDAR_TEST": "1", "NATIVE_TEST_PYTHON": sys.executable,
            "NATIVE_TEST_PINE_PYTHON": sys.executable, "PINE_EVENT_TEST_PYTHON": sys.executable,
+           "CANDLESCOPE_TEST_QUALIFIED_PINE_DESCRIPTOR": str(output / "unified-pine.json"),
            "CANDLESCOPE_NATIVE_RUNTIME_REGISTRY": str(registry),
            "CANDLESCOPE_RUNTIME_REGISTRY": str(registry),
            "DATA_DIR": str(output / "data"), "CANDLE_DATA_DIR": str(output / "data"),
@@ -79,6 +80,7 @@ def main():
         "python": sys.version, "contracts": ["host-bar-boundaries/1", "renko-event-rows/1", "ordered-chart-input/1"],
         "checks": [str(p.relative_to(repo)) if p.is_relative_to(repo) else p.name for p in cases],
         "bundle_manifest": json.loads((output / "manifest.json").read_text()),
+        "unified_pine": json.loads((output / "unified-pine.json").read_text(encoding="utf-8")),
     }, indent=2) + "\n", encoding="utf-8")
 
 

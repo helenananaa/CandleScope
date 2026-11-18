@@ -232,14 +232,14 @@ def main():
             lock_path.write_text(json.dumps(lock, indent=2) + "\n")
             bundle = args.output / f"{engine['bridge']}-{lock['plugin']['version']}-{target}.cspkg"
             locked_paths = [records[p].path for p in lock["wheels"]]
+            locked = builder.collect_locked_wheels(locked_paths, lock)
+            unified_bundle = args.output / f"candlescope-pine-unified-{lock['plugin']['version']}-{target}.cspkg"
+            unified = build_pine_package([wheel.path for wheel in locked], lock["plugin"]["version"], unified_bundle)
+            (args.output / "unified-pine.json").write_text(json.dumps({
+                "schema": "candlescope.bundled-unified-pine/1", "filename": unified_bundle.name,
+                "sha256": unified.sha256, "size": unified.size,
+            }, indent=2) + "\n", encoding="utf-8")
             if not args.qualification:
-                locked = builder.collect_locked_wheels(locked_paths, lock)
-                bundle = args.output / f"candlescope-pine-unified-{lock['plugin']['version']}-{target}.cspkg"
-                result = build_pine_package([wheel.path for wheel in locked], lock["plugin"]["version"], bundle)
-                (args.output / "unified-pine.json").write_text(json.dumps({
-                    "schema": "candlescope.bundled-unified-pine/1", "filename": bundle.name,
-                    "sha256": result.sha256, "size": result.size,
-                }, indent=2) + "\n")
                 continue
             result = builder.build_locked_bundle(locked_paths, bundle, lock_path=lock_path)
             entries.append({
