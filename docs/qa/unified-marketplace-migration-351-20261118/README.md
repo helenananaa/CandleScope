@@ -53,6 +53,8 @@ macOS arm64 和 Windows x64 的退役候选均完成安装、健康升级、迁�
 
 后续带排队 Pine 修复的 macOS arm64 候选再次运行本节的三个会话。旧入口在接管及
 回滚重启后均被拒，保留的私有数据与迁移前后摘要一致。[候选回执](macos-arm64-final-candidate.json)。
+Windows x64 也重跑了同一组场景，按进程启动身份核对三个会话均已完整退出。
+[Windows x64 候选回执](windows-x64-final-candidate.json)。
 
 同一份迁移配置随后由历史版 macOS 应用重新打开，旧制品记录、原数据摘要及保留的
 统一主题均可读取。[历史应用回执](macos-arm64-predecessor.json)。
