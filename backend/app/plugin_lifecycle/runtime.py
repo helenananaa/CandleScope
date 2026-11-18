@@ -32,7 +32,7 @@ from .executors import (
 )
 from .paths import is_link
 from .script_bundle import PINE_ENTRY, PINE_ID, SCRIPT_BUNDLES
-from .store import LifecycleError, PackageStore
+from .store import CHART_PERMISSION, LifecycleError, PackageStore
 
 
 @dataclass
@@ -85,8 +85,10 @@ class UnifiedRuntime:
         self.retained = {}
         self.script_host_disabled = False
         self.bundled_pine = False
+        self.marketplace_policy = None
+        self.marketplace_blocked = frozenset()
 
-    def _current(self, run):
+    def _current(self, run, *, permission=None):
         if (
             not run.active
             or self.running.get((run.identity.plugin_id, run.entry.id)) is not run
@@ -104,13 +106,41 @@ class UnifiedRuntime:
         return bool(
             record
             and record["enabled"]
+            and self._marketplace_allowed(run.identity.plugin_id, record)
+            and (
+                permission is None
+                or "marketplace" not in record
+                or permission in record["marketplace"]["permissions"]
+            )
             and record["generation"] == run.identity.generation
             and record["packageSha256"] == run.identity.package_sha256
             and run.identity.plugin_id not in self.errors
         )
 
-    def validate(self, manifest):
-        if manifest.trust == "restricted" and manifest.permissions:
+    def _marketplace_allowed(self, plugin_id, record):
+        return "marketplace" not in record or (
+            self.marketplace_policy is not None
+            and self.marketplace_policy(plugin_id, record)
+        )
+
+    def validate_marketplace(self, manifest):
+        if manifest.trust != "restricted" or any(
+            entry.kind not in {"data", "sidecar"} for entry in manifest.entries
+        ):
+            raise LifecycleError(
+                "marketplace observation requires restricted data or sidecar entries"
+            )
+        if manifest.permissions and (
+            manifest.permissions != (CHART_PERMISSION,)
+            or not any(entry.kind == "sidecar" for entry in manifest.entries)
+        ):
+            raise LifecycleError(
+                "marketplace package requests an unsupported capability"
+            )
+        self.validate(manifest, marketplace=True)
+
+    def validate(self, manifest, *, marketplace=False):
+        if manifest.trust == "restricted" and manifest.permissions and not marketplace:
             raise LifecycleError(
                 "restricted capability grants are not wired for unified entries"
             )
@@ -224,19 +254,33 @@ class UnifiedRuntime:
                         "sidecar exited or lost its activation"
                     )
                     self.changed = True
+            blocked = frozenset(
+                plugin_id
+                for plugin_id, record in snapshot["plugins"].items()
+                if record["enabled"]
+                and not self._marketplace_allowed(plugin_id, record)
+            )
             if (
                 start_only is None
                 and snapshot["revision"] == self.revision
+                and blocked == self.marketplace_blocked
                 and not self.changed
             ):
                 return
             self.changed = False
             revision, plan = await asyncio.to_thread(self.store.execution_plan)
-            desired = (
-                {}
-                if self.safe_mode
-                else {manifest.id: (manifest, identity) for manifest, identity in plan}
-            )
+            # Use the same desired revision for policy and for the execution plan.
+            if revision != snapshot["revision"]:
+                self.changed = True
+                return
+            self.marketplace_blocked = blocked
+            desired = {}
+            if not self.safe_mode:
+                for manifest, identity in plan:
+                    if manifest.id not in blocked and all(
+                        dependency in desired for dependency, _ in manifest.dependencies
+                    ):
+                        desired[manifest.id] = (manifest, identity)
             if self.script_host_disabled:
                 for runtime_id in SCRIPT_BUNDLES:
                     desired.pop(runtime_id, None)
@@ -290,7 +334,15 @@ class UnifiedRuntime:
                 self.attempted[plugin_id] = identity
                 self.errors.pop(plugin_id, None)
                 try:
-                    self.validate(manifest)
+                    record = snapshot["plugins"][plugin_id]
+                    if not self._marketplace_allowed(plugin_id, record):
+                        raise LifecycleError(
+                            "signed marketplace release is unavailable"
+                        )
+                    if "marketplace" in record:
+                        self.validate_marketplace(manifest)
+                    else:
+                        self.validate(manifest)
                     if any(
                         entry.kind == "backend" for entry in manifest.entries
                     ) and self.composition.interrupted(identity):
@@ -434,6 +486,7 @@ class UnifiedRuntime:
     async def prepare_startup(self, *, recovery_target=None, bundled=None):
         """Load only declared trusted startup hooks before the app builds services."""
         self._lock_owner()
+        await asyncio.to_thread(self.store.recover_marketplace)
         if recovery_target is not None:
             self.safe_mode = True
             disabled = await asyncio.to_thread(
@@ -457,10 +510,17 @@ class UnifiedRuntime:
                 except (OSError, ValueError, PlatformSecurityError) as exc:
                     self.errors[runtime_id] = str(exc)
         if not self.safe_mode:
+            snapshot = await asyncio.to_thread(self.store.snapshot)
             _, plan = await asyncio.to_thread(self.store.execution_plan)
             if sum(len(manifest.entries) for manifest, _ in plan) > 256:
                 raise LifecycleError("active execution plan exceeds 256 entries")
+            deferred = set()
             for manifest, identity in plan:
+                if "marketplace" in snapshot["plugins"].get(manifest.id, {}) or any(
+                    dependency in deferred for dependency, _ in manifest.dependencies
+                ):
+                    deferred.add(manifest.id)
+                    continue
                 entries = [
                     entry
                     for entry in manifest.entries
@@ -501,6 +561,47 @@ class UnifiedRuntime:
         self.composition.frozen = True
         if not self.safe_mode and not self.script_host_disabled:
             await self.reconcile(start_only=SCRIPT_BUNDLES.keys())
+
+    async def observe_marketplace(self, plugin_id, digest, generation):
+        # Data is parsed by the host and sidecars must complete their real
+        # activation handshake and remain alive through the observation window.
+        async with asyncio.timeout(20):
+            await self.reconcile()
+            await asyncio.sleep(0.5)
+            await self.reconcile()
+            async with self.lock:
+                package = self.packages.get(plugin_id)
+                record = self.store.snapshot()["plugins"].get(plugin_id)
+                if (
+                    package is None
+                    or not package["coreReady"]
+                    or package["identity"].package_sha256 != digest
+                    or package["identity"].generation != generation
+                    or not record
+                    or not record["enabled"]
+                    or record["generation"] != generation
+                    or not self._marketplace_allowed(plugin_id, record)
+                    or plugin_id in self.errors
+                ):
+                    raise LifecycleError(
+                        self.errors.get(
+                            plugin_id, "marketplace activation is unavailable"
+                        )
+                    )
+                evidence = []
+                for entry in package["manifest"].entries:
+                    if entry.kind == "sidecar":
+                        run = self.running.get((plugin_id, entry.id))
+                        if run is None or not self._current(run):
+                            raise LifecycleError(
+                                f"sidecar failed observation: {entry.id}"
+                            )
+                    elif entry.id not in package["data"]:
+                        raise LifecycleError(
+                            f"data entry failed observation: {entry.id}"
+                        )
+                    evidence.append({"entryId": entry.id, "kind": entry.kind})
+                return evidence
 
     async def start(self):
         self._lock_owner()
@@ -566,7 +667,7 @@ class UnifiedRuntime:
             or not self.packages.get(plugin_id, {}).get("coreReady")
             or run.identity.to_wire() != identity
             or run.instance != instance_id
-            or not self._current(run)
+            or not self._current(run, permission=CHART_PERMISSION if chart else None)
         ):
             raise LifecycleError("entry activation or instance is no longer current")
         task = asyncio.current_task()
@@ -718,6 +819,7 @@ class UnifiedRuntime:
             identity = package["identity"]
             if (
                 record["enabled"]
+                and self._marketplace_allowed(plugin_id, record)
                 and record["generation"] == identity.generation
                 and record["packageSha256"] == identity.package_sha256
             ):
@@ -952,7 +1054,12 @@ class UnifiedRuntime:
                     "manifest": manifest,
                     "desired": desired,
                     "entries": entries,
-                    "error": self.errors.get(plugin_id),
+                    "error": (
+                        "signed marketplace release is unavailable or revoked"
+                        if desired["enabled"]
+                        and not self._marketplace_allowed(plugin_id, desired)
+                        else self.errors.get(plugin_id)
+                    ),
                 }
             )
         wanted = {record["packageSha256"] for record in snapshot["plugins"].values()}

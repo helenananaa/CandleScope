@@ -1598,6 +1598,30 @@ test("marketplace catalog and status preserve only verified distribution metadat
   };
   assert.equal(parsePluginMarketplaceStatus(status).candidates[0]?.permissionDiff.requiresConfirmation, true);
 
+  const packageFormat = "candlescope.unified-bundle/1";
+  const unifiedCatalog = structuredClone(marketplaceCatalog);
+  Object.assign(unifiedCatalog.plugins[0]!.latest.artifact, { packageFormat });
+  assert.equal(parsePluginMarketplaceCatalog(unifiedCatalog).plugins[0]?.latest.artifact.packageFormat, packageFormat);
+
+  const unifiedCandidate = {
+    ...candidate,
+    phase: "active",
+    observation: { status: "passed", observedAt: "2026-07-23T02:01:00Z", detail: "Host health passed" },
+    permissionDiff: {
+      ...candidate.permissionDiff,
+      permissions: [{ ...candidate.permissionDiff.permissions[0]!, permissionId: "chart.compute/1" }],
+    },
+    unifiedApproval: {
+      packageSha256: candidate.bundleSha256,
+      permissions: ["chart.compute/1"],
+      previousGeneration: 7,
+    },
+  };
+  const unifiedStatus = { ...status, candidates: [unifiedCandidate] };
+  assert.deepEqual(parsePluginMarketplaceStatus(unifiedStatus).candidates[0]?.unifiedApproval, unifiedCandidate.unifiedApproval);
+  unifiedCandidate.unifiedApproval.permissions = [];
+  assert.throws(() => parsePluginMarketplaceStatus(unifiedStatus), /invalid/);
+
   const injected = structuredClone(marketplaceCatalog);
   Object.assign(injected.plugins[0]!.latest, { installScript: "powershell -enc ..." });
   assert.throws(() => parsePluginMarketplaceCatalog(injected), /invalid/);

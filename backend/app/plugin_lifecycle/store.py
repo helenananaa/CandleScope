@@ -34,6 +34,8 @@ from .appearance import APPEARANCE_KINDS, appearance_kind
 from .bundle import CHUNK, MAX_PACKAGE_BYTES, VerifiedPackage, verify_package
 from .paths import is_link
 
+CHART_PERMISSION = "chart.compute/1"
+
 REGISTRY_SCHEMA = "candlescope.unified-registry/1"
 TRANSACTION_SCHEMA = "candlescope.unified-transaction/1"
 MAX_STATE_BYTES = 1024 * 1024
@@ -126,11 +128,17 @@ class PackageStore:
     def _validate(self, state: dict) -> dict:
         if (
             not isinstance(state, dict)
-            or set(state)
-            not in (
-                {"schema", "revision", "generation", "plugins"},
-                {"schema", "revision", "generation", "plugins", "appearance"},
-            )
+            or not {"schema", "revision", "generation", "plugins"} <= state.keys()
+            or state.keys()
+            - {
+                "schema",
+                "revision",
+                "generation",
+                "plugins",
+                "appearance",
+                "marketplaceTrial",
+                "marketplacePackages",
+            }
             or state["schema"] != REGISTRY_SCHEMA
             or not _safe_integer(state["revision"])
             or not _safe_integer(state["generation"])
@@ -138,6 +146,14 @@ class PackageStore:
             or len(state["plugins"]) > 256
         ):
             raise LifecycleError("invalid unified registry")
+        marketplace_packages = state.get("marketplacePackages", [])
+        if (
+            not isinstance(marketplace_packages, list)
+            or len(marketplace_packages) > MAX_RETAINED_PACKAGES
+            or any(not _sha256(digest) for digest in marketplace_packages)
+            or marketplace_packages != sorted(set(marketplace_packages))
+        ):
+            raise LifecycleError("invalid marketplace package reservations")
         appearance = state.get("appearance", {})
         if (
             not isinstance(appearance, dict)
@@ -152,38 +168,67 @@ class PackageStore:
         generations = set()
         for plugin_id, record in state["plugins"].items():
             identifier(plugin_id, "registry.pluginId")
-            if (
-                not isinstance(record, dict)
-                or set(record)
-                != {
-                    "packageSha256",
-                    "version",
-                    "trust",
-                    "enabled",
-                    "generation",
-                    "history",
-                }
-                or not _sha256(record["packageSha256"])
-                or type(record["enabled"]) is not bool
-                or record["trust"] not in ("restricted", "full-trust")
-                or not _safe_integer(record["generation"], minimum=1)
-                or record["generation"] > state["generation"]
-                or not isinstance(record["history"], list)
-                or len(record["history"]) > 8
-                or any(not _sha256(digest) for digest in record["history"])
-            ):
-                raise LifecycleError("invalid unified activation record")
-            version(record["version"], "registry.version")
-            if (
-                record["generation"] in generations
-                or len(set(record["history"])) != len(record["history"])
-                or record["packageSha256"] in record["history"]
-            ):
-                raise LifecycleError("reused generation or ambiguous package history")
+            self._validate_record(record, state["generation"])
+            if record["generation"] in generations:
+                raise LifecycleError("reused activation generation")
             generations.add(record["generation"])
+        trial = state.get("marketplaceTrial")
+        if trial is not None:
+            if not isinstance(trial, dict) or set(trial) != {"pluginId", "previous"}:
+                raise LifecycleError("invalid marketplace observation record")
+            plugin_id = identifier(trial["pluginId"], "marketplaceTrial.pluginId")
+            record = state["plugins"].get(plugin_id, {})
+            if not record.get("enabled") or "marketplace" not in record:
+                raise LifecycleError("marketplace observation has no active target")
+            if trial["previous"] is not None:
+                self._validate_record(trial["previous"], record["generation"] - 1)
+                if "marketplace" not in trial["previous"]:
+                    raise LifecycleError("marketplace rollback has no approval")
         if state["revision"] != state["generation"]:
             raise LifecycleError("registry revision and generation allocator diverged")
         return state
+
+    @staticmethod
+    def _validate_record(record: dict, generation: int) -> None:
+        fields = {
+            "packageSha256",
+            "version",
+            "trust",
+            "enabled",
+            "generation",
+            "history",
+        }
+        if (
+            not isinstance(record, dict)
+            or not fields <= record.keys()
+            or record.keys() - fields - {"marketplace"}
+            or not _sha256(record["packageSha256"])
+            or type(record["enabled"]) is not bool
+            or record["trust"] not in ("restricted", "full-trust")
+            or not _safe_integer(record["generation"], minimum=1)
+            or record["generation"] > generation
+            or not isinstance(record["history"], list)
+            or len(record["history"]) > 8
+            or any(not _sha256(digest) for digest in record["history"])
+            or len(set(record["history"])) != len(record["history"])
+            or record["packageSha256"] in record["history"]
+        ):
+            raise LifecycleError("invalid unified activation record")
+        version(record["version"], "registry.version")
+        if "marketplace" in record:
+            grant = record["marketplace"]
+            if (
+                record["trust"] != "restricted"
+                or not isinstance(grant, dict)
+                or set(grant)
+                != {"marketplaceId", "publisherId", "publisherKeyId", "permissions"}
+                or any(
+                    not isinstance(grant[key], str) or not 0 < len(grant[key]) <= 128
+                    for key in ("marketplaceId", "publisherId", "publisherKeyId")
+                )
+                or grant["permissions"] not in ([], [CHART_PERMISSION])
+            ):
+                raise LifecycleError("invalid marketplace approval")
 
     def _state(self) -> dict:
         return (
@@ -208,6 +253,13 @@ class PackageStore:
         return package
 
     def _preflight(self, state: dict) -> None:
+        self._validate_plan(state)
+        if state.get("marketplaceTrial") is not None:
+            rollback = copy.deepcopy(state)
+            self._restore_marketplace(rollback)
+            self._validate_plan(rollback)
+
+    def _validate_plan(self, state: dict) -> None:
         manifests = []
         for plugin_id, record in state["plugins"].items():
             if not record["enabled"]:
@@ -217,6 +269,11 @@ class PackageStore:
                 manifest.id != plugin_id
                 or manifest.version != record["version"]
                 or manifest.trust != record["trust"]
+                or (
+                    "marketplace" in record
+                    and list(manifest.permissions)
+                    != record["marketplace"]["permissions"]
+                )
             ):
                 raise LifecycleError(
                     "activation record does not match approved package metadata"
@@ -298,59 +355,72 @@ class PackageStore:
         result["generation"] += 1
         return result
 
-    def stage(self, source: Path | str) -> VerifiedPackage:
+    def stage(
+        self, source: Path | str, *, marketplace_digest: str | None = None
+    ) -> VerifiedPackage:
         verified = verify_package(source)
-        with self._locked():
+        if marketplace_digest is not None and marketplace_digest != verified.sha256:
+            raise LifecycleError("archive does not match its signed marketplace digest")
+        with self._locked() as before:
             self.packages.mkdir(exist_ok=True)
             destination = self._archive(verified.sha256)
             if destination.exists():
-                return self._package(verified.sha256)
-            retained_bytes = 0
-            for retained_count, existing in enumerate(self.packages.iterdir(), 1):
-                self._check_path(existing)
-                if not existing.is_file():
-                    raise LifecycleError("package store contains a non-file artifact")
-                retained_bytes += existing.stat().st_size
-                if (
-                    retained_count >= MAX_RETAINED_PACKAGES
-                    or retained_bytes + verified.size > MAX_RETAINED_PACKAGE_BYTES
-                ):
-                    raise LifecycleError(
-                        "retained package budget exhausted; no archives were removed"
-                    )
-            if verified.size > MAX_RETAINED_PACKAGE_BYTES:
-                raise LifecycleError("package exceeds the retained byte budget")
-            descriptor, temporary = tempfile.mkstemp(
-                prefix=".stage-", suffix=".cspkg", dir=self.packages
-            )
-            temporary = Path(temporary)
-            try:
-                with (
-                    os.fdopen(descriptor, "wb") as output,
-                    Path(source).open("rb") as incoming,
-                ):
-                    size = 0
-                    while block := incoming.read(CHUNK):
-                        size += len(block)
-                        if size > MAX_PACKAGE_BYTES:
-                            raise LifecycleError(
-                                "staged input grew beyond its byte budget"
-                            )
-                        output.write(block)
-                    output.flush()
-                    os.fsync(output.fileno())
-                # Source replacement/modification between inspect and copy cannot
-                # change the bytes recorded under the reviewed digest.
-                staged = verify_package(temporary)
-                if staged.sha256 != verified.sha256:
-                    raise LifecycleError(
-                        "package changed while staging; inspect it again"
-                    )
-                os.replace(temporary, destination)
-                _fsync_directory(self.packages)
-            finally:
-                temporary.unlink(missing_ok=True)
+                staged = self._package(verified.sha256)
+            else:
+                staged = self._stage_archive(source, verified, destination)
+            if marketplace_digest is not None and marketplace_digest not in before.get(
+                "marketplacePackages", []
+            ):
+                after = self._next(before, before["revision"])
+                reserved = after.setdefault("marketplacePackages", [])
+                reserved.append(marketplace_digest)
+                reserved.sort()
+                self._commit(before, after)
             return staged
+
+    def _stage_archive(self, source, verified, destination):
+        retained_bytes = 0
+        for retained_count, existing in enumerate(self.packages.iterdir(), 1):
+            self._check_path(existing)
+            if not existing.is_file():
+                raise LifecycleError("package store contains a non-file artifact")
+            retained_bytes += existing.stat().st_size
+            if (
+                retained_count >= MAX_RETAINED_PACKAGES
+                or retained_bytes + verified.size > MAX_RETAINED_PACKAGE_BYTES
+            ):
+                raise LifecycleError(
+                    "retained package budget exhausted; no archives were removed"
+                )
+        if verified.size > MAX_RETAINED_PACKAGE_BYTES:
+            raise LifecycleError("package exceeds the retained byte budget")
+        descriptor, temporary = tempfile.mkstemp(
+            prefix=".stage-", suffix=".cspkg", dir=self.packages
+        )
+        temporary = Path(temporary)
+        try:
+            with (
+                os.fdopen(descriptor, "wb") as output,
+                Path(source).open("rb") as incoming,
+            ):
+                size = 0
+                while block := incoming.read(CHUNK):
+                    size += len(block)
+                    if size > MAX_PACKAGE_BYTES:
+                        raise LifecycleError("staged input grew beyond its byte budget")
+                    output.write(block)
+                output.flush()
+                os.fsync(output.fileno())
+            # Source replacement/modification between inspect and copy cannot
+            # change the bytes recorded under the reviewed digest.
+            staged = verify_package(temporary)
+            if staged.sha256 != verified.sha256:
+                raise LifecycleError("package changed while staging; inspect it again")
+            os.replace(temporary, destination)
+            _fsync_directory(self.packages)
+        finally:
+            temporary.unlink(missing_ok=True)
+        return staged
 
     def review(self, digest: str) -> dict:
         with self._locked() as state:
@@ -478,29 +548,114 @@ class PackageStore:
                 raise LifecycleError(
                     "explicit approval must match reviewed package bytes and trust"
                 )
-            previous = after["plugins"].get(manifest.id)
-            history = (
-                []
-                if previous is None
-                else list(
-                    dict.fromkeys([previous["packageSha256"], *previous["history"]])
+            if digest in before.get(
+                "marketplacePackages", []
+            ) or "marketplace" in before["plugins"].get(manifest.id, {}):
+                raise LifecycleError(
+                    "marketplace-owned plugins require marketplace approval"
                 )
-            )
-            after["plugins"][manifest.id] = {
-                "packageSha256": digest,
-                "version": manifest.version,
-                "trust": manifest.trust,
-                "enabled": True,
-                "generation": after["generation"],
-                "history": [item for item in history if item != digest][:8],
-            }
-            for kind, selected in after.get("appearance", {}).items():
-                if selected == manifest.id and not any(
-                    appearance_kind(entry) == kind for entry in manifest.entries
-                ):
-                    after["appearance"][kind] = None
+            self._set_active(after, manifest, digest)
             self._commit(before, after)
             return copy.deepcopy(after)
+
+    @staticmethod
+    def _set_active(
+        after: dict, manifest: Manifest, digest: str, *, marketplace=None
+    ) -> None:
+        previous = after["plugins"].get(manifest.id)
+        history = (
+            []
+            if previous is None
+            else list(dict.fromkeys([previous["packageSha256"], *previous["history"]]))
+        )
+        record = {
+            "packageSha256": digest,
+            "version": manifest.version,
+            "trust": manifest.trust,
+            "enabled": True,
+            "generation": after["generation"],
+            "history": [item for item in history if item != digest][:8],
+        }
+        if marketplace is not None:
+            record["marketplace"] = copy.deepcopy(marketplace)
+        after["plugins"][manifest.id] = record
+        for kind, selected in after.get("appearance", {}).items():
+            if selected == manifest.id and not any(
+                appearance_kind(entry) == kind for entry in manifest.entries
+            ):
+                if marketplace is not None:
+                    raise LifecycleError(
+                        "marketplace trial must preserve selected appearance"
+                    )
+                after["appearance"][kind] = None
+
+    def begin_marketplace(
+        self, digest: str, grant: dict, *, previous_generation: int | None
+    ) -> int:
+        """Commit a reviewed release and its rollback target in the same transaction."""
+        with self._locked() as before:
+            if before.get("marketplaceTrial") is not None:
+                raise RevisionConflict(
+                    "a marketplace activation is already under observation"
+                )
+            if digest not in before.get("marketplacePackages", []):
+                raise LifecycleError("marketplace package has not been staged")
+            manifest = self._package(digest).manifest
+            previous = before["plugins"].get(manifest.id)
+            if previous_generation != (previous and previous["generation"]):
+                raise RevisionConflict("marketplace activation changed since review")
+            if previous is not None and any(
+                previous.get("marketplace", {}).get(key) != grant[key]
+                for key in ("marketplaceId", "publisherId", "publisherKeyId")
+            ):
+                raise LifecycleError(
+                    "marketplace cannot take over a different activation owner"
+                )
+            after = self._next(before, before["revision"])
+            self._set_active(after, manifest, digest, marketplace=grant)
+            after["marketplaceTrial"] = {"pluginId": manifest.id, "previous": previous}
+            self._commit(before, after)
+            return after["generation"]
+
+    @staticmethod
+    def _restore_marketplace(state: dict) -> None:
+        trial = state.pop("marketplaceTrial")
+        plugin_id, previous = trial["pluginId"], trial["previous"]
+        if previous is None:
+            del state["plugins"][plugin_id]
+        else:
+            state["plugins"][plugin_id] = {
+                **previous,
+                "generation": state["generation"],
+            }
+        if previous is None or not previous["enabled"]:
+            for kind, selected in state.get("appearance", {}).items():
+                if selected == plugin_id:
+                    state["appearance"][kind] = None
+
+    def finish_marketplace(
+        self, plugin_id: str, generation: int, *, healthy: bool
+    ) -> bool:
+        with self._locked() as before:
+            if (before.get("marketplaceTrial") or {}).get(
+                "pluginId"
+            ) != plugin_id or before["plugins"][plugin_id]["generation"] != generation:
+                return False
+            after = self._next(before, before["revision"])
+            if healthy:
+                del after["marketplaceTrial"]
+            else:
+                self._restore_marketplace(after)
+            self._commit(before, after)
+            return True
+
+    def recover_marketplace(self) -> None:
+        state = self.snapshot()
+        if trial := state.get("marketplaceTrial"):
+            plugin_id = trial["pluginId"]
+            self.finish_marketplace(
+                plugin_id, state["plugins"][plugin_id]["generation"], healthy=False
+            )
 
     def select_appearance(
         self, kind: str, plugin_id: str | None, *, expected_revision: int
@@ -515,6 +670,11 @@ class PackageStore:
                 "enabled"
             ):
                 raise LifecycleError("appearance provider must be enabled")
+            trial = after.get("marketplaceTrial")
+            if trial and plugin_id == trial["pluginId"]:
+                raise LifecycleError(
+                    "marketplace appearance must pass health observation first"
+                )
             after.setdefault("appearance", {})[kind] = plugin_id
             self._commit(before, after)
             return copy.deepcopy(after)
@@ -526,9 +686,10 @@ class PackageStore:
         """Disable an explicit recovery target and its enabled dependents atomically."""
         identifier(plugin_id, "pluginId")
         with self._locked() as before:
-            if plugin_id not in before["plugins"]:
+            record = before["plugins"].get(plugin_id)
+            if record is None:
                 raise LifecycleError("plugin is not installed")
-            if not before["plugins"][plugin_id]["enabled"]:
+            if not record["enabled"]:
                 return ()
             dependencies = {
                 key: self._package(record["packageSha256"]).manifest.dependencies
@@ -546,6 +707,8 @@ class PackageStore:
                     break
                 disabled.update(more)
             after = self._next(before, before["revision"])
+            if (after.get("marketplaceTrial") or {}).get("pluginId") in disabled:
+                del after["marketplaceTrial"]
             for key in disabled:
                 after["plugins"][key]["enabled"] = False
             # The disabled flag revokes every dependent. Each later activation
@@ -568,6 +731,8 @@ class PackageStore:
             after = self._next(before, expected_revision)
             if plugin_id not in after["plugins"]:
                 raise LifecycleError("plugin is not installed")
+            if (after.get("marketplaceTrial") or {}).get("pluginId") == plugin_id:
+                del after["marketplaceTrial"]
             if uninstall:
                 del after["plugins"][plugin_id]
             else:

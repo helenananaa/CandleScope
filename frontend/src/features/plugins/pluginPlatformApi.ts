@@ -25,6 +25,7 @@ import type {
   PluginLiveExecutionRecord,
   PluginLocalInstallCandidate,
   PluginManagementDetail,
+  PluginMarketplaceApproval,
   PluginMarketplaceCatalog,
   PluginMarketplaceStatus,
   PluginUiSnapshot,
@@ -490,9 +491,13 @@ export async function applyPluginMarketplaceRelease(pluginId: string): Promise<v
   });
 }
 
-export async function activatePluginMarketplaceRelease(pluginId: string): Promise<void> {
+export async function activatePluginMarketplaceRelease(
+  pluginId: string,
+  approval?: PluginMarketplaceApproval,
+): Promise<void> {
   await managementRequest(`/manage/marketplace/${encodeURIComponent(pluginId)}/activate`, {
     method: "POST",
+    ...(approval ? { body: approval } : {}),
     action: "marketplace-activate",
   });
 }

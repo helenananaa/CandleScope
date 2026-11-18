@@ -442,7 +442,58 @@ def create_core_plugin_router() -> APIRouter:
         disabled = await asyncio.to_thread(platform.marketplace.enforce_trust_policy)
         for plugin_id in disabled:
             await platform.reconcile_plugin(plugin_id)
-        return list(disabled)
+        runtime = platform.marketplace.unified
+        if runtime is None:
+            return list(disabled)
+        await runtime.reconcile()
+        return sorted(set(disabled) | runtime.marketplace_blocked)
+
+    async def _observe_unified_release(marketplace, plugin_id, approval):
+        activation = await asyncio.to_thread(
+            marketplace.begin_unified_activation, plugin_id, approval
+        )
+        generation = activation["generation"]
+        digest = approval["packageSha256"]
+        health_error = None
+        try:
+            evidence = await marketplace.unified.observe_marketplace(
+                plugin_id, digest, generation
+            )
+            detail = f"Host runtime health passed for {len(evidence)} entrypoint(s)"
+        except Exception as exc:  # noqa: BLE001 -- any executor failure requires compensation
+            health_error = exc
+            evidence = []
+            detail = str(exc) or type(exc).__name__
+        observation = await asyncio.to_thread(
+            marketplace.finish_unified_activation,
+            plugin_id,
+            generation,
+            healthy=health_error is None,
+            detail=detail,
+        )
+        if not observation["healthy"]:
+            await marketplace.unified.reconcile()
+            restored = marketplace.unified.packages.get(plugin_id)
+            raise MarketplaceError(
+                "PLUGIN_MARKETPLACE_HEALTH_ROLLBACK",
+                "unified marketplace activation was rolled back",
+                details={
+                    "restoredVersion": observation["restoredVersion"],
+                    "runtimeReady": bool(
+                        restored
+                        and restored["coreReady"]
+                        and restored["identity"].plugin_version
+                        == observation["restoredVersion"]
+                    ),
+                    "healthError": observation["detail"],
+                },
+                status_code=409,
+            ) from health_error
+        return {
+            "activation": activation,
+            "observation": observation,
+            "health": evidence,
+        }
 
     @router.post("/manage/marketplace/{marketplace_id}/refresh")
     async def refresh_marketplace(
@@ -553,7 +604,8 @@ def create_core_plugin_router() -> APIRouter:
                 platform.marketplace.apply,
                 plugin_id,
             )
-            await platform.reconcile_plugin(plugin_id)
+            if "unifiedApproval" not in result["candidate"]:
+                await platform.reconcile_plugin(plugin_id)
             return result
         except Exception as exc:
             _raise_api_error(exc)
@@ -565,6 +617,20 @@ def create_core_plugin_router() -> APIRouter:
     ) -> dict[str, Any]:
         platform = await _guarded_platform(request)
         try:
+            marketplace = platform.marketplace
+            if await asyncio.to_thread(marketplace.is_unified_candidate, plugin_id):
+                approval = await _body(
+                    request,
+                    required={"packageSha256", "permissions", "previousGeneration"},
+                )
+                # Complete health compensation even if the HTTP client disconnects.
+                task = asyncio.create_task(
+                    _observe_unified_release(marketplace, plugin_id, approval)
+                )
+                task.add_done_callback(
+                    lambda done: None if done.cancelled() else done.exception()
+                )
+                return await asyncio.shield(task)
             activation = await asyncio.to_thread(
                 platform.marketplace.begin_activation,
                 plugin_id,
@@ -637,6 +703,8 @@ def create_core_plugin_router() -> APIRouter:
                 "health": health_evidence,
                 "rollback": platform.installer.rollback_status(plugin_id),
             }
+        except HTTPException:
+            raise
         except Exception as exc:
             _raise_api_error(exc)
 

@@ -2345,7 +2345,11 @@ function marketplaceReleaseV1(value: unknown, path: string): PluginMarketplaceRe
     "size",
     "manifestSha256",
     "sbomSha256",
-  ], [], `${path}.artifact`);
+  ], ["packageFormat"], `${path}.artifact`);
+  const packageFormat = artifact.packageFormat;
+  if (packageFormat !== undefined && packageFormat !== "candlescope.unified-bundle/1") {
+    fail(`${path}.artifact.packageFormat`);
+  }
   const fileName = string(artifact.fileName, `${path}.artifact.fileName`, 207);
   const artifactSha256 = digest(artifact.sha256, `${path}.artifact.sha256`);
   if (
@@ -2377,6 +2381,7 @@ function marketplaceReleaseV1(value: unknown, path: string): PluginMarketplaceRe
       size: integer(artifact.size, `${path}.artifact.size`, 1, MARKETPLACE_MAX_ARTIFACT_BYTES),
       manifestSha256: digest(artifact.manifestSha256, `${path}.artifact.manifestSha256`),
       sbomSha256: digest(artifact.sbomSha256, `${path}.artifact.sbomSha256`),
+      ...(packageFormat === undefined ? {} : { packageFormat }),
     },
     publishedAt: utcTimestamp(data.publishedAt, `${path}.publishedAt`),
     licenseExpression: marketplaceLicense(data.licenseExpression, `${path}.licenseExpression`),
@@ -2902,7 +2907,7 @@ function marketplaceCandidate(value: unknown, path: string): PluginMarketplaceCa
     "compatibility",
     "migration",
     "observation",
-  ], [], path);
+  ], ["unifiedApproval"], path);
   const pluginId = string(data.pluginId, `${path}.pluginId`, 128);
   const marketplaceId = string(data.marketplaceId, `${path}.marketplaceId`, 128);
   const publisherId = string(data.publisherId, `${path}.publisherId`, 128);
@@ -2940,7 +2945,28 @@ function marketplaceCandidate(value: unknown, path: string): PluginMarketplaceCa
   exact(migration, ["required", "supported", "policy"], [], `${path}.migration`);
   const observation = record(data.observation, `${path}.observation`);
   exact(observation, ["status", "observedAt", "detail"], [], `${path}.observation`);
+  const approval = data.unifiedApproval === undefined ? null : record(data.unifiedApproval, `${path}.unifiedApproval`);
+  const unifiedApproval = approval === null ? undefined : (() => {
+    exact(approval, ["packageSha256", "permissions", "previousGeneration"], [], `${path}.unifiedApproval`);
+    const packageSha256 = digest(approval.packageSha256, `${path}.unifiedApproval.packageSha256`);
+    const permissions = exactAcknowledgements(approval.permissions, `${path}.unifiedApproval.permissions`);
+    if (packageSha256 !== bundleSha256 || permissions.some((permission) => permission !== "chart.compute/1")) {
+      fail(`${path}.unifiedApproval`);
+    }
+    const required = permissionDiff.permissions.filter((permission) => permission.kind === "required");
+    if (required.map((permission) => permission.permissionId).join("\0") !== permissions.join("\0")) {
+      fail(`${path}.unifiedApproval.permissions`);
+    }
+    return {
+      packageSha256,
+      permissions,
+      previousGeneration: approval.previousGeneration === null
+        ? null
+        : integer(approval.previousGeneration, `${path}.unifiedApproval.previousGeneration`, 1),
+    };
+  })();
   return {
+    ...(unifiedApproval === undefined ? {} : { unifiedApproval }),
     pluginId,
     version: marketplaceVersion(data.version, `${path}.version`),
     marketplaceId,

@@ -36,6 +36,13 @@ from app.plugin_installer_v2.bundle import (
     verify_platform_bundle,
 )
 from app.plugin_installer_v2.registry import load_activation_registry
+from app.plugin_lifecycle.bundle import PackageError, verify_package
+from app.plugin_lifecycle.runtime import UnifiedRuntime
+from app.plugin_lifecycle.store import (
+    CHART_PERMISSION,
+    LifecycleError,
+    RevisionConflict,
+)
 from app.plugin_security_v2.grants import manifest_publisher_identity
 from app.plugin_security_v2.sandbox import restricted_runtime_profile
 from app.plugin_security_v2.storage import atomic_write_json, security_lock
@@ -44,6 +51,7 @@ from app.plugin_runtime_registry_v3.service import host_platform
 from .errors import MarketplaceError
 from .models import (
     MAX_INDEX_BYTES,
+    UNIFIED_PACKAGE_FORMAT,
     MarketplaceRoot,
     PublisherRecord,
     ReleaseRecord,
@@ -325,7 +333,10 @@ def _validate_state(state: dict[str, Any]) -> None:
     }
     for index, raw in enumerate(state["candidates"]):
         label = f"marketplace state.candidates[{index}]"
-        if not isinstance(raw, dict) or set(raw) != candidate_fields:
+        if (
+            not isinstance(raw, dict)
+            or set(raw) - {"unifiedApproval"} != candidate_fields
+        ):
             raise MarketplaceError(
                 "PLUGIN_MARKETPLACE_STATE_INVALID",
                 f"{label} schema is invalid",
@@ -366,6 +377,25 @@ def _validate_state(state: dict[str, Any]) -> None:
                 "PLUGIN_MARKETPLACE_STATE_INVALID",
                 f"{label} values are invalid",
             )
+        if "unifiedApproval" in raw:
+            approval = raw["unifiedApproval"]
+            if (
+                not isinstance(approval, dict)
+                or set(approval)
+                != {"packageSha256", "permissions", "previousGeneration"}
+                or approval["packageSha256"] != raw["bundleSha256"]
+                or approval["permissions"] not in ([], [CHART_PERMISSION])
+                or (
+                    approval["previousGeneration"] is not None
+                    and (
+                        type(approval["previousGeneration"]) is not int
+                        or approval["previousGeneration"] <= 0
+                    )
+                )
+            ):
+                raise MarketplaceError(
+                    "PLUGIN_MARKETPLACE_STATE_INVALID", f"{label} approval is invalid"
+                )
         candidate_keys.append(plugin_id)
     if candidate_keys != sorted(candidate_keys) or len(set(candidate_keys)) != len(
         candidate_keys
@@ -668,6 +698,165 @@ class PluginMarketplaceService:
                 "enabling Marketplace requires at least one build-pinned root",
             )
         self.reload_cache()
+
+    unified: UnifiedRuntime | None = None
+
+    def bind_unified(self, runtime: UnifiedRuntime) -> None:
+        self.unified = runtime
+        runtime.marketplace_policy = self.unified_release_current
+
+    def unified_release_current(self, plugin_id: str, record: dict) -> bool:
+        grant = record["marketplace"]
+        now = self._now()
+        index = self._current_indexes(now=now).get(grant["marketplaceId"])
+        if index is None:
+            return False
+        release = index.release_by_identity().get((plugin_id, record["version"]))
+        publisher = index.publisher_by_id().get(grant["publisherId"])
+        return bool(
+            release is not None
+            and publisher is not None
+            and publisher.key_id == grant["publisherKeyId"]
+            and release.publisher_id == grant["publisherId"]
+            and self._is_unified(release.artifact)
+            and release.artifact.sha256 == record["packageSha256"]
+            and self._release_visible(release)
+            and not index.is_revoked(release, now=now)
+        )
+
+    @staticmethod
+    def _is_unified(artifact) -> bool:
+        return getattr(artifact, "package_format", None) == UNIFIED_PACKAGE_FORMAT
+
+    def _unified_owner(self, plugin_id, release, index, publisher):
+        if self.unified is None:
+            raise MarketplaceError(
+                "PLUGIN_MARKETPLACE_UNIFIED_UNAVAILABLE",
+                "unified lifecycle is unavailable",
+            )
+        if self._active_record(plugin_id) is not None:
+            raise MarketplaceError(
+                "PLUGIN_MARKETPLACE_ACTIVATION_OWNED",
+                "a Platform v2 activation already owns this plugin ID",
+            )
+        current = self.unified.store.snapshot()["plugins"].get(plugin_id)
+        self._assert_unified_upgrade(current, release, index, publisher)
+        return current
+
+    @staticmethod
+    def _assert_unified_upgrade(current, release, index, publisher):
+        if current is None:
+            return
+        if any(
+            current.get("marketplace", {}).get(key) != expected
+            for key, expected in {
+                "marketplaceId": index.marketplace_id,
+                "publisherId": release.publisher_id,
+                "publisherKeyId": publisher.key_id,
+            }.items()
+        ):
+            raise MarketplaceError(
+                "PLUGIN_MARKETPLACE_ACTIVATION_OWNED",
+                "marketplace cannot replace a local activation or another publisher",
+            )
+        if _major(current["version"]) != _major(release.version):
+            raise MarketplaceError(
+                "PLUGIN_MARKETPLACE_MIGRATION_REQUIRED",
+                "major-version marketplace updates require a migration contract",
+            )
+        if (
+            current["enabled"] or current["packageSha256"] != release.artifact.sha256
+        ) and _version_key(release.version) <= _version_key(current["version"]):
+            raise MarketplaceError(
+                "PLUGIN_MARKETPLACE_UPDATE_NOT_NEWER",
+                "marketplace update must have a newer version",
+            )
+
+    def _verify_unified_artifact(self, path, release, artifact):
+        try:
+            package = verify_package(path)
+            manifest = package.manifest
+            with zipfile.ZipFile(path) as archive:
+                raw_manifest = archive.read("manifest.json")
+                with archive.open(SBOM_PATH) as stream:
+                    raw_sbom = stream.read(MAX_STATE_BYTES + 1)
+            if (
+                (package.sha256, package.size) != (artifact.sha256, artifact.size)
+                or (manifest.id, manifest.version) != release.identity
+                or _sha256_bytes(raw_manifest) != artifact.manifest_sha256
+                or _sha256_bytes(raw_sbom) != artifact.sbom_sha256
+                or len(raw_sbom) > MAX_STATE_BYTES
+            ):
+                raise MarketplaceError(
+                    "PLUGIN_MARKETPLACE_ARTIFACT_IDENTITY_MISMATCH",
+                    "unified artifact, manifest or SBOM does not match the signed release",
+                )
+            self._assert_sbom_metadata(raw_sbom, release)
+            if self.unified is None:
+                raise LifecycleError("unified lifecycle is unavailable")
+            self.unified.validate_marketplace(manifest)
+            return manifest
+        except (
+            PackageError,
+            LifecycleError,
+            OSError,
+            KeyError,
+            zipfile.BadZipFile,
+        ) as exc:
+            raise MarketplaceError(
+                "PLUGIN_MARKETPLACE_UNIFIED_INVALID", str(exc)
+            ) from exc
+
+    def _verify_artifact(self, path, release, publisher, artifact):
+        if self._is_unified(artifact):
+            manifest = self._verify_unified_artifact(path, release, artifact)
+            return {
+                "manifest": manifest,
+                "runtimeKinds": sorted(
+                    {entry.runtime for entry in manifest.entries if entry.runtime}
+                ),
+                "runtimeRegistry": [],
+                "sandboxAvailable": True,
+            }
+        bundle = verify_platform_bundle(
+            path,
+            expected_sha256=artifact.sha256,
+            host_version=self.installer.host_version,
+        )
+        return self._assert_bundle_release(bundle, release, publisher, artifact)
+
+    @staticmethod
+    def _unified_permission_diff(manifest, digest, current):
+        previous = current["marketplace"]["permissions"] if current else []
+        requested = list(manifest.permissions)
+        scope = {"data": "revealed-chart-bars"}
+        return {
+            "pluginId": manifest.id,
+            "publisherIdentityChanged": False,
+            "majorVersionChanged": False,
+            "bundleChanged": current is None or current["packageSha256"] != digest,
+            "requiresConfirmation": True,
+            "authorizationIdentityChanged": True,
+            "permissions": [
+                {
+                    "permissionId": permission,
+                    "kind": "required" if permission in requested else None,
+                    "previousKind": "required" if permission in previous else None,
+                    "change": (
+                        "unchanged"
+                        if permission in requested and permission in previous
+                        else "added"
+                        if permission in requested
+                        else "removed"
+                    ),
+                    "previousDecision": "granted" if permission in previous else None,
+                    "requestedScope": scope if permission in requested else None,
+                    "previousScope": scope if permission in previous else None,
+                    "requiresConfirmation": permission in requested,
+                }
+                for permission in sorted(set(previous) | set(requested))
+            ],
+        }
 
     def _state(self) -> dict[str, Any]:
         state = _strict_state(self.state_path)
@@ -1053,17 +1242,38 @@ class PluginMarketplaceService:
 
     @staticmethod
     def _assert_sbom_release(
-        bundle: VerifiedPlatformBundle,
-        release: ReleaseRecord,
+        bundle: VerifiedPlatformBundle, release: ReleaseRecord
     ) -> None:
         try:
             with zipfile.ZipFile(bundle.path, "r") as archive:
                 raw = archive.read(SBOM_PATH)
-            value = loads_strict(raw)
-        except (OSError, KeyError, zipfile.BadZipFile, PlatformContractError) as exc:
+        except (OSError, KeyError, zipfile.BadZipFile) as exc:
             raise MarketplaceError(
-                "PLUGIN_MARKETPLACE_SBOM_INVALID",
-                "signed release SBOM cannot be read",
+                "PLUGIN_MARKETPLACE_SBOM_INVALID", "signed release SBOM cannot be read"
+            ) from exc
+        PluginMarketplaceService._assert_sbom_metadata(raw, release)
+        wheel_dependencies = sorted(
+            (re.sub(r"[-_.]+", "-", item.package).lower(), item.version)
+            for item in bundle.wheels
+        )
+        signed_dependencies = [
+            (item.name, item.version) for item in release.dependencies
+        ]
+        missing_wheels = sorted(set(wheel_dependencies) - set(signed_dependencies))
+        if missing_wheels:
+            raise MarketplaceError(
+                "PLUGIN_MARKETPLACE_SBOM_DEPENDENCY_MISMATCH",
+                "signed dependencies do not cover every bundled wheel",
+                details={"missingWheels": missing_wheels},
+            )
+
+    @staticmethod
+    def _assert_sbom_metadata(raw: bytes, release: ReleaseRecord) -> None:
+        try:
+            value = loads_strict(raw)
+        except PlatformContractError as exc:
+            raise MarketplaceError(
+                "PLUGIN_MARKETPLACE_SBOM_INVALID", "signed release SBOM cannot be read"
             ) from exc
         if not isinstance(value, dict):
             raise MarketplaceError(
@@ -1125,20 +1335,6 @@ class PluginMarketplaceService:
                 "PLUGIN_MARKETPLACE_SBOM_DEPENDENCY_MISMATCH",
                 "SBOM dependencies or licenses do not match signed release metadata",
                 details={"expected": expected, "actual": declared},
-            )
-        wheel_dependencies = sorted(
-            (re.sub(r"[-_.]+", "-", item.package).lower(), item.version)
-            for item in bundle.wheels
-        )
-        signed_dependencies = [
-            (item.name, item.version) for item in release.dependencies
-        ]
-        missing_wheels = sorted(set(wheel_dependencies) - set(signed_dependencies))
-        if missing_wheels:
-            raise MarketplaceError(
-                "PLUGIN_MARKETPLACE_SBOM_DEPENDENCY_MISMATCH",
-                "signed dependencies do not cover every bundled wheel",
-                details={"missingWheels": missing_wheels},
             )
 
     def bundle_trust(
@@ -1465,6 +1661,14 @@ class PluginMarketplaceService:
         release: ReleaseRecord,
         marketplace_id: str,
     ) -> Any | None:
+        if (
+            self.unified is not None
+            and plugin_id in self.unified.store.snapshot()["plugins"]
+        ):
+            raise MarketplaceError(
+                "PLUGIN_MARKETPLACE_ACTIVATION_OWNED",
+                "a unified activation already owns this plugin ID",
+            )
         current = self._active_record(plugin_id)
         if current is None:
             return None
@@ -1583,7 +1787,11 @@ class PluginMarketplaceService:
         index, release, publisher = self._release(plugin_id, version)
         artifact = self._artifact_for_host(release)
         self._assert_minimum_host(release)
-        self._assert_ownership(plugin_id, release, index.marketplace_id)
+        unified = self._is_unified(artifact)
+        if unified:
+            self._unified_owner(plugin_id, release, index, publisher)
+        else:
+            self._assert_ownership(plugin_id, release, index.marketplace_id)
         destination = self._artifact_path(artifact.sha256)
         cache_reused = False
         if artifact_bytes is None:
@@ -1634,42 +1842,41 @@ class PluginMarketplaceService:
             os.fsync(temporary.fileno())
             temporary_path = Path(temporary.name)
         try:
-            bundle = verify_platform_bundle(
-                temporary_path,
-                expected_sha256=artifact.sha256,
-                host_version=self.installer.host_version,
-            )
-            compatibility = self._assert_bundle_release(
-                bundle,
-                release,
-                publisher,
-                artifact,
+            compatibility = self._verify_artifact(
+                temporary_path, release, publisher, artifact
             )
             _write_bytes(destination, artifact_bytes)
         finally:
             temporary_path.unlink(missing_ok=True)
         with security_lock(self.lock_path):
-            current_index, current_release, _current_publisher = self._release(
+            current_index, current_release, current_publisher = self._release(
                 plugin_id,
                 release.version,
             )
             if (
                 current_index.marketplace_id != index.marketplace_id
                 or current_release != release
+                or current_publisher != publisher
             ):
                 raise MarketplaceError(
                     "PLUGIN_MARKETPLACE_CANDIDATE_STALE",
                     "marketplace release changed while its artifact was being verified",
                 )
-            current = self._assert_ownership(
-                plugin_id,
-                release,
-                index.marketplace_id,
-            )
-            permission_diff = self.installer.preview_permission_diff(
-                destination,
-                expected_sha256=artifact.sha256,
-            ).to_wire()
+            if unified:
+                manifest = compatibility["manifest"]
+                current = self._unified_owner(plugin_id, release, index, publisher)
+                permission_diff = self._unified_permission_diff(
+                    manifest, artifact.sha256, current
+                )
+                from_version = current["version"] if current else None
+            else:
+                current = self._assert_ownership(
+                    plugin_id, release, index.marketplace_id
+                )
+                permission_diff = self.installer.preview_permission_diff(
+                    destination, expected_sha256=artifact.sha256
+                ).to_wire()
+                from_version = current.version if current is not None else None
             candidate = {
                 "pluginId": plugin_id,
                 "version": release.version,
@@ -1679,7 +1886,7 @@ class PluginMarketplaceService:
                 "artifactFile": (f"{artifact.sha256.removeprefix('sha256:')}.cspkg"),
                 "phase": "verified-staged",
                 "preparedAt": _utc_now(),
-                "fromVersion": current.version if current is not None else None,
+                "fromVersion": from_version,
                 "permissionDiff": permission_diff,
                 "compatibility": {
                     "hostVersion": self.installer.host_version,
@@ -1707,7 +1914,19 @@ class PluginMarketplaceService:
                     "detail": None,
                 },
             }
+            if unified:
+                candidate["unifiedApproval"] = {
+                    "packageSha256": artifact.sha256,
+                    "permissions": list(manifest.permissions),
+                    "previousGeneration": current["generation"] if current else None,
+                }
             state = self._state()
+            existing = self._candidate(state, plugin_id)
+            if existing and self._candidate_status(existing)["phase"] == "observing":
+                raise MarketplaceError(
+                    "PLUGIN_MARKETPLACE_OBSERVATION_PENDING",
+                    "a marketplace release is still under observation",
+                )
             state["candidates"] = [
                 item for item in state["candidates"] if item["pluginId"] != plugin_id
             ]
@@ -1734,14 +1953,18 @@ class PluginMarketplaceService:
             index.marketplace_id != candidate["marketplaceId"]
             or release.publisher_id != candidate["publisherId"]
             or artifact.sha256 != candidate["bundleSha256"]
+            or self._is_unified(artifact) != ("unifiedApproval" in candidate)
         ):
             raise MarketplaceError(
                 "PLUGIN_MARKETPLACE_CANDIDATE_STALE",
                 "marketplace candidate no longer matches the verified index",
             )
-        current = self._active_record(plugin_id)
-        if current is None or current.bundle_sha256 != artifact.sha256:
-            self._assert_ownership(plugin_id, release, index.marketplace_id)
+        if "unifiedApproval" in candidate:
+            self._unified_owner(plugin_id, release, index, publisher)
+        else:
+            current = self._active_record(plugin_id)
+            if current is None or current.bundle_sha256 != artifact.sha256:
+                self._assert_ownership(plugin_id, release, index.marketplace_id)
         path = self.artifact_directory / candidate["artifactFile"]
         if (
             path.is_symlink()
@@ -1756,12 +1979,7 @@ class PluginMarketplaceService:
                 "PLUGIN_MARKETPLACE_CACHE_INVALID",
                 "staged marketplace artifact failed its content-addressed check",
             )
-        bundle = verify_platform_bundle(
-            path,
-            expected_sha256=artifact.sha256,
-            host_version=self.installer.host_version,
-        )
-        self._assert_bundle_release(bundle, release, publisher, artifact)
+        self._verify_artifact(path, release, publisher, artifact)
         return dict(candidate), release, publisher, path
 
     def _replace_candidate_in_state(
@@ -1789,6 +2007,26 @@ class PluginMarketplaceService:
     def apply(self, plugin_id: str) -> dict[str, Any]:
         with security_lock(self.lock_path):
             candidate, release, _publisher, path = self._verified_candidate(plugin_id)
+            if "unifiedApproval" in candidate:
+                if candidate["phase"] not in {"verified-staged", "activation-staged"}:
+                    raise MarketplaceError(
+                        "PLUGIN_MARKETPLACE_ACTIVATION_STATE_INVALID",
+                        "prepare the unified marketplace release before staging it",
+                    )
+                try:
+                    package = self.unified.store.stage(
+                        path, marketplace_digest=candidate["bundleSha256"]
+                    )
+                except (PackageError, LifecycleError) as exc:
+                    raise MarketplaceError(
+                        "PLUGIN_MARKETPLACE_CACHE_INVALID", str(exc)
+                    ) from exc
+                candidate["phase"] = "activation-staged"
+                self._replace_candidate_in_state(self._state(), candidate)
+                return {
+                    "candidate": candidate,
+                    "installation": {**package.review(), "publisherVerified": True},
+                }
             activation_savepoint = self.installer.capture_activation_state(plugin_id)
             result = self.installer.install(
                 path,
@@ -1835,9 +2073,158 @@ class PluginMarketplaceService:
             "installation": result.to_wire(),
         }
 
+    def is_unified_candidate(self, plugin_id: str) -> bool:
+        candidate = self._candidate(self._state(), plugin_id)
+        return candidate is not None and "unifiedApproval" in candidate
+
+    def _candidate_status(self, candidate, snapshot=None):
+        if (
+            self.unified is None
+            or "unifiedApproval" not in candidate
+            or candidate["phase"] != "observing"
+        ):
+            return candidate
+        snapshot = self.unified.store.snapshot() if snapshot is None else snapshot
+        plugin_id = candidate["pluginId"]
+        record = snapshot["plugins"].get(plugin_id, {})
+        owns_release = (
+            record.get("enabled")
+            and "marketplace" in record
+            and record["packageSha256"] == candidate["bundleSha256"]
+            and record["generation"]
+            != candidate["unifiedApproval"]["previousGeneration"]
+        )
+        if (
+            owns_release
+            and (snapshot.get("marketplaceTrial") or {}).get("pluginId") == plugin_id
+        ):
+            return candidate
+        return {
+            **candidate,
+            "phase": "active" if owns_release else "rolled-back",
+            "observation": {
+                "status": "passed" if owns_release else "failed",
+                "observedAt": None,
+                "detail": (
+                    "unified activation was committed"
+                    if owns_release
+                    else "unified activation was recovered or superseded"
+                ),
+            },
+        }
+
+    def begin_unified_activation(
+        self, plugin_id: str, approval: dict
+    ) -> dict[str, Any]:
+        with security_lock(self.lock_path):
+            candidate, release, publisher, _path = self._verified_candidate(plugin_id)
+            expected = candidate.get("unifiedApproval")
+            if (
+                self.unified is None
+                or expected is None
+                or candidate["phase"] != "activation-staged"
+                or not self.unified.ready
+                or self.unified.safe_mode
+            ):
+                raise MarketplaceError(
+                    "PLUGIN_MARKETPLACE_ACTIVATION_STATE_INVALID",
+                    "unified candidate is not staged for activation",
+                )
+            if canonical_sha256(approval) != canonical_sha256(expected):
+                raise MarketplaceError(
+                    "PLUGIN_MARKETPLACE_APPROVAL_MISMATCH",
+                    "approve the reviewed package digest, permissions and activation generation",
+                    status_code=409,
+                )
+            digest = expected["packageSha256"]
+            grant = {
+                "marketplaceId": candidate["marketplaceId"],
+                "publisherId": release.publisher_id,
+                "publisherKeyId": publisher.key_id,
+                "permissions": expected["permissions"],
+            }
+            try:
+                generation = self.unified.store.begin_marketplace(
+                    digest, grant, previous_generation=expected["previousGeneration"]
+                )
+            except ValueError as exc:
+                raise MarketplaceError(
+                    "PLUGIN_MARKETPLACE_ACTIVATION_CONFLICT"
+                    if isinstance(exc, RevisionConflict)
+                    else "PLUGIN_MARKETPLACE_ACTIVATION_STATE_INVALID",
+                    str(exc),
+                    status_code=409,
+                ) from exc
+            try:
+                candidate["phase"] = "observing"
+                candidate["observation"] = {
+                    "status": "observing",
+                    "observedAt": None,
+                    "detail": None,
+                }
+                self._replace_candidate_in_state(self._state(), candidate)
+            except BaseException:
+                self.unified.store.finish_marketplace(
+                    plugin_id, generation, healthy=False
+                )
+                raise
+            return {"candidate": candidate, "generation": generation}
+
+    def finish_unified_activation(self, plugin_id, generation, *, healthy, detail):
+        with security_lock(self.lock_path):
+            state = self._state()
+            candidate = self._candidate(state, plugin_id)
+            snapshot = self.unified.store.snapshot()
+            record = snapshot["plugins"].get(plugin_id, {})
+            current = bool(
+                "marketplace" in record
+                and record["generation"] == generation
+                and self.unified_release_current(plugin_id, record)
+            )
+            healthy = healthy and current
+            changed = self.unified.store.finish_marketplace(
+                plugin_id, generation, healthy=healthy
+            )
+            if not changed:
+                raise MarketplaceError(
+                    "PLUGIN_MARKETPLACE_ACTIVATION_CONFLICT",
+                    "unified activation changed while under observation",
+                    status_code=409,
+                )
+            if not current:
+                detail = "signed marketplace release is unavailable or revoked"
+            phase = "active" if healthy else "rolled-back"
+            if (
+                candidate is not None
+                and candidate["phase"] == "observing"
+                and candidate["bundleSha256"] == record.get("packageSha256")
+            ):
+                candidate["phase"] = phase
+                candidate["observation"] = {
+                    "status": "passed" if healthy else "failed",
+                    "observedAt": _utc_now(),
+                    "detail": detail[:1024],
+                }
+                self._replace_candidate_in_state(state, candidate)
+            before = (snapshot.get("marketplaceTrial") or {}).get("previous")
+            return {
+                "candidate": candidate,
+                "healthy": healthy,
+                "detail": detail[:1024],
+                "restoredVersion": before["version"]
+                if not healthy and before
+                else None,
+            }
+
     def begin_activation(self, plugin_id: str) -> dict[str, Any]:
         with security_lock(self.lock_path):
             candidate, release, _publisher, _path = self._verified_candidate(plugin_id)
+            if "unifiedApproval" in candidate:
+                raise MarketplaceError(
+                    "PLUGIN_MARKETPLACE_APPROVAL_REQUIRED",
+                    "unified marketplace releases require explicit approval",
+                    status_code=409,
+                )
             current = self._active_record(plugin_id)
             artifact = self._artifact_for_host(release)
             if (
@@ -2191,6 +2578,9 @@ class PluginMarketplaceService:
                     plugins.setdefault(release.plugin_id, []).append((index, release))
         entries = []
         installed = load_activation_registry(self.installer.registry_path).by_id()
+        unified = (
+            self.unified.store.snapshot()["plugins"] if self.unified is not None else {}
+        )
         for plugin_id in sorted(plugins):
             releases = sorted(
                 plugins[plugin_id],
@@ -2213,6 +2603,22 @@ class PluginMarketplaceService:
                 host_artifact = self._artifact_for_host(latest)
             except MarketplaceError:
                 host_artifact = None
+            unified_artifact = self._is_unified(host_artifact)
+            unified_installable = False
+            if (
+                installable_release is not None
+                and unified_artifact
+                and self.unified is not None
+                and plugin_id not in installed
+            ):
+                try:
+                    self._assert_unified_upgrade(
+                        unified.get(plugin_id), latest, latest_index, publisher
+                    )
+                except MarketplaceError:
+                    pass
+                else:
+                    unified_installable = True
             publisher_wire = publisher.to_public_wire()
             if not isinstance(latest, MultiRuntimeReleaseRecord):
                 publisher_wire.pop("verificationTier", None)
@@ -2224,21 +2630,32 @@ class PluginMarketplaceService:
                 ),
                 "releaseCount": len(releases),
                 "installedVersion": (
-                    installed[plugin_id].version if plugin_id in installed else None
+                    unified[plugin_id]["version"]
+                    if plugin_id in unified
+                    else installed[plugin_id].version
+                    if plugin_id in installed
+                    else None
                 ),
                 "installable": (
                     installable_release is not None
                     and host_artifact is not None
                     and host_artifact.size <= MAX_REMOTE_ARTIFACT_BYTES
                     and self._release_available_on_host(latest)
-                    and assurances["sandbox"]["available"]
                     and (
-                        plugin_id not in installed
-                        or self._release_for_digest(
-                            installed[plugin_id].bundle_sha256,
-                            include_expired=True,
+                        unified_installable
+                        if unified_artifact
+                        else (
+                            plugin_id not in unified
+                            and assurances["sandbox"]["available"]
+                            and (
+                                plugin_id not in installed
+                                or self._release_for_digest(
+                                    installed[plugin_id].bundle_sha256,
+                                    include_expired=True,
+                                )
+                                is not None
+                            )
                         )
-                        is not None
                     )
                 ),
             }
@@ -2289,6 +2706,9 @@ class PluginMarketplaceService:
         schema_v2 = any(
             index.schema_version.endswith("/2") for index in current_indexes.values()
         )
+        unified_snapshot = (
+            self.unified.store.snapshot() if self.unified is not None else None
+        )
         result = {
             "schemaVersion": (
                 STATUS_SCHEMA_VERSION_V2 if schema_v2 else STATUS_SCHEMA_VERSION
@@ -2298,7 +2718,10 @@ class PluginMarketplaceService:
             "rootCount": len(self.roots),
             "validCacheCount": len(current_indexes),
             "cacheErrors": dict(sorted(cache_errors.items())),
-            "candidates": list(state["candidates"]),
+            "candidates": [
+                self._candidate_status(candidate, unified_snapshot)
+                for candidate in state["candidates"]
+            ],
             "updates": [
                 {
                     "pluginId": record.plugin_id,

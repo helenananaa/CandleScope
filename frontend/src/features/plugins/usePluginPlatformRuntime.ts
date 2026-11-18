@@ -736,8 +736,8 @@ export function usePluginPlatformRuntime(identity: PluginMarketIdentity, liveCha
         () => applyPluginMarketplaceRelease(pluginId),
         { kind: "message", key: "plugin.notice.marketplaceApplied" },
       ),
-      activateMarketplaceRelease: (pluginId) => withRefresh(
-        () => activatePluginMarketplaceRelease(pluginId),
+      activateMarketplaceRelease: (pluginId, approval) => withRefresh(
+        () => activatePluginMarketplaceRelease(pluginId, approval),
         { kind: "message", key: "plugin.notice.marketplaceActivated" },
       ),
       installBundle: async (file) => {

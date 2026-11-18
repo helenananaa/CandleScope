@@ -564,6 +564,7 @@ export interface PluginCatalog {
 }
 
 export interface PluginMarketplaceArtifact {
+  packageFormat?: "candlescope.unified-bundle/1";
   fileName: string;
   url: string;
   sha256: string;
@@ -681,7 +682,14 @@ export interface PluginMarketplacePermissionDiff {
   }>;
 }
 
+export interface PluginMarketplaceApproval {
+  packageSha256: string;
+  permissions: string[];
+  previousGeneration: number | null;
+}
+
 export interface PluginMarketplaceCandidate {
+  unifiedApproval?: PluginMarketplaceApproval;
   pluginId: string;
   version: string;
   marketplaceId: string;
@@ -1267,7 +1275,7 @@ export interface PluginPlatformRuntime {
     refreshMarketplace(marketplaceId: string): Promise<void>;
     prepareMarketplaceRelease(pluginId: string, version: string): Promise<void>;
     applyMarketplaceRelease(pluginId: string): Promise<void>;
-    activateMarketplaceRelease(pluginId: string): Promise<void>;
+    activateMarketplaceRelease(pluginId: string, approval?: PluginMarketplaceApproval): Promise<void>;
     installBundle(file: File): Promise<{ restartRequired: boolean } | void>;
     prepareLocalInstall(file: File): Promise<PluginLocalInstallCandidate>;
     reviewLocalInstall(

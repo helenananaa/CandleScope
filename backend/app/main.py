@@ -716,6 +716,8 @@ async def _startup_event_impl() -> None:
                 evictor=evict_exchange_metadata,
             )
             await plugin_platform_v2.start()
+            if plugin_platform_v2.enabled:
+                plugin_platform_v2.marketplace.bind_unified(app.state.unified_plugin_runtime)
             plugin_platform_v2.publish_event(
                 "candlescope.app.ready/1",
                 {"hostVersion": PLUGIN_PLATFORM_V2_HOST_VERSION},
