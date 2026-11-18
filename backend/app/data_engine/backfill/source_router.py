@@ -41,6 +41,7 @@ logger = logging.getLogger("backfill.HistoricalSourceRouter")
 MAX_USDM_ARCHIVE_OBJECT_ROWS = 8192
 MAX_USDM_ARCHIVE_ROUTE_ROWS = 32768
 MAX_COMPOSED_ARCHIVE_AMPLIFICATION = 4
+MAX_COMPOSED_MULTI_EDGE_AMPLIFICATION = 12
 SMALL_COMPOSED_ARCHIVE_ROWS = 256
 
 
@@ -353,6 +354,7 @@ class HistoricalSourceRouter:
                     interval=interval,
                     rest_page_size=capabilities.rest_page_size,
                     minimum_pages=max(1, self._cfg.history_archive_min_rest_pages),
+                    tasks=run,
                 )
                 threshold_count = len(candidates)
                 rejected = {}
@@ -408,11 +410,14 @@ class HistoricalSourceRouter:
                 needed_refs = [
                     ref
                     for ref in resolved_refs
-                    if _intersects(
-                        actual_start_ms,
-                        actual_end_ms,
-                        ref.start_ms,
-                        ref.end_ms,
+                    if any(
+                        _intersects(
+                            task.start_ms,
+                            task.end_ms,
+                            ref.start_ms,
+                            ref.end_ms,
+                        )
+                        for task in run
                     )
                 ]
                 needed_keys = {ref.object_key for ref in needed_refs}
@@ -978,18 +983,39 @@ class HistoricalSourceRouter:
         )
 
 
+def _composed_group_key(task: BackfillTask) -> tuple[str, str] | None:
+    contract = task.metadata.get("history_composition_contract")
+    custom_interval = task.metadata.get("custom_interval")
+    if not contract or not custom_interval:
+        return None
+    return (str(contract), str(custom_interval))
+
+
 def _task_runs(tasks: list[BackfillTask], interval: str) -> list[list[BackfillTask]]:
     interval_ms = parse_interval_ms(interval) or 1
     ordered = sorted(tasks, key=lambda item: (item.start_ms, item.end_ms))
     runs: list[list[BackfillTask]] = []
     for task in ordered:
-        if (not runs or task.start_ms > runs[-1][-1].end_ms + interval_ms
-                or _archive_run_policy(task) != _archive_run_policy(runs[-1][-1])):
+        if not runs:
+            runs.append([task])
+            continue
+        prev_run = runs[-1]
+        prev = prev_run[-1]
+        same_policy = _archive_run_policy(task) == _archive_run_policy(prev)
+        adjacent = task.start_ms <= prev.end_ms + interval_ms
+        composed_key = _composed_group_key(task)
+        same_composed_batch = (
+            composed_key is not None
+            and composed_key == _composed_group_key(prev)
+            and (max(prev.end_ms, task.end_ms) - min(prev_run[0].start_ms, task.start_ms)) // interval_ms + 1
+            <= MAX_USDM_ARCHIVE_ROUTE_ROWS
+        )
+        if same_policy and (adjacent or same_composed_batch):
+            prev_run.append(task)
+        else:
             # A neighbouring legacy demand must not revoke a qualified page's
             # actual-task envelope by making the all-tasks contract false.
             runs.append([task])
-        else:
-            runs[-1].append(task)
     return runs
 
 
@@ -1025,6 +1051,7 @@ def _filter_daily_candidates(
     interval: str,
     rest_page_size: int,
     minimum_pages: int,
+    tasks: list[BackfillTask] | None = None,
 ) -> list[ArchiveObjectRef]:
     monthly_candidates = [
         item
@@ -1035,6 +1062,9 @@ def _filter_daily_candidates(
     interval_ms = parse_interval_ms(interval)
     if interval_ms is None or interval_ms <= 0:
         return []
+    composed_tasks = bool(
+        tasks and all(task.metadata.get("history_composition_contract") for task in tasks)
+    )
     monthly: list[ArchiveObjectRef] = []
     for ref in monthly_candidates:
         overlap_bars = max(
@@ -1048,9 +1078,14 @@ def _filter_daily_candidates(
             range_start_ms <= ref.start_ms
             and range_end_ms >= ref.end_ms
         )
-        if complete_requested_month or (
-            _ceil_div(overlap_bars, rest_page_size) >= minimum_pages
-        ):
+        composed_windows = (
+            _composed_archive_window_stats(tasks, ref, interval_ms)[1]
+            if composed_tasks
+            else 0
+        )
+        if (complete_requested_month
+                or _ceil_div(overlap_bars, rest_page_size) >= minimum_pages
+                or composed_windows >= max(2, minimum_pages)):
             monthly.append(ref)
     if monthly:
         daily = [
@@ -1080,7 +1115,25 @@ def _filter_daily_candidates(
             ref.end_ms,
         )
     )
-    if _ceil_div(daily_bars, rest_page_size) < minimum_pages:
+    daily_composed_windows = 0
+    if composed_tasks:
+        daily_envelope = ArchiveObjectRef(
+            provider_id=daily[0].provider_id,
+            exchange=daily[0].exchange,
+            market_type=daily[0].market_type,
+            symbol=daily[0].symbol,
+            interval=daily[0].interval,
+            granularity=daily[0].granularity,
+            period="daily-range",
+            start_ms=min(ref.start_ms for ref in daily),
+            end_ms=max(ref.end_ms for ref in daily),
+            url=daily[0].url,
+        )
+        daily_composed_windows = _composed_archive_window_stats(
+            tasks, daily_envelope, interval_ms
+        )[1]
+    if (_ceil_div(daily_bars, rest_page_size) < minimum_pages
+            and daily_composed_windows < max(2, minimum_pages)):
         return monthly
     return monthly + daily
 
@@ -1124,9 +1177,14 @@ def _bounded_usdm_archive_candidates(refs, tasks, interval, *, rejected=None):
         elif (hi-lo)//width+1 > MAX_USDM_ARCHIVE_ROUTE_ROWS:
             reason = 'route_envelope_budget'
         elif composed:
-            needed = _composed_archive_slots(tasks, ref, width)
+            needed, window_count = _composed_archive_window_stats(tasks, ref, width)
+            amplification = (
+                MAX_COMPOSED_MULTI_EDGE_AMPLIFICATION
+                if window_count >= 3
+                else MAX_COMPOSED_ARCHIVE_AMPLIFICATION
+            )
             if (needed == 0 or count > max(SMALL_COMPOSED_ARCHIVE_ROWS,
-                                           MAX_COMPOSED_ARCHIVE_AMPLIFICATION * needed)):
+                                           amplification * needed)):
                 reason = 'source_amplification' if needed else 'no_required_slots'
         if reason:
             if rejected is not None:
@@ -1138,13 +1196,13 @@ def _bounded_usdm_archive_candidates(refs, tasks, interval, *, rejected=None):
     return selected
 
 
-def _composed_archive_slots(tasks, ref, width):
-    """Price exact canonical windows, excluding HTTP read-ahead holes."""
+def _composed_archive_window_stats(tasks, ref, width) -> tuple[int, int]:
+    """Price exact canonical windows and distinct edge count, excluding holes."""
     spans = []
     for task in tasks:
         windows = task.metadata.get('mixed_fetch_windows', [(task.start_ms, task.end_ms)])
         if not isinstance(windows, (list, tuple)) or len(spans)+len(windows) > 4096:
-            return 0
+            return 0, 0
         for first, last in windows:
             lo, hi = max(first, ref.start_ms), min(last, ref.end_ms)
             if lo <= hi:
@@ -1155,7 +1213,12 @@ def _composed_archive_slots(tasks, ref, width):
             merged[-1] = (merged[-1][0], max(hi, merged[-1][1]))
         else:
             merged.append((lo, hi))
-    return sum((hi-lo)//width+1 for lo, hi in merged)
+    return sum((hi-lo)//width+1 for lo, hi in merged), len(merged)
+
+
+def _composed_archive_slots(tasks, ref, width):
+    """Price exact canonical windows, excluding HTTP read-ahead holes."""
+    return _composed_archive_window_stats(tasks, ref, width)[0]
 
 
 def _archive_decision_range(tasks: list[BackfillTask]) -> tuple[int, int]:

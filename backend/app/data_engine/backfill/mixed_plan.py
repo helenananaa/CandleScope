@@ -206,7 +206,7 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
                         required_fields=frozenset(policy.fields), target_width=spec.nominal_ms,
                         base_width=0 if required_contract else base.nominal_ms, page_size=page_size,
                         task_page_size=max(1, cfg.fetch_batch_size),
-                        max_rows=MAX_SOURCE_ROWS if cold else max(0, MAX_SOURCE_ROWS-count),
+                        max_rows=MAX_SOURCE_ROWS,
                         max_tasks=MAX_TASKS, max_positions=MAX_POSITION_WORK // 2)
                 builder.positions(choice.positions)
                 diagnostics.update(mixed_cold_candidates=choice.candidates,
@@ -215,6 +215,7 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
                 if choice.sources is None:
                     raise _DeclineMixed(choice.reason)
                 sources = choice.sources
+                builder.sources = sources
             covers, cursor = [], first
             while cursor < stop:
                 planning = budget.reserve("history-backfill", PLAN_BYTES) if budget else nullcontext()
@@ -231,11 +232,26 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
             initial_requests = sum(math.ceil(span.rows / page_size) for cover in covers for span in cover.spans)
             if cold and initial_requests > baseline_requests:
                 raise _DeclineMixed("cold_rest_request_cost")
+            cover_rows: list[tuple[int, int]] = []
             for offset in range(0, len(covers), 32):
                 batch = covers[offset:offset + 32]
                 await builder.prefetch(batch)
-                for cover in batch:
-                    await builder.refine(cover)
+                for batch_idx, cover in enumerate(batch):
+                    before_rows = builder.rows
+                    try:
+                        await builder.refine(cover)
+                    except _DeclineMixed as exc:
+                        if str(exc) == "refined_source_row_budget" and len(covers) > 1:
+                            split_ranges = await builder.compute_split_ranges(
+                                cover_rows,
+                                batch[batch_idx:],
+                                covers[offset + 32:],
+                                MAX_SOURCE_ROWS,
+                            )
+                            if split_ranges:
+                                diagnostics["mixed_plan_split_ranges"] = split_ranges
+                        raise
+                    cover_rows.append((cover.start_ms, builder.rows - before_rows))
             tasks = coalesce_mixed_fetches(planner._deduplicate_tasks(builder.tasks),
                 page_size=page_size, row_budget=MAX_SOURCE_ROWS)
             windows = planner._deduplicate_tasks(builder.windows)
@@ -371,6 +387,49 @@ class _MixedBackfillBuilder:
             cursor = last + 1
         return False, trusted
 
+    async def count_refined_rows(self, cover) -> int:
+        total = 0
+        pending = deque(cover.spans)
+        while pending:
+            span = pending.popleft()
+            finer = tuple(source for source in self.sources if source.width_ms < span.source.width_ms)
+            rejected = await self.finer_present(span)
+            bad, _ = (False, set()) if rejected else await self.known_inputs(span)
+            if rejected or bad:
+                if not finer:
+                    raise _DeclineMixed("finest_input_not_composition_qualified")
+                planning = self.budget.reserve("history-backfill", PLAN_BYTES) if self.budget else nullcontext()
+                with planning:
+                    replacement = await run_preparation(plan_fixed_range, self.target, span.start_ms, span.end_ms,
+                        finer, required_fields=frozenset(self.policy.fields),
+                        max_positions=self.remaining_positions())
+                self.positions(replacement.explored_positions)
+                self.report["mixed_plan_refinements"] += 1
+                pending.extendleft(reversed(replacement.spans))
+                continue
+            total += span.rows
+        return total
+
+    async def compute_split_ranges(
+        self,
+        completed_cover_rows: list[tuple[int, int]],
+        current_batch_tail: list,
+        remaining_covers: list,
+        row_budget: int,
+    ) -> list[tuple[int, int]]:
+        try:
+            all_rows = list(completed_cover_rows)
+            for cover in current_batch_tail:
+                all_rows.append((cover.start_ms, await self.count_refined_rows(cover)))
+            for offset in range(0, len(remaining_covers), 32):
+                batch = remaining_covers[offset:offset + 32]
+                await self.prefetch(batch)
+                for cover in batch:
+                    all_rows.append((cover.start_ms, await self.count_refined_rows(cover)))
+        except (_DeclineMixed, CoverUnavailable):
+            return []
+        return _partition_target_ranges(all_rows, row_budget)
+
     async def refine(self, cover):
         pending = deque(cover.spans)
         while pending:
@@ -419,6 +478,27 @@ class _MixedBackfillBuilder:
                     task.metadata = dict(windows[0].metadata)
                     self.tasks.append(task)
                     self._check_work(tasks=(task,))
+
+
+def _partition_target_ranges(
+    cover_rows: list[tuple[int, int]],
+    row_budget: int,
+) -> list[tuple[int, int]]:
+    if len(cover_rows) < 2:
+        return []
+    partitions: list[tuple[int, int]] = []
+    cur_start = cur_end = cover_rows[0][0]
+    cur_rows = cover_rows[0][1]
+    for open_ms, rows in cover_rows[1:]:
+        if cur_rows + rows <= row_budget:
+            cur_end = open_ms
+            cur_rows += rows
+        else:
+            partitions.append((cur_start, cur_end))
+            cur_start = cur_end = open_ms
+            cur_rows = rows
+    partitions.append((cur_start, cur_end))
+    return partitions if len(partitions) >= 2 else []
 
 
 async def checked_mixed_windows(storage, target, policy, windows):

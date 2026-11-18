@@ -24,6 +24,7 @@ IDENTITY_COLUMNS = ("exchange", "market_type", "symbol", "interval",
                     "provider_id", "venue", "asset_class", "series_variant",
                     "price_adjustment", "session_variant", "volume_semantics")
 BLOCK_CHANGE_WINDOW = 1024
+SERIES_RANGE_SPAN_WINDOW = 8192
 
 
 REVISION_CHANGED_FIELDS = (*IDENTITY_COLUMNS, "open_time", "close_time", "open", "high", "low", "close", "volume",
@@ -61,7 +62,80 @@ def _execute_schema(conn, script):
         raise ValueError("incomplete revision schema statement")
 
 
-def _block_change_sql(values, predicate, revision, start_ms, end_ms):
+def _series_range_grid_sql(values, predicate, revision, open_expr, width_expr):
+    keys = ", ".join(IDENTITY_COLUMNS)
+    prev_expr = f"COALESCE((SELECT revision FROM kline_series_changes WHERE {predicate}), 0)"
+    epoch_expr = "(SELECT active_tx_epoch FROM kline_mutation_context WHERE singleton=1)"
+    return f"""
+        UPDATE kline_series_range_changes
+        SET last_revision = {revision},
+            step_ms = CASE
+                WHEN start_ms = end_ms AND step_ms = 0 AND {open_expr} <> start_ms THEN {width_expr}
+                ELSE step_ms
+            END,
+            start_ms = MIN(start_ms, {open_expr}),
+            end_ms = MAX(end_ms, {open_expr})
+        WHERE span_id = (
+            SELECT span_id FROM kline_series_range_changes
+            WHERE {predicate}
+            ORDER BY last_revision DESC LIMIT 1
+        )
+        AND {epoch_expr} > 0
+        AND tx_epoch = {epoch_expr}
+        AND last_revision = {prev_expr}
+        AND {prev_expr} > 0
+        AND {width_expr} > 0
+        AND (
+            (start_ms = end_ms AND step_ms = 0 AND (
+                {open_expr} = start_ms
+                OR {open_expr} = end_ms + {width_expr}
+                OR start_ms = {open_expr} + {width_expr}
+            ))
+            OR (step_ms = {width_expr} AND (
+                ({open_expr} >= start_ms AND {open_expr} <= end_ms AND ({open_expr} - start_ms) % step_ms = 0)
+                OR {open_expr} = end_ms + {width_expr}
+                OR start_ms = {open_expr} + {width_expr}
+            ))
+        );
+        INSERT INTO kline_series_range_changes (
+            {keys}, tx_epoch, previous_revision, first_revision, last_revision, start_ms, end_ms, step_ms
+        )
+        SELECT {values}, {epoch_expr}, {prev_expr}, {revision}, {revision}, {open_expr}, {open_expr}, 0
+        WHERE NOT EXISTS (
+            SELECT 1 FROM kline_series_range_changes
+            WHERE {predicate} AND last_revision = {revision}
+        );
+        DELETE FROM kline_series_range_changes
+        WHERE span_id <= (
+            SELECT COALESCE(MAX(span_id), 0) - {SERIES_RANGE_SPAN_WINDOW}
+            FROM kline_series_range_changes
+        );
+    """
+
+
+def _series_range_interval_sql(values, predicate, revision, start_ms, end_ms):
+    keys = ", ".join(IDENTITY_COLUMNS)
+    prev_expr = f"COALESCE((SELECT revision FROM kline_series_changes WHERE {predicate}), 0)"
+    return f"""
+        INSERT INTO kline_series_range_changes (
+            {keys}, tx_epoch, previous_revision, first_revision, last_revision, start_ms, end_ms, step_ms
+        ) VALUES (
+            {values}, 0, {prev_expr}, {revision}, {revision}, {start_ms}, {end_ms}, 0
+        );
+        DELETE FROM kline_series_range_changes
+        WHERE span_id <= (
+            SELECT COALESCE(MAX(span_id), 0) - {SERIES_RANGE_SPAN_WINDOW}
+            FROM kline_series_range_changes
+        );
+    """
+
+
+def _block_change_sql(values, predicate, revision, start_ms, end_ms, *, grid_width_expr=None):
+    range_sql = (
+        _series_range_grid_sql(values, predicate, revision, start_ms, grid_width_expr)
+        if grid_width_expr is not None
+        else _series_range_interval_sql(values, predicate, revision, start_ms, end_ms)
+    )
     return f"""
         INSERT INTO kline_block_changes VALUES (
             {revision}, {values},
@@ -69,6 +143,7 @@ def _block_change_sql(values, predicate, revision, start_ms, end_ms):
             {start_ms}, {end_ms}
         );
         DELETE FROM kline_block_changes WHERE revision<={revision}-{BLOCK_CHANGE_WINDOW};
+        {range_sql}
     """
 
 
@@ -92,6 +167,35 @@ def mutation_mode(conn, mode):
         yield
     finally:
         conn.execute("UPDATE kline_mutation_context SET mode=? WHERE singleton=1", (previous,))
+
+
+@contextmanager
+def _tx_range_epoch(conn):
+    try:
+        row = conn.execute(
+            "SELECT active_tx_epoch, next_tx_epoch FROM kline_mutation_context WHERE singleton=1"
+        ).fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    if row is None:
+        yield
+        return
+    previous_active, next_epoch = int(row[0]), int(row[1])
+    conn.execute(
+        "UPDATE kline_mutation_context SET active_tx_epoch=?, next_tx_epoch=? WHERE singleton=1",
+        (next_epoch, next_epoch + 1),
+    )
+    try:
+        yield
+    finally:
+        try:
+            if conn.in_transaction:
+                conn.execute(
+                    "UPDATE kline_mutation_context SET active_tx_epoch=? WHERE singleton=1",
+                    (previous_active,),
+                )
+        except sqlite3.Error:
+            pass
 
 
 def init_revision_storage(conn):
@@ -121,10 +225,27 @@ def init_revision_storage(conn):
             revision INTEGER PRIMARY KEY, {columns}, previous_revision INTEGER NOT NULL,
             start_ms INTEGER NOT NULL, end_ms INTEGER NOT NULL
         );
-        CREATE TABLE IF NOT EXISTS kline_mutation_context (
-            singleton INTEGER PRIMARY KEY CHECK(singleton=1), mode TEXT NOT NULL
+        CREATE TABLE IF NOT EXISTS kline_series_range_changes (
+            span_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            {columns},
+            tx_epoch INTEGER NOT NULL,
+            previous_revision INTEGER NOT NULL,
+            first_revision INTEGER NOT NULL,
+            last_revision INTEGER NOT NULL,
+            start_ms INTEGER NOT NULL,
+            end_ms INTEGER NOT NULL,
+            step_ms INTEGER NOT NULL
         );
-        INSERT OR IGNORE INTO kline_mutation_context VALUES (1,'');
+        CREATE INDEX IF NOT EXISTS idx_kline_series_range_changes
+            ON kline_series_range_changes({keys}, last_revision);
+        CREATE TABLE IF NOT EXISTS kline_mutation_context (
+            singleton INTEGER PRIMARY KEY CHECK(singleton=1),
+            mode TEXT NOT NULL,
+            active_tx_epoch INTEGER NOT NULL DEFAULT 0,
+            next_tx_epoch INTEGER NOT NULL DEFAULT 1
+        );
+        INSERT OR IGNORE INTO kline_mutation_context(singleton, mode, active_tx_epoch, next_tx_epoch)
+            VALUES (1, '', 0, 1);
         CREATE TABLE IF NOT EXISTS kline_acquisitions (
             owner TEXT PRIMARY KEY, revision INTEGER NOT NULL
         );
@@ -139,6 +260,11 @@ def init_revision_storage(conn):
     for statement in schema.split(";"):
         if statement.strip():
             conn.execute(statement)
+    context_columns = {row[1] for row in conn.execute("PRAGMA table_info(kline_mutation_context)")}
+    if "active_tx_epoch" not in context_columns:
+        conn.execute("ALTER TABLE kline_mutation_context ADD COLUMN active_tx_epoch INTEGER NOT NULL DEFAULT 0")
+    if "next_tx_epoch" not in context_columns:
+        conn.execute("ALTER TABLE kline_mutation_context ADD COLUMN next_tx_epoch INTEGER NOT NULL DEFAULT 1")
     if not had_delete_permissions:
         # Old pending jobs have no distinction between explicit deletion and
         # automatic projection invalidation. Preserve their conservative floor.
@@ -178,9 +304,14 @@ def init_revision_storage(conn):
         changed_fields = REVISION_CHANGED_FIELDS
         condition = "WHEN " + " OR ".join(f"NEW.{name} IS NOT OLD.{name}" for name in changed_fields) if operation == "update" else ""
         watermark_predicate = " AND ".join(f"{name}={alias}.{name}" for name in IDENTITY_COLUMNS)
+        grid_width_expr = (
+            f"(CASE WHEN {alias}.close_time IS NOT NULL AND {alias}.close_time >= {alias}.open_time "
+            f"THEN {alias}.close_time - {alias}.open_time + 1 ELSE 0 END)"
+        )
         # Canonical blocks select candles by open, including inserts and replacements.
         footprint = _block_change_sql(values, watermark_predicate, revision,
-                                      f"{alias}.open_time", f"{alias}.open_time")
+                                      f"{alias}.open_time", f"{alias}.open_time",
+                                      grid_width_expr=grid_width_expr)
         source_derived_predicate = " AND ".join(f"s.{name}={alias}.{name}" for name in IDENTITY_COLUMNS)
         family_predicate = " AND ".join(f"{name}={alias}.{name}" for name in IDENTITY_COLUMNS if name != "interval")
         mode = "(SELECT mode FROM kline_mutation_context WHERE singleton=1)"
@@ -309,6 +440,56 @@ def block_change_receipts(conn, revision, head):
     return receipts if len(receipts) == head - revision else ()
 
 
+def series_range_spans(conn, values, revision, head):
+    """Read a complete telescoping per-series range chain in (revision, head]."""
+    if revision < 0 or head - revision <= BLOCK_CHANGE_WINDOW:
+        return None
+    tail_floor = head - BLOCK_CHANGE_WINDOW
+    tail_count = conn.execute(
+        "SELECT COUNT(*) FROM kline_block_changes WHERE revision>? AND revision<=?",
+        (tail_floor, head),
+    ).fetchone()[0]
+    if tail_count != BLOCK_CHANGE_WINDOW:
+        return None
+    change = series_change(conn, values)
+    if change is None or int(change["revision"]) <= revision:
+        return ()
+    target_rev = int(change["revision"])
+    if conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='kline_series_range_changes'"
+    ).fetchone() is None:
+        return None
+    predicate = " AND ".join(f"{name}=?" for name in IDENTITY_COLUMNS)
+    spans = conn.execute(
+        f"SELECT previous_revision, first_revision, last_revision, start_ms, end_ms, step_ms "
+        f"FROM kline_series_range_changes WHERE {predicate} "
+        f"AND last_revision>? ORDER BY last_revision ASC",
+        (*values, revision),
+    ).fetchall()
+    if (not spans
+            or int(spans[0]["previous_revision"]) > revision
+            or any(int(left["last_revision"]) != int(right["previous_revision"])
+                   for left, right in zip(spans, spans[1:]))
+            or int(spans[-1]["last_revision"]) != target_rev):
+        return None
+    return tuple(span for span in spans if int(span["first_revision"]) <= head)
+
+
+def span_overlaps_half_open(span, start_ms: int, stop_ms: int) -> bool:
+    """Exact overlap between a coalesced grid/interval span and [start_ms, stop_ms)."""
+    if start_ms >= stop_ms:
+        return False
+    lo, hi, step = int(span["start_ms"]), int(span["end_ms"]), int(span["step_ms"])
+    if step <= 0 or lo == hi:
+        return lo < stop_ms and hi >= start_ms
+    if hi < start_ms or lo >= stop_ms:
+        return False
+    if start_ms <= lo:
+        return True
+    first_hit = lo + ((start_ms - lo + step - 1) // step) * step
+    return first_hit <= hi and first_hit < stop_ms
+
+
 def series_values(symbol, interval, exchange, market_type, identity=None):
     identity = identity or KlineSeriesIdentity.for_exchange(exchange)
     return (exchange, market_type, symbol, interval, *identity.storage_values)
@@ -329,11 +510,26 @@ def mark_deleted(conn, values, start_ms=None, end_ms=None):
     start = start_ms if start_ms is not None else 0
     end = end_ms if end_ms is not None else 9223372036854775807
     predicate = " AND ".join(f"{name}=?" for name in IDENTITY_COLUMNS)
+    prev_row = conn.execute(
+        f"SELECT revision FROM kline_series_changes WHERE {predicate}", values
+    ).fetchone()
+    prev_rev = int(prev_row[0]) if prev_row is not None else 0
     conn.execute(f"""INSERT INTO kline_block_changes VALUES (
-        ?, {','.join('?' for _ in IDENTITY_COLUMNS)},
-        COALESCE((SELECT revision FROM kline_series_changes WHERE {predicate}), 0), ?, ?
-    )""", (revision, *values, *values, start, end))
+        ?, {','.join('?' for _ in IDENTITY_COLUMNS)}, ?, ?, ?
+    )""", (revision, *values, prev_rev, start, end))
     conn.execute("DELETE FROM kline_block_changes WHERE revision<=?", (revision - BLOCK_CHANGE_WINDOW,))
+    if conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='kline_series_range_changes'"
+    ).fetchone() is not None:
+        conn.execute(f"""INSERT INTO kline_series_range_changes (
+            {keys}, tx_epoch, previous_revision, first_revision, last_revision, start_ms, end_ms, step_ms
+        ) VALUES ({','.join('?' for _ in IDENTITY_COLUMNS)}, 0, ?, ?, ?, ?, ?, 0)""",
+            (*values, prev_rev, revision, revision, start, end))
+        conn.execute(
+            "DELETE FROM kline_series_range_changes WHERE span_id <= "
+            "(SELECT COALESCE(MAX(span_id), 0) - ? FROM kline_series_range_changes)",
+            (SERIES_RANGE_SPAN_WINDOW,),
+        )
     conn.execute(f"INSERT INTO kline_delete_permissions VALUES ({','.join('?' for _ in range(12))}) "
                  f"ON CONFLICT({keys}) DO UPDATE SET revision=excluded.revision", (*values, revision))
     conn.execute(f"""INSERT INTO kline_series_changes VALUES ({','.join('?' for _ in range(16))})
@@ -551,7 +747,8 @@ def guarded_write(conn, values, *, commit=True, native_rows=None, source=None, n
     if not conn.in_transaction:
         conn.execute("BEGIN IMMEDIATE")
     if scope is None:
-        yield
+        with _tx_range_epoch(conn):
+            yield
         if commit:
             conn.commit()
         return
@@ -602,7 +799,8 @@ def guarded_write(conn, values, *, commit=True, native_rows=None, source=None, n
                 check_deletions(conn, scope, warmup.source, warmup.target)
                 warmup_head = current_revision(conn)
         before = versions() if view is not None or computation is not None or warmup_head is not None else None
-        yield
+        with _tx_range_epoch(conn):
+            yield
         accepted = versions()
         # A native range view does not consume other intervals as input.
         # Grant only mutations performed by this write, never unrelated family

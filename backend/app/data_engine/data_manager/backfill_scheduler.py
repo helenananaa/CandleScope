@@ -1729,7 +1729,7 @@ class BackfillScheduler:
             except RepairChunkSplit as exc:
                 kind = 'refined'
                 self._note_local_burst(chunk, None)
-                if self._refine_mixed_chunk(chunk):
+                if self._refine_mixed_chunk(chunk, split_ranges=exc.split_ranges):
                     return
                 outcome = RepairOutcome(request=chunk.request, status='failed', error=str(exc))
             except RepairRetryDeferred as exc:
@@ -1820,8 +1820,8 @@ class BackfillScheduler:
             row[key] = scalar(plan.get(key))
         self._chunk_receipts.append(row)
 
-    def _refine_mixed_chunk(self, chunk):
-        """Replace one unacquired work item by two on the same parent queue.
+    def _refine_mixed_chunk(self, chunk, *, split_ranges=None):
+        """Replace one unacquired work item by bounded partitions on its parent queue.
 
         Existing finer canonical history can make a cold 16-target proposal
         exceed its row bound. Refinement preserves leases, cancellation, quota
@@ -1835,12 +1835,34 @@ class BackfillScheduler:
                 or self._chunks.get(chunk.chunk_id) is not chunk):
             return False
         count = (chunk.request.end_ms-chunk.request.start_ms)//width+1
-        middle = chunk.request.start_ms + (count//2)*width
+        ranges = None
+        if split_ranges and isinstance(split_ranges, (tuple, list)) and len(split_ranges) >= 2:
+            candidate = []
+            expected = chunk.request.start_ms
+            valid = True
+            for item in split_ranges:
+                if not isinstance(item, (tuple, list)) or len(item) != 2:
+                    valid = False
+                    break
+                first, last = item
+                if (type(first) is not int or type(last) is not int
+                        or first != expected or last < first
+                        or (last - first) % width != 0
+                        or last > chunk.request.end_ms):
+                    valid = False
+                    break
+                candidate.append((first, last))
+                expected = last + width
+            if valid and expected == chunk.request.end_ms + width and 2 <= len(candidate) <= count:
+                ranges = tuple(candidate)
+        if ranges is None:
+            middle = chunk.request.start_ms + (count//2)*width
+            ranges = ((chunk.request.start_ms, middle-width), (middle, chunk.request.end_ms))
         children = []
         next_sequence = max((self._chunks[c].sequence for c in state.chunk_ids if c in self._chunks), default=chunk.sequence)+1
-        for index, (first, last) in enumerate(((chunk.request.start_ms, middle-width), (middle, chunk.request.end_ms))):
+        for index, (first, last) in enumerate(ranges):
             work = self._source_aware_chunk_plan(chunk.request, (last-first)//width+1)
-            sequence = chunk.sequence if index == 0 else next_sequence
+            sequence = chunk.sequence if index == 0 else next_sequence + index - 1
             request = replace(chunk.request, start_ms=first, end_ms=last, _retry_attempt=1,
                 metadata={**chunk.request.metadata, **work.to_metadata(), 'chunk_sequence': sequence})
             children.append(_FetchChunk(chunk.chunk_id+f':split{index}', chunk.parent_id, request, sequence))

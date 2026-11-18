@@ -16,7 +16,16 @@ from app.data_engine.interval_policy import parse_interval_spec
 from .range_changes import check_range_since
 from .derived_history_fence import check_deletions
 from .native_history_fence import fingerprint, fingerprint_rows, NativeHistoryView, MAX_SLOTS
-from .revisions import IDENTITY_COLUMNS, StaleAcquisition, block_change_receipts, current_revision, series_change, series_values
+from .revisions import (
+    IDENTITY_COLUMNS,
+    StaleAcquisition,
+    block_change_receipts,
+    current_revision,
+    series_change,
+    series_range_spans,
+    series_values,
+    span_overlaps_half_open,
+)
 
 _current = ContextVar('mixed_canonical_computation', default=())
 
@@ -55,29 +64,46 @@ class MixedComputation:
             # not a fresh post-compute snapshot that could bless stale output.
             self.canonical_input.check(conn, scope)
             return
-        keys = {*self.target.dependencies, self.target.key}
-        changed = {key for key in keys if (row := series_change(conn, key)) is not None
-                   and row['revision'] > self.revision}
+        head = current_revision(conn)
+        keys = (*self.target.dependencies, self.target.key)
+        changed = [key for key in keys if (row := series_change(conn, key)) is not None
+                   and row['revision'] > self.revision]
         if not changed:
             return
-        receipts = block_change_receipts(conn, self.revision, current_revision(conn))
-        if not receipts:
-            raise StaleAcquisition('mixed computation receipt suffix is unavailable', details={
-                'reason': 'mixed_receipt_suffix_unavailable', 'acquisition_revision': scope.revision,
-                'base_revision': self.revision, 'head_revision': current_revision(conn),
-                'start_ms': self.target.start, 'end_ms': self.target.end+self.target.duration})
-        for receipt in receipts:
-            key = tuple(receipt[name] for name in IDENTITY_COLUMNS)
-            if key == self.target.key and receipt['revision'] <= scope.accepted.get(key, self.revision):
-                continue  # A previously checked transaction of this computation.
-            if (key in changed
-                    and receipt['start_ms'] < self.target.end + self.target.duration
-                    and receipt['end_ms'] >= self.target.start):
-                raise StaleAcquisition('mixed canonical inputs or target changed during computation', details={
-                    'reason': 'mixed_overlapping_change', 'acquisition_revision': scope.revision,
-                    'base_revision': self.revision, 'head_revision': current_revision(conn),
-                    'change_revision': receipt['revision'], 'change_start_ms': receipt['start_ms'],
-                    'change_end_ms': receipt['end_ms']})
+        receipts = block_change_receipts(conn, self.revision, head)
+        if receipts:
+            changed_set = set(changed)
+            for receipt in receipts:
+                key = tuple(receipt[name] for name in IDENTITY_COLUMNS)
+                if key == self.target.key and receipt['revision'] <= scope.accepted.get(key, self.revision):
+                    continue  # A previously checked transaction of this computation.
+                if (key in changed_set
+                        and receipt['start_ms'] < self.target.end + self.target.duration
+                        and receipt['end_ms'] >= self.target.start):
+                    raise StaleAcquisition('mixed canonical inputs or target changed during computation', details={
+                        'reason': 'mixed_overlapping_change', 'acquisition_revision': scope.revision,
+                        'base_revision': self.revision, 'head_revision': head,
+                        'change_revision': receipt['revision'], 'change_start_ms': receipt['start_ms'],
+                        'change_end_ms': receipt['end_ms']})
+            return
+        stop_ms = self.target.end + self.target.duration
+        for key in changed:
+            spans = series_range_spans(conn, key, self.revision, head)
+            if spans is None:
+                raise StaleAcquisition('mixed computation receipt suffix is unavailable', details={
+                    'reason': 'mixed_receipt_suffix_unavailable', 'acquisition_revision': scope.revision,
+                    'base_revision': self.revision, 'head_revision': head,
+                    'start_ms': self.target.start, 'end_ms': stop_ms})
+            accepted_rev = scope.accepted.get(key, self.revision)
+            for span in spans:
+                if key == self.target.key and int(span['last_revision']) <= accepted_rev:
+                    continue
+                if span_overlaps_half_open(span, self.target.start, stop_ms):
+                    raise StaleAcquisition('mixed canonical inputs or target changed during computation', details={
+                        'reason': 'mixed_overlapping_change', 'acquisition_revision': scope.revision,
+                        'base_revision': self.revision, 'head_revision': head,
+                        'change_revision': int(span['last_revision']), 'change_start_ms': int(span['start_ms']),
+                        'change_end_ms': int(span['end_ms'])})
 
 
 def capture_targets(store, scope, plan, allow_standard=False):

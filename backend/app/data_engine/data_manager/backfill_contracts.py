@@ -77,6 +77,19 @@ def _merge_derived_repair_targets(*values: Any) -> list[dict[str, Any]]:
 class RepairChunkSplit(Exception):
     """Qualified planning exceeded its work bound before any acquisition."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        split_ranges: tuple[tuple[int, int], ...] | list[tuple[int, int]] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.split_ranges = (
+            tuple((int(first), int(last)) for first, last in split_ranges)
+            if split_ranges
+            else None
+        )
+
 
 class RepairRetryDeferred(Exception):
     """Retryable work yields its worker without settling the caller's future."""
