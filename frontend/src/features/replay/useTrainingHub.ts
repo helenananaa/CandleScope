@@ -17,6 +17,7 @@ import type {
 import { defaultReplayV2Api, ReplayV2ApiError } from "./replayV2Api.js";
 import type { TrainingRunListQuery } from "./replayV2Api.js";
 import { clearReplayIndicatorPreferences } from "./replayIndicatorPreferences.js";
+import { trainingRunStatusLabel } from "./trainingHubLabels.js";
 import { clearReplaySharedIndicatorPreferences } from "./replaySharedIndicatorPreferences.js";
 import { clearReplayWorkspacePreferences } from "./replayWorkspacePreferences.js";
 import {
@@ -670,7 +671,7 @@ export class TrainingHubLifecycle {
 
   continueRun(card: TrainingRunCard): void {
     if (card.resume_action === "UNAVAILABLE") {
-      this.error = { code: "TRAINING_RUN_UNAVAILABLE", message: card.status.message };
+      this.error = { code: "TRAINING_RUN_UNAVAILABLE", message: trainingRunStatusLabel(card) };
       this.publish();
       return;
     }
