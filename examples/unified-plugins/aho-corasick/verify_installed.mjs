@@ -109,7 +109,24 @@ async function computePython(session, script) {
 
 async function verifyPython(session) {
   const result = await computePython(session, pythonSource);
-  assert.equal(result.ok, true, JSON.stringify(result));
+  if (!result.ok) {
+    const managed = await session.page.evaluate(async () => {
+      const { apiBase, sessionToken } = window.candlescopeDesktop.getPluginManagementSession();
+      const response = await fetch(apiBase + "/manage/unified", {
+        headers: { "X-CandleScope-Plugin-Session": sessionToken },
+      });
+      if (!response.ok) return { status: response.status };
+      const { errors, safeMode, plugins } = await response.json();
+      return { errors, safeMode, scripts: plugins
+        .filter(({ id }) => ["candlescope.python-indicator", "candlescope.pine-compat"].includes(id))
+        .map(({ id, desired, error, entries }) => ({ id, enabled: desired.enabled, error, entries })) };
+    }).catch((error) => ({ error: error.message }));
+    const runtime = await fetch(new URL("/api/v1/indicators/diagnostics", session.health))
+      .then((response) => response.json())
+      .then(({ runtimeRouting, runtime }) => runtimeRouting ?? runtime ?? null)
+      .catch((error) => ({ error: error.message }));
+    assert.fail(JSON.stringify({ result, managed, runtime }));
+  }
   assert.equal(result.lines[0].type, "histogram");
   const values = result.lines[0].data.map(({ value }) => value);
   assert.deepEqual(values, [22, 24]);
