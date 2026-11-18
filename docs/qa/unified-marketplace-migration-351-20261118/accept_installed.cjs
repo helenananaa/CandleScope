@@ -14,12 +14,7 @@ const sha = bytes => "sha256:" + createHash("sha256").update(bytes).digest("hex"
 const windows = process.platform === "win32";
 const retired = process.env.CANDLESCOPE_QA_LEGACY_EXECUTION_RETIRED === "1";
 const legacyRuns = windows && !retired;
-const proc = () => (windows
-  ? execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
-    "Get-CimInstance Win32_Process | ForEach-Object { '{0} {1}' -f $_.ProcessId,$_.ParentProcessId }"],
-  { encoding: "utf8" })
-  : execFileSync("ps", ["-axo", "pid=,ppid="], { encoding: "utf8" }))
-  .trim().split("\n").map(row => row.trim().split(/\s+/).map(Number));
+const { trackInstalledProcesses } = require("../unified-installed-processes.cjs");
 const read = async file => JSON.parse(await fs.readFile(file, "utf8"));
 
 async function main() {
@@ -68,7 +63,7 @@ async function main() {
     const result = { name };
     receipt.sessions.push(result);
     let electron;
-    const pids = new Set();
+    let processTree;
     try {
       electron = await _electron.launch({
         executablePath: executable,
@@ -80,7 +75,7 @@ async function main() {
         packaged: app.isPackaged, pid: process.pid, userData: app.getPath("userData"),
         electron: process.versions.electron,
       }));
-      pids.add(identity.pid);
+      processTree = trackInstalledProcesses(identity.pid);
       assert.equal(identity.packaged, true);
       assert.equal(path.resolve(identity.userData), profile);
       result.electron = identity.electron;
@@ -213,17 +208,16 @@ async function main() {
     } finally {
       try {
         if (electron) {
-          const tree = proc();
-          for (let level = 0; level < 10; level++) {
-            for (const [pid, parent] of tree) if (pids.has(parent)) pids.add(pid);
-          }
+          if (processTree) processTree.observe();
           await electron.close();
-          for (let attempt = 0; attempt < 10; attempt++) {
-            result.remainingOwnedProcesses = proc().filter(([pid]) => pids.has(pid)).map(([pid]) => pid);
-            if (!result.remainingOwnedProcesses.length) break;
-            await delay(250);
+          if (processTree) {
+            for (let attempt = 0; attempt < 10; attempt++) {
+              result.remainingOwnedProcesses = processTree.remaining();
+              if (!result.remainingOwnedProcesses.length) break;
+              await delay(250);
+            }
+            assert.deepEqual(result.remainingOwnedProcesses, []);
           }
-          assert.deepEqual(result.remainingOwnedProcesses, []);
         }
       } finally {
         await record();
