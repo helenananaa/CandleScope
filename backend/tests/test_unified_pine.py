@@ -15,7 +15,11 @@ import pytest
 from app.backtest.errors import BacktestError
 from app.backtest.native import PROTOCOL, invoke, pin_native_launch, resolve_plugin
 from app.indicator.runtime_routes import IndicatorRuntimeRoutes
-from app.indicator.runtime_service import IndicatorRuntimeService
+from app.indicator.runtime_service import (
+    IndicatorRuntimeRequest,
+    IndicatorRuntimeService,
+    removed_in_process_runtime,
+)
 from app.plugin_compat_v1 import V1ScriptRuntimeCompatibilityBridge
 from app.plugin_lifecycle.pine import (
     PINE_ENTRY,
@@ -277,6 +281,26 @@ async def test_bundled_pine_chart_strategy_and_restart(tmp_path):
                 )
 
             assert await pine_available()
+            rendered = await indicators.execute(
+                IndicatorRuntimeRequest(
+                    language="pine",
+                    source=script + "\nhline(19)",
+                    exchange=context.exchange,
+                    market_type=context.market_type,
+                    symbol=context.symbol,
+                    interval=context.interval,
+                    bars=bars,
+                    options={"pineSessionId": "render"},
+                    transport="websocket.range",
+                ),
+                legacy=removed_in_process_runtime,
+                adapt_sidecar=lambda result: result.to_wire(),
+            )
+            assert rendered["ok"], rendered
+            assert rendered["output"]["collections"]["hlines"]
+            assert [
+                point["value"] for point in rendered["output"]["series"][0]["data"]
+            ] == [20, 22, 24]
             assert all(
                 row["runtimeId"] != PINE_ID
                 for row in bridge.public_catalog()["contributions"]
