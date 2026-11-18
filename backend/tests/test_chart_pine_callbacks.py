@@ -27,7 +27,7 @@ if not barstate.isconfirmed and strategy.position_size>0 and timenow==60000 and 
 
 
 @pytest.fixture
-def service(tmp_path):
+def service(tmp_path, qualified_pine):
     settings = load_backtest_settings({"BACKTEST_ENABLED":"1", "BACKTEST_BAR_ENABLED":"1", "BACKTEST_TRADE_TAPE_ENABLED":"1"},
         data_dir=tmp_path, klines_db_path=tmp_path/"klines.db", replay_db_path=tmp_path/"replay.db")
     host = BacktestService.start(settings, enforce_registered_revisions=True, now_ms=1)
@@ -191,7 +191,7 @@ def test_callback_profile_requires_order_intents_and_frozen_execution_model(serv
         service.create_run(payload(service,**override), idempotency_key="invalid", now_ms=3)
 
 
-def test_last_millisecond_pass_freezes_requested_visibility_and_symbol_metadata(monkeypatch):
+def test_last_millisecond_pass_freezes_requested_visibility_and_symbol_metadata(monkeypatch, qualified_pine):
     from tests.test_chart_pine_engine import frame
     source = '''//@version=6
 strategy("Pass metadata",calc_on_order_fills=true)

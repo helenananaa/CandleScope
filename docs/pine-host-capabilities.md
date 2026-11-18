@@ -95,21 +95,24 @@ or cancelled run must not publish a completed partial report.
 
 ## Reproducible historical regression
 
-Use a backend test Python and an isolated worker installed from the chosen core
-and bridge revisions. Supply the matching isolated plugin registry; global
-plugin activation and release catalogs are not changed by this command:
+Use a backend test Python, the unified Pine package built from the selected core
+and bridge, and an isolated reference worker from the same revisions.
+The qualification process uses its own temporary plugin store.
 
 ```powershell
 python backend/scripts/qualify_pine_host.py `
   --runtime-python <isolated-worker-python> `
   --runtime-registry <isolated-registry.json> `
+  --unified-pine-descriptor <unified-pine.json> `
   --output <new-receipt-directory>
 ```
 
 The script checks required runtime schemas and launcher identity, records source,
-bridge/binary and registry fingerprints, and runs the named installed-worker
-profile. Its JUnit receipt rejects missing tests, skips, failures and source or
-runtime drift. The profile includes legacy trade/book recovery and control
+bridge/binary, registry and unified package fingerprints, and runs the named
+installed-worker profile. Host strategy routes use the unified package. The
+isolated reference worker supplies the low-level fixtures. The JUnit receipt
+requires the complete selection and consistent source and runtime fingerprints.
+The profile includes legacy trade/book recovery and control
 regressions where they share BAR code. Pyne cases are explicitly outside this
 Pine profile. This gate does not include the entire repository, browser actions,
 packaging, performance or official-output comparisons.

@@ -138,10 +138,17 @@ def _qualified_pine_runtime(tmp_path_factory):
 
 
 @pytest.fixture
-def qualified_pine(monkeypatch, _qualified_pine_runtime):
+def qualified_pine_reference(monkeypatch, _qualified_pine_runtime):
     from app.plugin_lifecycle import pine
 
     monkeypatch.setattr(pine, "_strategy_runtime", _qualified_pine_runtime)
+    monkeypatch.setattr(pine, "_strategy_required", False)
+
+
+@pytest.fixture
+def qualified_pine(monkeypatch, qualified_pine_reference):
+    from app.plugin_lifecycle import pine
+
     monkeypatch.setattr(pine, "_strategy_required", True)
 
 
