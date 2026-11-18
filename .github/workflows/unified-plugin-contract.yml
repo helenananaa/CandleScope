@@ -12,6 +12,7 @@ on:
       - 'backend/app/plugin_security_v2/**'
       - 'backend/tests/test_unified_plugin_store.py'
       - 'backend/tests/test_unified_plugin_runtime.py'
+      - 'backend/tests/test_unified_chart_context.py'
       - 'frontend/desktop/unified-entry*'
       - 'frontend/tests/fixtures/unified-runtime-client.mjs'
       - 'backend/tests/conftest.py'
@@ -29,6 +30,7 @@ on:
       - 'backend/app/plugin_security_v2/**'
       - 'backend/tests/test_unified_plugin_store.py'
       - 'backend/tests/test_unified_plugin_runtime.py'
+      - 'backend/tests/test_unified_chart_context.py'
       - 'frontend/desktop/unified-entry*'
       - 'frontend/tests/fixtures/unified-runtime-client.mjs'
       - 'backend/tests/conftest.py'
@@ -74,7 +76,7 @@ jobs:
         working-directory: backend
         env:
           PYTHONPATH: '.'
-        run: python -m pytest -q tests/test_unified_plugin_store.py tests/test_unified_plugin_runtime.py
+        run: python -m pytest -q tests/test_unified_plugin_store.py tests/test_unified_plugin_runtime.py tests/test_unified_chart_context.py
       - name: Verify shared window and desktop lifecycle
         working-directory: frontend
         run: node --test desktop/unified-entry-host.test.mjs

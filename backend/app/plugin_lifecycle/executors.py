@@ -8,6 +8,7 @@ import inspect
 import shutil
 import sys
 import uuid
+from contextvars import ContextVar
 from pathlib import Path
 
 from app.plugin_host.process import SidecarProcessSpec
@@ -21,6 +22,7 @@ from app.plugin_security_v2.sandbox import (
 from .store import LifecycleError
 
 PROTOCOL = "candlescope.unified-entry/1"
+SCOPED_CHART_CALL = ContextVar("scoped_chart_call", default=False)
 
 
 async def bounded(work, timeout):
@@ -63,6 +65,8 @@ class OwnedContext:
             raise LifecycleError("plugin activation was revoked")
 
     def publish(self, value):
+        if SCOPED_CHART_CALL.get():
+            raise LifecycleError("return chart results through the scoped call")
         self.ensure_current()
         self._publish(value)
 
@@ -168,10 +172,20 @@ class BackendEntry:
         context.ensure_current()
 
     async def invoke(self, payload):
+        return await self._invoke("invoke", payload)
+
+    async def compute_chart(self, payload):
+        token = SCOPED_CHART_CALL.set(True)
+        try:
+            return await self._invoke("compute_chart", payload)
+        finally:
+            SCOPED_CHART_CALL.reset(token)
+
+    async def _invoke(self, name, payload):
         self.context.ensure_current()
-        handler = getattr(self.module, "invoke", None)
+        handler = getattr(self.module, name, None)
         if not callable(handler):
-            raise LifecycleError("entry does not export invoke(context, payload)")
+            raise LifecycleError(f"entry does not export {name}(context, payload)")
         value = handler(self.context, payload)
         return (
             await bounded(value, self.context.timeout)
@@ -267,6 +281,14 @@ class SidecarEntry:
         return await self.transport.request(
             "invoke",
             {"input": payload},
+            generation=self.context.identity.generation,
+            timeout=10,
+        )
+
+    async def compute_chart(self, payload):
+        return await self.transport.request(
+            "chart.compute",
+            payload,
             generation=self.context.identity.generation,
             timeout=10,
         )

@@ -198,6 +198,42 @@ def create_unified_router():
         except ValueError as exc:
             raise HTTPException(409, str(exc)) from exc
 
+    @router.post("/manage/unified/invoke-chart")
+    async def invoke_chart(request: Request):
+        runtime = await _runtime(request, background=True)
+        body = await _body(request)
+        if set(body) != {"target", "scope", "bars", "input"}:
+            raise HTTPException(400, "Invalid chart computation")
+
+        # A renderer losing the chart cancels the HTTP request. Stop awaiting
+        # that entry when the connection closes, including on window teardown.
+        async def disconnect():
+            while (await request.receive())["type"] != "http.disconnect":
+                pass
+
+        job = asyncio.create_task(
+            runtime.compute_chart(
+                body["target"], body["scope"], body["bars"], body["input"]
+            )
+        )
+        gone = asyncio.create_task(disconnect())
+        try:
+            done, _ = await asyncio.wait(
+                {job, gone}, return_when=asyncio.FIRST_COMPLETED
+            )
+            if gone in done:
+                return Response(status_code=499)
+            if job.cancelled():
+                raise LifecycleError("Chart computation was revoked")
+            return job.result()
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(409, str(exc)) from exc
+        finally:
+            for task in (job, gone):
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(job, gone, return_exceptions=True)
+
     @router.get("/unified-assets/{ticket}/{name:path}")
     async def asset(ticket: str, name: str, request: Request):
         runtime = getattr(request.app.state, "unified_plugin_runtime", None)

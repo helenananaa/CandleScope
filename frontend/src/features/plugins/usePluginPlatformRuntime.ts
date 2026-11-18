@@ -161,7 +161,7 @@ const UNAVAILABLE_LIVE_CONTROL: PluginLiveControlStatus = {
   mode: "unavailable",
 };
 
-export function usePluginPlatformRuntime(identity: PluginMarketIdentity): PluginPlatformRuntime {
+export function usePluginPlatformRuntime(identity: PluginMarketIdentity, liveChartVisible = true): PluginPlatformRuntime {
   const locale = useLocale();
   const { exchange, interval, marketType, symbol } = identity;
   const [catalog, setCatalog] = useState<PluginCatalog | null>(null);
@@ -462,6 +462,7 @@ export function usePluginPlatformRuntime(identity: PluginMarketIdentity): Plugin
 
   const chartContextSyncEnabled = (
     pageVisible
+    && liveChartVisible
     && managementAvailable
     && pluginCatalogNeedsChartContextSync(catalog)
   );

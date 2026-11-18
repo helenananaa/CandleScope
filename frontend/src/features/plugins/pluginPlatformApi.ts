@@ -338,8 +338,9 @@ export async function unifiedManagementRequest(path: string, body?: unknown): Pr
   });
 }
 
-export async function unifiedBackgroundRequest(path: string, body: unknown): Promise<unknown> {
-  return backgroundManagementRequest(`/manage/unified${path}`, body, "POST", AbortSignal.timeout(10000));
+export async function unifiedBackgroundRequest(path: string, body: unknown, signal?: AbortSignal): Promise<unknown> {
+  const timeout = AbortSignal.timeout(10000);
+  return backgroundManagementRequest(`/manage/unified${path}`, body, "POST", signal ? AbortSignal.any([signal, timeout]) : timeout);
 }
 
 export async function stageUnifiedPackage(file: Blob): Promise<unknown> {

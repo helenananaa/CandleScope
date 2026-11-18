@@ -1,3 +1,4 @@
+import { MAX_PLUGIN_CHART_BARS, observePluginBar, pluginProjectionRevision, usePluginChartSource } from "../plugins/unifiedChartContext.js";
 import { PanelToggle } from "../../app/PanelToggle.js";
 import { OverlayLayer } from "../../components/ui/Overlays.js";
 import PageSettingsDialog from "../../app/PageSettingsDialog.js";
@@ -8,7 +9,7 @@ import { ReplayReviewHistory } from "./replayReviewHistory.js";
 import type { ReplayCanonicalBinding } from "./replayCanonicalIndicators.js";
 import { useReplayReviewIndicators } from "./useReplayReviewIndicators.js";
 import { describeError } from "../../i18n/serverErrors.js";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { TickMarkType } from "../../chart-adapter/chartAdapterTypes.js";
 import MarketChartWorkspace from "../../app/MarketChartWorkspace.js";
 import MarketPageFrame from "../../app/MarketPageFrame.js";
@@ -85,6 +86,7 @@ import { useReplayPublicTimeRuntime } from "./useReplayPublicTimeRuntime.js";
 import type {
   ReplaySharedIndicatorRuntime,
 } from "./useReplaySharedIndicatorRuntime.js";
+import { excludeIncompleteReplayHistory, selectRevealedIndicatorBars } from "./useReplaySharedIndicatorRuntime.js";
 import type { ReplayRuntime } from "./useReplayRuntime.js";
 import type { ReplayViewerRuntime } from "./useReplayViewerRuntime.js";
 import { useReplayWorkspacePreferences } from "./replayWorkspacePreferences.js";
@@ -859,6 +861,33 @@ export default function ReplayTrainingPageShell({
     ? (reviewProjectedTrack && reviewLoadedPrefixKey === reviewPrefixKey ? reviewCursorVirtualTimeMs : null)
     : (runtime.store.hasAuthoritativeSnapshot && runtime.store.virtualTimeMs !== null && cell?.projectionBoundaryMs != null
       ? Math.min(runtime.store.virtualTimeMs, cell.projectionBoundaryMs) : null);
+  const chartMountId = useId();
+  const pluginRunId = integrityRuntime.runId ?? viewer.viewerState?.run_id;
+  const chartAvailable = active && !viewer.error && !viewer.viewerPending
+    && (isReview ? !reviewChartLoading && !reviewChartError && !reviewDrawingError
+      && reviewLoadedPrefixKey === reviewPrefixKey : !viewer.loading && !liveDrawingError);
+  usePluginChartSource(
+    cell ? `${cell.workspaceId}:${cell.cellId}` : `replay:${chartMountId}`,
+    chartAvailable && pluginRunId && noteTrackId && noteCutoff !== null && viewerBarCount ? {
+      observe: () => Number(displayedSeriesStore.version) === viewerVersion ? {
+        mode: isReview ? "replay-review" : "replay", runId: pluginRunId, trackId: noteTrackId,
+        seriesId: JSON.stringify([viewerSeriesKey, displayedSymbol, displayedInterval]), symbol: displayedSymbol, interval: displayedInterval,
+        dataRevision: JSON.stringify([runtime.store.dataEpoch, runtime.store.generation, pluginProjectionRevision(displayedSeriesStore), viewerVersion,
+          review?.review_id, review?.cursor_revision, review?.selected_timeline_sequence]),
+        visibleThroughMs: noteCutoff,
+      } : null,
+      bars: ({ visibleThroughMs }) => {
+        const tail = displayedSeriesStore.snapshot().slice(-MAX_PLUGIN_CHART_BARS);
+        const revealed = selectRevealedIndicatorBars(excludeIncompleteReplayHistory(tail, visibleThroughMs), visibleThroughMs);
+        return revealed.flatMap(bar => {
+          const open = Number(bar.time) * 1000;
+          const closed = (bar.replayClosed ?? bar.is_closed) === true;
+          return observePluginBar(open, closed ? Number(bar.replayCloseTimeMs) : visibleThroughMs, closed, bar);
+        });
+      },
+      subscribe: listener => displayedSeriesStore.subscribe(listener),
+    } : null,
+  );
   const noteBinding = cell?.accountOverlay?.notes && integrityRuntime.runId && noteTrackId && runtime.store.dataEpoch
     ? { runId: integrityRuntime.runId, trackId: noteTrackId, dataEpoch: runtime.store.dataEpoch,
       reviewId: review?.review_id ?? null, reviewRevision: review?.cursor_revision ?? null,

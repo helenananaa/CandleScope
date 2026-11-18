@@ -103,6 +103,8 @@ import { useTradeFlowRuntime } from "../features/trade-flow/useTradeFlowRuntime.
 import type { WatchlistRuntime } from "../features/watchlist/useWatchlistRuntime.js";
 import type { WatchlistSubscriptionContext } from "../features/watchlist/watchlistSubscriptionRuntime.js";
 import { usePluginPlatformRuntime } from "../features/plugins/usePluginPlatformRuntime.js";
+import { buildSeriesWindowKey } from "../features/market-data/window/seriesWindowKey.js";
+import { livePluginChartSource, usePluginChartSource } from "../features/plugins/unifiedChartContext.js";
 import { pluginCommands, PluginControlSession } from "../features/app-control/pluginCommands.js";
 import { useExtensionService } from "../features/extensions/hooks.js";
 import PluginPlatformSurfaces, { PluginUiErrorBoundary } from "../features/plugins/PluginPlatformSurfaces.js";
@@ -462,12 +464,13 @@ function LiveChartCell({
     }),
     [cell.id, chartSurface.actions, linkCoordinator, study.masked],
   );
+  const livePluginContext = !obscured && !study.pending && !study.masked && !study.busy && !replay.key;
   const plugins = usePluginPlatformRuntime({
     exchange: chartSession.view.exchange,
     marketType: chartSession.view.marketType,
     symbol: chartSession.view.symbol,
     interval: chartSession.view.interval,
-  });
+  }, livePluginContext);
   useExtensionService(`charts.${cell.id}`, { session: chartSession, surface: chartSurface });
   const initialViewportCountBackCap = initialViewportCountBackCapForCellCount(
     layoutCellIds.length,
@@ -531,6 +534,17 @@ function LiveChartCell({
     paused: obscured,
   });
   const sourceMarketData = liveReferenceSource.marketData;
+  const pluginStore = sourceMarketData.view.seriesStore;
+  const pluginChartSource = useMemo(() => pluginStore
+    ? livePluginChartSource(pluginStore, liveSourceSession.symbol, liveSourceSession.interval) : null,
+    [pluginStore, liveSourceSession.symbol, liveSourceSession.interval]);
+  const pluginChartId = `${workspaceId}:${cell.id}`;
+  usePluginChartSource(pluginChartId, livePluginContext && !sourceMarketData.view.loading && !sourceMarketData.view.error
+    && !sourceMarketData.view.meta.optimistic && sourceMarketData.view.meta.status === "ready"
+    && sourceMarketData.view.meta.seriesKey === pluginStore?.seriesKey
+    && pluginStore?.seriesKey === buildSeriesWindowKey(liveSourceSession)
+    ? pluginChartSource : null);
+
 
   const workTier = obscured ? "hidden" : active ? "focused" : "visible-secondary";
   const workScheduler = marketWorkspaceResources?.workScheduler;
@@ -1193,6 +1207,7 @@ function LiveChartCell({
               <QuickReplayOverlay
                 key={replay.key}
                 request={quickReplay}
+                pluginChartId={pluginChartId}
                 active={active && !obscured}
                 savedCursorSec={cell.quickReplay?.cursorSec}
                 savedStep={cell.quickReplay?.step}

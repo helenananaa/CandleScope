@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
+import { pluginChartOwner, type PluginChartBar, type PluginChartScope } from "../features/plugins/unifiedChartContext.js";
 import QuickReplayOverlay from "../features/trading-accounts/QuickReplayOverlay.js";
 import { MarketDataWorkspaceContext, type MarketDataWorkspaceResources } from "../features/market-data/marketDataWorkspaceContext.js";
 import type { MarketDataManager } from "../features/market-data/manager/marketDataManager.js";
@@ -17,6 +18,30 @@ const entry = Math.floor(1_700_000_000 / 3600) * 3600;
 export async function checkQuickReplayStep() {
   const host = document.createElement("div"); document.body.append(host);
   const root = createRoot(host);
+  const originalFetch = window.fetch;
+  const chartTarget = { sessionId: "qa-session", frontendInstanceId: "qa-entry", entryId: "backend" };
+  const chartFixtureId = "qa-quick-replay-cell";
+  let lastRequest: { scope: PluginChartScope; bars: PluginChartBar[] } | undefined;
+  let delayChartResult = false;
+  let releaseChartResult: (() => void) | undefined;
+  window.__CANDLESCOPE_PLUGIN_MANAGEMENT_V1__ = {
+    apiBase: `${location.origin}/api/v2/plugins`,
+    sessionToken: "s".repeat(48), csrfToken: "c".repeat(48),
+  };
+  window.fetch = async (resource, init) => {
+    if (!String(resource).endsWith("/manage/unified/invoke-chart")) return originalFetch(resource, init);
+    const request = JSON.parse(String(init?.body)) as NonNullable<typeof lastRequest>;
+    lastRequest = request;
+    if (delayChartResult) await new Promise<void>(resolve => { releaseChartResult = resolve; });
+    return Response.json({ scope: request.scope, result: { points: [] } });
+  };
+  function currentPluginChart() {
+    const scope = pluginChartOwner.list().find(chart => chart.chartId === chartFixtureId);
+    assert(scope, "the quick replay chart has no unified context");
+    assert(scope.mode === "quick-replay" && scope.runId === "qa:step-test", "wrong replay binding");
+    return scope;
+  }
+
   let resolveMinute: ((response: KlineFetchResult) => void) | undefined;
   const response = (step: number, start: number, end: number): KlineFetchResult => partialMock<KlineFetchResult>({
     data: Array.from({ length: Math.floor((end - start) / step) + 1 }, (_, i) => ({
@@ -97,7 +122,7 @@ export async function checkQuickReplayStep() {
   function render(noteSource = "original", active = true, saved?: typeof lastProgress, controlled = false,
     display = { trades: true, positions: true }) {
     flushSync(() => root.render(<MarketDataWorkspaceContext.Provider value={partialMock<MarketDataWorkspaceResources>({ dataManager: manager })}>
-      <QuickReplayOverlay key={saved ? "restored" : "initial"} request={request} active={active}
+      <QuickReplayOverlay key={saved ? "restored" : "initial"} request={request} active={active} pluginChartId={chartFixtureId}
         savedCursorSec={saved?.cursorSec} savedStep={saved?.step} onProgress={recordProgress}
         {...(controlled ? { onCursorChange: recordCursorAction } : {})} style={{ theme: "dark", customBg: "", upColor: "green", downColor: "red" }} indicatorDefinitions={[]} accountOverlay={normalizeChartAccountOverlay({ ...display, accountId: "other-chart-account", notes: true, noteSource, noteFilter: "screenshots" })} onExit={() => undefined} />
     </MarketDataWorkspaceContext.Provider>));
@@ -112,15 +137,32 @@ export async function checkQuickReplayStep() {
     await move("ArrowRight");
     const pending = renderedBars();
     assert(!pending.some((bar) => bar.time >= entry), `old 5m bar leaked at the 1m cursor: ${JSON.stringify(pending.at(-1))}`);
+    const pendingScope = currentPluginChart();
+    await pluginChartOwner.invoke(pendingScope, chartTarget, null);
+    assert(lastRequest?.bars.every(bar => bar.openTimeMs < entry * 1000), "plugin received an unrevealed forming bar");
     deliverMinute(); await settle();
     const resolved = renderedBars();
     assert(resolved.at(-1)?.time === entry && resolved.at(-1)?.high === 102, "current 1m reconstruction missing");
+    const revealedScope = currentPluginChart();
+    await pluginChartOwner.invoke(revealedScope, chartTarget, null);
+    const pluginTail = lastRequest?.bars.at(-1);
+    assert(pluginTail?.openTimeMs === entry * 1000 && pluginTail.high === 102
+      && pluginTail.observedThroughMs <= revealedScope.visibleThroughMs && !pluginTail.closed,
+    "plugin did not receive the bounded 1m reconstruction");
+
     assert(markerIds().length === 0, "original screenshot leaked before its capture time");
     render("review"); await settle();
     assert(markerIds().join() === "review", "review supplement missing or a foreign account leaked");
     render(); await settle(); await move("ArrowRight");
     assert(markerIds().join() === "original", "captured original screenshot missing");
+    const futureScope = currentPluginChart();
+    delayChartResult = true;
+    const late = pluginChartOwner.invoke(futureScope, chartTarget, null).then(() => false, () => true);
     await move("ArrowLeft");
+    assert(releaseChartResult, "chart computation did not start");
+    releaseChartResult();
+    assert(await late, "rewind adopted a delayed plugin result");
+    delayChartResult = false;
     assert(markerIds().length === 0, "rewind retained a future screenshot");
     const saved = lastProgress;
     assert(saved?.step === "1m" && saved.cursorSec === entry + 60, "rewind did not publish exact cursor and step");
@@ -151,6 +193,6 @@ export async function checkQuickReplayStep() {
     assert(effective < unavailable && cursorActions.length === 0, "out-of-range linked cursor crossed the available frontier");
     await move("ArrowLeft");
     assert(cursorActions.join() === String(effective - 60), "local action did not publish from the effective cut");
-    return { passed: true, restored: saved, linkedCursor: { unavailable, effective, cursorActions }, noteFilters: "original screenshot cutoff, review supplement, trade account, rewind", accountOverlays: "independent fills and position display, close and linked rewind", scope: "Actual QuickReplayOverlay and chart input with deferred controlled history transport; not installed native acceptance", pendingLast: pending.at(-1), resolvedLast: resolved.at(-1) };
-  } finally { flushSync(() => root.unmount()); host.remove(); }
+    return { passed: true, restored: saved, linkedCursor: { unavailable, effective, cursorActions }, noteFilters: "original screenshot cutoff, review supplement, trade account, rewind", accountOverlays: "independent fills and position display, close and linked rewind", scope: "Actual QuickReplayOverlay and chart input with deferred controlled history transport; not installed native acceptance", pendingLast: pending.at(-1), resolvedLast: resolved.at(-1), unifiedChart: { pendingPrefix: true, partialFromFineRows: true, rejectedAfterRewind: true } };
+  } finally { window.fetch = originalFetch; flushSync(() => root.unmount()); host.remove(); }
 }

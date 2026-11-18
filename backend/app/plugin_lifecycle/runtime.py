@@ -12,6 +12,10 @@ from dataclasses import dataclass
 
 from candlescope_plugin_sdk.platform_v2 import canonical_dumps, normalize_json
 from candlescope_plugin_sdk.unified import ActivationIdentity, Entry
+from candlescope_plugin_sdk.unified.chart import (
+    validate_chart_frame,
+    validate_chart_result,
+)
 
 from app.plugin_security_v2.sandbox import restricted_runtime_profile
 from app.plugin_security_v2.storage import security_lock
@@ -489,7 +493,9 @@ class UnifiedRuntime:
                 self.owner_lock.__exit__(None, None, None)
                 self.owner_lock = None
 
-    async def invoke(self, plugin_id, entry_id, identity, instance_id, payload):
+    async def invoke(
+        self, plugin_id, entry_id, identity, instance_id, payload, *, chart=False
+    ):
         if not all(
             isinstance(value, str) for value in (plugin_id, entry_id, instance_id)
         ):
@@ -508,17 +514,77 @@ class UnifiedRuntime:
             raise LifecycleError("plugin call budget exhausted")
         self.calls[task] = plugin_id
         try:
-            result = await run.executor.invoke(normalize_json(payload))
+            execute = run.executor.compute_chart if chart else run.executor.invoke
+            result = await execute(normalize_json(payload))
             if not self._current(run):
                 raise LifecycleError("late result from a revoked entry")
             return normalize_json(result)
         except Exception as exc:
-            if self._current(run):
+            if not chart and self._current(run):
                 self.entry_failed(plugin_id, exc)
-            self.changed = True
             raise LifecycleError(f"entry invocation failed: {exc}") from exc
         finally:
             self.calls.pop(task, None)
+
+    async def compute_chart(self, target, scope, bars, payload):
+        validate_chart_frame(scope, bars)
+        if not isinstance(target, dict) or not isinstance(target.get("entryId"), str):
+            raise LifecycleError("invalid chart computation target")
+        if set(target) == {"sessionId", "frontendInstanceId", "entryId"}:
+            origin = self.check_remote(
+                target["sessionId"], target["frontendInstanceId"]
+            )
+            if origin["entry"]["kind"] != "frontend" or origin["state"] != "running":
+                raise LifecycleError("chart caller must be an active frontend entry")
+            plugin_id, identity = origin["pluginId"], origin["identity"]
+            run = self.running.get((plugin_id, target["entryId"]))
+            if run is None:
+                raise LifecycleError("chart entry is unavailable")
+            instance = run.instance
+        elif set(target) == {
+            "sessionId",
+            "pluginId",
+            "identity",
+            "instanceId",
+            "entryId",
+        }:
+            plugin_id, identity, instance = (
+                target["pluginId"],
+                target["identity"],
+                target["instanceId"],
+            )
+        else:
+            raise LifecycleError("invalid chart computation target")
+        if not self._frontend_owns_document(target["sessionId"], scope["documentId"]):
+            raise LifecycleError("chart belongs to another window")
+        times = {bar["openTimeMs"] for bar in bars}
+        result = await self.invoke(
+            plugin_id,
+            target["entryId"],
+            identity,
+            instance,
+            {"scope": scope, "bars": bars, "input": payload},
+            chart=True,
+        )
+        if "frontendInstanceId" in target:
+            self.check_remote(target["sessionId"], target["frontendInstanceId"])
+        if not self._frontend_owns_document(target["sessionId"], scope["documentId"]):
+            raise LifecycleError("chart document is unavailable")
+        validate_chart_result(result, times)
+        return {
+            "scope": scope,
+            "identity": identity,
+            "instanceId": instance,
+            "result": result,
+        }
+
+    def _frontend_owns_document(self, session_id, document_id):
+        session = self.sessions.get(("frontend", document_id))
+        return bool(
+            session
+            and session["id"] == session_id
+            and time.monotonic() - session["seen"] <= 120
+        )
 
     def _session(self, client_id, realm):
         if (
@@ -629,7 +695,7 @@ class UnifiedRuntime:
                     if value["instanceId"] == instance_id and self._session_current(
                         session, value
                     ):
-                        return
+                        return value
         raise LifecycleError("entry activation or session is no longer current")
 
     def report(self, session_id, instance_id, state, error=None):
