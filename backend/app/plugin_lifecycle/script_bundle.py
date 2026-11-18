@@ -26,6 +26,7 @@ class BundledScript:
     module: str
     exchange: str
     environment: str
+    max_processes: int = 1
 
 
 SCRIPT_BUNDLES = {
@@ -42,6 +43,8 @@ SCRIPT_BUNDLES = {
         "candlescope_plugin_python_indicator",
         "python",
         "CANDLESCOPE_BUNDLED_UNIFIED_PYTHON",
+        # The runtime starts one fresh evaluator for each serialized batch.
+        max_processes=2,
     ),
 }
 
