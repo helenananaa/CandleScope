@@ -282,6 +282,9 @@ class Peer:
 with TestClient(Peer(app), base_url='http://127.0.0.1:18080') as client:
     assert app.state.extension_offline_probe == 'guarded'
     assert not app.state.trusted_extension_host.errors
+    bound_replay = app.state.data_manager_core.replay.service
+    assert type(bound_replay).__name__ == 'TakeoverReplayService'
+    assert bound_replay is app.state.replay_runtime.service
     assert client.get('/api/v1/replay/capabilities').json()['startupTakeover'] == 'example.startup-takeover'
     assert not app.state.unified_plugin_runtime.errors
     route = '/api/v2/plugins/manage/extensions'
