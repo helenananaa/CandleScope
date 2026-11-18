@@ -9,6 +9,16 @@ const [executable, packagePath, driver, output, helloPackage] = process.argv.sli
 const { _electron } = createRequire(import.meta.url)(driver);
 const profile = path.join(output, "desktop-profile");
 const digest = "sha256:" + createHash("sha256").update(await readFile(packagePath)).digest("hex");
+const pythonSource = [
+  'INDICATOR={"window":2,"outputs":[{"id":"main","type":"histogram"}]}',
+  "def compute(bars, params):",
+  ' return {"lines":{"main":[value*2 for value in bars["close"]]}}',
+].join("\n");
+const indicatorBars = [10, 11, 12, 13].map((close, index) => ({
+  time: 1_700_000_040 + index * 60,
+  open: close, high: close + 1, low: close - 1, close, volume: 100,
+  isClosed: index < 3,
+}));
 const env = {
   ...process.env,
   CANDLESCOPE_RUNTIME_MODE: "LIVE",
@@ -84,11 +94,41 @@ async function verifyHello(page) {
   });
 }
 
+async function computePython(session, script) {
+  const response = await fetch(new URL("/api/v1/indicators/compute", session.health), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      mode: "script", language: "python", symbol: "BTCUSDT", interval: "1m",
+      exchange: "binance", market_type: "spot", script, ohlcv: indicatorBars,
+    }),
+  });
+  assert.equal(response.status, 200);
+  return await response.json();
+}
+
+async function verifyPython(session) {
+  const result = await computePython(session, pythonSource);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.lines[0].type, "histogram");
+  const values = result.lines[0].data.map(({ value }) => value);
+  assert.deepEqual(values, [22, 24]);
+  assert.equal(result.meta.inputWindow.formingBarsExcluded, 1);
+  return values;
+}
+
 let running;
 const report = { packageSha256: digest, platform: process.platform, arch: process.arch };
 try {
   assert.equal(process.platform, "win32");
   running = await launch();
+  assert.equal((await computePython(running, "def broken")).ok, false);
+  const initialIndicator = await verifyPython(running);
+  report.pythonIndicator = {
+    sourceSha256: createHash("sha256").update(pythonSource).digest("hex"),
+    barsSha256: createHash("sha256").update(JSON.stringify(indicatorBars)).digest("hex"),
+    invalidSourceRejected: true, values: initialIndicator, formingBarsExcluded: 1,
+  };
   const first = running.page;
   await first.locator(".settings-btn").first().click();
   await first.locator(".st-nav-item").filter({ hasText: /^\s*(Plugins|插件与扩展)\s*$/ }).click();
@@ -113,6 +153,8 @@ try {
   }
   assert.equal(exited, true);
   running = await launch();
+  assert.deepEqual(await verifyPython(running), initialIndicator);
+  report.pythonIndicator.restart = "passed";
   assert.deepEqual(await search(running.page), initial);
   report.restartSearch = "passed";
   if (helloPackage) {
