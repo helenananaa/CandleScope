@@ -135,6 +135,16 @@ class PluginSettingsStore:
     ) -> tuple[str, str, str]:
         return (_publisher_hash(publisher_identity), plugin_id, contribution_id)
 
+    def export_for_migration(
+        self, plugin_id: str, publisher_identity: str
+    ) -> list[dict[str, Any]]:
+        prefix = (_publisher_hash(publisher_identity), plugin_id)
+        with self._lock:
+            _, records = self._load()
+            return [
+                record.to_wire() for key, record in records.items() if key[:2] == prefix
+            ]
+
     def bind(
         self, contribution: CoreContribution, *, publisher_identity: str
     ) -> dict[str, Any]:
@@ -177,10 +187,7 @@ class PluginSettingsStore:
                         details={"contributionId": contribution.id},
                     ) from exc
                 assert isinstance(validated, dict)
-                if (
-                    current.schema_sha256 != schema_sha256
-                    or current.value != validated
-                ):
+                if current.schema_sha256 != schema_sha256 or current.value != validated:
                     current = SettingsRecord(
                         current.plugin_id,
                         current.publisher_identity_hash,

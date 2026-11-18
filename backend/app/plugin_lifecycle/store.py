@@ -35,6 +35,7 @@ from .bundle import CHUNK, MAX_PACKAGE_BYTES, VerifiedPackage, verify_package
 from .paths import is_link
 
 CHART_PERMISSION = "chart.compute/1"
+MARKETPLACE_OWNER_FIELDS = ("marketplaceId", "publisherId", "publisherKeyId")
 
 REGISTRY_SCHEMA = "candlescope.unified-registry/1"
 TRANSACTION_SCHEMA = "candlescope.unified-transaction/1"
@@ -138,6 +139,7 @@ class PackageStore:
                 "appearance",
                 "marketplaceTrial",
                 "marketplacePackages",
+                "marketplaceMigrations",
             }
             or state["schema"] != REGISTRY_SCHEMA
             or not _safe_integer(state["revision"])
@@ -154,6 +156,51 @@ class PackageStore:
             or marketplace_packages != sorted(set(marketplace_packages))
         ):
             raise LifecycleError("invalid marketplace package reservations")
+        migrations = state.get("marketplaceMigrations", {})
+        if not isinstance(migrations, dict) or len(migrations) > MAX_RETAINED_PACKAGES:
+            raise LifecycleError("invalid marketplace migration registry")
+        for plugin_id, migration in migrations.items():
+            identifier(plugin_id, "marketplace migration.pluginId")
+            if (
+                not isinstance(migration, dict)
+                or set(migration)
+                != {
+                    "legacyActivationId",
+                    "legacyBundleSha256",
+                    "legacyGrantSha256",
+                    "generation",
+                    "complete",
+                    *MARKETPLACE_OWNER_FIELDS,
+                }
+                or any(
+                    not isinstance(migration[key], str)
+                    or not 0 < len(migration[key]) <= 128
+                    for key in MARKETPLACE_OWNER_FIELDS
+                )
+                or not isinstance(migration["legacyActivationId"], str)
+                or re.fullmatch(
+                    r"activation-[a-f0-9]{32}", migration["legacyActivationId"]
+                )
+                is None
+                or not _sha256(migration["legacyBundleSha256"])
+                or not _sha256(migration["legacyGrantSha256"])
+                or not _safe_integer(migration["generation"], minimum=1)
+                or migration["generation"] > state["generation"]
+                or type(migration["complete"]) is not bool
+                or (
+                    plugin_id in state["plugins"]
+                    and any(
+                        not isinstance(state["plugins"][plugin_id], dict)
+                        or not isinstance(
+                            state["plugins"][plugin_id].get("marketplace"), dict
+                        )
+                        or state["plugins"][plugin_id]["marketplace"].get(key)
+                        != migration[key]
+                        for key in MARKETPLACE_OWNER_FIELDS
+                    )
+                )
+            ):
+                raise LifecycleError("invalid marketplace migration record")
         appearance = state.get("appearance", {})
         if (
             not isinstance(appearance, dict)
@@ -504,9 +551,20 @@ class PackageStore:
                 shutil.rmtree(root)
                 raise
 
-    def private_directory(self, plugin_id: str) -> Path:
+    def private_directory(
+        self, plugin_id: str, *, migration_generation: int | None = None
+    ) -> Path:
         identifier(plugin_id, "pluginId")
         path = self.root / "private" / plugin_id
+        if migration_generation is not None:
+            if not _safe_integer(migration_generation, minimum=1):
+                raise LifecycleError("invalid private storage generation")
+            path = (
+                self.root
+                / "marketplace-private"
+                / plugin_id
+                / str(migration_generation)
+            )
         self._check_path(path)
         path.mkdir(parents=True, exist_ok=True)
         return path
@@ -548,9 +606,11 @@ class PackageStore:
                 raise LifecycleError(
                     "explicit approval must match reviewed package bytes and trust"
                 )
-            if digest in before.get(
-                "marketplacePackages", []
-            ) or "marketplace" in before["plugins"].get(manifest.id, {}):
+            if (
+                digest in before.get("marketplacePackages", [])
+                or "marketplace" in before["plugins"].get(manifest.id, {})
+                or manifest.id in before.get("marketplaceMigrations", {})
+            ):
                 raise LifecycleError(
                     "marketplace-owned plugins require marketplace approval"
                 )
@@ -590,7 +650,12 @@ class PackageStore:
                 after["appearance"][kind] = None
 
     def begin_marketplace(
-        self, digest: str, grant: dict, *, previous_generation: int | None
+        self,
+        digest: str,
+        grant: dict,
+        *,
+        previous_generation: int | None,
+        migration: dict | None = None,
     ) -> int:
         """Commit a reviewed release and its rollback target in the same transaction."""
         with self._locked() as before:
@@ -606,12 +671,40 @@ class PackageStore:
                 raise RevisionConflict("marketplace activation changed since review")
             if previous is not None and any(
                 previous.get("marketplace", {}).get(key) != grant[key]
-                for key in ("marketplaceId", "publisherId", "publisherKeyId")
+                for key in MARKETPLACE_OWNER_FIELDS
             ):
                 raise LifecycleError(
                     "marketplace cannot take over a different activation owner"
                 )
             after = self._next(before, before["revision"])
+            migrations = after.get("marketplaceMigrations", {})
+            existing = migrations.get(manifest.id)
+            if existing is not None and any(
+                existing[key] != grant[key] for key in MARKETPLACE_OWNER_FIELDS
+            ):
+                raise LifecycleError(
+                    "migration storage belongs to a different publisher"
+                )
+            if existing is not None and not existing["complete"] and migration is None:
+                raise RevisionConflict("previous marketplace migration has not settled")
+            if migration is not None:
+                if previous is not None or (
+                    existing is not None
+                    and (
+                        existing["complete"]
+                        or any(
+                            existing.get(key) != value
+                            for key, value in migration.items()
+                        )
+                    )
+                ):
+                    raise RevisionConflict("marketplace migration has already begun")
+                after.setdefault("marketplaceMigrations", {})[manifest.id] = {
+                    **migration,
+                    **{key: grant[key] for key in MARKETPLACE_OWNER_FIELDS},
+                    "generation": after["generation"],
+                    "complete": False,
+                }
             self._set_active(after, manifest, digest, marketplace=grant)
             after["marketplaceTrial"] = {"pluginId": manifest.id, "previous": previous}
             self._commit(before, after)
@@ -644,6 +737,9 @@ class PackageStore:
             after = self._next(before, before["revision"])
             if healthy:
                 del after["marketplaceTrial"]
+                migration = after.get("marketplaceMigrations", {}).get(plugin_id)
+                if migration is not None:
+                    migration["complete"] = True
             else:
                 self._restore_marketplace(after)
             self._commit(before, after)
@@ -656,6 +752,23 @@ class PackageStore:
             self.finish_marketplace(
                 plugin_id, state["plugins"][plugin_id]["generation"], healthy=False
             )
+
+    def release_marketplace_migration(
+        self, plugin_id: str, *, expected_revision: int, migration_generation: int
+    ) -> None:
+        """Release the old owner only after the unified activation has stopped."""
+        with self._locked() as before:
+            after = self._next(before, expected_revision)
+            migration = after.get("marketplaceMigrations", {}).get(plugin_id)
+            if (
+                migration is None
+                or migration["generation"] != migration_generation
+                or after["plugins"].get(plugin_id, {}).get("enabled")
+            ):
+                raise RevisionConflict("marketplace migration rollback target changed")
+            after["plugins"].pop(plugin_id, None)
+            del after["marketplaceMigrations"][plugin_id]
+            self._commit(before, after)
 
     def select_appearance(
         self, kind: str, plugin_id: str | None, *, expected_revision: int
@@ -732,6 +845,8 @@ class PackageStore:
             if plugin_id not in after["plugins"]:
                 raise LifecycleError("plugin is not installed")
             if (after.get("marketplaceTrial") or {}).get("pluginId") == plugin_id:
+                if plugin_id in after.get("marketplaceMigrations", {}):
+                    raise RevisionConflict("marketplace migration is under observation")
                 del after["marketplaceTrial"]
             if uninstall:
                 del after["plugins"][plugin_id]

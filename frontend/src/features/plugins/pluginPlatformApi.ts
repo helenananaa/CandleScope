@@ -26,6 +26,7 @@ import type {
   PluginLocalInstallCandidate,
   PluginManagementDetail,
   PluginMarketplaceApproval,
+  PluginMarketplaceRollbackReview,
   PluginMarketplaceCatalog,
   PluginMarketplaceStatus,
   PluginUiSnapshot,
@@ -499,6 +500,17 @@ export async function activatePluginMarketplaceRelease(
     method: "POST",
     ...(approval ? { body: approval } : {}),
     action: "marketplace-activate",
+  });
+}
+
+export async function rollbackPluginMarketplaceMigration(
+  pluginId: string,
+  { migrationGeneration, registryRevision }: PluginMarketplaceRollbackReview,
+): Promise<void> {
+  await managementRequest(`/manage/marketplace/${encodeURIComponent(pluginId)}/rollback-migration`, {
+    method: "POST",
+    body: { migrationGeneration, registryRevision },
+    action: "marketplace-rollback",
   });
 }
 

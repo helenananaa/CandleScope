@@ -1,5 +1,6 @@
 export const unifiedMessages = {
   "en": {
+    "plugin.market.copyLegacyData": "This update copies the previous version’s settings and private data.",
     "plugin.market.approveUnified": "Approve package {digest}. Requested permissions: {permissions}.",
     "plugin.market.chartScope": "Read bars already revealed on the current chart (chart.compute/1)",
     "unified.migrateAppearance": "Review appearance migration",
@@ -9,6 +10,7 @@ export const unifiedMessages = {
     "unified.restricted": "Restricted entries run only when their required capabilities and isolation are available."
   },
   "zh-CN": {
+    "plugin.market.copyLegacyData": "此次更新会复制旧版的设置和私有数据。",
     "plugin.market.approveUnified": "批准此包 {digest}。所请求的权限：{permissions}。",
     "plugin.market.chartScope": "读取当前图表中已揭示的 K 线 (chart.compute/1)",
     "unified.migrateAppearance": "审核外观迁移",
@@ -18,6 +20,7 @@ export const unifiedMessages = {
     "unified.restricted": "受限入口仅在所需能力和隔离条件满足后运行。"
   },
   "ar": {
+    "plugin.market.copyLegacyData": "ينسخ هذا التحديث إعدادات الإصدار السابق وبياناته الخاصة.",
     "plugin.market.approveUnified": "وافق على الحزمة {digest}. الأذونات المطلوبة: {permissions}.",
     "plugin.market.chartScope": "قراءة الشموع المعروضة بالفعل على الرسم البياني الحالي (chart.compute/1)",
     "unified.migrateAppearance": "مراجعة ترحيل المظهر",
@@ -27,6 +30,7 @@ export const unifiedMessages = {
     "unified.restricted": "تعمل المداخل المقيدة فقط عند توفر القدرات والعزل المطلوبين."
   },
   "cs": {
+    "plugin.market.copyLegacyData": "Tato aktualizace zkopíruje nastavení a soukromá data předchozí verze.",
     "plugin.market.approveUnified": "Schválit balíček {digest}. Požadovaná oprávnění: {permissions}.",
     "plugin.market.chartScope": "Číst již zobrazené svíčky aktuálního grafu (chart.compute/1)",
     "unified.migrateAppearance": "Zkontrolovat migraci vzhledu",
@@ -36,6 +40,7 @@ export const unifiedMessages = {
     "unified.restricted": "Omezené vstupy běží pouze s dostupnými požadovanými oprávněními a izolací."
   },
   "de": {
+    "plugin.market.copyLegacyData": "Dieses Update kopiert Einstellungen und private Daten der vorherigen Version.",
     "plugin.market.approveUnified": "Paket {digest} genehmigen. Angeforderte Berechtigungen: {permissions}.",
     "plugin.market.chartScope": "Bereits sichtbare Kerzen des aktuellen Charts lesen (chart.compute/1)",
     "unified.migrateAppearance": "Übernahme des Erscheinungsbilds prüfen",
@@ -45,6 +50,7 @@ export const unifiedMessages = {
     "unified.restricted": "Eingeschränkte Einstiegspunkte laufen nur, wenn die nötigen Berechtigungen und die Isolation verfügbar sind."
   },
   "es": {
+    "plugin.market.copyLegacyData": "Esta actualización copia la configuración y los datos privados de la versión anterior.",
     "plugin.market.approveUnified": "Aprobar el paquete {digest}. Permisos solicitados: {permissions}.",
     "plugin.market.chartScope": "Leer las velas ya reveladas en el gráfico actual (chart.compute/1)",
     "unified.migrateAppearance": "Revisar la migración de la apariencia",
@@ -54,6 +60,7 @@ export const unifiedMessages = {
     "unified.restricted": "Las entradas restringidas solo se ejecutan si están disponibles las capacidades y el aislamiento necesarios."
   },
   "fr": {
+    "plugin.market.copyLegacyData": "Cette mise à jour copie les paramètres et les données privées de la version précédente.",
     "plugin.market.approveUnified": "Approuver le paquet {digest}. Autorisations demandées : {permissions}.",
     "plugin.market.chartScope": "Lire les chandelles déjà révélées sur le graphique actuel (chart.compute/1)",
     "unified.migrateAppearance": "Examiner la migration de l’apparence",
@@ -63,6 +70,7 @@ export const unifiedMessages = {
     "unified.restricted": "Les points d’entrée restreints ne fonctionnent que si les capacités et l’isolation requises sont disponibles."
   },
   "he": {
+    "plugin.market.copyLegacyData": "עדכון זה מעתיק את ההגדרות והנתונים הפרטיים של הגרסה הקודמת.",
     "plugin.market.approveUnified": "אישור החבילה {digest}. הרשאות מבוקשות: {permissions}.",
     "plugin.market.chartScope": "קריאת נרות שכבר נחשפו בתרשים הנוכחי (chart.compute/1)",
     "unified.migrateAppearance": "בדיקת העברת המראה",
@@ -72,6 +80,7 @@ export const unifiedMessages = {
     "unified.restricted": "נקודות כניסה מוגבלות פועלות רק כאשר היכולות והבידוד הנדרשים זמינים."
   },
   "hi": {
+    "plugin.market.copyLegacyData": "यह अपडेट पिछले संस्करण की सेटिंग और निजी डेटा की प्रतिलिपि बनाता है।",
     "plugin.market.approveUnified": "पैकेज {digest} को मंज़ूरी दें। अनुरोधित अनुमतियाँ: {permissions}।",
     "plugin.market.chartScope": "मौजूदा चार्ट में पहले से दिखाई गई कैंडल पढ़ें (chart.compute/1)",
     "unified.migrateAppearance": "दिखावट के माइग्रेशन की समीक्षा करें",
@@ -81,6 +90,7 @@ export const unifiedMessages = {
     "unified.restricted": "सीमित एंट्री केवल आवश्यक क्षमताएँ और आइसोलेशन उपलब्ध होने पर चलती हैं।"
   },
   "hu": {
+    "plugin.market.copyLegacyData": "Ez a frissítés átmásolja az előző verzió beállításait és privát adatait.",
     "plugin.market.approveUnified": "A(z) {digest} csomag jóváhagyása. Kért engedélyek: {permissions}.",
     "plugin.market.chartScope": "Az aktuális grafikon már megjelenített gyertyáinak olvasása (chart.compute/1)",
     "unified.migrateAppearance": "Megjelenés átvitelének ellenőrzése",
@@ -90,6 +100,7 @@ export const unifiedMessages = {
     "unified.restricted": "A korlátozott belépési pontok csak a szükséges képességek és elkülönítés rendelkezésre állásakor futnak."
   },
   "id": {
+    "plugin.market.copyLegacyData": "Pembaruan ini menyalin pengaturan dan data pribadi dari versi sebelumnya.",
     "plugin.market.approveUnified": "Setujui paket {digest}. Izin yang diminta: {permissions}.",
     "plugin.market.chartScope": "Membaca candle yang sudah ditampilkan pada grafik saat ini (chart.compute/1)",
     "unified.migrateAppearance": "Tinjau migrasi tampilan",
@@ -99,6 +110,7 @@ export const unifiedMessages = {
     "unified.restricted": "Entri terbatas hanya berjalan jika kemampuan dan isolasi yang diperlukan tersedia."
   },
   "it": {
+    "plugin.market.copyLegacyData": "L’aggiornamento copia le impostazioni e i dati privati della versione precedente.",
     "plugin.market.approveUnified": "Approva il pacchetto {digest}. Autorizzazioni richieste: {permissions}.",
     "plugin.market.chartScope": "Leggere le candele già visibili sul grafico corrente (chart.compute/1)",
     "unified.migrateAppearance": "Esamina la migrazione dell’aspetto",
@@ -108,6 +120,7 @@ export const unifiedMessages = {
     "unified.restricted": "I punti di ingresso limitati funzionano solo se sono disponibili le capacità e l’isolamento richiesti."
   },
   "ja": {
+    "plugin.market.copyLegacyData": "この更新では、以前のバージョンの設定とプライベートデータをコピーします。",
     "plugin.market.approveUnified": "パッケージ {digest} を承認します。要求される権限：{permissions}。",
     "plugin.market.chartScope": "現在のチャートで公開済みのローソク足を読み取る (chart.compute/1)",
     "unified.migrateAppearance": "外観の移行を確認",
@@ -117,6 +130,7 @@ export const unifiedMessages = {
     "unified.restricted": "制限付きエントリーは、必要な権限と隔離機能が利用可能な場合にのみ実行されます。"
   },
   "ko": {
+    "plugin.market.copyLegacyData": "이 업데이트는 이전 버전의 설정과 비공개 데이터를 복사합니다.",
     "plugin.market.approveUnified": "패키지 {digest} 승인. 요청한 권한: {permissions}.",
     "plugin.market.chartScope": "현재 차트에 이미 표시된 캔들 읽기 (chart.compute/1)",
     "unified.migrateAppearance": "모양 마이그레이션 검토",
@@ -126,6 +140,7 @@ export const unifiedMessages = {
     "unified.restricted": "제한된 진입점은 필요한 권한과 격리 기능을 사용할 수 있을 때만 실행됩니다."
   },
   "ms": {
+    "plugin.market.copyLegacyData": "Kemas kini ini menyalin tetapan dan data peribadi versi sebelumnya.",
     "plugin.market.approveUnified": "Luluskan pakej {digest}. Kebenaran diminta: {permissions}.",
     "plugin.market.chartScope": "Baca lilin yang sudah dipaparkan pada carta semasa (chart.compute/1)",
     "unified.migrateAppearance": "Semak migrasi penampilan",
@@ -135,6 +150,7 @@ export const unifiedMessages = {
     "unified.restricted": "Titik masuk terhad hanya berjalan apabila keupayaan dan pengasingan yang diperlukan tersedia."
   },
   "nl": {
+    "plugin.market.copyLegacyData": "Deze update kopieert de instellingen en privégegevens van de vorige versie.",
     "plugin.market.approveUnified": "Pakket {digest} goedkeuren. Gevraagde machtigingen: {permissions}.",
     "plugin.market.chartScope": "Al weergegeven candles van de huidige grafiek lezen (chart.compute/1)",
     "unified.migrateAppearance": "Migratie van uiterlijk beoordelen",
@@ -144,6 +160,7 @@ export const unifiedMessages = {
     "unified.restricted": "Beperkte toegangspunten werken alleen als de vereiste mogelijkheden en isolatie beschikbaar zijn."
   },
   "pl": {
+    "plugin.market.copyLegacyData": "Ta aktualizacja kopiuje ustawienia i dane prywatne poprzedniej wersji.",
     "plugin.market.approveUnified": "Zatwierdź pakiet {digest}. Żądane uprawnienia: {permissions}.",
     "plugin.market.chartScope": "Odczyt świec już ujawnionych na bieżącym wykresie (chart.compute/1)",
     "unified.migrateAppearance": "Sprawdź migrację wyglądu",
@@ -153,6 +170,7 @@ export const unifiedMessages = {
     "unified.restricted": "Ograniczone punkty wejścia działają tylko wtedy, gdy dostępne są wymagane uprawnienia i izolacja."
   },
   "pt-BR": {
+    "plugin.market.copyLegacyData": "Esta atualização copia as configurações e os dados privados da versão anterior.",
     "plugin.market.approveUnified": "Aprovar o pacote {digest}. Permissões solicitadas: {permissions}.",
     "plugin.market.chartScope": "Ler os candles já revelados no gráfico atual (chart.compute/1)",
     "unified.migrateAppearance": "Revisar a migração da aparência",
@@ -162,6 +180,7 @@ export const unifiedMessages = {
     "unified.restricted": "As entradas restritas só são executadas quando os recursos e o isolamento necessários estão disponíveis."
   },
   "pt-PT": {
+    "plugin.market.copyLegacyData": "Esta atualização copia as definições e os dados privados da versão anterior.",
     "plugin.market.approveUnified": "Aprovar o pacote {digest}. Permissões solicitadas: {permissions}.",
     "plugin.market.chartScope": "Ler as velas já reveladas no gráfico atual (chart.compute/1)",
     "unified.migrateAppearance": "Rever a migração da aparência",
@@ -171,6 +190,7 @@ export const unifiedMessages = {
     "unified.restricted": "As entradas restritas só são executadas quando as capacidades e o isolamento necessários estão disponíveis."
   },
   "ro": {
+    "plugin.market.copyLegacyData": "Această actualizare copiază setările și datele private ale versiunii anterioare.",
     "plugin.market.approveUnified": "Aprobă pachetul {digest}. Permisiuni solicitate: {permissions}.",
     "plugin.market.chartScope": "Citirea lumânărilor deja afișate în graficul curent (chart.compute/1)",
     "unified.migrateAppearance": "Verifică migrarea aspectului",
@@ -180,6 +200,7 @@ export const unifiedMessages = {
     "unified.restricted": "Punctele de intrare restricționate rulează numai când sunt disponibile capabilitățile și izolarea necesare."
   },
   "ru": {
+    "plugin.market.copyLegacyData": "Это обновление копирует настройки и личные данные предыдущей версии.",
     "plugin.market.approveUnified": "Одобрить пакет {digest}. Запрошенные разрешения: {permissions}.",
     "plugin.market.chartScope": "Читать уже открытые свечи текущего графика (chart.compute/1)",
     "unified.migrateAppearance": "Проверить перенос оформления",
@@ -189,6 +210,7 @@ export const unifiedMessages = {
     "unified.restricted": "Ограниченные точки входа запускаются только при наличии необходимых разрешений и изоляции."
   },
   "sv": {
+    "plugin.market.copyLegacyData": "Uppdateringen kopierar inställningar och privata data från den föregående versionen.",
     "plugin.market.approveUnified": "Godkänn paketet {digest}. Begärda behörigheter: {permissions}.",
     "plugin.market.chartScope": "Läs redan visade ljus i det aktuella diagrammet (chart.compute/1)",
     "unified.migrateAppearance": "Granska överföringen av utseende",
@@ -198,6 +220,7 @@ export const unifiedMessages = {
     "unified.restricted": "Begränsade ingångar körs bara när nödvändiga behörigheter och isolering finns tillgängliga."
   },
   "th": {
+    "plugin.market.copyLegacyData": "การอัปเดตนี้จะคัดลอกการตั้งค่าและข้อมูลส่วนตัวจากเวอร์ชันก่อนหน้า",
     "plugin.market.approveUnified": "อนุมัติแพ็กเกจ {digest} สิทธิ์ที่ขอ: {permissions}",
     "plugin.market.chartScope": "อ่านแท่งเทียนที่เปิดเผยแล้วบนกราฟปัจจุบัน (chart.compute/1)",
     "unified.migrateAppearance": "ตรวจสอบการย้ายรูปลักษณ์",
@@ -207,6 +230,7 @@ export const unifiedMessages = {
     "unified.restricted": "จุดเข้าที่จำกัดจะทำงานเมื่อมีความสามารถและการแยกการทำงานที่จำเป็นเท่านั้น"
   },
   "tr": {
+    "plugin.market.copyLegacyData": "Bu güncelleme önceki sürümün ayarlarını ve özel verilerini kopyalar.",
     "plugin.market.approveUnified": "{digest} paketini onayla. İstenen izinler: {permissions}.",
     "plugin.market.chartScope": "Geçerli grafikte gösterilmiş mumları oku (chart.compute/1)",
     "unified.migrateAppearance": "Görünüm geçişini incele",
@@ -216,6 +240,7 @@ export const unifiedMessages = {
     "unified.restricted": "Kısıtlı girişler yalnızca gerekli yetenekler ve yalıtım mevcut olduğunda çalışır."
   },
   "uk": {
+    "plugin.market.copyLegacyData": "Це оновлення копіює налаштування та приватні дані попередньої версії.",
     "plugin.market.approveUnified": "Схвалити пакет {digest}. Запитані дозволи: {permissions}.",
     "plugin.market.chartScope": "Читати вже показані свічки поточного графіка (chart.compute/1)",
     "unified.migrateAppearance": "Перевірити перенесення оформлення",
@@ -225,6 +250,7 @@ export const unifiedMessages = {
     "unified.restricted": "Обмежені точки входу запускаються лише за наявності потрібних дозволів та ізоляції."
   },
   "vi": {
+    "plugin.market.copyLegacyData": "Bản cập nhật này sao chép cài đặt và dữ liệu riêng tư của phiên bản trước.",
     "plugin.market.approveUnified": "Phê duyệt gói {digest}. Quyền yêu cầu: {permissions}.",
     "plugin.market.chartScope": "Đọc các nến đã hiển thị trên biểu đồ hiện tại (chart.compute/1)",
     "unified.migrateAppearance": "Xem xét chuyển đổi giao diện",
@@ -234,6 +260,7 @@ export const unifiedMessages = {
     "unified.restricted": "Điểm vào bị hạn chế chỉ chạy khi có đủ quyền và cơ chế cách ly cần thiết."
   },
   "zh-HK": {
+    "plugin.market.copyLegacyData": "此次更新會複製舊版的設定和私有資料。",
     "plugin.market.approveUnified": "核准此套件 {digest}。要求的權限：{permissions}。",
     "plugin.market.chartScope": "讀取目前圖表中已揭示的 K 線 (chart.compute/1)",
     "unified.migrateAppearance": "審查外觀遷移",
@@ -243,6 +270,7 @@ export const unifiedMessages = {
     "unified.restricted": "受限入口僅在所需權限和隔離條件滿足後執行。"
   },
   "zh-Hant": {
+    "plugin.market.copyLegacyData": "此次更新會複製舊版的設定和私有資料。",
     "plugin.market.approveUnified": "核准此套件 {digest}。要求的權限：{permissions}。",
     "plugin.market.chartScope": "讀取目前圖表中已揭示的 K 線 (chart.compute/1)",
     "unified.migrateAppearance": "審查外觀移轉",
@@ -252,6 +280,7 @@ export const unifiedMessages = {
     "unified.restricted": "受限入口僅在所需權限和隔離條件滿足後執行。"
   },
   "zh-MO": {
+    "plugin.market.copyLegacyData": "此次更新會複製舊版的設定和私有資料。",
     "plugin.market.approveUnified": "核准此套件 {digest}。要求的權限：{permissions}。",
     "plugin.market.chartScope": "讀取目前圖表中已揭示的 K 線 (chart.compute/1)",
     "unified.migrateAppearance": "審查外觀遷移",
@@ -261,6 +290,7 @@ export const unifiedMessages = {
     "unified.restricted": "受限入口僅在所需權限和隔離條件滿足後執行。"
   },
   "zh-TW": {
+    "plugin.market.copyLegacyData": "此次更新會複製舊版的設定和私有資料。",
     "plugin.market.approveUnified": "核准此套件 {digest}。要求的權限：{permissions}。",
     "plugin.market.chartScope": "讀取目前圖表中已揭示的 K 線 (chart.compute/1)",
     "unified.migrateAppearance": "審查外觀移轉",

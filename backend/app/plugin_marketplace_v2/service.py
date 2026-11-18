@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from app.core.config import getenv as app_getenv
 
+import asyncio
 import hashlib
 import http.client
 import ipaddress
@@ -35,6 +36,7 @@ from app.plugin_installer_v2.bundle import (
     VerifiedPlatformBundle,
     verify_platform_bundle,
 )
+from app.plugin_installer_v2.errors import PlatformInstallerBaseError
 from app.plugin_installer_v2.registry import load_activation_registry
 from app.plugin_lifecycle.bundle import PackageError, verify_package
 from app.plugin_lifecycle.runtime import UnifiedRuntime
@@ -381,7 +383,7 @@ def _validate_state(state: dict[str, Any]) -> None:
             approval = raw["unifiedApproval"]
             if (
                 not isinstance(approval, dict)
-                or set(approval)
+                or set(approval) - {"legacy"}
                 != {"packageSha256", "permissions", "previousGeneration"}
                 or approval["packageSha256"] != raw["bundleSha256"]
                 or approval["permissions"] not in ([], [CHART_PERMISSION])
@@ -396,6 +398,27 @@ def _validate_state(state: dict[str, Any]) -> None:
                 raise MarketplaceError(
                     "PLUGIN_MARKETPLACE_STATE_INVALID", f"{label} approval is invalid"
                 )
+            if "legacy" in approval:
+                legacy = approval["legacy"]
+                if (
+                    not isinstance(legacy, dict)
+                    or set(legacy)
+                    != {"legacyActivationId", "legacyBundleSha256", "legacyGrantSha256"}
+                    or not isinstance(legacy["legacyActivationId"], str)
+                    or re.fullmatch(
+                        r"activation-[a-f0-9]{32}", legacy["legacyActivationId"]
+                    )
+                    is None
+                    or any(
+                        not isinstance(legacy[key], str)
+                        or _SHA256.fullmatch(legacy[key]) is None
+                        for key in ("legacyBundleSha256", "legacyGrantSha256")
+                    )
+                ):
+                    raise MarketplaceError(
+                        "PLUGIN_MARKETPLACE_STATE_INVALID",
+                        f"{label} migration approval is invalid",
+                    )
         candidate_keys.append(plugin_id)
     if candidate_keys != sorted(candidate_keys) or len(set(candidate_keys)) != len(
         candidate_keys
@@ -697,13 +720,41 @@ class PluginMarketplaceService:
                 "PLUGIN_MARKETPLACE_ROOT_REQUIRED",
                 "enabling Marketplace requires at least one build-pinned root",
             )
+        self.cutover_lock = asyncio.Lock()
+        self.migration_ready: set[tuple[str, int]] = set()
         self.reload_cache()
 
     unified: UnifiedRuntime | None = None
 
     def bind_unified(self, runtime: UnifiedRuntime) -> None:
         self.unified = runtime
-        runtime.marketplace_policy = self.unified_release_current
+        self.migration_ready = {
+            (plugin_id, item["generation"])
+            for plugin_id, item in runtime.store.snapshot()
+            .get("marketplaceMigrations", {})
+            .items()
+            if item["complete"]
+        }
+        runtime.marketplace_policy = self.unified_execution_allowed
+
+    def legacy_fences(self) -> set[str]:
+        if self.unified is None:
+            return set()
+        return set(self.unified.store.snapshot().get("marketplaceMigrations", {}))
+
+    def legacy_fenced(self, plugin_id: str) -> bool:
+        return plugin_id in self.legacy_fences()
+
+    def unified_execution_allowed(self, plugin_id: str, record: dict) -> bool:
+        migration = (
+            self.unified.store.snapshot()
+            .get("marketplaceMigrations", {})
+            .get(plugin_id)
+        )
+        return (
+            migration is None
+            or (plugin_id, migration["generation"]) in self.migration_ready
+        ) and self.unified_release_current(plugin_id, record)
 
     def unified_release_current(self, plugin_id: str, record: dict) -> bool:
         grant = record["marketplace"]
@@ -713,13 +764,17 @@ class PluginMarketplaceService:
             return False
         release = index.release_by_identity().get((plugin_id, record["version"]))
         publisher = index.publisher_by_id().get(grant["publisherId"])
+        try:
+            artifact = self._artifact_for_host(release) if release is not None else None
+        except MarketplaceError:
+            return False
         return bool(
             release is not None
             and publisher is not None
             and publisher.key_id == grant["publisherKeyId"]
             and release.publisher_id == grant["publisherId"]
-            and self._is_unified(release.artifact)
-            and release.artifact.sha256 == record["packageSha256"]
+            and self._is_unified(artifact)
+            and artifact.sha256 == record["packageSha256"]
             and self._release_visible(release)
             and not index.is_revoked(release, now=now)
         )
@@ -734,17 +789,179 @@ class PluginMarketplaceService:
                 "PLUGIN_MARKETPLACE_UNIFIED_UNAVAILABLE",
                 "unified lifecycle is unavailable",
             )
-        if self._active_record(plugin_id) is not None:
-            raise MarketplaceError(
-                "PLUGIN_MARKETPLACE_ACTIVATION_OWNED",
-                "a Platform v2 activation already owns this plugin ID",
-            )
-        current = self.unified.store.snapshot()["plugins"].get(plugin_id)
+        snapshot = self.unified.store.snapshot()
+        current = snapshot["plugins"].get(plugin_id)
+        legacy = self._active_record(plugin_id)
+        migration = snapshot.get("marketplaceMigrations", {}).get(plugin_id)
+        self._assert_migration_owner(migration, index, publisher)
+        if legacy is not None:
+            self._assert_legacy_successor(legacy, release, index, publisher)
+            if (
+                migration is not None
+                and legacy.bundle_sha256 != migration["legacyBundleSha256"]
+            ):
+                raise MarketplaceError(
+                    "PLUGIN_MARKETPLACE_MIGRATION_STALE",
+                    "preserved legacy activation changed",
+                )
         self._assert_unified_upgrade(current, release, index, publisher)
         return current
 
     @staticmethod
-    def _assert_unified_upgrade(current, release, index, publisher):
+    def _assert_migration_owner(migration, index, publisher) -> None:
+        if migration is not None and (
+            migration["marketplaceId"],
+            migration["publisherId"],
+            migration["publisherKeyId"],
+        ) != (index.marketplace_id, publisher.publisher_id, publisher.key_id):
+            raise MarketplaceError(
+                "PLUGIN_MARKETPLACE_ACTIVATION_OWNED",
+                "migration storage is retained for its verified publisher",
+            )
+
+    def _assert_legacy_successor(self, legacy, release, index, publisher) -> None:
+        if legacy.plugin_id == "candlescope.pyne":
+            raise MarketplaceError(
+                "PLUGIN_MARKETPLACE_RETIRED",
+                "Pyne is retired and cannot be migrated or restored",
+            )
+        previous = index.release_by_digest().get(legacy.bundle_sha256)
+        if (
+            previous is None
+            or previous.identity != (legacy.plugin_id, legacy.version)
+            or previous.publisher_id != publisher.publisher_id
+            or previous.signature["keyId"] != publisher.key_id
+            or any(
+                self._is_unified(item) and item.sha256 == legacy.bundle_sha256
+                for item in previous.artifacts
+            )
+        ):
+            raise MarketplaceError(
+                "PLUGIN_MARKETPLACE_ACTIVATION_OWNED",
+                "unified migration requires a legacy release signed by the same marketplace publisher",
+            )
+        if _major(legacy.version) != _major(release.version) or _version_key(
+            release.version
+        ) <= _version_key(legacy.version):
+            raise MarketplaceError(
+                "PLUGIN_MARKETPLACE_MIGRATION_REQUIRED",
+                "unified successor must be a newer release of the same major version",
+            )
+
+    def _legacy_review(self, plugin_id, release, index, publisher, snapshot):
+        migration = snapshot.get("marketplaceMigrations", {}).get(plugin_id)
+        if migration is not None and migration["complete"]:
+            return None, None
+        captured = self.installer.capture_activation_state(plugin_id)
+        record = captured.activation
+        if record is None:
+            return None, None
+        self._assert_legacy_successor(record, release, index, publisher)
+        if (
+            captured.grant is None
+            or captured.grant.publisher_identity != f"publisher-key:{publisher.key_id}"
+        ):
+            raise MarketplaceError(
+                "PLUGIN_MARKETPLACE_ACTIVATION_OWNED",
+                "legacy activation has no matching signed publisher grant record",
+            )
+        return {
+            "legacyActivationId": record.activation_id,
+            "legacyBundleSha256": record.bundle_sha256,
+            "legacyGrantSha256": captured.grant_sha256,
+        }, record.version
+
+    def migration_source(self, plugin_id: str, migration: dict, *, for_rollback=False):
+        if plugin_id == "candlescope.pyne":
+            raise MarketplaceError(
+                "PLUGIN_MARKETPLACE_RETIRED",
+                "Pyne is retired and cannot be migrated or restored",
+            )
+        captured = self.installer.capture_activation_state(plugin_id)
+        record = captured.activation
+        if (
+            record is None
+            or record.activation_id != migration["legacyActivationId"]
+            or record.bundle_sha256 != migration["legacyBundleSha256"]
+            or captured.grant_sha256 != migration["legacyGrantSha256"]
+        ):
+            raise MarketplaceError(
+                "PLUGIN_MARKETPLACE_MIGRATION_STALE",
+                "previous activation or permissions changed",
+            )
+        known = self._release_for_digest(record.bundle_sha256, include_expired=False)
+        if known is None or known[1].identity != (record.plugin_id, record.version):
+            raise MarketplaceError(
+                "PLUGIN_MARKETPLACE_MIGRATION_SOURCE_UNVERIFIED",
+                "previous release is no longer verifiable",
+            )
+        index, release = known
+        publisher = index.publisher_by_id()[release.publisher_id]
+        self._assert_migration_owner(migration, index, publisher)
+        if (
+            captured.grant is None
+            or captured.grant.publisher_identity != f"publisher-key:{publisher.key_id}"
+        ):
+            raise MarketplaceError(
+                "PLUGIN_MARKETPLACE_MIGRATION_SOURCE_UNVERIFIED",
+                "previous publisher grants are unavailable",
+            )
+        if for_rollback:
+            if index.is_revoked(release, now=self._now()):
+                raise MarketplaceError(
+                    "PLUGIN_MARKETPLACE_RELEASE_REVOKED", "previous release was revoked"
+                )
+            bundle, _installation = self.installer.verify_activation_static(record)
+            self._assert_bundle_release(bundle, release, publisher)
+        return record, f"publisher-key:{publisher.key_id}"
+
+    def release_migration(
+        self, plugin_id: str, migration_generation: int, *, expected_revision: int
+    ):
+        with security_lock(self.lock_path):
+            snapshot = self.unified.store.snapshot()
+            migration = snapshot.get("marketplaceMigrations", {}).get(plugin_id)
+            if migration is None or migration["generation"] != migration_generation:
+                raise MarketplaceError(
+                    "PLUGIN_MARKETPLACE_MIGRATION_STALE",
+                    "migration rollback target changed",
+                )
+            record, _ = self.migration_source(plugin_id, migration, for_rollback=True)
+            try:
+                self.unified.store.release_marketplace_migration(
+                    plugin_id,
+                    expected_revision=expected_revision,
+                    migration_generation=migration_generation,
+                )
+            except ValueError as exc:
+                raise MarketplaceError(
+                    "PLUGIN_MARKETPLACE_MIGRATION_STALE", str(exc)
+                ) from exc
+            self.migration_ready.discard((plugin_id, migration_generation))
+            return record
+
+    def recover_legacy_migrations(self) -> None:
+        if self.unified is None or self.unified.safe_mode:
+            return
+        snapshot = self.unified.store.snapshot()
+        for plugin_id, migration in snapshot.get("marketplaceMigrations", {}).items():
+            if not migration["complete"] and plugin_id not in snapshot["plugins"]:
+                try:
+                    self.release_migration(
+                        plugin_id,
+                        migration["generation"],
+                        expected_revision=self.unified.store.snapshot()["revision"],
+                    )
+                except (
+                    MarketplaceError,
+                    OSError,
+                    ValueError,
+                    PlatformInstallerBaseError,
+                ):
+                    # Keep ownership fenced if the preserved installation cannot be verified.
+                    continue
+
+    def _assert_unified_upgrade(self, current, release, index, publisher):
         if current is None:
             return
         if any(
@@ -765,7 +982,8 @@ class PluginMarketplaceService:
                 "major-version marketplace updates require a migration contract",
             )
         if (
-            current["enabled"] or current["packageSha256"] != release.artifact.sha256
+            current["enabled"]
+            or current["packageSha256"] != self._artifact_for_host(release).sha256
         ) and _version_key(release.version) <= _version_key(current["version"]):
             raise MarketplaceError(
                 "PLUGIN_MARKETPLACE_UPDATE_NOT_NEWER",
@@ -791,6 +1009,8 @@ class PluginMarketplaceService:
                     "PLUGIN_MARKETPLACE_ARTIFACT_IDENTITY_MISMATCH",
                     "unified artifact, manifest or SBOM does not match the signed release",
                 )
+            if isinstance(artifact, SignedArtifactRecord):
+                self._assert_unified_supply(path, manifest, release, artifact)
             self._assert_sbom_metadata(raw_sbom, release)
             if self.unified is None:
                 raise LifecycleError("unified lifecycle is unavailable")
@@ -806,6 +1026,61 @@ class PluginMarketplaceService:
             raise MarketplaceError(
                 "PLUGIN_MARKETPLACE_UNIFIED_INVALID", str(exc)
             ) from exc
+
+    def _assert_unified_supply(self, path, manifest, release, artifact):
+        required = (
+            [{"id": "chart.compute", "scope": {"data": "revealed-chart-bars"}}]
+            if manifest.permissions
+            else []
+        )
+        entries = {
+            entry.id: entry for entry in manifest.entries if entry.kind == "sidecar"
+        }
+        bindings = {
+            binding.entrypoint_id: binding for binding in artifact.runtime_bindings
+        }
+        inventory = {
+            "plugin": release.license_expression,
+            "dependencies": [item.to_wire() for item in release.dependencies],
+            "runtimeLicenses": [],
+        }
+        if release.permissions != {"required": required, "optional": []}:
+            raise MarketplaceError(
+                "PLUGIN_MARKETPLACE_PERMISSION_INVALID",
+                "signed permissions do not match the unified manifest",
+            )
+        if artifact.license_inventory_sha256 != canonical_sha256(inventory):
+            raise MarketplaceError(
+                "PLUGIN_MARKETPLACE_LICENSE_INVENTORY_MISMATCH",
+                "signed license inventory does not match",
+            )
+        if entries.keys() != bindings.keys():
+            raise MarketplaceError(
+                "PLUGIN_MARKETPLACE_RUNTIME_INVALID",
+                "signed runtime bindings do not cover every unified sidecar",
+            )
+        with zipfile.ZipFile(path) as archive:
+            for entry_id, entry in entries.items():
+                binding = bindings[entry_id]
+                if (
+                    entry.runtime not in {"native-executable", "python-module"}
+                    or binding.runtime_kind != entry.runtime
+                    or binding.runtime_id != entry.runtime
+                    or binding.plugin_artifact_path != entry.path
+                ):
+                    raise MarketplaceError(
+                        "PLUGIN_MARKETPLACE_RUNTIME_INVALID",
+                        "signed runtime supplied for the sidecar is unsupported",
+                    )
+                with archive.open(entry.path) as member:
+                    digest = (
+                        "sha256:" + hashlib.file_digest(member, "sha256").hexdigest()
+                    )
+                if digest != binding.plugin_artifact_sha256:
+                    raise MarketplaceError(
+                        "PLUGIN_MARKETPLACE_RUNTIME_INVALID",
+                        "signed sidecar entry digest does not match",
+                    )
 
     def _verify_artifact(self, path, release, publisher, artifact):
         if self._is_unified(artifact):
@@ -1661,9 +1936,9 @@ class PluginMarketplaceService:
         release: ReleaseRecord,
         marketplace_id: str,
     ) -> Any | None:
-        if (
-            self.unified is not None
-            and plugin_id in self.unified.store.snapshot()["plugins"]
+        if self.unified is not None and (
+            plugin_id in self.unified.store.snapshot()["plugins"]
+            or self.legacy_fenced(plugin_id)
         ):
             raise MarketplaceError(
                 "PLUGIN_MARKETPLACE_ACTIVATION_OWNED",
@@ -1868,7 +2143,10 @@ class PluginMarketplaceService:
                 permission_diff = self._unified_permission_diff(
                     manifest, artifact.sha256, current
                 )
-                from_version = current["version"] if current else None
+                legacy_review, legacy_version = self._legacy_review(
+                    plugin_id, release, index, publisher, self.unified.store.snapshot()
+                )
+                from_version = current["version"] if current else legacy_version
             else:
                 current = self._assert_ownership(
                     plugin_id, release, index.marketplace_id
@@ -1919,6 +2197,7 @@ class PluginMarketplaceService:
                     "packageSha256": artifact.sha256,
                     "permissions": list(manifest.permissions),
                     "previousGeneration": current["generation"] if current else None,
+                    **({"legacy": legacy_review} if legacy_review else {}),
                 }
             state = self._state()
             existing = self._candidate(state, plugin_id)
@@ -1962,6 +2241,11 @@ class PluginMarketplaceService:
         if "unifiedApproval" in candidate:
             self._unified_owner(plugin_id, release, index, publisher)
         else:
+            if self.legacy_fenced(plugin_id):
+                raise MarketplaceError(
+                    "PLUGIN_MARKETPLACE_ACTIVATION_OWNED",
+                    "plugin already migrated to the unified lifecycle",
+                )
             current = self._active_record(plugin_id)
             if current is None or current.bundle_sha256 != artifact.sha256:
                 self._assert_ownership(plugin_id, release, index.marketplace_id)
@@ -2081,7 +2365,7 @@ class PluginMarketplaceService:
         if (
             self.unified is None
             or "unifiedApproval" not in candidate
-            or candidate["phase"] != "observing"
+            or candidate["phase"] not in {"observing", "active"}
         ):
             return candidate
         snapshot = self.unified.store.snapshot() if snapshot is None else snapshot
@@ -2094,6 +2378,22 @@ class PluginMarketplaceService:
             and record["generation"]
             != candidate["unifiedApproval"]["previousGeneration"]
         )
+        if candidate["phase"] == "active":
+            if (
+                owns_release
+                or plugin_id in snapshot.get("marketplaceMigrations", {})
+                or self._active_record(plugin_id) is None
+            ):
+                return candidate
+            return {
+                **candidate,
+                "phase": "rolled-back",
+                "observation": {
+                    "status": "failed",
+                    "observedAt": None,
+                    "detail": "the verified Platform v2 activation was restored",
+                },
+            }
         if (
             owns_release
             and (snapshot.get("marketplaceTrial") or {}).get("pluginId") == plugin_id
@@ -2136,6 +2436,20 @@ class PluginMarketplaceService:
                     "approve the reviewed package digest, permissions and activation generation",
                     status_code=409,
                 )
+            index = self._current_indexes().get(candidate["marketplaceId"])
+            if index is None:
+                raise MarketplaceError(
+                    "PLUGIN_MARKETPLACE_CANDIDATE_STALE",
+                    "signed index expired during review",
+                )
+            migration, _ = self._legacy_review(
+                plugin_id, release, index, publisher, self.unified.store.snapshot()
+            )
+            if migration != expected.get("legacy"):
+                raise MarketplaceError(
+                    "PLUGIN_MARKETPLACE_MIGRATION_STALE",
+                    "legacy activation or its permissions changed since review",
+                )
             digest = expected["packageSha256"]
             grant = {
                 "marketplaceId": candidate["marketplaceId"],
@@ -2145,7 +2459,10 @@ class PluginMarketplaceService:
             }
             try:
                 generation = self.unified.store.begin_marketplace(
-                    digest, grant, previous_generation=expected["previousGeneration"]
+                    digest,
+                    grant,
+                    previous_generation=expected["previousGeneration"],
+                    migration=migration,
                 )
             except ValueError as exc:
                 raise MarketplaceError(
@@ -2168,7 +2485,15 @@ class PluginMarketplaceService:
                     plugin_id, generation, healthy=False
                 )
                 raise
-            return {"candidate": candidate, "generation": generation}
+            return {
+                "candidate": candidate,
+                "generation": generation,
+                "migration": self.unified.store.snapshot()["marketplaceMigrations"][
+                    plugin_id
+                ]
+                if migration
+                else None,
+            }
 
     def finish_unified_activation(self, plugin_id, generation, *, healthy, detail):
         with security_lock(self.lock_path):
@@ -2341,8 +2666,9 @@ class PluginMarketplaceService:
             state_changed = False
             registry = load_activation_registry(self.installer.registry_path)
             current_indexes = self._current_indexes()
+            fenced = self.legacy_fences()
             for record in registry.plugins:
-                if record.state != "active":
+                if record.state != "active" or record.plugin_id in fenced:
                     continue
                 known = self._release_for_digest(
                     record.bundle_sha256,
@@ -2518,7 +2844,7 @@ class PluginMarketplaceService:
             )
             for kind in runtime_kinds
         ]
-        sandbox_available = bool(profiles) and all(
+        sandbox_available = (bool(profiles) or self._is_unified(artifact)) and all(
             item["sandboxSupported"] for item in profiles
         )
         if not isinstance(release, MultiRuntimeReleaseRecord):
@@ -2578,9 +2904,11 @@ class PluginMarketplaceService:
                     plugins.setdefault(release.plugin_id, []).append((index, release))
         entries = []
         installed = load_activation_registry(self.installer.registry_path).by_id()
-        unified = (
-            self.unified.store.snapshot()["plugins"] if self.unified is not None else {}
+        unified_snapshot = (
+            self.unified.store.snapshot() if self.unified is not None else {}
         )
+        unified = unified_snapshot.get("plugins", {})
+        migrations = unified_snapshot.get("marketplaceMigrations", {})
         for plugin_id in sorted(plugins):
             releases = sorted(
                 plugins[plugin_id],
@@ -2609,9 +2937,19 @@ class PluginMarketplaceService:
                 installable_release is not None
                 and unified_artifact
                 and self.unified is not None
-                and plugin_id not in installed
+                and (
+                    not isinstance(latest, MultiRuntimeReleaseRecord)
+                    or assurances["sandbox"]["available"]
+                )
             ):
                 try:
+                    self._assert_migration_owner(
+                        migrations.get(plugin_id), latest_index, publisher
+                    )
+                    if plugin_id in installed and plugin_id not in migrations:
+                        self._assert_legacy_successor(
+                            installed[plugin_id], latest, latest_index, publisher
+                        )
                     self._assert_unified_upgrade(
                         unified.get(plugin_id), latest, latest_index, publisher
                     )
@@ -2646,6 +2984,7 @@ class PluginMarketplaceService:
                         if unified_artifact
                         else (
                             plugin_id not in unified
+                            and plugin_id not in migrations
                             and assurances["sandbox"]["available"]
                             and (
                                 plugin_id not in installed
@@ -2659,6 +2998,12 @@ class PluginMarketplaceService:
                     )
                 ),
             }
+            if plugin_id in migrations and plugin_id in installed:
+                entry["legacyRollback"] = {
+                    "version": installed[plugin_id].version,
+                    "migrationGeneration": migrations[plugin_id]["generation"],
+                    "registryRevision": unified_snapshot["revision"],
+                }
             if isinstance(latest, MultiRuntimeReleaseRecord):
                 entry["assurances"] = assurances
             entries.append(entry)

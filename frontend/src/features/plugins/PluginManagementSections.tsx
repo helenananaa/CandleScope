@@ -243,6 +243,7 @@ export function MarketplacePanel({
           const update = status?.updates.find((item) => item.pluginId === entry.pluginId) ?? null;
           const installed = runtime.view.catalog?.plugins.find((item) => item.id === entry.pluginId) ?? null;
           const approval = candidate?.unifiedApproval;
+          const rollback = entry.legacyRollback;
           const activationReady = approval !== undefined || installed?.permissions.activationReady === true;
           const selectedArtifact = entry.latest.artifacts?.find(
             (artifact) => artifact.artifactId === entry.assurances?.platform.artifactId,
@@ -363,12 +364,15 @@ export function MarketplacePanel({
                       if (!(await confirmAction({
                         title: t("plugin.market.activateConfirm", { plugin: entry.pluginId, version: candidate.version }),
                         ...(approval ? {
-                          message: t("plugin.market.approveUnified", {
-                            digest: approval.packageSha256,
-                            permissions: approval.permissions.length
-                              ? t("plugin.market.chartScope")
-                              : t("format.none"),
-                          }),
+                          message: [
+                            t("plugin.market.approveUnified", {
+                              digest: approval.packageSha256,
+                              permissions: approval.permissions.length
+                                ? t("plugin.market.chartScope")
+                                : t("format.none"),
+                            }),
+                            approval.legacy ? t("plugin.market.copyLegacyData") : "",
+                          ].filter(Boolean).join(" "),
                         } : {}),
                         confirmLabel: t("plugin.market.activateObserve"),
                       }))) return;
@@ -381,6 +385,22 @@ export function MarketplacePanel({
                     })()}
                   >
                     {busy === `activate:${entry.pluginId}` ? t("plugin.market.activating") : t("plugin.market.activateObserve")}
+                  </button>
+                )}
+                {rollback && candidate?.phase !== "observing" && (
+                  <button
+                    type="button"
+                    data-marketplace-rollback={entry.pluginId}
+                    disabled={!runtime.view.managementAvailable || busy !== null}
+                    onClick={() => void (async () => {
+                      if (!(await confirmAction({
+                        title: t("plugin.rollbackAvailable", { target: `${entry.pluginId} ${rollback.version}` }),
+                        confirmLabel: t("plugin.rollback"),
+                      }))) return;
+                      void run(`rollback:${entry.pluginId}`, () => runtime.actions.rollbackMarketplaceMigration(entry.pluginId, rollback));
+                    })()}
+                  >
+                    {t("plugin.rollback")}
                   </button>
                 )}
               </div>

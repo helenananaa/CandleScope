@@ -1695,6 +1695,17 @@ test("marketplace v2 preserves separate supply-chain assurances and local-only t
   assert.equal(parsed.plugins[0]?.assurances?.sandbox.available, true);
   assert.equal(parsed.plugins[0]?.latest.artifacts?.[0]?.reviewPolicy.sourceBuild, false);
 
+  const migrated = structuredClone(catalog);
+  const migratedEntry = migrated.plugins[0]!;
+  Object.assign(migratedEntry.latest.artifacts[0]!, { packageFormat: "candlescope.unified-bundle/1", runtimeBindings: [] });
+  migratedEntry.latest.runtimeKinds = [];
+  migratedEntry.assurances.sandbox.runtimeKinds = [];
+  migratedEntry.assurances.sandbox.profiles = [];
+  Object.assign(migratedEntry, { legacyRollback: { version: "0.1.0", migrationGeneration: 4, registryRevision: 8 } });
+  const migratedResult = parsePluginMarketplaceCatalog(migrated).plugins[0]!;
+  assert.equal(migratedResult.latest.artifact.packageFormat, "candlescope.unified-bundle/1");
+  assert.equal(migratedResult.legacyRollback?.migrationGeneration, 4);
+
   const status = {
     schemaVersion: "candlescope.marketplace-status/2",
     enabled: true,

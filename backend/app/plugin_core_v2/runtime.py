@@ -11,6 +11,7 @@ import sys
 import time
 import uuid
 from collections.abc import Callable, Iterable
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -514,11 +515,19 @@ class CorePluginPlatform:
 
     @staticmethod
     def _sandbox_key(bundle: VerifiedPlatformBundle, publisher_identity: str) -> str:
+        return CorePluginPlatform._sandbox_key_for_identity(
+            bundle.manifest.plugin.id,
+            bundle.manifest.plugin.version,
+            publisher_identity,
+        )
+
+    @staticmethod
+    def _sandbox_key_for_identity(
+        plugin_id: str, version: str, publisher_identity: str
+    ) -> str:
+        major = version.split(".", 1)[0]
         return hashlib.sha256(
-            (
-                f"{publisher_identity}\0{bundle.manifest.plugin.id}\0"
-                f"{bundle.manifest.plugin.version.split('.', 1)[0]}"
-            ).encode("utf-8")
+            f"{publisher_identity}\0{plugin_id}\0{major}".encode("utf-8")
         ).hexdigest()[:20]
 
     @staticmethod
@@ -713,6 +722,7 @@ class CorePluginPlatform:
         async with self._reconcile_lock:
             if self._started:
                 return
+            await asyncio.to_thread(self.marketplace.recover_legacy_migrations)
             await asyncio.to_thread(self.marketplace.enforce_trust_policy)
             await self.live_broker.start()
             try:
@@ -797,6 +807,16 @@ class CorePluginPlatform:
         registry = await asyncio.to_thread(
             load_activation_registry, self.installer.registry_path
         )
+        fenced = await asyncio.to_thread(self.marketplace.legacy_fences)
+        if fenced:
+            registry = replace(
+                registry,
+                plugins=tuple(
+                    record
+                    for record in registry.plugins
+                    if record.plugin_id not in fenced
+                ),
+            )
         records = registry.by_id()
         bundles: dict[str, VerifiedPlatformBundle] = {}
         installations: dict[str, Path] = {}
@@ -898,7 +918,12 @@ class CorePluginPlatform:
     async def _add_live_plugin(self, plugin_id: str) -> None:
         record = self._records.get(plugin_id)
         bundle = self._bundles.get(plugin_id)
-        if record is None or bundle is None or record.state != "active":
+        if (
+            record is None
+            or bundle is None
+            or record.state != "active"
+            or self.marketplace.legacy_fenced(plugin_id)
+        ):
             return
         if not await asyncio.to_thread(
             self.grant_store.activation_ready,
@@ -1149,6 +1174,7 @@ class CorePluginPlatform:
             raise core_error(
                 "PLUGIN_CORE_NOT_STARTED", "plugin platform is not started"
             )
+        self.assert_legacy_mutable(plugin_id)
         record = self._records.get(plugin_id)
         if record is None or record.state != "active":
             raise core_error(
@@ -1159,6 +1185,7 @@ class CorePluginPlatform:
         owner = (plugin_id, entrypoint_id)
         lock = self._activation_locks.setdefault(owner, asyncio.Lock())
         async with lock:
+            self.assert_legacy_mutable(plugin_id)
             supervisor = self.manager.supervisor(plugin_id, entrypoint_id)
             if supervisor.state == "active":
                 return supervisor
@@ -1419,6 +1446,14 @@ class CorePluginPlatform:
             )
         return contribution
 
+    def assert_legacy_mutable(self, plugin_id: str) -> None:
+        if self.marketplace.legacy_fenced(plugin_id):
+            raise core_error(
+                "PLUGIN_CORE_MIGRATED",
+                "plugin is owned by the unified lifecycle",
+                plugin_id=plugin_id,
+            )
+
     def _resolve_full(self, full_id: str, *, kind: str) -> CoreContribution:
         contribution = self._contributions.get(full_id)
         if contribution is None or contribution.kind != kind:
@@ -1426,6 +1461,7 @@ class CorePluginPlatform:
                 "PLUGIN_CORE_CONTRIBUTION_NOT_FOUND",
                 "core contribution is not available",
             )
+        self.assert_legacy_mutable(contribution.plugin_id)
         return contribution
 
     async def read_settings(self, full_id: str) -> dict[str, Any]:
@@ -2338,6 +2374,7 @@ class CorePluginPlatform:
                 expected_sha256=claim.bundle_sha256,
                 host_version=self.installer.host_version,
             )
+            self.assert_legacy_mutable(bundle.manifest.plugin.id)
             preview_plugin = claim.preview.get("plugin")
             if (
                 not isinstance(preview_plugin, dict)
@@ -2435,6 +2472,7 @@ class CorePluginPlatform:
         confirmation_token: str,
         user_action_id: str,
     ) -> dict[str, Any]:
+        self.assert_legacy_mutable(plugin_id)
         bundle = self._bundles.get(plugin_id)
         if bundle is None:
             raise core_error(

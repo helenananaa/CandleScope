@@ -24,6 +24,7 @@ import type {
   PluginMarketplaceCatalog,
   PluginMarketplacePermissionDiff,
   PluginMarketplaceRelease,
+  PluginMarketplaceSignedArtifact,
   PluginMarketplaceStatus,
   PluginMarketplaceUpdate,
   PluginPaperAccountContribution,
@@ -2571,7 +2572,7 @@ function marketplacePermissionScopes(value: unknown, path: string) {
   return { required, optional };
 }
 
-function marketplaceSignedArtifact(value: unknown, path: string) {
+function marketplaceSignedArtifact(value: unknown, path: string): PluginMarketplaceSignedArtifact {
   const data = record(value, path);
   exact(data, [
     "artifactId",
@@ -2588,7 +2589,9 @@ function marketplaceSignedArtifact(value: unknown, path: string) {
     "provenance",
     "reviewPolicy",
     "signature",
-  ], [], path);
+  ], ["packageFormat"], path);
+  const packageFormat = data.packageFormat;
+  if (packageFormat !== undefined && packageFormat !== "candlescope.unified-bundle/1") fail(`${path}.packageFormat`);
   const artifactId = string(data.artifactId, `${path}.artifactId`, 128);
   if (!MARKETPLACE_LOCAL_ID.test(artifactId)) fail(`${path}.artifactId`);
   const fileName = string(data.fileName, `${path}.fileName`, 207);
@@ -2648,7 +2651,7 @@ function marketplaceSignedArtifact(value: unknown, path: string) {
     };
   });
   if (
-    !runtimeBindings.length
+    (!runtimeBindings.length && packageFormat === undefined)
     || new Set(runtimeBindings.map((item) => item.entrypointId)).size !== runtimeBindings.length
     || runtimeBindings.map((item) => item.entrypointId).join("\0")
       !== runtimeBindings.map((item) => item.entrypointId).sort().join("\0")
@@ -2682,6 +2685,7 @@ function marketplaceSignedArtifact(value: unknown, path: string) {
   exact(signature, ["algorithm", "keyId", "value"], [], `${path}.signature`);
   if (signature.algorithm !== "ed25519") fail(`${path}.signature.algorithm`);
   return {
+    ...(packageFormat === undefined ? {} : { packageFormat }),
     artifactId,
     os: oneOf(data.os, new Set(["windows", "linux", "macos"] as const), `${path}.os`),
     arch: oneOf(data.arch, new Set(["x86_64", "arm64"] as const), `${path}.arch`),
@@ -2777,6 +2781,7 @@ function marketplaceReleaseV2(value: unknown, path: string): PluginMarketplaceRe
     version: marketplaceVersion(data.version, `${path}.version`),
     publisherId,
     artifact: {
+      ...(first.packageFormat === undefined ? {} : { packageFormat: first.packageFormat }),
       fileName: first.fileName,
       url: first.url,
       sha256: first.sha256,
@@ -2947,7 +2952,7 @@ function marketplaceCandidate(value: unknown, path: string): PluginMarketplaceCa
   exact(observation, ["status", "observedAt", "detail"], [], `${path}.observation`);
   const approval = data.unifiedApproval === undefined ? null : record(data.unifiedApproval, `${path}.unifiedApproval`);
   const unifiedApproval = approval === null ? undefined : (() => {
-    exact(approval, ["packageSha256", "permissions", "previousGeneration"], [], `${path}.unifiedApproval`);
+    exact(approval, ["packageSha256", "permissions", "previousGeneration"], ["legacy"], `${path}.unifiedApproval`);
     const packageSha256 = digest(approval.packageSha256, `${path}.unifiedApproval.packageSha256`);
     const permissions = exactAcknowledgements(approval.permissions, `${path}.unifiedApproval.permissions`);
     if (packageSha256 !== bundleSha256 || permissions.some((permission) => permission !== "chart.compute/1")) {
@@ -2957,9 +2962,24 @@ function marketplaceCandidate(value: unknown, path: string): PluginMarketplaceCa
     if (required.map((permission) => permission.permissionId).join("\0") !== permissions.join("\0")) {
       fail(`${path}.unifiedApproval.permissions`);
     }
+    const legacy = approval.legacy === undefined ? null : record(approval.legacy, `${path}.unifiedApproval.legacy`);
+    if (legacy) {
+      exact(legacy, ["legacyActivationId", "legacyBundleSha256", "legacyGrantSha256"], [], `${path}.unifiedApproval.legacy`);
+      if (
+        approval.previousGeneration !== null || data.fromVersion === null
+        || !/^activation-[a-f0-9]{32}$/.test(string(legacy.legacyActivationId, `${path}.unifiedApproval.legacy.legacyActivationId`, 43))
+      ) fail(`${path}.unifiedApproval.legacy`);
+    }
     return {
       packageSha256,
       permissions,
+      ...(legacy ? {
+        legacy: {
+          legacyActivationId: string(legacy.legacyActivationId, `${path}.unifiedApproval.legacy.legacyActivationId`, 43),
+          legacyBundleSha256: digest(legacy.legacyBundleSha256, `${path}.unifiedApproval.legacy.legacyBundleSha256`),
+          legacyGrantSha256: digest(legacy.legacyGrantSha256, `${path}.unifiedApproval.legacy.legacyGrantSha256`),
+        },
+      } : {}),
       previousGeneration: approval.previousGeneration === null
         ? null
         : integer(approval.previousGeneration, `${path}.unifiedApproval.previousGeneration`, 1),
@@ -3130,12 +3150,14 @@ export function parsePluginMarketplaceCatalog(value: unknown): PluginMarketplace
   const plugins = array(data.plugins, "marketplaceCatalog.plugins", 20_000).map((raw, index) => {
     const path = `marketplaceCatalog.plugins[${index}]`;
     const item = record(raw, path);
+    const multiRuntime = "artifacts" in record(item.latest, `${path}.latest`);
+    if (multiRuntime && !schemaV2) fail(`${path}.latest`);
     exact(
       item,
-      schemaV2
+      multiRuntime
         ? ["pluginId", "publisher", "latest", "assurances", "releaseCount", "installedVersion", "installable"]
         : ["pluginId", "publisher", "latest", "releaseCount", "installedVersion", "installable"],
-      [],
+      ["legacyRollback"],
       path,
     );
     const pluginId = string(item.pluginId, `${path}.pluginId`, 128);
@@ -3143,7 +3165,7 @@ export function parsePluginMarketplaceCatalog(value: unknown): PluginMarketplace
     const publisher = record(item.publisher, `${path}.publisher`);
     exact(
       publisher,
-      schemaV2
+      multiRuntime
         ? ["publisherId", "displayName", "keyId", "status", "verificationTier"]
         : ["publisherId", "displayName", "keyId", "status"],
       [],
@@ -3158,10 +3180,10 @@ export function parsePluginMarketplaceCatalog(value: unknown): PluginMarketplace
     );
     const latest = marketplaceRelease(item.latest, `${path}.latest`);
     if (latest.pluginId !== pluginId || latest.publisherId !== publisherId) fail(path);
-    const verificationTier = schemaV2
+    const verificationTier = multiRuntime
       ? oneOf(publisher.verificationTier, new Set(["verified", "official"] as const), `${path}.publisher.verificationTier`)
       : undefined;
-    const assurances = schemaV2 ? (() => {
+    const assurances = multiRuntime ? (() => {
       const assurance = record(item.assurances, `${path}.assurances`);
       exact(assurance, [
         "publisherVerified",
@@ -3181,7 +3203,11 @@ export function parsePluginMarketplaceCatalog(value: unknown): PluginMarketplace
         trustProfile(profile, `${path}.assurances.sandbox.profiles[${profileIndex}]`)
       ));
       const sandboxAvailable = boolean(assurance.sandbox && sandbox.available, `${path}.assurances.sandbox.available`);
-      if (sandboxAvailable !== (profiles.length > 0 && profiles.every((profile) => profile.sandboxSupported))) fail(`${path}.assurances.sandbox.available`);
+      const platformArtifact = latest.artifacts?.find((artifact) => artifact.artifactId === record(assurance.platform, `${path}.assurances.platform`).artifactId);
+      if (sandboxAvailable !== (
+        (profiles.length > 0 || platformArtifact?.packageFormat === "candlescope.unified-bundle/1")
+        && profiles.every((profile) => profile.sandboxSupported)
+      )) fail(`${path}.assurances.sandbox.available`);
       const permissions = marketplacePermissionScopes(assurance.permissions, `${path}.assurances.permissions`);
       const platform = record(assurance.platform, `${path}.assurances.platform`);
       exact(platform, ["os", "arch", "available", "artifactId"], [], `${path}.assurances.platform`);
@@ -3213,6 +3239,8 @@ export function parsePluginMarketplaceCatalog(value: unknown): PluginMarketplace
     })() : undefined;
     const installable = boolean(item.installable, `${path}.installable`);
     if (installable && latest.artifact.size > MARKETPLACE_MAX_REMOTE_ARTIFACT_BYTES) fail(`${path}.installable`);
+    const rollback = item.legacyRollback === undefined ? undefined : record(item.legacyRollback, `${path}.legacyRollback`);
+    if (rollback) exact(rollback, ["version", "migrationGeneration", "registryRevision"], [], `${path}.legacyRollback`);
     return {
       pluginId,
       publisher: {
@@ -3227,6 +3255,13 @@ export function parsePluginMarketplaceCatalog(value: unknown): PluginMarketplace
       releaseCount: integer(item.releaseCount, `${path}.releaseCount`, 1, 20_000),
       installedVersion: item.installedVersion === null ? null : marketplaceVersion(item.installedVersion, `${path}.installedVersion`),
       installable,
+      ...(rollback ? {
+        legacyRollback: {
+          version: marketplaceVersion(rollback.version, `${path}.legacyRollback.version`),
+          migrationGeneration: integer(rollback.migrationGeneration, `${path}.legacyRollback.migrationGeneration`, 1),
+          registryRevision: integer(rollback.registryRevision, `${path}.legacyRollback.registryRevision`, 1),
+        },
+      } : {}),
     };
   });
   if (new Set(plugins.map((item) => item.pluginId)).size !== plugins.length) fail("marketplaceCatalog.plugins");

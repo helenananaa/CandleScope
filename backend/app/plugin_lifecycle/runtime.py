@@ -368,7 +368,12 @@ class UnifiedRuntime:
                             raise LifecycleError(
                                 "startup factory changed; restart required"
                             )
-                        package = await self._materialize(manifest, identity)
+                        migration = snapshot.get("marketplaceMigrations", {}).get(
+                            plugin_id
+                        )
+                        package = await self._materialize(
+                            manifest, identity, migration=migration
+                        )
                     root = package["root"]
                     for entry in manifest.entries:
                         if entry.kind not in {"backend", "sidecar", "data"}:
@@ -425,7 +430,7 @@ class UnifiedRuntime:
                     if current is not previous_scripts[runtime_id]:
                         await indicators.refresh_runtime(runtime_id)
 
-    async def _materialize(self, manifest, identity):
+    async def _materialize(self, manifest, identity, *, migration=None):
         root, files = await asyncio.to_thread(
             self.store.materialize, identity.package_sha256
         )
@@ -434,7 +439,10 @@ class UnifiedRuntime:
             "identity": identity,
             "root": root,
             "files": files,
-            "storage": self.store.private_directory(manifest.id),
+            "storage": self.store.private_directory(
+                manifest.id,
+                migration_generation=migration["generation"] if migration else None,
+            ),
             "data": {},
             "coreReady": False,
             "pendingOutputs": collections.deque(maxlen=32),

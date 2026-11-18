@@ -33,13 +33,15 @@ def sha(raw: bytes) -> str:
     return "sha256:" + hashlib.sha256(raw).hexdigest()
 
 
-def signed_package(tmp_path, builder, version, *, data="{}", permissions=()):
+def signed_package(
+    tmp_path, builder, version, *, data="{}", permissions=(), plugin_id=PLUGIN_ID
+):
     source = tmp_path / version
     (source / "sbom").mkdir(parents=True)
     manifest = json.dumps(
         {
             "schema": "candlescope.unified-plugin/1",
-            "id": PLUGIN_ID,
+            "id": plugin_id,
             "name": "Market data extension",
             "version": version,
             "trust": "restricted",
@@ -53,7 +55,7 @@ def signed_package(tmp_path, builder, version, *, data="{}", permissions=()):
             "bomFormat": "CycloneDX",
             "metadata": {
                 "component": {
-                    "name": PLUGIN_ID,
+                    "name": plugin_id,
                     "version": version,
                     "licenses": [{"expression": "MIT"}],
                 }
@@ -64,11 +66,11 @@ def signed_package(tmp_path, builder, version, *, data="{}", permissions=()):
     (source / "manifest.json").write_bytes(manifest)
     (source / "sbom/cyclonedx.json").write_bytes(sbom)
     (source / "data.json").write_text(data)
-    output = tmp_path / f"{PLUGIN_ID}-{version}.cspkg"
+    output = tmp_path / f"{plugin_id}-{version}.cspkg"
     package = build_package(source, output)
     builder.add_release_statement(
         {
-            "pluginId": PLUGIN_ID,
+            "pluginId": plugin_id,
             "version": version,
             "publisherId": PUBLISHER_ID,
             "artifact": {

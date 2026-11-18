@@ -17,6 +17,7 @@ import {
   reviewPluginTrustChange,
   confirmPluginTrustChange,
   activatePluginMarketplaceRelease,
+  rollbackPluginMarketplaceMigration,
   applyPluginMarketplaceRelease,
   issueLiveConfirmation,
   killLiveControl,
@@ -739,6 +740,10 @@ export function usePluginPlatformRuntime(identity: PluginMarketIdentity, liveCha
       activateMarketplaceRelease: (pluginId, approval) => withRefresh(
         () => activatePluginMarketplaceRelease(pluginId, approval),
         { kind: "message", key: "plugin.notice.marketplaceActivated" },
+      ),
+      rollbackMarketplaceMigration: (pluginId, review) => withRefresh(
+        () => rollbackPluginMarketplaceMigration(pluginId, review),
+        { kind: "message", key: "plugin.notice.state.rollback" },
       ),
       installBundle: async (file) => {
         try {

@@ -715,9 +715,9 @@ async def _startup_event_impl() -> None:
                 refresh_exchange_metadata,
                 evictor=evict_exchange_metadata,
             )
-            await plugin_platform_v2.start()
             if plugin_platform_v2.enabled:
                 plugin_platform_v2.marketplace.bind_unified(app.state.unified_plugin_runtime)
+            await plugin_platform_v2.start()
             plugin_platform_v2.publish_event(
                 "candlescope.app.ready/1",
                 {"hostVersion": PLUGIN_PLATFORM_V2_HOST_VERSION},
@@ -726,6 +726,7 @@ async def _startup_event_impl() -> None:
             code, message = _plugin_plane_issue_from_exception(exc)
             _mark_plugin_plane_degraded(code=code, message=message)
             await _stop_plugin_owner(plugin_platform_v2)
+            app.state.unified_plugin_runtime.marketplace_policy = None
             from app.plugin_core_v2 import DisabledCorePluginPlatform
 
             plugin_platform_v2 = DisabledCorePluginPlatform()
