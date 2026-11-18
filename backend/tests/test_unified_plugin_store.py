@@ -70,10 +70,10 @@ def raw_package(
     stream = io.BytesIO()
     with zipfile.ZipFile(stream, "w", compression=zipfile.ZIP_STORED) as archive:
         for name, data in files.items():
-            archive.writestr(name, data)
-        archive.writestr("bundle.json", json.dumps(descriptor))
+            archive.writestr(zipfile.ZipInfo(name), data)
+        archive.writestr(zipfile.ZipInfo("bundle.json"), json.dumps(descriptor))
         if duplicate:
-            archive.writestr(duplicate, b"duplicate")
+            archive.writestr(zipfile.ZipInfo(duplicate), b"duplicate")
     return stream.getvalue()
 
 

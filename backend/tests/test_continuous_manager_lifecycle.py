@@ -87,7 +87,7 @@ def test_close_reclaims_setup_cancelled_before_its_first_step(storage,tmp_path,m
     finally:source.close();store.close();service.shutdown()
 
 
-def test_startup_failure_drains_bound_owner_before_stopping_extensions(storage,tmp_path,monkeypatch):
+def test_startup_failure_drains_bound_owner_before_stopping_plugins(storage,tmp_path,monkeypatch):
     from app import main as module
     service,_,definition,factory,store,manager,source,receipt=source_setup(storage,tmp_path,monkeypatch)
     create_frozen(source,receipt,definition,factory,store)
@@ -97,18 +97,18 @@ def test_startup_failure_drains_bound_owner_before_stopping_extensions(storage,t
     monkeypatch.setattr(module,"app",SimpleNamespace(state=SimpleNamespace(data_manager_core=manager)))
     stopped=[]
     async def later_failure():raise ValueError("later startup failure")
-    async def extensions(_app):
+    async def stop_plugins(_app):
         assert store.closed and not active and not runtime.actors
-        stopped.append("extensions")
+        stopped.append("plugins")
     monkeypatch.setattr(module,"_startup_event_impl",later_failure)
-    monkeypatch.setattr(module,"stop_extensions",extensions)
+    monkeypatch.setattr(module,"stop_unified",stop_plugins)
     async def scenario():
         try:
             await runtime.start_existing("cs_source")
             await wait_row(store,"cs_source",lambda row:row["phase"]=="LIVE")
             with pytest.raises(ValueError,match="later startup failure"):
                 await module.startup_event()
-            assert stopped==["extensions"]
+            assert stopped==["plugins"]
         finally:await runtime.close();await manager.event_bus.close()
     try:asyncio.run(scenario())
     finally:source.close();store.close();service.shutdown()

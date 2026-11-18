@@ -212,10 +212,10 @@ def test_host_account_is_required_and_not_inferred_from_previous_intents():
         provider.close()
 
 
-@pytest.mark.parametrize("isolated", [False, True])
+@pytest.mark.parametrize("inline", [False, True])
 @pytest.mark.parametrize("source,quantities", [(SOURCE, [2, 2]), (PARTIAL_SOURCE, [4, 1, 3]), (CLOCK_SOURCE, [4, 1, 3]), (PERP_SOURCE, [4, 1, 3])])
 def test_chart_workspace_compiles_smokes_and_runs_through_host_ledger(
-    tmp_path, monkeypatch, isolated, source, quantities
+    tmp_path, inline, source, quantities
 ):
     from app.market_dataset.snapshot import MarketEvent
 
@@ -223,6 +223,7 @@ def test_chart_workspace_compiles_smokes_and_runs_through_host_ledger(
     from tests.test_backtest_control_plane import _settings
 
     service = BacktestService.start(_settings(tmp_path), now_ms=1, enforce_registered_revisions=True)
+    service._colocated_worker = inline
     provider = PineEngineProvider()
     try:
         revision = service.create_strategy_revision(
@@ -264,11 +265,6 @@ def test_chart_workspace_compiles_smokes_and_runs_through_host_ledger(
             )
             for i, value in enumerate([10, 20, 20, 5, 5, 5, 5])
         )
-        if isolated:
-            from app.backtest.strategy.isolated import IsolatedStrategyProvider
-            from app.backtest.strategy.pine_engine import REVISION
-
-            provider = IsolatedStrategyProvider(REVISION, step_timeout_s=5)
         completed = service.execute_bar_run(
             str(run["run_id"]),
             events=events,
