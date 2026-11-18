@@ -1,56 +1,51 @@
-"""Unified entry for the trusted-local Hello Command sample."""
+"""Unified Hello Command worker using the standard library only."""
 
 import json
 import re
 import sys
 from pathlib import Path
 
-from candlescope_plugin_sdk.platform_v2 import (
-    JsonLimits,
-    RpcError,
-    RpcFailure,
-    RpcRequest,
-    RpcSuccess,
-    canonical_dumps,
-    loads_strict,
-)
-from candlescope_plugin_sdk.unified import ActivationIdentity
-
 PROTOCOL = "candlescope.unified-entry/1"
-MAX_FRAME_BYTES = JsonLimits().max_message_bytes
+MAX_FRAME_BYTES = 1024 * 1024
+MAX_GENERATION = 2**53 - 1
 MANIFEST = json.loads(Path(__file__).with_name("manifest.json").read_bytes())
 
 
-def activation(request):
-    try:
-        identity = request.params["identity"]
-        package = ActivationIdentity(
-            identity["pluginId"],
-            identity["version"],
-            identity["packageSha256"],
-            identity["generation"],
-        )
-        if (
-            request.params["protocol"] == PROTOCOL
-            and package.plugin_id == MANIFEST["id"]
-            and package.plugin_version == MANIFEST["version"]
-            and package.generation == request.generation
-            and identity
-            == {
-                **package.to_wire(),
-                "entryId": "main",
-                "instanceId": identity["instanceId"],
-            }
-            and re.fullmatch(r"[a-f0-9]{32}", identity["instanceId"])
-        ):
-            return {"protocol": PROTOCOL, "identity": identity}
-    except (ValueError, KeyError, TypeError):
-        pass
-    raise ValueError("invalid unified activation identity")
+def activation(params, generation):
+    if not isinstance(params, dict) or params.get("protocol") != PROTOCOL:
+        raise ValueError("invalid unified activation protocol")
+    identity = params.get("identity")
+    if not isinstance(identity, dict) or set(identity) != {
+        "pluginId",
+        "version",
+        "packageSha256",
+        "generation",
+        "entryId",
+        "instanceId",
+    }:
+        raise ValueError("invalid unified activation identity")
+    digest, instance = identity["packageSha256"], identity["instanceId"]
+    if (
+        identity["pluginId"] != MANIFEST["id"]
+        or identity["version"] != MANIFEST["version"]
+        or type(identity["generation"]) is not int
+        or identity["generation"] != generation
+        or identity["entryId"] != "main"
+        or not isinstance(digest, str)
+        or not re.fullmatch(r"sha256:[a-f0-9]{64}", digest)
+        or not isinstance(instance, str)
+        or not re.fullmatch(r"[a-f0-9]{32}", instance)
+    ):
+        raise ValueError("invalid unified activation identity")
+    return {"protocol": PROTOCOL, "identity": identity}
 
 
 def greet(params):
-    if set(params) != {"input"} or not isinstance(params["input"], dict):
+    if (
+        not isinstance(params, dict)
+        or set(params) != {"input"}
+        or not isinstance(params["input"], dict)
+    ):
         raise ValueError("hello input must be an object")
     values = params["input"]
     if set(values) - {"name"}:
@@ -68,24 +63,40 @@ def serve():
     while line := sys.stdin.buffer.readline(MAX_FRAME_BYTES + 2):
         if not line.endswith(b"\n") or len(line.rstrip(b"\r\n")) > MAX_FRAME_BYTES:
             return 2
-        request = RpcRequest.from_wire(loads_strict(line.rstrip(b"\r\n")))
         try:
-            if request.method == "activate" and current is None:
-                result = activation(request)
-                current = request.generation
-            elif request.method == "invoke" and request.generation == current:
-                result = greet(request.params)
+            request = json.loads(line)
+        except (UnicodeError, ValueError):
+            return 2
+        if not isinstance(request, dict) or request.get("jsonrpc") != "2.0":
+            return 2
+        method = request.get("method")
+        if method == "cancel" and "id" not in request:
+            continue
+        generation = request.get("generation")
+        if (
+            "id" not in request
+            or type(generation) is not int
+            or not 1 <= generation <= MAX_GENERATION
+        ):
+            return 2
+        response = {"jsonrpc": "2.0", "id": request["id"], "generation": generation}
+        try:
+            if method == "activate" and current is None:
+                response["result"] = activation(request.get("params"), generation)
+                current = generation
+            elif method == "invoke" and generation == current:
+                response["result"] = greet(request.get("params"))
             else:
                 raise ValueError("unsupported method or inactive generation")
-            response = RpcSuccess(request.id, result, request.generation)
         except ValueError as error:
-            response = RpcFailure(
-                request.id,
-                RpcError(-32602, str(error), "INVALID_CONTRACT"),
-                request.generation,
-            )
-        wire = canonical_dumps(response.to_wire()).encode("utf-8")
-        sys.stdout.buffer.write(wire + b"\n")
+            response["error"] = {
+                "code": -32602,
+                "message": str(error),
+                "data": {"code": "INVALID_CONTRACT"},
+            }
+        sys.stdout.buffer.write(
+            json.dumps(response, ensure_ascii=False).encode("utf-8") + b"\n"
+        )
         sys.stdout.buffer.flush()
     return 0
 
