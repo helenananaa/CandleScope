@@ -281,6 +281,7 @@ async def test_application_lifecycle_owns_plugin_host_and_health_summary(
         assert isinstance(routing.host, ScriptRuntimeHost)
         owner = main_module.app.state.unified_plugin_runtime
         assert routing.host.runtime is owner
+        assert main_module.app.state.plugin_platform_v2.marketplace.unified is owner
         assert main_module.app.state.indicator_runtime_service is routing
         health = await main_module.health_check()
         assert health["unified_plugins"] == {
