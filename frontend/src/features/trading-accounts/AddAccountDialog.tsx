@@ -24,7 +24,7 @@ export default function AddAccountDialog({
   const [preset, setPreset] = useState<Preset>("practice");
   const [name, setName] = useState("");
   const [initialBalance, setInitialBalance] = useState("10000");
-  const [positionMode, setPositionMode] = useState<"ONE_WAY" | "HEDGE">("ONE_WAY");
+  const [positionMode, setPositionMode] = useState<"ONE_WAY" | "HEDGE">("HEDGE");
   const [leverage, setLeverage] = useState("10");
   const [takerFeeRate, setTakerFeeRate] = useState("0.0005");
   const [makerFeeRate, setMakerFeeRate] = useState("0.0002");

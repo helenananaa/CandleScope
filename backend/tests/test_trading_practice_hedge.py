@@ -11,7 +11,7 @@ from tests.test_trading_accounts import service, T0
 
 def create(service, initial="1000"):
     return service.create_account({"kind": "practice", "name": "Hedge", "settings": {
-        "positionMode": "HEDGE", "initialBalance": initial, "leverage": "10",
+        "initialBalance": initial, "leverage": "10",
         "takerFeeRate": "0", "makerFeeRate": "0", "slippageBps": "0",
     }})["id"]
 
@@ -108,6 +108,7 @@ def test_colliding_orders_cannot_spend_same_collateral(service):
 
 def test_explicit_intent_mode_and_spot_contract(service):
     account = create(service)
+    assert service.account_summary(account)["account"]["settings"]["positionMode"] == "HEDGE"
     with pytest.raises(TradingAccountError):
         order(service, account, "LONG", "open", 1, 100, side="sell")
     with pytest.raises(TradingAccountError):
@@ -145,7 +146,7 @@ def test_equal_legs_keep_feed_without_orders_and_competing_markets_share_funds(s
 def test_legacy_order_fill_and_link_survive_v3_migration(service, tmp_path):
     import sqlite3
 
-    account = service.create_account({"kind": "practice", "name": "Legacy"})["id"]
+    account = service.create_account({"kind": "practice", "name": "Legacy", "settings": {"positionMode": "ONE_WAY"}})["id"]
     instrument = {"exchange": "binance", "marketType": "futures", "symbol": "BTCUSDT"}
     service.place_order(account, {**instrument, "type": "market", "side": "buy", "qty": "1", "referencePrice": "100"})
     service.place_order(account, {**instrument, "type": "market", "side": "sell", "qty": "2", "referencePrice": "100"})
@@ -167,6 +168,8 @@ def test_legacy_order_fill_and_link_survive_v3_migration(service, tmp_path):
         state = migrated.account_state(account)
         assert state["summary"] == original["summary"]
         assert state["trades"] == original["trades"]
+        updated = migrated.update_account(account, {"settings": {"leverage": "5"}})
+        assert updated["settings"]["positionMode"] == "ONE_WAY"
         assert migrated.entry_detail(note["id"])["tradeId"] == reversed_trade["id"]
     finally:
         store.close()

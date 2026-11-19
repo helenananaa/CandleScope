@@ -243,7 +243,11 @@ class TradingAccountService(JournalService):
 
     @staticmethod
     def _practice_settings(raw: Any, *, base: dict[str, str] | None = None) -> dict[str, str]:
-        source = {**DEFAULT_PRACTICE_SETTINGS, **(base or {})}
+        source = DEFAULT_PRACTICE_SETTINGS.copy()
+        if base is not None:
+            source.update(base)
+            # Accounts created before position modes always used net positions.
+            source["positionMode"] = base.get("positionMode", "ONE_WAY")
         if raw is not None:
             if not isinstance(raw, dict):
                 raise invalid("settings must be an object")

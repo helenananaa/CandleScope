@@ -29,7 +29,7 @@ DEFAULT_PRACTICE_SETTINGS: dict[str, str] = {
     "makerFeeRate": "0.0002",
     "slippageBps": "1",
     "leverage": "10",
-    "positionMode": "ONE_WAY",
+    "positionMode": "HEDGE",
 }
 
 MAX_NAME_LENGTH = 80

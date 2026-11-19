@@ -102,12 +102,13 @@ try {
   await panel().getByRole("button", { name: "添加账户", exact: true }).first().click();
   const dialog = q.s.page.getByRole("dialog", { name: "添加账户" });
   await dialog.getByLabel("名称", { exact: true }).fill("Hedge 343");
-  await dialog.getByRole("radio", { name: "多空双向持仓" }).click();
+  assert.equal(await dialog.getByRole("radio", { name: "多空双向持仓" }).getAttribute("aria-checked"), "true");
   await dialog.getByLabel("初始资金（USDT）", { exact: true }).fill("1000000");
   const creation = q.s.page.waitForResponse(r => r.url().endsWith("/trading/accounts") && r.request().method() === "POST");
   await dialog.getByRole("button", { name: "创建", exact: true }).click();
   const account = await (await creation).json();
   assert.equal(account.settings.positionMode, "HEDGE");
+  await q.record("default-account-mode", { preselected: "HEDGE", saved: account.settings.positionMode });
   const path = "/" + account.id;
   const summary = () => api(path + "/summary");
   const order = async (symbol, positionSide, positionEffect, qty, extra = {}) => {

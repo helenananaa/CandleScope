@@ -17,7 +17,7 @@ The existing committed-wakeup helper coalesces notifications. The manager limits
 subscriptions to 16 and reads at most once per second per subscription, with
 read-free 15 s heartbeats. Same-account readers may share a 5 ms batch only before a WAL snapshot starts; late readers acquire a new snapshot. Delivered views are independently copied, and the last reader releases its task. Closing views releases subscriptions, not background
 matching. Reconnect always obtains a complete state; the stream is not a
-resumable fill log. Practice accounts default to ONE_WAY. HEDGE accounts accept an explicit
+resumable fill log. New practice accounts default to HEDGE for futures. ONE_WAY remains selectable. HEDGE accounts accept an explicit
 LONG/SHORT positionSide and open/close positionEffect for futures orders.
 The same path matcher processes both legs in price/time order. Gross margin
 uses the sum of both marked notionals divided by leverage. Each close and
