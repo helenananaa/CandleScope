@@ -1155,13 +1155,15 @@ class BackfillScheduler:
         skipped: list[tuple[int, int, int, str]] = []
         next_delay: float | None = None
         try:
-            # The extra candidate slot exists only for the deliberately
-            # single-lane configuration. It is admitted below solely for one
-            # interactive request while maintenance occupies that lane.
-            candidate_capacity = self._max_concurrency + (
-                1 if self._max_concurrency == 1 else 0
-            )
-            while len(self._tasks) < candidate_capacity and self._ready:
+            # Inspect the queue only when some work can dispatch. A full
+            # foreground lane cannot use the maintenance reserve; cycling
+            # every queued chunk after each new demand is quadratic work.
+            # Recheck after dispatch so a newly started maintenance job can
+            # still admit its one interactive reserve in this same drain.
+            while self._ready and (
+                len(self._tasks) < self._max_concurrency
+                or self._has_foreground_reserve_capacity()
+            ):
                 item = self._pop_ready()
                 chunk = self._chunks.get(item[3])
                 if chunk is None:
@@ -1309,10 +1311,12 @@ class BackfillScheduler:
     def _can_use_foreground_reserve(self, request: RepairRequest) -> bool:
         """Admit one visible request beside one single-lane maintenance task."""
 
+        return self._is_interactive(request) and self._has_foreground_reserve_capacity()
+
+    def _has_foreground_reserve_capacity(self) -> bool:
         if (
             self._max_concurrency != 1
             or len(self._tasks) != 1
-            or not self._is_interactive(request)
         ):
             return False
         active_chunk_id = next(iter(self._tasks), None)
