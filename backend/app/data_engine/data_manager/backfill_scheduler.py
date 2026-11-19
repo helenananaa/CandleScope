@@ -426,6 +426,8 @@ class BackfillScheduler:
         request: RepairRequest,
     ) -> bool:
         self._merge_derived_targets_into_state(state, request)
+        interest_before = (dict(state.demand_leases), list(state.persistent_scheduling),
+                           state.request.metadata.get("_api_latest_interest"))
         incoming_leases = self._demand_leases_from_request(request)
         state.demand_leases.update(incoming_leases)
         if not incoming_leases:
@@ -454,6 +456,13 @@ class BackfillScheduler:
             chunk = self._chunks.get(chunk_id)
             if chunk is not None and requires_trusted_finality:
                 chunk.request.metadata["requires_trusted_finality"] = True
+        if not upgraded_finality and interest_before == (
+                dict(state.demand_leases), list(state.persistent_scheduling),
+                state.request.metadata.get("_api_latest_interest")):
+            # The same interest again (a chart re-submitting its gap on every
+            # poll): re-ranking would rebuild the ready queue and reissue every
+            # chunk of this request for an identical result.
+            return upgraded_finality
         self._restore_remaining_interest(state)
         if int(state.request.priority or 100) < previous_priority:
             self.priority_promotions += 1
