@@ -47,6 +47,16 @@ test("rewind selects saved content, clips snapshots and separates later review n
   assert.equal(note.body, "future"); // projection never mutates source
 });
 
+test("a hedge leg becomes visible only once the note was linked to that trade", () => {
+  const note: JournalEntry = { ...baseNote, positionSide: "SHORT", tradeLinkedAtMs: 3000 };
+  const review = { ...note, marketTimeMs: 1000 };
+  for (const cursor of [2, 3, 4, 2]) {
+    const result = journalAtCursor([note, review], cursor);
+    assert.equal(result.notes[0]!.positionSide, cursor > 3 ? "SHORT" : undefined);
+    assert.equal(result.reviewNotes[0]!.positionSide, cursor > 3 ? "SHORT" : undefined);
+  }
+});
+
 test("legacy or missing revision coverage never falls back to current text", () => {
   const note: JournalEntry = { ...baseNote, id: "old", createdAtMs: 1000, marketTimeMs: null, fields: { entryBasis: "future" },
     body: "future", snapshots: [], plan: null,
