@@ -86,6 +86,17 @@ export function parseReplayNote(value: unknown): ReplayNote {
   return { ...note, timelineSequence, ...(source.links === undefined ? {} : { links }),
     ...(source.screenshots === undefined ? {} : { screenshots }) };
 }
+// An original written after event N first appears in Review at the next event.
+function replayNoteVisibleAt(timeMs: number, sequence: number, reviewNote: boolean, context: ReplayNoteContext, cutoff: number): boolean {
+  return timeMs <= cutoff && (sequence < context.timelineSequence
+    || (sequence === context.timelineSequence && (context.reviewId === null || reviewNote)));
+}
+
+export function replayNoteContextVisibleAt(source: ReplayNoteContext, view: ReplayNoteContext, cutoff: number): boolean {
+  return source.runId === view.runId && source.trackId === view.trackId && source.dataEpoch === view.dataEpoch
+    && replayNoteVisibleAt(source.virtualTimeMs, source.timelineSequence, source.reviewNote, view, cutoff);
+}
+
 export function parseReplayNotesResponse(value: unknown): ReplayNotesResponse {
   const source = exact(value, ["protocol", "schema_version", "run_id", "track_id", "context", "asOfMs", "notes"]);
   if (source.protocol !== "replay.v3" || source.schema_version !== "replay.notes.v1"
@@ -94,7 +105,8 @@ export function parseReplayNotesResponse(value: unknown): ReplayNotesResponse {
   const asOfMs = integer(source.asOfMs), notes = (source.notes as unknown[]).map(parseReplayNote);
   if (context.runId !== run_id || context.trackId !== track_id || asOfMs > context.virtualTimeMs
     || new Set(notes.map(note => note.id)).size !== notes.length
-    || notes.some(note => note.runId !== run_id || note.trackId !== track_id || note.effectiveTimeMs > asOfMs || note.timelineSequence > context.timelineSequence
+    || notes.some(note => note.runId !== run_id || note.trackId !== track_id
+      || !replayNoteVisibleAt(note.effectiveTimeMs, note.timelineSequence, note.reviewNote, context, asOfMs)
       || note.screenshots?.some(capture => capture.dataEpoch !== context.dataEpoch))
     || new TextEncoder().encode(JSON.stringify(notes.map(note => note.fields))).length > 8 * 1024 * 1024) fail();
   return { protocol: "replay.v3", schema_version: "replay.notes.v1", run_id, track_id, context, asOfMs, notes };
@@ -120,7 +132,7 @@ export function parseReplayNoteVersions(value: unknown): ReplayNoteVersionsRespo
   const nextBeforeRevision = source.nextBeforeRevision === null ? null : integer(source.nextBeforeRevision, 100);
   if (context.runId !== run_id || context.trackId !== track_id || asOfMs > context.virtualTimeMs
     || versions.some((version, index) => version.id !== note_id || version.runId !== run_id || version.trackId !== track_id
-      || version.effectiveTimeMs > asOfMs || version.timelineSequence > context.timelineSequence
+      || !replayNoteVisibleAt(version.effectiveTimeMs, version.timelineSequence, version.reviewNote, context, asOfMs)
       || version.screenshots?.some(capture => capture.dataEpoch !== context.dataEpoch)
       || (index > 0 && version.revisionCount >= versions[index - 1]!.revisionCount))
     || (nextBeforeRevision !== null && (nextBeforeRevision < 2 || nextBeforeRevision !== versions.at(-1)?.revisionCount))) fail();
