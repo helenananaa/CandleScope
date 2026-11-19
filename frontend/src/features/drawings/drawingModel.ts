@@ -27,6 +27,7 @@ export const LINE_TOOL_IDS = new Set([
   ...AXIS_LINE_TOOL_IDS,
   ...ANGLE_TOOL_IDS,
   ...RANGE_MEASURE_TOOL_IDS,
+  "path-line", "path-arrow",
   ...CHANNEL_TOOL_IDS,
 ]);
 export const FIB_TOOL_IDS = new Set<DrawingToolId>(["fibonacci"]);
@@ -57,6 +58,7 @@ export const DRAWING_ENGINE_TOOL_IDS = new Set<DrawingToolId>([
   ...AXIS_LINE_TOOL_IDS,
   ...ANGLE_TOOL_IDS,
   ...RANGE_MEASURE_TOOL_IDS,
+  "path-line", "path-arrow",
   ...CHANNEL_TOOL_IDS,
   ...SHAPE_TOOL_IDS,
   "text",

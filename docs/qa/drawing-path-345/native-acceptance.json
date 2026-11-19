@@ -1,0 +1,413 @@
+{
+  "schema": "candlescope.drawing-path-native/1",
+  "sourceCommit": "1f6d116c7acb7d408f5d54e1641ff3724294fae7",
+  "platform": "26.6.2 arm64",
+  "package": "CandleScope 0.3.0, electron-builder --dir --mac --arm64",
+  "appAsarSha256": "76d5878a7b792f982b8c574ff199120c42ce7e5f9473757f32081e89b57a768d",
+  "transport": "Packaged renderer, real chart pointer and keyboard, isolated LIVE profile with seeded minute bars",
+  "passed": true,
+  "errors": [],
+  "steps": [
+    {
+      "name": "vertex-drag-insert-undo",
+      "at": "2026-11-19T08:33:15.274Z",
+      "evidence": {
+        "original": [
+          {
+            "time": 1795070453.8554218,
+            "price": 62688.09634188627
+          },
+          {
+            "time": 1795070453.8554218,
+            "price": 63274.998387656036
+          },
+          {
+            "time": 1795057585.4819276,
+            "price": 62807.02803398058
+          },
+          {
+            "time": 1795060962.2891567,
+            "price": 63068.16066227462
+          }
+        ],
+        "edited": [
+          {
+            "time": 1795070453.8554218,
+            "price": 62688.09634188627
+          },
+          {
+            "time": 1795072370.4216866,
+            "price": 63362.90442094314
+          },
+          {
+            "time": 1795057585.4819276,
+            "price": 62807.02803398058
+          },
+          {
+            "time": 1795060962.2891567,
+            "price": 63068.16066227462
+          }
+        ]
+      }
+    },
+    {
+      "name": "two-independent-charts",
+      "at": "2026-11-19T08:33:16.709Z",
+      "evidence": {
+        "expected": [
+          {
+            "id": "path_1",
+            "kind": "path",
+            "geometry": {
+              "kind": "path",
+              "dataPoints": [
+                {
+                  "time": 1795070453.8554218,
+                  "price": 62688.09634188627
+                },
+                {
+                  "time": 1795072370.4216866,
+                  "price": 63362.90442094314
+                },
+                {
+                  "time": 1795057585.4819276,
+                  "price": 62807.02803398058
+                },
+                {
+                  "time": 1795060962.2891567,
+                  "price": 63068.16066227462
+                }
+              ]
+            },
+            "style": {
+              "kind": "path",
+              "color": "#f59e0b",
+              "lineWidth": 2,
+              "arrowEnd": true
+            }
+          },
+          {
+            "id": "path_2",
+            "kind": "path",
+            "geometry": {
+              "kind": "path",
+              "dataPoints": [
+                {
+                  "time": 1795060146.764667,
+                  "price": 63533.18724359245
+                },
+                {
+                  "time": 1795066342.7412338,
+                  "price": 63429.148155904564
+                }
+              ]
+            },
+            "style": {
+              "kind": "path",
+              "color": "#f59e0b",
+              "lineWidth": 2,
+              "arrowEnd": false
+            }
+          }
+        ],
+        "other": []
+      }
+    },
+    {
+      "name": "saved-at-15m",
+      "at": "2026-11-19T08:33:33.191Z",
+      "evidence": {
+        "drawings": [
+          {
+            "id": "path_1",
+            "kind": "path",
+            "geometry": {
+              "kind": "path",
+              "dataPoints": [
+                {
+                  "time": 1795070453.8554218,
+                  "price": 62688.09634188627
+                },
+                {
+                  "time": 1795072370.4216866,
+                  "price": 63362.90442094314
+                },
+                {
+                  "time": 1795057585.4819276,
+                  "price": 62807.02803398058
+                },
+                {
+                  "time": 1795060962.2891567,
+                  "price": 63068.16066227462
+                }
+              ]
+            },
+            "style": {
+              "kind": "path",
+              "color": "#f59e0b",
+              "lineWidth": 2,
+              "arrowEnd": true
+            }
+          },
+          {
+            "id": "path_2",
+            "kind": "path",
+            "geometry": {
+              "kind": "path",
+              "dataPoints": [
+                {
+                  "time": 1795060146.764667,
+                  "price": 63533.18724359245
+                },
+                {
+                  "time": 1795066342.7412338,
+                  "price": 63429.148155904564
+                }
+              ]
+            },
+            "style": {
+              "kind": "path",
+              "color": "#f59e0b",
+              "lineWidth": 2,
+              "arrowEnd": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "quit-requested",
+      "at": "2026-11-19T08:33:33.239Z",
+      "evidence": {
+        "ownedProcessCount": 10
+      }
+    },
+    {
+      "name": "quit-completed",
+      "at": "2026-11-19T08:33:41.177Z",
+      "evidence": {
+        "elapsedMs": 7938
+      }
+    },
+    {
+      "name": "restored-after-full-exit",
+      "at": "2026-11-19T08:33:54.410Z",
+      "evidence": {
+        "restored": [
+          {
+            "id": "path_1",
+            "kind": "path",
+            "geometry": {
+              "kind": "path",
+              "dataPoints": [
+                {
+                  "time": 1795070453.8554218,
+                  "price": 62688.09634188627
+                },
+                {
+                  "time": 1795072370.4216866,
+                  "price": 63362.90442094314
+                },
+                {
+                  "time": 1795057585.4819276,
+                  "price": 62807.02803398058
+                },
+                {
+                  "time": 1795060962.2891567,
+                  "price": 63068.16066227462
+                }
+              ]
+            },
+            "style": {
+              "kind": "path",
+              "color": "#f59e0b",
+              "lineWidth": 2,
+              "arrowEnd": true
+            }
+          },
+          {
+            "id": "path_2",
+            "kind": "path",
+            "geometry": {
+              "kind": "path",
+              "dataPoints": [
+                {
+                  "time": 1795060146.764667,
+                  "price": 63533.18724359245
+                },
+                {
+                  "time": 1795066342.7412338,
+                  "price": 63429.148155904564
+                }
+              ]
+            },
+            "style": {
+              "kind": "path",
+              "color": "#f59e0b",
+              "lineWidth": 2,
+              "arrowEnd": false
+            }
+          }
+        ],
+        "packaged": true
+      }
+    },
+    {
+      "name": "linked-create-delete-undo",
+      "at": "2026-11-19T08:33:55.972Z",
+      "evidence": {
+        "groupId": "group-d355787b-0268-4ada-9932-7ea51a9c664c",
+        "first": [
+          {
+            "id": "path_3",
+            "kind": "path",
+            "geometry": {
+              "kind": "path",
+              "dataPoints": [
+                {
+                  "time": 1795055547.8114293,
+                  "price": 62631.16668962211
+                },
+                {
+                  "time": 1795064171.940975,
+                  "price": 63325.27943794342
+                },
+                {
+                  "time": 1795072209.9646292,
+                  "price": 62924.392196730216
+                }
+              ]
+            },
+            "style": {
+              "kind": "path",
+              "color": "#f59e0b",
+              "lineWidth": 2,
+              "arrowEnd": true
+            }
+          }
+        ],
+        "second": [
+          {
+            "id": "path_3",
+            "kind": "path",
+            "geometry": {
+              "kind": "path",
+              "dataPoints": [
+                {
+                  "time": 1795055547.8114293,
+                  "price": 62631.16668962211
+                },
+                {
+                  "time": 1795064171.940975,
+                  "price": 63325.27943794342
+                },
+                {
+                  "time": 1795072209.9646292,
+                  "price": 62924.392196730216
+                }
+              ]
+            },
+            "style": {
+              "kind": "path",
+              "color": "#f59e0b",
+              "lineWidth": 2,
+              "arrowEnd": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "quit-requested",
+      "at": "2026-11-19T08:33:56.502Z",
+      "evidence": {
+        "ownedProcessCount": 10
+      }
+    },
+    {
+      "name": "quit-completed",
+      "at": "2026-11-19T08:34:03.437Z",
+      "evidence": {
+        "elapsedMs": 6935
+      }
+    },
+    {
+      "name": "linked-restart-interval-round-trip",
+      "at": "2026-11-19T08:34:59.806Z",
+      "evidence": {
+        "first": [
+          {
+            "id": "path_3",
+            "kind": "path",
+            "geometry": {
+              "kind": "path",
+              "dataPoints": [
+                {
+                  "time": 1795055547.8114293,
+                  "price": 62631.16668962211
+                },
+                {
+                  "time": 1795064171.940975,
+                  "price": 63325.27943794342
+                },
+                {
+                  "time": 1795072209.9646292,
+                  "price": 62924.392196730216
+                }
+              ]
+            },
+            "style": {
+              "kind": "path",
+              "color": "#f59e0b",
+              "lineWidth": 2,
+              "arrowEnd": true
+            }
+          }
+        ],
+        "second": [
+          {
+            "id": "path_3",
+            "kind": "path",
+            "geometry": {
+              "kind": "path",
+              "dataPoints": [
+                {
+                  "time": 1795055547.8114293,
+                  "price": 62631.16668962211
+                },
+                {
+                  "time": 1795064171.940975,
+                  "price": 63325.27943794342
+                },
+                {
+                  "time": 1795072209.9646292,
+                  "price": 62924.392196730216
+                }
+              ]
+            },
+            "style": {
+              "kind": "path",
+              "color": "#f59e0b",
+              "lineWidth": 2,
+              "arrowEnd": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "quit-requested",
+      "at": "2026-11-19T08:34:59.856Z",
+      "evidence": {
+        "ownedProcessCount": 10
+      }
+    },
+    {
+      "name": "quit-completed",
+      "at": "2026-11-19T08:35:06.982Z",
+      "evidence": {
+        "elapsedMs": 7126
+      }
+    }
+  ]
+}

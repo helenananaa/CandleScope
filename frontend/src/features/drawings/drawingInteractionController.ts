@@ -161,6 +161,7 @@ import type {
   AngleToolId,
   ArrowToolId,
   ChannelToolId,
+  PathToolId,
   RangeMeasureToolId,
   AxisLineToolId,
   BasicLineToolId,
@@ -269,12 +270,14 @@ type TwoPointDrawingPrimitive = LineDrawingPrimitive
 type LineToolId = RangeMeasureToolId
   | BasicLineToolId
   | ArrowToolId
+  | PathToolId
   | ChannelToolId
   | AxisLineToolId
   | AngleToolId;
 type TwoPointCreationTool = RangeMeasureToolId
   | BasicLineToolId
   | ArrowToolId
+  | PathToolId
   | ChannelToolId
   | AngleToolId
   | FibonacciToolId
@@ -288,6 +291,7 @@ function isLineToolId(tool: DrawingToolId | null | undefined): tool is LineToolI
     || tool === "line-vertical"
     || tool === "line-cross"
     || tool === "line-arrow"
+    || tool === "path-line" || tool === "path-arrow"
     || tool === "channel-parallel"
     || tool === "measure-price"
     || tool === "measure-time"
@@ -318,6 +322,7 @@ function isTwoPointCreationTool(
     || tool === "line-ray"
     || tool === "line-infinite"
     || tool === "line-arrow"
+    || tool === "path-line" || tool === "path-arrow"
     || tool === "channel-parallel"
     || tool === "measure-price"
     || tool === "measure-time"
@@ -740,6 +745,14 @@ export function dynamicDecorationsForSavedDrawingDraft(
     const first = projected[0];
     const last = projected.at(-1);
     if (!first || !last) return [];
+    if (saved.type === "path") {
+      if (projected.length !== saved.dataPoints.length) return [];
+      const tip = projected[projected.length - 1]!;
+      let headSegment = projected.length - 2;
+      while (headSegment >= 0 && projected[headSegment]!.x === tip.x && projected[headSegment]!.y === tip.y) headSegment--;
+      return projected.slice(1).map((to, i) => ({ type: "line" as const, from: projected[i]!, to, color, lineWidth,
+        arrowEnd: saved.arrowEnd === true && i === headSegment, handles: i === 0 ? projected : [] }));
+    }
     if (saved.type === "channel") {
       const channel = parallelChannelScreenGeometry(projected[0], projected[1], projected[2]);
       if (!channel) return [];
@@ -1107,7 +1120,7 @@ export function dynamicSelectionHandlesForSavedDrawing(
     const projected = saved.dataPoints
       .map((point) => dataToScreen(point))
       .filter((point): point is ScreenPoint => point !== null);
-    if (projected.length < 2) return [];
+    if (projected.length < 2 || (saved.type === "path" && projected.length !== saved.dataPoints.length)) return [];
     if (saved.type === "shape") {
       const first = projected[0];
       const last = projected.at(-1);
@@ -1487,6 +1500,8 @@ export interface DrawingInteractionRuntime extends DrawingObjectApi {
   primitivesRef: MutableRefObject<DrawingPrimitive[]>;
   selectedPrimId: string | null;
   selectedDrawingMeta: SelectedDrawingMeta | null;
+  pathMenu: Readonly<{ x: number; y: number; vertex: boolean; disabled: boolean; apply(): void }> | null;
+  closePathMenu(): void;
   selectedDrawingSettingsRequest: Readonly<{ id: string; revision: number }> | null;
   subscribeVisibleScenePublication(
     listener: (stamp: DrawingCommittedPaintTicket) => void,
@@ -1704,6 +1719,8 @@ export function useDrawing({
   const previewEntityRef = useRef<SavedDrawing | null>(null);
   const anchorDataRef = useRef<DrawingDataPoint | null>(null); // { logical, price } first click
   // Channels take a third click: the fixed baseline end between clicks two and three.
+  const pathCountBeforeDown = useRef(0);
+  const pathPointsRef = useRef<DrawingDataPoint[]>([]);
   const channelBaselineEndRef = useRef<DrawingDataPoint | null>(null);
   const pendingTwoPointToolRef = useRef<TwoPointCreationTool | null>(null);
   const pendingToolExitAfterMouseUpRef = useRef<DrawingToolId | null>(null);
@@ -1730,6 +1747,10 @@ export function useDrawing({
       ? { mutatePrimitiveVisualState: false }
       : { onSelectionChange: notifyDrawingSceneInvalidation }),
   });
+  const [pathMenu, setPathMenu] = useState<DrawingInteractionRuntime["pathMenu"]>(null);
+  const closePathMenu = useCallback(() => setPathMenu(null), []);
+  useEffect(closePathMenu, [closePathMenu, symbol, drawingInterval, drawingCoordinateKey, activeTool, readOnly]);
+
   const [selectedDrawingSettingsRequest, setSelectedDrawingSettingsRequest] = useState<
     Readonly<{ id: string; revision: number }> | null
   >(null);
@@ -2231,6 +2252,7 @@ export function useDrawing({
       dynamicOverlayControllerRef.current?.clear();
     }
     anchorDataRef.current = null;
+    pathPointsRef.current = [];
     channelBaselineEndRef.current = null;
     pendingTwoPointToolRef.current = null;
     return true;
@@ -3133,7 +3155,7 @@ export function useDrawing({
             const baselineEnd = channelBaselineEndRef.current;
             previewEntityRef.current = Object.freeze({
               ...previewEntityRef.current,
-              dataPoints: Object.freeze(tool !== "channel-parallel"
+              dataPoints: Object.freeze(previewEntityRef.current.type === "path" ? [...pathPointsRef.current, pointer] : tool !== "channel-parallel"
                 ? [anchor, pointer]
                 : baselineEnd
                   ? [anchor, Object.freeze({ ...baselineEnd }), pointer]
@@ -3536,9 +3558,60 @@ export function useDrawing({
     return true;
   }, [chartContainerRef, clearHoverFeedback, deselectAll]);
 
+  const completePlacement = useCallback((finalDrawing: SavedDrawing, tool: TwoPointCreationTool) => {
+    const commands = drawingCreateCommandsForSavedDrawing(finalDrawing);
+    if (!commands || !finalDrawing.id) return;
+    // The click can land after the last pointermove. Publish the exact
+    // committed endpoint before the static scene is invalidated so the
+    // retained dynamic frame never shows stale preview geometry.
+    previewEntityRef.current = finalDrawing;
+    let receipt: ReturnType<typeof persistSceneCommands>;
+    try {
+      receipt = commitSavedDrawingAfterDynamicFrame(
+        finalDrawing,
+        dataToScreen,
+        (decorations) => {
+          const controller = dynamicOverlayControllerRef.current;
+          if (!controller) return;
+          controller.render({ decorations });
+          dynamicHandoffLockRef.current = true;
+        },
+        () => persistSceneCommands(commands),
+        getDynamicThemePalette(),
+      );
+    } catch (error) {
+      dynamicHandoffLockRef.current = false;
+      renderDynamicFeedback();
+      throw error;
+    }
+    if (!receipt?.committed) {
+      dynamicHandoffLockRef.current = false;
+      renderDynamicFeedback();
+      return;
+    }
+    previewEntityRef.current = null;
+    anchorDataRef.current = null;
+    channelBaselineEndRef.current = null;
+    pathPointsRef.current = [];
+    pendingTwoPointToolRef.current = null;
+    selectPrimitive(finalDrawing.id);
+    retainDynamicOverlayUntilPaint(receipt.ticket ?? null);
+    exitDrawingToolAfterCreation(tool);
+  }, [dataToScreen, exitDrawingToolAfterCreation, getDynamicThemePalette, persistSceneCommands,
+    renderDynamicFeedback, retainDynamicOverlayUntilPaint, selectPrimitive]);
+
+  const finishPath = useCallback(() => {
+    const preview = previewEntityRef.current;
+    const tool = activeToolRef.current;
+    if (preview?.type !== "path" || (tool !== "path-line" && tool !== "path-arrow")
+      || pathPointsRef.current.length < 2 || !prepareUserMutationScope()) return;
+    completePlacement({ ...preview, dataPoints: [...pathPointsRef.current] }, tool);
+  }, [completePlacement, prepareUserMutationScope]);
+
   const handleMouseDown = useCallback(
     (e: DrawingDomPointerEvent) => {
       if (e.target instanceof Element && e.target.closest(".drawing-object-list, .selected-drawing-style-bar, .text-format-bar, .text-edit-overlay")) return;
+      if ("button" in e && e.button !== 0) return;
       flushActiveDrawingMove();
       let tool = activeToolRef.current;
       // Establish one geometry snapshot for the interaction. Every pane host
@@ -4059,6 +4132,16 @@ export function useDrawing({
               snap: drawingSnapEnabledRef.current && !e.altKey && !(isShape && e.shiftKey),
             });
             if (!dataB) return;
+            if (previewEntityRef.current.type === "path") {
+              const previous = pathPointsRef.current.at(-1);
+              pathCountBeforeDown.current = pathPointsRef.current.length;
+              if (!previous || previous.time !== dataB.time || previous.price !== dataB.price) {
+                pathPointsRef.current.push(dataB);
+              }
+              previewEntityRef.current = { ...previewEntityRef.current, dataPoints: [...pathPointsRef.current] };
+              renderDynamicFeedback();
+              return;
+            }
             const baselineEnd = channelBaselineEndRef.current;
             if (tool === "channel-parallel" && !baselineEnd) {
               // Second channel click fixes the baseline; the third sets the width.
@@ -4087,43 +4170,7 @@ export function useDrawing({
                     Object.freeze({ ...dataB }),
                   ]),
             }) as SavedDrawing;
-            const commands = drawingCreateCommandsForSavedDrawing(finalDrawing);
-            if (!commands || !finalDrawing.id) return;
-            // The click can land after the last pointermove. Publish the exact
-            // committed endpoint before the static scene is invalidated so the
-            // retained dynamic frame never shows stale preview geometry.
-            previewEntityRef.current = finalDrawing;
-            let receipt: ReturnType<typeof persistSceneCommands>;
-            try {
-              receipt = commitSavedDrawingAfterDynamicFrame(
-                finalDrawing,
-                dataToScreen,
-                (decorations) => {
-                  const controller = dynamicOverlayControllerRef.current;
-                  if (!controller) return;
-                  controller.render({ decorations });
-                  dynamicHandoffLockRef.current = true;
-                },
-                () => persistSceneCommands(commands),
-                getDynamicThemePalette(),
-              );
-            } catch (error) {
-              dynamicHandoffLockRef.current = false;
-              renderDynamicFeedback();
-              throw error;
-            }
-            if (!receipt?.committed) {
-              dynamicHandoffLockRef.current = false;
-              renderDynamicFeedback();
-              return;
-            }
-            previewEntityRef.current = null;
-            anchorDataRef.current = null;
-            channelBaselineEndRef.current = null;
-            pendingTwoPointToolRef.current = null;
-            selectPrimitive(finalDrawing.id);
-            retainDynamicOverlayUntilPaint(receipt.ticket ?? null);
-            exitDrawingToolAfterCreation(tool);
+            completePlacement(finalDrawing, tool);
             return;
           }
           if (interactionSurfaceMode !== "overlay") {
@@ -4150,7 +4197,7 @@ export function useDrawing({
 
         // Hit existing element?
         const hit = automaticHit || hitTestInteractive(pos.x, pos.y);
-        if (hit && (hit.type === "line" || hit.type === "axis-line" || hit.type === "angle" || hit.type === "range-measure" || hit.type === "channel" || hit.type === "fibonacci" || hit.type === "shape")) {
+        if (hit && (hit.type === "line" || hit.type === "axis-line" || hit.type === "angle" || hit.type === "range-measure" || hit.type === "path" || hit.type === "channel" || hit.type === "fibonacci" || hit.type === "shape")) {
           const saved = savedDrawingFromInteractionHit(hit);
           const id = saved?.id;
           if (!saved || !id) return;
@@ -4311,6 +4358,8 @@ export function useDrawing({
             });
             if (!saved) return;
             anchorDataRef.current = dataPoint;
+            pathCountBeforeDown.current = 0;
+            pathPointsRef.current = saved.type === "path" ? [dataPoint] : [];
             channelBaselineEndRef.current = null;
             previewEntityRef.current = saved;
             pendingTwoPointToolRef.current = tool;
@@ -4346,7 +4395,7 @@ export function useDrawing({
         }
       }
     },
-    [projectStroke, exitAutomaticObjectEditing, enterObjectTool, flushActiveDrawingMove, capturePointerRect, getChartPos, isInsideDrawingPanePlot, captureOverlayFreehandBatch, interactionSurfaceMode, screenToFreehandData, screenToDrawingData, dataToScreen, detachPrim, attachPrim, hitTestAll, hitTestInteractive, hitTestSelectedOverlayHandle, selectPrimitive, deselectAll, getPrimitiveById, getSavedDrawing, getSceneScreenBox, beginOverlayEntityDrag, beginSavedTextDrag, beginTextDrag, startEntityTextEditing, startTextEditing, commitTextEditing, cancelTextEditing, persistDrawings, persistSceneCommands, prepareUserMutationScope, removePreview, cancelActiveFreehandStroke, cancelDynamicPaintHandoff, ensureOverlayDragRegistry, getChartAdapter, getDynamicFramePresentation, getDynamicThemePalette, chartContainerRef, drawingAnchorMode, editingTextIdRef, selectedIdRef, setSelectedPrimId, setSelectedTextUi, clearHoverFeedback, renderDynamicFeedback, renderOverlayDragDraft, retainDynamicOverlayUntilPaint, exitDrawingToolAfterCreation],
+    [completePlacement, projectStroke, exitAutomaticObjectEditing, enterObjectTool, flushActiveDrawingMove, capturePointerRect, getChartPos, isInsideDrawingPanePlot, captureOverlayFreehandBatch, interactionSurfaceMode, screenToFreehandData, screenToDrawingData, dataToScreen, detachPrim, attachPrim, hitTestAll, hitTestInteractive, hitTestSelectedOverlayHandle, selectPrimitive, deselectAll, getPrimitiveById, getSavedDrawing, getSceneScreenBox, beginOverlayEntityDrag, beginSavedTextDrag, beginTextDrag, startEntityTextEditing, startTextEditing, commitTextEditing, cancelTextEditing, persistDrawings, persistSceneCommands, prepareUserMutationScope, removePreview, cancelActiveFreehandStroke, cancelDynamicPaintHandoff, ensureOverlayDragRegistry, getChartAdapter, getDynamicFramePresentation, chartContainerRef, drawingAnchorMode, editingTextIdRef, selectedIdRef, setSelectedPrimId, setSelectedTextUi, clearHoverFeedback, renderDynamicFeedback, renderOverlayDragDraft, retainDynamicOverlayUntilPaint, exitDrawingToolAfterCreation],
   );
 
   // ════════════════════════════════════════════════════
@@ -4356,6 +4405,14 @@ export function useDrawing({
   const handleDblClick = useCallback(
     (e: MouseEvent) => {
       if (e.target instanceof Element && e.target.closest(".drawing-object-list, .selected-drawing-style-bar, .text-format-bar, .text-edit-overlay")) return;
+      if (previewEntityRef.current?.type === "path") {
+        e.preventDefault();
+        e.stopPropagation();
+        // The browser already delivered both pointerdowns. The first fixed the terminal vertex.
+        pathPointsRef.current.length = pathCountBeforeDown.current;
+        finishPath();
+        return;
+      }
       if (isPassiveCursorTool(activeToolRef.current) && !drawingAutoSelectEnabledRef.current) return;
       const pos = getChartPos(e);
       if (!pos) return;
@@ -4383,7 +4440,7 @@ export function useDrawing({
         e.stopPropagation();
       }
     },
-    [getChartPos, hitTestInteractive, prepareTerminalTextMutation, selectPrimitive, startEntityTextEditing, startTextEditing],
+    [finishPath, getChartPos, hitTestInteractive, prepareTerminalTextMutation, selectPrimitive, startEntityTextEditing, startTextEditing],
   );
 
   // ════════════════════════════════════════════════════
@@ -4871,10 +4928,53 @@ export function useDrawing({
       const tool = activeToolRef.current;
       if ((isTwoPointCreationTool(tool) || isAxisLineToolId(tool)) && anchorDataRef.current) {
         e.preventDefault();
+        e.stopPropagation();
         removePreview();
+        return;
       }
+      if (readOnly || interactionSurfaceMode !== "overlay" || !prepareUserMutationScope()) return;
+      const pos = getChartPos(e);
+      if (!pos || !isInsideDrawingPanePlot(pos)) return;
+      const hit = hitTestInteractive(pos.x, pos.y);
+      if (!hit || !isDrawingEntityHit(hit) || hit.saved.type !== "path" || !hit.saved.id) return;
+      const saved = hit.saved, id = hit.saved.id;
+      const captured = getObjectDocument().entities.get(id);
+      const index = hit.pointIndex ?? -1;
+      const vertex = index >= 0;
+      let insert: DrawingDataPoint | null = null;
+      let segment = -1;
+      if (!vertex) {
+        const match = /^segment-(\d+)$/.exec(hit.zone ?? "");
+        if (!match) return;
+        segment = Number(match[1]);
+        const start = saved.dataPoints[segment], end = saved.dataPoints[segment + 1];
+        const a = start && dataToScreen(start), b = end && dataToScreen(end);
+        if (!a || !b) return;
+        const dx = b.x - a.x, dy = b.y - a.y, length2 = dx * dx + dy * dy;
+        const t = length2 ? Math.max(0, Math.min(1, ((pos.x - a.x) * dx + (pos.y - a.y) * dy) / length2)) : 0;
+        insert = screenToDrawingData(a.x + t * dx, a.y + t * dy, { snap: drawingSnapEnabledRef.current && !e.altKey });
+        if (!insert) return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      selectPrimitive(id);
+      setPathMenu({ x: e.clientX, y: e.clientY, vertex, disabled: !!saved.locked || (vertex && saved.dataPoints.length <= 2),
+        apply() {
+          closePathMenu();
+          if (saved.locked || !prepareTerminalTextMutation() || getObjectDocument().entities.get(id) !== captured) return;
+          const points = [...saved.dataPoints];
+          if (vertex && points.length > 2) points.splice(index, 1);
+          else if (!vertex && insert) points.splice(segment + 1, 0, insert);
+          else return;
+          const candidate = { ...saved, dataPoints: points };
+          const commands = drawingCommandsForSavedDrawing(candidate, { type: "update", geometryCommand: "resize" });
+          if (commands && persistSceneCommands(commands)?.committed) selectPrimitive(id);
+        },
+      });
     },
-    [removePreview],
+    [readOnly, interactionSurfaceMode, removePreview, closePathMenu, prepareUserMutationScope, prepareTerminalTextMutation,
+      getChartPos, isInsideDrawingPanePlot, hitTestInteractive, getObjectDocument, dataToScreen, screenToDrawingData,
+      persistSceneCommands, selectPrimitive],
   );
 
   const replayHistory = useCallback((direction: "undo" | "redo") => {
@@ -4915,6 +5015,18 @@ export function useDrawing({
       if (!isAutomaticObjectEditing(activeToolRef.current, automaticObjectTool(chartContainerRef?.current) ?? autoSelectedToolRef.current)) return false;
       handlePointerCancel();
       return exitAutomaticObjectEditing();
+    },
+    pathDraftKey: (key) => {
+      const preview = previewEntityRef.current;
+      if (preview?.type !== "path") return false;
+      if (key === "Enter") finishPath();
+      else if (key === "Escape" || pathPointsRef.current.length <= 1) removePreview();
+      else {
+        pathPointsRef.current.pop();
+        previewEntityRef.current = { ...preview, dataPoints: [...pathPointsRef.current] };
+        renderDynamicFeedback();
+      }
+      return true;
     },
     deleteSelected: () => deleteSelectedRef.current(),
   });
@@ -5057,6 +5169,7 @@ export function useDrawing({
     previewRef.current = null;
     previewEntityRef.current = null;
     anchorDataRef.current = null;
+    pathPointsRef.current = [];
     channelBaselineEndRef.current = null;
     pendingTwoPointToolRef.current = null;
     draggingRef.current = null;
@@ -5678,6 +5791,7 @@ export function useDrawing({
     primitivesRef,
     selectedPrimId,
     selectedDrawingMeta,
+    pathMenu, closePathMenu,
     selectedDrawingSettingsRequest,
     // Text editing state (for rendering the inline editor in the component)
     editingTextId,

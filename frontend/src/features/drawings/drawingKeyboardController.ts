@@ -36,6 +36,7 @@ export interface UseDrawingKeyboardOptions {
   hasActiveInteractionGesture?: (() => boolean) | null;
   cancelActiveInteractionGesture?: (() => boolean) | null;
   exitObjectEditing?: (() => boolean) | null;
+  pathDraftKey?: (key: "Enter" | "Backspace" | "Escape") => boolean;
   deleteSelected?: (() => void) | null;
 }
 
@@ -97,6 +98,7 @@ export function useDrawingKeyboard({
   cancelActiveFreehandStroke = null,
   hasActiveInteractionGesture = null,
   cancelActiveInteractionGesture = null,
+  pathDraftKey,
   deleteSelected = null,
   exitObjectEditing = null,
 }: UseDrawingKeyboardOptions): void {
@@ -106,6 +108,14 @@ export function useDrawingKeyboard({
     const handleKeyDown = (e: KeyboardEvent): void => {
       // Don't intercept if editing text
       if (editingTextIdRef.current || e.defaultPrevented) return;
+
+      if ((e.key === "Escape" || e.key === "Backspace" || e.key === "Enter") && !hasOpenOverlay()
+        && !(e.target instanceof Element && e.target.closest('dialog, input, textarea, select, [contenteditable="true"]'))
+        && pathDraftKey?.(e.key)) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
 
       if (e.key === "Escape") {
         // Editors own their Escape, and an open drawer or dialog closes first; closing a panel must not also exit the tool.
@@ -153,7 +163,7 @@ export function useDrawingKeyboard({
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [active, anchorDataRef, beforeTerminalMutation, selectedIdRef, editingTextIdRef, primitivesRef, removePreview, deselectAll, detachPrim, persistDrawings, setSelectedPrimId, setSelectedTextUi, hasActiveFreehandStroke, cancelActiveFreehandStroke, hasActiveInteractionGesture, cancelActiveInteractionGesture, deleteSelected, exitObjectEditing]);
+  }, [active, anchorDataRef, beforeTerminalMutation, selectedIdRef, editingTextIdRef, primitivesRef, removePreview, deselectAll, detachPrim, persistDrawings, setSelectedPrimId, setSelectedTextUi, hasActiveFreehandStroke, cancelActiveFreehandStroke, hasActiveInteractionGesture, cancelActiveInteractionGesture, pathDraftKey, deleteSelected, exitObjectEditing]);
 }
 
 export default useDrawingKeyboard;
