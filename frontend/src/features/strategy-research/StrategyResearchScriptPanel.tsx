@@ -291,7 +291,7 @@ export function StrategyResearchScriptPanel({
   }, [cellScope, configuration, draft, editorSession, marketBatchAvailable, preciseBlocked, source, pythonTrustedConfirmed]);
 
   const run = useCallback(() => {
-    if (import.meta.env.VITE_BROWSER_PYTHON === "1") {
+    if (import.meta.env?.VITE_BROWSER_PYTHON === "1") {
       window.open(desktopReleaseUrl, "_blank", "noopener,noreferrer");
       return;
     }
@@ -391,7 +391,7 @@ export function StrategyResearchScriptPanel({
             ) : null}
           </TabPanel>
           <div className="strategy-research-run-actions">
-            {import.meta.env.VITE_BROWSER_PYTHON === "1" ? <BrowserDesktopLink feature="strategy" className="ui-btn ui-btn-primary" /> : <Button
+            {import.meta.env?.VITE_BROWSER_PYTHON === "1" ? <BrowserDesktopLink feature="strategy" className="ui-btn ui-btn-primary" /> : <Button
               variant="primary"
               fullWidth
               data-testid="strategy-research-run"

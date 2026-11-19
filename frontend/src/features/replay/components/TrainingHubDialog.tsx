@@ -792,7 +792,7 @@ export default function TrainingHubDialog({
             title={t("replay.hub.emptyTitle")}
             description={t("replay.hub.emptyHint")}
             action={<>
-              {import.meta.env.VITE_BROWSER_PYTHON === "1" && <a href="/strategy.html?action=import">{t("research.source.openLibrary")}</a>}
+              {import.meta.env?.VITE_BROWSER_PYTHON === "1" && <a href="/strategy.html?action=import">{t("research.source.openLibrary")}</a>}
               <Button variant="primary" onClick={() => void runtime.actions.openCreate()} disabled={busy}>{t("replay.hub.emptyCreate")}</Button>
             </>}
           />

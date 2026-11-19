@@ -516,7 +516,7 @@ export function CandleScopeStrategyTesterPanel({
   }, [attachRecord, draftStore]);
 
   const run = useCallback(() => {
-    if (import.meta.env.VITE_BROWSER_PYTHON === "1") {
+    if (import.meta.env?.VITE_BROWSER_PYTHON === "1") {
       window.open(desktopReleaseUrl, "_blank", "noopener,noreferrer");
       return;
     }
@@ -808,7 +808,7 @@ export function CandleScopeStrategyTesterPanel({
           {canResume && (
             <Button size="sm" variant="ghost" onClick={onResumeObserving}>{t("chartTester.resumeObserving")}</Button>
           )}
-          {currentAttachment && (import.meta.env.VITE_BROWSER_PYTHON === "1"
+          {currentAttachment && (import.meta.env?.VITE_BROWSER_PYTHON === "1"
             ? <BrowserDesktopLink feature="strategy" className="ui-btn ui-btn-primary ui-btn-sm" /> :
             <Button
               size="sm"

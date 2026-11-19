@@ -36,7 +36,7 @@ export default function ReadOnlyAccountDock({ height, onRequestClose, trading }:
   const [newNoteRequest, setNewNoteRequest] = useState<LinkedNoteRequest | undefined>();
   const noteRequestHandled = useCallback(() => setNewNoteRequest(undefined), []);
   const factRequest = useRef(0);
-  const available = import.meta.env.VITE_BROWSER_PYTHON !== "1" && accountSession() !== null;
+  const available = import.meta.env?.VITE_BROWSER_PYTHON !== "1" && accountSession() !== null;
   const date = (ms: number | null | undefined) => typeof ms === "number" && Number.isFinite(ms) ? new Date(ms).toLocaleString(locale) : t("account.unknown", {}, locale);
 
   useEffect(() => {
@@ -100,7 +100,7 @@ export default function ReadOnlyAccountDock({ height, onRequestClose, trading }:
     : status.account.status === "syncing" ? "accent" : status.account.status === "disconnected" ? "neutral" : "danger";
   const factsTab = tab !== "overview" && tab !== "journal" && tab !== "reconcile" && tab !== "trades";
 
-  if (import.meta.env.VITE_BROWSER_PYTHON === "1") {
+  if (import.meta.env?.VITE_BROWSER_PYTHON === "1") {
     return <section className="readonly-account-dock" style={{ height }} aria-label={t("account.title")}>
       <header className="readonly-account-heading"><strong>{t("account.title")}</strong>
         <IconButton size="sm" label={t("account.closePanel")} icon={<Icon name="close" size={16} />} onClick={onRequestClose} />

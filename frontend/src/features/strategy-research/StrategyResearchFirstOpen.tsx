@@ -37,7 +37,7 @@ export function StrategyResearchFirstOpen({
     <div className="strategy-research-first-open" data-testid="strategy-research-first-open" data-strategy-draft={draftId ?? ""}>
       <header className="strategy-research-first-open-head">
         <h2>{t("chartTester.startTitle")}</h2>
-        {import.meta.env.VITE_BROWSER_PYTHON === "1" ? <p>
+        {import.meta.env?.VITE_BROWSER_PYTHON === "1" ? <p>
           {locale.startsWith("zh") ? "可在此导入行情、分析图表并保存策略草稿。" : "Import data, analyze charts and save strategy drafts here."}{" "}
           <BrowserDesktopLink feature="strategy" />
         </p> : <p>{t("strategy.firstOpenLead")}</p>}

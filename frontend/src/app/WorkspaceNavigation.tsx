@@ -44,6 +44,6 @@ export default function WorkspaceNavigation({ active, offline = false, onReplay,
     {trainingDisabled ? <button type="button" disabled title={replayReason ?? localReplay.reason ?? undefined}>{t("ux.training")}</button> : onReplay
       ? <button type="button" onClick={onReplay} data-replay-entry="enabled">{t("ux.training")}</button>
       : <a href="/replay.html" aria-current={active === "replay" ? "page" : undefined}>{t("ux.training")}</a>}
-    {import.meta.env.VITE_BROWSER_PYTHON === "1" && <BrowserDesktopLink />}
+    {import.meta.env?.VITE_BROWSER_PYTHON === "1" && <BrowserDesktopLink />}
   </nav>;
 }
