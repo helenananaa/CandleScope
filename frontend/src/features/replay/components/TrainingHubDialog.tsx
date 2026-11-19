@@ -1,4 +1,3 @@
-import { HistoryDownloadForm } from "../../research-data/HistoryDownloadForm.js";
 import { useState, type ReactNode } from "react";
 import {
   Badge, Button, Checkbox, ConfirmDialog, Dialog, Disclosure, EmptyState, Field, InlineAlert, Input, SegmentedControl, Select,
@@ -28,7 +27,6 @@ import { preparationRequest } from "../../data-preparation/api.js";
 export interface TrainingHubDialogProps {
   readonly runtime: TrainingHubRuntime;
   readonly presentation?: "page" | "modal";
-  readonly downloadSymbol?: string;
   readonly onRequestClose?: () => void;
   readonly launchLabel?: string;
   readonly onPrepareData?: () => void;
@@ -122,7 +120,8 @@ function CreateChoice<T extends string>({ label, value, options, onChange, hint,
 type StartChoice = "RANGE" | "MARKET" | "MANUAL";
 
 function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: TrainingHubDialogProps) {
-  useLocale();
+  const locale = useLocale();
+  const browser = import.meta.env?.VITE_BROWSER_PYTHON === "1";
   const { draft, evaluation } = runtime;
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [presetMode, setPresetMode] = useState<"practice" | "challenge" | "custom">("custom");
@@ -169,7 +168,7 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
         ? "local.localOnly" : "replay.hub.aggHint",
   );
   const aggDisabled = busy || (!aggEnabled && !runtime.automaticTradePreparationAvailable);
-  const marketRandomDisabled = busy || !runtime.automaticPreparationAvailable || draft.sourceKind !== "BAR";
+  const marketRandomDisabled = browser || busy || !runtime.automaticPreparationAvailable || draft.sourceKind !== "BAR";
   const startChoice: StartChoice = draft.startMode === "MANUAL" ? "MANUAL"
     : draft.randomScope === "MARKET" ? "MARKET" : "RANGE";
   const chooseStart = (choice: StartChoice) => {
@@ -218,7 +217,8 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
           disabled={!evaluation.canSubmit || busy || validatingCatalog}
           onClick={() => void runtime.actions.createRun(draft)}
         >
-          {busy || validatingCatalog ? busyLabel : t("replay.hub.submit")}
+          {busy || validatingCatalog ? busyLabel : browser && runtime.automaticPreparationAvailable
+            ? (locale.startsWith("zh") ? "开始回放" : "Start replay") : t("replay.hub.submit")}
         </Button>
       </>}
     >
@@ -254,15 +254,26 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
             hint={runtime.automaticPreparationAvailable ? undefined : t("replay.hub.startHint")}>
             {runtime.automaticPreparationAvailable && <div className="training-hub-field-grid training-hub-field-grid-three">
               <Field label={t("backtest.exchange")}>
-                <Input disabled={busy} value={draft.exchange} onChange={(event) => patchDraft(runtime, { exchange: event.target.value.trim().toLowerCase() })} />
+                {browser ? <Select disabled={busy} value={draft.exchange} onChange={event => {
+                  const entry = runtime.catalog?.entries.find(item => item.identity.exchange === event.target.value);
+                  patchDraft(runtime, entry ? { exchange: entry.identity.exchange, marketType: entry.identity.market_type, symbol: entry.identity.symbol }
+                    : { exchange: "binance", marketType: "spot" });
+                }}>
+                  {draft.exchange !== "binance" && !runtime.catalog?.entries.some(item => item.identity.exchange === draft.exchange) &&
+                    <option value={draft.exchange} disabled>{draft.exchange}</option>}
+                  <option value="binance">Binance</option>
+                  {runtime.catalog?.entries.filter(item => item.identity.market_type === "local_bar").map(item =>
+                    <option key={item.identity.exchange} value={item.identity.exchange}>{item.identity.symbol} · {item.identity.exchange}</option>)}
+                </Select> : <Input disabled={busy} value={draft.exchange} onChange={(event) => patchDraft(runtime, { exchange: event.target.value.trim().toLowerCase() })} />}
               </Field>
               <Field label={t("backtest.marketType")}>
-                <Select disabled={busy} value={draft.marketType} onChange={(event) => patchDraft(runtime, { marketType: event.target.value })}>
-                  <option value="spot">{t("market.spot")}</option><option value="futures">{t("market.futures")}</option>
+                <Select disabled={busy || (browser && ["spot", "local_bar"].includes(draft.marketType))} value={draft.marketType} onChange={(event) => patchDraft(runtime, { marketType: event.target.value })}>
+                  {browser && draft.marketType === "local_bar" && <option value="local_bar">{t("local.libraryAria")}</option>}
+                  <option value="spot">{t("market.spot")}</option>{(!browser || draft.marketType === "futures") && <option value="futures">{t("market.futures")}</option>}
                 </Select>
               </Field>
               <Field label={t("replay.hub.symbol")}>
-                <Input disabled={busy} value={draft.symbol} onChange={(event) => patchDraft(runtime, { symbol: event.target.value.trim().toUpperCase() })} />
+                <Input disabled={busy || (browser && draft.marketType === "local_bar")} value={draft.symbol} onChange={(event) => patchDraft(runtime, { symbol: event.target.value.trim().toUpperCase() })} />
               </Field>
               {(!runtime.preparationJob || preparationActive) && <p className="ui-field-hint training-hub-field-wide">{t("preparation.background")}</p>}
             </div>}
@@ -302,6 +313,11 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
                     onChange={(value) => patchDraft(runtime, { requestedStartMs: value })}
                   />
                 </Field>
+                {browser && runtime.automaticPreparationAvailable && <Field label={t("ux.endUtc")}>
+                  <UtcReplayStartInput data-training-field="end-utc" disabled={busy || draft.requestedStartMs === null}
+                    value={draft.requestedStartMs === null || draft.forwardCacheMs <= 0 ? null : draft.requestedStartMs + draft.forwardCacheMs}
+                    onChange={end => patchDraft(runtime, { forwardCacheMs: end === null || draft.requestedStartMs === null ? 0 : end - draft.requestedStartMs })} />
+                </Field>}
                 <InlineAlert tone="warning">{t("replay.hub.manualWarning")}</InlineAlert>
               </>
             ) : draft.randomScope === "MARKET" ? (
@@ -662,12 +678,11 @@ function TrainingRunRow({ card, busy, onContinue, onDelete }: {
 export default function TrainingHubDialog({
   runtime,
   presentation = "page",
-  downloadSymbol,
   onRequestClose,
   launchLabel,
   onPrepareData,
 }: TrainingHubDialogProps) {
-  const locale = useLocale();
+  useLocale();
   const busy = runtime.operation !== null;
   const modal = presentation === "modal";
   const [deleteCandidate, setDeleteCandidate] = useState<TrainingRunCard | null>(
@@ -707,10 +722,7 @@ export default function TrainingHubDialog({
             </Button>
           </div>
         </header>
-        {import.meta.env?.VITE_BROWSER_PYTHON === "1" && <details className="research-dataset-ops">
-          <summary>{locale.startsWith("zh") ? "自动下载回放行情" : "Download replay data"}</summary>
-          <HistoryDownloadForm {...(downloadSymbol ? { initialSymbol: downloadSymbol } : {})} onImported={() => runtime.actions.refresh()} />
-        </details>}
+
 
         <ReplayStorageGovernancePanel runtime={runtime} />
         {recent && <section className="training-hub-resume" aria-labelledby="training-hub-resume-title">

@@ -308,6 +308,13 @@ export class TrainingHubLifecycle {
       if (!this.accept(token)) return;
       this.catalog = catalog;
       this.draft = preservedDraft ?? createTrainingRunDraft(catalog, this.launchContext);
+      if (!preservedDraft && import.meta.env?.VITE_BROWSER_PYTHON === "1" && this.canPrepare(this.draft)) {
+        const spot = this.launchContext?.exchange === "binance" && this.launchContext.market_type === "spot";
+        this.draft = { ...this.draft, exchange: "binance", marketType: "spot",
+          symbol: spot ? this.launchContext!.symbol : "BTCUSDT", indicatorWarmupBars: 5,
+          forwardCacheMs: 15 * 60_000, requestedStartMs: Math.floor(Date.now()/60_000 - 30)*60_000,
+          visibleHistoryMode: "DURATION", visibleHistoryLookbackMs: 5 * 60_000 };
+      }
       if (preservedDraft === null && !this.canPrepare(this.draft)) {
         this.draft = this.sourceAwareDraft(this.draft, catalog);
       }

@@ -28,9 +28,9 @@ async function visit(offline, check) {
   })
   try {
     const page = await context.newPage()
-    await page.goto(new URL('replay.html', url).href)
+    await page.goto(new URL('strategy.html?action=import', url).href)
     const form = page.getByTestId('history-download-form')
-    await form.locator('..').locator('summary').click({ timeout: 150000 })
+    await page.getByRole('tab', { name: /自动下载|Download/ }).click({ timeout: 150000 })
     await check(page, form)
   } finally {
     await context.close()

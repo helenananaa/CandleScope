@@ -45,7 +45,8 @@ async def browser_storage_access(request: Request):
 
 app.dependency_overrides[require_local_research_access] = browser_storage_access
 
-from library_download import router as library_download_router
+from library_download import ReplayLibrary, router as library_download_router
+app.state.replay_library = ReplayLibrary()
 app.include_router(library_download_router)
 
 

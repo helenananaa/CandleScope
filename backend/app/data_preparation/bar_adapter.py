@@ -28,10 +28,11 @@ from .storage import storage_call
 class BarPreparationAdapter:
     def __init__(self, root: Path, *, coordinator, replay_service=None, local_data=None,
                  query=query_klines, now_ms=lambda: int(time.time() * 1000), backtest_runtime=None,
-                 host_history_path=None):
+                 host_history_path=None, replay_library=None):
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         self.coordinator = coordinator
+        self.replay_library = replay_library
         self.replay_service = replay_service
         self.local_data = local_data
         self.query = query
@@ -81,7 +82,10 @@ class BarPreparationAdapter:
         if request.progressive:
             from .progressive import plan
             plan(request)
-        if request.consumer == "REPLAY" and any(r.role == "BARS" for r in request.requirements):
+        library_run = self.replay_library is not None and "replay_setup" in request.intent
+        if library_run:
+            self.replay_library.validate(request, self)
+        elif request.consumer == "REPLAY" and any(r.role == "BARS" for r in request.requirements):
             from app.replay.manual_history_import import import_unavailable_reason
             reason = import_unavailable_reason(self.replay_service)
             if reason:
@@ -107,7 +111,8 @@ class BarPreparationAdapter:
         estimate = 0
         for requirement in request.requirements:
             if requirement.role == "TRADES":
-                self.trades.validate(requirement, self.now_ms())
+                if not library_run:
+                    self.trades.validate(requirement, self.now_ms())
                 if request.consumer == "STRATEGY":
                     consumer_archive = getattr(self.backtest_runtime, "trade_archive", None)
                     if (consumer_archive is None or not hasattr(consumer_archive, "root")
@@ -512,13 +517,19 @@ class BarPreparationAdapter:
         progressive = result.get("progressive")
         prefix = progressive["initial_horizon_ms"] if progressive else None
         scope = request.requirements[0]
+        if "library_market" in result:
+            pinned = result["inputs"][0]
+            current = self.local_data.get_manifest(pinned["dataset_id"])
+            if current["data_epoch"] != pinned["data_epoch"]:
+                raise PreparationError("INPUT_CHANGED", "Prepared replay dataset changed before launch")
+            scope = scope.model_copy(update=result["library_market"])
         market_options = ({"_market_identity": (scope.exchange, scope.market_type, scope.symbol)}
                           if request.intent.get("submission", {}).get("random_by_market") else {})
         created = await self.replay_service.training.create_empty_run(setup, preparation_id=job_id,
             _preparation_market_identity=(scope.exchange, scope.market_type, scope.symbol),
             _progressive_initial_horizon_ms=prefix, **market_options)
         if not created["run"].get("adapter_session_id"):
-            requirement = request.requirements[0]
+            requirement = scope
             if progressive:
                 catalog = await self.replay_service.catalog(
                     warmup_bars=setup.to_dict()["indicator_warmup_bars"], horizon_ms=prefix,
