@@ -290,3 +290,33 @@ def test_wider_source_bars_keep_narrower_derived_bars(storage):
     assert overlapping
     assert derived("89m") == before["89m"] - overlapping
     assert derived("60m") == before["60m"] - {touched}
+
+
+@pytest.mark.parametrize("operation", ["insert", "update", "delete"])
+def test_source_mutation_work_does_not_grow_with_derived_history(storage, operation):
+    # Dependents are sought from (source open - the series' span bound), not
+    # scanned from the first derived bar of the series.
+    def seed(symbol, derived_bars):
+        first = START - derived_bars * 7 * MINUTE
+        write("1m", range(START, START + 64 * MINUTE, MINUTE), width=MINUTE, symbol=symbol)
+        write("7m", range(first, START + 63 * MINUTE, 7 * MINUTE), width=7 * MINUTE,
+              source=DERIVED, symbol=symbol)
+    seed("SMALLUSDT", 16)
+    seed("LARGEUSDT", 4096)
+    baseline = source_mutation_steps("SMALLUSDT", 64, operation)
+    measured = source_mutation_steps("LARGEUSDT", 64, operation)
+    assert measured <= baseline + baseline // 4, (baseline, measured)
+
+
+def test_registered_series_record_a_span_bound_and_unknown_bounds_still_invalidate(storage):
+    write("1m", range(START, START + 30 * MINUTE, MINUTE), width=MINUTE)
+    write("7m", range(START, START + 28 * MINUTE, 7 * MINUTE), width=7 * MINUTE, source=DERIVED)
+    with klines_repo._connect() as conn:
+        assert conn.execute("SELECT max_span_ms FROM kline_derived_series WHERE interval='7m'").fetchone()[0] \
+            == 2 * 7 * MINUTE
+        # A series registered before bounds existed keeps the unbounded scan.
+        conn.execute("UPDATE kline_derived_series SET max_span_ms=0")
+    before = stored()
+    write("1m", [START + 10 * MINUTE], width=MINUTE, close=250.0)
+    assert stored() == without_dependents(before, "spot", "BTCUSDT", "1m", START + 10 * MINUTE,
+                                          START + 11 * MINUTE - 1)

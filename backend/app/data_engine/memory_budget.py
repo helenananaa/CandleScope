@@ -422,7 +422,6 @@ class MemoryBudget:
         return True
 
     def _grant_pools(self):
-        blocked = set()
         pending=list(self._pool_waiters)
         while pending:
             now=time.monotonic()
@@ -434,8 +433,13 @@ class MemoryBudget:
             if waiter.future.cancelled() or waiter.loop.is_closed():
                 self._pool_waiters.pop(waiter,None)
                 continue
-            if waiter.owner in blocked or not self._safe_pool_grant(waiter):
-                blocked.add(waiter.owner)
+            # Every claim that is safe is granted, in the order above (holders
+            # first, then by age and chart turn). Skipping the rest of an owner
+            # after one claim could not be granted deadlocked cold loads: a
+            # holder that could not grow yet held back both another holder that
+            # could finish and the page claims running fetches need to finish.
+            # _safe_pool_grant already keeps an order in which all complete.
+            if not self._safe_pool_grant(waiter):
                 continue
             pool = waiter.pool
             previous = pool.allocated if pool else 0

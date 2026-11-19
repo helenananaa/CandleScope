@@ -31,6 +31,7 @@ from app.data_engine.series_identity import (
 
 from .revisions import (IDENTITY_COLUMNS, RevisionStore, guarded_write, init_revision_storage,
                         mark_deleted, series_values, register_derived, current_revision, mutation_mode)
+from .bulk_revisions import batch_bookkeeping
 from .sqlite_runtime import ReusableReads, SQLiteConnectionPolicy, close_idle_connections, open_sqlite
 
 # Valid market types
@@ -622,7 +623,8 @@ def upsert_klines(
                     ]
                 scope = (mutation_mode(conn, "derived_materialization")
                          if source == "backfill_aggregated" else nullcontext())
-                with scope:
+                with scope, batch_bookkeeping(
+                        conn, series_values(symbol, interval, exchange, market_type, identity), len(write_payload)):
                     affected = conn.executemany(sql, write_payload).rowcount
                 if source == "backfill" and affected == len(rows):
                     from .kline_sources import acknowledge_history_projection
@@ -786,7 +788,10 @@ def import_history_archive(
 
                 incoming_rank_sql = source_rank_sql("excluded.source")
                 stored_rank_sql = source_rank_sql("klines.source")
-                cursor = conn.executemany(
+                bookkeeping = batch_bookkeeping(
+                    conn, series_values(symbol, interval, exchange, market_type, identity), len(payload))
+                with bookkeeping:
+                    cursor = conn.executemany(
                     f"""
                     INSERT INTO klines (
                         exchange, market_type, provider_id, venue, asset_class,
@@ -812,7 +817,7 @@ def import_history_archive(
                     WHERE {incoming_rank_sql} >= {stored_rank_sql}
                     """,
                     payload,
-                )
+                    )
                 written = cursor.rowcount
                 conn.execute(
                     """

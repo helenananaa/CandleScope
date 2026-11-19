@@ -260,11 +260,20 @@ def init_revision_storage(conn):
     for statement in schema.split(";"):
         if statement.strip():
             conn.execute(statement)
+    derived_columns = {row[1] for row in conn.execute("PRAGMA table_info(kline_derived_series)")}
+    if "max_span_ms" not in derived_columns:
+        # Upper bound on one bar's close-open span, 0 when unknown. Lets the
+        # dependents trigger seek derived bars instead of scanning each one
+        # from the start of its series.
+        conn.execute("ALTER TABLE kline_derived_series ADD COLUMN max_span_ms INTEGER NOT NULL DEFAULT 0")
     context_columns = {row[1] for row in conn.execute("PRAGMA table_info(kline_mutation_context)")}
     if "active_tx_epoch" not in context_columns:
         conn.execute("ALTER TABLE kline_mutation_context ADD COLUMN active_tx_epoch INTEGER NOT NULL DEFAULT 0")
     if "next_tx_epoch" not in context_columns:
         conn.execute("ALTER TABLE kline_mutation_context ADD COLUMN next_tx_epoch INTEGER NOT NULL DEFAULT 1")
+    from .bulk_revisions import init_bulk_revision_storage, row_triggers_active
+    init_bulk_revision_storage(conn)
+    row_triggers = row_triggers_active()
     if not had_delete_permissions:
         # Old pending jobs have no distinction between explicit deletion and
         # automatic projection invalidation. Preserve their conservative floor.
@@ -287,9 +296,14 @@ def init_revision_storage(conn):
     conn.execute("""INSERT OR IGNORE INTO kline_acquisitions
         SELECT 'manual:' || job_id, 0 FROM manual_history_jobs
         WHERE state NOT IN ('SUCCEEDED','FAILED','CANCELLED')""")
-    conn.execute(f"INSERT OR IGNORE INTO kline_derived_series SELECT DISTINCT {keys} FROM klines "
+    conn.execute(f"INSERT OR IGNORE INTO kline_derived_series ({keys}) SELECT DISTINCT {keys} FROM klines "
                  "WHERE source IN ('backfill_aggregated','data_manager_composite_closed',"
                  "'settings_manual_repair','repair_derived_verified','manual_history_derived')")
+    for row in conn.execute(f"SELECT {keys} FROM kline_derived_series WHERE max_span_ms=0").fetchall():
+        bound = derived_span_bound(row[3])
+        if bound:
+            conn.execute("UPDATE kline_derived_series SET max_span_ms=? WHERE " +
+                         " AND ".join(f"{name}=?" for name in IDENTITY_COLUMNS), (bound, *row))
     changed_key = " OR ".join(f"NEW.{name} IS NOT OLD.{name}" for name in (*IDENTITY_COLUMNS, "open_time"))
     _execute_schema(conn, f"""
         CREATE TRIGGER IF NOT EXISTS kline_identity_immutable BEFORE UPDATE ON klines
@@ -302,7 +316,14 @@ def init_revision_storage(conn):
         revision = "(SELECT revision FROM kline_revision_clock WHERE singleton=1)"
         deletion = revision if operation == "delete" else "0"
         changed_fields = REVISION_CHANGED_FIELDS
-        condition = "WHEN " + " OR ".join(f"NEW.{name} IS NOT OLD.{name}" for name in changed_fields) if operation == "update" else ""
+        # Inserts and updates of a batch are recorded by bulk_revisions instead.
+        if operation == "update":
+            condition = (f"WHEN {row_triggers} AND ("
+                         + " OR ".join(f"NEW.{name} IS NOT OLD.{name}" for name in changed_fields) + ")")
+        elif operation == "insert":
+            condition = f"WHEN {row_triggers}"
+        else:
+            condition = ""
         watermark_predicate = " AND ".join(f"{name}={alias}.{name}" for name in IDENTITY_COLUMNS)
         grid_width_expr = (
             f"(CASE WHEN {alias}.close_time IS NOT NULL AND {alias}.close_time >= {alias}.open_time "
@@ -342,6 +363,8 @@ def init_revision_storage(conn):
         """)
         dependent_family = " AND ".join(f"d.{name}={alias}.{name}" for name in IDENTITY_COLUMNS if name != "interval")
         mutation_condition = "(" + " OR ".join(f"NEW.{name} IS NOT OLD.{name}" for name in changed_fields) + ") AND " if operation == "update" else ""
+        if operation != "delete":
+            mutation_condition = f"{row_triggers} AND " + mutation_condition
         # Avoid a K-line range scan for every row of an ordinary native import
         # when the semantic family has no registered derived projections.
         # When it has them, name their intervals: an inequality on interval
@@ -356,6 +379,11 @@ def init_revision_storage(conn):
         # of another chart, which were built from 1m and were still valid.
         # Derived bars without ordinary bounds keep the plain overlap rule.
         source_width = f"COALESCE({alias}.close_time,{alias}.open_time)-{alias}.open_time"
+        # Seek each derived series from (source open - its span bound): any bar
+        # overlapping the source opens no earlier, and bars without ordinary
+        # bounds open after the source does. An unknown bound scans as before.
+        # CROSS JOIN keeps the few registered series as the outer loop.
+        derived_join = " AND ".join(f"k.{name}=d.{name}" for name in IDENTITY_COLUMNS)
         _execute_schema(conn, f"""
             DROP TRIGGER IF EXISTS kline_dependents_{operation};
             CREATE TRIGGER IF NOT EXISTS kline_dependents_{operation}
@@ -366,14 +394,16 @@ def init_revision_storage(conn):
                 AND EXISTS(SELECT 1 FROM kline_derived_series d WHERE {dependent_family} AND d.interval<>{alias}.interval)
             BEGIN
                 UPDATE kline_projection_invalidation SET depth=depth+1 WHERE singleton=1;
-                DELETE FROM klines WHERE {family_predicate}
-                    AND interval IN (SELECT d.interval FROM kline_derived_series d
-                                     WHERE {dependent_family} AND d.interval<>{alias}.interval)
-                    AND NOT EXISTS(SELECT 1 FROM kline_derived_series s WHERE {source_derived_predicate})
-                    AND open_time<=COALESCE({alias}.close_time,{alias}.open_time)
-                    AND COALESCE(close_time,open_time)>={alias}.open_time
-                    AND (close_time IS NULL OR close_time<open_time
-                         OR close_time-open_time>={source_width});
+                DELETE FROM klines WHERE rowid IN (
+                    SELECT k.rowid FROM kline_derived_series d CROSS JOIN klines k ON {derived_join}
+                    WHERE {dependent_family} AND d.interval<>{alias}.interval
+                        AND k.open_time<=COALESCE({alias}.close_time,{alias}.open_time)
+                        AND k.open_time>=(CASE WHEN d.max_span_ms>0 THEN {alias}.open_time-d.max_span_ms
+                                          ELSE -9223372036854775807 END)
+                        AND COALESCE(k.close_time,k.open_time)>={alias}.open_time
+                        AND (k.close_time IS NULL OR k.close_time<k.open_time
+                             OR k.close_time-k.open_time>={source_width}))
+                    AND NOT EXISTS(SELECT 1 FROM kline_derived_series s WHERE {source_derived_predicate});
                 UPDATE kline_projection_invalidation SET depth=depth-1 WHERE singleton=1;
             END;
         """)
@@ -951,5 +981,20 @@ async def prepare_derived_inputs(storage, decomp, grouped):
                              _acquisition.get(), decomp, grouped)
 
 
+def derived_span_bound(interval) -> int:
+    """Twice the nominal bar width: room for calendar and session bars; 0 if unknown."""
+    from app.data_engine.interval_policy import parse_interval_spec
+    try:
+        spec = parse_interval_spec(str(interval))
+    except (TypeError, ValueError):
+        return 0
+    nominal = getattr(spec, "nominal_ms", None) if spec is not None else None
+    return 2 * int(nominal) if isinstance(nominal, int) and nominal > 0 else 0
+
+
 def register_derived(conn, values):
-    conn.execute("INSERT OR IGNORE INTO kline_derived_series VALUES (" + ",".join("?" for _ in values) + ")", values)
+    keys = ",".join(IDENTITY_COLUMNS)
+    conn.execute(f"INSERT INTO kline_derived_series ({keys}, max_span_ms) VALUES ("
+                 + ",".join("?" for _ in values) + ",?) "
+                 f"ON CONFLICT({keys}) DO UPDATE SET max_span_ms=MAX(max_span_ms, excluded.max_span_ms)",
+                 (*values, derived_span_bound(values[3])))
