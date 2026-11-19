@@ -635,7 +635,7 @@ def capabilities(request: Request):
     return {"enabled": instance.enabled, "roles": ["BARS", *(["TRADES"] if trade_ready or library_ready else [])],
             "replay_sources": {"BAR": instance.enabled and (library_ready or bar_reason is None),
                                "AGG_TRADE": instance.enabled and (library_ready or (bar_reason is None and trade_ready))},
-            "trade_providers": ([{"exchange": "binance", "market_type": "spot"}] if library_ready else
+            "trade_providers": (adapter.replay_library.trade_providers() if library_ready else
                                 [{"exchange": "binance", "market_type": "futures"}] if trade_ready else []),
             "base_intervals": ["1m"],
             "replay_account_modes": ["APPROX_PROXY", *(["HISTORICAL_EXACT"] if exact_account else [])],

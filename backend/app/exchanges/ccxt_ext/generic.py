@@ -1053,6 +1053,10 @@ def _create_exchange(
         options["fetchMarkets"] = {
             "types": ["spot", "swap"] if base_type == "swap" else [base_type]
         }
+    elif sys.platform == "emscripten" and entry.exchange_id == "bybit":
+        options["fetchMarkets"] = {"types": [subtype or ("linear" if base_type in {"swap", "future"} else base_type)]}
+    elif sys.platform == "emscripten" and entry.exchange_id == "bitget" and base_type in {"spot", "swap"}:
+        options["fetchMarkets"] = {"types": ["spot" if base_type == "spot" else "swap"]}
     elif entry.exchange_id == "binance" and base_type == "spot":
         options["fetchMarkets"] = {"types": ["spot"]}
     if config.proxy_mode == "pool":
@@ -1070,6 +1074,8 @@ def _create_exchange(
         "aiohttp_trust_env": config.proxy_mode == "system",
         "options": options,
     }
+    if sys.platform == "emscripten" and entry.exchange_id in {"bybit", "bitget"}:
+        values["timeout"] = max(30_000, config.http_timeout * 1000)
     if entry.exchange_id == "binance" and base_type == "spot":
         # REST and WS join the same ~18 MB spot catalog bootstrap. Keep
         # either client capable of loading it on an ordinary slower link.
@@ -1117,6 +1123,10 @@ def _create_exchange(
             fork_kline_enabled=True,
         ), config, market_type)
     exchange = exchange_class(values)
+    if sys.platform == "emscripten" and entry.exchange_id in {"bybit", "bitget"}:
+        # Public bars need instrument metadata. Currency deposit/withdrawal
+        # networks use separate endpoints and are not needed to load this market.
+        exchange.has["fetchCurrencies"] = False
     if websocket and entry.exchange_id == "bybit":
         parse_ws_ohlcv = exchange.parse_ws_ohlcv
 

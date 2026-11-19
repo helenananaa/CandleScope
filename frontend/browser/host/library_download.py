@@ -1,4 +1,4 @@
-"""Acquire public Binance spot history into the browser's original research library."""
+"""Acquire public exchange history into the browser's original research library."""
 import asyncio
 import csv
 import hashlib
@@ -7,6 +7,8 @@ import logging
 import time
 import uuid
 from collections import OrderedDict
+from decimal import Decimal
+from functools import lru_cache
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
@@ -16,12 +18,14 @@ from ccxt.base.errors import NetworkError
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from app.exchanges import bootstrap_default_adapters
+from app.data_engine.ingestion.models import StreamDescriptor, StreamType
 from app.data_engine.ingestion.config import IngestionConfig
 from app.data_preparation.models import PreparationError, Requirement
 from app.exchanges.rate_limits import RateLimitDeferred
 from app.exchanges.symbol_catalog import get_cached_symbol_metadata
-from app.exchanges.ccxt_ext.catalog import get_ccxt_catalog_entry
-from app.exchanges.ccxt_ext.generic import _create_exchange
+from app.exchanges.ccxt_ext.catalog import get_ccxt_catalog_entry, get_ccxt_catalog
+from app.exchanges.ccxt_ext.generic import _create_exchange, resolve_ccxt_symbol
 from app.exchanges.ccxt_ext.markets import get_shared_ccxt_market_tables
 from app.local_data.service import LocalDatasetError, LocalImportOptions
 from app.local_data.user_market_trades import MAX_TRADE_ROWS, TRADE_COLUMNS, UserMarketTradeOptions
@@ -36,12 +40,47 @@ minute = 60_000
 
 class Selection(BaseModel):
     kind: Literal["bars", "aggTrades"]
-    symbol: str = Field(pattern=r"^[A-Z0-9]{2,40}$")
+    symbol: str = Field(pattern=r"^[A-Z0-9][A-Z0-9_:/.-]{0,63}$")
     start_ms: int = Field(gt=0)
     end_ms: int = Field(gt=0)
+    exchange: str = "binance"
+    market_type: str = "spot"
 
 
-async def trade_rows(client, selection, writer, job, checkpoint):
+@lru_cache(maxsize=1)
+def public_markets():
+    registry = bootstrap_default_adapters()
+    result = {}
+    for entry in get_ccxt_catalog():
+        if not registry.has(entry.exchange_id):
+            continue
+        caps = registry.get_capabilities(entry.exchange_id)
+        continuous = {m.market_type for m in caps.markets if m.calendar_id == "crypto.24x7.utc"}
+        types = {m for channel in caps.channels if channel.channel.value == "kline" and channel.history
+                 and "1m" in channel.params.get("interval", ()) for m in channel.market_types}
+        supported = [m for m in ("spot", "futures", "swap.linear", "swap")
+                     if m in types & continuous and caps.bar_spec(m, "1m", "history").basis_interval == "1m"]
+        if supported:
+            result[entry.exchange_id] = {"id": entry.exchange_id, "name": entry.name, "markets": supported,
+                "trades": [m for m in supported if entry.exchange_id in ("binance", "okx") and m in ("spot", "futures")]}
+    return result
+
+
+def validate_source(exchange, market_type, trades):
+    venue = public_markets().get(exchange)
+    if venue is None or market_type not in venue["markets"]:
+        raise ValueError(f"{exchange} / {market_type} 未提供可用于回放的一分钟行情")
+    if trades and market_type not in venue["trades"]:
+        raise ValueError(f"{exchange} / {market_type} 可用 K 线回放，尚未接入可校验的逐笔历史")
+
+
+@router.get("/markets")
+def markets():
+    return list(public_markets().values())
+
+
+
+async def trade_rows(client, selection, native_id, writer, job, checkpoint):
     """An ID cursor keeps trades sharing the page's final millisecond."""
     cursor = None
     start, end = selection.start_ms, selection.end_ms
@@ -51,7 +90,8 @@ async def trade_rows(client, selection, writer, job, checkpoint):
         # source-ID cursor as soon as a full page could hide additional trades.
         window_end = min(start + 3_600_000, end)
         params = {"startTime": start, "endTime": window_end - 1} if cursor is None else {"fromId": cursor}
-        page = await client.public_get_aggtrades({"symbol": selection.symbol, "limit": 1000, **params})
+        method = client.public_get_aggtrades if selection.market_type == "spot" else client.fapipublic_get_aggtrades
+        page = await method({"symbol": native_id, "limit": 1000, **params})
         if not isinstance(page, list):
             raise ValueError("交易所返回了无效的成交记录")
         for row in page:
@@ -72,13 +112,51 @@ async def trade_rows(client, selection, writer, job, checkpoint):
             cursor = None
 
 
+async def okx_trade_rows(client, selection, market, writer, job, checkpoint):
+    # Start at the exclusive right edge, then page by trade ID so that
+    # records sharing one millisecond survive a page boundary.
+    params = {"type": "2", "after": str(selection.end_ms)}
+    newest = None
+    rows = []
+    multiplier = Decimal(str(market["contractSize"])) if market.get("contract") else Decimal(1)
+    while True:
+        await checkpoint()
+        response = await client.public_get_market_history_trades({"instId": market["id"], "limit": "100", **params})
+        page = response["data"]
+        if not isinstance(page, list):
+            raise ValueError("OKX 返回了无效的历史成交")
+        reached_start = False
+        for raw in page:
+            seq, ts = int(raw["tradeId"]), int(raw["ts"])
+            if raw["instId"] != market["id"] or (newest is not None and seq != newest - 1):
+                raise ValueError("OKX 成交品种或序号不连续")
+            newest = seq
+            if ts < selection.start_ms:
+                reached_start = True
+                break
+            if ts < selection.end_ms:
+                if raw["side"] not in ("buy", "sell"):
+                    raise ValueError("OKX 成交方向无效")
+                if job["rows"] >= MAX_TRADE_ROWS:
+                    raise ValueError(f"逐笔超过资料库上限 {MAX_TRADE_ROWS} 条，请缩短区间")
+                rows.append((ts, seq, raw["px"], format(Decimal(raw["sz"]) * multiplier, "f"), "true" if raw["side"] == "sell" else "false"))
+                job["rows"] += 1
+        if reached_start or len(page) < 100:
+            break
+        params = {"type": "1", "after": str(newest)}
+    writer.writerows(reversed(rows))
+
+
 fields = ("open_time", "open", "high", "low", "close", "volume", "quote_volume",
           "trades", "taker_buy_base", "taker_buy_quote")
 locks = WeakValueDictionary()
 
 
 def cache_key(selection):
-    return hashlib.sha256(selection.model_dump_json().encode()).hexdigest()
+    # Old receipts are exclusively Binance spot. Preserve them across upgrade.
+    legacy = selection.exchange == "binance" and selection.market_type == "spot"
+    wire = selection.model_dump_json(exclude={"exchange", "market_type"} if legacy else set())
+    return hashlib.sha256(wire.encode()).hexdigest()
 
 
 def bounds(manifest):
@@ -89,7 +167,7 @@ def cached_ranges(library, selection):
     # Only verified downloads carry venue provenance. A manually imported CSV
     # of the same symbol may belong to a different exchange.
     for manifest in library.list_datasets():
-        if manifest["symbol"] != selection.symbol or manifest["interval"] != "1m":
+        if manifest["interval"] != "1m":
             continue
         if bool(manifest.get("market_trade_input")) != (selection.kind == "aggTrades"):
             continue
@@ -137,7 +215,7 @@ def copy_cached(library, item, first, end, kind, writer, job):
 async def prepare_range(adapter, selection, job, checkpoint, *, allow_wider=True):
     # Serialize publication for overlapping windows of the same series. The
     # next caller rechecks the committed receipts after obtaining the lock.
-    series = selection.kind, selection.symbol
+    series = selection.exchange, selection.market_type, selection.kind, selection.symbol
     lock = locks.setdefault(series, asyncio.Lock())
     async with lock:
         await checkpoint()
@@ -158,9 +236,12 @@ async def assemble(adapter, selection, cached, job, checkpoint):
     client = None
     tables = get_shared_ccxt_market_tables()
     start, end = selection.start_ms, selection.end_ms
+    # The library uses path-safe native IDs; CCXT chart symbols may include
+    # slash and settlement suffix. Receipt keys retain the full acquisition identity.
+    replay_symbol = cached[0]["symbol"] if cached else (selection.symbol if "/" not in selection.symbol else None)
     instrument = cached[0]["instrument"] if cached else None
     if instrument is None:
-        metadata = get_cached_symbol_metadata("binance", "spot", selection.symbol) or {}
+        metadata = get_cached_symbol_metadata(selection.exchange, selection.market_type, selection.symbol) or {}
         if metadata.get("baseAsset") and metadata.get("quoteAsset"):
             instrument = {"base_asset": metadata["baseAsset"], "quote_asset": metadata["quoteAsset"]}
     try:
@@ -173,31 +254,41 @@ async def assemble(adapter, selection, cached, job, checkpoint):
                 if item is not None:
                     copy_cached(library, item, first, stop, selection.kind, writer, job)
                     continue
-                if client is None and (not bars or instrument is None):
-                    await asyncio.shield(adapter.replay_library.market_warmup)
-                    client = _create_exchange(get_ccxt_catalog_entry("binance"), IngestionConfig(), market_type="spot", websocket=False)
+                if client is None and (not bars or instrument is None or replay_symbol is None or (selection.market_type != "spot" and not cached)):
+                    if selection.exchange == "binance" and selection.market_type == "spot":
+                        await asyncio.shield(adapter.replay_library.market_warmup)
+                    client = _create_exchange(get_ccxt_catalog_entry(selection.exchange), IngestionConfig(),
+                                              market_type=selection.market_type, websocket=False)
                     await tables.load(client)
-                    market = next((m for m in client.markets_by_id.get(selection.symbol, []) if m.get("spot")), None)
-                    if not market:
-                        raise ValueError("找不到这个 Binance 现货交易对")
+                    descriptor = StreamDescriptor(selection.symbol, StreamType.KLINE, interval="1m",
+                                                  exchange=selection.exchange, market_type=selection.market_type)
+                    symbol = resolve_ccxt_symbol(client, descriptor)
+                    market = client.markets[symbol]
+                    replay_symbol = str(market["id"]).upper() if "/" in selection.symbol else selection.symbol
+                    if market.get("contract") and not market.get("linear"):
+                        raise ValueError("此品种为反向合约，当前回放使用线性合约")
                     instrument = {"base_asset": market["base"], "quote_asset": market["quote"]}
                 job.setdefault("missing_ranges", []).append([first, stop])
                 if bars:
                     for chunk in range(first, stop, 86_400_000):
                         await checkpoint()
-                        requirement = Requirement(exchange="binance", market_type="spot", symbol=selection.symbol,
+                        requirement = Requirement(exchange=selection.exchange, market_type=selection.market_type, symbol=selection.symbol,
                                                   start_ms=chunk, end_ms=min(stop, chunk + 86_400_000))
                         rows = await adapter.complete_host_bars(requirement, key)
                         writer.writerows([row.get(field) for field in fields] for row in rows)
                         job["rows"] += len(rows)
                 else:
-                    await trade_rows(client, selection.model_copy(update={"start_ms":first, "end_ms":stop}), writer, job, checkpoint)
+                    window = selection.model_copy(update={"start_ms": first, "end_ms": stop})
+                    if selection.exchange == "okx":
+                        await okx_trade_rows(client, window, market, writer, job, checkpoint)
+                    else:
+                        await trade_rows(client, window, market["id"], writer, job, checkpoint)
         await checkpoint()
         def utc(ms):
             return datetime.fromtimestamp(ms / 1000, timezone.utc).strftime("%Y-%m-%d %H:%M")
         label = "1m" if bars else "aggTrades"
-        name = f"Binance Spot {selection.symbol} · {label} · {utc(start)} – {utc(end)} UTC"
-        units = dict(name=name, symbol=selection.symbol, base_asset=instrument["base_asset"],
+        name = f"{selection.exchange} {selection.market_type} {selection.symbol} · {label} · {utc(start)} – {utc(end)} UTC"
+        units = dict(name=name, symbol=replay_symbol, base_asset=instrument["base_asset"],
                      quote_asset=instrument["quote_asset"], timestamp_unit="ms")
         if bars:
             result = library.import_csv(path, LocalImportOptions(**units, interval="1m", time_column="open_time",
@@ -205,7 +296,7 @@ async def assemble(adapter, selection, cached, job, checkpoint):
                 taker_buy_base_column="taker_buy_base", taker_buy_quote_column="taker_buy_quote"))
         else:
             result = library.import_user_market_trades(path, UserMarketTradeOptions(**units,
-                trade_kind="MARKET_AGG_TRADE", coverage_start_ms=start, coverage_end_ms=end))
+                trade_kind="MARKET_TRADE" if selection.exchange == "okx" else "MARKET_AGG_TRADE", coverage_start_ms=start, coverage_end_ms=end))
         receipts.mkdir(exist_ok=True)
         receipt = receipts / key
         temp = receipt.with_suffix(".tmp")
@@ -220,11 +311,17 @@ async def assemble(adapter, selection, cached, job, checkpoint):
 
 
 class ReplayLibrary:
+    def trade_providers(self):
+        return [{"exchange": v["id"], "market_type": m} for v in public_markets().values() for m in v["trades"]]
+
     def validate(self, request, adapter):
         scope = request.requirements[0]
         local = scope.exchange.startswith("local-") and scope.market_type == "local_bar"
-        if not local and (scope.exchange != "binance" or scope.market_type != "spot"):
-            raise PreparationError("INPUT_UNSUPPORTED", "网页自动补数支持 Binance 现货")
+        if not local:
+            try:
+                validate_source(scope.exchange, scope.market_type, request.intent["replay_setup"]["source_kind"] == "AGG_TRADE")
+            except ValueError as exc:
+                raise PreparationError("INPUT_UNSUPPORTED", str(exc)) from exc
         if (scope.end_ms-scope.start_ms)//minute > adapter.replay_service.settings.max_bar_dataset_rows:
             raise PreparationError("INPUT_UNSUPPORTED", "时间范围超过回放容量，请缩短区间")
 
@@ -241,6 +338,7 @@ class ReplayLibrary:
                     raise ValueError("所选本地资料未覆盖训练区间")
             else:
                 result = await prepare_range(adapter, Selection(kind="aggTrades" if trade else "bars",
+                    exchange=scope.exchange, market_type=scope.market_type,
                     symbol=scope.symbol, start_ms=scope.start_ms, end_ms=scope.end_ms), job, checkpoint)
         except PreparationError:
             raise
@@ -249,12 +347,12 @@ class ReplayLibrary:
                                    retry_at_ms=int(time.time() * 1000 + exc.retry_after_seconds * 1000)) from exc
         except (NetworkError, TimeoutError, ConnectionError) as exc:
             reason = f"{type(exc).__name__}: {exc}"[:250]
-            raise PreparationError("DOWNLOAD_UNAVAILABLE", f"无法读取行情源，请检查网络：{reason}",
+            raise PreparationError("DOWNLOAD_UNAVAILABLE", f"浏览器无法读取行情源，请检查网络或使用桌面版：{reason}",
                                    retryable=True) from exc
         except (LocalDatasetError, ValueError) as exc:
             raise PreparationError("INPUT_UNAVAILABLE", str(exc)) from exc
         return {"job_id": job_id, "consumer": "REPLAY", "missing_ranges": job["missing_ranges"],
-                "library_market": {"exchange":result["dataset_id"], "market_type":"local_bar"},
+                "library_market": {"exchange":result["dataset_id"], "market_type":"local_bar", "symbol":result["symbol"]},
                 "inputs": [{"dataset_id":result["dataset_id"], "data_epoch":result["data_epoch"]}]}
 
 
@@ -271,6 +369,10 @@ async def download(app, key, selection, job):
 
 @router.post("")
 async def submit(selection: Selection, request: Request):
+    try:
+        validate_source(selection.exchange, selection.market_type, selection.kind == "aggTrades")
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     start, end = selection.start_ms, selection.end_ms
     if start % minute or end % minute or end <= start or end > int(time.time() * 1000):
         raise HTTPException(422, "请选择已结束且对齐到分钟的 UTC 时间区间")

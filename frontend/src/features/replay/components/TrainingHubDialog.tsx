@@ -1,3 +1,4 @@
+import { BrowserReplayMarket, useReplayVenues } from "../../research-data/BrowserReplayMarket.js";
 import { useState, type ReactNode } from "react";
 import {
   Badge, Button, Checkbox, ConfirmDialog, Dialog, Disclosure, EmptyState, Field, InlineAlert, Input, SegmentedControl, Select,
@@ -122,6 +123,7 @@ type StartChoice = "RANGE" | "MARKET" | "MANUAL";
 function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: TrainingHubDialogProps) {
   const locale = useLocale();
   const browser = import.meta.env?.VITE_BROWSER_PYTHON === "1";
+  const { venues, error: venueError } = useReplayVenues(browser && runtime.createOpen);
   const { draft, evaluation } = runtime;
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [presetMode, setPresetMode] = useState<"practice" | "challenge" | "custom">("custom");
@@ -167,7 +169,9 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
       : runtime.capabilities?.sources.agg_trade.fidelity === "USER_MARKET_TRADE_COVERAGE"
         ? "local.localOnly" : "replay.hub.aggHint",
   );
-  const aggDisabled = busy || (!aggEnabled && !runtime.automaticTradePreparationAvailable);
+  const supportsTrades = !browser || draft.marketType === "local_bar"
+    || venues.find(v => v.id === draft.exchange)?.trades.includes(draft.marketType);
+  const aggDisabled = !supportsTrades || busy || (!aggEnabled && !runtime.automaticTradePreparationAvailable);
   const marketRandomDisabled = browser || busy || !runtime.automaticPreparationAvailable || draft.sourceKind !== "BAR";
   const startChoice: StartChoice = draft.startMode === "MANUAL" ? "MANUAL"
     : draft.randomScope === "MARKET" ? "MARKET" : "RANGE";
@@ -217,7 +221,7 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
         </Button>
         <Button
           variant="primary"
-          disabled={!evaluation.canSubmit || busy || validatingCatalog}
+          disabled={!evaluation.canSubmit || busy || validatingCatalog || (browser && (!draft.symbol || (draft.sourceKind === "AGG_TRADE" && !supportsTrades)))}
           onClick={() => void runtime.actions.createRun(draft)}
         >
           {busy || validatingCatalog ? busyLabel : browser && runtime.automaticPreparationAvailable
@@ -256,28 +260,24 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
           <CreateSection id="training-hub-create-start" number={1} title={t("replay.hub.sectionStart")}
             hint={runtime.automaticPreparationAvailable ? undefined : t("replay.hub.startHint")}>
             {runtime.automaticPreparationAvailable && <div className="training-hub-field-grid training-hub-field-grid-three">
-              <Field label={t("backtest.exchange")}>
-                {browser ? <Select disabled={busy} value={draft.exchange} onChange={event => {
-                  const entry = runtime.catalog?.entries.find(item => item.identity.exchange === event.target.value);
-                  patchDraft(runtime, entry ? { exchange: entry.identity.exchange, marketType: entry.identity.market_type, symbol: entry.identity.symbol }
-                    : { exchange: "binance", marketType: "spot" });
-                }}>
-                  {draft.exchange !== "binance" && !runtime.catalog?.entries.some(item => item.identity.exchange === draft.exchange) &&
-                    <option value={draft.exchange} disabled>{draft.exchange}</option>}
-                  <option value="binance">Binance</option>
-                  {runtime.catalog?.entries.filter(item => item.identity.market_type === "local_bar").map(item =>
-                    <option key={item.identity.exchange} value={item.identity.exchange}>{item.identity.symbol} · {item.identity.exchange}</option>)}
-                </Select> : <Input disabled={busy} value={draft.exchange} onChange={(event) => patchDraft(runtime, { exchange: event.target.value.trim().toLowerCase() })} />}
-              </Field>
-              <Field label={t("backtest.marketType")}>
-                <Select disabled={busy || (browser && ["spot", "local_bar"].includes(draft.marketType))} value={draft.marketType} onChange={(event) => patchDraft(runtime, { marketType: event.target.value })}>
-                  {browser && draft.marketType === "local_bar" && <option value="local_bar">{t("local.libraryAria")}</option>}
-                  <option value="spot">{t("market.spot")}</option>{(!browser || draft.marketType === "futures") && <option value="futures">{t("market.futures")}</option>}
-                </Select>
-              </Field>
-              <Field label={t("replay.hub.symbol")}>
-                <Input disabled={busy || (browser && draft.marketType === "local_bar")} value={draft.symbol} onChange={(event) => patchDraft(runtime, { symbol: event.target.value.trim().toUpperCase() })} />
-              </Field>
+              {browser ? <>
+                <BrowserReplayMarket venues={venues} market={draft} busy={busy}
+                  local={(runtime.catalog?.entries ?? []).filter(item => item.identity.market_type === "local_bar").map(({identity}) =>
+                    ({ exchange:identity.exchange,marketType:identity.market_type,symbol:identity.symbol }))}
+                  onChange={(market, quote) => patchDraft(runtime, { ...market,
+                    ...(quote ? { settlementAsset:quote } : {}),
+                    ...(market.marketType !== "local_bar" && !venues.find(v => v.id === market.exchange)?.trades.includes(market.marketType)
+                      ? { sourceKind:"BAR" } : {}) })} />
+                <Field label={locale.startsWith("zh") ? "结算资产" : "Settlement asset"}><Input disabled={busy} value={draft.settlementAsset}
+                  onChange={event => patchDraft(runtime, {settlementAsset:event.target.value.trim().toUpperCase()})} /></Field>
+                {venueError && <small>{venueError}</small>}
+              </> : <>
+                <Field label={t("backtest.exchange")}><Input disabled={busy} value={draft.exchange} onChange={(event) => patchDraft(runtime, { exchange: event.target.value.trim().toLowerCase() })} /></Field>
+                <Field label={t("backtest.marketType")}><Select disabled={busy} value={draft.marketType} onChange={(event) => patchDraft(runtime, { marketType: event.target.value })}>
+                  <option value="spot">{t("market.spot")}</option><option value="futures">{t("market.futures")}</option>
+                </Select></Field>
+                <Field label={t("replay.hub.symbol")}><Input disabled={busy} value={draft.symbol} onChange={(event) => patchDraft(runtime, { symbol: event.target.value.trim().toUpperCase() })} /></Field>
+              </>}
               {(!runtime.preparationJob || preparationActive) && <p className="ui-field-hint training-hub-field-wide">{preparationHint}</p>}
             </div>}
             <Field label={t("replay.hub.archiveName")}>
@@ -292,7 +292,8 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
               ]}
               onChange={(sourceKind) => patchDraft(runtime, { sourceKind })}
               hint={draft.sourceKind === "BAR" ? t("replay.hub.barHint") : aggHint}
-              note={draft.sourceKind === "BAR" && aggDisabled && !busy ? aggHint : null}
+              note={draft.sourceKind === "BAR" && aggDisabled && !busy ? (!supportsTrades
+                ? (locale.startsWith("zh") ? "此市场目前支持 K 线回放。" : "Bar replay is available for this market.") : aggHint) : null}
             />
             <CreateChoice<StartChoice>
               label={t("replay.hub.startMode")}

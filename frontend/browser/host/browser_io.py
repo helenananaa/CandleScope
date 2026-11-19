@@ -65,8 +65,11 @@ async def http_request(session, method, url, **options):
     async with asyncio.timeout(total if isinstance(total, (int, float)) else 20):
         if any(str(name).lower() in {"authorization", "x-mbx-apikey", "ok-access-key"} for name in (options.get("headers") or {})):
             raise aiohttp.ClientConnectionError("Private exchange accounts require the desktop runtime")
-        response = await pyfetch(str(target), method="GET", credentials="omit",
-                                 headers={"Accept": "application/json"})
+        try:
+            response = await pyfetch(str(target), method="GET", credentials="omit",
+                                     headers={"Accept": "application/json"})
+        except OSError as exc:
+            raise aiohttp.ClientConnectionError(f"Browser Fetch could not reach {target.host}") from exc
         headers = response.js_response.headers
         return FetchResponse(response, [(key, headers.get(key)) for key in headers.keys()])
 

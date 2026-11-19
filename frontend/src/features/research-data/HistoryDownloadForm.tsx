@@ -1,3 +1,4 @@
+import { BrowserReplayMarket, useReplayVenues } from "./BrowserReplayMarket.js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Button, Field, Input, Select } from "../../components/ui/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -21,6 +22,10 @@ export function HistoryDownloadForm({ onImported, initialSymbol = "BTCUSDT" }: {
 }) {
   const zh = useLocale().startsWith("zh");
   const label = (chinese: string, english: string) => zh ? chinese : english;
+  const { venues, error: catalogError } = useReplayVenues(true);
+  const [market, setMarket] = useState({exchange:"binance",marketType:"spot",symbol:initialSymbol});
+  const [kind, setKind] = useState("bars");
+  const trades = venues.find(v => v.id === market.exchange)?.trades.includes(market.marketType);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -38,7 +43,7 @@ export function HistoryDownloadForm({ onImported, initialSymbol = "BTCUSDT" }: {
     setMessage(label("正在准备行情…", "Preparing market data…"));
     try {
       const input = {
-        kind: fields.get("kind"),
+        kind, exchange:market.exchange, market_type:market.marketType,
         symbol: String(fields.get("symbol")).trim().toUpperCase(),
         start_ms: Date.parse(fields.get("start") + "Z"),
         end_ms: Date.parse(fields.get("end") + "Z"),
@@ -84,12 +89,15 @@ export function HistoryDownloadForm({ onImported, initialSymbol = "BTCUSDT" }: {
   }
 
   return <form className="research-import-form" onSubmit={submit} data-testid="history-download-form">
-    <p>Binance · {label("现货", "Spot")}</p>
     <fieldset disabled={busy} className="research-import-grid">
-      <Field label={label("交易对", "Symbol")}><Input name="symbol" defaultValue={initialSymbol} required pattern="[a-zA-Z0-9]{2,40}" /></Field>
-      <Field label={label("行情类型", "Data")}><Select name="kind" defaultValue="bars">
+      <BrowserReplayMarket venues={venues} market={market} busy={busy} onChange={next=>{
+        setMarket(next);
+        if(!venues.find(v=>v.id===next.exchange)?.trades.includes(next.marketType))setKind("bars");
+      }} />
+      {catalogError && <small>{catalogError}</small>}
+      <Field label={label("行情类型", "Data")}><Select name="kind" value={kind} onChange={e=>setKind(e.target.value)}>
         <option value="bars">{label("1 分钟 K 线", "1-minute bars")}</option>
-        <option value="aggTrades">{label("聚合逐笔成交", "Aggregate trades")}</option>
+        <option value="aggTrades" disabled={!trades}>{label("逐笔成交", "Trades")}</option>
       </Select></Field>
       <Field label={label("开始（UTC）", "Start (UTC)")}><Input name="start" type="datetime-local" defaultValue={utcInput(30)} required /></Field>
       <Field label={label("结束（UTC，不含）", "End (UTC, exclusive)")}><Input name="end" type="datetime-local" defaultValue={utcInput(5)} required /></Field>
