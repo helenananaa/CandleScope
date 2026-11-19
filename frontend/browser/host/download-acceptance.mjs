@@ -39,6 +39,10 @@ async function visit(offline, check) {
 try {
   await visit(false, async (page, form) => {
     for (const kind of ['bars', 'aggTrades']) {
+      if (kind !== 'bars') {
+        await page.goto(new URL('strategy.html?action=import', url).href)
+        await page.getByRole('tab', { name: /自动下载|Download/ }).click({ timeout: 150000 })
+      }
       await form.locator('[name=kind]').selectOption(kind)
       await form.locator('[name=start]').fill(new Date(start).toISOString().slice(0, 16))
       await form.locator('[name=end]').fill(new Date(end).toISOString().slice(0, 16))
@@ -47,14 +51,19 @@ try {
         () => {
           const form = document.querySelector('[data-testid=history-download-form]')
           return (
-            form?.querySelector('[role=alert]') ||
+            !form ||
+            form.querySelector('[role=alert]') ||
             form?.querySelector('[role=status]')?.textContent.match(/已保存|Saved/)
           )
         },
         null,
         { timeout: 240000 }
       )
-      assert.equal(await form.getByRole('alert').count(), 0, await form.innerText())
+      assert.equal(
+        await form.getByRole('alert').count(),
+        0,
+        await form.allInnerTexts().then((text) => text.join(' '))
+      )
       const manifest = await page.evaluate(async (kind) => {
         const { datasets } = await (await fetch('/api/v1/local/datasets')).json()
         return datasets.find((d) => (kind === 'aggTrades' ? d.market_trade_input : !d.market_trade_input))

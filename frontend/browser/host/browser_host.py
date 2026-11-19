@@ -77,6 +77,7 @@ async def start():
     # Reserve the metadata dependency before the UI opens its independent WS
     # and REST consumers. A restored database can render while it warms.
     warmup = asyncio.create_task(warm_initial_market())
+    app.state.replay_library.market_warmup = warmup
     try:
         await asyncio.wait_for(asyncio.shield(warmup), 1 if Path("/store/candlescope.db").exists() else 46)
     except TimeoutError:

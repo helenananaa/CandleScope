@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from app.data_engine.ingestion.config import IngestionConfig
 from app.data_preparation.models import PreparationError, Requirement
+from app.exchanges.rate_limits import RateLimitDeferred
 from app.exchanges.symbol_catalog import get_cached_symbol_metadata
 from app.exchanges.ccxt_ext.catalog import get_ccxt_catalog_entry
 from app.exchanges.ccxt_ext.generic import _create_exchange
@@ -173,6 +174,7 @@ async def assemble(adapter, selection, cached, job, checkpoint):
                     copy_cached(library, item, first, stop, selection.kind, writer, job)
                     continue
                 if client is None and (not bars or instrument is None):
+                    await asyncio.shield(adapter.replay_library.market_warmup)
                     client = _create_exchange(get_ccxt_catalog_entry("binance"), IngestionConfig(), market_type="spot", websocket=False)
                     await tables.load(client)
                     market = next((m for m in client.markets_by_id.get(selection.symbol, []) if m.get("spot")), None)
@@ -242,8 +244,13 @@ class ReplayLibrary:
                     symbol=scope.symbol, start_ms=scope.start_ms, end_ms=scope.end_ms), job, checkpoint)
         except PreparationError:
             raise
-        except (NetworkError, OSError) as exc:
-            raise PreparationError("DOWNLOAD_UNAVAILABLE", "无法读取行情源，请检查网络后重试") from exc
+        except RateLimitDeferred as exc:
+            raise PreparationError("RATE_LIMIT", "行情源请求正在等待配额", retryable=True,
+                                   retry_at_ms=int(time.time() * 1000 + exc.retry_after_seconds * 1000)) from exc
+        except (NetworkError, TimeoutError, ConnectionError) as exc:
+            reason = f"{type(exc).__name__}: {exc}"[:250]
+            raise PreparationError("DOWNLOAD_UNAVAILABLE", f"无法读取行情源，请检查网络：{reason}",
+                                   retryable=True) from exc
         except (LocalDatasetError, ValueError) as exc:
             raise PreparationError("INPUT_UNAVAILABLE", str(exc)) from exc
         return {"job_id": job_id, "consumer": "REPLAY", "missing_ranges": job["missing_ranges"],

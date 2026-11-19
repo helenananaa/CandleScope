@@ -188,6 +188,9 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
         ? REPLAY_POLICY_MUTATIONS
         : ["deposit", "withdraw"],
   });
+  const preparationHint = browser
+    ? (locale.startsWith("zh") ? "优先使用已保存的行情，仅补齐缺口。" : "Saved history is reused. Only missing intervals are fetched.")
+    : t("preparation.background");
   const intro = t(runtime.automaticPreparationAvailable ? "preparation.replayIntro" : "replay.hub.createIntro");
   return (
     <Dialog
@@ -203,7 +206,7 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
           {runtime.preparationJob && <div role="status" aria-live="polite">
             <p>{t(preparationStatus)} · {runtime.preparationJob.completed}/{runtime.preparationJob.total}</p>
             <PreparationWaiting job={runtime.preparationJob} />
-            {preparationActive && <p>{t("preparation.background")}</p>}
+            {preparationActive && <p>{preparationHint}</p>}
             {busy && preparationActive && <Button size="sm" disabled={runtime.preparationJob.cancel_requested || runtime.preparationJob.stage === "STARTING"}
               onClick={() => void preparationRequest(`/${runtime.preparationJob!.id}/cancel`, { method: "POST" }).catch(() => undefined)}>{t("preparation.cancel")}</Button>}
           </div>}
@@ -275,7 +278,7 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
               <Field label={t("replay.hub.symbol")}>
                 <Input disabled={busy || (browser && draft.marketType === "local_bar")} value={draft.symbol} onChange={(event) => patchDraft(runtime, { symbol: event.target.value.trim().toUpperCase() })} />
               </Field>
-              {(!runtime.preparationJob || preparationActive) && <p className="ui-field-hint training-hub-field-wide">{t("preparation.background")}</p>}
+              {(!runtime.preparationJob || preparationActive) && <p className="ui-field-hint training-hub-field-wide">{preparationHint}</p>}
             </div>}
             <Field label={t("replay.hub.archiveName")}>
               <Input value={draft.name} maxLength={80} onChange={(event) => patchDraft(runtime, { name: event.target.value })} />
