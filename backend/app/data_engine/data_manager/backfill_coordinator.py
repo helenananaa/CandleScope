@@ -239,6 +239,9 @@ class BackfillCoordinator:
             max_concurrency=max_concurrency,
             chunk_bars=chunk_bars,
         )
+        from . import family_fill
+        if family_fill.ENABLED:
+            self._scheduler.family_gate = family_fill.FamilyFillManager(self)
 
     def set_engine(self, engine: BackfillEngineLike) -> None:
         self._engine = engine

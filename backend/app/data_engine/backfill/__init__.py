@@ -295,6 +295,30 @@ class BackfillEngine:
         with self.publisher.receipt_scope() as enabled:
             return await self.run(*args,**kwargs, _receipt_mode=enabled)
 
+    @budgeted_work
+    async def plan_mixed_sources(self, *, symbol, interval, range_start_ms, range_end_ms,
+                                 exchange, market_type, metadata):
+        """Plan only: the mixed plan a run of this range would make now.
+
+        No fetch, write or fence: a read-only acquisition holds no permission
+        row. The family fill (data_manager/family_fill.py) uses it to learn
+        each chunk's target range and selected source grids. Returns
+        ``(plan or None, diagnostics)``.
+        """
+        from app.core.executors import run_storage
+        from app.data_engine.storage.revisions import acquisition_scope
+        from .mixed_plan import build_mixed_backfill_plan
+        store = getattr(self._storage, "revision_store", None)
+        if store is None:
+            return None, {}
+        symbol = normalize_symbol(symbol, exchange=exchange, market_type=market_type)
+        with acquisition_scope(await run_storage(store.acquisition)):
+            gaps = await self.detector.detect(symbol=symbol, intervals=[interval], range_start_ms=range_start_ms,
+                range_end_ms=range_end_ms, exchange=exchange, market_type=market_type)
+            diagnostics = {}
+            plan = await build_mixed_backfill_plan(self, gaps, dict(metadata), diagnostics) if gaps else None
+        return plan, diagnostics
+
     @admitted_work
     @fenced_acquisition
     @budgeted_work

@@ -298,7 +298,9 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
             decomp = IntervalDecomposition(target.interval, spec.nominal_ms, components,
                 composition_policy=policy, composition_target_range=(first, stop))
             diagnostics.update(mixed_history=True, mixed_source_rows=builder.rows,
-                mixed_estimated_rest_requests=requests, single_base_estimated_rest_requests=baseline_requests)
+                mixed_estimated_rest_requests=requests, single_base_estimated_rest_requests=baseline_requests,
+                # The grids this plan selected (family fill plans with the same ones).
+                mixed_selected_sources=[source.series.interval for source in sources])
             planner.metrics.inc("mixed_adopted_plans")
             planner.metrics.set("last_mixed_source_rows", builder.rows)
             planner.metrics.set("last_mixed_estimated_requests", requests)

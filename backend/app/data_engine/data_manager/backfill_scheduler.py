@@ -309,6 +309,9 @@ class BackfillScheduler:
         self.local_burst_dispatches = 0
         self.mixed_chunk_refinements = 0
         self._local_burst: dict[tuple[int, bool], tuple[str, float]] = {}
+        # Optional per-symbol cold source fill (family_fill.FamilyFillManager):
+        # told of every new request, and asked before a chunk is dispatched.
+        self.family_gate = None
 
     def submit(self, request: RepairRequest) -> tuple[str, asyncio.Future[RepairOutcome]]:
         if self._shutdown:
@@ -415,6 +418,9 @@ class BackfillScheduler:
         self._requests[request.request_id] = state
         series.pending.append(request.request_id)
         self._on_queued(request)
+        if self.family_gate is not None:
+            # Before this request's chunks can dispatch below.
+            self.family_gate.note(request)
         self._replace_pending_chunks(state)
         self._publish_progress(state, status="queued")
         self._drain()
@@ -866,6 +872,8 @@ class BackfillScheduler:
     async def shutdown(self) -> None:
         self._shutdown = True
         self._cancel_drain_timer()
+        if self.family_gate is not None:
+            await self.family_gate.shutdown()
         for task in list(self._tasks.values()):
             task.cancel()
         if self._tasks:
@@ -961,6 +969,7 @@ class BackfillScheduler:
             "exchange_rate_limit_deferrals": self.exchange_rate_limit_deferrals,
             "capacity_waiting_chunks": sum(chunk.resource_waiter is not None
                 or chunk.phase_wait_reason=='memory_working_set' for chunk in self._chunks.values()),
+            "family_fill": self.family_gate.snapshot() if self.family_gate is not None else None,
             "resource_waiting_chunks":len(self._parked),"phase_resumptions":self.phase_resumptions,
             "deferred_chunks": len(deferred),
             "deferred": sorted(
@@ -1398,6 +1407,11 @@ class BackfillScheduler:
                 # it runs it can read the canonical inputs the first job wrote.
                 if (self._series_conflict(series,chunk.parent_id)
                         or self._shared_gap_input_active(chunk.request)):
+                    skipped.append(item)
+                    continue
+                # A family fill is still acquiring sources this chunk reads.
+                if (not resuming and self.family_gate is not None
+                        and self.family_gate.holds(chunk.request)):
                     skipped.append(item)
                     continue
                 if self._max_concurrency and self._is_background(chunk.request) and (
@@ -2506,7 +2520,8 @@ class BackfillScheduler:
         # Required mixed execution and optional bounded fine-source batches
         # are different contracts. A covered/merged consumer cannot silently
         # lose either contract to a parent running under another one.
-        contracts = ('required_history_composition', 'bounded_history_batch_contract')
+        # A family fill tracks each of its pieces by its own future.
+        contracts = ('required_history_composition', 'bounded_history_batch_contract', 'family_fill_piece')
         return (_is_active_hydration(existing) == _is_active_hydration(new)
                 and all(existing.metadata.get(key) == new.metadata.get(key) for key in contracts))
 
