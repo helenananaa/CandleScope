@@ -5,6 +5,14 @@ import type { BacktestResearchRuntime } from "./backtestResearchTypes.js";
 import { researchFidelityLabel, shortFingerprint } from "./researchLabels.js";
 import ResearchPanelFrame from "./ResearchPanelFrame.js";
 
+type Dataset = BacktestResearchRuntime["view"]["datasets"][number];
+
+// Dataset names are long ("okx futures BTC-USDT-SWAP 1m · BTC-USDT-SWAP · 1m"); the select shows
+// what fits and its title the whole.
+function datasetOptionLabel(item: Dataset): string {
+  return `${item.name} · ${item.symbol} · ${item.interval}`;
+}
+
 export default function ResearchDataPanel({ runtime }: { runtime: BacktestResearchRuntime }) {
   const {
     advancedEnabled,
@@ -25,10 +33,11 @@ export default function ResearchDataPanel({ runtime }: { runtime: BacktestResear
       {advancedEnabled ? (
         <>
           <Field label={t("research.data.dataset")}>
-            <Select size="sm" value={selectedDatasetId} onChange={(event) => runtime.actions.selectDataset(event.target.value)}>
+            <Select size="sm" value={selectedDatasetId} title={dataset ? datasetOptionLabel(dataset) : undefined}
+              onChange={(event) => runtime.actions.selectDataset(event.target.value)}>
               {datasets.map((item) => (
                 <option key={`${item.dataset_id}:${item.data_epoch}`} value={item.dataset_id}>
-                  {item.name} · {item.symbol} · {item.interval}
+                  {datasetOptionLabel(item)}
                 </option>
               ))}
             </Select>
@@ -50,7 +59,7 @@ export default function ResearchDataPanel({ runtime }: { runtime: BacktestResear
         <dl className="research-facts">
           <div><dt>{t("research.data.rows")}</dt><dd>{dataset.rows}</dd></div>
           <div><dt>{t("research.data.epoch")}</dt><dd title={dataset.data_epoch}>{shortFingerprint(dataset.data_epoch)}</dd></div>
-          <div><dt>{t("research.data.coverage")}</dt><dd>{new Date(dataset.first_open_ms ?? 0).toLocaleDateString(getLocale())} → {new Date(dataset.last_close_ms ?? 0).toLocaleDateString(getLocale())}</dd></div>
+          <div><dt>{t("research.data.coverage")}</dt><dd className="research-fact-wrap">{new Date(dataset.first_open_ms ?? 0).toLocaleDateString(getLocale())} → {new Date(dataset.last_close_ms ?? 0).toLocaleDateString(getLocale())}</dd></div>
         </dl>
       )}
       {snapshot ? (

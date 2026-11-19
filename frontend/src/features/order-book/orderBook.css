@@ -40,22 +40,51 @@
 }
 
 .ob-symbol {
-  min-width: 0;
-  overflow: hidden;
+  flex-shrink: 0;
   color: var(--text-muted);
   font-size: var(--font-size-xs);
   font-weight: 600;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ob-delivery-mode {
+/* The header's right side: the status, and the data mode (a pill) beside the title. Laid out from
+   the right, so the status comes first and its auto margin puts the mode next to the title; when
+   the two do not fit (a narrow rail, a long language) the mode wraps onto a second line the header
+   hides, whole, and the status stays. Shared with the tape and the profile. */
+.ob-meta {
+  display: flex;
+  flex: 1 1 0;
+  flex-flow: row-reverse wrap;
+  align-items: center;
+  align-content: flex-start;
+  align-self: stretch;
+  min-width: 0;
+  column-gap: 6px;
   overflow: hidden;
+}
+/* The status itself: when even it does not fit, its label goes to a second line out of sight and
+   the coloured dot stays at the end (the label is still its text, and on hover). */
+.ob-meta > :first-child {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-content: flex-start;
+  height: 100%;
+  min-width: 0;
+  flex-shrink: 1;
+  row-gap: 40px;
+  overflow: hidden;
+}
+/* Makes the status's first line as tall as the header, so the dot and label stay centred. */
+.ob-meta > :first-child::before {
+  height: 100%;
+  margin-right: -4px;
+  content: "";
+}
+.ob-delivery-mode {
   padding: 2px 5px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-full);
   color: var(--text-muted);
   font-size: var(--font-size-xs);
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .ob-status {
@@ -92,22 +121,22 @@
   0%, 100% { opacity: 0.35; }
   50% { opacity: 1; }
 }
-/* Narrow rails put the mode switch on its own row so no select value is clipped in any
-   language; a wide rail fits all four controls on one row. */
+/* Each select is as wide as its value and the row wraps when they do not fit, so no value is cut
+   in any language ("20 档" and "Stufen: 20" alike); a narrow rail puts the mode switch on its own
+   row, a wide rail fits all four controls on one. */
 .ob-controls {
-  display: grid;
+  display: flex;
   flex: 0 0 auto;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  flex-wrap: wrap;
   align-items: center;
   min-width: 0;
   padding: 4px 6px;
   gap: 5px;
   border-bottom: 1px solid var(--border-subtle);
 }
-.ob-controls > .ui-segmented { grid-column: 1 / -1; }
+.ob-controls > .ui-segmented { flex: 1 0 100%; }
 @container rail (min-width: 380px) {
-  .ob-controls { grid-template-columns: minmax(120px, auto) repeat(3, minmax(0, 1fr)); }
-  .ob-controls > .ui-segmented { grid-column: auto; }
+  .ob-controls > .ui-segmented { flex: 1 0 120px; }
 }
 .ob-history-note {
   padding: 2px 6px;
@@ -115,9 +144,10 @@
   font-size: 11px;
 }
 .ob-controls label {
-  min-width: 0;
+  display: flex;
+  flex: 1 0 auto;
 }
-.ob-controls .ui-select { width: 100%; font-size: var(--font-size-xs); }
+.ob-controls .ui-select { flex: 1 0 auto; width: auto; field-sizing: content; font-size: var(--font-size-xs); }
 /* Dock selects are compact: values such as "自动 0.1" and "1000 ms" stay whole in a 300 px rail. */
 :is(.ob-controls, .ob-range-controls, .tf-controls) .ui-select { padding-left: 6px; padding-right: 18px; background-position: right 5px center; }
 
@@ -233,11 +263,14 @@
   filter: grayscale(0.6);
 }
 
+/* The message wraps (it is a sentence: "Orderbuch-Snapshot hat sich zu lange nicht aktualisiert");
+   the retry button keeps its label. */
 .ob-stale-bar span {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.35;
+}
+.ob-stale-bar .ui-btn {
+  flex-shrink: 0;
 }
 
 /* Range controls, the stale bar and the narrow rail (merged from orderBookControls.css in Phase 5i). */
@@ -256,7 +289,7 @@
   border-bottom: 1px solid var(--border-color);
 }
 .ob-range-controls label { display: inline-flex; align-items: center; gap: 4px; }
-.ob-range-controls .ui-select { width: auto; max-width: 110px; font-size: var(--font-size-xs); }
+.ob-range-controls .ui-select { width: auto; max-width: 100%; field-sizing: content; font-size: var(--font-size-xs); }
 .ob-range-controls > span { margin-left: auto; white-space: nowrap; }
 
 .ob-stale-bar {
@@ -273,13 +306,9 @@
 }
 
 
-/* Order book in a narrow rail: keep the title on one line, drop the delivery
- * label, and put the four controls on two rows instead of truncating them. */
+/* The title and the status keep their width; the data mode gives way (.ob-meta). */
 .ob-title,
 .ob-status {
   flex-shrink: 0;
   white-space: nowrap;
-}
-@container rail (max-width: 280px) {
-  .ob-delivery-mode { display: none; }
 }

@@ -74,7 +74,7 @@ export default function ResearchRunPanel({ runtime }: { runtime: BacktestResearc
               aria-current={run.run_id === activeRun?.run_id ? "true" : undefined}
               onClick={() => void runtime.actions.openRun(run.run_id)}
             >
-              <span><strong>{run.run_id}</strong><small>{researchFidelityLabel(run.fidelity_mode)}</small></span>
+              <span><strong title={run.run_id}>{run.run_id}</strong><small>{researchFidelityLabel(run.fidelity_mode)}</small></span>
               <Badge tone={researchStateTone(run.state)}>{researchStateLabel(run.state)}</Badge>
             </button>
           </li>
