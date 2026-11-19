@@ -41,5 +41,5 @@ export default defineConfig({
   base: './',
   publicDir: false,
   plugins: [react(), browserAssets()],
-  build: { outDir: '../dist-web', emptyOutDir: true },
+  build: { outDir: '../dist-prototype', emptyOutDir: true },
 })

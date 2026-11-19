@@ -25,3 +25,6 @@ desktop-dist
 *.sln
 *.sw?
 /dist-web/
+/browser/.host-cache/
+/dist-host/
+/dist-prototype/

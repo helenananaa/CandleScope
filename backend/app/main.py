@@ -22,6 +22,7 @@ an explicit capability error and never silently fall back.
 import asyncio
 import logging
 import os
+import sys
 
 # ── Monkey-patch: websockets recv_messages bug ──────────────────
 # websockets ≥15 initializes ``recv_messages`` in ``connection_made``,
@@ -589,7 +590,8 @@ async def _startup_event_impl() -> None:
     # Parse the CCXT CA bundle off the loop before feeds open their clients.
     from app.exchanges.ccxt_ext.tls import start_shared_ssl_context_warmup
 
-    start_shared_ssl_context_warmup()
+    if sys.platform != "emscripten":  # Fetch and WebSocket use the browser TLS stack.
+        start_shared_ssl_context_warmup()
 
     # 1. Initialize registered market-storage schemas through one composition root.
     storage_bootstrap = startup_factory(app, "market-storage", initialize_market_storage)(
@@ -788,7 +790,12 @@ def _schedule_symbol_catalog_refresh() -> asyncio.Task[None]:
             from app.exchanges.symbol_catalog import refresh_exchange_metadata
 
             await _wait_for_catalog_foreground_quiet()
-            counts = await refresh_exchange_metadata()
+            if sys.platform == "emscripten":
+                # Warm only the initial market on visitors' network connections.
+                # The usual catalog API can discover more sources on demand.
+                counts = await refresh_exchange_metadata("binance", market_type="spot")
+            else:
+                counts = await refresh_exchange_metadata()
             print(f"[startup] Exchange info loaded [ok] {counts}")
         except asyncio.CancelledError:
             raise

@@ -30,11 +30,26 @@ npm run build:web
 python3 -m http.server 4178 --bind 127.0.0.1 --directory dist-web
 ```
 
-Open `http://127.0.0.1:4178/`. Publish the contents of `dist-web/` together to serve the workspace from a static host, including under a subdirectory. The browser loads its own bundled Pyodide worker and fetches public Binance spot candles directly. The build copies the desktop source-quality and aggregation rules from `backend/app/data_engine`.
+Open `http://127.0.0.1:4178/` in a browser supporting module Shared Workers, Service Workers, WebAssembly and IndexedDB. Public hosting requires HTTPS. Build from a Git checkout with Python 3 and curl available. The build downloads checksum-locked wheels into `browser/.host-cache`; the deployed application serves its Python runtime and wheels from the same static site.
 
-The market picker searches a bundled spot directory and refreshes it from Binance. Watchlists use the desktop group store. Visible charts can link symbols, intervals, indicators, crosshairs and time ranges. MA, EMA and RSI run the desktop Python implementations with configurable periods and price inputs.
+The market, replay and strategy entries load the original React entrypoints. A service worker forwards application HTTP requests to the original FastAPI ASGI app in a shared Pyodide worker. In-app WebSockets use that same app. Public exchange I/O uses browser Fetch/WebSocket below CCXT. Desktop query, backfill, storage, indicator and chart logic remain the owners of their contracts. SQLite files live in the browser profile's IndexedDB-backed filesystem. Clearing site data removes them.
 
-IndexedDB keeps visited history pages and closed live candles by market, interval and timestamp. Reopening restores the saved chart window. Outstanding backward pagination resumes after reconnect, and missing intervals between stored candles are fetched in pages. Data stays in this browser profile and is subject to its storage quota. BTC, ETH and SOL against USDT also include 180 historical Binance candles for 5m, 15m, 1h and 1d for first-time visits without exchange access. The chart footer identifies the historical source and last bar time. Playback uses the loaded window. Full training sessions, strategy backtests, accounts and native plugins use the desktop runtime.
+The browser host disables native plugins, subprocess backtests, private exchange accounts and the optional Parquet trade-tape runtime. Exchange availability depends on the visitor's network and CORS. Native local-access checks still apply. History-study views in the WASM host use origin-scoped browser storage. A tab shares the Python engine with other tabs on the same application origin. Closing the browser ends background work. Loading an original page does not by itself establish parity for all of its workflows.
+
+The earlier standalone prototype is available with `npm run build:web:prototype` (output `dist-prototype/`). Its workspace and IndexedDB records use a separate format and are preserved independently of the original backend's SQLite databases.
+
+### Browser acceptance
+
+The live smoke uses the original market canvas and API to fetch public bars, request an older page and check the desktop MA against the displayed inputs. It exits Chromium completely, reopens the same profile with external market DNS blocked, compares all six OHLCV/time fields for 32 historical bars, then reopens online and extends the same series further. It creates and removes its own temporary browser profile.
+
+With a local Playwright Core install and Chrome available, run from the frontend directory:
+
+```sh
+PLAYWRIGHT_MODULE=/path/to/node_modules/playwright-core CHROME_PATH=/path/to/chrome \
+  node browser/host/acceptance.mjs http://127.0.0.1:4178/
+```
+
+This covers the live K-line/backfill and SQLite restart path. Full replay training sessions, account workflows, every exchange, long histories and other browsers have separate acceptance requirements.
 
 ## Backend Connection
 

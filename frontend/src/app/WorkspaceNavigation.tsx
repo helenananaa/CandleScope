@@ -43,5 +43,9 @@ export default function WorkspaceNavigation({ active, offline = false, onReplay,
     {trainingDisabled ? <button type="button" disabled title={replayReason ?? localReplay.reason ?? undefined}>{t("ux.training")}</button> : onReplay
       ? <button type="button" onClick={onReplay} data-replay-entry="enabled">{t("ux.training")}</button>
       : <a href="/replay.html" aria-current={active === "replay" ? "page" : undefined}>{t("ux.training")}</a>}
+    {import.meta.env.VITE_BROWSER_PYTHON === "1" && <a
+      href="https://github.com/helenananaa/CandleScope/releases"
+      title="本地 Python 策略、原生插件、账户接入及常驻任务需要桌面运行时"
+      target="_blank" rel="noreferrer">下载桌面版 ↗</a>}
   </nav>;
 }
