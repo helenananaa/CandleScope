@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import time
+import uuid
 from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -70,7 +71,8 @@ async def trade_rows(client, selection, output, job):
 
 async def download(app, key, selection, job):
     library = app.state.local_data_service
-    path = library.new_upload_path()
+    # The transfer file is disposable. Only publish validated datasets to IDBFS.
+    path = Path("/tmp") / f"download-{uuid.uuid4().hex}.csv"
     client = None
     tables = get_shared_ccxt_market_tables()
     try:
@@ -114,7 +116,7 @@ async def download(app, key, selection, job):
         job.update(status="complete", dataset=result)
     except Exception as exc:
         logging.getLogger(__name__).warning("Library download failed", exc_info=True)
-        job.update(status="failed", error=str(exc)[:400] or type(exc).__name__)
+        job.update(status="failed", error=f"{type(exc).__name__}: {exc}"[:400])
     finally:
         path.unlink(missing_ok=True)
         if client is not None:

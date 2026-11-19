@@ -5,11 +5,29 @@ let nextSocket = 0
 let sync = Promise.resolve()
 function filesystem(py, populate) {
   return new Promise((resolve, reject) =>
-    py.FS.syncfs(populate, (error) => (error ? reject(error) : resolve()))
+    py.FS.syncfs(populate, (error) => {
+      if (!error) return resolve()
+      const failure = new Error(
+        error.message || error.name || 'Browser filesystem sync failed (errno ' + error.errno + ')'
+      )
+      failure.errno = error.errno
+      reject(failure)
+    })
   )
 }
 function persist(py) {
-  const task = sync.catch(() => {}).then(() => filesystem(py, false))
+  const task = sync
+    .catch(() => {})
+    .then(async () => {
+      try {
+        await filesystem(py, false)
+      } catch (error) {
+        // IDBFS enumerates files before opening its transaction. SQLite may
+        // remove a journal during that interval. Re-enumerate on WASI ENOENT.
+        if (error.errno !== 44) throw error
+        await filesystem(py, false)
+      }
+    })
   sync = task
   return task
 }

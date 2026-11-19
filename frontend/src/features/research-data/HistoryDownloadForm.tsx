@@ -44,9 +44,18 @@ export function HistoryDownloadForm({ onImported, initialSymbol = "BTCUSDT" }: {
         end_ms: Date.parse(fields.get("end") + "Z"),
       };
       const path = "/api/v1/local/downloads";
-      let response = await fetch(path, {
+      // A Worker may briefly be busy flushing another request to IndexedDB.
+      // The selection is idempotent and polling only reads its current state.
+      async function request(url: string, options: RequestInit = {}) {
+        const init = { ...options, signal: controller.signal };
+        const first = await fetch(url, init);
+        if (first.status !== 503 && first.status !== 504) return first;
+        await new Promise(resolve => setTimeout(resolve, 800));
+        return fetch(url, init);
+      }
+      let response = await request(path, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(input), signal: controller.signal,
+        body: JSON.stringify(input),
       });
       while (!controller.signal.aborted) {
         const result = await response.json();
@@ -61,7 +70,7 @@ export function HistoryDownloadForm({ onImported, initialSymbol = "BTCUSDT" }: {
         setMessage(label("正在下载", "Downloading") + " · " + job.rows);
         await new Promise(resolve => setTimeout(resolve, 800));
         if (controller.signal.aborted) return;
-        response = await fetch(path + "/" + job.id, { signal: controller.signal });
+        response = await request(path + "/" + job.id);
       }
     } catch (reason) {
       if (!controller.signal.aborted) {
