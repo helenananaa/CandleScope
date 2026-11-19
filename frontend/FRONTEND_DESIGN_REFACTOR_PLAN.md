@@ -654,6 +654,12 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - Layout in Italian and Portuguese (152 visits, the 19 states that open without the local service, which kept hanging): the one cut the app writes itself was the CSV import's volume option, already cut before; it is shorter now. The rail's tab titles fit.
 - Next: row 7c4's remaining 15 languages, two per PR: 7c6 Dutch and Polish.
 
+**Phase 7c6 is done (branch `design/phase-7c6-nl-pl`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_7C6.md`](../docs/FRONTEND_DESIGN_QA_PHASE_7C6.md).
+
+- Dutch and Polish have their own feature files (`catalogs/dutchFeatureMessages.ts`, `catalogs/polishFeatureMessages.ts`: the seven feature blocks, 1,218 messages each, loaded only with their language), their inline English translated (163 Dutch, 221 Polish), and the 27 English duplicates that hid the native block removed. Messages shown in English: Dutch 1,157 → 44, Polish 1,203 → 13; what is left is names and trading terms that read the same (Dutch keeps more of them).
+- Layout in Dutch and Polish (152 visits, the 19 states that open without the local service, which was not started): the one cut the app writes itself was the CSV import's volume option, already cut before; it is shorter now. The rail's tab titles fit.
+- Next: row 7c4's remaining 13 languages, two per PR: 7c7 Ukrainian and Czech.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.
