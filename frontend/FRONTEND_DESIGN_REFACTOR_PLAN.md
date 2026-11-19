@@ -660,6 +660,12 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - Layout in Dutch and Polish (152 visits, the 19 states that open without the local service, which was not started): the one cut the app writes itself was the CSV import's volume option, already cut before; it is shorter now. The rail's tab titles fit.
 - Next: row 7c4's remaining 13 languages, two per PR: 7c7 Ukrainian and Czech.
 
+**Phase 7c7 is done (branch `design/phase-7c7-uk-cs`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_7C7.md`](../docs/FRONTEND_DESIGN_QA_PHASE_7C7.md).
+
+- Ukrainian and Czech have their own feature files (`catalogs/ukrainianFeatureMessages.ts`, `catalogs/czechFeatureMessages.ts`: the seven feature blocks, 1,218 messages each, loaded only with their language), their inline English translated (132 Ukrainian, 189 Czech), and the 27 English duplicates that hid the native block removed. Messages shown in English: Ukrainian 1,115 → 13, Czech 1,150 → 27; what is left is names and trading terms that read the same. The CSV import's volume option is shorter in both, as in the four languages before.
+- Layout in Ukrainian and Czech (152 visits, the 19 states that open without the local service): nothing the app writes itself is cut after the volume option's change. The rail's tab titles fit.
+- Next: row 7c4's remaining 11 languages, two per PR: 7c8 Hungarian and Romanian.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.
