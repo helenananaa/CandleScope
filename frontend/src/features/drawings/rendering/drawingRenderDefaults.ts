@@ -66,6 +66,10 @@ export type LineDrawingRenderEntity = DrawingRenderEntityBase<"line", {
   arrowEnd: boolean;
 }>;
 
+export type PathDrawingRenderEntity = DrawingRenderEntityBase<"path", {
+  kind: "path"; dataPoints: readonly DrawingDataPoint[];
+}, { kind: "path"; color: string; lineWidth: number; arrowEnd: boolean }>;
+
 export type ChannelDrawingRenderEntity = DrawingRenderEntityBase<"channel", {
   kind: "channel";
   dataPoints: readonly DrawingDataPoint[];
@@ -176,6 +180,7 @@ export type FreehandDrawingRenderEntity = DrawingRenderEntityBase<"freehand" | "
 }>;
 
 export type DrawingRenderEntity =
+  | PathDrawingRenderEntity
   | ChannelDrawingRenderEntity
   | LineDrawingRenderEntity
   | AxisLineDrawingRenderEntity
@@ -326,6 +331,12 @@ export function normalizeDrawingEntityForRender(
           arrowEnd: style.arrowEnd === true && (geometry.lineType ?? "line-segment") === "line-segment",
         }),
       });
+    case "path":
+      if (entity.kind !== "path" || style.kind !== "path") return null;
+      return Object.freeze({ ...renderBase(entity, "path"),
+        geometry: Object.freeze({ kind: "path" as const, dataPoints: cloneFrozen(geometry.dataPoints) }),
+        style: Object.freeze({ kind: "path" as const, color: renderColor(style.color),
+          lineWidth: renderLineWidth(style.lineWidth), arrowEnd: style.arrowEnd === true }) });
     case "channel":
       if (entity.kind !== "channel" || style.kind !== "channel") return null;
       return Object.freeze({

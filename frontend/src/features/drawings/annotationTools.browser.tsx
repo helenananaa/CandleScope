@@ -11,8 +11,8 @@ import "../../index.css";
 function assert(value: unknown, message: string): asserts value { if (!value) throw new Error(message); }
 
 /**
- * Real charts, pointer handlers and IndexedDB for the arrow, parallel channel
- * and rectangle zone options; no replacement drawing engine.
+ * Real chart gestures, document history, export and IndexedDB for paths,
+ * two-point arrows, parallel channels and rectangle zones.
  */
 export async function checkAnnotationTools() {
   const host = document.createElement("div");
@@ -53,7 +53,7 @@ export async function checkAnnotationTools() {
     const box = host.querySelector('[data-qa="chart"] .chart-pane')!.getBoundingClientRect();
     const clientX = box.left + x, clientY = box.top + y;
     const target = document.elementFromPoint(clientX, clientY);
-    assert(target, "Missing chart pointer target");
+    assert(target, `Missing chart pointer target at ${x}, ${y}`);
     await act(async () => target.dispatchEvent(new PointerEvent(kind, { bubbles: true, cancelable: true, pointerId: 1, pointerType: "mouse", isPrimary: true, button: 0, buttons, clientX, clientY })));
     await settle();
   };
@@ -62,18 +62,85 @@ export async function checkAnnotationTools() {
     await act(async () => render());
     await until(() => !!api()?.control?.isReady(), "Drawing control not ready");
 
+    const press = async (key: string) => {
+      await act(async () => { document.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })); });
+      await settle();
+    };
+    await selectTool("path-line");
+    await click(600, 240);
+    await click(650, 215);
+    await press("Escape");
+    assert(saved().length === 0, "Esc committed a path draft");
+    await selectTool("path-arrow");
+    await click(600, 240);
+    await click(600, 195);
+    await click(675, 230);
+    await press("Backspace");
+    await click(450, 260);
+    await click(450, 260);
+    await pointer("dblclick", 450, 260);
+    const path = byType("path");
+    assert(path?.id && path.arrowEnd && path.dataPoints.length === 3, `Double-click must commit one terminal vertex: ${JSON.stringify(path)}, tool ${tool}`);
+    const [a, b, c] = path.dataPoints;
+    assert(a && b && c && a.time === b.time && a.price !== b.price && c.time! < b.time!, "Vertical and backward segments lost their source coordinates");
+    const history = async (action: "undo" | "redo") => {
+      await act(async () => { assert(api()?.control?.history(action), action + " rejected"); }); await settle();
+    };
+    await history("undo");
+    assert(!byType("path"), "Creating a path must be one undo step");
+    await history("redo");
+    await selectTool("path-arrow");
+    await pointer("pointerdown", 600, 195, 1);
+    await pointer("pointermove", 620, 185, 1);
+    await pointer("pointerup", 620, 185);
+    const moved = byType("path")!;
+    assert(moved.dataPoints[1]!.price !== b.price && moved.dataPoints[0]!.price === a.price && moved.dataPoints[2]!.price === c.price, "Dragging a vertex must only edit that vertex");
+    await history("undo");
+    assert(JSON.stringify(byType("path")) === JSON.stringify(path), "Undo did not restore the dragged vertex");
+    const menuAction = async (x: number, y: number) => {
+      await pointer("contextmenu", x, y);
+      const item = document.querySelector<HTMLButtonElement>('[role="menu"] [role="menuitem"]');
+      assert(item, "Missing path context menu");
+      await act(async () => item.click()); await settle();
+    };
+    await menuAction(600, 218);
+    assert(byType("path")?.dataPoints.length === 4, "Segment menu did not insert a vertex");
+    await menuAction(600, 218);
+    assert(JSON.stringify(byType("path")) === JSON.stringify(path), "Vertex menu did not remove the inserted vertex");
+    await pointer("pointerdown", 525, 228, 1);
+    await pointer("pointermove", 545, 244, 1);
+    await pointer("pointerup", 545, 244);
+    const translated = byType("path")!;
+    assert(translated.dataPoints.every((p, i) => p.time !== path.dataPoints[i]?.time && p.price !== path.dataPoints[i]?.price),
+      "Dragging a segment must translate every vertex");
+    await history("undo");
+    assert(JSON.stringify(byType("path")) === JSON.stringify(path), "Segment drag must undo in one step");
+    await selectTool("path-line");
+    await click(420, 265); await click(680, 295);
+    await pointer("pointermove", 680, 240);
+    await press("Enter");
+    const plain = saved().filter(item => item.type === "path").find(item => item.id !== path.id);
+    assert(plain?.type === "path" && !plain.arrowEnd && plain.dataPoints.length === 2, "Enter appended the hover or lost the plain variant");
+    await pointer("contextmenu", 420, 265);
+    assert(document.querySelector<HTMLButtonElement>('[role="menu"] [role="menuitem"]')?.disabled,
+      "A two-point path must retain both endpoints");
+    await press("Escape");
+    await act(async () => { assert(api()?.objects?.updateObject(plain.id!, { arrowEnd: true }), "Arrow toggle rejected"); }); await settle();
+    assert(saved().some(item => item.id === plain.id && item.type === "path" && item.arrowEnd), "Arrow style did not change");
+    await selectTool("line-arrow");
+
     // Arrow: two clicks produce an ordinary segment with an arrowhead flag.
     await click(80, 330); await click(260, 250);
-    await until(() => saved().length === 1, "Two clicks did not create an arrow");
+    await until(() => saved().length === 3, "Two clicks did not create an arrow");
     const arrow = byType("line");
     assert(arrow?.lineType === "line-segment" && arrow.arrowEnd === true, "Arrow was not saved as a flagged segment");
 
     // Channel: the second click must not commit; the third sets the width.
     await selectTool("channel-parallel");
     await click(320, 300); await click(700, 200);
-    assert(saved().length === 1, "Channel committed after only two clicks");
+    assert(saved().length === 3, "Channel committed after only two clicks");
     await click(510, 150);
-    await until(() => saved().length === 2, "Third click did not create a channel");
+    await until(() => saved().length === 4, "Third click did not create a channel");
     const channel = byType("channel");
     assert(channel?.dataPoints.length === 3, "Channel did not keep three anchors");
     const [start, end, through] = channel.dataPoints;
@@ -93,7 +160,7 @@ export async function checkAnnotationTools() {
     // Rectangle zone options go through the same property command path as the panel.
     await selectTool("shape-rectangle");
     await click(90, 60); await click(240, 140);
-    await until(() => saved().length === 3, "Two clicks did not create a rectangle");
+    await until(() => saved().length === 5, "Two clicks did not create a rectangle");
     const rectangle = byType("shape");
     assert(rectangle?.id, "Missing rectangle");
     await act(async () => { assert(api()?.objects?.updateObject(rectangle.id!, { extendRight: true, midline: true, priceLabels: true, label: "Demand" }), "Zone options rejected"); });
@@ -114,11 +181,11 @@ export async function checkAnnotationTools() {
     assert(JSON.stringify(saved()) === JSON.stringify(before), "Interval switch altered source coordinates");
     await act(async () => root.unmount()); await settle();
     root = createRoot(host); await act(async () => render());
-    await until(() => saved().length === 3 && !!api()?.control?.isReady(), "Remount did not restore the drawings");
+    await until(() => saved().length === 5 && !!api()?.control?.isReady(), "Remount did not restore the drawings");
     assert(JSON.stringify(saved()) === JSON.stringify(before), "Restored drawings differ from saved source");
     const exported = await chart.current!.prepareExport();
     assert(exported, "Drawing export could not synchronize the new tools");
     await exported.restore();
-    return { status: "PASS", saved: before, scope: "Real Chromium pointer creation (arrow, three-click channel, rectangle), channel width drag, zone options, history, interval switch, IndexedDB remount and export" };
+    return { status: "PASS", saved: before, scope: "Real Chromium pointer creation (arrow, three-click channel, rectangle, plain/arrow paths), vertex edits, channel width drag, zone options, history, interval switch, IndexedDB remount and export" };
   } finally { await act(async () => root.unmount()); host.remove(); }
 }

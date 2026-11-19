@@ -1,6 +1,8 @@
 import type { DrawingObjectApi } from "./drawingObjectApi.js";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useDrawing } from "./drawingInteractionController.js";
+import { Menu } from "../../components/ui/index.js";
+import { t } from "../../i18n/index.js";
 import TextEditOverlay from "../../components/TextEditOverlay";
 import TextFormatBar from "../../components/TextFormatBar";
 import SelectedDrawingStyleBar from "./SelectedDrawingStyleBar.js";
@@ -117,6 +119,7 @@ function DrawingEngineHost({
         // persistence lifecycle just restored.
         setInteractionSurfaceMode("legacy");
     }, []);
+    const pathMenuAnchor = useRef<HTMLSpanElement>(null);
     const drawing = useDrawing({
         chartAdapter,
         chartContainerRef,
@@ -259,6 +262,12 @@ function DrawingEngineHost({
                 />
             )}
 
+            {!readOnly && drawing.pathMenu && <>
+                <span ref={pathMenuAnchor} aria-hidden="true" style={{ position: "fixed", pointerEvents: "none", left: drawing.pathMenu.x, top: drawing.pathMenu.y }} />
+                <Menu open anchorRef={pathMenuAnchor} onClose={drawing.closePathMenu} label={t("drawing.variant.path-line")}
+                    items={[{ id: "path-vertex", label: t(drawing.pathMenu.vertex ? "drawing.path.remove" : "drawing.path.insert"),
+                        disabled: drawing.pathMenu.disabled, onSelect: drawing.pathMenu.apply }]} />
+            </>}
             {!readOnly && drawing.editingTextId && drawing.editingTextPos && (
                 <TextEditOverlay
                     box={drawing.editingTextPos}

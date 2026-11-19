@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { structuralMock } from "../../../test/testHelpers.js";
+import { snapDataPointAtPointer } from "../../drawings/drawingSnapController.js";
+import { createTwoPointSavedDrawing } from "../../drawings/interaction/drawingEntityCreation.js";
 import { SeriesWindowStore } from "../../market-data/window/seriesWindowStore.js";
 import { replayDisplayBarToKline } from "../replaySeriesProjection.js";
 import { ReplayTapeViewer, type ReplayTapeViewerAuthority, type ReplayTapeViewerObservation } from "../replayTapeViewer.js";
@@ -69,6 +72,33 @@ test("a newly bound observer hides retained unverified rows until its selected p
     assert.equal(f.target.barCount, 0);
     f.waiting[0]!(); await until(() => f.observations.length === 1);
     assert.equal(f.target.last()?.volume, 7);
+  } finally { f.viewer.dispose(); }
+});
+
+test("path vertices snap only to the displayed tape prefix, including after a rewind", async () => {
+  const f = fixture();
+  const t0 = start / 1000;
+  const adapter = structuralMock<NonNullable<Parameters<typeof snapDataPointAtPointer>[4]>>({
+    isReady: () => true,
+    getSeriesData: () => f.target.snapshot(),
+    timeToCoordinate: (time: number) => (time - t0) / 2,
+    priceToCoordinate: (price: number) => price * 10,
+  });
+  const vertex = (index: number) => {
+    const point = { time: t0 + index * 60 + .5, price: 12.1 };
+    return snapDataPointAtPointer(point, index * 30, 121, { snap: true }, adapter)!;
+  };
+  try {
+    f.viewer.update();
+    await until(() => f.observations.at(-1)?.sourceSequence === 7);
+    assert.deepEqual(vertex(8), { time: t0 + 480, price: 12 });
+    f.state.count = 4;
+    f.advance(2);
+    await until(() => f.observations.at(-1)?.sourceSequence === 2);
+    const path = createTwoPointSavedDrawing({ tool: "path-arrow", color: "#ccc", lineWidth: 2,
+      dataPoints: [vertex(2), vertex(8)] });
+    assert.equal(path?.type, "path");
+    assert.deepEqual(path.dataPoints, [{ time: t0 + 120, price: 12 }, { time: t0 + 480.5, price: 12.1 }]);
   } finally { f.viewer.dispose(); }
 });
 

@@ -45,6 +45,7 @@ import type {
   AngleToolId,
   ArrowToolId,
   ChannelToolId,
+  PathToolId,
   RangeMeasureToolId,
   AxisLineToolId,
   DrawingAnchor,
@@ -70,6 +71,7 @@ import type {
 type TwoPointCreationTool = RangeMeasureToolId
   | BasicLineToolId
   | ArrowToolId
+  | PathToolId
   | ChannelToolId
   | AngleToolId
   | FibonacciToolId
@@ -85,7 +87,7 @@ function isLegacyTwoPointTool(tool: TwoPointCreationTool): tool is LegacyTwoPoin
     && tool !== "measure-time"
     && tool !== "measure-price-time"
     && tool !== "line-arrow"
-    && tool !== "channel-parallel";
+    && tool !== "path-line" && tool !== "path-arrow" && tool !== "channel-parallel";
 }
 type TwoPointDrawingPrimitive = LineDrawingPrimitive
   | AngleMeasurementPrimitive
