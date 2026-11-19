@@ -19,6 +19,21 @@ React/Vite charting UI for CandleScope.
 - [前端 TypeScript 渐进迁移执行文档](FRONTEND_TYPESCRIPT_MIGRATION_EXECUTION_zh.md)
 - [绘图引擎 V2 丝滑重构执行文档](DRAWING_ENGINE_V2_REBUILD_EXECUTION_zh.md)
 
+## Standalone browser workspace
+
+From the `frontend` directory, build and serve the static workspace with:
+
+```bash
+npm ci
+npm --prefix browser ci
+npm run build:web
+python3 -m http.server 4178 --bind 127.0.0.1 --directory dist-web
+```
+
+Open `http://127.0.0.1:4178/`. Publish the contents of `dist-web/` together to serve the workspace from a static host, including under a subdirectory. The browser loads its own bundled Pyodide worker and fetches public Binance spot candles directly. The build copies the desktop source-quality and aggregation rules from `backend/app/data_engine`.
+
+Each chart holds up to 2,400 bars. The browser caches the latest REST page per visited market and interval in IndexedDB. BTC, ETH and SOL against USDT also include 180 historical Binance candles for 5m, 15m, 1h and 1d for first-time visits without exchange access. The chart footer identifies the historical source and last bar time. Playback uses the loaded window. Full training sessions, strategy backtests, accounts and native plugins use the desktop runtime.
+
 ## Backend Connection
 
 The frontend uses same-origin `/api/v1` by default. During local development,

@@ -163,7 +163,8 @@
     "desktop:package:mac": "node scripts/package-desktop.mjs --distributable --mac dmg zip --publish never",
     "check:styles": "node scripts/check-style-metrics.mjs",
     "check:css-layers": "node scripts/check-css-layers.mjs",
-    "css:cascade": "node scripts/css-cascade-check.mjs"
+    "css:cascade": "node scripts/css-cascade-check.mjs",
+    "build:web": "vite build --config browser/vite.config.mjs"
   },
   "dependencies": {
     "@fontsource/ibm-plex-sans": "^5.3.0",
