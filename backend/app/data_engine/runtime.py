@@ -287,6 +287,10 @@ class DataEngineRuntime:
             self.backfill_transport.stop(),
             step_timeout,
         )
+        # Idle read connections outlive their callers. Release them last, so
+        # closing the database still checkpoints the WAL as it did before.
+        from app.data_engine.storage.klines_repo import close_idle_reads
+        close_idle_reads()
 
     async def _cancel_background_task(self, task: asyncio.Task | None, name: str) -> None:
         if task is None or task.done():

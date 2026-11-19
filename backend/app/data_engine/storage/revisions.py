@@ -362,16 +362,22 @@ class ScopedRevisionRead:
 
 
 class RevisionStore:
-    def __init__(self, connect):
+    def __init__(self, connect, *, reads=None):
         self.connect = connect
+        # Optional ReusableReads for this store's own self-contained reads.
+        # Writers, fences and scoped readers keep their own connections.
+        self._reads = reads
         self.observed_revision = 0
         from .prefix_watches import PrefixWatchStore
         self.prefix_watches = PrefixWatchStore(connect)
 
+    def _reading(self):
+        return self._reads.reading() if self._reads is not None else closing(self.connect())
+
     def changes_since(self, revision, *, limit=4096):
         # Head and changes belong to the same read transaction. A bounded
         # overrun tells the consumer to clear its projection and use the head.
-        with closing(self.connect()) as conn, conn:
+        with self._reading() as conn, conn:
             conn.execute("BEGIN")
             head = current_revision(conn)
             keys = ",".join(IDENTITY_COLUMNS)
@@ -386,7 +392,7 @@ class RevisionStore:
                     "changes": [dict(row) for row in rows[:limit]]}
 
     def head(self):
-        with closing(self.connect()) as conn:
+        with self._reading() as conn:
             self.observed_revision = current_revision(conn)
             return self.observed_revision
 
@@ -397,7 +403,7 @@ class RevisionStore:
         deletions. Unrelated series writes do not change a source's token.
         Consumers still fence their entire acquisition before publication.
         """
-        with closing(self.connect()) as conn:
+        with self._reading() as conn:
             return self._read_versions(conn, tuple(series))
 
     def read_series_changes(self, series):
@@ -409,7 +415,7 @@ class RevisionStore:
         values = tuple(series)
         if not 1 <= len(values) <= 32:
             raise ValueError("one to 32 source dependencies required")
-        with closing(self.connect()) as conn, conn:
+        with self._reading() as conn, conn:
             conn.execute("BEGIN")
             return current_revision(conn), tuple(
                 dict(row) if (row := series_change(conn, key)) is not None else None
@@ -435,7 +441,7 @@ class RevisionStore:
         """Read B130 versions and invalidation evidence from one snapshot."""
         if len(series) > 32:
             raise ValueError("at most 32 source dependencies per revision view")
-        with closing(self.connect()) as conn, conn:
+        with self._reading() as conn, conn:
             conn.execute("BEGIN")
             head = current_revision(conn)
             versions = self._versions(conn, series)
