@@ -32,7 +32,9 @@ python3 -m http.server 4178 --bind 127.0.0.1 --directory dist-web
 
 Open `http://127.0.0.1:4178/`. Publish the contents of `dist-web/` together to serve the workspace from a static host, including under a subdirectory. The browser loads its own bundled Pyodide worker and fetches public Binance spot candles directly. The build copies the desktop source-quality and aggregation rules from `backend/app/data_engine`.
 
-Each chart holds up to 2,400 bars. The browser caches the latest REST page per visited market and interval in IndexedDB. BTC, ETH and SOL against USDT also include 180 historical Binance candles for 5m, 15m, 1h and 1d for first-time visits without exchange access. The chart footer identifies the historical source and last bar time. Playback uses the loaded window. Full training sessions, strategy backtests, accounts and native plugins use the desktop runtime.
+The market picker searches a bundled spot directory and refreshes it from Binance. Watchlists use the desktop group store. Visible charts can link symbols, intervals, indicators, crosshairs and time ranges. MA, EMA and RSI run the desktop Python implementations with configurable periods and price inputs.
+
+IndexedDB keeps visited history pages and closed live candles by market, interval and timestamp. Reopening restores the saved chart window. Outstanding backward pagination resumes after reconnect, and missing intervals between stored candles are fetched in pages. Data stays in this browser profile and is subject to its storage quota. BTC, ETH and SOL against USDT also include 180 historical Binance candles for 5m, 15m, 1h and 1d for first-time visits without exchange access. The chart footer identifies the historical source and last bar time. Playback uses the loaded window. Full training sessions, strategy backtests, accounts and native plugins use the desktop runtime.
 
 ## Backend Connection
 
