@@ -38,6 +38,8 @@ The browser host disables native plugins, subprocess backtests, private exchange
 
 The earlier standalone prototype is available with `npm run build:web:prototype` (output `dist-prototype/`). Its workspace and IndexedDB records use a separate format and are preserved independently of the original backend's SQLite databases.
 
+To prepare replay data without a local file, open **Download replay data** on the replay page, or the **Download** tab of the research library. Choose a Binance spot symbol and a closed UTC time range. The browser imports 1-minute bars from the shared K-line repair engine or aggregate trades from the public Binance API. Both use the original library validators. Completed identical selections reuse the saved revision, including after a browser restart. Aggregate trades retain their exchange sequence numbers and the library’s 200,000-record limit. Missing coverage is reported in the form.
+
 ### Browser acceptance
 
 The live smoke uses the original market canvas and API to fetch public bars, request an older page and check the desktop MA against the displayed inputs. It exits Chromium completely, reopens the same profile with external market DNS blocked, compares all six OHLCV/time fields for 32 historical bars, then reopens online and extends the same series further. It creates and removes its own temporary browser profile.
@@ -49,7 +51,7 @@ PLAYWRIGHT_MODULE=/path/to/node_modules/playwright-core CHROME_PATH=/path/to/chr
   node browser/host/acceptance.mjs http://127.0.0.1:4178/
 ```
 
-The companion `browser/host/research-acceptance.mjs` uses the same Chrome configuration. It imports CSV, exports and restores a project ZIP, starts BAR and trade-print training sessions, steps the BAR replay, subscribes to a practice account, writes a journal note and verifies state after restarting Chrome. Large archives, every exchange, other browser engines and native strategy providers have separate acceptance requirements.
+`browser/host/download-acceptance.mjs` checks automatic downloads, replay selection and offline cache reuse in a disposable profile. The companion `browser/host/research-acceptance.mjs` uses the same Chrome configuration. It imports CSV, exports and restores a project ZIP, starts BAR and trade-print training sessions, steps the BAR replay, subscribes to a practice account, writes a journal note and verifies state after restarting Chrome. Large archives, every exchange, other browser engines and native strategy providers have separate acceptance requirements.
 
 ## Backend Connection
 

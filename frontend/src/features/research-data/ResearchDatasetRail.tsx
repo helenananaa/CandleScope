@@ -1,3 +1,5 @@
+import { HistoryDownloadForm } from "./HistoryDownloadForm.js";
+import { useLocale } from "../../i18n/useLocale.js";
 import { useId, useState, type ReactNode } from "react";
 
 import { Disclosure, EmptyState, TabPanel, Tabs } from "../../components/ui/index.js";
@@ -33,7 +35,9 @@ export function ResearchDatasetRail({
   management: ReactNode;
   analysis: ReactNode;
 }) {
-  const [view, setView] = useState<"library" | "import">(datasets.length === 0 ? "import" : "library");
+  const locale = useLocale();
+  const downloads = import.meta.env?.VITE_BROWSER_PYTHON === "1" && onMarketTradesImported;
+  const [view, setView] = useState<"library" | "import" | "download">(datasets.length === 0 ? "import" : "library");
   const tabsId = useId();
   const selected = datasets.find((dataset) => dataset.dataset_id === selectedId) ?? null;
   return (
@@ -46,6 +50,7 @@ export function ResearchDatasetRail({
         tabs={[
           { value: "library", label: t("local.datasets"), badge: datasets.length },
           { value: "import", label: t("local.import") },
+          ...(downloads ? [{value:"download" as const, label:locale.startsWith("zh") ? "自动下载" : "Download"}] : []),
         ]}
       />
       {/* Both panels stay mounted, so a half-filled import form survives a look at the library. */}
@@ -80,6 +85,11 @@ export function ResearchDatasetRail({
           )}
         </TabPanel>
       </div>
+      {downloads && <div hidden={view !== "download"}>
+        <TabPanel tabsId={tabsId} value="download" className="research-dataset-panel">
+          <HistoryDownloadForm onImported={downloads} />
+        </TabPanel>
+      </div>}
       <div hidden={view !== "import"}>
         <TabPanel tabsId={tabsId} value="import" className="research-dataset-panel">
           <ResearchDataImportForm

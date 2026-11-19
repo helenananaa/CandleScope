@@ -45,6 +45,9 @@ async def browser_storage_access(request: Request):
 
 app.dependency_overrides[require_local_research_access] = browser_storage_access
 
+from library_download import router as library_download_router
+app.include_router(library_download_router)
+
 
 async def warm_initial_market():
     """Let the existing shared CCXT catalog finish before consumers queue bars."""

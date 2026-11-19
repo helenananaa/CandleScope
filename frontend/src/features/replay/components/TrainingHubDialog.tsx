@@ -1,3 +1,4 @@
+import { HistoryDownloadForm } from "../../research-data/HistoryDownloadForm.js";
 import { useState, type ReactNode } from "react";
 import {
   Badge, Button, Checkbox, ConfirmDialog, Dialog, Disclosure, EmptyState, Field, InlineAlert, Input, SegmentedControl, Select,
@@ -27,6 +28,7 @@ import { preparationRequest } from "../../data-preparation/api.js";
 export interface TrainingHubDialogProps {
   readonly runtime: TrainingHubRuntime;
   readonly presentation?: "page" | "modal";
+  readonly downloadSymbol?: string;
   readonly onRequestClose?: () => void;
   readonly launchLabel?: string;
   readonly onPrepareData?: () => void;
@@ -660,11 +662,12 @@ function TrainingRunRow({ card, busy, onContinue, onDelete }: {
 export default function TrainingHubDialog({
   runtime,
   presentation = "page",
+  downloadSymbol,
   onRequestClose,
   launchLabel,
   onPrepareData,
 }: TrainingHubDialogProps) {
-  useLocale();
+  const locale = useLocale();
   const busy = runtime.operation !== null;
   const modal = presentation === "modal";
   const [deleteCandidate, setDeleteCandidate] = useState<TrainingRunCard | null>(
@@ -704,6 +707,10 @@ export default function TrainingHubDialog({
             </Button>
           </div>
         </header>
+        {import.meta.env?.VITE_BROWSER_PYTHON === "1" && <details className="research-dataset-ops">
+          <summary>{locale.startsWith("zh") ? "自动下载回放行情" : "Download replay data"}</summary>
+          <HistoryDownloadForm {...(downloadSymbol ? { initialSymbol: downloadSymbol } : {})} onImported={() => runtime.actions.refresh()} />
+        </details>}
 
         <ReplayStorageGovernancePanel runtime={runtime} />
         {recent && <section className="training-hub-resume" aria-labelledby="training-hub-resume-title">

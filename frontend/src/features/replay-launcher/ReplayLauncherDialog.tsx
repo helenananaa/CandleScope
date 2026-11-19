@@ -175,6 +175,8 @@ export default function ReplayLauncherDialog({
       ) : <TrainingHubDialog
         runtime={launcherRuntime}
         presentation="modal"
+        {...(launchContext.exchange === "binance" && launchContext.market_type === "spot"
+          ? { downloadSymbol: launchContext.symbol } : {})}
         launchLabel={launchLabel}
         onRequestClose={onRequestClose}
         onPrepareData={() => setPreparingData(true)}

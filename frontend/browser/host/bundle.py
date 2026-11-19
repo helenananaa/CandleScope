@@ -77,7 +77,7 @@ def main(output):
         files = subprocess.check_output(["git", "ls-files", "-z", "--", *roots], cwd=ROOT).decode().split("\0")
         for file in sorted(filter(None, files)):
             archive.write(ROOT / file, "repo/" + file)
-        for name in ("browser_host.py", "browser_io.py"):
+        for name in ("browser_host.py", "browser_io.py", "library_download.py"):
             archive.write(HERE / name, "repo/" + name)
 
 

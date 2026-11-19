@@ -149,6 +149,11 @@ class BarPreparationAdapter:
         archived = await storage_call(self._archive_rows, requirement)
         if archived is not None:
             return await storage_call(self._write, archived, requirement, "replay_archive")
+        rows = await self.complete_host_bars(requirement, key)
+        return await storage_call(self._write, rows, requirement)
+
+    async def complete_host_bars(self, requirement, key):
+        """Read the requested closed 1m bars through the shared repair coordinator."""
         rows = await storage_call(self._rows, requirement)
         if not self._complete(rows, requirement):
             if self.coordinator is None:
@@ -177,7 +182,7 @@ class BarPreparationAdapter:
         if not self._complete(rows, requirement):
             raise PreparationError("COVERAGE_INCOMPLETE", "Historical source did not supply the complete requested range", retryable=True)
         await storage_call(self._record_host_history)
-        return await storage_call(self._write, rows, requirement)
+        return rows
 
     def acquisition_waiting(self, key):
         request_id = self._repair_requests.get(key)
