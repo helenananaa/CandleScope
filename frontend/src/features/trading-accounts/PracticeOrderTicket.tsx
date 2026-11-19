@@ -30,16 +30,21 @@ export default function PracticeOrderTicket({
   onPlanTrade(draft: PlanDraft): void;
 }) {
   useLocale();
-  const [side, setSide] = useState<"buy" | "sell">("buy");
+  const [oneWaySide, setSide] = useState<"buy" | "sell">("buy");
   const [type, setType] = useState<OrderType>("market");
   const [qty, setQty] = useState("");
   const [price, setPrice] = useState("");
   const [stopLoss, setStopLoss] = useState("");
   const [takeProfit, setTakeProfit] = useState("");
-  const [reduceOnly, setReduceOnly] = useState(false);
+  const [oneWayReduceOnly, setReduceOnly] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: "error" | "ok"; text: string } | null>(null);
 
+  const hedge = account.settings.positionMode === "HEDGE" && context.marketType === "futures";
+  const [action, setAction] = useState<"openLong" | "openShort" | "closeLong" | "closeShort">("openLong");
+  const positionSide = action === "openLong" || action === "closeLong" ? "LONG" : "SHORT";
+  const reduceOnly = hedge ? action === "closeLong" || action === "closeShort" : oneWayReduceOnly;
+  const side = hedge ? (action === "openLong" || action === "closeShort" ? "buy" : "sell") : oneWaySide;
   const reference = context.lastPrice;
   const entry = type === "market" ? reference : Number(price) || null;
   const risk = useMemo(() => {
@@ -60,6 +65,7 @@ export default function PracticeOrderTicket({
         marketType: context.marketType,
         symbol: context.symbol,
         side,
+        ...(hedge ? { positionSide, positionEffect: reduceOnly ? "close" : "open" } : {}),
         type,
         qty,
         ...(type === "limit" ? { limitPrice: price } : {}),
@@ -85,7 +91,10 @@ export default function PracticeOrderTicket({
 
   return (
     <section className="trading-ticket" aria-label={t("trading.ticket.title")}>
-      <SegmentedControl
+      {hedge ? <SegmentedControl size="sm" fullWidth label={t("trading.ticket.side")} value={action} onChange={setAction}
+        options={(["openLong", "openShort", "closeLong", "closeShort"] as const).map(value => ({
+          value, label: t(`backtest.${value}` as const),
+        }))} /> : <SegmentedControl
         className="trading-side"
         size="sm"
         fullWidth
@@ -96,7 +105,7 @@ export default function PracticeOrderTicket({
           { value: "buy", label: t(context.marketType === "futures" ? "trading.ticket.long" : "trading.ticket.buy") },
           { value: "sell", label: t(context.marketType === "futures" ? "trading.ticket.short" : "trading.ticket.sell") },
         ]}
-      />
+      />}
       <SegmentedControl
         size="sm"
         fullWidth
@@ -125,7 +134,7 @@ export default function PracticeOrderTicket({
           </Field>
         </div>
       )}
-      <Checkbox label={t("trading.ticket.reduceOnly")} checked={reduceOnly} onChange={(event) => setReduceOnly(event.target.checked)} />
+      {!hedge && <Checkbox label={t("trading.ticket.reduceOnly")} checked={reduceOnly} onChange={(event) => setReduceOnly(event.target.checked)} />}
       <dl className="trading-kv">
         <dt>{t("trading.ticket.reference")}</dt>
         <dd>{reference ? formatPrice(reference) : t("trading.ticket.noPrice")}</dd>
@@ -159,7 +168,7 @@ export default function PracticeOrderTicket({
           disabled={busy || !qty || account.archived}
           onClick={() => { void submit(); }}
         >
-          {t(side === "buy" ? "trading.ticket.submitBuy" : "trading.ticket.submitSell")}
+          {hedge ? t(`backtest.${action}` as const) : t(side === "buy" ? "trading.ticket.submitBuy" : "trading.ticket.submitSell")}
         </Button>
       </div>
       <p className="trading-help">{t("trading.ticket.model")}</p>

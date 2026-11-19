@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Badge, Button, Dialog, Field, InlineAlert, Input } from "../../components/ui/index.js";
+import { Badge, Button, Dialog, Field, InlineAlert, Input, SegmentedControl } from "../../components/ui/index.js";
 import { t, type MessageKey } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { tradingErrorMessage } from "./useTradingAccountsRuntime.js";
@@ -24,6 +24,7 @@ export default function AddAccountDialog({
   const [preset, setPreset] = useState<Preset>("practice");
   const [name, setName] = useState("");
   const [initialBalance, setInitialBalance] = useState("10000");
+  const [positionMode, setPositionMode] = useState<"ONE_WAY" | "HEDGE">("ONE_WAY");
   const [leverage, setLeverage] = useState("10");
   const [takerFeeRate, setTakerFeeRate] = useState("0.0005");
   const [makerFeeRate, setMakerFeeRate] = useState("0.0002");
@@ -40,7 +41,7 @@ export default function AddAccountDialog({
         kind: preset,
         name: name.trim() || t(preset === "practice" ? "trading.kind.practice" : "trading.kind.manual"),
         ...(preset === "practice"
-          ? { settings: { initialBalance, leverage, takerFeeRate, makerFeeRate, slippageBps } }
+          ? { settings: { initialBalance, leverage, positionMode, takerFeeRate, makerFeeRate, slippageBps } }
           : {}),
       });
       onClose();
@@ -95,6 +96,10 @@ export default function AddAccountDialog({
       </Field>
       {preset === "practice" && (
         <>
+          <Field label={t("replay.hub.positionMode")}>
+            <SegmentedControl label={t("replay.hub.positionMode")} value={positionMode} onChange={setPositionMode}
+              options={[{ value: "ONE_WAY", label: t("replay.hub.oneWay") }, { value: "HEDGE", label: t("replay.hub.hedge") }]} />
+          </Field>
           <div className="trading-field-row">
             <Field label={t("trading.add.initialBalance")}>
               <Input inputMode="decimal" value={initialBalance} onChange={(event) => setInitialBalance(event.target.value)} />
