@@ -51,15 +51,32 @@ await browser_host.start()
 function attach(port) {
   const sessions = new Map()
   const send = (id, message) => port.postMessage({ id, ...message })
-  port.onmessage = async ({ data }) => {
+  const requests = new Map()
+  port.onmessage = async ({ data, ports }) => {
     const { id, kind } = data
+    const channel = ports[0]
     try {
       const { py, host } = await (runtime ??= boot())
-      if (kind === 'ready') return send(id, { kind: 'ready' })
+      if (kind === 'ready') return send(id, { kind: 'ready', transport: 2 })
+      if (kind === 'abort') return requests.get(id)?.cancel()
       if (kind === 'http') {
-        const response = JSON.parse(await host.http(JSON.stringify(data)))
-        await persist(py)
-        return send(id, { kind: 'http', ...response })
+        const { body, ...metadata } = data
+        const task = host.http_task(JSON.stringify(metadata), new Uint8Array(body), (value) =>
+          channel.postMessage(JSON.parse(value))
+        )
+        requests.set(id, task)
+        channel.onmessage = ({ data }) => {
+          if (data.type === 'abort') task.cancel()
+        }
+        try {
+          const result = JSON.parse(await task)
+          await persist(py)
+          channel.postMessage(result)
+        } finally {
+          requests.delete(id)
+          task.destroy()
+        }
+        return
       }
       if (kind === 'open') {
         const key = ++nextSocket
@@ -81,7 +98,13 @@ function attach(port) {
       }
     } catch (error) {
       console.error(error)
-      send(id, { kind: 'error', error: String(error) })
+      if (channel) channel.postMessage({ error: String(error) })
+      else send(id, { kind: 'error', error: String(error) })
+    } finally {
+      if (channel) {
+        channel.close()
+        send(id, { kind: 'complete' })
+      }
     }
   }
   port.start()

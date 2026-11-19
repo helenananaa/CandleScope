@@ -1,3 +1,5 @@
+import { BrowserDesktopLink } from "../../app/BrowserDesktopLink.js";
+import { useLocale } from "../../i18n/useLocale.js";
 import { useEffect, useState } from "react";
 import { Button, buttonClassName } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
@@ -19,6 +21,7 @@ export function StrategyResearchFirstOpen({
   saving: boolean;
   onSelectTemplate(templateId: string): void;
 }) {
+  const locale = useLocale();
   const [draft, setDraft] = useState<StrategyDraftRecord | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -34,7 +37,10 @@ export function StrategyResearchFirstOpen({
     <div className="strategy-research-first-open" data-testid="strategy-research-first-open" data-strategy-draft={draftId ?? ""}>
       <header className="strategy-research-first-open-head">
         <h2>{t("chartTester.startTitle")}</h2>
-        <p>{t("strategy.firstOpenLead")}</p>
+        {import.meta.env.VITE_BROWSER_PYTHON === "1" ? <p>
+          {locale.startsWith("zh") ? "可在此导入行情、分析图表并保存策略草稿。" : "Import data, analyze charts and save strategy drafts here."}{" "}
+          <BrowserDesktopLink feature="strategy" />
+        </p> : <p>{t("strategy.firstOpenLead")}</p>}
       </header>
       {selected && (
         <div className="strategy-research-resume" role="status">

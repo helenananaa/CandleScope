@@ -1,3 +1,4 @@
+import { BrowserDesktopLink, desktopReleaseUrl } from "../../../app/BrowserDesktopLink.js";
 import { strategyResearchModeHref } from "../research/backtestResearchModes.js";
 import { Button, Checkbox, Disclosure, EmptyState, Field, IconButton, InlineAlert, Menu, Select, Tabs, buttonClassName, tabId, tabPanelId } from "../../../components/ui/index.js";
 import { useNativeAvailability, resolveAvailableStrategyMode } from "../native/useNativeAvailability.js";
@@ -515,6 +516,10 @@ export function CandleScopeStrategyTesterPanel({
   }, [attachRecord, draftStore]);
 
   const run = useCallback(() => {
+    if (import.meta.env.VITE_BROWSER_PYTHON === "1") {
+      window.open(desktopReleaseUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
     if (!activeDraft || !currentAttachment) return;
     if (activeDraft.language === "python" && !pythonTrustedConfirmed) return;
     if (!validStrategyRunSettings({ ...currentAttachment, rangeMode: currentAttachment.rangeMode === "VISIBLE" ? "CUSTOM" : currentAttachment.rangeMode })) {
@@ -803,7 +808,8 @@ export function CandleScopeStrategyTesterPanel({
           {canResume && (
             <Button size="sm" variant="ghost" onClick={onResumeObserving}>{t("chartTester.resumeObserving")}</Button>
           )}
-          {currentAttachment && (
+          {currentAttachment && (import.meta.env.VITE_BROWSER_PYTHON === "1"
+            ? <BrowserDesktopLink feature="strategy" className="ui-btn ui-btn-primary ui-btn-sm" /> :
             <Button
               size="sm"
               variant="primary"

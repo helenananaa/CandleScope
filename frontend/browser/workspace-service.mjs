@@ -1,4 +1,10 @@
-self.addEventListener('install', (event) => event.waitUntil(self.skipWaiting()))
+// Let the previous transport finish serving its existing tabs before activating.
+self.addEventListener('message', ({ data, ports }) => {
+  if (data?.type === 'candlescope.transport' && ports[0]) {
+    ports[0].postMessage(2)
+    ports[0].close()
+  }
+})
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()))
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url)
@@ -16,20 +22,43 @@ async function dispatch(event, url) {
     return Response.json({ detail: 'A same-origin CandleScope workspace is required' }, { status: 403 })
   }
   const channel = new MessageChannel()
-  const bytes = new Uint8Array(await event.request.arrayBuffer())
-  let binary = ''
-  for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192))
+  const body = await event.request.arrayBuffer()
   return new Promise((resolve) => {
+    let stream
+    const abort = () => {
+      channel.port1.postMessage({ type: 'abort' })
+      channel.port1.close()
+    }
     function finish(response) {
       clearTimeout(timer)
       channel.port1.close()
       resolve(response)
     }
-    const timer = setTimeout(
-      () => finish(Response.json({ detail: 'Browser backend timed out' }, { status: 504 })),
-      95000
-    )
+    const timer = setTimeout(() => {
+      abort()
+      finish(Response.json({ detail: 'Browser backend timed out' }, { status: 504 }))
+    }, 95000)
     channel.port1.onmessage = ({ data }) => {
+      if (stream) {
+        if (data.type === 'chunk') stream.enqueue(Uint8Array.from(atob(data.body), (c) => c.charCodeAt(0)))
+        else {
+          if (data.error) stream.error(Error(data.error))
+          else stream.close()
+          channel.port1.close()
+        }
+        return
+      }
+      if (data.type === 'start') {
+        clearTimeout(timer)
+        const body = new ReadableStream({
+          start(controller) {
+            stream = controller
+          },
+          cancel: abort,
+        })
+        resolve(new Response(body, { status: data.status, headers: data.headers }))
+        return
+      }
       if (data.error) return finish(Response.json({ detail: data.error }, { status: 503 }))
       const body = Uint8Array.from(atob(data.body), (c) => c.charCodeAt(0))
       const headers = new Headers(data.headers)
@@ -50,9 +79,9 @@ async function dispatch(event, url) {
         headers: [...event.request.headers].filter(
           ([name]) => !['cookie', 'authorization', 'accept-encoding'].includes(name)
         ),
-        body: btoa(binary),
+        body,
       },
-      [channel.port2]
+      [channel.port2, body]
     )
   })
 }

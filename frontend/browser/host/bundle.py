@@ -35,7 +35,7 @@ def downloads():
         selected[name] = (filename, item["sha256"], f"https://cdn.jsdelivr.net/pyodide/v{version}/full/{filename}")
         for dep in item["depends"]:
             include(dep)
-    for name in ["aiohttp", "requests", "httpx", "sniffio", "cryptography", "orjson", "pydantic", *PINS]:
+    for name in ["aiohttp", "requests", "httpx", "tzdata", "sniffio", "cryptography", "orjson", "pydantic", *PINS]:
         include(name)
     fork = json.loads((ROOT / "backend/ccxt-fork.lock.json").read_text())
     selected["ccxt"] = (Path(urlsplit(fork["wheel_url"]).path).name, fork["wheel_sha256"], fork["wheel_url"])

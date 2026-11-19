@@ -16,7 +16,8 @@ os.environ.update(
     SYMBOL_CATALOG_WORKER_ENABLED="0", INDICATOR_HISTORY_PROCESS_ENABLED="0",
     INDICATOR_REALTIME_ISOLATED="0", HISTORY_ARCHIVE_ENABLED="0",
     CANDLESCOPE_PLUGIN_HOST_ENABLED="0", CANDLESCOPE_PLUGIN_PLATFORM_V2_ENABLED="0",
-    REPLAY_AGG_TRADE_ENABLED="0", BACKTEST_ENABLED="0",
+    REPLAY_AGG_TRADE_ENABLED="0", BACKTEST_ENABLED="1", BACKTEST_BAR_ENABLED="0",
+    BACKTEST_TRADE_TAPE_ENABLED="0", BACKTEST_STUDY_ENABLED="0",
     INGESTION_PROXY_MODE="direct",
 )
 install()
@@ -31,10 +32,10 @@ lifespan = None
 
 
 # A browser-owned SQLite file is isolated by the site's origin. No TCP peer
-# exists here. Only history-study storage uses this binding; desktop files and
+# exists here. Only the library and history studies use this binding; desktop files and
 # other local-only APIs continue to require the original local access policy.
-async def history_storage_access(request: Request):
-    if (request.url.path.startswith("/api/v1/history-studies/")
+async def browser_storage_access(request: Request):
+    if (request.url.path.startswith(("/api/v1/history-studies/", "/api/v1/local/"))
             and request.scope.get("extensions", {}).get("candlescope.worker-origin") == worker_location.origin
             and request.headers.get("origin", worker_location.origin) == worker_location.origin
             and request.headers.get("sec-fetch-site", "same-origin") == "same-origin"):
@@ -42,7 +43,7 @@ async def history_storage_access(request: Request):
     return require_local_research_access(request)
 
 
-app.dependency_overrides[require_local_research_access] = history_storage_access
+app.dependency_overrides[require_local_research_access] = browser_storage_access
 
 
 async def warm_initial_market():
@@ -97,38 +98,75 @@ def scope(kind, path, query, origin, headers):
 
 # Native credentials, broker connections and executable runtimes stay outside
 # the public browser host, including when a frontend calls an endpoint directly.
-DESKTOP_PATHS = ("/api/v1/trading", "/api/v1/readonly-accounts", "/api/v1/backtests",
-                 "/api/v1/native", "/api/v1/external")
+DESKTOP_PATHS = (
+    "/api/v1/readonly-accounts", "/api/v1/native", "/api/v1/external",
+    "/api/v1/backtests/native", "/api/v1/backtests/external",
+    "/api/v1/backtests/provider-connections", "/api/v1/backtests/continuous",
+    "/api/v1/backtests/strategy-bundles", "/api/v1/backtests/strategy-revisions/python",
+    "/api/v1/backtests/studies",
+)
 
 
-def needs_desktop(path):
+def needs_desktop(path, method="GET"):
+    runs = "/api/v1/backtests/runs"
+    if method == "POST" and (path in (runs, runs + "/validate") or
+                             (path.startswith(runs + "/") and path.endswith(("/resume", "/clone")))):
+        return True
+    if path.startswith("/api/v1/backtests/strategy-revisions/") and path.endswith(("/smoke", "/runtime-receipt")):
+        return True
     return any(path == prefix or path.startswith(prefix + "/") for prefix in DESKTOP_PATHS)
 
 
-async def http(message):
+def http_task(message, body, emit):
+    return asyncio.create_task(http(message, body, emit))
+
+
+async def http(message, body, emit):
     req = json.loads(message)
-    if needs_desktop(req["path"]):
-        body = json.dumps({"detail": "此功能需要桌面运行时，请下载 CandleScope 桌面版。"}, ensure_ascii=False).encode()
+    if needs_desktop(req["path"], req["method"]):
+        detail = "此操作需要桌面运行时，请下载 CandleScope 桌面版。"
+        body = json.dumps({"detail": detail, "error": {"code": "DESKTOP_REQUIRED", "message": detail}}, ensure_ascii=False).encode()
         return json.dumps({"status": 501, "headers": [["content-type", "application/json"]],
                            "body": base64.b64encode(body).decode()})
     incoming = scope("http", req["path"], req["query"], req["origin"], req["headers"])
     incoming["method"] = req["method"]
     result = {"status": 500, "headers": []}
     content = bytearray()
-    first = True
+    streaming = False
+    offset = 0
+    received = False
+
     async def receive():
-        nonlocal first
-        if first:
-            first = False
-            return {"type": "http.request", "body": base64.b64decode(req["body"]), "more_body": False}
-        await asyncio.Future()
+        nonlocal offset, received
+        if received:
+            await asyncio.Future()
+        # File imports consume the original ASGI body stream. Move only the
+        # current chunk into WASM memory; no base64 copy of the entire upload.
+        end = min(offset + 256 * 1024, body.length)
+        chunk = bytes(body.subarray(offset, end).to_py())
+        offset = end
+        received = end == body.length
+        return {"type": "http.request", "body": chunk, "more_body": not received}
+
     async def send(event):
+        nonlocal streaming
         if event["type"] == "http.response.start":
             result["status"] = event["status"]
             result["headers"] = [(k.decode("latin1"),v.decode("latin1")) for k,v in event["headers"]]
+            streaming = any(k == "content-type" and v.split(";", 1)[0] in ("text/event-stream", "application/x-ndjson",
+                                      "application/vnd.candlescope.local-project+zip") for k, v in result["headers"])
+            if streaming:
+                emit(json.dumps({"type": "start", **result}))
         elif event["type"] == "http.response.body":
-            content.extend(event.get("body", b""))
+            chunk = event.get("body", b"")
+            if streaming:
+                if chunk:
+                    emit(json.dumps({"type": "chunk", "body": base64.b64encode(chunk).decode()}))
+            else:
+                content.extend(chunk)
     await app(incoming, receive, send)
+    if streaming:
+        return json.dumps({"type": "end"})
     result["body"] = base64.b64encode(content).decode()
     return json.dumps(result)
 

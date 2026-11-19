@@ -791,7 +791,10 @@ export default function TrainingHubDialog({
           <EmptyState
             title={t("replay.hub.emptyTitle")}
             description={t("replay.hub.emptyHint")}
-            action={<Button variant="primary" onClick={() => void runtime.actions.openCreate()} disabled={busy}>{t("replay.hub.emptyCreate")}</Button>}
+            action={<>
+              {import.meta.env.VITE_BROWSER_PYTHON === "1" && <a href="/strategy.html?action=import">{t("research.source.openLibrary")}</a>}
+              <Button variant="primary" onClick={() => void runtime.actions.openCreate()} disabled={busy}>{t("replay.hub.emptyCreate")}</Button>
+            </>}
           />
         ) : (
           <div className="training-hub-list" aria-label={t("replay.hub.list")}>

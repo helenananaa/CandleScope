@@ -113,15 +113,16 @@ class AppSocket extends EventTarget {
   }
 }
 async function start() {
-  navigator.serviceWorker.addEventListener('message', async ({ data, ports }) => {
+  const httpRequests = new Set()
+  navigator.serviceWorker.addEventListener('message', ({ data, ports }) => {
     if (data?.type !== 'candlescope.api' || !ports[0]) return
-    try {
-      ports[0].postMessage(await request('http', { ...data, origin: location.origin }))
-    } catch (error) {
-      ports[0].postMessage({ error: String(error) })
-    } finally {
-      ports[0].close()
-    }
+    const id = ++sequence
+    httpRequests.add(id)
+    callbacks.set(id, () => {
+      callbacks.delete(id)
+      httpRequests.delete(id)
+    })
+    worker.port.postMessage({ ...data, kind: 'http', id, origin: location.origin }, [ports[0], data.body])
   })
   await navigator.serviceWorker.register(new URL('workspace-service.mjs', base), { scope: base.pathname })
   await navigator.serviceWorker.ready
@@ -130,12 +131,24 @@ async function start() {
       navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true })
       if (navigator.serviceWorker.controller) resolve()
     })
-  await request('ready', {}, 150000)
+  const channel = new MessageChannel()
+  const serviceVersion = await new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), 5000)
+    channel.port1.onmessage = ({ data }) => {
+      clearTimeout(timer)
+      resolve(data)
+    }
+    navigator.serviceWorker.controller.postMessage({ type: 'candlescope.transport' }, [channel.port2])
+  })
+  channel.port1.close()
+  if (serviceVersion !== 2 || (await request('ready', {}, 150000)).transport !== 2)
+    throw Error('网页版已更新，请关闭此站点的所有标签页后重新打开。')
   globalThis.WebSocket = AppSocket
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') void request('flush').catch(console.error)
   })
   window.addEventListener('pagehide', () => {
+    for (const id of httpRequests) worker.port.postMessage({ id, kind: 'abort' })
     for (const socket of appSockets) socket.close(1000, 'Page closed')
     void request('flush').catch(console.error)
   })

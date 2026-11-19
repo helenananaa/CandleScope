@@ -34,7 +34,7 @@ Open `http://127.0.0.1:4178/` in a browser supporting module Shared Workers, Ser
 
 The market, replay and strategy entries load the original React entrypoints. A service worker forwards application HTTP requests to the original FastAPI ASGI app in a shared Pyodide worker. In-app WebSockets use that same app. Public exchange I/O uses browser Fetch/WebSocket below CCXT. Desktop query, backfill, storage, indicator and chart logic remain the owners of their contracts. SQLite files live in the browser profile's IndexedDB-backed filesystem. Clearing site data removes them.
 
-The browser host disables native plugins, subprocess backtests, private exchange accounts and the optional Parquet trade-tape runtime. Exchange availability depends on the visitor's network and CORS. Native local-access checks still apply. History-study views in the WASM host use origin-scoped browser storage. A tab shares the Python engine with other tabs on the same application origin. Closing the browser ends background work. Loading an original page does not by itself establish parity for all of its workflows.
+The browser host disables native plugins, subprocess backtests, private exchange accounts and the optional Parquet trade-tape runtime. Exchange availability depends on the visitor's network and CORS. History studies and the research library in the WASM host use origin-scoped browser storage. Desktop local-access checks still apply on native hosts. The library uses the same CSV importer, IANA time zones, project ZIP files, dataset revisions, and replay sources as the desktop local-data profile. The replay picker uses imported bars and trade prints. Simulated and manual accounts and their journals are browser-local. Private exchange credentials and script execution require the desktop app. A tab shares the Python engine with other tabs on the same application origin. Closing the browser ends background work. Loading an original page does not by itself establish parity for all of its workflows.
 
 The earlier standalone prototype is available with `npm run build:web:prototype` (output `dist-prototype/`). Its workspace and IndexedDB records use a separate format and are preserved independently of the original backend's SQLite databases.
 
@@ -49,7 +49,7 @@ PLAYWRIGHT_MODULE=/path/to/node_modules/playwright-core CHROME_PATH=/path/to/chr
   node browser/host/acceptance.mjs http://127.0.0.1:4178/
 ```
 
-This covers the live K-line/backfill and SQLite restart path. Full replay training sessions, account workflows, every exchange, long histories and other browsers have separate acceptance requirements.
+The companion `browser/host/research-acceptance.mjs` uses the same Chrome configuration. It imports CSV, exports and restores a project ZIP, starts BAR and trade-print training sessions, steps the BAR replay, subscribes to a practice account, writes a journal note and verifies state after restarting Chrome. Large archives, every exchange, other browser engines and native strategy providers have separate acceptance requirements.
 
 ## Backend Connection
 
