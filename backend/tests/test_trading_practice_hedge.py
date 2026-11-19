@@ -64,6 +64,10 @@ def test_exact_two_leg_balance_cost_basis_and_recovery(service, tmp_path):
     summary = service.account_summary(account)
     assert summary["valuationStatus"] == "stale"
     assert {t["symbol"]: D(t["markPrice"]) for t in summary["positions"]} == {"BTCUSDT": 120, "ETHUSDT": 60}
+    tick(service, "BTCUSDT", 119)
+    summary = service.account_summary(account)
+    assert next(f for f in summary["feeds"] if f["symbol"] == "ETHUSDT")["status"] == "catching_up"
+    assert {t["symbol"]: D(t["markPrice"]) for t in summary["positions"]} == {"BTCUSDT": 119, "ETHUSDT": 60}
     service.flush_feeds()
     recovered = TradingStore(tmp_path / "trading.sqlite3")
     try:
