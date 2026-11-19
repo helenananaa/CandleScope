@@ -57,6 +57,62 @@ class MixedHistoryRead:
         return self._receipt
 
 
+class _SessionView:
+    __slots__ = ("revisions",)
+
+    def __init__(self, revisions):
+        self.revisions = revisions
+
+
+class MixedHistorySession:
+    """One composed query's shared fence, qualification and page allowance.
+
+    The query holds a B130 view over every source and precedence series and
+    revalidates it before anything is published. Target reads inside it need
+    no views of their own: they use that view's revisions, and a change is
+    still detected at its exit. Source qualification is resolved once per
+    series. Pages keep H127's boundaries and K130 summaries (see
+    ``HistoryBlockReader.read_in_view``), so results are unchanged.
+    """
+
+    # One decoded page at a time: the H127 per-page allowance for 256 slots.
+    PAGE_BYTES = 32 * 1024 + 256 * 4096 + 4096
+
+    def __init__(self, engine, view, floor):
+        self.engine, self.floor = engine, floor
+        self.storage, self.manager, self.policy = engine.storage, engine.shared_blocks, engine.history_policy
+        self.adapter = getattr(self.manager, "source", None)
+        self.max_ranges = self.manager.max_ranges
+        by_series = {}
+        for revision in view.revisions:
+            by_series.setdefault(revision.series, []).append(revision)
+        self._revisions = {series: items[0] for series, items in by_series.items() if len(items) == 1}
+        self._qualified = {}
+
+    def covers(self, series):
+        return all(item in self._revisions for item in series)
+
+    def revision(self, series):
+        return self._revisions[series]
+
+    def qualify(self, series):
+        qualified = self._qualified.get(series)
+        if qualified is None:
+            qualified = self._qualified[series] = self.engine.history_blocks._qualify(series)
+        return qualified
+
+    def check_binding(self):
+        engine = self.engine
+        if (engine.storage is not self.storage or engine.shared_blocks is not self.manager
+                or self.manager.source is not self.adapter or engine.history_policy is not self.policy):
+            raise BlockRevisionChanged("history source binding changed during the read")
+
+    @contextmanager
+    def view(self, series):
+        yield _SessionView(tuple(sorted((self._revisions[item] for item in series),
+                                        key=lambda revision: (revision.series.topic, revision.domain))))
+
+
 class MixedHistoryReader:
     def __init__(self, engine):
         self.engine = engine
@@ -64,7 +120,7 @@ class MixedHistoryReader:
     @contextmanager
     def read(self, target, start_ms, end_ms, sources, *, max_positions=32_768,
              page_rows=256, required_fields=frozenset({"open", "high", "low", "close", "volume"}),
-             cancel=None, admit_span=None, on_page=None):
+             cancel=None, admit_span=None, on_page=None, session=None):
         """Prepare one closed target; publish only after successful context exit.
 
         Runs on the caller's storage worker, using the synchronous H127 reader;
@@ -88,8 +144,12 @@ class MixedHistoryReader:
                              if replace(source.series, interval=target.interval) == target
                              and required_fields <= source.fields)
             selected = tuple(dict.fromkeys(source.series for source in eligible))
+            # A session's view covers these sources; otherwise this read
+            # opens and revalidates its own view as before.
+            shared = session if session is not None and session.covers(selected) else None
             for source in eligible:
-                width, _ = history._qualify(source.series)
+                width, _ = (shared.qualify(source.series) if shared is not None
+                            else history._qualify(source.series))
                 spec = parse_interval_spec(source.series.interval)
                 if width != source.width_ms or spec.phase_ms != source.phase_ms:
                     raise BlockUnavailable("mixed source grid differs from its qualified H127 boundary")
@@ -97,7 +157,7 @@ class MixedHistoryReader:
             store = getattr(storage, "revision_store", None)
             if store is None or manager is None:
                 raise BlockUnavailable("mixed history requires versioned canonical storage")
-            floor = store.head()
+            floor = shared.floor if shared is not None else store.head()
             summary = None
             pages = storage_rows = cache_hits = 0
             accepted_rows = fallbacks = 0
@@ -110,7 +170,8 @@ class MixedHistoryReader:
                     raise BlockRevisionChanged("mixed history binding changed during the read")
 
             result = MixedHistoryRead()
-            with manager.view(selected, acquired_at=floor) as view:
+            with (shared.view(selected) if shared is not None
+                  else manager.view(selected, acquired_at=floor)) as view:
                 check_binding()
                 revisions = {revision.series: revision for revision in view.revisions}
                 pending = deque(plan.spans)
@@ -121,9 +182,14 @@ class MixedHistoryReader:
                     unavailable = admit_span is not None and not admit_span(span)
                     while not unavailable:
                         history._cancelled(cancel)
-                        with history.read(span.source.series, span.start_ms, span.end_ms,
-                                          max_rows=page_rows, cursor=cursor,
-                                          required_fields=required_fields, cancel=cancel) as page:
+                        reader = (history.read(span.source.series, span.start_ms, span.end_ms,
+                                               max_rows=page_rows, cursor=cursor,
+                                               required_fields=required_fields, cancel=cancel)
+                                  if shared is None else
+                                  history.read_in_view(span.source.series, span.start_ms, span.end_ms,
+                                               session=shared, max_rows=page_rows, cursor=cursor,
+                                               required_fields=required_fields, cancel=cancel))
+                        with reader as page:
                             for block in page.blocks:
                                 if block.summary.revisions != (revisions[span.source.series],):
                                     raise BlockRevisionChanged("mixed history source changed between spans")

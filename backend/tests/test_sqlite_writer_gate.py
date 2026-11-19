@@ -225,3 +225,36 @@ def test_a_replaced_database_file_is_not_served_by_an_idle_connection(db, tmp_pa
     assert fresh.execute("SELECT k FROM t").fetchall()[0][0] == 42
     fresh.close()
     assert sqlite_runtime.close_idle_connections() == 1
+
+
+def test_revision_checks_and_source_page_lookups_reuse_this_threads_connection(tmp_path, monkeypatch):
+    # Fence captures and source-journal page lookups ran once per chunk and
+    # page, each parsing the whole K-line schema on a fresh connection.
+    from contextlib import closing
+    from app.data_engine.ingestion.models import StreamDescriptor, StreamType
+    from app.data_engine.storage import kline_sources, klines_repo
+
+    monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", tmp_path / "klines.sqlite")
+    klines_repo.init_klines_storage()
+    sqlite_runtime.close_idle_connections()
+    store = klines_repo.KlinesRepoAdapter().revision_store
+    opened = []
+    real_connect = sqlite3.connect
+    monkeypatch.setattr(sqlite3, "connect", lambda *a, **k: opened.append(a[0]) or real_connect(*a, **k))
+    descriptor = StreamDescriptor(exchange="binance", market_type="futures", symbol="BTCUSDT",
+                                  stream_type=StreamType.KLINE, interval="1m")
+    for _ in range(5):
+        store.acquisition()
+        with closing(store.connect()) as conn, conn:
+            conn.execute("BEGIN")
+            conn.execute("SELECT COUNT(*) FROM klines").fetchone()
+        assert kline_sources.history_projection_inputs(descriptor, 0, 60_000 * 9, 60_000) is None
+    assert len(opened) <= 2
+    # A scoped live-input read still owns, and really closes, its connection.
+    scoped = store.scoped_version_reader()
+    scoped.read_versions(())
+    held = scoped._connection
+    scoped.close()
+    with pytest.raises(sqlite3.ProgrammingError):
+        held.execute("SELECT 1")
+    sqlite_runtime.close_idle_connections()

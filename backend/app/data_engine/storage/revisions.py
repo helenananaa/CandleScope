@@ -597,7 +597,7 @@ class ScopedRevisionRead:
 
     def read_versions(self, series):
         if self._connection is None:
-            self._connection = self.store.connect()
+            self._connection = self.store.scoped_connect()
         conn = self._connection
         version = conn.execute("PRAGMA data_version").fetchone()[0]
         values = tuple(series)
@@ -615,8 +615,11 @@ class ScopedRevisionRead:
 
 
 class RevisionStore:
-    def __init__(self, connect, *, reads=None):
+    def __init__(self, connect, *, reads=None, scoped=None):
         self.connect = connect
+        # A scoped read holds its connection for one live input and must
+        # really close it afterwards, so it may use a non-reusable factory.
+        self.scoped_connect = connect if scoped is None else scoped
         # Optional ReusableReads for this store's own self-contained reads.
         # Writers, fences and scoped readers keep their own connections.
         self._reads = reads
@@ -733,6 +736,9 @@ class Acquisition:
     native_history_views: list = field(default_factory=list, repr=False)
     derived_target_views: list = field(default_factory=list, repr=False)
     mixed_target_views: list = field(default_factory=list, repr=False)
+    # Read-path compositions (capture_read_computation); only their own
+    # computation_scope matches them, and no backfill capture consults them.
+    read_targets: list = field(default_factory=list, repr=False)
     warmup_view: WarmupView | None = field(default=None, repr=False)
     lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
 

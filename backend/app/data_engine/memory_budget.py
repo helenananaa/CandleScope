@@ -16,6 +16,7 @@ import asyncio
 import threading
 import time
 from collections import OrderedDict
+from itertools import chain
 from dataclasses import dataclass
 
 
@@ -262,33 +263,115 @@ def reserve_work(budget, owner, bytes_needed):
         leases.enter_context(budget.reserve(owner, bytes_needed))
 
 
+_LEAF_TYPES = frozenset((int, float, str, bytes, complex))
+_SEQUENCE_TYPES = frozenset((list, tuple, set, frozenset))
+_SKIP, _MAPPING, _SEQUENCE, _DATACLASS, _OTHER = range(5)
+_TYPE_SHAPES: dict[type, tuple[int, tuple[str, ...], bool]] = {}
+
+
+def _type_shape(kind):
+    """How retained_size traverses instances of ``kind``; a fact about the type.
+
+    The answers equal the per-instance isinstance/is_dataclass checks for
+    ordinary classes (it ignores later ABC registration and ``__class__``
+    overrides, which value types here do not use).
+    """
+    shape = _TYPE_SHAPES.get(kind)
+    if shape is None:
+        names = ()
+        if issubclass(kind, (type, bool)):
+            how = _SKIP
+        elif issubclass(kind, Mapping):
+            how = _MAPPING
+        elif issubclass(kind, (list, tuple, set, frozenset)):
+            how = _SEQUENCE
+        elif is_dataclass(kind):
+            how, names = _DATACLASS, tuple(field.name for field in fields(kind))
+        else:
+            how = _OTHER
+        shape = how, names, issubclass(kind, RetainedMetadata)
+        if len(_TYPE_SHAPES) < 4096:
+            _TYPE_SHAPES[kind] = shape
+    return shape
+
+
+_FLAT_VALUE_TYPES = frozenset((int, float, str, bytes, bool, type(None)))
+
+
+def flat_rows_within(rows, limit):
+    """``retained_size((rows,))[0] <= limit`` for a list of flat dict rows.
+
+    Summing every key and value without de-duplication can only overcount, so
+    an upper bound within ``limit`` decides the comparison without walking the
+    graph. Other shapes, or a bound over the limit, use the exact count.
+    """
+    getsizeof = sys.getsizeof
+    if type(rows) is list and all(type(row) is dict for row in rows):
+        keys = chain.from_iterable(map(dict.keys, rows))
+        values = list(chain.from_iterable(map(dict.values, rows)))
+        if set(map(type, values)) <= _FLAT_VALUE_TYPES:
+            bound = (getsizeof(rows) + sum(map(getsizeof, rows)) + sum(map(getsizeof, keys))
+                     + sum(map(getsizeof, values)))
+            if bound <= limit:
+                return True
+    return retained_size((rows,))[0] <= limit
+
+
 def retained_size(roots, seen=None):
     """Count reachable value/container objects once; do not traverse services."""
     seen = set() if seen is None else seen
     pending = list(roots)
     total = objects = 0
+    getsizeof, seen_add, pop, extend, append = sys.getsizeof, seen.add, pending.pop, pending.extend, pending.append
+    leaves, sequences, shapes = _LEAF_TYPES, _SEQUENCE_TYPES, _TYPE_SHAPES
     while pending:
-        value = pending.pop()
-        if id(value) in seen or value is None or isinstance(value, (type, bool)):
+        value = pop()
+        kind = type(value)
+        # Exact built-ins first: same result, without abstract-base checks.
+        if kind in leaves:
+            if id(value) not in seen:
+                seen_add(id(value))
+                total += getsizeof(value)
+                objects += 1
             continue
-        seen.add(id(value))
-        total += sys.getsizeof(value)
+        if kind is dict:
+            if id(value) not in seen:
+                seen_add(id(value))
+                total += getsizeof(value)
+                objects += 1
+                extend(value.keys())
+                extend(value.values())
+            continue
+        if kind in sequences:
+            if id(value) not in seen:
+                seen_add(id(value))
+                total += getsizeof(value)
+                objects += 1
+                extend(value)
+            continue
+        if value is None or id(value) in seen:
+            continue
+        how, names, metadata = shapes.get(kind) or _type_shape(kind)
+        if how == _SKIP:
+            continue
+        seen_add(id(value))
+        total += getsizeof(value)
         objects += 1
-        if isinstance(value, Mapping):
-            pending.extend(value.keys())
-            pending.extend(value.values())
+        if how == _MAPPING:
+            extend(value.keys())
+            extend(value.values())
             if hasattr(value, "_values"):
-                total += sys.getsizeof(dict(value))  # private map backing allocation
-                pending.append(value._values)
-        elif isinstance(value, (list, tuple, set, frozenset)):
-            pending.extend(value)
-        elif is_dataclass(value):
+                total += getsizeof(dict(value))  # private map backing allocation
+                append(value._values)
+        elif how == _SEQUENCE:
+            extend(value)
+        elif how == _DATACLASS:
             if hasattr(value, "__dict__"):
-                pending.append(vars(value))
+                append(vars(value))
             else:
-                pending.extend(getattr(value, field.name) for field in fields(value))
-        if isinstance(value, RetainedMetadata):
-            pending.extend(value._memory_metadata())
+                extend(getattr(value, name) for name in names)
+        if metadata:
+            extend(value._memory_metadata())
     return total, objects
 
 
@@ -392,12 +475,20 @@ class MemoryBudget:
             if not loop.is_closed():
                 loop.call_soon_threadsafe(event.set)
 
-    def _safe_pool_grant(self, waiter):
-        snapshot = self.snapshot()
+    def _owner_estimates(self):
+        """Each owner's measured usage, read once for a whole grant pass."""
+        return {name: dict(usage()).get("estimated_bytes", 0)
+                for name, (_limit, usage, _roots) in tuple(self._owners.items())}
+
+    def _safe_pool_grant(self, waiter, estimates=None):
+        # Measuring usage walks every owner's structures; a pass over many
+        # waiters measures once (callers hold the lock, so only grants made
+        # in this pass change the reservations read here).
+        estimates = self._owner_estimates() if estimates is None else estimates
         delta = waiter.size-(waiter.pool.allocated if waiter.pool else 0)
-        free = self.total_bytes-snapshot['estimated_bytes']-snapshot['reserved_bytes']-delta
-        local = {name:item['limit_bytes']-item.get('estimated_bytes',0)-item['reserved_bytes']
-                 for name,item in snapshot['owners'].items()}
+        free = self.total_bytes-sum(estimates.values())-sum(self._reserved.values())-delta
+        local = {name:limit-estimates.get(name,0)-self._reserved[name]
+                 for name,(limit,_usage,_roots) in self._owners.items()}
         local[waiter.owner] -= delta
         if free < 0 or local[waiter.owner] < 0:
             return False
@@ -423,6 +514,7 @@ class MemoryBudget:
 
     def _grant_pools(self):
         pending=list(self._pool_waiters)
+        estimates=self._owner_estimates() if pending else None
         while pending:
             now=time.monotonic()
             waiter=min(pending,key=lambda w:(
@@ -439,7 +531,7 @@ class MemoryBudget:
             # holder that could not grow yet held back both another holder that
             # could finish and the page claims running fetches need to finish.
             # _safe_pool_grant already keeps an order in which all complete.
-            if not self._safe_pool_grant(waiter):
+            if not self._safe_pool_grant(waiter, estimates):
                 continue
             pool = waiter.pool
             previous = pool.allocated if pool else 0

@@ -1,6 +1,7 @@
 """Custom interval query service for QueryEngine."""
 from __future__ import annotations
 
+from contextlib import nullcontext
 from copy import deepcopy
 
 import time
@@ -507,8 +508,14 @@ class CustomIntervalQueryService:
         if result.metadata.get('mixed_partial_materialized'):
             written, role = 0, 'existing_partial'
         else:
-            written, role = self._persist_rebuilt_target(result.bars, result,
-                symbol=key.symbol, interval=key.interval, exchange=key.exchange, market_type=key.market_type)
+            from app.data_engine.storage.mixed_history_fence import ClosedMixedRead, computation_scope
+            proof = result._closed_target_read
+            # The composition's range proof, not every family series staying
+            # unchanged, permits this write (as for a backfill reduction).
+            with (computation_scope((proof.computation,)) if isinstance(proof, ClosedMixedRead)
+                  else nullcontext()):
+                written, role = self._persist_rebuilt_target(result.bars, result,
+                    symbol=key.symbol, interval=key.interval, exchange=key.exchange, market_type=key.market_type)
         self._cache.bulk_load(key, result.bars)
         result.metadata.update(self._combined_io_metadata(materialized_result, result))
         result.metadata.update(elapsed_ms=round((time.monotonic() - started_at) * 1000, 2),

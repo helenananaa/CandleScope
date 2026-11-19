@@ -396,6 +396,27 @@ class RateLimitManager:
         except TimeoutError:
             pass
 
+    def probe_in_flight(self, bucket_key: str) -> bool:
+        """Whether a consuming probe still owns this bucket's admission."""
+        bucket = self._buckets.get(bucket_key)
+        # Read-only: an expired lease no longer owns admission; the next
+        # admission clears it exactly as before.
+        return bucket is not None and time.monotonic() < bucket.probe_lease_until
+
+    async def wait_for_probe_release(self, bucket_key: str, timeout: float) -> None:
+        """Return once the bucket's probe is accounted, at most after ``timeout``.
+
+        The probe lease is only the fail-safe expiry. A recorded response
+        releases it, usually within one round trip, and notifies a change.
+        """
+        deadline = time.monotonic() + max(0.0, float(timeout))
+        while self.probe_in_flight(bucket_key):
+            now = time.monotonic()
+            remaining = min(deadline, self._buckets[bucket_key].probe_lease_until) - now
+            if remaining <= 0:
+                return
+            await self.wait_for_change(remaining)
+
     async def acquire_many_nowait(
         self, rules: list[RateLimitRule], request: HistoricalRequest,
     ) -> list[RateLimitReservation]:

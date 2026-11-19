@@ -1438,6 +1438,137 @@ def test_cancelling_rate_limit_deferred_chunk_prevents_timer_revival() -> None:
     asyncio.run(_run())
 
 
+def test_probe_deferred_chunk_resumes_when_the_probe_is_released(monkeypatch) -> None:
+    # A probe deferral reports the probe's whole fail-safe lease. The chunk
+    # must run again once the probe response is accounted, not 30 s later.
+    from app.data_engine.data_manager import backfill_scheduler
+
+    async def _run() -> list[float]:
+        released = asyncio.Event()
+
+        async def wait_for_probe_release(bucket_key, timeout):
+            assert bucket_key == "binance:futures:request_weight:ip" and timeout >= 29
+            await asyncio.wait_for(released.wait(), timeout)
+
+        manager = backfill_scheduler.get_public_admission().manager
+        monkeypatch.setattr(manager, "wait_for_probe_release", wait_for_probe_release, raising=False)
+
+        class _Engine:
+            def __init__(self) -> None:
+                self.calls: list[float] = []
+
+            async def run(self, **kwargs):
+                self.calls.append(time.monotonic())
+                if len(self.calls) == 1:
+                    deferral = _quota_deferral(30.0)
+                    deferral.reason = "probe_in_flight"
+                    raise deferral
+                return _RepairReport(status="completed")
+
+        engine = _Engine()
+        dm = _DataManager()
+        coordinator = BackfillCoordinator(
+            storage=_Storage(), bars_backfilled=dm.on_bars_backfilled, emit_event=dm.event_bus.emit,
+            engine=engine, loop=asyncio.get_running_loop(), base_delay_seconds=0, chunk_bars=1)
+        request = _request(0, 0, request_id="probe-deferred")
+        request.market_type = "futures"
+        request_id = coordinator.request(request)
+        await _wait_until(lambda: coordinator.snapshot()["deferred_chunks"] == 1)
+        await asyncio.sleep(0.1)
+        assert len(engine.calls) == 1
+        released.set()
+        outcome = await asyncio.wait_for(coordinator.wait_for_request(request_id), timeout=2.0)
+        assert outcome is not None and outcome.status == "completed"
+        await coordinator.shutdown()
+        return engine.calls
+
+    calls = asyncio.run(_run())
+    assert len(calls) == 2 and calls[1] - calls[0] < 2.0
+
+
+def test_coroutines_of_one_chunk_leaving_resource_waits_together_all_resume(monkeypatch) -> None:
+    # Pages and shared inputs of one chunk can leave memory waits in the same
+    # turn. Each must resume; a later resume must not replace the earlier
+    # waiter's dispatch turn, or that waiter keeps its memory grant forever.
+    from app.core.resource_wait import resource_wait
+
+    async def _run() -> list[int]:
+        gate = asyncio.Event()
+        entered: list[int] = []
+        resumed: list[int] = []
+
+        class _Engine:
+            async def run(self, **kwargs):
+                async def part(index):
+                    async with resource_wait("memory_working_set"):
+                        entered.append(index)
+                        await gate.wait()
+                    resumed.append(index)
+                await asyncio.gather(part(0), part(1))
+                return _RepairReport(status="completed")
+
+        dm = _DataManager()
+        coordinator = BackfillCoordinator(
+            storage=_Storage(), bars_backfilled=dm.on_bars_backfilled, emit_event=dm.event_bus.emit,
+            engine=_Engine(), loop=asyncio.get_running_loop(), base_delay_seconds=0, chunk_bars=1)
+        scheduler = coordinator._scheduler
+        request_id = coordinator.request(_request(0, 0, request_id="two-resource-waits"))
+        await _wait_until(lambda: len(entered) == 2)
+        # Both waiters ask to resume before any drain serves the first one.
+        drain = scheduler._drain
+        monkeypatch.setattr(scheduler, "_drain", lambda: None)
+        gate.set()
+        for _ in range(10):
+            await asyncio.sleep(0)
+        monkeypatch.setattr(scheduler, "_drain", drain)
+        drain()
+        outcome = await asyncio.wait_for(coordinator.wait_for_request(request_id), timeout=2.0)
+        assert outcome is not None and outcome.status == "completed"
+        assert scheduler.snapshot()["ready_chunks"] == 0
+        await coordinator.shutdown()
+        return resumed
+
+    assert sorted(asyncio.run(_run())) == [0, 1]
+
+
+def test_a_chunk_waiting_for_resources_resumes_after_a_merge_rebuilds_its_request() -> None:
+    # A merge rebuilds a request's chunks under the same ids while their tasks
+    # run. A task that was waiting for memory must still get its turn back;
+    # otherwise it never resumes and its memory grant is never released.
+    from app.core.resource_wait import resource_wait
+
+    async def _run() -> list[tuple[int, int]]:
+        gate = asyncio.Event()
+        waiting = asyncio.Event()
+        calls: list[tuple[int, int]] = []
+
+        class _Engine:
+            async def run(self, **kwargs):
+                calls.append((kwargs["range_start_ms"], kwargs["range_end_ms"]))
+                if len(calls) == 1:
+                    async with resource_wait("memory_working_set"):
+                        waiting.set()
+                        await gate.wait()
+                return _RepairReport(status="completed")
+
+        dm = _DataManager()
+        coordinator = BackfillCoordinator(
+            storage=_Storage(), bars_backfilled=dm.on_bars_backfilled, emit_event=dm.event_bus.emit,
+            engine=_Engine(), loop=asyncio.get_running_loop(), base_delay_seconds=0, chunk_bars=1_000)
+        first = coordinator.request(_request(0, 9 * 60_000, request_id="merge-while-waiting"))
+        await asyncio.wait_for(waiting.wait(), 1.0)
+        second = coordinator.request(_request(10 * 60_000, 19 * 60_000, request_id="merge-into-waiting"))
+        assert second == first and coordinator.snapshot()["merged"] == 1
+        gate.set()
+        outcome = await asyncio.wait_for(coordinator.wait_for_request(first), timeout=2.0)
+        assert outcome is not None
+        await coordinator.shutdown()
+        return calls
+
+    calls = asyncio.run(_run())
+    assert calls[0] == (0, 9 * 60_000)
+
+
 def test_custom_interval_scheduler_chunks_by_source_rows() -> None:
     async def _run() -> None:
         class _Engine:

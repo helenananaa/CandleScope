@@ -1033,3 +1033,46 @@ def test_binance_clock_dependency_obeys_kline_cooldown(market, path):
         assert scheduler.snapshot()["in_flight"] == 0
 
     asyncio.run(run())
+
+
+def test_waiting_for_a_probe_returns_when_its_response_is_recorded() -> None:
+    # The probe lease (30 s by default) is only the fail-safe expiry. A
+    # deferred caller waits for the recorded response, not for the lease.
+    async def run() -> tuple:
+        manager = RateLimitManager(conservative_cold_start=True, probe_lease_seconds=30.0)
+        request = HistoricalRequest(exchange="binance", market_type="futures",
+                                    endpoint="/fapi/v1/klines", symbol="BTCUSDT")
+        rule = RateLimitRule(name="binance_futures_klines", bucket_key="binance:futures:request_weight:ip",
+                             capacity=100, refill_interval_seconds=60)
+        await manager.acquire_nowait(rule, request)
+        with pytest.raises(RateLimitDeferred) as caught:
+            await manager.acquire_nowait(rule, request)
+        held = manager.probe_in_flight(rule.bucket_key)
+        started = time.monotonic()
+        waiting = asyncio.create_task(manager.wait_for_probe_release(rule.bucket_key, caught.value.retry_after_seconds))
+        await asyncio.sleep(0.05)
+        assert not waiting.done()
+        manager.record_response(rule, status_code=200, headers={"x-mbx-used-weight-1m": "5"})
+        await asyncio.wait_for(waiting, 1.0)
+        return caught.value, held, time.monotonic() - started, manager.probe_in_flight(rule.bucket_key)
+
+    deferred, held, waited, after = asyncio.run(run())
+    assert deferred.reason == "probe_in_flight" and deferred.retry_after_seconds > 20
+    assert held is True and after is False
+    assert waited < 1.0
+
+
+def test_waiting_for_a_probe_is_bounded_by_its_lease() -> None:
+    async def run() -> float:
+        manager = RateLimitManager(conservative_cold_start=True, probe_lease_seconds=0.2)
+        request = HistoricalRequest(exchange="binance", market_type="futures",
+                                    endpoint="/fapi/v1/klines", symbol="BTCUSDT")
+        rule = RateLimitRule(name="binance_futures_klines", bucket_key="binance:futures:request_weight:ip",
+                             capacity=100, refill_interval_seconds=60)
+        await manager.acquire_nowait(rule, request)
+        started = time.monotonic()
+        await asyncio.wait_for(manager.wait_for_probe_release(rule.bucket_key, 5.0), 2.0)
+        return time.monotonic() - started
+
+    waited = asyncio.run(run())
+    assert 0.1 < waited < 1.0

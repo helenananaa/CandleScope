@@ -196,6 +196,20 @@ def _connect(
 _REUSE_CONNECTION: ContextVar[bool] = ContextVar("klines_reuse_connection", default=False)
 
 
+def _reusable(**kwargs) -> sqlite3.Connection:
+    """``_connect`` whose ``close`` hands the connection back to this thread.
+
+    For callers that always close: a new connection parses the whole schema
+    (triggers included) before its first statement. Closing inside a
+    transaction still really closes, which rolls it back.
+    """
+    token = _REUSE_CONNECTION.set(True)
+    try:
+        return _connect(**kwargs)
+    finally:
+        _REUSE_CONNECTION.reset(token)
+
+
 @contextmanager
 def _connected(**kwargs):
     """``with _connect() as conn`` that also closes, so the connection is reused.
@@ -203,11 +217,7 @@ def _connected(**kwargs):
     The block commits or rolls back exactly as ``with conn`` does; closing then
     hands the connection back for this thread's next open.
     """
-    token = _REUSE_CONNECTION.set(True)
-    try:
-        conn = _connect(**kwargs)
-    finally:
-        _REUSE_CONNECTION.reset(token)
+    conn = _reusable(**kwargs)
     try:
         with conn:
             yield conn
@@ -1704,10 +1714,11 @@ class KlinesRepoAdapter:
         self._calendar_resolver = calendar_resolver
         self._calendar_registry = calendar_registry
         self.revision_store = RevisionStore(
-            lambda: _connect(timeout_seconds=0.1, configure_journal_mode=False), reads=_REVISION_READS)
+            lambda: _reusable(timeout_seconds=0.1, configure_journal_mode=False), reads=_REVISION_READS,
+            scoped=lambda: _connect(timeout_seconds=0.1, configure_journal_mode=False))
         from .bar_delivery import BarDeliveryJournal
         self.bar_delivery = BarDeliveryJournal(
-            lambda: _connect(timeout_seconds=1.0, configure_journal_mode=False), upsert_klines)
+            lambda: _reusable(timeout_seconds=1.0, configure_journal_mode=False), upsert_klines)
 
     def set_calendar_resolver(
         self,
@@ -2215,7 +2226,8 @@ class AsyncKlinesRepoAdapter:
     @property
     def revision_store(self):
         return RevisionStore(
-            lambda: _connect(timeout_seconds=0.1, configure_journal_mode=False), reads=_REVISION_READS)
+            lambda: _reusable(timeout_seconds=0.1, configure_journal_mode=False), reads=_REVISION_READS,
+            scoped=lambda: _connect(timeout_seconds=0.1, configure_journal_mode=False))
 
     async def query_bars_range_presence(
         self, symbol: str, interval: str, ranges: tuple[tuple[int, int], ...], *,

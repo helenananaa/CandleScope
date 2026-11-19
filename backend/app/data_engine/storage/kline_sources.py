@@ -449,7 +449,7 @@ def history_projection_inputs(descriptor: StreamDescriptor, first: int, last: in
     if (not identity.is_legacy_default_for(descriptor.exchange) or width <= 0
             or first > last or (last-first) % width or (last-first)//width >= 1000):
         return None
-    with closing(klines_repo._connect()) as conn, conn:
+    with closing(klines_repo._reusable()) as conn, conn:
         conn.execute('BEGIN')
         tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         if not {'kline_source_heads','kline_source_observations','kline_delete_permissions'} <= tables:

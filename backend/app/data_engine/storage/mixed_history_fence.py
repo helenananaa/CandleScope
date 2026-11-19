@@ -164,6 +164,50 @@ def capture_computations(store, scope, decomp):
     return tuple(views)
 
 
+def capture_read_computation(store, scope, key, dependencies, start, end, duration, revision):
+    """Range proof for a read-path composition of closed targets [start, end].
+
+    The composition reads every dependency as of ``revision`` (the query's
+    floor). Persisting or adopting its output then needs what a backfill
+    reduction needs (``MixedComputation.check``): no intersecting dependency or
+    target change since then, and no deletion past the permission floor. It
+    does not need the whole family, including the live minute, to stay
+    unchanged until the output is written and adopted.
+    Only a ``computation_scope`` holding this proof grants a write.
+    """
+    if (store is None or scope is None or duration <= 0 or start < 0 or start % duration
+            or not 0 < (end - start) // duration + 1 <= 512):
+        return None
+    with scope.lock, closing(store.connect()) as conn, conn:
+        conn.execute('BEGIN')
+        check_deletions(conn, scope, key, *dependencies)
+        target = MixedTarget(key, tuple(dependencies), start, end, duration, fingerprint(conn, key, start, end))
+        scope.read_targets.append(target)
+    return MixedComputation(target, revision)
+
+
+@dataclass(frozen=True)
+class ClosedMixedRead:
+    """Adoption proof for a composed page, in place of family-wide conflicts."""
+    storage: object
+    store: object
+    computation: MixedComputation
+    bars: tuple
+
+    def check(self, storage, store, scope, key, bars):
+        published = {bar.time_ms: bar for bar in self.bars}
+        if (storage is not self.storage or store is not self.store or key != self.computation.target.key
+                or any(published.get(bar.time_ms) != bar for bar in bars)):
+            raise StaleAcquisition('composed read binding or output changed')
+        with scope.lock, self.store._reading() as conn, conn:
+            conn.execute('BEGIN')
+            head = current_revision(conn)
+            if head < self.computation.revision:
+                raise StaleAcquisition('composed read revision rewound')
+            self.computation.check(conn, scope)
+            return head
+
+
 def seal_standard_inputs(symbol, interval, exchange, market_type, rows, owner_check):
     """Bind bounded dense 1m inputs used by the qualified built-in reducer.
 
@@ -194,7 +238,8 @@ def seal_standard_inputs(symbol, interval, exchange, market_type, rows, owner_ch
 def matching_computation(scope, key, rows, source):
     if source != 'backfill_aggregated' or not rows:
         return None
-    return next((view for view in _current.get() if view.target in scope.mixed_target_views
+    return next((view for view in _current.get()
+        if (view.target in scope.mixed_target_views or view.target in scope.read_targets)
         and view.target.key == key and all(view.target.start <= row['open_time'] <= view.target.end
             and row['open_time'] % view.target.duration == 0
             and row['close_time'] == row['open_time'] + view.target.duration - 1 for row in rows)), None)

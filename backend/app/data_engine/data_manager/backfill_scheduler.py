@@ -124,7 +124,6 @@ class _FetchChunk:
     execution_scope: Any = None
     executing: bool = False
     resource_waiter: asyncio.Task | None = None
-    resume_future: asyncio.Future | None = None
     phase_wait_reason: str | None = None
     phase_wait_started: float = 0.0
     phase_wait_ms: float = 0.0
@@ -268,6 +267,9 @@ class BackfillScheduler:
         self._chunks: dict[str, _FetchChunk] = {}
         self._ready: list[tuple[int, int, int, str]] = []
         self._tasks: dict[str, asyncio.Task] = {}
+        # Resume turns are keyed by chunk id, not by chunk object: a merge can
+        # rebuild a request's chunks under the same ids while their tasks run.
+        self._resume_turns: dict[str, asyncio.Future] = {}
         self._parked: set[str] = set()
         self.phase_resumptions = 0
         self._buckets: dict[str, _TokenBucket] = {}
@@ -1313,11 +1315,19 @@ class BackfillScheduler:
                     chunk.phase_wait_reason = None
                     owner.phase_resumptions += 1
                     return
-                future = asyncio.get_running_loop().create_future()
-                chunk.resume_future = future
-                owner._push_ready(chunk,preserve_sequence=True)
+                # Several coroutines of one chunk (pages, shared inputs) may
+                # leave resource waits together. They share one dispatch turn:
+                # a second future must not replace the first, or the first
+                # waiter never resumes and keeps its memory grant. The turn is
+                # keyed by id: a merge may have replaced this chunk object.
+                future = owner._resume_turns.get(chunk.chunk_id)
+                if future is None or future.done():
+                    future = asyncio.get_running_loop().create_future()
+                    owner._resume_turns[chunk.chunk_id] = future
+                    owner._push_ready(chunk,preserve_sequence=True)
                 owner._drain()
-                await future
+                # One cancelled waiter must not cancel its siblings' turn.
+                await asyncio.shield(future)
         return Observer()
 
     def _parent_running(self, parent_id, *, excluding=None):
@@ -1356,7 +1366,8 @@ class BackfillScheduler:
                     else:
                         self._drop_chunk(chunk.chunk_id, None)
                     continue
-                if (chunk.chunk_id in self._tasks and chunk.resume_future is None
+                resuming = chunk.chunk_id in self._resume_turns
+                if (chunk.chunk_id in self._tasks and not resuming
                         or chunk.resource_waiter is not None):
                     skipped.append(item)
                     continue
@@ -1400,7 +1411,7 @@ class BackfillScheduler:
                     self.fairness_rotations += 1
                     skipped.append(item)
                     continue
-                bucket = self._bucket_for(chunk.request) if self._max_concurrency and chunk.resume_future is None else None
+                bucket = self._bucket_for(chunk.request) if self._max_concurrency and not resuming else None
                 now_ms = int(time.time() * 1000)
                 if bucket is not None and not bucket.try_acquire(now_ms):
                     self.rate_limited_skips += 1
@@ -1409,15 +1420,16 @@ class BackfillScheduler:
                     skipped.append(item)
                     continue
 
-                if chunk.resume_future is not None:
-                    future,chunk.resume_future = chunk.resume_future,None
+                if resuming:
+                    future = self._resume_turns.pop(chunk.chunk_id)
                     self._parked.discard(chunk.chunk_id)
                     series.active.add(chunk.parent_id)
                     if chunk.parent_id in series.pending:
                         series.pending.remove(chunk.parent_id)
                     (self._active_background_chunks if self._is_background(chunk.request)
                      else self._active_foreground_chunks).add(chunk.chunk_id)
-                    chunk.phase_wait_ms += (time.monotonic()-chunk.phase_wait_started)*1000
+                    if chunk.phase_wait_started:
+                        chunk.phase_wait_ms += (time.monotonic()-chunk.phase_wait_started)*1000
                     chunk.phase_wait_reason = None
                     self.phase_resumptions += 1
                     if not future.done():
@@ -1587,7 +1599,12 @@ class BackfillScheduler:
             if int(item[0]) != lane[0]:
                 continue
             candidate = self._chunks.get(item[3])
-            if candidate is None or (candidate.phase_wait_reason and candidate.resume_future is None) or candidate.resource_waiter is not None or candidate.eligible_at_monotonic > now:
+            resuming = candidate is not None and candidate.chunk_id in self._resume_turns
+            if candidate is None or (candidate.phase_wait_reason and not resuming) or candidate.resource_waiter is not None or candidate.eligible_at_monotonic > now:
+                continue
+            # Running work without a resume request is skipped by the drain
+            # loop; it is no alternative to a chunk that is ready to resume.
+            if candidate.chunk_id in self._tasks and not resuming:
                 continue
             if self._is_background(candidate.request) != lane[1]:
                 continue
@@ -1741,6 +1758,7 @@ class BackfillScheduler:
             except RateLimitDeferred as exc:
                 kind = 'public_admission_deferred'
                 self._note_local_burst(chunk, None)
+                self._wake_on_probe_release(exc)
                 if chunk.public_demand is not None:
                     get_public_admission().protect(
                         chunk.public_demand, exc.bucket_key,
@@ -1775,10 +1793,27 @@ class BackfillScheduler:
             self._active_foreground_chunks.discard(chunk.chunk_id)
             self._active_background_chunks.discard(chunk.chunk_id)
             self._tasks.pop(chunk.chunk_id, None)
+            # Only this task's coroutines can request its resume turn.
+            self._resume_turns.pop(chunk.chunk_id, None)
             self._parked.discard(chunk.chunk_id)
             if chunk.public_demand is not None and not chunk.public_demand.alive():
                 get_public_admission().forget(chunk.public_demand)
             self._drain()
+
+    @staticmethod
+    def _wake_on_probe_release(exc):
+        """A probe deferral reports the probe's whole fail-safe lease (30 s).
+
+        Its response normally arrives within one round trip and releases the
+        bucket. Wait for that release instead of sleeping out the lease; the
+        lease still bounds the wait.
+        """
+        if exc.reason != 'probe_in_flight' or getattr(exc, 'wait_for_capacity', None) is not None:
+            return
+        wait = getattr(get_public_admission().manager, 'wait_for_probe_release', None)
+        if callable(wait):
+            bucket, timeout = exc.bucket_key, exc.retry_after_seconds
+            exc.wait_for_capacity = lambda: wait(bucket, timeout)
 
     def _record_chunk_receipt(self, chunk, state, kind, report):
         """Bounded diagnostics only, never coverage or quota authority.
