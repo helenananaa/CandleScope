@@ -1,3 +1,5 @@
+import { useState } from "react";
+import ProxySubscriptionImport from "../../features/settings/ProxySubscriptionImport.js";
 import { Button } from "../ui/Button.js";
 import { Checkbox, Field, Input, Select } from "../ui/Field.js";
 import { Disclosure, InlineAlert } from "../ui/Display.js";
@@ -68,6 +70,8 @@ export default function ProxySettingsPanel({
     onProxyRoutesChange, onProxyStrategyChange,
 }: ProxySettingsPanelProps) {
     useLocale();
+    const [importing, setImporting] = useState(false);
+    const busy = proxyLoading || importing;
     const updateRoute = (id: string, patch: Partial<ProxyRouteConfig>) => {
         onProxyRoutesChange?.(proxyRoutes.map((route) => route.id === id ? { ...route, ...patch } : route));
     };
@@ -82,6 +86,7 @@ export default function ProxySettingsPanel({
                         key={mode.value}
                         type="button"
                         className={`st-theme-card ${proxyMode === mode.value ? 'active' : ''}`}
+                        disabled={busy}
                         aria-pressed={proxyMode === mode.value}
                         onClick={() => onProxyModeChange(mode.value)}
                     >
@@ -113,8 +118,10 @@ export default function ProxySettingsPanel({
 
             {proxyMode === 'pool' && (
                 <div className="st-proxy-pool">
+                    {onProxyRoutesChange && <ProxySubscriptionImport routes={proxyRoutes} saved={proxySavedRoutes ?? []}
+                        onChange={onProxyRoutesChange} disabled={proxyLoading} onBusy={setImporting} />}
                     <Field label={t("settings.proxy.strategy")} hint={t("settings.proxy.poolHelp", { group: DEFAULT_EGRESS_GROUP })}>
-                        <Select value={proxyStrategy} disabled={proxyLoading}
+                        <Select value={proxyStrategy} disabled={busy}
                             onChange={(event) => onProxyStrategyChange?.(event.target.value === "balanced" ? "balanced" : "failover")}>
                             <option value="failover">{t("settings.proxy.failover")}</option>
                             <option value="balanced">{t("settings.proxy.balanced")}</option>
@@ -131,16 +138,17 @@ export default function ProxySettingsPanel({
                         const cooldown = status ? Math.max(0, ...Object.values(status.budgets).map((budget) =>
                             Math.max(budget.cooldown_remaining_seconds ?? 0, budget.global_circuit?.cooldown_remaining_seconds ?? 0)),
                             ...status.observations.map((item) => item.cooldown_seconds)) : 0;
-                        return <fieldset className="st-proxy-route" key={route.id} disabled={proxyLoading}>
+                        return <fieldset className="st-proxy-route" key={route.id} disabled={busy}>
                             <legend>{t("settings.proxy.route", { index: index + 1 })}</legend>
+                            {status?.available === false && route.enabled && <InlineAlert tone="warning">{t("extensions.status.unavailable")}</InlineAlert>}
                             <div className="st-proxy-fields">
                                 <Field label={t("settings.proxy.name")}>
                                     <Input value={route.name} onChange={(event) => updateRoute(route.id, { name: event.target.value })} />
                                 </Field>
-                                <Field label={t("settings.proxy.address")}>
+                                {!route.url.startsWith("mihomo://") && <Field label={t("settings.proxy.address")}>
                                     <Input type="password" autoComplete="off" placeholder="http://127.0.0.1:7890" value={route.url}
                                         onChange={(event) => updateRoute(route.id, { url: event.target.value })} />
-                                </Field>
+                                </Field>}
                                 <Field label={t("settings.proxy.egressGroup")}>
                                     <Input value={route.egress_group} onChange={(event) => updateRoute(route.id, { egress_group: event.target.value })} />
                                 </Field>
@@ -203,7 +211,7 @@ export default function ProxySettingsPanel({
                         </fieldset>;
                     })}
                     <div>
-                        <Button disabled={proxyLoading || proxyRoutes.length >= 16}
+                        <Button disabled={busy || proxyRoutes.length >= 16}
                             onClick={() => onProxyRoutesChange?.([...proxyRoutes, { id: crypto.randomUUID(), name: "", url: "",
                                 egress_group: DEFAULT_EGRESS_GROUP, enabled: true, exchanges: [], max_concurrency: 4, max_ws_subscriptions: 64 }])}>
                             {t("settings.proxy.add")}
@@ -220,10 +228,10 @@ export default function ProxySettingsPanel({
             )}
 
             <div className="st-form-actions">
-                <Button onClick={onProxyTest} disabled={proxyLoading}>
+                <Button onClick={onProxyTest} disabled={busy}>
                     {proxyLoading ? t("settings.proxy.testing") : t("settings.proxy.test")}
                 </Button>
-                <Button variant="primary" onClick={onProxySave} disabled={proxyLoading || !proxyDirty}>
+                <Button variant="primary" onClick={onProxySave} disabled={busy || !proxyDirty}>
                     {proxyLoading ? t("settings.proxy.saving") : t("settings.proxy.save")}
                 </Button>
                 {proxyDirty && <span className="st-unsaved">{t("settings.unsaved.badge")}</span>}

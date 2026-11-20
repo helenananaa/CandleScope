@@ -55,6 +55,11 @@ async function prepareFixture(t, failure = "") {
         phase = "ccxt";
       } else if (args[0] === "pip" && args[1] === "freeze") {
         phase = "freeze"; stdout = "fixture==1\\n";
+      } else if (args[0].endsWith("prepare-mihomo.py")) {
+        phase = "mihomo";
+        const output = args[args.indexOf("--output") + 1];
+        fs.mkdirSync(output, { recursive: true });
+        fs.writeFileSync(path.join(output, "SOURCE.txt"), "verified fixture");
       } else if (args[0].endsWith("prepare-desktop-plugins.py")) {
         phase = "plugins";
         assert.equal(fs.readFileSync(path.join(cache, "runtime", "marker"), "utf8"), "runtime");
@@ -84,6 +89,9 @@ test("the preparation entry point promotes installed dependencies and built plug
   const { cache, result, calls } = await prepareFixture(t);
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.ok(calls.some(call => call.phase === "plugins"));
+  if (process.platform === "darwin" || process.platform === "win32") {
+    assert.equal(await fs.readFile(path.join(cache, "runtime", "mihomo", "SOURCE.txt"), "utf8"), "verified fixture");
+  }
   assert.equal(await fs.readFile(path.join(cache, "runtime", "plugins", "bundle.cspkg"), "utf8"), "built plugin");
   assert.equal(await fs.readFile(path.join(cache, "runtime", "site-packages", "installed"), "utf8"), "dependency fixture");
   const backups = (await fs.readdir(cache)).filter(name => name.startsWith("previous-"));
@@ -94,7 +102,7 @@ test("the preparation entry point promotes installed dependencies and built plug
   }
 });
 
-for (const phase of ["dependencies", "ccxt", "plugins"]) {
+for (const phase of ["dependencies", "ccxt", "plugins", ...(["darwin", "win32"].includes(process.platform) ? ["mihomo"] : [])]) {
   test(`the preparation entry point preserves the active runtime when ${phase} fail`, async t => {
     const { cache, result, calls } = await prepareFixture(t, phase);
     assert.equal(result.status, 1, result.stdout + result.stderr);
