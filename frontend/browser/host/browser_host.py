@@ -5,6 +5,8 @@ import json
 import os
 import logging
 import random
+import sqlite3
+from contextlib import closing
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -20,6 +22,8 @@ os.environ.update(
     REPLAY_AGG_TRADE_ENABLED="0", BACKTEST_ENABLED="1", BACKTEST_BAR_ENABLED="0",
     BACKTEST_TRADE_TAPE_ENABLED="0", BACKTEST_STUDY_ENABLED="0",
     INGESTION_PROXY_MODE="direct",
+    # The data directory lives in memory here; keep no raw REST/WS envelope log.
+    INGESTION_MARKET_SOURCE_CAPTURE_ENABLED="0",
     # Computed at build time for the bundled CCXT; see prepare_engine.mjs.
     CANDLESCOPE_CCXT_CATALOG=str(Path(__file__).with_name("ccxt_catalog.json")),
 )
@@ -82,11 +86,41 @@ async def warm_initial_market():
     asyncio.create_task(release())
 
 
+def drop_market_source_log():
+    """Remove the raw envelope log that earlier builds of this host kept.
+
+    It took most of the data directory, which is held in memory. VACUUM gives
+    the space back; it runs before the backend opens the database.
+    """
+    from app.core.config import KLINES_DB_PATH
+
+    if not KLINES_DB_PATH.exists():
+        return
+    with closing(sqlite3.connect(KLINES_DB_PATH)) as db:
+        tables = {name for (name,) in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        if "market_source_observations" not in tables or not db.execute(
+                "SELECT EXISTS(SELECT 1 FROM market_source_observations)").fetchone()[0]:
+            return
+        before = KLINES_DB_PATH.stat().st_size
+        with db:
+            db.execute("DELETE FROM market_source_observations")
+            if "source_log_archives" in tables:
+                db.execute("DELETE FROM source_log_archives WHERE source_table='market_source_observations'")
+        db.execute("VACUUM")
+        db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    logging.getLogger(__name__).warning(
+        "Removed the raw market envelope log: %d -> %d bytes", before, KLINES_DB_PATH.stat().st_size)
+
+
 async def start():
     global lifespan
     # Sessions restored from one memory snapshot would otherwise share the
     # generator state that importing seeded.
     random.seed()
+    try:
+        drop_market_source_log()
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Could not remove the raw market envelope log: %s", exc)
     # Reserve the metadata dependency before the UI opens its independent WS
     # and REST consumers; they join that load instead of starting their own.
     # Parsing a venue catalog takes seconds in WASM, so the page opens now
