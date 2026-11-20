@@ -214,3 +214,50 @@ def plan_family_sources(demands, stored, *, extra=None, max_iterations=MAX_ITERA
         for interval, opens in added.items():
             present.add(interval, opens)
     raise FamilyPlanUnavailable("family_plan_did_not_settle")
+
+
+MAX_STORED_ROWS = 200_000
+
+
+async def read_stored_series(storage, demands, *, now_ms=None, max_rows=MAX_STORED_ROWS):
+    """What the planner's reads would see over every demand's range, per interval.
+
+    One revision read for the change history of every precedence and source
+    series, then bounded canonical pages for the series that have any. Raises
+    FamilyPlanUnavailable past ``max_rows`` (the caller plans as today).
+    """
+    import time
+    from app.core.executors import run_storage
+    from .mixed_plan import reusable_component
+    target = demands[0].target
+    lo, hi = min(d.start_ms for d in demands), max(d.stop_ms for d in demands)
+    widths = {}
+    for demand in demands:
+        widths.update((series.interval, width) for series, width in demand.precedences)
+        widths.update((source.series.interval, source.width_ms) for source in demand.sources)
+    fields = demands[0].required_fields
+    keys = [(target.exchange, target.market_type, target.symbol, interval, *target.identity.storage_values)
+            for interval in widths]
+    _, changes = await run_storage(storage.revision_store.read_series_changes, keys)
+    now_ms = int(time.time() * 1000) if now_ms is None else now_ms
+    stored, read = {}, 0
+    for (interval, width), change in zip(widths.items(), changes):
+        if change is None:
+            continue
+        reusable, other = set(), set()
+        cursor = max(0, lo - width)
+        while cursor < hi:
+            rows = await storage.query_canonical_page(target.symbol, interval, cursor, hi - 1,
+                exchange=target.exchange, market_type=target.market_type, series_identity=target.identity)
+            read += len(rows)
+            if read > max_rows:
+                raise FamilyPlanUnavailable("stored_row_budget")
+            for row in rows:
+                (reusable if reusable_component(row, width, now_ms, fields) else other).add(row["open_time"])
+            if len(rows) < 256:
+                break
+            cursor = rows[-1]["open_time"] + 1
+        deleted = int(change["delete_revision"] or 0) > 0
+        stored[interval] = StoredSeries(frozenset(reusable), frozenset(other),
+                                        int(change["start_ms"]) if deleted else None)
+    return stored

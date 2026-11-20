@@ -36,15 +36,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 import uuid
 from dataclasses import replace
 from datetime import datetime, timezone
 from functools import lru_cache
 
-from app.core.executors import run_preparation, run_storage
-from app.data_engine.backfill.family_plan import ChartDemand, FamilyPlanUnavailable, StoredSeries, plan_family_sources
-from app.data_engine.backfill.mixed_plan import reusable_component
+from app.core.executors import run_preparation
+from app.data_engine.backfill.family_plan import ChartDemand, plan_family_sources, read_stored_series
 from app.data_engine.backfill.source_router import MAX_USDM_ARCHIVE_OBJECT_ROWS
 from app.data_engine.memory_budget import MemoryBudgetExceeded
 from app.data_engine.history.cover_plan import FixedHistorySource
@@ -442,36 +440,4 @@ class FamilyFill:
     @staticmethod
     async def _stored(storage, demands):
         """What the planner's reads would see, over every demand's range."""
-        target = demands[0].target
-        lo, hi = min(d.start_ms for d in demands), max(d.stop_ms for d in demands)
-        widths = {}
-        for demand in demands:
-            widths.update((series.interval, width) for series, width in demand.precedences)
-            widths.update((source.series.interval, source.width_ms) for source in demand.sources)
-        fields = demands[0].required_fields
-        store = storage.revision_store
-        keys = [(target.exchange, target.market_type, target.symbol, interval, *target.identity.storage_values)
-                for interval in widths]
-        _, changes = await run_storage(store.read_series_changes, keys)
-        now_ms = int(time.time() * 1000)
-        stored, read = {}, 0
-        for (interval, width), change in zip(widths.items(), changes):
-            if change is None:
-                continue
-            reusable, other = set(), set()
-            cursor = max(0, lo - width)
-            while cursor < hi:
-                rows = await storage.query_canonical_page(target.symbol, interval, cursor, hi - 1,
-                    exchange=target.exchange, market_type=target.market_type, series_identity=target.identity)
-                read += len(rows)
-                if read > MAX_STORED_ROWS:
-                    raise FamilyPlanUnavailable("stored_row_budget")
-                for row in rows:
-                    (reusable if reusable_component(row, width, now_ms, fields) else other).add(row["open_time"])
-                if len(rows) < 256:
-                    break
-                cursor = rows[-1]["open_time"] + 1
-            deleted = int(change["delete_revision"] or 0) > 0
-            stored[interval] = StoredSeries(frozenset(reusable), frozenset(other),
-                                            int(change["start_ms"]) if deleted else None)
-        return stored
+        return await read_stored_series(storage, demands, max_rows=MAX_STORED_ROWS)

@@ -280,6 +280,21 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
             requests = sum(math.ceil(task.estimated_bars / page_size) for task in tasks)
             if requests > baseline_requests:
                 raise _DeclineMixed("rest_request_cost")
+            from . import mixed_routes
+            if mixed_routes.ROUTE_AWARE:
+                routed = await mixed_routes.route_aware_plan(engine, storage, gap, target, first, stop,
+                    sources, precedences, policy, now_ms, page_size, max_rows=MAX_SOURCE_ROWS,
+                    coalesce=lambda items: coalesce_mixed_fetches(planner._deduplicate_tasks(items),
+                                                                  page_size=page_size, row_budget=MAX_SOURCE_ROWS))
+                rest = (sum(math.ceil(task.estimated_bars / page_size) for task in routed[0]
+                            if not task.metadata.get(mixed_routes.ROUTE_OBJECTS_KEY))
+                        if routed is not None else None)
+                if routed is not None and rest <= baseline_requests:
+                    tasks, windows = routed[0], planner._deduplicate_tasks(routed[1])
+                    requests = rest
+                    diagnostics.update(routed[2])
+                else:
+                    diagnostics["mixed_route_aware"] = False
             _, current = await run_storage(store.read_versions, keys)
             if tuple(current) != versions:
                 await run_storage(check_store_range, store, keys, first, stop, planning_head)

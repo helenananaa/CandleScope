@@ -154,6 +154,19 @@ select_owned_objects(objects, needed_cells_by_grid, owned_range, page_size, mini
    `tests/test_archive_selection.py` 在 60 组随机 run 上与原先内联的判断逐项相同，覆盖导入、预算拒绝的三种原因
    和 1d 改用 REST 的情形。只保留完全在范围内的对象由第 2 步的规划负责，这个函数本身不改变路由的选择。）
 2. 规划：候选对象、导入决定、`plan_family_sources` 不动点，输出对象任务与窗口任务（开关默认关）；性质测试。
+   （已完成，开关 `backfill/mixed_routes.ROUTE_AWARE` 默认关：今天的规划通过全部检查（含 `rest_request_cost`）之后，
+   `route_aware_plan` 读已存行（`family_plan.read_stored_series`，FamilyFill 也改用它），单独求一次 cover，
+   每个精度只取完全落在 `[first, stop)` 内的候选对象，用 `select_archive_objects` 按第一轮要取的窗口定价，
+   再以导入对象的全部格子为 `extra` 求不动点，输出对象任务（`mixed_route_objects` 列出对象键；一个对象超过单任务行数时
+   会拆成几个任务，列同一个键，第 3 步的路由按键去重）、REST 窗口任务和按新 cover 的派生窗口，全部带
+   `mixed_target_range`。行数超预算、规则判断不出、REST 请求数高于今天的上限，都保留今天的计划
+   （`mixed_route_aware=False`）。`tests/test_mixed_routes.py`：真实 Binance 目录，相邻两个 16 目标的 10007m chunk，
+   12 组已存状态（冷、按网格对齐的 1m/1h/1d 片段、整月 1h），检查写入都在本 chunk 内、两 chunk 不相交、
+   写入后 `checked_mixed_windows` 不拒绝任何窗口、真实 reader 完整合成；今天的规划先拒绝的状态（chunk 由调度器拆分）
+   只要求路由规划没有运行。对照：按今天的规划加路由选对象，第 8、9、11 组会写出 chunk 之外（254–491 行）并与相邻 chunk
+   重叠（56–126 行），即 A 类。相关的 45 个测试文件：开关关时与 HEAD 失败集合相同（另有一个 FamilyFill 的已有偶发失败，
+   HEAD 上 4 次也失败 1 次）；开关强制打开时，现有 mixed 测试里 62 次路由规划全部采用（这些测试不开归档，只有 REST 窗口），
+   没有新增失败。）
 3. 路由服从 `mixed_route_objects`，解析失败时整段 REST；路由测试。
 4. 写入校验在获取前按计划一次捕获；确认 `planned_write_windows` 结果与计划一致。
 5. 配对测量，按 §7 验收；全量测试。通过后默认打开。
