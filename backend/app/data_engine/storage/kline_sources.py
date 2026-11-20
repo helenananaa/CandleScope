@@ -449,7 +449,7 @@ def history_projection_inputs(descriptor: StreamDescriptor, first: int, last: in
     if (not identity.is_legacy_default_for(descriptor.exchange) or width <= 0
             or first > last or (last-first) % width or (last-first)//width >= 1000):
         return None
-    with closing(klines_repo._connect()) as conn, conn:
+    with closing(klines_repo._reusable()) as conn, conn:
         conn.execute('BEGIN')
         tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         if not {'kline_source_heads','kline_source_observations','kline_delete_permissions'} <= tables:
@@ -833,7 +833,15 @@ def source_window_current(conn, version):
 
 
 def _source_window_canonical_current(conn, version):
-    from .revisions import current_revision, series_change, series_values, IDENTITY_COLUMNS, BLOCK_CHANGE_WINDOW
+    from .revisions import (
+        current_revision,
+        series_change,
+        series_range_spans,
+        series_values,
+        span_overlaps_half_open,
+        IDENTITY_COLUMNS,
+        BLOCK_CHANGE_WINDOW,
+    )
     head = current_revision(conn)
     if head < version.acquisition_revision:
         return False
@@ -848,27 +856,29 @@ def _source_window_canonical_current(conn, version):
     # seam do not invalidate this read; a correction within it does. Query only
     # scalar metadata, never materialize unrelated payloads/identity strings.
     gap = head - version.acquisition_revision
-    if not 0 < gap <= BLOCK_CHANGE_WINDOW:
+    if 0 < gap <= BLOCK_CHANGE_WINDOW:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM kline_block_changes WHERE revision>? AND revision<=?",
+            (version.acquisition_revision, head),
+        ).fetchone()[0]
+        if count == gap:
+            changed = conn.execute(
+                "SELECT 1 FROM kline_block_changes WHERE revision>? AND revision<=? AND "
+                + " AND ".join(name + "=?" for name in IDENTITY_COLUMNS)
+                + " AND start_ms<? AND end_ms>=? LIMIT 1",
+                (
+                    version.acquisition_revision,
+                    head,
+                    *key,
+                    version.through_ms,
+                    version.start_ms,
+                ),
+            ).fetchone()
+            return changed is None
+    spans = series_range_spans(conn, key, version.acquisition_revision, head)
+    if spans is None:
         return False
-    count = conn.execute(
-        "SELECT COUNT(*) FROM kline_block_changes WHERE revision>? AND revision<=?",
-        (version.acquisition_revision, head),
-    ).fetchone()[0]
-    if count != gap:
-        return False
-    changed = conn.execute(
-        "SELECT 1 FROM kline_block_changes WHERE revision>? AND revision<=? AND "
-        + " AND ".join(name + "=?" for name in IDENTITY_COLUMNS)
-        + " AND start_ms<? AND end_ms>=? LIMIT 1",
-        (
-            version.acquisition_revision,
-            head,
-            *key,
-            version.through_ms,
-            version.start_ms,
-        ),
-    ).fetchone()
-    return changed is None
+    return not any(span_overlaps_half_open(span, version.start_ms, version.through_ms) for span in spans)
 
 
 def source_window_allows_target(conn, version, interval, *, expected=None):

@@ -239,6 +239,9 @@ class BackfillCoordinator:
             max_concurrency=max_concurrency,
             chunk_bars=chunk_bars,
         )
+        from . import family_fill
+        if family_fill.ENABLED:
+            self._scheduler.family_gate = family_fill.FamilyFillManager(self)
 
     def set_engine(self, engine: BackfillEngineLike) -> None:
         self._engine = engine
@@ -2532,7 +2535,10 @@ class BackfillCoordinator:
                         and request.end_ms > request.start_ms and not getattr(report, 'fetch_results', ())
                         and (getattr(report, 'metadata', {}) or {}).get('mixed_plan_fallback')
                             in {'source_row_budget', 'refined_source_row_budget', 'planning_work_budget', 'task_work_budget', 'memory_work_budget'}):
-                    raise RepairChunkSplit('mixed canonical source work requires a smaller chunk')
+                    raise RepairChunkSplit(
+                        'mixed canonical source work requires a smaller chunk',
+                        split_ranges=(getattr(report, 'metadata', {}) or {}).get('mixed_plan_split_ranges'),
+                    )
                 if self._is_failed(report.status) and attempt < self._max_retries:
                     delay = self._backoff(attempt)
                     await self._ledger_mark_retry_wait(

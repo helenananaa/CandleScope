@@ -228,9 +228,13 @@ def revision_checked_query(function):
                     "series_variant", "price_adjustment", "session_variant", "volume_semantics")})
             canonical = result._closed_target_read
             if canonical is not None:
-                after = canonical.check(self._storage, consumer.store, scope,
+                proven = _check_read_proof(canonical, self._storage, consumer.store, scope,
                     (result_key.exchange,result_key.market_type,result_key.symbol,result_key.interval,
                      *result_key.identity.storage_values),result.bars)
+                if proven is None:
+                    canonical = None  # The family-wide check below decides, as before.
+                else:
+                    after = proven
             if after < before or (canonical is None and
                 consumer.conflicts(before, result_key, scope.accepted)
                 and (result.metadata.get("derived_from") or not result.metadata.get("cache_read_retries"))
@@ -247,6 +251,23 @@ def revision_checked_query(function):
         except (RevisionUnavailable, StaleAcquisition):
             return _pending(symbol, interval, context, "revision_unavailable", min_revision)
     return budgeted_query(query)
+
+
+def _check_read_proof(proof, storage, store, scope, key, bars):
+    """The proof's head, or None when a composed page's range proof fails.
+
+    A composed page's proof only adds a way to adopt it: if it fails, the
+    family-wide conflict check decides as before. Any change it rejects is
+    also a family change since the query began. A stored target read's proof
+    keeps deciding alone.
+    """
+    from app.data_engine.storage.mixed_history_fence import ClosedMixedRead
+    if not isinstance(proof, ClosedMixedRead):
+        return proof.check(storage, store, scope, key, bars)
+    try:
+        return proof.check(storage, store, scope, key, bars)
+    except StaleAcquisition:
+        return None
 
 
 def _pending(symbol, interval, kwargs, reason, required=None, observed=None):

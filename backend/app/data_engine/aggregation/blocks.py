@@ -427,6 +427,24 @@ class SharedBlockManager:
             self._bytes -= entry.size
         self._publish_usage()
 
+    def lookup(self, key, revisions):
+        """Cache-only read for a caller that pins ``revisions`` in its own view.
+
+        Returns the immutable summary of a valid entry built for exactly these
+        revisions, or None. There is no lease, flight or reservation: the caller
+        keeps only the summary value and revalidates its view before publishing.
+        """
+        cache_key = (key, revisions)
+        with self._lock:
+            if self._closed:
+                return None
+            entry = self._entries.get(cache_key)
+            if entry is None or not entry.valid:
+                return None
+            self._entries.move_to_end(cache_key)
+            self._metrics["hits"] += 1
+            return entry.block.summary
+
     def acquire(self, key, view, build=None, *, work_bytes=64 * 1024, cancel=None, reclaim_shared=True):
         """Join one pure build; cancellation only releases this participant.
 

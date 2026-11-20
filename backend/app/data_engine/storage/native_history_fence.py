@@ -155,22 +155,7 @@ def capture_planned_write_views(store, scope, windows):
     if store is None or scope is None:
         return
     known = {(view.key, view.start, view.end, view.archive) for view in scope.native_history_views}
-    selected, slots = [], 0
-    for window in windows:
-        start, end = window.start_ms, window.end_ms
-        if (window.exchange != "binance" or window.market_type != "futures"
-                or not isinstance(start, int) or not isinstance(end, int) or start > end):
-            continue
-        count = _native_grid_slots(window, getattr(window, "metadata", {}))
-        if count is None or count > MAX_SLOTS:
-            continue
-        item = (series_values(window.symbol, window.interval, window.exchange, window.market_type),
-                start, end, bool(window.archive))
-        if item in known or len(selected) >= MAX_PLANNED_WINDOWS or slots + count > MAX_PLANNED_SLOTS:
-            continue
-        known.add(item)
-        selected.append(item)
-        slots += count
+    selected, _ = _planned_items(windows, known)
     if not selected:
         return
     with scope.lock, closing(store.connect()) as conn, conn:
@@ -181,6 +166,46 @@ def capture_planned_write_views(store, scope, windows):
         for view in views:
             view.check(conn, scope)
         scope.native_history_views.extend(views)
+
+
+def _planned_items(windows, known):
+    """New windows ``capture_planned_write_views`` would view, and whether that is every window.
+
+    A window is left out when it does not qualify (another market, a custom
+    identity or derived interval, off its grid, oversized) or when it would
+    pass the per-run window or row budget. ``known`` is updated in place.
+    """
+    selected, slots, complete = [], 0, True
+    for window in windows:
+        start, end = window.start_ms, window.end_ms
+        if (window.exchange != "binance" or window.market_type != "futures"
+                or not isinstance(start, int) or not isinstance(end, int) or start > end):
+            complete = False
+            continue
+        count = _native_grid_slots(window, getattr(window, "metadata", {}))
+        if count is None or count > MAX_SLOTS:
+            complete = False
+            continue
+        item = (series_values(window.symbol, window.interval, window.exchange, window.market_type),
+                start, end, bool(window.archive))
+        if item in known:
+            continue
+        if len(selected) >= MAX_PLANNED_WINDOWS or slots + count > MAX_PLANNED_SLOTS:
+            complete = False
+            continue
+        known.add(item)
+        selected.append(item)
+        slots += count
+    return selected, complete
+
+
+def planned_windows_fit(windows):
+    """Whether one capture would give every window its own view.
+
+    A write outside every view falls back to the family-wide acquisition
+    check, which any concurrent write to the symbol's family invalidates.
+    """
+    return _planned_items(windows, set())[1]
 
 
 def matching_view(scope, key, rows, source):

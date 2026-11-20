@@ -182,7 +182,9 @@ class NormalizeLayer:
             if key not in self._bar_contracts:
                 from app.exchanges import get_exchange_registry
                 from app.data_engine.bar_basis import native_bar_spec
-                caps = get_exchange_registry().get_capabilities(event.exchange)
+                registry = get_exchange_registry()
+                view = getattr(registry, "capabilities_view", None)
+                caps = view(event.exchange) if callable(view) else registry.get_capabilities(event.exchange)
                 factory = getattr(caps, "bar_spec", None)
                 self._bar_contracts[key] = (factory(event.market_type, interval, purpose) if callable(factory)
                                             else native_bar_spec(event.exchange, event.market_type, interval, purpose))

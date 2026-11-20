@@ -111,7 +111,9 @@ def summarize(components: Iterable[AcceptedComponent], *, target: SeriesKey) -> 
     ordered = sorted(components, key=lambda item: item.bar.time_ms)
     if not ordered:
         raise ValueError("empty input cannot manufacture a zero-volume candle")
-    if any(replace(item.series, interval=target.interval) != target for item in ordered):
+    # Compatibility depends only on the series; pages usually share one.
+    if any(replace(series, interval=target.interval) != target
+           for series in {item.series for item in ordered}):
         raise ValueError("incompatible provider, market, instrument or bar semantics")
     values = []
     for item in ordered:

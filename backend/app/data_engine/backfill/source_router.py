@@ -41,7 +41,12 @@ logger = logging.getLogger("backfill.HistoricalSourceRouter")
 MAX_USDM_ARCHIVE_OBJECT_ROWS = 8192
 MAX_USDM_ARCHIVE_ROUTE_ROWS = 32768
 MAX_COMPOSED_ARCHIVE_AMPLIFICATION = 4
+MAX_COMPOSED_MULTI_EDGE_AMPLIFICATION = 12
 SMALL_COMPOSED_ARCHIVE_ROWS = 256
+# Fetch tasks of a route-aware mixed plan (backfill/mixed_routes.py) carry this
+# key: the archive objects the task imports, chosen by the plan, which counted
+# every row they write. An empty list means REST only.
+PLANNED_OBJECTS_KEY = "mixed_route_objects"
 
 
 @dataclass(frozen=True, slots=True)
@@ -307,8 +312,14 @@ class HistoricalSourceRouter:
             foreground_demand,
         )
 
+        planned = [task for task in tasks if PLANNED_OBJECTS_KEY in task.metadata]
+        if planned:
+            await self._prepare_planned(planned, decisions, refs_by_task, futures,
+                                        owner_task_by_object, scheduled_object_keys, now_ms)
         groups: dict[tuple[str, str, str, str], list[BackfillTask]] = {}
         for task in tasks:
+            if PLANNED_OBJECTS_KEY in task.metadata:
+                continue
             groups.setdefault(
                 (task.exchange, task.market_type, task.symbol, task.interval),
                 [],
@@ -345,59 +356,37 @@ class HistoricalSourceRouter:
                     end_ms=route_end_ms,
                     now_ms=now_ms,
                 )
-                planned_count = len(candidates)
-                candidates = _filter_daily_candidates(
-                    candidates,
-                    range_start_ms=route_start_ms,
-                    range_end_ms=route_end_ms,
-                    interval=interval,
+                selection = select_archive_objects(
+                    candidates, run, exchange=exchange, market_type=market_type, interval=interval,
+                    route_start_ms=route_start_ms, route_end_ms=route_end_ms,
                     rest_page_size=capabilities.rest_page_size,
                     minimum_pages=max(1, self._cfg.history_archive_min_rest_pages),
+                    fetch_batch_size=self._cfg.fetch_batch_size,
                 )
-                threshold_count = len(candidates)
-                rejected = {}
-                if exchange == 'binance' and market_type == 'futures':
-                    bounded = _bounded_usdm_archive_candidates(candidates, run, interval,
-                                                               rejected=rejected)
-                    self._metrics.inc('archive_source_budget_skips', len(candidates)-len(bounded))
-                    candidates = bounded
+                if selection.budget_checked:
+                    self._metrics.inc('archive_source_budget_skips',
+                                      selection.above_threshold - len(selection.eligible))
                 for task in run:
-                    decisions[task.task_key].update(candidate_objects=planned_count,
-                        below_rest_threshold_objects=planned_count-threshold_count,
-                        eligible_objects=len(candidates), archive_rejections=dict(rejected))
-                    if planned_count and not candidates:
+                    decisions[task.task_key].update(candidate_objects=selection.planned,
+                        below_rest_threshold_objects=selection.planned-selection.above_threshold,
+                        eligible_objects=len(selection.eligible), archive_rejections=dict(selection.rejected))
+                    if selection.planned and not selection.eligible:
                         decisions[task.task_key]['reason'] = 'archive_cost_rejected'
-                if not candidates:
+                if not selection.eligible:
                     continue
-                # Local ZIPs are usable without contacting the resolver or
-                # acquiring any proxy route (even with no enabled routes).
-                cached = await asyncio.gather(*(self._cache.resolve_fresh(ref) for ref in candidates))
-                warm = [ref for ref in cached if ref is not None]
-                cold = [ref for ref, hit in zip(candidates, cached) if hit is None]
-                if cold and capabilities.probe_symbol and provider.id not in self._probe_passed:
-                    probe = await self._probe_provider(exchange, provider)
-                    if not probe.get("enabled"):
-                        if exchange in self._disabled_providers:
-                            continue
-                        cold = []
-                try:
-                    resolved = warm + (await provider.resolve_objects(cold, self._http_for(exchange))
-                                       if cold else [])
-                except RateLimitDeferred:
-                    raise
-                except ArchiveCompatibilityError as exc:
-                    self._disable_provider(exchange, exc)
+                if selection.rest_preferred:
+                    self._metrics.inc('archive_composed_daily_rest_preferred', len(selection.eligible))
+                    for task in run:
+                        decisions[task.task_key].update(
+                            reason='composed_daily_rest_cheaper', eligible_objects=0,
+                            archive_rejections={**selection.rejected,
+                                                'composed_daily_rest_cheaper': len(selection.eligible)},
+                        )
                     continue
-                except Exception as exc:
-                    self._metrics.inc("archive_resolver_errors")
-                    self._metrics.mark("last_error_at")
-                    logger.warning(
-                        "rest_fallback archive resolver failed exchange=%s symbol=%s: %s",
-                        exchange,
-                        symbol,
-                        exc,
-                    )
-                    resolved = warm
+                resolved = await self._resolve(provider, capabilities, exchange, symbol,
+                                               list(selection.eligible))
+                if resolved is None:
+                    continue
                 actual_start_ms = min(task.start_ms for task in run)
                 actual_end_ms = max(task.end_ms for task in run)
                 # Resolve from the complete parent demand, but only make the
@@ -408,11 +397,14 @@ class HistoricalSourceRouter:
                 needed_refs = [
                     ref
                     for ref in resolved_refs
-                    if _intersects(
-                        actual_start_ms,
-                        actual_end_ms,
-                        ref.start_ms,
-                        ref.end_ms,
+                    if any(
+                        _intersects(
+                            task.start_ms,
+                            task.end_ms,
+                            ref.start_ms,
+                            ref.end_ms,
+                        )
+                        for task in run
                     )
                 ]
                 needed_keys = {ref.object_key for ref in needed_refs}
@@ -454,9 +446,15 @@ class HistoricalSourceRouter:
                     if is_fresh
                 }
                 cold_new_keys = newly_prefetched_keys - fresh_new_keys
+                composed_run = bool(
+                    run and all(task.metadata.get("history_composition_contract") for task in run)
+                )
                 parent_prefill = (
-                    route_start_ms < actual_start_ms
-                    or route_end_ms > actual_end_ms
+                    not composed_run
+                    and (
+                        route_start_ms < actual_start_ms
+                        or route_end_ms > actual_end_ms
+                    )
                 )
                 warm_parent_batch = (
                     parent_prefill
@@ -578,6 +576,99 @@ class HistoricalSourceRouter:
             foreground_demand,
             decisions,
         )
+
+    async def _resolve(self, provider, capabilities, exchange, symbol, candidates):
+        """Published refs among ``candidates``; None when the provider was disabled meanwhile."""
+        # Local ZIPs are usable without contacting the resolver or
+        # acquiring any proxy route (even with no enabled routes).
+        cached = await asyncio.gather(*(self._cache.resolve_fresh(ref) for ref in candidates))
+        warm = [ref for ref in cached if ref is not None]
+        cold = [ref for ref, hit in zip(candidates, cached) if hit is None]
+        if cold and capabilities.probe_symbol and provider.id not in self._probe_passed:
+            probe = await self._probe_provider(exchange, provider)
+            if not probe.get("enabled"):
+                if exchange in self._disabled_providers:
+                    return None
+                cold = []
+        try:
+            return warm + (await provider.resolve_objects(cold, self._http_for(exchange)) if cold else [])
+        except RateLimitDeferred:
+            raise
+        except ArchiveCompatibilityError as exc:
+            self._disable_provider(exchange, exc)
+            return None
+        except Exception as exc:
+            self._metrics.inc("archive_resolver_errors")
+            self._metrics.mark("last_error_at")
+            logger.warning(
+                "rest_fallback archive resolver failed exchange=%s symbol=%s: %s",
+                exchange,
+                symbol,
+                exc,
+            )
+            return warm
+
+    async def _prepare_planned(self, tasks, decisions, refs_by_task, futures, owner_task_by_object,
+                               scheduled_object_keys, now_ms) -> None:
+        """Route a route-aware mixed plan's tasks: import exactly the objects each lists.
+
+        The plan chose these objects (whole objects inside one chunk's
+        targets) and counted every row they write, so nothing is selected
+        here and nothing else is prefetched: every other row is REST. An
+        object task spans its object, so a listed object that is not
+        resolved leaves its tasks to REST over the whole object, and one that
+        fails to load falls back over its intersection with each task (the
+        fetcher's existing fallback); either way the rows the plan counted
+        arrive. When the tasks listing an object no longer cover all of it
+        (the engine reused committed rows and trimmed them), only their own
+        ranges are fetched, by REST.
+        """
+        groups: dict[tuple[str, str, str, str], list[BackfillTask]] = {}
+        keys_by_task: dict[str, list[str]] = {}
+        for task in sorted(tasks, key=lambda item: (item.start_ms, item.end_ms)):
+            keys = keys_by_task[task.task_key] = [str(key) for key in task.metadata.get(PLANNED_OBJECTS_KEY) or ()]
+            decisions[task.task_key].update(reason="route_planned_rest", planned_object_count=len(keys))
+            if keys:
+                groups.setdefault((task.exchange, task.market_type, task.symbol, task.interval), []).append(task)
+        for (exchange, market_type, symbol, interval), group in groups.items():
+            width = parse_interval_ms(interval) or 1
+            listed: dict[str, list[BackfillTask]] = {}
+            for task in group:
+                for key in keys_by_task[task.task_key]:
+                    listed.setdefault(key, []).append(task)
+            provider = None if exchange in self._disabled_providers else self._provider(exchange)
+            capabilities = provider.capabilities(market_type) if provider is not None else None
+            resolved = None
+            if capabilities is not None and capabilities.supports(market_type=market_type, interval=interval):
+                # Up to the last task's close: a catalog lists a daily object
+                # only when the range holds the whole day.
+                catalog = {ref.object_key: ref for ref in provider.plan_objects(
+                    market_type=market_type, symbol=symbol, interval=interval,
+                    start_ms=min(task.start_ms for task in group),
+                    end_ms=max(task.end_ms for task in group) + width - 1, now_ms=now_ms)}
+                wanted = [catalog[key] for key in listed if key in catalog]
+                resolved = await self._resolve(provider, capabilities, exchange, symbol, wanted) if wanted else []
+            published = {ref.object_key: ref for ref in _unique_refs(resolved or [])}
+            for key, owners in listed.items():
+                ref = published.get(key)
+                if ref is not None and not _tasks_cover(owners, ref, width):
+                    # Part of the object's rows were already committed and its
+                    # tasks were trimmed to the rest (canonical minute reuse):
+                    # importing it whole would rewrite rows other runs hold.
+                    self._metrics.inc("archive_planned_object_partial")
+                    ref = None
+                if ref is None:
+                    self._metrics.inc("archive_planned_object_rest_fallbacks")
+                    for task in owners:
+                        decisions[task.task_key]["reason"] = "route_planned_object_unavailable"
+                    continue
+                touching = [task for task in owners if _intersects(task.start_ms, task.end_ms, ref.start_ms, ref.end_ms)]
+                futures.setdefault(key, await self._singleflight(provider, ref))
+                scheduled_object_keys.add(key)
+                owner_task_by_object.setdefault(key, touching[0].task_key)
+                for task in touching:
+                    refs_by_task.setdefault(task.task_key, []).append(ref)
+            self._metrics.inc("archive_planned_objects", len(listed))
 
     def start_deferred_prefetch(self, route_plan: ArchiveRoutePlan) -> None:
         """Launch cold parent objects after foreground fetch work completes."""
@@ -978,18 +1069,39 @@ class HistoricalSourceRouter:
         )
 
 
+def _composed_group_key(task: BackfillTask) -> tuple[str, str] | None:
+    contract = task.metadata.get("history_composition_contract")
+    custom_interval = task.metadata.get("custom_interval")
+    if not contract or not custom_interval:
+        return None
+    return (str(contract), str(custom_interval))
+
+
 def _task_runs(tasks: list[BackfillTask], interval: str) -> list[list[BackfillTask]]:
     interval_ms = parse_interval_ms(interval) or 1
     ordered = sorted(tasks, key=lambda item: (item.start_ms, item.end_ms))
     runs: list[list[BackfillTask]] = []
     for task in ordered:
-        if (not runs or task.start_ms > runs[-1][-1].end_ms + interval_ms
-                or _archive_run_policy(task) != _archive_run_policy(runs[-1][-1])):
+        if not runs:
+            runs.append([task])
+            continue
+        prev_run = runs[-1]
+        prev = prev_run[-1]
+        same_policy = _archive_run_policy(task) == _archive_run_policy(prev)
+        adjacent = task.start_ms <= prev.end_ms + interval_ms
+        composed_key = _composed_group_key(task)
+        same_composed_batch = (
+            composed_key is not None
+            and composed_key == _composed_group_key(prev)
+            and (max(prev.end_ms, task.end_ms) - min(prev_run[0].start_ms, task.start_ms)) // interval_ms + 1
+            <= MAX_USDM_ARCHIVE_ROUTE_ROWS
+        )
+        if same_policy and (adjacent or same_composed_batch):
+            prev_run.append(task)
+        else:
             # A neighbouring legacy demand must not revoke a qualified page's
             # actual-task envelope by making the all-tasks contract false.
             runs.append([task])
-        else:
-            runs[-1].append(task)
     return runs
 
 
@@ -1017,6 +1129,66 @@ def _is_foreground_archive_demand(task: BackfillTask) -> bool:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class ArchiveSelection:
+    """Which catalog objects a run of tasks would use, before any cache or network check.
+
+    ``planned``: objects the provider's catalog lists for the run's decision
+    range; ``above_threshold``: those left by the REST-page threshold;
+    ``eligible``: those left by the Binance USD-M row and amplification limits
+    (``budget_checked``) with ``rejected`` counting each limit's rejections;
+    ``rest_preferred``: a composed daily run that fits REST pages, which then
+    uses none of them.
+    """
+    planned: int
+    above_threshold: int
+    eligible: tuple
+    rejected: dict
+    budget_checked: bool
+    rest_preferred: bool
+
+    @property
+    def objects(self):
+        """The objects the run imports (none when REST is preferred)."""
+        return () if self.rest_preferred else self.eligible
+
+
+def select_archive_objects(candidates, tasks, *, exchange, market_type, interval, route_start_ms,
+                           route_end_ms, rest_page_size, minimum_pages, fetch_batch_size):
+    """The router's archive-or-REST choice for one run, as a pure function.
+
+    Depends only on the catalog objects, the tasks (their ranges, windows and
+    metadata) and the configuration passed in, so a planner can make the same
+    choice before routing (docs/architecture/MIXED_ROUTE_PLANNING_zh.md).
+    """
+    planned = len(candidates)
+    candidates = _filter_daily_candidates(
+        candidates,
+        range_start_ms=route_start_ms,
+        range_end_ms=route_end_ms,
+        interval=interval,
+        rest_page_size=rest_page_size,
+        minimum_pages=minimum_pages,
+        tasks=tasks,
+    )
+    above_threshold = len(candidates)
+    rejected = {}
+    budget_checked = exchange == 'binance' and market_type == 'futures'
+    if budget_checked:
+        candidates = _bounded_usdm_archive_candidates(candidates, tasks, interval, rejected=rejected)
+    # A composed daily window often fits one REST page even when it straddles
+    # two months. Avoid extra archive transactions and whole-object imports
+    # without changing canonical slots.
+    rest_preferred = bool(
+        candidates and budget_checked and interval == '1d'
+        and all(_composed_group_key(task) for task in tasks)
+        and (page_size := min(fetch_batch_size, rest_page_size)) > 0
+        and sum(_ceil_div((task.end_ms-task.start_ms)//86_400_000+1, page_size)
+                for task in tasks) <= len(candidates))
+    return ArchiveSelection(planned, above_threshold, tuple(candidates), rejected, budget_checked,
+                            rest_preferred)
+
+
 def _filter_daily_candidates(
     candidates: list[ArchiveObjectRef],
     *,
@@ -1025,6 +1197,7 @@ def _filter_daily_candidates(
     interval: str,
     rest_page_size: int,
     minimum_pages: int,
+    tasks: list[BackfillTask] | None = None,
 ) -> list[ArchiveObjectRef]:
     monthly_candidates = [
         item
@@ -1035,6 +1208,9 @@ def _filter_daily_candidates(
     interval_ms = parse_interval_ms(interval)
     if interval_ms is None or interval_ms <= 0:
         return []
+    composed_tasks = bool(
+        tasks and all(task.metadata.get("history_composition_contract") for task in tasks)
+    )
     monthly: list[ArchiveObjectRef] = []
     for ref in monthly_candidates:
         overlap_bars = max(
@@ -1048,9 +1224,14 @@ def _filter_daily_candidates(
             range_start_ms <= ref.start_ms
             and range_end_ms >= ref.end_ms
         )
-        if complete_requested_month or (
-            _ceil_div(overlap_bars, rest_page_size) >= minimum_pages
-        ):
+        composed_windows = (
+            _composed_archive_window_stats(tasks, ref, interval_ms)[1]
+            if composed_tasks
+            else 0
+        )
+        if (complete_requested_month
+                or _ceil_div(overlap_bars, rest_page_size) >= minimum_pages
+                or composed_windows >= max(2, minimum_pages)):
             monthly.append(ref)
     if monthly:
         daily = [
@@ -1124,9 +1305,14 @@ def _bounded_usdm_archive_candidates(refs, tasks, interval, *, rejected=None):
         elif (hi-lo)//width+1 > MAX_USDM_ARCHIVE_ROUTE_ROWS:
             reason = 'route_envelope_budget'
         elif composed:
-            needed = _composed_archive_slots(tasks, ref, width)
+            needed, window_count = _composed_archive_window_stats(tasks, ref, width)
+            amplification = (
+                MAX_COMPOSED_MULTI_EDGE_AMPLIFICATION
+                if window_count >= 3
+                else MAX_COMPOSED_ARCHIVE_AMPLIFICATION
+            )
             if (needed == 0 or count > max(SMALL_COMPOSED_ARCHIVE_ROWS,
-                                           MAX_COMPOSED_ARCHIVE_AMPLIFICATION * needed)):
+                                           amplification * needed)):
                 reason = 'source_amplification' if needed else 'no_required_slots'
         if reason:
             if rejected is not None:
@@ -1138,13 +1324,13 @@ def _bounded_usdm_archive_candidates(refs, tasks, interval, *, rejected=None):
     return selected
 
 
-def _composed_archive_slots(tasks, ref, width):
-    """Price exact canonical windows, excluding HTTP read-ahead holes."""
+def _composed_archive_window_stats(tasks, ref, width) -> tuple[int, int]:
+    """Price exact canonical windows and distinct edge count, excluding holes."""
     spans = []
     for task in tasks:
         windows = task.metadata.get('mixed_fetch_windows', [(task.start_ms, task.end_ms)])
         if not isinstance(windows, (list, tuple)) or len(spans)+len(windows) > 4096:
-            return 0
+            return 0, 0
         for first, last in windows:
             lo, hi = max(first, ref.start_ms), min(last, ref.end_ms)
             if lo <= hi:
@@ -1155,7 +1341,12 @@ def _composed_archive_slots(tasks, ref, width):
             merged[-1] = (merged[-1][0], max(hi, merged[-1][1]))
         else:
             merged.append((lo, hi))
-    return sum((hi-lo)//width+1 for lo, hi in merged)
+    return sum((hi-lo)//width+1 for lo, hi in merged), len(merged)
+
+
+def _composed_archive_slots(tasks, ref, width):
+    """Price exact canonical windows, excluding HTTP read-ahead holes."""
+    return _composed_archive_window_stats(tasks, ref, width)[0]
 
 
 def _archive_decision_range(tasks: list[BackfillTask]) -> tuple[int, int]:
@@ -1196,6 +1387,16 @@ def _route_decision(task: BackfillTask) -> dict[str, Any]:
         bounded_history_page=_bounded_history_page([task]),
         candidate_objects=0, eligible_objects=0, selected_object_count=0,
         selected_objects=[], reason='archive_disabled')
+
+
+def _tasks_cover(tasks: list[BackfillTask], ref: ArchiveObjectRef, width: int) -> bool:
+    """Whether the tasks' ranges together cover the whole object, without a gap."""
+    cursor = ref.start_ms
+    for task in sorted(tasks, key=lambda item: item.start_ms):
+        if task.start_ms > cursor:
+            return False
+        cursor = max(cursor, task.end_ms + width)
+    return cursor > ref.end_ms
 
 
 def _unique_refs(values: list[ArchiveObjectRef]) -> list[ArchiveObjectRef]:

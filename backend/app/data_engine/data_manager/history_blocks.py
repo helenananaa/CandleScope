@@ -18,7 +18,7 @@ from app.data_engine.aggregation.core import InputRevision, AcceptedComponent, s
 from app.data_engine.history import AlwaysOpenCalendar
 from app.data_engine.interval_policy import IntervalAlignment, parse_interval_spec
 from app.data_engine.interval_resolution import IntervalPurpose, IntervalRouteKind
-from app.data_engine.memory_budget import MemoryBudgetExceeded, retained_size
+from app.data_engine.memory_budget import MemoryBudgetExceeded, flat_rows_within, retained_size
 from .models import SeriesKey
 
 
@@ -76,6 +76,21 @@ class HistoryBlockPage:
         return self._receipt
 
 
+class _ComputedBlock:
+    """A page block summarized inside a caller's view; never offered to B130."""
+    __slots__ = ("summary",)
+
+    def __init__(self, summary):
+        self.summary = summary
+
+
+class _ComputedPage:
+    __slots__ = ("blocks", "receipt")
+
+    def __init__(self, blocks, receipt):
+        self.blocks, self.receipt = blocks, receipt
+
+
 class HistoryBlockReader:
     def __init__(self, engine):
         self.engine = engine
@@ -122,6 +137,130 @@ class HistoryBlockReader:
             if not isinstance(calendar, AlwaysOpenCalendar):
                 raise ValueError("H127 v1 does not qualify session or unknown calendars")
         return spec.nominal_ms, policy
+
+    @contextmanager
+    def read_in_view(self, source: SeriesKey, start_ms: int, end_ms: int, *, session,
+                     max_rows: int = MAX_PAGE_ROWS, cursor: HistoryBlockCursor | None = None,
+                     required_fields=CORE_FIELDS, cancel=None):
+        """``read`` for a caller that already holds a B130 view over ``source``.
+
+        The caller's view pins the source revision and is revalidated before
+        anything is published, so this page opens no view of its own. The page
+        and 16-row block boundaries, row admission and K130 summaries are the
+        same as ``read``; blocks are summarized directly instead of passing
+        through the shared block cache. The session owns the page allowance.
+        """
+        self._count(reads=1)
+        try:
+            self._cancelled(cancel)
+            width, _policy = session.qualify(source)
+            if (type(start_ms) is not int or type(end_ms) is not int
+                    or not 0 <= start_ms < end_ms <= (1 << 63) - 1
+                    or start_ms % width or end_ms % width
+                    or end_ms > int(time.time() * 1000) // width * width):
+                raise ValueError("aligned, elapsed half-open source range required")
+            if type(max_rows) is not int or not 1 <= max_rows <= MAX_PAGE_ROWS:
+                raise ValueError("history page row budget must be between 1 and 256")
+            if not isinstance(required_fields, (tuple, list, set, frozenset)) or len(required_fields) > len(FIELDS):
+                raise ValueError("bounded required-field set required")
+            fields = tuple(sorted(set(required_fields)))
+            if not fields or not set(fields) <= FIELDS:
+                raise ValueError("unsupported required history fields")
+            revision = session.revision(source)
+            position = start_ms
+            if cursor is not None:
+                if (not isinstance(cursor, HistoryBlockCursor)
+                        or (cursor.source, cursor.start_ms, cursor.end_ms, cursor.direction, cursor.required_fields)
+                        != (source, start_ms, end_ms, "asc", fields)
+                        or type(cursor.position_ms) is not int or cursor.position_ms % width
+                        or not start_ms < cursor.position_ms < end_ms):
+                    raise ValueError("history continuation does not match the request")
+                if cursor.revisions != (revision,):
+                    raise BlockRevisionChanged("history continuation source revision expired")
+                position = cursor.position_ms
+            lo, hi = position, min(end_ms, position + max_rows * width)
+            ranges = []
+            at = lo
+            while at < hi:
+                stop = min(hi, (at // (BLOCK_ROWS * width) + 1) * BLOCK_ROWS * width)
+                ranges.append((at, stop))
+                at = stop
+            work_bytes = (hi - lo) // width * 4096 + 4096
+            # Resident B130 summaries for exactly this revision are reused.
+            summaries = {}
+            for bounds in ranges:
+                cached = session.manager.lookup(
+                    BlockKey(source, *bounds, input_fingerprint="h127-canonical-v1"), (revision,))
+                if cached is not None:
+                    summaries[bounds] = cached
+            hits = len(summaries)
+            self._count(cache_hits=hits)
+            rows_read = 0
+            if hits != len(ranges):
+                self._count(storage_reads=1)
+                rows = self.engine._read_canonical_history_rows(session.storage, source, lo, hi,
+                                                               (hi - lo) // width + 1)
+                rows_read = len(rows)
+                self._count(storage_rows=rows_read)
+                self._cancelled(cancel)
+                session.check_binding()
+                if not flat_rows_within(rows, work_bytes // 2):
+                    raise MemoryBudgetExceeded("canonical history page exceeds its decoding allowance")
+                times = [row["open_time"] for row in rows]
+                if (len(times) > (hi - lo) // width or len(set(times)) != len(times)
+                        or any(type(t) is not int or not lo <= t < hi or t % width for t in times)):
+                    raise BlockUnavailable("canonical history page violates its grid or row bound")
+                valid = [row for row in rows if row.get("close_time") == row["open_time"] + width - 1]
+                bars = self.engine._storage_rows_to_bars(source, valid)
+                accepted = {bar.time_ms: bar for bar in bars if bar.is_closed and bar.trusted_final}
+                del rows, valid, bars, times
+                for bounds in ranges:
+                    self._cancelled(cancel)
+                    if bounds in summaries:
+                        continue
+                    leaves = [accepted[t] for t in range(*bounds, width) if t in accepted]
+                    if not leaves:
+                        continue
+                    summary = summarize((AcceptedComponent(source, bar, bar.time_ms + width, revision)
+                                         for bar in leaves), target=source)
+                    # The checks B130 applies to a built block before adoption.
+                    if (summary.target != source or not summary.revisions_known
+                            or summary.revisions != (revision,) or not summary.coverage.ranges
+                            or len(summary.coverage.ranges) > session.max_ranges
+                            or summary.coverage.ranges[0][0] < bounds[0]
+                            or summary.coverage.ranges[-1][1] > bounds[1]):
+                        raise ValueError("block result violates its identity, bounds or dependency contract")
+                    summaries[bounds] = summary
+                del accepted
+            blocks = [_ComputedBlock(summaries[bounds]) for bounds in ranges if bounds in summaries]
+            if any(not block.summary.all_authoritative for block in blocks):
+                raise BlockUnavailable("unqualified cached history summary")
+            coverage = sorted(part for block in blocks for part in block.summary.coverage.ranges)
+            missing, at = [], lo
+            for start, stop in coverage:
+                if start > at:
+                    missing.append((at, start))
+                at = max(at, stop)
+            if at < hi:
+                missing.append((at, hi))
+            missing_fields = tuple(f for f in fields if any(
+                getattr(block.summary.values, f) is None for block in blocks))
+            continuation = (HistoryBlockCursor(source, start_ms, end_ms, hi, "asc", (revision,), fields)
+                            if start_ms < hi < end_ms else None)
+            receipt = HistoryBlockReceipt(source, (start_ms, end_ms), (lo, hi), (revision,),
+                tuple(missing), missing_fields, not missing and not missing_fields,
+                continuation, len(blocks), rows_read, hits, int(hits != len(ranges)))
+            yield _ComputedPage(tuple(blocks), receipt)
+            self._cancelled(cancel)
+            session.check_binding()
+            self._count(accepted_pages=1, partial_pages=int(not receipt.complete),
+                        accepted_blocks=receipt.blocks)
+        except CancelledError:
+            self._count(cancellations=1)
+            raise
+        except BaseException:
+            self._count(failures=1)
+            raise
 
     @contextmanager
     def read(self, source: SeriesKey, start_ms: int, end_ms: int, *,

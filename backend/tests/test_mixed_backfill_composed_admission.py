@@ -356,10 +356,19 @@ def test_durable_or_memory_read_deferral_never_becomes_verification_repair(compo
     manager = composed_dm
     if fault == 'revision_unavailable':
         # Keep the legitimate cache poll watermark behind a new SQLite commit.
+        # The commit is inside the requested page: a composed read only needs
+        # its own range unchanged since the watermark, not the whole family.
         consumer = manager.query_engine._cache.revision_consumer
         consumer.sync(force=True)
         consumer.poll_seconds = 60
-        manager.query_engine.storage.upsert_bars('BTCUSDT', '1d', [row(0, 1440*MINUTE)],
+        if endpoint.startswith('/history'):
+            import time
+            day = 1440 * MINUTE
+            forming = int(time.time() * 1000) // WIDTH * WIDTH
+            opened = (forming - WIDTH) // day * day  # Inside the newest closed target.
+        else:
+            opened = 0
+        manager.query_engine.storage.upsert_bars('BTCUSDT', '1d', [row(opened, 1440*MINUTE)],
             source='backfill', market_type='futures')
     else:
         original_reserve = manager.memory_budget.reserve

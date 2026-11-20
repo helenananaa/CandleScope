@@ -6,6 +6,7 @@ This owner does not read storage, mutate caches, or import the coordinator.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import heapq
 import logging
 import time
@@ -33,6 +34,7 @@ from .backfill_contracts import (
     _merge_derived_repair_targets,
     repair_status_value,
 )
+from . import finer_work_hold
 
 logger = logging.getLogger("data_manager.backfill_scheduler")
 
@@ -124,10 +126,13 @@ class _FetchChunk:
     execution_scope: Any = None
     executing: bool = False
     resource_waiter: asyncio.Task | None = None
-    resume_future: asyncio.Future | None = None
     phase_wait_reason: str | None = None
     phase_wait_started: float = 0.0
     phase_wait_ms: float = 0.0
+    # When this chunk first waited for another chart's finer history, and
+    # where this chunk may itself write such history (finer_work_hold).
+    finer_hold_started: float = 0.0
+    finer_reach: Any = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,6 +186,9 @@ class _RequestState:
     cancel_reason: str | None = None
     progress_revision: int = 0
     last_dispatch_sequence: int = 0
+    # Until when its newest chunk waits for charts opened with it, -1 once
+    # past (finer_work_hold.SETTLE_SECONDS).
+    finer_settle_until: float = 0.0
 
     @property
     def total(self) -> int:
@@ -268,6 +276,9 @@ class BackfillScheduler:
         self._chunks: dict[str, _FetchChunk] = {}
         self._ready: list[tuple[int, int, int, str]] = []
         self._tasks: dict[str, asyncio.Task] = {}
+        # Resume turns are keyed by chunk id, not by chunk object: a merge can
+        # rebuild a request's chunks under the same ids while their tasks run.
+        self._resume_turns: dict[str, asyncio.Future] = {}
         self._parked: set[str] = set()
         self.phase_resumptions = 0
         self._buckets: dict[str, _TokenBucket] = {}
@@ -306,7 +317,16 @@ class BackfillScheduler:
         self.local_burst_seconds = 2.0
         self.local_burst_dispatches = 0
         self.mixed_chunk_refinements = 0
+        # Mixed chunks split around, held for, and released after waiting
+        # for another chart's finer history (finer_work_hold).
+        self.finer_work_settles = 0
+        self.finer_work_splits = 0
+        self.finer_work_holds = 0
+        self.finer_work_hold_timeouts = 0
         self._local_burst: dict[tuple[int, bool], tuple[str, float]] = {}
+        # Optional per-symbol cold source fill (family_fill.FamilyFillManager):
+        # told of every new request, and asked before a chunk is dispatched.
+        self.family_gate = None
 
     def submit(self, request: RepairRequest) -> tuple[str, asyncio.Future[RepairOutcome]]:
         if self._shutdown:
@@ -413,6 +433,9 @@ class BackfillScheduler:
         self._requests[request.request_id] = state
         series.pending.append(request.request_id)
         self._on_queued(request)
+        if self.family_gate is not None:
+            # Before this request's chunks can dispatch below.
+            self.family_gate.note(request)
         self._replace_pending_chunks(state)
         self._publish_progress(state, status="queued")
         self._drain()
@@ -424,6 +447,8 @@ class BackfillScheduler:
         request: RepairRequest,
     ) -> bool:
         self._merge_derived_targets_into_state(state, request)
+        interest_before = (dict(state.demand_leases), list(state.persistent_scheduling),
+                           state.request.metadata.get("_api_latest_interest"))
         incoming_leases = self._demand_leases_from_request(request)
         state.demand_leases.update(incoming_leases)
         if not incoming_leases:
@@ -452,6 +477,13 @@ class BackfillScheduler:
             chunk = self._chunks.get(chunk_id)
             if chunk is not None and requires_trusted_finality:
                 chunk.request.metadata["requires_trusted_finality"] = True
+        if not upgraded_finality and interest_before == (
+                dict(state.demand_leases), list(state.persistent_scheduling),
+                state.request.metadata.get("_api_latest_interest")):
+            # The same interest again (a chart re-submitting its gap on every
+            # poll): re-ranking would rebuild the ready queue and reissue every
+            # chunk of this request for an identical result.
+            return upgraded_finality
         self._restore_remaining_interest(state)
         if int(state.request.priority or 100) < previous_priority:
             self.priority_promotions += 1
@@ -855,6 +887,8 @@ class BackfillScheduler:
     async def shutdown(self) -> None:
         self._shutdown = True
         self._cancel_drain_timer()
+        if self.family_gate is not None:
+            await self.family_gate.shutdown()
         for task in list(self._tasks.values()):
             task.cancel()
         if self._tasks:
@@ -932,6 +966,10 @@ class BackfillScheduler:
             "fairness_rotations": self.fairness_rotations,
             "local_burst_dispatches": self.local_burst_dispatches,
             "mixed_chunk_refinements": self.mixed_chunk_refinements,
+            "finer_work_settles": self.finer_work_settles,
+            "finer_work_splits": self.finer_work_splits,
+            "finer_work_holds": self.finer_work_holds,
+            "finer_work_hold_timeouts": self.finer_work_hold_timeouts,
             "aged_dispatches": self.aged_dispatches,
             "max_dispatch_bypass": self.max_dispatch_bypass,
             "running_background_chunks": self._running_background_count(),
@@ -950,6 +988,7 @@ class BackfillScheduler:
             "exchange_rate_limit_deferrals": self.exchange_rate_limit_deferrals,
             "capacity_waiting_chunks": sum(chunk.resource_waiter is not None
                 or chunk.phase_wait_reason=='memory_working_set' for chunk in self._chunks.values()),
+            "family_fill": self.family_gate.snapshot() if self.family_gate is not None else None,
             "resource_waiting_chunks":len(self._parked),"phase_resumptions":self.phase_resumptions,
             "deferred_chunks": len(deferred),
             "deferred": sorted(
@@ -1313,11 +1352,19 @@ class BackfillScheduler:
                     chunk.phase_wait_reason = None
                     owner.phase_resumptions += 1
                     return
-                future = asyncio.get_running_loop().create_future()
-                chunk.resume_future = future
-                owner._push_ready(chunk,preserve_sequence=True)
+                # Several coroutines of one chunk (pages, shared inputs) may
+                # leave resource waits together. They share one dispatch turn:
+                # a second future must not replace the first, or the first
+                # waiter never resumes and keeps its memory grant. The turn is
+                # keyed by id: a merge may have replaced this chunk object.
+                future = owner._resume_turns.get(chunk.chunk_id)
+                if future is None or future.done():
+                    future = asyncio.get_running_loop().create_future()
+                    owner._resume_turns[chunk.chunk_id] = future
+                    owner._push_ready(chunk,preserve_sequence=True)
                 owner._drain()
-                await future
+                # One cancelled waiter must not cancel its siblings' turn.
+                await asyncio.shield(future)
         return Observer()
 
     def _parent_running(self, parent_id, *, excluding=None):
@@ -1356,7 +1403,8 @@ class BackfillScheduler:
                     else:
                         self._drop_chunk(chunk.chunk_id, None)
                     continue
-                if (chunk.chunk_id in self._tasks and chunk.resume_future is None
+                resuming = chunk.chunk_id in self._resume_turns
+                if (chunk.chunk_id in self._tasks and not resuming
                         or chunk.resource_waiter is not None):
                     skipped.append(item)
                     continue
@@ -1380,6 +1428,20 @@ class BackfillScheduler:
                         or self._shared_gap_input_active(chunk.request)):
                     skipped.append(item)
                     continue
+                # A family fill is still acquiring sources this chunk reads.
+                if (not resuming and self.family_gate is not None
+                        and self.family_gate.holds(chunk.request)):
+                    skipped.append(item)
+                    continue
+                # Another chart is still fetching finer history inside some
+                # of its targets (MIXED_ROUTE_PLANNING_zh.md §10).
+                hold = self._finer_work_hold(chunk) if not resuming and finer_work_hold.ENABLED else None
+                if hold == "split":
+                    continue  # its parts are queued; free ones dispatch in this drain
+                if hold is not None:
+                    next_delay = hold if next_delay is None else min(next_delay, hold)
+                    skipped.append(item)
+                    continue
                 if self._max_concurrency and self._is_background(chunk.request) and (
                     self._running_background_count() >= 1
                     or (chunk.dispatch_bypasses < self.max_dispatch_bypass
@@ -1400,7 +1462,7 @@ class BackfillScheduler:
                     self.fairness_rotations += 1
                     skipped.append(item)
                     continue
-                bucket = self._bucket_for(chunk.request) if self._max_concurrency and chunk.resume_future is None else None
+                bucket = self._bucket_for(chunk.request) if self._max_concurrency and not resuming else None
                 now_ms = int(time.time() * 1000)
                 if bucket is not None and not bucket.try_acquire(now_ms):
                     self.rate_limited_skips += 1
@@ -1409,15 +1471,16 @@ class BackfillScheduler:
                     skipped.append(item)
                     continue
 
-                if chunk.resume_future is not None:
-                    future,chunk.resume_future = chunk.resume_future,None
+                if resuming:
+                    future = self._resume_turns.pop(chunk.chunk_id)
                     self._parked.discard(chunk.chunk_id)
                     series.active.add(chunk.parent_id)
                     if chunk.parent_id in series.pending:
                         series.pending.remove(chunk.parent_id)
                     (self._active_background_chunks if self._is_background(chunk.request)
                      else self._active_foreground_chunks).add(chunk.chunk_id)
-                    chunk.phase_wait_ms += (time.monotonic()-chunk.phase_wait_started)*1000
+                    if chunk.phase_wait_started:
+                        chunk.phase_wait_ms += (time.monotonic()-chunk.phase_wait_started)*1000
                     chunk.phase_wait_reason = None
                     self.phase_resumptions += 1
                     if not future.done():
@@ -1442,6 +1505,12 @@ class BackfillScheduler:
                 series.active.add(chunk.parent_id)
                 if chunk.parent_id in series.pending:
                     series.pending.remove(chunk.parent_id)
+                # A fresh context: a drain runs wherever it is triggered (a
+                # submit inside another run's acquisition scope, a finished
+                # chunk's task, a timer scheduled there), and create_task would
+                # copy that run's fence, computation and memory-lease
+                # ContextVars into this chunk. Each run acquires its own;
+                # deletion permission travels in the request's metadata.
                 task = asyncio.create_task(
                     self._run_chunk(chunk),
                     name=(
@@ -1450,6 +1519,7 @@ class BackfillScheduler:
                         f"{chunk.request.symbol}@{chunk.request.interval}:"
                         f"{chunk.sequence}"
                     ),
+                    context=contextvars.Context(),
                 )
                 self._tasks[chunk.chunk_id] = task
                 aged_dispatch = chunk.dispatch_bypasses >= self.max_dispatch_bypass
@@ -1587,7 +1657,12 @@ class BackfillScheduler:
             if int(item[0]) != lane[0]:
                 continue
             candidate = self._chunks.get(item[3])
-            if candidate is None or (candidate.phase_wait_reason and candidate.resume_future is None) or candidate.resource_waiter is not None or candidate.eligible_at_monotonic > now:
+            resuming = candidate is not None and candidate.chunk_id in self._resume_turns
+            if candidate is None or (candidate.phase_wait_reason and not resuming) or candidate.resource_waiter is not None or candidate.eligible_at_monotonic > now:
+                continue
+            # Running work without a resume request is skipped by the drain
+            # loop; it is no alternative to a chunk that is ready to resume.
+            if candidate.chunk_id in self._tasks and not resuming:
                 continue
             if self._is_background(candidate.request) != lane[1]:
                 continue
@@ -1729,7 +1804,7 @@ class BackfillScheduler:
             except RepairChunkSplit as exc:
                 kind = 'refined'
                 self._note_local_burst(chunk, None)
-                if self._refine_mixed_chunk(chunk):
+                if self._refine_mixed_chunk(chunk, split_ranges=exc.split_ranges):
                     return
                 outcome = RepairOutcome(request=chunk.request, status='failed', error=str(exc))
             except RepairRetryDeferred as exc:
@@ -1741,6 +1816,7 @@ class BackfillScheduler:
             except RateLimitDeferred as exc:
                 kind = 'public_admission_deferred'
                 self._note_local_burst(chunk, None)
+                self._wake_on_probe_release(exc)
                 if chunk.public_demand is not None:
                     get_public_admission().protect(
                         chunk.public_demand, exc.bucket_key,
@@ -1775,10 +1851,27 @@ class BackfillScheduler:
             self._active_foreground_chunks.discard(chunk.chunk_id)
             self._active_background_chunks.discard(chunk.chunk_id)
             self._tasks.pop(chunk.chunk_id, None)
+            # Only this task's coroutines can request its resume turn.
+            self._resume_turns.pop(chunk.chunk_id, None)
             self._parked.discard(chunk.chunk_id)
             if chunk.public_demand is not None and not chunk.public_demand.alive():
                 get_public_admission().forget(chunk.public_demand)
             self._drain()
+
+    @staticmethod
+    def _wake_on_probe_release(exc):
+        """A probe deferral reports the probe's whole fail-safe lease (30 s).
+
+        Its response normally arrives within one round trip and releases the
+        bucket. Wait for that release instead of sleeping out the lease; the
+        lease still bounds the wait.
+        """
+        if exc.reason != 'probe_in_flight' or getattr(exc, 'wait_for_capacity', None) is not None:
+            return
+        wait = getattr(get_public_admission().manager, 'wait_for_probe_release', None)
+        if callable(wait):
+            bucket, timeout = exc.bucket_key, exc.retry_after_seconds
+            exc.wait_for_capacity = lambda: wait(bucket, timeout)
 
     def _record_chunk_receipt(self, chunk, state, kind, report):
         """Bounded diagnostics only, never coverage or quota authority.
@@ -1820,12 +1913,70 @@ class BackfillScheduler:
             row[key] = scalar(plan.get(key))
         self._chunk_receipts.append(row)
 
-    def _refine_mixed_chunk(self, chunk):
-        """Replace one unacquired work item by two on the same parent queue.
+    def _finer_work_hold(self, chunk):
+        """None to dispatch this chunk now, "split" when it was replaced by its
+        parts, else the seconds it may still wait for another chart's finer
+        history (finer_work_hold)."""
+        width = finer_work_hold.holdable_width(chunk.request)
+        if width is None:
+            return None
+        state = self._requests.get(chunk.parent_id)
+        if (state is not None and state.finer_settle_until >= 0
+                and self._reasons(chunk.request) & finer_work_hold.SETTLE_REASONS):
+            now_monotonic = time.monotonic()
+            if not state.finer_settle_until:
+                state.finer_settle_until = now_monotonic + finer_work_hold.SETTLE_SECONDS
+                self.finer_work_settles += 1
+            if now_monotonic >= state.finer_settle_until:
+                state.finer_settle_until = -1.0
+            elif chunk.request.end_ms >= max(self._chunks[chunk_id].request.end_ms
+                                              for chunk_id in state.chunk_ids if chunk_id in self._chunks):
+                return state.finer_settle_until - now_monotonic
+        family = finer_work_hold.family(chunk.request)
+        reaches = []
+        for other in self._chunks.values():
+            if other.finer_reach is False:
+                other.finer_reach = (None if self._is_background(other.request)
+                                     else finer_work_hold.reach(other.request))
+            span = other.finer_reach
+            if span is None or span[0] >= width or other.parent_id == chunk.parent_id:
+                continue
+            request, owner = other.request, self._requests.get(other.parent_id)
+            # A reach is only computed for a default series identity (finer_work_hold.family).
+            if ((request.exchange, request.market_type, request.symbol) != family or owner is None
+                    or owner.stale or owner.failed is not None or owner.cancel_requested):
+                continue
+            reaches.append(span[1:])
+        ranges = finer_work_hold.partition(chunk.request, reaches)
+        if ranges is None:
+            return None
+        if len(ranges) > 1:
+            if self._refine_mixed_chunk(chunk, split_ranges=[(first, last) for first, last, _ in ranges],
+                                        cause="finer_work_hold"):
+                self.finer_work_splits += 1
+                return "split"
+            return None
+        if chunk.finer_hold_started < 0:
+            return None  # waited its longest already
+        now_monotonic = time.monotonic()
+        if not chunk.finer_hold_started:
+            chunk.finer_hold_started = now_monotonic
+            self.finer_work_holds += 1
+        remaining = chunk.finer_hold_started + finer_work_hold.MAX_HOLD_SECONDS - now_monotonic
+        if remaining > 0:
+            return remaining
+        self.finer_work_hold_timeouts += 1
+        chunk.finer_hold_started = -1.0
+        return None
+
+    def _refine_mixed_chunk(self, chunk, *, split_ranges=None, cause="refined_source_row_budget"):
+        """Replace one unacquired work item by bounded partitions on its parent queue.
 
         Existing finer canonical history can make a cold 16-target proposal
         exceed its row bound. Refinement preserves leases, cancellation, quota
         ownership, deletion floor and final verification; it creates no queue.
+        The same split puts targets that wait for another chart's finer
+        history (``cause="finer_work_hold"``) on chunks of their own.
         """
         state = self._requests.get(chunk.parent_id)
         width = parse_interval_ms(chunk.request.interval)
@@ -1835,12 +1986,34 @@ class BackfillScheduler:
                 or self._chunks.get(chunk.chunk_id) is not chunk):
             return False
         count = (chunk.request.end_ms-chunk.request.start_ms)//width+1
-        middle = chunk.request.start_ms + (count//2)*width
+        ranges = None
+        if split_ranges and isinstance(split_ranges, (tuple, list)) and len(split_ranges) >= 2:
+            candidate = []
+            expected = chunk.request.start_ms
+            valid = True
+            for item in split_ranges:
+                if not isinstance(item, (tuple, list)) or len(item) != 2:
+                    valid = False
+                    break
+                first, last = item
+                if (type(first) is not int or type(last) is not int
+                        or first != expected or last < first
+                        or (last - first) % width != 0
+                        or last > chunk.request.end_ms):
+                    valid = False
+                    break
+                candidate.append((first, last))
+                expected = last + width
+            if valid and expected == chunk.request.end_ms + width and 2 <= len(candidate) <= count:
+                ranges = tuple(candidate)
+        if ranges is None:
+            middle = chunk.request.start_ms + (count//2)*width
+            ranges = ((chunk.request.start_ms, middle-width), (middle, chunk.request.end_ms))
         children = []
         next_sequence = max((self._chunks[c].sequence for c in state.chunk_ids if c in self._chunks), default=chunk.sequence)+1
-        for index, (first, last) in enumerate(((chunk.request.start_ms, middle-width), (middle, chunk.request.end_ms))):
+        for index, (first, last) in enumerate(ranges):
             work = self._source_aware_chunk_plan(chunk.request, (last-first)//width+1)
-            sequence = chunk.sequence if index == 0 else next_sequence
+            sequence = chunk.sequence if index == 0 else next_sequence + index - 1
             request = replace(chunk.request, start_ms=first, end_ms=last, _retry_attempt=1,
                 metadata={**chunk.request.metadata, **work.to_metadata(), 'chunk_sequence': sequence})
             children.append(_FetchChunk(chunk.chunk_id+f':split{index}', chunk.parent_id, request, sequence))
@@ -1857,8 +2030,10 @@ class BackfillScheduler:
             self._chunks[child.chunk_id] = child
             self._push_ready(child)
         state.progress_revision += 1
-        self.mixed_chunk_refinements += 1
-        self._publish_progress(state, status='chunk_refined', details={'source_chunk': chunk.chunk_id})
+        if cause == "refined_source_row_budget":
+            self.mixed_chunk_refinements += 1
+        self._publish_progress(state, status='chunk_refined',
+                               details={'source_chunk': chunk.chunk_id, 'cause': cause})
         return True
 
     async def _defer_chunk(
@@ -2440,7 +2615,8 @@ class BackfillScheduler:
         # Required mixed execution and optional bounded fine-source batches
         # are different contracts. A covered/merged consumer cannot silently
         # lose either contract to a parent running under another one.
-        contracts = ('required_history_composition', 'bounded_history_batch_contract')
+        # A family fill tracks each of its pieces by its own future.
+        contracts = ('required_history_composition', 'bounded_history_batch_contract', 'family_fill_piece')
         return (_is_active_hydration(existing) == _is_active_hydration(new)
                 and all(existing.metadata.get(key) == new.metadata.get(key) for key in contracts))
 

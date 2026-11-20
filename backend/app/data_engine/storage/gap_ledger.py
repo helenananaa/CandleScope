@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 import sqlite3
 import time
 from pathlib import Path
 from typing import Any
 
 from app.core.config import KLINES_DB_PATH
+from app.data_engine.storage.sqlite_runtime import open_sqlite
 from app.data_engine.interval_policy import (
     compute_bucket_close_ms,
     compute_bucket_start_ms,
@@ -57,18 +59,25 @@ def _row_table(row_id: int) -> str:
     return _SCOPED_TABLE if row_id < 0 else _LEGACY_TABLE
 
 
-def _connect(db_path: Path | str | None = None) -> sqlite3.Connection:
-    path = Path(db_path or KLINES_DB_PATH)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path), timeout=30, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL;")
-    conn.execute("PRAGMA synchronous=NORMAL;")
+def _connect(db_path: Path | str | None = None, *, reuse: bool = False) -> sqlite3.Connection:
+    # With ``reuse``, ``close`` hands the connection back for this thread's next open.
+    conn = open_sqlite(Path(db_path or KLINES_DB_PATH), reuse=reuse)
     conn.create_function("gap_series_scope", 2, _series_scope, deterministic=True)
     conn.create_function("merge_native_receipts", 4, _merge_native_receipts, deterministic=True)
     conn.create_function("gap_has_native_receipts", 1, _has_native_receipts, deterministic=True)
     conn.create_function("gap_has_bybit_source_gap", 4, _has_bybit_source_gap, deterministic=True)
     return conn
+
+
+@contextmanager
+def _connected(db_path: Path | str | None = None):
+    """``with _connect() as conn`` that also closes, so the connection is reused."""
+    conn = _connect(db_path, reuse=True)
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
 
 
 def _now_ms() -> int:
@@ -198,7 +207,7 @@ class GapLedger:
         self.init_storage()
 
     def init_storage(self) -> None:
-        with _connect(self._db_path) as conn:
+        with _connected(self._db_path) as conn:
             # Keep the old writer's conflict target intact during rollback.
             # Schema creation and transfer share the same write transaction.
             conn.execute("BEGIN IMMEDIATE")
@@ -304,7 +313,7 @@ class GapLedger:
                 "scope": scope,
             })
 
-        with _connect(self._db_path) as conn:
+        with _connected(self._db_path) as conn:
             for scope, rows in grouped.items():
                 table, scope_column = _partition(scope)
                 extra_column, extra_value = (", series_scope", ", :scope") if scope else ("", "")
@@ -540,7 +549,7 @@ class GapLedger:
         clear_receipts = (
             f", {_REMOVE_NATIVE_PROGRESS}" if normalized_status in {"filled", "source_empty"} else ""
         )
-        with _connect(self._db_path) as conn:
+        with _connected(self._db_path) as conn:
             cursor = conn.execute(
                 f"""
                 UPDATE {table}
@@ -700,7 +709,7 @@ class GapLedger:
             return 0
         scope = _request_scope(request)
         table, scope_column = _partition(scope)
-        with _connect(self._db_path) as conn:
+        with _connected(self._db_path) as conn:
             if row_snapshot is not None:
                 try:
                     row_id = int(row_snapshot["id"])
@@ -798,7 +807,7 @@ class GapLedger:
     def get_status(self, request: Any) -> dict[str, Any] | None:
         scope = _request_scope(request)
         table, scope_column = _partition(scope)
-        with _connect(self._db_path) as conn:
+        with _connected(self._db_path) as conn:
             row = conn.execute(
                 f"""
                 SELECT
@@ -858,7 +867,7 @@ class GapLedger:
         scope = _identity_scope(exchange, series_identity)
         table, scope_column = _partition(scope)
         row_id = "-id" if scope else "id"
-        with _connect(self._db_path) as conn:
+        with _connected(self._db_path) as conn:
             row = conn.execute(
                 f"""
                 SELECT {row_id} AS id, {_ROW_FIELDS},
@@ -922,7 +931,7 @@ class GapLedger:
     def list_suppressions(self, *, now_ms: int | None = None) -> list[dict[str, Any]]:
         """Return current terminal/cooldown rows for the submission cache."""
         now = int(_now_ms() if now_ms is None else now_ms)
-        with _connect(self._db_path) as conn:
+        with _connected(self._db_path) as conn:
             rows = conn.execute(
                 f"""
                 SELECT *
@@ -960,7 +969,7 @@ class GapLedger:
         scope = _identity_scope(exchange, series_identity)
         table, scope_column = _partition(scope)
         row_id = "-id" if scope else "id"
-        with _connect(self._db_path) as conn:
+        with _connected(self._db_path) as conn:
             row = conn.execute(
                 f"""
                 SELECT {row_id} AS id, {_ROW_FIELDS}
@@ -1001,7 +1010,7 @@ class GapLedger:
         return dict(row) if row is not None else None
 
     def list_open(self, *, limit: int = 100) -> list[dict[str, Any]]:
-        with _connect(self._db_path) as conn:
+        with _connected(self._db_path) as conn:
             rows = conn.execute(
                 f"""
                 SELECT *
@@ -1034,7 +1043,7 @@ class GapLedger:
             else _now_ms() - _DEFAULT_STALE_AFTER_MS
         )
         due_before = int(due_before_ms if due_before_ms is not None else _now_ms())
-        with _connect(self._db_path) as conn:
+        with _connected(self._db_path) as conn:
             rows = conn.execute(
                 f"""
                 SELECT *
@@ -1102,7 +1111,7 @@ class GapLedger:
         """Persist exact-scan progress so a large range resumes next pass."""
         now = _now_ms()
         table = _row_table(row_id)
-        with _connect(self._db_path) as conn:
+        with _connected(self._db_path) as conn:
             row = conn.execute(
                 f"""
                 SELECT status, last_seen_at, metadata_json, repair_ticket
@@ -1177,7 +1186,7 @@ class GapLedger:
     ) -> bool:
         """Drop a stale scan cursor after resolution or a confirmed gap."""
         table = _row_table(row_id)
-        with _connect(self._db_path) as conn:
+        with _connected(self._db_path) as conn:
             row = conn.execute(
                 f"""
                 SELECT status, last_seen_at, metadata_json, repair_ticket
@@ -1235,7 +1244,7 @@ class GapLedger:
         """Defer a malformed/corrupt candidate that cannot form a request."""
         now = _now_ms()
         table = _row_table(row_id)
-        with _connect(self._db_path) as conn:
+        with _connected(self._db_path) as conn:
             params: list[Any] = [
                 now,
                 int(next_retry_at),
@@ -1288,7 +1297,7 @@ class GapLedger:
     def health_summary(self, *, sample_limit: int = 50) -> dict[str, Any]:
         """Return exact open counts without materialising the full ledger."""
         now = _now_ms()
-        with _connect(self._db_path) as conn:
+        with _connected(self._db_path) as conn:
             status_rows = conn.execute(
                 f"""
                 SELECT status, COUNT(*) AS count
@@ -1346,7 +1355,7 @@ class GapLedger:
         reason = _bounded_reason(getattr(request, "reason", "unknown"))
         scope = _request_scope(request)
         table, scope_column = _partition(scope)
-        with _connect(self._db_path) as conn:
+        with _connected(self._db_path) as conn:
             cursor = conn.execute(
                 f"""
                 UPDATE {table}
@@ -1389,7 +1398,7 @@ class GapLedger:
         now = _now_ms()
         changed = 0
         budget = max(1, int(limit))
-        with _connect(self._db_path) as conn:
+        with _connected(self._db_path) as conn:
             for table, scope_column in ((_LEGACY_TABLE, "''"), (_SCOPED_TABLE, "series_scope")):
                 conn.execute(
                     f"""
@@ -1487,7 +1496,7 @@ class GapLedger:
             ticket_clause = " AND repair_ticket IS ?"
             params.append(request.request_id)
         table, scope_column = _partition(scope)
-        with _connect(self._db_path) as conn:
+        with _connected(self._db_path) as conn:
             conn.execute(
                 f"""
                 UPDATE {table}

@@ -1,8 +1,11 @@
 """Derived invalidation reads registered derived series, not the whole family.
 
-Every source mutation deletes the overlapping bars of the other derived
-intervals in its semantic family. That set must stay exact while the work per
-mutated row stays independent of how many native bars the family holds.
+Every source bar mutation deletes the overlapping bars of the other derived
+intervals in its semantic family that are at least as wide as that source bar.
+A wider source bar cannot be a component of a narrower target. Proven-empty
+coverage spans delete every overlapping derived bar. That set must stay exact
+while the work per mutated row stays independent of how many native bars the
+family holds.
 """
 from __future__ import annotations
 
@@ -18,7 +21,7 @@ SECOND = 1_000
 START = 1_700_000_040_000
 NATIVE = "backfill_rest_verified"
 DERIVED = "backfill_aggregated"
-WIDTHS = {"1m": MINUTE, "5m": 5 * MINUTE, "7m": 7 * MINUTE, "13m": 13 * MINUTE}
+WIDTHS = {"1m": MINUTE, "5m": 5 * MINUTE, "7m": 7 * MINUTE, "13m": 13 * MINUTE, "15m": 15 * MINUTE}
 SPAN_MINUTES = 182
 
 
@@ -46,11 +49,15 @@ def stored():
                 (row["close_time"], row["source"]) for row in conn.execute("SELECT * FROM klines")}
 
 
-def without_dependents(state, market, symbol, interval, open_time, close_time):
-    """The documented contract: other derived intervals, same family, overlapping."""
+def without_dependents(state, market, symbol, interval, open_time, close_time, *, bar=True):
+    """The documented contract: other derived intervals, same family, overlapping.
+
+    For a source bar, only derived bars at least as wide as it are dependents.
+    """
+    width = close_time - open_time if bar else 0
     return {key: value for key, value in state.items() if not (
         value[1] == DERIVED and key[:2] == (market, symbol) and key[2] != interval
-        and key[3] <= close_time and value[0] >= open_time)}
+        and key[3] <= close_time and value[0] >= open_time and value[0] - key[3] >= width)}
 
 
 def grid(interval, *, skip=0):
@@ -61,20 +68,23 @@ def grid(interval, *, skip=0):
 
 def test_source_mutations_delete_exactly_the_overlapping_derived_bars(storage):
     # Holes leave room for later inserts. A second native interval, another
-    # symbol and another market must never be read as dependents.
+    # symbol and another market must never be read as dependents. A native
+    # interval wider than every derived one deletes none of them.
     write("1m", grid("1m", skip=9), width=MINUTE)
     write("5m", grid("5m", skip=4), width=5 * MINUTE)
+    write("15m", grid("15m", skip=3), width=15 * MINUTE)
     for series in ({}, {"symbol": "ETHUSDT"}, {"market_type": "futures"}):
         for interval in ("7m", "13m"):
             write(interval, grid(interval), width=WIDTHS[interval], source=DERIVED, **series)
     initial = state = stored()
     choose = random.Random(126)
     holes = {interval: sorted(set(grid(interval)) - set(grid(interval, skip=skip)))
-             for interval, skip in (("1m", 9), ("5m", 4))}
+             for interval, skip in (("1m", 9), ("5m", 4), ("15m", 3))}
     present = sorted(set(grid("1m", skip=9)))
 
-    for step in range(24):
-        operation = ("insert", "update", "delete", "insert_other_native", "derived_update")[step % 5]
+    operations = ("insert", "update", "delete", "insert_other_native", "insert_coarser_native", "derived_update")
+    for step in range(30):
+        operation = operations[step % len(operations)]
         if operation == "insert":
             interval, open_time = "1m", holes["1m"].pop(choose.randrange(len(holes["1m"])))
             write(interval, [open_time], width=MINUTE)
@@ -92,6 +102,10 @@ def test_source_mutations_delete_exactly_the_overlapping_derived_bars(storage):
             interval, open_time = "5m", holes["5m"].pop(choose.randrange(len(holes["5m"])))
             write(interval, [open_time], width=5 * MINUTE)
             state = {**state, ("spot", "BTCUSDT", interval, open_time): (open_time + 5 * MINUTE - 1, NATIVE)}
+        elif operation == "insert_coarser_native":
+            interval, open_time = "15m", holes["15m"].pop(choose.randrange(len(holes["15m"])))
+            write(interval, [open_time], width=15 * MINUTE)
+            state = {**state, ("spot", "BTCUSDT", interval, open_time): (open_time + 15 * MINUTE - 1, NATIVE)}
         else:
             # A derived series is not a source of its sibling projections.
             survivors = sorted(key[3] for key in state if key[:3] == ("spot", "BTCUSDT", "7m"))
@@ -213,7 +227,7 @@ def test_empty_coverage_deletes_exactly_the_overlapping_derived_bars(storage, ex
         trade_empty_buckets.record(exchange, "spot", symbol, "1s", [(empty_from, empty_to)])
     else:
         native_empty_seconds.record(symbol, [(empty_from, empty_to)])
-    expected = without_dependents(before, "spot", symbol, "1s", empty_from, empty_to)
+    expected = without_dependents(before, "spot", symbol, "1s", empty_from, empty_to, bar=False)
     assert stored() == expected
     assert len(before) - len(expected) == 2  # the two 7s bars touching 30s..40s
 
@@ -244,3 +258,65 @@ def test_restart_replaces_an_older_dependents_trigger(storage, operation):
     expected = without_dependents(before, "spot", "BTCUSDT", "1m", touched, touched + MINUTE - 1)
     assert stored() == expected
     assert len(expected) < len(before)
+
+
+def test_wider_source_bars_keep_narrower_derived_bars(storage):
+    # One chart's coarse imports must not delete another chart's finer bars,
+    # which can only have been composed from bars no wider than themselves.
+    day, hour, w89 = 1440 * MINUTE, 60 * MINUTE, 89 * MINUTE
+    midnight = 1_700_006_400_000
+    write("89m", range(midnight // w89 * w89, midnight + day + w89, w89), width=w89, source=DERIVED)
+    write("60m", range(midnight, midnight + day, hour), width=hour, source=DERIVED)
+    write("10007m", [midnight - 2 * day], width=10007 * MINUTE, source=DERIVED)
+
+    def derived(interval):
+        return {key[3] for key, value in stored().items() if key[2] == interval and value[1] == DERIVED}
+
+    before = {interval: derived(interval) for interval in ("89m", "60m", "10007m")}
+    write("1d", [midnight], width=day)
+    write("4h", [midnight + 8 * hour], width=4 * hour)
+    write("1d", [midnight], width=day, close=200.0)
+    with klines_repo._connect() as conn:
+        conn.execute("DELETE FROM klines WHERE interval='1d'")
+    assert derived("89m") == before["89m"]
+    assert derived("60m") == before["60m"]
+    # The wide bar may contain a daily component, so it is still invalidated.
+    assert derived("10007m") == set()
+
+    # An hour bar is no wider than either: every overlapping bar is a dependent.
+    touched = midnight + 10 * hour
+    write("1h", [touched], width=hour)
+    overlapping = {opened for opened in before["89m"] if opened < touched + hour and opened + w89 > touched}
+    assert overlapping
+    assert derived("89m") == before["89m"] - overlapping
+    assert derived("60m") == before["60m"] - {touched}
+
+
+@pytest.mark.parametrize("operation", ["insert", "update", "delete"])
+def test_source_mutation_work_does_not_grow_with_derived_history(storage, operation):
+    # Dependents are sought from (source open - the series' span bound), not
+    # scanned from the first derived bar of the series.
+    def seed(symbol, derived_bars):
+        first = START - derived_bars * 7 * MINUTE
+        write("1m", range(START, START + 64 * MINUTE, MINUTE), width=MINUTE, symbol=symbol)
+        write("7m", range(first, START + 63 * MINUTE, 7 * MINUTE), width=7 * MINUTE,
+              source=DERIVED, symbol=symbol)
+    seed("SMALLUSDT", 16)
+    seed("LARGEUSDT", 4096)
+    baseline = source_mutation_steps("SMALLUSDT", 64, operation)
+    measured = source_mutation_steps("LARGEUSDT", 64, operation)
+    assert measured <= baseline + baseline // 4, (baseline, measured)
+
+
+def test_registered_series_record_a_span_bound_and_unknown_bounds_still_invalidate(storage):
+    write("1m", range(START, START + 30 * MINUTE, MINUTE), width=MINUTE)
+    write("7m", range(START, START + 28 * MINUTE, 7 * MINUTE), width=7 * MINUTE, source=DERIVED)
+    with klines_repo._connect() as conn:
+        assert conn.execute("SELECT max_span_ms FROM kline_derived_series WHERE interval='7m'").fetchone()[0] \
+            == 2 * 7 * MINUTE
+        # A series registered before bounds existed keeps the unbounded scan.
+        conn.execute("UPDATE kline_derived_series SET max_span_ms=0")
+    before = stored()
+    write("1m", [START + 10 * MINUTE], width=MINUTE, close=250.0)
+    assert stored() == without_dependents(before, "spot", "BTCUSDT", "1m", START + 10 * MINUTE,
+                                          START + 11 * MINUTE - 1)

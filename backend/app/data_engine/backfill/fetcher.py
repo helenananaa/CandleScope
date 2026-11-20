@@ -37,6 +37,7 @@ from typing import Callable, Awaitable, Any
 
 from app.data_engine.market_data.kline_metrics import declared_enhanced_fields
 from app.data_engine.series_identity import identity_from_metadata, resolve_kline_series_identity
+from app.data_engine.storage.revisions import StaleAcquisition
 from app.exchanges import (
     HistoricalRequest,
     RateLimitDeferred,
@@ -70,10 +71,10 @@ from .models import (
     FetchReceipt,
 )
 from .fetch_stream import PageConsumer, PAGE_BYTES_PER_ROW, stream_grid, disjoint_source_spans
-from .source_router import ArchiveRoutePlan, HistoricalSourceRouter
+from .source_router import PLANNED_OBJECTS_KEY, ArchiveRoutePlan, HistoricalSourceRouter
 from app.data_engine.memory_budget import MemoryBudgetExceeded
 from app.core.bounded_executor import ExecutorBusyError
-from .input_subscriptions import InputSubscriptions, input_adoption, retain_input_payload
+from .input_subscriptions import InputSubscriptions, current_input_adoption, input_adoption, retain_input_payload
 
 logger = logging.getLogger("backfill.Fetcher")
 
@@ -382,7 +383,6 @@ class HistoricalFetcher:
             raise latest
 
         capacity = next((item for item in raw_results if isinstance(item, (MemoryBudgetExceeded,ExecutorBusyError))), None)
-        from .input_subscriptions import current_input_adoption
         adoption = current_input_adoption()
         if (capacity is not None and adoption is not None and adoption.managed
                 and (isinstance(capacity,ExecutorBusyError) or capacity.waitable)):
@@ -392,6 +392,15 @@ class HistoricalFetcher:
                 if admitted:
                     await on_deferred(admitted)
             raise capacity
+
+        # Do not turn a typed streamed write conflict into a transport
+        # failure. Successful siblings here are already committed receipts.
+        if adoption is not None and adoption.managed and any(streaming):
+            conflicts = [r for r in raw_results if isinstance(r, StaleAcquisition) and r.can_replan]
+            if conflicts and all((isinstance(r, StaleAcquisition) and r.can_replan)
+                    or (isinstance(r, FetchReceipt) and r.status == BackfillStatus.COMPLETED and not r.errors)
+                    for r in raw_results):
+                raise conflicts[0]
 
         # Handle any unexpected exceptions returned by gather
         results: list[FetchResult] = []
@@ -444,7 +453,6 @@ class HistoricalFetcher:
 
     def _check_input_binding(self,binding):
         if binding is not None and binding != self._input_binding():
-            from app.data_engine.storage.revisions import StaleAcquisition
             raise StaleAcquisition('historical input owner binding changed')
 
     async def _http_page(self, task, req, payload_owner=None, binding=None):
@@ -828,6 +836,12 @@ class HistoricalFetcher:
                     await collector.accept(page_bars)
                 except (RateLimitDeferred, MemoryBudgetExceeded, ExecutorBusyError):
                     raise
+                except StaleAcquisition as exc:
+                    adoption = current_input_adoption()
+                    if adoption is not None and adoption.managed and exc.can_replan:
+                        raise
+                    errors.append(f'page_consumption_failed: {exc}')
+                    break
                 except Exception as exc:
                     errors.append(f'page_consumption_failed: {exc}')
                     break
@@ -1613,6 +1627,35 @@ def planned_write_windows(
                                int(start), int(end), archive, task.metadata)
             for start, end, archive in spans
         )
+    return windows
+
+
+def planned_route_windows(tasks: list[BackfillTask]) -> list[PlannedWriteWindow]:
+    """The windows a route-aware mixed plan writes, from the plan alone.
+
+    What ``planned_write_windows`` reports for these tasks once the router
+    imports exactly the listed objects (``PLANNED_OBJECTS_KEY``): each task's
+    range for REST (for an object task, its fallback), and each listed
+    object's whole range for its import, owned by the first task listing it.
+    An object task spans its object, so the tasks listing one object cover
+    exactly its range.
+    """
+    windows: list[PlannedWriteWindow] = []
+    objects: dict[str, list] = {}
+    for task in sorted(tasks, key=lambda item: (item.start_ms, item.end_ms)):
+        windows.append(PlannedWriteWindow(task.exchange, task.market_type, task.symbol, task.interval,
+                                          task.start_ms, task.end_ms, False, task.metadata))
+        spec = parse_interval_spec(task.interval)
+        for key in task.metadata.get(PLANNED_OBJECTS_KEY) or ():
+            last = task.end_ms + spec.nominal_ms - 1
+            if key in objects:
+                objects[key][1] = min(objects[key][1], task.start_ms)
+                objects[key][2] = max(objects[key][2], last)
+            else:
+                objects[key] = [task, task.start_ms, last]
+    windows.extend(PlannedWriteWindow(task.exchange, task.market_type, task.symbol, task.interval,
+                                      start, end, True, task.metadata)
+                   for task, start, end in objects.values())
     return windows
 
 

@@ -4,6 +4,7 @@ Proposals grant no availability or write permission. Existing canonical reads,
 finer precedence, acquisition fences and materialization still decide adoption.
 """
 from dataclasses import dataclass
+from functools import lru_cache
 from .models import BackfillTask
 from .fetch_windows import coalesce_mixed_fetches
 import math
@@ -60,9 +61,29 @@ def _minimum_rows(width, sources):
     return rows if width == 0 else math.inf
 
 
-def choose_cold_sources(target, first, stop, sources, *, required_fields,
-                        target_width, base_width, page_size, task_page_size,
-                        max_rows, max_tasks, max_positions):
+def choose_cold_sources(target, first, stop, sources, **options):
+    """See ``_choose_cold_sources``; repeated identical choices are cached.
+
+    The choice is a pure function of its arguments. The family fill plans a
+    chunk once before the chunk plans itself, so each choice is otherwise
+    computed twice per cold load.
+    """
+    try:
+        key = (target, first, stop, tuple(sources), tuple(sorted(options.items())))
+        hash(key)
+    except TypeError:
+        return _choose_cold_sources(target, first, stop, sources, **options)
+    return _cached_choice(*key)
+
+
+@lru_cache(maxsize=256)
+def _cached_choice(target, first, stop, sources, options):
+    return _choose_cold_sources(target, first, stop, sources, **dict(options))
+
+
+def _choose_cold_sources(target, first, stop, sources, *, required_fields,
+                         target_width, base_width, page_size, task_page_size,
+                         max_rows, max_tasks, max_positions):
     """Compare at most 32 qualified grid subsets, without retaining plans.
 
     Only declared grids wider than the original single base are alternatives.

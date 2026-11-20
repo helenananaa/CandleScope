@@ -103,6 +103,50 @@ def test_zero_scratch_handoff_keeps_owner_alive_until_work_scope_exits():
     asyncio.run(run())
 
 
+def test_a_holder_that_can_finish_grows_while_a_larger_holder_waits():
+    # Seen in a cold four-chart load: one execution holds 152 of 192 and needs
+    # 172; another holds 29 and needs 33; new planners want 20 each. The small
+    # growth is safe and lets the large one finish later, so it must not wait
+    # behind the blocked one.
+    async def run():
+        owner=budget(192)
+        large=await owner._acquire_pool('history-backfill',152,172)
+        small=await owner._acquire_pool('history-backfill',29,33)
+        planners=[asyncio.create_task(owner._acquire_pool('history-backfill',20,20)) for _ in range(3)]
+        await asyncio.sleep(0)
+        growth=asyncio.create_task(large.resize(172))
+        await asyncio.sleep(0)
+        await asyncio.wait_for(small.resize(33),1)
+        assert not growth.done()
+        small.close()
+        await asyncio.wait_for(growth,1)
+        large.close()
+        for pool in await asyncio.wait_for(asyncio.gather(*planners),1):
+            pool.close()
+        assert owner.snapshot()['reserved_bytes']==0 and not owner._work_pools
+    asyncio.run(run())
+
+
+def test_running_holders_get_page_claims_while_a_larger_holder_waits():
+    # Seen next: one execution holds 150 of 192 and needs 170; six fetches
+    # hold 4 each (up to 20) and need a 1-unit page claim to finish. Those
+    # claims are safe and are what eventually frees room for the large one.
+    async def run():
+        owner=budget(192)
+        large=await owner._acquire_pool('history-backfill',150,170)
+        fetches=[await owner._acquire_pool('history-backfill',4,20) for _ in range(6)]
+        growth=asyncio.create_task(large.resize(170))
+        await asyncio.sleep(0)
+        pages=[await asyncio.wait_for(owner._acquire_pool('history-backfill',1,1),1) for _ in fetches]
+        assert not growth.done()
+        for page,fetch in zip(pages,fetches):
+            page.close();fetch.close()
+        await asyncio.wait_for(growth,1)
+        large.close()
+        assert owner.snapshot()['reserved_bytes']==0 and not owner._work_pools
+    asyncio.run(run())
+
+
 from tests.test_backfill_dependency_pipeline import setup_pipeline,request,mixed_query,MINUTE
 
 

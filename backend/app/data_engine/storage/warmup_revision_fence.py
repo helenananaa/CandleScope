@@ -13,7 +13,9 @@ from .revisions import (
     block_change_receipts,
     current_revision,
     series_change,
+    series_range_spans,
     series_values,
+    span_overlaps_half_open,
 )
 
 
@@ -50,29 +52,50 @@ class WarmupView:
         if self.owned and self.owned[0][0] == base:
             base = self.owned[0][1]
         head = current_revision(conn)
-        changed = {
+        changed = [
             dependency for dependency in dependencies
             if (change := series_change(conn, dependency)) is not None and change["revision"] > base
-        }
+        ]
         if changed:
             receipts = block_change_receipts(conn, base, head)
-            if not receipts:
-                raise StaleAcquisition("warmup change receipts do not cover the acquisition", details={
-                    'reason': 'warmup_receipt_suffix_unavailable', 'acquisition_revision': scope.revision,
-                    'base_revision': base, 'head_revision': head, 'receipt_limit': BLOCK_CHANGE_WINDOW,
-                    'start_ms': opens[0], 'end_ms': opens[-1], 'owned_commits': len(self.owned)})
-            for receipt in receipts:
-                if tuple(receipt[name] for name in IDENTITY_COLUMNS) not in changed:
-                    continue
-                if any(before < receipt["revision"] <= after for before, after in self.owned):
-                    continue
-                i = bisect_left(opens, receipt["start_ms"] - width + 1)
-                if i < len(opens) and opens[i] <= receipt["end_ms"]:
-                    raise StaleAcquisition("warmup inputs or target changed during acquisition", details={
-                        'reason': 'warmup_overlapping_change', 'acquisition_revision': scope.revision,
-                        'base_revision': base, 'head_revision': head, 'change_revision': receipt['revision'],
-                        'change_start_ms': receipt['start_ms'], 'change_end_ms': receipt['end_ms'],
-                        'start_ms': opens[0], 'end_ms': opens[-1]})
+            if receipts:
+                changed_set = set(changed)
+                for receipt in receipts:
+                    if tuple(receipt[name] for name in IDENTITY_COLUMNS) not in changed_set:
+                        continue
+                    if any(before < receipt["revision"] <= after for before, after in self.owned):
+                        continue
+                    i = bisect_left(opens, receipt["start_ms"] - width + 1)
+                    if i < len(opens) and opens[i] <= receipt["end_ms"]:
+                        raise StaleAcquisition("warmup inputs or target changed during acquisition", details={
+                            'reason': 'warmup_overlapping_change', 'acquisition_revision': scope.revision,
+                            'base_revision': base, 'head_revision': head, 'change_revision': receipt['revision'],
+                            'change_start_ms': receipt['start_ms'], 'change_end_ms': receipt['end_ms'],
+                            'start_ms': opens[0], 'end_ms': opens[-1]})
+            else:
+                for dependency in changed:
+                    spans = series_range_spans(conn, dependency, base, head)
+                    if spans is None:
+                        raise StaleAcquisition("warmup change receipts do not cover the acquisition", details={
+                            'reason': 'warmup_receipt_suffix_unavailable', 'acquisition_revision': scope.revision,
+                            'base_revision': base, 'head_revision': head, 'receipt_limit': BLOCK_CHANGE_WINDOW,
+                            'start_ms': opens[0], 'end_ms': opens[-1], 'owned_commits': len(self.owned)})
+                    for span in spans:
+                        first_rev, last_rev = int(span["first_revision"]), int(span["last_revision"])
+                        if any(before < first_rev and last_rev <= after for before, after in self.owned):
+                            continue
+                        lo, hi, step = int(span["start_ms"]), int(span["end_ms"]), int(span["step_ms"])
+                        if step <= width:
+                            i = bisect_left(opens, lo - width + 1)
+                            overlapped = i < len(opens) and opens[i] <= hi
+                        else:
+                            overlapped = any(span_overlaps_half_open(span, op, op + width) for op in opens)
+                        if overlapped:
+                            raise StaleAcquisition("warmup inputs or target changed during acquisition", details={
+                                'reason': 'warmup_overlapping_change', 'acquisition_revision': scope.revision,
+                                'base_revision': base, 'head_revision': head, 'change_revision': last_rev,
+                                'change_start_ms': lo, 'change_end_ms': hi,
+                                'start_ms': opens[0], 'end_ms': opens[-1]})
         return head
 
     def accept(self, before: int, after: int) -> None:

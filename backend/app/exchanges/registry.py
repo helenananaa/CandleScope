@@ -192,6 +192,21 @@ class ExchangeRegistry:
             raise KeyError(f"Unknown exchange: {exchange}")
         return copy.deepcopy(self._capabilities[key])
 
+    def capabilities_view(self, exchange: str) -> Any:
+        """Return the registered capability document itself, without a copy.
+
+        For hot read-only paths such as interval and history policy
+        resolution: a deep copy costs about a millisecond, and a cold chart
+        load resolved tens of thousands of times. Callers must not mutate the
+        result; use ``get_capabilities`` for a private copy.
+        """
+
+        key = exchange.strip().lower()
+        try:
+            return self._capabilities[key]
+        except KeyError:
+            raise KeyError(f"Unknown exchange: {exchange}") from None
+
     def list(self) -> list[ExchangeAdapter]:
         return [plugin.adapter() for plugin in self.list_plugins()]
 

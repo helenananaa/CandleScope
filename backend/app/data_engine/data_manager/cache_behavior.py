@@ -9,6 +9,7 @@ from threading import RLock
 from typing import Any
 
 from app.core.config import DATA_DIR
+from app.data_engine.storage.sqlite_runtime import connect_coordinated
 
 from .models import SeriesKey
 
@@ -308,7 +309,7 @@ class CacheBehaviorStore:
             self._initialized = True
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self.db_path), timeout=10.0)
+        conn = connect_coordinated(str(self.db_path), timeout=10.0)
         conn.execute("PRAGMA busy_timeout = 5000")
         return conn
 
