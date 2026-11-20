@@ -2,6 +2,7 @@ import { BrowserDesktopLink } from "./BrowserDesktopLink.js";
 import { useEffect } from "react";
 import { t } from "../i18n/index.js";
 import { useReplayEntryCapability } from "../features/replay/useReplayEntryCapability.js";
+import { browserHost } from "./browserHost.js";
 
 /**
  * Each workspace is its own HTML entry, so switching is a page load. Chromium
@@ -37,9 +38,9 @@ export default function WorkspaceNavigation({ active, offline = false, onReplay,
   const prerenderable: string[] = [];
   // The browser host shows pages in a frame beside its running engine, where
   // a prerendered top-level page would only start a second, idle shell.
-  const browserHost = import.meta.env?.VITE_BROWSER_PYTHON === "1";
-  if (!browserHost && researchEnabled && active !== "research") prerenderable.push("/strategy.html");
-  if (!browserHost && !offline && !replayDisabled && !onReplay && active !== "replay") prerenderable.push("/replay.html");
+  const web = browserHost();
+  if (!web && researchEnabled && active !== "research") prerenderable.push("/strategy.html");
+  if (!web && !offline && !replayDisabled && !onReplay && active !== "replay") prerenderable.push("/replay.html");
   usePrerenderOnHover(prerenderable);
   return <nav className="workspace-navigation" aria-label={t("ux.navigation")}>
     {offline ? <span aria-disabled="true">{t("ux.market")}</span> : <a href="/" aria-current={active === "live" ? "page" : undefined}>{t("ux.market")}</a>}
@@ -47,6 +48,6 @@ export default function WorkspaceNavigation({ active, offline = false, onReplay,
     {trainingDisabled ? <button type="button" disabled title={replayReason ?? localReplay.reason ?? undefined}>{t("ux.training")}</button> : onReplay
       ? <button type="button" onClick={onReplay} data-replay-entry="enabled">{t("ux.training")}</button>
       : <a href="/replay.html" aria-current={active === "replay" ? "page" : undefined}>{t("ux.training")}</a>}
-    {import.meta.env?.VITE_BROWSER_PYTHON === "1" && <BrowserDesktopLink />}
+    {browserHost() && <BrowserDesktopLink />}
   </nav>;
 }

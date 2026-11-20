@@ -15,16 +15,37 @@ const worker =
   typeof SharedWorker === 'function'
     ? new SharedWorker(engineScript, { type: 'module', name: 'candlescope-python' })
     : null
-function startupFailure(message) {
-  root.textContent = message + ' '
+// The shell's own messages come from the app's catalogs, in the language the
+// person chose. Only failures load them in the shell; pages load them anyway.
+let messages
+function translator() {
+  messages ??= Promise.all([
+    import('../../src/i18n/index.js'),
+    import('../../src/features/settings/chartAppearanceSettings.js'),
+  ]).then(async ([i18n, settings]) => {
+    await i18n.initializeLocale(settings.readPersistedLocale())
+    return i18n.t
+  })
+  return messages
+}
+const NOTICE_STYLE = 'padding:12px 16px;color:#8b909a;font:13px/1.5 system-ui,sans-serif;white-space:pre-line'
+async function startupFailure(key, values) {
+  // Without its catalogs the app cannot run either; say so in English.
+  const t = await translator().catch(() => (name, values) =>
+    name === 'browser.desktop.download' ? 'Download the desktop app' : values?.reason ?? "CandleScope couldn't start."
+  )
+  root.hidden = false
+  root.style.cssText = NOTICE_STYLE
+  root.dataset.startupFailure = key
+  root.textContent = t(key, values) + ' '
   const link = document.createElement('a')
   link.href = 'https://github.com/helenananaa/CandleScope/releases'
   link.target = '_top'
-  link.textContent = '下载 CandleScope 桌面版'
+  link.textContent = t('browser.desktop.download')
   root.append(link)
 }
 if (!worker) {
-  startupFailure('当前浏览器缺少 SharedWorker 支持。')
+  void startupFailure('browser.host.unsupported')
   throw Error('SharedWorker unavailable')
 }
 worker.port.onmessage = ({ data }) =>
@@ -56,29 +77,32 @@ function request(kind, payload = {}, timeout = 90000) {
 
 // The engine reports when another build's engine still owns the browser
 // storage, and when saving to it fails. The page frame shows either.
+let storageNotice = null
 let storageBanner
 function showStorageNotice(notice) {
+  storageNotice = notice ?? null
   if (notice?.state === 'waiting') {
     // Starting waits for the other tabs to close, however long that takes.
     for (const deadline of deadlines.values()) clearTimeout(deadline)
     deadlines.clear()
   }
   if (window.top === window) return
-  if (!notice) return storageBanner?.remove()
-  if (!storageBanner) {
-    storageBanner = document.createElement('div')
-    storageBanner.setAttribute('role', 'alert')
-    storageBanner.style.cssText =
-      'position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483647;padding:10px 14px;border-radius:6px;' +
-      'background:#3a2a12;color:#f5d9a8;font:13px/1.5 system-ui,sans-serif;box-shadow:0 2px 12px rgba(0,0,0,.4)'
-  }
-  storageBanner.textContent =
-    notice.state === 'waiting'
-      ? '另一个版本的 CandleScope 网页版正在其他标签页中运行。关闭那些标签页后，本页会自动继续。'
-      : '浏览器存储写入失败，最近的改动还没有保存（' +
-        notice.error +
-        '）。引擎会继续重试；请检查磁盘空间或浏览器的网站数据设置。'
-  document.body.append(storageBanner)
+  translator().then((t) => {
+    const current = storageNotice
+    if (!current) return storageBanner?.remove()
+    if (!storageBanner) {
+      storageBanner = document.createElement('div')
+      storageBanner.setAttribute('role', 'alert')
+      storageBanner.style.cssText =
+        'position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483647;padding:10px 14px;border-radius:6px;' +
+        'background:#3a2a12;color:#f5d9a8;font:13px/1.5 system-ui,sans-serif;box-shadow:0 2px 12px rgba(0,0,0,.4)'
+    }
+    storageBanner.textContent =
+      current.state === 'waiting'
+        ? t('browser.host.storageWaiting')
+        : t('browser.host.storageFailed', { reason: current.error })
+    document.body.append(storageBanner)
+  }, console.error)
 }
 
 // The service worker hands each application HTTP request to the document that
@@ -273,10 +297,19 @@ function followShell() {
 async function startPage() {
   // A running engine answers within a frame or two; only a cold start shows text.
   // Before the page's styles load, the shell's last page colour shows through.
-  const notice = setTimeout(() => {
-    root.style.cssText = 'padding:12px 16px;color:#8b909a;font:13px/1.5 system-ui,sans-serif'
-    root.textContent = '正在启动本机浏览器中的 CandleScope Python 引擎…'
+  let started = false
+  const t = translator()
+  const notice = setTimeout(async () => {
+    const text = await t
+    if (started) return
+    root.style.cssText = NOTICE_STYLE
+    root.textContent = text('browser.host.starting')
   }, 400)
+  // A first visit downloads the engine; say why it takes a while.
+  const slow = setTimeout(async () => {
+    const text = await t
+    if (!started) root.textContent = text('browser.host.starting') + '\n' + text('browser.host.firstStart')
+  }, 8000)
   forwardApplicationRequests()
   await navigator.serviceWorker.register(new URL('workspace-service.mjs', base), { scope: base.pathname })
   await navigator.serviceWorker.ready
@@ -296,8 +329,10 @@ async function startPage() {
   })
   channel.port1.close()
   const ready = serviceVersion === 2 ? await request('ready', {}, 150000) : null
-  if (ready?.transport !== 2) throw Error('网页版已更新，请关闭此站点的所有标签页后重新打开。')
+  started = true
   clearTimeout(notice)
+  clearTimeout(slow)
+  if (ready?.transport !== 2) return startupFailure('browser.host.updated')
   root.style.cssText = ''
   if (ready.instance) document.documentElement.dataset.engineInstance = ready.instance
   showStorageNotice(ready.storage)
@@ -328,7 +363,7 @@ if (window.top === window) startShell()
 else {
   if (window.name === FRAME) followShell()
   startPage().catch((error) => {
-    startupFailure('浏览器后端启动失败：' + String(error))
+    void startupFailure('browser.host.startFailed', { reason: String(error) })
     console.error(error)
   })
 }

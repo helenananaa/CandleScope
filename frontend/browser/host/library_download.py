@@ -38,6 +38,19 @@ receipts = Path("/store/download-receipts")
 minute = 60_000
 
 
+class LibraryError(ValueError):
+    """A download failure with a stable code; the page translates the code and
+    shows this English text as the detail (see serverErrors.ts)."""
+
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code = code
+
+
+def failure(code, message):
+    return {"code": code, "message": message}
+
+
 class Selection(BaseModel):
     kind: Literal["bars", "aggTrades"]
     symbol: str = Field(pattern=r"^[A-Z0-9][A-Z0-9_:/.-]{0,63}$")
@@ -69,9 +82,10 @@ def public_markets():
 def validate_source(exchange, market_type, trades):
     venue = public_markets().get(exchange)
     if venue is None or market_type not in venue["markets"]:
-        raise ValueError(f"{exchange} / {market_type} 未提供可用于回放的一分钟行情")
+        raise LibraryError("LIBRARY_SOURCE_UNSUPPORTED", f"{exchange} / {market_type} has no 1-minute history for replay")
     if trades and market_type not in venue["trades"]:
-        raise ValueError(f"{exchange} / {market_type} 可用 K 线回放，尚未接入可校验的逐笔历史")
+        raise LibraryError("LIBRARY_SOURCE_UNSUPPORTED",
+                           f"{exchange} / {market_type} replays candles; verifiable trade history is not available yet")
 
 
 @router.get("/markets")
@@ -93,15 +107,15 @@ async def trade_rows(client, selection, native_id, writer, job, checkpoint):
         method = client.public_get_aggtrades if selection.market_type == "spot" else client.fapipublic_get_aggtrades
         page = await method({"symbol": native_id, "limit": 1000, **params})
         if not isinstance(page, list):
-            raise ValueError("交易所返回了无效的成交记录")
+            raise ValueError("The exchange returned invalid trades")
         for row in page:
             timestamp, sequence = int(row["T"]), int(row["a"])
             if timestamp >= end:
                 return
             if timestamp < start or (cursor is not None and sequence != cursor):
-                raise ValueError("成交序号或时间不连续，请重试")
+                raise ValueError("Trade IDs or times are not continuous; try again")
             if job["rows"] >= MAX_TRADE_ROWS:
-                raise ValueError(f"逐笔超过资料库上限 {MAX_TRADE_ROWS} 条，请缩短区间")
+                raise LibraryError("LIBRARY_RANGE_TOO_LARGE", f"More than {MAX_TRADE_ROWS} trades; choose a shorter range")
             writer.writerow((timestamp, sequence, row["p"], row["q"], str(row["m"]).lower()))
             job["rows"] += 1
             cursor = sequence + 1
@@ -124,21 +138,21 @@ async def okx_trade_rows(client, selection, market, writer, job, checkpoint):
         response = await client.public_get_market_history_trades({"instId": market["id"], "limit": "100", **params})
         page = response["data"]
         if not isinstance(page, list):
-            raise ValueError("OKX 返回了无效的历史成交")
+            raise ValueError("OKX returned invalid historical trades")
         reached_start = False
         for raw in page:
             seq, ts = int(raw["tradeId"]), int(raw["ts"])
             if raw["instId"] != market["id"] or (newest is not None and seq != newest - 1):
-                raise ValueError("OKX 成交品种或序号不连续")
+                raise ValueError("OKX trades changed symbol or skipped IDs")
             newest = seq
             if ts < selection.start_ms:
                 reached_start = True
                 break
             if ts < selection.end_ms:
                 if raw["side"] not in ("buy", "sell"):
-                    raise ValueError("OKX 成交方向无效")
+                    raise ValueError("OKX returned an invalid trade side")
                 if job["rows"] >= MAX_TRADE_ROWS:
-                    raise ValueError(f"逐笔超过资料库上限 {MAX_TRADE_ROWS} 条，请缩短区间")
+                    raise LibraryError("LIBRARY_RANGE_TOO_LARGE", f"More than {MAX_TRADE_ROWS} trades; choose a shorter range")
                 rows.append((ts, seq, raw["px"], format(Decimal(raw["sz"]) * multiplier, "f"), "true" if raw["side"] == "sell" else "false"))
                 job["rows"] += 1
         if reached_start or len(page) < 100:
@@ -207,7 +221,7 @@ def copy_cached(library, item, first, end, kind, writer, job):
         _, rows = library.load_pinned_closed_bars(identity[0], data_epoch=identity[1], interval="1m",
                                                    through_ms=end-1, limit=count)
         if len(rows) != count or any(row["open_time_ms"] != first+i*minute for i,row in enumerate(rows)):
-            raise ValueError("已保存的 K 线覆盖不完整")
+            raise ValueError("The saved candles do not cover the whole range")
         writer.writerows([row["open_time_ms"], *(row.get(field) for field in fields[1:])] for row in rows)
     job["rows"] += count
 
@@ -266,7 +280,7 @@ async def assemble(adapter, selection, cached, job, checkpoint):
                     market = client.markets[symbol]
                     replay_symbol = str(market["id"]).upper() if "/" in selection.symbol else selection.symbol
                     if market.get("contract") and not market.get("linear"):
-                        raise ValueError("此品种为反向合约，当前回放使用线性合约")
+                        raise LibraryError("LIBRARY_SOURCE_UNSUPPORTED", "This symbol is an inverse contract; replay uses linear contracts")
                     instrument = {"base_asset": market["base"], "quote_asset": market["quote"]}
                 job.setdefault("missing_ranges", []).append([first, stop])
                 if bars:
@@ -323,7 +337,7 @@ class ReplayLibrary:
             except ValueError as exc:
                 raise PreparationError("INPUT_UNSUPPORTED", str(exc)) from exc
         if (scope.end_ms-scope.start_ms)//minute > adapter.replay_service.settings.max_bar_dataset_rows:
-            raise PreparationError("INPUT_UNSUPPORTED", "时间范围超过回放容量，请缩短区间")
+            raise PreparationError("INPUT_UNSUPPORTED", "The range is larger than replay can hold; choose a shorter range")
 
     async def prepare(self, request, adapter, job_id, checkpoint):
         scope = request.requirements[0]
@@ -335,7 +349,7 @@ class ReplayLibrary:
                 first, end = bounds(result)
                 if (result["symbol"] != scope.symbol or (trade and not result.get("market_trade_input"))
                         or scope.start_ms < first or scope.end_ms > end):
-                    raise ValueError("所选本地资料未覆盖训练区间")
+                    raise ValueError("The selected library dataset does not cover the training range")
             else:
                 result = await prepare_range(adapter, Selection(kind="aggTrades" if trade else "bars",
                     exchange=scope.exchange, market_type=scope.market_type,
@@ -343,11 +357,12 @@ class ReplayLibrary:
         except PreparationError:
             raise
         except RateLimitDeferred as exc:
-            raise PreparationError("RATE_LIMIT", "行情源请求正在等待配额", retryable=True,
+            raise PreparationError("RATE_LIMIT", "Waiting for the market data source's request quota", retryable=True,
                                    retry_at_ms=int(time.time() * 1000 + exc.retry_after_seconds * 1000)) from exc
         except (NetworkError, TimeoutError, ConnectionError) as exc:
             reason = f"{type(exc).__name__}: {exc}"[:250]
-            raise PreparationError("DOWNLOAD_UNAVAILABLE", f"浏览器无法读取行情源，请检查网络或使用桌面版：{reason}",
+            raise PreparationError("DOWNLOAD_UNAVAILABLE",
+                                   f"The browser could not reach the market data source; check the network or use the desktop app: {reason}",
                                    retryable=True) from exc
         except (LocalDatasetError, ValueError) as exc:
             raise PreparationError("INPUT_UNAVAILABLE", str(exc)) from exc
@@ -364,20 +379,22 @@ async def download(app, key, selection, job):
         job.update(status="complete", dataset=result)
     except Exception as exc:
         logging.getLogger(__name__).warning("Library download failed", exc_info=True)
-        job.update(status="failed", error=f"{type(exc).__name__}: {exc}"[:400])
+        # Data problems explain themselves; anything else keeps its type as a technical detail.
+        detail = str(exc) if isinstance(exc, ValueError) else f"{type(exc).__name__}: {exc}"
+        job.update(status="failed", error=detail[:400], error_code=getattr(exc, "code", "LIBRARY_DOWNLOAD_FAILED"))
 
 
 @router.post("")
 async def submit(selection: Selection, request: Request):
     try:
         validate_source(selection.exchange, selection.market_type, selection.kind == "aggTrades")
-    except ValueError as exc:
-        raise HTTPException(422, str(exc)) from exc
+    except LibraryError as exc:
+        raise HTTPException(422, failure(exc.code, str(exc))) from exc
     start, end = selection.start_ms, selection.end_ms
     if start % minute or end % minute or end <= start or end > int(time.time() * 1000):
-        raise HTTPException(422, "请选择已结束且对齐到分钟的 UTC 时间区间")
+        raise HTTPException(422, failure("LIBRARY_RANGE_INVALID", "Choose a finished UTC range aligned to whole minutes"))
     if (end - start) // minute > (MAX_TRADE_ROWS if selection.kind == "aggTrades" else request.app.state.replay_service.settings.max_bar_dataset_rows):
-        raise HTTPException(422, "超出回放资料库的容量，请缩短区间")
+        raise HTTPException(422, failure("LIBRARY_RANGE_TOO_LARGE", "The range is larger than the replay library can hold"))
     key = cache_key(selection)
     job = jobs.get(key)
     if job and job["status"] == "downloading":
@@ -408,5 +425,5 @@ async def submit(selection: Selection, request: Request):
 @router.get("/{key}")
 async def status(key: str):
     if key not in jobs:
-        raise HTTPException(404, "下载任务已结束，请重新提交同一区间以查询已保存的数据")
+        raise HTTPException(404, failure("LIBRARY_DOWNLOAD_ENDED", "The download has ended; submit the same range to read the saved data"))
     return jobs[key]

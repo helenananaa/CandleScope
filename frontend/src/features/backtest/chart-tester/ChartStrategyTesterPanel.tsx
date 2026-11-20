@@ -105,6 +105,7 @@ const ContinuousStrategyPanel = lazy(() => import("../continuous/ContinuousStrat
 import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
 import type { ContinuousMode } from "../continuous/continuousTypes.js";
 import type { ChartStrategyResultMarkerSource } from "./chartStrategyResultMarkerSource.js";
+import { browserHost } from "../../../app/browserHost.js";
 
 type PanelTab = ChartStrategyPanelTab;
 const PANEL_TABS: readonly PanelTab[] = ["overview", "trades", "script", "settings"];
@@ -282,7 +283,7 @@ export default function ChartStrategyTesterPanel(props: ChartStrategyTesterPanel
       </Suspense>
     </StrategyDockPane>}
     {(mode === "CANDLESCOPE" || visited.has("CANDLESCOPE")) && <StrategyDockPane hidden={mode !== "CANDLESCOPE"}>
-      {availability === "error" && <StrategyDockSlot name="notice"><InlineAlert>{t("indicator.editor.runtimeUnavailableHelp")}</InlineAlert></StrategyDockSlot>}
+      {availability === "error" && <StrategyDockSlot name="notice"><InlineAlert>{t(browserHost() ? "browser.scripts.desktopOnly" : "indicator.editor.runtimeUnavailableHelp")}</InlineAlert></StrategyDockSlot>}
       {availability === "unavailable" && <StrategyDockSlot name="notice"><InlineAlert>{t("native.platformHelp")}</InlineAlert></StrategyDockSlot>}
       <CandleScopeStrategyTesterPanel {...props} active={props.active !== false && mode === "CANDLESCOPE"}
         continuousChartActive={mode === "CANDLESCOPE" && !!props.continuousChartActive} />
@@ -516,7 +517,7 @@ export function CandleScopeStrategyTesterPanel({
   }, [attachRecord, draftStore]);
 
   const run = useCallback(() => {
-    if (import.meta.env?.VITE_BROWSER_PYTHON === "1") {
+    if (browserHost()) {
       window.open(desktopReleaseUrl, "_blank", "noopener,noreferrer");
       return;
     }
@@ -808,7 +809,7 @@ export function CandleScopeStrategyTesterPanel({
           {canResume && (
             <Button size="sm" variant="ghost" onClick={onResumeObserving}>{t("chartTester.resumeObserving")}</Button>
           )}
-          {currentAttachment && (import.meta.env?.VITE_BROWSER_PYTHON === "1"
+          {currentAttachment && (browserHost()
             ? <BrowserDesktopLink feature="strategy" className="ui-btn ui-btn-primary ui-btn-sm" /> :
             <Button
               size="sm"

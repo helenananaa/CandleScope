@@ -1,6 +1,9 @@
-import { BrowserReplayMarket, useReplayVenues } from "./BrowserReplayMarket.js";
+import { BrowserReplayMarket } from "./BrowserReplayMarket.js";
+import { useReplayVenues } from "./useReplayVenues.js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Button, Field, Input, Select } from "../../components/ui/index.js";
+import { t } from "../../i18n/index.js";
+import { describeError } from "../../i18n/serverErrors.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import type { LocalDatasetManifest } from "./researchDataApi.js";
 
@@ -9,7 +12,16 @@ interface Download {
   status: "downloading" | "complete" | "failed";
   rows: number;
   error?: string;
+  error_code?: string;
   dataset?: LocalDatasetManifest;
+}
+
+/** A failure the browser host reported: a code for the message, its English detail as the text. */
+function hostError(code: unknown, message: unknown, status?: number): Error {
+  return Object.assign(new Error(typeof message === "string" && message ? message : t("browser.download.failed")), {
+    ...(typeof code === "string" ? { code } : {}),
+    ...(status === undefined ? {} : { status }),
+  });
 }
 
 function utcInput(minutesAgo: number) {
@@ -20,8 +32,7 @@ export function HistoryDownloadForm({ onImported, initialSymbol = "BTCUSDT" }: {
   initialSymbol?: string;
   onImported(dataset: LocalDatasetManifest): Promise<void> | void;
 }) {
-  const zh = useLocale().startsWith("zh");
-  const label = (chinese: string, english: string) => zh ? chinese : english;
+  useLocale();
   const { venues, error: catalogError } = useReplayVenues(true);
   const [market, setMarket] = useState({exchange:"binance",marketType:"spot",symbol:initialSymbol});
   const [kind, setKind] = useState("bars");
@@ -40,13 +51,13 @@ export function HistoryDownloadForm({ onImported, initialSymbol = "BTCUSDT" }: {
     active.current = controller;
     setBusy(true);
     setError("");
-    setMessage(label("正在准备行情…", "Preparing market data…"));
+    setMessage(t("browser.download.preparing"));
     try {
       const input = {
         kind, exchange:market.exchange, market_type:market.marketType,
         symbol: String(fields.get("symbol")).trim().toUpperCase(),
-        start_ms: Date.parse(fields.get("start") + "Z"),
-        end_ms: Date.parse(fields.get("end") + "Z"),
+        start_ms: Date.parse(String(fields.get("start")) + "Z"),
+        end_ms: Date.parse(String(fields.get("end")) + "Z"),
       };
       const path = "/api/v1/local/downloads";
       // A Worker may briefly be busy flushing another request to IndexedDB.
@@ -63,23 +74,28 @@ export function HistoryDownloadForm({ onImported, initialSymbol = "BTCUSDT" }: {
         body: JSON.stringify(input),
       });
       while (!controller.signal.aborted) {
-        const result = await response.json();
-        if (!response.ok) throw Error(typeof result.detail === "string" ? result.detail : JSON.stringify(result.detail ?? result));
-        const job = result as Download;
+        const result = (await response.json()) as Download & { detail?: unknown };
+        if (!response.ok) {
+          const detail = result.detail;
+          throw typeof detail === "object" && detail !== null
+            ? hostError((detail as { code?: unknown }).code, (detail as { message?: unknown }).message, response.status)
+            : hostError(undefined, typeof detail === "string" ? detail : `HTTP ${response.status}`, response.status);
+        }
+        const job: Download = result;
         if (job.status === "complete" && job.dataset) {
-          setMessage(label("已保存到资料库", "Saved to the library") + " · " + job.dataset.name);
+          setMessage(t("browser.download.saved", { name: job.dataset.name }));
           await onImported(job.dataset);
           return;
         }
-        if (job.status !== "downloading") throw Error(job.error || label("下载失败", "Download failed"));
-        setMessage(label("正在下载", "Downloading") + " · " + job.rows);
+        if (job.status !== "downloading") throw hostError(job.error_code, job.error);
+        setMessage(t("browser.download.progress", { count: job.rows }));
         await new Promise(resolve => setTimeout(resolve, 800));
         if (controller.signal.aborted) return;
         response = await request(path + "/" + job.id);
       }
     } catch (reason) {
       if (!controller.signal.aborted) {
-        setError(reason instanceof Error ? reason.message : String(reason));
+        setError(describeError(reason, t("browser.download.failed")));
         setMessage("");
       }
     } finally {
@@ -95,14 +111,14 @@ export function HistoryDownloadForm({ onImported, initialSymbol = "BTCUSDT" }: {
         if(!venues.find(v=>v.id===next.exchange)?.trades.includes(next.marketType))setKind("bars");
       }} />
       {catalogError && <small>{catalogError}</small>}
-      <Field label={label("行情类型", "Data")}><Select name="kind" value={kind} onChange={e=>setKind(e.target.value)}>
-        <option value="bars">{label("1 分钟 K 线", "1-minute bars")}</option>
-        <option value="aggTrades" disabled={!trades}>{label("逐笔成交", "Trades")}</option>
+      <Field label={t("browser.download.kind")}><Select name="kind" value={kind} onChange={e=>setKind(e.target.value)}>
+        <option value="bars">{t("browser.download.bars")}</option>
+        <option value="aggTrades" disabled={!trades}>{t("replay.source.agg")}</option>
       </Select></Field>
-      <Field label={label("开始（UTC）", "Start (UTC)")}><Input name="start" type="datetime-local" defaultValue={utcInput(30)} required /></Field>
-      <Field label={label("结束（UTC，不含）", "End (UTC, exclusive)")}><Input name="end" type="datetime-local" defaultValue={utcInput(5)} required /></Field>
+      <Field label={t("ux.startUtc")}><Input name="start" type="datetime-local" defaultValue={utcInput(30)} required /></Field>
+      <Field label={t("browser.download.end")}><Input name="end" type="datetime-local" defaultValue={utcInput(5)} required /></Field>
     </fieldset>
-    <Button variant="primary" type="submit" disabled={busy}>{label("下载并导入", "Download and import")}</Button>
+    <Button variant="primary" type="submit" disabled={busy}>{t("browser.download.submit")}</Button>
     {message && <p role="status">{message}</p>}
     {error && <p role="alert">{error}</p>}
   </form>;

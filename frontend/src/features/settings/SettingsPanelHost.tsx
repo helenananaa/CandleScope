@@ -17,6 +17,7 @@ import type { PluginPlatformRuntime } from "../plugins/pluginPlatformTypes.js";
 import type { SettingsCategory, SettingsPanelViewModel } from "./settingsTypes.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
+import { browserHost } from "../../app/browserHost.js";
 
 export interface SettingsPanelHostProps {
   activeCategory: SettingsCategory;
@@ -85,6 +86,7 @@ export default function SettingsPanelHost({
         </div>
       );
     case "plugins":
+      if (browserHost()) return <EmptyState title={t("extensions.desktopOnly")} />;
       return plugins
         ? <PluginSettingsPanel runtime={plugins} {...(onPluginBusyChange ? { onBusyChange: onPluginBusyChange } : {})} />
         : <EmptyState title={t("settings.pluginsUnavailable")} />;

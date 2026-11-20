@@ -7,6 +7,7 @@ import { strategyLanguageLabel } from "../backtest/chart-tester/strategyLanguage
 import { RESEARCH_STRATEGY_TEMPLATES } from "./strategyTemplateDraft.js";
 import { getChartStrategyDraftStore } from "../backtest/chart-tester/chartStrategyTesterDrafts.js";
 import type { StrategyDraftRecord } from "../backtest/chart-tester/StrategyDraftStore.js";
+import { browserHost } from "../../app/browserHost.js";
 
 export function StrategyResearchFirstOpen({
   runtimeMode,
@@ -21,7 +22,7 @@ export function StrategyResearchFirstOpen({
   saving: boolean;
   onSelectTemplate(templateId: string): void;
 }) {
-  const locale = useLocale();
+  useLocale();
   const [draft, setDraft] = useState<StrategyDraftRecord | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -37,8 +38,8 @@ export function StrategyResearchFirstOpen({
     <div className="strategy-research-first-open" data-testid="strategy-research-first-open" data-strategy-draft={draftId ?? ""}>
       <header className="strategy-research-first-open-head">
         <h2>{t("chartTester.startTitle")}</h2>
-        {import.meta.env?.VITE_BROWSER_PYTHON === "1" ? <p>
-          {locale.startsWith("zh") ? "可在此导入行情、分析图表并保存策略草稿。" : "Import data, analyze charts and save strategy drafts here."}{" "}
+        {browserHost() ? <p>
+          {t("browser.strategy.intro")}{" "}
           <BrowserDesktopLink feature="strategy" />
         </p> : <p>{t("strategy.firstOpenLead")}</p>}
       </header>

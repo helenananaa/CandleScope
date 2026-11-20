@@ -175,8 +175,9 @@ def http_task(message, body, emit):
 async def http(message, body, emit):
     req = json.loads(message)
     if needs_desktop(req["path"], req["method"]):
-        detail = "此操作需要桌面运行时，请下载 CandleScope 桌面版。"
-        body = json.dumps({"detail": detail, "error": {"code": "DESKTOP_REQUIRED", "message": detail}}, ensure_ascii=False).encode()
+        # The page translates the code (serverErrors.ts); clients read either field.
+        error = {"code": "DESKTOP_REQUIRED", "message": "This needs the CandleScope desktop app"}
+        body = json.dumps({"detail": error, "error": error}).encode()
         return json.dumps({"status": 501, "headers": [["content-type", "application/json"]],
                            "body": base64.b64encode(body).decode()})
     incoming = scope("http", req["path"], req["query"], req["origin"], req["headers"])

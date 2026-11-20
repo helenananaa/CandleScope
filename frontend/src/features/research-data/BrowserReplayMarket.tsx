@@ -1,33 +1,8 @@
 import { useEffect, useId, useState } from "react";
+import type { Market, ReplayVenue } from "./useReplayVenues.js";
 import { Field, Input, Select } from "../../components/ui/index.js";
+import { t, translateMarketType } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
-
-export interface ReplayVenue {
-  id: string;
-  name: string;
-  markets: string[];
-  trades: string[];
-}
-type Market = { exchange: string; marketType: string; symbol: string };
-export function useReplayVenues(enabled: boolean) {
-  const [venues, setVenues] = useState<ReplayVenue[]>([]);
-  const [error, setError] = useState("");
-  useEffect(() => {
-    if (!enabled) return;
-    const abort = new AbortController();
-    fetch("/api/v1/local/downloads/markets", { signal: abort.signal })
-      .then(async (response) => {
-        if (!response.ok) throw Error(String(response.status));
-        setVenues(await response.json());
-        setError("");
-      })
-      .catch((error) => {
-        if (!abort.signal.aborted) setError(String(error));
-      });
-    return () => abort.abort();
-  }, [enabled]);
-  return { venues, error };
-}
 
 export function BrowserReplayMarket({
   venues,
@@ -42,7 +17,7 @@ export function BrowserReplayMarket({
   busy: boolean;
   local?: Market[];
 }) {
-  const zh = useLocale().startsWith("zh");
+  useLocale();
   const list = useId();
   const [focused, setFocused] = useState(false);
   const [symbols, setSymbols] = useState<Array<{ symbol: string; quoteAsset: string }>>([]);
@@ -58,9 +33,9 @@ export function BrowserReplayMarket({
     const timer = setTimeout(async () => {
       try {
         const query = new URLSearchParams({ exchange, market_type: marketType, search: symbol });
-        const res = await fetch("/api/v1/symbols/exchange-info?" + query, { signal: abort.signal });
+        const res = await fetch("/api/v1/symbols/exchange-info?" + query.toString(), { signal: abort.signal });
         if (!res.ok) throw Error(String(res.status));
-        const data = await res.json();
+        const data = (await res.json()) as { symbols: Array<{ symbol: string; quoteAsset: string }> };
         if (!abort.signal.aborted) setSymbols(data.symbols.slice(0, 80));
       } catch {
         if (!abort.signal.aborted) setUnavailable(true);
@@ -71,14 +46,9 @@ export function BrowserReplayMarket({
       abort.abort();
     };
   }, [exchange, marketType, symbol, focused, imported]);
-  function marketLabel(type: string) {
-    if (type === "spot") return zh ? "现货" : "Spot";
-    if (type === "local_bar") return zh ? "本地资料" : "Library";
-    return type === "swap" ? (zh ? "永续" : "Perpetual") : zh ? "线性永续" : "Linear perpetual";
-  }
   return (
     <>
-      <Field label={zh ? "交易所" : "Exchange"}>
+      <Field label={t("search.exchange")}>
         <Select
           disabled={busy}
           value={exchange}
@@ -110,7 +80,7 @@ export function BrowserReplayMarket({
           ))}
         </Select>
       </Field>
-      <Field label={zh ? "市场类型" : "Market type"}>
+      <Field label={t("replay.picker.marketType")}>
         <Select
           disabled={busy || imported}
           value={marketType}
@@ -121,12 +91,12 @@ export function BrowserReplayMarket({
             : [marketType, ...(venue?.markets ?? [])]
           ).map((m) => (
             <option key={m} value={m}>
-              {marketLabel(m)}
+              {translateMarketType(m)}
             </option>
           ))}
         </Select>
       </Field>
-      <Field label={zh ? "商品" : "Symbol"}>
+      <Field label={t("watchlist.symbol")}>
         <Input
           name="symbol"
           required
@@ -151,11 +121,7 @@ export function BrowserReplayMarket({
         ))}
       </datalist>
       {unavailable && (
-        <small>
-          {zh
-            ? "暂时无法读取品种目录，可输入交易所的完整品种代码。"
-            : "Symbol lookup unavailable. Enter the full market symbol."}
-        </small>
+        <small>{t("browser.download.symbolLookupUnavailable")}</small>
       )}
     </>
   );

@@ -38,6 +38,7 @@ import type {
   TrainingRunListResponse,
   TrainingRunMutationResponse,
 } from "./replayV2Types.js";
+import { browserHost } from "../../app/browserHost.js";
 
 export type TrainingHubPhase = "IDLE" | "LOADING" | "READY" | "ERROR" | "STOPPED";
 export type TrainingHubOperation =
@@ -308,7 +309,7 @@ export class TrainingHubLifecycle {
       if (!this.accept(token)) return;
       this.catalog = catalog;
       this.draft = preservedDraft ?? createTrainingRunDraft(catalog, this.launchContext);
-      if (!preservedDraft && import.meta.env?.VITE_BROWSER_PYTHON === "1" && this.canPrepare(this.draft)) {
+      if (!preservedDraft && browserHost() && this.canPrepare(this.draft)) {
         const source = this.launchContext;
         this.draft = { ...this.draft, exchange: source?.exchange ?? "binance", marketType: source?.market_type ?? "spot",
           symbol: source?.symbol ?? "BTCUSDT", indicatorWarmupBars: 5,

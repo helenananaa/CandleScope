@@ -1,4 +1,5 @@
-import { BrowserReplayMarket, useReplayVenues } from "../../research-data/BrowserReplayMarket.js";
+import { BrowserReplayMarket } from "../../research-data/BrowserReplayMarket.js";
+import { useReplayVenues } from "../../research-data/useReplayVenues.js";
 import { useState, type ReactNode } from "react";
 import {
   Badge, Button, Checkbox, ConfirmDialog, Dialog, Disclosure, EmptyState, Field, InlineAlert, Input, SegmentedControl, Select,
@@ -24,6 +25,7 @@ import { applyTrainingPreset } from "../trainingPresets.js";
 import PreparationJobsPanel from "../../data-preparation/PreparationJobsPanel.js";
 import PreparationWaiting from "../../data-preparation/PreparationWaiting.js";
 import { preparationRequest } from "../../data-preparation/api.js";
+import { browserHost } from "../../../app/browserHost.js";
 
 export interface TrainingHubDialogProps {
   readonly runtime: TrainingHubRuntime;
@@ -121,8 +123,8 @@ function CreateChoice<T extends string>({ label, value, options, onChange, hint,
 type StartChoice = "RANGE" | "MARKET" | "MANUAL";
 
 function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: TrainingHubDialogProps) {
-  const locale = useLocale();
-  const browser = import.meta.env?.VITE_BROWSER_PYTHON === "1";
+  useLocale();
+  const browser = browserHost();
   const { venues, error: venueError } = useReplayVenues(browser && runtime.createOpen);
   const { draft, evaluation } = runtime;
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -193,7 +195,7 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
         : ["deposit", "withdraw"],
   });
   const preparationHint = browser
-    ? (locale.startsWith("zh") ? "优先使用已保存的行情，仅补齐缺口。" : "Saved history is reused. Only missing intervals are fetched.")
+    ? t("browser.replay.reuseHistory")
     : t("preparation.background");
   const intro = t(runtime.automaticPreparationAvailable ? "preparation.replayIntro" : "replay.hub.createIntro");
   return (
@@ -225,7 +227,7 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
           onClick={() => void runtime.actions.createRun(draft)}
         >
           {busy || validatingCatalog ? busyLabel : browser && runtime.automaticPreparationAvailable
-            ? (locale.startsWith("zh") ? "开始回放" : "Start replay") : t("replay.hub.submit")}
+            ? t("browser.replay.start") : t("replay.hub.submit")}
         </Button>
       </>}
     >
@@ -268,7 +270,7 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
                     ...(quote ? { settlementAsset:quote } : {}),
                     ...(market.marketType !== "local_bar" && !venues.find(v => v.id === market.exchange)?.trades.includes(market.marketType)
                       ? { sourceKind:"BAR" } : {}) })} />
-                <Field label={locale.startsWith("zh") ? "结算资产" : "Settlement asset"}><Input disabled={busy} value={draft.settlementAsset}
+                <Field label={t("replay.picker.settlement")}><Input disabled={busy} value={draft.settlementAsset}
                   onChange={event => patchDraft(runtime, {settlementAsset:event.target.value.trim().toUpperCase()})} /></Field>
                 {venueError && <small>{venueError}</small>}
               </> : <>
@@ -293,7 +295,7 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
               onChange={(sourceKind) => patchDraft(runtime, { sourceKind })}
               hint={draft.sourceKind === "BAR" ? t("replay.hub.barHint") : aggHint}
               note={draft.sourceKind === "BAR" && aggDisabled && !busy ? (!supportsTrades
-                ? (locale.startsWith("zh") ? "此市场目前支持 K 线回放。" : "Bar replay is available for this market.") : aggHint) : null}
+                ? t("browser.replay.barsOnly") : aggHint) : null}
             />
             <CreateChoice<StartChoice>
               label={t("replay.hub.startMode")}
@@ -815,7 +817,7 @@ export default function TrainingHubDialog({
             title={t("replay.hub.emptyTitle")}
             description={t("replay.hub.emptyHint")}
             action={<>
-              {import.meta.env?.VITE_BROWSER_PYTHON === "1" && <a href="/strategy.html?action=import">{t("research.source.openLibrary")}</a>}
+              {browserHost() && <a href="/strategy.html?action=import">{t("research.source.openLibrary")}</a>}
               <Button variant="primary" onClick={() => void runtime.actions.openCreate()} disabled={busy}>{t("replay.hub.emptyCreate")}</Button>
             </>}
           />

@@ -9,6 +9,7 @@ import { formatResearchRows } from "./researchDataFormat.js";
 import { ResearchMarketTradeImportForm } from "./ResearchMarketTradeImportForm.js";
 import { ResearchDataImportForm } from "./ResearchDataImportForm.js";
 import type { ResearchImportSubmitInput } from "./useResearchDataLibrary.js";
+import { browserHost } from "../../app/browserHost.js";
 
 export function ResearchDatasetRail({
   datasets,
@@ -35,8 +36,8 @@ export function ResearchDatasetRail({
   management: ReactNode;
   analysis: ReactNode;
 }) {
-  const locale = useLocale();
-  const downloads = import.meta.env?.VITE_BROWSER_PYTHON === "1" && onMarketTradesImported;
+  useLocale();
+  const downloads = browserHost() && onMarketTradesImported;
   const [view, setView] = useState<"library" | "import" | "download">(datasets.length === 0 ? "import" : "library");
   const tabsId = useId();
   const selected = datasets.find((dataset) => dataset.dataset_id === selectedId) ?? null;
@@ -50,7 +51,7 @@ export function ResearchDatasetRail({
         tabs={[
           { value: "library", label: t("local.datasets"), badge: datasets.length },
           { value: "import", label: t("local.import") },
-          ...(downloads ? [{value:"download" as const, label:locale.startsWith("zh") ? "自动下载" : "Download"}] : []),
+          ...(downloads ? [{value:"download" as const, label:t("browser.download.tab")}] : []),
         ]}
       />
       {/* Both panels stay mounted, so a half-filled import form survives a look at the library. */}

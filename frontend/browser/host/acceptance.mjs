@@ -27,7 +27,7 @@ async function visit(offline, test) {
   try {
     const page = await openApp(await context.newPage(), url)
     await page.waitForFunction(
-      () => document.querySelector('canvas') || document.body.innerText.includes('启动失败'),
+      () => document.querySelector('canvas') || document.querySelector('#root[data-startup-failure]'),
       null,
       { timeout: 150000 }
     )
