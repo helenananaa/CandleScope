@@ -1,0 +1,136 @@
+# 只派生冷加载的 CPU：去向与两处削减（#447）
+
+背景：`COLD_FAMILY_FILL_zh.md` §9 估计，即使没有冲突，"只派生"（所有源数据已在库中，四张图只做派生）
+每次加载仍要约 11 秒进程 CPU（负载 4–5），这是每图 3 秒目标的下限。本文是对这部分的测量与削减。
+工具与原始数据在工作树的 `output/derive-cpu-20261120/`（`README.md` 有完整表格）。
+
+## 1. 测量方法的两点修正
+
+- 种子库 `stored-sources-20261119.sqlite` 最新的 1m 行是 2026-11-19 05:58 UTC。到 11-20，每次"只派生"加载
+  还要用 REST 补约 1,700 分钟，短周期图其实是半冷的。`tools/top_up_seed.py` 用基准自己的 `_bar_values`
+  经 `upsert_klines(source="backfill")` 补到最近一个已收盘分钟，每次加载前执行。
+- 以前的"进程 CPU"包含适配器启动（负载 6 时约 2 秒，负载 25 时约 4 秒），那是应用启动成本，不属于加载。
+  进程级 cProfile 用墙钟计时，会把锁和 GIL 等待算进函数时间；分阶段数据改用 `tools/phasetimer.py`：
+  被包装的函数按线程 CPU 计时，嵌套阶段暂停外层，各阶段相加等于被测 CPU。
+
+## 2. CPU 去向（修改前）
+
+"只派生"加载是双峰的：
+
+- 快：没有回填 chunk，四图 4.2–5.0 秒就绪，进程 CPU 4.6–5.6 秒；
+- 慢：某张短周期图被派了 14–16 个修复 chunk，7.9–9.7 秒就绪，10–13 秒 CPU。6 次追踪中 4 次是慢的。
+
+| 阶段（线程 CPU，秒） | 快 | 慢 |
+|---|---:|---:|
+| SQL 读取，整行转 dict（H127 页；修复 chunk 的 `query_time_range`） | 0.5–0.7 | 2.5–4.2 |
+| SQL 读取，组件 tuple（短周期图的 1m 页） | 0.5–0.7 | 1.7–2.2 |
+| 行 → `BarData` | 1.1–1.3 | 1.5 |
+| 内存守卫（`retained_size` 遍历） | 0.9–1.0 | 0.9–1.0 |
+| fence 捕获与检查 | 0.02–0.03 | 0.6–0.9 |
+| 短周期聚合与流式读取 | 0.35–0.43 | 0.3–0.4 |
+| K130 summarize / combine | 0.4 | 0.4 |
+| 合成其余部分、覆盖规划 | 0.45–0.5 | 0.5 |
+| 写入、修订记账 | 0.15 | 0.3–0.4 |
+
+按付费方：10007m 一次合成 3.0–3.5 秒（46,830 行源数据，1,171 个 H127 页）；短周期图每次成功读取 0.5–0.8 秒
+（约 2 万行 1m）；被作废的短周期读取每次 0.3–0.8 秒，每次加载 2–3 次；慢模式下修复 chunk 另加 5–8 秒。
+
+单独一次合成（3.4 秒）中，内存守卫占 33%：H127 页守卫的廉价上界把每行 23 个共享列名各算一遍
+（约 3.4 KB/行），超过每格 2 KiB 的额度，1,171 页里 940 页退回精确遍历，而精确值始终在额度内
+（约 1,720 B/行，最多 0.83 倍）。真正的浪费是解码 23 列，其中 11 列由 WHERE 条件固定。
+
+## 3. 改动一：会话 H127 页读组件 tuple（`bfbda48ab`）
+
+`HistoryBlockReader.read_in_view`（每个合成查询走的会话路径）改读
+`(*K 线组件, close_time)`：与 `query_klines` 同样的行、顺序和 limit，不读身份列。网格、重复和
+`close_time` 检查在同样的值上进行；解码走 `BarData.from_storage_component_page`（与 `from_storage_row`
+共用校验函数）；`flat_rows_within` 对 tuple 行用"所有值大小之和"做上界，判定与 `retained_size` 完全一致。
+没有该投影的存储和非会话的 `read` 仍读整行。开关：`history_blocks.COMPONENT_PAGES`。fence 与证明不变。
+
+测试 `tests/test_canonical_component_pages.py`：守卫与精确计数逐例一致；投影与 `query_klines` 逐行一致；
+合成查询在 tuple 页与整行页下发布完全相同的 K 线、终态、完整性、回退原因和落库行，包括被改坏的行
+（`close_time` 错位或为 NULL、REAL 列中的文本、负成交量、小数成交笔数、无穷大成交额、未知来源）。
+
+配对结果（同一棵树开关交替，`closed_once`，`net_zero`）：
+
+| 中位数 | 开 | 关 |
+|---|---:|---:|
+| 单独一次合成（6 对，负载 6–9，线程 CPU） | 1.31 秒 | 2.14 秒 |
+| 四图全部就绪（8 轮，负载 4.4–7.7） | 3.39 秒 | 5.09 秒 |
+| 四图进程 CPU | 4.12 秒 | 6.19 秒 |
+| 其中快模式加载的 CPU | 3.69 秒（6 次） | 4.69 秒（4 次） |
+
+## 4. 改动二：缓存读取冲突不是缺口（`94c8b4edb`）
+
+慢模式的起因（`run_pending.py`、`run_trace.py`）：
+
+1. 三张短周期图同时通过共享的 1m `BarCache` 流式读取重叠的 1m 页（每页 4,096 行）。每次采用页面都会推进
+   1m 序列的版本，竞争读取的 `bulk_load_if_unchanged` 因此失败；两次之后 `_run_cache_read` 回答 pending、
+   可重试、`cache_read_conflict: True`。它的注释写明契约是"让调用方重试，不为并发变化安排下载"，
+   `test_repeated_conflict_is_bounded_retryable_and_does_not_download` 在 QueryEngine 层守住了它。
+2. 自定义周期的流式读取在这个空页处停下。冲突页是第一页时，回答带着标记；是后面的页时，
+   `_merge_base_page_results` 只保留最新一页的 metadata，标记丢失。
+3. `/klines/history` 和 `/klines/range` 对回答做校验，凡是缺的 K 线都安排修复，除非 `_snapshot_is_stable`
+   判定不稳定，而它的列表里没有 `cache_read_conflict`。于是 221 根只拿到 0 或 43 根的 89m 回答被当成真实缺口：
+   整个窗口的 `initial_history`（或 `visible_range_gap`）修复，14–16 个回填 chunk，每个都把 1m 源数据按整行
+   重读、做 fence、写 16 根；每次 chunk 写入又作废这张图下一次读取路径的回答。
+
+改动：`_snapshot_is_stable` 把 `cache_read_conflict` 当作不稳定（与 `storage_revision_conflict` 相同）；
+多页合并时任一页有标记就保留。没有改 fence 或证明，只是不再为查询层已标为"重试"的回答安排下载；
+真实缺口仍以 `missing_ranges` 返回，照常修复。测试 `tests/test_cache_conflict_repairs.py`。
+
+配对结果（两侧都开着改动一；"关"在基准工具里恢复旧的 `_snapshot_is_stable` 和合并）：
+
+| 中位数 | 只派生，负载 6.5–7.9，8 轮，开 | 关 | 合并另一组（负载 6–12）共 16 轮，开 | 关 |
+|---|---:|---:|---:|---:|
+| 四图全部就绪 | 4.17 秒 | 5.24 秒 | 4.92 秒 | 5.27 秒 |
+| 进程 CPU | 5.45 秒 | 6.84 秒 | 6.20 秒 | 6.92 秒 |
+| 出现修复 chunk 的加载 | 0/8 | 3/8 | 0/16 | 6/16 |
+| 最差一次：就绪 / CPU | 5.4 / 6.9 秒 | 14.2 / 21.1 秒 | 9.2 / 9.1 秒 | 14.2 / 21.1 秒 |
+
+负载 6–12 的那一组单看中位数持平（5.71 对 5.83 秒、7.26 对 7.00 秒），慢模式同样是 0/8 对 3/8：改动之后冲突
+变成读取重试（每次加载 2–4 次被冲突的短周期回答，每次约 0.4 秒），所以收益主要在尾部。要去掉这些重试，
+需要冲突本身消失（重叠 1m 页的竞争采用，以及下节的 family 级作废）。
+
+冷加载（10 轮，负载 13–78，只能说明"不变差"）：全部就绪 52.1 对 52.5 秒，CPU 46.1 对 46.5 秒；两侧每张图的
+修复触发次数相同（短周期图 `visible_range_gap` 15–90 次，10007m 91–205 次），压制并没有让冷加载的修复缺位。
+
+两处改动合计（两侧同时开关，8 轮，负载 7.6–12.8，且后台同时在跑全量测试，绝对值两侧都偏高）：四图全部就绪
+7.31 对 10.35 秒，进程 CPU 8.41 对 11.32 秒，出现修复 chunk 的加载 0/8 对 2/8，最差一次 10.1 对 20.5 秒。
+
+全量后端测试（忽略两个无法收集的文件）：296 失败、10,521 通过、6 错误；失败的 302 项在 `1664497dc` 上逐项重跑，
+除 3 项外都同样失败。那 3 项（`test_bulk_revision_bookkeeping::test_dependent_lookup_stays_local_for_long_batches`、
+`test_external_provider_http_runtime::test_revoked_connection_cannot_publish_a_run_that_already_validated`、
+`test_numeric_indicator_queries::test_public_numeric_query_uses_existing_isolated_history_process`）只在全量运行中失败，
+在本分支上单独运行 3 次都通过。
+
+## 5. 未做：单一底层周期读取的范围证明
+
+每张图保存自己的 K 线时（101m 195 行、97m 203 行、89m 221 行、10007m 128 行），以及每个新收盘的实时分钟，
+都会经 `revision_checked_query` 的 family 级检查作废其他短周期图进行中的回答（`storage_revision_conflict`），
+每次加载 2–3 次，每次 0.3–0.8 秒。这类回答的保存（`_persist_rebuilt_target` → `upsert_bars` →
+`Acquisition.check`）同样是 family 级的，冷加载中是最大的冲突来源（每次加载 31–51 次，第八轮）。
+
+做法与第 0 步的合成页证明相同（`capture_read_computation` + `ClosedMixedRead`）：
+
+1. 读取基础页之前，在查询的 floor 上为回答可能包含的已收盘目标 bucket 捕获一个 `MixedComputation`
+   （目标键、依赖为基础序列、`[首个, 最后一个已收盘]`、目标宽度，最多 512 个）；正在形成的 bucket 不在其中。
+2. 在 `computation_scope((computation,))` 内保存，写入像回填归约一样按范围检查：floor 之后依赖或目标没有相交的
+   变化，删除没有越过权限下限。
+3. 把证明挂到已收盘 K 线的 `_closed_target_read`，采用时先试它，失败再走 family 级检查；正在形成的 K 线
+   仍走 family 级检查（它依赖实时分钟）。
+4. 内层 1m 页读取本身也是带修订检查的查询，而且先失败（今天返回空页的就是它们）。在声明了该页范围的外层读取
+   计算之内，内层检查应接受范围被证明未变（自外层 floor 起对页范围做 `check_store_range`）的页，
+   而不是要求整个 family 不动。
+
+先写的测试（照 `tests/test_mixed_read_proof.py`）：回答范围以外的兄弟序列写入和实时分钟不再作废它；已收盘 bucket
+的基础分钟内、目标范围内的写入，或越过 floor 的删除仍然作废；正在形成的 K 线仍按 family 检查；逐项去掉检查
+都有测试失败。"捕获后相同的写入仍使视图失效"属于原生窗口 fence，不受影响；归档导入不受影响。
+
+## 6. 两处改动之后还剩什么（快模式）
+
+- 一次 10007m 合成单独约 1.2–1.3 秒线程 CPU：行 → `BarData` 约 0.24、K130 summarize 约 0.24、覆盖规划
+  约 0.19、其余守卫约 0.16、SQL 约 0.14。
+- 每张短周期图一次成功读取 0.5–0.8 秒。`BarData` 构造约 10 µs/行（冻结 dataclass 的 `__init__` 和每行的来源
+  规范化与质量查找）；按页构造并缓存来源质量约可省三分之一，但涉及核心类型，需要单独的等价测试。
+- 上节的作废回答。

@@ -403,12 +403,14 @@ def test_large_fine_only_target_uses_bounded_h127_pages_instead_of_large_base_wi
     engine = mixed_query
     stop = 10007 * MINUTE
     add_fine(engine, stop)
-    original = engine._read_canonical_history_rows
     limits = []
-    def bounded(storage, source, start_ms, end_ms, limit):
-        limits.append(limit)
-        return original(storage, source, start_ms, end_ms, limit)
-    monkeypatch.setattr(engine, "_read_canonical_history_rows", bounded)
+    # Session pages read the component projection, other pages full rows.
+    for name in ("_read_canonical_history_rows", "_read_canonical_history_components"):
+        original = getattr(engine, name)
+        def bounded(storage, source, start_ms, end_ms, limit, original=original):
+            limits.append(limit)
+            return original(storage, source, start_ms, end_ms, limit)
+        monkeypatch.setattr(engine, name, bounded)
     result = engine.query("BTCUSDT", "10007m", start_ms=0, end_ms=stop - 1, limit=1,
         market_type="futures", min_revision=engine.storage.revision_store.head())
     assert result.complete and not result.retryable

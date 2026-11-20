@@ -608,6 +608,24 @@ class QueryEngine:
         except Exception as exc:
             raise BlockUnavailable("canonical history page read failed") from exc
 
+    def _read_canonical_history_components(self, storage, source, start_ms, end_ms, limit):
+        """The rows of ``_read_canonical_history_rows`` as ``(*components, close_time)``.
+
+        Returns None when the storage has no such projection; callers then
+        read full rows. Identity columns are fixed by the series predicate.
+        """
+        read = getattr(storage, "query_canonical_components", None)
+        if read is None:
+            return None
+        from app.data_engine.aggregation.blocks import BlockUnavailable
+        try:
+            return self._measure_storage_read(_QueryIOMetrics(), lambda: read(
+                source.symbol, source.interval, start_ms, end_ms - 1, limit,
+                exchange=source.exchange, market_type=source.market_type,
+                series_identity=source.identity), projected=True)
+        except Exception as exc:
+            raise BlockUnavailable("canonical history page read failed") from exc
+
     def _count_canonical_history_rows(self, storage, source, start_ms, end_ms):
         # One scalar SQL result; this chooses an executor, never proves finality.
         return self._measure_storage_read(_QueryIOMetrics(), lambda: [storage.count_bars(

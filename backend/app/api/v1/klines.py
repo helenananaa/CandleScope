@@ -1030,11 +1030,17 @@ def _resolve_history_calendar(
 
 
 def _snapshot_is_stable(result: Any) -> bool:
-    """Both durable read admission and publication must certify a snapshot."""
+    """Both durable read admission and publication must certify a snapshot.
+
+    A read that lost its cache adoption to concurrent writes twice
+    (``cache_read_conflict``) is a retry, not evidence of missing history:
+    verification must not schedule a download for it.
+    """
     metadata = getattr(result, 'metadata', None) or {}
     if any(metadata.get(reason) is True for reason in (
         'revision_unavailable', 'revision_unsupported', 'min_revision_pending',
         'storage_revision_conflict', 'memory_budget_deferred', 'latest_stream_pending',
+        'cache_read_conflict',
     )):
         return False
     version = metadata.get("stream_version")
