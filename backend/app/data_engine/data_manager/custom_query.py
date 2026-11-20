@@ -1295,6 +1295,10 @@ class CustomIntervalQueryService:
             missing_ranges=missing_ranges,
             metadata={
                 **newest.metadata,
+                # A page that lost its cache adoption makes the whole read a
+                # retry; keep the marker when it is not the newest page.
+                **({"cache_read_conflict": True}
+                   if any(result.metadata.get("cache_read_conflict") for result in results) else {}),
                 "all_rows_final": all_rows_final,
                 "expected_closed_rows": sum(
                     int(result.metadata.get("expected_closed_rows") or 0)
