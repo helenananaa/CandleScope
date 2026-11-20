@@ -1,7 +1,9 @@
 # 按路由规划 mixed 回填（Route-aware mixed planning）设计
 
 状态：已实现并默认打开（`mixed_routes.ROUTE_AWARE = True`，设为 False 即回到原来的规划）；验收见 §8 第 5 步。
-B 类冲突后来由 `data_manager/finer_work_hold.py` 处理（§10，默认打开，`finer_work_hold.ENABLED = False` 关闭）
+B 类冲突后来由 `data_manager/finer_work_hold.py` 处理（§10，默认打开，`finer_work_hold.ENABLED = False` 关闭）。
+更细的数据只细化它触及的格子（§11，`history/source_precedence.trim_rejected`，规划和读取共用）。
+派发的 chunk 不再继承派发者的 ContextVar（§12）
 范围：Binance USD-M 上 required 的 mixed composition chunk（典型是 10007m），冷启动历史回填
 相关：`backfill/mixed_plan.py`（规划）、`backfill/source_router.py`（路由）、`backfill/fetcher.py`（获取与写入窗口）、
 `backfill/reconciler.py`（派生）、`storage/native_history_fence.py`（原生写入校验）、
@@ -268,7 +270,8 @@ required composition 没有单一底层的回退（只有 optional 的计划会�
 - 超时后扣住的目标照常运行；
 - 后台工作、更宽的图和其它 mixed 图都不扣住 10007m；
 - 等待：较旧的 chunk 立即运行，最新的 chunk 等 `SETTLE_SECONDS`，晚 20 毫秒提交的短周期图仍让它拆分；
-- 规划：10-31 目标在部分已存的 1m 上能规划（没有 §10.3 的修正时失败）。
+- 规划：10-31 目标在部分已存的 1m 上能规划（没有 §10.3 的修正时失败）。§11 之后这个状态不再超过基线，
+  改用分散的 1m 行，见 §11.4。
 
 `test_family_fill.py` 里检查 family gate 一释放就派发的测试关掉了等待（它测的是 gate 本身）。
 全量后端测试（约 10,700 个，跳过同样两个文件）：与路由规划默认打开时的上一次全量相比，只少了已修正的
@@ -302,12 +305,117 @@ required composition 没有单一底层的回退（只有 optional 的计划会�
   只有关闭一边的代码变化是上面的 `_deletes_dependents` 修正；新旧两种查找交替各 2 次（`pairs/r19-lookup`）没有一致的差别。
 - 24 次开启加载里有一次（`r19-hold-real/cand-1`），释放后的 11-07 目标连续 7 次因 "canonical dependency range changed
   during acquisition" 失败（每次 20–1,600 毫秒），约 3 秒后成功。其余 68 次加载（`r15`–`r17` 的路由规划配对，`r18`、`r19` 的关闭一边，
-  `r19-lookup`）里 10007m 没有出现过这种失败。bench 记下的写入里，失败前没有落进这个目标范围的；原因未查明。
-  `tools/range_trace_run.py` 会记下每次范围拒绝的调用者、范围和回执，带它跑的 8 次加载都没有复现。
+  `r19-lookup`）里 10007m 没有出现过这种失败。bench 记下的写入里，失败前没有落进这个目标范围的。
+  后来在更空闲的机器上更常见（16 次里 3 次），原因是调度器：派发的 chunk 继承了派发者的 acquisition scope，见 §12。
 
 ### 10.6 剩下的
 
 - 释放后的 10-31 目标整个由 1m 合成，在全部 16 次开启加载里都是 10007m 最后完成的运行（8–24 秒，比较旧的 chunk 晚
-  1.5–3.3 秒结束），是现在的关键路径。只在细数据已存或目标边缘用 1m、其余继续用 1h/1d，可以缩短它；这是规划器的改动。
+  1.5–3.3 秒结束），是现在的关键路径。只在细数据已存或目标边缘用 1m、其余继续用 1h/1d，可以缩短它。（已做，见 §11。）
 - 较旧的 chunk 本身在 28–40 秒才结束，主要是派生的 CPU（见 [COLD_FAMILY_FILL_zh.md](COLD_FAMILY_FILL_zh.md)）。
 - 短周期图相邻 chunk 的重新规划（§9.2）不变。
+
+## 11. 只细化更细的数据触及的格子（`history/source_precedence.trim_rejected`）
+
+### 11.1 原因
+
+§10 释放后的 10-31 13:49 目标，冷启动时只需取 75 行（边缘的 1m、1h、1d）；短周期图存下 11-06 16:57 以后的 1m 之后，
+它要取 11-01 00:00 到 11-06 16:56 的全部 1m（8,217 行，路由规划下是 6 个整天的 1m 对象，8,640 行）。
+
+`plan_fixed_range` 把同一精度相邻的格子合成一个 span。一个 span 只要有更细的行触及，就把整个 span 用更细的精度重新规划，
+而重新规划的结果又合成一个 span。所以 11-06 下午的一个 1m 行让 1d span [11-01, 11-07) 依次细化成 4h、1h、15m、5m，
+最后整段 1m。已存的 1m 从整点开始时（例如 11-07 06:00）只多出几百行，因为触及的只是最后一个 span；从整点之后开始时，
+16:57 落在 1h、15m、5m 格子的中间，每一层都整段细化。
+
+读取路径（`data_manager/mixed_history.py`）用同样的整段规则选择 cover，所以只改规划器不行：规划只存了 1d 和 11-06 的
+细格子，读取仍会把 [11-01, 11-07) 细化到 1m，找不到那些 1m，目标就无法合成。这是合成的规则本身，五处必须一致：
+`_MixedBackfillBuilder.refine`、`count_refined_rows`、`family_plan._refined_spans`（路由规划和 FamilyFill 用它）、
+写入后的 `checked_mixed_windows`、读取路径。
+
+### 11.2 规则
+
+一个 span 因更细的行或删除足迹被拒绝时，只把它从第一个到最后一个被触及的格子用更细的精度重新规划；之前和之后的格子
+留在原精度。任何被更细的行触及的粗格子仍然不会被采用，所以 H127 的 precedence 保证不变（见
+[MIXED_HISTORY_H127.md](MIXED_HISTORY_H127.md)）。因为本精度的行不可用或缺失而被拒绝的 span 仍整段细化，与原来相同。
+
+"被触及"对子范围是单调的（更细的行落在 `[start - width + 1, end)`，或删除足迹早于 `end`），所以第一个和最后一个
+被触及的格子在前缀和后缀上二分查找，检查与拒绝整个 span 的那次相同。`trim_rejected` 是一个生成器：给出要检查的子 span，
+调用方送回是否拒绝，同步（`drive`）和异步（`drive_async`）调用方共用同一段算法。每个格子都被触及时只检查两次
+（首尾两个格子）；规划器和读取的批量预取现在也包括每个 span 的首尾格子，这种情形不增加存储读取。读取路径的单行探测
+结果在本批内保留，与批量预取的结果一样。
+
+### 11.3 结果
+
+10-31 目标在 bench 的已存状态下（1m 从 11-06 16:57 起）要取的格子：1d 5 个（11-01..11-05）、4h 6 个、15m 3 个、
+5m 4 个、1h 2 个、1m 3 个，共约 20 个，原来是 8,217 个 1m。路由规划与原来的规划结果相同。1m 从 11-07 06:00 起时，
+原来取 360 个 1m，现在是几个 1h 和 4h。
+
+### 11.4 测试
+
+- `tests/test_trim_rejected.py`：200 组随机 span、更细的行和删除足迹，与逐格判断相比，中间段恰好从第一个到最后一个
+  被触及的格子，前后两段都不被拒绝，检查次数不超过 `2⌈log₂ n⌉ + 2`，全部被触及时只检查首尾两格。
+- `tests/test_family_plan.py`：1m 从某个整点后 37 分钟开始的后缀；规划的 1m 格子不超过冷启动的边缘格子加 4 个，
+  写入后由真实 reader 完整合成。原来的 12 组随机已存状态（真实 reader 合成）照常通过。
+- `tests/test_finer_work_hold.py`：10-31 目标在 bench 的已存状态下要取的行少于 100，11-06 16:00 之前没有 1m、5m、15m。
+  §10.3 的回归改用分散的 1m 行（12 个），使计划的 REST 请求多于基线。
+- 两个后缀测试在 HEAD 上失败；保留本节的修改、去掉 §10.3 的修正时，分散的那个失败。相关的 36 个测试文件与 HEAD 的失败集合相同。
+
+### 11.5 测量
+
+`tools/pairs8.sh`：同一棵树里交替，关闭一边用 `tools/no_trim_run.py` 在任何规划器或 reader 导入之前把 `trim_rejected`
+换成整段细化，两边都打开路由规划和 §10 的扣住；各 4 轮，`closed_once`。
+
+| 中位数 | `r20` `net_real` 开 | 关 | `r20` `net_zero` 开 | 关 | `r21` `net_real` 开 | 关 | `r21` `net_zero` 开 | 关 |
+|---|---|---|---|---|---|---|---|---|
+| 释放后 10-31 目标的运行 | 0.65 秒 | 5.4 秒 | 0.6 秒 | 4.9 秒 | 1.7 秒 | 6.85 秒 | 1.75 秒 | 5.6 秒 |
+| 10007m 最后完成的是它（4 次中） | 1 | 4 | 0 | 4 | 0 | 4 | 0 | 4 |
+| 四图全部就绪 | 16.3 秒 | 16.0 秒 | 13.0 秒 | 17.3 秒 | 25.3 秒 | 22.6 秒 | 20.1 秒 | 19.2 秒 |
+| 进程 CPU | 22.3 秒 | 21.6 秒 | 19.1 秒 | 22.4 秒 | 34.8 秒 | 30.1 秒 | 28.2 秒 | 27.4 秒 |
+| 归档下载 | 20 | 26 | 20 | 25 | 20 | 25 | 20 | 25 |
+
+- 释放后的目标快 3–8 倍，不再是关键路径：关闭时全部 16 次加载里它都是 10007m 最后完成的运行，打开时 16 次里只有 1 次。
+  现在最后完成的是较旧的 chunk，所以全部就绪时间没有一致的变化；它们主要花在派生的 CPU 上。
+- `r20`（负载约 4.5）的关闭一边有 §12 的连续失败（16 次里 3 次，两边都有），`r21` 是修正 §12 之后（负载 7.6–21.9，
+  噪声大），两边都没有失败。`r21` 打开一边的全部就绪和 CPU 偏高，与负载最高的几次加载对应；
+  单独测量（真实 reader 合成 64 个已存的 10007m 目标）首尾格子的预取只占第一次合成的约 4%（844 对 809 毫秒），
+  同样的数据用整段细化的 reader 无法合成。
+
+## 12. 派发的 chunk 继承了派发者的 acquisition scope
+
+### 12.1 现象
+
+§10 扣住的目标偶尔连续失败：一次加载 9 次、4 次，最多一次 165 次（13.6 到 24.8 秒，那时较旧的 chunk 和短周期图
+都已结束），每次 5–40 毫秒就以 "canonical dependency range changed during acquisition" 失败，或者派生写入以
+"canonical series family changed after acquisition" 失败。开关 §11 的两边都有（`pairs/r20-trim-*`，16 次里 3 次）。
+
+### 12.2 原因
+
+`tools/range_trace_run.py` 记下这些拒绝时的 acquisition scope：被扣住的 11-07 目标的运行用的是 revision 1，也就是
+加载开始时的库头。规划时 `check_store_range` 检查目标范围自 revision 1 以来的变化，而短周期图正是在这个范围写了 1m
+（这个目标被扣住的原因），所以每次重新规划都失败。
+
+调度器在 `_drain` 里用 `asyncio.create_task` 派发 chunk，它复制调用者的 context；`loop.call_later` 也保留安排它时的
+context。`_drain` 在很多地方被调用：另一个运行在自己的 acquisition scope 里 submit，一个 chunk 的 task 结束时，
+在这些地方安排的定时器。`fenced_acquisition` 看到已有的 scope 就直接沿用（为嵌套运行设计），所以被派发的 chunk 用的是
+别人的 scope：别人的读取起点、`accepted`、已捕获的原生写入视图和 mixed 目标。已有 mixed 目标时 `capture_targets`
+不再捕获本 chunk 的目标，派生写入找不到自己的 computation，只能走整个 family 的检查，live 流的 1m 写入就让它失效。
+失败的运行在自己的 context 里重新派发，于是一直沿用同一个旧 scope，直到某次派发来自干净的 context。
+
+这不只影响扣住的目标，也不只影响效率：一个 chunk 可能按另一个运行捕获的写入视图被放行。扣住让它常见，因为释放
+正好发生在别的运行结束或定时器触发时。
+
+### 12.3 修正
+
+每个 chunk 的 task 都在新的空 context 里创建（`create_task(..., context=contextvars.Context())`）。运行自己取得
+acquisition scope；删除权限本来就放在请求的 metadata 里（`acquisition_revision`），不靠 context 传递。会被继承的
+ContextVar 还有 mixed/derived 的 computation、memory budget 的 pools 和 leases、历史输入的 adoption 等，现在都不会。
+
+测试（`tests/test_backfill_dispatch_context.py`）：在另一个运行的 scope 里 submit 的 chunk，以及由在 scope 里安排的
+定时器派发的扣住目标，运行时都没有 acquisition scope、mixed computation 或 memory lease；修正前两个都失败
+（看到 `Acquisition(revision=1)`）。相关的 97 个测试文件（mixed 规划与读取、调度器、coordinator、acquisition、
+memory budget）与 HEAD 的失败集合相同，只多出已知的顺序相关测试。
+
+### 12.4 测量
+
+修正之后（`pairs/r21-trim-{real,zero}`，16 次加载，开关 §11 的两边）：10007m 的运行全部一次完成，冲突 0，派发都是 10 次，
+没有本地重新规划。修正之前（`r20`，同样 16 次）有 3 次加载出现 9、4、165 次连续失败。
