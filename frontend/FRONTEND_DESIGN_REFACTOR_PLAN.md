@@ -680,6 +680,12 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - Layout in Swedish and Turkish (152 visits, the 19 states that open without the local service): nothing the app writes itself is cut after the volume option's change. The rail's tab titles fit.
 - Next: row 7c4's remaining 7 languages, two per PR: 7c10 Indonesian and Malay.
 
+**Phase 7c10 is done (branch `design/phase-7c10-id-ms`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_7C10.md`](../docs/FRONTEND_DESIGN_QA_PHASE_7C10.md).
+
+- Indonesian and Malay have their own feature files (`catalogs/indonesianFeatureMessages.ts`, `catalogs/malayFeatureMessages.ts`: the seven feature blocks, 1,218 messages each, loaded only with their language), their inline English translated (214 Indonesian, 134 Malay), and the 27 English duplicates that hid the native block removed. Messages shown in English: Indonesian 1,206 → 24, Malay 1,125 → 20; what is left is names and trading terms that read the same.
+- Layout in Indonesian and Malay (152 visits, the 19 states that open without the local service): nothing the app writes itself is cut. The CSV import's volume option already fits in both, so it is unchanged. The rail's tab titles fit; the Malay rail's existing collapse label breaks mid-word (known gap).
+- Next: row 7c4's remaining 5 languages: 7c11 Vietnamese and Thai, then Hindi, Arabic and Hebrew.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.
