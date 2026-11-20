@@ -141,6 +141,26 @@ def test_planning_each_chart_alone_leaves_targets_that_cannot_compose(tmp_path, 
     assert broken
 
 
+def test_finer_rows_refine_only_the_cells_they_reach_and_the_reader_composes_the_rest(tmp_path, monkeypatch):
+    """A short chart's 1m from 37 minutes past an hour, two days before the end.
+
+    Refining whole coarse spans composed everything from that day's 1d span on
+    from 1m; only the cells the minutes reach need finer grids, and the reader
+    must take the same cover from what the plan writes.
+    """
+    rng = random.Random(3)
+    charts = [demand("10007m", 0, STOP)]
+    opens = frozenset(range(STOP - 2 * DAY + 37 * MINUTE, STOP, MINUTE))
+    rows = {("1m", "backfill"): [bar(at, MINUTE, rng) for at in sorted(opens)]}
+    plan = plan_family_sources(charts, {"1m": StoredSeries(opens)})
+    cold = plan_family_sources(charts, {})
+    # The targets' own edge minutes, plus at most the 5m cell the stored minutes start in.
+    assert len(plan.cells["1m"]) <= len(cold.cells["1m"]) + 4, (len(plan.cells["1m"]), len(cold.cells["1m"]))
+    assert "1d" in plan.cells
+    results = composed(tmp_path, monkeypatch, "suffix", with_cells(rows, plan.cells, rng), charts)
+    assert all(done == count for done, count in results.values()), results
+
+
 def test_a_deletion_history_refines_every_coarser_span_it_may_reach():
     charts = [demand("10007m", 0, WIDE, ("1m", "1h", "1d"))]
     clean = plan_family_sources(charts, {})

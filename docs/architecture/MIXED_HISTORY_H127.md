@@ -93,6 +93,14 @@ withdrawn fine history. An absent finer row alone is insufficient after deletion
 The current conservative policy may reject more work than mathematically needed;
 it does not compare revision counters across sources or use wall-clock freshness.
 
+Such a rejection replans only the span's cells from the first one the finer
+rows or deletion footprint reach to the last (`source_precedence.trim_rejected`,
+binary searched with the same check on prefixes and suffixes); the cells before
+and after stay on the span's grid, and no coarse cell a finer row reaches is ever
+accepted. A span with unavailable rows, bounds or fields is still replanned
+whole. The backfill planners, the family plan and the post-commit check use the
+same rule, so a plan stores exactly the cells this reader composes from.
+
 One outer B130 view covers the page's candidate and precedence sources. Inner
 target revisions and the bounded D126 `read_series_changes` evidence must match
 it. Storage, policy/resolver and rollout configuration are checked again at the

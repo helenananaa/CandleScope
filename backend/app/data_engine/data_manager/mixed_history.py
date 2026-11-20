@@ -16,6 +16,7 @@ from app.data_engine.aggregation.core import AggregateSummary, InputRevision, co
 from app.data_engine.history.cover_plan import (
     CoverBudgetExceeded, CoverUnavailable, plan_fixed_range, plan_fixed_target,
 )
+from app.data_engine.history.source_precedence import drive, trim_rejected
 from app.data_engine.interval_policy import parse_interval_spec
 from app.data_engine.memory_budget import MemoryBudgetExceeded, retained_size
 from .models import SeriesKey
@@ -179,7 +180,8 @@ class MixedHistoryReader:
                     span = pending.popleft()
                     cursor = None
                     span_summary = None
-                    unavailable = admit_span is not None and not admit_span(span)
+                    rejected = admit_span is not None and not admit_span(span)
+                    unavailable = rejected
                     while not unavailable:
                         history._cancelled(cancel)
                         reader = (history.read(span.source.series, span.start_ms, span.end_ms,
@@ -222,6 +224,11 @@ class MixedHistoryReader:
                         remaining = max_positions - explored
                         if remaining <= 0:
                             raise CoverBudgetExceeded("mixed history refinement position budget exhausted")
+                        # Finer precedence replans only the cells it reaches
+                        # (trim_rejected), as the backfill planners do; an
+                        # unavailable span is replanned whole.
+                        head, span, tail = (drive(trim_rejected(span), lambda part: not admit_span(part))
+                                            if rejected else (None, span, None))
                         try:
                             replacement = plan_fixed_range(target, span.start_ms, span.end_ms, finer,
                                 required_fields=required_fields, max_positions=remaining)
@@ -230,7 +237,8 @@ class MixedHistoryReader:
                         except CoverUnavailable as error:
                             raise BlockUnavailable("finer sources cannot exactly replace the unavailable span") from error
                         explored += replacement.explored_positions
-                        pending.extendleft(reversed(replacement.spans))
+                        pending.extendleft(reversed([part for part in (head, *replacement.spans, tail)
+                                                     if part is not None]))
                         fallbacks += 1
                         continue
                     if span_summary is None:

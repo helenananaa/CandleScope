@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import random
 from datetime import datetime, timezone
 
 from app.data_engine.data_manager import finer_work_hold as fwh
@@ -151,16 +152,10 @@ def test_a_mixed_chart_opened_just_before_a_short_one_still_waits_for_it(monkeyp
     asyncio.run(run())
 
 
-def test_a_held_target_the_finer_rows_only_partly_cover_still_plans_on_its_own(tmp_path, monkeypatch):
-    """The bench's 2026-10-31 13:49 target, released after the short charts stored 1m from 2026-11-06 16:57.
-
-    Composed from 1m, it needs one REST page more than fetching the target whole;
-    a required composition has no single-base fallback, so it must keep its plan.
-    """
-    import random
-
+def plan_target_over(tmp_path, monkeypatch, name, minutes):
+    """The bench's 2026-10-31 13:49 target, planned over stored 1m rows at ``minutes``."""
     from app.data_engine.backfill import mixed_routes
-    from app.data_engine.backfill.models import GapInfo, GapType
+    from tests.test_mixed_backfill_plan import engine_for
     from tests.test_mixed_history_session import bar, manager_for
     from tests.test_mixed_routes import catalog, plan_chunk
 
@@ -168,18 +163,43 @@ def test_a_held_target_the_finer_rows_only_partly_cover_still_plans_on_its_own(t
     monkeypatch.setattr(mixed_routes, "archive_catalog", lambda engine: catalog())
     monkeypatch.setattr("app.data_engine.backfill.mixed_plan.time.time", lambda: now / 1000)
     rng = random.Random(1)
-    stored = [bar(at, MINUTE, rng) for at in range(utc(2026, 11, 6, 16, 57), now - 2 * 3_600_000, MINUTE)]
-    manager = manager_for(tmp_path / "held.sqlite", {("1m", "backfill"): stored}, monkeypatch)
+    manager = manager_for(tmp_path / f"{name}.sqlite", {("1m", "backfill"): [bar(at, MINUTE, rng) for at in minutes]},
+                          monkeypatch)
     try:
-        from tests.test_mixed_backfill_plan import engine_for
-        engine = engine_for(manager.query_engine)
         target = LAST - WIDTH
-        plan, report = plan_chunk(manager, engine, target, target + WIDTH)
+        plan, report = plan_chunk(manager, engine_for(manager.query_engine), target, target + WIDTH)
         assert plan is not None, report.get("mixed_plan_fallback")
-        assert report["mixed_rest_requests_over_baseline"] >= 1
-        # Every row it plans to write stays inside the target (whole archive
-        # objects included); the engine's minute reuse trims what is stored.
+        # Every row it plans to write stays inside the target.
         assert plan.tasks and all(target <= task.start_ms and task.end_ms < target + WIDTH for task in plan.tasks)
+        return plan, report
     finally:
-        import asyncio as _asyncio
-        _asyncio.run(manager.shutdown())
+        asyncio.run(manager.shutdown())
+
+
+def test_a_held_target_fetches_only_the_cells_the_stored_finer_rows_reach(tmp_path, monkeypatch):
+    """Released after the short charts stored 1m from 2026-11-06 16:57 (not on an hour).
+
+    Refining the whole 1d span 11-01..11-07 used to compose all of it from 1m
+    (8,217 rows fetched); only 11-06 from 16:00 needs finer grids.
+    """
+    stored = range(utc(2026, 11, 6, 16, 57), utc(2026, 11, 20, 6, 40), MINUTE)
+    plan, _ = plan_target_over(tmp_path, monkeypatch, "suffix", stored)
+    fetched = {}
+    for task in plan.tasks:
+        fetched[task.interval] = fetched.get(task.interval, 0) + task.estimated_bars
+    assert sum(fetched.values()) < 100, fetched
+    assert not [task for task in plan.tasks if task.interval in ("1m", "5m", "15m")
+                and utc(2026, 10, 31, 14) <= task.start_ms < utc(2026, 11, 6, 16)]
+    assert any(task.interval == "1d" for task in plan.tasks)
+
+
+def test_a_required_composition_keeps_a_plan_that_needs_more_rest_than_its_baseline(tmp_path, monkeypatch):
+    """Scattered finer rows split the target into many small runs, each its own REST request.
+
+    A required composition has no single-base fallback (a decline fails the
+    repair), so it must keep that plan.
+    """
+    target = LAST - WIDTH
+    plan, report = plan_target_over(tmp_path, monkeypatch, "scattered",
+                                    [target + k * 13 * 3_600_000 + 37 * MINUTE for k in range(12)])
+    assert report["mixed_rest_requests_over_baseline"] >= 1

@@ -6,7 +6,7 @@ through B130/D126. Probes never qualify a finer row as an accepted component.
 """
 from app.data_engine.aggregation.blocks import BlockUnavailable
 from app.data_engine.history.cover_plan import plan_fixed_batch
-from app.data_engine.history.source_precedence import finer_requirements, collect_presence_windows
+from app.data_engine.history.source_precedence import collect_presence_windows, edge_cells, finer_requirements
 from app.data_engine.memory_budget import MemoryBudgetExceeded, retained_size
 
 BATCH_TARGETS = 32
@@ -35,7 +35,9 @@ class MixedPrecedence:
             batch = plan_fixed_batch(self.target, opens[0], opens[-1] + width, self.sources,
                 required_fields=self.sources[0].fields, max_targets=len(opens), max_source_rows=131_072)
             self.report["mixed_preflight_positions"] += batch.explored_positions
-            requested = collect_presence_windows((span for cover in batch.covers for span in cover.spans),
+            # Edge cells too: a rejected span first probes them (trim_rejected).
+            requested = collect_presence_windows((part for cover in batch.covers for span in cover.spans
+                                                  for part in (span, *edge_cells(span))),
                                                   self.precedences, self.mutations)
         for source, values in requested.items():
             windows = sorted(values)
@@ -64,10 +66,12 @@ class MixedPrecedence:
                     return False
                 continue
             # Refinements not in the initial cover and stores without the
-            # optional batch read retain the original one-row bounded probe.
+            # optional batch read retain the original one-row bounded probe,
+            # kept for this batch like the batch read's flags.
             self.report["mixed_probe_reads"] += 1
             rows = self.engine._read_canonical_history_rows(self.storage, fine, lo, hi, 1)
             self.report["mixed_probe_rows"] += len(rows)
+            self.presence[key] = bool(rows)
             if rows:
                 return False
         return True

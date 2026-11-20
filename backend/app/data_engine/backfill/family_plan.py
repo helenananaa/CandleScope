@@ -12,9 +12,10 @@ It is pure and synchronous: no storage, network, revision or fence. The
 caller describes what is stored and owns every check of what is actually
 written and read. The rules mirror ``_MixedBackfillBuilder.refine``:
 
-- a span is refined (its whole range, by the finer selected sources) when a
-  finer precedence series has a row overlapping it, or a deletion history
-  that may reach it, or when a stored row of its own grid is not reusable;
+- a span is refined by the finer selected sources when a finer precedence
+  series has a row overlapping it, or a deletion history that may reach it:
+  only its cells from the first to the last reached (``trim_rejected``);
+  when a stored row of its own grid is not reusable, its whole range;
 - otherwise its cells that are not stored and reusable are acquired.
 
 Cells planned for one chart count as present for every other chart, and
@@ -36,6 +37,7 @@ from app.data_engine.history.cover_plan import (
     plan_fixed_range,
     plan_fixed_target,
 )
+from app.data_engine.history.source_precedence import drive, trim_rejected
 from app.data_engine.interval_policy import parse_interval_spec
 
 MAX_ITERATIONS = 8
@@ -111,23 +113,25 @@ class _Present:
 
 def _refined_spans(demand, cover, stored, present, counts):
     """The cover the planner's refinement settles on, given what will be present."""
+
+    def rejects(span):
+        for fine, fine_width in demand.precedences:
+            if fine_width >= span.source.width_ms:
+                continue
+            lo, hi = max(0, span.start_ms - fine_width + 1), span.end_ms
+            series = stored.get(fine.interval)
+            if series is not None and series.deleted_from is not None and series.deleted_from < hi:
+                return True
+            if present.any_in(fine.interval, lo, hi):
+                return True
+        return False
+
     out = []
     pending = deque(cover.spans)
     while pending:
         span = pending.popleft()
         width = span.source.width_ms
-        rejected = False
-        for fine, fine_width in demand.precedences:
-            if fine_width >= width:
-                continue
-            lo, hi = max(0, span.start_ms - fine_width + 1), span.end_ms
-            series = stored.get(fine.interval)
-            if series is not None and series.deleted_from is not None and series.deleted_from < hi:
-                rejected = True
-                break
-            if present.any_in(fine.interval, lo, hi):
-                rejected = True
-                break
+        rejected = rejects(span)
         bad = not rejected and _any_in(present.unusable.get(span.source.series.interval, ()),
                                        span.start_ms, span.end_ms)
         if not (rejected or bad):
@@ -136,10 +140,11 @@ def _refined_spans(demand, cover, stored, present, counts):
         finer = tuple(source for source in demand.sources if source.width_ms < width)
         if not finer:
             raise FamilyPlanUnavailable("finest_input_not_composition_qualified")
-        replacement = plan_fixed_range(demand.target, span.start_ms, span.end_ms, finer,
+        head, middle, tail = drive(trim_rejected(span), rejects) if rejected else (None, span, None)
+        replacement = plan_fixed_range(demand.target, middle.start_ms, middle.end_ms, finer,
                                        required_fields=demand.required_fields)
         counts[0] += 1
-        pending.extendleft(reversed(replacement.spans))
+        pending.extendleft(reversed([part for part in (head, *replacement.spans, tail) if part is not None]))
     return tuple(out)
 
 

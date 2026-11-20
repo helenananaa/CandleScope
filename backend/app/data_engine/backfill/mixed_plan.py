@@ -18,7 +18,8 @@ from app.data_engine.history.cover_plan import (
     CoverUnavailable, FixedHistorySource, HistoryReadSpan,
     plan_fixed_batch, plan_fixed_range,
 )
-from app.data_engine.history.source_precedence import collect_presence_windows, finer_requirements
+from app.data_engine.history.source_precedence import (
+    collect_presence_windows, drive_async, edge_cells, finer_requirements, trim_rejected)
 from app.data_engine.history import AlwaysOpenCalendar
 from app.data_engine.interval_policy import parse_interval_spec, row_is_closed
 from app.data_engine.interval_resolution import IntervalPurpose, IntervalRouteKind, IntervalResolver
@@ -253,8 +254,8 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
             # Optional mixed plans give way to the single-base plan when they
             # would send more REST requests than it. A required composition has
             # no such fallback (a decline fails the repair), so it keeps its plan:
-            # a target that stored finer rows partly cover is composed from that
-            # base and can need a page more than fetching it whole.
+            # finer rows stored here and there split a target into small runs on
+            # several grids, each its own request.
             baseline_requests = math.ceil(((stop - first) // base.nominal_ms) / page_size)
             initial_requests = sum(math.ceil(span.rows / page_size) for cover in covers for span in cover.spans)
             if cold and initial_requests > baseline_requests and not required_contract:
@@ -377,7 +378,9 @@ class _MixedBackfillBuilder:
 
     async def prefetch(self, covers):
         self.presence.clear()
-        requests = collect_presence_windows((span for cover in covers for span in cover.spans),
+        # Edge cells too: a rejected span first probes them (trim_rejected).
+        requests = collect_presence_windows((part for cover in covers for span in cover.spans
+                                             for part in (span, *edge_cells(span))),
                                             self.precedences, self.mutations)
         for source, ranges in requests.items():
             for offset in range(0, len(ranges), 256):
@@ -434,6 +437,23 @@ class _MixedBackfillBuilder:
             cursor = last + 1
         return False, trusted
 
+    async def _refined(self, span, finer, rejected):
+        """The spans replacing a rejected span: only the cells finer precedence
+        reaches are replanned on finer grids (trim_rejected); a span rejected
+        for its own unusable rows is replanned whole."""
+        if not finer:
+            raise _DeclineMixed("finest_input_not_composition_qualified")
+        head, middle, tail = ((await drive_async(trim_rejected(span), self.finer_present))
+                              if rejected else (None, span, None))
+        planning = self.budget.reserve("history-backfill", PLAN_BYTES) if self.budget else nullcontext()
+        with planning:
+            replacement = await run_preparation(plan_fixed_range, self.target, middle.start_ms, middle.end_ms,
+                finer, required_fields=frozenset(self.policy.fields),
+                max_positions=self.remaining_positions())
+        self.positions(replacement.explored_positions)
+        self.report["mixed_plan_refinements"] += 1
+        return [part for part in (head, *replacement.spans, tail) if part is not None]
+
     async def count_refined_rows(self, cover) -> int:
         total = 0
         pending = deque(cover.spans)
@@ -443,16 +463,7 @@ class _MixedBackfillBuilder:
             rejected = await self.finer_present(span)
             bad, _ = (False, set()) if rejected else await self.known_inputs(span)
             if rejected or bad:
-                if not finer:
-                    raise _DeclineMixed("finest_input_not_composition_qualified")
-                planning = self.budget.reserve("history-backfill", PLAN_BYTES) if self.budget else nullcontext()
-                with planning:
-                    replacement = await run_preparation(plan_fixed_range, self.target, span.start_ms, span.end_ms,
-                        finer, required_fields=frozenset(self.policy.fields),
-                        max_positions=self.remaining_positions())
-                self.positions(replacement.explored_positions)
-                self.report["mixed_plan_refinements"] += 1
-                pending.extendleft(reversed(replacement.spans))
+                pending.extendleft(reversed(await self._refined(span, finer, rejected)))
                 continue
             total += span.rows
         return total
@@ -485,16 +496,7 @@ class _MixedBackfillBuilder:
             rejected = await self.finer_present(span)
             bad, trusted = (False, set()) if rejected else await self.known_inputs(span)
             if rejected or bad:
-                if not finer:
-                    raise _DeclineMixed("finest_input_not_composition_qualified")
-                planning = self.budget.reserve("history-backfill", PLAN_BYTES) if self.budget else nullcontext()
-                with planning:
-                    replacement = await run_preparation(plan_fixed_range, self.target, span.start_ms, span.end_ms,
-                        finer, required_fields=frozenset(self.policy.fields),
-                        max_positions=self.remaining_positions())
-                self.positions(replacement.explored_positions)
-                self.report["mixed_plan_refinements"] += 1
-                pending.extendleft(reversed(replacement.spans))
+                pending.extendleft(reversed(await self._refined(span, finer, rejected)))
                 continue
             self.rows += span.rows
             if self.rows > MAX_SOURCE_ROWS:
@@ -586,7 +588,8 @@ async def checked_mixed_windows(storage, target, policy, windows):
             source = FixedHistorySource(replace(target, interval=interval), width, 0,
                 ((first, last + width),), frozenset(policy.fields), policy.contract_id)
             batch.append((window, HistoryReadSpan(source, first, last + width)))
-        requests = collect_presence_windows((span for _, span in batch), precedences, mutations)
+        requests = collect_presence_windows((part for _, span in batch for part in (span, *edge_cells(span))),
+                                            precedences, mutations)
         for source, ranges in requests.items():
             for start in range(0, len(ranges), 256):
                 chunk = ranges[start:start + 256]
@@ -595,9 +598,21 @@ async def checked_mixed_windows(storage, target, policy, windows):
                 if len(flags) != len(chunk) or any(type(flag) is not bool for flag in flags):
                     raise StaleAcquisition("mixed post-commit presence receipt is invalid")
                 presence.update(((source, lo, hi), flag) for (lo, hi), flag in zip(chunk, flags))
+        async def rejects(part, presence=presence):
+            for source, lo, hi, deleted in finer_requirements(part, precedences, mutations):
+                if deleted:
+                    return True
+                if (source, lo, hi) not in presence:
+                    flags = await storage.query_bars_range_presence(source.symbol, source.interval, ((lo, hi),),
+                        exchange=source.exchange, market_type=source.market_type, series_identity=source.identity)
+                    if len(flags) != 1 or type(flags[0]) is not bool:
+                        raise StaleAcquisition("mixed post-commit presence receipt is invalid")
+                    presence[(source, lo, hi)] = flags[0]
+                if presence[(source, lo, hi)]:
+                    return True
+            return False
         for window, span in batch:
-            if not any(deleted or presence[(source, lo, hi)] for source, lo, hi, deleted
-                       in finer_requirements(span, precedences, mutations)):
+            if not await rejects(span):
                 result.append(window)
             else:
                 # Read-ahead can make a finer canonical grid authoritative in
@@ -608,6 +623,11 @@ async def checked_mixed_windows(storage, target, policy, windows):
                     for interval, width in selected_widths.items() if width < span.source.width_ms)
                 if not finer:
                     continue
+                # Only the cells it reaches, as every planner and reader does.
+                head, span, tail = await drive_async(trim_rejected(span), rejects)
+                width = span.source.width_ms
+                result.extend((window[0], part.start_ms, part.end_ms - width, window[3])
+                              for part in (head, tail) if part is not None)
                 cover = await run_preparation(plan_fixed_range, target, span.start_ms, span.end_ms,
                     finer, required_fields=frozenset(policy.fields), max_positions=MAX_POSITION_WORK-positions)
                 positions += cover.explored_positions

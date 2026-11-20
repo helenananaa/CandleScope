@@ -304,7 +304,8 @@ FamilyFill：
      `test_mixed_backfill_composed_admission.py` 原来把"版本落后"的故障写在页面以外，现在改写到页面以内。
    - 判断点的结果：第 0 步之后"只派生"明显快于冷加载（7.5 秒 vs 15.8 秒），FamilyFill 值得做。
 1. **规划库（已完成，`backfill/family_plan.py`）**：`plan_family_sources(demands, stored, extra=...)`，
-   按 `_MixedBackfillBuilder.refine` 的规则（更细的 precedence 行或删除历史、或本精度存有不可复用的行时，整段细化）
+   按 `_MixedBackfillBuilder.refine` 的规则（更细的 precedence 行或删除历史触及时，只细化从第一个到最后一个被触及的格子，
+   见 [MIXED_ROUTE_PLANNING_zh.md](MIXED_ROUTE_PLANNING_zh.md) §11；本精度存有不可复用的行时整段细化）
    在"已存 ∪ 已规划 ∪ 归档对象"上求不动点；已规划的格子只增不减，所以收敛。超出格子预算或规则不允许时抛出
    `FamilyPlanUnavailable`，调用方照常逐图规划。
    - 测试（`tests/test_family_plan.py`）：12 个随机已存状态（部分 1m/1h/1d、不可复用的行、非路线的 3m 行），
