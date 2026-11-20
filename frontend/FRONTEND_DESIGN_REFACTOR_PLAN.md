@@ -686,6 +686,12 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - Layout in Indonesian and Malay (152 visits, the 19 states that open without the local service): nothing the app writes itself is cut. The CSV import's volume option already fits in both, so it is unchanged. The rail's tab titles fit; the Malay rail's existing collapse label breaks mid-word (known gap).
 - Next: row 7c4's remaining 5 languages: 7c11 Vietnamese and Thai, then Hindi, Arabic and Hebrew.
 
+**Phase 7c11 is done (branch `design/phase-7c11-vi-th`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_7C11.md`](../docs/FRONTEND_DESIGN_QA_PHASE_7C11.md).
+
+- Vietnamese and Thai have their own feature files (`catalogs/vietnameseFeatureMessages.ts`, `catalogs/thaiFeatureMessages.ts`: the seven feature blocks, 1,218 messages each, loaded only with their language), their inline English translated (223 Vietnamese, 154 Thai), and the 27 English duplicates that hid the native block removed. Messages shown in English: Vietnamese 1,204 → 12, Thai 1,140 → 21; what is left is names and trading terms that read the same.
+- Layout in Vietnamese and Thai (152 visits, the 19 states that open without the local service): the CSV import's volume option, cut in both, is shorter, and the Vietnamese rail's tape summary ("Giao dịch trực tiếp") now fits at 1024 px. What remains is cut with its full text on hover. The rail's tab titles fit. Thai draws in the system's Thai font, since the interface font has no Thai (known gap).
+- Next: row 7c4's last 3 languages, Hindi, Arabic and Hebrew, from Phase 7c12.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.
