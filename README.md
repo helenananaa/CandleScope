@@ -38,18 +38,33 @@ entrance animations have finished.
 
 ## Deployment
 
-GitHub Pages publishes from `codex/website`, root (`/`). Push a commit to that
-branch to update the website. Keep `.nojekyll` and `CNAME` in place.
+Cloudflare Workers Static Assets hosts the website in the `candlescope` Worker.
+Workers Builds watches this repository's `codex/website` production branch, with
+root directory `/`. Push a commit to that branch to publish a website update.
+Preview builds for other branches are disabled.
 
-The custom domain is `candlescope.app`. DNS should contain these apex A records:
+Build command (copies only public website files):
 
+```sh
+mkdir -p dist && cp index.html style.css robots.txt sitemap.xml dist/ && cp -R assets dist/
 ```
-185.199.108.153
-185.199.109.153
-185.199.110.153
-185.199.111.153
+
+Deploy command:
+
+```sh
+npx wrangler@4 deploy --name candlescope --assets ./dist --compatibility-date 2026-11-21
 ```
 
-The `www` CNAME should point to `helenananaa.github.io`.
-Enable Enforce HTTPS once GitHub has issued the certificate.
-GitHub's DNS and certificate changes may take up to 24 hours to finish.
+The temporary deployment URL is
+https://candlescope.ryan-liang-work-d75.workers.dev/. Production uses
+`candlescope.app` and `www.candlescope.app` as Worker custom domains with
+Cloudflare-managed DNS and HTTPS. The domain registration and renewals remain
+at Name.com. Cloudflare nameservers are `eleanor.ns.cloudflare.com` and
+`zac.ns.cloudflare.com`. Do not restore the old GitHub Pages A records when
+updating the production site.
+
+The existing `.nojekyll` and `CNAME` files are retained for rollback during the
+migration; they are not included in the Cloudflare asset upload. The previous
+GitHub Pages source was `codex/website`, root `/`, with four apex A records
+(`185.199.108.153`, `185.199.109.153`, `185.199.110.153`, `185.199.111.153`)
+and a `www` CNAME pointing to `helenananaa.github.io`.
