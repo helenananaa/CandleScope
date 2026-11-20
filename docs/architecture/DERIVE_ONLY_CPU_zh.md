@@ -98,6 +98,12 @@
 两处改动合计（两侧同时开关，8 轮，负载 7.6–12.8，且后台同时在跑全量测试，绝对值两侧都偏高）：四图全部就绪
 7.31 对 10.35 秒，进程 CPU 8.41 对 11.32 秒，出现修复 chunk 的加载 0/8 对 2/8，最差一次 10.1 对 20.5 秒。
 
+全量后端测试（忽略两个无法收集的文件）：296 失败、10,521 通过、6 错误；失败的 302 项在 `1664497dc` 上逐项重跑，
+除 3 项外都同样失败。那 3 项（`test_bulk_revision_bookkeeping::test_dependent_lookup_stays_local_for_long_batches`、
+`test_external_provider_http_runtime::test_revoked_connection_cannot_publish_a_run_that_already_validated`、
+`test_numeric_indicator_queries::test_public_numeric_query_uses_existing_isolated_history_process`）只在全量运行中失败，
+在本分支上单独运行 3 次都通过。
+
 ## 5. 未做：单一底层周期读取的范围证明
 
 每张图保存自己的 K 线时（101m 195 行、97m 203 行、89m 221 行、10007m 128 行），以及每个新收盘的实时分钟，
