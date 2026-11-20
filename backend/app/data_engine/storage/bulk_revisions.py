@@ -194,8 +194,9 @@ def _deletes_dependents(candidates, opened: int, closed) -> bool:
     end = opened if closed is None else closed
     width = end - opened
     for span, opens, items in candidates:
-        index = bisect_left(opens, opened - span) if span > 0 else 0
-        for k_open, k_close, _, gone in items[index:]:
+        # Index in place: slicing would copy the rest of the batch per row.
+        for at in range(bisect_left(opens, opened - span) if span > 0 else 0, len(items)):
+            k_open, k_close, _, gone = items[at]
             if k_open > end:
                 break
             if gone or (k_open if k_close is None else k_close) < opened:
