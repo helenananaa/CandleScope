@@ -1,6 +1,6 @@
 # 按路由规划 mixed 回填（Route-aware mixed planning）设计
 
-状态：设计稿，待实现
+状态：已实现并默认打开（`mixed_routes.ROUTE_AWARE = True`，设为 False 即回到原来的规划）；验收见 §8 第 5 步
 范围：Binance USD-M 上 required 的 mixed composition chunk（典型是 10007m），冷启动历史回填
 相关：`backfill/mixed_plan.py`（规划）、`backfill/source_router.py`（路由）、`backfill/fetcher.py`（获取与写入窗口）、
 `backfill/reconciler.py`（派生）、`storage/native_history_fence.py`（原生写入校验）、
@@ -192,6 +192,21 @@ select_owned_objects(objects, needed_cells_by_grid, owned_range, page_size, mini
    共 4 次尝试。各种子下计划的窗口为 28–42 个、约 4–15k 行，都在预算内。相关的 50 个测试文件（加上原生、派生和 OKX 的
    范围校验测试）：开关关时与 HEAD 失败集合相同；强制打开时只多出 `test_without_the_flag_the_plan_is_unchanged`。）
 5. 配对测量，按 §7 验收；全量测试。通过后默认打开。
+   （配对测量已完成，见 `output/cold-local-cost-20261119/README.md` 第十二轮；`tools/run_routes.py`、`tools/pairs6.sh`。
+   先跑的几次加载找出三个问题，都已修正并有测试：路由按任务最后的开盘时间查目录，而目录只在范围包含整天时才列出日度
+   对象，所以计划的日度对象全部改走了 REST；引擎复用已提交的分钟、裁剪了计划对象的 1m 任务时，路由现在不导入对象，
+   只用 REST 取剩下的行（整天导入会改写其它运行持有的行）；规划按每个窗口一个伪任务定价，路由"composed 1d 一页 REST
+   就够时不导入"的规则从不生效，每次加载多导入 21 个月度 1d 对象，现在按合并后的 REST 任务定价，与路由看到的一致。
+   最终配对（各 4 轮，`closed_once`，负载 5–10），中位数，开 / 关：
+   `net_real` 全部就绪 15.8 / 20.3 秒，CPU 21.1 / 25.2 秒；`net_zero` 26.0 / 26.9 秒，34.6 / 36.3 秒。
+   10007m 的 A 类冲突 0 / 7–7.5（之前两组配对的 16 次开启加载里没有一次窗口级的 A 类冲突），派发 11–13 / 19，
+   "lack trusted composition" 的 PARTIAL 0 / 1–2.5，本地版本重新规划 1 / 6–7.5，修复重试 0 / 1–2.5；
+   REST 请求 192–194 / 187.5–199，限流的运行 0–3 / 2.5–7.5，归档下载 23.5–26.5 / 33。
+   剩下的 10007m 冲突是 B 类（§9.3），每次加载仍有一次最新的稠密 chunk 的 `refined_source_row_budget` 拆分，与今天相同。
+   全量后端测试（约 10,700 个，跳过两个在本环境无法收集的文件：缺 `jsonschema`，以及 `test_review_regressions.py`
+   引用了已删除的名字）：开关关时与 HEAD 失败集合相同（多出的 `test_amendment_inside_a_partly_consumed_native_window_stops_its_remaining_pages`
+   在 HEAD 上单独跑 4 次都失败，是已有的不稳定测试）；强制打开时只多出检查关闭行为的 `test_without_the_flag_the_plan_is_unchanged`。
+   §7 的五项都满足，开关已默认打开；该测试现在自己关掉开关。）
 
 ## 9. 待决定
 

@@ -1,8 +1,9 @@
-"""Route-aware mixed planning: step 2 of docs/architecture/MIXED_ROUTE_PLANNING_zh.md.
+"""Route-aware mixed planning (docs/architecture/MIXED_ROUTE_PLANNING_zh.md).
 
-Off unless ROUTE_AWARE. Today a mixed chunk plans its covers and fetch
-windows, and routing later decides which archive objects to import. An
-object then writes rows the plan does not account for: into the
+On by default; ``ROUTE_AWARE = False`` plans every mixed chunk as before.
+Without it a mixed chunk plans its covers and fetch windows, and routing
+later decides which archive objects to import. An object then writes rows
+the plan does not account for: into the
 neighbouring chunk's targets (whichever writes second replans), or into the
 chunk's own coarse spans (``checked_mixed_windows`` rejects them after the
 write and the chunk retries). This module makes the import decision while
@@ -39,7 +40,8 @@ from .family_plan import ChartDemand, FamilyPlanUnavailable, plan_family_sources
 from .models import BackfillTask
 from .source_router import PLANNED_OBJECTS_KEY as ROUTE_OBJECTS_KEY, select_archive_objects
 
-ROUTE_AWARE = False
+# Paired cold loads (MIXED_ROUTE_PLANNING_zh.md §8 step 5) passed §7 with it on.
+ROUTE_AWARE = True
 
 
 def archive_catalog(engine):
@@ -104,14 +106,15 @@ async def route_aware_plan(engine, storage, gap, target, first, stop, sources, p
                      if ref.start_ms >= first and ref.end_ms + 1 <= stop]
             if not owned:
                 continue
-            # Priced as the router prices a run: on the windows this chunk
-            # would otherwise fetch.
-            run = [BackfillTask(symbol=target.symbol, interval=interval, start_ms=lo, end_ms=hi - width,
+            # Priced as the router prices a run: on the REST tasks this chunk
+            # would otherwise send, coalesced as the plan's would be (a
+            # composed 1d run that fits one REST page then imports nothing).
+            run = coalesce([BackfillTask(symbol=target.symbol, interval=interval, start_ms=lo, end_ms=hi - width,
                                 estimated_bars=(hi - lo) // width, exchange=target.exchange,
                                 market_type=target.market_type,
                                 metadata={**_metadata(target, policy, first, stop - 1),
                                           "mixed_fetch_windows": [(lo, hi - width)]})
-                   for lo, hi in windows]
+                   for lo, hi in windows])
             selection = select_archive_objects(owned, run, exchange=target.exchange,
                 market_type=target.market_type, interval=interval, route_start_ms=first,
                 route_end_ms=stop - 1, rest_page_size=rest_page_size, minimum_pages=minimum_pages,

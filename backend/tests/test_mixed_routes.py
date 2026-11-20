@@ -153,6 +153,7 @@ def test_adjacent_route_aware_chunks_write_only_their_own_targets_and_compose(tm
 
 
 def test_without_the_flag_the_plan_is_unchanged(tmp_path, monkeypatch):
+    monkeypatch.setattr(mixed_routes, "ROUTE_AWARE", False)
     monkeypatch.setattr("app.data_engine.backfill.mixed_plan.time.time", lambda: NOW / 1000)
     manager = manager_for(tmp_path / "plain.sqlite", {}, monkeypatch)
     try:

@@ -619,7 +619,9 @@ class HistoricalSourceRouter:
         resolved leaves its tasks to REST over the whole object, and one that
         fails to load falls back over its intersection with each task (the
         fetcher's existing fallback); either way the rows the plan counted
-        arrive.
+        arrive. When the tasks listing an object no longer cover all of it
+        (the engine reused committed rows and trimmed them), only their own
+        ranges are fetched, by REST.
         """
         groups: dict[tuple[str, str, str, str], list[BackfillTask]] = {}
         keys_by_task: dict[str, list[str]] = {}
@@ -629,6 +631,7 @@ class HistoricalSourceRouter:
             if keys:
                 groups.setdefault((task.exchange, task.market_type, task.symbol, task.interval), []).append(task)
         for (exchange, market_type, symbol, interval), group in groups.items():
+            width = parse_interval_ms(interval) or 1
             listed: dict[str, list[BackfillTask]] = {}
             for task in group:
                 for key in keys_by_task[task.task_key]:
@@ -637,23 +640,29 @@ class HistoricalSourceRouter:
             capabilities = provider.capabilities(market_type) if provider is not None else None
             resolved = None
             if capabilities is not None and capabilities.supports(market_type=market_type, interval=interval):
+                # Up to the last task's close: a catalog lists a daily object
+                # only when the range holds the whole day.
                 catalog = {ref.object_key: ref for ref in provider.plan_objects(
                     market_type=market_type, symbol=symbol, interval=interval,
-                    start_ms=min(task.start_ms for task in group), end_ms=max(task.end_ms for task in group),
-                    now_ms=now_ms)}
+                    start_ms=min(task.start_ms for task in group),
+                    end_ms=max(task.end_ms for task in group) + width - 1, now_ms=now_ms)}
                 wanted = [catalog[key] for key in listed if key in catalog]
                 resolved = await self._resolve(provider, capabilities, exchange, symbol, wanted) if wanted else []
             published = {ref.object_key: ref for ref in _unique_refs(resolved or [])}
             for key, owners in listed.items():
                 ref = published.get(key)
+                if ref is not None and not _tasks_cover(owners, ref, width):
+                    # Part of the object's rows were already committed and its
+                    # tasks were trimmed to the rest (canonical minute reuse):
+                    # importing it whole would rewrite rows other runs hold.
+                    self._metrics.inc("archive_planned_object_partial")
+                    ref = None
                 if ref is None:
                     self._metrics.inc("archive_planned_object_rest_fallbacks")
                     for task in owners:
                         decisions[task.task_key]["reason"] = "route_planned_object_unavailable"
                     continue
                 touching = [task for task in owners if _intersects(task.start_ms, task.end_ms, ref.start_ms, ref.end_ms)]
-                if not touching:
-                    continue
                 futures.setdefault(key, await self._singleflight(provider, ref))
                 scheduled_object_keys.add(key)
                 owner_task_by_object.setdefault(key, touching[0].task_key)
@@ -1378,6 +1387,16 @@ def _route_decision(task: BackfillTask) -> dict[str, Any]:
         bounded_history_page=_bounded_history_page([task]),
         candidate_objects=0, eligible_objects=0, selected_object_count=0,
         selected_objects=[], reason='archive_disabled')
+
+
+def _tasks_cover(tasks: list[BackfillTask], ref: ArchiveObjectRef, width: int) -> bool:
+    """Whether the tasks' ranges together cover the whole object, without a gap."""
+    cursor = ref.start_ms
+    for task in sorted(tasks, key=lambda item: item.start_ms):
+        if task.start_ms > cursor:
+            return False
+        cursor = max(cursor, task.end_ms + width)
+    return cursor > ref.end_ms
 
 
 def _unique_refs(values: list[ArchiveObjectRef]) -> list[ArchiveObjectRef]:

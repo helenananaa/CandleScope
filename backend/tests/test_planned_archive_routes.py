@@ -112,7 +112,8 @@ def refs_for(tasks):
     refs = {}
     for task in tasks:
         for ref in provider.plan_objects(market_type="futures", symbol=task.symbol, interval=task.interval,
-                                         start_ms=task.start_ms, end_ms=task.end_ms, now_ms=NOW):
+                                         start_ms=task.start_ms, end_ms=task.end_ms + WIDTHS[task.interval] - 1,
+                                         now_ms=NOW):
             refs[ref.object_key] = ref
     return refs
 
@@ -375,3 +376,68 @@ def test_a_cold_wide_chart_captures_its_plans_writes_before_routing(tmp_path, mo
         for items, added_after, _ in after:
             assert items <= before and added_after == 0
     assert http.downloads
+
+
+def test_a_planned_daily_object_split_across_tasks_is_imported_once(tmp_path, monkeypatch):
+    """A catalog lists a daily object only for a range holding the whole day, up to its last millisecond."""
+    from datetime import datetime, timezone
+    from app.data_engine.backfill.models import BackfillTask
+    monkeypatch.setattr("app.data_engine.backfill.source_router.time.time", lambda: NOW / 1000)
+    day = int(datetime(2026, 11, 6, tzinfo=timezone.utc).timestamp() * 1000)
+    minute = WIDTHS["1m"]
+    ref = next(ref for ref in BinanceKlineArchiveProvider().plan_objects(
+        market_type="futures", symbol="BTCUSDT", interval="1m", start_ms=day, end_ms=day + 1440 * minute - 1,
+        now_ms=NOW) if ref.period == "2026-11-06")
+    metadata = {"custom_interval": "10007m", "history_composition_contract": "binance.usdm.trade-klines/base-utc/1",
+                "requester": "klines_history", PLANNED_OBJECTS_KEY: [ref.object_key]}
+    tasks = [BackfillTask("BTCUSDT", "1m", lo, hi, estimated_bars=(hi - lo) // minute + 1, exchange="binance",
+                          market_type="futures", metadata=dict(metadata))
+             for lo, hi in ((day, day + 999 * minute), (day + 1000 * minute, day + 1439 * minute))]
+
+    async def run():
+        http = ArchiveHttp()
+        http.add([ref])
+        router, _, _ = router_and_fetcher(tmp_path, http)
+        try:
+            route = await router.prepare(tasks)
+            assert [route.refs_for(task) for task in tasks] == [(ref,), (ref,)]
+            assert route.owns_object(tasks[0], ref) and not route.owns_object(tasks[1], ref)
+            assert router.snapshot()["metrics"]["counters"].get("archive_planned_object_rest_fallbacks", 0) == 0
+        finally:
+            await router.close()
+    asyncio.run(run())
+
+
+def test_a_planned_object_whose_tasks_were_trimmed_is_fetched_only_where_they_remain(tmp_path, monkeypatch):
+    """The engine reuses committed minutes and trims 1m tasks; the router then imports nothing over them."""
+    from datetime import datetime, timezone
+    from app.data_engine.backfill.models import BackfillTask
+    monkeypatch.setattr("app.data_engine.backfill.source_router.time.time", lambda: NOW / 1000)
+    day = int(datetime(2026, 11, 6, tzinfo=timezone.utc).timestamp() * 1000)
+    minute = WIDTHS["1m"]
+    ref = next(ref for ref in BinanceKlineArchiveProvider().plan_objects(
+        market_type="futures", symbol="BTCUSDT", interval="1m", start_ms=day, end_ms=day + 1440 * minute - 1,
+        now_ms=NOW) if ref.period == "2026-11-06")
+    metadata = {"custom_interval": "10007m", "history_composition_contract": "binance.usdm.trade-klines/base-utc/1",
+                "requester": "klines_history", PLANNED_OBJECTS_KEY: [ref.object_key]}
+    # The middle of the day is already stored: both ends remain.
+    tasks = [BackfillTask("BTCUSDT", "1m", lo, hi, estimated_bars=(hi - lo) // minute + 1, exchange="binance",
+                          market_type="futures", metadata=dict(metadata))
+             for lo, hi in ((day, day + 299 * minute), (day + 1000 * minute, day + 1439 * minute))]
+
+    async def run():
+        http = ArchiveHttp()
+        http.add([ref])
+        router, fetcher, transport = router_and_fetcher(tmp_path, http)
+        try:
+            route = await router.prepare(tasks)
+            assert [route.refs_for(task) for task in tasks] == [(), ()]
+            counters = router.snapshot()["metrics"]["counters"]
+            assert counters["archive_planned_object_partial"] == 1
+            results = await fetcher.fetch(tasks)
+            assert fetched_cells(tasks, results) == {("1m", at) for task in tasks
+                                                     for at in range(task.start_ms, task.end_ms + 1, minute)}
+            assert not http.downloads
+        finally:
+            await router.close()
+    asyncio.run(run())
