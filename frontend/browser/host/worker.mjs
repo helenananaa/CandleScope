@@ -1,6 +1,8 @@
 import { loadPyodide } from './pyodide.mjs'
 
 let runtime
+// Pages report this to show that moving between them reused one engine.
+const instance = crypto.randomUUID()
 let nextSocket = 0
 let sync = Promise.resolve()
 function filesystem(py, populate) {
@@ -75,7 +77,8 @@ function attach(port) {
     const channel = ports[0]
     try {
       const { py, host } = await (runtime ??= boot())
-      if (kind === 'ready') return send(id, { kind: 'ready', transport: 2 })
+      if (kind === 'ready') return send(id, { kind: 'ready', transport: 2, instance })
+      if (kind === 'stats') return send(id, { kind: 'stats', instance, ...JSON.parse(host.stats()) })
       if (kind === 'abort') return requests.get(id)?.cancel()
       if (kind === 'http') {
         const { body, ...metadata } = data
@@ -125,6 +128,16 @@ function attach(port) {
       }
     }
   }
+  // The shell keeps this worker alive across pages. A page that disappears
+  // without its pagehide messages must not leave its sockets or requests open.
+  port.addEventListener('close', () => {
+    for (const task of requests.values()) task.cancel()
+    if (!sessions.size) return
+    void runtime?.then(({ host }) => {
+      for (const key of sessions.values())
+        host.ws_event(key, JSON.stringify({ type: 'websocket.disconnect', code: 1001, reason: 'Page closed' }))
+    })
+  })
   port.start()
 }
 self.onconnect = ({ ports }) => attach(ports[0])

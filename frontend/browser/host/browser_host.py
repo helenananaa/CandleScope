@@ -198,6 +198,11 @@ async def websocket(identity, message, emit):
         sockets.pop(identity, None)
 
 
+def stats():
+    """Open application sockets and pending tasks, for page-switch acceptance."""
+    return json.dumps({"sockets": len(sockets), "tasks": len(asyncio.all_tasks(asyncio.get_event_loop()))})
+
+
 def ws_event(identity, payload):
     queue = sockets.get(identity)
     if queue is not None:

@@ -4,6 +4,7 @@ import { createRequire } from 'node:module'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { openApp } from './app-frame.mjs'
 
 const require = createRequire(import.meta.url)
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright-core')
@@ -27,8 +28,7 @@ async function visit(offline, check) {
       : [],
   })
   try {
-    const page = await context.newPage()
-    await page.goto(new URL('strategy.html?action=import', url).href)
+    const page = await openApp(await context.newPage(), new URL('strategy.html?action=import', url).href)
     const form = page.getByTestId('history-download-form')
     await page.getByRole('tab', { name: /自动下载|Download/ }).click({ timeout: 150000 })
     await check(page, form)

@@ -35,8 +35,11 @@ export default function WorkspaceNavigation({ active, offline = false, onReplay,
   const localReplay = useReplayEntryCapability({ enabled: offline });
   const trainingDisabled = replayDisabled || (offline && localReplay.state !== "enabled");
   const prerenderable: string[] = [];
-  if (researchEnabled && active !== "research") prerenderable.push("/strategy.html");
-  if (!offline && !replayDisabled && !onReplay && active !== "replay") prerenderable.push("/replay.html");
+  // The browser host shows pages in a frame beside its running engine, where
+  // a prerendered top-level page would only start a second, idle shell.
+  const browserHost = import.meta.env?.VITE_BROWSER_PYTHON === "1";
+  if (!browserHost && researchEnabled && active !== "research") prerenderable.push("/strategy.html");
+  if (!browserHost && !offline && !replayDisabled && !onReplay && active !== "replay") prerenderable.push("/replay.html");
   usePrerenderOnHover(prerenderable);
   return <nav className="workspace-navigation" aria-label={t("ux.navigation")}>
     {offline ? <span aria-disabled="true">{t("ux.market")}</span> : <a href="/" aria-current={active === "live" ? "page" : undefined}>{t("ux.market")}</a>}

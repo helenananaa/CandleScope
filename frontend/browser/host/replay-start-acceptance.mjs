@@ -4,6 +4,7 @@ import { createRequire } from 'node:module'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { openApp } from './app-frame.mjs'
 
 const { chromium } = createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE || 'playwright-core')
 const url = new URL('replay.html', process.argv[2] || 'http://127.0.0.1:4178/')
@@ -25,21 +26,25 @@ async function check(offline) {
       : [],
   })
   try {
-    const p = await ctx.newPage()
-    p.on('response', async (response) => {
+    const tab = await ctx.newPage()
+    let p
+    tab.on('response', async (response) => {
       if (!response.url().includes('/data-preparations/') || response.request().method() !== 'GET') return
       try {
         const body = await response.json()
         if (body.state === 'FAILED') console.error('Preparation failed:', body.error)
       } catch {}
     })
-    let imports = 0
-    p.on('request', (r) => {
-      if (r.url().includes('/local/downloads') || r.url().includes('/imports/csv')) imports++
+    // Start replay prepares its own history. It must not submit a library
+    // download or CSV import; listing the downloadable markets is a read.
+    const imports = []
+    tab.on('request', (r) => {
+      if (r.method() === 'POST' && (r.url().includes('/local/downloads') || r.url().includes('/imports/csv')))
+        imports.push(r.url())
     })
     async function start(kind, from, until, gaps) {
       console.log('Start', kind, utc(from), utc(until))
-      await p.goto(url.href)
+      p = await openApp(tab, url.href)
       await p.getByRole('button', { name: '新建训练', exact: true }).click({ timeout: 150000 })
       const dialog = p.locator('.training-hub-create')
       const field = dialog.locator('[data-training-field=requested-start-utc]')
@@ -52,7 +57,7 @@ async function check(offline) {
       const end = dialog.locator('[data-training-field=end-utc]')
       await end.fill(utc(until))
       await end.press('Tab')
-      const submission = p.waitForResponse(
+      const submission = tab.waitForResponse(
         (r) => r.request().method() === 'POST' && r.url().endsWith('/data-preparations/replay')
       )
       await dialog.getByRole('button', { name: '开始回放', exact: true }).click({ timeout: 30000 })
@@ -83,7 +88,7 @@ async function check(offline) {
         job.result.missing_ranges,
         gaps.map(([a, b]) => [instant(a), instant(b)])
       )
-      assert.equal(imports, 0)
+      assert.deepEqual(imports, [])
       const id = job.result.inputs[0].dataset_id
       if (offline) assert.equal(id, saved[kind])
       saved[kind] = id

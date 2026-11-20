@@ -4,6 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { openApp } from './app-frame.mjs'
 
 const require = createRequire(import.meta.url)
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright-core')
@@ -18,8 +19,7 @@ async function visit(check) {
     headless: true,
   })
   try {
-    const page = await context.newPage()
-    await page.goto(new URL('strategy.html?action=import', url).href)
+    const page = await openApp(await context.newPage(), new URL('strategy.html?action=import', url).href)
     await page.getByTestId('research-data-drawer').waitFor({ timeout: 150000 })
     async function api(path, body, status = 200) {
       const [code, value] = await page.evaluate(

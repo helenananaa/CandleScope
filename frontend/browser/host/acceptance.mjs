@@ -5,6 +5,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { openApp } from './app-frame.mjs'
 
 const require = createRequire(import.meta.url)
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright-core')
@@ -24,8 +25,7 @@ async function visit(offline, test) {
       : [],
   })
   try {
-    const page = await context.newPage()
-    await page.goto(url)
+    const page = await openApp(await context.newPage(), url)
     await page.waitForFunction(
       () => document.querySelector('canvas') || document.body.innerText.includes('启动失败'),
       null,
@@ -104,7 +104,7 @@ try {
     const value = result.lines[0].data.at(-1).value
     const expected = history.data.slice(-3).reduce((total, bar) => total + bar.close, 0) / 3
     assert.ok(Math.abs(value - expected) < 1e-5)
-    if (process.env.CANDLE_BROWSER_SCREENSHOT) await page.screenshot({ path: process.env.CANDLE_BROWSER_SCREENSHOT })
+    if (process.env.CANDLE_BROWSER_SCREENSHOT) await page.page().screenshot({ path: process.env.CANDLE_BROWSER_SCREENSHOT })
     console.log('Original market canvas, public history, older repair, desktop MA calculation passed.')
   })
   await visit(true, async (page) => {

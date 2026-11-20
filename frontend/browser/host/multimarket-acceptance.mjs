@@ -1,6 +1,7 @@
 // Check switching the real replay form, including same-symbol cache isolation.
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
+import { openApp } from './app-frame.mjs'
 const { chromium } = createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE || 'playwright-core')
 const url = new URL('replay.html', process.argv[2] || 'http://127.0.0.1:4178/')
 const browser = await chromium.launch({
@@ -13,10 +14,9 @@ const utc = (ms) => new Date(ms).toISOString().slice(0, 16).replace('T', ' ')
 const ids = new Map()
 try {
   // Keep a hub tab open; all sessions use the same origin-qualified library.
-  const hub = await context.newPage()
-  await hub.goto(url.href)
+  const hub = await openApp(await context.newPage(), url.href)
   await hub.getByRole('button', { name: '新建训练', exact: true }).waitFor({ timeout: 150000 })
-  const page = await context.newPage()
+  const tab = await context.newPage()
   for (const [exchange, market, symbol, kind] of [
     ['binance', 'spot', 'ETHUSDT', 'BAR'],
     ['binance', 'futures', 'ETHUSDT', 'BAR'],
@@ -26,7 +26,7 @@ try {
     ['binance', 'futures', 'ETHUSDT', 'BAR'],
   ]) {
     console.log('Starting', exchange, market, symbol, kind)
-    await page.goto(url.href)
+    const page = await openApp(tab, url.href)
     await page.getByRole('button', { name: '新建训练', exact: true }).click({ timeout: 150000 })
     const dialog = page.locator('.training-hub-create')
     await dialog.getByLabel('交易所', { exact: true }).selectOption(exchange, { timeout: 45000 })
@@ -39,14 +39,14 @@ try {
     const end = dialog.locator('[data-training-field=end-utc]')
     await end.fill(utc(start + 120000))
     await end.press('Tab')
-    const submitted = page.waitForResponse(
+    const submitted = tab.waitForResponse(
       (r) => r.url().endsWith('/data-preparations/replay') && r.request().method() === 'POST'
     )
     await dialog.getByRole('button', { name: '开始回放', exact: true }).click()
     const initial = await (await submitted).json()
     assert.equal(initial.request.requirements[0].exchange, exchange)
     assert.equal(initial.request.requirements[0].market_type, market)
-    const reportFailure = page
+    const reportFailure = tab
       .waitForResponse(
         async (response) => {
           if (!response.url().endsWith('/data-preparations/' + initial.id)) return false
