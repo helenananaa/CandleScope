@@ -666,6 +666,13 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - Layout in Ukrainian and Czech (152 visits, the 19 states that open without the local service): nothing the app writes itself is cut after the volume option's change. The rail's tab titles fit.
 - Next: row 7c4's remaining 11 languages, two per PR: 7c8 Hungarian and Romanian.
 
+**Phase 7c8 is done (branch `design/phase-7c8-hu-ro`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_7C8.md`](../docs/FRONTEND_DESIGN_QA_PHASE_7C8.md).
+
+- Hungarian and Romanian have their own feature files (`catalogs/hungarianFeatureMessages.ts`, `catalogs/romanianFeatureMessages.ts`: the seven feature blocks, 1,218 messages each, loaded only with their language), their inline English translated (147 Hungarian, 162 Romanian), and the 27 English duplicates that hid the native block removed. Messages shown in English: Hungarian 1,136 → 27, Romanian 1,155 → 40; what is left is names and trading terms that read the same. The CSV import's volume option is shorter in both.
+- IBM Plex Sans now loads from its per-weight files with every subset's unicode-range (`styles/fonts.ts`): with only the latin and cyrillic subset files, which have no unicode-range, Hungarian ő / ű fell through to the CJK font and drew with a detached accent, and other Latin Extended-A letters came from a fallback face.
+- Layout in Hungarian and Romanian (152 visits, the 19 states that open without the local service, audited again with the font change): nothing the app writes itself is cut after the volume option's change. The rail's tab titles fit.
+- Next: row 7c4's remaining 9 languages, two per PR: 7c9 Swedish and Turkish.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.
