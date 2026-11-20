@@ -18,7 +18,9 @@ planning, so the plan says exactly what the chunk writes:
    that then needs outside objects become REST windows, still inside
    [first, stop);
 4. emit object tasks (``mixed_route_objects`` names each object), REST
-   window tasks, and derive windows that follow the settled covers.
+   window tasks (an empty list: REST only), and derive windows that follow
+   the settled covers. The router imports exactly the listed objects
+   (``HistoricalSourceRouter._prepare_planned``).
 
 Any rule, budget or catalog failure returns None, and the chunk is planned
 as today. No fence changes: what this decides is only which rows to fetch.
@@ -32,9 +34,9 @@ from app.data_engine.history.cover_plan import CoverUnavailable
 
 from .family_plan import ChartDemand, FamilyPlanUnavailable, plan_family_sources, read_stored_series
 from .models import BackfillTask
+from .source_router import PLANNED_OBJECTS_KEY as ROUTE_OBJECTS_KEY, select_archive_objects
 
 ROUTE_AWARE = False
-ROUTE_OBJECTS_KEY = "mixed_route_objects"
 
 
 def archive_catalog(engine):
@@ -93,7 +95,6 @@ async def route_aware_plan(engine, storage, gap, target, first, stop, sources, p
     imports = {}
     if catalog is not None:
         plan_objects, rest_page_size, minimum_pages, fetch_batch_size = catalog
-        from .source_router import select_archive_objects
         for interval, windows in alone.windows.items():
             width = widths[interval]
             owned = [ref for ref in plan_objects(target.symbol, interval, first, stop - 1, now_ms)
@@ -144,6 +145,9 @@ async def route_aware_plan(engine, storage, gap, target, first, stop, sources, p
                  ROUTE_OBJECTS_KEY: [ref.object_key]}))
     for task in (*tasks, *windows):
         task.metadata["mixed_target_range"] = [first, stop]
+    for task in tasks:
+        # The router imports exactly the listed objects; none on REST tasks.
+        task.metadata.setdefault(ROUTE_OBJECTS_KEY, [])
     diagnostics = {"mixed_route_aware": True,
                    "mixed_route_imports": {interval: len(refs) for interval, refs in imports.items()},
                    "mixed_route_rest_cells": {interval: len(cells) for interval, cells in plan.cells.items()}}

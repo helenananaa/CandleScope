@@ -47,7 +47,8 @@ def catalog():
         return provider.plan_objects(market_type="futures", symbol=symbol, interval=interval,
                                      start_ms=start_ms, end_ms=end_ms, now_ms=NOW)
     cfg = BackfillConfig()
-    return plan_objects, 1500, max(1, cfg.history_archive_min_rest_pages), cfg.fetch_batch_size
+    return (plan_objects, provider.capabilities("futures").rest_page_size,
+            max(1, cfg.history_archive_min_rest_pages), cfg.fetch_batch_size)
 
 
 def stored_rows(rng, cold):

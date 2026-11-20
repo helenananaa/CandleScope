@@ -168,6 +168,16 @@ select_owned_objects(objects, needed_cells_by_grid, owned_range, page_size, mini
    HEAD 上 4 次也失败 1 次）；开关强制打开时，现有 mixed 测试里 62 次路由规划全部采用（这些测试不开归档，只有 REST 窗口），
    没有新增失败。）
 3. 路由服从 `mixed_route_objects`，解析失败时整段 REST；路由测试。
+   （已完成：键改由路由定义为 `source_router.PLANNED_OBJECTS_KEY`，规划的 REST 任务带空列表。`prepare` 先把带这个键的
+   任务交给 `_prepare_planned`：按键在目录里找到对象、照常解析（缓存、探测、解析器，抽成 `_resolve`，原路径共用），
+   每个对象只开一个 singleflight、只有一个所属任务，不选别的对象、不做父批次预取，REST 任务没有对象；不带键的任务照旧选择。
+   对象任务的范围就是对象本身，所以目录里找不到（`archive_planned_object_rest_fallbacks`）或解析失败时，任务没有对象，
+   整段走 REST；下载失败（404、校验失败）时由取数器现有的回退在任务与对象的交集上走 REST，也是整个对象。
+   `tests/test_planned_archive_routes.py` 用第 2 步的真实规划、真实路由和取数器、Binance 归档与 REST 替身：
+   导入的对象恰好是列出的对象，同一次调用里的其它任务与单独路由时相同（同样的任务去掉键后，今天的路由每个 chunk 选
+   3–8 个对象，其中 1–2 个跨出 chunk）；取到的行恰好是计划算进的行；一个对象 404 或不在目录里时，行仍然相同，
+   对象的整段由 REST 取到。第 2 步的测试改用 Binance 真实的 REST 页大小（1000）定价。相关的 46 个测试文件：开关关时
+   与 HEAD 失败集合相同；强制打开时只多出 `test_without_the_flag_the_plan_is_unchanged`（它检查的就是关闭时的行为）。）
 4. 写入校验在获取前按计划一次捕获；确认 `planned_write_windows` 结果与计划一致。
 5. 配对测量，按 §7 验收；全量测试。通过后默认打开。
 

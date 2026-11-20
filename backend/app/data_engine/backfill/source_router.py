@@ -43,6 +43,10 @@ MAX_USDM_ARCHIVE_ROUTE_ROWS = 32768
 MAX_COMPOSED_ARCHIVE_AMPLIFICATION = 4
 MAX_COMPOSED_MULTI_EDGE_AMPLIFICATION = 12
 SMALL_COMPOSED_ARCHIVE_ROWS = 256
+# Fetch tasks of a route-aware mixed plan (backfill/mixed_routes.py) carry this
+# key: the archive objects the task imports, chosen by the plan, which counted
+# every row they write. An empty list means REST only.
+PLANNED_OBJECTS_KEY = "mixed_route_objects"
 
 
 @dataclass(frozen=True, slots=True)
@@ -308,8 +312,14 @@ class HistoricalSourceRouter:
             foreground_demand,
         )
 
+        planned = [task for task in tasks if PLANNED_OBJECTS_KEY in task.metadata]
+        if planned:
+            await self._prepare_planned(planned, decisions, refs_by_task, futures,
+                                        owner_task_by_object, scheduled_object_keys, now_ms)
         groups: dict[tuple[str, str, str, str], list[BackfillTask]] = {}
         for task in tasks:
+            if PLANNED_OBJECTS_KEY in task.metadata:
+                continue
             groups.setdefault(
                 (task.exchange, task.market_type, task.symbol, task.interval),
                 [],
@@ -373,36 +383,10 @@ class HistoricalSourceRouter:
                                                 'composed_daily_rest_cheaper': len(selection.eligible)},
                         )
                     continue
-                candidates = list(selection.eligible)
-                # Local ZIPs are usable without contacting the resolver or
-                # acquiring any proxy route (even with no enabled routes).
-                cached = await asyncio.gather(*(self._cache.resolve_fresh(ref) for ref in candidates))
-                warm = [ref for ref in cached if ref is not None]
-                cold = [ref for ref, hit in zip(candidates, cached) if hit is None]
-                if cold and capabilities.probe_symbol and provider.id not in self._probe_passed:
-                    probe = await self._probe_provider(exchange, provider)
-                    if not probe.get("enabled"):
-                        if exchange in self._disabled_providers:
-                            continue
-                        cold = []
-                try:
-                    resolved = warm + (await provider.resolve_objects(cold, self._http_for(exchange))
-                                       if cold else [])
-                except RateLimitDeferred:
-                    raise
-                except ArchiveCompatibilityError as exc:
-                    self._disable_provider(exchange, exc)
+                resolved = await self._resolve(provider, capabilities, exchange, symbol,
+                                               list(selection.eligible))
+                if resolved is None:
                     continue
-                except Exception as exc:
-                    self._metrics.inc("archive_resolver_errors")
-                    self._metrics.mark("last_error_at")
-                    logger.warning(
-                        "rest_fallback archive resolver failed exchange=%s symbol=%s: %s",
-                        exchange,
-                        symbol,
-                        exc,
-                    )
-                    resolved = warm
                 actual_start_ms = min(task.start_ms for task in run)
                 actual_end_ms = max(task.end_ms for task in run)
                 # Resolve from the complete parent demand, but only make the
@@ -592,6 +576,90 @@ class HistoricalSourceRouter:
             foreground_demand,
             decisions,
         )
+
+    async def _resolve(self, provider, capabilities, exchange, symbol, candidates):
+        """Published refs among ``candidates``; None when the provider was disabled meanwhile."""
+        # Local ZIPs are usable without contacting the resolver or
+        # acquiring any proxy route (even with no enabled routes).
+        cached = await asyncio.gather(*(self._cache.resolve_fresh(ref) for ref in candidates))
+        warm = [ref for ref in cached if ref is not None]
+        cold = [ref for ref, hit in zip(candidates, cached) if hit is None]
+        if cold and capabilities.probe_symbol and provider.id not in self._probe_passed:
+            probe = await self._probe_provider(exchange, provider)
+            if not probe.get("enabled"):
+                if exchange in self._disabled_providers:
+                    return None
+                cold = []
+        try:
+            return warm + (await provider.resolve_objects(cold, self._http_for(exchange)) if cold else [])
+        except RateLimitDeferred:
+            raise
+        except ArchiveCompatibilityError as exc:
+            self._disable_provider(exchange, exc)
+            return None
+        except Exception as exc:
+            self._metrics.inc("archive_resolver_errors")
+            self._metrics.mark("last_error_at")
+            logger.warning(
+                "rest_fallback archive resolver failed exchange=%s symbol=%s: %s",
+                exchange,
+                symbol,
+                exc,
+            )
+            return warm
+
+    async def _prepare_planned(self, tasks, decisions, refs_by_task, futures, owner_task_by_object,
+                               scheduled_object_keys, now_ms) -> None:
+        """Route a route-aware mixed plan's tasks: import exactly the objects each lists.
+
+        The plan chose these objects (whole objects inside one chunk's
+        targets) and counted every row they write, so nothing is selected
+        here and nothing else is prefetched: every other row is REST. An
+        object task spans its object, so a listed object that is not
+        resolved leaves its tasks to REST over the whole object, and one that
+        fails to load falls back over its intersection with each task (the
+        fetcher's existing fallback); either way the rows the plan counted
+        arrive.
+        """
+        groups: dict[tuple[str, str, str, str], list[BackfillTask]] = {}
+        keys_by_task: dict[str, list[str]] = {}
+        for task in sorted(tasks, key=lambda item: (item.start_ms, item.end_ms)):
+            keys = keys_by_task[task.task_key] = [str(key) for key in task.metadata.get(PLANNED_OBJECTS_KEY) or ()]
+            decisions[task.task_key].update(reason="route_planned_rest", planned_object_count=len(keys))
+            if keys:
+                groups.setdefault((task.exchange, task.market_type, task.symbol, task.interval), []).append(task)
+        for (exchange, market_type, symbol, interval), group in groups.items():
+            listed: dict[str, list[BackfillTask]] = {}
+            for task in group:
+                for key in keys_by_task[task.task_key]:
+                    listed.setdefault(key, []).append(task)
+            provider = None if exchange in self._disabled_providers else self._provider(exchange)
+            capabilities = provider.capabilities(market_type) if provider is not None else None
+            resolved = None
+            if capabilities is not None and capabilities.supports(market_type=market_type, interval=interval):
+                catalog = {ref.object_key: ref for ref in provider.plan_objects(
+                    market_type=market_type, symbol=symbol, interval=interval,
+                    start_ms=min(task.start_ms for task in group), end_ms=max(task.end_ms for task in group),
+                    now_ms=now_ms)}
+                wanted = [catalog[key] for key in listed if key in catalog]
+                resolved = await self._resolve(provider, capabilities, exchange, symbol, wanted) if wanted else []
+            published = {ref.object_key: ref for ref in _unique_refs(resolved or [])}
+            for key, owners in listed.items():
+                ref = published.get(key)
+                if ref is None:
+                    self._metrics.inc("archive_planned_object_rest_fallbacks")
+                    for task in owners:
+                        decisions[task.task_key]["reason"] = "route_planned_object_unavailable"
+                    continue
+                touching = [task for task in owners if _intersects(task.start_ms, task.end_ms, ref.start_ms, ref.end_ms)]
+                if not touching:
+                    continue
+                futures.setdefault(key, await self._singleflight(provider, ref))
+                scheduled_object_keys.add(key)
+                owner_task_by_object.setdefault(key, touching[0].task_key)
+                for task in touching:
+                    refs_by_task.setdefault(task.task_key, []).append(ref)
+            self._metrics.inc("archive_planned_objects", len(listed))
 
     def start_deferred_prefetch(self, route_plan: ArchiveRoutePlan) -> None:
         """Launch cold parent objects after foreground fetch work completes."""
