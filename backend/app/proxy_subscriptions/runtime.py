@@ -56,33 +56,29 @@ class ManagedRoutes:
                 raise SubscriptionError("Invalid or duplicate subscription node")
             nodes[key] = snapshots[revision][key]
         if nodes and previous.core and previous.core.alive:
-            previous_nodes = previous.core.nodes
-            changed = nodes != previous_nodes
-            if changed:
-                previous.core.reconfigure(nodes)
-            try:
+            with previous.core.stage_update(nodes):
                 yield Generation(references, previous.core)
-            except BaseException:
-                if changed:
-                    previous.core.reconfigure(previous_nodes)
-                raise
             return
         candidate = Generation(references, Core(nodes) if nodes else None)
         try:
             yield candidate
-        finally:
-            if candidate.core and self.active.core is not candidate.core:
+        except BaseException:
+            if candidate.core:
                 candidate.core.close()
+            raise
 
     def activate(self, routes, persist=None):
-        with self.lock, self.candidate(routes) as candidate:
-            if persist:
-                persist()
+        with self.lock:
+            with self.candidate(routes) as candidate:
+                if persist:
+                    persist()
             previous = self.active
             self.active = candidate
             self.restore_pending = False
             if previous.core and previous.core is not candidate.core:
                 previous.core.close()
+            if candidate.core:
+                candidate.core.sweep_retired_connections()
 
     def restore(self):
         with self.lock:
@@ -95,12 +91,15 @@ class ManagedRoutes:
         with self.lock:
             if self.restore_pending or (self.active.core and not self.active.core.alive):
                 self.restore()
+            elif self.active.core:
+                self.active.core.sweep_retired_connections()
 
     async def supervise(self):
         delay = 2
         while True:
             await asyncio.sleep(delay)
-            if not self.restore_pending and (not self.active.core or self.active.core.alive):
+            core = self.active.core
+            if not self.restore_pending and (not core or (core.alive and not core.connection_sweep_due)):
                 delay = 2
                 continue
             try:
