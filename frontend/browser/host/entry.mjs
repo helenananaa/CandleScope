@@ -27,24 +27,58 @@ if (!worker) {
   startupFailure('当前浏览器缺少 SharedWorker 支持。')
   throw Error('SharedWorker unavailable')
 }
-worker.port.onmessage = ({ data }) => callbacks.get(data.id)?.(data)
+worker.port.onmessage = ({ data }) =>
+  data.kind === 'notice' ? showStorageNotice(data.storage) : callbacks.get(data.id)?.(data)
 worker.port.start()
 
+const deadlines = new Map()
 function request(kind, payload = {}, timeout = 90000) {
   const id = ++sequence
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      callbacks.delete(id)
-      reject(Error('Python worker timed out'))
-    }, timeout)
+    deadlines.set(
+      id,
+      setTimeout(() => {
+        callbacks.delete(id)
+        deadlines.delete(id)
+        reject(Error('Python worker timed out'))
+      }, timeout)
+    )
     callbacks.set(id, (result) => {
       callbacks.delete(id)
-      clearTimeout(timer)
+      clearTimeout(deadlines.get(id))
+      deadlines.delete(id)
       if (result.kind === 'error') reject(Error(result.error))
       else resolve(result)
     })
     worker.port.postMessage({ id, kind, ...payload })
   })
+}
+
+// The engine reports when another build's engine still owns the browser
+// storage, and when saving to it fails. The page frame shows either.
+let storageBanner
+function showStorageNotice(notice) {
+  if (notice?.state === 'waiting') {
+    // Starting waits for the other tabs to close, however long that takes.
+    for (const deadline of deadlines.values()) clearTimeout(deadline)
+    deadlines.clear()
+  }
+  if (window.top === window) return
+  if (!notice) return storageBanner?.remove()
+  if (!storageBanner) {
+    storageBanner = document.createElement('div')
+    storageBanner.setAttribute('role', 'alert')
+    storageBanner.style.cssText =
+      'position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483647;padding:10px 14px;border-radius:6px;' +
+      'background:#3a2a12;color:#f5d9a8;font:13px/1.5 system-ui,sans-serif;box-shadow:0 2px 12px rgba(0,0,0,.4)'
+  }
+  storageBanner.textContent =
+    notice.state === 'waiting'
+      ? '另一个版本的 CandleScope 网页版正在其他标签页中运行。关闭那些标签页后，本页会自动继续。'
+      : '浏览器存储写入失败，最近的改动还没有保存（' +
+        notice.error +
+        '）。引擎会继续重试；请检查磁盘空间或浏览器的网站数据设置。'
+  document.body.append(storageBanner)
 }
 
 // The service worker hands each application HTTP request to the document that
@@ -153,6 +187,8 @@ function startShell() {
   const html = document.documentElement
   html.dataset.candlescopeShell = '1'
   root.hidden = true
+  // Ask the browser not to clear the site's data under storage pressure.
+  navigator.storage?.persist?.().catch(() => {})
   // Boot the engine while the frame loads. The frame waits for this instance.
   request('ready', {}, 150000).then((ready) => {
     if (ready.snapshot === 'missing') setTimeout(snapshotEngine, 10000)
@@ -264,6 +300,7 @@ async function startPage() {
   clearTimeout(notice)
   root.style.cssText = ''
   if (ready.instance) document.documentElement.dataset.engineInstance = ready.instance
+  showStorageNotice(ready.storage)
   globalThis.WebSocket = AppSocket
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') void request('flush').catch(console.error)

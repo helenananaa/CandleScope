@@ -1,4 +1,5 @@
 import { IMPORT_BACKEND, disableSnapshot, hasSnapshot, interpreter, loadBackend, readSnapshot } from './interpreter.mjs'
+import { openStore } from './store.mjs'
 
 let runtime
 // Pages report this to show that moving between them reused one engine.
@@ -11,31 +12,55 @@ const snapshots = typeof caches !== 'undefined'
 let boot = 'import'
 let snapshotState = snapshots ? 'missing' : 'unsupported'
 
-function filesystem(py, populate) {
-  return new Promise((resolve, reject) =>
-    py.FS.syncfs(populate, (error) => {
-      if (!error) return resolve()
-      const failure = new Error(
-        error.message || error.name || 'Browser filesystem sync failed (errno ' + error.errno + ')'
-      )
-      failure.errno = error.errno
-      reject(failure)
-    })
-  )
+// Pages show the storage state: { state: 'waiting' } while another build's
+// engine owns the data directory, { state: 'failed', error } after a save
+// failed, and null otherwise.
+let storageNotice = null
+const ports = new Set()
+function notify(notice) {
+  if (JSON.stringify(notice) === JSON.stringify(storageNotice)) return
+  storageNotice = notice
+  for (const port of ports) port.postMessage({ kind: 'notice', storage: notice })
 }
-function persist(py) {
-  const task = sync
-    .catch(() => {})
-    .then(async () => {
-      try {
-        await filesystem(py, false)
-      } catch (error) {
-        // IDBFS enumerates files before opening its transaction. SQLite may
-        // remove a journal during that interval. Re-enumerate on WASI ENOENT.
-        if (error.errno !== 44) throw error
-        await filesystem(py, false)
-      }
-    })
+
+// One engine at a time owns the data directory. Tabs of another build run
+// another shared worker, which waits here until this one's tabs have closed.
+async function lockStorage() {
+  if (!navigator.locks) return
+  const forever = new Promise(() => {})
+  const acquired = await new Promise((resolve, reject) =>
+    navigator.locks
+      .request('candlescope-store', { ifAvailable: true }, (lock) => {
+        resolve(Boolean(lock))
+        return lock && forever
+      })
+      .catch(reject)
+  )
+  if (acquired) return
+  notify({ state: 'waiting' })
+  await new Promise((resolve, reject) =>
+    navigator.locks
+      .request('candlescope-store', () => {
+        resolve()
+        return forever
+      })
+      .catch(reject)
+  )
+  notify(null)
+}
+
+// A failed save keeps serving: the changes stay in memory, the pages say so,
+// and the next save retries them.
+function persist(store) {
+  const task = sync.then(async () => {
+    try {
+      await store.save()
+      if (storageNotice?.state === 'failed') notify(null)
+    } catch (error) {
+      console.error('Could not save the data directory', error)
+      notify({ state: 'failed', error: String(error?.message || error) })
+    }
+  })
   sync = task
   return task
 }
@@ -49,6 +74,7 @@ async function start() {
           return null
         })
       : null,
+    lockStorage(),
   ])
   let py
   if (snapshot?.disabled) snapshotState = 'disabled'
@@ -64,9 +90,7 @@ async function start() {
     }
   }
   py ??= await interpreter(backend, 'import')
-  py.FS.mkdirTree('/store')
-  py.FS.mount(py.FS.filesystems.IDBFS, {}, '/store')
-  await filesystem(py, true)
+  const store = await openStore(py, '/store')
   try {
     // The archive holds unpacked packages with bytecode for the modules that
     // starting the backend imports (see prepare_engine.mjs).
@@ -81,17 +105,14 @@ async function start() {
   setInterval(async () => {
     if (flushing) return
     flushing = true
-    try {
-      await persist(py)
-    } catch (error) {
-      console.error(error)
-    } finally {
-      flushing = false
-    }
+    await persist(store)
+    flushing = false
   }, 2000)
-  return { py, host: py.pyimport('browser_host') }
+  return { store, host: py.pyimport('browser_host') }
 }
 function attach(port) {
+  ports.add(port)
+  if (storageNotice) port.postMessage({ kind: 'notice', storage: storageNotice })
   const sessions = new Map()
   const send = (id, message) => port.postMessage({ id, ...message })
   const requests = new Map()
@@ -99,8 +120,9 @@ function attach(port) {
     const { id, kind } = data
     const channel = ports[0]
     try {
-      const { py, host } = await (runtime ??= start())
-      if (kind === 'ready') return send(id, { kind: 'ready', transport: 2, instance, snapshot: snapshotState })
+      const { store, host } = await (runtime ??= start())
+      if (kind === 'ready')
+        return send(id, { kind: 'ready', transport: 2, instance, snapshot: snapshotState, storage: storageNotice })
       if (kind === 'stats') {
         const snapshot = snapshotState === 'missing' && (await hasSnapshot()) ? 'stored' : snapshotState
         return send(id, { kind: 'stats', instance, boot, snapshot, ...JSON.parse(host.stats()) })
@@ -117,7 +139,7 @@ function attach(port) {
         }
         try {
           const result = JSON.parse(await task)
-          await persist(py)
+          await persist(store)
           channel.postMessage(result)
         } finally {
           requests.delete(id)
@@ -140,7 +162,7 @@ function attach(port) {
       } else if (kind === 'socket' && sessions.has(id))
         host.ws_event(sessions.get(id), JSON.stringify(data.event))
       else if (kind === 'flush') {
-        await persist(py)
+        await persist(store)
         send(id, { kind: 'ready' })
       }
     } catch (error) {
@@ -157,6 +179,7 @@ function attach(port) {
   // The shell keeps this worker alive across pages. A page that disappears
   // without its pagehide messages must not leave its sockets or requests open.
   port.addEventListener('close', () => {
+    ports.delete(port)
     for (const task of requests.values()) task.cancel()
     if (!sessions.size) return
     void runtime?.then(({ host }) => {

@@ -29,6 +29,7 @@ const engineFiles = {
   'backend-worker.mjs': resolve(here, 'host/worker.mjs'),
   'interpreter.mjs': resolve(here, 'host/interpreter.mjs'),
   'snapshot-worker.mjs': resolve(here, 'host/snapshot-worker.mjs'),
+  'store.mjs': resolve(here, 'host/store.mjs'),
   ...Object.fromEntries(
     ['pyodide.mjs', 'pyodide.asm.mjs', 'pyodide.asm.wasm', 'python_stdlib.zip', 'pyodide-lock.json'].map(
       (name) => [name, resolve(runtime, name)]
