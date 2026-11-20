@@ -57,7 +57,11 @@ def normalize_proxy_pool(routes: list[dict] | None, strategy: str = "failover") 
             valid = parsed.scheme in {"http", "https"} and parsed.hostname and parsed.port
         except ValueError:
             valid = False
-        if not valid or parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+        from app.proxy_subscriptions.store import REFERENCE
+        managed = REFERENCE.fullmatch(url)
+        if managed and route_id != "sub_" + managed[2]:
+            raise ValueError("managed route id does not match its node")
+        if not managed and (not valid or parsed.path not in {"", "/"} or parsed.query or parsed.fragment):
             raise ValueError("proxy routes require an HTTP(S) proxy URL with an explicit port")
         if url in url_groups and url_groups[url] != group:
             raise ValueError("the same proxy address must use the same egress group")
@@ -266,10 +270,18 @@ class ProxyPool:
             return []
         values, _ = normalize_proxy_pool(getattr(config, "proxy_routes", []),
                                         getattr(config, "proxy_strategy", "failover"))
-        routes = [ProxyRoute(value["id"], value["name"], value["url"],
-                             value["egress_group"], value["max_concurrency"], value["max_ws_subscriptions"])
-                  for value in values if value["enabled"] and
-                  (not value["exchanges"] or exchange in value["exchanges"])]
+        from app.proxy_subscriptions.runtime import resolve
+        from app.proxy_subscriptions.source import SubscriptionError
+        routes = []
+        for value in values:
+            if not value["enabled"] or (value["exchanges"] and exchange not in value["exchanges"]):
+                continue
+            try:
+                endpoint = resolve(value["url"])
+            except SubscriptionError:
+                continue
+            routes.append(ProxyRoute(value["id"], value["name"], endpoint, value["egress_group"],
+                                     value["max_concurrency"], value["max_ws_subscriptions"]))
         if not routes:
             raise ValueError(f"no enabled proxy route for {exchange}")
         return routes
@@ -719,7 +731,13 @@ class ProxyPool:
         values = getattr(config, "proxy_routes", [])
         rows = []
         for value in values:
-            url = value["url"]
+            from app.proxy_subscriptions.runtime import resolve
+            available = True
+            try:
+                url = resolve(value["url"])
+            except ValueError:
+                available = False
+                url = value["url"]
             observations = []
             for (observed_url, exchange, kind), health in self._health.items():
                 if observed_url == url:
@@ -735,7 +753,7 @@ class ProxyPool:
                               and runtime.get("proxy_egress_group") == value["egress_group"]
                               and runtime.get("proxy_endpoint") == redact_proxy_url(url)]
             rows.append({"id": value["id"], "name": value["name"], "enabled": value["enabled"],
-                         "endpoint": redact_proxy_url(url),
+                         "endpoint": redact_proxy_url(url), "available": available,
                          "egress_group": value["egress_group"], "active_requests": self._active.get(url, 0),
                          "ws_subscriptions": len(self._ws_load.get(url, {})),
                          "ws_sessions": len(leases),

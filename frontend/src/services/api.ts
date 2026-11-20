@@ -454,6 +454,30 @@ interface ProxySettingsInput {
   strategy?: string;
 }
 
+export interface ProxyRouteConfig extends Record<string, unknown> {
+  id: string; name: string; url: string; egress_group: string;
+  enabled: boolean; exchanges: string[]; max_concurrency: number;
+  max_ws_subscriptions?: number;
+}
+
+export interface ProxySubscriptionPreview {
+  preview: string;
+  source: string;
+  skipped: number;
+  nodes: Array<{ id: string; name: string; protocol: string }>;
+}
+
+export async function previewProxySubscription(body: { url: string } | { saved_route_id: string }) {
+  return await request(`${API_BASE}/settings/proxy/subscriptions/preview`, { method: "POST", body }) as ProxySubscriptionPreview;
+}
+
+export async function prepareSubscriptionRoutes(preview: string, nodes: string[]) {
+  const data = await request(`${API_BASE}/settings/proxy/subscriptions/routes`, {
+    method: "POST", body: { preview, nodes },
+  }) as { routes: ProxyRouteConfig[] };
+  return data.routes;
+}
+
 export async function fetchProxySettings(): Promise<unknown> {
   return request(`${API_BASE}/settings/proxy`);
 }

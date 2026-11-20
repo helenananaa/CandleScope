@@ -498,8 +498,18 @@ async def _start_plugin_plane() -> None:
 @app.on_event("startup")
 async def startup_event() -> None:
     try:
+        if RUNTIME_MODE != "LOCAL_OFFLINE":
+            from app.proxy_subscriptions.runtime import managed
+            from app.proxy_subscriptions.source import SubscriptionError
+            try:
+                await asyncio.to_thread(managed.restore)
+            except SubscriptionError as exc:
+                logger.warning("Subscription routes unavailable: %s", exc)
+            app.state.proxy_supervisor = asyncio.create_task(managed.supervise(), name="managed-proxy-recovery")
         await _startup_event_impl()
     except BaseException:
+        if RUNTIME_MODE != "LOCAL_OFFLINE":
+            await _stop_managed_proxy()
         core = getattr(app.state, "data_manager_core", None)
         if core is not None:
             await core.shutdown_strategy()
@@ -837,7 +847,14 @@ async def shutdown_event() -> None:
     # Cancelling the lifespan waiter cannot abandon databases/actors after a
     # manager has drained its own physical work. Keep the entire application
     # cleanup owned until its remaining component shutdowns finish.
-    cleanup = asyncio.create_task(_shutdown_components(), name="application-shutdown-components")
+    async def stop_components():
+        try:
+            await _shutdown_components()
+        finally:
+            if RUNTIME_MODE != "LOCAL_OFFLINE":
+                await _stop_managed_proxy()
+
+    cleanup = asyncio.create_task(stop_components(), name="application-shutdown-components")
     try:
         await asyncio.shield(cleanup)
     except asyncio.CancelledError:
@@ -853,6 +870,15 @@ async def shutdown_event() -> None:
         except BaseException:
             logger.exception("Application cleanup failed after shutdown waiter cancellation")
         raise
+
+
+async def _stop_managed_proxy() -> None:
+    from app.proxy_subscriptions.runtime import managed
+    supervisor = getattr(app.state, "proxy_supervisor", None)
+    if supervisor is not None:
+        supervisor.cancel()
+        await asyncio.gather(supervisor, return_exceptions=True)
+    await asyncio.to_thread(managed.close)
 
 
 async def _shutdown_components() -> None:

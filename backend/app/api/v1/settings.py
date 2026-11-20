@@ -22,6 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from app.core.proxy_pool import get_proxy_pool, normalize_proxy_pool, redact_proxy_url
 
 from app.core.config import KLINES_DB_PATH
+from app.core.async_cleanup import finish_cleanup
 from app.core.executors import run_storage
 from app.core.bounded_executor import ExecutorBusyError
 from app.core.market import MarketType
@@ -45,7 +46,14 @@ from app.data_engine.data_manager import (
 
 logger = logging.getLogger("candlescope.settings")
 
+from app.proxy_subscriptions import api as subscription_api
+from app.proxy_subscriptions.runtime import ManagedRoutes, managed
+from app.proxy_subscriptions.source import SubscriptionError
+from app.research_data.access import require_local_research_access
+
 router = APIRouter(prefix="/settings", tags=["settings"])
+router.include_router(subscription_api.router)
+_proxy_update_lock = asyncio.Lock()
 
 # ═══════════════════════════════════════════════════════════════
 #  Models
@@ -540,12 +548,32 @@ async def update_proxy_settings(request: Request, body: ProxyConfig) -> dict:
     This updates the IngestionConfig and restarts HTTP sessions
     so the new proxy takes effect immediately.
     """
+    async with _proxy_update_lock:
+        return await finish_cleanup(_apply_proxy_settings(request, body))
+
+
+async def _apply_proxy_settings(request, body):
     mode, custom_proxy = normalize_proxy_settings(body.mode, body.custom_proxy)
     cfg = _get_ingestion_config(request)
+    selected = body.routes if mode == "pool" else []
+    previous_core = managed.active.core
+    def external_routes(routes):
+        return [r for r in routes if not r["url"].startswith("mihomo://")]
+
+    preserve_sessions = bool(
+        previous_core and previous_core.alive and cfg and getattr(cfg, "proxy_mode", None) == mode == "pool"
+        and external_routes(cfg.proxy_routes) == external_routes(selected)
+    )
+    if any(route["url"].startswith("mihomo://") for route in body.routes) or managed.active.core:
+        require_local_research_access(request)
+    try:
+        await asyncio.to_thread(managed.activate, selected, lambda: save_proxy_settings(
+            mode, custom_proxy, routes=body.routes, strategy=body.strategy))
+    except SubscriptionError as exc:
+        raise HTTPException(400, str(exc)) from None
 
     if cfg is None:
         # Even without IngestionConfig, persist the settings to disk
-        save_proxy_settings(mode, custom_proxy, routes=body.routes, strategy=body.strategy)
         readonly_accounts = getattr(request.app.state, "readonly_account_service", None)
         if readonly_accounts is not None:
             await readonly_accounts.reconfigure_network()
@@ -558,8 +586,6 @@ async def update_proxy_settings(request: Request, body: ProxyConfig) -> dict:
             "routes": body.routes, "strategy": body.strategy,
         }
 
-    # Persist to disk so settings survive restarts
-    save_proxy_settings(mode, custom_proxy, routes=body.routes, strategy=body.strategy)
 
     runtime = _get_data_engine_runtime(request)
     update_config = getattr(runtime, "update_ingestion_config", None)
@@ -571,7 +597,8 @@ async def update_proxy_settings(request: Request, body: ProxyConfig) -> dict:
                    proxy_routes=body.routes, proxy_strategy=body.strategy)
 
     # Restart all active runtime transports to apply the new proxy.
-    await _restart_runtime_transports(request)
+    if not (preserve_sessions and managed.active.core is previous_core):
+        await _restart_runtime_transports(request)
     readonly_accounts = getattr(request.app.state, "readonly_account_service", None)
     if readonly_accounts is not None:
         await readonly_accounts.reconfigure_network()
@@ -608,6 +635,25 @@ async def test_proxy_connection(body: ProxyTestRequest, request: Request) -> dic
     Returns per-exchange results so the user can see which exchanges
     are reachable.
     """
+    if body.mode == "pool" and any(r["url"].startswith("mihomo://") for r in body.routes):
+        require_local_research_access(request)
+        return await finish_cleanup(_test_subscription_draft(body, request))
+    return await _test_proxy_connection(body, request)
+
+
+async def _test_subscription_draft(body, request):
+    draft = ManagedRoutes(managed.store)
+    try:
+        await asyncio.to_thread(draft.activate, body.routes)
+        routes = [dict(r, url=draft.active.resolve(r["url"])) if r["enabled"] else r for r in body.routes]
+        return await _test_proxy_connection(body.model_copy(update={"routes": routes}), request)
+    except SubscriptionError as exc:
+        raise HTTPException(400, str(exc)) from None
+    finally:
+        await asyncio.to_thread(draft.close)
+
+
+async def _test_proxy_connection(body, request):
     proxy_url = _resolve_proxy_url(body.mode, body.custom_proxy)
     if body.mode == "pool":
         # Draft routes can be tested before saving. The same shared quotas and
