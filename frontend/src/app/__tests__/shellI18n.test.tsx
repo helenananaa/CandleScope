@@ -424,7 +424,8 @@ test("Russian layout CSS keeps long chrome wrapping and a Cyrillic-capable font 
   assert.match(main, /\.\/styles\/fonts\.js/);
   const fonts = fs.readFileSync(new URL("../../styles/fonts.ts", import.meta.url), "utf8");
   assert.match(tokens, /--font-sans:\s*'IBM Plex Sans'/);
-  assert.match(fonts, /@fontsource\/ibm-plex-sans\/cyrillic-400\.css/);
+  // The per-weight file covers latin-ext and cyrillic with unicode-range (Hungarian ő / ű, Russian).
+  assert.match(fonts, /@fontsource\/ibm-plex-sans\/400\.css/);
   assert.match(settingsCss, /html\[lang="ru"\] \.st-group-title/);
   assert.match(settingsCss, /overflow-wrap: break-word/);
 });
