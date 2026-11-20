@@ -346,46 +346,34 @@ class HistoricalSourceRouter:
                     end_ms=route_end_ms,
                     now_ms=now_ms,
                 )
-                planned_count = len(candidates)
-                candidates = _filter_daily_candidates(
-                    candidates,
-                    range_start_ms=route_start_ms,
-                    range_end_ms=route_end_ms,
-                    interval=interval,
+                selection = select_archive_objects(
+                    candidates, run, exchange=exchange, market_type=market_type, interval=interval,
+                    route_start_ms=route_start_ms, route_end_ms=route_end_ms,
                     rest_page_size=capabilities.rest_page_size,
                     minimum_pages=max(1, self._cfg.history_archive_min_rest_pages),
-                    tasks=run,
+                    fetch_batch_size=self._cfg.fetch_batch_size,
                 )
-                threshold_count = len(candidates)
-                rejected = {}
-                if exchange == 'binance' and market_type == 'futures':
-                    bounded = _bounded_usdm_archive_candidates(candidates, run, interval,
-                                                               rejected=rejected)
-                    self._metrics.inc('archive_source_budget_skips', len(candidates)-len(bounded))
-                    candidates = bounded
+                if selection.budget_checked:
+                    self._metrics.inc('archive_source_budget_skips',
+                                      selection.above_threshold - len(selection.eligible))
                 for task in run:
-                    decisions[task.task_key].update(candidate_objects=planned_count,
-                        below_rest_threshold_objects=planned_count-threshold_count,
-                        eligible_objects=len(candidates), archive_rejections=dict(rejected))
-                    if planned_count and not candidates:
+                    decisions[task.task_key].update(candidate_objects=selection.planned,
+                        below_rest_threshold_objects=selection.planned-selection.above_threshold,
+                        eligible_objects=len(selection.eligible), archive_rejections=dict(selection.rejected))
+                    if selection.planned and not selection.eligible:
                         decisions[task.task_key]['reason'] = 'archive_cost_rejected'
-                if not candidates:
+                if not selection.eligible:
                     continue
-                # A composed daily window often fits one REST page even when
-                # it straddles two months. Avoid extra archive transactions
-                # and whole-object imports without changing canonical slots.
-                if (exchange == 'binance' and market_type == 'futures' and interval == '1d'
-                        and all(_composed_group_key(task) for task in run)
-                        and (page_size := min(self._cfg.fetch_batch_size, capabilities.rest_page_size)) > 0
-                        and sum(_ceil_div((task.end_ms-task.start_ms)//86_400_000+1, page_size)
-                                for task in run) <= len(candidates)):
-                    self._metrics.inc('archive_composed_daily_rest_preferred', len(candidates))
+                if selection.rest_preferred:
+                    self._metrics.inc('archive_composed_daily_rest_preferred', len(selection.eligible))
                     for task in run:
                         decisions[task.task_key].update(
                             reason='composed_daily_rest_cheaper', eligible_objects=0,
-                            archive_rejections={**rejected, 'composed_daily_rest_cheaper': len(candidates)},
+                            archive_rejections={**selection.rejected,
+                                                'composed_daily_rest_cheaper': len(selection.eligible)},
                         )
                     continue
+                candidates = list(selection.eligible)
                 # Local ZIPs are usable without contacting the resolver or
                 # acquiring any proxy route (even with no enabled routes).
                 cached = await asyncio.gather(*(self._cache.resolve_fresh(ref) for ref in candidates))
@@ -1062,6 +1050,66 @@ def _is_foreground_archive_demand(task: BackfillTask) -> bool:
         or "visible_range_gap" in reason
         or reason == "manual_history_download"
     )
+
+
+@dataclass(frozen=True, slots=True)
+class ArchiveSelection:
+    """Which catalog objects a run of tasks would use, before any cache or network check.
+
+    ``planned``: objects the provider's catalog lists for the run's decision
+    range; ``above_threshold``: those left by the REST-page threshold;
+    ``eligible``: those left by the Binance USD-M row and amplification limits
+    (``budget_checked``) with ``rejected`` counting each limit's rejections;
+    ``rest_preferred``: a composed daily run that fits REST pages, which then
+    uses none of them.
+    """
+    planned: int
+    above_threshold: int
+    eligible: tuple
+    rejected: dict
+    budget_checked: bool
+    rest_preferred: bool
+
+    @property
+    def objects(self):
+        """The objects the run imports (none when REST is preferred)."""
+        return () if self.rest_preferred else self.eligible
+
+
+def select_archive_objects(candidates, tasks, *, exchange, market_type, interval, route_start_ms,
+                           route_end_ms, rest_page_size, minimum_pages, fetch_batch_size):
+    """The router's archive-or-REST choice for one run, as a pure function.
+
+    Depends only on the catalog objects, the tasks (their ranges, windows and
+    metadata) and the configuration passed in, so a planner can make the same
+    choice before routing (docs/architecture/MIXED_ROUTE_PLANNING_zh.md).
+    """
+    planned = len(candidates)
+    candidates = _filter_daily_candidates(
+        candidates,
+        range_start_ms=route_start_ms,
+        range_end_ms=route_end_ms,
+        interval=interval,
+        rest_page_size=rest_page_size,
+        minimum_pages=minimum_pages,
+        tasks=tasks,
+    )
+    above_threshold = len(candidates)
+    rejected = {}
+    budget_checked = exchange == 'binance' and market_type == 'futures'
+    if budget_checked:
+        candidates = _bounded_usdm_archive_candidates(candidates, tasks, interval, rejected=rejected)
+    # A composed daily window often fits one REST page even when it straddles
+    # two months. Avoid extra archive transactions and whole-object imports
+    # without changing canonical slots.
+    rest_preferred = bool(
+        candidates and budget_checked and interval == '1d'
+        and all(_composed_group_key(task) for task in tasks)
+        and (page_size := min(fetch_batch_size, rest_page_size)) > 0
+        and sum(_ceil_div((task.end_ms-task.start_ms)//86_400_000+1, page_size)
+                for task in tasks) <= len(candidates))
+    return ArchiveSelection(planned, above_threshold, tuple(candidates), rejected, budget_checked,
+                            rest_preferred)
 
 
 def _filter_daily_candidates(
