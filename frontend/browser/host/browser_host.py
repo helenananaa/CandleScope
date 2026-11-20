@@ -19,6 +19,8 @@ os.environ.update(
     REPLAY_AGG_TRADE_ENABLED="0", BACKTEST_ENABLED="1", BACKTEST_BAR_ENABLED="0",
     BACKTEST_TRADE_TAPE_ENABLED="0", BACKTEST_STUDY_ENABLED="0",
     INGESTION_PROXY_MODE="direct",
+    # Computed at build time for the bundled CCXT; see prepare_engine.mjs.
+    CANDLESCOPE_CCXT_CATALOG=str(Path(__file__).with_name("ccxt_catalog.json")),
 )
 install()
 
@@ -75,13 +77,12 @@ async def warm_initial_market():
 async def start():
     global lifespan
     # Reserve the metadata dependency before the UI opens its independent WS
-    # and REST consumers. A restored database can render while it warms.
+    # and REST consumers; they join that load instead of starting their own.
+    # Parsing a venue catalog takes seconds in WASM, so the page opens now
+    # and its first market requests wait for the shared load.
     warmup = asyncio.create_task(warm_initial_market())
     app.state.replay_library.market_warmup = warmup
-    try:
-        await asyncio.wait_for(asyncio.shield(warmup), 1 if Path("/store/candlescope.db").exists() else 46)
-    except TimeoutError:
-        pass
+    await asyncio.sleep(0)
     lifespan = app.router.lifespan_context(app)
     await lifespan.__aenter__()
     if getattr(app.state, "data_manager", None) is None:

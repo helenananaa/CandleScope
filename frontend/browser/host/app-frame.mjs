@@ -16,7 +16,7 @@ export async function openApp(page, href) {
 // Ask the shared engine for its identity and open application sockets.
 export function engineStats(frame) {
   return frame.evaluate(async () => {
-    const worker = new SharedWorker(new URL('engine/backend-worker.mjs', document.baseURI), {
+    const worker = new SharedWorker(document.documentElement.dataset.engineScript, {
       type: 'module',
       name: 'candlescope-python',
     })

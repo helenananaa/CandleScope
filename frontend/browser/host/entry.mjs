@@ -8,12 +8,12 @@ const FRAME = 'candlescope-page'
 const root = document.getElementById('root')
 let sequence = 0
 const callbacks = new Map()
+// The build names a content-addressed engine folder (see host.config.mjs).
+const engineScript = new URL((import.meta.env.VITE_ENGINE_DIR || 'engine/') + 'backend-worker.mjs', base)
+document.documentElement.dataset.engineScript = engineScript.href
 const worker =
   typeof SharedWorker === 'function'
-    ? new SharedWorker(new URL('engine/backend-worker.mjs', base), {
-        type: 'module',
-        name: 'candlescope-python',
-      })
+    ? new SharedWorker(engineScript, { type: 'module', name: 'candlescope-python' })
     : null
 function startupFailure(message) {
   root.textContent = message + ' '

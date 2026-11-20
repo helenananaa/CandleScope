@@ -41,14 +41,11 @@ async function boot() {
   py.FS.mkdirTree('/store')
   py.FS.mount(py.FS.filesystems.IDBFS, {}, '/store')
   await filesystem(py, true)
+  // The archive holds unpacked packages with bytecode for the modules that
+  // starting the backend imports (see prepare_engine.mjs).
   await py.runPythonAsync(`
-import glob, sys, os, zipfile
+import glob, sys
 sys.dont_write_bytecode = True
-os.makedirs('/packages', exist_ok=True)
-for name in glob.glob('/wheels/*.whl'):
-    with zipfile.ZipFile(name) as archive:
-        archive.extractall('/packages')
-    os.unlink(name)
 sys.path[:0] = ['/packages', '/repo', '/repo/backend', *glob.glob('/repo/packages/*/src')]
 import browser_host
 await browser_host.start()

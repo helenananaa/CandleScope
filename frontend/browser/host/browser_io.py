@@ -15,7 +15,12 @@ def public_url(value):
     url = urlsplit(str(value))
     # The market-data-only host exposes the same public spot protocol.
     if url.hostname in {"api.binance.com", *(f"api{i}.binance.com" for i in range(1, 5))} and url.path.startswith("/api/"):
-        return urlunsplit(url._replace(netloc="data-api.binance.vision"))
+        url = url._replace(netloc="data-api.binance.vision")
+        # The spot catalog's permission sets are 60% of its 18 MB, and CCXT
+        # does not read them.
+        if url.path == "/api/v3/exchangeInfo" and "showPermissionSets" not in url.query:
+            url = url._replace(query="&".join(filter(None, (url.query, "showPermissionSets=false"))))
+        return urlunsplit(url)
     if url.hostname == "stream.binance.com":
         return urlunsplit(url._replace(netloc="data-stream.binance.vision"))
     return str(value)
