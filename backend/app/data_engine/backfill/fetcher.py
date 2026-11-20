@@ -71,7 +71,7 @@ from .models import (
     FetchReceipt,
 )
 from .fetch_stream import PageConsumer, PAGE_BYTES_PER_ROW, stream_grid, disjoint_source_spans
-from .source_router import ArchiveRoutePlan, HistoricalSourceRouter
+from .source_router import PLANNED_OBJECTS_KEY, ArchiveRoutePlan, HistoricalSourceRouter
 from app.data_engine.memory_budget import MemoryBudgetExceeded
 from app.core.bounded_executor import ExecutorBusyError
 from .input_subscriptions import InputSubscriptions, current_input_adoption, input_adoption, retain_input_payload
@@ -1627,6 +1627,35 @@ def planned_write_windows(
                                int(start), int(end), archive, task.metadata)
             for start, end, archive in spans
         )
+    return windows
+
+
+def planned_route_windows(tasks: list[BackfillTask]) -> list[PlannedWriteWindow]:
+    """The windows a route-aware mixed plan writes, from the plan alone.
+
+    What ``planned_write_windows`` reports for these tasks once the router
+    imports exactly the listed objects (``PLANNED_OBJECTS_KEY``): each task's
+    range for REST (for an object task, its fallback), and each listed
+    object's whole range for its import, owned by the first task listing it.
+    An object task spans its object, so the tasks listing one object cover
+    exactly its range.
+    """
+    windows: list[PlannedWriteWindow] = []
+    objects: dict[str, list] = {}
+    for task in sorted(tasks, key=lambda item: (item.start_ms, item.end_ms)):
+        windows.append(PlannedWriteWindow(task.exchange, task.market_type, task.symbol, task.interval,
+                                          task.start_ms, task.end_ms, False, task.metadata))
+        spec = parse_interval_spec(task.interval)
+        for key in task.metadata.get(PLANNED_OBJECTS_KEY) or ():
+            last = task.end_ms + spec.nominal_ms - 1
+            if key in objects:
+                objects[key][1] = min(objects[key][1], task.start_ms)
+                objects[key][2] = max(objects[key][2], last)
+            else:
+                objects[key] = [task, task.start_ms, last]
+    windows.extend(PlannedWriteWindow(task.exchange, task.market_type, task.symbol, task.interval,
+                                      start, end, True, task.metadata)
+                   for task, start, end in objects.values())
     return windows
 
 

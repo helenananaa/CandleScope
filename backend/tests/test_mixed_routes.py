@@ -162,3 +162,19 @@ def test_without_the_flag_the_plan_is_unchanged(tmp_path, monkeypatch):
         assert not any(task.metadata.get(mixed_routes.ROUTE_OBJECTS_KEY) for task in plain.tasks)
     finally:
         asyncio.run(manager.shutdown())
+
+
+def test_a_plan_whose_writes_would_not_all_be_viewed_stays_as_today(tmp_path, monkeypatch):
+    monkeypatch.setattr(mixed_routes, "ROUTE_AWARE", True)
+    monkeypatch.setattr(mixed_routes, "archive_catalog", lambda engine: catalog())
+    monkeypatch.setattr("app.data_engine.backfill.mixed_plan.time.time", lambda: NOW / 1000)
+    # Writes outside every native write view take the family-wide check.
+    monkeypatch.setattr("app.data_engine.storage.native_history_fence.MAX_PLANNED_WINDOWS", 8)
+    manager = manager_for(tmp_path / "budget.sqlite", {}, monkeypatch)
+    try:
+        engine = engine_for(manager.query_engine)
+        plan, report = plan_chunk(manager, engine, *CHUNKS[0])
+        assert plan is not None and report["mixed_route_aware"] is False
+        assert not any(mixed_routes.ROUTE_OBJECTS_KEY in task.metadata for task in plan.tasks)
+    finally:
+        asyncio.run(manager.shutdown())

@@ -179,6 +179,18 @@ select_owned_objects(objects, needed_cells_by_grid, owned_range, page_size, mini
    对象的整段由 REST 取到。第 2 步的测试改用 Binance 真实的 REST 页大小（1000）定价。相关的 46 个测试文件：开关关时
    与 HEAD 失败集合相同；强制打开时只多出 `test_without_the_flag_the_plan_is_unchanged`（它检查的就是关闭时的行为）。）
 4. 写入校验在获取前按计划一次捕获；确认 `planned_write_windows` 结果与计划一致。
+   （已完成：USD-M 的原生写入校验只来自路由之后的捕获（获取前的 `capture_native_history_views` 不处理期货），
+   每次运行最多 64 个窗口、32,768 行；没有校验覆盖的写入改走整个 family 的 acquisition 检查，任何并发写入都会让它失效
+   （mixed 计划有多个精度，warmup 校验也不适用）。现在 `fetcher.planned_route_windows` 只凭计划给出写入窗口：每个任务的
+   范围（REST，对象任务即其回退），每个列出的对象的整个范围（导入，归第一个列出它的任务）。引擎在获取前对带
+   `PLANNED_OBJECTS_KEY` 的计划先捕获这些窗口，路由之后取数器报告的窗口都已存在，不再增加。路由规划在窗口放不进
+   上述预算时（`native_history_fence.planned_windows_fit`，与捕获共用 `_planned_items` 的选择）保留今天的计划。
+   测试：第 3 步的计划上，计划给出的窗口与路由后 `planned_write_windows` 完全相同（对象缺失时是其真子集），
+   用真实存储先按计划捕获、再按路由捕获，后者不增加任何校验；预算不够时不采用路由规划。端到端
+   （真实 coordinator、引擎、路由、存储，一张冷 10007m 图的两个相邻 chunk）：每个 chunk 一次成功，按计划捕获 32 个校验，
+   路由后增加 0 个，图完整；开关关时同一场景两个 chunk 都以 PARTIAL（"lack trusted composition fields/coverage"）结束并重跑，
+   共 4 次尝试。各种子下计划的窗口为 28–42 个、约 4–15k 行，都在预算内。相关的 50 个测试文件（加上原生、派生和 OKX 的
+   范围校验测试）：开关关时与 HEAD 失败集合相同；强制打开时只多出 `test_without_the_flag_the_plan_is_unchanged`。）
 5. 配对测量，按 §7 验收；全量测试。通过后默认打开。
 
 ## 9. 待决定

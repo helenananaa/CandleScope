@@ -23,7 +23,10 @@ planning, so the plan says exactly what the chunk writes:
    (``HistoricalSourceRouter._prepare_planned``).
 
 Any rule, budget or catalog failure returns None, and the chunk is planned
-as today. No fence changes: what this decides is only which rows to fetch.
+as today, as does a plan whose writes would not all get their own native
+write view (``planned_windows_fit``). The engine captures those views from
+the plan before fetching (``planned_route_windows``); the fence rules do not
+change.
 """
 from __future__ import annotations
 
@@ -148,6 +151,11 @@ async def route_aware_plan(engine, storage, gap, target, first, stop, sources, p
     for task in tasks:
         # The router imports exactly the listed objects; none on REST tasks.
         task.metadata.setdefault(ROUTE_OBJECTS_KEY, [])
+    from app.data_engine.storage.native_history_fence import planned_windows_fit
+    from .fetcher import planned_route_windows
+    if not planned_windows_fit(planned_route_windows(tasks)):
+        # Writes outside the captured views would take the family-wide check.
+        return None
     diagnostics = {"mixed_route_aware": True,
                    "mixed_route_imports": {interval: len(refs) for interval, refs in imports.items()},
                    "mixed_route_rest_cells": {interval: len(cells) for interval, cells in plan.cells.items()}}

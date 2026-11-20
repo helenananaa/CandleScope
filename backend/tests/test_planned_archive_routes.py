@@ -12,11 +12,15 @@ planner's property test writes and composes. These tests check that:
   same call keep today's selection;
 - a listed object that fails to download (404) or is absent from the catalog
   at fetch time arrives whole over REST, so the rows are still exactly the
-  plan's.
+  plan's;
+- the write windows taken from the plan alone (``planned_route_windows``,
+  captured before fetching) are the windows the fetcher reports after
+  routing, so capturing them first leaves routing no view to add (step 4).
 """
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import random
 from dataclasses import replace
 
@@ -25,10 +29,12 @@ import pytest
 from app.data_engine.backfill import mixed_routes
 from app.data_engine.backfill.archive_cache import HistoricalArchiveCache
 from app.data_engine.backfill.config import BackfillConfig
-from app.data_engine.backfill.fetcher import HistoricalFetcher
+from app.data_engine.backfill.fetcher import HistoricalFetcher, planned_route_windows, planned_write_windows
 from app.data_engine.backfill.models import BackfillStatus
 from app.data_engine.backfill.source_router import PLANNED_OBJECTS_KEY, HistoricalSourceRouter
 from app.data_engine.ingestion.config import IngestionConfig
+from app.data_engine.storage.native_history_fence import capture_planned_write_views
+from app.data_engine.storage.revisions import Acquisition
 from app.exchanges.archive import ArchiveHttpResponse
 from app.exchanges.plugins.binance.archive import BinanceKlineArchiveProvider
 from tests.history_stream_transport import IntervalTransport
@@ -39,8 +45,6 @@ from tests.test_history_archive_routing import (  # noqa: F401  (autouse fixture
 from tests.test_mixed_backfill_plan import engine_for
 from tests.test_mixed_history_session import manager_for
 from tests.test_mixed_routes import CHUNKS, NOW, WIDTHS, catalog, plan_chunk, stored_rows, written_cells
-
-import hashlib
 
 
 class ArchiveHttp:
@@ -237,3 +241,137 @@ def test_a_planned_object_absent_from_the_catalog_arrives_whole_over_rest(tmp_pa
         finally:
             await router.close()
     asyncio.run(run())
+
+
+def window_items(windows):
+    return {(window.interval, window.start_ms, window.end_ms, window.archive) for window in windows}
+
+
+@pytest.mark.parametrize("seed", [0, 5, 8])
+def test_the_plans_own_write_windows_are_what_routing_reports(tmp_path, monkeypatch, seed):
+    chunks = planned_chunks(tmp_path, monkeypatch, seed)
+    monkeypatch.setattr("app.data_engine.backfill.source_router.time.time", lambda: NOW / 1000)
+    manager = manager_for(tmp_path / "fence.sqlite", {}, monkeypatch)
+    store = manager.query_engine.storage.revision_store
+
+    async def run():
+        router, _, _ = router_and_fetcher(tmp_path, ArchiveHttp())
+        try:
+            for start, stop, plan in chunks:
+                planned = planned_route_windows(plan.tasks)
+                routed = planned_write_windows(plan.tasks, await router.prepare(plan.tasks))
+                assert window_items(routed) == window_items(planned)
+                assert {(w.start_ms, w.end_ms) for w in planned if w.archive} == {
+                    (ref.start_ms, ref.end_ms) for key, ref in refs_for(plan.tasks).items() if key in listed(plan)}
+
+                # The engine captures the plan's windows before fetching; the
+                # fetcher's capture after routing then adds no view.
+                scope = Acquisition(store.head())
+                capture_planned_write_views(store, scope, planned)
+                assert len(scope.native_history_views) == len(window_items(planned))
+                captured = list(scope.native_history_views)
+                capture_planned_write_views(store, scope, routed)
+                assert scope.native_history_views == captured
+        finally:
+            await router.close()
+    try:
+        asyncio.run(run())
+    finally:
+        asyncio.run(manager.shutdown())
+
+
+def test_routing_around_a_missing_object_needs_no_view_the_plan_lacks(tmp_path, monkeypatch):
+    chunks = planned_chunks(tmp_path, monkeypatch, 8)
+    monkeypatch.setattr("app.data_engine.backfill.source_router.time.time", lambda: NOW / 1000)
+    start, stop, plan = next(chunk for chunk in chunks if listed(chunk[2]))
+    lost = sorted(listed(plan))[0]
+    original = BinanceKlineArchiveProvider.plan_objects
+    monkeypatch.setattr(BinanceKlineArchiveProvider, "plan_objects", lambda self, **kwargs: [
+        ref for ref in original(self, **kwargs) if ref.object_key != lost])
+
+    async def run():
+        router, _, _ = router_and_fetcher(tmp_path, ArchiveHttp())
+        try:
+            routed = planned_write_windows(plan.tasks, await router.prepare(plan.tasks))
+            assert window_items(routed) < window_items(planned_route_windows(plan.tasks))
+        finally:
+            await router.close()
+    asyncio.run(run())
+
+
+def test_a_cold_wide_chart_captures_its_plans_writes_before_routing(tmp_path, monkeypatch):
+    """Two adjacent route-aware chunks through the real coordinator, engine, router and storage."""
+    import app.data_engine.backfill as engine_module
+    from app.core import config as core_config
+    from app.data_engine.data_manager import DataManager
+    from app.data_engine.data_manager.backfill_contracts import RepairRequest
+    from app.data_engine.data_manager.backfill_coordinator import BackfillCoordinator
+    from app.data_engine.data_manager.config import DataManagerConfig
+    from app.data_engine.storage import klines_repo
+    from app.data_engine.storage.gap_ledger import GapLedger
+    from app.data_engine.storage.revisions import _acquisition
+    from tests.test_mixed_routes import CONTRACT, TARGETS, WIDTH
+
+    monkeypatch.setattr(mixed_routes, "ROUTE_AWARE", True)
+    database = tmp_path / "chart.sqlite"
+    monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", database)
+    monkeypatch.setattr(core_config, "KLINES_DB_PATH", database)
+    klines_repo.init_klines_storage()
+    config = DataManagerConfig()
+    config.query.auto_backfill = False
+    dm = DataManager(config)
+    storage = klines_repo.KlinesRepoAdapter()
+    dm.set_storage(storage)
+    engine = engine_for(dm.query_engine)
+    engine.config.fetch_binance_futures_rate_limit_delay = 0
+    http = ArchiveHttp()
+    first, stop = CHUNKS[0][0], CHUNKS[1][1]
+    provider = BinanceKlineArchiveProvider()
+    for interval in ("1m", "1h", "1d"):
+        http.add(provider.plan_objects(market_type="futures", symbol="BTCUSDT", interval=interval,
+                                       start_ms=first, end_ms=stop - 1, now_ms=NOW))
+    router, fetcher, transport = router_and_fetcher(tmp_path, http)
+    engine._fetcher = fetcher
+
+    captures = {}
+    original = engine_module.prepare_planned_write_views
+
+    async def spy(storage_, windows):
+        scope = _acquisition.get()
+        before = len(scope.native_history_views)
+        await original(storage_, windows)
+        captures.setdefault(id(scope), []).append((window_items(windows), len(scope.native_history_views) - before,
+                                                   any(PLANNED_OBJECTS_KEY in w.metadata for w in windows)))
+    monkeypatch.setattr(engine_module, "prepare_planned_write_views", spy)
+
+    async def run():
+        coordinator = BackfillCoordinator(storage=storage, bars_backfilled=dm.on_bars_backfilled,
+            emit_event=dm.emit_event, source_available=dm.source_storage_available, engine=engine,
+            loop=asyncio.get_running_loop(), gap_ledger=GapLedger(database), max_concurrency=0, chunk_bars=1000)
+        try:
+            request = coordinator.request(RepairRequest("BTCUSDT", "10007m", first, stop - 1, market_type="futures",
+                reason="initial_history", requester="klines_history",
+                metadata={"required_history_composition": CONTRACT, "history_calendar_id": "crypto.24x7.utc"}))
+            outcome = await asyncio.wait_for(coordinator.wait_for_request(request), timeout=120)
+            result = dm.query("BTCUSDT", "10007m", start_ms=first, end_ms=stop - 1, limit=2 * TARGETS,
+                              market_type="futures", auto_backfill=False, min_revision=storage.revision_store.head())
+            return outcome, result
+        finally:
+            await coordinator.shutdown()
+            await router.close()
+            await dm.shutdown()
+    outcome, result = asyncio.run(run())
+
+    assert outcome.verified_contiguous, outcome.error
+    assert result.complete and len(result.bars) == 2 * TARGETS
+    # One acquisition per chunk attempt: the plan's capture, then routing's.
+    # Each chunk succeeds on its first attempt. Planned as today, both end
+    # PARTIAL and run again: finer rows their imported objects write lie under
+    # coarse spans the plan kept, which then "lack trusted composition coverage".
+    runs = list(captures.values())
+    assert len(runs) == 2 and all(flag for calls in runs for _, _, flag in calls)
+    for (before, added, _), *after in runs:
+        assert added == len(before) and after
+        for items, added_after, _ in after:
+            assert items <= before and added_after == 0
+    assert http.downloads

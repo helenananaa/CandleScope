@@ -90,7 +90,8 @@ from .models import (
 )
 from .gap_detector import GapDetector
 from .planner import BackfillPlanner
-from .fetcher import FetchBatchDeferred, HistoricalFetcher
+from .fetcher import FetchBatchDeferred, HistoricalFetcher, planned_route_windows
+from .source_router import PLANNED_OBJECTS_KEY
 from .native_progress import NativeBackfillDeferred, NativeBackfillProgress
 from .reconciler import Reconciler
 from .publisher import RepairPublisher
@@ -573,6 +574,11 @@ class BackfillEngine:
             # Archive routing decides what a task really writes. Capture those
             # windows as soon as the built-in fetcher knows them.
             if getattr(self.fetcher.fetch, '__func__', None) is HistoricalFetcher.fetch:
+                if any(PLANNED_OBJECTS_KEY in task.metadata for task in plan.tasks):
+                    # A route-aware mixed plan already names everything it
+                    # writes; the router imports exactly that, so the views
+                    # it reports below are all known by then.
+                    await prepare_planned_write_views(self._storage, planned_route_windows(plan.tasks))
                 async def capture_planned_windows(windows):
                     await prepare_planned_write_views(self._storage, windows)
                 page_options = {**page_options, 'on_write_windows': capture_planned_windows}
