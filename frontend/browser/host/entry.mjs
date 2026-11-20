@@ -135,12 +135,28 @@ class AppSocket extends EventTarget {
   }
 }
 
+// Later engine starts restore a memory snapshot of the imported backend. A
+// shared worker cannot start workers, so the shell starts the one that makes
+// it, once the first page has loaded its data. A visit that ends sooner
+// leaves the snapshot to the next one.
+function snapshotEngine() {
+  const maker = new Worker(new URL('snapshot-worker.mjs', engineScript), { type: 'module', name: 'candlescope-snapshot' })
+  const done = (error) => {
+    maker.terminate()
+    if (error) console.warn('Could not snapshot the Python engine', error)
+  }
+  maker.onmessage = ({ data }) => done(data.error)
+  maker.onerror = (event) => done(event.message || 'worker error')
+}
+
 function startShell() {
   const html = document.documentElement
   html.dataset.candlescopeShell = '1'
   root.hidden = true
   // Boot the engine while the frame loads. The frame waits for this instance.
-  worker.port.postMessage({ id: ++sequence, kind: 'ready' })
+  request('ready', {}, 150000).then((ready) => {
+    if (ready.snapshot === 'missing') setTimeout(snapshotEngine, 10000)
+  }, console.error)
   const style = document.createElement('style')
   style.textContent =
     'html,body{margin:0;height:100%;overflow:hidden;background:#0d0e10}' +

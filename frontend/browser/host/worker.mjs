@@ -1,10 +1,16 @@
-import { loadPyodide } from './pyodide.mjs'
+import { IMPORT_BACKEND, disableSnapshot, hasSnapshot, interpreter, loadBackend, readSnapshot } from './interpreter.mjs'
 
 let runtime
 // Pages report this to show that moving between them reused one engine.
 const instance = crypto.randomUUID()
 let nextSocket = 0
 let sync = Promise.resolve()
+// After the first start, the engine restores a memory snapshot of the imported
+// backend instead of importing it (see interpreter.mjs and the shell).
+const snapshots = typeof caches !== 'undefined'
+let boot = 'import'
+let snapshotState = snapshots ? 'missing' : 'unsupported'
+
 function filesystem(py, populate) {
   return new Promise((resolve, reject) =>
     py.FS.syncfs(populate, (error) => {
@@ -33,23 +39,43 @@ function persist(py) {
   sync = task
   return task
 }
-async function boot() {
-  const py = await loadPyodide({ indexURL: new URL('./', import.meta.url).href })
-  const bundle = await fetch(new URL('./backend.zip', import.meta.url))
-  if (!bundle.ok) throw Error('Python backend download failed')
-  py.unpackArchive(await bundle.arrayBuffer(), 'zip', { extractDir: '/' })
+
+async function start() {
+  const [backend, snapshot] = await Promise.all([
+    loadBackend(),
+    snapshots
+      ? readSnapshot().catch((error) => {
+          console.warn('Ignoring the interpreter snapshot', error)
+          return null
+        })
+      : null,
+  ])
+  let py
+  if (snapshot?.disabled) snapshotState = 'disabled'
+  else if (snapshot) {
+    try {
+      py = await interpreter(backend, { snapshot })
+      boot = 'snapshot'
+      snapshotState = 'restored'
+    } catch (error) {
+      console.warn('Could not restore the interpreter snapshot; importing the backend', error)
+      snapshotState = 'disabled'
+      await disableSnapshot().catch(() => {})
+    }
+  }
+  py ??= await interpreter(backend, 'import')
   py.FS.mkdirTree('/store')
   py.FS.mount(py.FS.filesystems.IDBFS, {}, '/store')
   await filesystem(py, true)
-  // The archive holds unpacked packages with bytecode for the modules that
-  // starting the backend imports (see prepare_engine.mjs).
-  await py.runPythonAsync(`
-import glob, sys
-sys.dont_write_bytecode = True
-sys.path[:0] = ['/packages', '/repo', '/repo/backend', *glob.glob('/repo/packages/*/src')]
-import browser_host
-await browser_host.start()
-`)
+  try {
+    // The archive holds unpacked packages with bytecode for the modules that
+    // starting the backend imports (see prepare_engine.mjs).
+    await py.runPythonAsync((boot === 'snapshot' ? 'import browser_host\n' : IMPORT_BACKEND) + 'await browser_host.start()\n')
+  } catch (error) {
+    // A restored interpreter that cannot start is not restored again.
+    if (boot === 'snapshot') await disableSnapshot().catch(() => {})
+    throw error
+  }
   // Background backfill may commit after its HTTP request has already returned.
   let flushing = false
   setInterval(async () => {
@@ -73,9 +99,12 @@ function attach(port) {
     const { id, kind } = data
     const channel = ports[0]
     try {
-      const { py, host } = await (runtime ??= boot())
-      if (kind === 'ready') return send(id, { kind: 'ready', transport: 2, instance })
-      if (kind === 'stats') return send(id, { kind: 'stats', instance, ...JSON.parse(host.stats()) })
+      const { py, host } = await (runtime ??= start())
+      if (kind === 'ready') return send(id, { kind: 'ready', transport: 2, instance, snapshot: snapshotState })
+      if (kind === 'stats') {
+        const snapshot = snapshotState === 'missing' && (await hasSnapshot()) ? 'stored' : snapshotState
+        return send(id, { kind: 'stats', instance, boot, snapshot, ...JSON.parse(host.stats()) })
+      }
       if (kind === 'abort') return requests.get(id)?.cancel()
       if (kind === 'http') {
         const { body, ...metadata } = data

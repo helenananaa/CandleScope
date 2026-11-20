@@ -4,6 +4,7 @@ import base64
 import json
 import os
 import logging
+import random
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -27,19 +28,26 @@ install()
 from app.main import app
 from app.research_data.access import require_local_research_access
 from fastapi import Request
-from js import location as worker_location
+import js
 
 sockets = {}
 lifespan = None
+
+
+def worker_origin():
+    # Read while serving: the interpreter that the engine's memory snapshot is
+    # taken from cannot use browser accessors (see snapshot-worker.mjs).
+    return str(js.location.origin)
 
 
 # A browser-owned SQLite file is isolated by the site's origin. No TCP peer
 # exists here. Only the library and history studies use this binding; desktop files and
 # other local-only APIs continue to require the original local access policy.
 async def browser_storage_access(request: Request):
+    origin = worker_origin()
     if (request.url.path.startswith(("/api/v1/history-studies/", "/api/v1/local/"))
-            and request.scope.get("extensions", {}).get("candlescope.worker-origin") == worker_location.origin
-            and request.headers.get("origin", worker_location.origin) == worker_location.origin
+            and request.scope.get("extensions", {}).get("candlescope.worker-origin") == origin
+            and request.headers.get("origin", origin) == origin
             and request.headers.get("sec-fetch-site", "same-origin") == "same-origin"):
         return
     return require_local_research_access(request)
@@ -76,6 +84,9 @@ async def warm_initial_market():
 
 async def start():
     global lifespan
+    # Sessions restored from one memory snapshot would otherwise share the
+    # generator state that importing seeded.
+    random.seed()
     # Reserve the metadata dependency before the UI opens its independent WS
     # and REST consumers; they join that load instead of starting their own.
     # Parsing a venue catalog takes seconds in WASM, so the page opens now
@@ -90,7 +101,7 @@ async def start():
 
 
 def scope(kind, path, query, origin, headers):
-    origin = str(worker_location.origin)
+    origin = worker_origin()
     target = urlsplit(origin)
     return {"type": kind, "asgi": {"version": "3.0", "spec_version": "2.3"},
             "scheme": target.scheme if kind == "http" else ("wss" if target.scheme == "https" else "ws"),

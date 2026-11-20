@@ -5,7 +5,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { openApp } from './app-frame.mjs'
+import { engineStats, openApp } from './app-frame.mjs'
 
 const require = createRequire(import.meta.url)
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright-core')
@@ -106,6 +106,13 @@ try {
     assert.ok(Math.abs(value - expected) < 1e-5)
     if (process.env.CANDLE_BROWSER_SCREENSHOT) await page.page().screenshot({ path: process.env.CANDLE_BROWSER_SCREENSHOT })
     console.log('Original market canvas, public history, older repair, desktop MA calculation passed.')
+    // The shell has a memory snapshot of the imported engine made for later starts.
+    let stats = await engineStats(page)
+    for (let tries = 0; tries < 120 && stats.snapshot === 'missing'; tries++) {
+      await page.waitForTimeout(500)
+      stats = await engineStats(page)
+    }
+    assert.deepEqual([stats.boot, stats.snapshot], ['import', 'stored'])
   })
   await visit(true, async (page) => {
     assert.equal(
@@ -134,8 +141,9 @@ try {
       saved.length
     )
     assert.deepEqual(signature(range.data), saved)
+    assert.equal((await engineStats(page)).boot, 'snapshot')
     console.log(
-      'After a complete browser exit, all ' +
+      'After a complete browser exit, the engine restored its snapshot and all ' +
         saved.length +
         ' closed candles matched from the original storage, offline.'
     )

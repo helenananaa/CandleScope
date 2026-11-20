@@ -27,6 +27,8 @@ execFileSync('python3', [resolve(here, 'host/bundle.py'), pack], {
 const engineFiles = {
   'backend.zip': pack,
   'backend-worker.mjs': resolve(here, 'host/worker.mjs'),
+  'interpreter.mjs': resolve(here, 'host/interpreter.mjs'),
+  'snapshot-worker.mjs': resolve(here, 'host/snapshot-worker.mjs'),
   ...Object.fromEntries(
     ['pyodide.mjs', 'pyodide.asm.mjs', 'pyodide.asm.wasm', 'python_stdlib.zip', 'pyodide-lock.json'].map(
       (name) => [name, resolve(runtime, name)]
