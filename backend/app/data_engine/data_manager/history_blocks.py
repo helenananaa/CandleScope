@@ -24,6 +24,8 @@ from .models import SeriesKey
 
 MAX_PAGE_ROWS = 256
 BLOCK_ROWS = 16
+# Session pages read (*bar components, close_time) tuples instead of full rows.
+COMPONENT_PAGES = True
 FIELDS = frozenset(("open", "high", "low", "close", "volume", "quote_volume",
                     "trades", "taker_buy_base", "taker_buy_quote"))
 CORE_FIELDS = ("open", "high", "low", "close", "volume")
@@ -198,19 +200,29 @@ class HistoryBlockReader:
             rows_read = 0
             if hits != len(ranges):
                 self._count(storage_reads=1)
-                rows = self.engine._read_canonical_history_rows(session.storage, source, lo, hi,
-                                                               (hi - lo) // width + 1)
+                # The same rows as ``read``, as (*bar components, close_time)
+                # tuples when the storage has that projection: the series
+                # predicate fixes every identity column, so they are not decoded.
+                limit = (hi - lo) // width + 1
+                rows = (self.engine._read_canonical_history_components(session.storage, source, lo, hi, limit)
+                        if COMPONENT_PAGES else None)
+                compact = rows is not None
+                if not compact:
+                    rows = self.engine._read_canonical_history_rows(session.storage, source, lo, hi, limit)
                 rows_read = len(rows)
                 self._count(storage_rows=rows_read)
                 self._cancelled(cancel)
                 session.check_binding()
                 if not flat_rows_within(rows, work_bytes // 2):
                     raise MemoryBudgetExceeded("canonical history page exceeds its decoding allowance")
-                times = [row["open_time"] for row in rows]
+                times = [row[0] for row in rows] if compact else [row["open_time"] for row in rows]
                 if (len(times) > (hi - lo) // width or len(set(times)) != len(times)
                         or any(type(t) is not int or not lo <= t < hi or t % width for t in times)):
                     raise BlockUnavailable("canonical history page violates its grid or row bound")
-                valid = [row for row in rows if row.get("close_time") == row["open_time"] + width - 1]
+                if compact:
+                    valid = [row[:-1] for row in rows if row[-1] == row[0] + width - 1]
+                else:
+                    valid = [row for row in rows if row.get("close_time") == row["open_time"] + width - 1]
                 bars = self.engine._storage_rows_to_bars(source, valid)
                 accepted = {bar.time_ms: bar for bar in bars if bar.is_closed and bar.trusted_final}
                 del rows, valid, bars, times

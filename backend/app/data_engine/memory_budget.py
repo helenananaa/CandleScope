@@ -296,17 +296,25 @@ def _type_shape(kind):
 
 
 _FLAT_VALUE_TYPES = frozenset((int, float, str, bytes, bool, type(None)))
+_TUPLE_ROWS, _DICT_ROWS = frozenset((tuple,)), frozenset((dict,))
 
 
 def flat_rows_within(rows, limit):
-    """``retained_size((rows,))[0] <= limit`` for a list of flat dict rows.
+    """``retained_size((rows,))[0] <= limit`` for a list of flat dict or tuple rows.
 
     Summing every key and value without de-duplication can only overcount, so
     an upper bound within ``limit`` decides the comparison without walking the
     graph. Other shapes, or a bound over the limit, use the exact count.
     """
     getsizeof = sys.getsizeof
-    if type(rows) is list and all(type(row) is dict for row in rows):
+    kinds = set(map(type, rows)) if type(rows) is list else None
+    if kinds is not None and kinds <= _TUPLE_ROWS:
+        values = list(chain.from_iterable(rows))
+        if set(map(type, values)) <= _FLAT_VALUE_TYPES:
+            bound = getsizeof(rows) + sum(map(getsizeof, rows)) + sum(map(getsizeof, values))
+            if bound <= limit:
+                return True
+    elif kinds is not None and kinds <= _DICT_ROWS:
         keys = chain.from_iterable(map(dict.keys, rows))
         values = list(chain.from_iterable(map(dict.values, rows)))
         if set(map(type, values)) <= _FLAT_VALUE_TYPES:

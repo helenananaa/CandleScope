@@ -1131,6 +1131,43 @@ def query_kline_bar_components(
     return rows
 
 
+def query_kline_canonical_components(
+    symbol: str,
+    interval: str,
+    start_ms: int,
+    end_ms: int,
+    limit: int,
+    *,
+    exchange: str = DEFAULT_EXCHANGE,
+    market_type: str = DEFAULT_MARKET_TYPE,
+    series_identity: KlineSeriesIdentity | None = None,
+) -> list[tuple]:
+    """Ascending canonical rows as ``(*bar components, close_time)`` tuples.
+
+    The same rows as ``query_klines`` over inclusive opens. Identity columns
+    are fixed by the WHERE clause, so only the bar components (with source)
+    and the stored ``close_time`` that H127 checks against the grid are read.
+    """
+    where, params, _ = _series_where(
+        exchange=exchange,
+        market_type=market_type,
+        symbol=symbol,
+        interval=interval,
+        series_identity=series_identity,
+    )
+    where.extend(("open_time >= ?", "open_time <= ?"))
+    params.extend((start_ms, end_ms, limit))
+    sql = f"""
+        SELECT {_BAR_COMPONENT_PROJECTION}, close_time
+        FROM klines
+        WHERE {" AND ".join(where)}
+        ORDER BY open_time ASC
+        LIMIT ?
+    """
+    with _READS.reading(rows=False) as conn:
+        return conn.execute(sql, params).fetchall()
+
+
 def fetch_before(
     symbol: str,
     interval: str,
@@ -1751,6 +1788,29 @@ class KlinesRepoAdapter:
             end_ms=end_ms,
             limit=limit,
             order=order,
+            exchange=exchange or self._exchange,
+            market_type=market_type or self._market_type,
+            series_identity=series_identity or self._series_identity,
+        )
+
+    def query_canonical_components(
+        self,
+        symbol: str,
+        interval: str,
+        start_ms: int,
+        end_ms: int,
+        limit: int,
+        exchange: str | None = None,
+        market_type: str | None = None,
+        series_identity: KlineSeriesIdentity | None = None,
+    ) -> list[tuple]:
+        """Canonical H127 page rows as ``(*bar components, close_time)``."""
+        return query_kline_canonical_components(
+            symbol,
+            interval,
+            start_ms,
+            end_ms,
+            limit,
             exchange=exchange or self._exchange,
             market_type=market_type or self._market_type,
             series_identity=series_identity or self._series_identity,
