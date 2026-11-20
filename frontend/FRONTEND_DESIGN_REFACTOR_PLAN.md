@@ -673,6 +673,13 @@ Each PR also merges its surface's late-loading CSS file into the main one and re
 - Layout in Hungarian and Romanian (152 visits, the 19 states that open without the local service, audited again with the font change): nothing the app writes itself is cut after the volume option's change. The rail's tab titles fit.
 - Next: row 7c4's remaining 9 languages, two per PR: 7c9 Swedish and Turkish.
 
+**Phase 7c9 is done (branch `design/phase-7c9-sv-tr`).** QA: [`docs/FRONTEND_DESIGN_QA_PHASE_7C9.md`](../docs/FRONTEND_DESIGN_QA_PHASE_7C9.md).
+
+- Swedish and Turkish have their own feature files (`catalogs/swedishFeatureMessages.ts`, `catalogs/turkishFeatureMessages.ts`: the seven feature blocks, 1,218 messages each, loaded only with their language), their inline English translated (188 Swedish, 223 Turkish), and the 27 English duplicates that hid the native block removed. Messages shown in English: Swedish 1,166 → 32, Turkish 1,204 → 12; what is left is names and trading terms that read the same. The CSV import's volume option is shorter in both (it was cut in Turkish).
+- Turkish ğ, ı, ş and İ draw in IBM Plex Sans thanks to Phase 7c8's font change; no suffix is attached to a placeholder, since Turkish vowel harmony would depend on the value.
+- Layout in Swedish and Turkish (152 visits, the 19 states that open without the local service): nothing the app writes itself is cut after the volume option's change. The rail's tab titles fit.
+- Next: row 7c4's remaining 7 languages, two per PR: 7c10 Indonesian and Malay.
+
 ### 6.1 Merging strategy research and backtest (decided 2026-11-12)
 
 **Today.** The routing is already shared; the experience is not.
