@@ -14,6 +14,9 @@ on:
       - "frontend/public/brand/candlescope-app-icon-1024.png"
       - "frontend/scripts/*desktop*"
       - "frontend/scripts/prepare-control-adapter.mjs"
+      - "frontend/scripts/prepare-mihomo.py"
+      - "backend/app/proxy_subscriptions/**"
+      - "backend/tests/test_proxy_subscription*.py"
       - "frontend/scripts/verify-macos-package.mjs"
       - "frontend/scripts/vite-loopback-alias.mjs"
       - "backend/app/core/version.py"
@@ -110,7 +113,11 @@ jobs:
           PYTHONNOUSERSITE: "1"
         run: |
           export PYTHONPATH="$GITHUB_WORKSPACE/frontend/.desktop-runtime/runtime/site-packages"
+          export CANDLESCOPE_MIHOMO="$GITHUB_WORKSPACE/frontend/.desktop-runtime/runtime/mihomo/mihomo"
+          test -x "$CANDLESCOPE_MIHOMO"
           ../frontend/.desktop-runtime/runtime/python/bin/python3 -m pytest -q -W error::pytest.PytestUnhandledCoroutineWarning \
+            tests/test_proxy_subscriptions.py \
+            tests/test_proxy_subscription_refresh.py \
             tests/test_market_stream_version.py \
             tests/test_oi_local_history.py \
             tests/test_market_metrics_storage.py \

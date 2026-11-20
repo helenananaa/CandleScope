@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import http.client
 import json
+import logging
 import os
 from pathlib import Path
 import secrets
@@ -12,7 +13,7 @@ import socket
 import subprocess
 import sys
 import time
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 
 import requests
 
@@ -31,6 +32,7 @@ class Core:
         self.endpoints = {}
         self.listeners = {}
         self.process = None
+        self._next_connection_sweep = None
         self.session = requests.Session()
         self.session.trust_env = False
         self.secret = secrets.token_hex(32)
@@ -52,7 +54,7 @@ class Core:
             if self.nodes.get(key) == node:
                 listeners[key] = self.listeners[key]
             else:
-                listeners[key] = {"name": "in-" + key, "type": "http", "listen": "127.0.0.1",
+                listeners[key] = {"name": f"in-{key}-{secrets.token_hex(8)}", "type": "http", "listen": "127.0.0.1",
                                   "port": _reserve(stack), "proxy": key,
                                   "users": [{"username": "candlescope", "password": secrets.token_hex(24)}]}
         return listeners
@@ -131,18 +133,63 @@ class Core:
         except requests.RequestException:
             raise SubscriptionError("Mihomo rejected the selected configuration") from None
 
-    def reconfigure(self, nodes):
+    @contextmanager
+    def stage_update(self, nodes):
+        """Keep the exact published listeners for rollback until persistence succeeds."""
+        if nodes == self.nodes:
+            yield
+            return
         with ExitStack() as stack:
             listeners = self._listeners(nodes, stack)
         try:
             self._reload(nodes, listeners)
-        except SubscriptionError:
+            yield
+        except BaseException:
             try:
                 self._reload(self.nodes, self.listeners)
             except SubscriptionError:
                 self.close()
             raise
+        retired = any(listeners.get(key) != old for key, old in self.listeners.items())
         self._publish(nodes, listeners)
+        if retired:
+            self._next_connection_sweep = 0
+
+    def reconfigure(self, nodes):
+        with self.stage_update(nodes):
+            pass
+        self.sweep_retired_connections()
+
+    @property
+    def connection_sweep_due(self):
+        return self._next_connection_sweep is not None and time.monotonic() >= self._next_connection_sweep
+
+    def sweep_retired_connections(self):
+        # Removing an inbound stops accepts, but an existing CONNECT tunnel can
+        # continue to carry traffic. Match the listener incarnation, since a
+        # replacement for the same node has the same outbound chain name.
+        if not self.connection_sweep_due:
+            return
+        current = {listener["name"] for listener in self.listeners.values()}
+        try:
+            response = self.session.get(self.controller + "/connections", timeout=1)
+            response.raise_for_status()
+            for connection in response.json()["connections"] or []:
+                inbound = connection["metadata"].get("inboundName", "")
+                if inbound.startswith("in-") and inbound not in current:
+                    deleted = self.session.delete(self.controller + "/connections/" + connection["id"], timeout=1)
+                    if deleted.status_code != 404:
+                        deleted.raise_for_status()
+        except (requests.RequestException, KeyError, TypeError, ValueError):
+            # The saved selection has already committed. Stop forwarding if
+            # retirement cannot be confirmed; the supervisor restores that
+            # selection with a new core instead of leaving revoked tunnels up.
+            logging.getLogger(__name__).warning("Stopping managed proxy after connection cleanup failed")
+            self.close()
+        else:
+            # A connection accepted before reload may finish its handshake
+            # after this snapshot. No retired-name history needs to be retained.
+            self._next_connection_sweep = time.monotonic() + 30
 
     @property
     def alive(self):

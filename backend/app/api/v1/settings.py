@@ -27,6 +27,7 @@ from app.core.executors import run_storage
 from app.core.bounded_executor import ExecutorBusyError
 from app.core.market import MarketType
 from app.core.config import (
+    get_effective_proxy,
     load_proxy_settings,
     normalize_proxy_settings,
     save_proxy_settings,
@@ -552,6 +553,14 @@ async def update_proxy_settings(request: Request, body: ProxyConfig) -> dict:
         return await finish_cleanup(_apply_proxy_settings(request, body))
 
 
+def _available_account_proxy():
+    try:
+        return get_effective_proxy()
+    except ValueError:
+        # A pool with no usable route must still be able to save a recovery.
+        return None
+
+
 async def _apply_proxy_settings(request, body):
     mode, custom_proxy = normalize_proxy_settings(body.mode, body.custom_proxy)
     cfg = _get_ingestion_config(request)
@@ -566,16 +575,24 @@ async def _apply_proxy_settings(request, body):
     )
     if any(route["url"].startswith("mihomo://") for route in body.routes) or managed.active.core:
         require_local_research_access(request)
+    readonly_accounts = getattr(request.app.state, "readonly_account_service", None)
+    # The account service binds to the first usable route, independently of
+    # the public-market pool. Restart it when that concrete endpoint changes.
+    previous_account_proxy = None
+    if readonly_accounts is not None and previous_core and mode == "pool":
+        previous_account_proxy = _available_account_proxy()
     try:
         await asyncio.to_thread(managed.activate, selected, lambda: save_proxy_settings(
             mode, custom_proxy, routes=body.routes, strategy=body.strategy))
     except SubscriptionError as exc:
         raise HTTPException(400, str(exc)) from None
 
+    restart_account = readonly_accounts is not None and (
+        previous_account_proxy is None or previous_account_proxy != _available_account_proxy()
+    )
     if cfg is None:
         # Even without IngestionConfig, persist the settings to disk
-        readonly_accounts = getattr(request.app.state, "readonly_account_service", None)
-        if readonly_accounts is not None:
+        if restart_account:
             await readonly_accounts.reconfigure_network()
         return {
             "status": "warning",
@@ -599,8 +616,7 @@ async def _apply_proxy_settings(request, body):
     # Restart all active runtime transports to apply the new proxy.
     if not (preserve_sessions and managed.active.core is previous_core):
         await _restart_runtime_transports(request)
-    readonly_accounts = getattr(request.app.state, "readonly_account_service", None)
-    if readonly_accounts is not None:
+    if restart_account:
         await readonly_accounts.reconfigure_network()
 
     effective = _resolve_proxy_url(mode, custom_proxy)

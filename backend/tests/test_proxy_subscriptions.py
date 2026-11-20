@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 import httpx
@@ -35,6 +36,15 @@ def test_import_accepts_only_node_data_and_preserves_identity():
 
 
 class FakeCore:
+    connection_sweep_due = False
+
+    def sweep_retired_connections(self):
+        pass
+
+    @contextmanager
+    def stage_update(self, nodes):
+        yield
+        self.reconfigure(nodes)
     def __init__(self, nodes):
         self.alive = True
         self.reconfigure(nodes)
@@ -90,6 +100,15 @@ async def test_trusted_import_save_restore_refresh_failure_and_disable(tmp_path,
         assert [r.url for r in get_proxy_pool().routes(draft, "okx")] == [r.url for r in bound]
         refresh = (await cli.post("subscriptions/preview", json={"saved_route_id": rows[0]["id"]})).json()
         assert refresh["nodes"] == view["nodes"]
+
+        async def invalid_refresh(url):
+            return parse_nodes(b"subscription unavailable", url)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(api, "download", invalid_refresh)
+            failed = await cli.post("subscriptions/preview", json={"saved_route_id": rows[0]["id"]})
+        assert failed.status_code == 400 and config.load_proxy_settings()["routes"] == rows
+        assert manager.active.core is active and active.alive
         invalid = [dict(rows[0], url="mihomo://" + "0" * 64 + "/" + selected[0])]
         result = await cli.put("", json={"mode": "pool", "routes": invalid}, follow_redirects=True)
         assert result.status_code == 400 and manager.active.core is active
