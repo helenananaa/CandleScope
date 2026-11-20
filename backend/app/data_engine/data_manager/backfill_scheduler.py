@@ -33,6 +33,7 @@ from .backfill_contracts import (
     _merge_derived_repair_targets,
     repair_status_value,
 )
+from . import finer_work_hold
 
 logger = logging.getLogger("data_manager.backfill_scheduler")
 
@@ -127,6 +128,10 @@ class _FetchChunk:
     phase_wait_reason: str | None = None
     phase_wait_started: float = 0.0
     phase_wait_ms: float = 0.0
+    # When this chunk first waited for another chart's finer history, and
+    # where this chunk may itself write such history (finer_work_hold).
+    finer_hold_started: float = 0.0
+    finer_reach: Any = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,6 +185,9 @@ class _RequestState:
     cancel_reason: str | None = None
     progress_revision: int = 0
     last_dispatch_sequence: int = 0
+    # Until when its newest chunk waits for charts opened with it, -1 once
+    # past (finer_work_hold.SETTLE_SECONDS).
+    finer_settle_until: float = 0.0
 
     @property
     def total(self) -> int:
@@ -308,6 +316,12 @@ class BackfillScheduler:
         self.local_burst_seconds = 2.0
         self.local_burst_dispatches = 0
         self.mixed_chunk_refinements = 0
+        # Mixed chunks split around, held for, and released after waiting
+        # for another chart's finer history (finer_work_hold).
+        self.finer_work_settles = 0
+        self.finer_work_splits = 0
+        self.finer_work_holds = 0
+        self.finer_work_hold_timeouts = 0
         self._local_burst: dict[tuple[int, bool], tuple[str, float]] = {}
         # Optional per-symbol cold source fill (family_fill.FamilyFillManager):
         # told of every new request, and asked before a chunk is dispatched.
@@ -951,6 +965,10 @@ class BackfillScheduler:
             "fairness_rotations": self.fairness_rotations,
             "local_burst_dispatches": self.local_burst_dispatches,
             "mixed_chunk_refinements": self.mixed_chunk_refinements,
+            "finer_work_settles": self.finer_work_settles,
+            "finer_work_splits": self.finer_work_splits,
+            "finer_work_holds": self.finer_work_holds,
+            "finer_work_hold_timeouts": self.finer_work_hold_timeouts,
             "aged_dispatches": self.aged_dispatches,
             "max_dispatch_bypass": self.max_dispatch_bypass,
             "running_background_chunks": self._running_background_count(),
@@ -1412,6 +1430,15 @@ class BackfillScheduler:
                 # A family fill is still acquiring sources this chunk reads.
                 if (not resuming and self.family_gate is not None
                         and self.family_gate.holds(chunk.request)):
+                    skipped.append(item)
+                    continue
+                # Another chart is still fetching finer history inside some
+                # of its targets (MIXED_ROUTE_PLANNING_zh.md §10).
+                hold = self._finer_work_hold(chunk) if not resuming and finer_work_hold.ENABLED else None
+                if hold == "split":
+                    continue  # its parts are queued; free ones dispatch in this drain
+                if hold is not None:
+                    next_delay = hold if next_delay is None else min(next_delay, hold)
                     skipped.append(item)
                     continue
                 if self._max_concurrency and self._is_background(chunk.request) and (
@@ -1878,12 +1905,70 @@ class BackfillScheduler:
             row[key] = scalar(plan.get(key))
         self._chunk_receipts.append(row)
 
-    def _refine_mixed_chunk(self, chunk, *, split_ranges=None):
+    def _finer_work_hold(self, chunk):
+        """None to dispatch this chunk now, "split" when it was replaced by its
+        parts, else the seconds it may still wait for another chart's finer
+        history (finer_work_hold)."""
+        width = finer_work_hold.holdable_width(chunk.request)
+        if width is None:
+            return None
+        state = self._requests.get(chunk.parent_id)
+        if (state is not None and state.finer_settle_until >= 0
+                and self._reasons(chunk.request) & finer_work_hold.SETTLE_REASONS):
+            now_monotonic = time.monotonic()
+            if not state.finer_settle_until:
+                state.finer_settle_until = now_monotonic + finer_work_hold.SETTLE_SECONDS
+                self.finer_work_settles += 1
+            if now_monotonic >= state.finer_settle_until:
+                state.finer_settle_until = -1.0
+            elif chunk.request.end_ms >= max(self._chunks[chunk_id].request.end_ms
+                                              for chunk_id in state.chunk_ids if chunk_id in self._chunks):
+                return state.finer_settle_until - now_monotonic
+        family = finer_work_hold.family(chunk.request)
+        reaches = []
+        for other in self._chunks.values():
+            if other.finer_reach is False:
+                other.finer_reach = (None if self._is_background(other.request)
+                                     else finer_work_hold.reach(other.request))
+            span = other.finer_reach
+            if span is None or span[0] >= width or other.parent_id == chunk.parent_id:
+                continue
+            request, owner = other.request, self._requests.get(other.parent_id)
+            # A reach is only computed for a default series identity (finer_work_hold.family).
+            if ((request.exchange, request.market_type, request.symbol) != family or owner is None
+                    or owner.stale or owner.failed is not None or owner.cancel_requested):
+                continue
+            reaches.append(span[1:])
+        ranges = finer_work_hold.partition(chunk.request, reaches)
+        if ranges is None:
+            return None
+        if len(ranges) > 1:
+            if self._refine_mixed_chunk(chunk, split_ranges=[(first, last) for first, last, _ in ranges],
+                                        cause="finer_work_hold"):
+                self.finer_work_splits += 1
+                return "split"
+            return None
+        if chunk.finer_hold_started < 0:
+            return None  # waited its longest already
+        now_monotonic = time.monotonic()
+        if not chunk.finer_hold_started:
+            chunk.finer_hold_started = now_monotonic
+            self.finer_work_holds += 1
+        remaining = chunk.finer_hold_started + finer_work_hold.MAX_HOLD_SECONDS - now_monotonic
+        if remaining > 0:
+            return remaining
+        self.finer_work_hold_timeouts += 1
+        chunk.finer_hold_started = -1.0
+        return None
+
+    def _refine_mixed_chunk(self, chunk, *, split_ranges=None, cause="refined_source_row_budget"):
         """Replace one unacquired work item by bounded partitions on its parent queue.
 
         Existing finer canonical history can make a cold 16-target proposal
         exceed its row bound. Refinement preserves leases, cancellation, quota
         ownership, deletion floor and final verification; it creates no queue.
+        The same split puts targets that wait for another chart's finer
+        history (``cause="finer_work_hold"``) on chunks of their own.
         """
         state = self._requests.get(chunk.parent_id)
         width = parse_interval_ms(chunk.request.interval)
@@ -1937,8 +2022,10 @@ class BackfillScheduler:
             self._chunks[child.chunk_id] = child
             self._push_ready(child)
         state.progress_revision += 1
-        self.mixed_chunk_refinements += 1
-        self._publish_progress(state, status='chunk_refined', details={'source_chunk': chunk.chunk_id})
+        if cause == "refined_source_row_budget":
+            self.mixed_chunk_refinements += 1
+        self._publish_progress(state, status='chunk_refined',
+                               details={'source_chunk': chunk.chunk_id, 'cause': cause})
         return True
 
     async def _defer_chunk(

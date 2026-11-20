@@ -1,6 +1,7 @@
 # 按路由规划 mixed 回填（Route-aware mixed planning）设计
 
-状态：已实现并默认打开（`mixed_routes.ROUTE_AWARE = True`，设为 False 即回到原来的规划）；验收见 §8 第 5 步
+状态：已实现并默认打开（`mixed_routes.ROUTE_AWARE = True`，设为 False 即回到原来的规划）；验收见 §8 第 5 步。
+B 类冲突后来由 `data_manager/finer_work_hold.py` 处理（§10，默认打开，`finer_work_hold.ENABLED = False` 关闭）
 范围：Binance USD-M 上 required 的 mixed composition chunk（典型是 10007m），冷启动历史回填
 相关：`backfill/mixed_plan.py`（规划）、`backfill/source_router.py`（路由）、`backfill/fetcher.py`（获取与写入窗口）、
 `backfill/reconciler.py`（派生）、`storage/native_history_fence.py`（原生写入校验）、
@@ -18,7 +19,7 @@
   这些冲突发生在 19–23 秒，决定了 10007m 何时完成。
 - **B（6 个）**：最新的 10007m chunk（7 月底到 11 月中）与短周期图最近两周的稠密 1m 重叠，它运行期间短周期图写入，规划失效。
 
-本设计只解决 A。B 单独处理（§9）。
+本设计（§2–§8）只解决 A。B 后来单独处理（§10）。
 
 ### 1.1 已试过、已撤回的三种做法
 
@@ -56,7 +57,7 @@
 
 非目标：
 
-- B（最新 chunk 与短周期图重叠），见 §9。
+- B（最新 chunk 与短周期图重叠）：不改规划，后来由调度器处理，见 §10。
 - 短周期图在冷启动时走单一底层 1m 的 chunk（它们相邻 chunk 共享日度 1m 对象，也会冲突，可作为第二步，§9）。
 - FamilyFill（保持默认关）。
 
@@ -202,7 +203,7 @@ select_owned_objects(objects, needed_cells_by_grid, owned_range, page_size, mini
    10007m 的 A 类冲突 0 / 7–7.5（之前两组配对的 16 次开启加载里没有一次窗口级的 A 类冲突），派发 11–13 / 19，
    "lack trusted composition" 的 PARTIAL 0 / 1–2.5，本地版本重新规划 1 / 6–7.5，修复重试 0 / 1–2.5；
    REST 请求 192–194 / 187.5–199，限流的运行 0–3 / 2.5–7.5，归档下载 23.5–26.5 / 33。
-   剩下的 10007m 冲突是 B 类（§9.3），每次加载仍有一次最新的稠密 chunk 的 `refined_source_row_budget` 拆分，与今天相同。
+   剩下的 10007m 冲突是 B 类（§9.3，后来由 §10 处理），每次加载仍有一次最新的稠密 chunk 的 `refined_source_row_budget` 拆分，与今天相同。
    全量后端测试（约 10,700 个，跳过两个在本环境无法收集的文件：缺 `jsonschema`，以及 `test_review_regressions.py`
    引用了已删除的名字）：开关关时与 HEAD 失败集合相同（多出的 `test_amendment_inside_a_partly_consumed_native_window_stops_its_remaining_pages`
    在 HEAD 上单独跑 4 次都失败，是已有的不稳定测试）；强制打开时只多出检查关闭行为的 `test_without_the_flag_the_plan_is_unchanged`。
@@ -214,4 +215,99 @@ select_owned_objects(objects, needed_cells_by_grid, owned_range, page_size, mini
 2. **短周期图**：冷启动时它们是单一底层 1m 的 chunk，相邻 chunk 共享日度 1m 对象，也有重新规划（每次加载 4–15 次）。
    本设计稍作推广（单一底层计划也带目标范围）即可覆盖，建议作为第二步。
 3. **B 的处理**：让最新的 10007m chunk 在与它重叠的短周期图 chunk 完成后再规划（小改动，去掉约 6 个冲突），
-   可以与本设计并行做，也可以等本设计完成后再看是否仍需要。
+   可以与本设计并行做，也可以等本设计完成后再看是否仍需要。（已实现，见 §10。）
+
+## 10. B 类：等短周期图的 1m 存好再规划（`data_manager/finer_work_hold.py`）
+
+### 10.1 冲突
+
+路由规划打开后，每次加载剩下 2 个 B 类冲突，都在最新的 10007m chunk 上。这个 chunk 有 16 个目标
+（2026-07-26 06:51 起，最后一个开于 11-07 12:36），目标边缘需要 1m，获取前捕获了 11-07 12:00–12:59、
+11-14 11:00–11:22 这两个小时窗口的原生视图。同时打开的 89m、97m、101m 冷启动约 13.7 天（11-06 16:57 起），
+每个 chunk 约一天、16 个目标，底层都是 1m，大约 3–14 秒后写进同样的小时。10007m 的写入于是被拒绝
+（"native history window changed during acquisition"），chunk 以 PARTIAL 结束。重试时 1m 已存，按更细的数据规划
+超过 `MAX_SOURCE_ROWS`（16,384 行），被 `refined_source_row_budget` 拆成 [07-26..10-31] 和 [11-07] 两个 chunk 重跑。
+所以每次加载有 2 个 B 类冲突、2 次没有完成的运行和 1 次预算拆分。
+
+### 10.2 做法
+
+调度器派发一个 qualified mixed chunk（带 `required_history_composition`）之前，先看同一 symbol（同一 exchange、
+market type，默认 series identity）上其它图尚未完成的前台 chunk 可能写到哪里：
+
+- 一个 chunk 的**可达范围**是它的目标范围 `[start, end + width)`，扩到它的底层精度可能导入的归档对象。一个月的底层行
+  放得进一个对象（`MAX_USDM_ARCHIVE_OBJECT_ROWS`，如 1h、15m）时扩到整 UTC 月，否则（1m、3m、5m）扩到整 UTC 日。
+  只有比 mixed chunk 窄的图才算。后台工作、其它 mixed chunk，以及已失效、失败或取消的请求都不算。
+  chunk 的请求不会变，所以每个 chunk 只算一次。
+- mixed chunk 的目标里，落进任何可达范围的被**扣住**。每个扣住的目标单独成一个 chunk：细数据存好以后，一个目标的行数
+  就可能有一整个冷 chunk 那么多。其余连续的目标合成一个 chunk，立即派发。拆分走 `_refine_mixed_chunk`
+  （cause `finer_work_hold`，不计入 `mixed_chunk_refinements`）。
+- 扣住的目标等到重叠的工作全部完成再派发，最多等 `MAX_HOLD_SECONDS`（60 秒），超时后照原来的做法运行。
+  释放后，它像任何后来的 chunk 一样在已存的细数据上规划，所有写入校验不变。
+- mixed chunk 从不扣住别的 chunk，所以等待之间没有环。
+- 几张图同时打开时，各自的请求相隔 30–77 毫秒到达调度器，顺序随机。10007m 先到时，它最新的 chunk 在任何重叠可知
+  之前就派发了。所以一张 mixed 图的 initial history 里，最新的 chunk 在它的请求第一次进入派发时先等
+  `SETTLE_SECONDS`（0.25 秒）；较旧的 chunk 不等。
+- 这些都不依赖调度器的并发上限：app 和 bench 都用订阅模式（`max_concurrency=0`）。
+
+### 10.3 规划的一处修正
+
+释放后的 10-31 13:49 目标会在部分已存的 1m 上规划（短周期图已存 11-06 16:57 以后的 1m）。单个目标在这种状态下
+整个由 1m 合成，比整段取这个目标多一页 REST（12 对 11）。`mixed_plan` 的 `rest_request_cost` 因此拒绝它，而
+required composition 没有单一底层的回退（只有 optional 的计划会回到 `planner.plan`），拒绝就是硬失败
+（"Qualified composed history could not admit this bounded repair"），10007m 永远不会就绪。现在 required composition
+保留这个计划，多出的请求记在 `mixed_rest_requests_over_baseline`。`cold_rest_request_cost` 同样只拒绝 optional 的计划。
+路由规划的采用条件改为 REST 不多于它取代的计划（或基线）。
+
+### 10.4 测试
+
+`tests/test_finer_work_hold.py`：
+
+- 可达范围：底层 1m 扩到整日，1h 扩到整月，mixed chunk 没有可达范围；
+- 只有落进可达范围的目标被扣住，每个单独一段；
+- 调度器：其余目标立即派发，扣住的两个目标在短周期图完成后才派发，没有预算拆分和超时；
+- 超时后扣住的目标照常运行；
+- 后台工作、更宽的图和其它 mixed 图都不扣住 10007m；
+- 等待：较旧的 chunk 立即运行，最新的 chunk 等 `SETTLE_SECONDS`，晚 20 毫秒提交的短周期图仍让它拆分；
+- 规划：10-31 目标在部分已存的 1m 上能规划（没有 §10.3 的修正时失败）。
+
+`test_family_fill.py` 里检查 family gate 一释放就派发的测试关掉了等待（它测的是 gate 本身）。
+全量后端测试（约 10,700 个，跳过同样两个文件）：与路由规划默认打开时的上一次全量相比，只少了已修正的
+`test_without_the_flag_the_plan_is_unchanged`。多出的四个失败里，三个在 HEAD 上单独跑也失败或单独跑都通过
+（已知的顺序相关测试、真实 bus 测试、一个负载下的 worker 超时测试）。第四个 `test_dependent_lookup_stays_local_for_long_batches`
+找出了本分支 `e5fa098fa` 的一个问题：`bulk_revisions._deletes_dependents` 对每一行都切片复制批次剩下的部分，长批次是平方的，
+现在原地索引（该测试 2.4 → 0.05 秒；与行触发器逐表比对的随机测试照常通过）。
+
+### 10.5 测量
+
+`tools/pairs7.sh`（`FINER_HOLD=1/0` 交替，两边都打开路由规划，`closed_once`），各 4 轮，中位数，开 / 关
+（`pairs/r19-hold-{real,zero}`，负载 7–11）：
+
+| 中位数 | `net_real` 开 | 关 | `net_zero` 开 | 关 |
+|---|---|---|---|---|
+| 四图全部就绪 | 32.3 秒 | 35.6 秒 | 37.1 秒 | 40.8 秒 |
+| 进程 CPU | 43.5 秒 | 45.8 秒 | 49.7 秒 | 54.9 秒 |
+| 10007m 的 B 类冲突 | 0 | 1.5 | 0 | 1 |
+| 10007m 没有完成的运行 | 0 | 2 | 0 | 2 |
+| 10007m 派发 | 10 | 11 | 10 | 11 |
+| 预算拆分 | 0 | 1 | 0 | 1 |
+| REST 请求 | 190 | 187 | 193 | 192 |
+| 限流的运行 | 0.5 | 0 | 1 | 1 |
+| 归档下载 | 25 | 26 | 25 | 26 |
+
+- 每次开启的加载（这 8 次和另外 8 次带追踪的加载）都等待一次、拆分一次、扣住两个目标，没有超时。
+  加上等待之前的一组（`r18`），8 次开启加载里有 3 次 10007m 先到调度器，扣住没有生效；这一组没有 10007m 先到的加载，
+  这种情形由单元测试覆盖。
+- 短周期图就绪晚 2–4 秒：10007m 不再失败的目标现在与它们同时运行。
+- 这一组的绝对时间比 `r18` 高约 60%，开关两边都高：机器上 Spotlight 和两个存储进程占了约 2 个核（共 8 个）。
+  只有关闭一边的代码变化是上面的 `_deletes_dependents` 修正；新旧两种查找交替各 2 次（`pairs/r19-lookup`）没有一致的差别。
+- 24 次开启加载里有一次（`r19-hold-real/cand-1`），释放后的 11-07 目标连续 7 次因 "canonical dependency range changed
+  during acquisition" 失败（每次 20–1,600 毫秒），约 3 秒后成功。其余 68 次加载（`r15`–`r17` 的路由规划配对，`r18`、`r19` 的关闭一边，
+  `r19-lookup`）里 10007m 没有出现过这种失败。bench 记下的写入里，失败前没有落进这个目标范围的；原因未查明。
+  `tools/range_trace_run.py` 会记下每次范围拒绝的调用者、范围和回执，带它跑的 8 次加载都没有复现。
+
+### 10.6 剩下的
+
+- 释放后的 10-31 目标整个由 1m 合成，在全部 16 次开启加载里都是 10007m 最后完成的运行（8–24 秒，比较旧的 chunk 晚
+  1.5–3.3 秒结束），是现在的关键路径。只在细数据已存或目标边缘用 1m、其余继续用 1h/1d，可以缩短它；这是规划器的改动。
+- 较旧的 chunk 本身在 28–40 秒才结束，主要是派生的 CPU（见 [COLD_FAMILY_FILL_zh.md](COLD_FAMILY_FILL_zh.md)）。
+- 短周期图相邻 chunk 的重新规划（§9.2）不变。

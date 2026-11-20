@@ -250,9 +250,14 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
                 if sum(c.planned_rows for c in covers) > MAX_SOURCE_ROWS:
                     raise _DeclineMixed("source_row_budget")
                 cursor = batch.planned_range[1]
+            # Optional mixed plans give way to the single-base plan when they
+            # would send more REST requests than it. A required composition has
+            # no such fallback (a decline fails the repair), so it keeps its plan:
+            # a target that stored finer rows partly cover is composed from that
+            # base and can need a page more than fetching it whole.
             baseline_requests = math.ceil(((stop - first) // base.nominal_ms) / page_size)
             initial_requests = sum(math.ceil(span.rows / page_size) for cover in covers for span in cover.spans)
-            if cold and initial_requests > baseline_requests:
+            if cold and initial_requests > baseline_requests and not required_contract:
                 raise _DeclineMixed("cold_rest_request_cost")
             cover_rows: list[tuple[int, int]] = []
             for offset in range(0, len(covers), 32):
@@ -279,7 +284,9 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
             windows = planner._deduplicate_tasks(builder.windows)
             requests = sum(math.ceil(task.estimated_bars / page_size) for task in tasks)
             if requests > baseline_requests:
-                raise _DeclineMixed("rest_request_cost")
+                if not required_contract:
+                    raise _DeclineMixed("rest_request_cost")
+                diagnostics["mixed_rest_requests_over_baseline"] = requests - baseline_requests
             from . import mixed_routes
             if mixed_routes.ROUTE_AWARE:
                 routed = await mixed_routes.route_aware_plan(engine, storage, gap, target, first, stop,
@@ -289,7 +296,8 @@ async def build_mixed_backfill_plan(engine, gaps, metadata, diagnostics):
                 rest = (sum(math.ceil(task.estimated_bars / page_size) for task in routed[0]
                             if not task.metadata.get(mixed_routes.ROUTE_OBJECTS_KEY))
                         if routed is not None else None)
-                if routed is not None and rest <= baseline_requests:
+                # Never more REST than the plan it replaces (or the baseline).
+                if routed is not None and rest <= max(baseline_requests, requests):
                     tasks, windows = routed[0], planner._deduplicate_tasks(routed[1])
                     requests = rest
                     diagnostics.update(routed[2])

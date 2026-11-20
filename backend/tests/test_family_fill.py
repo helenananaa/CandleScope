@@ -139,7 +139,10 @@ class Gate:
         pass
 
 
-def test_a_held_chunk_is_not_dispatched_until_its_gate_releases_it():
+def test_a_held_chunk_is_not_dispatched_until_its_gate_releases_it(monkeypatch):
+    # The gate alone: the newest mixed chunk's settling wait (finer_work_hold) is off.
+    from app.data_engine.data_manager import finer_work_hold
+    monkeypatch.setattr(finer_work_hold, "SETTLE_SECONDS", 0.0)
     async def run():
         calls = []
         async def execute(req):
