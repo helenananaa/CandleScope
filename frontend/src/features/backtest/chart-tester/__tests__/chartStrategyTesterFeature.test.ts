@@ -84,8 +84,9 @@ test("phase 4 keeps runtime, draft storage, and Monaco behind lazy boundaries", 
   assert.match(bridge, /manual Run preempted unsubmitted auto Run/);
 });
 
-test("shared run-result views stay opt-in until their visual review", () => {
-  assert.equal(resolveChartRunResultViewsEnabled(), false);
+test("shared run-result views default on after their visual review and remain strict", () => {
+  assert.equal(resolveChartRunResultViewsEnabled(), true);
+  assert.equal(resolveChartRunResultViewsEnabled({ VITE_CHART_RUN_RESULT_VIEWS_ENABLED: "0" }), false);
   assert.equal(resolveChartRunResultViewsEnabled({ VITE_CHART_RUN_RESULT_VIEWS_ENABLED: "true" }), false);
   assert.equal(resolveChartRunResultViewsEnabled({ VITE_CHART_RUN_RESULT_VIEWS_ENABLED: "1" }), true);
 });

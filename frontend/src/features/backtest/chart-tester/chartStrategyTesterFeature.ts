@@ -32,11 +32,14 @@ export function resolveChartRunCompareEnabled(
   return enabledByDefault(environment.VITE_CHART_RUN_COMPARE_ENABLED);
 }
 
-/** Shared run-result views (ADR-BACKTEST-015 P1c); off until the ADR-013 visual review approves them. */
+/**
+ * Shared run-result views (ADR-BACKTEST-015 P1c). The ADR-013 visual review approved
+ * them on 2026-11-21, so they default on; "0" restores the per-family views.
+ */
 export function resolveChartRunResultViewsEnabled(
   environment: ChartStrategyTesterFlagEnvironment = {},
 ): boolean {
-  return strictEnabled(environment.VITE_CHART_RUN_RESULT_VIEWS_ENABLED);
+  return enabledByDefault(environment.VITE_CHART_RUN_RESULT_VIEWS_ENABLED);
 }
 
 export function resolveChartStrategyAutoRunEnabled(
