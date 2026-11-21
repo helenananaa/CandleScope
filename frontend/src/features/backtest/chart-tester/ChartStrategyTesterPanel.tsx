@@ -101,7 +101,7 @@ import { StrategySwitcher, type StrategySwitcherItem } from "./StrategySwitcher.
 const StrategyScriptWorkspace = lazy(() => import("./StrategyScriptWorkspace.js"));
 const NativeStrategyPanel = lazy(() => import("../native/NativeStrategyPanel.js"));
 const ContinuousStrategyPanel = lazy(() => import("../continuous/ContinuousStrategyPanel.js"));
-import { overlayRunForNative, type StrategyOverlayRun } from "../runResult/useStrategyRunOverlay.js";
+import { overlayRunForNative, shownOverlayRun, type StrategyOverlayRun } from "../runResult/useStrategyRunOverlay.js";
 import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
 import type { ContinuousMode } from "../continuous/continuousTypes.js";
 import type { ChartStrategyResultMarkerSource } from "./chartStrategyResultMarkerSource.js";
@@ -216,8 +216,10 @@ export interface ChartStrategyTesterPanelProps {
   continuousMarketWindow?: SeriesWindowView | null;
   onRunModeChange?(mode: ContinuousMode): void;
   continuousMarkerSource?: Pick<ChartStrategyResultMarkerSource, "setContinuousResult">;
-  /** The completed native/external run to draw on the chart; host runs keep their own markers. */
+  /** The run the chart overlay shows: the native panel's in native mode, otherwise the host result. */
   onOverlayRunChange?(run: StrategyOverlayRun | null): void;
+  /** The completed, visible fixed-history result, supplied by the cell bridge. */
+  hostOverlayRun?: StrategyOverlayRun | null;
   active?: boolean;
   onReviewTrade?(trade: StrategyTradeFocus | null): void;
   onPrepareData(): void;
@@ -244,10 +246,12 @@ export default function ChartStrategyTesterPanel(props: ChartStrategyTesterPanel
   ] }));
   useLocale();
   const onOverlayRunChange = props.onOverlayRunChange;
-  useEffect(() => { if (mode !== "NATIVE") onOverlayRunChange?.(null); }, [mode, onOverlayRunChange]);
+  const [nativeOverlayRun, setNativeOverlayRun] = useState<StrategyOverlayRun | null>(null);
   const handleNativeRunChange = useCallback((run: Parameters<typeof overlayRunForNative>[0]) => {
-    onOverlayRunChange?.(overlayRunForNative(run));
-  }, [onOverlayRunChange]);
+    setNativeOverlayRun(overlayRunForNative(run));
+  }, []);
+  const shown = shownOverlayRun(mode, nativeOverlayRun, props.hostOverlayRun ?? null);
+  useEffect(() => { onOverlayRunChange?.(shown); }, [onOverlayRunChange, shown]);
   const switchMode = (next: typeof mode) => {
     setModeChosen(true);
     setMode(next);

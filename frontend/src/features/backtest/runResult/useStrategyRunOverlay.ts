@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import { useMarketDataWorkspaceResources } from "../../market-data/marketDataWorkspaceContext.js";
 import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
 import type { RunResultFamily } from "./runResult.js";
-import { buildStrategyOverlay, StrategyOverlaySource, type StrategyOverlayLabels } from "./strategyOverlay.js";
+import {
+  buildStrategyOverlay, StrategyOverlaySource, type StrategyMarkerEvidence, type StrategyOverlayLabels,
+} from "./strategyOverlay.js";
 
 /** The completed run a chart cell should overlay, by family and id. */
 export interface StrategyOverlayRun {
@@ -20,6 +22,12 @@ export function overlayRunForNative(run: {
   return { family: run.execution_mode === "CANDLESCOPE" ? "external" : "native", runId: run.run_id };
 }
 
+/** The dock shows one run at a time: the native panel's in native mode, otherwise the fixed-history result. */
+export function shownOverlayRun(mode: "NATIVE" | "CANDLESCOPE", native: StrategyOverlayRun | null,
+  host: StrategyOverlayRun | null): StrategyOverlayRun | null {
+  return mode === "NATIVE" ? native : host;
+}
+
 export function strategyOverlayLabels(): StrategyOverlayLabels {
   return {
     actions: {
@@ -31,6 +39,7 @@ export function strategyOverlayLabels(): StrategyOverlayLabels {
     long: t("report.long"),
     short: t("report.short"),
     workingOrder: t("replay.shell.order"),
+    rejection: t("backtest.reject"),
   };
 }
 
@@ -38,14 +47,18 @@ export function strategyOverlayLabels(): StrategyOverlayLabels {
  * One overlay source per chart cell. It shows `run` only while its result's interval
  * matches the chart's, and clears on any load failure rather than drawing stale data.
  */
-export function useStrategyRunOverlay({ run, interval, series }: {
+export function useStrategyRunOverlay({ run, interval, series, onActivate }: {
   run: StrategyOverlayRun | null;
   interval: string;
   series: SeriesWindowView | null;
+  /** A marker with recorded evidence was clicked. */
+  onActivate?: (evidence: StrategyMarkerEvidence) => void;
 }): { source: StrategyOverlaySource; error: string | null } {
   const locale = useLocale();
   const manager = useMarketDataWorkspaceResources()?.dataManager.strategy;
-  const source = useMemo(() => new StrategyOverlaySource(), []);
+  const activate = useRef(onActivate);
+  useLayoutEffect(() => { activate.current = onActivate; }, [onActivate]);
+  const source = useMemo(() => new StrategyOverlaySource((evidence) => activate.current?.(evidence)), []);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => () => source.dispose(), [source]);
   useEffect(() => { source.setSeries(series); }, [series, source]);
@@ -60,8 +73,8 @@ export function useStrategyRunOverlay({ run, interval, series }: {
       if (controller.signal.aborted) return;
       if (result.interval !== interval) return;  // a run for another interval never draws on this chart
       void locale;
-      source.setOverlay(buildStrategyOverlay(result, { labels: strategyOverlayLabels(), idPrefix: `run:${family}:${runId}` }),
-        result.interval);
+      const owner = `run:${family}:${runId}`;
+      source.setOverlay(buildStrategyOverlay(result, { labels: strategyOverlayLabels(), idPrefix: owner }), result.interval, owner);
     }).catch((failure: unknown) => {
       if (controller.signal.aborted) return;
       setError(failure instanceof Error ? failure.message : String(failure));

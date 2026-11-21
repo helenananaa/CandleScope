@@ -193,3 +193,57 @@ def test_calendar_intervals_anchor_to_the_runs_own_bars(runtime_run, monkeypatch
     assert projected["interval"] == "1w"
     assert {fill["bar_time_ms"] for fill in projected["fills"]} <= set(opens)
     assert projected["fills"][0]["bar_time_ms"] == 0 and projected["fills"][-1]["bar_time_ms"] == 1_800_000
+
+
+def test_host_rejections_and_explanations_pass_through():
+    explanation = {"schema": "TRADE_EXPLANATION_V1", "evidenceHash": "sha256:" + "0" * 64}
+    result = {
+        "fills": [{"event_time_ms": 119_999, "side": "BUY", "qty": "1", "price": "10", "fee": "0",
+                   "order_id": "ord-1", "sequence": 2, "explanation": explanation}],
+        "orders": [], "ledger": {"account": {"position_qty": "1", "entry_price": "10"}},
+        "equity_curve": [{"sequence": 4, "event_time_ms": 239_999, "equity": "100", "position_qty": "1"}],
+        "rejected_orders": [
+            {"reason": "MIN_NOTIONAL", "sequence": 3, "event_time_ms": 179_999, "intent": {"side": "sell"},
+             "explanation": explanation},
+            {"reason": "INSUFFICIENT_MARGIN", "sequence": 4, "intent": {}},
+        ],
+    }
+    projected = from_host_result(result, interval="1m", fidelity="BAR_APPROX")
+    assert projected["fills"][0]["explanation"] == explanation
+    assert projected["rejections"] == [
+        {"time_ms": 179_999, "bar_time_ms": 120_000, "side": "SELL", "reason": "MIN_NOTIONAL", "order_id": None,
+         "explanation": explanation},
+        # Report rows have no timestamp: the equity point of their sequence anchors them.
+        {"time_ms": 239_999, "bar_time_ms": 180_000, "side": None, "reason": "INSUFFICIENT_MARGIN", "order_id": None,
+         "explanation": None},
+    ]
+    # Kernel results name the same list "rejected".
+    kernel = {**result, "rejected": result.pop("rejected_orders")}
+    assert from_host_result(kernel, interval="1m", fidelity="BAR_APPROX")["rejections"] == projected["rejections"]
+
+
+
+def test_rejected_runtime_orders_are_anchored_by_sequence(runtime_run, monkeypatch):
+    """A real report: rejection rows carry only their sequence, yet every one gets a bar."""
+    runtime, run_id = runtime_run
+    report = runtime.service.get_report(run_id)
+    first_fill = report["fills"][0]
+    rejected = [{"accepted": False, "reason": "SPOT_INSUFFICIENT_CASH", "sequence": first_fill["sequence"],
+                 "intent": {"side": "BUY", "type": "MARKET", "qty": "1"}}]
+    projected = from_host_result({**report, "rejected_orders": rejected}, interval="1m", fidelity="BAR_APPROX")
+    assert projected["rejections"][0]["bar_time_ms"] == projected["fills"][0]["bar_time_ms"]
+
+
+
+def test_sampled_equity_still_anchors_rejections_only_across_gap_free_spans():
+    """The runtime keeps every 100th equity point; rejections in between are placed exactly."""
+    hour = 3_600_000
+    equity = [{"sequence": seq, "event_time_ms": seq * hour - 1, "equity": "100", "position_qty": "0"} for seq in (1, 100)]
+    equity.append({"sequence": 171, "event_time_ms": 175 * hour - 1, "equity": "100", "position_qty": "0"})  # 4 bars missing
+    result = {"fills": [], "orders": [], "ledger": {"account": {}}, "equity_curve": equity,
+              "rejected_orders": [{"reason": "SPOT_INSUFFICIENT_CASH", "sequence": seq, "intent": {"side": "BUY"}}
+                                  for seq in (7, 100, 130)]}
+    bar = from_host_result(result, interval="1h", fidelity="BAR_APPROX")["rejections"]
+    assert [item["bar_time_ms"] for item in bar] == [6 * hour, 99 * hour, None]
+    trades = from_host_result(result, interval="1h", fidelity="AGG_TRADE_EXECUTION")["rejections"]
+    assert all(item["bar_time_ms"] is None for item in trades), "print sequences are not bar indexes"

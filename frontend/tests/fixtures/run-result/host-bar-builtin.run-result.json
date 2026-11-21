@@ -242,6 +242,7 @@
   "fills": [
     {
       "bar_time_ms": 660000,
+      "explanation": null,
       "fee": "0.03210321",
       "order_id": "ord-1",
       "price": "107.0107",
@@ -252,6 +253,7 @@
     },
     {
       "bar_time_ms": 900000,
+      "explanation": null,
       "fee": "0.029997",
       "order_id": "ord-2",
       "price": "99.99",
@@ -262,6 +264,7 @@
     },
     {
       "bar_time_ms": 1080000,
+      "explanation": null,
       "fee": "0.03240324",
       "order_id": "ord-3",
       "price": "108.0108",
@@ -272,6 +275,7 @@
     },
     {
       "bar_time_ms": 1320000,
+      "explanation": null,
       "fee": "0.03059694",
       "order_id": "ord-4",
       "price": "101.9898",
@@ -282,6 +286,7 @@
     },
     {
       "bar_time_ms": 1620000,
+      "explanation": null,
       "fee": "0.03210321",
       "order_id": "ord-5",
       "price": "107.0107",
@@ -292,6 +297,7 @@
     },
     {
       "bar_time_ms": 1860000,
+      "explanation": null,
       "fee": "0.029997",
       "order_id": "ord-6",
       "price": "99.99",
@@ -302,6 +308,7 @@
     },
     {
       "bar_time_ms": 2040000,
+      "explanation": null,
       "fee": "0.03240324",
       "order_id": "ord-7",
       "price": "108.0108",
@@ -312,6 +319,7 @@
     },
     {
       "bar_time_ms": 2280000,
+      "explanation": null,
       "fee": "0.03059694",
       "order_id": "ord-8",
       "price": "101.9898",
@@ -322,6 +330,7 @@
     },
     {
       "bar_time_ms": 2580000,
+      "explanation": null,
       "fee": "0.03210321",
       "order_id": "ord-9",
       "price": "107.0107",
@@ -339,6 +348,7 @@
   },
   "pending_orders": [],
   "plots": [],
+  "rejections": [],
   "schema": "candlescope.run-result/1",
   "source": "host-kernel",
   "summary": {

@@ -28,7 +28,9 @@ test("the host projection of the oracle run parses with every fill anchored to a
   assert.ok(result.fills.every((fill) => fill.bar_time_ms !== null && fill.bar_time_ms % 60_000 === 0));
   assert.deepEqual(result.fills[0], {
     time_ms: 719_999, bar_time_ms: 660_000, side: "BUY", qty: "1", price: "107.0107", fee: "0.03210321", order_id: "ord-1", tag: null,
+    explanation: null,
   });
+  assert.deepEqual(result.rejections, []);
   assert.equal(result.open_position?.side, "LONG");
   assert.deepEqual(result.plots, []);
 });
@@ -53,6 +55,9 @@ const MALFORMED: ReadonlyArray<readonly [string, (value: Wire) => void]> = [
   ["an unknown fill side", (value) => { firstFill(value).side = "SHORT"; }],
   ["a missing trade list", (value) => { delete value.trades; }],
   ["a non-finite plot value", (value) => { value.plots = [{ id: "7", title: null, kind: "line", pane: "main", points: [[0, "x"]] }]; }],
+  ["a missing rejection list", (value) => { delete value.rejections; }],
+  ["a rejection without a reason", (value) => { value.rejections = [{ time_ms: null, bar_time_ms: null, side: null, order_id: null, explanation: null }]; }],
+  ["a non-object explanation", (value) => { firstFill(value).explanation = "trust me"; }],
 ];
 
 for (const [label, mutate] of MALFORMED) {

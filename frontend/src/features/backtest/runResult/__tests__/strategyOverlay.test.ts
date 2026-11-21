@@ -4,7 +4,8 @@ import test from "node:test";
 import { combineChartLayerSources, type ChartLayerSource } from "../../../plugins/pluginChartLayerSource.js";
 import { parseRunResult, type RunResult } from "../runResult.js";
 import { buildStrategyOverlay, fillActions, StrategyOverlaySource, type StrategyOverlayLabels } from "../strategyOverlay.js";
-import { overlayRunForNative } from "../useStrategyRunOverlay.js";
+import { overlayRunForNative, shownOverlayRun } from "../useStrategyRunOverlay.js";
+import type { StrategyMarkerEvidence } from "../strategyOverlay.js";
 
 function fixture(name: string): RunResult {
   const raw: unknown = JSON.parse(readFileSync(new URL(`../../../../../tests/fixtures/run-result/${name}.run-result.json`, import.meta.url), "utf8"));
@@ -15,7 +16,7 @@ const LABELS: StrategyOverlayLabels = {
   actions: { OPEN_LONG: "open long", ADD_LONG: "add long", REDUCE_LONG: "reduce long", CLOSE_LONG: "close long",
     REVERSE_TO_SHORT: "reverse short", OPEN_SHORT: "open short", ADD_SHORT: "add short", REDUCE_SHORT: "reduce short",
     CLOSE_SHORT: "close short", REVERSE_TO_LONG: "reverse long" },
-  long: "Long", short: "Short", workingOrder: "Order",
+  long: "Long", short: "Short", workingOrder: "Order", rejection: "Rejected",
 };
 
 function fill(side: "BUY" | "SELL", qty: string) {
@@ -117,4 +118,66 @@ test("only completed native-panel runs become overlay runs", () => {
   assert.equal(overlayRunForNative({ run_id: "a", state: "COMPLETED", execution_mode: "NATIVE" }), null, "no result yet");
   assert.deepEqual(overlayRunForNative({ run_id: "a", state: "COMPLETED", execution_mode: "NATIVE", result: {} }), { family: "native", runId: "a" });
   assert.deepEqual(overlayRunForNative({ run_id: "b", state: "COMPLETED", execution_mode: "CANDLESCOPE", result: {} }), { family: "external", runId: "b" });
+});
+
+
+function withEvidence(): RunResult {
+  const result = fixture("host-bar-builtin");
+  const explanation = { schema: "TRADE_EXPLANATION_V1" };
+  return {
+    ...result,
+    fills: result.fills.map((item, index) => (index === 0 ? { ...item, explanation } : item)),
+    rejections: [
+      { time_ms: 900_000, bar_time_ms: 900_000, side: "SELL", reason: "MIN_NOTIONAL", order_id: null, explanation },
+      { time_ms: null, bar_time_ms: null, side: null, reason: "INSUFFICIENT_MARGIN", order_id: null, explanation: null },
+    ],
+  };
+}
+
+test("rejections become amber markers and recorded evidence is clickable", () => {
+  const overlay = buildStrategyOverlay(withEvidence(), { labels: LABELS, idPrefix: "run:host:x" });
+  const rejection = overlay.markers.find((marker) => marker.id === "run:host:x:rejection:0");
+  assert.deepEqual(rejection, { id: "run:host:x:rejection:0", time: 900, position: "aboveBar", color: "#f59e0b",
+    shape: "square", text: "Rejected" });
+  assert.equal(overlay.markers.filter((marker) => marker.id.includes(":rejection:")).length, 1, "unanchored rejections are not drawn");
+  assert.deepEqual([...overlay.evidence.keys()], ["run:host:x:fill:0", "run:host:x:rejection:0"]);
+  const clicked: StrategyMarkerEvidence[] = [];
+  const source = new StrategyOverlaySource((evidence) => clicked.push(evidence));
+  source.setOverlay(overlay, "1m", "run:host:x");
+  assert.equal(source.markers.activate?.("run:host:x:fill:0"), true);
+  assert.equal(source.markers.activate?.("run:host:x:fill:1"), false, "no evidence, nothing to open");
+  assert.equal(source.markers.activate?.("run:host:x:rejection:0"), true);
+  assert.deepEqual(clicked.map((item) => item.kind), ["FILL", "REJECTION"]);
+  assert.equal(new StrategyOverlaySource().markers.activate?.("run:host:x:fill:0"), false, "no handler, not claimed");
+});
+
+test("the reviewed trade is highlighted on top of the run's markers, only on loaded bars", () => {
+  const loaded = new Set<number>([660, 960]);
+  const source = new StrategyOverlaySource();
+  source.setSeries({ axisRevision: 1, hasTime: (time: number) => loaded.has(time), subscribe: () => () => true } as never);
+  source.setOverlay(buildStrategyOverlay(fixture("host-bar-builtin"), { labels: LABELS, idPrefix: "r" }), "1m", "run:host:r");
+  source.setTradeFocus({ id: "trade-1", entryTimeMs: 719_999, exitTimeMs: 959_999, entryPrice: 107, exitPrice: null }, "1m", "Entry", "Exit");
+  const focus = source.markers.getSnapshot().markers.filter((marker) => marker.id.startsWith("review:"));
+  assert.deepEqual(focus.map((marker) => [marker.id, marker.time, marker.text]),
+    [["review:trade-1:entry", 660, "Entry 107"], ["review:trade-1:exit", 900, "Exit"]].filter(([, time]) => loaded.has(time as number)));
+  source.setTradeFocus(null, "1m", "Entry", "Exit");
+  assert.equal(source.markers.getSnapshot().markers.filter((marker) => marker.id.startsWith("review:")).length, 0);
+});
+
+test("a stale host result is cleared by owner without touching a native overlay", () => {
+  const source = new StrategyOverlaySource();
+  source.setOverlay(buildStrategyOverlay(fixture("native-pine"), { labels: LABELS, idPrefix: "run:native:n" }), "1m", "run:native:n");
+  source.clearOwner("run:host:");
+  assert.ok(source.layer.getSnapshot().entries.length > 0, "native overlay survives a host STALE");
+  source.setOverlay(buildStrategyOverlay(fixture("host-bar-builtin"), { labels: LABELS, idPrefix: "run:host:h" }), "1m", "run:host:h");
+  source.clearOwner("run:host:");
+  assert.deepEqual([source.markers.getSnapshot().markers.length, source.layer.getSnapshot().entries.length], [0, 0]);
+});
+
+test("the dock shows the native run in native mode and the fixed-history result otherwise", () => {
+  const native = { family: "native" as const, runId: "n" }, host = { family: "host" as const, runId: "h" };
+  assert.equal(shownOverlayRun("NATIVE", native, host), native);
+  assert.equal(shownOverlayRun("NATIVE", null, host), null, "an empty native panel never shows the host result");
+  assert.equal(shownOverlayRun("CANDLESCOPE", native, host), host);
+  assert.equal(shownOverlayRun("CANDLESCOPE", native, null), null);
 });

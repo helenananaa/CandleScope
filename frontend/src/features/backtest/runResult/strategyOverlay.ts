@@ -12,6 +12,8 @@ import type { ChartLayerSource, PluginChartLayerSnapshot, PluginChartRenderEntry
 import { parseIntervalSeconds } from "../../../utils/intervals.js";
 import { boundVisibleBacktestMarkers, normalizedTimeRange } from "../chart-tester/chartStrategyResultMarkerSource.js";
 import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
+import type { StrategyTradeFocus } from "../chart-tester/strategyTradeReview.js";
+import { floorIntervalTime } from "../../../utils/intervalTimeline.js";
 import type { RunResult, RunResultFill } from "./runResult.js";
 
 export type FillAction =
@@ -23,11 +25,21 @@ export interface StrategyOverlayLabels {
   long: string;
   short: string;
   workingOrder: string;
+  rejection: string;
+}
+
+/** What a clicked marker stands for, when the run recorded decision-time evidence for it. */
+export interface StrategyMarkerEvidence {
+  markerId: string;
+  kind: "FILL" | "REJECTION";
+  explanation: Record<string, unknown>;
 }
 
 export interface StrategyOverlay {
   markers: ExternalSeriesMarker[];
   entries: PluginChartRenderEntry[];
+  /** Evidence by marker id, for click-through. */
+  evidence: ReadonlyMap<string, StrategyMarkerEvidence>;
 }
 
 export const STRATEGY_OVERLAY_COLORS = {
@@ -38,6 +50,9 @@ export const STRATEGY_OVERLAY_COLORS = {
   neutral: "#94a3b8",
   position: "#3b82f6",
   order: "#f59e0b",
+  rejection: "#f59e0b",
+  focusEntry: "#38bdf8",
+  focusExit: "#f59e0b",
   plots: ["#3b82f6", "#f97316", "#a855f7", "#14b8a6", "#eab308", "#ec4899"],
 } as const;
 
@@ -78,12 +93,14 @@ export function buildStrategyOverlay(result: RunResult, options: {
   const { labels, idPrefix } = options;
   const actions = fillActions(result.fills);
   const markers: ExternalSeriesMarker[] = [];
+  const evidence = new Map<string, StrategyMarkerEvidence>();
   result.fills.forEach((fill, index) => {
     if (fill.bar_time_ms === null) return;
     const time = seconds(fill.bar_time_ms);
     const buy = fill.side === "BUY";
+    const id = `${idPrefix}:fill:${index}`;
     markers.push({
-      id: `${idPrefix}:fill:${index}`,
+      id,
       time,
       position: buy ? "belowBar" : "aboveBar",
       color: buy ? STRATEGY_OVERLAY_COLORS.buy : STRATEGY_OVERLAY_COLORS.sell,
@@ -91,6 +108,14 @@ export function buildStrategyOverlay(result: RunResult, options: {
       text: `${labels.actions[actions[index]!]} ${fill.price}`,
       size: 1.2,
     });
+    if (fill.explanation) evidence.set(id, { markerId: id, kind: "FILL", explanation: fill.explanation });
+  });
+  result.rejections.forEach((rejection, index) => {
+    if (rejection.bar_time_ms === null) return;
+    const id = `${idPrefix}:rejection:${index}`;
+    markers.push({ id, time: seconds(rejection.bar_time_ms), position: "aboveBar", color: STRATEGY_OVERLAY_COLORS.rejection,
+      shape: "square", text: labels.rejection });
+    if (rejection.explanation) evidence.set(id, { markerId: id, kind: "REJECTION", explanation: rejection.explanation });
   });
   markers.sort((left, right) => Number(left.time) - Number(right.time));
 
@@ -139,8 +164,28 @@ export function buildStrategyOverlay(result: RunResult, options: {
       width: 1, style: "dotted", text: `${labels.workingOrder} ${order.side} ${order.type}${order.qty ? ` ${order.qty}` : ""}`,
     } });
   });
-  return { markers, entries };
+  return { markers, entries, evidence };
 }
+
+/** Entry and exit highlights for the trade under review; drawn on top, outside the visible-range bound. */
+export function tradeFocusMarkers(focus: {
+  trade: StrategyTradeFocus; interval: string; entryLabel: string; exitLabel: string;
+}): ExternalSeriesMarker[] {
+  const { trade, interval, entryLabel, exitLabel } = focus;
+  const markers: ExternalSeriesMarker[] = [];
+  for (const [kind, timeMs, label, price] of [["entry", trade.entryTimeMs, entryLabel, trade.entryPrice],
+    ["exit", trade.exitTimeMs, exitLabel, trade.exitPrice]] as const) {
+    if (timeMs === null) continue;
+    const time = floorIntervalTime(interval, timeMs / 1000);
+    if (time === null) continue;
+    markers.push({ id: `review:${trade.id}:${kind}`, time, position: kind === "entry" ? "belowBar" : "aboveBar",
+      color: kind === "entry" ? STRATEGY_OVERLAY_COLORS.focusEntry : STRATEGY_OVERLAY_COLORS.focusExit,
+      shape: kind === "entry" ? "arrowUp" : "arrowDown", text: `${label}${price === null ? "" : ` ${price}`}`, size: 2 });
+  }
+  return markers;
+}
+
+const NO_OVERLAY: StrategyOverlay = { markers: [], entries: [], evidence: new Map() };
 
 const EMPTY_MARKERS: ExternalMarkerSnapshot = Object.freeze({ markers: Object.freeze([]), revision: 0 });
 const EMPTY_LAYER: PluginChartLayerSnapshot = Object.freeze({ entries: Object.freeze([]), revision: 0 });
@@ -153,7 +198,9 @@ type OverlaySeries = Pick<SeriesWindowView, "hasTime" | "axisRevision" | "subscr
  * like the host tester's markers; layer entries are few and always drawn.
  */
 export class StrategyOverlaySource {
-  private overlay: StrategyOverlay = { markers: [], entries: [] };
+  private overlay: StrategyOverlay = NO_OVERLAY;
+  private owner: string | null = null;
+  private focus: ExternalSeriesMarker[] = [];
   private series: OverlaySeries | null = null;
   private seriesAxis = -1;
   private stopSeries: (() => void) | null = null;
@@ -164,9 +211,17 @@ export class StrategyOverlaySource {
   private revision = 0;
   private readonly listeners = new Set<() => void>();
 
+  constructor(private readonly onActivate?: (evidence: StrategyMarkerEvidence) => void) {}
+
   readonly markers: ExternalMarkerSource = {
     getSnapshot: () => this.markerSnapshot,
     subscribe: (listener) => this.subscribe(listener),
+    activate: (markerId) => {
+      const evidence = this.overlay.evidence.get(markerId);
+      if (!evidence || !this.onActivate) return false;
+      this.onActivate(evidence);
+      return true;
+    },
   };
 
   readonly layer: ChartLayerSource = {
@@ -174,10 +229,23 @@ export class StrategyOverlaySource {
     subscribe: (listener) => this.subscribe(listener),
   };
 
-  setOverlay(overlay: StrategyOverlay | null, interval: string | null): void {
-    this.overlay = overlay ?? { markers: [], entries: [] };
+  /** Show one run's overlay; `owner` names it (for example `run:host:<id>`) so a stale owner can be cleared. */
+  setOverlay(overlay: StrategyOverlay | null, interval: string | null, owner: string | null = null): void {
+    this.overlay = overlay ?? NO_OVERLAY;
+    this.owner = overlay ? owner : null;
     this.intervalSeconds = Math.max(1, (interval ? parseIntervalSeconds(interval) : null) ?? 1);
     this.publish(true);
+  }
+
+  /** Clear synchronously when the current overlay's owner starts with `prefix` (same-frame STALE hiding). */
+  clearOwner(prefix: string): void {
+    if (this.owner === null || !this.owner.startsWith(prefix)) return;
+    this.setOverlay(null, null);
+  }
+
+  setTradeFocus(trade: StrategyTradeFocus | null, interval: string, entryLabel: string, exitLabel: string): void {
+    this.focus = trade ? tradeFocusMarkers({ trade, interval, entryLabel, exitLabel }) : [];
+    this.publish(false);
   }
 
   /** The chart's loaded bars; markers on bars it does not have are held back until they load. */
@@ -199,6 +267,8 @@ export class StrategyOverlaySource {
   }
 
   dispose(): void {
+    this.overlay = NO_OVERLAY;
+    this.focus = [];
     this.stopSeries?.();
     this.stopSeries = null;
     this.series = null;
@@ -226,8 +296,9 @@ export class StrategyOverlaySource {
     this.revision += 1;
     const series = this.series;
     const loaded = series ? this.overlay.markers.filter((marker) => series.hasTime(marker.time)) : this.overlay.markers;
+    const focus = series ? this.focus.filter((marker) => series.hasTime(marker.time)) : this.focus;
     this.markerSnapshot = {
-      markers: boundVisibleBacktestMarkers(loaded, this.visibleRange, this.intervalSeconds),
+      markers: [...boundVisibleBacktestMarkers(loaded, this.visibleRange, this.intervalSeconds), ...focus],
       revision: this.revision,
     };
     if (layerChanged) this.layerSnapshot = { entries: this.overlay.entries, revision: this.revision };
