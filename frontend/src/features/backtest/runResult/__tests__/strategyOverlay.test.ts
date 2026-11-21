@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { combineChartLayerSources, type ChartLayerSource } from "../../../plugins/pluginChartLayerSource.js";
 import { parseRunResult, type RunResult } from "../runResult.js";
-import { buildStrategyOverlay, fillActions, StrategyOverlaySource, type StrategyOverlayLabels } from "../strategyOverlay.js";
+import { boundVisibleConnectors, buildStrategyOverlay, fillActions, StrategyOverlaySource, type StrategyOverlayLabels } from "../strategyOverlay.js";
 import { overlayRunForNative, shownOverlayRun } from "../useStrategyRunOverlay.js";
 import type { StrategyMarkerEvidence } from "../strategyOverlay.js";
 
@@ -36,8 +36,9 @@ test("the host oracle run overlays one marker per fill, a connector per round tr
   assert.deepEqual(overlay.markers[0], { id: "run:host:a:fill:0", time: 660, position: "belowBar", color: "#22c55e",
     shape: "arrowUp", text: "open long 107.0107", size: 1.2 });
   assert.equal(overlay.markers[1]?.text, "close long 99.99");
-  const connectors = overlay.entries.filter((entry) => entry.id.includes(":trade:"));
+  const connectors = overlay.connectors;
   assert.equal(connectors.length, result.trades.length);
+  assert.equal(overlay.entries.filter((entry) => entry.id.includes(":trade:")).length, 0, "connectors are bounded separately");
   assert.ok(connectors.every((entry) => entry.item.type === "polyline" && entry.item.style === "dashed"));
   const position = overlay.entries.find((entry) => entry.id === "run:host:a:position");
   assert.deepEqual(position?.item, { id: "run:host:a:position", type: "price-line", price: 107.0107, color: "#3b82f6",
@@ -79,7 +80,7 @@ test("the overlay source holds markers back until their bars load and bounds the
   source.setSeries(series as never);
   source.setOverlay(overlay, result.interval);
   assert.deepEqual(source.markers.getSnapshot().markers.map((marker) => marker.time), [660]);
-  assert.equal(source.layer.getSnapshot().entries.length, overlay.entries.length);
+  assert.equal(source.layer.getSnapshot().entries.length, overlay.entries.length + overlay.connectors.length);
   for (const marker of overlay.markers) loaded.add(Number(marker.time));
   listeners.forEach((listener) => listener());
   assert.equal(source.markers.getSnapshot().markers.length, 1, "same axis: nothing to republish");
@@ -106,6 +107,7 @@ test("combined chart layers keep every source's entries and refresh when any sou
   const first = combined.getSnapshot();
   assert.equal(first.entries[0]?.id, "plugin");
   assert.equal(first.entries.length, 1 + strategy.layer.getSnapshot().entries.length);
+  assert.ok(strategy.layer.getSnapshot().entries.some((entry) => entry.id.includes(":trade:")), "connectors are drawn");
   assert.equal(combined.getSnapshot(), first, "unchanged sources return the same snapshot");
   revision += 1;
   assert.notEqual(combined.getSnapshot(), first);
@@ -180,4 +182,20 @@ test("the dock shows the native run in native mode and the fixed-history result 
   assert.equal(shownOverlayRun("NATIVE", null, host), null, "an empty native panel never shows the host result");
   assert.equal(shownOverlayRun("CANDLESCOPE", native, host), host);
   assert.equal(shownOverlayRun("CANDLESCOPE", native, null), null);
+});
+
+
+test("connectors are bounded to the visible range and capped, like markers", () => {
+  const result = fixture("host-bar-builtin");
+  const overlay = buildStrategyOverlay(result, { labels: LABELS, idPrefix: "b" });
+  const source = new StrategyOverlaySource();
+  source.setOverlay(overlay, "1m", "run:host:b");
+  const all = source.layer.getSnapshot().entries.filter((entry) => entry.id.includes(":trade:")).length;
+  assert.equal(all, overlay.connectors.length, "no range yet: every connector");
+  source.setVisibleRange({ time: { from: 0, to: 300 } });
+  const near = source.layer.getSnapshot().entries.filter((entry) => entry.id.includes(":trade:")).length;
+  assert.ok(near < all && near > 0, `only round trips near the first minutes (${near} of ${all})`);
+  assert.ok(source.layer.getSnapshot().entries.some((entry) => entry.id === "b:position"), "the position line stays");
+  const many = Array.from({ length: 30 }, (_, index) => overlay.connectors[index % overlay.connectors.length]!);
+  assert.equal(boundVisibleConnectors(many, null, 60, 10).length, 10);
 });

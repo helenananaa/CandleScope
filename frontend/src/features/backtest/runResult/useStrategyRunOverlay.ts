@@ -3,6 +3,7 @@ import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import { useMarketDataWorkspaceResources } from "../../market-data/marketDataWorkspaceContext.js";
 import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
+import type { StrategyDataManager } from "../../market-data/manager/strategyDataManager.js";
 import type { RunResult, RunResultFamily } from "./runResult.js";
 import {
   buildStrategyOverlay, StrategyOverlaySource, type StrategyMarkerEvidence, type StrategyOverlayLabels,
@@ -53,22 +54,26 @@ export function strategyOverlayLabels(): StrategyOverlayLabels {
  * One overlay source per chart cell. It shows `run` only while its result's interval
  * matches the chart's, and clears on any load failure rather than drawing stale data.
  */
-export function useStrategyRunOverlay({ run, interval, series, onActivate }: {
+export function useStrategyRunOverlay({ run, interval, series, onActivate, manager: explicitManager }: {
   run: StrategyOverlayRun | null;
   interval: string;
-  series: SeriesWindowView | null;
+  /** The chart's loaded bars. Leave undefined when the chart registers them itself (setSeries). */
+  series?: SeriesWindowView | null;
+  /** A page with its own data manager (the research page) passes it; charts use the workspace's. */
+  manager?: StrategyDataManager | null;
   /** A marker with recorded evidence was clicked. */
   onActivate?: (evidence: StrategyMarkerEvidence) => void;
 }): { source: StrategyOverlaySource; error: string | null; shown: ShownRunResult | null } {
   const locale = useLocale();
-  const manager = useMarketDataWorkspaceResources()?.dataManager.strategy;
+  const workspaceManager = useMarketDataWorkspaceResources()?.dataManager.strategy;
+  const manager = explicitManager ?? workspaceManager;
   const activate = useRef(onActivate);
   useLayoutEffect(() => { activate.current = onActivate; }, [onActivate]);
   const source = useMemo(() => new StrategyOverlaySource((evidence) => activate.current?.(evidence)), []);
   const [error, setError] = useState<string | null>(null);
   const [shown, setShown] = useState<ShownRunResult | null>(null);
   useEffect(() => () => source.dispose(), [source]);
-  useEffect(() => { source.setSeries(series); }, [series, source]);
+  useEffect(() => { if (series !== undefined) source.setSeries(series); }, [series, source]);
   const family = run?.family ?? null;
   const runId = run?.runId ?? null;
   useEffect(() => {
