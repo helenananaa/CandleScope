@@ -5,25 +5,16 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { engineStats, openApp } from './app-frame.mjs'
+import { closeBrowsers, engineStats, launchVisit, openApp } from './app-frame.mjs'
 
 const require = createRequire(import.meta.url)
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright-core')
+const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright-core')
 const url = process.argv[2] || 'http://127.0.0.1:4178/'
 const profile = await mkdtemp(join(tmpdir(), 'candlescope-python-acceptance-'))
 const market = 'exchange=binance&market_type=spot&symbol=BTCUSDT&interval=1h'
 
 async function visit(offline, test) {
-  const context = await chromium.launchPersistentContext(profile, {
-    headless: true,
-    ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}),
-    args: offline
-      ? [
-          '--proxy-server=direct://',
-          '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1',
-        ]
-      : [],
-  })
+  const context = await launchVisit(playwright, profile, { offline })
   try {
     const page = await openApp(await context.newPage(), url)
     await page.waitForFunction(
@@ -42,7 +33,7 @@ async function visit(offline, test) {
       null,
       { timeout: 60000 }
     )
-    await test(page)
+    await test(page, context)
   } finally {
     await context.close()
   }
@@ -114,8 +105,8 @@ try {
     }
     assert.deepEqual([stats.boot, stats.snapshot], ['import', 'stored'])
   })
-  await visit(true, async (page) => {
-    assert.equal(
+  await visit(true, async (page, context) => {
+    if (context.blocksNetwork) assert.equal(
       await page.evaluate(async () => {
         try {
           await fetch('https://data-api.binance.vision/api/v3/time', {
@@ -141,9 +132,12 @@ try {
       saved.length
     )
     assert.deepEqual(signature(range.data), saved)
-    assert.equal((await engineStats(page)).boot, 'snapshot')
+    assert.equal((await engineStats(page)).boot, context.keepsSnapshots ? 'snapshot' : 'import')
     console.log(
-      'After a complete browser exit, the engine restored its snapshot and all ' +
+      'After a complete browser exit, the engine ' +
+        (context.keepsSnapshots ? 'restored its snapshot' : 'started again') +
+        (context.blocksNetwork ? '' : ' (this browser cannot block the network here)') +
+        ' and all ' +
         saved.length +
         ' closed candles matched from the original storage, offline.'
     )
@@ -154,5 +148,6 @@ try {
     console.log('After reopening online, the original backend served the next older page.')
   })
 } finally {
+  await closeBrowsers()
   await rm(profile, { recursive: true, force: true, maxRetries: 3 })
 }

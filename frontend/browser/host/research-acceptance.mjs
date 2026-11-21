@@ -4,20 +4,17 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { openApp } from './app-frame.mjs'
+import { closeBrowsers, launchVisit, openApp } from './app-frame.mjs'
 
 const require = createRequire(import.meta.url)
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright-core')
+const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright-core')
 const url = process.argv[2] || 'http://127.0.0.1:4178/'
 const profile = await mkdtemp(join(tmpdir(), 'candlescope-library-'))
 const start = 1760000400000
 const minute = 60000
 let dataset, session, account, run, cursor, journal
 async function visit(check) {
-  const context = await chromium.launchPersistentContext(profile, {
-    ...(process.env.CHROME_PATH && { executablePath: process.env.CHROME_PATH }),
-    headless: true,
-  })
+  const context = await launchVisit(playwright, profile)
   try {
     const page = await openApp(await context.newPage(), new URL('strategy.html?action=import', url).href)
     await page.getByTestId('research-data-drawer').waitFor({ timeout: 150000 })
@@ -253,5 +250,6 @@ try {
     )
   })
 } finally {
+  await closeBrowsers()
   await rm(profile, { recursive: true, force: true, maxRetries: 3 })
 }

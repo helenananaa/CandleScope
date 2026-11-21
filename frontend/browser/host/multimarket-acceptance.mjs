@@ -1,14 +1,13 @@
 // Check switching the real replay form, including same-symbol cache isolation.
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { openApp } from './app-frame.mjs'
-const { chromium } = createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE || 'playwright-core')
+import { mkdtemp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { closeBrowsers, launchVisit, openApp } from './app-frame.mjs'
+const playwright = createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE || 'playwright-core')
 const url = new URL('replay.html', process.argv[2] || 'http://127.0.0.1:4178/')
-const browser = await chromium.launch({
-  headless: true,
-  ...(process.env.CHROME_PATH && { executablePath: process.env.CHROME_PATH }),
-})
-const context = await browser.newContext()
+const context = await launchVisit(playwright, await mkdtemp(join(tmpdir(), 'candlescope-multimarket-')))
 const start = Math.floor((Date.now() - 86400000) / 60000) * 60000
 const utc = (ms) => new Date(ms).toISOString().slice(0, 16).replace('T', ' ')
 const ids = new Map()
@@ -92,5 +91,6 @@ try {
     console.log('Visible replay chart', identity, receipt)
   }
 } finally {
-  await browser.close()
+  await context.close()
+  await closeBrowsers()
 }

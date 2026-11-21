@@ -9,15 +9,13 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { closeBrowsers, launchVisit } from './app-frame.mjs'
 
 const require = createRequire(import.meta.url)
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright-core')
+const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright-core')
 const url = new URL(process.argv[2] || 'http://127.0.0.1:4178/')
 const profile = await mkdtemp(join(tmpdir(), 'candlescope-storage-acceptance-'))
-const context = await chromium.launchPersistentContext(profile, {
-  headless: true,
-  ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}),
-})
+const context = await launchVisit(playwright, profile)
 try {
   const page = await context.newPage()
   // Any same-origin document will do; this one does not start the engine.
@@ -157,5 +155,6 @@ open('${legacy}/settings.json', 'w').write('{"language": "en"}')
   console.log('An IDBFS directory of an earlier build moved to the new storage and the old database was removed.')
 } finally {
   await context.close()
+  await closeBrowsers()
   await rm(profile, { recursive: true, force: true, maxRetries: 3 })
 }

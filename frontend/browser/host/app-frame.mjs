@@ -37,3 +37,51 @@ export function engineStats(frame) {
     }
   })
 }
+
+// Acceptance scripts run in Chromium unless BROWSER names Playwright's WebKit.
+// A visit is a browser context over the script's profile; closing it ends the
+// engine, as quitting the browser does. An offline visit reaches only this
+// machine.
+//
+// Playwright's WebKit cannot start with a profile directory on every macOS, so
+// a script's visits share one context and closing a visit closes its pages.
+// Its Cache Storage does not outlive the last page: later visits import the
+// backend instead of restoring a snapshot. Offline, it aborts requests to other
+// hosts, but not those of pages a service worker controls. A visit reports both
+// limits (blocksNetwork, keepsSnapshots) so that checks skip what it cannot show.
+// Playwright's Firefox lets page requests bypass the service worker that
+// carries the application's HTTP requests, so it cannot run these checks.
+let webkit
+export async function launchVisit(playwright, profile, { offline = false } = {}) {
+  const name = process.env.BROWSER || 'chromium'
+  if (name === 'chromium') {
+    const context = await playwright.chromium.launchPersistentContext(profile, {
+      headless: true,
+      ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}),
+      args: offline
+        ? ['--proxy-server=direct://', '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1, EXCLUDE localhost']
+        : [],
+    })
+    return Object.assign(context, { blocksNetwork: offline, keepsSnapshots: true })
+  }
+  if (name !== 'webkit') throw Error(`BROWSER=${name} is not supported; use chromium or webkit`)
+  webkit ??= await (await playwright.webkit.launch({ headless: true })).newContext()
+  await webkit.unrouteAll()
+  const local = (url) => ['127.0.0.1', 'localhost'].includes(url.hostname)
+  if (offline) await webkit.route((url) => !local(url), (route) => route.abort('internetdisconnected'))
+  return {
+    blocksNetwork: false,
+    keepsSnapshots: false,
+    newPage: () => webkit.newPage(),
+    async close() {
+      for (const page of webkit.pages()) await page.close()
+      // The engine's shared worker ends once no page holds it.
+      await new Promise((resolve) => setTimeout(resolve, 3000))
+    },
+  }
+}
+
+export async function closeBrowsers() {
+  await webkit?.browser().close()
+  webkit = undefined
+}

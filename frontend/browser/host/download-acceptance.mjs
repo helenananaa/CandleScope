@@ -4,29 +4,17 @@ import { createRequire } from 'node:module'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { openApp } from './app-frame.mjs'
+import { closeBrowsers, launchVisit, openApp } from './app-frame.mjs'
 
 const require = createRequire(import.meta.url)
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright-core')
+const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright-core')
 const url = process.argv[2] || 'http://127.0.0.1:4178/'
 const profile = await mkdtemp(join(tmpdir(), 'candlescope-download-'))
-const options = {
-  headless: true,
-  ...(process.env.CHROME_PATH && { executablePath: process.env.CHROME_PATH }),
-}
 const start = Date.UTC(2025, 0, 2, 0, 0)
 const end = start + 25 * 60000
 const saved = []
 async function visit(offline, check) {
-  const context = await chromium.launchPersistentContext(profile, {
-    ...options,
-    args: offline
-      ? [
-          '--proxy-server=direct://',
-          '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1, EXCLUDE localhost',
-        ]
-      : [],
-  })
+  const context = await launchVisit(playwright, profile, { offline })
   try {
     const page = await openApp(await context.newPage(), new URL('strategy.html?action=import', url).href)
     const form = page.getByTestId('history-download-form')
@@ -161,5 +149,6 @@ try {
     )
   })
 } finally {
+  await closeBrowsers()
   await rm(profile, { recursive: true, force: true, maxRetries: 3 })
 }

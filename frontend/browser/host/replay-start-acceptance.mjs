@@ -4,9 +4,9 @@ import { createRequire } from 'node:module'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { openApp } from './app-frame.mjs'
+import { closeBrowsers, launchVisit, openApp } from './app-frame.mjs'
 
-const { chromium } = createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE || 'playwright-core')
+const playwright = createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE || 'playwright-core')
 const url = new URL('replay.html', process.argv[2] || 'http://127.0.0.1:4178/')
 const profile = await mkdtemp(join(tmpdir(), 'candlescope-start-'))
 const epoch = Date.UTC(2025, 0, 2)
@@ -15,16 +15,7 @@ const instant = (m) => epoch + m * minute
 const utc = (m) => new Date(instant(m)).toISOString().slice(0, 16).replace('T', ' ')
 const saved = {}
 async function check(offline) {
-  const ctx = await chromium.launchPersistentContext(profile, {
-    headless: true,
-    ...(process.env.CHROME_PATH && { executablePath: process.env.CHROME_PATH }),
-    args: offline
-      ? [
-          '--proxy-server=direct://',
-          '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1, EXCLUDE localhost',
-        ]
-      : [],
-  })
+  const ctx = await launchVisit(playwright, profile, { offline })
   try {
     const tab = await ctx.newPage()
     let p
@@ -116,5 +107,6 @@ try {
   await check(false)
   await check(true)
 } finally {
+  await closeBrowsers()
   await rm(profile, { recursive: true, force: true, maxRetries: 3 })
 }

@@ -6,9 +6,9 @@ import { createRequire } from 'node:module'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { appFrame, engineStats, openApp } from './app-frame.mjs'
+import { appFrame, closeBrowsers, engineStats, launchVisit, openApp } from './app-frame.mjs'
 
-const { chromium } = createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE || 'playwright-core')
+const playwright = createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE || 'playwright-core')
 const url = process.argv[2] || 'http://127.0.0.1:4178/'
 const limit = Number(process.env.CANDLE_PAGE_SWITCH_MS || 10000)
 const profile = await mkdtemp(join(tmpdir(), 'candlescope-page-switch-'))
@@ -42,10 +42,7 @@ async function expectPage(tab, frame, name, instance) {
   return elapsed
 }
 
-const context = await chromium.launchPersistentContext(profile, {
-  headless: true,
-  ...(process.env.CHROME_PATH && { executablePath: process.env.CHROME_PATH }),
-})
+const context = await launchVisit(playwright, profile)
 try {
   const tab = await context.newPage()
   const started = Date.now()
@@ -93,5 +90,6 @@ try {
   console.log('Reloading one tab kept the engine that the other tab holds.')
 } finally {
   await context.close()
+  await closeBrowsers()
   await rm(profile, { recursive: true, force: true, maxRetries: 3 })
 }
