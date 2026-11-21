@@ -1,6 +1,8 @@
 import type { BacktestReplayChartOptions, BacktestReplayExtraSlot, BacktestResultReplayChart } from "../../backtest/backtestTypes.js";
 import type { PreparationJob } from "../../data-preparation/api.js";
-import { defaultBacktestApi, type BacktestApiClient, type ExternalProviderConnection, type StrategyRevisionRecord } from "../../backtest/backtestApi.js";
+import {
+  defaultBacktestApi, type BacktestApiClient, type ExternalProviderConnection, type StrategyReferenceKind, type StrategyRevisionRecord,
+} from "../../backtest/backtestApi.js";
 import type { BacktestResultReplayCursor, BacktestResultReplayNoteDraft, BacktestRunRecord } from "../../backtest/backtestTypes.js";
 import { isBacktestTerminalState } from "../../backtest/backtestRunClient.js";
 import { StrategyRunStreamError, type StrategyRunUpdate } from "../../backtest/backtestRunStream.js";
@@ -29,7 +31,8 @@ export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "str
   & Partial<Pick<BacktestApiClient, "capabilities" | "listStrategyRevisions" | "externalProviders"
     | "getStrategyRun" | "getStrategyRunResult" | "cancelStrategyRun" | "strategyRunCapabilities" | "watchStrategyRun"
     | "compareRecentRun" | "createResearchLaunchContext" | "getSelectedVersion"
-    | "getStrategyVersion" | "strategyVersionNames" | "nameStrategyVersion" | "unnameStrategyVersion">>;
+    | "getStrategyVersion" | "strategyVersionNames" | "nameStrategyVersion" | "unnameStrategyVersion"
+    | "getStrategyReference" | "listStrategyReferences" | "putStrategyReference" | "removeStrategyReference" | "importStrategyReferences">>;
 
 /** Owns fixed-history operations and immutable results independently of live
  * chart stores. Releasing a consumer never cancels a durable shared run. */
@@ -306,6 +309,45 @@ export class StrategyDataManager {
     return this.operation(signal, (owned) => {
       if (!this.api.unnameStrategyVersion) unavailable();
       return this.api.unnameStrategyVersion(name, owned);
+    });
+  }
+
+  // -- Strategy references (ADR-BACKTEST-015 P3c) ---------------------------
+
+  /** A reference's stored value (unvalidated: each kind's reader validates it), or null. */
+  loadStrategyReference(kind: StrategyReferenceKind, key: string, signal?: AbortSignal): Promise<unknown> {
+    return this.operation(signal, (owned) => {
+      if (!this.api.getStrategyReference) unavailable();
+      return this.api.getStrategyReference(kind, key, owned);
+    });
+  }
+
+  listStrategyReferences(kind: StrategyReferenceKind, prefix = "", signal?: AbortSignal) {
+    return this.operation(signal, (owned) => {
+      if (!this.api.listStrategyReferences) unavailable();
+      return this.api.listStrategyReferences(kind, prefix, owned);
+    });
+  }
+
+  saveStrategyReference(kind: StrategyReferenceKind, key: string, value: unknown, signal?: AbortSignal): Promise<void> {
+    return this.operation(signal, (owned) => {
+      if (!this.api.putStrategyReference) unavailable();
+      return this.api.putStrategyReference(kind, key, value, owned);
+    });
+  }
+
+  removeStrategyReference(kind: StrategyReferenceKind, key: string, signal?: AbortSignal): Promise<void> {
+    return this.operation(signal, (owned) => {
+      if (!this.api.removeStrategyReference) unavailable();
+      return this.api.removeStrategyReference(kind, key, owned);
+    });
+  }
+
+  /** Bring browser-storage entries in once; entries the backend already holds are kept. */
+  importStrategyReferences(kind: StrategyReferenceKind, entries: Array<{ key: string; value: unknown }>, signal?: AbortSignal) {
+    return this.operation(signal, (owned) => {
+      if (!this.api.importStrategyReferences) unavailable();
+      return this.api.importStrategyReferences(kind, entries, owned);
     });
   }
 

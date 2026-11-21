@@ -63,7 +63,7 @@ import { openPythonStrategyDraft, getChartStrategyDraftStore } from "../backtest
 import { DEFAULT_STRATEGY_RUN_SETTINGS } from "../../shared/strategyRunSettings.js";
 import { ResearchExternalModel } from "./ResearchExternalModel.js";
 import { saveResearchTemplate } from "./strategyTemplateDraft.js";
-import { readResearchHandoff } from "./strategyResearchHandoff.js";
+import { readResearchHandoff, type ResearchHandoff } from "./strategyResearchHandoff.js";
 import ResearchReturnButton from "./ResearchReturnButton.js";
 import { StrategyResearchShell } from "./StrategyResearchShell.js";
 import type { NativeFeedbackStatus } from "../backtest/native/nativeDiagnostics.js";
@@ -156,10 +156,13 @@ import { bool, choice, object, text } from "../app-control/commandSchema.js";
 export default function StrategyResearchApp({
   intent,
   initialMode,
+  handoff: preloadedHandoff,
 }: {
   intent: StrategyResearchLaunchIntent;
   /** Mode to open in; by default `?mode=` or what the launch intent implies. */
   initialMode?: StrategyResearchMode | null;
+  /** The chart's hand-off, read from the backend before mounting (ADR-BACKTEST-015 P3c); otherwise read from browser storage. */
+  handoff?: ResearchHandoff | null;
 }) {
   const locale = useLocale();
   const availability = useNativeAvailability();
@@ -173,7 +176,8 @@ export default function StrategyResearchApp({
   usePageControlBridge();
   useControlCommands(() => settingsCommands({ settings, setSettings, resolvedTheme }, "strategy-settings"));
   useControlCommands(() => libraryCommands(library));
-  const handoff = useMemo(() => intent.kind === "handoff" ? readResearchHandoff(intent.id) : null, [intent]);
+  const handoff = useMemo(() => intent.kind !== "handoff" ? null
+    : preloadedHandoff !== undefined ? preloadedHandoff : readResearchHandoff(intent.id), [intent, preloadedHandoff]);
   const [runtime] = useState(() => {
     const created = new StrategyResearchRuntime({
       restoreWorkspace: intent.kind === "restore",

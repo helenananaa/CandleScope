@@ -324,6 +324,19 @@ CREATE TABLE IF NOT EXISTS backtest_strategy_version_names (
     version_hash TEXT NOT NULL REFERENCES backtest_strategy_versions(version_hash),
     named_at_ms INTEGER NOT NULL
 );
+
+-- ADR-BACKTEST-015 P3c: small references the strategy pages keep (which forward run a
+-- chart follows; chart <-> research hand-offs), formerly in origin-scoped browser storage.
+CREATE TABLE IF NOT EXISTS backtest_strategy_references (
+    kind TEXT NOT NULL,
+    ref_key TEXT NOT NULL,
+    value_json TEXT NOT NULL,
+    updated_at_ms INTEGER NOT NULL,
+    PRIMARY KEY (kind, ref_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_backtest_strategy_references_updated
+    ON backtest_strategy_references(kind, updated_at_ms DESC);
 """
 
 

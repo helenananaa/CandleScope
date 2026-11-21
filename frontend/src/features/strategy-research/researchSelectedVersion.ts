@@ -91,21 +91,39 @@ export function projectSelectedVersion(version: ResearchSelectedVersion): {
   } };
 }
 
-export async function saveResearchReturn(reference: ResearchReturnReference, storage: StrategyStorage | null = getStrategyStorage()): Promise<string> {
-  if (!storage) throw new Error("RESEARCH_RETURN_STORAGE_UNAVAILABLE");
+type ReturnReferences = {
+  saveStrategyReference(kind: "research-return", key: string, value: unknown): Promise<void>;
+  loadStrategyReference(kind: "research-return", key: string): Promise<unknown>;
+};
+
+/**
+ * Keep the selected version for the chart to pick up. It is stored in the backend
+ * (ADR-BACKTEST-015 P3c), so a changed desktop UI port or another origin still finds it.
+ */
+export async function saveResearchReturn(reference: ResearchReturnReference, references: Pick<ReturnReferences, "saveStrategyReference">): Promise<string> {
   const id = crypto.randomUUID();
-  await storage.setItem(PREFIX + id, JSON.stringify(reference));
+  await references.saveStrategyReference("research-return", id, reference);
   return `/?research-version=${encodeURIComponent(id)}`;
+}
+/** The reference behind a `?research-version=` link: from the backend, else (a link from before P3c) app storage. */
+export async function loadResearchReturn(id: string, references: Pick<ReturnReferences, "loadStrategyReference">): Promise<ResearchReturnReference | null> {
+  if (!/^[\w-]{8,80}$/.test(id)) return null;
+  const stored = await references.loadStrategyReference("research-return", id).catch(() => null);
+  return parseResearchReturn(stored) ?? readResearchReturn(id);
 }
 export function readResearchReturn(id: string, storage: StrategyStorage | null = getStrategyStorage()): ResearchReturnReference | null {
   try {
     if (!storage || !/^[\w-]{8,80}$/.test(id)) return null;
     const raw = storage.getItem(PREFIX + id);
     if (!raw || raw.length > 2048) return null;
-    const value = JSON.parse(raw) as ResearchReturnReference;
-    if (value?.schema !== 1 || !/^bt_[\w-]+$/.test(value.runId) || !hash.test(value.versionHash)
-      || (value.origin !== null && (!value.origin || typeof value.origin.workspaceId !== "string"
-        || typeof value.origin.cellId !== "string"))) return null;
-    return value;
+    return parseResearchReturn(JSON.parse(raw));
   } catch { return null; }
+}
+export function parseResearchReturn(raw: unknown): ResearchReturnReference | null {
+  const value = raw as ResearchReturnReference | null;
+  if (!value || typeof value !== "object" || value.schema !== 1 || typeof value.runId !== "string" || !/^bt_[\w-]+$/.test(value.runId)
+    || typeof value.versionHash !== "string" || !hash.test(value.versionHash)
+    || (value.origin !== null && (!value.origin || typeof value.origin.workspaceId !== "string"
+      || typeof value.origin.cellId !== "string"))) return null;
+  return value;
 }

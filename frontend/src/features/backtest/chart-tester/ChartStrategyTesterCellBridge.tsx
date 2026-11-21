@@ -795,9 +795,10 @@ export default function ChartStrategyTesterCellBridge({
       onOpenAdvanced={handleOpenAdvanced}
       onOpenWorkspace={async (draft, settings) => {
         if (!attachment) return;
+        if (!strategyManager) throw new Error(t("chartTester.error.backend"));
         try { window.location.assign(await saveResearchHandoff({ session, workspaceId, cellId,
           attachment: settings ? { ...attachment, ...settings } : attachment,
-          draft, runId: settings ? null : result?.run.run_id ?? null })); }
+          draft, runId: settings ? null : result?.run.run_id ?? null }, strategyManager)); }
         catch (reason) { setResultError(reason instanceof Error ? describeError(reason, reason.message) : String(reason)); throw reason; }
       }}
       onOpenBatchStudy={handleOpenBatchStudy}

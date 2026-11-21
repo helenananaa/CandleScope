@@ -4,6 +4,15 @@ import { saveResearchHandoff, readResearchHandoff } from "../strategyResearchHan
 import { StrategyDraftStore, createMemoryStrategyDraftAdapter } from "../../backtest/chart-tester/StrategyDraftStore.js";
 import type { ChartStrategyAttachmentRecord } from "../../chart-workspace/chartWorkspaceTypes.js";
 
+/** The backend reference store (P3c), kept in the test's storage map under the key the reader also checks. */
+function handoffReferences(values: Map<string, string>) {
+  return {
+    async saveStrategyReference(_kind: "research-handoff", key: string, value: unknown) {
+      values.set(`candlescope:research-handoff:${key}`, JSON.stringify(value));
+    },
+  };
+}
+
 for (const language of ["pine", "python"] as const) test(`${language} research edits cannot rewrite the originating chart draft`, async () => {
   const previous = Object.getOwnPropertyDescriptor(globalThis, "window"), values = new Map<string, string>();
   Object.defineProperty(globalThis, "window", { configurable: true, value: { localStorage: {
@@ -16,7 +25,7 @@ for (const language of ["pine", "python"] as const) test(`${language} research e
       displayName: original.displayName, language, parameters: { fast: 8 }, rangeMode: "CUSTOM", customRange: { startMs: 1000, endMs: 2000 },
       fidelityPreference: "PRECISE", quickPresetId: "CRYPTO_PERP_STANDARD_V1", autoRun: false };
     const href = await saveResearchHandoff({ session: { exchange: "binance", marketType: "futures", symbol: "ETHUSDT", interval: "15m" },
-      workspaceId: "workspace-main", cellId: "cell-1", attachment, draft: original, runId: null }, store);
+      workspaceId: "workspace-main", cellId: "cell-1", attachment, draft: original, runId: null }, handoffReferences(values), store);
     const handoff = readResearchHandoff(new URL(href, "http://localhost").searchParams.get("handoff")!)!;
     const experiment = (await new StrategyDraftStore(adapter).load(handoff.draftId)).record!;
     assert.equal(experiment.source, original.source); assert.equal(experiment.language, language);
@@ -51,7 +60,7 @@ test("handoff freezes clicked code and conditions while the independent draft wr
       displayName: draft.displayName, language: "python", parameters: { nested: { period: 8 } }, rangeMode: "CUSTOM", customRange: { startMs: 1000, endMs: 2000 },
       fidelityPreference: "PRECISE", quickPresetId: "CRYPTO_SPOT_STANDARD_V1", autoRun: false };
     const pending = saveResearchHandoff({ session: { exchange: "binance", marketType: "spot", symbol: "BTCUSDT", interval: "1m" },
-      workspaceId: "workspace-main", cellId: "cell-1", attachment, draft, runId: null }, store);
+      workspaceId: "workspace-main", cellId: "cell-1", attachment, draft, runId: null }, handoffReferences(values), store);
     await enteredWrite; assert.equal(values.size, 0, "No handoff is published before the independent draft is durable");
     draft.source = "later code"; (attachment.parameters.nested as { period: number }).period = 99; attachment.customRange!.endMs = 9000;
     release(); const href = await pending;
@@ -78,7 +87,7 @@ test("a failed experiment save publishes no handoff and leaves the chart program
       displayName: draft.displayName, language: "python", parameters: {}, rangeMode: "ALL_AVAILABLE", customRange: null,
       fidelityPreference: "FAST", quickPresetId: "CRYPTO_SPOT_STANDARD_V1", autoRun: false };
     await assert.rejects(saveResearchHandoff({ session: { exchange: "binance", marketType: "spot", symbol: "BTCUSDT", interval: "1m" },
-      workspaceId: "workspace-main", cellId: "cell-1", attachment, draft, runId: null }, store), /quota/);
+      workspaceId: "workspace-main", cellId: "cell-1", attachment, draft, runId: null }, handoffReferences(values), store), /quota/);
     assert.equal(values.size, 0); assert.deepEqual((await new StrategyDraftStore(adapter).load(draft.id)).record, draft);
     const key = "candlescope:research-handoff:legacy-context";
     values.set(key, JSON.stringify({ source: {}, draftId: draft.id, configuration: { rangeMode: "ALL_AVAILABLE", customRange: null }, runId: null }));
