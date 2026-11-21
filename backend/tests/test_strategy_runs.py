@@ -62,6 +62,10 @@ class _Forward:
             raise BacktestError("CONTINUOUS_RUN_NOT_FOUND", "Unknown continuous strategy run")
         return self.value
 
+    async def committed_result(self, run_id):
+        # Neither stub has a committed account: a requested run, or no run at all.
+        raise BacktestError("CONTINUOUS_RUN_NOT_FOUND", "Unknown continuous strategy run")
+
     def close_views(self):
         pass
 
@@ -137,27 +141,36 @@ def test_native_and_external_records_report_their_own_authority(runtime_run):
     assert runtime.native.get("native_external")["state"] == "CANCELLED"
 
 
+def _live(phase, generation, error=None):
+    return {"phase": phase, "generation": generation, "error": error, "checkpoint_revision": 4, "event_time_ms": 60_000}
+
+
 @pytest.mark.parametrize("value,expected", [
-    ({"creation": {"phase": "READY", "error": None}, "run": None}, ("QUEUED", "READY", None, False)),
+    ({"creation": {"phase": "READY", "error": None}, "run": None}, ("QUEUED", "READY", None, False, False)),
     ({"creation": {"phase": "FAILED", "error": {"code": "INPUT", "message": "m"}}, "run": None},
-     ("FAILED", "FAILED", None, True)),
-    ({"creation": None, "run": {"phase": "LIVE", "generation": 1, "error": None}}, ("RUNNING", "LIVE", 1, False)),
-    ({"creation": None, "run": {"phase": "REPAIR_REQUIRED", "generation": 3, "error": {"code": "GAP", "message": "m"}}},
-     ("BLOCKED", "REPAIR_REQUIRED", 3, False)),
+     ("FAILED", "FAILED", None, True, False)),
+    ({"creation": None, "run": _live("LIVE", 1)}, ("RUNNING", "LIVE", 1, False, True)),
+    ({"creation": None, "run": _live("REPAIR_REQUIRED", 3, {"code": "GAP", "message": "m"})},
+     ("BLOCKED", "REPAIR_REQUIRED", 3, False, True)),
 ])
-def test_forward_runs_report_status_but_not_a_result_yet(runtime_run, monkeypatch, value, expected):
+def test_forward_runs_report_their_lifecycle(runtime_run, monkeypatch, value, expected):
     runtime, _ = runtime_run
     client, manager = _client(runtime)
     monkeypatch.setattr(manager, "continuous_access", lambda: _Forward(value))
     with client:
         status = client.get("/strategy-runs/cs_run").json()
-        result = client.get("/strategy-runs/cs_run/result")
         cancel = client.post("/strategy-runs/cs_run/cancel")
-    assert (status["state"], status["source_state"], status["generation"], status["terminal"]) == expected
+        result = client.get("/strategy-runs/cs_run/result")
+        monkeypatch.setattr(manager, "continuous_access", lambda: _Forward(None))
+        unknown = client.get("/strategy-runs/cs_run/result")
+    assert (status["state"], status["source_state"], status["generation"], status["terminal"],
+            status["result_available"]) == expected
+    if value["run"] is None:
+        # Requested but not committed: the run exists, its result does not yet.
+        assert result.status_code == 409 and result.json()["error"]["code"] == "RUN_RESULT_NOT_READY"
+    assert unknown.status_code == 404 and unknown.json()["error"]["code"] == "RUN_NOT_FOUND"
     assert (status["family"], status["authority"], status["clock_policy"], status["fidelity"]) == (
         "continuous", "HOST", "FORWARD", "BAR_APPROX")
-    assert status["result_available"] is False
-    assert result.status_code == 409 and result.json()["error"]["code"] == "RUN_RESULT_UNAVAILABLE"
     if status["terminal"]:
         assert cancel.status_code == 200 and cancel.json() == status
     else:
@@ -172,8 +185,7 @@ def test_forward_ids_resolve_only_in_their_own_store(runtime_run, monkeypatch):
         unbound = client.get("/strategy-runs/cs_run")
         monkeypatch.setattr(manager, "continuous_access", lambda: _Forward(None))
         missing = client.get("/strategy-runs/cs_run")
-        monkeypatch.setattr(manager, "continuous_access", lambda: _Forward({"creation": None, "run": {
-            "phase": "SOMETHING_NEW", "generation": 1, "error": None}}))
+        monkeypatch.setattr(manager, "continuous_access", lambda: _Forward({"creation": None, "run": _live("SOMETHING_NEW", 1)}))
         unknown_phase = client.get("/strategy-runs/cs_run")
     assert unbound.status_code == 503 and unbound.json()["error"]["code"] == "CONTINUOUS_NOT_READY"
     assert missing.status_code == 404 and missing.json()["error"]["code"] == "RUN_NOT_FOUND"
@@ -299,7 +311,7 @@ def test_watches_fail_before_streaming_and_share_the_subscription_capacity(servi
         run = create_run(service)
         manager = StrategyDataManager(service, max_subscriptions=1)
         for run_id, code in (("bt_missing", "RUN_NOT_FOUND"), ("missing", "RUN_NOT_FOUND"),
-                             ("cs_run", "RUN_STREAM_UNSUPPORTED"), ("native_run", "FLAG_DISABLED")):
+                             ("cs_run", "CONTINUOUS_NOT_READY"), ("native_run", "FLAG_DISABLED")):
             with pytest.raises(BacktestError) as failure:
                 await manager.runs().watch(run_id)
             assert failure.value.code == code
@@ -321,7 +333,7 @@ def test_a_changed_generation_ends_the_stream_instead_of_mixing_runs(service):
     async def check():
         generation = 1
 
-        def read(run_id):
+        async def read(run_id):
             return {"run_id": run_id, "generation": generation, "terminal": False, "state": "RUNNING"}, None
         updates = CommittedUpdates()
         manager = StrategyDataManager(service)
@@ -352,4 +364,5 @@ def test_the_events_route_streams_ndjson_and_refuses_before_streaming(runtime_ru
     assert frames[0]["progress"] is None
     oracles.assert_frontend_fixture("host-completed", {
         **frames[0], "status": {**frames[0]["status"], "run_id": "bt_fixture"}}, kind="strategy-run-stream")
-    assert missing.status_code == 404 and forward.status_code == 409
+    # Without a bound forward-run owner the stream is unavailable, not unsupported.
+    assert missing.status_code == 404 and forward.status_code == 503

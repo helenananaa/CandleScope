@@ -37,10 +37,6 @@ import { loadChartStrategyPanelPreferences, resolveChartStrategyRunMode } from "
 import type { ContinuousMode } from "../continuous/continuousTypes.js";
 import ChartStrategyTesterPanel from "./ChartStrategyTesterPanel.js";
 import type { ChartStrategyResultBundle } from "./chartStrategyResultCache.js";
-import {
-  createChartStrategyResultMarkerSource,
-  type ChartStrategyResultMarkerSource,
-} from "./chartStrategyResultMarkerSource.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import type { RecentRunCompareV1, TradeExplanationV1 } from "../backtestTypes.js";
@@ -86,7 +82,6 @@ export interface ChartStrategyTesterCellBridgeProps {
   bottomPanelHost: HTMLElement | null;
   seriesStore: SeriesWindowView | null;
   getCurrentVisibleRange(): ChartSurfaceVisibleRange | null;
-  onMarkerSourceChange(source: ChartStrategyResultMarkerSource | null): void;
   /** The run overlay this bridge draws on the chart: fixed-history and Pine runs (ADR-BACKTEST-015 P1c). */
   onOverlaySourceChange?(source: StrategyOverlaySource | null): void;
   onLocateTrade(timeMs: number): void;
@@ -113,7 +108,6 @@ export default function ChartStrategyTesterCellBridge({
   bottomPanelHost,
   seriesStore,
   getCurrentVisibleRange,
-  onMarkerSourceChange,
   onOverlaySourceChange,
   onLocateTrade,
   onReviewTrade,
@@ -123,7 +117,7 @@ export default function ChartStrategyTesterCellBridge({
   onClosePanel,
 }: ChartStrategyTesterCellBridgeProps) {
   const attachment = useMemo(() => savedAttachment ? withChartSignalInput(savedAttachment, appearance ?? {}) : null, [savedAttachment, appearance]);
-  const locale = useLocale();
+  useLocale();
   const draftStore = useMemo(() => getChartStrategyDraftStore(), []);
   const cellScope = `${workspaceId}\u0000${cellId}`;
   const [runMode, setRunMode] = useState<ContinuousMode>(() => resolveChartStrategyRunMode(loadChartStrategyPanelPreferences(cellScope), attachment));
@@ -195,24 +189,6 @@ export default function ChartStrategyTesterCellBridge({
     intervalSeconds: parseIntervalSeconds(session.interval),
     seriesKey: `chart-strategy:${cellScope}`,
   }), [cellScope, seriesStore, session.interval]);
-  const resultMarkerLabels = useMemo(() => {
-    void locale;
-    return {
-      actions: {
-        OPEN_LONG: t("backtest.openLong"),
-        CLOSE_LONG: t("backtest.closeLong"),
-        OPEN_SHORT: t("backtest.openShort"),
-        CLOSE_SHORT: t("backtest.closeShort"),
-        ADD_LONG: t("backtest.addLong"),
-        ADD_SHORT: t("backtest.addShort"),
-        REDUCE_LONG: t("backtest.reduceLong"),
-        REDUCE_SHORT: t("backtest.reduceShort"),
-        REVERSE_TO_LONG: t("backtest.reverseLong"),
-        REVERSE_TO_SHORT: t("backtest.reverseShort"),
-      },
-      rejection: t("backtest.reject"),
-    };
-  }, [locale]);
   const activateEvidence = useCallback((evidence: Pick<StrategyMarkerEvidence, "markerId" | "kind"> & {
     explanation: TradeExplanationV1 | Record<string, unknown>;
   }) => {
@@ -231,13 +207,6 @@ export default function ChartStrategyTesterCellBridge({
     });
     onOpenPanel();
   }, [onOpenPanel]);
-  // Continuous runs keep this source until the P2 stream protocol; fixed-history results use the overlay.
-  const resultMarkerSource = useMemo(() => createChartStrategyResultMarkerSource({
-    seriesStore: projectionSeriesStore,
-    labels: resultMarkerLabels,
-    onActivate: activateEvidence,
-  }), [activateEvidence, projectionSeriesStore, resultMarkerLabels]);
-
   // The run drawn by the overlay belongs to the chart session it was reported for.
   const overlaySessionKey = [session.exchange, session.marketType, session.symbol, session.interval].join("\u0000");
   const [overlayRun, setOverlayRun] = useState<{ run: StrategyOverlayRun; sessionKey: string } | null>(null);
@@ -260,33 +229,13 @@ export default function ChartStrategyTesterCellBridge({
     onOverlaySourceChange?.(runOverlaySource);
     return () => onOverlaySourceChange?.(null);
   }, [getCurrentVisibleRange, onOverlaySourceChange, runOverlaySource]);
-  // The tester runtime hides a result the moment it goes STALE; that must reach both sources in the same frame.
-  // Disposal stays with this bridge, so replacing the runtime's source never disposes the shared host source.
+  // The tester runtime hides a result the moment it goes STALE; that must reach the overlay in the same frame.
+  // Disposal stays with this bridge, so replacing the runtime's source never disposes the shared overlay source.
   const testerMarkerSource = useMemo<ChartStrategyTesterMarkerSource>(() => ({
     clear() {
-      resultMarkerSource.clear();
       runOverlaySource.clearOwner("run:host:");
     },
-  }), [resultMarkerSource, runOverlaySource]);
-
-  const pendingMarkerDisposals = useRef(new Map<ChartStrategyResultMarkerSource, symbol>());
-  useLayoutEffect(() => {
-    const pending = pendingMarkerDisposals.current;
-    pending.delete(resultMarkerSource);
-    resultMarkerSource.setVisibleRange(getCurrentVisibleRange());
-    onMarkerSourceChange(resultMarkerSource);
-    return () => {
-      onMarkerSourceChange(null);
-      // StrictMode replays setup after cleanup using the same memoized source.
-      const token = Symbol("marker-disposal");
-      pending.set(resultMarkerSource, token);
-      queueMicrotask(() => {
-        if (pending.get(resultMarkerSource) !== token) return;
-        pending.delete(resultMarkerSource);
-        resultMarkerSource.dispose();
-      });
-    };
-  }, [getCurrentVisibleRange, onMarkerSourceChange, resultMarkerSource]);
+  }), [runOverlaySource]);
 
   useLayoutEffect(() => {
     const runtime = runtimeFactory.get(workspaceId, cellId);
@@ -364,14 +313,16 @@ export default function ChartStrategyTesterCellBridge({
       cancelled = true;
       controller.abort();
     };
-  }, [cellId, resultMarkerSource, runtimeState.resultIdentity, runtimeState.status, strategyManager, workspaceId]);
+  }, [cellId, runtimeState.resultIdentity, runtimeState.status, strategyManager, workspaceId]);
 
-  // A completed, visible fixed-history result is drawn by the run overlay (host family).
-  const hostOverlayRun = useMemo<StrategyOverlayRun | null>(() => (
-    result && runMode === "HISTORY" && runtimeState.projectionVisible
-      && runtimeState.resultIdentity?.runId === result.run.run_id
-      ? { family: "host", runId: result.run.run_id } : null
-  ), [result, runMode, runtimeState.projectionVisible, runtimeState.resultIdentity?.runId]);
+  // In CandleScope mode the overlay draws a completed, visible fixed-history result (host family) in
+  // history mode, and the continuous panel's forward run in the live modes (ADR-BACKTEST-015 P2d).
+  const [continuousOverlayRun, setContinuousOverlayRun] = useState<StrategyOverlayRun | null>(null);
+  const candleScopeOverlayRun = useMemo<StrategyOverlayRun | null>(() => {
+    if (runMode !== "HISTORY") return continuousOverlayRun;
+    return result && runtimeState.projectionVisible && runtimeState.resultIdentity?.runId === result.run.run_id
+      ? { family: "host", runId: result.run.run_id } : null;
+  }, [continuousOverlayRun, result, runMode, runtimeState.projectionVisible, runtimeState.resultIdentity?.runId]);
 
   useEffect(() => {
     const draftId = attachment?.strategyDraftId;
@@ -831,8 +782,8 @@ export default function ChartStrategyTesterCellBridge({
       onLocateTrade={onLocateTrade}
       continuousChartActive={continuousChartActive}
       continuousMarketWindow={seriesStore}
-      continuousMarkerSource={resultMarkerSource}
-      hostOverlayRun={hostOverlayRun}
+      onContinuousOverlayRunChange={setContinuousOverlayRun}
+      candleScopeOverlayRun={candleScopeOverlayRun}
       onOverlayRunChange={handleOverlayRunChange}
       overlayResult={runOverlay.shown}
       onRunModeChange={setRunMode}

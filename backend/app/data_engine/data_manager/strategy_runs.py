@@ -12,8 +12,8 @@ Families:
 - ``external``: ``/backtests/external/runs`` (``native_``, execution mode
   CANDLESCOPE), a Pine script matched by the host: authority HOST, clock FIXED.
 - ``continuous``: ``/backtests/continuous/runs`` (``cs_``), authority HOST,
-  clock FORWARD. Its results move onto the run result in step P2d; until then
-  the facade reports its status only.
+  clock FORWARD. Its committed account is projected onto the same run result
+  (step P2d) and changes with every commit; it is never COMPLETED.
 """
 from __future__ import annotations
 
@@ -174,6 +174,10 @@ class StrategyRuns:
                        error=summary.get("error"))
 
     async def _continuous_status(self, run_id: str) -> dict[str, Any]:
+        return (await self._continuous_view(run_id))[0]
+
+    async def _continuous_view(self, run_id: str) -> tuple[dict[str, Any], dict[str, int] | None]:
+        """A forward run's status and its committed revision (each commit changes its result)."""
         self.owner._require_open()
         try:
             value = await self.owner.continuous_access().status(run_id)
@@ -190,26 +194,36 @@ class StrategyRuns:
             source_state = str(run["phase"])
             state = _lifecycle(CONTINUOUS_PHASES, source_state, "continuous")
             generation, error = int(run["generation"]), run.get("error")
-        return _status(run_id, "continuous", authority="HOST", clock_policy="FORWARD", fidelity="BAR_APPROX",
-                       language=None, source_state=source_state, state=state, generation=generation,
-                       result_available=False, error=error)
+        # A committed forward account always has a result; it changes with every commit.
+        status = _status(run_id, "continuous", authority="HOST", clock_policy="FORWARD", fidelity="BAR_APPROX",
+                         language=None, source_state=source_state, state=state, generation=generation,
+                         result_available=run is not None, error=error)
+        progress = None if run is None else {
+            "sequence": int(run["checkpoint_revision"]), "created_at_ms": int(run["event_time_ms"])}
+        return status, progress
 
     # -- watch ------------------------------------------------------------
 
     async def watch(self, run_id: str) -> RunWatch:
-        """A commit-driven status stream for one fixed run (step P2b).
+        """A commit-driven status stream for one run (steps P2b, P2d).
 
         The first status is read before this returns, so an unknown run fails
-        before a stream starts. Releasing the watch never cancels the run.
+        before a stream starts. Releasing the watch never cancels the run. A
+        forward run's frames carry its committed revision as progress, so each
+        commit that changes its result is a frame.
         """
         store = store_for(run_id)
         if store == "continuous":
-            raise BacktestError("RUN_STREAM_UNSUPPORTED", "forward runs stream through their own channel until step P2d")
-        if store == "host":
             self.owner._require_open()
-            updates, read = self.owner.service.repository.run_updates, self._host_view
+            updates = self.owner.continuous_access().controller().store.updates
+            read = self._continuous_view
+        elif store == "host":
+            self.owner._require_open()
+            updates = self.owner.service.repository.run_updates
+            read = _in_thread(self._host_view)
         else:
-            updates, read = self._runtime().native.run_updates, lambda value: (self._native_status(value), None)
+            updates = self._runtime().native.run_updates
+            read = _in_thread(lambda value: (self._native_status(value), None))
         # Check capacity before subscribing, so a refused watch leaves no subscription behind.
         self.owner._require_capacity()
         return await self.owner._admit(RunWatch(self.owner, run_id, updates, read))
@@ -217,7 +231,7 @@ class StrategyRuns:
     # -- result -----------------------------------------------------------
 
     async def result(self, run_id: str) -> dict[str, Any]:
-        """The completed run as ``candlescope.run-result/1``."""
+        """The run as ``candlescope.run-result/1``: a finished fixed run, or a forward run's committed account."""
         store = store_for(run_id)
         if store == "host":
             def host() -> dict[str, Any]:
@@ -227,8 +241,18 @@ class StrategyRuns:
         if store == "native":
             from app.backtest.run_result import from_native_record
             return await asyncio.to_thread(lambda: from_native_record(self._runtime().native.get(run_id)))
-        await self._continuous_status(run_id)
-        raise BacktestError("RUN_RESULT_UNAVAILABLE", "forward runs deliver their results through their own stream")
+        from app.backtest.run_result import from_host_result
+        self.owner._require_open()
+        try:
+            value = await self.owner.continuous_access().committed_result(run_id)
+        except BacktestError as exc:
+            if exc.code != "CONTINUOUS_RUN_NOT_FOUND":
+                raise
+            # A requested run that has not committed yet has no account; an unknown id is not found.
+            await self._continuous_status(run_id)
+            raise BacktestError("RUN_RESULT_NOT_READY", "the forward run has not committed its first result") from None
+        return await asyncio.to_thread(lambda: from_host_result(
+            value["result"], interval=value["interval"], fidelity="BAR_APPROX", clock_policy="FORWARD"))
 
     # -- controls ---------------------------------------------------------
 
@@ -345,6 +369,13 @@ class StrategyRuns:
         return {"continuous": _family(enabled, reason)}, rows
 
 
+def _in_thread(read):
+    """A blocking store read, run off the event loop."""
+    async def threaded(run_id: str):
+        return await asyncio.to_thread(read, run_id)
+    return threaded
+
+
 def _family(available: bool, reason: str | None) -> dict[str, Any]:
     return {"available": available, "reason": None if available else reason}
 
@@ -383,7 +414,7 @@ class RunWatch:
     async def _read(self) -> dict[str, Any]:
         # Clear before reading: a commit racing with the read schedules another read.
         self._updates.clear_before_read()
-        status, progress = await asyncio.to_thread(self._read_view, self.run_id)
+        status, progress = await self._read_view(self.run_id)
         if self._updates.closed:
             raise asyncio.CancelledError
         if self._generation is not None and status["generation"] != self._generation:

@@ -206,6 +206,17 @@ class ContinuousStrategyAccess:
             await self._ensure(run_id)
             return await self.work(controller.store.results.read,run_id,**kwargs)
 
+    async def committed_result(self,run_id):
+        """The committed account for the shared run-result projection (ADR-BACKTEST-015 P2d)."""
+        async def read():
+            controller=self.controller()
+            try:return await self.work(controller.store.results.committed_kernel_result,run_id)
+            except BacktestError as failure:
+                if failure.code!="CONTINUOUS_RESULTS_UNAVAILABLE":raise
+                await self._ensure(run_id)
+                return await self.work(controller.store.results.committed_kernel_result,run_id)
+        return await self._command(read)
+
     async def status(self,run_id):
         async def read():
             controller=self.controller()

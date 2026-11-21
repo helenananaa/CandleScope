@@ -106,7 +106,6 @@ import { RunResultSummary, RunResultTradeList } from "../runResult/RunResultView
 import { CHART_RUN_RESULT_VIEWS_ENABLED } from "./chartStrategyTesterFeature.js";
 import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
 import type { ContinuousMode } from "../continuous/continuousTypes.js";
-import type { ChartStrategyResultMarkerSource } from "./chartStrategyResultMarkerSource.js";
 
 type PanelTab = ChartStrategyPanelTab;
 const PANEL_TABS: readonly PanelTab[] = ["overview", "trades", "script", "settings"];
@@ -217,11 +216,12 @@ export interface ChartStrategyTesterPanelProps {
   continuousChartActive?: boolean;
   continuousMarketWindow?: SeriesWindowView | null;
   onRunModeChange?(mode: ContinuousMode): void;
-  continuousMarkerSource?: Pick<ChartStrategyResultMarkerSource, "setContinuousResult">;
-  /** The run the chart overlay shows: the native panel's in native mode, otherwise the host result. */
+  /** The continuous panel's forward run, for the bridge to overlay in the continuous run modes. */
+  onContinuousOverlayRunChange?(run: StrategyOverlayRun | null): void;
+  /** The run the chart overlay shows: the native panel's in native mode, otherwise the CandleScope-mode run. */
   onOverlayRunChange?(run: StrategyOverlayRun | null): void;
-  /** The completed, visible fixed-history result, supplied by the cell bridge. */
-  hostOverlayRun?: StrategyOverlayRun | null;
+  /** The CandleScope-mode run to overlay, supplied by the cell bridge: the visible fixed-history result, or the forward run. */
+  candleScopeOverlayRun?: StrategyOverlayRun | null;
   /** The run result the bridge loaded for the overlay; shared result views read it (behind a flag). */
   overlayResult?: ShownRunResult | null;
   active?: boolean;
@@ -254,7 +254,7 @@ export default function ChartStrategyTesterPanel(props: ChartStrategyTesterPanel
   const handleNativeRunChange = useCallback((run: Parameters<typeof overlayRunForNative>[0]) => {
     setNativeOverlayRun(overlayRunForNative(run));
   }, []);
-  const shown = shownOverlayRun(mode, nativeOverlayRun, props.hostOverlayRun ?? null);
+  const shown = shownOverlayRun(mode, nativeOverlayRun, props.candleScopeOverlayRun ?? null);
   useEffect(() => { onOverlayRunChange?.(shown); }, [onOverlayRunChange, shown]);
   const switchMode = (next: typeof mode) => {
     setModeChosen(true);
@@ -330,7 +330,7 @@ export function CandleScopeStrategyTesterPanel({
   continuousChartActive,
   continuousMarketWindow,
   onRunModeChange,
-  continuousMarkerSource,
+  onContinuousOverlayRunChange,
   onReviewTrade,
   active = true,
   onPrepareData,
@@ -1127,7 +1127,7 @@ export function CandleScopeStrategyTesterPanel({
           scope={JSON.stringify([cellScope, activeDraft?.id])} session={session} mode={runMode} source={source}
           language={activeDraft?.language ?? ""} parameters={currentAttachment?.parameters ?? {}} trusted={pythonTrustedConfirmed} active={active}
           chartActive={!!continuousChartActive} marketWindow={continuousMarketWindow ?? null} onLocateTrade={onLocateTrade}
-          {...(continuousMarkerSource ? { markerSource: continuousMarkerSource } : {})}
+          {...(onContinuousOverlayRunChange ? { onOverlayRunChange: onContinuousOverlayRunChange } : {})}
           {...(onOpenWorkspace && activeDraft ? { onOpenWorkspace: openWorkspace } : {})}
           saveDraft={async () => { await persistCurrentDraft(); }}
           onDetach={detachStrategy}

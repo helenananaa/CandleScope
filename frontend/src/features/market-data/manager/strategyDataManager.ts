@@ -353,11 +353,16 @@ export class StrategyDataManager {
     });
   }
 
-  /** A completed run in `candlescope.run-result/1` (ADR-BACKTEST-015 P1), validated against its family. */
+  /**
+   * A run in `candlescope.run-result/1` (ADR-BACKTEST-015 P1), validated against its family.
+   * A finished fixed run never changes, so it is cached; a forward run's result is its
+   * committed account at the moment of the read (P2d), so it is read every time.
+   */
   loadRunResult(family: RunResultFamily, runId: string, signal?: AbortSignal): Promise<RunResult> {
     return this.operation(signal, async (owned) => {
       const key = `${family}\u0000${runId}`;
-      const cached = this.runResults.get(key);
+      const forward = family === "continuous";
+      const cached = forward ? undefined : this.runResults.get(key);
       if (cached) {
         this.runResults.delete(key);
         this.runResults.set(key, cached);
@@ -371,6 +376,10 @@ export class StrategyDataManager {
       if (result.source !== expected.source || result.authority !== expected.authority) {
         throw new RunResultContractError("source", `${family} runs must be served by ${expected.source} with ${expected.authority} authority`);
       }
+      if ((result.clock_policy === "FORWARD") !== forward) {
+        throw new RunResultContractError("clock_policy", `${family} runs cannot be served as ${result.clock_policy}`);
+      }
+      if (forward) return result;
       this.runResults.set(key, result);
       while (this.runResults.size > RETAINED_RUN_RESULTS) this.runResults.delete(this.runResults.keys().next().value!);
       return result;

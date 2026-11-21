@@ -131,13 +131,15 @@ export function parseStrategyRunStatus(value: unknown): StrategyRunStatus {
     fail("generation", "must be a non-negative integer or null");
   }
   const resultAvailable = flag(body.result_available, "result_available");
-  if (resultAvailable && state !== "COMPLETED") fail("result_available", "only a completed run has a result");
+  const clockPolicy = choice(body.clock_policy, CLOCK_POLICIES, "clock_policy");
+  // A fixed run has a result once it completes; a forward run's committed account is its result.
+  if (resultAvailable && clockPolicy === "FIXED" && state !== "COMPLETED") fail("result_available", "only a completed fixed run has a result");
   const error = body.error === null ? null : row(body.error, "error");
   return {
     run_id: text(body.run_id, "run_id"),
     family: choice(body.family, FAMILIES, "family"),
     authority: choice(body.authority, AUTHORITIES, "authority"),
-    clock_policy: choice(body.clock_policy, CLOCK_POLICIES, "clock_policy"),
+    clock_policy: clockPolicy,
     fidelity: optionalText(body.fidelity, "fidelity"),
     language: optionalText(body.language, "language"),
     state,

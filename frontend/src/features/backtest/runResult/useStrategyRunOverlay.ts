@@ -5,6 +5,8 @@ import { useMarketDataWorkspaceResources } from "../../market-data/marketDataWor
 import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
 import type { StrategyDataManager } from "../../market-data/manager/strategyDataManager.js";
 import type { RunResult, RunResultFamily } from "./runResult.js";
+import type { StrategyRunStatus } from "./strategyRun.js";
+import { StrategyRunStreamError } from "../backtestRunStream.js";
 import {
   buildStrategyOverlay, StrategyOverlaySource, type StrategyMarkerEvidence, type StrategyOverlayLabels,
 } from "./strategyOverlay.js";
@@ -29,10 +31,45 @@ export function overlayRunForNative(run: {
   return { family: run.execution_mode === "CANDLESCOPE" ? "external" : "native", runId: run.run_id };
 }
 
-/** The dock shows one run at a time: the native panel's in native mode, otherwise the fixed-history result. */
+/** The dock shows one run at a time: the native panel's in native mode, otherwise the CandleScope-mode run. */
 export function shownOverlayRun(mode: "NATIVE" | "CANDLESCOPE", native: StrategyOverlayRun | null,
-  host: StrategyOverlayRun | null): StrategyOverlayRun | null {
-  return mode === "NATIVE" ? native : host;
+  candleScope: StrategyOverlayRun | null): StrategyOverlayRun | null {
+  return mode === "NATIVE" ? native : candleScope;
+}
+
+/**
+ * Follow a forward run (ADR-BACKTEST-015 P2d): its result is read for each committed revision the
+ * run's stream reports, coalesced so at most one read is in flight, until the run stops. A resumed
+ * run (a new generation) reconnects. Resolves when the run stops; the last result is its final one.
+ */
+export async function followForwardRun(manager: Pick<StrategyDataManager, "loadRunResult" | "watchRun">, runId: string,
+  signal: AbortSignal, onResult: (result: RunResult) => void, onError: (failure: unknown) => void): Promise<void> {
+  let loading: Promise<void> | null = null;
+  let again = false;
+  const refresh = (): Promise<void> => {
+    if (loading) { again = true; return loading; }
+    loading = (async () => {
+      do {
+        again = false;
+        const result = await manager.loadRunResult("continuous", runId, signal);
+        if (!signal.aborted) onResult(result);
+      } while (again && !signal.aborted);
+    })().finally(() => { loading = null; });
+    return loading;
+  };
+  const onStatus = (status: StrategyRunStatus) => {
+    if (status.result_available && !status.terminal) refresh().catch(onError);
+  };
+  for (;;) {
+    try {
+      const stopped = await manager.watchRun(runId, onStatus, signal);
+      if (stopped.result_available) await refresh();
+      return;
+    } catch (failure) {
+      if (!signal.aborted && failure instanceof StrategyRunStreamError && failure.code === "RUN_IDENTITY_CHANGED") continue;
+      throw failure;
+    }
+  }
 }
 
 export function strategyOverlayLabels(): StrategyOverlayLabels {
@@ -82,17 +119,20 @@ export function useStrategyRunOverlay({ run, interval, series, onActivate, manag
     setShown(null);
     if (!manager || family === null || runId === null) return;
     const controller = new AbortController();
-    manager.loadRunResult(family, runId, controller.signal).then((result) => {
+    const owner = `run:${family}:${runId}`;
+    const draw = (result: RunResult) => {
       if (controller.signal.aborted) return;
       if (result.interval !== interval) return;  // a run for another interval never draws on this chart
       void locale;
-      const owner = `run:${family}:${runId}`;
       source.setOverlay(buildStrategyOverlay(result, { labels: strategyOverlayLabels(), idPrefix: owner }), result.interval, owner);
       setShown({ run: { family, runId }, result });
-    }).catch((failure: unknown) => {
+    };
+    const fail = (failure: unknown) => {
       if (controller.signal.aborted) return;
       setError(failure instanceof Error ? failure.message : String(failure));
-    });
+    };
+    if (family === "continuous") void followForwardRun(manager, runId, controller.signal, draw, fail).catch(fail);
+    else manager.loadRunResult(family, runId, controller.signal).then(draw).catch(fail);
     return () => controller.abort();
   }, [family, interval, locale, manager, runId, source]);
   return { source, error, shown };

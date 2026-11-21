@@ -37,8 +37,10 @@ def _error(failure: Exception) -> JSONResponse:
                             content={"error": {"code": code, "message": message}})
     elif code in UNAVAILABLE:
         status = 503
-    elif code in {"RUN_RESULT_UNAVAILABLE", "RUN_CONTROL_UNSUPPORTED", "RUN_STREAM_UNSUPPORTED"}:
+    elif code in {"RUN_CONTROL_UNSUPPORTED", "RUN_RESULT_NOT_READY"}:
         status = 409
+    elif code == "BUDGET_EXCEEDED":
+        status = 413
     else:
         status = 400
     return JSONResponse(status_code=status, content={"error": {"code": code, "message": message}},
