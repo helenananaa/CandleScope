@@ -66,6 +66,8 @@ def main() -> int:
         "test_strategy_runs.py", "test_strategy_runs_forward.py",
         # ADR-BACKTEST-015 P3: strategy drafts and versions in the backend.
         "test_strategy_drafts.py", "test_strategy_versions.py", "test_strategy_references.py",
+        # ADR-BACKTEST-015 P4: FOLLOW equals FIXED.
+        "test_follow_session.py",
     )
     files = sorted({str(path) for pattern in patterns for path in (backend / "tests").glob(pattern)})
     return pytest.main(["-q", "-p", "pytest_asyncio.plugin", "-p", "anyio.pytest_plugin",
