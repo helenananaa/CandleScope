@@ -61,6 +61,11 @@ class BarAnchor:
         if self._opens is None and self._width is None:
             raise BarAnchorRequired(f"bar open times are required to anchor {interval!r} results")
 
+    @property
+    def width_ms(self) -> int | None:
+        """Bar width when bars are evenly spaced UTC-day divisions; ``None`` otherwise."""
+        return self._width if self._opens is None else None
+
     def __call__(self, time_ms: int | None) -> int | None:
         if time_ms is None:
             return None
@@ -101,7 +106,7 @@ def _summary(equity: list[dict[str, Any]], trades: list[dict[str, Any]], fills: 
 def _result(*, source: str, authority: str, clock_policy: str, fidelity: str | None, interval: str,
             fills: list[dict[str, Any]], trades: list[dict[str, Any]], open_position: dict[str, Any] | None,
             pending_orders: list[dict[str, Any]], equity: list[dict[str, Any]],
-            plots: list[dict[str, Any]]) -> dict[str, Any]:
+            plots: list[dict[str, Any]], rejections: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     return {
         "schema": SCHEMA,
         "source": source,
@@ -113,6 +118,7 @@ def _result(*, source: str, authority: str, clock_policy: str, fidelity: str | N
         "trades": trades,
         "open_position": open_position,
         "pending_orders": pending_orders,
+        "rejections": rejections or [],
         "equity": equity,
         "plots": plots,
         "summary": _summary(equity, trades, fills),
@@ -138,7 +144,47 @@ def _host_fill(fill: Mapping[str, Any], anchor: BarAnchor) -> dict[str, Any]:
         "fee": decimal_text(fill.get("fee")),
         "order_id": str(fill["order_id"]) if fill.get("order_id") is not None else None,
         "tag": fill.get("script_order_id") or fill.get("client_tag"),
+        # Trusted decision-time evidence (TradeExplanationV1), present only when the run recorded it.
+        "explanation": dict(fill["explanation"]) if isinstance(fill.get("explanation"), Mapping) else None,
     }
+
+
+def _sequence_time(sequence: int, known: Mapping[int, int], anchor: BarAnchor) -> int | None:
+    """Event time of a BAR sequence. The runtime samples equity every N events, so a missing
+    sequence is interpolated between its known neighbours, but only when they are exactly one
+    bar width apart per sequence step (no missing bars in between); otherwise it stays unknown."""
+    if sequence in known:
+        return known[sequence]
+    width = anchor.width_ms
+    if width is None:
+        return None
+    before = max((seq for seq in known if seq < sequence), default=None)
+    after = min((seq for seq in known if seq > sequence), default=None)
+    if before is None or after is None or known[after] - known[before] != (after - before) * width:
+        return None
+    return known[before] + (sequence - before) * width
+
+
+def _host_rejections(rows: Sequence[Mapping[str, Any]], anchor: BarAnchor,
+                     sequence_times: Mapping[int, int]) -> list[dict[str, Any]]:
+    """Orders the host refused. Report rows carry the event ``sequence`` but no timestamp,
+    so the time comes from the equity point of that sequence; without one there is no anchor."""
+    rejections = []
+    for row in rows:
+        intent = row.get("intent") if isinstance(row.get("intent"), Mapping) else {}
+        time_ms = _ms(row.get("event_time_ms"))
+        if time_ms is None and row.get("sequence") is not None:
+            time_ms = _sequence_time(int(row["sequence"]), sequence_times, anchor)
+        side = row.get("side") or intent.get("side")
+        rejections.append({
+            "time_ms": time_ms,
+            "bar_time_ms": anchor(time_ms),
+            "side": str(side).upper() if side else None,
+            "reason": str(row.get("reason") or ""),
+            "order_id": str(row["order_id"]) if row.get("order_id") is not None else None,
+            "explanation": dict(row["explanation"]) if isinstance(row.get("explanation"), Mapping) else None,
+        })
+    return rejections
 
 
 def _host_pending(orders: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
@@ -171,13 +217,19 @@ def from_host_result(result: Mapping[str, Any], *, interval: str, fidelity: str,
         })
     account = (result.get("ledger") or {}).get("account") or {}
     equity = []
+    sequence_times: dict[int, int] = {}
     for point in result.get("equity_curve") or ():
         time_ms = _ms(point.get("event_time_ms"))
         equity.append({"time_ms": time_ms, "bar_time_ms": anchor(time_ms), "equity": decimal_text(point.get("equity"))})
+        # Sequences number BAR events one per bar; other fidelities number prints, so no mapping.
+        if fidelity == "BAR_APPROX" and point.get("sequence") is not None and time_ms is not None:
+            sequence_times[int(point["sequence"])] = time_ms
     return _result(source=source, authority="HOST", clock_policy=clock_policy, fidelity=fidelity, interval=interval,
                    fills=fills, trades=trades,
                    open_position=_open_position(account.get("position_qty"), account.get("entry_price")),
-                   pending_orders=_host_pending(result.get("orders") or ()), equity=equity, plots=[])
+                   pending_orders=_host_pending(result.get("orders") or ()), equity=equity, plots=[],
+                   rejections=_host_rejections(result.get("rejected_orders") or result.get("rejected") or (), anchor,
+                                               sequence_times))
 
 
 def _plots(graphics: Sequence[Mapping[str, Any]], bar_open_times_ms: Sequence[int]) -> list[dict[str, Any]]:
@@ -215,7 +267,8 @@ def from_native_report(report: Mapping[str, Any], *, interval: str) -> dict[str,
         position += qty if side == "BUY" else -qty
         time_ms = _seconds_ms(order.get("time"))
         fills.append({"time_ms": time_ms, "bar_time_ms": anchor(time_ms), "side": side, "qty": decimal_text(qty),
-                      "price": decimal_text(order.get("price")), "fee": None, "order_id": None, "tag": order.get("id")})
+                      "price": decimal_text(order.get("price")), "fee": None, "order_id": None, "tag": order.get("id"),
+                      "explanation": None})
     trades = []
     for index, trade in enumerate(report.get("trades") or (), start=1):
         size = Decimal(str(trade.get("qty") or "0"))

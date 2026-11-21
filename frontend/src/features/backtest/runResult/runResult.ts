@@ -24,6 +24,17 @@ export interface RunResultFill {
   fee: string | null;
   order_id: string | null;
   tag: string | null;
+  /** Decision-time evidence (`TradeExplanationV1`), only when the run recorded it. */
+  explanation: Record<string, unknown> | null;
+}
+
+export interface RunResultRejection {
+  time_ms: number | null;
+  bar_time_ms: number | null;
+  side: string | null;
+  reason: string;
+  order_id: string | null;
+  explanation: Record<string, unknown> | null;
 }
 
 export interface RunResultTrade {
@@ -91,6 +102,7 @@ export interface RunResult {
   trades: RunResultTrade[];
   open_position: RunResultPosition | null;
   pending_orders: RunResultPendingOrder[];
+  rejections: RunResultRejection[];
   equity: RunResultEquityPoint[];
   plots: RunResultPlot[];
   summary: RunResultSummary;
@@ -152,6 +164,10 @@ function optionalText(value: unknown, path: string): string | null {
   return value;
 }
 
+function optionalObject(value: unknown, path: string): Record<string, unknown> | null {
+  return value === null || value === undefined ? null : row(value, path);
+}
+
 function choice<T extends string>(value: unknown, allowed: readonly T[], path: string): T {
   if (typeof value !== "string" || !(allowed as readonly string[]).includes(value)) fail(path, `must be one of ${allowed.join(", ")}`);
   return value as T;
@@ -173,6 +189,18 @@ export function parseRunResult(value: unknown): RunResult {
       side: choice(fill.side, ["BUY", "SELL"] as const, `${at}.side`), qty: decimal(fill.qty, `${at}.qty`),
       price: decimal(fill.price, `${at}.price`), fee: optionalDecimal(fill.fee, `${at}.fee`),
       order_id: optionalText(fill.order_id, `${at}.order_id`), tag: optionalText(fill.tag, `${at}.tag`),
+      explanation: optionalObject(fill.explanation, `${at}.explanation`),
+    };
+  });
+  const rejections = list(body.rejections, "rejections").map((item, index): RunResultRejection => {
+    const rejection = row(item, `rejections[${index}]`), at = `rejections[${index}]`;
+    return {
+      time_ms: optionalTime(rejection.time_ms ?? null, `${at}.time_ms`),
+      bar_time_ms: optionalTime(rejection.bar_time_ms ?? null, `${at}.bar_time_ms`),
+      side: optionalText(rejection.side, `${at}.side`),
+      reason: optionalText(rejection.reason, `${at}.reason`) ?? fail(`${at}.reason`, "is required"),
+      order_id: optionalText(rejection.order_id, `${at}.order_id`),
+      explanation: optionalObject(rejection.explanation, `${at}.explanation`),
     };
   });
   const trades = list(body.trades, "trades").map((item, index): RunResultTrade => {
@@ -229,7 +257,7 @@ export function parseRunResult(value: unknown): RunResult {
     clock_policy: choice(body.clock_policy, ["FIXED", "FOLLOW", "FORWARD"] as const, "clock_policy"),
     fidelity: optionalText(body.fidelity, "fidelity"),
     interval: optionalText(body.interval, "interval") ?? fail("interval", "is required"),
-    fills, trades, pending_orders: pending, equity, plots,
+    fills, trades, pending_orders: pending, rejections, equity, plots,
     open_position: position === null ? null : {
       side: choice(position.side, ["LONG", "SHORT"] as const, "open_position.side"),
       qty: decimal(position.qty, "open_position.qty"),

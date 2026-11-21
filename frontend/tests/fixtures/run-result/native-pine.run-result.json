@@ -242,6 +242,7 @@
   "fills": [
     {
       "bar_time_ms": 660000,
+      "explanation": null,
       "fee": null,
       "order_id": null,
       "price": "107",
@@ -252,6 +253,7 @@
     },
     {
       "bar_time_ms": 900000,
+      "explanation": null,
       "fee": null,
       "order_id": null,
       "price": "100",
@@ -262,6 +264,7 @@
     },
     {
       "bar_time_ms": 1080000,
+      "explanation": null,
       "fee": null,
       "order_id": null,
       "price": "108",
@@ -272,6 +275,7 @@
     },
     {
       "bar_time_ms": 1320000,
+      "explanation": null,
       "fee": null,
       "order_id": null,
       "price": "102",
@@ -282,6 +286,7 @@
     },
     {
       "bar_time_ms": 1620000,
+      "explanation": null,
       "fee": null,
       "order_id": null,
       "price": "107",
@@ -292,6 +297,7 @@
     },
     {
       "bar_time_ms": 1860000,
+      "explanation": null,
       "fee": null,
       "order_id": null,
       "price": "100",
@@ -302,6 +308,7 @@
     },
     {
       "bar_time_ms": 2040000,
+      "explanation": null,
       "fee": null,
       "order_id": null,
       "price": "108",
@@ -312,6 +319,7 @@
     },
     {
       "bar_time_ms": 2280000,
+      "explanation": null,
       "fee": null,
       "order_id": null,
       "price": "102",
@@ -322,6 +330,7 @@
     },
     {
       "bar_time_ms": 2580000,
+      "explanation": null,
       "fee": null,
       "order_id": null,
       "price": "107",
@@ -732,6 +741,7 @@
       "title": null
     }
   ],
+  "rejections": [],
   "schema": "candlescope.run-result/1",
   "source": "native-pine",
   "summary": {

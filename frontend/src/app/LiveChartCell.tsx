@@ -130,7 +130,7 @@ import { drawingToolWhenInteractionReady } from "./drawingInteractionReadiness.j
 import ChartCellCanvas from "./ChartCellCanvas.js";
 import { combineExternalMarkerSources } from "../chart-adapter/externalMarkerSource.js";
 import { combineChartLayerSources } from "../features/plugins/pluginChartLayerSource.js";
-import { useStrategyRunOverlay, type StrategyOverlayRun } from "../features/backtest/runResult/useStrategyRunOverlay.js";
+import type { StrategyOverlaySource } from "../features/backtest/runResult/strategyOverlay.js";
 import LazyFeatureSurfaces from "./LazyFeatureSurfaces.js";
 import StatusBar from "./StatusBar.js";
 import TopBar from "./TopBar.js";
@@ -898,30 +898,23 @@ function LiveChartCell({
   const [strategyMarkerSource, setStrategyMarkerSource] = useState<ChartStrategyResultMarkerSource | null>(null);
   const handleStrategyMarkerSourceChange = useCallback((source: ChartStrategyResultMarkerSource | null) => {
     strategyMarkerSourceRef.current = source;
-    const focus = strategyTradeFocusRef.current;
-    if (source && focus) source.setTradeFocus(focus.trade, focus.interval, t("chartTester.result.entry"), t("chartTester.result.exit"));
     setStrategyMarkerSource(source);
   }, []);
-  // ADR-BACKTEST-015 P1c: the completed run the strategy dock reports, drawn from run-result/1.
-  // A run belongs to the chart session it was reported for; switching symbol or interval drops it.
-  const overlaySessionKey = [liveSourceSession.exchange, liveSourceSession.marketType,
-    liveSourceSession.symbol, liveSourceSession.interval].join("\u0000");
-  const [overlayRun, setOverlayRun] = useState<{ run: StrategyOverlayRun; sessionKey: string } | null>(null);
-  const handleOverlayRunChange = useCallback((run: StrategyOverlayRun | null) => {
-    setOverlayRun(run ? { run, sessionKey: overlaySessionKey } : null);
-  }, [overlaySessionKey]);
-  const runOverlay = useStrategyRunOverlay({
-    run: overlayRun?.sessionKey === overlaySessionKey ? overlayRun.run : null,
-    interval: liveSourceSession.interval,
-    series: sourceMarketData.view.seriesStore ?? null,
-  });
-  const runOverlaySource = runOverlay.source;
+  // ADR-BACKTEST-015 P1c: the strategy bridge owns the run overlay; this cell only draws it.
+  const [runOverlaySource, setRunOverlaySource] = useState<StrategyOverlaySource | null>(null);
+  const runOverlaySourceRef = useRef<StrategyOverlaySource | null>(null);
+  const handleOverlaySourceChange = useCallback((source: StrategyOverlaySource | null) => {
+    runOverlaySourceRef.current = source;
+    const focus = strategyTradeFocusRef.current;
+    if (source && focus) source.setTradeFocus(focus.trade, focus.interval, t("chartTester.result.entry"), t("chartTester.result.exit"));
+    setRunOverlaySource(source);
+  }, []);
   const combinedStrategyMarkerSource = useMemo(
-    () => combineExternalMarkerSources([strategyMarkerSource, runOverlaySource.markers]),
+    () => combineExternalMarkerSources([strategyMarkerSource, runOverlaySource?.markers]),
     [runOverlaySource, strategyMarkerSource],
   );
   const combinedChartLayerSource = useMemo(
-    () => combineChartLayerSources([plugins.view.chartLayerSource, runOverlaySource.layer]),
+    () => combineChartLayerSources([plugins.view.chartLayerSource, runOverlaySource?.layer]),
     [plugins.view.chartLayerSource, runOverlaySource],
   );
   const upstreamViewportRangeChangeRef = useRef(
@@ -933,11 +926,12 @@ function LiveChartCell({
   const handleChartViewportRangeChange = useCallback((range: ChartSurfaceVisibleRange) => {
     upstreamViewportRangeChangeRef.current?.(range);
     strategyMarkerSourceRef.current?.setVisibleRange(range);
-    runOverlaySource.setVisibleRange(range);
-  }, [runOverlaySource]);
+    runOverlaySourceRef.current?.setVisibleRange(range);
+  }, []);
   const handleReviewStrategyTrade = useCallback((trade: StrategyTradeFocus | null) => {
     strategyTradeFocusRef.current = trade ? { trade, interval: liveSourceSession.interval } : null;
-    strategyMarkerSourceRef.current?.setTradeFocus(trade, liveSourceSession.interval, t("chartTester.result.entry"), t("chartTester.result.exit"));
+    // Fixed-history results are drawn by the run overlay, so the reviewed trade is highlighted there.
+    runOverlaySourceRef.current?.setTradeFocus(trade, liveSourceSession.interval, t("chartTester.result.entry"), t("chartTester.result.exit"));
     if (!trade) return;
     chartSurface.actions.setLinkedVisibleTimeRange(strategyTradeRange(trade, parseIntervalSeconds(liveSourceSession.interval) ?? 60));
     chartSurface.actions.setLinkedCrosshairTime(trade.entryTimeMs / 1000);
@@ -1302,7 +1296,7 @@ function LiveChartCell({
               seriesStore={sourceMarketData.view.seriesStore}
               getCurrentVisibleRange={chartSurface.actions.getVisibleRange}
               onMarkerSourceChange={handleStrategyMarkerSourceChange}
-              onOverlayRunChange={handleOverlayRunChange}
+              onOverlaySourceChange={handleOverlaySourceChange}
               onLocateTrade={handleLocateStrategyTrade}
               onReviewTrade={handleReviewStrategyTrade}
               onAttachmentChange={handleStrategyAttachmentChange}
