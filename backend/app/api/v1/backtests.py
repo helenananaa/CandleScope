@@ -509,6 +509,15 @@ def get_chart(request: Request, run_id: str) -> dict[str, Any]:
         return _error(exc)
 
 
+@router.get("/runs/{run_id}/run-result")
+def get_run_result(request: Request, run_id: str) -> dict[str, Any]:
+    """The completed run in the shared ``candlescope.run-result/1`` shape (ADR-BACKTEST-015)."""
+    try:
+        return _runtime(request).run_result(run_id)
+    except BacktestError as exc:
+        return _error(exc)
+
+
 _RESULT_REPLAY_CHARTS = TypeAdapter(dict[Literal["extra1", "extra2"], ResultReplayChartRequest])
 
 

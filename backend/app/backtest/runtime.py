@@ -389,17 +389,39 @@ class BacktestRuntime:
             snapshot_hash=str(preview["snapshot_hash"]),
         )
 
-    def chart_data(self, run_id: str, *, max_bars: int = 50_000) -> dict[str, Any]:
-        record = self.service.get_run(run_id)
-        if record["state"] != "COMPLETED":
-            raise BacktestError("IDENTITY_MUTATION", "backtest chart is not ready")
-        config = json.loads(str(record["config_json"]))
-        interval = str(
+    def _chart_interval(self, record: Mapping[str, Any], config: Mapping[str, Any]) -> str:
+        """The bar interval a run's chart and results are anchored to."""
+        return str(
             config.get("signal_interval")
             if record["fidelity_mode"] in DUAL_MODES
             else config.get("interval")
             or self._manifest(str(record["dataset_id"]))["interval"]
         )
+
+    def run_result(self, run_id: str) -> dict[str, Any]:
+        """A completed run projected into ``candlescope.run-result/1`` (ADR-BACKTEST-015 P1)."""
+        from .run_result import BarAnchorRequired, from_host_result
+
+        record = self.service.get_run(run_id)
+        if record["state"] != "COMPLETED":
+            raise BacktestError("IDENTITY_MUTATION", "backtest result is not ready")
+        config = json.loads(str(record["config_json"]))
+        interval = self._chart_interval(record, config)
+        report = self.service.get_report(run_id)
+        fidelity = str(record["fidelity_mode"])
+        try:
+            return from_host_result(report, interval=interval, fidelity=fidelity)
+        except BarAnchorRequired:
+            # Calendar-aligned intervals (weeks, months, sessions) anchor to the run's own bars.
+            opens = [int(bar["time"]) * 1000 for bar in self.chart_data(run_id)["bars"]]
+            return from_host_result(report, interval=interval, fidelity=fidelity, bar_open_times_ms=opens)
+
+    def chart_data(self, run_id: str, *, max_bars: int = 50_000) -> dict[str, Any]:
+        record = self.service.get_run(run_id)
+        if record["state"] != "COMPLETED":
+            raise BacktestError("IDENTITY_MUTATION", "backtest chart is not ready")
+        config = json.loads(str(record["config_json"]))
+        interval = self._chart_interval(record, config)
         if record['fidelity_mode'] in BOOK_MODES:
             from .chart_book import freeze,require_identity
             preview,_,bars=freeze(self,config)
