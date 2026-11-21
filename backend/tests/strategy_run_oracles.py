@@ -10,9 +10,10 @@ Regenerate deliberately, then review the JSON diff:
 
     CANDLESCOPE_UPDATE_STRATEGY_ORACLES=1 pytest tests/test_strategy_run_oracles*.py
 
-The goldens only compare a path with itself. Cross-path differences (for
-example native Pine filling on the signal bar's close while host matching fills
-at the next bar's open) are recorded in the summaries for P1, not asserted here.
+The goldens only compare a path with itself. Paths report fills differently
+(native Pine stamps the fill bar's open time in seconds; host kernels stamp the
+bar's close event in milliseconds; costs differ per path), so cross-path
+comparison belongs to the P1 run-result projection, not to these digests.
 """
 from __future__ import annotations
 
