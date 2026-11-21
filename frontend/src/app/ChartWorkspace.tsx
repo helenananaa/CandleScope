@@ -11,7 +11,7 @@ import type { AdvancedMarketRuntimeView } from "../features/advanced-market-data
 import MarketChartWorkspace from "./MarketChartWorkspace.js";
 import type { TradeFlowRuntime } from "../features/trade-flow/tradeFlowTypes.js";
 import type { ExternalMarkerSource } from "../chart-adapter/externalMarkerSource.js";
-import type { PluginChartLayerSource } from "../features/plugins/pluginChartLayerSource.js";
+import type { ChartLayerSource } from "../features/plugins/pluginChartLayerSource.js";
 import { preloadDrawingEngineHost } from "../features/drawings/drawingEngineLoader.js";
 import { drawingToolWhenInteractionReady } from "./drawingInteractionReadiness.js";
 import ChartCellCanvas from "./ChartCellCanvas.js";
@@ -49,7 +49,7 @@ export interface ChartWorkspaceProps {
   tradeFlow: TradeFlowRuntime;
   marketRail: ChartWorkspaceRailLayout;
   pluginMarkerSource?: ExternalMarkerSource | null;
-  pluginChartLayerSource?: PluginChartLayerSource | null;
+  pluginChartLayerSource?: ChartLayerSource | null;
   errorBoundary?: ComponentType<PropsWithChildren>;
 }
 
