@@ -74,7 +74,9 @@ def main():
         "test_chart_calculation_real_bus.py", "test_chart_calculation_ack_loss.py",
         "test_chart_calculation_source_fencing.py", "test_chart_calculation_transports.py",
         # ADR-BACKTEST-015 P0: Pine-path financial oracles.
-        "test_strategy_run_oracles_pine.py", "test_run_result_pine.py")]
+        "test_strategy_run_oracles_pine.py", "test_run_result_pine.py",
+        # ADR-BACKTEST-015 P2: Pine runs through the run facade.
+        "test_strategy_runs_pine.py")]
     # Confirm every required file exists: a renamed gate must never silently disappear.
     for case in cases:
         if not case.is_file():

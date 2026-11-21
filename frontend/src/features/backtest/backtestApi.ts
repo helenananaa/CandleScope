@@ -222,10 +222,15 @@ export interface BacktestApiClient {
   streamRun?(runId: string, signal?: AbortSignal, onUpdate?: (event: StrategyRunUpdate) => void): Promise<BacktestRunRecord>;
   getReport(runId: string, signal?: AbortSignal): Promise<BacktestReport>;
   getChart(runId: string, signal?: AbortSignal): Promise<BacktestChartData>;
-  /** Host run in `candlescope.run-result/1`; unvalidated wire value (see `parseRunResult`). */
-  getRunResult?(runId: string, signal?: AbortSignal): Promise<unknown>;
-  /** Native or CandleScope-matched Pine run in `candlescope.run-result/1`; unvalidated wire value. */
-  getPineRunResult?(mode: "native" | "external", runId: string, signal?: AbortSignal): Promise<unknown>;
+  /**
+   * The run facade (ADR-BACKTEST-015 P2), one entry for every run family. Values are
+   * unvalidated wire values: see `parseStrategyRunStatus`, `parseRunResult` and
+   * `parseStrategyRunCapabilities`.
+   */
+  getStrategyRun?(runId: string, signal?: AbortSignal): Promise<unknown>;
+  getStrategyRunResult?(runId: string, signal?: AbortSignal): Promise<unknown>;
+  cancelStrategyRun?(runId: string, signal?: AbortSignal): Promise<unknown>;
+  strategyRunCapabilities?(signal?: AbortSignal): Promise<unknown>;
   getResultReplay?(cursor: BacktestResultReplayCursor, signal?: AbortSignal): Promise<BacktestResultReplayFrame>;
   saveResultReplayNote?(cursor: BacktestResultReplayCursor, note: BacktestResultReplayNoteDraft,
     signal?: AbortSignal): Promise<{ revision: number }>;
@@ -355,7 +360,12 @@ function requestOptions(options: RequestInit, signal?: AbortSignal): RequestInit
   return signal === undefined ? options : { ...options, signal };
 }
 
-export function createBacktestApi(base = `${API_BASE}/backtests`): BacktestApiClient {
+/** The run facade is served beside `/backtests` (ADR-BACKTEST-015 P2). */
+function strategyRunsBase(base: string) {
+  return base.endsWith("/backtests") ? `${base.slice(0, -"/backtests".length)}/strategy-runs` : `${API_BASE}/strategy-runs`;
+}
+
+export function createBacktestApi(base = `${API_BASE}/backtests`, runsBase = strategyRunsBase(base)): BacktestApiClient {
   return {
     externalProviders: {
       async trace(runId, after = 0, signal) {
@@ -522,11 +532,17 @@ export function createBacktestApi(base = `${API_BASE}/backtests`): BacktestApiCl
         ),
       );
     },
-    async getRunResult(runId, signal) {
-      return readJson(await fetch(`${base}/runs/${encodeURIComponent(runId)}/run-result`, requestOptions({}, signal)));
+    async getStrategyRun(runId, signal) {
+      return readJson(await fetch(`${runsBase}/${encodeURIComponent(runId)}`, requestOptions({}, signal)));
     },
-    async getPineRunResult(mode, runId, signal) {
-      return readJson(await fetch(`${base}/${mode}/runs/${encodeURIComponent(runId)}/run-result`, requestOptions({}, signal)));
+    async getStrategyRunResult(runId, signal) {
+      return readJson(await fetch(`${runsBase}/${encodeURIComponent(runId)}/result`, requestOptions({}, signal)));
+    },
+    async cancelStrategyRun(runId, signal) {
+      return readJson(await fetch(`${runsBase}/${encodeURIComponent(runId)}/cancel`, requestOptions({ method: "POST" }, signal)));
+    },
+    async strategyRunCapabilities(signal) {
+      return readJson(await fetch(`${runsBase}/capabilities`, requestOptions({}, signal)));
     },
     async getResultReplay(cursor, signal) {
       const query = new URLSearchParams({

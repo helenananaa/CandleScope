@@ -11,6 +11,10 @@ import { defaultContinuousApi } from "../../backtest/continuous/continuousApi.js
 import type { ContinuousApi } from "../../backtest/continuous/continuousTypes.js";
 import { ContinuousStrategyDataManager } from "./continuousStrategyDataManager.js";
 import { parseRunResult, RUN_RESULT_FAMILY_IDENTITY, RunResultContractError, type RunResult, type RunResultFamily } from "../../backtest/runResult/runResult.js";
+import {
+  parseStrategyRunCapabilities, parseStrategyRunStatus, StrategyRunContractError,
+  type StrategyRunCapabilities, type StrategyRunStatus,
+} from "../../backtest/runResult/strategyRun.js";
 
 const RETAINED_RUN_RESULTS = 8;
 
@@ -19,7 +23,8 @@ type ExternalRunDraft = { readonly revision: StrategyRevisionRecord; readonly bo
 
 type ResearchRequest = Omit<Parameters<typeof runResearchBacktest>[0], "api" | "waitForTerminal" | "wait" | "pollIntervalMs">;
 export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "streamRun" | "getReport" | "getChart" | "cancelRun" | "listRuns" | "compareRuns"> & Pick<BacktestApiClient, "getResultReplay" | "saveResultReplayNote" | "observeStrategyPreparation">
-  & Partial<Pick<BacktestApiClient, "capabilities" | "listStrategyRevisions" | "externalProviders" | "getRunResult" | "getPineRunResult">>;
+  & Partial<Pick<BacktestApiClient, "capabilities" | "listStrategyRevisions" | "externalProviders"
+    | "getStrategyRun" | "getStrategyRunResult" | "cancelStrategyRun" | "strategyRunCapabilities">>;
 
 /** Owns fixed-history operations and immutable results independently of live
  * chart stores. Releasing a consumer never cancels a durable shared run. */
@@ -30,6 +35,7 @@ export class StrategyDataManager {
   private readonly retainedResults: string[] = [];
   /** Completed run results never change, so parsed values are kept by family and run id. */
   private readonly runResults = new Map<string, RunResult>();
+  private runCapabilities: StrategyRunCapabilities | null = null;
   private streams = 0;
   private closed = false;
 
@@ -175,6 +181,42 @@ export class StrategyDataManager {
     return this.operation(signal, (owned) => this.readResult(runId, owned));
   }
 
+  /** Any run's current status through the run facade (ADR-BACKTEST-015 P2). Never cached. */
+  loadRunStatus(runId: string, signal?: AbortSignal): Promise<StrategyRunStatus> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.getStrategyRun) unavailable();
+      const status = parseStrategyRunStatus(await this.api.getStrategyRun(runId, owned));
+      owned.throwIfAborted();
+      if (status.run_id !== runId) throw new StrategyRunContractError("run_id", `asked for ${runId}, served ${status.run_id}`);
+      return status;
+    });
+  }
+
+  /** Cancel any run family's run; returns its status. Cancelling a finished run changes nothing. */
+  cancelStrategyRun(runId: string, signal?: AbortSignal): Promise<StrategyRunStatus> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.cancelStrategyRun) unavailable();
+      const status = parseStrategyRunStatus(await this.api.cancelStrategyRun(runId, owned));
+      if (status.run_id !== runId) throw new StrategyRunContractError("run_id", `asked for ${runId}, served ${status.run_id}`);
+      return status;
+    });
+  }
+
+  /**
+   * The backend's one capability matrix. Reading it starts the script engines to
+   * describe them, so it is kept until `refresh` asks again.
+   */
+  loadRunCapabilities(signal?: AbortSignal, { refresh = false }: { refresh?: boolean } = {}): Promise<StrategyRunCapabilities> {
+    return this.operation(signal, async (owned) => {
+      if (this.runCapabilities && !refresh) return this.runCapabilities;
+      if (!this.api.strategyRunCapabilities) unavailable();
+      const capabilities = parseStrategyRunCapabilities(await this.api.strategyRunCapabilities(owned));
+      owned.throwIfAborted();
+      this.runCapabilities = capabilities;
+      return capabilities;
+    });
+  }
+
   /** A completed run in `candlescope.run-result/1` (ADR-BACKTEST-015 P1), validated against its family. */
   loadRunResult(family: RunResultFamily, runId: string, signal?: AbortSignal): Promise<RunResult> {
     return this.operation(signal, async (owned) => {
@@ -185,14 +227,8 @@ export class StrategyDataManager {
         this.runResults.set(key, cached);
         return cached;
       }
-      let raw: unknown;
-      if (family === "host") {
-        if (!this.api.getRunResult) unavailable();
-        raw = await this.api.getRunResult(runId, owned);
-      } else {
-        if (!this.api.getPineRunResult) unavailable();
-        raw = await this.api.getPineRunResult(family, runId, owned);
-      }
+      if (!this.api.getStrategyRunResult) unavailable();
+      const raw = await this.api.getStrategyRunResult(runId, owned);
       owned.throwIfAborted();
       const result = parseRunResult(raw);
       const expected = RUN_RESULT_FAMILY_IDENTITY[family];
@@ -326,6 +362,7 @@ export class StrategyDataManager {
     this.results.clear();
     this.retainedResults.length = 0;
     this.runResults.clear();
+    this.runCapabilities = null;
     this.updates.clear();
   }
 }

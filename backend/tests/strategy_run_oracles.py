@@ -240,11 +240,13 @@ def assert_oracle(oracle: Mapping[str, Any]) -> None:
 FRONTEND_FIXTURES = Path(__file__).resolve().parents[2] / "frontend" / "tests" / "fixtures" / "run-result"
 
 
-def assert_frontend_fixture(name: str, projected: Mapping[str, Any]) -> None:
-    target = FRONTEND_FIXTURES / f"{name}.run-result.json"
+def assert_frontend_fixture(name: str, projected: Mapping[str, Any], *, kind: str = "run-result") -> None:
+    """Keep a frontend contract fixture equal to what the backend serves (``kind`` names its directory)."""
+    directory = FRONTEND_FIXTURES.parent / kind
+    target = directory / f"{name}.{kind}.json"
     text = json.dumps(projected, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
     if os.environ.get(UPDATE_ENV) == "1":
-        FRONTEND_FIXTURES.mkdir(parents=True, exist_ok=True)
+        directory.mkdir(parents=True, exist_ok=True)
         target.write_text(text, encoding="utf-8")
         return
     if not target.is_file():
