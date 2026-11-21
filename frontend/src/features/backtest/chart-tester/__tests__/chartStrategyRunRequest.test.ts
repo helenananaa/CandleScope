@@ -10,12 +10,27 @@ import {
   chartStrategyRunDiagnostics,
   freezeChartStrategyRunRequest,
   qualitySummaryFromImportedManifest,
-  runChartStrategyBacktest,
-  runResearchBacktest,
+  runChartStrategyBacktest as runChartStrategyWith,
+  runResearchBacktest as runResearchWith,
   type ChartStrategyRunApi,
 } from "../chartStrategyRunRequest.js";
 import type { ChartStrategyRunRequest } from "../chartStrategyTesterUiModel.js";
 import { StrategyDataManager, type StrategyDataApi } from "../../../market-data/manager/strategyDataManager.js";
+
+/** These tests drive a created run to its end through `getRun`; the app follows it by stream (StrategyDataManager). */
+function followByGetRun(api: Pick<ChartStrategyRunApi, "getRun">) {
+  return async (runId: string, signal: AbortSignal | undefined, onUpdate: (run: BacktestRunRecord) => void) => {
+    for (;;) {
+      const run = await api.getRun(runId, signal);
+      onUpdate(run);
+      if (run.state === "COMPLETED" || run.state === "FAILED" || run.state === "CANCELLED") return run;
+    }
+  };
+}
+const runChartStrategyBacktest = (options: Omit<Parameters<typeof runChartStrategyWith>[0], "waitForTerminal">) =>
+  runChartStrategyWith({ ...options, waitForTerminal: followByGetRun(options.api) });
+const runResearchBacktest = (options: Omit<Parameters<typeof runResearchWith>[0], "waitForTerminal">) =>
+  runResearchWith({ ...options, waitForTerminal: followByGetRun(options.api) });
 
 const request: ChartStrategyRunRequest = {
   cellScope: "workspace\u0000cell-1",
@@ -286,7 +301,6 @@ test("READY follows revision-resolve-smoke-validate-reresolve-create-poll", asyn
   const outcome = await runChartStrategyBacktest({
     api,
     request,
-    pollIntervalMs: 0,
   });
   assert.equal(outcome.kind, "TERMINAL");
   assert.deepEqual(calls, [
@@ -303,7 +317,6 @@ test("READY follows revision-resolve-smoke-validate-reresolve-create-poll", asyn
   await runChartStrategyBacktest({
     api: apiWithResolutions([resolution(), resolution()], secondCalls, keys),
     request,
-    pollIntervalMs: 0,
   });
   assert.equal(keys[0], keys[1]);
 });
@@ -314,7 +327,7 @@ test("Pine charts compile through the real engine revision rather than the froze
     source: '//@version=6\nstrategy("SMA")\nif close > ta.sma(close, 2)\n    strategy.entry("L", strategy.long)',
     attachment: { ...request.attachment, language: "pine" } };
   const outcome = await runChartStrategyBacktest({ api: apiWithResolutions([resolution(), resolution()], calls),
-    request: pine, pollIntervalMs: 0 });
+    request: pine });
   assert.equal(outcome.kind, "TERMINAL");
   assert.equal(calls[0], "revision:PINE_ENGINE");
 });
@@ -348,7 +361,7 @@ test("Pine requested datasets are frozen into manual and automatically prepared 
     assert.equal((body.pine_contexts as Record<string, unknown>[])[0]?.exchange, "okx");
     return completed();
   };
-  assert.equal((await runChartStrategyBacktest({ api, request: pine, signal, pollIntervalMs: 0 })).kind, "TERMINAL");
+  assert.equal((await runChartStrategyBacktest({ api, request: pine, signal })).kind, "TERMINAL");
   const automatic = apiWithResolutions([resolution("NEEDS_DATA")], []);
   automatic.createStrategyRevision = api.createStrategyRevision;
   automatic.prepareChartContext = async (_body, _signal, intent) => {
@@ -357,7 +370,7 @@ test("Pine requested datasets are frozen into manual and automatically prepared 
     assert.equal((intent?.pine_contexts?.[0] as Record<string, unknown>).snapshot_hash, "remote-snapshot");
     return { ...resolution(), prepared_run: completed() };
   };
-  assert.equal((await runChartStrategyBacktest({ api: automatic, request: pine, signal, pollIntervalMs: 0 })).kind, "TERMINAL");
+  assert.equal((await runChartStrategyBacktest({ api: automatic, request: pine, signal })).kind, "TERMINAL");
 });
 
 test("an idempotent completed Run is reused without polling or retry", async () => {
@@ -371,7 +384,7 @@ test("an idempotent completed Run is reused without polling or retry", async () 
     calls.push("get");
     return completed();
   };
-  const outcome = await runChartStrategyBacktest({ api, request, pollIntervalMs: 0 });
+  const outcome = await runChartStrategyBacktest({ api, request });
   assert.equal(outcome.kind, "TERMINAL");
   assert.equal(outcome.kind === "TERMINAL" ? outcome.run.state : null, "COMPLETED");
   assert.equal(calls.filter((call) => call === "create").length, 1);
@@ -393,7 +406,6 @@ test("NEEDS_DATA stops for confirmation and materialize always re-resolves", asy
     api: apiWithResolutions([resolution(), resolution()], nextCalls),
     request,
     materializeResolution: needs,
-    pollIntervalMs: 0,
   });
   assert.equal(next.kind, "TERMINAL");
   assert.deepEqual(nextCalls.slice(0, 3), [
@@ -413,7 +425,7 @@ test("automatic preparation carries frozen strategy intent and observes the serv
     assert.equal(intent?.strategy_draft_id, request.draftId);
     return { ...resolution(), prepared_run: { ...completed(), state: "QUEUED" } };
   };
-  const outcome = await runChartStrategyBacktest({ api, request, pollIntervalMs: 0 });
+  const outcome = await runChartStrategyBacktest({ api, request });
   assert.equal(outcome.kind, "TERMINAL");
   assert.deepEqual(calls, ["revision:PINE_ENGINE", "resolve", "prepare", "get"]);
 });
@@ -424,7 +436,6 @@ test("validate/create drift fails before create", async () => {
     runChartStrategyBacktest({
       api: apiWithResolutions([resolution("READY", "a"), resolution("READY", "b")], calls),
       request,
-      pollIntervalMs: 0,
     }),
     (error: unknown) => (
       error instanceof Error
@@ -551,7 +562,6 @@ test("imported dataset previews and freezes without materialize or online resolv
     api: importedApi(calls),
     request: { ...request, session: { ...request.session, marketType: "spot", symbol: "BTC-USDT", interval: "15m" } },
     source: importedSource,
-    pollIntervalMs: 0,
   });
   assert.equal(outcome.kind, "TERMINAL");
   assert.equal(outcome.frozenContext?.sourceKind, "IMPORTED_DATASET");
@@ -589,7 +599,6 @@ test("imported data epoch change after preview fails before create", async () =>
       api,
       request,
       source: importedSource,
-      pollIntervalMs: 0,
     }),
     (error: unknown) => error instanceof Error && "code" in error && error.code === "DATA_SNAPSHOT_MISMATCH",
   );
@@ -609,7 +618,6 @@ test("gapped imported windows are not READY and never create a Run", async () =>
         volumeAvailable: true,
       }),
     },
-    pollIntervalMs: 0,
   });
   assert.equal(outcome.kind, "UNSUPPORTED");
   assert.equal(outcome.resolution.status, "UNAVAILABLE");

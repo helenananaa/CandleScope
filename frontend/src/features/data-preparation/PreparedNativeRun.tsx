@@ -1,34 +1,39 @@
 import { describeError } from "../../i18n/serverErrors.js";
 import { useEffect, useState } from "react";
 import { t } from "../../i18n/index.js";
-import { nativeApi, nativeTerminal, type NativeRun } from "../backtest/native/nativeBacktestApi.js";
+import { nativeTerminal, type NativeRun } from "../backtest/native/nativeBacktestApi.js";
+import { useStrategyDataManager } from "../market-data/useStrategyDataManager.js";
 import { NativeStrategyReport } from "../backtest/native/NativeStrategyReport.js";
 import "../backtest/native/nativeStrategy.css";
 
 /** Reopen the engine-owned run without restoring or overwriting an editor draft. */
 export default function PreparedNativeRun({ initial, onClose }: { initial: NativeRun; onClose(): void }) {
+  const manager = useStrategyDataManager();
   const [run, setRun] = useState<NativeRun | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
+    if (!manager) return;
     const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
     setRun(null);
     setError(null);
-    const refresh = async () => {
+    const mode = initial.execution_mode === "CANDLESCOPE" ? "CANDLESCOPE" : "NATIVE";
+    // Read once, then follow the run's committed status instead of polling it.
+    const follow = async () => {
       try {
-        const path = initial.execution_mode === "CANDLESCOPE" ? "/external/runs" : "/native/runs";
-        const current = await nativeApi<NativeRun>(`${path}/${encodeURIComponent(initial.run_id)}`, undefined, undefined, controller.signal);
+        const current = await manager.loadNativeRun(mode, initial.run_id, controller.signal);
         if (controller.signal.aborted) return;
         setRun(current);
-        if (!nativeTerminal(current.state)) timer = setTimeout(() => void refresh(), 1000);
+        if (!nativeTerminal(current.state)) {
+          await manager.followNativeRun(current, (value) => { if (!controller.signal.aborted) setRun(value); }, controller.signal);
+        }
       } catch (cause) {
         if (!controller.signal.aborted) setError(cause instanceof Error ? describeError(cause, cause.message) : String(cause));
       }
     };
-    void refresh();
-    return () => { controller.abort(); clearTimeout(timer); };
-  }, [initial.run_id, initial.execution_mode, attempt]);
+    void follow();
+    return () => controller.abort();
+  }, [manager, initial.run_id, initial.execution_mode, attempt]);
   return <section className="native-strategy-panel" aria-label={t("native.history")}>
     <button type="button" onClick={onClose}>{t("backtest.close")}</button>
     <p>{initial.run_id}</p>

@@ -1,4 +1,4 @@
-import { defaultBacktestApi } from "../backtest/backtestApi.js";
+import type { StrategyDataManager } from "../market-data/manager/strategyDataManager.js";
 import { buildBacktestResearchLaunchContext } from "../backtest/research/backtestResearchLaunch.js";
 import type { ChartStrategyResultBundle } from "../backtest/chart-tester/chartStrategyResultCache.js";
 import { chartStrategyQuickPresetIdForMarket } from "../backtest/chart-tester/chartStrategyRunRequest.js";
@@ -15,6 +15,7 @@ export function strategyResearchAdvancedCellId(source: ResearchSourceRefV1 | nul
  * creates a launch context and returns the search that opens it (`?context=…`).
  */
 export async function createStrategyResearchContextSearch(input: {
+  manager: Pick<StrategyDataManager, "createResearchLaunchContext">;
   source: ResearchSourceRefV1 | null;
   session: ChartSession;
   draftId: string;
@@ -44,7 +45,7 @@ export async function createStrategyResearchContextSearch(input: {
     activeRunId: input.result?.run.run_id ?? null,
     baselineRunId: null,
   });
-  const context = await defaultBacktestApi.createResearchLaunchContext(payload);
+  const context = await input.manager.createResearchLaunchContext(payload);
   if (!/^brc_[A-Za-z0-9_-]{8,128}$/.test(context.context_id)) {
     throw new Error("Invalid BacktestResearchLaunchContext ID");
   }

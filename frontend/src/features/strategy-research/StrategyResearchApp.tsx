@@ -479,6 +479,7 @@ export default function StrategyResearchApp({
     if (mode === "quick" && next !== "quick" && researchRun.session !== null && source !== null && state.script.draftId !== null) {
       setModeSwitching(true);
       void createStrategyResearchContextSearch({
+        manager: researchRun.historyManager,
         source,
         session: researchRun.session,
         draftId: state.script.draftId,
@@ -493,7 +494,7 @@ export default function StrategyResearchApp({
       return;
     }
     showMode(next, researchSearch);
-  }, [mode, modeSwitching, researchRun.session, researchRun.sourceResult, researchSearch, showMode, source, state.script.draftId, signalConfiguration]);
+  }, [mode, modeSwitching, researchRun.historyManager, researchRun.session, researchRun.sourceResult, researchSearch, showMode, source, state.script.draftId, signalConfiguration]);
   const openAdvanced = useCallback(() => switchMode("precise"), [switchMode]);
   const modeRail = <StrategyResearchModeRail mode={mode} pending={modeSwitching} onSelect={switchMode} />;
 
@@ -639,7 +640,7 @@ export default function StrategyResearchApp({
   </Suspense> : null : (
     <>
     {researchRun.result?.run.state === "COMPLETED" && <ResearchReturnButton key={researchRun.result.run.run_id}
-      runId={researchRun.result.run.run_id} origin={handoff ? { workspaceId: handoff.source.workspaceId, cellId: handoff.source.cellId }
+      manager={researchRun.historyManager} runId={researchRun.result.run.run_id} origin={handoff ? { workspaceId: handoff.source.workspaceId, cellId: handoff.source.cellId }
         : researchRun.sourceResult && source?.kind === "CURRENT_CHART" ? { workspaceId: source.workspaceId, cellId: source.cellId } : null} />}
     <StrategyResearchResultPanel
       key={researchRun.result?.run.run_id ?? "pending"}

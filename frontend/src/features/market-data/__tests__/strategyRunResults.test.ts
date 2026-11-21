@@ -144,3 +144,79 @@ test("a run is watched through the facade stream and counted while it streams", 
   await assert.rejects(new StrategyDataManager(api()).watchRun("bt_1"), /unavailable/i);
   manager.dispose();
 });
+
+// -- P2c: native runs and host-run following go through the manager ----------
+
+type NativeClient = ConstructorParameters<typeof StrategyDataManager>[2];
+type WatchedStatus = Awaited<ReturnType<NonNullable<StrategyDataApi["watchStrategyRun"]>>>;
+
+function status(runId: string, state: string, sourceState = state): WatchedStatus {
+  const terminal = ["COMPLETED", "FAILED", "CANCELLED"].includes(state);
+  return parseStrategyRunStatus({ ...structuredClone(STATUS) as object, run_id: runId, state, source_state: sourceState,
+    terminal, result_available: state === "COMPLETED" });
+}
+
+function watching(runId: string, states: Array<[string, string?]>): Partial<StrategyDataApi> {
+  return {
+    async watchStrategyRun(id, _signal, onStatus) {
+      assert.equal(id, runId);
+      const statuses = states.map(([state, source]) => status(runId, state, source));
+      for (const value of statuses) onStatus?.(value, null);
+      return statuses.at(-1)!;
+    },
+  };
+}
+
+test("native runs are created, listed, read and cancelled through the manager's client", async () => {
+  const calls: string[] = [];
+  const run = (runId: string, state = "COMPLETED") => ({ run_id: runId, state, execution_mode: "CANDLESCOPE", created_at_ms: 1 });
+  const client = {
+    async create(mode, _body, key) { calls.push(`create:${mode}:${key}`); return run("native_new", "QUEUED"); },
+    async get(mode, runId) { calls.push(`get:${mode}:${runId}`); if (runId === "native_gone") throw new Error("gone"); return run(runId); },
+    async list(mode) { calls.push(`list:${mode}`); return [run("native_a")]; },
+    async cancel(mode, runId) { calls.push(`cancel:${mode}:${runId}`); return run(runId, "CANCELLED"); },
+  } as NativeClient;
+  const manager = new StrategyDataManager(api(), undefined, client);
+  assert.equal((await manager.createNativeRun("CANDLESCOPE", {}, "key")).run_id, "native_new");
+  assert.deepEqual((await manager.listNativeRuns("NATIVE", ["native_a", "native_b", "native_gone"])).map((item) => item.run_id),
+    ["native_a", "native_b"], "listed runs plus readable saved ones");
+  assert.equal((await manager.cancelNativeRun("NATIVE", "native_a")).state, "CANCELLED");
+  assert.deepEqual(calls, ["create:CANDLESCOPE:key", "list:NATIVE", "get:NATIVE:native_b", "get:NATIVE:native_gone", "cancel:NATIVE:native_a"]);
+  manager.dispose();
+  await assert.rejects(manager.loadNativeRun("NATIVE", "native_a"), /closed/);
+});
+
+test("a native run is followed by stream and its finished record is read once", async () => {
+  const reads: string[] = [];
+  const queued = { run_id: "native_1", state: "QUEUED", execution_mode: "CANDLESCOPE", created_at_ms: 1 } as Parameters<StrategyDataManager["followNativeRun"]>[0];
+  const client = { async get(mode, runId) { reads.push(`${mode}:${runId}`); return { ...queued, state: "COMPLETED", result: {} }; } } as NativeClient;
+  const manager = new StrategyDataManager(api(watching("native_1", [["QUEUED"], ["RUNNING"], ["RUNNING"], ["COMPLETED"]])), undefined, client);
+  const seen: string[] = [];
+  const finished = await manager.followNativeRun(queued, (run) => seen.push(run.state));
+  assert.deepEqual(seen, ["RUNNING", "COMPLETED"]);
+  assert.equal(finished.state, "COMPLETED");
+  assert.deepEqual(reads, ["CANDLESCOPE:native_1"]);
+  assert.equal(manager.diagnostics().streams, 0);
+  const mismatch = new StrategyDataManager(api(watching("native_1", [["FAILED", "INTERRUPTED"]])), undefined, client);
+  await assert.rejects(mismatch.followNativeRun(queued, () => {}), /differs/);
+  manager.dispose();
+  mismatch.dispose();
+});
+
+test("a host run is followed by stream and a failed run is a result, not an error", async () => {
+  const record = (state: string) => ({ run_id: "bt_1", state, failure_code: state === "FAILED" ? "PROVIDER_CRASH" : null }) as never;
+  let reads = 0;
+  const manager = new StrategyDataManager(api({
+    ...watching("bt_1", [["QUEUED"], ["RUNNING"], ["FAILED"]]),
+    async getRun() { reads += 1; return record(reads === 1 ? "QUEUED" : "FAILED"); },
+  }));
+  const seen: string[] = [];
+  const finished = await manager.followHostRun("bt_1", (run) => seen.push(run.state));
+  assert.deepEqual(seen, ["RUNNING"]);
+  assert.equal((finished as { state: string }).state, "FAILED");
+  assert.equal(reads, 2, "the record is read before watching and once at the end");
+  const done = new StrategyDataManager(api({ async getRun() { return record("COMPLETED"); } }));
+  assert.equal((await done.followHostRun("bt_1") as { state: string }).state, "COMPLETED", "a finished run is not watched");
+  manager.dispose();
+  done.dispose();
+});

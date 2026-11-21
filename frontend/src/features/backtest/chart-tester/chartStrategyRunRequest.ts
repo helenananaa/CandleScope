@@ -8,7 +8,6 @@ import {
   type StrategyRevisionRecord,
 } from "../backtestApi.js";
 import { validExecutionOverrides, validStrategyRunSettings, type StrategyRunSettings } from "../../../shared/strategyRunSettings.js";
-import { pollBacktestRunToTerminal, type waitForBacktestPoll } from "../backtestRunClient.js";
 import type { PreparationJob } from "../../data-preparation/api.js";
 import type { BacktestRunRecord } from "../backtestTypes.js";
 import { StrategyRunStreamError } from "../backtestRunStream.js";
@@ -647,15 +646,14 @@ export async function runResearchBacktest(options: {
   request: ChartStrategyRunRequest;
   source: ResearchRunSource;
   signal?: AbortSignal;
-  pollIntervalMs?: number;
-  wait?: typeof waitForBacktestPoll;
   onStage?(stage: ChartStrategyRunStage): void;
   onRevision?(revision: StrategyRevisionRecord): void;
   onPreparation?(job: PreparationJob): void | Promise<void>;
   onResolution?(resolution: ChartContextResolution): void;
   onRunCreated?(run: BacktestRunRecord, identity: ResultProjectionIdentity): void | Promise<void>;
   onRunUpdate?(run: BacktestRunRecord): void;
-  waitForTerminal?: (runId: string, signal: AbortSignal | undefined, onUpdate: (run: BacktestRunRecord) => void) => Promise<BacktestRunRecord>;
+  /** Follows the created run to its terminal record; the strategy data manager streams it (no polling). */
+  waitForTerminal: (runId: string, signal: AbortSignal | undefined, onUpdate: (run: BacktestRunRecord) => void) => Promise<BacktestRunRecord>;
 }): Promise<ChartStrategyRunOutcome> {
   const request = options.source.kind === "IMPORTED_DATASET"
     ? {
@@ -866,16 +864,7 @@ export async function runResearchBacktest(options: {
     options.onStage?.(run.state === "QUEUED" ? "QUEUED" : "RUNNING");
     options.onRunUpdate?.(run);
   };
-  const terminal = options.waitForTerminal
-    ? await options.waitForTerminal(created.run_id, options.signal, onUpdate)
-    : await pollBacktestRunToTerminal({
-      api: options.api,
-      runId: created.run_id,
-      ...(options.signal ? { signal: options.signal } : {}),
-      ...(options.pollIntervalMs === undefined ? {} : { intervalMs: options.pollIntervalMs }),
-      ...(options.wait ? { wait: options.wait } : {}),
-      onUpdate,
-    });
+  const terminal = await options.waitForTerminal(created.run_id, options.signal, onUpdate);
   return { kind: "TERMINAL", frozen, revision, resolution: refreshed, run: terminal, identity, frozenContext };
 }
 
@@ -884,8 +873,7 @@ export async function runChartStrategyBacktest(options: {
   request: ChartStrategyRunRequest;
   signal?: AbortSignal;
   materializeResolution?: ChartContextResolution | null;
-  pollIntervalMs?: number;
-  wait?: typeof waitForBacktestPoll;
+  waitForTerminal: Parameters<typeof runResearchBacktest>[0]["waitForTerminal"];
   onStage?(stage: ChartStrategyRunStage): void;
   onRevision?(revision: StrategyRevisionRecord): void;
   onResolution?(resolution: ChartContextResolution): void;
@@ -902,8 +890,7 @@ export async function runChartStrategyBacktest(options: {
         : {}),
     },
     ...(options.signal ? { signal: options.signal } : {}),
-    ...(options.pollIntervalMs === undefined ? {} : { pollIntervalMs: options.pollIntervalMs }),
-    ...(options.wait ? { wait: options.wait } : {}),
+    waitForTerminal: options.waitForTerminal,
     ...(options.onStage ? { onStage: options.onStage } : {}),
     ...(options.onRevision ? { onRevision: options.onRevision } : {}),
     ...(options.onResolution ? { onResolution: options.onResolution } : {}),

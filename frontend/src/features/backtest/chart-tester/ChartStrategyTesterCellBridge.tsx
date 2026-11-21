@@ -13,8 +13,8 @@ import type { ChartStrategyAttachmentRecord } from "../../chart-workspace/chartW
 import { SeriesWindowStore } from "../../market-data/window/seriesWindowStore.js";
 import type { ChartSurfaceVisibleRange } from "../../../chart-adapter/useChartSurfaceRuntime.js";
 import { parseIntervalSeconds } from "../../../utils/intervals.js";
-import { defaultBacktestApi, type ChartContextResolution } from "../backtestApi.js";
-import { pollBacktestRunToTerminal } from "../backtestRunClient.js";
+import type { ChartContextResolution } from "../backtestApi.js";
+import { useMarketDataWorkspaceResources } from "../../market-data/marketDataWorkspaceContext.js";
 import { ChartStrategyTesterRuntimeFactory } from "./ChartStrategyTesterRuntime.js";
 import {
   getChartStrategyDraftStore,
@@ -27,7 +27,6 @@ import type {
 import {
   chartStrategyQuickPresetIdForMarket,
   chartStrategyRunDiagnostics,
-  runChartStrategyBacktest,
 } from "./chartStrategyRunRequest.js";
 import {
   createChartStrategyTesterState,
@@ -37,10 +36,7 @@ import {
 import { loadChartStrategyPanelPreferences, resolveChartStrategyRunMode } from "./chartStrategyPanelPreferences.js";
 import type { ContinuousMode } from "../continuous/continuousTypes.js";
 import ChartStrategyTesterPanel from "./ChartStrategyTesterPanel.js";
-import {
-  chartStrategyResultCache,
-  type ChartStrategyResultBundle,
-} from "./chartStrategyResultCache.js";
+import type { ChartStrategyResultBundle } from "./chartStrategyResultCache.js";
 import {
   createChartStrategyResultMarkerSource,
   type ChartStrategyResultMarkerSource,
@@ -251,6 +247,7 @@ export default function ChartStrategyTesterCellBridge({
   const handleOverlayRunChange = useCallback((run: StrategyOverlayRun | null) => {
     setOverlayRun(run ? { run, sessionKey: overlaySessionKeyRef.current } : null);
   }, []);
+  const strategyManager = useMarketDataWorkspaceResources()?.dataManager.strategy ?? null;
   const runOverlay = useStrategyRunOverlay({
     run: overlayRun?.sessionKey === overlaySessionKey ? overlayRun.run : null,
     interval: session.interval,
@@ -337,7 +334,8 @@ export default function ChartStrategyTesterCellBridge({
       setComparison(null);
       setSelectedExplanation(null);
     });
-    void chartStrategyResultCache.load(defaultBacktestApi, identity.runId, controller.signal)
+    if (!strategyManager) return undefined;
+    void strategyManager.loadResult(identity.runId, controller.signal)
       .then((bundle) => {
         if (cancelled) return;
         const runtime = runtimeFactory.get(workspaceId, cellId);
@@ -346,7 +344,7 @@ export default function ChartStrategyTesterCellBridge({
         setResult(bundle);
         runtime.setResultReference(bundle);
         if (CHART_RUN_COMPARE_ENABLED) {
-          void defaultBacktestApi.compareRecentRun(identity.runId, controller.signal)
+          void strategyManager.compareRecentRun(identity.runId, controller.signal)
             .then((value) => {
               if (!cancelled) setComparison(value);
             })
@@ -366,7 +364,7 @@ export default function ChartStrategyTesterCellBridge({
       cancelled = true;
       controller.abort();
     };
-  }, [cellId, resultMarkerSource, runtimeState.resultIdentity, runtimeState.status, workspaceId]);
+  }, [cellId, resultMarkerSource, runtimeState.resultIdentity, runtimeState.status, strategyManager, workspaceId]);
 
   // A completed, visible fixed-history result is drawn by the run overlay (host family).
   const hostOverlayRun = useMemo<StrategyOverlayRun | null>(() => (
@@ -418,8 +416,14 @@ export default function ChartStrategyTesterCellBridge({
     const controller = new AbortController();
     const untrack = runtime.trackAbortController(controller);
     setSourceDiagnostics([]);
-    const task = runChartStrategyBacktest({
-      api: defaultBacktestApi,
+    // Runs and their progress go through the workspace's strategy data manager (ADR-BACKTEST-015 P2c).
+    if (!strategyManager) {
+      untrack();
+      runtime.dispatch({ type: "REQUEST_FAILED", token,
+        error: { code: "STRATEGY_STREAM_UNAVAILABLE", message: t("chartTester.error.backend"), action: "retry" } });
+      return null;
+    }
+    const task = strategyManager.runChartStrategy({
       request,
       signal: controller.signal,
       materializeResolution,
@@ -532,7 +536,7 @@ export default function ChartStrategyTesterCellBridge({
     inFlightSubmittedRef.current = false;
     inFlightRef.current = task;
     return task;
-  }, [cellId, onAttachmentChange, workspaceId]);
+  }, [cellId, onAttachmentChange, strategyManager, workspaceId]);
 
   const cancelPendingAutoRun = useCallback(() => {
     cancelAutoDebounceRef.current?.();
@@ -691,19 +695,20 @@ export default function ChartStrategyTesterCellBridge({
     runtime.dispatch({ type: "REQUEST_STATUS", token, status: "RUNNING", activeRunId: runId });
     const controller = new AbortController();
     const untrack = runtime.trackAbortController(controller);
-    const task = pollBacktestRunToTerminal({
-      api: defaultBacktestApi,
-      runId,
-      signal: controller.signal,
-      onUpdate(run) {
-        runtime.dispatch({
-          type: "REQUEST_STATUS",
-          token,
-          status: run.state === "QUEUED" ? "QUEUED" : "RUNNING",
-          activeRunId: run.run_id,
-        });
-      },
-    }).then((run) => {
+    if (!strategyManager) {
+      untrack();
+      runtime.dispatch({ type: "REQUEST_FAILED", token,
+        error: { code: "STRATEGY_STREAM_UNAVAILABLE", message: t("chartTester.error.backend"), action: "retry" } });
+      return;
+    }
+    const task = strategyManager.followHostRun(runId, (run) => {
+      runtime.dispatch({
+        type: "REQUEST_STATUS",
+        token,
+        status: run.state === "QUEUED" ? "QUEUED" : "RUNNING",
+        activeRunId: run.run_id,
+      });
+    }, controller.signal).then((run) => {
       if (run.state === "COMPLETED") {
         const previousRunId = runtime.snapshot().resultIdentity?.runId ?? null;
         runtime.dispatch({
@@ -742,7 +747,7 @@ export default function ChartStrategyTesterCellBridge({
       if (inFlightRef.current === task) inFlightRef.current = null;
     });
     inFlightRef.current = task;
-  }, [cancelPendingAutoRun, cellId, workspaceId]);
+  }, [cancelPendingAutoRun, cellId, strategyManager, workspaceId]);
 
   const openResearch = useCallback((entryTask: "PRECISE_EXECUTION" | "PARAMETER_ROBUSTNESS") => {
     if (advancedOpening) return;
@@ -770,7 +775,8 @@ export default function ChartStrategyTesterCellBridge({
       setAdvancedOpening(false);
       return;
     }
-    void defaultBacktestApi.createResearchLaunchContext(payload).then((context) => {
+    if (!strategyManager) { setResultError(t("chartTester.error.backend")); setAdvancedOpening(false); return; }
+    void strategyManager.createResearchLaunchContext(payload).then((context) => {
       window.location.assign(backtestResearchContextHref(context.context_id, entryTask));
     }).catch((reason: unknown) => {
       setResultError(reason instanceof Error ? describeError(reason, reason.message) : String(reason));
@@ -785,6 +791,7 @@ export default function ChartStrategyTesterCellBridge({
     runtimeState.activeRunId,
     runtimeState.baselineRunId,
     session,
+    strategyManager,
     workspaceId,
   ]);
   const handleOpenAdvanced = useCallback(() => openResearch("PRECISE_EXECUTION"), [openResearch]);

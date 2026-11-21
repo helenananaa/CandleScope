@@ -37,6 +37,7 @@ const RULES = {
   replayAppNoLiveRuntimeImport: "replay-app-no-live-runtime-import",
   replayAppNoPrivateTradingImport: "replay-app-no-private-trading-import",
   marketChartPlatformNoProductUiImport: "market-chart-platform-no-product-ui-import",
+  strategyRunViaManager: "strategy-run-via-manager",
 };
 
 const allowlist = [];
@@ -126,6 +127,31 @@ function isDrawingPersistenceBoundaryPath(filePath) {
     || modulePath === "src/features/drawings/drawingPersistence"
     || modulePath === "src/features/drawings/useDrawingPersistenceLifecycle";
 }
+
+// ADR-BACKTEST-015 P2c: strategy runs are created, followed and read only through the
+// strategy data managers. These modules own the run transports; nothing else may
+// import them or address a run route.
+const strategyRunTransportOwners = [
+  "src/features/market-data/manager/",
+  "src/features/backtest/backtestApi.ts",
+  "src/features/backtest/backtestRunClient.ts",
+  "src/features/backtest/continuous/continuousApi.ts",
+  "src/features/backtest/native/nativeBacktestApi.ts",
+  // The legacy research page (backtest.html) keeps its own client until ADR-BACKTEST-015 P5
+  // replaces it with the shared research workspace; delete these two entries with it.
+  "src/features/backtest/research/useBacktestResearchRuntime.ts",
+  "src/features/backtest/research/ResearchStrategyPanel.tsx",
+];
+const strategyRunTransports = new Map([
+  ["src/features/backtest/backtestApi", new Set(["defaultBacktestApi", "createBacktestApi"])],
+  ["src/features/backtest/backtestRunClient", new Set(["pollBacktestRunToTerminal"])],
+  ["src/features/backtest/continuous/continuousApi", new Set(["defaultContinuousApi", "createContinuousApi"])],
+  ["src/features/backtest/native/nativeBacktestApi", new Set(["defaultNativeRunClient"])],
+]);
+// A strategy run route inside a string literal: a backtest family's runs (`/backtests/runs`,
+// `/native/runs`, `/external/runs`, `/continuous/runs`) or the run facade (`/strategy-runs`).
+// Replay training runs (`/replay/…/runs`) are a different resource.
+const strategyRunRoutePattern = /\/(?:backtests|native|external|continuous)\/runs(?:$|[/?])|\/strategy-runs\b/;
 
 function allowlistKey(entry) {
   return [entry.rule, entry.path, entry.target || ""].join("|");
@@ -279,6 +305,67 @@ function stripCommentsAndStrings(content) {
   }
 
   return output;
+}
+
+/** Each string or template literal outside comments, with the index of its opening quote. */
+function* stringLiterals(content) {
+  let state = "code";
+  let start = 0;
+  for (let index = 0; index < content.length; index += 1) {
+    const char = content[index];
+    const next = content[index + 1];
+    if (state === "line-comment") {
+      if (char === "\n") state = "code";
+      continue;
+    }
+    if (state === "block-comment") {
+      if (char === "*" && next === "/") { index += 1; state = "code"; }
+      continue;
+    }
+    if (state === "single" || state === "double" || state === "template") {
+      const quote = state === "single" ? "'" : state === "double" ? "\"" : "`";
+      if (char === "\\") { index += 1; continue; }
+      if (char === quote) {
+        yield { text: content.slice(start + 1, index), index: start };
+        state = "code";
+      }
+      continue;
+    }
+    if (char === "/" && next === "/") { index += 1; state = "line-comment"; continue; }
+    if (char === "/" && next === "*") { index += 1; state = "block-comment"; continue; }
+    if (char === "'" || char === "\"" || char === "`") {
+      start = index;
+      state = char === "'" ? "single" : char === "\"" ? "double" : "template";
+    }
+  }
+}
+
+function checkStrategyRunViaManager(absPath, filePath, content, projectDirectory) {
+  if (isTestSourcePath(filePath) || strategyRunTransportOwners.some((owner) => filePath.startsWith(owner))) return;
+  const namedImportPattern = /\bimport\s+(?!type\b)(?:[\w$]+\s*,\s*)?\{([^}]*)\}\s*from\s*["']([^"']+)["']/g;
+  let match;
+  while ((match = namedImportPattern.exec(content))) {
+    const target = normalizeModulePath(resolveImportSpecifier(absPath, match[2], projectDirectory));
+    const forbidden = strategyRunTransports.get(target);
+    if (!forbidden) continue;
+    for (const item of match[1].split(",")) {
+      const name = item.trim();
+      if (!name || /^type\b/.test(name)) continue;
+      const imported = name.split(/\s+as\s+/)[0].trim();
+      if (!forbidden.has(imported)) continue;
+      addViolation({
+        rule: RULES.strategyRunViaManager, filePath, line: lineNumberAt(content, match.index), target: `${target}#${imported}`,
+        message: `${imported} is a strategy run transport; go through the strategy data manager`,
+      });
+    }
+  }
+  for (const literal of stringLiterals(content)) {
+    if (!strategyRunRoutePattern.test(literal.text)) continue;
+    addViolation({
+      rule: RULES.strategyRunViaManager, filePath, line: lineNumberAt(content, literal.index),
+      message: `strategy run route "${literal.text.slice(0, 80)}" outside the run transports; go through the strategy data manager`,
+    });
+  }
 }
 
 function hasJsx(content) {
@@ -1017,6 +1104,7 @@ export function runArchitectureCheck({
     checkLiveAppReplayOwnership(filePath, content);
     checkFeatureRuntimeLegacyCompatFields(filePath, content);
     checkDrawingPublicRuntimeRawChartSeries(filePath, content);
+    checkStrategyRunViaManager(absPath, filePath, content, projectDirectory);
   }
   checkDrawingWorkerReachableImports(sourceModules, projectDirectory);
   checkDrawingHotPathReachableLocalStorageWrites(sourceModules, projectDirectory);

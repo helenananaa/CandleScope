@@ -5,7 +5,10 @@ import type { BacktestResultReplayCursor, BacktestResultReplayNoteDraft, Backtes
 import { isBacktestTerminalState } from "../../backtest/backtestRunClient.js";
 import { StrategyRunStreamError, type StrategyRunUpdate } from "../../backtest/backtestRunStream.js";
 import { ChartStrategyResultCache } from "../../backtest/chart-tester/chartStrategyResultCache.js";
-import { buildImportedExternalRunBody, runResearchBacktest, type ChartStrategyRunApi } from "../../backtest/chart-tester/chartStrategyRunRequest.js";
+import {
+  buildImportedExternalRunBody, runChartStrategyBacktest, runResearchBacktest, type ChartStrategyRunApi,
+} from "../../backtest/chart-tester/chartStrategyRunRequest.js";
+import { defaultNativeRunClient, type NativeExecutionMode, type NativeRun, type NativeRunClient } from "../../backtest/native/nativeBacktestApi.js";
 import { externalSnapshotRequest, matchingExternalConnections } from "../../backtest/research/externalProviderModel.js";
 import { defaultContinuousApi } from "../../backtest/continuous/continuousApi.js";
 import type { ContinuousApi } from "../../backtest/continuous/continuousTypes.js";
@@ -21,10 +24,11 @@ const RETAINED_RUN_RESULTS = 8;
 type ExternalInput = Omit<Parameters<typeof buildImportedExternalRunBody>[0], "api" | "signal">;
 type ExternalRunDraft = { readonly revision: StrategyRevisionRecord; readonly body: Record<string, unknown> };
 
-type ResearchRequest = Omit<Parameters<typeof runResearchBacktest>[0], "api" | "waitForTerminal" | "wait" | "pollIntervalMs">;
+type ResearchRequest = Omit<Parameters<typeof runResearchBacktest>[0], "api" | "waitForTerminal">;
 export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "streamRun" | "getReport" | "getChart" | "cancelRun" | "listRuns" | "compareRuns"> & Pick<BacktestApiClient, "getResultReplay" | "saveResultReplayNote" | "observeStrategyPreparation">
   & Partial<Pick<BacktestApiClient, "capabilities" | "listStrategyRevisions" | "externalProviders"
-    | "getStrategyRun" | "getStrategyRunResult" | "cancelStrategyRun" | "strategyRunCapabilities" | "watchStrategyRun">>;
+    | "getStrategyRun" | "getStrategyRunResult" | "cancelStrategyRun" | "strategyRunCapabilities" | "watchStrategyRun"
+    | "compareRecentRun" | "createResearchLaunchContext" | "getSelectedVersion">>;
 
 /** Owns fixed-history operations and immutable results independently of live
  * chart stores. Releasing a consumer never cancels a durable shared run. */
@@ -41,7 +45,8 @@ export class StrategyDataManager {
 
   readonly continuous: ContinuousStrategyDataManager;
 
-  constructor(private readonly api: StrategyDataApi = defaultBacktestApi, continuousApi: ContinuousApi = defaultContinuousApi) {
+  constructor(private readonly api: StrategyDataApi = defaultBacktestApi, continuousApi: ContinuousApi = defaultContinuousApi,
+    private readonly nativeRuns: NativeRunClient = defaultNativeRunClient) {
     this.continuous = new ContinuousStrategyDataManager(continuousApi, (signal, action) => this.operation(signal, action));
   }
 
@@ -208,6 +213,118 @@ export class StrategyDataManager {
       } finally {
         this.streams -= 1;
       }
+    });
+  }
+
+  /**
+   * Follow a host run to its end through the run facade's status stream. Updates carry the
+   * run's header with its new state; the full record is read once at the end and returned
+   * whatever the outcome (a failed run is a result, not an error).
+   */
+  followHostRun(runId: string, onUpdate?: (run: BacktestRunRecord) => void, signal?: AbortSignal): Promise<BacktestRunRecord> {
+    return this.operation(signal, async (owned) => {
+      let latest = await this.api.getRun(runId, owned);
+      if (isBacktestTerminalState(latest.state)) return latest;
+      if (!this.api.watchStrategyRun) unavailable();
+      this.streams += 1;
+      try {
+        await this.api.watchStrategyRun(runId, owned, (status) => {
+          if (owned.aborted || this.closed || status.terminal || status.source_state === latest.state) return;
+          latest = { ...latest, state: status.source_state as BacktestRunRecord["state"] };
+          onUpdate?.(latest);
+        });
+      } finally {
+        this.streams -= 1;
+      }
+      const record = await this.api.getRun(runId, owned);
+      if (!isBacktestTerminalState(record.state)) {
+        throw new StrategyRunStreamError("RESULT_IDENTITY_MISMATCH", "The finished run's record is not terminal");
+      }
+      return record;
+    });
+  }
+
+  /** Run the chart's strategy on the chart's history; the run is followed by stream, not polled. */
+  runChartStrategy(options: Omit<Parameters<typeof runChartStrategyBacktest>[0], "api" | "waitForTerminal">) {
+    return this.operation(options.signal, (signal) => runChartStrategyBacktest({
+      ...options, api: this.api, signal,
+      waitForTerminal: (runId, _signal, onUpdate) => this.followHostRun(runId, onUpdate, signal),
+    }));
+  }
+
+  compareRecentRun(runId: string, signal?: AbortSignal) {
+    return this.operation(signal, (owned) => {
+      if (!this.api.compareRecentRun) unavailable();
+      return this.api.compareRecentRun(runId, owned);
+    });
+  }
+
+  /** The strategy version a research run selected, for returning it to a chart. */
+  loadSelectedRunVersion(runId: string, signal?: AbortSignal) {
+    return this.operation(signal, (owned) => {
+      if (!this.api.getSelectedVersion) unavailable();
+      return this.api.getSelectedVersion(runId, owned);
+    });
+  }
+
+  createResearchLaunchContext(payload: Parameters<BacktestApiClient["createResearchLaunchContext"]>[0]) {
+    return this.operation(undefined, () => {
+      if (!this.api.createResearchLaunchContext) unavailable();
+      return this.api.createResearchLaunchContext(payload);
+    });
+  }
+
+  // -- Native and CandleScope-matched runs ----------------------------------
+
+  createNativeRun(mode: NativeExecutionMode, body: Record<string, unknown>, idempotencyKey: string, signal?: AbortSignal): Promise<NativeRun> {
+    return this.operation(signal, (owned) => this.nativeRuns.create(mode, body, idempotencyKey, owned));
+  }
+
+  loadNativeRun(mode: NativeExecutionMode, runId: string, signal?: AbortSignal): Promise<NativeRun> {
+    return this.operation(signal, (owned) => this.nativeRuns.get(mode, runId, owned));
+  }
+
+  /** The recent runs of one mode, plus any `include` ids the list no longer holds (unreadable ones are skipped). */
+  listNativeRuns(mode: NativeExecutionMode, include: Iterable<string> = [], signal?: AbortSignal): Promise<NativeRun[]> {
+    return this.operation(signal, async (owned) => {
+      const runs = await this.nativeRuns.list(mode, owned);
+      const listed = new Set(runs.map((run) => run.run_id));
+      const missing = [...new Set(include)].filter((runId) => !listed.has(runId));
+      const restored = await Promise.all(missing.map((runId) => this.nativeRuns.get(mode, runId, owned).catch(() => null)));
+      return [...runs, ...restored.filter((run): run is NativeRun => run !== null)];
+    });
+  }
+
+  cancelNativeRun(mode: NativeExecutionMode, runId: string, signal?: AbortSignal): Promise<NativeRun> {
+    return this.operation(signal, (owned) => this.nativeRuns.cancel(mode, runId, owned));
+  }
+
+  /**
+   * Follow a native run through the run facade's stream (no polling). Each committed state
+   * change updates its header; the finished record (result or error) is read once.
+   */
+  followNativeRun(current: NativeRun, onRun: (run: NativeRun) => void, signal?: AbortSignal): Promise<NativeRun> {
+    return this.operation(signal, async (owned) => {
+      let latest = current;
+      const mode: NativeExecutionMode = current.execution_mode === "CANDLESCOPE" ? "CANDLESCOPE" : "NATIVE";
+      if (!this.api.watchStrategyRun) unavailable();
+      this.streams += 1;
+      let terminal: StrategyRunStatus;
+      try {
+        terminal = await this.api.watchStrategyRun(current.run_id, owned, (status) => {
+          if (owned.aborted || this.closed || status.terminal || status.source_state === latest.state) return;
+          latest = { ...latest, state: status.source_state };
+          onRun(latest);
+        });
+      } finally {
+        this.streams -= 1;
+      }
+      const record = await this.nativeRuns.get(mode, current.run_id, owned);
+      if (record.run_id !== current.run_id || record.state !== terminal.source_state) {
+        throw new StrategyRunStreamError("RESULT_IDENTITY_MISMATCH", "Native run record differs from its finished status");
+      }
+      onRun(record);
+      return record;
     });
   }
 
