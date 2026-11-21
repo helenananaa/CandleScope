@@ -5,7 +5,7 @@ import { useMarketDataWorkspaceResources } from "../../market-data/marketDataWor
 import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
 import type { StrategyDataManager } from "../../market-data/manager/strategyDataManager.js";
 import type { RunResult, RunResultFamily } from "./runResult.js";
-import type { StrategyRunStatus } from "./strategyRun.js";
+import type { StrategyRunProgress, StrategyRunStatus } from "./strategyRun.js";
 import { StrategyRunStreamError } from "../backtestRunStream.js";
 import {
   buildStrategyOverlay, StrategyOverlaySource, type StrategyMarkerEvidence, type StrategyOverlayLabels,
@@ -17,6 +17,15 @@ export interface StrategyOverlayRun {
   runId: string;
   /** A FOLLOW run (P4b): the fixed run it keeps current, whose views it takes over. */
   followsRunId?: string;
+}
+
+/** The latest status frame of a shown live run (forward or FOLLOW): its own phase and how far it applied bars. */
+export interface ShownRunLive {
+  run: StrategyOverlayRun;
+  /** The family's own phase, for example LIVE or WAITING_DATA for a FOLLOW run. */
+  sourceState: string;
+  /** For a FOLLOW run, the close time of its newest applied bar; null before it applied one. */
+  throughMs: number | null;
 }
 
 /** A loaded run result together with the run it belongs to, for views that show it. */
@@ -55,7 +64,8 @@ export function followForwardRun(manager: Pick<StrategyDataManager, "loadRunResu
  */
 export async function followLiveRun(manager: Pick<StrategyDataManager, "loadRunResult" | "watchRun">,
   family: "continuous" | "follow", runId: string, signal: AbortSignal, onResult: (result: RunResult) => void,
-  onError: (failure: unknown) => void): Promise<void> {
+  onError: (failure: unknown) => void,
+  onStatus?: (status: StrategyRunStatus, progress: StrategyRunProgress | null) => void): Promise<void> {
   let loading: Promise<void> | null = null;
   let again = false;
   const refresh = (): Promise<void> => {
@@ -69,12 +79,13 @@ export async function followLiveRun(manager: Pick<StrategyDataManager, "loadRunR
     })().finally(() => { loading = null; });
     return loading;
   };
-  const onStatus = (status: StrategyRunStatus) => {
+  const onFrame = (status: StrategyRunStatus, progress: StrategyRunProgress | null) => {
+    if (!signal.aborted) onStatus?.(status, progress);
     if (status.result_available && !status.terminal) refresh().catch(onError);
   };
   for (;;) {
     try {
-      const stopped = await manager.watchRun(runId, onStatus, signal);
+      const stopped = await manager.watchRun(runId, onFrame, signal);
       if (stopped.result_available) await refresh();
       return;
     } catch (failure) {
@@ -112,7 +123,7 @@ export function useStrategyRunOverlay({ run, interval, series, onActivate, manag
   manager?: StrategyDataManager | null;
   /** A marker with recorded evidence was clicked. */
   onActivate?: (evidence: StrategyMarkerEvidence) => void;
-}): { source: StrategyOverlaySource; error: string | null; shown: ShownRunResult | null } {
+}): { source: StrategyOverlaySource; error: string | null; shown: ShownRunResult | null; live: ShownRunLive | null } {
   const locale = useLocale();
   const workspaceManager = useMarketDataWorkspaceResources()?.dataManager.strategy;
   const manager = explicitManager ?? workspaceManager;
@@ -121,6 +132,7 @@ export function useStrategyRunOverlay({ run, interval, series, onActivate, manag
   const source = useMemo(() => new StrategyOverlaySource((evidence) => activate.current?.(evidence)), []);
   const [error, setError] = useState<string | null>(null);
   const [shown, setShown] = useState<ShownRunResult | null>(null);
+  const [live, setLive] = useState<ShownRunLive | null>(null);
   useEffect(() => () => source.dispose(), [source]);
   useEffect(() => { if (series !== undefined) source.setSeries(series); }, [series, source]);
   const family = run?.family ?? null;
@@ -130,6 +142,7 @@ export function useStrategyRunOverlay({ run, interval, series, onActivate, manag
     source.setOverlay(null, null);
     setError(null);
     setShown(null);
+    setLive(null);
     if (!manager || family === null || runId === null) return;
     const controller = new AbortController();
     const owner = `run:${family}:${runId}`;
@@ -145,9 +158,15 @@ export function useStrategyRunOverlay({ run, interval, series, onActivate, manag
       setError(failure instanceof Error ? failure.message : String(failure));
     };
     if (family === "continuous" || family === "follow") {
-      void followLiveRun(manager, family, runId, controller.signal, draw, fail).catch(fail);
+      const report = (status: StrategyRunStatus, progress: StrategyRunProgress | null) => {
+        if (controller.signal.aborted) return;
+        // A FOLLOW run reports the close time of its newest applied bar as its progress time.
+        const throughMs = family === "follow" && progress && progress.created_at_ms > 0 ? progress.created_at_ms : null;
+        setLive({ run: { family, runId, ...(followsRunId ? { followsRunId } : {}) }, sourceState: status.source_state, throughMs });
+      };
+      void followLiveRun(manager, family, runId, controller.signal, draw, fail, report).catch(fail);
     } else manager.loadRunResult(family, runId, controller.signal).then(draw).catch(fail);
     return () => controller.abort();
   }, [family, followsRunId, interval, locale, manager, runId, source]);
-  return { source, error, shown };
+  return { source, error, shown, live };
 }

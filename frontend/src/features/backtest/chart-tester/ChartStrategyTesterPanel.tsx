@@ -1,5 +1,5 @@
 import { strategyResearchModeHref } from "../research/backtestResearchModes.js";
-import { Button, Checkbox, Disclosure, EmptyState, Field, IconButton, InlineAlert, Menu, Select, Tabs, buttonClassName, tabId, tabPanelId } from "../../../components/ui/index.js";
+import { Button, Checkbox, Disclosure, EmptyState, Field, IconButton, InlineAlert, Menu, SegmentedControl, Select, Tabs, buttonClassName, tabId, tabPanelId } from "../../../components/ui/index.js";
 import { useNativeAvailability, resolveAvailableStrategyMode } from "../native/useNativeAvailability.js";
 import { resolveStrategyTesterMode } from "./chartStrategyMode.js";
 import { useControlCommands } from "../../app-control/useControlCommands.js";
@@ -103,7 +103,8 @@ const NativeStrategyPanel = lazy(() => import("../native/NativeStrategyPanel.js"
 const ContinuousStrategyPanel = lazy(() => import("../continuous/ContinuousStrategyPanel.js"));
 import { overlayRunForNative, shownOverlayRun, type ShownRunResult, type StrategyOverlayRun } from "../runResult/useStrategyRunOverlay.js";
 import { RunResultSummary, RunResultTradeList } from "../runResult/RunResultViews.js";
-import { CHART_RUN_RESULT_VIEWS_ENABLED } from "./chartStrategyTesterFeature.js";
+import { CHART_RUN_RESULT_VIEWS_ENABLED, CHART_STRATEGY_FOLLOW_ENABLED } from "./chartStrategyTesterFeature.js";
+import { chartFollowStatusLabel, chartFollowStatusTone, type ChartFollowStatus } from "./chartStrategyFollowStatus.js";
 import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
 import type { ContinuousMode } from "../continuous/continuousTypes.js";
 
@@ -224,6 +225,13 @@ export interface ChartStrategyTesterPanelProps {
   candleScopeOverlayRun?: StrategyOverlayRun | null;
   /** The run result the bridge loaded for the overlay; shared result views read it (behind a flag). */
   overlayResult?: ShownRunResult | null;
+  /**
+   * ADR-BACKTEST-015 P4c: the chart keeps its strategy current (FOLLOW) and forward tracking is opened
+   * explicitly, instead of choosing among historical, history + live and live only. Off: the run-mode select.
+   */
+  liveFollow?: boolean;
+  /** What the live run keeping the shown result current is doing, when the chart follows one. */
+  followStatus?: ChartFollowStatus | null;
   active?: boolean;
   onReviewTrade?(trade: StrategyTradeFocus | null): void;
   onPrepareData(): void;
@@ -293,7 +301,7 @@ export default function ChartStrategyTesterPanel(props: ChartStrategyTesterPanel
               switchMode("CANDLESCOPE");
             });
           }}
-          strategies={strategies} active={props.active !== false && mode === "NATIVE"} docked
+          strategies={strategies} active={props.active !== false && mode === "NATIVE"} shownOnChart={mode === "NATIVE"} docked
           {...(onOverlayRunChange ? { onRunChange: handleNativeRunChange } : {})} />
       </Suspense>
     </StrategyDockPane>}
@@ -342,6 +350,8 @@ export function CandleScopeStrategyTesterPanel({
   onOpenBatchStudy,
   onOpenWorkspace,
   overlayResult = null,
+  liveFollow = CHART_STRATEGY_FOLLOW_ENABLED,
+  followStatus = null,
 }: ChartStrategyTesterPanelProps) {
   const locale = useLocale();
   // ADR-BACKTEST-015 P1c: the shared views show the host run only when the loaded result is this run's,
@@ -356,6 +366,11 @@ export function CandleScopeStrategyTesterPanel({
   const [runModePreference, setRunModePreference] = useState(() => loadChartStrategyPanelPreferences(cellScope));
   const runMode = resolveChartStrategyRunMode(runModePreference, attachment);
   useLayoutEffect(() => { onRunModeChange?.(runMode); }, [onRunModeChange, runMode]);
+  const chooseRunMode = (next: ContinuousMode) => {
+    setRunModePreference((current) => ({ ...current, runMode: next,
+      ...(attachment?.strategyDraftId ? { runModeDraftId: attachment.strategyDraftId } : {}),
+      ...(next !== "HISTORY" ? { forwardStart: next } : {}) }));
+  };
   const [height, setHeight] = useState(() => loadChartStrategyPanelPreferences(cellScope).height);
   const [activeTab, setActiveTab] = useState<PanelTab>(() => (
     attachment ? loadChartStrategyPanelPreferences(cellScope).activeTab : "script"
@@ -701,6 +716,7 @@ export function CandleScopeStrategyTesterPanel({
       command("openAdvanced", "Open the existing advanced-research workflow.", empty, () => onOpenAdvanced?.(), { available: () => !!onOpenAdvanced }),
       command("openBatchStudy", "Open the existing batch study workflow.", empty, () => onOpenBatchStudy?.(), { available: () => !!onOpenBatchStudy }),
       command("openWorkspace", "Save the current code and open an independent research experiment.", empty, () => openWorkspace(), { available: () => runMode === "HISTORY" && !!onOpenWorkspace && !!activeDraft && active }),
+      command("forward", "Open forward tracking from a past date (HISTORY_LIVE) or from now (LIVE_ONLY), or go back to the chart (null).", object({ start: nullable(choice(["HISTORY_LIVE", "LIVE_ONLY"])) }), ({ start }) => chooseRunMode(start ?? "HISTORY"), { available: () => liveFollow && !!activeDraft && active }),
       command("close", "Close the host strategy panel.", empty, onClose),
     ] }));
   const runLabel = pendingDataMatchesSource
@@ -783,7 +799,7 @@ export function CandleScopeStrategyTesterPanel({
         onPointerDown={beginResize}
         onKeyDown={handleResizeKey}
       />
-      <div className="continuous-mode">
+      {!liveFollow && <div className="continuous-mode">
         <Field label={t("continuous.mode")}>
           <Select size="sm" value={runMode} onChange={(event) => {
             const next = event.target.value as ContinuousMode;
@@ -793,7 +809,14 @@ export function CandleScopeStrategyTesterPanel({
             <option value="HISTORY">{t("continuous.history")}</option><option value="HISTORY_LIVE">{t("continuous.historyLive")}</option><option value="LIVE_ONLY">{t("continuous.liveOnly")}</option>
           </Select>
         </Field>
-      </div>
+      </div>}
+      {liveFollow && runMode !== "HISTORY" && currentAttachment && <div className="continuous-mode strategy-forward-bar" data-testid="strategy-forward-bar">
+        <strong>{t("strategyForward.title")}</strong>
+        <SegmentedControl size="sm" label={t("strategyForward.start")} value={runMode}
+          options={[{ value: "HISTORY_LIVE", label: t("strategyForward.fromDate") }, { value: "LIVE_ONLY", label: t("strategyForward.fromNow") }]}
+          onChange={(value) => chooseRunMode(value)} />
+        <Button size="sm" variant="ghost" onClick={() => chooseRunMode("HISTORY")}>{t("strategyForward.back")}</Button>
+      </div>}
       {runMode === "HISTORY" || !currentAttachment ? <>
       {currentAttachment && <StrategyDockSlot name="tabs">
         <Tabs id={tabsId} className="strategy-dock-view-tabs" label={t("chartTester.tabsAria")} value={activeTab} onChange={setActiveTab}
@@ -808,6 +831,12 @@ export function CandleScopeStrategyTesterPanel({
               <span><small>{t("chartTester.result.maxDrawdown")}</small><b>{chartStrategyMaxDrawdown(result.report)}</b></span>
               <span><small>{t("chartTester.result.winRate")}</small><b>{chartStrategyWinRate(result.report.metrics.win_rate, locale)}</b></span>
             </button>
+          )}
+          {result && followStatus && (
+            <span role="status" className="strategy-run-status" data-status={chartFollowStatusTone(followStatus.state)}
+              data-follow-state={followStatus.state} data-testid="chart-strategy-follow-status">
+              <i aria-hidden="true" />{chartFollowStatusLabel(followStatus)}
+            </span>
           )}
           {saveVisible && <span className={`chart-strategy-autosave state-${saveState.toLowerCase()}`}>{saveLabel}</span>}
           {saveState === "ERROR" && (
@@ -848,6 +877,9 @@ export function CandleScopeStrategyTesterPanel({
                   ...(onOpenWorkspace ? [{ id: "workspace", label: t("ux.openWorkspace"), disabled: !activeDraft || !active,
                     onSelect: () => { void openWorkspace().catch(() => undefined); } }] : []),
                   ...(onOpenAdvanced ? [{ id: "advanced", label: t("chartTester.openAdvanced"), onSelect: onOpenAdvanced }] : []),
+                  // Forward tracking keeps its own record from its start; the chart itself follows live bars.
+                  ...(liveFollow ? [{ id: "forward", label: t("strategyForward.title"), disabled: activeDraft?.language !== "python" || !active,
+                    onSelect: () => chooseRunMode(runModePreference.forwardStart ?? "HISTORY_LIVE") }] : []),
                   { id: "focus", label: t("chartTester.focusMode"), ...(focusMode ? { icon: <Icon name="check" size={13} /> } : {}),
                     onSelect: () => setFocusMode((focused) => !focused) },
                 ]} />

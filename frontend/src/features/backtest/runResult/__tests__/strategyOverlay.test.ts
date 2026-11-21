@@ -238,3 +238,27 @@ test("a forward run is redrawn once per committed revision, reconnects on a new 
   assert.deepEqual(drawn, [1, 2, 3], "first read, one coalesced read, then the stopped account");
   assert.deepEqual(failures, []);
 });
+
+test("a live run's status frames reach the cell with their progress, before each result read", async () => {
+  const { followLiveRun } = await import("../useStrategyRunOverlay.js");
+  type Status = Parameters<Parameters<typeof followLiveRun>[0]["watchRun"]>[1] extends ((s: infer S, ...rest: never[]) => void) | undefined ? S : never;
+  const status = (state: string, sourceState: string, terminal = false) => ({ run_id: "fl_1", family: "follow", authority: "HOST",
+    clock_policy: "FOLLOW", fidelity: "BAR_APPROX", language: "python", state, source_state: sourceState, generation: 1, error: null,
+    terminal, result_available: !terminal }) as unknown as Status;
+  const events: string[] = [];
+  const manager = {
+    async loadRunResult() { events.push("read"); return {} as never; },
+    async watchRun(_runId: string, onStatus?: (value: Status, progress: { sequence: number; created_at_ms: number } | null) => void) {
+      onStatus?.(status("RUNNING", "LIVE"), { sequence: 3, created_at_ms: 1_000 });
+      onStatus?.(status("BLOCKED", "WAITING_DATA"), { sequence: 3, created_at_ms: 1_000 });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      return status("CANCELLED", "STOPPED", true);
+    },
+  };
+  await followLiveRun(manager as never, "follow", "fl_1", new AbortController().signal, () => undefined, () => undefined,
+    (value, progress) => events.push(`${value.source_state}@${progress?.created_at_ms ?? "-"}`));
+  assert.equal(events[0], "LIVE@1000", "the frame is reported before its result is read");
+  assert.deepEqual(events.filter((event) => event !== "read"), ["LIVE@1000", "WAITING_DATA@1000"]);
+  assert.ok(events.includes("read"), "each frame with a result still reads it");
+});
+

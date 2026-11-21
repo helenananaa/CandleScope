@@ -243,3 +243,64 @@ test("a selected research version defaults to history plus live in the target ch
   assert.equal(resolveChartStrategyRunMode({ runModeDraftId: "returned-version" }, selected), "HISTORY");
   assert.equal(resolveChartStrategyRunMode(otherDraftPreference, { ...selected, initialization }), "LIVE_ONLY");
 });
+
+function panelProps(cellScope: string, attached: typeof attachment | null) {
+  return {
+    cellScope, session, attachment: attached,
+    draftStore: new StrategyDraftStore(createMemoryStrategyDraftAdapter()),
+    onAttachmentChange: () => undefined, onEntryStateChange: () => undefined, onRunRequest: () => undefined,
+    runState: createChartStrategyTesterState(attached ? { session, attachment: attached, draftContentRevision: 1 } : null, cellScope),
+    resolution: null, sourceDiagnostics: [], pendingDataDraftRevision: null,
+    onPrepareData: () => undefined, onStopObserving: () => undefined, onResumeObserving: () => undefined,
+    onSourceDirty: () => undefined, onClose: () => undefined,
+  };
+}
+
+function withStorage<T>(run: (values: Map<string, string>) => T): T {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  const values = new Map<string, string>();
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: {
+    getItem(key: string) { return values.get(key) ?? null; },
+    setItem(key: string, value: string) { values.set(key, value); },
+  } });
+  try { return run(values); } finally {
+    if (descriptor) Object.defineProperty(globalThis, "localStorage", descriptor);
+    else Reflect.deleteProperty(globalThis, "localStorage");
+  }
+}
+
+test("with live follow the chart offers no run modes: it follows live bars, and forward tracking is opened on purpose", () => {
+  withStorage(() => {
+    const empty = renderToStaticMarkup(<ChartStrategyTesterPanel {...panelProps("workspace\u0000cell-1", null)} liveFollow />);
+    for (const key of ["continuous.mode", "continuous.history", "continuous.historyLive", "continuous.liveOnly"] as const) {
+      assert.ok(!empty.includes(t(key)), `${key} is not offered`);
+    }
+    const chart = renderToStaticMarkup(<ChartStrategyTesterPanel {...panelProps("workspace\u0000cell-1", attachment)} liveFollow />);
+    assert.doesNotMatch(chart, /data-testid="strategy-forward-bar"/, "the chart view is the strategy on the chart");
+    assert.doesNotMatch(chart, /<select/);
+  });
+});
+
+test("forward tracking says where it starts and leads back to the chart", () => {
+  withStorage(() => {
+    const cellScope = "workspace\u0000cell-2";
+    saveChartStrategyPanelPreferences(cellScope, { height: 400, activeTab: "script", runMode: "LIVE_ONLY", runModeDraftId: attachment.strategyDraftId });
+    const html = renderToStaticMarkup(<ChartStrategyTesterPanel {...panelProps(cellScope, attachment)} liveFollow />);
+    assert.match(html, /data-testid="strategy-forward-bar"/);
+    for (const key of ["strategyForward.title", "strategyForward.fromDate", "strategyForward.fromNow", "strategyForward.back"] as const) {
+      assert.ok(html.includes(t(key)), key);
+    }
+    assert.match(html, new RegExp(`aria-checked="true"[^>]*>${t("strategyForward.fromNow")}`), "the saved start is selected");
+    assert.ok(!html.includes(t("continuous.mode")));
+  });
+});
+
+test("the forward start a chart last used is remembered with its panel", () => {
+  const values = new Map<string, string>();
+  const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); } };
+  saveChartStrategyPanelPreferences("workspace\u0000cell-3", { height: 400, activeTab: "overview", forwardStart: "LIVE_ONLY" }, storage);
+  assert.equal(loadChartStrategyPanelPreferences("workspace\u0000cell-3", storage).forwardStart, "LIVE_ONLY");
+  values.set([...values.keys()][0]!, JSON.stringify({ height: 400, activeTab: "overview", forwardStart: "HISTORY" }));
+  assert.equal(loadChartStrategyPanelPreferences("workspace\u0000cell-3", storage).forwardStart, undefined, "only a forward start is kept");
+});
+

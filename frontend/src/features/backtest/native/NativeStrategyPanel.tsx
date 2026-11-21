@@ -16,6 +16,7 @@ import { CHART_STRATEGY_FOLLOW_ENABLED } from "../chart-tester/chartStrategyTest
 import {
   fixedIntervalMs, followInputKey, latestClosedBarOpenMs, ScriptFollowController, type FollowRange, type ScriptFollowBase,
 } from "../follow/scriptFollow.js";
+import { chartFollowStatusLabel, chartFollowStatusTone, type ChartFollowStatus } from "../chart-tester/chartStrategyFollowStatus.js";
 import type { StrategyDataManager } from "../../market-data/manager/strategyDataManager.js";
 import "./nativeStrategy.css";
 import { NativeAdvancedInputs } from "./NativeAdvancedInputs.js";
@@ -58,6 +59,8 @@ type NativeStrategyPanelProps = Pick<ChartStrategyTesterPanelProps, "session" | 
   onStatusChange?: (status: NativeFeedbackStatus) => void;
   externalReport?: boolean;
   docked?: boolean;
+  /** The chart shows this panel's runs (the dock's other strategy may be shown instead); only then does it follow live bars. */
+  shownOnChart?: boolean;
   onSelectPython?(): void;
   /** Supplied by the chart dock, which shows the strategy list in its header. */
   strategies?: NativeStrategyController;
@@ -318,6 +321,8 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   // ADR-BACKTEST-015 P4a: after the user's run completes on the chart, each newer closed bar rebuilds its prefix.
   const pendingFollow = useRef<{ runId: string; base: ScriptFollowBase<NativeRun> } | null>(null);
   const receiveFollowRun = useRef<(value: NativeRun) => void>(() => undefined);
+  // What the panel says about following (P4c): the end the shown rebuild covers, and whether the last rebuild failed.
+  const [followed, setFollowed] = useState<{ endMs: number; failed: boolean } | null>(null);
   useLayoutEffect(() => {
     receiveFollowRun.current = (value: NativeRun) => {
       // A FOLLOW result moves the cell's latest-run pointer; the run history keeps the user's own runs.
@@ -326,17 +331,26 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       setRun(value); setBusy(false);
     };
   });
-  const [follow] = useState(() => new ScriptFollowController<NativeRun>((value) => receiveFollowRun.current(value),
-    (failure) => setError(String(failure))));
+  const [follow] = useState(() => new ScriptFollowController<NativeRun>((value, range) => {
+    setFollowed({ endMs: range.end_time_ms, failed: false });
+    receiveFollowRun.current(value);
+  }, (failure) => {
+    setFollowed((current) => current && { ...current, failed: true });
+    setError(String(failure));
+  }));
   useEffect(() => { follow.resume(); return () => follow.dispose(); }, [follow]);
-  useEffect(() => { follow.setBase(null); pendingFollow.current = null; }, [follow, runContext]);
+  useEffect(() => { follow.setBase(null); pendingFollow.current = null; setFollowed(null); }, [follow, runContext]);
   useEffect(() => {
     const pending = pendingFollow.current;
     if (!pending || run?.run_id !== pending.runId || !nativeTerminal(run.state)) return;
     pendingFollow.current = null;
-    if (run.state === "COMPLETED") follow.setBase(pending.base);
+    if (run.state === "COMPLETED") {
+      follow.setBase(pending.base);
+      setFollowed({ endMs: pending.base.coveredEndMs, failed: false });
+    }
   }, [follow, run]);
-  const followWindow = CHART_STRATEGY_FOLLOW_ENABLED && props.docked ? props.continuousMarketWindow ?? null : null;
+  const followWindow = CHART_STRATEGY_FOLLOW_ENABLED && props.docked && props.shownOnChart !== false
+    ? props.continuousMarketWindow ?? null : null;
   const followIntervalMs = fixedIntervalMs(props.session.interval);
   const subscribeFollowWindow = useCallback((change: () => void) => {
     const release = followWindow?.subscribe(change);
@@ -345,13 +359,20 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   const closedBar = useSyncExternalStore(subscribeFollowWindow, () => followWindow && !followWindow.rightTruncated
     && (followWindow.intervalSeconds ?? 0) * 1000 === followIntervalMs ? latestClosedBarOpenMs(followWindow) : null, () => null);
   useEffect(() => { follow.setClosedBar(closedBar); }, [follow, closedBar]);
+  // One bar behind is the rebuild in flight for the bar that just closed; more is the first catch-up after the run.
+  const followBehind = closedBar !== null && followIntervalMs !== null && followed !== null
+    && closedBar - (followed.endMs + 1) >= followIntervalMs;
+  const followStatus: ChartFollowStatus | null = followWindow && followed && followIntervalMs !== null
+    ? followed.failed ? { state: "stopped", latestBarMs: followed.endMs + 1 - followIntervalMs }
+      : followBehind ? { state: "connecting", latestBarMs: null }
+        : { state: "live", latestBarMs: followed.endMs + 1 - followIntervalMs } : null;
   const start = async (prepare = false) => {
     // A restored uploaded input requires an explicit re-selection or clearing,
     // including the automatic preparation entry point.
     if (mode === "CANDLESCOPE" && fidelity !== "BAR_APPROX" && executionDataState !== "ready") return;
     if (accountError) return;
     // A new run replaces what the chart follows.
-    follow.setBase(null); pendingFollow.current = null;
+    follow.setBase(null); pendingFollow.current = null; setFollowed(null);
     pendingOverview.current = !run?.result && !previousRun?.result ? navigationRevision.current : null;
     if (run?.result) setPreviousRun(run);
     setHistoricalRun(null); setBusy(true); setError(""); setRun(null); setPreparation(null); setResolution(null);
@@ -587,7 +608,9 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         <span><small>{t("chartTester.result.maxDrawdown")}</small><b>{percent(summary.maxDrawdownPercent)}</b></span>
         <span><small>{t("report.winRate")}</small><b>{percent(summary.winRate)}</b></span>
       </button>}
-      {status !== "idle" && <span role="status" className="strategy-run-status" data-status={status}><i aria-hidden="true" />{t(`strategyReview.status.${status}`)}</span>}
+      {status !== "idle" && !(followStatus && !historicalRun && status === "completed") && <span role="status" className="strategy-run-status" data-status={status}><i aria-hidden="true" />{t(`strategyReview.status.${status}`)}</span>}
+      {followStatus && !historicalRun && <span role="status" className="strategy-run-status" data-status={chartFollowStatusTone(followStatus.state)}
+        data-follow-state={followStatus.state} data-testid="native-strategy-follow-status"><i aria-hidden="true" />{chartFollowStatusLabel(followStatus)}</span>}
       {run && !nativeTerminal(run.state) && <Button size="sm" variant="ghost" icon={<Icon name="stop" size={11} filled />}
         onClick={() => void requireStrategyManager().cancelNativeRun(mode, run.run_id).then(receiveRun).catch((reason) => setError(String(reason)))}>
         {t("native.cancel")}</Button>}

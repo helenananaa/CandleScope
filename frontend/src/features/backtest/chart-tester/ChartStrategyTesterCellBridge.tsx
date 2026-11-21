@@ -50,6 +50,7 @@ import {
   CHART_TRADE_EXPLANATION_ENABLED,
 } from "./chartStrategyTesterFeature.js";
 import { fixedIntervalMs } from "../follow/scriptFollow.js";
+import { chartFollowStatus } from "./chartStrategyFollowStatus.js";
 import { resolveKlineSeriesIdentity } from "../../market-data/klineSeriesIdentity.js";
 import type { TradeExplanationSelection } from "./ChartStrategyResultViews.js";
 import type { StrategyDraftRecord } from "./StrategyDraftStore.js";
@@ -334,10 +335,15 @@ export default function ChartStrategyTesterCellBridge({
       return false;
     }
   }, [session.exchange, session.interval, session.marketType, session.symbol, shownRunConfig]);
+  // Only while the chart shows this result: a cell showing one of its Pine strategies lets the Python run go.
+  const shownOverlay = overlayRun?.sessionKey === overlaySessionKey ? overlayRun.run : null;
+  const chartShowsHostResult = shownOverlay?.family === "host" || shownOverlay?.family === "follow";
   const followableRunId = CHART_STRATEGY_FOLLOW_ENABLED && runMode === "HISTORY" && attachment?.language === "python"
-    && shownRunOnChart && fixedIntervalMs(session.interval) !== null ? shownFixedRunId : null;
+    && shownRunOnChart && chartShowsHostResult && fixedIntervalMs(session.interval) !== null ? shownFixedRunId : null;
   const followHolder = useMemo(() => `chart-cell:${crypto.randomUUID()}`, []);
   const [followed, setFollowed] = useState<{ fixedRunId: string; followId: string } | null>(null);
+  // The fixed run whose hold the backend refused: its result stays fixed, and the panel says so.
+  const [refusedRunId, setRefusedRunId] = useState<string | null>(null);
   useEffect(() => {
     if (!followableRunId || !strategyManager) return undefined;
     const identity = resolveKlineSeriesIdentity(session.exchange, session);
@@ -351,7 +357,7 @@ export default function ChartStrategyTesterCellBridge({
       if (!controller.signal.aborted) setFollowed({ fixedRunId: followableRunId, followId: held.followId });
     }, controller.signal).catch(() => {
       // Refused (a range beyond the FOLLOW budget, settings it cannot continue) or lost: the fixed result stays.
-      if (!controller.signal.aborted) setFollowed(null);
+      if (!controller.signal.aborted) { setFollowed(null); setRefusedRunId(followableRunId); }
     });
     return () => controller.abort();
   }, [followHolder, followableRunId, session, strategyManager]);
@@ -366,6 +372,15 @@ export default function ChartStrategyTesterCellBridge({
       ? { family: "follow", runId: followed.followId, followsRunId: shownFixedRunId }
       : { family: "host", runId: shownFixedRunId };
   }, [continuousOverlayRun, followableRunId, followed, runMode, shownFixedRunId]);
+  const followRunId = candleScopeOverlayRun?.family === "follow" ? candleScopeOverlayRun.runId : null;
+  const followLive = runOverlay.live?.run.runId === followRunId ? runOverlay.live : null;
+  const followStatus = useMemo(() => chartFollowStatus({
+    following: followableRunId !== null,
+    refused: followableRunId !== null && refusedRunId === followableRunId,
+    shown: followRunId !== null && runOverlay.shown?.run.runId === followRunId,
+    live: followLive,
+    intervalMs: fixedIntervalMs(session.interval),
+  }), [followLive, followRunId, followableRunId, refusedRunId, runOverlay.shown, session.interval]);
 
   useEffect(() => {
     const draftId = attachment?.strategyDraftId;
@@ -829,6 +844,7 @@ export default function ChartStrategyTesterCellBridge({
       candleScopeOverlayRun={candleScopeOverlayRun}
       onOverlayRunChange={handleOverlayRunChange}
       overlayResult={runOverlay.shown}
+      followStatus={followStatus}
       onRunModeChange={setRunMode}
       {...(onReviewTrade ? { onReviewTrade } : {})}
       onPrepareData={handlePrepareData}
