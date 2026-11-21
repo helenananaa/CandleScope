@@ -281,6 +281,22 @@ CREATE TABLE IF NOT EXISTS backtest_research_launch_contexts (
 
 CREATE INDEX IF NOT EXISTS idx_backtest_research_context_created
     ON backtest_research_launch_contexts(created_at_ms DESC);
+
+-- ADR-BACKTEST-015 P3a: the strategy editor's mutable working copies live here, not in
+-- browser storage. Runs never reference a draft; they reference a frozen version.
+CREATE TABLE IF NOT EXISTS backtest_strategy_drafts (
+    draft_id TEXT PRIMARY KEY,
+    revision INTEGER NOT NULL,
+    display_name TEXT NOT NULL,
+    language TEXT NOT NULL,
+    source_text TEXT NOT NULL,
+    cursor_json TEXT,
+    created_at_ms INTEGER NOT NULL,
+    updated_at_ms INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_backtest_strategy_drafts_updated
+    ON backtest_strategy_drafts(updated_at_ms DESC, draft_id);
 """
 
 

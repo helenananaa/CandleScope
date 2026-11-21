@@ -117,6 +117,77 @@ class BacktestRepository:
         ).fetchone()
         return dict(row) if row is not None else None
 
+    # -- strategy drafts (ADR-BACKTEST-015 P3a) ---------------------------------
+
+    @_locked
+    def get_strategy_draft(self, draft_id: str) -> dict[str, Any] | None:
+        row = self.connection.execute(
+            "SELECT * FROM backtest_strategy_drafts WHERE draft_id = ?", (draft_id,)
+        ).fetchone()
+        return dict(row) if row is not None else None
+
+    @_locked
+    def list_strategy_drafts(self, limit: int) -> list[dict[str, Any]]:
+        rows = self.connection.execute(
+            "SELECT * FROM backtest_strategy_drafts ORDER BY updated_at_ms DESC, draft_id LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    @_locked
+    def count_strategy_drafts(self) -> int:
+        return int(self.connection.execute("SELECT COUNT(*) FROM backtest_strategy_drafts").fetchone()[0])
+
+    @_locked
+    def compare_and_set_strategy_draft(self, record: dict[str, Any], expected_revision: int | None) -> bool:
+        """Write ``record`` only if the stored revision is ``expected_revision`` (None: absent)."""
+        if expected_revision is None:
+            cursor = self.connection.execute(
+                "INSERT OR IGNORE INTO backtest_strategy_drafts(draft_id, revision, display_name, language, "
+                "source_text, cursor_json, created_at_ms, updated_at_ms) VALUES (:draft_id, :revision, "
+                ":display_name, :language, :source_text, :cursor_json, :created_at_ms, :updated_at_ms)", record)
+        else:
+            cursor = self.connection.execute(
+                "UPDATE backtest_strategy_drafts SET revision = :revision, display_name = :display_name, "
+                "language = :language, source_text = :source_text, cursor_json = :cursor_json, "
+                "updated_at_ms = :updated_at_ms WHERE draft_id = :draft_id AND revision = :expected",
+                {**record, "expected": expected_revision})
+        self.connection.commit()
+        return cursor.rowcount == 1
+
+    @_locked
+    def delete_strategy_draft(self, draft_id: str) -> bool:
+        cursor = self.connection.execute("DELETE FROM backtest_strategy_drafts WHERE draft_id = ?", (draft_id,))
+        self.connection.commit()
+        return cursor.rowcount == 1
+
+    @_locked
+    def import_strategy_drafts(self, records: list[dict[str, Any]], *, capacity: int) -> dict[str, list[str]]:
+        """One transaction: add absent drafts and replace older ones; a newer stored copy is kept."""
+        from .errors import BacktestError
+
+        imported, kept = [], []
+        try:
+            for record in records:
+                stored = self.connection.execute(
+                    "SELECT revision FROM backtest_strategy_drafts WHERE draft_id = ?", (record["draft_id"],)
+                ).fetchone()
+                if stored is not None and int(stored[0]) >= int(record["revision"]):
+                    kept.append(record["draft_id"])
+                    continue
+                if stored is None and int(self.connection.execute(
+                        "SELECT COUNT(*) FROM backtest_strategy_drafts").fetchone()[0]) >= capacity:
+                    raise BacktestError("DRAFT_CAPACITY_EXCEEDED", "the strategy draft limit is reached")
+                self.connection.execute(
+                    "INSERT OR REPLACE INTO backtest_strategy_drafts(draft_id, revision, display_name, language, "
+                    "source_text, cursor_json, created_at_ms, updated_at_ms) VALUES (:draft_id, :revision, "
+                    ":display_name, :language, :source_text, :cursor_json, :created_at_ms, :updated_at_ms)", record)
+                imported.append(record["draft_id"])
+            self.connection.commit()
+        except BaseException:
+            self.connection.rollback()
+            raise
+        return {"imported": imported, "kept": kept}
+
     @_locked
     def insert_strategy_revision(self, payload: dict[str, Any]) -> None:
         stored = {key: value for key, value in payload.items() if key != "diagnostics"}

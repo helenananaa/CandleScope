@@ -121,6 +121,7 @@ class StrategyDataManager:
         self.continuous = None
         self._continuous_access = None
         self._runs = None
+        self._drafts = None
         self._control_requests = 0
         self.max_subscriptions = max_subscriptions
         self.heartbeat_seconds = heartbeat_seconds
@@ -157,6 +158,14 @@ class StrategyDataManager:
             from .continuous_strategy import ContinuousStrategyAccess
             self._continuous_access=ContinuousStrategyAccess(self)
         return self._continuous_access
+
+    def drafts(self):
+        """The strategy editor's working copies (ADR-BACKTEST-015 P3a)."""
+        self._require_open()
+        if self._drafts is None:
+            from app.backtest.strategy_drafts import StrategyDrafts
+            self._drafts = StrategyDrafts(self.service.repository)
+        return self._drafts
 
     def runs(self):
         """One facade over every run family: status, result, cancel and capabilities (ADR-BACKTEST-015 P2)."""
