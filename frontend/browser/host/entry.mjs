@@ -5,6 +5,7 @@
 // entry; that is the only change before the desktop code runs.
 const base = new URL('./', document.baseURI)
 const FRAME = 'candlescope-page'
+const UNCONTROLLED = 'candlescope.uncontrolled-reload'
 const root = document.getElementById('root')
 let sequence = 0
 const callbacks = new Map()
@@ -227,7 +228,19 @@ function startShell() {
   frame.title = document.title
   frame.allow = 'fullscreen; clipboard-read; clipboard-write'
   frame.src = location.href
-  document.body.append(frame)
+  // Load the page once the service worker is active, so that it controls the
+  // page from its first request. Whether clients.claim() reaches a frame that
+  // already exists differs by browser: Safari often leaves it uncontrolled.
+  navigator.serviceWorker
+    .register(new URL('workspace-service.mjs', base), { scope: base.pathname })
+    .then(() => navigator.serviceWorker.ready)
+    .then(
+      () => document.body.append(frame),
+      (error) => {
+        console.error(error)
+        void startupFailure('browser.host.startFailed', { reason: String(error) })
+      }
+    )
 
   // Keep the address bar, title and language in step with the page, so that
   // reloading or sharing the URL opens the page the visitor is looking at.
@@ -266,7 +279,6 @@ function startShell() {
     if (source === frame.contentWindow && data?.type === 'candlescope.location') sync()
   })
   forwardApplicationRequests()
-  navigator.serviceWorker.register(new URL('workspace-service.mjs', base), { scope: base.pathname }).catch(console.error)
 }
 
 // Same-document URL changes and links leaving the site belong to the shell.
@@ -313,11 +325,23 @@ async function startPage() {
   forwardApplicationRequests()
   await navigator.serviceWorker.register(new URL('workspace-service.mjs', base), { scope: base.pathname })
   await navigator.serviceWorker.ready
-  if (!navigator.serviceWorker.controller)
-    await new Promise((resolve) => {
-      navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true })
-      if (navigator.serviceWorker.controller) resolve()
+  if (!navigator.serviceWorker.controller) {
+    const controlled = await new Promise((resolve) => {
+      navigator.serviceWorker.addEventListener('controllerchange', () => resolve(true), { once: true })
+      if (navigator.serviceWorker.controller) resolve(true)
+      setTimeout(() => resolve(false), 3000)
     })
+    // A document that loaded before the worker activated may stay uncontrolled;
+    // its reload is controlled. Reload once, then report the failure.
+    if (!controlled) {
+      if (sessionStorage.getItem(UNCONTROLLED) !== location.href) {
+        sessionStorage.setItem(UNCONTROLLED, location.href)
+        return location.reload()
+      }
+      throw Error('The service worker does not control this page')
+    }
+  }
+  sessionStorage.removeItem(UNCONTROLLED)
   const channel = new MessageChannel()
   const serviceVersion = await new Promise((resolve) => {
     const timer = setTimeout(() => resolve(null), 5000)
