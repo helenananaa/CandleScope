@@ -63,7 +63,7 @@ def main() -> int:
         # ADR-BACKTEST-015 P0 financial oracles (Pine paths run in pine-host-contracts).
         "test_strategy_run_oracles.py", "test_run_result.py",
         # ADR-BACKTEST-015 P2: one run facade over every run family.
-        "test_strategy_runs.py",
+        "test_strategy_runs.py", "test_strategy_runs_forward.py",
     )
     files = sorted({str(path) for pattern in patterns for path in (backend / "tests").glob(pattern)})
     return pytest.main(["-q", "-p", "pytest_asyncio.plugin", "-p", "anyio.pytest_plugin",

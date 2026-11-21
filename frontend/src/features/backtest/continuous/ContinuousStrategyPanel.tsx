@@ -16,9 +16,8 @@ import ContinuousParameterEditor from "./ContinuousParameterEditor.js";
 import ContinuousAutoRepairSetting from "./ContinuousAutoRepairSetting.js";
 import ContinuousRepairPanel from "./ContinuousRepairPanel.js";
 import ContinuousAccountView from "./ContinuousAccountView.js";
-import { continuousFillTimeMs, readContinuousAccountRows } from "./continuousAccountRows.js";
-import type { ChartStrategyResultMarkerSource } from "../chart-tester/chartStrategyResultMarkerSource.js";
-import type { BacktestMarkerChart } from "../chart-tester/chartStrategyResultProjection.js";
+import { readContinuousAccountRows } from "./continuousAccountRows.js";
+import type { StrategyOverlayRun } from "../runResult/useStrategyRunOverlay.js";
 import "./continuousStrategy.css";
 
 export interface ContinuousStrategyPanelProps {
@@ -31,7 +30,8 @@ export interface ContinuousStrategyPanelProps {
   initialFromMs?: number;
   chartActive?: boolean;
   marketWindow?: SeriesWindowView | null;
-  markerSource?: Pick<ChartStrategyResultMarkerSource, "setContinuousResult">;
+  /** The forward run the chart should overlay (ADR-BACKTEST-015 P2d), or null. */
+  onOverlayRunChange?(run: StrategyOverlayRun | null): void;
   onLocateTrade?(timeMs: number): void;
   onDetach?(): Promise<void>;
   onOpenWorkspace?(settings: StrategyRunSettings): Promise<void>;
@@ -113,24 +113,14 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
     } catch (failure) { setError(String(failure)); }
   }, [manager, observe, reference?.runId, attempt]);
   const view = state.result?.identity.id === reference?.runId ? state.result : null;
-  const markerSource = props.markerSource;
-  const chart = useMemo<BacktestMarkerChart | null>(() => {
-    if (!props.chartActive || !view || view.stale) return null;
-    const { identity: point } = view;
-    return {
-      run_id: point.id,
-      chart_hash: JSON.stringify(["continuous", point.id, point.generation, point.revision, point.checkpoint_revision, point.data_revision]),
-      interval: props.session.interval,
-      fills: state.rows.fills.filter((fill) => {
-        const time = continuousFillTimeMs(fill);
-        return time !== null && time <= point.event_time_ms && (fill.side === "BUY" || fill.side === "SELL");
-      }),
-    };
-  }, [props.chartActive, props.session.interval, state.rows.fills, view]);
-  useLayoutEffect(() => () => markerSource?.setContinuousResult(undefined), [markerSource]);
-  useLayoutEffect(() => {
-    markerSource?.setContinuousResult(chart);
-  }, [chart, markerSource]);
+  // The chart overlay draws the run's committed account from the run facade; a stale
+  // (repair-required) account is not drawn.
+  const overlayRunId = props.chartActive && view && !view.stale ? view.identity.id : null;
+  const onOverlayRunChange = props.onOverlayRunChange;
+  useEffect(() => {
+    onOverlayRunChange?.(overlayRunId ? { family: "continuous", runId: overlayRunId } : null);
+  }, [onOverlayRunChange, overlayRunId]);
+  useEffect(() => () => onOverlayRunChange?.(null), [onOverlayRunChange]);
 
   function save(next: ContinuousRunReference) {
     try {

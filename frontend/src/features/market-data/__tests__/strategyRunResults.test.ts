@@ -220,3 +220,28 @@ test("a host run is followed by stream and a failed run is a result, not an erro
   manager.dispose();
   done.dispose();
 });
+
+// -- P2d: forward runs ---------------------------------------------------------
+
+const FORWARD = { ...structuredClone(HOST) as object, clock_policy: "FORWARD" };
+
+test("a forward run's result is read every time and must be served as FORWARD", async () => {
+  let reads = 0;
+  const manager = new StrategyDataManager(api({ async getStrategyRunResult() { reads += 1; return structuredClone(FORWARD); } }));
+  await manager.loadRunResult("continuous", "cs_1");
+  await manager.loadRunResult("continuous", "cs_1");
+  assert.equal(reads, 2, "a forward account changes with every commit, so it is never cached");
+  assert.equal(manager.diagnostics().runResults, 0);
+  const fixed = new StrategyDataManager(api({ async getStrategyRunResult() { return structuredClone(FORWARD); } }));
+  await assert.rejects(fixed.loadRunResult("host", "bt_1"), /clock_policy/);
+  const forward = new StrategyDataManager(api({ async getStrategyRunResult() { return structuredClone(HOST); } }));
+  await assert.rejects(forward.loadRunResult("continuous", "cs_1"), /clock_policy/);
+  for (const value of [manager, fixed, forward]) value.dispose();
+});
+
+test("a running forward run has a result; a running fixed run does not", () => {
+  const live = { ...structuredClone(STATUS) as object, run_id: "cs_1", family: "continuous", clock_policy: "FORWARD",
+    state: "RUNNING", source_state: "LIVE", terminal: false, result_available: true };
+  assert.equal(parseStrategyRunStatus(live).result_available, true);
+  assert.throws(() => parseStrategyRunStatus({ ...live, clock_policy: "FIXED" }), /result_available/);
+});

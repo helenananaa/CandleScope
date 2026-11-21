@@ -27,6 +27,9 @@ RESPONSE_METADATA_BYTES=32*1024
 MAX_PAGE_ITEMS=200
 ENTRY_OVERHEAD_BYTES=256
 HEAD_OVERHEAD_BYTES=1024
+# What the shared run-result projection reads from a forward account, and its read budget.
+FORWARD_RESULT_KINDS=("orders","fills","rejected","equity_curve")
+MAX_FORWARD_RESULT_BYTES=32*1024*1024
 
 
 def error(code,message):return BacktestError(code,message)
@@ -206,6 +209,39 @@ class ContinuousResults:
             if head is not None and head[0]==current["checkpoint_revision"]:return
             self.publish(run_id,current["checkpoint_revision"],patch)
             self.store._enforce_total_budget()
+
+    def committed_kernel_result(self,run_id,*,max_bytes=MAX_FORWARD_RESULT_BYTES):
+        """The committed account as a kernel-result mapping, for the shared run-result projection.
+
+        One read snapshot: the head's account and every row of the collections the
+        projection reads. Beyond ``max_bytes`` of stored rows it refuses instead of
+        silently dropping history (ADR-BACKTEST-015 P2d).
+        """
+        from .continuous_store import _text
+        _text(run_id,128)
+        kinds=FORWARD_RESULT_KINDS
+        marks=",".join("?"*len(kinds))
+        with self.store.lock:
+            if self.store.closed:raise error("CONTINUOUS_STORE_CLOSED","Continuous strategy store is closed")
+            self.store.db.execute("BEGIN")
+            try:
+                row=self.store.summary(run_id)
+                projection=self.store.epochs.projection(run_id)
+                head=self.store.db.execute(f"SELECT * FROM {projection.heads} WHERE run_id=?",(projection.key,)).fetchone()
+                if head is None or head["checkpoint_revision"]!=row["checkpoint_revision"]:
+                    raise error("CONTINUOUS_RESULTS_UNAVAILABLE","Prepare the committed result projection before reading")
+                size=self.store.db.execute(f"SELECT COALESCE(SUM(stored_bytes),0) FROM {projection.items} "
+                    f"WHERE run_id=? AND kind IN ({marks})",(projection.key,*kinds)).fetchone()[0]
+                if size>max_bytes:
+                    raise error("BUDGET_EXCEEDED","This account's history exceeds the run-result budget")
+                arrays={kind:[] for kind in kinds}
+                for item in self.store.db.execute(f"SELECT kind,wire FROM {projection.items} WHERE run_id=? AND kind IN ({marks}) "
+                        "ORDER BY kind,item_index",(projection.key,*kinds)):
+                    arrays[item["kind"]].append(json.loads(item["wire"]))
+                definition=json.loads(self.store.db.execute("SELECT definition_json FROM runs WHERE id=?",(run_id,)).fetchone()[0])
+                return {"run":row,"result":{**arrays,"ledger":{"account":json.loads(head["head_json"])["account"]}},
+                    "interval":str((definition.get("configuration") or {}).get("interval") or "1m")}
+            finally:self.store.db.execute("ROLLBACK")
 
     @staticmethod
     def identity(row):

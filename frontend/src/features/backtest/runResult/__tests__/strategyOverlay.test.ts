@@ -199,3 +199,42 @@ test("connectors are bounded to the visible range and capped, like markers", () 
   const many = Array.from({ length: 30 }, (_, index) => overlay.connectors[index % overlay.connectors.length]!);
   assert.equal(boundVisibleConnectors(many, null, 60, 10).length, 10);
 });
+
+test("a forward run is redrawn once per committed revision, reconnects on a new generation and stops with the run", async () => {
+  const { followForwardRun } = await import("../useStrategyRunOverlay.js");
+  const { StrategyRunStreamError } = await import("../../backtestRunStream.js");
+  type Status = Parameters<Parameters<typeof followForwardRun>[0]["watchRun"]>[1] extends ((s: infer S, ...rest: never[]) => void) | undefined ? S : never;
+  const status = (state: string, extra: Record<string, unknown> = {}) => ({ run_id: "cs_1", family: "continuous", authority: "HOST",
+    clock_policy: "FORWARD", fidelity: "BAR_APPROX", language: null, state, source_state: state, generation: 1, error: null,
+    terminal: state === "CANCELLED", result_available: true, ...extra }) as unknown as Status;
+  let loads = 0;
+  let release: (() => void) | null = null;
+  let watches = 0;
+  const manager = {
+    async loadRunResult() {
+      loads += 1;
+      if (loads === 1) await new Promise<void>((resolve) => { release = resolve; });
+      return { loads } as never;
+    },
+    async watchRun(_runId: string, onStatus?: (value: Status) => void) {
+      watches += 1;
+      if (watches === 1) {
+        // Three commits while the first read is still in flight coalesce into one more read.
+        onStatus?.(status("RUNNING")); onStatus?.(status("RUNNING")); onStatus?.(status("RUNNING"));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        (release as (() => void) | null)?.();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        throw new StrategyRunStreamError("RUN_IDENTITY_CHANGED", "resumed");
+      }
+      onStatus?.(status("RUNNING", { result_available: false }));
+      return status("CANCELLED");
+    },
+  };
+  const drawn: number[] = [];
+  const failures: unknown[] = [];
+  await followForwardRun(manager as never, "cs_1", new AbortController().signal,
+    (result) => drawn.push((result as unknown as { loads: number }).loads), (failure) => failures.push(failure));
+  assert.equal(watches, 2, "a new generation reconnects");
+  assert.deepEqual(drawn, [1, 2, 3], "first read, one coalesced read, then the stopped account");
+  assert.deepEqual(failures, []);
+});
