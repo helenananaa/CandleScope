@@ -31,6 +31,8 @@ import {
 import LocalAnalysisPanel from "../local-data/LocalAnalysisPanel.js";
 import LocalIntervalSelector from "../local-data/LocalIntervalSelector.js";
 import { createLocalAnalysisMarkerSource } from "../local-data/localAnalysisMarkerSource.js";
+import { combineExternalMarkerSources } from "../../chart-adapter/externalMarkerSource.js";
+import type { StrategyOverlaySource } from "../backtest/runResult/strategyOverlay.js";
 import type { LocalAnalysisEventStore } from "../local-data/localAnalysisStore.js";
 import type {
   LocalAnalysisEvent,
@@ -113,7 +115,10 @@ function StrategyResearchChartPanes({
   onDrawingInteractionReadyChange,
   onRemoveIndicator,
   onCrosshairMove,
+  overlaySource = null,
 }: {
+  /** The research run drawn on this chart (ADR-BACKTEST-015 P1c). */
+  overlaySource?: StrategyOverlaySource | null;
   manifest: LocalDatasetManifest;
   interval: string;
   runtime: ReturnType<typeof useLocalChartRuntime>;
@@ -137,11 +142,23 @@ function StrategyResearchChartPanes({
   onCrosshairMove(value: MainSeriesCrosshairValue | null): void;
 }) {
   const focusTime = runtime.focusTime;
-  const markerSource = useMemo(() => createLocalAnalysisMarkerSource({
+  const analysisMarkerSource = useMemo(() => createLocalAnalysisMarkerSource({
     eventStore,
     seriesStore: runtime.seriesStore,
     interval,
   }), [eventStore, interval, runtime.seriesStore]);
+  const markerSource = useMemo(
+    () => combineExternalMarkerSources([analysisMarkerSource, overlaySource?.markers]),
+    [analysisMarkerSource, overlaySource],
+  );
+  useEffect(() => {
+    overlaySource?.setSeries(runtime.seriesStore);
+    return () => overlaySource?.setSeries(null);
+  }, [overlaySource, runtime.seriesStore]);
+  const handleVisibleRange = useCallback((range: unknown) => {
+    onVisibleRangeChange(range);
+    overlaySource?.setVisibleRange(range as Parameters<StrategyOverlaySource["setVisibleRange"]>[0]);
+  }, [onVisibleRangeChange, overlaySource]);
   useEffect(() => {
     if (focusRequest === null) return undefined;
     let active = true;
@@ -205,7 +222,8 @@ function StrategyResearchChartPanes({
           timezone={settings.timezone ?? manifest.timezone}
           savedVisibleRange={savedVisibleRange}
           onViewportRangeChange={indicators.actions.ensureVisibleIndicatorRange}
-          onVisibleRangeChange={onVisibleRangeChange}
+          onVisibleRangeChange={handleVisibleRange}
+          pluginChartLayerSource={overlaySource?.layer ?? null}
           followLatest={false}
           externalMarkerSource={markerSource}
           drawingTool={drawingTool}
@@ -270,7 +288,9 @@ export function StrategyResearchImportedWorkspace({
   onSettingsChange,
   resolvedTheme,
   children,
+  overlaySource = null,
 }: {
+  overlaySource?: StrategyOverlaySource | null;
   manifest: LocalDatasetManifest;
   interval: string;
   indicatorPresets: readonly IndicatorPreset[];
@@ -467,6 +487,7 @@ export function StrategyResearchImportedWorkspace({
       onDrawingInteractionReadyChange={setDrawingInteractionReady}
       onRemoveIndicator={removeIndicator}
       onCrosshairMove={onCrosshairMove}
+      overlaySource={overlaySource}
     />
   );
   const indicatorPanel = (

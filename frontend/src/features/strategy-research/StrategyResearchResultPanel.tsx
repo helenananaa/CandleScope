@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { RunResultSummary, RunResultTradeList } from "../backtest/runResult/RunResultViews.js";
+import type { ShownRunResult } from "../backtest/runResult/useStrategyRunOverlay.js";
+import { CHART_RUN_RESULT_VIEWS_ENABLED } from "../backtest/chart-tester/chartStrategyTesterFeature.js";
 import { Badge, Button, Disclosure, InlineAlert, TabPanel, Tabs } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
 import {
@@ -26,7 +29,10 @@ export function StrategyResearchResultPanel({
   onOpenReplay,
   onLocateTrade,
   dataResolution,
+  sharedResult = null,
 }: {
+  /** The run-result/1 of this run, loaded for the research overlay; the trades tab reads it (behind a flag). */
+  sharedResult?: ShownRunResult | null;
   result: ChartStrategyResultBundle | null;
   stale: boolean;
   staleReasons: readonly ChartStrategyTesterStaleReason[];
@@ -123,7 +129,13 @@ export function StrategyResearchResultPanel({
         stale={stale}
         onOpenTrades={() => setActiveTab("trades")}
         {...(onOpenAdvanced ? { onOpenAdvanced } : {})}
-      /> : <ChartStrategyTradeList
+      /> : CHART_RUN_RESULT_VIEWS_ENABLED && sharedResult?.run.runId === result.run.run_id
+        ? <div className="chart-strategy-result-overview run-result-views" data-testid="run-result-views">
+          <RunResultSummary result={sharedResult.result} locale={locale} />
+          <RunResultTradeList result={sharedResult.result} locale={locale}
+            onLocateTrade={(timeMs) => { if (!stale) onLocateTrade?.(timeMs); }} onSelectExplanation={setExplanation} />
+        </div>
+        : <ChartStrategyTradeList
         result={result}
         locale={locale}
         onLocateTrade={(timeMs) => { if (!stale) onLocateTrade?.(timeMs); }}

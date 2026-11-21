@@ -147,6 +147,7 @@ function dispatchImportedSource(
 }
 
 import { useControlCommands, usePageControlBridge } from "../app-control/useControlCommands.js";
+import { overlayRunForNative, useStrategyRunOverlay, type StrategyOverlayRun } from "../backtest/runResult/useStrategyRunOverlay.js";
 import { settingsCommands } from "../app-control/settingsCommands.js";
 import { libraryCommands } from "../app-control/libraryCommands.js";
 import { command } from "../app-control/commandRegistry.js";
@@ -417,6 +418,16 @@ export default function StrategyResearchApp({
     restoreRunId: state.result.replay ? null : state.result.runId,
     onRunId: handleRunId,
   });
+  // ADR-BACKTEST-015 P1c: research runs draw on the research charts through the shared run overlay.
+  const researchChartInterval = (source?.kind === "CURRENT_CHART" ? source.interval : selectedInterval) ?? "";
+  const hostResearchRunId = researchRun.sourceResult?.run.state === "COMPLETED" ? researchRun.sourceResult.run.run_id : null;
+  const nativeResearchRun = overlayRunForNative(nativeRun);
+  // The overlay hook loads by family and run id, so a fresh object each render does not refetch.
+  const researchOverlayRun: StrategyOverlayRun | null = nativeMode
+    ? nativeResearchRun
+    : hostResearchRunId ? { family: "host", runId: hostResearchRunId } : null;
+  const researchOverlay = useStrategyRunOverlay({ run: researchOverlayRun, interval: researchChartInterval,
+    manager: researchRun.historyManager });
   const saveResultReplay = useCallback((replay: BacktestResultReplayCursor) => {
     dispatch({ type: "result/replay", replay });
   }, [dispatch]);
@@ -633,6 +644,7 @@ export default function StrategyResearchApp({
     <StrategyResearchResultPanel
       key={researchRun.result?.run.run_id ?? "pending"}
       result={researchRun.result}
+      sharedResult={researchOverlay.shown?.run.family === "host" ? researchOverlay.shown : null}
       stale={researchRun.stale || state.result.stale}
       staleReasons={researchRun.staleReasons}
       barOnly={researchRun.result ? researchRun.result.run.fidelity_mode === "BAR_APPROX" : researchRun.barOnly}
@@ -824,6 +836,7 @@ export default function StrategyResearchApp({
           settings={settings}
           onSettingsChange={setSettings}
           resolvedTheme={resolvedTheme}
+          overlaySource={researchOverlay.source}
         >
           {({ toolbar, exportOverlay, chart, indicatorPanel }) => (
             <StrategyResearchShell
@@ -861,7 +874,7 @@ export default function StrategyResearchApp({
         chart={
           source?.kind === "CURRENT_CHART"
             ? hostReady && runtime.runtimeMode === "LIVE" && researchRun.session
-              ? <MarketDataWorkspaceProvider><Suspense fallback={<p className="strategy-research-note">{t("research.loading")}</p>}><StrategyResearchLiveChart session={researchRun.session} result={nativeMode ? null : researchRun.sourceResult} focusRequest={focusRequest} /></Suspense></MarketDataWorkspaceProvider>
+              ? <MarketDataWorkspaceProvider><Suspense fallback={<p className="strategy-research-note">{t("research.loading")}</p>}><StrategyResearchLiveChart session={researchRun.session} result={nativeMode ? null : researchRun.sourceResult} focusRequest={focusRequest} overlaySource={researchOverlay.source} /></Suspense></MarketDataWorkspaceProvider>
               : <StrategyResearchCurrentChart />
             : (
               <StrategyResearchFirstOpen

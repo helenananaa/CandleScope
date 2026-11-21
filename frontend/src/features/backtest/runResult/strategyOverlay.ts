@@ -10,7 +10,9 @@ import type { ExternalMarkerSource, ExternalMarkerSnapshot, ExternalSeriesMarker
 import type { ChartSurfaceVisibleRange } from "../../../chart-adapter/useChartSurfaceRuntime.js";
 import type { ChartLayerSource, PluginChartLayerSnapshot, PluginChartRenderEntry } from "../../plugins/pluginChartLayerSource.js";
 import { parseIntervalSeconds } from "../../../utils/intervals.js";
-import { boundVisibleBacktestMarkers, normalizedTimeRange } from "../chart-tester/chartStrategyResultMarkerSource.js";
+import {
+  boundVisibleBacktestMarkers, CHART_STRATEGY_MARKER_OVERSCAN_BARS, CHART_STRATEGY_VISIBLE_MARKER_LIMIT, normalizedTimeRange,
+} from "../chart-tester/chartStrategyResultMarkerSource.js";
 import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
 import type { StrategyTradeFocus } from "../chart-tester/strategyTradeReview.js";
 import { floorIntervalTime } from "../../../utils/intervalTimeline.js";
@@ -37,7 +39,10 @@ export interface StrategyMarkerEvidence {
 
 export interface StrategyOverlay {
   markers: ExternalSeriesMarker[];
+  /** Plots, the open position and working orders: few, always drawn. */
   entries: PluginChartRenderEntry[];
+  /** Entry-to-exit lines, one per round trip: bounded to the visible range like markers. */
+  connectors: PluginChartRenderEntry[];
   /** Evidence by marker id, for click-through. */
   evidence: ReadonlyMap<string, StrategyMarkerEvidence>;
 }
@@ -138,12 +143,13 @@ export function buildStrategyOverlay(result: RunResult, options: {
     }
     flush();
   });
+  const connectors: PluginChartRenderEntry[] = [];
   result.trades.forEach((trade) => {
     const entry = priceOf(trade.entry_price), exit = priceOf(trade.exit_price);
     if (trade.entry_bar_time_ms === null || trade.exit_bar_time_ms === null || entry === null || exit === null) return;
     const pnl = priceOf(trade.net_pnl);
     const color = pnl === null ? STRATEGY_OVERLAY_COLORS.neutral : pnl > 0 ? STRATEGY_OVERLAY_COLORS.win : STRATEGY_OVERLAY_COLORS.loss;
-    entries.push({ id: `${idPrefix}:trade:${trade.id}`, zOrder: "above-series", item: {
+    connectors.push({ id: `${idPrefix}:trade:${trade.id}`, zOrder: "above-series", item: {
       id: `${idPrefix}:trade:${trade.id}`, type: "polyline", color, width: 1, style: "dashed",
       points: [{ time: trade.entry_bar_time_ms, price: entry }, { time: trade.exit_bar_time_ms, price: exit }],
     } });
@@ -164,7 +170,29 @@ export function buildStrategyOverlay(result: RunResult, options: {
       width: 1, style: "dotted", text: `${labels.workingOrder} ${order.side} ${order.type}${order.qty ? ` ${order.qty}` : ""}`,
     } });
   });
-  return { markers, entries, evidence };
+  return { markers, entries, connectors, evidence };
+}
+
+/** Connectors overlapping the visible range (with the markers' overscan), evenly sampled past `limit`. */
+export function boundVisibleConnectors(
+  connectors: readonly PluginChartRenderEntry[],
+  range: { from: number; to: number } | null,
+  intervalSeconds: number,
+  limit = CHART_STRATEGY_VISIBLE_MARKER_LIMIT,
+): readonly PluginChartRenderEntry[] {
+  let visible = connectors;
+  if (range) {
+    const overscan = Math.max(intervalSeconds * CHART_STRATEGY_MARKER_OVERSCAN_BARS, Math.max(intervalSeconds, range.to - range.from) * 0.25);
+    const from = (range.from - overscan) * 1000, to = (range.to + overscan) * 1000;
+    visible = connectors.filter((entry) => {
+      if (entry.item.type !== "polyline") return true;
+      const times = entry.item.points.map((point) => point.time);
+      return Math.max(...times) >= from && Math.min(...times) <= to;
+    });
+  }
+  if (visible.length <= limit) return visible;
+  const last = visible.length - 1;
+  return Array.from({ length: limit }, (_, index) => visible[Math.round((index / (limit - 1)) * last)]!);
 }
 
 /** Entry and exit highlights for the trade under review; drawn on top, outside the visible-range bound. */
@@ -185,7 +213,7 @@ export function tradeFocusMarkers(focus: {
   return markers;
 }
 
-const NO_OVERLAY: StrategyOverlay = { markers: [], entries: [], evidence: new Map() };
+const NO_OVERLAY: StrategyOverlay = { markers: [], entries: [], connectors: [], evidence: new Map() };
 
 const EMPTY_MARKERS: ExternalMarkerSnapshot = Object.freeze({ markers: Object.freeze([]), revision: 0 });
 const EMPTY_LAYER: PluginChartLayerSnapshot = Object.freeze({ entries: Object.freeze([]), revision: 0 });
@@ -279,12 +307,13 @@ export class StrategyOverlaySource {
     const next = normalizedTimeRange(range);
     if (next?.from === this.visibleRange?.from && next?.to === this.visibleRange?.to) return;
     this.visibleRange = next;
-    this.publish(false);
+    this.publish(this.overlay.connectors.length > 0);
   }
 
   diagnostics() {
     return { markers: this.overlay.markers.length, visibleMarkers: this.markerSnapshot.markers.length,
-      entries: this.overlay.entries.length, revision: this.revision };
+      entries: this.overlay.entries.length, connectors: this.overlay.connectors.length,
+      drawnLayerEntries: this.layerSnapshot.entries.length, revision: this.revision };
   }
 
   private subscribe(listener: () => void): () => void {
@@ -301,7 +330,10 @@ export class StrategyOverlaySource {
       markers: [...boundVisibleBacktestMarkers(loaded, this.visibleRange, this.intervalSeconds), ...focus],
       revision: this.revision,
     };
-    if (layerChanged) this.layerSnapshot = { entries: this.overlay.entries, revision: this.revision };
+    if (layerChanged) {
+      this.layerSnapshot = { entries: [...this.overlay.entries,
+        ...boundVisibleConnectors(this.overlay.connectors, this.visibleRange, this.intervalSeconds)], revision: this.revision };
+    }
     for (const listener of [...this.listeners]) listener();
   }
 }

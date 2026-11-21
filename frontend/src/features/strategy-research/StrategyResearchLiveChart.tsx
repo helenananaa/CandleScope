@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useChartSurfaceRuntime } from "../../chart-adapter/useChartSurfaceRuntime.js";
 import { useChartSession } from "../chart-session/useChartSession.js";
 import type { ChartSession } from "../chart-session/chartSessionTypes.js";
@@ -12,9 +12,12 @@ import type { ChartStrategyResultBundle } from "../backtest/chart-tester/chartSt
 import type { LocalAnalysisFocusRequest } from "../local-data/localAnalysisTypes.js";
 import { EmptyState, InlineAlert } from "../../components/ui/index.js";
 import { t } from "../../i18n/index.js";
+import type { StrategyOverlaySource } from "../backtest/runResult/strategyOverlay.js";
 
-export default function StrategyResearchLiveChart({ session, result, focusRequest }: {
+export default function StrategyResearchLiveChart({ session, result, focusRequest, overlaySource = null }: {
   session: ChartSession; result: ChartStrategyResultBundle | null; focusRequest: LocalAnalysisFocusRequest | null;
+  /** The research run drawn on this chart (ADR-BACKTEST-015 P1c). */
+  overlaySource?: StrategyOverlaySource | null;
 }) {
   const surface = useChartSurfaceRuntime();
   const appearance = useChartSettingsRuntime();
@@ -29,6 +32,16 @@ export default function StrategyResearchLiveChart({ session, result, focusReques
   useEffect(() => () => frozen?.dispose(), [frozen]);
   useEffect(() => { if (focusRequest) surface.ref.current?.setLinkedVisibleTimeAnchor(focusRequest.time); }, [focusRequest, surface.ref]);
   const source = frozen ?? live;
+  const seriesStore = source.marketData.view.seriesStore;
+  useEffect(() => {
+    overlaySource?.setSeries(seriesStore ?? null);
+    return () => overlaySource?.setSeries(null);
+  }, [overlaySource, seriesStore]);
+  const onVisibleRangeChange = source.marketData.actions.onVisibleRangeChange;
+  const handleVisibleRange = useCallback((range: Parameters<typeof onVisibleRangeChange>[0]) => {
+    onVisibleRangeChange(range);
+    overlaySource?.setVisibleRange(range as Parameters<StrategyOverlaySource["setVisibleRange"]>[0]);
+  }, [onVisibleRangeChange, overlaySource]);
   if (!source.marketData.status.activeChartReady || !source.marketData.view.seriesStore) {
     return <EmptyState className="local-chart-empty" compact role={source.marketData.view.error ? "alert" : "status"}
       tone={source.marketData.view.error ? "danger" : "neutral"}
@@ -40,7 +53,8 @@ export default function StrategyResearchLiveChart({ session, result, focusReques
       symbol={source.session.symbol} interval={source.session.interval} datasetKey={source.datasetKey}
       seriesStore={source.marketData.view.seriesStore} loading={source.marketData.view.loading} dataMeta={source.marketData.view.meta}
       backendSyntheticSource={backendSyntheticSourceFor(source)}
-      onNeedMoreLeft={source.marketData.actions.loadMoreLeft} onVisibleRangeChange={source.marketData.actions.onVisibleRangeChange}
+      onNeedMoreLeft={source.marketData.actions.loadMoreLeft} onVisibleRangeChange={handleVisibleRange}
+      externalMarkerSource={overlaySource?.markers ?? null} pluginChartLayerSource={overlaySource?.layer ?? null}
       onCrosshairMove={source.marketData.actions.onCrosshairMove}
       renkoBoxSizeMode={appearance.settings.renkoBoxSizeMode} renkoAtrLength={appearance.settings.renkoAtrLength} renkoBoxSize={appearance.settings.renkoBoxSize}
       pointFigureBoxSizeMode={appearance.settings.pointFigureBoxSizeMode} pointFigureAtrLength={appearance.settings.pointFigureAtrLength}
