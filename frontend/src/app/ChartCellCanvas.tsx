@@ -4,7 +4,7 @@ import SingleChartPanes from "../components/SingleChartPanes.js";
 import { combineExternalMarkerSources } from "../chart-adapter/externalMarkerSource.js";
 import type { ExternalMarkerSource } from "../chart-adapter/externalMarkerSource.js";
 import type { ExternalPriceLineSource } from "../chart-adapter/externalPriceLineSource.js";
-import type { PluginChartLayerSource } from "../features/plugins/pluginChartLayerSource.js";
+import type { ChartLayerSource } from "../features/plugins/pluginChartLayerSource.js";
 import { useAdvancedMarketPanes } from "../features/advanced-market-data/useAdvancedMarketPanes.js";
 import { useTradeFlowPanes } from "../features/trade-flow/useTradeFlowPanes.js";
 import type { TradeFlowRuntime } from "../features/trade-flow/tradeFlowTypes.js";
@@ -26,7 +26,7 @@ export interface ChartCellCanvasProps {
   accountMarkerSource?: ExternalMarkerSource | null;
   /** Average entry and working stop / target of the open position. */
   accountPriceLineSource?: ExternalPriceLineSource | null;
-  pluginChartLayerSource?: PluginChartLayerSource | null;
+  pluginChartLayerSource?: ChartLayerSource | null;
   errorBoundary?: ComponentType<PropsWithChildren>;
   drawingInteractionReady?: boolean;
   drawingControlsHost?: HTMLElement | null;

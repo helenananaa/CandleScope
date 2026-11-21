@@ -81,7 +81,7 @@ import type { ExternalMarkerSource } from "../chart-adapter/externalMarkerSource
 import { attachExternalPriceLineSource } from "../chart-adapter/externalPriceLineSource.js";
 import type { ExternalPriceLineSource } from "../chart-adapter/externalPriceLineSource.js";
 import { attachPluginChartLayerSource } from "../chart-adapter/pluginChartLayerRenderer.js";
-import type { PluginChartLayerSource } from "../features/plugins/pluginChartLayerSource.js";
+import type { ChartLayerSource } from "../features/plugins/pluginChartLayerSource.js";
 import { renderBgcolors } from "../chart-adapter/bgcolorPrimitiveRenderer";
 import {
   buildMainSeriesProjectionPatch,
@@ -369,7 +369,7 @@ export interface SingleChartPanesProps {
   indicatorMarkers?: IndicatorMarker[];
   externalMarkerSource?: ExternalMarkerSource | null;
   externalPriceLineSource?: ExternalPriceLineSource | null;
-  pluginChartLayerSource?: PluginChartLayerSource | null;
+  pluginChartLayerSource?: ChartLayerSource | null;
   indicatorFills?: IndicatorFill[];
   indicatorHlines?: IndicatorHLine[];
   indicatorBgcolors?: IndicatorBgColor[];

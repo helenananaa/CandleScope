@@ -128,6 +128,9 @@ import { loadUserPrefs, updateUserPref } from "../features/chart-session/chartSe
 import { preloadDrawingEngineHost } from "../features/drawings/drawingEngineLoader.js";
 import { drawingToolWhenInteractionReady } from "./drawingInteractionReadiness.js";
 import ChartCellCanvas from "./ChartCellCanvas.js";
+import { combineExternalMarkerSources } from "../chart-adapter/externalMarkerSource.js";
+import { combineChartLayerSources } from "../features/plugins/pluginChartLayerSource.js";
+import { useStrategyRunOverlay, type StrategyOverlayRun } from "../features/backtest/runResult/useStrategyRunOverlay.js";
 import LazyFeatureSurfaces from "./LazyFeatureSurfaces.js";
 import StatusBar from "./StatusBar.js";
 import TopBar from "./TopBar.js";
@@ -899,6 +902,28 @@ function LiveChartCell({
     if (source && focus) source.setTradeFocus(focus.trade, focus.interval, t("chartTester.result.entry"), t("chartTester.result.exit"));
     setStrategyMarkerSource(source);
   }, []);
+  // ADR-BACKTEST-015 P1c: the completed run the strategy dock reports, drawn from run-result/1.
+  // A run belongs to the chart session it was reported for; switching symbol or interval drops it.
+  const overlaySessionKey = [liveSourceSession.exchange, liveSourceSession.marketType,
+    liveSourceSession.symbol, liveSourceSession.interval].join("\u0000");
+  const [overlayRun, setOverlayRun] = useState<{ run: StrategyOverlayRun; sessionKey: string } | null>(null);
+  const handleOverlayRunChange = useCallback((run: StrategyOverlayRun | null) => {
+    setOverlayRun(run ? { run, sessionKey: overlaySessionKey } : null);
+  }, [overlaySessionKey]);
+  const runOverlay = useStrategyRunOverlay({
+    run: overlayRun?.sessionKey === overlaySessionKey ? overlayRun.run : null,
+    interval: liveSourceSession.interval,
+    series: sourceMarketData.view.seriesStore ?? null,
+  });
+  const runOverlaySource = runOverlay.source;
+  const combinedStrategyMarkerSource = useMemo(
+    () => combineExternalMarkerSources([strategyMarkerSource, runOverlaySource.markers]),
+    [runOverlaySource, strategyMarkerSource],
+  );
+  const combinedChartLayerSource = useMemo(
+    () => combineChartLayerSources([plugins.view.chartLayerSource, runOverlaySource.layer]),
+    [plugins.view.chartLayerSource, runOverlaySource],
+  );
   const upstreamViewportRangeChangeRef = useRef(
     model.chartWorkspace.chart.chartProps.onViewportRangeChange,
   );
@@ -908,7 +933,8 @@ function LiveChartCell({
   const handleChartViewportRangeChange = useCallback((range: ChartSurfaceVisibleRange) => {
     upstreamViewportRangeChangeRef.current?.(range);
     strategyMarkerSourceRef.current?.setVisibleRange(range);
-  }, []);
+    runOverlaySource.setVisibleRange(range);
+  }, [runOverlaySource]);
   const handleReviewStrategyTrade = useCallback((trade: StrategyTradeFocus | null) => {
     strategyTradeFocusRef.current = trade ? { trade, interval: liveSourceSession.interval } : null;
     strategyMarkerSourceRef.current?.setTradeFocus(trade, liveSourceSession.interval, t("chartTester.result.entry"), t("chartTester.result.exit"));
@@ -1192,11 +1218,11 @@ function LiveChartCell({
             chart={chartModel}
             source={liveReferenceSource}
             tradeFlow={tradeFlow}
-            strategyMarkerSource={strategyMarkerSource}
+            strategyMarkerSource={combinedStrategyMarkerSource}
             pluginMarkerSource={plugins.view.markerSource}
             accountMarkerSource={tradingOverlay.markerSource}
             accountPriceLineSource={tradingOverlay.priceLineSource}
-            pluginChartLayerSource={plugins.view.chartLayerSource}
+            pluginChartLayerSource={combinedChartLayerSource}
             drawingInteractionReady={drawingInteractionReady}
             drawingControlsHost={drawingControlsHost}
             onDrawingInteractionReadyChange={setDrawingInteractionReady}
@@ -1276,6 +1302,7 @@ function LiveChartCell({
               seriesStore={sourceMarketData.view.seriesStore}
               getCurrentVisibleRange={chartSurface.actions.getVisibleRange}
               onMarkerSourceChange={handleStrategyMarkerSourceChange}
+              onOverlayRunChange={handleOverlayRunChange}
               onLocateTrade={handleLocateStrategyTrade}
               onReviewTrade={handleReviewStrategyTrade}
               onAttachmentChange={handleStrategyAttachmentChange}

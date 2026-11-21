@@ -88,6 +88,8 @@ export interface ChartStrategyTesterCellBridgeProps {
   seriesStore: SeriesWindowView | null;
   getCurrentVisibleRange(): ChartSurfaceVisibleRange | null;
   onMarkerSourceChange(source: ChartStrategyResultMarkerSource | null): void;
+  /** The completed native/external run to draw on the chart (ADR-BACKTEST-015 P1c). */
+  onOverlayRunChange?(run: import("../runResult/useStrategyRunOverlay.js").StrategyOverlayRun | null): void;
   onLocateTrade(timeMs: number): void;
   onReviewTrade?(trade: StrategyTradeFocus | null): void;
   onAttachmentChange(attachment: ChartStrategyAttachmentRecord | null): void;
@@ -113,6 +115,7 @@ export default function ChartStrategyTesterCellBridge({
   seriesStore,
   getCurrentVisibleRange,
   onMarkerSourceChange,
+  onOverlayRunChange,
   onLocateTrade,
   onReviewTrade,
   onAttachmentChange,
@@ -789,6 +792,7 @@ export default function ChartStrategyTesterCellBridge({
       continuousChartActive={continuousChartActive}
       continuousMarketWindow={seriesStore}
       continuousMarkerSource={resultMarkerSource}
+      {...(onOverlayRunChange ? { onOverlayRunChange } : {})}
       onRunModeChange={setRunMode}
       {...(onReviewTrade ? { onReviewTrade } : {})}
       onPrepareData={handlePrepareData}

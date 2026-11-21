@@ -101,6 +101,7 @@ import { StrategySwitcher, type StrategySwitcherItem } from "./StrategySwitcher.
 const StrategyScriptWorkspace = lazy(() => import("./StrategyScriptWorkspace.js"));
 const NativeStrategyPanel = lazy(() => import("../native/NativeStrategyPanel.js"));
 const ContinuousStrategyPanel = lazy(() => import("../continuous/ContinuousStrategyPanel.js"));
+import { overlayRunForNative, type StrategyOverlayRun } from "../runResult/useStrategyRunOverlay.js";
 import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
 import type { ContinuousMode } from "../continuous/continuousTypes.js";
 import type { ChartStrategyResultMarkerSource } from "./chartStrategyResultMarkerSource.js";
@@ -215,6 +216,8 @@ export interface ChartStrategyTesterPanelProps {
   continuousMarketWindow?: SeriesWindowView | null;
   onRunModeChange?(mode: ContinuousMode): void;
   continuousMarkerSource?: Pick<ChartStrategyResultMarkerSource, "setContinuousResult">;
+  /** The completed native/external run to draw on the chart; host runs keep their own markers. */
+  onOverlayRunChange?(run: StrategyOverlayRun | null): void;
   active?: boolean;
   onReviewTrade?(trade: StrategyTradeFocus | null): void;
   onPrepareData(): void;
@@ -240,6 +243,11 @@ export default function ChartStrategyTesterPanel(props: ChartStrategyTesterPanel
     command("mode", "Switch strategy mode and mount its existing panel.", object({ mode: choice(["NATIVE", "CANDLESCOPE"]) }), ({ mode }) => { setMode(mode); props.onStrategyTesterModeChange?.(mode); setVisited((items) => new Set([...items, mode])); }),
   ] }));
   useLocale();
+  const onOverlayRunChange = props.onOverlayRunChange;
+  useEffect(() => { if (mode !== "NATIVE") onOverlayRunChange?.(null); }, [mode, onOverlayRunChange]);
+  const handleNativeRunChange = useCallback((run: Parameters<typeof overlayRunForNative>[0]) => {
+    onOverlayRunChange?.(overlayRunForNative(run));
+  }, [onOverlayRunChange]);
   const switchMode = (next: typeof mode) => {
     setModeChosen(true);
     setMode(next);
@@ -277,7 +285,8 @@ export default function ChartStrategyTesterPanel(props: ChartStrategyTesterPanel
               switchMode("CANDLESCOPE");
             });
           }}
-          strategies={strategies} active={props.active !== false && mode === "NATIVE"} docked />
+          strategies={strategies} active={props.active !== false && mode === "NATIVE"} docked
+          {...(onOverlayRunChange ? { onRunChange: handleNativeRunChange } : {})} />
       </Suspense>
     </StrategyDockPane>}
     {(mode === "CANDLESCOPE" || visited.has("CANDLESCOPE")) && <StrategyDockPane hidden={mode !== "CANDLESCOPE"}>
