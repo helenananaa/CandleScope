@@ -11,8 +11,7 @@ import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import { nativeApi, nativeExportUrl, nativeTerminal, nativeTimeframe, type NativeCapabilities, type NativeRun } from "./nativeBacktestApi.js";
 import { NativeStrategyReport } from "./NativeStrategyReport.js";
-import { watchNativeRun } from "./nativeRunWatch.js";
-import { useMarketDataWorkspaceResources } from "../../market-data/marketDataWorkspaceContext.js";
+import { useStrategyDataManager } from "../../market-data/useStrategyDataManager.js";
 import type { StrategyDataManager } from "../../market-data/manager/strategyDataManager.js";
 import "./nativeStrategy.css";
 import { NativeAdvancedInputs } from "./NativeAdvancedInputs.js";
@@ -95,7 +94,7 @@ export default function NativeStrategyPanel(props: NativeStrategyPanelProps) {
     <StrategyDockPane hidden={!comparing}>
       <StrategyDockSlot name="tabs"><strong className="strategy-dock-view-title">{t("strategyCompare.title")}</strong></StrategyDockSlot>
       <StrategyDockSlot name="actions"><Button size="sm" variant="ghost" onClick={() => strategies.setComparing(false)}>{t("chartTester.close")}</Button></StrategyDockSlot>
-      <NativeStrategyComparison items={collection.items}
+      <NativeStrategyComparison items={collection.items} manager={props.manager}
         context={contextParts}
         saved={collection.comparisons?.[context]}
         onSave={(selection) => strategies.update((value) => ({ ...value, comparisons: { ...value.comparisons, [context]: selection } }))}
@@ -127,8 +126,12 @@ function NativeStrategyInstancePanel(props: InstanceProps) {
 }
 function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" | "CANDLESCOPE"; onExecutionModeChange(mode: "NATIVE" | "CANDLESCOPE"): void }) {
   const locale = useLocale();
-  const workspaceStrategyManager = useMarketDataWorkspaceResources()?.dataManager.strategy;
-  const strategyManager = props.manager ?? workspaceStrategyManager ?? null;
+  const strategyManager = useStrategyDataManager(props.manager);
+  // Runs go through the strategy data manager, never the run endpoints (ADR-BACKTEST-015 P2c).
+  const requireStrategyManager = () => {
+    if (!strategyManager) throw new Error(t("chartTester.error.backend"));
+    return strategyManager;
+  };
   const tabStorageKey = `candlescope.native-tab:${props.cellScope}:${props.executionMode}`;
   const [tab, setTab] = useState<"script" | "settings" | "overview" | "trades" | "history">(() => {
     try { const saved = localStorage.getItem(tabStorageKey) ?? localStorage.getItem(`candlescope.native-tab:${props.cellScope}`); return saved === "settings" || saved === "overview" || saved === "trades" || saved === "history" ? saved : "script"; } catch { return "script"; }
@@ -165,7 +168,6 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   const [executionDataState, setExecutionDataState] = useState<"ready" | "loading" | "invalid" | "missing">("ready");
   const executionUpload = useRef(0);
   const [executionInputKey, setExecutionInputKey] = useState(0);
-  const runPath = mode === "NATIVE" ? "/native/runs" : "/external/runs";
   const [source, setSource] = useState(NATIVE_TEMPLATES.pine);
   const [advanced, setAdvanced] = useState<AdvancedInputs>(emptyAdvancedInputs);
   const [parameters, setParameters] = useState("{}");
@@ -250,11 +252,12 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
     if (!saved) return;
     setBusy(true);
     const abort = new AbortController();
-    void nativeApi<NativeRun>(`${runPath}/${encodeURIComponent(saved)}`, undefined, undefined, abort.signal)
+    if (!strategyManager) { setError(t("chartTester.error.backend")); setBusy(false); return; }
+    void strategyManager.loadNativeRun(mode, saved, abort.signal)
       .then((value) => { if (!abort.signal.aborted) receiveRun(value); })
       .catch((reason) => { if (!abort.signal.aborted) { setError(String(reason)); setBusy(false); } });
     return () => abort.abort();
-  }, [runContext, runPath, receiveRun]);
+  }, [runContext, mode, receiveRun, strategyManager]);
   useEffect(() => {
     alive.current = true;
     void nativeApi<NativeCapabilities>("/native/capabilities").then(setCapabilities).catch((reason) => setError(String(reason)));
@@ -263,16 +266,14 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   }, []);
   useEffect(() => {
     const abort = new AbortController();
-    void nativeApi<{ runs: NativeRun[] }>(runPath, undefined, undefined, abort.signal).then(async (value) => {
-      const listed = new Set(value.runs.map((item) => item.run_id));
-      const missing = [...strategyRunIds(instanceRef.current, mode)].filter((id) => !listed.has(id));
-      const restored = await Promise.all(missing.map((id) => nativeApi<NativeRun>(`${runPath}/${encodeURIComponent(id)}`, undefined, undefined, abort.signal).catch(() => null)));
+    if (!strategyManager) return;
+    void strategyManager.listNativeRuns(mode, strategyRunIds(instanceRef.current, mode), abort.signal).then((runs) => {
       if (abort.signal.aborted) return;
-      setHistory((items) => [...new Map([...value.runs, ...restored.filter((item): item is NativeRun => item !== null), ...items].map((item) => [item.run_id, item])).values()]);
+      setHistory((items) => [...new Map([...runs, ...items].map((item) => [item.run_id, item])).values()]);
     })
       .catch((reason) => { if (!abort.signal.aborted) setError(String(reason)); });
     return () => abort.abort();
-  }, [runPath, mode]);
+  }, [mode, strategyManager]);
   useEffect(() => {
     const defaultStart = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
     const defaultEnd = new Date().toISOString().slice(0, 10);
@@ -306,7 +307,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
     if (watchedRunId === null || !current || current.run_id !== watchedRunId) return;
     const controller = new AbortController();
     if (!strategyManager) { setError(t("chartTester.error.backend")); setBusy(false); return; }
-    void watchNativeRun(strategyManager, current, (value) => { if (!controller.signal.aborted) receiveRun(value); }, controller.signal)
+    void strategyManager.followNativeRun(current, (value) => { if (!controller.signal.aborted) receiveRun(value); }, controller.signal)
       .catch((reason) => { if (!controller.signal.aborted) { setError(String(reason)); setBusy(false); } });
     return () => controller.abort();
   }, [watchedRunId, receiveRun, strategyManager]);
@@ -378,7 +379,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         const payload = { ...(props.signalChart ? { signal_chart: props.signalChart } : {}), ...data, ...inputs, ...execution, snapshot_hash: snapshot.snapshot_hash,
           language, source, parameters: params, context: { symbol: context.symbol, timeframe: nativeTimeframe(context.interval), ...(pineMetadata ? { metadata: pineMetadata } : {}) } };
         if (prepareTrades) { await prepareRun("/external-strategy", { run: payload }); return; }
-        const result = await nativeApi<NativeRun>(runPath, payload, crypto.randomUUID());
+        const result = await requireStrategyManager().createNativeRun(mode, payload, crypto.randomUUID());
         if (alive.current) receiveRun(result);
         return;
       }
@@ -396,7 +397,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         end_time_ms: frozen.coverage.requested_end_ms ?? frozen.coverage.available_end_ms!,
         exchange: context.exchange, market_type: context.marketType,
       });
-      const result = await nativeApi<NativeRun>(runPath, { ...(props.signalChart ? { signal_chart: props.signalChart } : {}), ...inputs, ...execution,
+      const result = await requireStrategyManager().createNativeRun(mode, { ...(props.signalChart ? { signal_chart: props.signalChart } : {}), ...inputs, ...execution,
         language, source, parameters: params, dataset_id: frozen.dataset_id, data_epoch: frozen.data_epoch,
         snapshot_hash: frozen.snapshot_hash, start_time_ms: frozen.coverage.requested_start_ms ?? frozen.coverage.available_start_ms,
         end_time_ms: frozen.coverage.requested_end_ms ?? frozen.coverage.available_end_ms,
@@ -484,7 +485,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       command("historyScope", "Include all existing strategy run history or only this instance's history.", object({ all: bool }), ({ all }) => setAllHistory(all)),
       command("selectHistory", "Open an existing visible history run report.", object({ runId: nullable(text(128)) }), async ({ runId }) => {
         if (!runId) { setHistoricalRun(null); return; } if (!visibleHistory.some((row) => row.run_id === runId)) throw new Error("HISTORY_UNAVAILABLE");
-        const value = await nativeApi<NativeRun>(`${runPath}/${encodeURIComponent(runId)}`); pendingOverview.current = null; setError(""); setHistoricalRun(value); selectTab("overview");
+        const value = await requireStrategyManager().loadNativeRun(mode, runId); pendingOverview.current = null; setError(""); setHistoricalRun(value); selectTab("overview");
       }, { available: () => !busy }),
       command("exportReport", "Export the current native/external report through its existing backend export endpoint to a fileRef.", empty, async () => {
         if (!reportRun?.result) throw new Error("REPORT_UNAVAILABLE"); const response = await fetch(nativeExportUrl(reportRun.run_id, reportRun.execution_mode));
@@ -493,7 +494,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       command("run", "Start the existing run/preparation flow. Poll inspect for busy, error, resolution and run.state; acknowledgement does not mean completion.", empty,
         () => { void start(); return { submitted: true }; }, { available: () => !busy && !(mode === "CANDLESCOPE" && fidelity !== "BAR_APPROX" && executionDataState !== "ready") && !!(mode === "NATIVE" ? available?.available : available?.external_available) }),
       command("prepare", "Materialize the inspected missing-data resolution and start the run.", empty, () => { void start(true); return { submitted: true }; }, { available: () => !busy && !!resolution && resolution.status !== "READY" }),
-      command("cancelRun", "Cancel the current strategy run.", empty, async () => receiveRun(await nativeApi<NativeRun>(`${runPath}/${run!.run_id}/cancel`, {})), { available: () => !!run && !nativeTerminal(run.state), interrupt: true }),
+      command("cancelRun", "Cancel the current strategy run.", empty, async () => receiveRun(await requireStrategyManager().cancelNativeRun(mode, run!.run_id)), { available: () => !!run && !nativeTerminal(run.state), interrupt: true }),
       command("cancelPreparation", "Cancel the current data preparation job.", empty, async () => {
         const value = await preparationRequest<PreparationJob>(`/${preparation!.id}/cancel`, { method: "POST" }); preparationSubmission.current = null; setPreparation(value);
       }, { available: () => !!preparation && !["READY", "CANCELLED"].includes(preparation.state) && preparation.stage !== "STARTING" && !preparation.cancel_requested, interrupt: true }),
@@ -515,7 +516,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       </button>}
       {status !== "idle" && <span role="status" className="strategy-run-status" data-status={status}><i aria-hidden="true" />{t(`strategyReview.status.${status}`)}</span>}
       {run && !nativeTerminal(run.state) && <Button size="sm" variant="ghost" icon={<Icon name="stop" size={11} filled />}
-        onClick={() => void nativeApi<NativeRun>(`${runPath}/${run.run_id}/cancel`, {}).then(receiveRun).catch((reason) => setError(String(reason)))}>
+        onClick={() => void requireStrategyManager().cancelNativeRun(mode, run.run_id).then(receiveRun).catch((reason) => setError(String(reason)))}>
         {t("native.cancel")}</Button>}
       <Button size="sm" variant="primary" icon={<Icon name="play" size={11} filled />} disabled={runDisabled} onClick={runNow}
         title={t(mode === "NATIVE" ? "native.run" : "native.external.run")}>
@@ -674,7 +675,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       {!visibleHistory.length && <EmptyState compact title={t("strategyHistory.empty")} />}
       {visibleHistory.length > 0 && <ul className="native-history-list" aria-label={t(mode === "NATIVE" ? "native.history" : "native.external.history")}>
         {visibleHistory.map((item) => <li key={item.run_id}><button type="button" disabled={busy} aria-current={reportRun?.run_id === item.run_id}
-          onClick={() => void nativeApi<NativeRun>(`${runPath}/${item.run_id}`).then((value) => { pendingOverview.current = null; setError(""); setHistoricalRun(value); selectTab("overview"); }).catch((reason) => setError(String(reason)))}>
+          onClick={() => void requireStrategyManager().loadNativeRun(mode, item.run_id).then((value) => { pendingOverview.current = null; setError(""); setHistoricalRun(value); selectTab("overview"); }).catch((reason) => setError(String(reason)))}>
           <time dateTime={new Date(item.created_at_ms).toISOString()}>{new Date(item.created_at_ms).toLocaleString(locale)}</time>
           <span>{item.runtime_identity.engine.package}</span>
           <Badge tone={researchStateTone(item.state === "INTERRUPTED" ? "FAILED" : item.state)}>{researchStateLabel(item.state)}</Badge>

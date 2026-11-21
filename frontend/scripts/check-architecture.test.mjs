@@ -591,3 +591,45 @@ test("live chart consumers cannot import mutable stores or the window commit aut
   assert.equal(result.violations.length, 3);
   assert.ok(result.violations.every((violation) => violation.rule === "live-window-writer-boundary"));
 });
+
+test("strategy runs go through the strategy data manager, not their transports", (t) => {
+  const transports = {
+    "src/features/backtest/backtestApi.ts": "export const defaultBacktestApi = {}; export function createBacktestApi() {}",
+    "src/features/backtest/backtestRunClient.ts": "export async function pollBacktestRunToTerminal() {}",
+    "src/features/backtest/native/nativeBacktestApi.ts":
+      'export const defaultNativeRunClient = {}; export function nativeApi() {} const path = "/native/runs";',
+    "src/features/market-data/manager/strategyDataManager.ts":
+      'import { defaultBacktestApi } from "../../backtest/backtestApi.js"; import { defaultNativeRunClient } from "../../backtest/native/nativeBacktestApi.js";',
+  };
+  const result = runArchitectureFixture(t, {
+    ...transports,
+    "src/features/backtest/chart-tester/Bridge.tsx":
+      'import { defaultBacktestApi as api, type BacktestApiClient } from "../backtestApi.js";\nimport { pollBacktestRunToTerminal } from "../backtestRunClient.js";',
+    "src/features/backtest/native/Panel.tsx":
+      'import { nativeApi } from "./nativeBacktestApi.js";\nconst runPath = "/external/runs";\nvoid nativeApi(`/native/runs/${id}/cancel`);\nvoid fetch(`/api/v1/strategy-runs/${id}`);',
+  });
+  const found = result.violations.filter((v) => v.rule === "strategy-run-via-manager").map((v) => `${v.filePath}:${v.line}`);
+  assert.deepEqual(found.sort(), [
+    "src/features/backtest/chart-tester/Bridge.tsx:1",
+    "src/features/backtest/chart-tester/Bridge.tsx:2",
+    "src/features/backtest/native/Panel.tsx:2",
+    "src/features/backtest/native/Panel.tsx:3",
+    "src/features/backtest/native/Panel.tsx:4",
+  ]);
+});
+
+test("run transports may be named in types, comments, tests and other run resources", (t) => {
+  const result = runArchitectureFixture(t, {
+    "src/features/backtest/backtestApi.ts": "export const defaultBacktestApi = {}; export interface BacktestApiClient {}",
+    "src/features/backtest/native/Panel.tsx": [
+      'import type { BacktestApiClient } from "../backtestApi.js";',
+      'import { type BacktestApiClient as Client } from "../backtestApi.js";',
+      "// Served by `/api/v1/strategy-runs` and /native/runs.",
+      "/** Reads `/backtests/runs/{id}`. */",
+      'const replay = "/replay/training/runs/abc";',
+      'const label = "runs";',
+    ].join("\n"),
+    "src/features/backtest/__tests__/wire.test.ts": 'import { defaultBacktestApi } from "../backtestApi.js"; const url = "/native/runs";',
+  });
+  assert.equal(result.ok, true, JSON.stringify(result.violations));
+});
