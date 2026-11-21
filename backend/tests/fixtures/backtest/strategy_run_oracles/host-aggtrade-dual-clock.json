@@ -1,0 +1,38 @@
+{
+  "description": "Host AGG_TRADE_EXECUTION dual clock, builtin SMA cross provider",
+  "digests": {
+    "decision_hash": "673b2d76d2924cbab4b62e20bca1c723181f21b8c6d94a073c2c902608eea4e6",
+    "equity_curve": "sha256:2e97fc8984967465d3b6034b8a330e94a21bb4b4587d8f9e3b1d8d562f02962d",
+    "fill_hash": "2a723a6cec2dcd4158501500df032a5c8ca7980e72d7aff29f39906d6b193122",
+    "ledger_hash": "4f222813a5cbe011a5a6f347189d0d63028e3cbbc850ec5ad74172dc2505abcf",
+    "orders": "sha256:274050e1a171f6fc0ef187b7a58fcd60078908f5fe1908bfb88bffa9b79430b5"
+  },
+  "path": "host-aggtrade-dual-clock",
+  "scenario": {
+    "bars": 47,
+    "bars_digest": "6961bc80ef0f1bac2416f39e621748b9d0cbde5e783a7c19c7c3c2983695af46",
+    "id": "swing-48m-aggtrade-v1",
+    "trades": 192,
+    "trades_digest": "fac3b513aff51a9bae975f3c4a5283e00d3803139b21be70e75312660dc3ade7"
+  },
+  "schema": "candlescope.strategy-run-oracle/1",
+  "summary": {
+    "fill_rows": [
+      "665000 BUY 1 @ 107.0107 fee 0.03210321",
+      "905000 SELL 1 @ 99.99 fee 0.029997",
+      "1085000 BUY 1 @ 108.0108 fee 0.03240324",
+      "1325000 SELL 1 @ 101.9898 fee 0.03059694",
+      "1625000 BUY 1 @ 107.0107 fee 0.03210321",
+      "1865000 SELL 1 @ 99.99 fee 0.029997",
+      "2045000 BUY 1 @ 108.0108 fee 0.03240324",
+      "2285000 SELL 1 @ 101.9898 fee 0.03059694",
+      "2585000 BUY 1 @ 107.0107 fee 0.03210321",
+      "2825000 SELL 1 @ 99.99 fee 0.029997"
+    ],
+    "fills": 10,
+    "final_equity": "9966.58359901",
+    "final_position": "0",
+    "orders": 10,
+    "rejected": 0
+  }
+}
