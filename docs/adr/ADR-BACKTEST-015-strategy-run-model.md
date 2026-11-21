@@ -1,6 +1,6 @@
 # ADR-BACKTEST-015：统一策略运行模型——一种 Run，模式拆成字段，界面按用途划分
 
-- 状态：Proposed（待确认：本 ADR 替换 #165 已确认的“三个模式按钮”，见 §7.1）
+- 状态：Accepted（2026-11-21 用户确认 §7.1：替换 #165 的“三个模式按钮”）
 - 日期：2026-11-21
 - 基线：`main@aae80d98`
 - 修订：[ADR-BACKTEST-002](ADR-BACKTEST-002-host-owned-execution.md)（补充 `authority=SCRIPT` 例外）、[ADR-BACKTEST-013](ADR-BACKTEST-013-CHART-FIRST-STRATEGY-TESTER.md)（图表层不再暴露引擎和模式切换）
@@ -228,7 +228,7 @@ Run = StrategyVersion × Parameters × InputSpec × ExecutionProfile × ClockPol
 #165 的“纯历史 / 历史 + 实时 / 纯实时三个模式按钮”被替换：用户不再选模式。图表默认 `FOLLOW`，
 “前向跟踪”显式创建 `FORWARD`，研究工作区只创建 `FIXED` 与 `Experiment`。#165 的其余原则全部保留：
 输入快照隔离、两个 Manager、历史与实时交接无遗漏无重复、修补需确认或授权（仅 `FORWARD`）、
-检查点后缀重算。**此项经用户确认后，本 ADR 才转为 Accepted。**
+检查点后缀重算。**用户已于 2026-11-21 确认此项，本 ADR 转为 Accepted。**
 
 ### 7.2 建议的 issue 重新划分
 
