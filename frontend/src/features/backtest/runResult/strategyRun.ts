@@ -3,6 +3,7 @@
  * every run family, and one capability matrix in place of the three per-family
  * capability endpoints. Served by `/api/v1/strategy-runs`.
  */
+import { readNdjsonUntilTerminal, StrategyRunStreamError } from "../backtestRunStream.js";
 import type { RunResultAuthority, RunResultFamily } from "./runResult.js";
 
 export const STRATEGY_RUN_SCHEMA = "candlescope.strategy-run/1";
@@ -179,4 +180,59 @@ export function parseStrategyRunCapabilities(value: unknown): StrategyRunCapabil
 export function strategyRunProfile(capabilities: StrategyRunCapabilities, family: StrategyRunFamily,
   language: string): StrategyRunProfile | null {
   return capabilities.profiles.find((profile) => profile.family === family && profile.language === language) ?? null;
+}
+
+export const STRATEGY_RUN_STREAM_SCHEMA = "candlescope.strategy-run-stream/1";
+
+/** The latest checkpoint of a host run; null for native runs and finished runs. */
+export interface StrategyRunProgress {
+  sequence: number;
+  created_at_ms: number;
+}
+
+/**
+ * Consume one `candlescope.strategy-run-stream/1` body until the run's terminal status.
+ * Every status must be for `runId` and keep its generation. A server error frame or
+ * EOF before a terminal status throws `StrategyRunStreamError`; the run itself is untouched.
+ */
+export function readStrategyRunStatusStream(input: {
+  body: ReadableStream<Uint8Array>;
+  runId: string;
+  signal?: AbortSignal;
+  onStatus?: (status: StrategyRunStatus, progress: StrategyRunProgress | null) => void;
+  maxFrameCharacters?: number;
+}): Promise<StrategyRunStatus> {
+  let generation: number | null | undefined;
+  const parse = (line: string): StrategyRunStatus | null => {
+    let raw: unknown;
+    try { raw = JSON.parse(line); } catch { fail("frame", "must be JSON"); }
+    const frame = row(raw, "frame");
+    if (frame.schema !== STRATEGY_RUN_STREAM_SCHEMA) fail("frame.schema", `must be ${STRATEGY_RUN_STREAM_SCHEMA}`);
+    if (frame.type === "heartbeat") {
+      if (frame.terminal !== false) fail("frame.terminal", "a heartbeat is never terminal");
+      return null;
+    }
+    if (frame.type === "error") {
+      const error = row(frame.error, "frame.error");
+      if (frame.terminal !== true || frame.run_id !== input.runId) fail("frame", "an error ends this run's stream");
+      throw new StrategyRunStreamError(text(error.code, "frame.error.code"), text(error.message, "frame.error.message"));
+    }
+    if (frame.type !== "status") fail("frame.type", "must be status, heartbeat or error");
+    const status = parseStrategyRunStatus(frame.status);
+    if (status.run_id !== input.runId) fail("frame.status.run_id", `asked for ${input.runId}, served ${status.run_id}`);
+    if (frame.terminal !== status.terminal) fail("frame.terminal", "disagrees with the status");
+    if (generation !== undefined && status.generation !== generation) fail("frame.status.generation", "changed within one stream");
+    generation = status.generation;
+    let progress: StrategyRunProgress | null = null;
+    if (frame.progress !== null) {
+      const value = row(frame.progress, "frame.progress");
+      if (!Number.isSafeInteger(value.sequence) || (value.sequence as number) < 0
+        || !Number.isSafeInteger(value.created_at_ms)) fail("frame.progress", "must hold an integer sequence and time");
+      progress = { sequence: value.sequence as number, created_at_ms: value.created_at_ms as number };
+    }
+    input.onStatus?.(status, progress);
+    return status.terminal ? status : null;
+  };
+  return readNdjsonUntilTerminal({ body: input.body, parse, ...(input.signal ? { signal: input.signal } : {}),
+    ...(input.maxFrameCharacters ? { maxFrameCharacters: input.maxFrameCharacters } : {}) });
 }

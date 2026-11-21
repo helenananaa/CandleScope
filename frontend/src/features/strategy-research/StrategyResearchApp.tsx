@@ -556,7 +556,7 @@ export default function StrategyResearchApp({
       {!nativeMode && availability === "error" && <p className="strategy-research-note" role="status">{t("indicator.editor.runtimeUnavailableHelp")}</p>}
       {!nativeMode && availability === "unavailable" && <p className="strategy-research-note" role="status">{t("native.platformHelp")}</p>}
       {nativeMode ? researchRun.session ? <Suspense fallback={<p className="strategy-research-note">{t("native.loading")}</p>}>
-        <NativeStrategyPanel signalChart={chartStrategySignalInput(settings)} session={researchRun.session} cellScope="strategy-research-native" onClose={() => setNativeMode(false)}
+        <NativeStrategyPanel signalChart={chartStrategySignalInput(settings)} session={researchRun.session} manager={researchRun.historyManager} cellScope="strategy-research-native" onClose={() => setNativeMode(false)}
           onSelectPython={() => {
             void openPythonStrategyDraft(getChartStrategyDraftStore(), scriptDraft).then((draft) => {
               dispatch({ type: "script/setDraft", draftId: draft.id });

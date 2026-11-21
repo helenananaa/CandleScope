@@ -13,7 +13,7 @@ import { ContinuousStrategyDataManager } from "./continuousStrategyDataManager.j
 import { parseRunResult, RUN_RESULT_FAMILY_IDENTITY, RunResultContractError, type RunResult, type RunResultFamily } from "../../backtest/runResult/runResult.js";
 import {
   parseStrategyRunCapabilities, parseStrategyRunStatus, StrategyRunContractError,
-  type StrategyRunCapabilities, type StrategyRunStatus,
+  type StrategyRunCapabilities, type StrategyRunProgress, type StrategyRunStatus,
 } from "../../backtest/runResult/strategyRun.js";
 
 const RETAINED_RUN_RESULTS = 8;
@@ -24,7 +24,7 @@ type ExternalRunDraft = { readonly revision: StrategyRevisionRecord; readonly bo
 type ResearchRequest = Omit<Parameters<typeof runResearchBacktest>[0], "api" | "waitForTerminal" | "wait" | "pollIntervalMs">;
 export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "streamRun" | "getReport" | "getChart" | "cancelRun" | "listRuns" | "compareRuns"> & Pick<BacktestApiClient, "getResultReplay" | "saveResultReplayNote" | "observeStrategyPreparation">
   & Partial<Pick<BacktestApiClient, "capabilities" | "listStrategyRevisions" | "externalProviders"
-    | "getStrategyRun" | "getStrategyRunResult" | "cancelStrategyRun" | "strategyRunCapabilities">>;
+    | "getStrategyRun" | "getStrategyRunResult" | "cancelStrategyRun" | "strategyRunCapabilities" | "watchStrategyRun">>;
 
 /** Owns fixed-history operations and immutable results independently of live
  * chart stores. Releasing a consumer never cancels a durable shared run. */
@@ -189,6 +189,25 @@ export class StrategyDataManager {
       owned.throwIfAborted();
       if (status.run_id !== runId) throw new StrategyRunContractError("run_id", `asked for ${runId}, served ${status.run_id}`);
       return status;
+    });
+  }
+
+  /**
+   * Follow one fixed run's committed status until it finishes (ADR-BACKTEST-015 P2b).
+   * Resolves with the terminal status, whatever its outcome; releasing the watch never cancels the run.
+   */
+  watchRun(runId: string, onStatus?: (status: StrategyRunStatus, progress: StrategyRunProgress | null) => void,
+    signal?: AbortSignal): Promise<StrategyRunStatus> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.watchStrategyRun) unavailable();
+      this.streams += 1;
+      try {
+        return await this.api.watchStrategyRun(runId, owned, (status, progress) => {
+          if (!owned.aborted && !this.closed) onStatus?.(status, progress);
+        });
+      } finally {
+        this.streams -= 1;
+      }
     });
   }
 

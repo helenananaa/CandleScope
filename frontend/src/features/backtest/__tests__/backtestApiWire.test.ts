@@ -296,3 +296,24 @@ test("the run facade is addressed beside the backtest base, one entry for every 
     mock.restoreAll();
   }
 });
+
+test("a run's status stream is read from the facade's events route", async () => {
+  const urls: string[] = [];
+  const frame = { schema: "candlescope.strategy-run-stream/1", type: "status", terminal: true, progress: null, status: {
+    schema: "candlescope.strategy-run/1", run_id: "native_1", family: "native", authority: "SCRIPT", clock_policy: "FIXED",
+    fidelity: null, language: "pine", state: "COMPLETED", source_state: "COMPLETED", terminal: true, generation: null,
+    result_available: true, error: null } };
+  mock.method(globalThis, "fetch", async (input: RequestInfo | URL) => {
+    urls.push(String(input));
+    return new Response(`${JSON.stringify(frame)}\n`, { headers: { "content-type": "application/x-ndjson" } });
+  });
+  try {
+    const status = await createBacktestApi("/api/v1/backtests").watchStrategyRun!("native_1");
+    assert.equal(status.state, "COMPLETED");
+    assert.deepEqual(urls, ["/api/v1/strategy-runs/native_1/events"]);
+    mock.method(globalThis, "fetch", async () => Response.json({}));
+    await assert.rejects(createBacktestApi("/api/v1/backtests").watchStrategyRun!("native_1"), /stream/);
+  } finally {
+    mock.restoreAll();
+  }
+});

@@ -1,5 +1,6 @@
 import { readStrategyRunStream, StrategyRunStreamError, type StrategyRunUpdate } from "./backtestRunStream.js";
 import { API_BASE } from "../../services/apiConfig.js";
+import { readStrategyRunStatusStream, type StrategyRunProgress, type StrategyRunStatus } from "./runResult/strategyRun.js";
 import type { ResearchSelectedVersion } from "../strategy-research/researchSelectedVersion.js";
 import { preparationRequest, waitForPreparation, type PreparationJob } from "../data-preparation/api.js";
 import type {
@@ -230,6 +231,9 @@ export interface BacktestApiClient {
   getStrategyRun?(runId: string, signal?: AbortSignal): Promise<unknown>;
   getStrategyRunResult?(runId: string, signal?: AbortSignal): Promise<unknown>;
   cancelStrategyRun?(runId: string, signal?: AbortSignal): Promise<unknown>;
+  /** A commit-driven status stream for one fixed run; resolves with its terminal status. */
+  watchStrategyRun?(runId: string, signal?: AbortSignal,
+    onStatus?: (status: StrategyRunStatus, progress: StrategyRunProgress | null) => void): Promise<StrategyRunStatus>;
   strategyRunCapabilities?(signal?: AbortSignal): Promise<unknown>;
   getResultReplay?(cursor: BacktestResultReplayCursor, signal?: AbortSignal): Promise<BacktestResultReplayFrame>;
   saveResultReplayNote?(cursor: BacktestResultReplayCursor, note: BacktestResultReplayNoteDraft,
@@ -537,6 +541,16 @@ export function createBacktestApi(base = `${API_BASE}/backtests`, runsBase = str
     },
     async getStrategyRunResult(runId, signal) {
       return readJson(await fetch(`${runsBase}/${encodeURIComponent(runId)}/result`, requestOptions({}, signal)));
+    },
+    async watchStrategyRun(runId, signal, onStatus) {
+      const response = await fetch(`${runsBase}/${encodeURIComponent(runId)}/events`, requestOptions({
+        headers: { Accept: "application/x-ndjson" },
+      }, signal));
+      if (!response.ok) await readJson(response);
+      if (!response.body || !response.headers.get("content-type")?.startsWith("application/x-ndjson")) {
+        throw new StrategyRunStreamError("STRATEGY_STREAM_UNAVAILABLE", "The backend did not return a run status stream");
+      }
+      return readStrategyRunStatusStream({ body: response.body, runId, ...(signal ? { signal } : {}), ...(onStatus ? { onStatus } : {}) });
     },
     async cancelStrategyRun(runId, signal) {
       return readJson(await fetch(`${runsBase}/${encodeURIComponent(runId)}/cancel`, requestOptions({ method: "POST" }, signal)));

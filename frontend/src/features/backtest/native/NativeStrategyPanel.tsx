@@ -11,7 +11,9 @@ import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import { nativeApi, nativeExportUrl, nativeTerminal, nativeTimeframe, type NativeCapabilities, type NativeRun } from "./nativeBacktestApi.js";
 import { NativeStrategyReport } from "./NativeStrategyReport.js";
-import { pollNativeRun } from "./nativeRunPolling.js";
+import { watchNativeRun } from "./nativeRunWatch.js";
+import { useMarketDataWorkspaceResources } from "../../market-data/marketDataWorkspaceContext.js";
+import type { StrategyDataManager } from "../../market-data/manager/strategyDataManager.js";
 import "./nativeStrategy.css";
 import { NativeAdvancedInputs } from "./NativeAdvancedInputs.js";
 import { NativePreparationContexts } from "./NativePreparationContexts.js";
@@ -56,6 +58,8 @@ type NativeStrategyPanelProps = Pick<ChartStrategyTesterPanelProps, "session" | 
   onSelectPython?(): void;
   /** Supplied by the chart dock, which shows the strategy list in its header. */
   strategies?: NativeStrategyController;
+  /** A page with its own data manager (the research page) passes it; charts use the workspace's. */
+  manager?: StrategyDataManager | null;
 };
 export default function NativeStrategyPanel(props: NativeStrategyPanelProps) {
   useLocale();
@@ -123,6 +127,8 @@ function NativeStrategyInstancePanel(props: InstanceProps) {
 }
 function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" | "CANDLESCOPE"; onExecutionModeChange(mode: "NATIVE" | "CANDLESCOPE"): void }) {
   const locale = useLocale();
+  const workspaceStrategyManager = useMarketDataWorkspaceResources()?.dataManager.strategy;
+  const strategyManager = props.manager ?? workspaceStrategyManager ?? null;
   const tabStorageKey = `candlescope.native-tab:${props.cellScope}:${props.executionMode}`;
   const [tab, setTab] = useState<"script" | "settings" | "overview" | "trades" | "history">(() => {
     try { const saved = localStorage.getItem(tabStorageKey) ?? localStorage.getItem(`candlescope.native-tab:${props.cellScope}`); return saved === "settings" || saved === "overview" || saved === "trades" || saved === "history" ? saved : "script"; } catch { return "script"; }
@@ -291,16 +297,19 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
     patchInstance.current(item.id, { drafts: { [`${language}:${mode}`]: draft } });
     try { localStorage.setItem(storageKey, draft); } catch { setError(t("native.saveFailed")); }
   };
+  // One commit-driven watch per unfinished run; header changes do not restart it.
+  const watchedRun = useRef(run);
+  useLayoutEffect(() => { watchedRun.current = run; }, [run]);
+  const watchedRunId = run && !nativeTerminal(run.state) ? run.run_id : null;
   useEffect(() => {
-    if (!run || nativeTerminal(run.state)) return;
+    const current = watchedRun.current;
+    if (watchedRunId === null || !current || current.run_id !== watchedRunId) return;
     const controller = new AbortController();
-    const timer = window.setTimeout(() => {
-      void pollNativeRun(run, controller.signal)
-        .then((value) => { if (!controller.signal.aborted) receiveRun(value); })
-        .catch((reason) => { if (!controller.signal.aborted) { setError(String(reason)); setBusy(false); } });
-    }, 700);
-    return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [run, receiveRun]);
+    if (!strategyManager) { setError(t("chartTester.error.backend")); setBusy(false); return; }
+    void watchNativeRun(strategyManager, current, (value) => { if (!controller.signal.aborted) receiveRun(value); }, controller.signal)
+      .catch((reason) => { if (!controller.signal.aborted) { setError(String(reason)); setBusy(false); } });
+    return () => controller.abort();
+  }, [watchedRunId, receiveRun, strategyManager]);
   const start = async (prepare = false) => {
     // A restored uploaded input requires an explicit re-selection or clearing,
     // including the automatic preparation entry point.

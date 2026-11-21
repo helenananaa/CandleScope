@@ -1,0 +1,21 @@
+{
+  "progress": null,
+  "schema": "candlescope.strategy-run-stream/1",
+  "status": {
+    "authority": "HOST",
+    "clock_policy": "FIXED",
+    "error": null,
+    "family": "host",
+    "fidelity": "BAR_APPROX",
+    "generation": 1,
+    "language": null,
+    "result_available": true,
+    "run_id": "bt_fixture",
+    "schema": "candlescope.strategy-run/1",
+    "source_state": "COMPLETED",
+    "state": "COMPLETED",
+    "terminal": true
+  },
+  "terminal": true,
+  "type": "status"
+}

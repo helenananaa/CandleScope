@@ -5,10 +5,11 @@ these. Every route goes through the profile's StrategyDataManager.
 """
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.backtest.errors import BacktestError
 from app.backtest.strategy.protocol import StrategyProviderError
@@ -36,7 +37,7 @@ def _error(failure: Exception) -> JSONResponse:
                             content={"error": {"code": code, "message": message}})
     elif code in UNAVAILABLE:
         status = 503
-    elif code in {"RUN_RESULT_UNAVAILABLE", "RUN_CONTROL_UNSUPPORTED"}:
+    elif code in {"RUN_RESULT_UNAVAILABLE", "RUN_CONTROL_UNSUPPORTED", "RUN_STREAM_UNSUPPORTED"}:
         status = 409
     else:
         status = 400
@@ -62,6 +63,25 @@ async def status(request: Request, run_id: str):
         return _reply(await _runs(request).status(run_id))
     except WIRE_ERRORS as failure:
         return _error(failure)
+
+
+@router.get("/{run_id}/events", response_model=None)
+async def events(request: Request, run_id: str):
+    """``candlescope.strategy-run-stream/1`` as NDJSON: a status frame per committed change, ending at the terminal one."""
+    try:
+        watch = await _runs(request).watch(run_id)
+    except WIRE_ERRORS as failure:
+        return _error(failure)
+
+    async def rows():
+        try:
+            async for frame in watch.events():
+                yield json.dumps(frame, ensure_ascii=False, allow_nan=False, separators=(",", ":")) + "\n"
+        finally:
+            watch.close()
+
+    return StreamingResponse(rows(), media_type="application/x-ndjson",
+                             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no", "Content-Encoding": "identity"})
 
 
 @router.get("/{run_id}/result")

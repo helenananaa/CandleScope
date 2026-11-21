@@ -18,7 +18,7 @@ Families:
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Mapping
 from typing import TYPE_CHECKING, Any, get_args
 
 from app.backtest.errors import BacktestError
@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 
 
 STATUS_SCHEMA = "candlescope.strategy-run/1"
+STREAM_SCHEMA = "candlescope.strategy-run-stream/1"
 CAPABILITIES_SCHEMA = "candlescope.strategy-run-capabilities/1"
 FAMILIES = ("host", "native", "external", "continuous")
 STATES = ("QUEUED", "RUNNING", "PAUSED", "BLOCKED", "COMPLETED", "FAILED", "CANCELLED")
@@ -138,13 +139,24 @@ class StrategyRuns:
         return await self._continuous_status(run_id)
 
     def _host_status(self, run_id: str) -> dict[str, Any]:
-        record = self._host_record(run_id)
+        return self._host_view(run_id)[0]
+
+    def _host_view(self, run_id: str) -> tuple[dict[str, Any], dict[str, int] | None]:
+        """The host run's status and latest checkpoint, read in one transaction."""
+        self.owner._require_open()
+        value = self.owner.service.repository.read_run_progress(run_id)
+        if value is None:
+            raise _not_found(run_id)
+        record, checkpoint = value["run"], value["checkpoint"]
         source_state = str(record["state"])
         state = _lifecycle(HOST_STATES, source_state, "host")
-        return _status(run_id, "host", authority="HOST", clock_policy="FIXED",
-                       fidelity=str(record["fidelity_mode"]), language=None, source_state=source_state,
-                       state=state, generation=int(record["generation"]),
-                       result_available=state == "COMPLETED", error=record.get("failure_code"))
+        status = _status(run_id, "host", authority="HOST", clock_policy="FIXED",
+                         fidelity=str(record["fidelity_mode"]), language=None, source_state=source_state,
+                         state=state, generation=int(record["generation"]), result_available=state == "COMPLETED",
+                         error=value["failure"] or record.get("failure_code"))
+        progress = None if checkpoint is None else {
+            "sequence": int(checkpoint["sequence"]), "created_at_ms": int(checkpoint["created_at_ms"])}
+        return status, progress
 
     def _native_status(self, run_id: str) -> dict[str, Any]:
         summary = self._runtime().native.status_summary(run_id)
@@ -181,6 +193,26 @@ class StrategyRuns:
         return _status(run_id, "continuous", authority="HOST", clock_policy="FORWARD", fidelity="BAR_APPROX",
                        language=None, source_state=source_state, state=state, generation=generation,
                        result_available=False, error=error)
+
+    # -- watch ------------------------------------------------------------
+
+    async def watch(self, run_id: str) -> RunWatch:
+        """A commit-driven status stream for one fixed run (step P2b).
+
+        The first status is read before this returns, so an unknown run fails
+        before a stream starts. Releasing the watch never cancels the run.
+        """
+        store = store_for(run_id)
+        if store == "continuous":
+            raise BacktestError("RUN_STREAM_UNSUPPORTED", "forward runs stream through their own channel until step P2d")
+        if store == "host":
+            self.owner._require_open()
+            updates, read = self.owner.service.repository.run_updates, self._host_view
+        else:
+            updates, read = self._runtime().native.run_updates, lambda value: (self._native_status(value), None)
+        # Check capacity before subscribing, so a refused watch leaves no subscription behind.
+        self.owner._require_capacity()
+        return await self.owner._admit(RunWatch(self.owner, run_id, updates, read))
 
     # -- result -----------------------------------------------------------
 
@@ -329,3 +361,77 @@ def _profile(family: str, language: str, *, authority: str, clock_policy: str, f
         "account_models": account_models, "intervals": intervals,
         "controls": {"cancel": cancel},
     }
+
+
+class RunWatch:
+    """One consumer's view of a fixed run: a status frame per committed change, then the terminal one.
+
+    Frames are ``candlescope.strategy-run-stream/1``. A wakeup carries no data;
+    each frame is read from the committed store, so coalesced commits only
+    skip intermediate states, never the terminal one.
+    """
+
+    def __init__(self, owner: StrategyDataManager, run_id: str, updates, read) -> None:
+        self.owner = owner
+        self.run_id = run_id
+        self._read_view = read
+        self._updates = updates.subscribe(run_id)
+        self._generation: int | None = None
+        self._first: dict[str, Any] | None = None
+        self._iterating = False
+
+    async def _read(self) -> dict[str, Any]:
+        # Clear before reading: a commit racing with the read schedules another read.
+        self._updates.clear_before_read()
+        status, progress = await asyncio.to_thread(self._read_view, self.run_id)
+        if self._updates.closed:
+            raise asyncio.CancelledError
+        if self._generation is not None and status["generation"] != self._generation:
+            return {"schema": STREAM_SCHEMA, "type": "error", "terminal": True, "run_id": self.run_id,
+                    "error": {"code": "RUN_IDENTITY_CHANGED",
+                              "message": "The run's generation changed; reconnect to the current run."}}
+        self._generation = status["generation"]
+        return {"schema": STREAM_SCHEMA, "type": "status", "terminal": status["terminal"],
+                "status": status, "progress": progress}
+
+    async def prepare(self) -> None:
+        self._first = await self._read()
+
+    async def events(self) -> AsyncIterator[dict[str, Any]]:
+        if self._iterating:
+            raise RuntimeError("a run watch has one consumer")
+        self._iterating = True
+        previous = None
+        try:
+            frame, self._first = self._first, None
+            while not self._updates.closed:
+                if frame is None:
+                    frame = await self._read()
+                if frame != previous:
+                    yield frame
+                    previous = frame
+                if frame["terminal"]:
+                    return
+                frame = None
+                while not self._updates.closed:
+                    try:
+                        if not await asyncio.wait_for(self._updates.wait(), self.owner.heartbeat_seconds):
+                            return
+                        break
+                    except TimeoutError:
+                        # Keep the transport alive without polling the store.
+                        yield {"schema": STREAM_SCHEMA, "type": "heartbeat", "terminal": False}
+        except BacktestError as exc:
+            yield {"schema": STREAM_SCHEMA, "type": "error", "terminal": True, "run_id": self.run_id,
+                   "error": {"code": exc.code, "message": exc.message}}
+        except Exception:
+            yield {"schema": STREAM_SCHEMA, "type": "error", "terminal": True, "run_id": self.run_id,
+                   "error": {"code": "STRATEGY_STREAM_FAILED",
+                             "message": "The run's committed status could not be read; reconnect to inspect it."}}
+        finally:
+            self.close()
+
+    def close(self) -> None:
+        self._first = None
+        self._updates.close()
+        self.owner._subscriptions.discard(self)
