@@ -124,7 +124,8 @@ class StrategyDataManager:
         self._control_requests = 0
         self.max_subscriptions = max_subscriptions
         self.heartbeat_seconds = heartbeat_seconds
-        self._subscriptions: set[StrategyRunSubscription] = set()
+        # Host event subscriptions and run-facade watches share one capacity.
+        self._subscriptions: set[Any] = set()
         self._closed = False
         self.external_providers = ExternalProviderAccess(self.control_plane, runtime, check_owner=self._require_open)
 
@@ -178,12 +179,19 @@ class StrategyDataManager:
         return self.service
 
     async def subscribe_run(self, run_id: str) -> StrategyRunSubscription:
+        self._require_capacity()
+        return await self._admit(StrategyRunSubscription(self, run_id))
+
+    def _require_capacity(self) -> None:
         if self._closed:
             raise BacktestError("STRATEGY_MANAGER_CLOSED", "strategy manager is closed")
         continuous_count=0 if self._continuous_access is None else len(self._continuous_access.subscriptions)
         if len(self._subscriptions)+continuous_count >= self.max_subscriptions:
             raise BacktestError("RUN_CAPACITY_EXCEEDED", "strategy subscription capacity reached")
-        subscription = StrategyRunSubscription(self, run_id)
+
+    async def _admit(self, subscription):
+        """Count a run view against the shared capacity and read its first frame."""
+        self._require_capacity()
         self._subscriptions.add(subscription)
         try:
             # Errors in the initial lookup are returned before streaming headers.

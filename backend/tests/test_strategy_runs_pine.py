@@ -46,3 +46,20 @@ def test_pine_runs_read_the_same_through_the_facade(native_runtime):
     rows = {(row["family"], row["language"]): row for row in matrix["profiles"]}
     assert rows["native", "pine"]["available"] and rows["external", "pine"]["available"]
     assert matrix["families"]["native"]["available"] and matrix["families"]["external"]["available"]
+
+
+def test_a_real_pine_run_is_watched_to_completion_without_polling(native_runtime):
+    import asyncio
+
+    runtime, request = native_runtime
+
+    async def check():
+        manager = StrategyDataManager(runtime.service, runtime=runtime)
+        run_id = runtime.native.create(request, "facade-watch")["run_id"]
+        frames = [frame async for frame in (await manager.runs().watch(run_id)).events() if frame["type"] != "heartbeat"]
+        states = [frame["status"]["state"] for frame in frames]
+        assert states[-1] == "COMPLETED" and frames[-1]["terminal"] and frames[-1]["status"]["result_available"]
+        assert set(states) <= {"QUEUED", "RUNNING", "COMPLETED"} and len(states) == len(set(states))
+        assert runtime.native.run_updates.diagnostics()["subscriptions"] == 0
+        manager.close()
+    asyncio.run(check())

@@ -7,6 +7,7 @@ import weakref
 import pytest
 
 from app.backtest.native import NativeBacktests, digest, encoded
+from app.core.committed_updates import CommittedUpdates
 
 
 @pytest.fixture
@@ -14,6 +15,7 @@ def service():
     native = object.__new__(NativeBacktests)
     native.lock = threading.RLock()
     native.db = sqlite3.connect(":memory:", check_same_thread=False)
+    native.run_updates = CommittedUpdates()
     native.db.execute("CREATE TABLE runs(id TEXT PRIMARY KEY, record TEXT)")
     native.db.execute("CREATE TABLE native_run_summaries(id TEXT PRIMARY KEY, record TEXT)")
     record = {"run_id":"run", "state":"RUNNING", "execution_mode":"CANDLESCOPE", "error":None,

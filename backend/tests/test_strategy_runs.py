@@ -5,6 +5,7 @@ write them. Real Pine runs through the facade: ``test_strategy_runs_pine.py``.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 from types import SimpleNamespace
 
@@ -13,12 +14,16 @@ import pytest
 from app.backtest.errors import BacktestError
 from app.backtest.models import RunState
 from app.backtest.native import TERMINAL as NATIVE_TERMINAL
+from app.backtest.strategy.protocol import CrashProvider, DeterministicFakeProvider
+from app.core.committed_updates import CommittedUpdates
 from app.data_engine.data_manager.strategy import StrategyDataManager
 from app.data_engine.data_manager.strategy_runs import (
-    CONTINUOUS_CREATION_PHASES, CONTINUOUS_PHASES, HOST_STATES, NATIVE_STATES, STATES, STATUS_SCHEMA,
+    CONTINUOUS_CREATION_PHASES, CONTINUOUS_PHASES, HOST_STATES, NATIVE_STATES, STATES, STATUS_SCHEMA, STREAM_SCHEMA,
+    RunWatch,
 )
 from tests import strategy_run_oracles as oracles
 from tests.test_run_result import runtime_run  # noqa: F401 - fixture
+from tests.test_strategy_data_manager import create_run, events as bar_events, service  # noqa: F401 - fixture
 
 
 def _client(runtime):
@@ -222,3 +227,129 @@ def test_a_closed_manager_serves_nothing(runtime_run):
         capabilities = client.get("/strategy-runs/capabilities")
     assert response.status_code == capabilities.status_code == 503
     assert response.json()["error"]["code"] == "STRATEGY_MANAGER_CLOSED"
+
+
+# -- P2b: one commit-driven status stream ---------------------------------
+
+
+@pytest.mark.parametrize("crash", [False, True])
+def test_a_host_run_streams_its_status_until_it_finishes(service, crash):
+    async def check():
+        run = create_run(service)
+        manager = StrategyDataManager(service)
+        stream = (await manager.runs().watch(run["run_id"])).events()
+        first = await anext(stream)
+        assert first["schema"] == STREAM_SCHEMA and first["type"] == "status"
+        assert (first["status"]["state"], first["status"]["source_state"], first["terminal"]) == ("QUEUED", "QUEUED", False)
+        provider = CrashProvider() if crash else DeterministicFakeProvider()
+        try:
+            await asyncio.to_thread(service.execute_bar_run, run["run_id"], events=bar_events(), provider=provider, now_ms=3)
+        except Exception:
+            assert crash
+        frames = [frame async for frame in stream]
+        final = frames[-1]
+        assert final["terminal"] is True and all(not frame["terminal"] for frame in frames[:-1])
+        if crash:
+            assert final["status"]["state"] == "FAILED"
+            assert final["status"]["error"]["code"] == "PROVIDER_CRASH_UNRECOVERABLE"
+            assert "crash" in final["status"]["error"]["message"].lower()
+        else:
+            assert final["status"]["state"] == "COMPLETED" and final["status"]["result_available"] is True
+        assert manager.diagnostics()["subscriptions"] == 0
+        assert service.repository.run_updates.diagnostics()["subscriptions"] == 0
+        manager.close()
+    asyncio.run(check())
+
+
+def test_a_native_run_streams_each_committed_state_without_polling(runtime_run, monkeypatch):
+    runtime, _ = runtime_run
+    _native_record(runtime, {"run_id": "native_watched", "execution_mode": "NATIVE", "state": "QUEUED",
+                             "config": {"language": "pine"}, "result": None, "error": None}, "watched")
+    reads = 0
+    original = runtime.native.status_summary
+
+    def counted(run_id):
+        nonlocal reads
+        reads += 1
+        return original(run_id)
+    monkeypatch.setattr(runtime.native, "status_summary", counted)
+
+    async def check():
+        manager = StrategyDataManager(runtime.service, runtime=runtime, heartbeat_seconds=0.01)
+        stream = (await manager.runs().watch("native_watched")).events()
+        assert (await anext(stream))["status"]["state"] == "QUEUED"
+        # Heartbeats keep the transport alive without reading the store.
+        assert [(await anext(stream))["type"] for _ in range(3)] == ["heartbeat"] * 3
+        assert reads == 1
+        await asyncio.to_thread(runtime.native._mark_running, "native_watched")
+        frame = await anext(stream)
+        while frame["type"] == "heartbeat":
+            frame = await anext(stream)
+        assert (frame["status"]["family"], frame["status"]["state"], frame["progress"]) == ("native", "RUNNING", None)
+        await asyncio.to_thread(runtime.native.cancel, "native_watched")
+        rest = [frame async for frame in stream if frame["type"] != "heartbeat"]
+        assert [(frame["status"]["state"], frame["terminal"]) for frame in rest] == [("CANCELLED", True)]
+        assert runtime.native.run_updates.diagnostics()["subscriptions"] == 0
+        manager.close()
+    asyncio.run(check())
+
+
+def test_watches_fail_before_streaming_and_share_the_subscription_capacity(service):
+    async def check():
+        run = create_run(service)
+        manager = StrategyDataManager(service, max_subscriptions=1)
+        for run_id, code in (("bt_missing", "RUN_NOT_FOUND"), ("missing", "RUN_NOT_FOUND"),
+                             ("cs_run", "RUN_STREAM_UNSUPPORTED"), ("native_run", "FLAG_DISABLED")):
+            with pytest.raises(BacktestError) as failure:
+                await manager.runs().watch(run_id)
+            assert failure.value.code == code
+        assert manager.diagnostics()["subscriptions"] == 0
+        held = await manager.runs().watch(run["run_id"])
+        with pytest.raises(BacktestError, match="capacity"):
+            await manager.runs().watch(run["run_id"])
+        with pytest.raises(BacktestError, match="capacity"):
+            await manager.subscribe_run(run["run_id"])
+        # A refused watch leaves no subscription behind.
+        assert service.repository.run_updates.diagnostics()["subscriptions"] == 1
+        held.close()
+        assert manager.diagnostics()["subscriptions"] == 0
+        manager.close()
+    asyncio.run(check())
+
+
+def test_a_changed_generation_ends_the_stream_instead_of_mixing_runs(service):
+    async def check():
+        generation = 1
+
+        def read(run_id):
+            return {"run_id": run_id, "generation": generation, "terminal": False, "state": "RUNNING"}, None
+        updates = CommittedUpdates()
+        manager = StrategyDataManager(service)
+        watch = await manager._admit(RunWatch(manager, "bt_x", updates, read))
+        stream = watch.events()
+        assert (await anext(stream))["type"] == "status"
+        generation = 2
+        updates.notify("bt_x")
+        final = await anext(stream)
+        assert (final["type"], final["terminal"], final["error"]["code"]) == ("error", True, "RUN_IDENTITY_CHANGED")
+        assert [frame async for frame in stream] == []
+        manager.close()
+    asyncio.run(check())
+
+
+def test_the_events_route_streams_ndjson_and_refuses_before_streaming(runtime_run):
+    runtime, run_id = runtime_run
+    client, _ = _client(runtime)
+    with client:
+        response = client.get(f"/strategy-runs/{run_id}/events")
+        missing = client.get("/strategy-runs/bt_missing/events")
+        forward = client.get("/strategy-runs/cs_run/events")
+    assert response.status_code == 200 and response.headers["content-type"].startswith("application/x-ndjson")
+    frames = [json.loads(line) for line in response.text.splitlines() if line]
+    assert len(frames) == 1 and frames[0]["terminal"] is True
+    assert frames[0]["status"] == client.app.state.data_manager_core.strategy.runs()._host_status(run_id)
+    # The frontend reader's fixture, minus the per-run id. A finished run keeps no checkpoint.
+    assert frames[0]["progress"] is None
+    oracles.assert_frontend_fixture("host-completed", {
+        **frames[0], "status": {**frames[0]["status"], "run_id": "bt_fixture"}}, kind="strategy-run-stream")
+    assert missing.status_code == 404 and forward.status_code == 409

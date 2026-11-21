@@ -121,3 +121,26 @@ test("the capability contract requires a reason exactly when a profile is unavai
   matrix.profiles[0] = { ...matrix.profiles[0], available: false, reason: null };
   assert.throws(() => parseStrategyRunCapabilities(matrix), StrategyRunContractError);
 });
+
+test("a run is watched through the facade stream and counted while it streams", async () => {
+  let release: (() => void) | undefined;
+  const manager = new StrategyDataManager(api({
+    async watchStrategyRun(runId, signal, onStatus) {
+      const terminal = { ...structuredClone(STATUS) as object, run_id: runId } as Parameters<NonNullable<typeof onStatus>>[0];
+      onStatus?.(terminal, null);
+      await new Promise<void>((resolve) => { release = resolve; });
+      signal?.throwIfAborted();
+      return terminal;
+    },
+  }));
+  const seen: string[] = [];
+  const watching = manager.watchRun("bt_1", (status) => seen.push(status.state));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(manager.diagnostics().streams, 1);
+  release?.();
+  assert.equal((await watching).run_id, "bt_1");
+  assert.deepEqual(seen, ["COMPLETED"]);
+  assert.equal(manager.diagnostics().streams, 0);
+  await assert.rejects(new StrategyDataManager(api()).watchRun("bt_1"), /unavailable/i);
+  manager.dispose();
+});

@@ -16,6 +16,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
+from app.core.committed_updates import committed_updates_for
 from app.core.config import runtime_environment
 from app.data_engine.interval_policy import parse_interval_spec
 from .errors import BacktestError
@@ -152,7 +153,10 @@ class NativeBacktests:
         self.pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="native-backtest")
         self.cancel_events = {}
         self.closed = False
-        self.db = sqlite3.connect(runtime.settings.db_path.with_name("native-backtests.db"), check_same_thread=False)
+        db_path = runtime.settings.db_path.with_name("native-backtests.db")
+        self.db = sqlite3.connect(db_path, check_same_thread=False)
+        # Wakes run watchers after each committed state change; carries no data.
+        self.run_updates = committed_updates_for(db_path, "native-runs")
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, key TEXT UNIQUE, hash TEXT NOT NULL, record TEXT NOT NULL)")
         self.db.execute("CREATE TABLE IF NOT EXISTS native_inputs (id TEXT PRIMARY KEY, wire TEXT NOT NULL)")
@@ -506,6 +510,7 @@ class NativeBacktests:
         self.db.execute("UPDATE runs SET record=? WHERE id=?", (encoded(record), run_id))
         self._save_summary(record)
         self.db.commit()
+        self.run_updates.notify(run_id)
 
     def _mark_running(self, run_id):
         # Only the initial state changes here. Keep the complete frozen input
@@ -528,6 +533,7 @@ class NativeBacktests:
             return
         self._save_summary(json.loads(row[0]))
         self.db.commit()
+        self.run_updates.notify(run_id)
 
     def _execute(self, run_id, plugin, wire, cancel):
         try:
