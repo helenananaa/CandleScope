@@ -4,7 +4,7 @@ import { formatIntervalLabel } from "../../../utils/intervals.js";
 import { diagnosticLocation, nativeRunFeedback, type NativeFeedbackStatus } from "./nativeDiagnostics.js";
 import NativeStrategyComparison from "./NativeStrategyComparison.js";
 import { recordStrategyRun, strategyRunIds, strategyInstanceScope, type NativeStrategyInstance } from "./nativeStrategyCollection.js";
-import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import type { ChartStrategyTesterPanelProps } from "../chart-tester/ChartStrategyTesterPanel.js";
 import type { ChartContextResolution } from "../backtestApi.js";
 import { t } from "../../../i18n/index.js";
@@ -12,6 +12,10 @@ import { useLocale } from "../../../i18n/useLocale.js";
 import { nativeApi, nativeExportUrl, nativeTerminal, nativeTimeframe, type NativeCapabilities, type NativeRun } from "./nativeBacktestApi.js";
 import { NativeStrategyReport } from "./NativeStrategyReport.js";
 import { useStrategyDataManager } from "../../market-data/useStrategyDataManager.js";
+import { CHART_STRATEGY_FOLLOW_ENABLED } from "../chart-tester/chartStrategyTesterFeature.js";
+import {
+  fixedIntervalMs, followInputKey, latestClosedBarOpenMs, ScriptFollowController, type FollowRange, type ScriptFollowBase,
+} from "../follow/scriptFollow.js";
 import type { StrategyDataManager } from "../../market-data/manager/strategyDataManager.js";
 import "./nativeStrategy.css";
 import { NativeAdvancedInputs } from "./NativeAdvancedInputs.js";
@@ -47,7 +51,7 @@ const NATIVE_TEMPLATES = {
 const SESSION_TABS = ["overview", "trades", "script", "settings", "history"] as const;
 const ignoreCursor = () => undefined;
 
-type NativeStrategyPanelProps = Pick<ChartStrategyTesterPanelProps, "session" | "cellScope" | "onClose" | "onLocateTrade" | "onReviewTrade" | "active" | "nativeStrategies" | "onNativeStrategiesChange" | "overlayResult"> & {
+type NativeStrategyPanelProps = Pick<ChartStrategyTesterPanelProps, "session" | "cellScope" | "onClose" | "onLocateTrade" | "onReviewTrade" | "active" | "nativeStrategies" | "onNativeStrategiesChange" | "overlayResult" | "continuousMarketWindow"> & {
   signalChart?: import("../../../shared/strategyRunSettings.js").ChartSignalDefinition | undefined;
   dataset?: { datasetId: string; dataEpoch: string } | undefined;
   onRunChange?: (run: NativeRun | null) => void;
@@ -311,11 +315,43 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       .catch((reason) => { if (!controller.signal.aborted) { setError(String(reason)); setBusy(false); } });
     return () => controller.abort();
   }, [watchedRunId, receiveRun, strategyManager]);
+  // ADR-BACKTEST-015 P4a: after the user's run completes on the chart, each newer closed bar rebuilds its prefix.
+  const pendingFollow = useRef<{ runId: string; base: ScriptFollowBase<NativeRun> } | null>(null);
+  const receiveFollowRun = useRef<(value: NativeRun) => void>(() => undefined);
+  useLayoutEffect(() => {
+    receiveFollowRun.current = (value: NativeRun) => {
+      // A FOLLOW result moves the cell's latest-run pointer; the run history keeps the user's own runs.
+      const item = instanceRef.current;
+      if (item.runs[runContext] !== value.run_id) patchInstance.current(item.id, { runs: { ...item.runs, [runContext]: value.run_id } });
+      setRun(value); setBusy(false);
+    };
+  });
+  const [follow] = useState(() => new ScriptFollowController<NativeRun>((value) => receiveFollowRun.current(value),
+    (failure) => setError(String(failure))));
+  useEffect(() => { follow.resume(); return () => follow.dispose(); }, [follow]);
+  useEffect(() => { follow.setBase(null); pendingFollow.current = null; }, [follow, runContext]);
+  useEffect(() => {
+    const pending = pendingFollow.current;
+    if (!pending || run?.run_id !== pending.runId || !nativeTerminal(run.state)) return;
+    pendingFollow.current = null;
+    if (run.state === "COMPLETED") follow.setBase(pending.base);
+  }, [follow, run]);
+  const followWindow = CHART_STRATEGY_FOLLOW_ENABLED && props.docked ? props.continuousMarketWindow ?? null : null;
+  const followIntervalMs = fixedIntervalMs(props.session.interval);
+  const subscribeFollowWindow = useCallback((change: () => void) => {
+    const release = followWindow?.subscribe(change);
+    return () => { release?.(); };
+  }, [followWindow]);
+  const closedBar = useSyncExternalStore(subscribeFollowWindow, () => followWindow && !followWindow.rightTruncated
+    && (followWindow.intervalSeconds ?? 0) * 1000 === followIntervalMs ? latestClosedBarOpenMs(followWindow) : null, () => null);
+  useEffect(() => { follow.setClosedBar(closedBar); }, [follow, closedBar]);
   const start = async (prepare = false) => {
     // A restored uploaded input requires an explicit re-selection or clearing,
     // including the automatic preparation entry point.
     if (mode === "CANDLESCOPE" && fidelity !== "BAR_APPROX" && executionDataState !== "ready") return;
     if (accountError) return;
+    // A new run replaces what the chart follows.
+    follow.setBase(null); pendingFollow.current = null;
     pendingOverview.current = !run?.result && !previousRun?.result ? navigationRevision.current : null;
     if (run?.result) setPreviousRun(run);
     setHistoricalRun(null); setBusy(true); setError(""); setRun(null); setPreparation(null); setResolution(null);
@@ -343,23 +379,42 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         if (initial.state === "CANCELLED") preparationSubmission.current = null;
         const ready = await waitForPreparation(initial, setPreparation, observer.signal);
         if (!ready.result?.native_run) throw new Error("Prepared strategy is missing its run");
-        if (alive.current) receiveRun(ready.result.native_run);
+        return ready.result.native_run;
       };
       if (automatic && automaticExecution !== undefined && !props.dataset && !advanced.contexts.length && !advanced.magnifier) {
         const startTime = Date.parse(`${historyStart}T00:00:00Z`);
         const endTime = Date.parse(`${historyEnd}T00:00:00Z`);
         if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime) throw new Error("INVALID_RANGE: select an increasing UTC date range");
-        const inputs = await freezeAdvancedInputs(advanced, language, {
-          start_time_ms: startTime, end_time_ms: endTime - 1, exchange: context.exchange, market_type: context.marketType,
-        });
-        const submission = { ...(props.signalChart ? { signal_chart: props.signalChart } : {}), language, source, parameters: params, libraries: inputs.libraries, host_inputs: inputs.host_inputs,
-          ...("currency_rates" in inputs ? { currency_rates: inputs.currency_rates } : {}),
-          ...(pineMetadata ? { chart_metadata: pineMetadata } : {}),
-          ...(automaticExecution === null ? {} : { execution: automaticExecution }),
-          contexts: automaticContexts.map((row) => ({ ...row, binding_symbol: row.binding_symbol.trim() || undefined })),
-          context: { exchange: context.exchange, market_type: context.marketType, symbol: context.symbol,
-            interval: context.interval, range_mode: "CUSTOM", fidelity_preference: "FAST", start_time_ms: startTime, end_time_ms: endTime - 1 } };
-        await prepareRun("/native-strategy", submission);
+        // One submission for a range: the user's run and every FOLLOW rebuild (P4a) prepare the same input.
+        const submissionFor = async (range: FollowRange) => {
+          const inputs = await freezeAdvancedInputs(advanced, language, { ...range, exchange: context.exchange, market_type: context.marketType });
+          return { ...(props.signalChart ? { signal_chart: props.signalChart } : {}), language, source, parameters: params, libraries: inputs.libraries, host_inputs: inputs.host_inputs,
+            ...("currency_rates" in inputs ? { currency_rates: inputs.currency_rates } : {}),
+            ...(pineMetadata ? { chart_metadata: pineMetadata } : {}),
+            ...(automaticExecution === null ? {} : { execution: automaticExecution }),
+            contexts: automaticContexts.map((row) => ({ ...row, binding_symbol: row.binding_symbol.trim() || undefined })),
+            context: { exchange: context.exchange, market_type: context.marketType, symbol: context.symbol,
+              interval: context.interval, range_mode: "CUSTOM", fidelity_preference: "FAST", ...range } };
+        };
+        const range = { start_time_ms: startTime, end_time_ms: endTime - 1 };
+        const prepared = await prepareRun("/native-strategy", await submissionFor(range));
+        const intervalMs = fixedIntervalMs(context.interval);
+        if (CHART_STRATEGY_FOLLOW_ENABLED && props.docked && intervalMs !== null) {
+          const manager = requireStrategyManager();
+          pendingFollow.current = { runId: prepared.run_id, base: { startMs: range.start_time_ms, coveredEndMs: range.end_time_ms, intervalMs,
+            async rebuild(next, signal) {
+              const submission = await submissionFor(next);
+              const job = await preparationRequest<PreparationJob>("/native-strategy", {
+                method: "POST", headers: { "Content-Type": "application/json" }, signal,
+                body: JSON.stringify({ ...submission, idempotency_key: await followInputKey({ route: "/native-strategy", ...submission }) }),
+              });
+              if (["FAILED", "BLOCKED_STORAGE", "CANCELLED"].includes(job.state)) return null;
+              const created = (await waitForPreparation(job, () => undefined, signal)).result?.native_run;
+              if (!created) return null;
+              return nativeTerminal(created.state) ? created : manager.followNativeRun(created, () => undefined, signal);
+            } } };
+        }
+        if (alive.current) receiveRun(prepared);
         return;
       }
       if (props.dataset) {
@@ -378,7 +433,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         const inputs = await freezeAdvancedInputs(advanced, language, data);
         const payload = { ...(props.signalChart ? { signal_chart: props.signalChart } : {}), ...data, ...inputs, ...execution, snapshot_hash: snapshot.snapshot_hash,
           language, source, parameters: params, context: { symbol: context.symbol, timeframe: nativeTimeframe(context.interval), ...(pineMetadata ? { metadata: pineMetadata } : {}) } };
-        if (prepareTrades) { await prepareRun("/external-strategy", { run: payload }); return; }
+        if (prepareTrades) { const prepared = await prepareRun("/external-strategy", { run: payload }); if (alive.current) receiveRun(prepared); return; }
         const result = await requireStrategyManager().createNativeRun(mode, payload, crypto.randomUUID());
         if (alive.current) receiveRun(result);
         return;
@@ -392,18 +447,35 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       if (!alive.current) return;
       setResolution(frozen);
       if (frozen.status !== "READY") { setBusy(false); return; }
-      const inputs = await freezeAdvancedInputs(advanced, language, {
-        start_time_ms: frozen.coverage.requested_start_ms ?? frozen.coverage.available_start_ms!,
-        end_time_ms: frozen.coverage.requested_end_ms ?? frozen.coverage.available_end_ms!,
-        exchange: context.exchange, market_type: context.marketType,
-      });
-      const result = await requireStrategyManager().createNativeRun(mode, { ...(props.signalChart ? { signal_chart: props.signalChart } : {}), ...inputs, ...execution,
-        language, source, parameters: params, dataset_id: frozen.dataset_id, data_epoch: frozen.data_epoch,
-        snapshot_hash: frozen.snapshot_hash, start_time_ms: frozen.coverage.requested_start_ms ?? frozen.coverage.available_start_ms,
-        end_time_ms: frozen.coverage.requested_end_ms ?? frozen.coverage.available_end_ms,
-        interval: context.interval, exchange: context.exchange, market_type: context.marketType,
-        context: { symbol: `${context.exchange.toUpperCase()}:${context.symbol}`, timeframe: nativeTimeframe(context.interval), ...(pineMetadata ? { metadata: pineMetadata } : {}) },
-      }, crypto.randomUUID());
+      // One payload for the chart's history over a range: the manual run and every FOLLOW rebuild (P4a) use it.
+      const chartRunPayload = async (resolved: ChartContextResolution, range: FollowRange) => {
+        const inputs = await freezeAdvancedInputs(advanced, language, { ...range, exchange: context.exchange, market_type: context.marketType });
+        return { ...(props.signalChart ? { signal_chart: props.signalChart } : {}), ...inputs, ...execution,
+          language, source, parameters: params, dataset_id: resolved.dataset_id, data_epoch: resolved.data_epoch,
+          snapshot_hash: resolved.snapshot_hash, ...range,
+          interval: context.interval, exchange: context.exchange, market_type: context.marketType,
+          context: { symbol: `${context.exchange.toUpperCase()}:${context.symbol}`, timeframe: nativeTimeframe(context.interval), ...(pineMetadata ? { metadata: pineMetadata } : {}) },
+        };
+      };
+      const range = { start_time_ms: frozen.coverage.requested_start_ms ?? frozen.coverage.available_start_ms!,
+        end_time_ms: frozen.coverage.requested_end_ms ?? frozen.coverage.available_end_ms! };
+      const manager = requireStrategyManager();
+      const result = await manager.createNativeRun(mode, await chartRunPayload(frozen, range), crypto.randomUUID());
+      const intervalMs = fixedIntervalMs(context.interval);
+      if (CHART_STRATEGY_FOLLOW_ENABLED && props.docked && intervalMs !== null) {
+        // Follow live bars once this run completes: each newer closed bar rebuilds the prefix as a FIXED run.
+        pendingFollow.current = { runId: result.run_id, base: { startMs: range.start_time_ms, coveredEndMs: range.end_time_ms, intervalMs,
+          async rebuild(next, signal) {
+            const resolved = await nativeApi<ChartContextResolution>("/chart-context/resolve", {
+              exchange: context.exchange, market_type: context.marketType, symbol: context.symbol, interval: context.interval,
+              range_mode: "CUSTOM", ...next, fidelity_preference: "FAST",
+            }, undefined, signal);
+            if (resolved.status !== "READY") return null;
+            const payload = await chartRunPayload(resolved, next);
+            const created = await manager.createNativeRun(mode, payload, await followInputKey({ mode, ...payload }), signal);
+            return nativeTerminal(created.state) ? created : manager.followNativeRun(created, () => undefined, signal);
+          } } };
+      }
       if (alive.current) receiveRun(result);
     } catch (reason) { if (alive.current) { setError(reason instanceof PreparationApiError ? `${reason.code}: ${reason.message}` : String(reason)); setBusy(false); } }
   };
@@ -503,7 +575,8 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         ({ section, offset = 0, limit = 100 }) => ({ runId: reportRun?.run_id, stale: resultStale, authority: reportRun?.result?.account_authority,
           reportHash: reportRun?.result?.report_hash, total: reportRun?.result?.[section].length ?? 0, items: reportRun?.result?.[section].slice(offset, offset + limit) ?? [] }), { readOnly: true }),
     ] }), props.active !== false);
-  return <section className={`native-strategy-panel${props.docked ? " native-strategy-docked" : ""}`} aria-label={t("native.title")}>
+  return <section className={`native-strategy-panel${props.docked ? " native-strategy-docked" : ""}`} aria-label={t("native.title")}
+    {...(followWindow ? { "data-follow-closed-bar": closedBar ?? "", "data-follow-covered-end": follow.coveredEndMs ?? "" } : {})}>
     {!props.docked && <header><strong>{t(mode === "NATIVE" ? "native.title" : "native.external.title")}</strong><span>{props.session.symbol} · {formatIntervalLabel(props.session.interval)}</span><IconButton size="sm" label={t("backtest.close")} icon={<Icon name="close" size={14} />} onClick={props.onClose} /></header>}
     {props.docked && <StrategyDockSlot name="tabs"><Tabs className="strategy-dock-view-tabs" label={t("chartTester.tabsAria")} value={tab} onChange={selectTab}
       tabs={SESSION_TABS.map((item) => ({ value: item, label: t(item === "history" ? "ux.history" : `chartTester.tab.${item}`) }))} /></StrategyDockSlot>}
