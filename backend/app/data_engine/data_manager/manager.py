@@ -458,7 +458,7 @@ class DataManager(DataManagerCore):
                                       ("synthetic-series", self.synthetic, 64 * 1024 * 1024)):
             self.memory_budget.register(owner, limit_bytes=self._cfg.memory_owner_budgets.get(owner, limit), usage=service.memory_usage,
                                         roots=service._memory_roots)
-        self.memory_budget.register("history-query", limit_bytes=self._cfg.memory_owner_budgets.get("history-query", 64 * 1024 * 1024),
+        self.memory_budget.register("history-query", limit_bytes=self._cfg.memory_owner_budgets.get("history-query", 192 * 1024 * 1024),
                                     usage=lambda: {"estimated_bytes": 0})
         self.memory_budget.register("history-backfill", limit_bytes=self._cfg.memory_owner_budgets.get("history-backfill", 64 * 1024 * 1024),
                                     usage=lambda: {"estimated_bytes": 0})
