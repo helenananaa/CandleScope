@@ -65,7 +65,7 @@ def main() -> int:
         # ADR-BACKTEST-015 P2: one run facade over every run family.
         "test_strategy_runs.py", "test_strategy_runs_forward.py",
         # ADR-BACKTEST-015 P3: strategy drafts and versions in the backend.
-        "test_strategy_drafts.py",
+        "test_strategy_drafts.py", "test_strategy_versions.py",
     )
     files = sorted({str(path) for pattern in patterns for path in (backend / "tests").glob(pattern)})
     return pytest.main(["-q", "-p", "pytest_asyncio.plugin", "-p", "anyio.pytest_plugin",

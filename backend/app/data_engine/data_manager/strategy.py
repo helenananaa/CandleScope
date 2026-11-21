@@ -159,6 +159,12 @@ class StrategyDataManager:
             self._continuous_access=ContinuousStrategyAccess(self)
         return self._continuous_access
 
+    def versions(self):
+        """Content-addressed strategy versions and their names (ADR-BACKTEST-015 P3b)."""
+        self._require_open()
+        from app.backtest.strategy_versions import StrategyVersions
+        return StrategyVersions(self.service.repository)
+
     def drafts(self):
         """The strategy editor's working copies (ADR-BACKTEST-015 P3a)."""
         self._require_open()

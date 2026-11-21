@@ -9,7 +9,10 @@ import pytest
 
 from app.backtest.continuous_results import FORWARD_RESULT_KINDS
 from app.backtest.errors import BacktestError
+from app.backtest.models import ENGINE_VERSION
 from app.backtest.run_result import from_host_result
+from app.backtest.strategy.builtin import BUILTIN_SMA_REVISION
+from app.backtest.strategy_versions import material, version_hash
 from app.data_engine.data_manager.models import DataEvent, DataEventType
 from app.data_engine.data_manager.strategy_runs import STREAM_SCHEMA
 from tests.test_continuous_strategy_access import access_setup, create
@@ -44,6 +47,9 @@ def test_a_forward_run_is_served_and_watched_through_the_facade(storage, tmp_pat
             assert (status["family"], status["clock_policy"], status["state"], status["source_state"]) == (
                 "continuous", "FORWARD", "RUNNING", "LIVE")
             assert status["result_available"] is True and status["terminal"] is False
+            # P3b: the forward builtin is the same version as the same builtin run on the host.
+            assert status["version_hash"] == version_hash(
+                material("builtin", BUILTIN_SMA_REVISION, {}, {"engine_version": ENGINE_VERSION}))
             served = await runs.result(run_id)
             assert served == committed_projection(controller, run_id)
             if history:  # the caught-up history already traded

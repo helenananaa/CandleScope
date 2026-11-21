@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.core.config import getenv as app_getenv
 
 import json
+import logging
 import sqlite3
 import time
 import uuid
@@ -1315,7 +1316,23 @@ class BacktestService:
                 "run identity conflicted during creation",
             )
         self._audit(run_id, "create", {"config_hash": digest})
+        self._record_run_version(record, stamp)
         return record
+
+    def _record_run_version(self, record: Mapping[str, Any], now_ms: int) -> None:
+        """Link a new run to the content-addressed version of its code (ADR-BACKTEST-015 P3b).
+
+        Best effort: the run is already committed, and the run facade links any run it
+        finds without a version, so an indexing failure never fails run creation.
+        """
+        from .strategy_versions import StrategyVersions, host_material
+        try:
+            StrategyVersions(self.repository).record(
+                host_material(self.repository, self.strategy_registry, record),
+                run_id=str(record["run_id"]), family="host", now_ms=now_ms)
+        except Exception:
+            logging.getLogger(__name__).warning("Strategy version for run %s was not recorded", record.get("run_id"),
+                                                exc_info=True)
 
     def get_run(self, run_id: str) -> dict[str, object]:
         record = self.repository.get_run_by_id(run_id)

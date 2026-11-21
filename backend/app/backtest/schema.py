@@ -297,6 +297,33 @@ CREATE TABLE IF NOT EXISTS backtest_strategy_drafts (
 
 CREATE INDEX IF NOT EXISTS idx_backtest_strategy_drafts_updated
     ON backtest_strategy_drafts(updated_at_ms DESC, draft_id);
+
+-- ADR-BACKTEST-015 P3b: content-addressed versions, the runs that executed them (of
+-- every run family) and the names users give them.
+CREATE TABLE IF NOT EXISTS backtest_strategy_versions (
+    version_hash TEXT PRIMARY KEY,
+    language TEXT NOT NULL,
+    source_text TEXT NOT NULL,
+    libraries_json TEXT NOT NULL,
+    runtime_json TEXT NOT NULL,
+    created_at_ms INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS backtest_strategy_version_runs (
+    run_id TEXT PRIMARY KEY,
+    version_hash TEXT NOT NULL REFERENCES backtest_strategy_versions(version_hash),
+    family TEXT NOT NULL,
+    linked_at_ms INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_backtest_strategy_version_runs
+    ON backtest_strategy_version_runs(version_hash, linked_at_ms DESC, run_id);
+
+CREATE TABLE IF NOT EXISTS backtest_strategy_version_names (
+    name TEXT PRIMARY KEY,
+    version_hash TEXT NOT NULL REFERENCES backtest_strategy_versions(version_hash),
+    named_at_ms INTEGER NOT NULL
+);
 """
 
 

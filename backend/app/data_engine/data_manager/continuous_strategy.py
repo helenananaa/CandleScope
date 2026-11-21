@@ -206,6 +206,11 @@ class ContinuousStrategyAccess:
             await self._ensure(run_id)
             return await self.work(controller.store.results.read,run_id,**kwargs)
 
+    async def describe(self,run_id):
+        """A forward run's immutable definition, without its account (ADR-BACKTEST-015 P3b)."""
+        async def read():return await self.work(self.controller().store.describe,run_id)
+        return await self._command(read)
+
     async def committed_result(self,run_id):
         """The committed account for the shared run-result projection (ADR-BACKTEST-015 P2d)."""
         async def read():
