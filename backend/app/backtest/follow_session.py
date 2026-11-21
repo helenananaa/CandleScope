@@ -43,7 +43,8 @@ def _closed(payload: Mapping[str, Any]) -> bool:
 class FollowSession:
     """One FOLLOW run's live state: consecutive closed base bars in, the current result out."""
 
-    def __init__(self, follow_id: str, definition: Mapping[str, Any], provider_factory, *, interval: str) -> None:
+    def __init__(self, follow_id: str, definition: Mapping[str, Any], provider_factory, *, interval: str,
+                 generation: int = 1) -> None:
         from app.data_engine.interval_policy import IntervalAlignment, parse_interval_spec
 
         spec = parse_interval_spec(interval)
@@ -52,8 +53,15 @@ class FollowSession:
         if not isinstance(step, int) or step <= 0:
             raise BacktestError("FIDELITY_UNSUPPORTED", "FOLLOW needs a fixed-length chart interval")
         self.follow_id = follow_id
+        self.definition = definition
         self.interval = interval
         self.step_ms = step
+        # A recomputation (processed bars were revised) starts a new generation of the same run.
+        self.generation = generation
+        # CATCHING_UP until the run first reaches the latest closed bar; then LIVE.
+        # WAITING_DATA while the source cannot supply complete closed bars.
+        self.phase = "CATCHING_UP"
+        self.caught_up = False
         self.lock = threading.RLock()
         self.host = ContinuousBarHost(follow_id, definition, provider_factory)
         self.sequence = 0
@@ -61,6 +69,7 @@ class FollowSession:
         self.revision = 0
         self.failed: BaseException | None = None
         self.closed = False
+        self._released = False
 
     def extend(self, events: Iterable[MarketEvent]) -> int:
         """Apply newly closed chart-interval bars, consecutive with what was applied; returns the revision."""
@@ -89,6 +98,9 @@ class FollowSession:
                 # The kernel may have applied part of the batch: the run must start over.
                 self.failed = failure
                 raise
+            finally:
+                if self.closed:  # stopped while this batch ran: release what close() could not
+                    self._release()
             self.sequence, self.through_ms = sequence, through
             self.revision += 1
             return self.revision
@@ -104,21 +116,36 @@ class FollowSession:
         return from_host_result(raw, interval=self.interval, fidelity="BAR_APPROX", clock_policy="FOLLOW")
 
     def close(self) -> None:
-        with self.lock:
-            if not self.closed:
-                self.closed = True
-                self.host.close()
+        """Stop the run without waiting for a batch in progress; that batch releases the provider when it ends."""
+        self.closed = True
+        if self.lock.acquire(blocking=False):
+            try:
+                self._release()
+            finally:
+                self.lock.release()
+
+    def _release(self) -> None:
+        if not self._released:
+            self._released = True
+            self.host.close()
 
 
-def follow_identity(definition: Mapping[str, Any], interval: str) -> str:
-    """Identical inputs share one FOLLOW run (ADR O2: cached by input identity)."""
-    return canonical_hash({"schema": "candlescope.follow-input/1", "definition": dict(definition), "interval": interval})
+def follow_identity(definition: Mapping[str, Any], interval: str, from_ms: int | None = None) -> str:
+    """Identical inputs share one FOLLOW run (ADR O2: cached by input identity).
+
+    Where a live run starts is part of its input: the same code from another bar is another run.
+    """
+    value = {"schema": "candlescope.follow-input/1", "definition": dict(definition), "interval": interval}
+    if from_ms is not None:
+        value["from_ms"] = from_ms
+    return canonical_hash(value)
 
 
 class _Entry:
-    def __init__(self, session: FollowSession, identity: str) -> None:
+    def __init__(self, session: FollowSession, identity: str, interval: str) -> None:
         self.session = session
         self.identity = identity
+        self.interval = interval
         self.leases: dict[str, float] = {}
 
 
@@ -129,10 +156,13 @@ class FollowSessions:
     """
 
     def __init__(self, provider_factory, *, capacity: int = 16, lease_ms: int = 30_000,
-                 clock: Callable[[], float] = time.monotonic) -> None:
+                 clock: Callable[[], float] = time.monotonic,
+                 on_stop: Callable[[FollowSession], None] | None = None) -> None:
         if capacity < 1 or lease_ms < 1:
             raise ValueError("FOLLOW limits must be positive")
         self.provider_factory = provider_factory
+        # Told, under the lock, when a run stops: whoever reads it next must see it stopped.
+        self.on_stop = on_stop
         self.capacity = capacity
         self.lease_s = lease_ms / 1000
         self.clock = clock
@@ -141,9 +171,10 @@ class FollowSessions:
         self._by_identity: dict[str, str] = {}
         self._counter = 0
 
-    def open(self, definition: Mapping[str, Any], *, interval: str, holder: str) -> tuple[FollowSession, bool]:
+    def open(self, definition: Mapping[str, Any], *, interval: str, holder: str,
+             from_ms: int | None = None) -> tuple[FollowSession, bool]:
         """The FOLLOW run for this input, shared if one exists; returns (session, created)."""
-        identity = follow_identity(definition, interval)
+        identity = follow_identity(definition, interval, from_ms)
         with self.lock:
             self._sweep()
             existing = self._by_identity.get(identity)
@@ -156,7 +187,7 @@ class FollowSessions:
             self._counter += 1
             follow_id = f"{ID_PREFIX}{identity[7:39]}{self._counter:04x}"
             session = FollowSession(follow_id, definition, self.provider_factory, interval=interval)
-            entry = _Entry(session, identity)
+            entry = _Entry(session, identity, interval)
             self._entries[follow_id] = entry
             self._by_identity[identity] = follow_id
             self._hold(entry, holder)
@@ -168,6 +199,18 @@ class FollowSessions:
             entry = self._entries.get(follow_id)
             if entry is None:
                 raise BacktestError("RUN_NOT_FOUND", "unknown or stopped FOLLOW run")
+            return entry.session
+
+    def recompute(self, follow_id: str) -> FollowSession:
+        """Start the run over from its first bar (its processed input was revised); leases carry over."""
+        with self.lock:
+            entry = self._entries.get(follow_id)
+            if entry is None:
+                raise BacktestError("RUN_NOT_FOUND", "unknown or stopped FOLLOW run")
+            old = entry.session
+            entry.session = FollowSession(follow_id, old.definition, self.provider_factory, interval=entry.interval,
+                                          generation=old.generation + 1)
+            old.close()
             return entry.session
 
     def renew(self, follow_id: str, holder: str) -> None:
@@ -191,6 +234,11 @@ class FollowSessions:
     def sweep(self) -> None:
         with self.lock:
             self._sweep()
+
+    def stop(self, follow_id: str) -> None:
+        """Stop a run whatever holds it (its feed ended)."""
+        with self.lock:
+            self._stop(follow_id)
 
     def close(self) -> None:
         with self.lock:
@@ -221,3 +269,5 @@ class FollowSessions:
             return
         self._by_identity.pop(entry.identity, None)
         entry.session.close()
+        if self.on_stop is not None:
+            self.on_stop(entry.session)

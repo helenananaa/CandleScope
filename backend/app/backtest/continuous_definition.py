@@ -24,8 +24,18 @@ POLICY_FIELDS = {"sizing_policy","fixed_qty","fixed_notional","equity_percent","
 REALISM_FIELDS = {"execution_model_revision","participation_rate","order_end_policy","bar_path_scenario"}
 
 
-def prepare_definition(provider, execution, key: SeriesKey, *, warmup_bars=0):
-    """Own current code and normalized fees/account before acquiring any data."""
+def _fixed_interval(interval):
+    from app.data_engine.interval_policy import IntervalAlignment, parse_interval_spec
+    spec = parse_interval_spec(interval)
+    return spec is not None and not spec.timezone and spec.alignment is not IntervalAlignment.CALENDAR_MONTH
+
+
+def prepare_definition(provider, execution, key: SeriesKey, *, warmup_bars=0, follow=False):
+    """Own current code and normalized fees/account before acquiring any data.
+
+    ``follow`` (ADR-BACKTEST-015 P4b): a FOLLOW run consumes the chart's own closed
+    bars, so any fixed-length chart interval qualifies; forward runs keep 1m.
+    """
     if not isinstance(execution, Mapping) or set(execution)-(BASE_FIELDS|POLICY_FIELDS|REALISM_FIELDS):
         raise BacktestError("CONTINUOUS_INPUT_INVALID","Unknown continuing execution fields")
     if len(_json(dict(execution)).encode("utf-8")) > 65_536:
@@ -35,7 +45,8 @@ def prepare_definition(provider, execution, key: SeriesKey, *, warmup_bars=0):
     for name in ("funding_interval_hours","max_active_orders","cooldown_events"):
         if name in execution and type(execution[name]) is not int:
             raise BacktestError("CONTINUOUS_INPUT_INVALID",f"{name} must be an integer")
-    if (not isinstance(key,SeriesKey) or key.interval!="1m" or key.market_type not in {"spot","futures"}
+    if (not isinstance(key,SeriesKey) or (key.interval!="1m" and not (follow and _fixed_interval(key.interval)))
+            or key.market_type not in {"spot","futures"}
             or (key.market_type=="futures" and key.exchange!="binance")
             or key.identity.asset_class!="crypto" or key.identity.series_variant!="native"
             or key.identity.price_adjustment!="raw" or key.identity.session_variant!="continuous"

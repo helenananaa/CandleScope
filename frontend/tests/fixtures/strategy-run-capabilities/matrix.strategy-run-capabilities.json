@@ -8,6 +8,10 @@
       "available": false,
       "reason": "ENGINE_UNAVAILABLE"
     },
+    "follow": {
+      "available": false,
+      "reason": "FOLLOW_UNAVAILABLE"
+    },
     "host": {
       "available": true,
       "reason": null
@@ -167,6 +171,46 @@
         "HISTORY_LIVE",
         "LIVE_ONLY"
       ]
+    },
+    {
+      "account_models": [
+        "SPOT_CASH_V1",
+        "LINEAR_PERP_ONE_WAY_V1"
+      ],
+      "authority": "HOST",
+      "available": false,
+      "clock_policy": "FOLLOW",
+      "controls": {
+        "cancel": false
+      },
+      "family": "follow",
+      "fidelities": [
+        "BAR_APPROX"
+      ],
+      "fixed_intervals_only": true,
+      "intervals": null,
+      "language": "builtin",
+      "reason": "FOLLOW_UNAVAILABLE"
+    },
+    {
+      "account_models": [
+        "SPOT_CASH_V1",
+        "LINEAR_PERP_ONE_WAY_V1"
+      ],
+      "authority": "HOST",
+      "available": false,
+      "clock_policy": "FOLLOW",
+      "controls": {
+        "cancel": false
+      },
+      "family": "follow",
+      "fidelities": [
+        "BAR_APPROX"
+      ],
+      "fixed_intervals_only": true,
+      "intervals": null,
+      "language": "python",
+      "reason": "FOLLOW_UNAVAILABLE"
     }
   ],
   "schema": "candlescope.strategy-run-capabilities/1",

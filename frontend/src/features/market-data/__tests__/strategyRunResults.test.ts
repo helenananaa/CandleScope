@@ -106,13 +106,17 @@ test("one capability matrix names every family and profile, and is kept until re
   assert.equal(await manager.loadRunCapabilities(), matrix);
   await manager.loadRunCapabilities(undefined, { refresh: true });
   assert.equal(reads, 2);
-  assert.deepEqual(Object.keys(matrix.families).sort(), ["continuous", "external", "host", "native"]);
+  assert.deepEqual(Object.keys(matrix.families).sort(), ["continuous", "external", "follow", "host", "native"]);
   assert.equal(strategyRunProfile(matrix, "native", "pine")?.authority, "SCRIPT");
   assert.equal(strategyRunProfile(matrix, "native", "pine")?.fidelities, null);
   assert.equal(strategyRunProfile(matrix, "external", "pine")?.authority, "HOST");
   assert.deepEqual(strategyRunProfile(matrix, "continuous", "builtin")?.starts, ["HISTORY_LIVE", "LIVE_ONLY"]);
   assert.equal(strategyRunProfile(matrix, "host", "python")?.reason, "FLAG_DISABLED");
   assert.equal(strategyRunProfile(matrix, "native", "python"), null);
+  const follow = strategyRunProfile(matrix, "follow", "builtin");
+  assert.deepEqual([follow?.clock_policy, follow?.intervals, follow?.fixed_intervals_only, follow?.controls.cancel],
+    ["FOLLOW", null, true, false]);
+  assert.equal(strategyRunProfile(matrix, "host", "builtin")?.fixed_intervals_only, false);
   manager.dispose();
 });
 
@@ -244,6 +248,19 @@ test("a running forward run has a result; a running fixed run does not", () => {
     state: "RUNNING", source_state: "LIVE", terminal: false, result_available: true };
   assert.equal(parseStrategyRunStatus(live).result_available, true);
   assert.throws(() => parseStrategyRunStatus({ ...live, clock_policy: "FIXED" }), /result_available/);
+});
+
+// -- P4b: chart FOLLOW runs --------------------------------------------------------
+
+test("a chart's FOLLOW run reports its phase, and stops as CANCELLED once no chart holds it", () => {
+  const live = { ...structuredClone(STATUS) as object, run_id: "fl_1", family: "follow", clock_policy: "FOLLOW",
+    state: "RUNNING", source_state: "LIVE", terminal: false, result_available: true, generation: 2 };
+  const status = parseStrategyRunStatus(live);
+  assert.deepEqual([status.family, status.clock_policy, status.generation, status.result_available], ["follow", "FOLLOW", 2, true]);
+  assert.equal(parseStrategyRunStatus({ ...live, state: "BLOCKED", source_state: "WAITING_DATA", result_available: false }).state,
+    "BLOCKED");
+  assert.equal(parseStrategyRunStatus({ ...live, state: "CANCELLED", source_state: "STOPPED", terminal: true,
+    result_available: false }).terminal, true);
 });
 
 // -- P3b: strategy versions ------------------------------------------------------

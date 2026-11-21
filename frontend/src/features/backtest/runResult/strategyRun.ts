@@ -9,15 +9,19 @@ import type { RunResultAuthority, RunResultFamily } from "./runResult.js";
 export const STRATEGY_RUN_SCHEMA = "candlescope.strategy-run/1";
 export const STRATEGY_RUN_CAPABILITIES_SCHEMA = "candlescope.strategy-run-capabilities/1";
 
-export type StrategyRunFamily = RunResultFamily | "continuous";
+/** `follow`: a chart's live HOST run (ADR-BACKTEST-015 P4b), held by chart-cell leases. */
+export type StrategyRunFamily = RunResultFamily | "continuous" | "follow";
 export type StrategyRunState = "QUEUED" | "RUNNING" | "PAUSED" | "BLOCKED" | "COMPLETED" | "FAILED" | "CANCELLED";
-/** FOLLOW runs are not served yet; a FIXED run has a fixed history, a FORWARD run keeps going. */
-export type StrategyRunClockPolicy = "FIXED" | "FORWARD";
+/**
+ * A FIXED run has a fixed history; a FOLLOW run keeps a chart's strategy current as bars close
+ * and recomputes when they are revised; a FORWARD run keeps going on its own committed account.
+ */
+export type StrategyRunClockPolicy = "FIXED" | "FOLLOW" | "FORWARD";
 
-const FAMILIES = ["host", "native", "external", "continuous"] as const satisfies readonly StrategyRunFamily[];
+const FAMILIES = ["host", "native", "external", "continuous", "follow"] as const satisfies readonly StrategyRunFamily[];
 const STATES = ["QUEUED", "RUNNING", "PAUSED", "BLOCKED", "COMPLETED", "FAILED", "CANCELLED"] as const satisfies readonly StrategyRunState[];
 const AUTHORITIES = ["HOST", "SCRIPT"] as const satisfies readonly RunResultAuthority[];
-const CLOCK_POLICIES = ["FIXED", "FORWARD"] as const satisfies readonly StrategyRunClockPolicy[];
+const CLOCK_POLICIES = ["FIXED", "FOLLOW", "FORWARD"] as const satisfies readonly StrategyRunClockPolicy[];
 const TERMINAL: ReadonlySet<StrategyRunState> = new Set(["COMPLETED", "FAILED", "CANCELLED"]);
 
 export interface StrategyRunError {
@@ -75,6 +79,8 @@ export interface StrategyRunProfile extends StrategyRunAvailability {
   account_models: string[] | null;
   /** Null when any chart interval is accepted. */
   intervals: string[] | null;
+  /** True when only fixed-length intervals are accepted (FOLLOW: weeks and months are not followed). */
+  fixed_intervals_only: boolean;
   controls: { cancel: boolean };
   /** How a forward run may start; forward profiles only. */
   starts: string[] | null;
@@ -216,6 +222,8 @@ export function parseStrategyRunCapabilities(value: unknown): StrategyRunCapabil
       ...availability(profile, at),
       account_models: optionalTexts(profile.account_models, `${at}.account_models`),
       intervals: optionalTexts(profile.intervals, `${at}.intervals`),
+      fixed_intervals_only: profile.fixed_intervals_only === undefined ? false
+        : flag(profile.fixed_intervals_only, `${at}.fixed_intervals_only`),
       controls: { cancel: flag(controls.cancel, `${at}.controls.cancel`) },
       starts: optionalTexts(profile.starts, `${at}.starts`),
     };

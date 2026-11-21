@@ -14,6 +14,10 @@ Families:
 - ``continuous``: ``/backtests/continuous/runs`` (``cs_``), authority HOST,
   clock FORWARD. Its committed account is projected onto the same run result
   (step P2d) and changes with every commit; it is never COMPLETED.
+- ``follow``: ``/strategy-follows`` (``fl_``), authority HOST, clock FOLLOW
+  (step P4b). A chart's live run, in memory and held by chart-cell leases; it
+  recomputes as its next generation when its processed bars are revised, and
+  reads as CANCELLED once no chart holds it. It is never COMPLETED.
 """
 from __future__ import annotations
 
@@ -32,7 +36,7 @@ if TYPE_CHECKING:
 STATUS_SCHEMA = "candlescope.strategy-run/1"
 STREAM_SCHEMA = "candlescope.strategy-run-stream/1"
 CAPABILITIES_SCHEMA = "candlescope.strategy-run-capabilities/1"
-FAMILIES = ("host", "native", "external", "continuous")
+FAMILIES = ("host", "native", "external", "continuous", "follow")
 STATES = ("QUEUED", "RUNNING", "PAUSED", "BLOCKED", "COMPLETED", "FAILED", "CANCELLED")
 TERMINAL = frozenset({"COMPLETED", "FAILED", "CANCELLED"})
 MAX_RUN_ID = 128
@@ -55,6 +59,11 @@ CONTINUOUS_PHASES = {
     # Its input changed under it; it waits for a repair rather than for the user.
     "REPAIR_REQUIRED": "BLOCKED", "FAILED": "FAILED", "CANCELLED": "CANCELLED",
 }
+FOLLOW_PHASES = {
+    "CATCHING_UP": "RUNNING", "LIVE": "RUNNING",
+    # The source cannot supply its closed bars yet; it continues once they arrive.
+    "WAITING_DATA": "BLOCKED", "FAILED": "FAILED",
+}
 # A forward run that has not been committed yet still reports its creation request.
 CONTINUOUS_CREATION_PHASES = {
     "REQUESTED": "QUEUED", "WATCHED": "QUEUED", "READY": "QUEUED", "PAUSED": "PAUSED",
@@ -67,7 +76,7 @@ def _not_found(run_id: str) -> BacktestError:
 
 
 def store_for(run_id: str) -> str:
-    """The store that may hold ``run_id``: ``host``, ``native`` (native or external) or ``continuous``."""
+    """The store that may hold ``run_id``: ``host``, ``native`` (native or external), ``continuous`` or ``follow``."""
     if not isinstance(run_id, str) or not 0 < len(run_id) <= MAX_RUN_ID:
         raise _not_found(str(run_id)[:MAX_RUN_ID])
     if run_id.startswith("bt_"):
@@ -76,6 +85,8 @@ def store_for(run_id: str) -> str:
         return "native"
     if run_id.startswith("cs_"):
         return "continuous"
+    if run_id.startswith("fl_"):
+        return "follow"
     raise _not_found(run_id)
 
 
@@ -157,6 +168,8 @@ class StrategyRuns:
             return await asyncio.to_thread(self._host_status, run_id)
         if store == "native":
             return await asyncio.to_thread(self._native_status, run_id)
+        if store == "follow":
+            return (await self._follow_view(run_id))[0]
         return await self._continuous_status(run_id)
 
     def _host_status(self, run_id: str) -> dict[str, Any]:
@@ -246,6 +259,38 @@ class StrategyRuns:
             "sequence": int(run["checkpoint_revision"]), "created_at_ms": int(run["event_time_ms"])}
         return status, progress
 
+    def _follows(self, run_id: str):
+        self.owner._require_open()
+        follows = self.owner.follows_or_none()
+        if follows is None:
+            raise _not_found(run_id)
+        return follows
+
+    async def _follow_view(self, run_id: str) -> tuple[dict[str, Any], dict[str, int] | None]:
+        """A chart's live run: its phase, and how far it has applied bars (each applied page changes its result)."""
+        follows = self._follows(run_id)
+        session = follows.sessions_or_none(run_id)
+        if session is None:
+            ended = follows.ended.get(run_id)
+            if ended is None:
+                raise _not_found(run_id)
+            # No chart holds it any more: it stopped, and keeps no result.
+            definition, generation, error = ended["definition"], ended["generation"], ended["error"]
+            source_state, state, available, progress = "STOPPED", "CANCELLED", False, None
+        else:
+            definition, generation = session.definition, session.generation
+            source_state = session.phase
+            state = _lifecycle(FOLLOW_PHASES, source_state, "follow")
+            available = session.caught_up and session.failed is None
+            error = None if session.failed is None else _follow_error(session.failed)
+            progress = {"sequence": session.revision, "created_at_ms": session.through_ms or 0}
+        version = await asyncio.to_thread(follows.version_hash, run_id, definition)
+        status = _status(run_id, "follow", authority="HOST", clock_policy="FOLLOW", fidelity="BAR_APPROX",
+                         language=str(definition.get("language") or "builtin"), source_state=source_state,
+                         state=state, generation=generation, result_available=available, error=error,
+                         version_hash=version)
+        return status, progress
+
     # -- watch ------------------------------------------------------------
 
     async def watch(self, run_id: str) -> RunWatch:
@@ -261,6 +306,9 @@ class StrategyRuns:
             self.owner._require_open()
             updates = self.owner.continuous_access().controller().store.updates
             read = self._continuous_view
+        elif store == "follow":
+            updates = self._follows(run_id).updates
+            read = self._follow_view
         elif store == "host":
             self.owner._require_open()
             updates = self.owner.service.repository.run_updates
@@ -285,6 +333,13 @@ class StrategyRuns:
         if store == "native":
             from app.backtest.run_result import from_native_record
             return await asyncio.to_thread(lambda: from_native_record(self._runtime().native.get(run_id)))
+        if store == "follow":
+            session = self._follows(run_id).sessions_or_none(run_id)
+            if session is None:
+                raise _not_found(run_id)  # a stopped FOLLOW run keeps no result
+            if not session.caught_up:
+                raise BacktestError("RUN_RESULT_NOT_READY", "the FOLLOW run has not reached the chart's newest bar")
+            return await asyncio.to_thread(session.result)
         from app.backtest.run_result import from_host_result
         self.owner._require_open()
         try:
@@ -308,6 +363,8 @@ class StrategyRuns:
         if current["family"] == "continuous":
             # Forward-run controls require the account's full committed identity.
             raise BacktestError("RUN_CONTROL_UNSUPPORTED", "stop a forward run from its account controls")
+        if current["family"] == "follow":
+            raise BacktestError("RUN_CONTROL_UNSUPPORTED", "a FOLLOW run stops when no chart holds it")
 
         def cancel() -> None:
             if current["family"] == "host":
@@ -348,6 +405,7 @@ class StrategyRuns:
         await collect(("host",), lambda: asyncio.to_thread(self._host_capabilities))
         await collect(("native", "external"), lambda: asyncio.to_thread(self._native_capabilities))
         await collect(("continuous",), self._continuous_capabilities)
+        await collect(("follow",), self._follow_capabilities)
         profiles.sort(key=lambda row: (FAMILIES.index(row["family"]), row["language"]))
         return {"schema": CAPABILITIES_SCHEMA, "states": list(STATES),
                 "families": {name: families[name] for name in FAMILIES}, "profiles": profiles}
@@ -411,6 +469,26 @@ class StrategyRuns:
                             account_models=list(ACCOUNT_MODELS), intervals=list(INTERVALS), cancel=False),
                  "starts": starts} for language in LANGUAGES]
         return {"continuous": _family(enabled, reason)}, rows
+
+
+    async def _follow_capabilities(self) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+        from app.backtest.continuous_contracts import ACCOUNT_MODELS, LANGUAGES
+
+        enabled = self.owner.market_manager is not None
+        reason = None if enabled else "FOLLOW_UNAVAILABLE"
+        rows = [{**_profile("follow", language, authority="HOST", clock_policy="FOLLOW", fidelities=["BAR_APPROX"],
+                            available=enabled, reason=reason, account_models=list(ACCOUNT_MODELS), intervals=None,
+                            cancel=False),
+                 # Any chart interval of fixed length; weeks and months are not followed.
+                 "fixed_intervals_only": True} for language in LANGUAGES]
+        return {"follow": _family(enabled, reason)}, rows
+
+
+def _follow_error(failure: BaseException) -> dict[str, Any]:
+    code = getattr(failure, "code", None)
+    if isinstance(code, str) and code:
+        return {"code": code[:64], "message": str(getattr(failure, "message", "") or "")[:256] or None}
+    return {"code": "FOLLOW_FAILED", "message": "The strategy failed on a closed bar; it recomputes when its bars are revised."}
 
 
 def _in_thread(read):

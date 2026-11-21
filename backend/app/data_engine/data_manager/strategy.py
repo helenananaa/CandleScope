@@ -122,6 +122,7 @@ class StrategyDataManager:
         self._continuous_access = None
         self._runs = None
         self._drafts = None
+        self._follows = None
         self._control_requests = 0
         self.max_subscriptions = max_subscriptions
         self.heartbeat_seconds = heartbeat_seconds
@@ -147,6 +148,9 @@ class StrategyDataManager:
 
     async def shutdown(self):
         self.close()
+        if self._follows is not None:
+            follows, self._follows = self._follows, None
+            await follows.close()
         if self._continuous_access is not None:
             await self._continuous_access.shutdown()
         elif self.continuous is not None:
@@ -186,6 +190,17 @@ class StrategyDataManager:
             from .strategy_runs import StrategyRuns
             self._runs = StrategyRuns(self)
         return self._runs
+
+    def follows(self):
+        """Chart FOLLOW runs for HOST strategies, fed by this profile's DataManager (ADR-BACKTEST-015 P4b)."""
+        self._require_open()
+        if self._follows is None:
+            from .strategy_follows import StrategyFollows
+            self._follows = StrategyFollows(self)
+        return self._follows
+
+    def follows_or_none(self):
+        return self._follows
 
     async def start_continuous(self):
         return await self.continuous_access().start()
