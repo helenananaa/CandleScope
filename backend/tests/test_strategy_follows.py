@@ -33,7 +33,9 @@ from tests.test_backtest_control_plane import _settings
 from tests.test_continuous_controller import market
 from tests.test_continuous_provider import spec
 from tests.test_kline_revision_contract import storage as storage  # noqa: F401 - fixture
+from tests.test_follow_session import assert_follow_equals_fixed
 from tests.test_query_cache_fencing import KEY, SOURCE, START, STEP, _row
+from tests.test_strategy_run_oracles import BAR, python_provider, python_revision
 
 
 def series(interval="1m"):
@@ -55,6 +57,31 @@ def follow_setup(storage, tmp_path, monkeypatch, *, count=25, **options):
                               provider_factory=ContinuousProviderFactory(scratch_root=tmp_path), **options)
     gate._follows = follows
     return manager, service, gate, follows, active, now
+
+
+def stored_events(count):
+    rows = []
+    for index, close in enumerate(stored_closes(count)):
+        opened = START + index * STEP
+        rows.append(MarketEvent(index + 1, opened + STEP - 1, "BARS", {
+            "open": "100", "high": "250", "low": "50", "close": close, "volume": "10",
+            "open_time_ms": opened, "close_time_ms": opened + STEP - 1, "is_closed": True}))
+    return rows
+
+
+def fixed_python_run(service, count=20, key="chart-fixed-python"):
+    """A completed fixed Python host run on the DataManager's first ``count`` bars, as the chart tester creates."""
+    revision = python_revision(service)
+    payload = {**BAR, "strategy_revision_id": revision, "python_runtime_mode": "TRUSTED_LOCAL",
+               "python_trusted_confirmed": True, "exchange": KEY.exchange, "market_type": KEY.market_type,
+               "symbol": KEY.symbol, "account_model": "SPOT_CASH_V1",
+               "start_time_ms": START, "end_time_ms": START + count * STEP - 1}
+    service.smoke_strategy_revision(revision, payload, now_ms=4)
+    row = service.create_run(payload, idempotency_key=key, now_ms=4)
+    completed = service.execute_bar_run(str(row["run_id"]), events=stored_events(count), provider=python_provider(),
+                                        now_ms=5)
+    assert completed["state"] == "COMPLETED", completed
+    return str(row["run_id"]), completed
 
 
 def run(scenario, manager, gate, service):
@@ -341,4 +368,37 @@ def test_the_lease_routes_hold_renew_and_release_a_follow_run(storage, tmp_path,
             assert (await status())["state"] == "CANCELLED" and not active
             gone = await client.get(f"/api/v1/strategy-runs/{follow_id}/result")
             assert gone.status_code == 404
+    run(scenario, manager, gate, service)
+
+
+def test_a_completed_python_chart_run_is_followed_from_its_own_revision_and_start(storage, tmp_path, monkeypatch):
+    monkeypatch.setenv("BACKTEST_PYTHON_TRUSTED_LOCAL_ENABLED", "1")
+    manager, service, gate, follows, _active, now = follow_setup(storage, tmp_path, monkeypatch)
+    run_id, completed = fixed_python_run(service)
+
+    async def scenario():
+        runs = gate.runs()
+        request = {"holder": "cell-a", "run_id": run_id, "series": series()}
+        with pytest.raises(BacktestError) as untrusted:
+            await follows.open(request)
+        assert untrusted.value.code == "TRUSTED_ORIGIN_REQUIRED"
+        held = await follows.open(request, trusted=True)
+        assert held["from_ms"] == START, "FOLLOW starts where the fixed run starts"
+        follow_id = held["follow_id"]
+        await until(lambda: runs.status(follow_id), lambda value: value["source_state"] == "LIVE")
+        # On the same 20 closed bars, FOLLOW is the fixed run (§3.4), but for the orders FIXED cancels at its end.
+        assert_follow_equals_fixed(await runs.result(follow_id), completed["result"], interval="1m")
+        assert (await follows.open({**request, "holder": "cell-b"}, trusted=True))["follow_id"] == follow_id
+        now[0] = START + 25 * STEP
+        await emit(manager, DataEventType.BAR_CLOSED)
+        await until(lambda: runs.status(follow_id),
+                    lambda value: follows.sessions.get(follow_id).through_ms == START + 25 * STEP - 1)
+        _, longer = fixed_python_run(service, 25, "chart-fixed-python-25")
+        assert_follow_equals_fixed(await runs.result(follow_id), longer["result"], interval="1m")
+
+        for wrong, code in (({**request, "run_id": "bt_missing"}, "RUN_NOT_FOUND"),
+                            ({**request, "series": series("5m")}, "FOLLOW_INPUT_INVALID")):
+            with pytest.raises(BacktestError) as refused:
+                await follows.open(wrong, trusted=True)
+            assert refused.value.code == code
     run(scenario, manager, gate, service)

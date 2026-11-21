@@ -15,6 +15,8 @@ import {
 export interface StrategyOverlayRun {
   family: RunResultFamily;
   runId: string;
+  /** A FOLLOW run (P4b): the fixed run it keeps current, whose views it takes over. */
+  followsRunId?: string;
 }
 
 /** A loaded run result together with the run it belongs to, for views that show it. */
@@ -42,8 +44,18 @@ export function shownOverlayRun(mode: "NATIVE" | "CANDLESCOPE", native: Strategy
  * run's stream reports, coalesced so at most one read is in flight, until the run stops. A resumed
  * run (a new generation) reconnects. Resolves when the run stops; the last result is its final one.
  */
-export async function followForwardRun(manager: Pick<StrategyDataManager, "loadRunResult" | "watchRun">, runId: string,
+export function followForwardRun(manager: Pick<StrategyDataManager, "loadRunResult" | "watchRun">, runId: string,
   signal: AbortSignal, onResult: (result: RunResult) => void, onError: (failure: unknown) => void): Promise<void> {
+  return followLiveRun(manager, "continuous", runId, signal, onResult, onError);
+}
+
+/**
+ * Follow a run whose result keeps changing: a forward run (P2d) or a chart's FOLLOW run (P4b), whose
+ * stream reports each newly applied page of bars. A recomputed FOLLOW run (a new generation) reconnects.
+ */
+export async function followLiveRun(manager: Pick<StrategyDataManager, "loadRunResult" | "watchRun">,
+  family: "continuous" | "follow", runId: string, signal: AbortSignal, onResult: (result: RunResult) => void,
+  onError: (failure: unknown) => void): Promise<void> {
   let loading: Promise<void> | null = null;
   let again = false;
   const refresh = (): Promise<void> => {
@@ -51,7 +63,7 @@ export async function followForwardRun(manager: Pick<StrategyDataManager, "loadR
     loading = (async () => {
       do {
         again = false;
-        const result = await manager.loadRunResult("continuous", runId, signal);
+        const result = await manager.loadRunResult(family, runId, signal);
         if (!signal.aborted) onResult(result);
       } while (again && !signal.aborted);
     })().finally(() => { loading = null; });
@@ -113,6 +125,7 @@ export function useStrategyRunOverlay({ run, interval, series, onActivate, manag
   useEffect(() => { if (series !== undefined) source.setSeries(series); }, [series, source]);
   const family = run?.family ?? null;
   const runId = run?.runId ?? null;
+  const followsRunId = run?.followsRunId;
   useEffect(() => {
     source.setOverlay(null, null);
     setError(null);
@@ -125,15 +138,16 @@ export function useStrategyRunOverlay({ run, interval, series, onActivate, manag
       if (result.interval !== interval) return;  // a run for another interval never draws on this chart
       void locale;
       source.setOverlay(buildStrategyOverlay(result, { labels: strategyOverlayLabels(), idPrefix: owner }), result.interval, owner);
-      setShown({ run: { family, runId }, result });
+      setShown({ run: { family, runId, ...(followsRunId ? { followsRunId } : {}) }, result });
     };
     const fail = (failure: unknown) => {
       if (controller.signal.aborted) return;
       setError(failure instanceof Error ? failure.message : String(failure));
     };
-    if (family === "continuous") void followForwardRun(manager, runId, controller.signal, draw, fail).catch(fail);
-    else manager.loadRunResult(family, runId, controller.signal).then(draw).catch(fail);
+    if (family === "continuous" || family === "follow") {
+      void followLiveRun(manager, family, runId, controller.signal, draw, fail).catch(fail);
+    } else manager.loadRunResult(family, runId, controller.signal).then(draw).catch(fail);
     return () => controller.abort();
-  }, [family, interval, locale, manager, runId, source]);
+  }, [family, followsRunId, interval, locale, manager, runId, source]);
   return { source, error, shown };
 }

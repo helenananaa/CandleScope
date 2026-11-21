@@ -61,6 +61,13 @@ class FollowCreate(StrictInput):
     warmup_bars: int = Field(default=0, ge=0, le=200_000)
 
 
+class FollowFromRun(StrictInput):
+    """Keep a completed fixed host run current: the same code, configuration and start, on live bars."""
+    holder: str = Field(min_length=1, max_length=200)
+    run_id: str = Field(min_length=4, max_length=128, pattern=r"^bt_\S+$")
+    series: MarketSeries
+
+
 class FollowLease(StrictInput):
     holder: str = Field(min_length=1, max_length=200)
 
@@ -327,14 +334,15 @@ class StrategyFollows:
             scratch = owner.service.settings.db_path.parent / "follow-scratch"
             scratch.mkdir(parents=True, exist_ok=True)
             provider_factory = ContinuousProviderFactory(scratch_root=scratch)
-        self.sessions = FollowSessions(provider_factory, capacity=capacity, lease_ms=lease_ms, on_stop=self._stopped)
+        self._current_code = provider_factory
+        self.sessions = FollowSessions(self._provider, capacity=capacity, lease_ms=lease_ms, on_stop=self._stopped)
         self.clock_ms = clock_ms or (lambda: int(time.time() * 1000))
         self.sweep_s = sweep_s
         self.updates = CommittedUpdates()
         self.feeds: dict[str, _Feed] = {}
         # Runs that stopped, so a watcher or a late status read sees CANCELLED rather than an unknown id.
         self.ended: OrderedDict[str, dict[str, Any]] = OrderedDict()
-        self._versions: dict[str, str] = {}
+        self._versions: dict[str, str | None] = {}
         self._ended_lock = threading.Lock()
         self._loop: asyncio.AbstractEventLoop | None = None
         self.closed = False
@@ -356,6 +364,51 @@ class StrategyFollows:
             except RuntimeError:
                 pass  # the loop has closed
 
+    def _provider(self, definition):
+        """A followed fixed run runs its own frozen revision; current code runs through the forward-run factory."""
+        host = definition.get("host_run")
+        if host is None:
+            return self._current_code(definition)
+        return self.owner.service.build_python_host_provider(
+            host["strategy_revision_id"], parameters=dict(definition["input_plan"]["parameters"]),
+            mode=host["python_runtime_mode"], trusted_confirmed=host["python_trusted_confirmed"])
+
+    def _definition_from_run(self, request: FollowFromRun, key) -> tuple[dict[str, Any], int]:
+        """The FOLLOW definition of a completed fixed run and its first bar (§3.4: FOLLOW equals FIXED)."""
+        from app.backtest.models import ENGINE_VERSION
+        from app.data_engine.interval_policy import parse_interval_spec
+
+        service = self.owner.service
+        try:
+            record = service.get_run(request.run_id)
+        except BacktestError as failure:
+            if failure.code == "SCHEMA_UNKNOWN_FIELD":
+                raise BacktestError("RUN_NOT_FOUND", "unknown fixed run to follow") from None
+            raise
+        if record["state"] != "COMPLETED" or record["fidelity_mode"] != "BAR_APPROX":
+            raise BacktestError("FOLLOW_INPUT_INVALID", "FOLLOW continues a completed bar run")
+        revision = service.repository.get_strategy_revision(str(record["strategy_revision_id"]))
+        if revision is None or revision["base_revision_id"] != "python-source-v1":
+            # Pine on the chart follows by rebuilding its prefix (O1); the continuation host does not run it.
+            raise BacktestError("FIDELITY_UNSUPPORTED", "Only Python host runs follow live bars here")
+        config = json.loads(str(record["config_json"]))
+        if (config.get("exchange"), config.get("market_type"), config.get("symbol"), config.get("interval")) != (
+                key.exchange, key.market_type, key.symbol, key.interval):
+            raise BacktestError("FOLLOW_INPUT_INVALID", "The chart series is not the fixed run's market")
+        spec = parse_interval_spec(key.interval)
+        start = int(config["start_time_ms"])
+        first = spec.floor_ms(start)
+        first = first if first == start else first + spec.nominal_ms
+        definition = {
+            "engine_version": ENGINE_VERSION, "language": "python", "configuration": config,
+            "input_plan": {"roles": ["BARS"], "parameters": dict(config.get("parameters") or {})},
+            "market": {"venue": key.exchange, "symbol": key.symbol},
+            "host_run": {"run_id": request.run_id, "strategy_revision_id": str(record["strategy_revision_id"]),
+                         "python_runtime_mode": str(config.get("python_runtime_mode") or "SANDBOXED_LOCAL"),
+                         "python_trusted_confirmed": bool(config.get("python_trusted_confirmed"))},
+        }
+        return definition, first
+
     def sessions_or_none(self, follow_id: str) -> FollowSession | None:
         try:
             return self.sessions.get(follow_id)
@@ -370,12 +423,20 @@ class StrategyFollows:
         if follow_id in self._versions:
             return self._versions[follow_id]
         from app.backtest.strategy_versions import StrategyVersions, continuous_material
+        versions = StrategyVersions(self.owner.service.repository)
+        host = definition.get("host_run")
         try:
-            value = StrategyVersions(self.owner.service.repository).record(
-                continuous_material(definition), now_ms=int(time.time() * 1000))
+            if host is not None:
+                # A followed fixed run runs that run's version; it is linked when the run's status is read.
+                found = versions.for_run(host["run_id"])
+                if found is None:
+                    return None
+                value = found
+            else:
+                value = versions.record(continuous_material(definition), now_ms=int(time.time() * 1000))
         except Exception:
             logger.warning("Strategy version of FOLLOW run %s is unavailable", follow_id, exc_info=True)
-            return None
+            value = None
         self._versions[follow_id] = value
         return value
 
@@ -385,30 +446,39 @@ class StrategyFollows:
         ``trusted``: the request came from the trusted local application, which Python code requires.
         """
         from app.backtest.continuous_definition import prepare_definition
-        from app.data_engine.interval_policy import parse_interval_spec
+        from app.data_engine.interval_policy import IntervalAlignment, parse_interval_spec
 
         if self.closed:
             raise BacktestError("STRATEGY_MANAGER_CLOSED", "strategy manager is closed")
         self._loop = asyncio.get_running_loop()
+        from_run = isinstance(body, dict) and "run_id" in body
         try:
-            request = FollowCreate.model_validate(body)
+            request = (FollowFromRun if from_run else FollowCreate).model_validate(body)
         except (ValidationError, ValueError, TypeError):
             raise BacktestError("FOLLOW_INPUT_INVALID", "Invalid FOLLOW request fields") from None
         key = request.series.key()
-        definition = await asyncio.to_thread(
-            prepare_definition, request.provider.model_dump(exclude_unset=True, by_alias=True), request.execution,
-            key, warmup_bars=request.warmup_bars, follow=True)
-        if definition["language"] == "python" and not trusted:
+        if not trusted and (from_run or request.provider.language == "python"):
             raise BacktestError("TRUSTED_ORIGIN_REQUIRED", "Python editor requires a trusted local application origin")
+        if isinstance(request, FollowFromRun):
+            definition, from_ms = await asyncio.to_thread(self._definition_from_run, request, key)
+        else:
+            definition = await asyncio.to_thread(
+                prepare_definition, request.provider.model_dump(exclude_unset=True, by_alias=True), request.execution,
+                key, warmup_bars=request.warmup_bars, follow=True)
+            if definition["language"] == "python" and not trusted:
+                raise BacktestError("TRUSTED_ORIGIN_REQUIRED", "Python editor requires a trusted local application origin")
+            from_ms = request.from_ms
         spec = parse_interval_spec(key.interval)
-        if request.from_ms != spec.floor_ms(request.from_ms):
+        if spec is None or spec.timezone or spec.alignment is IntervalAlignment.CALENDAR_MONTH:
+            raise BacktestError("FIDELITY_UNSUPPORTED", "FOLLOW needs a fixed-length chart interval")
+        if from_ms != spec.floor_ms(from_ms):
             raise BacktestError("FOLLOW_INPUT_INVALID", "FOLLOW starts at a bar's open")
-        if (spec.floor_ms(int(self.clock_ms())) - request.from_ms) // spec.nominal_ms > MAX_FOLLOW_BARS:
+        if (spec.floor_ms(int(self.clock_ms())) - from_ms) // spec.nominal_ms > MAX_FOLLOW_BARS:
             raise BacktestError("BUDGET_EXCEEDED", f"FOLLOW starts at most {MAX_FOLLOW_BARS} bars back")
         session, created = await asyncio.to_thread(
-            self.sessions.open, definition, interval=key.interval, holder=request.holder, from_ms=request.from_ms)
+            self.sessions.open, definition, interval=key.interval, holder=request.holder, from_ms=from_ms)
         if created:
-            feed = _Feed(self, session, key, request.from_ms, spec)
+            feed = _Feed(self, session, key, from_ms, spec)
             self.feeds[session.follow_id] = feed
             try:
                 await feed.start()
@@ -417,7 +487,8 @@ class StrategyFollows:
                 await asyncio.to_thread(self.sessions.stop, session.follow_id)
                 await feed.cancel()
                 raise
-        return {"follow_id": session.follow_id, "created": created, "lease_ms": int(self.sessions.lease_s * 1000)}
+        return {"follow_id": session.follow_id, "created": created, "from_ms": from_ms,
+                "lease_ms": int(self.sessions.lease_s * 1000)}
 
     async def renew(self, follow_id: str, body: object) -> dict[str, Any]:
         holder = self._holder(body)

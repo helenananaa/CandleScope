@@ -235,6 +235,14 @@ export interface BacktestApiClient {
   watchStrategyRun?(runId: string, signal?: AbortSignal,
     onStatus?: (status: StrategyRunStatus, progress: StrategyRunProgress | null) => void): Promise<StrategyRunStatus>;
   strategyRunCapabilities?(signal?: AbortSignal): Promise<unknown>;
+  /**
+   * Chart FOLLOW runs (ADR-BACKTEST-015 P4b): a chart cell holds a live run through a lease.
+   * `holdStrategyFollow` creates or joins the run (`{ follow_id, created, from_ms, lease_ms }`);
+   * the run stops once no cell renews its lease. Values are unvalidated wire values.
+   */
+  holdStrategyFollow?(body: Record<string, unknown>, signal?: AbortSignal): Promise<unknown>;
+  renewStrategyFollow?(followId: string, holder: string, signal?: AbortSignal): Promise<unknown>;
+  releaseStrategyFollow?(followId: string, holder: string): Promise<void>;
   /** Content-addressed strategy versions and their names (ADR-BACKTEST-015 P3b); unvalidated wire values. */
   getStrategyVersion?(versionHash: string, signal?: AbortSignal): Promise<unknown>;
   strategyVersionNames?(signal?: AbortSignal): Promise<{ names: Array<{ name: string; version_hash: string; named_at_ms: number }> }>;
@@ -389,6 +397,7 @@ export function createBacktestApi(base = `${API_BASE}/backtests`, runsBase = str
     ? `${runsBase.slice(0, -"/strategy-runs".length)}/${name}` : `${API_BASE}/${name}`;
   const versionsBase = sibling("strategy-versions");
   const referencesBase = sibling("strategy-references");
+  const followsBase = sibling("strategy-follows");
   return {
     externalProviders: {
       async trace(runId, after = 0, signal) {
@@ -612,6 +621,21 @@ export function createBacktestApi(base = `${API_BASE}/backtests`, runsBase = str
     },
     async strategyRunCapabilities(signal) {
       return readJson(await fetch(`${runsBase}/capabilities`, requestOptions({}, signal)));
+    },
+    async holdStrategyFollow(body, signal) {
+      return readJson(await fetch(followsBase, requestOptions({
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      }, signal)));
+    },
+    async renewStrategyFollow(followId, holder, signal) {
+      return readJson(await fetch(`${followsBase}/${encodeURIComponent(followId)}/lease`, requestOptions({
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ holder }),
+      }, signal)));
+    },
+    async releaseStrategyFollow(followId, holder) {
+      // keepalive: a cell closing with the page still lets its run go.
+      await readJson(await fetch(`${followsBase}/${encodeURIComponent(followId)}/lease?holder=${encodeURIComponent(holder)}`,
+        { method: "DELETE", keepalive: true }));
     },
     async getResultReplay(cursor, signal) {
       const query = new URLSearchParams({

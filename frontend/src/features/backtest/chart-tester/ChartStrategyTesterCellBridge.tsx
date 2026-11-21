@@ -46,8 +46,11 @@ import type { ChartStrategyTesterMarkerSource } from "./ChartStrategyTesterRunti
 import {
   CHART_RUN_COMPARE_ENABLED,
   CHART_STRATEGY_AUTO_RUN_ENABLED,
+  CHART_STRATEGY_FOLLOW_ENABLED,
   CHART_TRADE_EXPLANATION_ENABLED,
 } from "./chartStrategyTesterFeature.js";
+import { fixedIntervalMs } from "../follow/scriptFollow.js";
+import { resolveKlineSeriesIdentity } from "../../market-data/klineSeriesIdentity.js";
 import type { TradeExplanationSelection } from "./ChartStrategyResultViews.js";
 import type { StrategyDraftRecord } from "./StrategyDraftStore.js";
 import {
@@ -315,14 +318,54 @@ export default function ChartStrategyTesterCellBridge({
     };
   }, [cellId, runtimeState.resultIdentity, runtimeState.status, strategyManager, workspaceId]);
 
+  // ADR-BACKTEST-015 P4b: a shown Python run keeps up with live bars. The backend continues the
+  // fixed run (same revision, configuration and start) over each newly closed bar; this cell holds
+  // that FOLLOW run while it shows the result and lets it go when the result is replaced or hidden.
+  const shownFixedRunId = result && runtimeState.projectionVisible && runtimeState.resultIdentity?.runId === result.run.run_id
+    ? result.run.run_id : null;
+  // Only a run of this chart's market and interval is followed: a session switch shows the old result for a moment.
+  const shownRunConfig = result?.run.config_json;
+  const shownRunOnChart = useMemo(() => {
+    try {
+      const config = JSON.parse(shownRunConfig ?? "null") as Record<string, unknown> | null;
+      return config !== null && config.exchange === session.exchange && config.market_type === session.marketType
+        && config.symbol === session.symbol && config.interval === session.interval;
+    } catch {
+      return false;
+    }
+  }, [session.exchange, session.interval, session.marketType, session.symbol, shownRunConfig]);
+  const followableRunId = CHART_STRATEGY_FOLLOW_ENABLED && runMode === "HISTORY" && attachment?.language === "python"
+    && shownRunOnChart && fixedIntervalMs(session.interval) !== null ? shownFixedRunId : null;
+  const followHolder = useMemo(() => `chart-cell:${crypto.randomUUID()}`, []);
+  const [followed, setFollowed] = useState<{ fixedRunId: string; followId: string } | null>(null);
+  useEffect(() => {
+    if (!followableRunId || !strategyManager) return undefined;
+    const identity = resolveKlineSeriesIdentity(session.exchange, session);
+    const body = { run_id: followableRunId, series: {
+      exchange: session.exchange, market_type: session.marketType, symbol: session.symbol, interval: session.interval,
+      identity: { provider_id: identity.providerId, venue: identity.venue, asset_class: identity.assetClass,
+        series_variant: identity.seriesVariant, price_adjustment: identity.priceAdjustment,
+        session_variant: identity.sessionVariant, volume_semantics: identity.volumeSemantics } } };
+    const controller = new AbortController();
+    void strategyManager.holdFollowRun(body, followHolder, (held) => {
+      if (!controller.signal.aborted) setFollowed({ fixedRunId: followableRunId, followId: held.followId });
+    }, controller.signal).catch(() => {
+      // Refused (a range beyond the FOLLOW budget, settings it cannot continue) or lost: the fixed result stays.
+      if (!controller.signal.aborted) setFollowed(null);
+    });
+    return () => controller.abort();
+  }, [followHolder, followableRunId, session, strategyManager]);
+
   // In CandleScope mode the overlay draws a completed, visible fixed-history result (host family) in
   // history mode, and the continuous panel's forward run in the live modes (ADR-BACKTEST-015 P2d).
   const [continuousOverlayRun, setContinuousOverlayRun] = useState<StrategyOverlayRun | null>(null);
   const candleScopeOverlayRun = useMemo<StrategyOverlayRun | null>(() => {
     if (runMode !== "HISTORY") return continuousOverlayRun;
-    return result && runtimeState.projectionVisible && runtimeState.resultIdentity?.runId === result.run.run_id
-      ? { family: "host", runId: result.run.run_id } : null;
-  }, [continuousOverlayRun, result, runMode, runtimeState.projectionVisible, runtimeState.resultIdentity?.runId]);
+    if (!shownFixedRunId) return null;
+    return followableRunId && followed?.fixedRunId === shownFixedRunId
+      ? { family: "follow", runId: followed.followId, followsRunId: shownFixedRunId }
+      : { family: "host", runId: shownFixedRunId };
+  }, [continuousOverlayRun, followableRunId, followed, runMode, shownFixedRunId]);
 
   useEffect(() => {
     const draftId = attachment?.strategyDraftId;

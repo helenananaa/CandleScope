@@ -149,9 +149,9 @@ const strategyRunTransports = new Map([
   ["src/features/backtest/native/nativeBacktestApi", new Set(["defaultNativeRunClient"])],
 ]);
 // A strategy run route inside a string literal: a backtest family's runs (`/backtests/runs`,
-// `/native/runs`, `/external/runs`, `/continuous/runs`) or the run facade (`/strategy-runs`).
-// Replay training runs (`/replay/…/runs`) are a different resource.
-const strategyRunRoutePattern = /\/(?:backtests|native|external|continuous)\/runs(?:$|[/?])|\/strategy-runs\b/;
+// `/native/runs`, `/external/runs`, `/continuous/runs`), the run facade (`/strategy-runs`) or
+// chart FOLLOW leases (`/strategy-follows`). Replay training runs (`/replay/…/runs`) are a different resource.
+const strategyRunRoutePattern = /\/(?:backtests|native|external|continuous)\/runs(?:$|[/?])|\/strategy-(?:runs|follows)\b/;
 
 function allowlistKey(entry) {
   return [entry.rule, entry.path, entry.target || ""].join("|");
