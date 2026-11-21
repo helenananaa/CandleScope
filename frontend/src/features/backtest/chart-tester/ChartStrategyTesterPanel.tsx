@@ -101,7 +101,9 @@ import { StrategySwitcher, type StrategySwitcherItem } from "./StrategySwitcher.
 const StrategyScriptWorkspace = lazy(() => import("./StrategyScriptWorkspace.js"));
 const NativeStrategyPanel = lazy(() => import("../native/NativeStrategyPanel.js"));
 const ContinuousStrategyPanel = lazy(() => import("../continuous/ContinuousStrategyPanel.js"));
-import { overlayRunForNative, shownOverlayRun, type StrategyOverlayRun } from "../runResult/useStrategyRunOverlay.js";
+import { overlayRunForNative, shownOverlayRun, type ShownRunResult, type StrategyOverlayRun } from "../runResult/useStrategyRunOverlay.js";
+import { RunResultSummary, RunResultTradeList } from "../runResult/RunResultViews.js";
+import { CHART_RUN_RESULT_VIEWS_ENABLED } from "./chartStrategyTesterFeature.js";
 import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
 import type { ContinuousMode } from "../continuous/continuousTypes.js";
 import type { ChartStrategyResultMarkerSource } from "./chartStrategyResultMarkerSource.js";
@@ -220,6 +222,8 @@ export interface ChartStrategyTesterPanelProps {
   onOverlayRunChange?(run: StrategyOverlayRun | null): void;
   /** The completed, visible fixed-history result, supplied by the cell bridge. */
   hostOverlayRun?: StrategyOverlayRun | null;
+  /** The run result the bridge loaded for the overlay; shared result views read it (behind a flag). */
+  overlayResult?: ShownRunResult | null;
   active?: boolean;
   onReviewTrade?(trade: StrategyTradeFocus | null): void;
   onPrepareData(): void;
@@ -337,8 +341,11 @@ export function CandleScopeStrategyTesterPanel({
   onOpenAdvanced,
   onOpenBatchStudy,
   onOpenWorkspace,
+  overlayResult = null,
 }: ChartStrategyTesterPanelProps) {
   const locale = useLocale();
+  // ADR-BACKTEST-015 P1c: the shared views show the host run only when the loaded result is this run's.
+  const sharedResult = CHART_RUN_RESULT_VIEWS_ENABLED && overlayResult?.run.family === "host" ? overlayResult : null;
   const [focusMode, setFocusMode] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLButtonElement>(null);
@@ -1087,7 +1094,14 @@ export function CandleScopeStrategyTesterPanel({
           </div>
         )}
 
-        <div hidden={!currentAttachment || activeTab !== "trades"}>{result
+        <div hidden={!currentAttachment || activeTab !== "trades"}>{result && sharedResult?.run.runId === result.run.run_id
+            ? <div className="chart-strategy-result-overview run-result-views" data-testid="run-result-views">
+              <RunResultSummary result={sharedResult.result} locale={locale} />
+              <RunResultTradeList key={result.run.run_id} result={sharedResult.result} locale={locale}
+                active={active && activeTab === "trades"} onLocateTrade={onLocateTrade}
+                {...(onReviewTrade ? { onReviewTrade } : {})} onSelectExplanation={onSelectExplanation} />
+            </div>
+            : result
             ? <ChartStrategyTradeList key={result.run.run_id} active={active && activeTab === "trades"}
               result={result}
               locale={locale}

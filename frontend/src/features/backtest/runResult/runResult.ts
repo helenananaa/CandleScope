@@ -49,6 +49,9 @@ export interface RunResultTrade {
   exit_price: string;
   fees: string | null;
   net_pnl: string | null;
+  /** Decision-time evidence for the entry and exit, when the run recorded it. */
+  entry_explanation: Record<string, unknown> | null;
+  exit_explanation: Record<string, unknown> | null;
 }
 
 export interface RunResultPosition {
@@ -215,6 +218,8 @@ export function parseRunResult(value: unknown): RunResult {
       exit_bar_time_ms: optionalTime(trade.exit_bar_time_ms, `${at}.exit_bar_time_ms`),
       exit_price: decimal(trade.exit_price, `${at}.exit_price`),
       fees: optionalDecimal(trade.fees, `${at}.fees`), net_pnl: optionalDecimal(trade.net_pnl, `${at}.net_pnl`),
+      entry_explanation: optionalObject(trade.entry_explanation, `${at}.entry_explanation`),
+      exit_explanation: optionalObject(trade.exit_explanation, `${at}.exit_explanation`),
     };
   });
   const position = body.open_position === null ? null : row(body.open_position, "open_position");

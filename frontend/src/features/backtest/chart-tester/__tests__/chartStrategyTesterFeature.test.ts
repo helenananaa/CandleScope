@@ -6,6 +6,7 @@ import test from "node:test";
 import {
   resolveChartRunCompareEnabled,
   resolveChartStrategyAutoRunEnabled,
+  resolveChartRunResultViewsEnabled,
   resolveChartStrategyTesterEnabled,
   resolveChartTradeExplanationEnabled,
 } from "../chartStrategyTesterFeature.js";
@@ -81,4 +82,10 @@ test("phase 4 keeps runtime, draft storage, and Monaco behind lazy boundaries", 
   assert.match(bridge, /inFlightOriginRef\.current === "AUTO"/);
   assert.match(bridge, /!inFlightSubmittedRef\.current/);
   assert.match(bridge, /manual Run preempted unsubmitted auto Run/);
+});
+
+test("shared run-result views stay opt-in until their visual review", () => {
+  assert.equal(resolveChartRunResultViewsEnabled(), false);
+  assert.equal(resolveChartRunResultViewsEnabled({ VITE_CHART_RUN_RESULT_VIEWS_ENABLED: "true" }), false);
+  assert.equal(resolveChartRunResultViewsEnabled({ VITE_CHART_RUN_RESULT_VIEWS_ENABLED: "1" }), true);
 });
