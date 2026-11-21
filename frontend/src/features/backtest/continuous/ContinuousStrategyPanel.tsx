@@ -8,7 +8,8 @@ import type { ChartSession } from "../../chart-session/chartSessionTypes.js";
 import { validStrategyRunSettings, type StrategyRunSettings, type StrategyExecutionOverrides, type StrategyInitializationSettings } from "../../../shared/strategyRunSettings.js";
 import type { ContinuousObservation } from "../../market-data/manager/continuousStrategyDataManager.js";
 import { strategyDraftContentRevision } from "../chart-tester/chartStrategyTesterDrafts.js";
-import { activateContinuousReference, listContinuousReferences, readContinuousReference, type ContinuousRunReference, saveContinuousReference, continuousArchiveScope } from "./continuousRunReference.js";
+import { backendContinuousReferences, type ContinuousRunReference } from "./continuousRunReference.js";
+import { useStrategyDataManager } from "../../market-data/useStrategyDataManager.js";
 import type { ContinuousAction, ContinuousCapabilities, ContinuousCreate, ContinuousCreation, ContinuousMode } from "./continuousTypes.js";
 import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
 import ContinuousBarBoundary from "./ContinuousBarBoundary.js";
@@ -54,6 +55,8 @@ function time(value: unknown): string {
 export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelProps) {
   useLocale();
   const manager = useMarketDataWorkspaceResources()?.dataManager.strategy.continuous;
+  const strategyManager = useStrategyDataManager();
+  const references = useMemo(() => strategyManager ? backendContinuousReferences(strategyManager, browserStorage()) : null, [strategyManager]);
   const [caps, setCaps] = useState<ContinuousCapabilities | null>(null);
   const [reference, setReference] = useState<ContinuousRunReference | null>(null);
   const [savedRuns, setSavedRuns] = useState<ContinuousRunReference[]>([]);
@@ -85,16 +88,23 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
     && identity.assetClass === "crypto" && identity.seriesVariant === "native" && identity.priceAdjustment === "raw"
     && identity.sessionVariant === "continuous" && identity.volumeSemantics === "base_asset";
   useEffect(() => {
-    try {
-      const saved = readContinuousReference(localStorage, scope); setReference(saved); setStorageFailed(false);
-      setSavedRuns(listContinuousReferences(localStorage, scope));
-      if (saved) {
-        setFrom(saved.settings.from); setBalance(saved.settings.balance); setPercent(saved.settings.percent);
-        setFee(saved.settings.fee); setSlippage(saved.settings.slippage); setOutput(saved.settings.output);
+    if (!references) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const saved = await references.read(scope);
+        const listed = await references.list(scope);
+        if (cancelled) return;
+        setReference(saved); setStorageFailed(false); setSavedRuns(listed);
+        if (saved) {
+          setFrom(saved.settings.from); setBalance(saved.settings.balance); setPercent(saved.settings.percent);
+          setFee(saved.settings.fee); setSlippage(saved.settings.slippage); setOutput(saved.settings.output);
+        }
       }
-    }
-    catch { setStorageFailed(true); setError(t("continuous.storage")); }
-  }, [scope]);
+      catch { if (!cancelled) { setStorageFailed(true); setError(t("continuous.storage")); } }
+    })();
+    return () => { cancelled = true; };
+  }, [references, scope]);
   useEffect(() => {
     if (!manager || !props.active) return;
     const controller = new AbortController();
@@ -122,9 +132,11 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
   }, [onOverlayRunChange, overlayRunId]);
   useEffect(() => () => onOverlayRunChange?.(null), [onOverlayRunChange]);
 
-  function save(next: ContinuousRunReference) {
+  // The chart's forward-run references live in the backend (ADR-BACKTEST-015 P3c).
+  async function save(next: ContinuousRunReference) {
     try {
-      activateContinuousReference(localStorage, scope, next); setReference(next); setSavedRuns(listContinuousReferences(localStorage, scope));
+      if (!references) throw new Error(t("continuous.storage"));
+      await references.activate(scope, next); setReference(next); setSavedRuns(await references.list(scope));
     }
     catch { setStorageFailed(true); throw new Error(t("continuous.storage")); }
   }
@@ -148,13 +160,14 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
       // selected until the backend acknowledges the replacement.
       if (reference?.runId) {
         try {
-          saveContinuousReference(localStorage, continuousArchiveScope(scope, next.requestKey), next);
-          setSavedRuns(listContinuousReferences(localStorage, scope));
+          if (!references) throw new Error(t("continuous.storage"));
+          await references.archive(scope, next);
+          setSavedRuns(await references.list(scope));
         } catch {
           setStorageFailed(true);
           throw new Error(t("continuous.storage"));
         }
-      } else save(next);
+      } else await save(next);
       const result = await manager.create(next.requestKey, { mode: props.mode,
         series: { exchange: props.session.exchange, market_type: props.session.marketType, symbol: props.session.symbol, interval: props.session.interval,
           identity: { provider_id: identity.providerId, venue: identity.venue, asset_class: identity.assetClass,
@@ -166,7 +179,7 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
         ...(props.initialization ? { warmup_bars: props.initialization.warmupBars } : {}),
         ...(props.mode === "HISTORY_LIVE" ? { from_ms: start } : {}),
       });
-      save({ ...next, runId: result.creation.run_id }); setCreation(result.creation); setState(empty);
+      await save({ ...next, runId: result.creation.run_id }); setCreation(result.creation); setState(empty);
     } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); }
     finally { submitting.current = false; setBusy(false); }
   }
@@ -175,7 +188,7 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
     setBusy(true); setError(null);
     try {
       const result = await manager.request(reference.requestKey);
-      setCreation(result.creation); save({ ...reference, runId: result.creation.run_id }); setAttempt((value) => value + 1);
+      setCreation(result.creation); await save({ ...reference, runId: result.creation.run_id }); setAttempt((value) => value + 1);
     } catch (failure) { setError(String(failure)); }
     finally { setBusy(false); }
   }
@@ -229,11 +242,11 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
     {savedRuns.length > 0 && <label>{t("continuous.savedRuns")}<select disabled={busy || storageFailed} value={reference?.requestKey ?? ""} onChange={(event) => {
       const selected = savedRuns.find((value) => value.requestKey === event.target.value);
       if (!selected) return;
-      try {
-        save(selected); setCreation(null); setState(empty); setError(null);
+      void save(selected).then(() => {
+        setCreation(null); setState(empty); setError(null);
         setFrom(selected.settings.from); setBalance(selected.settings.balance); setPercent(selected.settings.percent);
         setFee(selected.settings.fee); setSlippage(selected.settings.slippage); setOutput(selected.settings.output);
-      } catch (failure) { setError(String(failure)); }
+      }, (failure: unknown) => setError(String(failure)));
     }}><option value="" disabled>{t("continuous.savedRuns")}</option>{savedRuns.map((saved) => <option key={saved.requestKey} value={saved.requestKey}>
       {time(saved.createdAtMs)} · {saved.runId?.slice(-8) ?? t("continuous.pendingRun")}
     </option>)}</select></label>}
@@ -287,4 +300,9 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
         if (barTime !== null) props.onLocateTrade?.(barTime * 1000);
       } } : {})} /> : <p>{t("continuous.empty")}</p>}
   </div>;
+}
+
+/** The origin's browser storage, where references lived before ADR-BACKTEST-015 P3c; null when it is unavailable. */
+function browserStorage(): Storage | null {
+  try { return window.localStorage; } catch { return null; }
 }

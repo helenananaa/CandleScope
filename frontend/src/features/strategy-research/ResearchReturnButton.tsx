@@ -22,7 +22,7 @@ export default function ResearchReturnButton({ runId, origin, manager: explicitM
       const version = await manager.loadSelectedRunVersion(runId, controller.signal);
       projectSelectedVersion(version);
       if (controller.signal.aborted) return;
-      const href = await saveResearchReturn({ schema: 1, runId, versionHash: version.version_hash, origin });
+      const href = await saveResearchReturn({ schema: 1, runId, versionHash: version.version_hash, origin }, manager);
       if (!controller.signal.aborted) window.location.assign(href);
     } catch (failure) { if (!controller.signal.aborted) setError(researchReturnError(failure)); }
     finally { if (!controller.signal.aborted) { pending.current = null; setBusy(false); } }

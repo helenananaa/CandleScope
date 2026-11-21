@@ -159,6 +159,12 @@ class StrategyDataManager:
             self._continuous_access=ContinuousStrategyAccess(self)
         return self._continuous_access
 
+    def references(self):
+        """Small references the strategy pages keep (ADR-BACKTEST-015 P3c)."""
+        self._require_open()
+        from app.backtest.strategy_references import StrategyReferences
+        return StrategyReferences(self.service.repository)
+
     def versions(self):
         """Content-addressed strategy versions and their names (ADR-BACKTEST-015 P3b)."""
         self._require_open()

@@ -5,7 +5,9 @@ import { useLocale } from "../../i18n/useLocale.js";
 import { useStrategyDataManager } from "../market-data/useStrategyDataManager.js";
 import { getChartStrategyDraftStore, createChartStrategyDraftId } from "../backtest/chart-tester/chartStrategyTesterDrafts.js";
 import type { ChartWorkspaceRuntime } from "../chart-workspace/useChartWorkspaceRuntime.js";
-import { projectSelectedVersion, readResearchReturn, ResearchReturnUnsupported, type ResearchSelectedVersion } from "./researchSelectedVersion.js";
+import {
+  loadResearchReturn, projectSelectedVersion, ResearchReturnUnsupported, type ResearchReturnReference, type ResearchSelectedVersion,
+} from "./researchSelectedVersion.js";
 import { researchReturnError } from "./researchReturnError.js";
 
 export default function ResearchReturnDialog({ id, workspace, onClose, onApplied }: {
@@ -13,7 +15,14 @@ export default function ResearchReturnDialog({ id, workspace, onClose, onApplied
 }) {
   const locale = useLocale();
   const manager = useStrategyDataManager();
-  const [reference] = useState(() => readResearchReturn(id));
+  // undefined while the reference is read from the backend; null when it is missing or invalid.
+  const [reference, setReference] = useState<ResearchReturnReference | null | undefined>(undefined);
+  useEffect(() => {
+    if (!manager) return;
+    let cancelled = false;
+    void loadResearchReturn(id, manager).then((value) => { if (!cancelled) setReference(value); });
+    return () => { cancelled = true; };
+  }, [id, manager]);
   const [version, setVersion] = useState<ResearchSelectedVersion | null>(null);
   const [error, setError] = useState<string | null>(null), [busy, setBusy] = useState(false);
   const [cell, setCell] = useState("");
@@ -25,7 +34,7 @@ export default function ResearchReturnDialog({ id, workspace, onClose, onApplied
     return () => { alive.current = false; };
   }, []);
   useEffect(() => {
-    if (!manager) return;
+    if (!manager || reference === undefined) return;
     const controller = new AbortController();
     void (async () => {
       try {

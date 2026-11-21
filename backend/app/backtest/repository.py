@@ -117,6 +117,65 @@ class BacktestRepository:
         ).fetchone()
         return dict(row) if row is not None else None
 
+    # -- strategy references (ADR-BACKTEST-015 P3c) -----------------------------
+
+    @_locked
+    def get_strategy_reference(self, kind: str, key: str) -> dict[str, Any] | None:
+        row = self.connection.execute(
+            "SELECT ref_key, value_json, updated_at_ms FROM backtest_strategy_references WHERE kind = ? AND ref_key = ?",
+            (kind, key)).fetchone()
+        return dict(row) if row is not None else None
+
+    @_locked
+    def list_strategy_references(self, kind: str, prefix: str, limit: int) -> list[dict[str, Any]]:
+        rows = self.connection.execute(
+            "SELECT ref_key, value_json, updated_at_ms FROM backtest_strategy_references "
+            "WHERE kind = ? AND substr(ref_key, 1, ?) = ? ORDER BY updated_at_ms DESC, ref_key LIMIT ?",
+            (kind, len(prefix), prefix, limit)).fetchall()
+        return [dict(row) for row in rows]
+
+    @_locked
+    def put_strategy_references(self, kind: str, entries: list[tuple[str, str]], *, now_ms: int, capacity: int,
+                                prune: bool, keep_existing: bool) -> list[str]:
+        """One transaction. ``keep_existing`` (an import) never overwrites; at ``capacity`` a
+        pruned kind drops its oldest entries and any other kind refuses."""
+        from .errors import BacktestError
+
+        written = []
+        try:
+            for key, value in entries:
+                exists = self.connection.execute(
+                    "SELECT 1 FROM backtest_strategy_references WHERE kind = ? AND ref_key = ?", (kind, key)).fetchone()
+                if exists and keep_existing:
+                    continue
+                if not exists:
+                    count = int(self.connection.execute(
+                        "SELECT COUNT(*) FROM backtest_strategy_references WHERE kind = ?", (kind,)).fetchone()[0])
+                    if count >= capacity:
+                        if not prune:
+                            raise BacktestError("REFERENCE_CAPACITY_EXCEEDED", f"the {kind} reference limit is reached")
+                        self.connection.execute(
+                            "DELETE FROM backtest_strategy_references WHERE kind = ? AND ref_key IN (SELECT ref_key "
+                            "FROM backtest_strategy_references WHERE kind = ? ORDER BY updated_at_ms, ref_key LIMIT ?)",
+                            (kind, kind, count - capacity + 1))
+                self.connection.execute(
+                    "INSERT INTO backtest_strategy_references(kind, ref_key, value_json, updated_at_ms) VALUES (?, ?, ?, ?) "
+                    "ON CONFLICT(kind, ref_key) DO UPDATE SET value_json = excluded.value_json, "
+                    "updated_at_ms = excluded.updated_at_ms", (kind, key, value, now_ms))
+                written.append(key)
+            self.connection.commit()
+        except BaseException:
+            self.connection.rollback()
+            raise
+        return written
+
+    @_locked
+    def delete_strategy_reference(self, kind: str, key: str) -> bool:
+        cursor = self.connection.execute(
+            "DELETE FROM backtest_strategy_references WHERE kind = ? AND ref_key = ?", (kind, key))
+        self.connection.commit()
+        return cursor.rowcount == 1
+
     # -- strategy versions (ADR-BACKTEST-015 P3b) -------------------------------
 
     @_locked

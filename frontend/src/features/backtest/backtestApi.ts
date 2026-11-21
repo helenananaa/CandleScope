@@ -240,6 +240,12 @@ export interface BacktestApiClient {
   strategyVersionNames?(signal?: AbortSignal): Promise<{ names: Array<{ name: string; version_hash: string; named_at_ms: number }> }>;
   nameStrategyVersion?(name: string, versionHash: string, signal?: AbortSignal): Promise<{ name: string; version_hash: string }>;
   unnameStrategyVersion?(name: string, signal?: AbortSignal): Promise<{ name: string; removed: boolean }>;
+  /** Small references the strategy pages keep (ADR-BACKTEST-015 P3c); values are unvalidated JSON. */
+  getStrategyReference?(kind: StrategyReferenceKind, key: string, signal?: AbortSignal): Promise<unknown>;
+  listStrategyReferences?(kind: StrategyReferenceKind, prefix: string, signal?: AbortSignal): Promise<Array<{ key: string; value: unknown; updated_at_ms: number }>>;
+  putStrategyReference?(kind: StrategyReferenceKind, key: string, value: unknown, signal?: AbortSignal): Promise<void>;
+  removeStrategyReference?(kind: StrategyReferenceKind, key: string, signal?: AbortSignal): Promise<void>;
+  importStrategyReferences?(kind: StrategyReferenceKind, entries: Array<{ key: string; value: unknown }>, signal?: AbortSignal): Promise<{ imported: string[]; kept: string[] }>;
   getResultReplay?(cursor: BacktestResultReplayCursor, signal?: AbortSignal): Promise<BacktestResultReplayFrame>;
   saveResultReplayNote?(cursor: BacktestResultReplayCursor, note: BacktestResultReplayNoteDraft,
     signal?: AbortSignal): Promise<{ revision: number }>;
@@ -329,6 +335,9 @@ export interface BacktestSnapshot {
   identity?: Record<string, unknown>;
 }
 
+/** What the strategy pages keep in the backend instead of browser storage (ADR-BACKTEST-015 P3c). */
+export type StrategyReferenceKind = "continuous-run" | "research-handoff" | "research-return";
+
 export class BacktestApiError extends Error {
   constructor(
     readonly code: string,
@@ -376,8 +385,10 @@ function strategyRunsBase(base: string) {
 
 export function createBacktestApi(base = `${API_BASE}/backtests`, runsBase = strategyRunsBase(base)): BacktestApiClient {
   // Versions are served beside the run facade.
-  const versionsBase = runsBase.endsWith("/strategy-runs")
-    ? `${runsBase.slice(0, -"/strategy-runs".length)}/strategy-versions` : `${API_BASE}/strategy-versions`;
+  const sibling = (name: string) => runsBase.endsWith("/strategy-runs")
+    ? `${runsBase.slice(0, -"/strategy-runs".length)}/${name}` : `${API_BASE}/${name}`;
+  const versionsBase = sibling("strategy-versions");
+  const referencesBase = sibling("strategy-references");
   return {
     externalProviders: {
       async trace(runId, after = 0, signal) {
@@ -576,6 +587,28 @@ export function createBacktestApi(base = `${API_BASE}/backtests`, runsBase = str
     },
     async unnameStrategyVersion(name, signal) {
       return readJson(await fetch(`${versionsBase}/names/${encodeURIComponent(name)}`, requestOptions({ method: "DELETE" }, signal)));
+    },
+    async getStrategyReference(kind, key, signal) {
+      const response = await fetch(`${referencesBase}/${kind}/entry?key=${encodeURIComponent(key)}`, requestOptions({}, signal));
+      if (response.status === 404) return null;
+      return (await readJson<{ value: unknown }>(response)).value;
+    },
+    async listStrategyReferences(kind, prefix, signal) {
+      return (await readJson<{ entries: Array<{ key: string; value: unknown; updated_at_ms: number }> }>(await fetch(
+        `${referencesBase}/${kind}?prefix=${encodeURIComponent(prefix)}&limit=512`, requestOptions({}, signal)))).entries;
+    },
+    async putStrategyReference(kind, key, value, signal) {
+      await readJson(await fetch(`${referencesBase}/${kind}/entry`, requestOptions({
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key, value }),
+      }, signal)));
+    },
+    async removeStrategyReference(kind, key, signal) {
+      await readJson(await fetch(`${referencesBase}/${kind}/entry?key=${encodeURIComponent(key)}`, requestOptions({ method: "DELETE" }, signal)));
+    },
+    async importStrategyReferences(kind, entries, signal) {
+      return readJson(await fetch(`${referencesBase}/${kind}/import`, requestOptions({
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entries }),
+      }, signal)));
     },
     async strategyRunCapabilities(signal) {
       return readJson(await fetch(`${runsBase}/capabilities`, requestOptions({}, signal)));
