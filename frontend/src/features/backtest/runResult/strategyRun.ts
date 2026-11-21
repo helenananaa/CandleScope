@@ -10,7 +10,7 @@ export const STRATEGY_RUN_SCHEMA = "candlescope.strategy-run/1";
 export const STRATEGY_RUN_CAPABILITIES_SCHEMA = "candlescope.strategy-run-capabilities/1";
 
 /** `follow`: a chart's live HOST run (ADR-BACKTEST-015 P4b), held by chart-cell leases. */
-export type StrategyRunFamily = RunResultFamily | "continuous" | "follow";
+export type StrategyRunFamily = RunResultFamily;
 export type StrategyRunState = "QUEUED" | "RUNNING" | "PAUSED" | "BLOCKED" | "COMPLETED" | "FAILED" | "CANCELLED";
 /**
  * A FIXED run has a fixed history; a FOLLOW run keeps a chart's strategy current as bars close

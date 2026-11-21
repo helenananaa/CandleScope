@@ -1,7 +1,7 @@
 import type { BacktestReplayChartOptions, BacktestReplayExtraSlot, BacktestResultReplayChart } from "../../backtest/backtestTypes.js";
 import type { PreparationJob } from "../../data-preparation/api.js";
 import {
-  defaultBacktestApi, type BacktestApiClient, type ExternalProviderConnection, type StrategyReferenceKind, type StrategyRevisionRecord,
+  BacktestApiError, defaultBacktestApi, type BacktestApiClient, type ExternalProviderConnection, type StrategyReferenceKind, type StrategyRevisionRecord,
 } from "../../backtest/backtestApi.js";
 import type { BacktestResultReplayCursor, BacktestResultReplayNoteDraft, BacktestRunRecord } from "../../backtest/backtestTypes.js";
 import { isBacktestTerminalState } from "../../backtest/backtestRunClient.js";
@@ -15,6 +15,7 @@ import { externalSnapshotRequest, matchingExternalConnections } from "../../back
 import { defaultContinuousApi } from "../../backtest/continuous/continuousApi.js";
 import type { ContinuousApi } from "../../backtest/continuous/continuousTypes.js";
 import { ContinuousStrategyDataManager } from "./continuousStrategyDataManager.js";
+import { holdFollow, type HeldFollow } from "../../backtest/follow/hostFollow.js";
 import { parseRunResult, RUN_RESULT_FAMILY_IDENTITY, RunResultContractError, type RunResult, type RunResultFamily } from "../../backtest/runResult/runResult.js";
 import {
   parseStrategyRunCapabilities, parseStrategyRunStatus, parseStrategyVersion, StrategyRunContractError,
@@ -32,7 +33,8 @@ export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "str
     | "getStrategyRun" | "getStrategyRunResult" | "cancelStrategyRun" | "strategyRunCapabilities" | "watchStrategyRun"
     | "compareRecentRun" | "createResearchLaunchContext" | "getSelectedVersion"
     | "getStrategyVersion" | "strategyVersionNames" | "nameStrategyVersion" | "unnameStrategyVersion"
-    | "getStrategyReference" | "listStrategyReferences" | "putStrategyReference" | "removeStrategyReference" | "importStrategyReferences">>;
+    | "getStrategyReference" | "listStrategyReferences" | "putStrategyReference" | "removeStrategyReference" | "importStrategyReferences"
+    | "holdStrategyFollow" | "renewStrategyFollow" | "releaseStrategyFollow">>;
 
 /** Owns fixed-history operations and immutable results independently of live
  * chart stores. Releasing a consumer never cancels a durable shared run. */
@@ -218,6 +220,51 @@ export class StrategyDataManager {
         this.streams -= 1;
       }
     });
+  }
+
+  /**
+   * Hold a chart FOLLOW run for one cell (ADR-BACKTEST-015 P4b) until `signal` aborts: create or
+   * join it, renew its lease, and release it at the end. `onReady` reports the run to show once it
+   * has a result. Rejects when the backend refuses the input; the caller keeps the fixed result.
+   */
+  holdFollowRun(body: Record<string, unknown>, holder: string, onReady: (held: HeldFollow) => void,
+    signal: AbortSignal): Promise<void> {
+    return this.operation(signal, (owned) => {
+      const api = this.api;
+      const hold = api.holdStrategyFollow, renew = api.renewStrategyFollow, release = api.releaseStrategyFollow;
+      if (!hold || !renew || !release) unavailable();
+      return holdFollow({
+        hold: (value, at) => hold.call(api, value, at),
+        renew: (followId, who, at) => renew.call(api, followId, who, at),
+        release: (followId, who) => release.call(api, followId, who),
+        ready: (followId, at) => this.followReady(followId, at),
+        gone: (failure) => failure instanceof BacktestApiError && failure.status === 404,
+      }, body, holder, onReady, owned);
+    });
+  }
+
+  /** Resolves once a FOLLOW run has a result: it caught up, possibly as a recomputed generation. */
+  private async followReady(runId: string, signal: AbortSignal): Promise<void> {
+    for (;;) {
+      const watch = new AbortController();
+      const stop = () => watch.abort(signal.reason);
+      signal.addEventListener("abort", stop, { once: true });
+      let ready = false;
+      try {
+        const last = await this.watchRun(runId, (status) => {
+          if (status.result_available) { ready = true; watch.abort(); }
+        }, watch.signal);
+        if (last.result_available) return;
+        throw new StrategyRunStreamError(last.error?.code ?? "RUN_STOPPED", "The FOLLOW run stopped before it had a result");
+      } catch (failure) {
+        if (ready) return;
+        if (signal.aborted) throw failure;
+        if (failure instanceof StrategyRunStreamError && failure.code === "RUN_IDENTITY_CHANGED") continue;
+        throw failure;
+      } finally {
+        signal.removeEventListener("abort", stop);
+      }
+    }
   }
 
   /**
@@ -433,13 +480,15 @@ export class StrategyDataManager {
   /**
    * A run in `candlescope.run-result/1` (ADR-BACKTEST-015 P1), validated against its family.
    * A finished fixed run never changes, so it is cached; a forward run's result is its
-   * committed account at the moment of the read (P2d), so it is read every time.
+   * committed account at the moment of the read (P2d), and a FOLLOW run's its state at the
+   * chart's newest applied bar (P4b), so those are read every time.
    */
   loadRunResult(family: RunResultFamily, runId: string, signal?: AbortSignal): Promise<RunResult> {
     return this.operation(signal, async (owned) => {
       const key = `${family}\u0000${runId}`;
-      const forward = family === "continuous";
-      const cached = forward ? undefined : this.runResults.get(key);
+      const clock = family === "continuous" ? "FORWARD" : family === "follow" ? "FOLLOW" : "FIXED";
+      const live = clock !== "FIXED";
+      const cached = live ? undefined : this.runResults.get(key);
       if (cached) {
         this.runResults.delete(key);
         this.runResults.set(key, cached);
@@ -453,10 +502,10 @@ export class StrategyDataManager {
       if (result.source !== expected.source || result.authority !== expected.authority) {
         throw new RunResultContractError("source", `${family} runs must be served by ${expected.source} with ${expected.authority} authority`);
       }
-      if ((result.clock_policy === "FORWARD") !== forward) {
+      if (result.clock_policy !== clock) {
         throw new RunResultContractError("clock_policy", `${family} runs cannot be served as ${result.clock_policy}`);
       }
-      if (forward) return result;
+      if (live) return result;
       this.runResults.set(key, result);
       while (this.runResults.size > RETAINED_RUN_RESULTS) this.runResults.delete(this.runResults.keys().next().value!);
       return result;

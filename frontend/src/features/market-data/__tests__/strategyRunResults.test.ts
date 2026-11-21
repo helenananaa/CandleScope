@@ -6,6 +6,7 @@ import {
   parseStrategyRunCapabilities, parseStrategyRunStatus, StrategyRunContractError, strategyRunProfile,
 } from "../../backtest/runResult/strategyRun.js";
 import { StrategyDataManager, type StrategyDataApi } from "../manager/strategyDataManager.js";
+import { StrategyRunStreamError } from "../../backtest/backtestRunStream.js";
 
 function fixture(path: string): unknown {
   return JSON.parse(readFileSync(new URL(`../../../../tests/fixtures/${path}`, import.meta.url), "utf8"));
@@ -261,6 +262,61 @@ test("a chart's FOLLOW run reports its phase, and stops as CANCELLED once no cha
     "BLOCKED");
   assert.equal(parseStrategyRunStatus({ ...live, state: "CANCELLED", source_state: "STOPPED", terminal: true,
     result_available: false }).terminal, true);
+});
+
+const FOLLOW = { ...structuredClone(HOST) as object, clock_policy: "FOLLOW" };
+
+test("a FOLLOW run's result is read every time and must be served as FOLLOW", async () => {
+  let reads = 0;
+  const manager = new StrategyDataManager(api({ async getStrategyRunResult() { reads += 1; return structuredClone(FOLLOW); } }));
+  await manager.loadRunResult("follow", "fl_1");
+  await manager.loadRunResult("follow", "fl_1");
+  assert.equal(reads, 2, "a FOLLOW result changes as bars close, so it is never cached");
+  await assert.rejects(manager.loadRunResult("host", "bt_1"), /clock_policy/);
+  const fixed = new StrategyDataManager(api({ async getStrategyRunResult() { return structuredClone(HOST); } }));
+  await assert.rejects(fixed.loadRunResult("follow", "fl_1"), /clock_policy/);
+  for (const value of [manager, fixed]) value.dispose();
+});
+
+test("a held FOLLOW run is shown once it has a result, through a recomputed generation", async () => {
+  const live = { ...structuredClone(STATUS) as object, run_id: "fl_1", family: "follow", clock_policy: "FOLLOW",
+    state: "RUNNING", source_state: "CATCHING_UP", terminal: false, result_available: false };
+  const watches: string[] = [];
+  const released: string[] = [];
+  const manager = new StrategyDataManager(api({
+    async holdStrategyFollow(body) {
+      assert.deepEqual(body, { run_id: "bt_1", holder: "cell" });
+      return { follow_id: "fl_1", created: true, from_ms: 0, lease_ms: 30_000 };
+    },
+    async renewStrategyFollow() { return { held: true }; },
+    async releaseStrategyFollow(followId, holder) { released.push(`${followId} ${holder}`); },
+    async watchStrategyRun(runId, signal, onStatus) {
+      watches.push(runId);
+      if (watches.length === 1) {  // the run recomputed while it caught up: reconnect
+        onStatus?.(parseStrategyRunStatus(live), null);
+        throw new StrategyRunStreamError("RUN_IDENTITY_CHANGED", "reconnect");
+      }
+      onStatus?.(parseStrategyRunStatus({ ...live, source_state: "LIVE", result_available: true, generation: 2 }), null);
+      await new Promise((_resolve, reject) => {
+        if (signal?.aborted) reject(new Error("aborted"));
+        signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+      });
+      throw new Error("unreachable");
+    },
+  }));
+  const controller = new AbortController();
+  const shown: string[] = [];
+  const hold = manager.holdFollowRun({ run_id: "bt_1" }, "cell", (held) => shown.push(held.followId), controller.signal);
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.deepEqual([watches.length, shown], [2, ["fl_1"]]);
+  } finally {
+    controller.abort();
+  }
+  await assert.rejects(hold);
+  assert.deepEqual(released, ["fl_1 cell"]);
+  assert.equal(manager.diagnostics().streams, 0);
+  manager.dispose();
 });
 
 // -- P3b: strategy versions ------------------------------------------------------

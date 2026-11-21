@@ -344,8 +344,11 @@ export function CandleScopeStrategyTesterPanel({
   overlayResult = null,
 }: ChartStrategyTesterPanelProps) {
   const locale = useLocale();
-  // ADR-BACKTEST-015 P1c: the shared views show the host run only when the loaded result is this run's.
-  const sharedResult = CHART_RUN_RESULT_VIEWS_ENABLED && overlayResult?.run.family === "host" ? overlayResult : null;
+  // ADR-BACKTEST-015 P1c: the shared views show the host run only when the loaded result is this run's,
+  // or the FOLLOW run that keeps it current (P4b).
+  const sharedResult = CHART_RUN_RESULT_VIEWS_ENABLED
+    && (overlayResult?.run.family === "host" || overlayResult?.run.family === "follow") ? overlayResult : null;
+  const sharedRunId = sharedResult?.run.followsRunId ?? sharedResult?.run.runId ?? null;
   const [focusMode, setFocusMode] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLButtonElement>(null);
@@ -1094,7 +1097,7 @@ export function CandleScopeStrategyTesterPanel({
           </div>
         )}
 
-        <div hidden={!currentAttachment || activeTab !== "trades"}>{result && sharedResult?.run.runId === result.run.run_id
+        <div hidden={!currentAttachment || activeTab !== "trades"}>{result && sharedResult && sharedRunId === result.run.run_id
             ? <div className="chart-strategy-result-overview run-result-views" data-testid="run-result-views">
               <RunResultSummary result={sharedResult.result} locale={locale} />
               <RunResultTradeList key={result.run.run_id} result={sharedResult.result} locale={locale}

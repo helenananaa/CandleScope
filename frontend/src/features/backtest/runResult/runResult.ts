@@ -12,7 +12,8 @@ export const RUN_RESULT_SCHEMA = "candlescope.run-result/1";
 
 /** Which run family served the result; each has its own endpoint until the P2 Run facade. */
 /** `continuous` is a forward run: its result is its committed account and changes with every commit. */
-export type RunResultFamily = "host" | "native" | "external" | "continuous";
+/** `follow` is a chart's live HOST run (ADR-BACKTEST-015 P4b): its result changes as bars close. */
+export type RunResultFamily = "host" | "native" | "external" | "continuous" | "follow";
 export type RunResultAuthority = "HOST" | "SCRIPT";
 export type RunResultSource = "host-kernel" | "native-pine" | "external-pine";
 
@@ -118,6 +119,7 @@ export const RUN_RESULT_FAMILY_IDENTITY: Readonly<Record<RunResultFamily, { sour
   native: { source: "native-pine", authority: "SCRIPT" },
   external: { source: "external-pine", authority: "HOST" },
   continuous: { source: "host-kernel", authority: "HOST" },
+  follow: { source: "host-kernel", authority: "HOST" },
 };
 
 export class RunResultContractError extends Error {
