@@ -1,6 +1,6 @@
 # ADR-BACKTEST-015：统一策略运行模型——一种 Run，模式拆成字段，界面按用途划分
 
-- 状态：Accepted（2026-11-21 用户确认 §7.1：替换 #165 的“三个模式按钮”）
+- 状态：Accepted（2026-11-21 用户确认 §7.1：替换 #165 的“三个模式按钮”；2026-11-22 用户确认 O1）
 - 日期：2026-11-21
 - 基线：`main@aae80d98`
 - 修订：[ADR-BACKTEST-002](ADR-BACKTEST-002-host-owned-execution.md)（补充 `authority=SCRIPT` 例外）、[ADR-BACKTEST-013](ADR-BACKTEST-013-CHART-FIRST-STRATEGY-TESTER.md)（图表层不再暴露引擎和模式切换）
@@ -217,7 +217,7 @@ Run = StrategyVersion × Parameters × InputSpec × ExecutionProfile × ClockPol
 | P1 统一结果与渲染 | `RunResultV1` 与后端投影适配器；前端 `StrategyOverlay`、`RunResultViews`，图表面板和研究页同时换上；原生 plot 画到主图 | P0 摘要不变；视觉评审通过 |
 | P2 统一 Run 门面 | 统一运行端点（命名待定）、能力矩阵、统一流协议；所有 Run 经两个 Manager；旧端点降为适配器 | 架构测试禁止组件直接调用运行 API；前端轮询消失 |
 | P3 策略版本收口 | 内容寻址版本与后端草稿；现有 localStorage 草稿、挂回交接和持续运行引用一次性导入后端，原数据保留 | 完全退出并重启后，草稿、图表挂载和运行引用均可恢复 |
-| P4 FOLLOW 与图表 | 从持续运行抽出实时推进器，支持任意信号周期（1m 基础时钟）与 Pine；图表面板改为一个策略列表；两组切换下线；“前向跟踪”创建 `FORWARD` | 同输入 `FOLLOW` 与 `FIXED` 逐条相同；换品种、周期、参数的行为符合 §3.4；#157 新验收 |
+| P4 FOLLOW 与图表 | 从持续运行抽出实时推进器，支持任意信号周期（1m 基础时钟）与 Pine；图表面板改为一个策略列表；两组切换下线；“前向跟踪”创建 `FORWARD`。按 O1 拆为：P4a `SCRIPT` 的 `FOLLOW`（前缀重建）；P4b `HOST` 的 `FOLLOW`（实时推进器，任意信号周期）；P4c 策略列表、切换下线与“前向跟踪” | 同输入 `FOLLOW` 与 `FIXED` 逐条相同；换品种、周期、参数的行为符合 §3.4；#157 新验收 |
 | P5 研究工作区 | 在共享图表与结果组件上重建；模式改为字段；`Experiment` 承接批量、稳健性、多市场；删除 `BacktestResearchApp` 与研究页自有图表；`backtest.html`、`local.html` 保留重定向 | #332 验收；旧深链可打开 |
 | P6 撮合核收敛 | 三个 Pine 专用 K 线核并入 `HOST` K 线核；评估与练习账户共用账户模型（O3）；旧核先留作对照，摘要一致后删除 | 每个账户模型 × 成交时钟的 P0 摘要一致 |
 
@@ -263,8 +263,15 @@ Run = StrategyVersion × Parameters × InputSpec × ExecutionProfile × ClockPol
 - **O1 原生 Pine 的实时追加。** 现有 `FIXED_HORIZON_INCREMENTAL` 在创建时固定区间，`barstate.islast`
   等按完整区间计算（`docs/NATIVE_STRATEGY_BACKTEST_zh.md`）。`FOLLOW` 需要引擎支持区间延长与实时柱
   语义。在此之前，`SCRIPT` 的 `FOLLOW` 只能用“每根收盘做前缀重建”并设条数预算，或暂不开放。
-  P4 开始前必须确认。
-- **O2** `FOLLOW` 的默认条数预算、缓存容量与淘汰规则。
+  **已确认（2026-11-22）：每根收盘做前缀重建。** `SCRIPT` 的 `FOLLOW` 在每根信号周期 K 线收盘后，
+  对最新前缀新建一次 `FIXED` Run，并原子替换图上的结果；因此与同输入 `FIXED` 逐条相同（§3.4 不变量
+  直接成立），`barstate.islast` 等按该前缀的语义计算。引擎支持区间延长与实时柱后，再改为增量推进。
+- **O2** `FOLLOW` 的默认条数预算、缓存容量与淘汰规则。建议默认值（P4 实测后确认）：
+  - `SCRIPT` 前缀重建每次最多 5,000 根信号周期 K 线（取最近的），超出部分不参与该次重建；
+  - 同一单元格同时只算一次重建，期间收盘的 K 线合并进下一次，不排队；
+  - 按输入身份（代码、参数、前缀回执）去重：相同输入复用已有 Run，不重算；
+  - 每个工作区保留最多 8 个 `FOLLOW` 结果，按最近使用淘汰；没有图表租约即停止，不在后台运行；
+  - `HOST` 的 `FOLLOW` 用增量 `step`，窗口上限 20,000 根。
 - **O3** `FORWARD` 账户与练习账户（`trading_accounts`，#500 刚加入对冲模式）是同一对象还是互相引用。
 - **O4** Pine 的宿主撮合（`pine-engine-chart-v1`、外部反馈）作为执行选项保留在图表层，还是只在研究工作区出现。
 - **O5** P2 只建统一索引与适配；是否最终合并 `backtest.db`、`native-backtests.db`、`continuous-strategy.sqlite3`。
