@@ -223,10 +223,13 @@ def test_one_capability_matrix_covers_every_family(runtime_run, monkeypatch):
         "host": {"available": True, "reason": None}, "native": {"available": True, "reason": None},
         "external": {"available": False, "reason": "ENGINE_UNAVAILABLE"},
         "continuous": {"available": False, "reason": "READ_ONLY"},
+        # P4b: chart FOLLOW runs need the profile's live DataManager, which this manager has not.
+        "follow": {"available": False, "reason": "FOLLOW_UNAVAILABLE"},
     }
     rows = {(row["family"], row["language"]): row for row in matrix["profiles"]}
     assert set(rows) == {("host", "builtin"), ("host", "pine"), ("host", "python"), ("native", "pine"),
-                         ("external", "pine"), ("continuous", "builtin"), ("continuous", "python")}
+                         ("external", "pine"), ("continuous", "builtin"), ("continuous", "python"),
+                         ("follow", "builtin"), ("follow", "python")}
     host = rows["host", "builtin"]
     assert host["available"] and host["authority"] == "HOST" and host["clock_policy"] == "FIXED"
     assert host["fidelities"] == runtime.service.capabilities()["fidelity_modes"] and "BAR_APPROX" in host["fidelities"]
@@ -240,6 +243,9 @@ def test_one_capability_matrix_covers_every_family(runtime_run, monkeypatch):
     assert (forward["clock_policy"], forward["intervals"], forward["starts"], forward["controls"]) == (
         "FORWARD", ["1m"], ["HISTORY_LIVE", "LIVE_ONLY"], {"cancel": False})
     assert forward["available"] is False and forward["reason"] == "READ_ONLY"
+    follow = rows["follow", "builtin"]
+    assert (follow["authority"], follow["clock_policy"], follow["intervals"], follow["fixed_intervals_only"]) == (
+        "HOST", "FOLLOW", None, True)
 
 
 def test_a_closed_manager_serves_nothing(runtime_run):

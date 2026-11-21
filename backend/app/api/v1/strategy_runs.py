@@ -17,7 +17,7 @@ from app.core.bounded_executor import ExecutorBusyError
 
 router = APIRouter(prefix="/strategy-runs", tags=["strategy-runs"])
 WIRE_ERRORS = (BacktestError, StrategyProviderError, ExecutorBusyError)
-UNAVAILABLE = {"FLAG_DISABLED", "STRATEGY_MANAGER_CLOSED", "CONTINUOUS_NOT_READY", "EXECUTOR_BUSY"}
+UNAVAILABLE = {"FLAG_DISABLED", "STRATEGY_MANAGER_CLOSED", "CONTINUOUS_NOT_READY", "EXECUTOR_BUSY", "FOLLOW_UNAVAILABLE"}
 
 
 def _runs(request: Request):
@@ -37,7 +37,7 @@ def _error(failure: Exception) -> JSONResponse:
                             content={"error": {"code": code, "message": message}})
     elif code in UNAVAILABLE:
         status = 503
-    elif code in {"RUN_CONTROL_UNSUPPORTED", "RUN_RESULT_NOT_READY"}:
+    elif code in {"RUN_CONTROL_UNSUPPORTED", "RUN_RESULT_NOT_READY", "FOLLOW_FAILED"}:
         status = 409
     elif code == "BUDGET_EXCEEDED":
         status = 413
