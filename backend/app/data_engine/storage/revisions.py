@@ -650,6 +650,13 @@ async def prepare_native_history_views(storage, tasks):
                       _acquisition.get(), tasks)
 
 
+async def prepare_planned_write_views(storage, windows):
+    from app.core.executors import run_storage
+    from .native_history_fence import capture_planned_write_views
+    await run_storage(capture_planned_write_views, getattr(storage, "revision_store", None),
+                      _acquisition.get(), windows)
+
+
 async def prepare_derived_targets(storage, plan):
     from app.core.executors import run_storage
     from .derived_history_fence import capture_targets

@@ -28,7 +28,7 @@ from dataclasses import replace
 import logging
 import time
 from itertools import pairwise
-from typing import Callable, Awaitable, Any
+from typing import Callable, Awaitable, Any, Sequence
 
 from app.core.executors import run_preparation
 from app.data_engine.aggregation.semantics import valid_ohlcv
@@ -73,6 +73,25 @@ CustomAggregator = Callable[[list[FetchedBar], str, str, int, int], FetchedBar |
 DedupFn = Callable[[FetchedBar, dict], bool]  # (new_bar, existing_row) → keep_new?
 WriteBatchCallback = Callable[[str, str, int], Awaitable[None]]  # symbol, interval, count
 ReconcileDoneCallback = Callable[[ReconcileResult], Awaitable[None]]
+
+
+def _split_rest_edges(
+    bars: list[FetchedBar],
+    ranges: Sequence[tuple[int, int]],
+) -> list[list[FetchedBar]]:
+    """Group REST rows by the edge they were fetched for; other rows stay together."""
+    if not ranges:
+        return [bars]
+    edges: list[list[FetchedBar]] = [[] for _ in ranges]
+    other: list[FetchedBar] = []
+    for bar in bars:
+        for index, (start, end) in enumerate(ranges):
+            if start <= bar.open_time <= end:
+                edges[index].append(bar)
+                break
+        else:
+            other.append(bar)
+    return [group for group in (*edges, other) if group]
 
 
 class Reconciler:
@@ -196,6 +215,7 @@ class Reconciler:
             handled_archive_receipts: set[str] = set()
             # 1. Collect all bars grouped by (exchange, market_type, symbol, interval)
             grouped = self._group_bars(fetch_results)
+            rest_ranges = self._collect_rest_ranges(fetch_results)
             total_received = sum(len(bars) for bars in grouped.values())
             result.bars_received = total_received
             record_empty = getattr(self._storage, "record_native_empty_seconds", None)
@@ -231,6 +251,7 @@ class Reconciler:
                     exchange=exchange,
                     market_type=market_type,
                     archive_receipts=archive_receipts_by_key,
+                    rest_ranges=rest_ranges.get((exchange, market_type, symbol, interval), ()),
                 )
                 result.bars_written += written
                 result.bars_skipped += skipped
@@ -380,6 +401,29 @@ class Reconciler:
         return True
 
     @staticmethod
+    def _collect_rest_ranges(
+        fetch_results: list[FetchResult],
+    ) -> dict[tuple[str, str, str, str], list[tuple[int, int]]]:
+        """REST edges declared by archive-routed tasks, by series."""
+        ranges: dict[tuple[str, str, str, str], list[tuple[int, int]]] = {}
+        for fetch_result in fetch_results:
+            if fetch_result.status == BackfillStatus.FAILED:
+                continue
+            declared = fetch_result.metadata.get("rest_ranges")
+            if not isinstance(declared, list):
+                continue
+            task = fetch_result.task
+            key = (task.exchange, task.market_type, task.symbol, task.interval)
+            for item in declared:
+                try:
+                    start, end = int(item[0]), int(item[1])
+                except (TypeError, ValueError, IndexError):
+                    continue
+                if start <= end:
+                    ranges.setdefault(key, []).append((start, end))
+        return ranges
+
+    @staticmethod
     def _collect_archive_receipts(
         fetch_results: list[FetchResult],
     ) -> list[dict[str, Any]]:
@@ -434,6 +478,7 @@ class Reconciler:
         exchange: str = "binance",
         market_type: str = "spot",
         archive_receipts: dict[str, dict[str, Any]] | None = None,
+        rest_ranges: Sequence[tuple[int, int]] = (),
     ) -> tuple[
         int,
         int,
@@ -522,8 +567,18 @@ class Reconciler:
                 else batch_size
             )
             effective_batch_size = max(1, effective_batch_size)
-            for i in range(0, len(source_bars), effective_batch_size):
-                batch = source_bars[i : i + effective_batch_size]
+            # A routed run holds one range permission per REST edge, so a
+            # batch must not join two edges that archive days separate.
+            segments = (
+                [source_bars]
+                if source.startswith("backfill_archive_")
+                else _split_rest_edges(source_bars, rest_ranges)
+            )
+            for batch in (
+                segment[i : i + effective_batch_size]
+                for segment in segments
+                for i in range(0, len(segment), effective_batch_size)
+            ):
                 dicts = [b.to_storage_dict() for b in batch]
                 archive_write_started = (
                     time.monotonic()
