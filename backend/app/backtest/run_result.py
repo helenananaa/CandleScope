@@ -187,6 +187,10 @@ def _host_rejections(rows: Sequence[Mapping[str, Any]], anchor: BarAnchor,
     return rejections
 
 
+def _evidence(value: object) -> dict[str, Any] | None:
+    return dict(value) if isinstance(value, Mapping) else None
+
+
 def _host_pending(orders: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     return [{
         "order_id": str(order.get("order_id")),
@@ -207,13 +211,19 @@ def from_host_result(result: Mapping[str, Any], *, interval: str, fidelity: str,
     raw_fills = [dict(fill) for fill in result.get("fills") or ()]
     fills = [_host_fill(fill, anchor) for fill in raw_fills]
     trades = []
-    for trade in build_round_trip_trades(raw_fills):
+    round_trips = build_round_trip_trades(raw_fills)
+    # A report's own trade list is the same FIFO round trips, enriched with decision-time evidence.
+    report_trades = [row for row in result.get("trades") or () if isinstance(row, Mapping)]
+    evidence = report_trades if len(report_trades) == len(round_trips) else [{}] * len(round_trips)
+    for trade, enriched in zip(round_trips, evidence):
         entry, exit_ = _ms(trade["entry_time_ms"]), _ms(trade["exit_time_ms"])
         trades.append({
             "id": trade["trade_id"], "side": trade["side"], "qty": decimal_text(trade["qty"]),
             "entry_time_ms": entry, "entry_bar_time_ms": anchor(entry), "entry_price": decimal_text(trade["entry_price"]),
             "exit_time_ms": exit_, "exit_bar_time_ms": anchor(exit_), "exit_price": decimal_text(trade["exit_price"]),
             "fees": decimal_text(trade["fees"]), "net_pnl": decimal_text(trade["net_pnl"]),
+            "entry_explanation": _evidence(enriched.get("entry_explanation")),
+            "exit_explanation": _evidence(enriched.get("exit_explanation")),
         })
     account = (result.get("ledger") or {}).get("account") or {}
     equity = []
@@ -278,6 +288,7 @@ def from_native_report(report: Mapping[str, Any], *, interval: str) -> dict[str,
             "entry_time_ms": entry, "entry_bar_time_ms": anchor(entry), "entry_price": decimal_text(trade.get("entryPrice")),
             "exit_time_ms": exit_, "exit_bar_time_ms": anchor(exit_), "exit_price": decimal_text(trade.get("exitPrice")),
             "fees": None, "net_pnl": decimal_text(trade.get("profit")),
+            "entry_explanation": None, "exit_explanation": None,
         })
     history = list(report.get("position") or ())
     last = history[-1] if history else {}
@@ -303,6 +314,7 @@ def from_external_report(report: Mapping[str, Any], *, interval: str) -> dict[st
             "entry_time_ms": entry, "entry_bar_time_ms": anchor(entry), "entry_price": decimal_text(trade.get("entryPrice")),
             "exit_time_ms": exit_, "exit_bar_time_ms": anchor(exit_), "exit_price": decimal_text(trade.get("exitPrice")),
             "fees": None, "net_pnl": decimal_text(trade.get("profit")),
+            "entry_explanation": None, "exit_explanation": None,
         })
     account = report.get("position") or {}
     equity = []

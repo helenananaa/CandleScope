@@ -755,9 +755,11 @@
   "trades": [
     {
       "entry_bar_time_ms": 660000,
+      "entry_explanation": null,
       "entry_price": "107",
       "entry_time_ms": 660000,
       "exit_bar_time_ms": 900000,
+      "exit_explanation": null,
       "exit_price": "100",
       "exit_time_ms": 900000,
       "fees": null,
@@ -768,9 +770,11 @@
     },
     {
       "entry_bar_time_ms": 1080000,
+      "entry_explanation": null,
       "entry_price": "108",
       "entry_time_ms": 1080000,
       "exit_bar_time_ms": 1320000,
+      "exit_explanation": null,
       "exit_price": "102",
       "exit_time_ms": 1320000,
       "fees": null,
@@ -781,9 +785,11 @@
     },
     {
       "entry_bar_time_ms": 1620000,
+      "entry_explanation": null,
       "entry_price": "107",
       "entry_time_ms": 1620000,
       "exit_bar_time_ms": 1860000,
+      "exit_explanation": null,
       "exit_price": "100",
       "exit_time_ms": 1860000,
       "fees": null,
@@ -794,9 +800,11 @@
     },
     {
       "entry_bar_time_ms": 2040000,
+      "entry_explanation": null,
       "entry_price": "108",
       "entry_time_ms": 2040000,
       "exit_bar_time_ms": 2280000,
+      "exit_explanation": null,
       "exit_price": "102",
       "exit_time_ms": 2280000,
       "fees": null,

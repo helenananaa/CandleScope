@@ -34,23 +34,9 @@ import {
   chartStrategyTradeFocusTimeMs,
   chartStrategyVirtualTradeWindow,
   chartStrategyWinRate,
+  dateTime,
+  signedClass,
 } from "./chartStrategyResultModel.js";
-
-function dateTime(value: number, locale: string): string {
-  return new Intl.DateTimeFormat(locale, {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date(value));
-}
-
-function signedClass(value: string): string {
-  const number = Number(value);
-  return Number.isFinite(number) ? (number > 0 ? "positive" : number < 0 ? "negative" : "flat") : "flat";
-}
 
 function fidelityLabel(value: string): string {
   if (value === "BAR_APPROX") return t("chartTester.result.fidelityFast");
@@ -187,7 +173,7 @@ export function ChartStrategyResultContextBar({
   );
 }
 
-function ResultMetric({ label, value, detail = "", rawValue = value }: { label: string; value: string; detail?: string; rawValue?: string }) {
+export function ResultMetric({ label, value, detail = "", rawValue = value }: { label: string; value: string; detail?: string; rawValue?: string }) {
   return (
     <div className="chart-strategy-result-metric">
       <span>{label}</span>

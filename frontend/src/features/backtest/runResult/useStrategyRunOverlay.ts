@@ -3,7 +3,7 @@ import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import { useMarketDataWorkspaceResources } from "../../market-data/marketDataWorkspaceContext.js";
 import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
-import type { RunResultFamily } from "./runResult.js";
+import type { RunResult, RunResultFamily } from "./runResult.js";
 import {
   buildStrategyOverlay, StrategyOverlaySource, type StrategyMarkerEvidence, type StrategyOverlayLabels,
 } from "./strategyOverlay.js";
@@ -12,6 +12,12 @@ import {
 export interface StrategyOverlayRun {
   family: RunResultFamily;
   runId: string;
+}
+
+/** A loaded run result together with the run it belongs to, for views that show it. */
+export interface ShownRunResult {
+  run: StrategyOverlayRun;
+  result: RunResult;
 }
 
 /** The overlay run for the native strategy panel's run: completed runs only, by execution mode. */
@@ -53,13 +59,14 @@ export function useStrategyRunOverlay({ run, interval, series, onActivate }: {
   series: SeriesWindowView | null;
   /** A marker with recorded evidence was clicked. */
   onActivate?: (evidence: StrategyMarkerEvidence) => void;
-}): { source: StrategyOverlaySource; error: string | null } {
+}): { source: StrategyOverlaySource; error: string | null; shown: ShownRunResult | null } {
   const locale = useLocale();
   const manager = useMarketDataWorkspaceResources()?.dataManager.strategy;
   const activate = useRef(onActivate);
   useLayoutEffect(() => { activate.current = onActivate; }, [onActivate]);
   const source = useMemo(() => new StrategyOverlaySource((evidence) => activate.current?.(evidence)), []);
   const [error, setError] = useState<string | null>(null);
+  const [shown, setShown] = useState<ShownRunResult | null>(null);
   useEffect(() => () => source.dispose(), [source]);
   useEffect(() => { source.setSeries(series); }, [series, source]);
   const family = run?.family ?? null;
@@ -67,6 +74,7 @@ export function useStrategyRunOverlay({ run, interval, series, onActivate }: {
   useEffect(() => {
     source.setOverlay(null, null);
     setError(null);
+    setShown(null);
     if (!manager || family === null || runId === null) return;
     const controller = new AbortController();
     manager.loadRunResult(family, runId, controller.signal).then((result) => {
@@ -75,11 +83,12 @@ export function useStrategyRunOverlay({ run, interval, series, onActivate }: {
       void locale;
       const owner = `run:${family}:${runId}`;
       source.setOverlay(buildStrategyOverlay(result, { labels: strategyOverlayLabels(), idPrefix: owner }), result.interval, owner);
+      setShown({ run: { family, runId }, result });
     }).catch((failure: unknown) => {
       if (controller.signal.aborted) return;
       setError(failure instanceof Error ? failure.message : String(failure));
     });
     return () => controller.abort();
   }, [family, interval, locale, manager, runId, source]);
-  return { source, error };
+  return { source, error, shown };
 }

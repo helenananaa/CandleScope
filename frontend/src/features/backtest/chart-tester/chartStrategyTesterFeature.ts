@@ -3,6 +3,7 @@ export interface ChartStrategyTesterFlagEnvironment {
   VITE_CHART_TRADE_EXPLANATION_ENABLED?: unknown;
   VITE_CHART_RUN_COMPARE_ENABLED?: unknown;
   VITE_CHART_STRATEGY_AUTO_RUN_ENABLED?: unknown;
+  VITE_CHART_RUN_RESULT_VIEWS_ENABLED?: unknown;
 }
 
 function strictEnabled(value: unknown): boolean {
@@ -31,6 +32,16 @@ export function resolveChartRunCompareEnabled(
   return enabledByDefault(environment.VITE_CHART_RUN_COMPARE_ENABLED);
 }
 
+/**
+ * Shared run-result views (ADR-BACKTEST-015 P1c). The ADR-013 visual review approved
+ * them on 2026-11-21, so they default on; "0" restores the per-family views.
+ */
+export function resolveChartRunResultViewsEnabled(
+  environment: ChartStrategyTesterFlagEnvironment = {},
+): boolean {
+  return enabledByDefault(environment.VITE_CHART_RUN_RESULT_VIEWS_ENABLED);
+}
+
 export function resolveChartStrategyAutoRunEnabled(
   environment: ChartStrategyTesterFlagEnvironment = {},
 ): boolean {
@@ -48,6 +59,8 @@ function viteEnvironment(): ChartStrategyTesterFlagEnvironment {
         import.meta.env?.VITE_CHART_RUN_COMPARE_ENABLED,
       VITE_CHART_STRATEGY_AUTO_RUN_ENABLED:
         import.meta.env?.VITE_CHART_STRATEGY_AUTO_RUN_ENABLED,
+      VITE_CHART_RUN_RESULT_VIEWS_ENABLED:
+        import.meta.env?.VITE_CHART_RUN_RESULT_VIEWS_ENABLED,
     };
   } catch {
     return {};
@@ -67,5 +80,9 @@ export const CHART_RUN_COMPARE_ENABLED = resolveChartRunCompareEnabled(
 );
 
 export const CHART_STRATEGY_AUTO_RUN_ENABLED = resolveChartStrategyAutoRunEnabled(
+  viteEnvironment(),
+);
+
+export const CHART_RUN_RESULT_VIEWS_ENABLED = resolveChartRunResultViewsEnabled(
   viteEnvironment(),
 );

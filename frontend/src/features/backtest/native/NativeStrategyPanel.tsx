@@ -28,6 +28,8 @@ import { useNativeStrategyCollection, nativeStrategySwitcherActions, nativeStrat
 import { StrategyDockPane, StrategyDockSlot } from "../chart-tester/StrategyDockSlots.js";
 import { StrategySwitcher } from "../chart-tester/StrategySwitcher.js";
 import { strategyLanguageLabel } from "../chart-tester/strategyLanguageLabel.js";
+import { RunResultSummary, RunResultTradeList } from "../runResult/RunResultViews.js";
+import { CHART_RUN_RESULT_VIEWS_ENABLED } from "../chart-tester/chartStrategyTesterFeature.js";
 import { datasetIdentityChanged, defaultExecutionDraft, executionSettingsChanged, restoreExecutionDraft, sameExecutionData, type NativeExecutionDraft } from "./nativeExecutionSettings.js";
 import { WorkbenchAccountSettings } from "./WorkbenchAccountSettings.js";
 import { defaultWorkbenchAccount, parseAccountData, workbenchAccountError, type AccountInputState, type FrozenAccountData } from "./workbenchAccountInputs.js";
@@ -44,7 +46,7 @@ const NATIVE_TEMPLATES = {
 const SESSION_TABS = ["overview", "trades", "script", "settings", "history"] as const;
 const ignoreCursor = () => undefined;
 
-type NativeStrategyPanelProps = Pick<ChartStrategyTesterPanelProps, "session" | "cellScope" | "onClose" | "onLocateTrade" | "onReviewTrade" | "active" | "nativeStrategies" | "onNativeStrategiesChange"> & {
+type NativeStrategyPanelProps = Pick<ChartStrategyTesterPanelProps, "session" | "cellScope" | "onClose" | "onLocateTrade" | "onReviewTrade" | "active" | "nativeStrategies" | "onNativeStrategiesChange" | "overlayResult"> & {
   signalChart?: import("../../../shared/strategyRunSettings.js").ChartSignalDefinition | undefined;
   dataset?: { datasetId: string; dataEpoch: string } | undefined;
   onRunChange?: (run: NativeRun | null) => void;
@@ -398,6 +400,9 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   const ownedRunIds = strategyRunIds(props.instance, mode);
   const visibleHistory = allHistory ? history : history.filter((item) => ownedRunIds.has(item.run_id));
   const reportRun = historicalRun ?? (run?.result ? run : previousRun);
+  // ADR-BACKTEST-015 P1c: in the dock, the trades view reads the shared run result when it is this run's.
+  const sharedResult = CHART_RUN_RESULT_VIEWS_ENABLED && props.docked && props.overlayResult
+    && props.overlayResult.run.family !== "host" && props.overlayResult.run.runId === reportRun?.run_id ? props.overlayResult : null;
   const executionDataMatches = useMemo(() => executionDataState === "ready"
     && sameExecutionData(reportRun?.config?.execution_data, executionData), [executionDataState, reportRun?.config?.execution_data, executionData]);
   const accountDataMatches = useMemo(() => accountDataState === "ready"
@@ -643,7 +648,13 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         <p>{t("strategyDock.empty")}</p>
         <Button size="sm" variant="primary" icon={<Icon name="play" size={11} filled />} disabled={runDisabled} onClick={runNow}>{t("chartTester.run")}</Button>
       </div>}
-      {reportRun?.result && !props.externalReport && <NativeStrategyReport key={reportRun.run_id} run={reportRun} onLocate={props.onLocateTrade} onReviewTrade={props.onReviewTrade} active={!historicalRun && props.active !== false && (!props.docked || tab === "trades")}
+      {sharedResult && tab === "trades" && <div className="chart-strategy-result-overview run-result-views" data-testid="run-result-views">
+        <RunResultSummary result={sharedResult.result} locale={locale} />
+        <RunResultTradeList key={sharedResult.run.runId} result={sharedResult.result} locale={locale}
+          active={props.active !== false} onLocateTrade={props.onLocateTrade ?? (() => undefined)}
+          {...(props.onReviewTrade ? { onReviewTrade: props.onReviewTrade } : {})} />
+      </div>}
+      {reportRun?.result && !props.externalReport && !(sharedResult && tab === "trades") && <NativeStrategyReport key={reportRun.run_id} run={reportRun} onLocate={props.onLocateTrade} onReviewTrade={props.onReviewTrade} active={!historicalRun && props.active !== false && (!props.docked || tab === "trades")}
         stale={(!historicalRun && resultStale) || datasetIdentityChanged(reportRun.config, props.dataset)}
         view={props.docked ? (tab === "trades" ? "trades" : "overview") : "all"} />}
     </div>

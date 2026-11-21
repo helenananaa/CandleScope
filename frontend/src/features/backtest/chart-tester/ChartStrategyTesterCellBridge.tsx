@@ -827,6 +827,7 @@ export default function ChartStrategyTesterCellBridge({
       continuousMarkerSource={resultMarkerSource}
       hostOverlayRun={hostOverlayRun}
       onOverlayRunChange={handleOverlayRunChange}
+      overlayResult={runOverlay.shown}
       onRunModeChange={setRunMode}
       {...(onReviewTrade ? { onReviewTrade } : {})}
       onPrepareData={handlePrepareData}

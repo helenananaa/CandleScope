@@ -58,6 +58,7 @@ const MALFORMED: ReadonlyArray<readonly [string, (value: Wire) => void]> = [
   ["a missing rejection list", (value) => { delete value.rejections; }],
   ["a rejection without a reason", (value) => { value.rejections = [{ time_ms: null, bar_time_ms: null, side: null, order_id: null, explanation: null }]; }],
   ["a non-object explanation", (value) => { firstFill(value).explanation = "trust me"; }],
+  ["a non-object trade explanation", (value) => { (value.trades as WireRow[])[0]!.entry_explanation = 1; }],
 ];
 
 for (const [label, mutate] of MALFORMED) {

@@ -247,3 +247,16 @@ def test_sampled_equity_still_anchors_rejections_only_across_gap_free_spans():
     assert [item["bar_time_ms"] for item in bar] == [6 * hour, 99 * hour, None]
     trades = from_host_result(result, interval="1h", fidelity="AGG_TRADE_EXECUTION")["rejections"]
     assert all(item["bar_time_ms"] is None for item in trades), "print sequences are not bar indexes"
+
+
+
+def test_host_trade_evidence_comes_from_the_reports_own_trade_list(runtime_run):
+    runtime, run_id = runtime_run
+    report = runtime.service.get_report(run_id)
+    entry = {"schema": "TRADE_EXPLANATION_V1", "side": "entry"}
+    enriched = [{**row, "entry_explanation": entry, "exit_explanation": None} for row in report["trades"]]
+    projected = from_host_result({**report, "trades": enriched}, interval="1m", fidelity="BAR_APPROX")
+    assert projected["trades"] and all(t["entry_explanation"] == entry and t["exit_explanation"] is None
+                                      for t in projected["trades"])
+    mismatched = from_host_result({**report, "trades": enriched[:1]}, interval="1m", fidelity="BAR_APPROX")
+    assert all(t["entry_explanation"] is None for t in mismatched["trades"]), "never pair evidence by guesswork"
