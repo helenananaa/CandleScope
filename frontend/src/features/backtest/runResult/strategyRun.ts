@@ -40,6 +40,23 @@ export interface StrategyRunStatus {
   generation: number | null;
   result_available: boolean;
   error: StrategyRunError | null;
+  /** The content-addressed version of the run's code (ADR-BACKTEST-015 P3b); null while unknown. */
+  version_hash: string | null;
+}
+
+export const STRATEGY_VERSION_SCHEMA = "candlescope.strategy-version/1";
+const VERSION_HASH = /^sha256:[0-9a-f]{64}$/;
+
+/** The exact code a run executed: language, source, libraries and the runtime that interpreted it. */
+export interface StrategyVersion {
+  version_hash: string;
+  language: string;
+  source: string;
+  libraries: Record<string, string>;
+  runtime: Record<string, unknown>;
+  created_at_ms: number;
+  /** The names pointing at this version ("named save" names a hash). */
+  names: string[];
 }
 
 export interface StrategyRunAvailability {
@@ -148,6 +165,34 @@ export function parseStrategyRunStatus(value: unknown): StrategyRunStatus {
     generation: generation as number | null,
     result_available: resultAvailable,
     error: error === null ? null : { code: text(error.code, "error.code"), message: optionalText(error.message, "error.message") },
+    version_hash: versionHash(body.version_hash, "version_hash"),
+  };
+}
+
+function versionHash(value: unknown, path: string): string | null {
+  // Backends before P3b do not report a version.
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string" || !VERSION_HASH.test(value)) fail(path, "must be a sha256 version hash or null");
+  return value;
+}
+
+/** Validate a served `candlescope.strategy-version/1`. Throws `StrategyRunContractError`. */
+export function parseStrategyVersion(value: unknown): StrategyVersion {
+  const body = row(value, "$");
+  if (body.schema !== STRATEGY_VERSION_SCHEMA) fail("schema", `must be ${STRATEGY_VERSION_SCHEMA}`);
+  const libraries = row(body.libraries, "libraries");
+  if (!Array.isArray(body.names)) fail("names", "must be an array");
+  const created = body.created_at_ms;
+  if (typeof created !== "number" || !Number.isSafeInteger(created) || created < 0) fail("created_at_ms", "must be integer milliseconds");
+  return {
+    version_hash: versionHash(body.version_hash, "version_hash") ?? fail("version_hash", "is required"),
+    language: text(body.language, "language"),
+    source: typeof body.source === "string" ? body.source : fail("source", "must be text"),
+    libraries: Object.fromEntries(Object.entries(libraries).map(([name, code]) => [name,
+      typeof code === "string" ? code : fail(`libraries.${name}`, "must be text")])),
+    runtime: row(body.runtime, "runtime"),
+    created_at_ms: created,
+    names: body.names.map((name, index) => text(name, `names[${index}]`)),
   };
 }
 

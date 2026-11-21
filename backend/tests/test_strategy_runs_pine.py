@@ -23,6 +23,10 @@ def test_pine_runs_read_the_same_through_the_facade(native_runtime):
     native_id = terminal(runtime.native, runtime.native.create(request, "facade-native")["run_id"], timeout=90)["run_id"]
     external_id = terminal(runtime.native, runtime.native.create({**request, **EXTERNAL}, "facade-external")["run_id"],
                            timeout=90)["run_id"]
+    from app.backtest.strategy_versions import StrategyVersions
+    # Linked when created, before anything reads them through the facade.
+    created_links = {run_id: StrategyVersions(runtime.service.repository).for_run(run_id) for run_id in (native_id, external_id)}
+    assert all(created_links.values())
     app = FastAPI()
     app.state.data_manager_core = SimpleNamespace(strategy=StrategyDataManager(runtime.service, runtime=runtime))
     app.include_router(router)
@@ -43,6 +47,14 @@ def test_pine_runs_read_the_same_through_the_facade(native_runtime):
     assert native_result.status_code == external_result.status_code == 200
     assert native_result.json() == from_native_record(runtime.native.get(native_id)) == adapters[0]
     assert external_result.json() == from_native_record(runtime.native.get(external_id)) == adapters[1]
+    # P3b: both runs were linked to their code's version when they were created.
+    from app.backtest.strategy_versions import StrategyVersions
+    versions = StrategyVersions(runtime.service.repository)
+    for run_id, status in ((native_id, native), (external_id, external)):
+        assert status["version_hash"] == versions.for_run(run_id) == created_links[run_id]
+        stored = versions.get(status["version_hash"])
+        assert (stored["language"], stored["source"]) == ("pine", request["source"])
+        assert stored["runtime"]["engine"] == runtime.native.get(run_id)["runtime_identity"]
     rows = {(row["family"], row["language"]): row for row in matrix["profiles"]}
     assert rows["native", "pine"]["available"] and rows["external", "pine"]["available"]
     assert matrix["families"]["native"]["available"] and matrix["families"]["external"]["available"]

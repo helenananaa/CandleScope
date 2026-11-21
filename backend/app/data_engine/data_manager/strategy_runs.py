@@ -18,6 +18,8 @@ Families:
 from __future__ import annotations
 
 import asyncio
+import logging
+import time
 from collections.abc import AsyncIterator, Mapping
 from typing import TYPE_CHECKING, Any, get_args
 
@@ -95,12 +97,14 @@ def _error(value: object) -> dict[str, Any] | None:
 
 def _status(run_id: str, family: str, *, authority: str, clock_policy: str, fidelity: str | None,
             language: str | None, source_state: str, state: str, generation: int | None,
-            result_available: bool, error: object) -> dict[str, Any]:
+            result_available: bool, error: object, version_hash: str | None = None) -> dict[str, Any]:
     return {
         "schema": STATUS_SCHEMA, "run_id": run_id, "family": family,
         "authority": authority, "clock_policy": clock_policy, "fidelity": fidelity, "language": language,
         "state": state, "source_state": source_state, "terminal": state in TERMINAL,
         "generation": generation, "result_available": result_available, "error": _error(error),
+        # The content-addressed version of the run's code (P3b); null while it cannot be known yet.
+        "version_hash": version_hash,
     }
 
 
@@ -128,6 +132,23 @@ class StrategyRuns:
                 raise _not_found(run_id) from None
             raise
 
+    # -- versions (P3b) ---------------------------------------------------
+
+    def _version(self, run_id: str, family: str, read_material) -> str | None:
+        """The run's version hash; a run without a link yet is linked from its own record, once."""
+        from app.backtest.strategy_versions import StrategyVersions
+        versions = StrategyVersions(self.owner.service.repository)
+        try:
+            found = versions.for_run(run_id)
+            if found is not None:
+                return found
+            return versions.record(read_material(), run_id=run_id, family=family, now_ms=int(time.time() * 1000))
+        except BacktestError:
+            return None  # e.g. a legacy record that does not hold its code
+        except Exception:
+            logging.getLogger(__name__).warning("Strategy version of run %s is unavailable", run_id, exc_info=True)
+            return None
+
     # -- status -----------------------------------------------------------
 
     async def status(self, run_id: str) -> dict[str, Any]:
@@ -150,10 +171,15 @@ class StrategyRuns:
         record, checkpoint = value["run"], value["checkpoint"]
         source_state = str(record["state"])
         state = _lifecycle(HOST_STATES, source_state, "host")
+        def material():
+            from app.backtest.strategy_versions import host_material
+            service = self.owner.service
+            return host_material(service.repository, service.strategy_registry, service.repository.get_run_by_id(run_id))
         status = _status(run_id, "host", authority="HOST", clock_policy="FIXED",
                          fidelity=str(record["fidelity_mode"]), language=None, source_state=source_state,
                          state=state, generation=int(record["generation"]), result_available=state == "COMPLETED",
-                         error=value["failure"] or record.get("failure_code"))
+                         error=value["failure"] or record.get("failure_code"),
+                         version_hash=self._version(run_id, "host", material))
         progress = None if checkpoint is None else {
             "sequence": int(checkpoint["sequence"]), "created_at_ms": int(checkpoint["created_at_ms"])}
         return status, progress
@@ -165,13 +191,18 @@ class StrategyRuns:
             raise BacktestError("NATIVE_INPUT_UNSUPPORTED", f"unknown strategy execution mode {summary['execution_mode']!r}")
         source_state = str(summary["state"])
         state = _lifecycle(NATIVE_STATES, source_state, "native")
-        return _status(run_id, "external" if external else "native",
+        family = "external" if external else "native"
+
+        def material():
+            from app.backtest.strategy_versions import native_material
+            return native_material(self._runtime().native.get(run_id))
+        return _status(run_id, family,
                        authority="HOST" if external else "SCRIPT", clock_policy="FIXED",
                        # A native run fills by the script's own model; there is no host fidelity.
                        fidelity=str(summary.get("execution_fidelity") or "BAR_APPROX") if external else None,
                        language=summary.get("language"), source_state=source_state, state=state, generation=None,
                        result_available=state == "COMPLETED" and summary["result_present"],
-                       error=summary.get("error"))
+                       error=summary.get("error"), version_hash=self._version(run_id, family, material))
 
     async def _continuous_status(self, run_id: str) -> dict[str, Any]:
         return (await self._continuous_view(run_id))[0]
@@ -194,10 +225,23 @@ class StrategyRuns:
             source_state = str(run["phase"])
             state = _lifecycle(CONTINUOUS_PHASES, source_state, "continuous")
             generation, error = int(run["generation"]), run.get("error")
+        version = None
+        if run is not None:
+            # A committed forward run holds its prepared provider in its definition.
+            from app.backtest.strategy_versions import StrategyVersions, continuous_material
+            version = await asyncio.to_thread(StrategyVersions(self.owner.service.repository).for_run, run_id)
+            if version is None:
+                try:
+                    definition = (await self.owner.continuous_access().describe(run_id))["definition"]
+                except BacktestError:
+                    definition = None
+                if definition is not None:
+                    version = await asyncio.to_thread(
+                        self._version, run_id, "continuous", lambda: continuous_material(definition))
         # A committed forward account always has a result; it changes with every commit.
         status = _status(run_id, "continuous", authority="HOST", clock_policy="FORWARD", fidelity="BAR_APPROX",
                          language=None, source_state=source_state, state=state, generation=generation,
-                         result_available=run is not None, error=error)
+                         result_available=run is not None, error=error, version_hash=version)
         progress = None if run is None else {
             "sequence": int(run["checkpoint_revision"]), "created_at_ms": int(run["event_time_ms"])}
         return status, progress

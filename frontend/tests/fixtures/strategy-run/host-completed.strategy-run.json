@@ -11,5 +11,6 @@
   "schema": "candlescope.strategy-run/1",
   "source_state": "COMPLETED",
   "state": "COMPLETED",
-  "terminal": true
+  "terminal": true,
+  "version_hash": "sha256:8177f1457b103e86f1f8860b06a2d880df0a49fcd771e7e7c27bfb797959f64c"
 }

@@ -21,7 +21,9 @@ from app.data_engine.data_manager.strategy_runs import (
     CONTINUOUS_CREATION_PHASES, CONTINUOUS_PHASES, HOST_STATES, NATIVE_STATES, STATES, STATUS_SCHEMA, STREAM_SCHEMA,
     RunWatch,
 )
+from app.backtest.strategy_versions import material, version_hash
 from tests import strategy_run_oracles as oracles
+from tests.test_strategy_run_oracles import BUILTIN_SMA_REVISION
 from tests.test_run_result import runtime_run  # noqa: F401 - fixture
 from tests.test_strategy_data_manager import create_run, events as bar_events, service  # noqa: F401 - fixture
 
@@ -62,6 +64,10 @@ class _Forward:
             raise BacktestError("CONTINUOUS_RUN_NOT_FOUND", "Unknown continuous strategy run")
         return self.value
 
+    async def describe(self, run_id):
+        return {"run": self.value["run"], "definition": {"engine_version": "engine-1", "provider": {
+            "schema": "provider-1", "language": "builtin", "builtin_id": "builtin-sma-cross-v1", "source_text": ""}}}
+
     async def committed_result(self, run_id):
         # Neither stub has a committed account: a requested run, or no run at all.
         raise BacktestError("CONTINUOUS_RUN_NOT_FOUND", "Unknown continuous strategy run")
@@ -90,6 +96,9 @@ def test_a_host_run_reads_the_same_through_the_facade(runtime_run):
         "fidelity": "BAR_APPROX", "language": None, "state": "COMPLETED", "source_state": "COMPLETED",
         "terminal": True, "generation": runtime.service.get_run(run_id)["generation"], "result_available": True,
         "error": None,
+        # Linked when the run was created (P3b): a builtin is its id on the engine version.
+        "version_hash": version_hash(material("builtin", BUILTIN_SMA_REVISION, {}, {
+            "engine_version": runtime.service.get_run(run_id)["engine_version"]})),
     }
     assert result.status_code == 200 and result.json() == runtime.run_result(run_id)
     # The frontend parser's contract fixture is exactly this status, minus the per-run id.
@@ -165,6 +174,9 @@ def test_forward_runs_report_their_lifecycle(runtime_run, monkeypatch, value, ex
         unknown = client.get("/strategy-runs/cs_run/result")
     assert (status["state"], status["source_state"], status["generation"], status["terminal"],
             status["result_available"]) == expected
+    # A committed forward run is linked to its provider's version; a requested one has none yet.
+    assert status["version_hash"] == (None if value["run"] is None else version_hash(
+        material("builtin", "builtin-sma-cross-v1", {}, {"engine_version": "engine-1"})))
     if value["run"] is None:
         # Requested but not committed: the run exists, its result does not yet.
         assert result.status_code == 409 and result.json()["error"]["code"] == "RUN_RESULT_NOT_READY"

@@ -15,8 +15,8 @@ import type { ContinuousApi } from "../../backtest/continuous/continuousTypes.js
 import { ContinuousStrategyDataManager } from "./continuousStrategyDataManager.js";
 import { parseRunResult, RUN_RESULT_FAMILY_IDENTITY, RunResultContractError, type RunResult, type RunResultFamily } from "../../backtest/runResult/runResult.js";
 import {
-  parseStrategyRunCapabilities, parseStrategyRunStatus, StrategyRunContractError,
-  type StrategyRunCapabilities, type StrategyRunProgress, type StrategyRunStatus,
+  parseStrategyRunCapabilities, parseStrategyRunStatus, parseStrategyVersion, StrategyRunContractError,
+  type StrategyRunCapabilities, type StrategyRunProgress, type StrategyRunStatus, type StrategyVersion,
 } from "../../backtest/runResult/strategyRun.js";
 
 const RETAINED_RUN_RESULTS = 8;
@@ -28,7 +28,8 @@ type ResearchRequest = Omit<Parameters<typeof runResearchBacktest>[0], "api" | "
 export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "streamRun" | "getReport" | "getChart" | "cancelRun" | "listRuns" | "compareRuns"> & Pick<BacktestApiClient, "getResultReplay" | "saveResultReplayNote" | "observeStrategyPreparation">
   & Partial<Pick<BacktestApiClient, "capabilities" | "listStrategyRevisions" | "externalProviders"
     | "getStrategyRun" | "getStrategyRunResult" | "cancelStrategyRun" | "strategyRunCapabilities" | "watchStrategyRun"
-    | "compareRecentRun" | "createResearchLaunchContext" | "getSelectedVersion">>;
+    | "compareRecentRun" | "createResearchLaunchContext" | "getSelectedVersion"
+    | "getStrategyVersion" | "strategyVersionNames" | "nameStrategyVersion" | "unnameStrategyVersion">>;
 
 /** Owns fixed-history operations and immutable results independently of live
  * chart stores. Releasing a consumer never cancels a durable shared run. */
@@ -271,6 +272,40 @@ export class StrategyDataManager {
     return this.operation(undefined, () => {
       if (!this.api.createResearchLaunchContext) unavailable();
       return this.api.createResearchLaunchContext(payload);
+    });
+  }
+
+  // -- Strategy versions (ADR-BACKTEST-015 P3b) -----------------------------
+
+  /** The exact code of a version, with the names pointing at it. */
+  loadStrategyVersion(versionHash: string, signal?: AbortSignal): Promise<StrategyVersion> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.getStrategyVersion) unavailable();
+      const version = parseStrategyVersion(await this.api.getStrategyVersion(versionHash, owned));
+      if (version.version_hash !== versionHash) throw new StrategyRunContractError("version_hash", `asked for ${versionHash}, served ${version.version_hash}`);
+      return version;
+    });
+  }
+
+  listStrategyVersionNames(signal?: AbortSignal) {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.strategyVersionNames) unavailable();
+      return (await this.api.strategyVersionNames(owned)).names;
+    });
+  }
+
+  /** "Named save": point a name at a version. Naming again moves the name. */
+  nameStrategyVersion(name: string, versionHash: string, signal?: AbortSignal) {
+    return this.operation(signal, (owned) => {
+      if (!this.api.nameStrategyVersion) unavailable();
+      return this.api.nameStrategyVersion(name, versionHash, owned);
+    });
+  }
+
+  unnameStrategyVersion(name: string, signal?: AbortSignal) {
+    return this.operation(signal, (owned) => {
+      if (!this.api.unnameStrategyVersion) unavailable();
+      return this.api.unnameStrategyVersion(name, owned);
     });
   }
 

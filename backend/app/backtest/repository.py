@@ -117,6 +117,75 @@ class BacktestRepository:
         ).fetchone()
         return dict(row) if row is not None else None
 
+    # -- strategy versions (ADR-BACKTEST-015 P3b) -------------------------------
+
+    @_locked
+    def record_strategy_version(self, version_hash: str, value: dict[str, Any], *, run_id: str | None,
+                                family: str | None, now_ms: int) -> str:
+        """Store a version once and link a run to it; a run keeps the version it was first linked to."""
+        try:
+            self.connection.execute(
+                "INSERT OR IGNORE INTO backtest_strategy_versions(version_hash, language, source_text, libraries_json, "
+                "runtime_json, created_at_ms) VALUES (?, ?, ?, ?, ?, ?)",
+                (version_hash, value["language"], value["source"],
+                 json.dumps(value["libraries"], sort_keys=True, separators=(",", ":")),
+                 json.dumps(value["runtime"], sort_keys=True, separators=(",", ":")), now_ms))
+            if run_id is not None:
+                self.connection.execute(
+                    "INSERT OR IGNORE INTO backtest_strategy_version_runs(run_id, version_hash, family, linked_at_ms) "
+                    "VALUES (?, ?, ?, ?)", (run_id, version_hash, family, now_ms))
+            self.connection.commit()
+        except BaseException:
+            self.connection.rollback()
+            raise
+        if run_id is None:
+            return version_hash
+        return str(self.connection.execute(
+            "SELECT version_hash FROM backtest_strategy_version_runs WHERE run_id = ?", (run_id,)).fetchone()[0])
+
+    @_locked
+    def strategy_version_for_run(self, run_id: str) -> str | None:
+        row = self.connection.execute(
+            "SELECT version_hash FROM backtest_strategy_version_runs WHERE run_id = ?", (run_id,)).fetchone()
+        return None if row is None else str(row[0])
+
+    @_locked
+    def get_strategy_version(self, version_hash: str) -> dict[str, Any] | None:
+        row = self.connection.execute(
+            "SELECT * FROM backtest_strategy_versions WHERE version_hash = ?", (version_hash,)).fetchone()
+        return dict(row) if row is not None else None
+
+    @_locked
+    def strategy_version_runs(self, version_hash: str, limit: int) -> list[dict[str, Any]]:
+        rows = self.connection.execute(
+            "SELECT run_id, family, linked_at_ms FROM backtest_strategy_version_runs WHERE version_hash = ? "
+            "ORDER BY linked_at_ms DESC, run_id LIMIT ?", (version_hash, limit)).fetchall()
+        return [dict(row) for row in rows]
+
+    @_locked
+    def strategy_version_names(self, version_hash: str) -> list[str]:
+        return [str(row[0]) for row in self.connection.execute(
+            "SELECT name FROM backtest_strategy_version_names WHERE version_hash = ? ORDER BY name", (version_hash,))]
+
+    @_locked
+    def name_strategy_version(self, name: str, version_hash: str, *, now_ms: int) -> None:
+        self.connection.execute(
+            "INSERT INTO backtest_strategy_version_names(name, version_hash, named_at_ms) VALUES (?, ?, ?) "
+            "ON CONFLICT(name) DO UPDATE SET version_hash = excluded.version_hash, named_at_ms = excluded.named_at_ms",
+            (name, version_hash, now_ms))
+        self.connection.commit()
+
+    @_locked
+    def list_strategy_version_names(self) -> list[dict[str, Any]]:
+        return [dict(row) for row in self.connection.execute(
+            "SELECT name, version_hash, named_at_ms FROM backtest_strategy_version_names ORDER BY name")]
+
+    @_locked
+    def delete_strategy_version_name(self, name: str) -> bool:
+        cursor = self.connection.execute("DELETE FROM backtest_strategy_version_names WHERE name = ?", (name,))
+        self.connection.commit()
+        return cursor.rowcount == 1
+
     # -- strategy drafts (ADR-BACKTEST-015 P3a) ---------------------------------
 
     @_locked

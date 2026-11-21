@@ -245,3 +245,34 @@ test("a running forward run has a result; a running fixed run does not", () => {
   assert.equal(parseStrategyRunStatus(live).result_available, true);
   assert.throws(() => parseStrategyRunStatus({ ...live, clock_policy: "FIXED" }), /result_available/);
 });
+
+// -- P3b: strategy versions ------------------------------------------------------
+
+test("a status names its run's version, or null on backends before versions", () => {
+  const status = parseStrategyRunStatus(structuredClone(STATUS));
+  assert.match(status.version_hash ?? "", /^sha256:[0-9a-f]{64}$/);
+  const { version_hash: _ignored, ...older } = structuredClone(STATUS) as Record<string, unknown>;
+  assert.equal(parseStrategyRunStatus(older).version_hash, null);
+  assert.throws(() => parseStrategyRunStatus({ ...(structuredClone(STATUS) as object), version_hash: "v1" }), /version_hash/);
+});
+
+test("a version is read through the manager and must be the one asked for; names point at versions", async () => {
+  const hash = `sha256:${"a".repeat(64)}`;
+  const version = { schema: "candlescope.strategy-version/1", version_hash: hash, language: "builtin", source: "builtin-sma-cross-v1",
+    libraries: {}, runtime: { engine_version: "e" }, created_at_ms: 1, names: ["SMA"] };
+  const calls: string[] = [];
+  const manager = new StrategyDataManager(api({
+    async getStrategyVersion(asked) { calls.push(`get:${asked}`); return structuredClone(version); },
+    async nameStrategyVersion(name, asked) { calls.push(`name:${name}:${asked}`); return { name, version_hash: asked }; },
+    async strategyVersionNames() { return { names: [{ name: "SMA", version_hash: hash, named_at_ms: 2 }] }; },
+    async unnameStrategyVersion(name) { calls.push(`unname:${name}`); return { name, removed: true }; },
+  }));
+  assert.deepEqual((await manager.loadStrategyVersion(hash)).names, ["SMA"]);
+  await assert.rejects(manager.loadStrategyVersion(`sha256:${"b".repeat(64)}`), StrategyRunContractError);
+  assert.deepEqual(await manager.nameStrategyVersion("SMA", hash), { name: "SMA", version_hash: hash });
+  assert.equal((await manager.listStrategyVersionNames())[0]?.version_hash, hash);
+  assert.equal((await manager.unnameStrategyVersion("SMA")).removed, true);
+  assert.deepEqual(calls, [`get:${hash}`, `get:sha256:${"b".repeat(64)}`, `name:SMA:${hash}`, "unname:SMA"]);
+  await assert.rejects(new StrategyDataManager(api()).loadStrategyVersion(hash), /unavailable/i);
+  manager.dispose();
+});

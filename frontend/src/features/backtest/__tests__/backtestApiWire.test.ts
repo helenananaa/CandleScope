@@ -317,3 +317,26 @@ test("a run's status stream is read from the facade's events route", async () =>
     mock.restoreAll();
   }
 });
+
+test("strategy versions and their names are addressed beside the run facade", async () => {
+  const calls: CapturedRequest[] = [];
+  mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ url: String(input), init });
+    return Response.json({ names: [] });
+  });
+  try {
+    const api = createBacktestApi("/api/v1/backtests");
+    await api.getStrategyVersion!("sha256:abc");
+    await api.strategyVersionNames!();
+    await api.nameStrategyVersion!("My SMA", "sha256:abc");
+    await api.unnameStrategyVersion!("My SMA");
+    assert.deepEqual(calls.map(({ url, init }) => [init?.method ?? "GET", url, init?.body ?? null]), [
+      ["GET", "/api/v1/strategy-versions/sha256%3Aabc", null],
+      ["GET", "/api/v1/strategy-versions/names", null],
+      ["PUT", "/api/v1/strategy-versions/names/My%20SMA", JSON.stringify({ version_hash: "sha256:abc" })],
+      ["DELETE", "/api/v1/strategy-versions/names/My%20SMA", null],
+    ]);
+  } finally {
+    mock.restoreAll();
+  }
+});

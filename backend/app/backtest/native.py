@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import sqlite3
 import subprocess
@@ -429,6 +430,7 @@ class NativeBacktests:
             self.db.execute("INSERT INTO native_inputs VALUES (?,?)", (run_id, encoded(wire)))
             self._save_summary(record)
             self.db.commit()
+            self._record_version(record)
             cancel = threading.Event()
             self.cancel_events[run_id] = cancel
             self.pool.submit(self._execute, run_id, plugin, wire, cancel)
@@ -447,6 +449,18 @@ class NativeBacktests:
             if not row:
                 raise BacktestError("RUN_NOT_FOUND", "native run not found")
             return json.loads(row[0])
+
+    def _record_version(self, record):
+        """Link the new run to the version of its code (ADR-BACKTEST-015 P3b); best effort, like the host."""
+        from .strategy_versions import StrategyVersions, native_material
+        try:
+            StrategyVersions(self.runtime.service.repository).record(
+                native_material(record), run_id=record["run_id"],
+                family="external" if record["execution_mode"] == "CANDLESCOPE" else "native",
+                now_ms=int(record["created_at_ms"]))
+        except Exception:
+            logging.getLogger(__name__).warning("Strategy version for run %s was not recorded", record["run_id"],
+                                                exc_info=True)
 
     def status_summary(self, run_id):
         """State, profile and whether a result is stored, without decoding the report."""

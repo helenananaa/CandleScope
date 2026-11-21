@@ -235,6 +235,11 @@ export interface BacktestApiClient {
   watchStrategyRun?(runId: string, signal?: AbortSignal,
     onStatus?: (status: StrategyRunStatus, progress: StrategyRunProgress | null) => void): Promise<StrategyRunStatus>;
   strategyRunCapabilities?(signal?: AbortSignal): Promise<unknown>;
+  /** Content-addressed strategy versions and their names (ADR-BACKTEST-015 P3b); unvalidated wire values. */
+  getStrategyVersion?(versionHash: string, signal?: AbortSignal): Promise<unknown>;
+  strategyVersionNames?(signal?: AbortSignal): Promise<{ names: Array<{ name: string; version_hash: string; named_at_ms: number }> }>;
+  nameStrategyVersion?(name: string, versionHash: string, signal?: AbortSignal): Promise<{ name: string; version_hash: string }>;
+  unnameStrategyVersion?(name: string, signal?: AbortSignal): Promise<{ name: string; removed: boolean }>;
   getResultReplay?(cursor: BacktestResultReplayCursor, signal?: AbortSignal): Promise<BacktestResultReplayFrame>;
   saveResultReplayNote?(cursor: BacktestResultReplayCursor, note: BacktestResultReplayNoteDraft,
     signal?: AbortSignal): Promise<{ revision: number }>;
@@ -370,6 +375,9 @@ function strategyRunsBase(base: string) {
 }
 
 export function createBacktestApi(base = `${API_BASE}/backtests`, runsBase = strategyRunsBase(base)): BacktestApiClient {
+  // Versions are served beside the run facade.
+  const versionsBase = runsBase.endsWith("/strategy-runs")
+    ? `${runsBase.slice(0, -"/strategy-runs".length)}/strategy-versions` : `${API_BASE}/strategy-versions`;
   return {
     externalProviders: {
       async trace(runId, after = 0, signal) {
@@ -554,6 +562,20 @@ export function createBacktestApi(base = `${API_BASE}/backtests`, runsBase = str
     },
     async cancelStrategyRun(runId, signal) {
       return readJson(await fetch(`${runsBase}/${encodeURIComponent(runId)}/cancel`, requestOptions({ method: "POST" }, signal)));
+    },
+    async getStrategyVersion(versionHash, signal) {
+      return readJson(await fetch(`${versionsBase}/${encodeURIComponent(versionHash)}`, requestOptions({}, signal)));
+    },
+    async strategyVersionNames(signal) {
+      return readJson(await fetch(`${versionsBase}/names`, requestOptions({}, signal)));
+    },
+    async nameStrategyVersion(name, versionHash, signal) {
+      return readJson(await fetch(`${versionsBase}/names/${encodeURIComponent(name)}`, requestOptions({
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version_hash: versionHash }),
+      }, signal)));
+    },
+    async unnameStrategyVersion(name, signal) {
+      return readJson(await fetch(`${versionsBase}/names/${encodeURIComponent(name)}`, requestOptions({ method: "DELETE" }, signal)));
     },
     async strategyRunCapabilities(signal) {
       return readJson(await fetch(`${runsBase}/capabilities`, requestOptions({}, signal)));
