@@ -76,6 +76,8 @@ def test_host_bar_results_project_without_loss(service, provider_name):
     _, completed = fixed_run(service, provider_name)
     projected = from_host_result(completed["result"], interval="1m", fidelity="BAR_APPROX")
     assert_projects_golden(projected, f"host-bar-{provider_name}")
+    if provider_name == "builtin":
+        oracles.assert_frontend_fixture("host-bar-builtin", projected)
     assert projected["authority"] == "HOST" and projected["plots"] == []
     # Host round trips are exactly the report's own trade list.
     report_trades = completed["report"]["trades"]
@@ -115,3 +117,79 @@ def test_forward_result_projects_like_fixed(service, tmp_path):
         host.close(); store.close()
     fixed = from_host_result(completed["result"], interval="1m", fidelity="BAR_APPROX")
     assert {**forward, "clock_policy": "FIXED"} == fixed
+
+
+@pytest.fixture
+def runtime_run(tmp_path):
+    """A builtin SMA run executed by the backtest runtime from a local dataset of the oracle bars."""
+    import time
+    from app.backtest.runtime import BacktestRuntime
+    from app.core.config import load_backtest_settings
+    from app.local_data.service import LocalDatasetService, LocalImportOptions
+    from tests.test_strategy_run_oracles import COMMON
+
+    csv = tmp_path / "oracle-bars.csv"
+    csv.write_text(oracles.bars_csv(), encoding="utf-8")
+    manifest = LocalDatasetService(tmp_path / "local").import_csv(
+        csv, LocalImportOptions(name="oracle", symbol="BTCUSDT", interval="1m", timestamp_unit="ms"))
+    settings = load_backtest_settings({"BACKTEST_ENABLED": "1", "BACKTEST_BAR_ENABLED": "1"}, data_dir=tmp_path,
+                                      klines_db_path=tmp_path / "candlescope.db", replay_db_path=tmp_path / "replay.db")
+    runtime = BacktestRuntime.start(settings, local_data_dir=tmp_path / "local")
+    try:
+        end = len(oracles.bars()) * 60_000
+        preview = runtime.preview_snapshot(dataset_id=manifest["dataset_id"], data_epoch=manifest["data_epoch"],
+                                           start_time_ms=0, end_time_ms=end, interval="1m")
+        created = runtime.service.create_run({
+            **COMMON, "strategy_revision_id": BUILTIN_SMA_REVISION, "fidelity_mode": "BAR_APPROX",
+            "dataset_id": manifest["dataset_id"], "data_epoch": manifest["data_epoch"],
+            "snapshot_hash": preview["snapshot_hash"], "end_time_ms": end,
+        }, idempotency_key="result-runtime")
+        deadline = time.monotonic() + 15
+        while runtime.service.get_run(str(created["run_id"]))["state"] not in {"COMPLETED", "FAILED"}:
+            assert time.monotonic() < deadline, "runtime run did not finish"
+            time.sleep(0.05)
+        assert runtime.service.get_run(str(created["run_id"]))["state"] == "COMPLETED"
+        yield runtime, str(created["run_id"])
+    finally:
+        runtime.shutdown()
+
+
+def _client(runtime):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.api.v1.backtests import router
+
+    app = FastAPI()
+    app.state.backtest_runtime = runtime
+    app.include_router(router)
+    return TestClient(app)
+
+
+def test_run_result_route_serves_the_projection_of_a_runtime_run(runtime_run):
+    runtime, run_id = runtime_run
+    with _client(runtime) as client:
+        served = client.get(f"/backtests/runs/{run_id}/run-result")
+        missing = client.get("/backtests/runs/no-such-run/run-result")
+    assert served.status_code == 200
+    body = served.json()
+    assert body == from_host_result(runtime.service.get_report(run_id), interval="1m", fidelity="BAR_APPROX")
+    # The production path over a local dataset trades exactly like the P0 oracle run.
+    golden = oracles.load_golden("host-bar-builtin")["summary"]
+    def golden_fill(row):  # "719999 BUY 1 @ 107.0107 fee 0.03210321"
+        time_ms, side, qty, _, price, _, fee = row.split()
+        return int(time_ms), side, Decimal(qty), Decimal(price), Decimal(fee)
+
+    assert [(f["time_ms"], f["side"], Decimal(f["qty"]), Decimal(f["price"]), Decimal(f["fee"]))
+            for f in body["fills"]] == [golden_fill(row) for row in golden["fill_rows"]]
+    assert missing.status_code >= 400 and "error" in missing.json()
+
+
+def test_calendar_intervals_anchor_to_the_runs_own_bars(runtime_run, monkeypatch):
+    runtime, run_id = runtime_run
+    opens = [0, 900_000, 1_800_000]  # pretend three uneven calendar bars
+    monkeypatch.setattr(runtime, "_chart_interval", lambda record, config: "1w")
+    monkeypatch.setattr(runtime, "chart_data", lambda _run_id: {"bars": [{"time": value // 1000} for value in opens]})
+    projected = runtime.run_result(run_id)
+    assert projected["interval"] == "1w"
+    assert {fill["bar_time_ms"] for fill in projected["fills"]} <= set(opens)
+    assert projected["fills"][0]["bar_time_ms"] == 0 and projected["fills"][-1]["bar_time_ms"] == 1_800_000

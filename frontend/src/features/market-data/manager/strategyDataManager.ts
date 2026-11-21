@@ -10,13 +10,16 @@ import { externalSnapshotRequest, matchingExternalConnections } from "../../back
 import { defaultContinuousApi } from "../../backtest/continuous/continuousApi.js";
 import type { ContinuousApi } from "../../backtest/continuous/continuousTypes.js";
 import { ContinuousStrategyDataManager } from "./continuousStrategyDataManager.js";
+import { parseRunResult, RUN_RESULT_FAMILY_IDENTITY, RunResultContractError, type RunResult, type RunResultFamily } from "../../backtest/runResult/runResult.js";
+
+const RETAINED_RUN_RESULTS = 8;
 
 type ExternalInput = Omit<Parameters<typeof buildImportedExternalRunBody>[0], "api" | "signal">;
 type ExternalRunDraft = { readonly revision: StrategyRevisionRecord; readonly body: Record<string, unknown> };
 
 type ResearchRequest = Omit<Parameters<typeof runResearchBacktest>[0], "api" | "waitForTerminal" | "wait" | "pollIntervalMs">;
 export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "streamRun" | "getReport" | "getChart" | "cancelRun" | "listRuns" | "compareRuns"> & Pick<BacktestApiClient, "getResultReplay" | "saveResultReplayNote" | "observeStrategyPreparation">
-  & Partial<Pick<BacktestApiClient, "capabilities" | "listStrategyRevisions" | "externalProviders">>;
+  & Partial<Pick<BacktestApiClient, "capabilities" | "listStrategyRevisions" | "externalProviders" | "getRunResult" | "getPineRunResult">>;
 
 /** Owns fixed-history operations and immutable results independently of live
  * chart stores. Releasing a consumer never cancels a durable shared run. */
@@ -25,6 +28,8 @@ export class StrategyDataManager {
   private readonly results = new ChartStrategyResultCache();
   private readonly updates = new Map<string, StrategyRunUpdate>();
   private readonly retainedResults: string[] = [];
+  /** Completed run results never change, so parsed values are kept by family and run id. */
+  private readonly runResults = new Map<string, RunResult>();
   private streams = 0;
   private closed = false;
 
@@ -170,6 +175,36 @@ export class StrategyDataManager {
     return this.operation(signal, (owned) => this.readResult(runId, owned));
   }
 
+  /** A completed run in `candlescope.run-result/1` (ADR-BACKTEST-015 P1), validated against its family. */
+  loadRunResult(family: RunResultFamily, runId: string, signal?: AbortSignal): Promise<RunResult> {
+    return this.operation(signal, async (owned) => {
+      const key = `${family}\u0000${runId}`;
+      const cached = this.runResults.get(key);
+      if (cached) {
+        this.runResults.delete(key);
+        this.runResults.set(key, cached);
+        return cached;
+      }
+      let raw: unknown;
+      if (family === "host") {
+        if (!this.api.getRunResult) unavailable();
+        raw = await this.api.getRunResult(runId, owned);
+      } else {
+        if (!this.api.getPineRunResult) unavailable();
+        raw = await this.api.getPineRunResult(family, runId, owned);
+      }
+      owned.throwIfAborted();
+      const result = parseRunResult(raw);
+      const expected = RUN_RESULT_FAMILY_IDENTITY[family];
+      if (result.source !== expected.source || result.authority !== expected.authority) {
+        throw new RunResultContractError("source", `${family} runs must be served by ${expected.source} with ${expected.authority} authority`);
+      }
+      this.runResults.set(key, result);
+      while (this.runResults.size > RETAINED_RUN_RESULTS) this.runResults.delete(this.runResults.keys().next().value!);
+      return result;
+    });
+  }
+
   loadResultReplay(cursor: BacktestResultReplayCursor, signal?: AbortSignal) {
     return this.operation(signal, async (owned) => {
       if (!this.api.getResultReplay) throw new StrategyRunStreamError("STRATEGY_STREAM_UNAVAILABLE", "Result replay is unavailable");
@@ -278,7 +313,7 @@ export class StrategyDataManager {
 
   diagnostics() {
     return { closed: this.closed, operations: this.operations.size, streams: this.streams,
-      continuous: this.continuous.diagnostics(), results: this.results.diagnostics(), runs: [...this.updates].map(([runId, event]) => ({
+      continuous: this.continuous.diagnostics(), results: this.results.diagnostics(), runResults: this.runResults.size, runs: [...this.updates].map(([runId, event]) => ({
         runId, state: event.run.state, snapshotHash: event.run.snapshot_hash,
         configHash: event.run.config_hash, progress: event.progress,
       })) };
@@ -290,6 +325,11 @@ export class StrategyDataManager {
     for (const operation of this.operations) operation.abort();
     this.results.clear();
     this.retainedResults.length = 0;
+    this.runResults.clear();
     this.updates.clear();
   }
+}
+
+function unavailable(): never {
+  throw new StrategyRunStreamError("STRATEGY_STREAM_UNAVAILABLE", "Run results are unavailable from this backend");
 }

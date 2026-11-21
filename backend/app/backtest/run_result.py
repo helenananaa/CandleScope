@@ -45,6 +45,10 @@ def decimal_text(value: object) -> str | None:
     return text
 
 
+class BarAnchorRequired(ValueError):
+    """The interval does not align with UTC days, so the run's bar open times are needed."""
+
+
 class BarAnchor:
     """Map an engine timestamp to the open time of the bar containing it."""
 
@@ -55,7 +59,7 @@ class BarAnchor:
         # Flooring by width is only exact when bars align with UTC days.
         self._width = width if width and width <= DAY_MS and DAY_MS % width == 0 else None
         if self._opens is None and self._width is None:
-            raise ValueError(f"bar open times are required to anchor {interval!r} results")
+            raise BarAnchorRequired(f"bar open times are required to anchor {interval!r} results")
 
     def __call__(self, time_ms: int | None) -> int | None:
         if time_ms is None:
@@ -258,3 +262,18 @@ def from_external_report(report: Mapping[str, Any], *, interval: str) -> dict[st
                    open_position=_open_position(account.get("position_qty"), account.get("entry_price")),
                    pending_orders=_host_pending(report.get("orders") or ()), equity=equity,
                    plots=_plots(report.get("graphics") or (), bar_opens))
+
+
+def from_native_record(record: Mapping[str, Any]) -> dict[str, Any]:
+    """Project a completed ``/backtests/native`` or ``/backtests/external`` run record."""
+    from .errors import BacktestError
+
+    if record.get("state") != "COMPLETED" or not isinstance(record.get("result"), Mapping):
+        raise BacktestError("IDENTITY_MUTATION", "strategy run result is not ready")
+    interval = str((record.get("config") or {}).get("interval") or "")
+    mode = record.get("execution_mode")
+    if mode == "NATIVE":
+        return from_native_report(record["result"], interval=interval)
+    if mode == "CANDLESCOPE":
+        return from_external_report(record["result"], interval=interval)
+    raise BacktestError("NATIVE_INPUT_UNSUPPORTED", f"unknown strategy execution mode {mode!r}")

@@ -233,3 +233,21 @@ def assert_oracle(oracle: Mapping[str, Any]) -> None:
         f"golden summary:  {json.dumps(golden.get('summary'), sort_keys=True)}\n"
         f"current summary: {json.dumps(oracle['summary'], sort_keys=True)}"
     )
+
+
+# Frontend contract fixtures: the backend's run-result/1 projection of an oracle run,
+# parsed by the frontend runResult and StrategyDataManager tests. Kept equal to the live projection.
+FRONTEND_FIXTURES = Path(__file__).resolve().parents[2] / "frontend" / "tests" / "fixtures" / "run-result"
+
+
+def assert_frontend_fixture(name: str, projected: Mapping[str, Any]) -> None:
+    target = FRONTEND_FIXTURES / f"{name}.run-result.json"
+    text = json.dumps(projected, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    if os.environ.get(UPDATE_ENV) == "1":
+        FRONTEND_FIXTURES.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, encoding="utf-8")
+        return
+    if not target.is_file():
+        pytest.fail(f"missing frontend fixture {target.name}; generate it with {UPDATE_ENV}=1", pytrace=False)
+    assert json.loads(target.read_text(encoding="utf-8")) == json.loads(text), (
+        f"{target.name} no longer matches the backend projection; regenerate with {UPDATE_ENV}=1")

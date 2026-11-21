@@ -67,6 +67,7 @@ def test_pine_paths_project_without_loss_and_agree_on_bars(tmp_path, native_runt
     assert native["summary"]["fill_count"] == native_golden["orders"]
     assert native["summary"]["trade_count"] == native_golden["trades"]
     assert Decimal(native["summary"]["final_equity"]) == Decimal(str(native_golden["final_equity"]))
+    oracles.assert_frontend_fixture("native-pine", native)
     assert native["authority"] == "SCRIPT" and external["authority"] == host_pine["authority"] == "HOST"
     assert len(native["plots"]) == len(external["plots"]) == 2
     assert all(len(plot["points"]) == len(oracles.bars()) for plot in native["plots"])
@@ -85,3 +86,27 @@ def test_pine_paths_project_without_loss_and_agree_on_bars(tmp_path, native_runt
     # Native Pine uses the script's zero costs; the host paths charge configured fees and slippage.
     assert [f["price"] for f in native["fills"]] == [f["price"] for f in external["fills"]]
     assert all(f["fee"] is None for f in native["fills"]) and all(f["fee"] for f in host_pine["fills"])
+
+
+def test_native_and_external_routes_serve_their_projections(native_runtime):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.api.v1.backtests import router
+    from tests.test_native_backtests import terminal
+
+    runtime, request = native_runtime
+    native_id = terminal(runtime.native, runtime.native.create(request, "route-native")["run_id"], timeout=90)["run_id"]
+    external_id = terminal(runtime.native, runtime.native.create({**request, **EXTERNAL}, "route-external")["run_id"],
+                           timeout=90)["run_id"]
+    app = FastAPI()
+    app.state.backtest_runtime = runtime
+    app.include_router(router)
+    with TestClient(app) as client:
+        native = client.get(f"/backtests/native/runs/{native_id}/run-result")
+        external = client.get(f"/backtests/external/runs/{external_id}/run-result")
+        unknown = client.get("/backtests/native/runs/no-such-run/run-result")
+    assert native.status_code == external.status_code == 200
+    assert native.json() == from_native_report(runtime.native.get(native_id)["result"], interval="1m")
+    assert external.json() == from_external_report(runtime.native.get(external_id)["result"], interval="1m")
+    assert native.json()["authority"] == "SCRIPT" and external.json()["authority"] == "HOST"
+    assert unknown.status_code >= 400

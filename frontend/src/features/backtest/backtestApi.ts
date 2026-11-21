@@ -222,6 +222,10 @@ export interface BacktestApiClient {
   streamRun?(runId: string, signal?: AbortSignal, onUpdate?: (event: StrategyRunUpdate) => void): Promise<BacktestRunRecord>;
   getReport(runId: string, signal?: AbortSignal): Promise<BacktestReport>;
   getChart(runId: string, signal?: AbortSignal): Promise<BacktestChartData>;
+  /** Host run in `candlescope.run-result/1`; unvalidated wire value (see `parseRunResult`). */
+  getRunResult?(runId: string, signal?: AbortSignal): Promise<unknown>;
+  /** Native or CandleScope-matched Pine run in `candlescope.run-result/1`; unvalidated wire value. */
+  getPineRunResult?(mode: "native" | "external", runId: string, signal?: AbortSignal): Promise<unknown>;
   getResultReplay?(cursor: BacktestResultReplayCursor, signal?: AbortSignal): Promise<BacktestResultReplayFrame>;
   saveResultReplayNote?(cursor: BacktestResultReplayCursor, note: BacktestResultReplayNoteDraft,
     signal?: AbortSignal): Promise<{ revision: number }>;
@@ -517,6 +521,12 @@ export function createBacktestApi(base = `${API_BASE}/backtests`): BacktestApiCl
           requestOptions({}, signal),
         ),
       );
+    },
+    async getRunResult(runId, signal) {
+      return readJson(await fetch(`${base}/runs/${encodeURIComponent(runId)}/run-result`, requestOptions({}, signal)));
+    },
+    async getPineRunResult(mode, runId, signal) {
+      return readJson(await fetch(`${base}/${mode}/runs/${encodeURIComponent(runId)}/run-result`, requestOptions({}, signal)));
     },
     async getResultReplay(cursor, signal) {
       const query = new URLSearchParams({
