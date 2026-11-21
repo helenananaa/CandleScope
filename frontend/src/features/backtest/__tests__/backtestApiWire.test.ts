@@ -271,3 +271,28 @@ test("signal trace pagination and Run compare compatibility stay typed", async (
     mock.restoreAll();
   }
 });
+
+test("the run facade is addressed beside the backtest base, one entry for every family", async () => {
+  const calls: CapturedRequest[] = [];
+  mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ url: String(input), init });
+    return Response.json({});
+  });
+  try {
+    const api = createBacktestApi("/api/v1/backtests");
+    await api.getStrategyRun!("native_a/b");
+    await api.getStrategyRunResult!("bt_1");
+    await api.cancelStrategyRun!("cs_1");
+    await api.strategyRunCapabilities!();
+    await createBacktestApi("/wire", "/runs-wire").getStrategyRun!("bt_2");
+    assert.deepEqual(calls.map(({ url, init }) => [init?.method ?? "GET", url]), [
+      ["GET", "/api/v1/strategy-runs/native_a%2Fb"],
+      ["GET", "/api/v1/strategy-runs/bt_1/result"],
+      ["POST", "/api/v1/strategy-runs/cs_1/cancel"],
+      ["GET", "/api/v1/strategy-runs/capabilities"],
+      ["GET", "/runs-wire/bt_2"],
+    ]);
+  } finally {
+    mock.restoreAll();
+  }
+});

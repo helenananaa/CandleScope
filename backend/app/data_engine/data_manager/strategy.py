@@ -120,6 +120,7 @@ class StrategyDataManager:
         self.market_manager = market_manager
         self.continuous = None
         self._continuous_access = None
+        self._runs = None
         self._control_requests = 0
         self.max_subscriptions = max_subscriptions
         self.heartbeat_seconds = heartbeat_seconds
@@ -155,6 +156,14 @@ class StrategyDataManager:
             from .continuous_strategy import ContinuousStrategyAccess
             self._continuous_access=ContinuousStrategyAccess(self)
         return self._continuous_access
+
+    def runs(self):
+        """One facade over every run family: status, result, cancel and capabilities (ADR-BACKTEST-015 P2)."""
+        self._require_open()
+        if self._runs is None:
+            from .strategy_runs import StrategyRuns
+            self._runs = StrategyRuns(self)
+        return self._runs
 
     async def start_continuous(self):
         return await self.continuous_access().start()

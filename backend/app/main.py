@@ -180,8 +180,10 @@ else:
 
 if BACKTEST_SETTINGS.enabled:
     from app.api.v1.backtests import router as backtests_router
+    from app.api.v1.strategy_runs import router as strategy_runs_router
 
     app.include_router(backtests_router, prefix="/api/v1")
+    app.include_router(strategy_runs_router, prefix="/api/v1")
 
 
 # ═══════════════════════════════════════════════════════════════

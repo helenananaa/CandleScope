@@ -444,6 +444,26 @@ class NativeBacktests:
                 raise BacktestError("RUN_NOT_FOUND", "native run not found")
             return json.loads(row[0])
 
+    def status_summary(self, run_id):
+        """State, profile and whether a result is stored, without decoding the report."""
+        with self.lock:
+            try:
+                row = self.db.execute("""SELECT s.record, json_extract(r.record,'$.config.language'),
+                    json_extract(r.record,'$.config.execution_fidelity'), json_type(r.record,'$.result')
+                    FROM native_run_summaries s JOIN runs r ON r.id=s.id WHERE s.id=?""", (run_id,)).fetchone()
+            except sqlite3.OperationalError as exc:
+                if str(exc) != "malformed JSON":
+                    raise
+                # Preserve the ordinary reader's malformed-record exception.
+                record = self.get(run_id)
+                config = record.get("config") or {}
+                return {**{key: value for key, value in record.items() if key not in {"result", "config"}},
+                        "language": config.get("language"), "execution_fidelity": config.get("execution_fidelity"),
+                        "result_present": isinstance(record.get("result"), dict)}
+        if row is None:
+            raise BacktestError("RUN_NOT_FOUND", "native run not found")
+        return {**json.loads(row[0]), "language": row[1], "execution_fidelity": row[2], "result_present": row[3] == "object"}
+
     def list(self):
         with self.lock:
             return [json.loads(row[0]) for row in self.db.execute(
