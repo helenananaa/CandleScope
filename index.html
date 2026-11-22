@@ -33,6 +33,7 @@
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
     <symbol id="i-gh" viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></symbol>
+    <symbol id="i-web" viewBox="0 0 16 16"><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2"/><path d="M1.75 6h12.5"/><path d="M6.75 8.25v3.5l3-1.75z" fill="currentColor" stroke="none"/></symbol>
   </svg>
   <a class="skip-link" href="#main" data-en="Skip to content">跳到主要内容</a>
 
@@ -55,6 +56,10 @@
           <button type="button" data-set-lang="zh" aria-pressed="true">中</button>
           <button type="button" data-set-lang="en" aria-pressed="false">EN</button>
         </div>
+        <a class="btn btn-primary btn-sm" href="https://app.candlescope.app/" aria-label="打开网页版" data-en-aria="Open the web app">
+          <svg class="ico" aria-hidden="true"><use href="#i-web"/></svg>
+          <span data-en="Open web app">打开网页版</span>
+        </a>
         <a class="btn btn-ghost btn-sm" href="https://github.com/helenananaa/CandleScope">
           <svg class="gh" aria-hidden="true"><use href="#i-gh"/></svg>
           <span>GitHub</span>
@@ -89,7 +94,11 @@
         </h1>
         <p class="lede reveal" data-en="100+ exchanges, any custom interval, and no caps on history, indicators or alerts. Charting, replay training, paper trading and backtesting — all on your own machine.">100+ 家交易所、任意自定义周期，历史数据、指标与警报都不设上限。看盘、回放训练、模拟盘与策略回测——全部跑在你自己的电脑上。</p>
         <div class="cta reveal">
-          <a class="btn btn-primary" href="https://github.com/helenananaa/CandleScope">
+          <a class="btn btn-primary" href="https://app.candlescope.app/">
+            <svg class="ico" aria-hidden="true"><use href="#i-web"/></svg>
+            <span data-en="Open in your browser">在浏览器中打开</span>
+          </a>
+          <a class="btn btn-ghost" href="https://github.com/helenananaa/CandleScope">
             <svg class="gh" aria-hidden="true"><use href="#i-gh"/></svg>
             <span data-en="Get it on GitHub">在 GitHub 获取</span>
           </a>
@@ -633,6 +642,7 @@ slow = ta.<span class="c-fn">ema</span>(close, <span class="c-nu">55</span>)
         <details class="scope reveal">
           <summary><span data-en="Current scope">当前范围与限制</span></summary>
           <ul>
+            <li data-en="The web app at app.candlescope.app needs no install: charts, replay training and paper trading run in your browser, and your data stays in that browser. Script strategies, exchange accounts and plugins need the local install. It needs a recent Chrome, Edge, Safari or Firefox; Android Chrome is not supported yet.">网页版 app.candlescope.app 无需安装：看盘、回放训练与模拟盘直接在浏览器里运行，数据只保存在你的浏览器中；运行脚本策略、连接交易所账户与插件需要本地安装版。需要较新版本的 Chrome、Edge、Safari 或 Firefox，暂不支持安卓 Chrome。</li>
             <li data-en="Replay and paper trading use simulated orders and never route live exchange orders. Exchange account sync is read-only and currently supports OKX.">回放与模拟盘使用模拟委托，不会向交易所发送真实订单；交易所账户同步为只读，目前支持 OKX。</li>
             <li data-en="History depth and advanced market views (order book, order flow, contract context) depend on what the selected exchange or provider serves.">历史深度与高级市场视图（盘口、订单流、合约信息）取决于所选交易所或数据提供商能提供的数据。</li>
             <li data-en="The standard workspace shows up to four charts; 16-chart and multi-window layouts (up to 64 charts) are opt-in.">标准工作区默认最多四张图；16 图与多窗口布局（最多 64 张图）需手动开启。</li>
@@ -653,7 +663,8 @@ slow = ta.<span class="c-fn">ema</span>(close, <span class="c-nu">55</span>)
       <h2 id="final-title" data-en="Your next study starts here.">下一次研究，从这里开始。</h2>
       <p data-en="Free and open source. Browse the code, the setup guide and what's in progress — stars, issues and contributions are welcome.">免费、开源。查看源码、安装说明与项目进展——欢迎 Star、提 Issue 或参与贡献。</p>
       <div class="cta">
-        <a class="btn btn-primary" href="https://github.com/helenananaa/CandleScope"><svg class="gh" aria-hidden="true"><use href="#i-gh"/></svg><span data-en="Get it on GitHub">在 GitHub 获取</span></a>
+        <a class="btn btn-primary" href="https://app.candlescope.app/"><svg class="ico" aria-hidden="true"><use href="#i-web"/></svg><span data-en="Open in your browser">在浏览器中打开</span></a>
+        <a class="btn btn-ghost" href="https://github.com/helenananaa/CandleScope"><svg class="gh" aria-hidden="true"><use href="#i-gh"/></svg><span data-en="Get it on GitHub">在 GitHub 获取</span></a>
         <a class="btn btn-ghost" href="https://github.com/helenananaa/CandleScope/blob/main/README_zh.md" data-en-href="https://github.com/helenananaa/CandleScope/blob/main/README.md"><span data-en="Read the docs">阅读文档</span></a>
       </div>
       <a class="repo" href="https://github.com/helenananaa/CandleScope">github.com/helenananaa/CandleScope</a>
