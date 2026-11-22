@@ -595,7 +595,7 @@ export async function buildImportedExternalRunBody(input: {
 }
 
 async function previewImportedSnapshot(
-  api: ChartStrategyRunApi,
+  api: Pick<ChartStrategyRunApi, "previewSnapshot">,
   source: Extract<ResearchRunSource, { kind: "IMPORTED_DATASET" }>,
   precise: boolean,
   signal?: AbortSignal,
@@ -639,6 +639,102 @@ async function previewImportedSnapshot(
     throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "The frozen snapshot lacks the requested user market trades");
   }
   return preview;
+}
+
+/** A run over a frozen snapshot is accepted after a bounded smoke of the revision on that snapshot, then validation. */
+async function smokeAndValidate(api: Pick<ChartStrategyRunApi, "smokeStrategyRevision" | "validate">, frozen: ChartStrategyFrozenRunRequest,
+  revision: StrategyRevisionRecord, resolution: ChartContextResolution, body: Record<string, unknown>,
+  range: ReturnType<typeof readyRange>, signal?: AbortSignal): Promise<void> {
+  await api.smokeStrategyRevision(revision.revision_id, {
+    ...(frozen.language === "python" ? { python_runtime_mode: "TRUSTED_LOCAL", python_trusted_confirmed: frozen.pythonTrustedConfirmed === true } : {}),
+    dataset_id: resolution.dataset_id,
+    snapshot_hash: resolution.snapshot_hash,
+    start_time_ms: range.startTimeMs,
+    end_time_ms: Math.min(range.endTimeMs, range.startTimeMs + 7 * 86_400_000),
+    parameters: executionParameters(frozen),
+  }, signal);
+  await api.validate(body, signal);
+}
+
+/** What a strategy data preparation runs once the history is ready: the same run as a direct research run. */
+function strategyPreparationIntent(frozen: ChartStrategyFrozenRunRequest, revision: StrategyRevisionRecord,
+  pineContexts: Awaited<ReturnType<typeof freezePineChartContexts>>) {
+  const profile = frozen.attachment.pythonBarExecution;
+  return {
+    ...(frozen.language === "python" ? { python_runtime_mode: "TRUSTED_LOCAL", python_trusted_confirmed: frozen.pythonTrustedConfirmed === true } : {}),
+    ...(frozen.attachment.signalChart ? { signal_chart: frozen.attachment.signalChart } : {}),
+    strategy_revision_id: revision.revision_id,
+    parameters: executionParameters(frozen),
+    ...(frozen.language === "pine" ? { output_mode: selectedOutputMode(frozen, revision) } : {}),
+    ...(profile ? { python_bar_execution: profile } : {}),
+    ...(pineContexts.length ? { pine_contexts: pineContexts } : {}),
+    ...(frozen.attachment.executionOverrides ? { execution_overrides: frozen.attachment.executionOverrides } : {}),
+    chart_cell_scope: frozen.cellScope,
+    strategy_draft_id: frozen.draftId,
+  };
+}
+
+/** One input of a research experiment: imported data (a frozen snapshot) or exchange history over a range. */
+export type ResearchExperimentInput =
+  | { input: Record<string, unknown>; source: Extract<ResearchRunSource, { kind: "IMPORTED_DATASET" }> }
+  | { input: Record<string, unknown>; source: { kind: "MARKET_HISTORY"; session: ChartStrategyRunRequest["session"]; startMs: number; endMs: number } };
+
+/**
+ * The members of an experiment that runs one research request over several inputs (ADR-BACKTEST-015 P5b):
+ * imported data becomes a run over its frozen snapshot, exchange history a strategy data preparation that
+ * starts its run when the history is ready. One strategy revision serves every member.
+ */
+export async function buildResearchExperimentMembers(options: {
+  api: Pick<ChartStrategyRunApi, "createStrategyRevision" | "previewSnapshot" | "smokeStrategyRevision" | "validate">;
+  request: ChartStrategyRunRequest;
+  inputs: readonly ResearchExperimentInput[];
+  signal?: AbortSignal;
+}): Promise<{ revision: StrategyRevisionRecord; members: Array<Record<string, unknown>> }> {
+  if (options.request.attachment.pythonBarExecution) {
+    throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "A saved continuous profile runs on its own chart market only");
+  }
+  const base = await freezeChartStrategyRunRequest(options.request);
+  const revision = await options.api.createStrategyRevision({
+    name: base.displayName,
+    language: revisionLanguage(base.language),
+    base_revision_id: null,
+    source_text: base.source,
+    parameter_schema: [],
+    ...(base.language === "pine" ? { libraries: base.attachment.parameters.__pineLibraries ?? {} } : {}),
+  }, options.signal);
+  const members: Array<Record<string, unknown>> = [];
+  for (const { input, source } of options.inputs) {
+    const session = source.kind === "IMPORTED_DATASET"
+      ? { exchange: "local", marketType: "spot", symbol: source.symbol, interval: source.interval }
+      : { ...source.session };
+    const attachment = source.kind === "IMPORTED_DATASET" ? options.request.attachment
+      : { ...options.request.attachment, rangeMode: "CUSTOM" as const, customRange: { startMs: source.startMs, endMs: source.endMs } };
+    const frozen = await freezeChartStrategyRunRequest({ ...options.request, session, attachment });
+    const pineContexts = frozen.language === "pine" ? await freezePineChartContexts(
+      restoreAdvancedInputs(frozen.attachment.parameters.__pineInputs, true).contexts,
+      { exchange: frozen.session.exchange, market_type: frozen.session.marketType }, undefined, options.signal) : [];
+    if (source.kind === "MARKET_HISTORY") {
+      const context = chartContextRequestForFrozen(frozen);
+      context.end_time_ms = source.endMs - 1;
+      members.push({ input, preparation: { context, strategy: strategyPreparationIntent(frozen, revision, pineContexts) } });
+      continue;
+    }
+    const precise = frozen.attachment.fidelityPreference === "PRECISE";
+    if (precise && !source.marketTradeInput) {
+      throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "Imported data only supports bar estimates", { next_step: "use bar estimate" });
+    }
+    const preview = await previewImportedSnapshot(options.api, source, precise, options.signal);
+    const resolution = resolutionFromImportedPreview({ source, rangeMode: frozen.attachment.rangeMode, preview, precise });
+    if (resolution.status !== "READY" || !resolution.coverage.complete) {
+      throw new ChartStrategyRunError("IMPORTED_DATASET_NOT_READY", "Imported data has gaps in the selected range",
+        { next_step: "choose complete data or a shorter range" });
+    }
+    const body = buildChartStrategyRunBody({ frozen, revision, resolution, pineContexts });
+    // As for a single run: the backend accepts a run over a snapshot only after the revision's smoke on it.
+    await smokeAndValidate(options.api, frozen, revision, resolution, body, readyRange(resolution), options.signal);
+    members.push({ input, run: body });
+  }
+  return { revision, members };
 }
 
 export async function runResearchBacktest(options: {
@@ -733,18 +829,7 @@ export async function runResearchBacktest(options: {
     if (options.api.prepareChartContext && resolution.automatic_preparation_available !== false
       && (resolution.status === "NEEDS_DATA" || (resolution.status === "READY" && resolution.automatic_preparation_available))) {
       options.onStage?.("MATERIALIZING");
-      const strategyIntent = {
-        ...(frozen.language === "python" ? { python_runtime_mode: "TRUSTED_LOCAL", python_trusted_confirmed: frozen.pythonTrustedConfirmed === true } : {}),
-        ...(frozen.attachment.signalChart ? { signal_chart: frozen.attachment.signalChart } : {}),
-        strategy_revision_id: revision.revision_id,
-        parameters: executionParameters(frozen),
-        ...(frozen.language === "pine" ? { output_mode: selectedOutputMode(frozen, revision) } : {}),
-        ...(profile ? { python_bar_execution: profile } : {}),
-        ...(pineContexts.length ? { pine_contexts: pineContexts } : {}),
-        ...(frozen.attachment.executionOverrides ? { execution_overrides: frozen.attachment.executionOverrides } : {}),
-        chart_cell_scope: frozen.cellScope,
-        strategy_draft_id: frozen.draftId,
-      };
+      const strategyIntent = strategyPreparationIntent(frozen, revision, pineContexts);
       const preparationKey = await chartStrategySha256({ context: contextRequest, strategy: strategyIntent,
         resolved_context: resolution.chart_context_hash });
       resolution = await options.api.prepareChartContext(contextRequest, options.signal, strategyIntent, preparationKey, options.onPreparation);
@@ -784,17 +869,7 @@ export async function runResearchBacktest(options: {
   const body = buildChartStrategyRunBody({ frozen, revision, resolution, pineContexts });
   const range = readyRange(resolution);
   options.onStage?.("VALIDATING");
-  if (!resolution.prepared_run) {
-    await options.api.smokeStrategyRevision(revision.revision_id, {
-    ...(frozen.language === "python" ? { python_runtime_mode: "TRUSTED_LOCAL", python_trusted_confirmed: frozen.pythonTrustedConfirmed === true } : {}),
-    dataset_id: resolution.dataset_id,
-    snapshot_hash: resolution.snapshot_hash,
-    start_time_ms: range.startTimeMs,
-    end_time_ms: Math.min(range.endTimeMs, range.startTimeMs + 7 * 86_400_000),
-    parameters: executionParameters(frozen),
-  }, options.signal);
-    await options.api.validate(body, options.signal);
-  }
+  if (!resolution.prepared_run) await smokeAndValidate(options.api, frozen, revision, resolution, body, range, options.signal);
 
   let refreshed = resolution;
   if (options.source.kind === "IMPORTED_DATASET") {

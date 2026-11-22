@@ -26,7 +26,7 @@ import { ResearchIndicatorScopeStore } from "./researchIndicatorScope.js";
 import { ResearchIndicatorScopeControl } from "./ResearchIndicatorScopeControl.js";
 import { useResearchIndicatorScopeResults } from "./useResearchIndicatorScopeResults.js";
 import type { ResearchMarketInput } from "./strategyResearchBatch.js";
-import { ResearchBatchResults, ResearchBatchSources } from "./ResearchBatchPanel.js";
+import { ResearchBatchResults, ResearchBatchSources, ResearchExperimentResults } from "./ResearchBatchPanel.js";
 import { ResearchMarketInputForm } from "./ResearchMarketInputs.js";
 import PreparationWaiting from "../data-preparation/PreparationWaiting.js";
 import { RESEARCH_SOURCE_SCHEMA } from "../research-data/researchDataTypes.js";
@@ -466,6 +466,8 @@ export default function StrategyResearchApp({
   const [marketInputs, setMarketInputs] = useState<readonly ResearchMarketInput[]>([]);
   const marketBatchAvailable = hostReady && runtime.runtimeMode === "LIVE";
   const batchState = useSyncExternalStore(researchRun.batch.subscribe, researchRun.batch.snapshot, researchRun.batch.snapshot);
+  const experimentsState = useSyncExternalStore(researchRun.experiments.subscribe, researchRun.experiments.snapshot, researchRun.experiments.snapshot);
+  const batchCount = experimentsState.experiments.length + batchState.jobs.length;
   const [batchError, setBatchError] = useState(false);
   const [advancedError, setAdvancedError] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -611,18 +613,18 @@ export default function StrategyResearchApp({
         batchControls={(request) => <ResearchBatchSources datasets={libraryDatasets} precise={state.script.configuration?.fidelityPreference === "PRECISE"}
           marketEnabled={marketBatchAvailable} markets={marketInputs} onMarkets={setMarketInputs}>{(selected, exchange) => <>
           <div className="strategy-research-batch-actions">
-            <Button variant="primary" size="sm" disabled={!request || (!exchange.length && selected.length < 2) || batchState.storageFailed}
+            <Button variant="primary" size="sm" disabled={!request || (!exchange.length && selected.length < 2)}
               onClick={() => {
                 if (!request) return;
                 setBatchError(false);
-                void researchRun.batch.submit(request, selected, exchange).catch(() => setBatchError(true));
+                // The backend keeps the batch as an experiment (ADR-BACKTEST-015 P5b): leaving or switching does not stop it.
+                void researchRun.experiments.submit(request, selected, exchange).catch(() => setBatchError(true));
               }}>{t("researchBatch.run")}</Button>
-            {batchState.jobs.length > 0 && <Button size="sm" variant="ghost" onClick={() => setHistoryOpen(true)}>
-              {t("researchBatch.jobs")} · {batchState.jobs.length}
+            {batchCount > 0 && <Button size="sm" variant="ghost" onClick={() => setHistoryOpen(true)}>
+              {t("researchBatch.jobs")} · {batchCount}
             </Button>}
           </div>
-          {batchState.storageFailed ? <InlineAlert tone="danger">{t("researchBatch.storage")}</InlineAlert>
-            : batchError && <InlineAlert tone="danger">{t("researchBatch.submitFailed")}</InlineAlert>}
+          {batchError && <InlineAlert tone="danger">{t("researchBatch.submitFailed")}</InlineAlert>}
         </>}</ResearchBatchSources>}
         onConfirmNeedsData={researchRun.onConfirmNeedsData}
         onOpenAdvanced={openAdvanced}
@@ -719,7 +721,24 @@ export default function StrategyResearchApp({
       </Drawer>
       <Drawer open={historyOpen} onClose={() => setHistoryOpen(false)} title={t("ux.history")} className="strategy-research-drawer">
         <Suspense fallback={<p className="strategy-research-note">{t("research.loading")}</p>}><StrategyRunHistory manager={researchRun.historyManager} draftId={state.script.draftId} currentRunId={researchRun.result?.run.run_id ?? null} onOpen={(runId) => { dispatch({ type: "result/viewHistory", runId }); setNativeMode(false); setHistoryOpen(false); }} /></Suspense>
-        <ResearchBatchResults jobs={batchState.jobs} storageFailed={batchState.storageFailed}
+        <ResearchExperimentResults experiments={experimentsState.experiments}
+          onCancel={(experimentId) => { void researchRun.experiments.cancel(experimentId).catch(() => setBatchError(true)); }}
+          onRetry={(experimentId, ordinal) => { void researchRun.experiments.retry(experimentId, ordinal).catch(() => setBatchError(true)); }}
+          onOpen={(_experiment, member) => {
+            const input = member.input;
+            if (input.kind === "IMPORTED_DATASET" && libraryDatasets.some(dataset => dataset.dataset_id === input.datasetId && dataset.data_epoch === input.dataEpoch)) {
+              setLibrarySelectedId(String(input.datasetId));
+              onSelectDataset(String(input.datasetId));
+            } else if (input.kind === "EXCHANGE_SERIES" && typeof input.startMs === "number" && typeof input.endMs === "number") {
+              dispatch({ type: "source/select", source: { schemaVersion: RESEARCH_SOURCE_SCHEMA, kind: "EXCHANGE_SERIES",
+                exchange: String(input.exchange), marketType: String(input.marketType), symbol: String(input.symbol),
+                interval: String(input.interval), startMs: input.startMs, endMs: input.endMs } });
+            }
+            if (member.runId) dispatch({ type: "result/viewHistory", runId: member.runId });
+            setNativeMode(false);
+            setHistoryOpen(false);
+          }} />
+        <ResearchBatchResults jobs={batchState.jobs} storageFailed={batchState.storageFailed} title={t("researchExperiment.earlier")}
           onResume={(id, retry) => researchRun.batch.resume(id, retry)}
           onOpen={job => {
             if (libraryDatasets.some(dataset => dataset.dataset_id === job.datasetId && dataset.data_epoch === job.dataEpoch)) {

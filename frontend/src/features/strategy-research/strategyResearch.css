@@ -247,6 +247,8 @@
 .strategy-research-drawer .ui-drawer-body { display: grid; align-content: start; gap: var(--space-5); }
 .strategy-history,
 .strategy-research-batch-jobs { display: grid; gap: var(--space-3); min-width: 0; }
+/* One experiment: its own line, then one row per input (ADR-BACKTEST-015 P5b). */
+.strategy-research-experiment { display: grid; gap: var(--space-2); min-width: 0; }
 .strategy-history h3,
 .strategy-research-batch-jobs h3 {
   margin: 0;

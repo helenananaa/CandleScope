@@ -8,8 +8,10 @@ import { isBacktestTerminalState } from "../../backtest/backtestRunClient.js";
 import { StrategyRunStreamError, type StrategyRunUpdate } from "../../backtest/backtestRunStream.js";
 import { ChartStrategyResultCache } from "../../backtest/chart-tester/chartStrategyResultCache.js";
 import {
-  buildImportedExternalRunBody, runChartStrategyBacktest, runResearchBacktest, type ChartStrategyRunApi,
+  buildImportedExternalRunBody, buildResearchExperimentMembers, runChartStrategyBacktest, runResearchBacktest,
+  type ChartStrategyRunApi, type ResearchExperimentInput,
 } from "../../backtest/chart-tester/chartStrategyRunRequest.js";
+import type { ChartStrategyRunRequest } from "../../backtest/chart-tester/chartStrategyTesterUiModel.js";
 import { defaultNativeRunClient, type NativeExecutionMode, type NativeRun, type NativeRunClient } from "../../backtest/native/nativeBacktestApi.js";
 import { externalSnapshotRequest, matchingExternalConnections } from "../../backtest/research/externalProviderModel.js";
 import { defaultContinuousApi } from "../../backtest/continuous/continuousApi.js";
@@ -240,6 +242,25 @@ export class StrategyDataManager {
     return this.operation(signal, async (owned) => {
       if (!this.api.getStrategyExperiment) unavailable();
       return parseStrategyExperiment(await this.api.getStrategyExperiment(experimentId, owned));
+    });
+  }
+
+  /**
+   * Run one research request over several inputs as an experiment (ADR-BACKTEST-015 P5b): its members
+   * are built here (one strategy revision, each input's snapshot or preparation) and kept by the backend.
+   */
+  createResearchExperiment(input: { request: ChartStrategyRunRequest; inputs: readonly ResearchExperimentInput[] },
+    signal?: AbortSignal): Promise<StrategyExperiment> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.createStrategyExperiment) unavailable();
+      const { revision, members } = await buildResearchExperimentMembers({ api: this.api, request: input.request, inputs: input.inputs, signal: owned });
+      return parseStrategyExperiment(await this.api.createStrategyExperiment({
+        idempotency_key: crypto.randomUUID(),
+        name: input.request.displayName,
+        strategy: { language: input.request.language, draft_id: input.request.draftId,
+          draft_content_revision: input.request.draftContentRevision, strategy_revision_id: revision.revision_id },
+        members,
+      }, owned));
     });
   }
 

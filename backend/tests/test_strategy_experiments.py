@@ -247,7 +247,7 @@ def test_the_frontend_contract_fixture_is_what_the_backend_serves(service):
     ]
     created = asyncio.run(experiments.create(body(members=members), port))
     port.preparations["job0"].update(state="RUNNING", stage="FETCHING", completed=2,
-                                     waiting={"reason": "RATE_LIMITED", "until_ms": 1_763_600_030_000})
+                                     waiting={"reason": "RATE_LIMIT", "retry_at_ms": 1_763_600_030_000})
     port.runs["bt_0"]["state"] = "COMPLETED"
     port.preparations["job1"].update(state="FAILED", stage="FAILED",
                                      error={"code": "SOURCE_UNAVAILABLE", "message": "The exchange did not answer"})

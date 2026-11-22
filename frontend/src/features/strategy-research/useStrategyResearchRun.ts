@@ -23,6 +23,7 @@ import { getStrategyStorage } from "../../shared/strategyStorage.js";
 import { importedResearchRunSource } from "./importedDatasetSource.js";
 import type { PreparationJob } from "../data-preparation/api.js";
 import { StrategyResearchBatch } from "./strategyResearchBatch.js";
+import { ResearchExperiments } from "./researchExperiments.js";
 import { StrategyResearchRunEffectGuard } from "./strategyResearchRunLifecycle.js";
 import { MarketDataManagerCore } from "../market-data/manager/marketDataManagerCore.js";
 import { DEFAULT_STRATEGY_RUN_SETTINGS, validStrategyRunSettings, type StrategyRunSettings } from "../../shared/strategyRunSettings.js";
@@ -83,11 +84,14 @@ export function useStrategyResearchRun(input: {
   const tester = useMemo(() => new ChartStrategyTesterRuntime("strategy-research", null), []);
   const dataManager = useMemo(() => new MarketDataManagerCore(), []);
   const managerLifecycle = useMemo(() => new StrategyResearchRunEffectGuard(), []);
+  // Batch tasks this browser ran before experiments (kept readable and resumable); new batches are experiments (P5b).
   const batch = useMemo(() => new StrategyResearchBatch(dataManager.strategy, getStrategyStorage()), [dataManager]);
+  const experiments = useMemo(() => new ResearchExperiments(dataManager.strategy), [dataManager]);
   useEffect(() => {
     batch.start();
-    return managerLifecycle.mount({ dispose() { batch.dispose(); dataManager.closeAll(); } });
-  }, [batch, dataManager, managerLifecycle]);
+    experiments.start();
+    return managerLifecycle.mount({ dispose() { batch.dispose(); experiments.dispose(); dataManager.closeAll(); } });
+  }, [batch, dataManager, experiments, managerLifecycle]);
   const [, setTesterVersion] = useState(0);
   const [result, setResult] = useState<ChartStrategyResultBundle | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -295,6 +299,7 @@ export function useStrategyResearchRun(input: {
   return {
     session,
     batch,
+    experiments,
     historyManager: dataManager.strategy,
     barOnly,
     runStatus: (restoringRun ? "RUNNING" : snapshot.status) as ChartStrategyTesterStatus,
