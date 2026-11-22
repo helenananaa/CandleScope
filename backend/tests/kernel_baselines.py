@@ -27,6 +27,7 @@ from app.backtest.identity import canonical_json, sha256_hex
 from app.market_dataset.snapshot import MarketEvent
 from app.simulation.execution_realism import BAR_PATH_SCENARIO, EXECUTION_REALISM_V2, PINE_BAR_PATH_SCENARIO
 from app.simulation.kernel import SimulationKernel
+from app.simulation.ohlc_path import PINE_CHART, PINE_PATH, PINE_V2
 from app.simulation.pine_bar_kernel import PineBarKernel
 from app.simulation.pine_chart_kernel import PineChartBarKernel
 from app.simulation.pine_v2_bar_kernel import PineV2BarKernel
@@ -55,6 +56,8 @@ CLOCKS: dict[str, tuple[type, dict[str, Any], str]] = {
     "pine-v2-path-realism": (PineV2BarKernel, {**REALISM, "bar_path_scenario": PINE_BAR_PATH_SCENARIO}, "chart"),
 }
 ACCOUNT_MODELS = (PERP, SPOT, PERP_V2)
+# P6b: the Host bar kernel runs every Pine clock itself; the old class names only set the clock.
+HOST_CLOCK = {PineBarKernel: PINE_PATH, PineChartBarKernel: PINE_CHART, PineV2BarKernel: PINE_V2}
 
 
 def _order(kind: str, side: str, **fields: Any) -> dict[str, Any]:
@@ -165,11 +168,19 @@ def _drive(kernel: Any, driver: str, strategy: Callable, snapshots: list[Any]) -
     return kernel.result()
 
 
-def baseline(clock: str, account_model: str) -> dict[str, Any] | None:
-    """One kernel run, or None when the clock refuses the account model (refusals are pinned separately)."""
-    kernel_type, settings, driver = CLOCKS[clock]
+def make_kernel(clock: str, account_model: str, *, host: bool = False) -> Any:
+    """The clock's kernel; with ``host`` the Host bar kernel itself, on the clock the old class name sets."""
+    kernel_type, settings, _driver = CLOCKS[clock]
+    if host and kernel_type in HOST_CLOCK:
+        return SimulationKernel(account_model=account_model, bar_clock=HOST_CLOCK[kernel_type], **settings)
+    return kernel_type(account_model=account_model, **settings)
+
+
+def baseline(clock: str, account_model: str, *, host: bool = False) -> dict[str, Any] | None:
+    """One kernel run, or a refusal when the clock refuses the account model (refusals are pinned too)."""
+    kernel_type, _settings, driver = CLOCKS[clock]
     try:
-        kernel = kernel_type(account_model=account_model, **settings)
+        kernel = make_kernel(clock, account_model, host=host)
     except Exception as exc:  # noqa: BLE001 - which combinations a clock refuses is itself baseline data
         return {"refused": f"{type(exc).__name__}: {getattr(exc, 'code', '')}".rstrip(": ")}
     snapshots: list[Any] = []
@@ -206,13 +217,13 @@ def case_name(clock: str, account_model: str) -> str:
     return f"{clock}.{account_model.lower().replace('_', '-')}"
 
 
-def build(clock: str) -> dict[str, Any]:
+def build(clock: str, *, host: bool = False) -> dict[str, Any]:
     return {
         "schema": SCHEMA,
         "clock": clock,
         "scenario": scenario(),
         "checkpoint_bar": CHECKPOINT_BAR,
-        "accounts": {case_name(clock, model): baseline(clock, model) for model in ACCOUNT_MODELS},
+        "accounts": {case_name(clock, model): baseline(clock, model, host=host) for model in ACCOUNT_MODELS},
     }
 
 

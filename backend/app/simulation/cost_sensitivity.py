@@ -37,7 +37,7 @@ def build_cost_sensitivity_matrix(
 
     base_rate = Decimal(str(getattr(kernel, "participation_rate")))
     fused = None
-    if (fast_bar and type(kernel) is SimulationKernel
+    if (fast_bar and type(kernel) is SimulationKernel and kernel.bar_clock == "BAR"
             and getenv("BACKTEST_FUSED_BAR_SENSITIVITY_ENABLED", "1").strip() == "1"):
         replays = [
             _clone_kernel(kernel, _bar_sensitivity=True,
@@ -229,9 +229,11 @@ def _clone_kernel(kernel: Any, *, _bar_sensitivity=False, **overrides: object) -
             **common,
         )
     kind = _BarSensitivityKernel if _bar_sensitivity and type(kernel) is SimulationKernel else SimulationKernel
-    from .pine_chart_kernel import PineChartBarKernel
-    if isinstance(kernel, PineChartBarKernel):
+    from .ohlc_path import CHART_CLOCKS
+    if kernel.bar_clock in CHART_CLOCKS:
+        # Chart clocks replay on their own path; the OHLC path clock replays as BAR, as before.
         kind = type(kernel)
+        common["bar_clock"] = kernel.bar_clock
     return kind(
         price_tick=kernel.price_tick,
         qty_step=kernel.qty_step,

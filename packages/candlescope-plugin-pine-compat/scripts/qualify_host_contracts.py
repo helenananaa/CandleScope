@@ -73,8 +73,8 @@ def main():
         "test_history_fetch_stream.py", "test_history_fetch_stream_engine.py",
         "test_chart_calculation_real_bus.py", "test_chart_calculation_ack_loss.py",
         "test_chart_calculation_source_fencing.py", "test_chart_calculation_transports.py",
-        # ADR-BACKTEST-015 P0: Pine-path financial oracles.
-        "test_strategy_run_oracles_pine.py", "test_run_result_pine.py",
+        # ADR-BACKTEST-015 P0: financial oracles (host BAR, Python, aggTrade, FORWARD; Pine paths).
+        "test_strategy_run_oracles.py", "test_strategy_run_oracles_pine.py", "test_run_result_pine.py",
         # ADR-BACKTEST-015 P2: Pine runs through the run facade.
         "test_strategy_runs_pine.py",
         # ADR-BACKTEST-015 P6: every bar-family fill clock x account model keeps its kernel digests.

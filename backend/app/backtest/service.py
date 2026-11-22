@@ -4991,7 +4991,7 @@ class BacktestService:
         provider, provider_json, provider_size = checkpoint_session(session)
         self._assert_provider_state_budget(provider, encoded_size=provider_size)
         history = None
-        if (type(kernel) is SimulationKernel
+        if (type(kernel) is SimulationKernel and kernel.bar_clock == "BAR"
                 and app_getenv("BACKTEST_INCREMENTAL_CHECKPOINT_ENABLED", "1").strip() == "1"):
             from .checkpoint_history import HistoryEncoder, ENCODING
             if kernel._checkpoint_history is None:
