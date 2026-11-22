@@ -76,7 +76,9 @@ def main():
         # ADR-BACKTEST-015 P0: Pine-path financial oracles.
         "test_strategy_run_oracles_pine.py", "test_run_result_pine.py",
         # ADR-BACKTEST-015 P2: Pine runs through the run facade.
-        "test_strategy_runs_pine.py")]
+        "test_strategy_runs_pine.py",
+        # ADR-BACKTEST-015 P6: every bar-family fill clock x account model keeps its kernel digests.
+        "test_kernel_baselines.py")]
     # Confirm every required file exists: a renamed gate must never silently disappear.
     for case in cases:
         if not case.is_file():

@@ -1,0 +1,116 @@
+{
+  "accounts": {
+    "pine-chart-bar-on-close.linear-perp-one-way-v1": {
+      "digests": {
+        "checkpoint": "sha256:38e6f1b3173327ae84c1bb6e33f982a396940450328a6c0312ec4de8ae9f1f14",
+        "decision_hash": "4f061346161ecd153dd192b49fa1caadf1eb680f5241b8e4e4ca07bd0c81c77e",
+        "equity_curve": "sha256:0ab40a6b16c1190f1d0b6937883a6f77bb68a2c8c9522cc889fbd3a70cad0aa1",
+        "fill_hash": "9cb9d5dfbeeddc0e3fc84b0423c01fa8aced06df4b99772050d6f186fcb7ff50",
+        "final_snapshot": "sha256:798cfe39a0b793fb04a4bbde931bd05874e83065945d425ddeb2b4846682f88b",
+        "ledger_hash": "1d688a83955607524d1d4bde1a036a77d073393b1527444e2403160ec2c46f58",
+        "orders": "sha256:cf964482772715354361e23e305615d1801e91cf088460a0a153c00ad4e7e990",
+        "rejected": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "report_hash": "sha256:ebdde264a9b226bc82e21a7881991d72ad8d65651a81b0db406be8ff8451123e"
+      },
+      "summary": {
+        "ambiguity": 0,
+        "fill_policy": "PINE_OHLC_PATH_V1",
+        "fill_rows": [
+          "359999 SELL 1 @ 102.9897 PINE_BAR_CLOSE",
+          "420000 BUY 1 @ 98.00 LIMIT_TOUCH",
+          "659999 BUY 1 @ 106.0106 PINE_BAR_CLOSE",
+          "780000 SELL 1 @ 107.9892 STOP_TOUCH",
+          "899999 SELL 1 @ 100.9899 PINE_BAR_CLOSE",
+          "983332 BUY 1 @ 100.50 LIMIT_TOUCH",
+          "1079999 BUY 1 @ 107.0107 PINE_BAR_CLOSE",
+          "1116665 BUY 1 @ 110.50 LIMIT_TOUCH",
+          "1223332 BUY 1 @ 109.50 LIMIT_TOUCH",
+          "1233332 SELL 1 @ 107.9892 STOP_TOUCH",
+          "1319999 SELL 1 @ 102.9897 PINE_BAR_CLOSE",
+          "1319999 SELL 1 @ 102.9897 PINE_BAR_CLOSE",
+          "1619999 BUY 1 @ 106.0106 PINE_BAR_CLOSE",
+          "1620000 BUY 1 @ 107.00 LIMIT_TOUCH",
+          "1771665 SELL 1 @ 106.239375 STOP_TOUCH",
+          "1859999 SELL 1 @ 100.9899 PINE_BAR_CLOSE",
+          "1859999 SELL 1 @ 100.9899 PINE_BAR_CLOSE",
+          "1860000 BUY 1 @ 100.00 LIMIT_TOUCH",
+          "2039999 BUY 1 @ 107.0107 PINE_BAR_CLOSE",
+          "2193332 SELL 1 @ 107.9892 STOP_TOUCH",
+          "2279999 SELL 1 @ 102.9897 PINE_BAR_CLOSE",
+          "2319999 BUY 1 @ 99.00 LIMIT_TOUCH",
+          "2579999 BUY 1 @ 106.0106 PINE_BAR_CLOSE",
+          "2580000 BUY 1 @ 107.00 LIMIT_TOUCH",
+          "2731665 SELL 1 @ 106.239375 STOP_TOUCH",
+          "2760000 BUY 1 @ 104.00 LIMIT_TOUCH",
+          "2819999 SELL 1 @ 100.9899 PINE_BAR_CLOSE",
+          "2819999 SELL 1 @ 100.9899 PINE_BAR_CLOSE"
+        ],
+        "fills": 28,
+        "final_equity": "9985.801449999999999999999993",
+        "kernel": "PineChartBarKernel",
+        "orders": 57,
+        "rejected": 0
+      }
+    },
+    "pine-chart-bar-on-close.linear-perp-one-way-v2": {
+      "refused": "MarketDatasetError: FIDELITY_UNSUPPORTED"
+    },
+    "pine-chart-bar-on-close.spot-cash-v1": {
+      "digests": {
+        "checkpoint": "sha256:787de9003a845ac9f983f49630299ab4e956b736b00db4c2e2d9d0adc4dcb4e9",
+        "decision_hash": "ac69779d635c339f1fc11a411ddd0eadd4f409bbb822b54b7f77533141908bd4",
+        "equity_curve": "sha256:3de9d5d455ec1fb4b57bd23d21908252a83ab0f3d521f1490e6ae1486018e2ac",
+        "fill_hash": "4bb31354b196a83f750caf7703327d5fb1ae177e232e56885eac9c427a99861b",
+        "final_snapshot": "sha256:27b36e0837a3f8a35766c94c7eea5af365f70f2a91ece51537a92a905fab495e",
+        "ledger_hash": "c295413c549ca6a149ed36eebc0320a0a95fc67f6a14228307d955aec740976c",
+        "orders": "sha256:3f4a94c49c391235c854d4d52c8a0cb01e634b62cd6dc6c708d870a3ded23648",
+        "rejected": "sha256:552c50b0357fc8286b82d34a037bc5bab84d7a7ac867f75e46c9356e312540e3",
+        "report_hash": "sha256:a5618e3c1e5a51f2be2aa8c858e780b8819f0b6ce31b76aff61b20a8f9911420"
+      },
+      "summary": {
+        "ambiguity": 0,
+        "fill_policy": "PINE_OHLC_PATH_V1",
+        "fill_rows": [
+          "420000 BUY 1 @ 98.00 LIMIT_TOUCH",
+          "659999 BUY 1 @ 106.0106 PINE_BAR_CLOSE",
+          "780000 SELL 1 @ 107.9892 STOP_TOUCH",
+          "811665 SELL 1 @ 106.239375 STOP_TOUCH",
+          "983332 BUY 1 @ 100.50 LIMIT_TOUCH",
+          "1079999 BUY 1 @ 107.0107 PINE_BAR_CLOSE",
+          "1116665 BUY 1 @ 110.50 LIMIT_TOUCH",
+          "1223332 BUY 1 @ 109.50 LIMIT_TOUCH",
+          "1233332 SELL 1 @ 107.9892 STOP_TOUCH",
+          "1319999 SELL 1 @ 102.9897 PINE_BAR_CLOSE",
+          "1619999 BUY 1 @ 106.0106 PINE_BAR_CLOSE",
+          "1620000 BUY 1 @ 107.00 LIMIT_TOUCH",
+          "1771665 SELL 1 @ 106.239375 STOP_TOUCH",
+          "1859999 SELL 1 @ 100.9899 PINE_BAR_CLOSE",
+          "2039999 BUY 1 @ 107.0107 PINE_BAR_CLOSE",
+          "2193332 SELL 1 @ 107.9892 STOP_TOUCH",
+          "2279999 SELL 1 @ 102.9897 PINE_BAR_CLOSE",
+          "2319999 BUY 1 @ 99.00 LIMIT_TOUCH",
+          "2579999 BUY 1 @ 106.0106 PINE_BAR_CLOSE",
+          "2580000 BUY 1 @ 107.00 LIMIT_TOUCH",
+          "2731665 SELL 1 @ 106.239375 STOP_TOUCH",
+          "2760000 BUY 1 @ 104.00 LIMIT_TOUCH",
+          "2819999 SELL 1 @ 100.9899 PINE_BAR_CLOSE"
+        ],
+        "fills": 23,
+        "final_equity": "9986.091725",
+        "kernel": "PineChartBarKernel",
+        "orders": 29,
+        "rejected": 1
+      }
+    }
+  },
+  "checkpoint_bar": 20,
+  "clock": "pine-chart-bar-on-close",
+  "scenario": {
+    "bars": 47,
+    "bars_digest": "6961bc80ef0f1bac2416f39e621748b9d0cbde5e783a7c19c7c3c2983695af46",
+    "id": "swing-48m-aggtrade-v1",
+    "trades": 192,
+    "trades_digest": "fac3b513aff51a9bae975f3c4a5283e00d3803139b21be70e75312660dc3ade7"
+  },
+  "schema": "candlescope.kernel-baseline/1"
+}

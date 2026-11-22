@@ -1,0 +1,160 @@
+{
+  "accounts": {
+    "pine-v2-path.linear-perp-one-way-v1": {
+      "digests": {
+        "checkpoint": "sha256:bb587583d981f534e53c861a94ecd7de1ea93ea8b3a57682deec9332f57dc1fb",
+        "decision_hash": "ca45517237eab2b3bfe72e4e7db858a75f0780090ded77580aad2669b218ba65",
+        "equity_curve": "sha256:d338e7e3a0315346e43fcfbe45c4866a7484ba3dcba99b6d6877b62ff441675b",
+        "fill_hash": "cfd4855aaad0a3275e0d00e543bdeff9d9a7f275678c9972178853d151c2d522",
+        "final_snapshot": "sha256:34dd72f19d619438ebf15ead9a6493f3ccd45ef973533a539bb0e6a664a13964",
+        "ledger_hash": "f5ebb6db36a7820541231479bae7cf407021729f79bb11de6badecc17b1720e0",
+        "orders": "sha256:05809612bbffb9bc6aae879103a7b9c02c9a964d50b2098b5765fa9c07a4c203",
+        "rejected": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "report_hash": "sha256:2cff69618f0dbb73a61bd7bb0a51fdfac74f458b1c44d9c924cc320f85e54a63"
+      },
+      "summary": {
+        "ambiguity": 0,
+        "fill_policy": "PINE_OHLC_PATH_V2",
+        "fill_rows": [
+          "360000 SELL 1 @ 101.9898 MARKET_NEXT_VERTEX",
+          "420000 BUY 1 @ 98.00 LIMIT_TOUCH",
+          "660000 BUY 1 @ 107.0107 MARKET_NEXT_VERTEX",
+          "780000 SELL 1 @ 107.9892 STOP_TOUCH",
+          "900000 SELL 1 @ 99.99 MARKET_NEXT_VERTEX",
+          "983332 BUY 1 @ 100.50 LIMIT_TOUCH",
+          "1080000 BUY 1 @ 108.0108 MARKET_NEXT_VERTEX",
+          "1116665 BUY 1 @ 110.50 LIMIT_TOUCH",
+          "1223332 BUY 1 @ 109.50 LIMIT_TOUCH",
+          "1233332 SELL 1 @ 107.9892 STOP_TOUCH",
+          "1320000 SELL 1 @ 101.9898 MARKET_NEXT_VERTEX",
+          "1320000 SELL 1 @ 101.9898 MARKET_NEXT_VERTEX",
+          "1620000 BUY 1 @ 107.0107 MARKET_NEXT_VERTEX",
+          "1620000 BUY 1 @ 107.00 LIMIT_TOUCH",
+          "1771665 SELL 1 @ 106.239375 STOP_TOUCH",
+          "1860000 SELL 1 @ 99.99 MARKET_NEXT_VERTEX",
+          "1860000 SELL 1 @ 99.99 MARKET_NEXT_VERTEX",
+          "1860000 BUY 1 @ 100.00 LIMIT_TOUCH",
+          "2040000 BUY 1 @ 108.0108 MARKET_NEXT_VERTEX",
+          "2193332 SELL 1 @ 107.9892 STOP_TOUCH",
+          "2280000 SELL 1 @ 101.9898 MARKET_NEXT_VERTEX",
+          "2319999 BUY 1 @ 99.00 LIMIT_TOUCH",
+          "2580000 BUY 1 @ 107.00 LIMIT_TOUCH",
+          "2580000 BUY 1 @ 107.0107 MARKET_NEXT_VERTEX",
+          "2731665 SELL 1 @ 106.239375 STOP_TOUCH",
+          "2760000 BUY 1 @ 104.00 LIMIT_TOUCH"
+        ],
+        "fills": 26,
+        "final_equity": "9973.821850000000000000000004",
+        "kernel": "PineV2BarKernel",
+        "orders": 57,
+        "rejected": 0
+      }
+    },
+    "pine-v2-path.linear-perp-one-way-v2": {
+      "digests": {
+        "checkpoint": "sha256:1f1f5bc729bc13d5b9e55848fd7b01cb8935eece4fbebdae0d4ad9584176a6b0",
+        "decision_hash": "bbd66c8504dabc57d1afac4aa3e6600162f751db9d4c0d93720613df29b1bda0",
+        "equity_curve": "sha256:0037c90b1ea26b8a3c133afa2d4cba91b8b24a09fdac8738659676e793030b8c",
+        "fill_hash": "a628f3526dab7fd057a0b98067eb002af09bc646afaba140ef38273f2fc4c873",
+        "final_snapshot": "sha256:e97805bf5775f0841865d42022ad4edcf8b5a3166cf245182efc1549c7ded842",
+        "ledger_hash": "8c840cbfc6a1b291664ccd1dcfeda648bb1fc10c3edb38f1de55dba0c4c3c5a3",
+        "orders": "sha256:560710f25f8232fb3b2c97c83597a81a08bd60cb84261426f76740a24d8a3b2e",
+        "rejected": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "report_hash": "sha256:0ce52fe3ff81945962a0c3dae1c5cab62941c558976173dcfbaf0404627ffc0c"
+      },
+      "summary": {
+        "ambiguity": 0,
+        "fill_policy": "PINE_OHLC_PATH_V2",
+        "fill_rows": [
+          "360000 SELL 1 @ 101.9898 MARKET_NEXT_VERTEX",
+          "420000 BUY 1 @ 98.00 LIMIT_TOUCH",
+          "660000 BUY 1 @ 107.0107 MARKET_NEXT_VERTEX",
+          "780000 SELL 1 @ 107.9892 STOP_TOUCH",
+          "900000 SELL 1 @ 99.99 MARKET_NEXT_VERTEX",
+          "983332 BUY 1 @ 100.50 LIMIT_TOUCH",
+          "1080000 BUY 1 @ 108.0108 MARKET_NEXT_VERTEX",
+          "1116665 BUY 1 @ 110.50 LIMIT_TOUCH",
+          "1223332 BUY 1 @ 109.50 LIMIT_TOUCH",
+          "1233332 SELL 1 @ 107.9892 STOP_TOUCH",
+          "1320000 SELL 1 @ 101.9898 MARKET_NEXT_VERTEX",
+          "1320000 SELL 1 @ 101.9898 MARKET_NEXT_VERTEX",
+          "1620000 BUY 1 @ 107.0107 MARKET_NEXT_VERTEX",
+          "1620000 BUY 1 @ 107.00 LIMIT_TOUCH",
+          "1771665 SELL 1 @ 106.239375 STOP_TOUCH",
+          "1860000 SELL 1 @ 99.99 MARKET_NEXT_VERTEX",
+          "1860000 SELL 1 @ 99.99 MARKET_NEXT_VERTEX",
+          "1860000 BUY 1 @ 100.00 LIMIT_TOUCH",
+          "2040000 BUY 1 @ 108.0108 MARKET_NEXT_VERTEX",
+          "2193332 SELL 1 @ 107.9892 STOP_TOUCH",
+          "2280000 SELL 1 @ 101.9898 MARKET_NEXT_VERTEX",
+          "2319999 BUY 1 @ 99.00 LIMIT_TOUCH",
+          "2580000 BUY 1 @ 107.00 LIMIT_TOUCH",
+          "2580000 BUY 1 @ 107.0107 MARKET_NEXT_VERTEX",
+          "2731665 SELL 1 @ 106.239375 STOP_TOUCH",
+          "2760000 BUY 1 @ 104.00 LIMIT_TOUCH"
+        ],
+        "fills": 26,
+        "final_equity": "9979.821850",
+        "kernel": "PineV2BarKernel",
+        "orders": 57,
+        "rejected": 0
+      }
+    },
+    "pine-v2-path.spot-cash-v1": {
+      "digests": {
+        "checkpoint": "sha256:abc40fee0b4d04112589d5987cf3953252fedd4ce4cf1b830dd68e916abe3d6e",
+        "decision_hash": "6d5755cdb155ab40cfe268a506b78d7ee1dc4c58a79a4f7eae84d534af698c50",
+        "equity_curve": "sha256:4c0f7b78ea8dedbcce77d5c4dd7433e6622e29b90c384dbd73dcac6fab3abfea",
+        "fill_hash": "42aaf31b9eec3d473c6f8e3f8fcbca8d1037f75eec165411dcf4d379dab03210",
+        "final_snapshot": "sha256:2719782a3e7b71464147908bddf02debb40935468f819c26b4533e8edaa5a42d",
+        "ledger_hash": "c0c15a940ae97bb75179133caaa02452ab8c554e548b1000c173f1ab158ffeca",
+        "orders": "sha256:bc81e8170ff05f0c9ce39053ccabd10deeef8be3a257ce10315ba8652e2d1704",
+        "rejected": "sha256:5aa653ed85cb6e236f6d5e9e75f5e4934523147f990a4c1028782d73a6dff2f0",
+        "report_hash": "sha256:fdef7e9ebc54f8db38ebdcd5e647fd4d318a19ff6f81a62c942e46ddd8d94217"
+      },
+      "summary": {
+        "ambiguity": 0,
+        "fill_policy": "PINE_OHLC_PATH_V2",
+        "fill_rows": [
+          "420000 BUY 1 @ 98.00 LIMIT_TOUCH",
+          "660000 BUY 1 @ 107.0107 MARKET_NEXT_VERTEX",
+          "780000 SELL 1 @ 107.9892 STOP_TOUCH",
+          "811665 SELL 1 @ 106.239375 STOP_TOUCH",
+          "983332 BUY 1 @ 100.50 LIMIT_TOUCH",
+          "1080000 BUY 1 @ 108.0108 MARKET_NEXT_VERTEX",
+          "1116665 BUY 1 @ 110.50 LIMIT_TOUCH",
+          "1223332 BUY 1 @ 109.50 LIMIT_TOUCH",
+          "1233332 SELL 1 @ 107.9892 STOP_TOUCH",
+          "1320000 SELL 1 @ 101.9898 MARKET_NEXT_VERTEX",
+          "1620000 BUY 1 @ 107.0107 MARKET_NEXT_VERTEX",
+          "1620000 BUY 1 @ 107.00 LIMIT_TOUCH",
+          "1771665 SELL 1 @ 106.239375 STOP_TOUCH",
+          "1860000 SELL 1 @ 99.99 MARKET_NEXT_VERTEX",
+          "2040000 BUY 1 @ 108.0108 MARKET_NEXT_VERTEX",
+          "2193332 SELL 1 @ 107.9892 STOP_TOUCH",
+          "2280000 SELL 1 @ 101.9898 MARKET_NEXT_VERTEX",
+          "2319999 BUY 1 @ 99.00 LIMIT_TOUCH",
+          "2580000 BUY 1 @ 107.00 LIMIT_TOUCH",
+          "2580000 BUY 1 @ 107.0107 MARKET_NEXT_VERTEX",
+          "2731665 SELL 1 @ 106.239375 STOP_TOUCH",
+          "2760000 BUY 1 @ 104.00 LIMIT_TOUCH"
+        ],
+        "fills": 22,
+        "final_equity": "9978.101625",
+        "kernel": "PineV2BarKernel",
+        "orders": 29,
+        "rejected": 1
+      }
+    }
+  },
+  "checkpoint_bar": 20,
+  "clock": "pine-v2-path",
+  "scenario": {
+    "bars": 47,
+    "bars_digest": "6961bc80ef0f1bac2416f39e621748b9d0cbde5e783a7c19c7c3c2983695af46",
+    "id": "swing-48m-aggtrade-v1",
+    "trades": 192,
+    "trades_digest": "fac3b513aff51a9bae975f3c4a5283e00d3803139b21be70e75312660dc3ade7"
+  },
+  "schema": "candlescope.kernel-baseline/1"
+}
