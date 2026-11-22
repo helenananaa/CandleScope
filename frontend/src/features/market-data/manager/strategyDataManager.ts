@@ -16,6 +16,7 @@ import { defaultContinuousApi } from "../../backtest/continuous/continuousApi.js
 import type { ContinuousApi } from "../../backtest/continuous/continuousTypes.js";
 import { ContinuousStrategyDataManager } from "./continuousStrategyDataManager.js";
 import { holdFollow, type HeldFollow } from "../../backtest/follow/hostFollow.js";
+import { parseStrategyExperiment, type StrategyExperiment } from "../../backtest/experiment/strategyExperiment.js";
 import { parseRunResult, RUN_RESULT_FAMILY_IDENTITY, RunResultContractError, type RunResult, type RunResultFamily } from "../../backtest/runResult/runResult.js";
 import {
   parseStrategyRunCapabilities, parseStrategyRunStatus, parseStrategyVersion, StrategyRunContractError,
@@ -34,7 +35,9 @@ export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "str
     | "compareRecentRun" | "createResearchLaunchContext" | "getSelectedVersion"
     | "getStrategyVersion" | "strategyVersionNames" | "nameStrategyVersion" | "unnameStrategyVersion"
     | "getStrategyReference" | "listStrategyReferences" | "putStrategyReference" | "removeStrategyReference" | "importStrategyReferences"
-    | "holdStrategyFollow" | "renewStrategyFollow" | "releaseStrategyFollow">>;
+    | "holdStrategyFollow" | "renewStrategyFollow" | "releaseStrategyFollow"
+    | "createStrategyExperiment" | "getStrategyExperiment" | "listStrategyExperiments" | "cancelStrategyExperiment"
+    | "retryStrategyExperimentMember" | "watchStrategyExperiment">>;
 
 /** Owns fixed-history operations and immutable results independently of live
  * chart stores. Releasing a consumer never cancels a durable shared run. */
@@ -216,6 +219,70 @@ export class StrategyDataManager {
         return await this.api.watchStrategyRun(runId, owned, (status, progress) => {
           if (!owned.aborted && !this.closed) onStatus?.(status, progress);
         });
+      } finally {
+        this.streams -= 1;
+      }
+    });
+  }
+
+  /**
+   * Experiments (ADR-BACKTEST-015 P5b): one strategy run over several inputs. The backend submits and
+   * keeps the members; a closed page, a switched chart or a restart does not cancel or lose them.
+   */
+  createExperiment(body: Record<string, unknown>, signal?: AbortSignal): Promise<StrategyExperiment> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.createStrategyExperiment) unavailable();
+      return parseStrategyExperiment(await this.api.createStrategyExperiment(body, owned));
+    });
+  }
+
+  loadExperiment(experimentId: string, signal?: AbortSignal): Promise<StrategyExperiment> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.getStrategyExperiment) unavailable();
+      return parseStrategyExperiment(await this.api.getStrategyExperiment(experimentId, owned));
+    });
+  }
+
+  /** The newest experiments, newest first. */
+  listExperiments(limit = 20, signal?: AbortSignal): Promise<StrategyExperiment[]> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.listStrategyExperiments) unavailable();
+      const body = await this.api.listStrategyExperiments(limit, owned) as { experiments?: unknown };
+      if (!Array.isArray(body?.experiments)) throw new StrategyRunStreamError("STRATEGY_STREAM_INVALID", "experiments must be a list");
+      return body.experiments.map(parseStrategyExperiment);
+    });
+  }
+
+  /** Stop the members still preparing or running; finished members keep their results. */
+  cancelExperiment(experimentId: string, signal?: AbortSignal): Promise<StrategyExperiment> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.cancelStrategyExperiment) unavailable();
+      return parseStrategyExperiment(await this.api.cancelStrategyExperiment(experimentId, owned));
+    });
+  }
+
+  /** Submit a failed or cancelled member again. */
+  retryExperimentMember(experimentId: string, ordinal: number, signal?: AbortSignal): Promise<StrategyExperiment> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.retryStrategyExperimentMember) unavailable();
+      return parseStrategyExperiment(await this.api.retryStrategyExperimentMember(experimentId, ordinal, owned));
+    });
+  }
+
+  /**
+   * Follow an experiment through its commit-driven stream: each member's preparation and run
+   * changes are reported, without polling. Resolves once no member is active; stopping the watch
+   * never cancels the experiment.
+   */
+  watchExperiment(experimentId: string, onExperiment: (value: StrategyExperiment) => void,
+    signal?: AbortSignal): Promise<StrategyExperiment> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.watchStrategyExperiment) unavailable();
+      this.streams += 1;
+      try {
+        return await this.api.watchStrategyExperiment(experimentId, (value) => {
+          if (!owned.aborted && !this.closed) onExperiment(value);
+        }, owned);
       } finally {
         this.streams -= 1;
       }

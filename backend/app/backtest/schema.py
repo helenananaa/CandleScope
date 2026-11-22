@@ -337,6 +337,37 @@ CREATE TABLE IF NOT EXISTS backtest_strategy_references (
 
 CREATE INDEX IF NOT EXISTS idx_backtest_strategy_references_updated
     ON backtest_strategy_references(kind, updated_at_ms DESC);
+
+-- ADR-BACKTEST-015 P5b: an experiment is one strategy run over several inputs. Each member is
+-- submitted as a strategy data preparation (exchange history) or a run (a frozen snapshot);
+-- its state is read from that preparation or run, never copied here.
+CREATE TABLE IF NOT EXISTS backtest_strategy_experiments (
+    experiment_id TEXT PRIMARY KEY,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    request_hash TEXT NOT NULL,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    strategy_json TEXT NOT NULL,
+    cancelled_at_ms INTEGER,
+    created_at_ms INTEGER NOT NULL,
+    updated_at_ms INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_backtest_strategy_experiments_created
+    ON backtest_strategy_experiments(created_at_ms DESC);
+
+CREATE TABLE IF NOT EXISTS backtest_strategy_experiment_members (
+    experiment_id TEXT NOT NULL REFERENCES backtest_strategy_experiments(experiment_id),
+    ordinal INTEGER NOT NULL,
+    input_json TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    request_json TEXT NOT NULL,
+    attempt INTEGER NOT NULL DEFAULT 0,
+    preparation_id TEXT,
+    run_id TEXT,
+    error_json TEXT,
+    PRIMARY KEY (experiment_id, ordinal)
+);
 """
 
 

@@ -117,6 +117,66 @@ class BacktestRepository:
         ).fetchone()
         return dict(row) if row is not None else None
 
+    # -- strategy experiments (ADR-BACKTEST-015 P5b) -----------------------------
+
+    @_locked
+    def insert_strategy_experiment(self, row: dict[str, Any], members: list[dict[str, Any]]) -> None:
+        try:
+            self.connection.execute(
+                "INSERT INTO backtest_strategy_experiments(experiment_id, idempotency_key, request_hash, name, kind, "
+                "strategy_json, cancelled_at_ms, created_at_ms, updated_at_ms) VALUES (:experiment_id, :idempotency_key, "
+                ":request_hash, :name, :kind, :strategy_json, NULL, :created_at_ms, :created_at_ms)", row)
+            self.connection.executemany(
+                "INSERT INTO backtest_strategy_experiment_members(experiment_id, ordinal, input_json, kind, request_json) "
+                "VALUES (:experiment_id, :ordinal, :input_json, :kind, :request_json)", members)
+            self.connection.commit()
+        except BaseException:
+            self.connection.rollback()
+            raise
+
+    @_locked
+    def strategy_experiment_by_key(self, idempotency_key: str) -> dict[str, Any] | None:
+        row = self.connection.execute(
+            "SELECT experiment_id, request_hash FROM backtest_strategy_experiments WHERE idempotency_key = ?",
+            (idempotency_key,)).fetchone()
+        return dict(row) if row is not None else None
+
+    @_locked
+    def get_strategy_experiment(self, experiment_id: str) -> tuple[dict[str, Any], list[dict[str, Any]]] | None:
+        row = self.connection.execute(
+            "SELECT * FROM backtest_strategy_experiments WHERE experiment_id = ?", (experiment_id,)).fetchone()
+        if row is None:
+            return None
+        members = self.connection.execute(
+            "SELECT * FROM backtest_strategy_experiment_members WHERE experiment_id = ? ORDER BY ordinal",
+            (experiment_id,)).fetchall()
+        return dict(row), [dict(member) for member in members]
+
+    @_locked
+    def list_strategy_experiments(self, limit: int) -> list[str]:
+        rows = self.connection.execute(
+            "SELECT experiment_id FROM backtest_strategy_experiments ORDER BY created_at_ms DESC, experiment_id LIMIT ?",
+            (limit,)).fetchall()
+        return [str(row[0]) for row in rows]
+
+    @_locked
+    def set_strategy_experiment_member(self, experiment_id: str, ordinal: int, *, attempt: int,
+                                       preparation_id: str | None, run_id: str | None, error_json: str | None,
+                                       now_ms: int) -> None:
+        self.connection.execute(
+            "UPDATE backtest_strategy_experiment_members SET attempt = ?, preparation_id = ?, run_id = ?, error_json = ? "
+            "WHERE experiment_id = ? AND ordinal = ?", (attempt, preparation_id, run_id, error_json, experiment_id, ordinal))
+        self.connection.execute("UPDATE backtest_strategy_experiments SET updated_at_ms = ? WHERE experiment_id = ?",
+                                (now_ms, experiment_id))
+        self.connection.commit()
+
+    @_locked
+    def cancel_strategy_experiment(self, experiment_id: str, now_ms: int) -> None:
+        self.connection.execute(
+            "UPDATE backtest_strategy_experiments SET cancelled_at_ms = COALESCE(cancelled_at_ms, ?), updated_at_ms = ? "
+            "WHERE experiment_id = ?", (now_ms, now_ms, experiment_id))
+        self.connection.commit()
+
     # -- strategy references (ADR-BACKTEST-015 P3c) -----------------------------
 
     @_locked

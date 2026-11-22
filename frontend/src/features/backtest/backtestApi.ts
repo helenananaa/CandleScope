@@ -1,4 +1,5 @@
-import { readStrategyRunStream, StrategyRunStreamError, type StrategyRunUpdate } from "./backtestRunStream.js";
+import { readNdjsonUntilTerminal, readStrategyRunStream, StrategyRunStreamError, type StrategyRunUpdate } from "./backtestRunStream.js";
+import { parseStrategyExperimentFrame, type StrategyExperiment } from "./experiment/strategyExperiment.js";
 import { API_BASE } from "../../services/apiConfig.js";
 import { readStrategyRunStatusStream, type StrategyRunProgress, type StrategyRunStatus } from "./runResult/strategyRun.js";
 import type { ResearchSelectedVersion } from "../strategy-research/researchSelectedVersion.js";
@@ -241,6 +242,18 @@ export interface BacktestApiClient {
    * the run stops once no cell renews its lease. Values are unvalidated wire values.
    */
   holdStrategyFollow?(body: Record<string, unknown>, signal?: AbortSignal): Promise<unknown>;
+  /**
+   * Experiments (ADR-BACKTEST-015 P5b): one strategy run over several inputs, held by the backend.
+   * Values are unvalidated wire values; the strategy data manager parses them.
+   */
+  createStrategyExperiment?(body: Record<string, unknown>, signal?: AbortSignal): Promise<unknown>;
+  getStrategyExperiment?(experimentId: string, signal?: AbortSignal): Promise<unknown>;
+  listStrategyExperiments?(limit: number, signal?: AbortSignal): Promise<unknown>;
+  cancelStrategyExperiment?(experimentId: string, signal?: AbortSignal): Promise<unknown>;
+  retryStrategyExperimentMember?(experimentId: string, ordinal: number, signal?: AbortSignal): Promise<unknown>;
+  /** The experiment's commit-driven stream; reports each experiment and resolves with the first one no member is active in. */
+  watchStrategyExperiment?(experimentId: string, onExperiment: (value: StrategyExperiment) => void,
+    signal?: AbortSignal): Promise<StrategyExperiment>;
   renewStrategyFollow?(followId: string, holder: string, signal?: AbortSignal): Promise<unknown>;
   releaseStrategyFollow?(followId: string, holder: string): Promise<void>;
   /** Content-addressed strategy versions and their names (ADR-BACKTEST-015 P3b); unvalidated wire values. */
@@ -398,6 +411,7 @@ export function createBacktestApi(base = `${API_BASE}/backtests`, runsBase = str
   const versionsBase = sibling("strategy-versions");
   const referencesBase = sibling("strategy-references");
   const followsBase = sibling("strategy-follows");
+  const experimentsBase = sibling("strategy-experiments");
   return {
     externalProviders: {
       async trace(runId, after = 0, signal) {
@@ -621,6 +635,43 @@ export function createBacktestApi(base = `${API_BASE}/backtests`, runsBase = str
     },
     async strategyRunCapabilities(signal) {
       return readJson(await fetch(`${runsBase}/capabilities`, requestOptions({}, signal)));
+    },
+    async createStrategyExperiment(body, signal) {
+      return readJson(await fetch(experimentsBase, requestOptions({
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      }, signal)));
+    },
+    async getStrategyExperiment(experimentId, signal) {
+      return readJson(await fetch(`${experimentsBase}/${encodeURIComponent(experimentId)}`, requestOptions({}, signal)));
+    },
+    async listStrategyExperiments(limit, signal) {
+      return readJson(await fetch(`${experimentsBase}?limit=${limit}`, requestOptions({}, signal)));
+    },
+    async cancelStrategyExperiment(experimentId, signal) {
+      return readJson(await fetch(`${experimentsBase}/${encodeURIComponent(experimentId)}/cancel`, requestOptions({ method: "POST" }, signal)));
+    },
+    async retryStrategyExperimentMember(experimentId, ordinal, signal) {
+      return readJson(await fetch(`${experimentsBase}/${encodeURIComponent(experimentId)}/members/${ordinal}/retry`,
+        requestOptions({ method: "POST" }, signal)));
+    },
+    async watchStrategyExperiment(experimentId, onExperiment, signal) {
+      const response = await fetch(`${experimentsBase}/${encodeURIComponent(experimentId)}/events`, requestOptions({
+        headers: { Accept: "application/x-ndjson" },
+      }, signal));
+      if (!response.ok) await readJson(response);
+      if (!response.body || !response.headers.get("content-type")?.startsWith("application/x-ndjson")) {
+        throw new StrategyRunStreamError("STRATEGY_STREAM_UNAVAILABLE", "The backend did not return an experiment stream");
+      }
+      return readNdjsonUntilTerminal<StrategyExperiment>({
+        body: response.body, ...(signal ? { signal } : {}),
+        parse(line) {
+          const frame = parseStrategyExperimentFrame(JSON.parse(line));
+          if (frame === null) return null;
+          if ("error" in frame) throw new StrategyRunStreamError(frame.error.code, frame.error.message);
+          onExperiment(frame.experiment);
+          return frame.experiment.terminal ? frame.experiment : null;
+        },
+      });
     },
     async holdStrategyFollow(body, signal) {
       return readJson(await fetch(followsBase, requestOptions({

@@ -1,0 +1,99 @@
+{
+  "cancelled_at_ms": null,
+  "counts": {
+    "active": 1,
+    "cancelled": 0,
+    "completed": 1,
+    "failed": 1,
+    "total": 3
+  },
+  "created_at_ms": 1763600000000,
+  "experiment_id": "ex_fixture",
+  "kind": "INPUTS",
+  "members": [
+    {
+      "attempt": 0,
+      "error": null,
+      "input": {
+        "endMs": 1763640000000,
+        "exchange": "binance",
+        "interval": "1m",
+        "kind": "EXCHANGE_SERIES",
+        "marketType": "spot",
+        "startMs": 1763596800000,
+        "symbol": "BTCUSDT"
+      },
+      "kind": "PREPARATION",
+      "ordinal": 0,
+      "preparation": {
+        "completed": 2,
+        "error": null,
+        "id": "job0",
+        "stage": "FETCHING",
+        "state": "RUNNING",
+        "total": 3,
+        "waiting": {
+          "reason": "RATE_LIMITED",
+          "until_ms": 1763600030000
+        }
+      },
+      "run_id": null,
+      "state": "PREPARING"
+    },
+    {
+      "attempt": 0,
+      "error": null,
+      "input": {
+        "dataEpoch": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "datasetId": "local-1",
+        "kind": "IMPORTED_DATASET",
+        "name": "BTC sample"
+      },
+      "kind": "RUN",
+      "ordinal": 1,
+      "preparation": null,
+      "run_id": "bt_0",
+      "state": "COMPLETED"
+    },
+    {
+      "attempt": 0,
+      "error": {
+        "code": "SOURCE_UNAVAILABLE",
+        "message": "The exchange did not answer"
+      },
+      "input": {
+        "endMs": 1762560000000,
+        "exchange": "okx",
+        "interval": "1h",
+        "kind": "EXCHANGE_SERIES",
+        "marketType": "spot",
+        "startMs": 1761955200000,
+        "symbol": "ETH-USDT"
+      },
+      "kind": "PREPARATION",
+      "ordinal": 2,
+      "preparation": {
+        "completed": 0,
+        "error": {
+          "code": "SOURCE_UNAVAILABLE",
+          "message": "The exchange did not answer"
+        },
+        "id": "job1",
+        "stage": "FAILED",
+        "state": "FAILED",
+        "total": 3,
+        "waiting": null
+      },
+      "run_id": null,
+      "state": "FAILED"
+    }
+  ],
+  "name": "SMA Cross · 2 inputs",
+  "schema": "candlescope.strategy-experiment/1",
+  "state": "RUNNING",
+  "strategy": {
+    "draft_id": "draft-1",
+    "language": "python"
+  },
+  "terminal": false
+}

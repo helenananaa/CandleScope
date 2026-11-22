@@ -151,7 +151,7 @@ const strategyRunTransports = new Map([
 // A strategy run route inside a string literal: a backtest family's runs (`/backtests/runs`,
 // `/native/runs`, `/external/runs`, `/continuous/runs`), the run facade (`/strategy-runs`) or
 // chart FOLLOW leases (`/strategy-follows`). Replay training runs (`/replay/…/runs`) are a different resource.
-const strategyRunRoutePattern = /\/(?:backtests|native|external|continuous)\/runs(?:$|[/?])|\/strategy-(?:runs|follows)\b/;
+const strategyRunRoutePattern = /\/(?:backtests|native|external|continuous)\/runs(?:$|[/?])|\/strategy-(?:runs|follows|experiments)\b/;
 
 function allowlistKey(entry) {
   return [entry.rule, entry.path, entry.target || ""].join("|");

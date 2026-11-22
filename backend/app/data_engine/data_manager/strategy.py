@@ -123,6 +123,7 @@ class StrategyDataManager:
         self._runs = None
         self._drafts = None
         self._follows = None
+        self._experiments = None
         self._control_requests = 0
         self.max_subscriptions = max_subscriptions
         self.heartbeat_seconds = heartbeat_seconds
@@ -182,6 +183,14 @@ class StrategyDataManager:
             from app.backtest.strategy_drafts import StrategyDrafts
             self._drafts = StrategyDrafts(self.service.repository)
         return self._drafts
+
+    def experiments(self):
+        """Experiments: one strategy run over several inputs (ADR-BACKTEST-015 P5b)."""
+        self._require_open()
+        if self._experiments is None:
+            from app.backtest.strategy_experiments import StrategyExperiments
+            self._experiments = StrategyExperiments(self.service.repository, heartbeat_seconds=self.heartbeat_seconds)
+        return self._experiments
 
     def runs(self):
         """One facade over every run family: status, result, cancel and capabilities (ADR-BACKTEST-015 P2)."""
