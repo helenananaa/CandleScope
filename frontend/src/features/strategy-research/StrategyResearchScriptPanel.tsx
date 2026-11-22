@@ -78,6 +78,7 @@ export function StrategyResearchScriptPanel({
   batchControls,
   robustnessControls,
   languageFixed = false,
+  requestedPane,
   batchSession,
   marketBatchAvailable,
 }: {
@@ -93,7 +94,10 @@ export function StrategyResearchScriptPanel({
   onDraftRevision(revision: number): void;
   onRun(request: ChartStrategyRunRequest): void;
   onConfirmNeedsData(): void;
-  onOpenAdvanced(): void;
+  /** Leaves for the research tool; the research workspace has none (its tools are its fields, ADR-BACKTEST-015 P5c4). */
+  onOpenAdvanced?(): void;
+  /** A pane the page asks for (`?mode=precise` names run settings); a new nonce asks again. */
+  requestedPane?: { pane: "parameters" | "code" | "conditions"; nonce: number } | undefined;
   configuration?: StrategyRunSettings | undefined;
   onConfigure?(settings: StrategyRunSettings): void;
   batchControls?(request: ChartStrategyRunRequest | null): ReactNode;
@@ -117,7 +121,13 @@ export function StrategyResearchScriptPanel({
   const pythonTrustedConfirmed = pythonApproval === approvalKey;
   const [cursor, setCursor] = useState<StrategyDraftCursor | null>(null);
   const [openEditor, setOpenEditor] = useState(false);
-  const [pane, setPane] = useState<"parameters" | "code" | "conditions">("parameters");
+  const [pane, setPane] = useState<"parameters" | "code" | "conditions">(() => requestedPane?.pane ?? "parameters");
+  const requestedPaneNonce = requestedPane?.nonce;
+  useEffect(() => {
+    if (requestedPane) setPane(requestedPane.pane);
+    // Only a new request moves the pane.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedPaneNonce]);
   const [recentDrafts, setRecentDrafts] = useState<StrategyDraftRecord[]>([]);
   useEffect(() => {
     let cancelled = false;
@@ -272,7 +282,7 @@ export function StrategyResearchScriptPanel({
     } catch {
       return;
     }
-    onOpenAdvanced();
+    onOpenAdvanced?.();
   }, [draftId, flushPendingDraft, onOpenAdvanced]);
 
   const preciseBlocked = barOnly && configuration.fidelityPreference === "PRECISE";
@@ -318,7 +328,7 @@ export function StrategyResearchScriptPanel({
       command("pane", "Select editor pane.", object({ pane: choice(["parameters", "code", "conditions"]) }), ({ pane }) => { setPane(pane); setOpenEditor(true); }),
       command("run", "Start the host strategy through its draft/session/attachment ownership workflow.", empty, () => run(), { available: () => controlReady() && session !== null && !preciseBlocked && runRequest !== null }),
       command("prepare", "Confirm the current missing-data preparation workflow.", empty, () => onConfirmNeedsData(), { available: () => controlReady() && session !== null && !preciseBlocked && needsData && runRequest !== null }),
-      command("openAdvanced", "Flush the draft and open advanced research.", empty, () => openAdvanced()),
+      command("openAdvanced", "Flush the draft and open advanced research.", empty, () => openAdvanced(), { available: () => !!onOpenAdvanced }),
     ] }));
   if (!editorSession) {
     return <><p className="strategy-research-note" data-testid="strategy-research-script-empty">{t("strategy.scriptSlot")}</p>
@@ -353,14 +363,14 @@ export function StrategyResearchScriptPanel({
               {strategyLanguageLabel(template.language)} · {t(template.nameKey)}
             </Button>
           ))}
-          <Button
+          {onOpenAdvanced && <Button
             variant="ghost"
             size="sm"
             data-testid="strategy-research-open-advanced"
             onClick={() => void openAdvanced()}
           >
             {t("strategy.advanced")}
-          </Button>
+          </Button>}
         </div>
       ) : (
         <>
@@ -409,14 +419,14 @@ export function StrategyResearchScriptPanel({
             >
               {t(needsData ? "chartTester.prepareDataRun" : "chartTester.run")}
             </Button>
-            <Button
+            {onOpenAdvanced && <Button
               variant="ghost"
               size="sm"
               data-testid="strategy-research-open-advanced"
               onClick={() => void openAdvanced()}
             >
               {t("strategy.advanced")}
-            </Button>
+            </Button>}
           </div>
         </>
       )}

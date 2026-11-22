@@ -13,7 +13,10 @@ function sourceKey(dataset: LocalDatasetManifest): string {
   return JSON.stringify([dataset.dataset_id, dataset.data_epoch]);
 }
 
-export function ResearchBatchSources({ datasets, precise, marketEnabled, markets, onMarkets, children }: {
+export function ResearchBatchSources({ datasets, precise, marketEnabled, markets, onMarkets, open, onToggle, children }: {
+  /** Controlled by the page (`?mode=multi` opens it, ADR-BACKTEST-015 P5c4). */
+  open?: boolean;
+  onToggle?(open: boolean): void;
   datasets: readonly LocalDatasetManifest[];
   precise: boolean;
   marketEnabled?: boolean;
@@ -27,7 +30,8 @@ export function ResearchBatchSources({ datasets, precise, marketEnabled, markets
   const selected = available.filter(dataset => supportsBatchSource(dataset, precise) && selection.includes(sourceKey(dataset)));
   if (available.length < 2 && !marketEnabled) return null;
   const exchange = marketEnabled ? markets : [];
-  return <Disclosure className="strategy-research-batch" summary={t(marketEnabled ? "researchBatch.allSources" : "researchBatch.sources")}>
+  return <Disclosure className="strategy-research-batch" summary={t(marketEnabled ? "researchBatch.allSources" : "researchBatch.sources")}
+    {...(open !== undefined ? { open } : {})} {...(onToggle ? { onToggle } : {})}>
     <p className="strategy-research-note">{t(marketEnabled ? "researchBatch.marketHelp" : "researchBatch.help", { max: RESEARCH_BATCH_MAX_INPUTS })}</p>
     {precise && <p className="strategy-research-note">{t("researchBatch.precise")}</p>}
     {available.length > 0 && <fieldset className="strategy-research-checklist">

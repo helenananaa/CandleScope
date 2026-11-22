@@ -1,4 +1,4 @@
-import { useState, type ComponentProps } from "react";
+import { useEffect, useState, type ComponentProps } from "react";
 import { StrategyResearchRunDetails } from "./StrategyResearchRunDetails.js";
 import { RunResultSummary, RunResultTradeList } from "../backtest/runResult/RunResultViews.js";
 import type { ShownRunResult } from "../backtest/runResult/useStrategyRunOverlay.js";
@@ -34,7 +34,13 @@ export function StrategyResearchResultPanel({
   manager = null,
   onRunCreated,
   onOpenVersion,
+  requestedTab,
+  onOpenCompare,
 }: {
+  /** A tab the page asks for (`?mode=` names one, ADR-BACKTEST-015 P5c4); a new nonce asks again. */
+  requestedTab?: { tab: "details"; nonce: number } | undefined;
+  /** Where the full comparison of runs opens (the run history). */
+  onOpenCompare?(): void;
   onRunCreated?: ComponentProps<typeof StrategyResearchRunDetails>["onRunCreated"];
   onOpenVersion?: ComponentProps<typeof StrategyResearchRunDetails>["onOpenVersion"];
   /** Loads the run's details (signal trace, export, replay review); without it the details tab is hidden. */
@@ -54,7 +60,15 @@ export function StrategyResearchResultPanel({
   dataResolution?: ChartContextResolution | null;
 }) {
   const locale = useLocale();
-  const [activeTab, setActiveTab] = useState<"overview" | "trades" | "details">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "trades" | "details">(() => requestedTab && manager ? requestedTab.tab : "overview");
+  const requestedNonce = requestedTab?.nonce;
+  useEffect(() => {
+    if (requestedTab && manager) setActiveTab(requestedTab.tab);
+    // Only a new request moves the tab; the user's own choice stays otherwise.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedNonce]);
+  // The research tools' details are this result's details tab (ADR-BACKTEST-015 P5c4).
+  const openDetails = manager ? () => setActiveTab("details") : onOpenAdvanced;
   const [explanation, setExplanation] = useState<TradeExplanationSelection | null>(null);
   if (error !== null) {
     return <InlineAlert tone="danger">{error}</InlineAlert>;
@@ -109,6 +123,7 @@ export function StrategyResearchResultPanel({
         result={result}
         locale={locale}
         stale={stale}
+        {...(openDetails ? { onOpenAdvanced: openDetails } : {})}
       />
       <div className="strategy-research-result-bar">
         <Tabs
@@ -139,7 +154,9 @@ export function StrategyResearchResultPanel({
         result={result}
         stale={stale}
         onOpenTrades={() => setActiveTab("trades")}
-        {...(onOpenAdvanced ? { onOpenAdvanced } : {})}
+        {...(openDetails ? { onOpenAdvanced: openDetails } : {})}
+        {...(manager ? { advancedLabel: t("researchResult.openDetails") } : {})}
+        {...(onOpenCompare ? { onOpenCompare } : {})}
       /> : CHART_RUN_RESULT_VIEWS_ENABLED && sharedResult?.run.runId === result.run.run_id
         ? <div className="chart-strategy-result-overview run-result-views" data-testid="run-result-views">
           <RunResultSummary result={sharedResult.result} locale={locale} />

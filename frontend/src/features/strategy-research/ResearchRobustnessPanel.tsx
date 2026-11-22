@@ -28,7 +28,10 @@ function rangeOf(request: ChartStrategyRunRequest | null, dataset: LocalDatasetM
  * walk-forward folds over the imported dataset, as a backend Study V2 experiment. Its progress and
  * verdict appear with the other experiments.
  */
-export function ResearchRobustness({ request, dataset, onSubmit }: {
+export function ResearchRobustness({ request, dataset, onSubmit, open, onToggle }: {
+  /** Controlled by the page (`?mode=robust` opens it, ADR-BACKTEST-015 P5c4). */
+  open?: boolean;
+  onToggle?(open: boolean): void;
   /** The current strategy, or null until a Python strategy is confirmed to run on this computer. */
   request: ChartStrategyRunRequest | null;
   /** The imported dataset the research page shows, or null for exchange data. */
@@ -62,7 +65,8 @@ export function ResearchRobustness({ request, dataset, onSubmit }: {
     </Field>
   );
   const plan = form && range ? robustnessPlan(form, range) : null;
-  return <Disclosure className="strategy-research-robustness" summary={t("researchRobustness.title")}>
+  return <Disclosure className="strategy-research-robustness" summary={t("researchRobustness.title")}
+    {...(open !== undefined ? { open } : {})} {...(onToggle ? { onToggle } : {})}>
     <p className="strategy-research-note">{t("researchRobustness.help")}</p>
     {blocked || !form || !range ? <p className="strategy-research-note" role="status">{t(blocked ?? "researchRobustness.fixedInterval")}</p> : <>
       <Field label={t("researchRobustness.hypothesis")} hint={t("researchRobustness.hypothesisHint")}>

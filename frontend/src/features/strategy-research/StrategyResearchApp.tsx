@@ -2,7 +2,6 @@ import { chartStrategySignalInput, withChartSignalInput } from "../backtest/char
 import { PanelToggle } from "../../app/PanelToggle.js";
 import { Button, Disclosure, Drawer, InlineAlert, SegmentedControl } from "../../components/ui/index.js";
 import { useNativeAvailability } from "../backtest/native/useNativeAvailability.js";
-import { describeError } from "../../i18n/serverErrors.js";
 import {
   Component,
   lazy,
@@ -77,18 +76,16 @@ import type { NativeFeedbackStatus } from "../backtest/native/nativeDiagnostics.
 import { useStrategyResearchRun } from "./useStrategyResearchRun.js";
 import { loadStrategyResearchHostHealth } from "./strategyResearchHostHealth.js";
 import type { StrategyResearchNetworkDiagnostics } from "./strategyResearchHostHealth.js";
-import { createStrategyResearchContextSearch } from "./strategyResearchAdvanced.js";
-import StrategyResearchModeRail from "./StrategyResearchModeRail.js";
 import {
   initialStrategyResearchMode,
-  isResearchToolMode,
   researchModeForTask,
-  researchTaskForMode,
+  researchToolTask,
+  researchWorkspaceFocus,
   strategyResearchModeHref,
   STRATEGY_RESEARCH_MODES,
+  type ResearchWorkspaceFocus,
   type StrategyResearchMode,
 } from "./strategyResearchMode.js";
-import { ResearchModeRailContext } from "../backtest/research/researchModeRailContext.js";
 import { StrategyResearchCompatNotice } from "./StrategyResearchCompatNotice.js";
 import { ProfileRailIcon } from "../../app/marketRailIcons.js";
 import { MarketDataWorkspaceProvider } from "../market-data/MarketDataWorkspaceProvider.js";
@@ -473,54 +470,43 @@ export default function StrategyResearchApp({
   const experimentsState = useSyncExternalStore(researchRun.experiments.subscribe, researchRun.experiments.snapshot, researchRun.experiments.snapshot);
   const batchCount = experimentsState.experiments.length + batchState.jobs.length;
   const [batchError, setBatchError] = useState(false);
-  const [advancedError, setAdvancedError] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [accountsOpen, setAccountsOpen] = useState(false);
   useEffect(() => { if (researchRun.inputStale && !state.result.stale) dispatch({ type: "result/invalidate" }); }, [dispatch, researchRun.inputStale, state.result.stale]);
-  // One page, several modes: 快速测试 and the research tools. `researchSearch` is the
-  // research tools' launch context or deep link, kept while switching modes.
-  const [mode, setMode] = useState<StrategyResearchMode | null>(() => initialMode !== undefined
+  // ADR-BACKTEST-015 P5c4: one workspace. The research tools' features are its fields, and `?mode=` opens
+  // the field it names. A link to a run, study or launch context still opens the research tool until P5d.
+  const [openingMode] = useState<StrategyResearchMode | null>(() => initialMode !== undefined
     ? initialMode
     : initialStrategyResearchMode(intent, typeof window === "undefined" ? "" : window.location.search));
-  const [researchSearch, setResearchSearch] = useState<string | null>(() => strategyResearchDeepLinkSearch(intent));
-  const [modeSwitching, setModeSwitching] = useState(false);
-  const showMode = useCallback((next: StrategyResearchMode, search: string | null) => {
-    setMode(next);
-    if (typeof window === "undefined") return;
-    const params = next === "quick" ? {} : Object.fromEntries(new URLSearchParams(search ?? ""));
-    window.history.replaceState(window.history.state, "", strategyResearchModeHref(next, params));
-  }, []);
-  const switchMode = useCallback((next: StrategyResearchMode) => {
-    if (next === mode || modeSwitching) return;
-    setAdvancedError(null);
-    // Leaving 快速测试 carries its source, strategy draft and latest result to the tools.
-    if (mode === "quick" && next !== "quick" && researchRun.session !== null && source !== null && state.script.draftId !== null) {
-      setModeSwitching(true);
-      void createStrategyResearchContextSearch({
-        manager: researchRun.historyManager,
-        source,
-        session: researchRun.session,
-        draftId: state.script.draftId,
-        result: researchRun.sourceResult,
-        configuration: signalConfiguration,
-      }).then((search) => {
-        setResearchSearch(search);
-        showMode(next, search);
-      }).catch((reason: unknown) => {
-        setAdvancedError(reason instanceof Error ? describeError(reason, reason.message) : String(reason));
-      }).finally(() => setModeSwitching(false));
-      return;
+  const [initialFocus] = useState(() => researchWorkspaceFocus(openingMode));
+  const [focus, setFocus] = useState<ResearchWorkspaceFocus & { nonce: number }>(() => ({ ...initialFocus, nonce: 0 }));
+  const [toolSearch, setToolSearch] = useState<string | null>(() => strategyResearchDeepLinkSearch(intent));
+  const [batchOpen, setBatchOpen] = useState(initialFocus.batch === true);
+  const [robustnessOpen, setRobustnessOpen] = useState(initialFocus.robustness === true);
+  const [savedOpen, setSavedOpen] = useState(initialFocus.saved === true);
+  const showFocus = useCallback((next: StrategyResearchMode) => {
+    const opened = researchWorkspaceFocus(next);
+    setFocus((current) => ({ ...opened, nonce: current.nonce + 1 }));
+    if (opened.batch) setBatchOpen(true);
+    if (opened.robustness) setRobustnessOpen(true);
+    if (opened.saved) setSavedOpen(true);
+    // Run settings, batches, robustness and saved strategies are in the CandleScope (Python) panel.
+    if (opened.pane || opened.batch || opened.robustness || opened.saved) setNativeMode(false);
+    setToolSearch(null);
+    if (typeof window !== "undefined") {
+      window.history.replaceState(window.history.state, "", next === "quick" ? "/strategy.html" : strategyResearchModeHref(next));
     }
-    showMode(next, researchSearch);
-  }, [mode, modeSwitching, researchRun.historyManager, researchRun.session, researchRun.sourceResult, researchSearch, showMode, source, state.script.draftId, signalConfiguration]);
-  const openAdvanced = useCallback(() => switchMode("precise"), [switchMode]);
-  const modeRail = <StrategyResearchModeRail mode={mode} pending={modeSwitching} onSelect={switchMode} />;
+  }, []);
+  const closeTool = useCallback(() => {
+    setToolSearch(null);
+    if (typeof window !== "undefined") window.history.replaceState(window.history.state, "", "/strategy.html");
+  }, []);
 
-  useControlCommands(() => ({ id: "research-panels", title: "Strategy research panels", context: () => ({ chartUiScope, settingsOpen, indicatorPanel, historyOpen }), snapshot: () => ({ settingsOpen, indicatorPanel, historyOpen, advancedError, mode }), commands: [
+  useControlCommands(() => ({ id: "research-panels", title: "Strategy research panels", context: () => ({ chartUiScope, settingsOpen, indicatorPanel, historyOpen }), snapshot: () => ({ settingsOpen, indicatorPanel, historyOpen, focus, toolOpen: toolSearch !== null }), commands: [
     command("settings", "Open/close research settings.", object({ open: bool }), ({ open }) => setSettingsOpen(open)),
     command("indicators", "Open/close the indicator catalog for the selected chart scope.", object({ open: bool }), ({ open }) => setIndicatorPanel({ scope: chartUiScope, open })),
     command("history", "Open/close strategy run history.", object({ open: bool }), ({ open }) => setHistoryOpen(open)),
-    command("mode", "Switch the page between 快速测试 and the research tools.", object({ mode: choice(STRATEGY_RESEARCH_MODES) }), ({ mode: next }) => switchMode(next)),
+    command("mode", "Open the workspace field a research mode names: precise run settings, robustness, Python packages, batches or run details (ADR-BACKTEST-015 P5c4).", object({ mode: choice(STRATEGY_RESEARCH_MODES) }), ({ mode: next }) => showFocus(next)),
   ] }));
   const drawer = (
     <StrategyResearchDrawerBoundary
@@ -569,7 +555,6 @@ export default function StrategyResearchApp({
 
   const [externalVisited, setExternalVisited] = useState(false);
   const [externalOpen, setExternalOpen] = useState(false);
-  const [savedOpen, setSavedOpen] = useState(false);
   // ADR-BACKTEST-015 P5c4: as on the chart (P4c2), strategies are named by their language and the engine
   // follows from it: Pine runs as the script declares or with CandleScope matching (a fills setting), Python on CandleScope.
   const strategyList = CHART_STRATEGY_FOLLOW_ENABLED;
@@ -622,7 +607,7 @@ export default function StrategyResearchApp({
         onRun={researchRun.onRun}
         marketBatchAvailable={marketBatchAvailable}
         batchSession={marketBatchAvailable ? marketInputs[0]?.session ?? null : null}
-        batchControls={(request) => <ResearchBatchSources datasets={libraryDatasets} precise={state.script.configuration?.fidelityPreference === "PRECISE"}
+        batchControls={(request) => <ResearchBatchSources open={batchOpen} onToggle={setBatchOpen} datasets={libraryDatasets} precise={state.script.configuration?.fidelityPreference === "PRECISE"}
           marketEnabled={marketBatchAvailable} markets={marketInputs} onMarkets={setMarketInputs}>{(selected, exchange) => <>
           <div className="strategy-research-batch-actions">
             <Button variant="primary" size="sm" disabled={!request || (!exchange.length && selected.length < 2)}
@@ -638,7 +623,7 @@ export default function StrategyResearchApp({
           </div>
           {batchError && <InlineAlert tone="danger">{t("researchBatch.submitFailed")}</InlineAlert>}
         </>}</ResearchBatchSources>}
-        robustnessControls={(request) => <ResearchRobustness request={request}
+        robustnessControls={(request) => <ResearchRobustness request={request} open={robustnessOpen} onToggle={setRobustnessOpen}
           dataset={importedManifest && !importedManifest.market_trade_input ? importedManifest : null}
           onSubmit={async (fields) => {
             if (!request || !importedManifest) return;
@@ -647,7 +632,7 @@ export default function StrategyResearchApp({
             setHistoryOpen(true);
           }} />}
         onConfirmNeedsData={researchRun.onConfirmNeedsData}
-        onOpenAdvanced={openAdvanced}
+        {...(focus.pane ? { requestedPane: { pane: focus.pane, nonce: focus.nonce } } : {})}
         configuration={state.script.configuration}
         onConfigure={(configuration) => dispatch({ type: "script/configure", configuration })}
         languageFixed={strategyList}
@@ -729,7 +714,8 @@ export default function StrategyResearchApp({
       runStatus={researchRun.runStatus}
       network={networkDiagnostics}
       dataResolution={researchRun.dataResolution}
-      onOpenAdvanced={openAdvanced}
+      {...(focus.resultTab ? { requestedTab: { tab: focus.resultTab, nonce: focus.nonce } } : {})}
+      onOpenCompare={() => setHistoryOpen(true)}
       {...(canReplay ? { onOpenReplay: openResultReplay } : {})}
       onLocateTrade={(timeMs) => setFocusedAnalysis((current) => ({
         scope: chartUiScope,
@@ -812,12 +798,6 @@ export default function StrategyResearchApp({
           {library.error}
         </InlineAlert>
       )}
-      {advancedError !== null && (
-        <InlineAlert tone="danger" className="strategy-research-page-alert"
-          action={<Button size="sm" variant="ghost" onClick={() => setAdvancedError(null)}>{t("backtest.close")}</Button>}>
-          <span data-testid="strategy-research-advanced-error">{advancedError}</span>
-        </InlineAlert>
-      )}
       <SettingsModal
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}
@@ -883,17 +863,24 @@ export default function StrategyResearchApp({
       );
     }
 
-    if (isResearchToolMode(mode)) {
-      // The research tools own their data, navigation and status; the mode rail stays.
-      const task = mode === null ? null : researchTaskForMode(mode);
+    if (toolSearch !== null) {
+      // A link to a run, study or launch context opens the research tool until P5d brings it into the workspace.
       return (
-        <section className="strategy-research-advanced" data-testid="strategy-research-advanced" data-research-mode={mode ?? "pending"}>
+        <section className="strategy-research-advanced" data-testid="strategy-research-advanced" data-research-mode={openingMode ?? "pending"}>
+          <div className="strategy-research-tool-bar" data-testid="strategy-research-tool-bar">
+            <span>{t("researchTool.note")}</span>
+            <Button size="sm" onClick={closeTool}>{t("researchTool.back")}</Button>
+          </div>
           <MarketDataWorkspaceProvider>
             <Suspense fallback={<main className="research-status-page" data-state="loading" />}>
               <BacktestResearchApp
-                {...(researchSearch === null ? {} : { search: researchSearch })}
-                task={task}
-                onTaskResolved={(resolved) => showMode(researchModeForTask(resolved), researchSearch)}
+                search={toolSearch}
+                task={researchToolTask(openingMode)}
+                onTaskResolved={(resolved) => {
+                  if (typeof window === "undefined") return;
+                  window.history.replaceState(window.history.state, "",
+                    strategyResearchModeHref(researchModeForTask(resolved), Object.fromEntries(new URLSearchParams(toolSearch))));
+                }}
               />
             </Suspense>
           </MarketDataWorkspaceProvider>
@@ -996,5 +983,5 @@ export default function StrategyResearchApp({
       />
     );
   })();
-  return <ResearchModeRailContext.Provider value={modeRail}>{view}</ResearchModeRailContext.Provider>;
+  return view;
 }

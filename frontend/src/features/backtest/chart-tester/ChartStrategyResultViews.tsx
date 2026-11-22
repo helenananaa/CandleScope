@@ -189,12 +189,18 @@ export function ChartStrategyResultOverview({
   comparison,
   onOpenTrades,
   onOpenAdvanced,
+  advancedLabel,
+  onOpenCompare,
 }: {
   result: ChartStrategyResultBundle;
   stale: boolean;
   comparison?: RecentRunCompareV1 | null;
   onOpenTrades(): void;
   onOpenAdvanced?: () => void;
+  /** What the advanced action opens, where it is not the research tool (the research workspace's run details). */
+  advancedLabel?: string;
+  /** Where the full comparison opens, if not with the advanced action. */
+  onOpenCompare?: () => void;
 }) {
   const { report, chart, run } = result;
   const reportedQuote = report.data_quality?.quote_asset;
@@ -254,8 +260,8 @@ export function ChartStrategyResultOverview({
                   : t("chartTester.compare.incompatible")
                 : t("chartTester.compare.noBaseline")}</span>
             </div>
-            {onOpenAdvanced
-              ? <Button size="sm" variant="ghost" onClick={onOpenAdvanced}>{t("chartTester.compare.full")}</Button>
+            {onOpenCompare ?? onOpenAdvanced
+              ? <Button size="sm" variant="ghost" onClick={onOpenCompare ?? onOpenAdvanced}>{t("chartTester.compare.full")}</Button>
               : <a className={buttonClassName({ variant: "ghost", size: "sm" })} href={advancedHref}>{t("chartTester.compare.full")}</a>}
           </div>
           {directComparison && (
@@ -305,7 +311,7 @@ export function ChartStrategyResultOverview({
           <div><dt>{t("chartTester.result.reportHash")}</dt><dd title={result.reportHash}>{result.reportHash.slice(0, 18)}…</dd></div>
         </dl>
         {onOpenAdvanced
-          ? <Button size="sm" variant="ghost" onClick={onOpenAdvanced}>{t("chartTester.openAdvanced")}</Button>
+          ? <Button size="sm" variant="ghost" onClick={onOpenAdvanced}>{advancedLabel ?? t("chartTester.openAdvanced")}</Button>
           : <a className={buttonClassName({ variant: "ghost", size: "sm" })} href={advancedHref}>{t("chartTester.openAdvanced")}</a>}
       </Disclosure>
     </div>
