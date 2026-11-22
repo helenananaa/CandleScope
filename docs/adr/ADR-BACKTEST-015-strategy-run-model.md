@@ -218,7 +218,7 @@ Run = StrategyVersion × Parameters × InputSpec × ExecutionProfile × ClockPol
 | P2 统一 Run 门面 | 统一运行端点（命名待定）、能力矩阵、统一流协议；所有 Run 经两个 Manager；旧端点降为适配器 | 架构测试禁止组件直接调用运行 API；前端轮询消失 |
 | P3 策略版本收口 | 内容寻址版本与后端草稿；现有 localStorage 草稿、挂回交接和持续运行引用一次性导入后端，原数据保留 | 完全退出并重启后，草稿、图表挂载和运行引用均可恢复 |
 | P4 FOLLOW 与图表 | 从持续运行抽出实时推进器，支持任意信号周期（1m 基础时钟）与 Pine；图表面板改为一个策略列表；两组切换下线；“前向跟踪”创建 `FORWARD`。按 O1 拆为：P4a `SCRIPT` 的 `FOLLOW`（前缀重建）；P4b `HOST` 的 `FOLLOW`（实时推进器，任意信号周期）；P4c 策略列表、切换下线与“前向跟踪” | 同输入 `FOLLOW` 与 `FIXED` 逐条相同；换品种、周期、参数的行为符合 §3.4；#157 新验收 |
-| P5 研究工作区 | 在共享图表与结果组件上重建；模式改为字段；`Experiment` 承接批量、稳健性、多市场；删除 `BacktestResearchApp` 与研究页自有图表；`backtest.html`、`local.html` 保留重定向 | #332 验收；旧深链可打开 |
+| P5 研究工作区 | 在共享图表与结果组件上重建；模式改为字段；`Experiment` 承接批量、稳健性、多市场；删除 `BacktestResearchApp` 与研究页自有图表；`backtest.html`、`local.html` 保留重定向。按依赖拆为：P5a 交易所数据作为工作区输入（序列 + 固定范围，显示准备进度、失败与重试，不再经旧高级研究页）；P5b `Experiment`（批量、多市场、稳健性生成一组 `FIXED` Run，后端持有与恢复）；P5c 模式改为字段，研究工具的功能迁入工作区（撮合精度档位与运行配置、语言定引擎、结果比较与信号追踪、结果回放与训练回放、运行列表、版本与快速试运行、外部模型连接），不删除功能；P5d 删除 `BacktestResearchApp` 与研究页自有图表（统一到 `MarketChartSurface` 与 `StrategyOverlay`），`?context`、`?run`、`?study`、`?compare`、`?mode` 深链在工作区打开 | #332 验收；旧深链可打开 |
 | P6 撮合核收敛 | 三个 Pine 专用 K 线核并入 `HOST` K 线核；评估与练习账户共用账户模型（O3）；旧核先留作对照，摘要一致后删除 | 每个账户模型 × 成交时钟的 P0 摘要一致 |
 
 ## 7. 对现有需求与 issue 的影响
