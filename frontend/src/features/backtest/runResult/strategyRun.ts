@@ -202,6 +202,31 @@ export function parseStrategyVersion(value: unknown): StrategyVersion {
   };
 }
 
+export const STRATEGY_VERSION_DRAFT_SCHEMA = "candlescope.strategy-version-draft/1";
+
+/** A version as editor text, to edit as a new draft (P5c2). Python is the editor bundle's code. */
+export interface StrategyVersionDraft {
+  version_hash: string;
+  language: "pine" | "python";
+  source: string;
+  libraries: Record<string, string>;
+}
+
+/** Validate a served `candlescope.strategy-version-draft/1`. Throws `StrategyRunContractError`. */
+export function parseStrategyVersionDraft(value: unknown): StrategyVersionDraft {
+  const body = row(value, "$");
+  if (body.schema !== STRATEGY_VERSION_DRAFT_SCHEMA) fail("schema", `must be ${STRATEGY_VERSION_DRAFT_SCHEMA}`);
+  const language = body.language === "pine" || body.language === "python" ? body.language : fail("language", "must be pine or python");
+  const libraries = row(body.libraries, "libraries");
+  return {
+    version_hash: versionHash(body.version_hash, "version_hash") ?? fail("version_hash", "is required"),
+    language,
+    source: text(body.source, "source"),
+    libraries: Object.fromEntries(Object.entries(libraries).map(([name, code]) => [name,
+      typeof code === "string" ? code : fail(`libraries.${name}`, "must be text")])),
+  };
+}
+
 /** Validate a served `candlescope.strategy-run-capabilities/1` matrix. Throws `StrategyRunContractError`. */
 export function parseStrategyRunCapabilities(value: unknown): StrategyRunCapabilities {
   const body = row(value, "$");

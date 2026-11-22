@@ -1,5 +1,8 @@
-import { useEffect, useState } from "react";
-import { Badge, Button, Disclosure, InlineAlert, buttonClassName } from "../../components/ui/index.js";
+import { useEffect, useMemo, useState } from "react";
+import { Badge, Button, Disclosure, Field, InlineAlert, Input, Select, Textarea, buttonClassName } from "../../components/ui/index.js";
+import type { StrategyVersionDraft } from "../backtest/runResult/strategyRun.js";
+import { researchFidelityLabel } from "../backtest/research/researchLabels.js";
+import { changedSettings, derivableSettings } from "./runDerivation.js";
 import { t } from "../../i18n/index.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import type { ChartStrategyResultBundle } from "../backtest/chart-tester/chartStrategyResultCache.js";
@@ -9,7 +12,10 @@ import { researchStateTone } from "../backtest/research/researchStateTone.js";
 import type { StrategyDataManager } from "../market-data/manager/strategyDataManager.js";
 
 type DetailsManager = Pick<StrategyDataManager, "loadBacktestCapabilities" | "exportRun" | "loadSignalTrace"
-  | "createReviewBridge" | "revealReviewBridge">;
+  | "createReviewBridge" | "revealReviewBridge" | "deriveRun" | "loadRunStatus" | "listStrategyVersionNames"
+  | "nameStrategyVersion" | "loadStrategyVersionDraft">;
+
+const FILL_MODES = [["BAR_APPROX", "BAR"], ["AGG_TRADE_EXECUTION", "AGG_TRADE"]] as const;
 
 function download(name: string, payload: unknown): void {
   if (typeof document === "undefined" || typeof URL.createObjectURL !== "function") return;
@@ -30,7 +36,14 @@ function failure(reason: unknown): string {
  * decisions, data quality and fill model, the server's export, and a blind review in training replay.
  * These were the research tools' result panels; the run is the one the workspace shows.
  */
-export function StrategyResearchRunDetails({ result, manager }: { result: ChartStrategyResultBundle; manager: DetailsManager }) {
+export function StrategyResearchRunDetails({ result, manager, onRunCreated, onOpenVersion }: {
+  result: ChartStrategyResultBundle;
+  manager: DetailsManager;
+  /** A run created from this one with changed settings; the workspace shows it. */
+  onRunCreated?(runId: string): void;
+  /** A named version's editor text, to edit as a new draft. */
+  onOpenVersion?(version: StrategyVersionDraft, name: string): void;
+}) {
   const runId = result.run.run_id;
   const report = result.report;
   const [trace, setTrace] = useState<unknown[] | null>(null);
@@ -53,10 +66,83 @@ export function StrategyResearchRunDetails({ result, manager }: { result: ChartS
     setError(null);
     void operation().catch((reason: unknown) => setError(failure(reason))).finally(() => setBusy(false));
   };
+  const original = useMemo(() => derivableSettings(result.config), [result.config]);
+  const [settingsText, setSettingsText] = useState(() => JSON.stringify(original, null, 2));
+  const [notice, setNotice] = useState<string | null>(null);
+  let fillMode = typeof original.fidelity_mode === "string" ? original.fidelity_mode : "BAR_APPROX";
+  try { const parsed = JSON.parse(settingsText) as Record<string, unknown>; if (typeof parsed.fidelity_mode === "string") fillMode = parsed.fidelity_mode; }
+  catch { /* the text is being edited */ }
+  const [versionHash, setVersionHash] = useState<string | null>(null);
+  const [names, setNames] = useState<Array<{ name: string; version_hash: string }>>([]);
+  const [versionName, setVersionName] = useState("");
+  useEffect(() => {
+    const controller = new AbortController();
+    void manager.loadRunStatus(runId, controller.signal).then((status) => {
+      if (!controller.signal.aborted) setVersionHash(status.version_hash);
+    }, () => undefined);
+    void manager.listStrategyVersionNames(controller.signal).then((value) => {
+      if (!controller.signal.aborted) setNames(value);
+    }, () => undefined);
+    return () => controller.abort();
+  }, [manager, runId]);
   const bridgeState = typeof bridge?.state === "string" ? bridge.state : null;
   const replayHref = researchReplayHref(bridge);
   return <div className="strategy-research-run-details" data-testid="strategy-research-run-details">
     {error && <InlineAlert tone="danger">{error}</InlineAlert>}
+    {notice && <p className="strategy-research-note" role="status">{notice}</p>}
+    {onRunCreated && <section className="strategy-research-detail-section" data-testid="strategy-research-rerun">
+      <h4>{t("researchResult.rerun")}</h4>
+      <p className="strategy-research-note">{t("researchResult.rerunHint")}</p>
+      <Field label={t("native.external.fidelity")}>
+        <Select size="sm" value={fillMode} disabled={busy} onChange={(event) => {
+          const mode = FILL_MODES.find(([value]) => value === event.target.value);
+          if (!mode) return;
+          try {
+            const parsed = JSON.parse(settingsText) as Record<string, unknown>;
+            setSettingsText(JSON.stringify({ ...parsed, fidelity_mode: mode[0], source_event_kind: mode[1] }, null, 2));
+          } catch { setError(t("researchResult.invalidSettings")); }
+        }}>
+          {FILL_MODES.map(([value]) => <option key={value} value={value}>{researchFidelityLabel(value)}</option>)}
+          {!FILL_MODES.some(([value]) => value === fillMode) && <option value={fillMode}>{researchFidelityLabel(fillMode)}</option>}
+        </Select>
+      </Field>
+      <Field label={t("researchResult.settings")}>
+        <Textarea className="strategy-research-detail-editor" rows={10} spellCheck={false} disabled={busy}
+          value={settingsText} onChange={(event) => setSettingsText(event.target.value)} />
+      </Field>
+      <div className="strategy-research-detail-actions">
+        <Button size="sm" variant="primary" disabled={busy} onClick={() => act(async () => {
+          const overrides = changedSettings(original, settingsText);
+          if (overrides === null) throw new Error(t("researchResult.invalidSettings"));
+          if (!Object.keys(overrides).length) throw new Error(t("researchResult.noChange"));
+          onRunCreated((await manager.deriveRun(runId, overrides)).run_id);
+        })}>{t("researchExperiment.retry")}</Button>
+      </div>
+    </section>}
+    <section className="strategy-research-detail-section" data-testid="strategy-research-version">
+      <h4>{t("researchResult.version")}</h4>
+      {versionHash && <p className="strategy-research-note"><code title={versionHash}>{versionHash.slice(0, 19)}…</code>
+        {names.filter((item) => item.version_hash === versionHash).map((item) => <Badge key={item.name}>{item.name}</Badge>)}</p>}
+      {versionHash && <div className="strategy-research-detail-actions">
+        <Input size="sm" aria-label={t("researchResult.versionName")} placeholder={t("researchResult.versionName")} maxLength={80}
+          value={versionName} onChange={(event) => setVersionName(event.target.value)} />
+        <Button size="sm" disabled={busy || !versionName.trim()} onClick={() => act(async () => {
+          const name = versionName.trim();
+          await manager.nameStrategyVersion(name, versionHash);
+          setNames(await manager.listStrategyVersionNames());
+          setVersionName("");
+          setNotice(t("researchResult.versionNamed", { name }));
+        })}>{t("researchResult.nameVersion")}</Button>
+      </div>}
+      {onOpenVersion && names.length > 0 && <Disclosure summary={t("researchResult.namedVersions")}>
+        <ul className="strategy-history-list">{names.map((item) => <li key={item.name} className="strategy-history-row">
+          <div className="strategy-history-run"><strong>{item.name}</strong><span><code>{item.version_hash.slice(0, 19)}…</code></span></div>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => act(async () => {
+            onOpenVersion(await manager.loadStrategyVersionDraft(item.version_hash), item.name);
+          })}>{t("researchResult.openVersion")}</Button>
+        </li>)}</ul>
+      </Disclosure>}
+    </section>
     <section className="strategy-research-detail-section">
       <h4>{t("research.results.tab.trace")}</h4>
       <div className="strategy-research-detail-actions">

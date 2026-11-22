@@ -258,6 +258,7 @@ export interface BacktestApiClient {
   releaseStrategyFollow?(followId: string, holder: string): Promise<void>;
   /** Content-addressed strategy versions and their names (ADR-BACKTEST-015 P3b); unvalidated wire values. */
   getStrategyVersion?(versionHash: string, signal?: AbortSignal): Promise<unknown>;
+  getStrategyVersionDraft?(versionHash: string, signal?: AbortSignal): Promise<unknown>;
   strategyVersionNames?(signal?: AbortSignal): Promise<{ names: Array<{ name: string; version_hash: string; named_at_ms: number }> }>;
   nameStrategyVersion?(name: string, versionHash: string, signal?: AbortSignal): Promise<{ name: string; version_hash: string }>;
   unnameStrategyVersion?(name: string, signal?: AbortSignal): Promise<{ name: string; removed: boolean }>;
@@ -289,6 +290,8 @@ export interface BacktestApiClient {
   copyStrategyRevision(revisionId: string, name: string, signal?: AbortSignal): Promise<StrategyRevisionRecord>;
   archiveStrategyRevision(revisionId: string, signal?: AbortSignal): Promise<StrategyRevisionRecord>;
   createReviewBridge(runId: string, startTimeMs: number, endTimeMs: number, signal?: AbortSignal): Promise<Record<string, unknown>>;
+  /** A new run of the same strategy and input with changed settings (ADR-BACKTEST-015 P5c). */
+  deriveRun?(runId: string, overrides: Record<string, unknown>, idempotencyKey: string, signal?: AbortSignal): Promise<BacktestRunRecord>;
   getReviewBridge(bridgeId: string, signal?: AbortSignal): Promise<Record<string, unknown>>;
   revealReviewBridge(bridgeId: string, signal?: AbortSignal): Promise<Record<string, unknown>>;
   inspectPythonBundle(zipBase64: string, signal?: AbortSignal): Promise<Record<string, unknown>>;
@@ -600,6 +603,9 @@ export function createBacktestApi(base = `${API_BASE}/backtests`, runsBase = str
     async getStrategyVersion(versionHash, signal) {
       return readJson(await fetch(`${versionsBase}/${encodeURIComponent(versionHash)}`, requestOptions({}, signal)));
     },
+    async getStrategyVersionDraft(versionHash, signal) {
+      return readJson(await fetch(`${versionsBase}/${encodeURIComponent(versionHash)}/draft`, requestOptions({}, signal)));
+    },
     async strategyVersionNames(signal) {
       return readJson(await fetch(`${versionsBase}/names`, requestOptions({}, signal)));
     },
@@ -820,6 +826,12 @@ export function createBacktestApi(base = `${API_BASE}/backtests`, runsBase = str
         `${base}/runs/${encodeURIComponent(runId)}/comparison`,
         requestOptions({}, signal),
       ));
+    },
+    async deriveRun(runId, overrides, idempotencyKey, signal) {
+      return readJson(await fetch(`${base}/runs/${encodeURIComponent(runId)}/derive`, requestOptions({
+        method: "POST", headers: { "content-type": "application/json", "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify({ overrides }),
+      }, signal)));
     },
     async cloneRun(runId, parameter, value, idempotencyKey, signal) {
       return readJson(await fetch(`${base}/runs/${encodeURIComponent(runId)}/clone`, requestOptions({

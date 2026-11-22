@@ -21,6 +21,8 @@ from .errors import BacktestError
 from .strategy.protocol import canonical_hash
 
 SCHEMA = "candlescope.strategy-version/1"
+DRAFT_SCHEMA = "candlescope.strategy-version-draft/1"
+MAX_DRAFT_SOURCE_BYTES = 2 * 1024 * 1024
 VERSION_HASH = re.compile(r"^sha256:[0-9a-f]{64}$")
 # A name is a path segment: no slash, no surrounding space, 1 to 120 characters.
 NAME = re.compile(r"^[^\s/](?:[^/\n]{0,118}[^\s/])?$")
@@ -127,6 +129,26 @@ class StrategyVersions:
                 "source": row["source_text"], "libraries": json.loads(row["libraries_json"]),
                 "runtime": json.loads(row["runtime_json"]), "created_at_ms": int(row["created_at_ms"]),
                 "names": self.repository.strategy_version_names(row["version_hash"])}
+
+    def draft(self, digest: str) -> dict[str, Any]:
+        """A version as editor text, to edit as a new draft.
+
+        Pine and forward-run Python hold their text; a chart or editor Python revision
+        holds its bundle identity, and its text is that single-file editor bundle's
+        ``strategy.py``. Builtins, external bundles and retired languages have no editor
+        text and are refused, never relabelled.
+        """
+        version = self.get(digest)
+        language, source, runtime = version["language"], version["source"], version["runtime"]
+        if language == "python" and runtime.get("compiler") == "PYTHON_SOURCE":
+            from .research_version import editor_bundle_source
+            source, _ = editor_bundle_source(self.repository, source)
+        elif not (language == "pine" or (language == "python" and "provider_schema" in runtime)):
+            raise BacktestError("FIDELITY_UNSUPPORTED", "this strategy version has no editor text")
+        if not source.strip() or len(source.encode("utf-8")) > MAX_DRAFT_SOURCE_BYTES:
+            raise BacktestError("FIDELITY_UNSUPPORTED", "this strategy version exceeds the editor budget")
+        return {"schema": DRAFT_SCHEMA, "version_hash": digest, "language": language, "source": source,
+                "libraries": version["libraries"]}
 
     def runs(self, digest: str, limit: int = 50) -> dict[str, Any]:
         self.get(digest)

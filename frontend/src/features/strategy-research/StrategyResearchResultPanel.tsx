@@ -32,7 +32,11 @@ export function StrategyResearchResultPanel({
   dataResolution,
   sharedResult = null,
   manager = null,
+  onRunCreated,
+  onOpenVersion,
 }: {
+  onRunCreated?: ComponentProps<typeof StrategyResearchRunDetails>["onRunCreated"];
+  onOpenVersion?: ComponentProps<typeof StrategyResearchRunDetails>["onOpenVersion"];
   /** Loads the run's details (signal trace, export, replay review); without it the details tab is hidden. */
   manager?: ComponentProps<typeof StrategyResearchRunDetails>["manager"] | null;
   /** The run-result/1 of this run, loaded for the research overlay; the trades tab reads it (behind a flag). */
@@ -129,7 +133,8 @@ export function StrategyResearchResultPanel({
         </span>
       </div>
       <TabPanel tabsId={tabsId} value={activeTab} className="strategy-research-result-body">
-      {activeTab === "details" && manager ? <StrategyResearchRunDetails key={result.run.run_id} result={result} manager={manager} />
+      {activeTab === "details" && manager ? <StrategyResearchRunDetails key={result.run.run_id} result={result} manager={manager}
+          {...(onRunCreated ? { onRunCreated } : {})} {...(onOpenVersion ? { onOpenVersion } : {})} />
         : activeTab === "overview" ? <ChartStrategyResultOverview
         result={result}
         stale={stale}

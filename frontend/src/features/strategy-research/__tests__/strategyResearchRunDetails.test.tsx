@@ -37,3 +37,39 @@ test("the strategy manager reaches the run's export, trace and replay review, an
   assert.deepEqual(calls, ["export bt_details", "trace bt_details 0 1000", "bridge bt_details 1000-2000", "reveal b1"]);
   await assert.rejects(new StrategyDataManager({} as StrategyDataApi).exportRun("bt_details"), /unavailable/i);
 });
+
+test("running again sends only the settings that changed, and never the input or the strategy", async () => {
+  const { changedSettings, derivableSettings } = await import("../runDerivation.js");
+  const config = { dataset_id: "local-a", snapshot_hash: "sha256:x", strategy_revision_id: "srv2", parameters: { fast: 3 },
+    fidelity_mode: "BAR_APPROX", taker_fee_bps: "10", latency_ms: null };
+  const original = derivableSettings(config);
+  assert.deepEqual(original, { parameters: { fast: 3 }, fidelity_mode: "BAR_APPROX", taker_fee_bps: "10" },
+    "only changeable settings the run has; the input and strategy are not offered");
+  assert.deepEqual(changedSettings(original, JSON.stringify({ ...original, parameters: { fast: 5 }, taker_fee_bps: "4" })),
+    { parameters: { fast: 5 }, taker_fee_bps: "4" });
+  assert.deepEqual(changedSettings(original, JSON.stringify(original)), {});
+  assert.equal(changedSettings(original, "{ broken"), null);
+  assert.equal(changedSettings(original, "[1]"), null);
+  const html = renderToStaticMarkup(<StrategyResearchRunDetails result={result} manager={{} as never} onRunCreated={() => undefined} />);
+  assert.match(html, /data-testid="strategy-research-rerun"/);
+  assert.ok(html.includes(t("researchResult.rerun")));
+  const sent: unknown[] = [];
+  const manager = new StrategyDataManager({ async deriveRun(runId: string, overrides: unknown, key: string) {
+    sent.push([runId, overrides, typeof key]); return { run_id: "bt_derived" };
+  } } as unknown as StrategyDataApi);
+  assert.equal((await manager.deriveRun("bt_details", { taker_fee_bps: "4" })).run_id, "bt_derived");
+  assert.deepEqual(sent, [["bt_details", { taker_fee_bps: "4" }, "string"]]);
+});
+
+test("a named version opens as its editor text; a served wrong version or language is refused", async () => {
+  const hash = "sha256:" + "a".repeat(64);
+  const served = { schema: "candlescope.strategy-version-draft/1", version_hash: hash, language: "python", source: "class Strategy: ...", libraries: {} };
+  let reply: unknown = served;
+  const manager = new StrategyDataManager({ async getStrategyVersionDraft() { return reply; } } as unknown as StrategyDataApi);
+  assert.deepEqual(await manager.loadStrategyVersionDraft(hash),
+    { version_hash: hash, language: "python", source: "class Strategy: ...", libraries: {} });
+  reply = { ...served, version_hash: "sha256:" + "b".repeat(64) };
+  await assert.rejects(manager.loadStrategyVersionDraft(hash), /asked for/);
+  reply = { ...served, language: "builtin" };
+  await assert.rejects(manager.loadStrategyVersionDraft(hash), /pine or python/);
+});

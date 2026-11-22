@@ -220,6 +220,10 @@
   padding: var(--space-2);
   background: var(--surface-1);
 }
+/* The sticky bar stays opaque when stale: the tab content scrolls under it. */
+.strategy-research-result-panel > .chart-strategy-result-context.stale {
+  background: color-mix(in srgb, var(--color-warning) 8%, var(--surface-1));
+}
 .strategy-research-result-bar {
   display: flex;
   flex-wrap: wrap;
@@ -252,6 +256,7 @@
 .strategy-research-detail-section { display: grid; gap: var(--space-2); min-width: 0; }
 .strategy-research-detail-section h4 { margin: 0; color: var(--text-primary); font: 600 var(--font-size-sm)/1.4 var(--font-sans); }
 .strategy-research-detail-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.strategy-research-detail-editor { font: var(--font-size-xs)/1.5 var(--font-mono); tab-size: 2; }
 .strategy-research-detail-readout {
   max-height: 240px;
   margin: 0;

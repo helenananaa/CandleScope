@@ -21,8 +21,8 @@ import { holdFollow, type HeldFollow } from "../../backtest/follow/hostFollow.js
 import { parseStrategyExperiment, type StrategyExperiment } from "../../backtest/experiment/strategyExperiment.js";
 import { parseRunResult, RUN_RESULT_FAMILY_IDENTITY, RunResultContractError, type RunResult, type RunResultFamily } from "../../backtest/runResult/runResult.js";
 import {
-  parseStrategyRunCapabilities, parseStrategyRunStatus, parseStrategyVersion, StrategyRunContractError,
-  type StrategyRunCapabilities, type StrategyRunProgress, type StrategyRunStatus, type StrategyVersion,
+  parseStrategyRunCapabilities, parseStrategyRunStatus, parseStrategyVersion, parseStrategyVersionDraft, StrategyRunContractError,
+  type StrategyRunCapabilities, type StrategyRunProgress, type StrategyRunStatus, type StrategyVersion, type StrategyVersionDraft,
 } from "../../backtest/runResult/strategyRun.js";
 
 const RETAINED_RUN_RESULTS = 8;
@@ -35,12 +35,12 @@ export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "str
   & Partial<Pick<BacktestApiClient, "capabilities" | "listStrategyRevisions" | "externalProviders"
     | "getStrategyRun" | "getStrategyRunResult" | "cancelStrategyRun" | "strategyRunCapabilities" | "watchStrategyRun"
     | "compareRecentRun" | "createResearchLaunchContext" | "getSelectedVersion"
-    | "getStrategyVersion" | "strategyVersionNames" | "nameStrategyVersion" | "unnameStrategyVersion"
+    | "getStrategyVersion" | "getStrategyVersionDraft" | "strategyVersionNames" | "nameStrategyVersion" | "unnameStrategyVersion"
     | "getStrategyReference" | "listStrategyReferences" | "putStrategyReference" | "removeStrategyReference" | "importStrategyReferences"
     | "holdStrategyFollow" | "renewStrategyFollow" | "releaseStrategyFollow"
     | "createStrategyExperiment" | "getStrategyExperiment" | "listStrategyExperiments" | "cancelStrategyExperiment"
     | "retryStrategyExperimentMember" | "watchStrategyExperiment"
-    | "exportRun" | "getSignalTrace" | "createReviewBridge" | "revealReviewBridge">>;
+    | "exportRun" | "getSignalTrace" | "createReviewBridge" | "revealReviewBridge" | "deriveRun">>;
 
 /** Owns fixed-history operations and immutable results independently of live
  * chart stores. Releasing a consumer never cancels a durable shared run. */
@@ -241,6 +241,17 @@ export class StrategyDataManager {
     return this.operation(signal, async (owned) => {
       if (!this.api.exportRun) unavailable();
       return this.api.exportRun(runId, owned);
+    });
+  }
+
+  /**
+   * Run again with changed settings (ADR-BACKTEST-015 P5c): the same strategy and input, with new
+   * parameters, fill accuracy, account, costs or risk limits. Resolves with the new run's record.
+   */
+  deriveRun(runId: string, overrides: Record<string, unknown>, signal?: AbortSignal): Promise<BacktestRunRecord> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.deriveRun) unavailable();
+      return this.api.deriveRun(runId, overrides, crypto.randomUUID(), owned);
     });
   }
 
@@ -465,6 +476,16 @@ export class StrategyDataManager {
       const version = parseStrategyVersion(await this.api.getStrategyVersion(versionHash, owned));
       if (version.version_hash !== versionHash) throw new StrategyRunContractError("version_hash", `asked for ${versionHash}, served ${version.version_hash}`);
       return version;
+    });
+  }
+
+  /** A version as editor text, to edit as a new draft; versions without editor text are refused. */
+  loadStrategyVersionDraft(versionHash: string, signal?: AbortSignal): Promise<StrategyVersionDraft> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.getStrategyVersionDraft) unavailable();
+      const draft = parseStrategyVersionDraft(await this.api.getStrategyVersionDraft(versionHash, owned));
+      if (draft.version_hash !== versionHash) throw new StrategyRunContractError("version_hash", `asked for ${versionHash}, served ${draft.version_hash}`);
+      return draft;
     });
   }
 

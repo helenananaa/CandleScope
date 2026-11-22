@@ -972,6 +972,61 @@ class BacktestService:
         config["python_trusted_confirmed"] = confirmed
         return self.create_run(config, idempotency_key=idempotency_key)
 
+    # Settings a derived run may change (ADR-BACKTEST-015 P5c): parameters, fill accuracy, account,
+    # costs and risk limits. The input (dataset, snapshot, range, interval) and the strategy stay.
+    DERIVABLE_RUN_SETTINGS = frozenset({
+        "parameters", "fidelity_mode", "source_event_kind", "execution_data",
+        "initial_balance", "equity_percent", "leverage", "sizing_policy", "fixed_qty", "fixed_notional",
+        "taker_fee_bps", "maker_fee_bps", "slippage_bps", "fee_source", "funding_mode", "funding_rate",
+        "latency_ms", "latency_events", "participation_rate", "order_end_policy", "cost_sensitivity_mode",
+        "max_leverage", "max_notional", "max_abs_position_qty", "max_active_orders", "max_drawdown_percent",
+        "daily_loss_limit", "max_cumulative_fees", "max_order_risk", "risk_per_stop_percent", "stop_distance",
+    })
+
+    def derive_run(
+        self,
+        run_id: str,
+        *,
+        overrides: Mapping[str, object],
+        idempotency_key: str,
+        trusted: bool = False,
+    ) -> dict[str, object]:
+        """A new run of the same strategy and input with changed settings (``clone_run_parameter`` generalized)."""
+        from app.core.operator_origin import effective_python_runtime_mode
+
+        if not isinstance(overrides, Mapping) or not overrides:
+            raise BacktestError("IDENTITY_MUTATION", "a derived run changes at least one setting")
+        unknown = sorted(set(overrides) - self.DERIVABLE_RUN_SETTINGS)
+        if unknown:
+            raise BacktestError("SCHEMA_UNKNOWN_FIELD", f"a derived run cannot change: {', '.join(unknown)}")
+        origin = self.get_run(run_id)
+        config = json.loads(str(origin["config_json"]))
+        before = json.dumps(config, sort_keys=True)
+        for key, value in overrides.items():
+            if key == "parameters":
+                if not isinstance(value, Mapping):
+                    raise BacktestError("SCHEMA_UNKNOWN_FIELD", "parameters must be an object")
+                parameters = dict(config.get("parameters") or {})
+                missing = sorted(set(value) - set(parameters))
+                if missing:
+                    raise BacktestError("SCHEMA_UNKNOWN_FIELD", f"unknown parameters: {', '.join(missing)}")
+                config["parameters"] = {**parameters, **value}
+            else:
+                config[key] = value
+        if json.dumps(config, sort_keys=True) == before:
+            raise BacktestError("IDENTITY_MUTATION", "a derived run changes at least one setting")
+        if {"taker_fee_bps", "maker_fee_bps", "slippage_bps"} & set(overrides) and "fee_source" not in overrides:
+            config["fee_source"] = "user-defined"
+        config.pop("study_id", None)
+        mode, confirmed = effective_python_runtime_mode(
+            config.get("python_runtime_mode"),
+            bool(config.get("python_trusted_confirmed")),
+            trusted=trusted,
+        )
+        config["python_runtime_mode"] = mode
+        config["python_trusted_confirmed"] = confirmed
+        return self.create_run(config, idempotency_key=idempotency_key)
+
     def create_review_bridge(
         self, run_id: str, payload: Mapping[str, object], *, now_ms: int | None = None
     ) -> dict[str, object]:

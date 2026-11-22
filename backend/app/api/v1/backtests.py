@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from app.backtest.request_contracts import (
     RunCreateRequest,
     StudyCreateRequest,
@@ -605,6 +607,32 @@ def clone_run(
             run_id,
             parameter=payload.parameter,
             value=payload.value,
+            idempotency_key=x_idempotency_key,
+            trusted=is_trusted_operator_origin(origin_from(request.headers)),
+        )
+    except BacktestError as exc:
+        return _error(exc)
+
+
+@router.post("/runs/{run_id}/derive")
+async def derive_run(
+    request: Request,
+    run_id: str,
+    x_idempotency_key: str = Header(alias="Idempotency-Key"),
+) -> dict[str, Any]:
+    """A new run of the same strategy and input with changed settings (ADR-BACKTEST-015 P5c)."""
+    try:
+        body = await request.json()
+    except ValueError:
+        return _error(BacktestError("SCHEMA_UNKNOWN_FIELD", "the request body must be JSON"))
+    overrides = body.get("overrides") if isinstance(body, dict) else None
+    if not isinstance(overrides, dict) or set(body) - {"overrides"}:
+        return _error(BacktestError("SCHEMA_UNKNOWN_FIELD", "send {\"overrides\": {...}}"))
+    try:
+        return await asyncio.to_thread(
+            _service(request).derive_run,
+            run_id,
+            overrides=overrides,
             idempotency_key=x_idempotency_key,
             trusted=is_trusted_operator_origin(origin_from(request.headers)),
         )

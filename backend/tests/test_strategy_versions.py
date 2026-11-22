@@ -134,6 +134,7 @@ def test_the_version_routes(runtime_run):
         names = client.get("/strategy-versions/names")
         bad = client.put("/strategy-versions/names/SMA", json={"hash": digest})
         missing = client.get("/strategy-versions/sha256:" + "0" * 64)
+        builtin_draft = client.get(f"/strategy-versions/{digest}/draft")
         removed = client.delete("/strategy-versions/names/SMA%20crossing")
     assert version.status_code == 200 and version.json()["source"] == BUILTIN_SMA_REVISION
     assert runs.json()["runs"][0]["run_id"] == run_id
@@ -141,3 +142,42 @@ def test_the_version_routes(runtime_run):
     assert names.json()["names"][0]["name"] == "SMA crossing"
     assert bad.status_code == 400 and missing.status_code == 404
     assert removed.json() == {"name": "SMA crossing", "removed": True}
+    assert builtin_draft.status_code == 400 and builtin_draft.json()["error"]["code"] == "FIDELITY_UNSUPPORTED"
+
+
+def test_a_version_opens_as_editor_text(tmp_path):
+    """P5c2: a named version opens as a new draft with its editor text, never with a bundle identity."""
+    from pathlib import Path
+    from app.backtest.strategy_versions import DRAFT_SCHEMA
+    from tests.test_python_editor import SOURCE, compile_editor, service_at
+
+    service = service_at(tmp_path)
+    try:
+        versions = StrategyVersions(service.repository)
+        revision = compile_editor(service)
+        stored = material(**host_material(service.repository, None, {"strategy_revision_id": revision["revision_id"],
+                                                                     "config_json": "{}", "engine_version": "e"}))
+        assert json.loads(stored["source"])["bundle_id"], "a Python revision's source is its bundle identity"
+        python = versions.record(stored, now_ms=1)
+        assert versions.draft(python) == {"schema": DRAFT_SCHEMA, "version_hash": python, "language": "python",
+                                          "source": SOURCE, "libraries": {}}
+        pine = versions.record(material("pine", PINE, {"a/b/1": "x"}, {"engine": {}}), now_ms=2)
+        assert (versions.draft(pine)["source"], versions.draft(pine)["libraries"]) == (PINE, {"a/b/1": "x"})
+        forward = versions.record(continuous_material({"engine_version": "e", "provider": {
+            "schema": "s", "language": "python", "source_text": "def on_bar(): pass"}}), now_ms=3)
+        assert versions.draft(forward)["source"] == "def on_bar(): pass"
+        for refused in (material("builtin", BUILTIN_SMA_REVISION, {}, {"engine_version": "e"}),
+                        material("pyne", "legacy", {}, {}),
+                        material("python", "not editor text", {}, {"compiler": "EXTERNAL_PROVIDER"})):
+            with pytest.raises(BacktestError) as failure:
+                versions.draft(versions.record(refused, now_ms=4))
+            assert failure.value.code == "FIDELITY_UNSUPPORTED"
+        bundle = service.repository.get_strategy_bundle(json.loads(stored["source"])["bundle_id"])
+        path = Path(bundle["store_path"]) / "strategy.py"
+        path.chmod(0o600)
+        path.write_text(SOURCE + "\n# changed frozen file\n")
+        with pytest.raises(BacktestError) as changed:
+            versions.draft(python)
+        assert changed.value.code == "DATA_SNAPSHOT_MISMATCH"
+    finally:
+        service.shutdown()

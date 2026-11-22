@@ -74,6 +74,15 @@ async def get_version(request: Request, version_hash: str):
         return _error(failure)
 
 
+@router.get("/{version_hash}/draft")
+async def version_draft(request: Request, version_hash: str):
+    """The version as editor text, to open as a new draft."""
+    try:
+        return _reply(await asyncio.to_thread(_versions(request).draft, version_hash))
+    except BacktestError as failure:
+        return _error(failure)
+
+
 @router.get("/{version_hash}/runs")
 async def version_runs(request: Request, version_hash: str, limit: int = Query(default=50, ge=1, le=200)):
     """The runs that executed this version, newest first."""

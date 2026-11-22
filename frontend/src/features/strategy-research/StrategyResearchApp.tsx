@@ -62,7 +62,7 @@ import {
 import { StrategyResearchRuntime } from "./StrategyResearchRuntime.js";
 import { StrategyResearchResultPanel } from "./StrategyResearchResultPanel.js";
 import { StrategyResearchScriptPanel } from "./StrategyResearchScriptPanel.js";
-import { openPythonStrategyDraft, getChartStrategyDraftStore } from "../backtest/chart-tester/chartStrategyTesterDrafts.js";
+import { createChartStrategyDraftId, openPythonStrategyDraft, getChartStrategyDraftStore } from "../backtest/chart-tester/chartStrategyTesterDrafts.js";
 import { DEFAULT_STRATEGY_RUN_SETTINGS } from "../../shared/strategyRunSettings.js";
 import { ResearchExternalModel } from "./ResearchExternalModel.js";
 import { saveResearchTemplate } from "./strategyTemplateDraft.js";
@@ -677,6 +677,14 @@ export default function StrategyResearchApp({
       result={researchRun.result}
       sharedResult={researchOverlay.shown?.run.family === "host" ? researchOverlay.shown : null}
       manager={researchRun.historyManager}
+      onRunCreated={(runId) => dispatch({ type: "result/setRun", runId })}
+      onOpenVersion={(version, name) => {
+        void getChartStrategyDraftStore().save({ id: createChartStrategyDraftId(), displayName: name, language: version.language,
+          source: version.source, cursor: { line: 1, column: 1 } }).then((draft) => {
+          dispatch({ type: "script/setDraft", draftId: draft.id });
+          setNativeMode(false);
+        }).catch(() => library.setError(t("chartTester.autosave.error")));
+      }}
       stale={researchRun.stale || state.result.stale}
       staleReasons={researchRun.staleReasons}
       barOnly={researchRun.result ? researchRun.result.run.fidelity_mode === "BAR_APPROX" : researchRun.barOnly}
