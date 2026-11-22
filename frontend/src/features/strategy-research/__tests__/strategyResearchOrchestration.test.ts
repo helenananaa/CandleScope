@@ -60,7 +60,7 @@ test("import polling, dataset selection, and Run polling are not reimplemented i
   assert.match(library, /export async function pollResearchImportJob/);
   assert.doesNotMatch(app, /pollResearchImportJob|setInterval\(|pollBacktestRunToTerminal/);
   assert.match(app, /useResearchDataLibrary/);
-  assert.match(app, /BacktestResearchApp/);
+  assert.doesNotMatch(app, /BacktestResearchApp/, "the research tool is no longer hosted (ADR-BACKTEST-015 P5d)");
   assert.match(researchRuntime, /window\.setInterval/);
   assert.match(runClient, /export async function pollBacktestRunToTerminal/);
   assert.equal((library.match(/export async function pollResearchImportJob/g) ?? []).length, 1);
@@ -92,7 +92,8 @@ test("compatibility URLs show a one-time notice and keep using the unified app",
     }),
   );
   assert.match(backtest, /strategy-research-compat-notice/);
-  assert.match(backtest, /strategy-research-advanced|strategy-research-deep-link-error/);
+  assert.match(backtest, /strategy-research-shell/);
+  assert.doesNotMatch(backtest, /strategy-research-advanced/);
 });
 
 test("compat notice dismiss writes only its key and never deletes legacy storage", () => {

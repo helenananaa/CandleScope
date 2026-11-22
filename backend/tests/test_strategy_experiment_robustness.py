@@ -399,3 +399,26 @@ def test_a_python_robustness_experiment_runs_its_folds_and_holdout_end_to_end(tm
         assert len(configs) == 7 and {(c["python_runtime_mode"], c["output_mode"]) for c in configs} == {("TRUSTED_LOCAL", "SIGNAL")}
     finally:
         runtime.shutdown()
+
+
+def test_a_study_made_by_the_research_tool_is_adopted_once(service):
+    """P5d: a `?study=` link opens in the workspace as a robustness experiment; a V1 study shows its trials."""
+    port = StudyPort(service.repository)
+    service.repository.insert_study({"study_id": "st_v1", "name": "Old grid", "hypothesis": "", "strategy_revision_id": "srv2_x",
+                                     "config_json": "{}", "config_hash": "sha256:x", "state": "COMPLETED", "created_at_ms": 7})
+    port.studies["st_v1"] = {**_study("COMPLETED"), "study_id": "st_v1", "name": "Old grid", "created_at_ms": 7,
+                             "strategy_revision_id": "srv2_x",
+                             "trials": [{"split_id": "split-1", "params_json": json.dumps({"fast": 2}), "run_id": "bt_t1", "state": "COMPLETED"},
+                                        {"split_id": "split-1", "params_json": json.dumps({"fast": 3}), "run_id": None, "state": "CANCELLED"}]}
+    port.runs["bt_t1"] = _run("COMPLETED")
+    experiments = StrategyDataManager(service).experiments()
+    adopted = asyncio.run(experiments.adopt_study("st_v1", port))
+    assert (adopted["kind"], adopted["name"], adopted["state"], adopted["created_at_ms"]) == ("ROBUSTNESS", "Old grid", "COMPLETED", 7)
+    assert [(m["input"]["role"], m["input"]["parameters"], m["state"]) for m in adopted["members"]] == [
+        ("TRIAL", {"fast": 2}, "COMPLETED"), ("TRIAL", {"fast": 3}, "CANCELLED")]
+    again = asyncio.run(experiments.adopt_study("st_v1", port))
+    assert again["experiment_id"] == adopted["experiment_id"]
+    assert [item["experiment_id"] for item in asyncio.run(experiments.list(port))["experiments"]] == [adopted["experiment_id"]]
+    with pytest.raises(BacktestError) as missing:
+        asyncio.run(experiments.adopt_study("st_missing", port))
+    assert missing.value.code == "STUDY_NOT_FOUND"

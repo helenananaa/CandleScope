@@ -41,18 +41,20 @@ function errorText(reason: unknown): string {
   return reason instanceof Error ? describeError(reason, reason.message) : String(reason);
 }
 
-export default function StrategyRunHistory({ manager, draftId, currentRunId, onOpen }: {
+export default function StrategyRunHistory({ manager, draftId, currentRunId, onOpen, initialCompare = null }: {
   manager: Pick<StrategyDataManager, "listRuns" | "compareRuns">;
   draftId: string | null;
   currentRunId: string | null;
   onOpen(runId: string): void;
+  /** Two runs to compare on opening (a `?run=…&compare=…` link, ADR-BACKTEST-015 P5d): baseline, then run. */
+  initialCompare?: readonly [string, string] | null;
 }) {
   const locale = useLocale();
   const [runs, setRuns] = useState<BacktestRunRecord[]>([]);
   const [names, setNames] = useState<Map<string, string>>(() => new Map());
   const [historyError, setHistoryError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Pair>(() => ["", currentRunId ?? ""]);
-  const [requested, setRequested] = useState<Pair | null>(null);
+  const [selected, setSelected] = useState<Pair>(() => initialCompare ? [initialCompare[0], initialCompare[1]] : ["", currentRunId ?? ""]);
+  const [requested, setRequested] = useState<Pair | null>(() => initialCompare ? [initialCompare[0], initialCompare[1]] : null);
   const [response, setResponse] = useState<{ pair: Pair; comparison?: RunCompareV3; error?: string } | null>(null);
 
   useEffect(() => {

@@ -719,16 +719,3 @@
 .strategy-research-robustness-summary { display: grid; gap: var(--space-1); margin: var(--space-2) 0; }
 .strategy-research-robustness-summary p { margin: 0; }
 .strategy-research-robustness-folds { margin: 0; padding-left: var(--space-4); color: var(--text-secondary); font-size: var(--font-size-sm); }
-
-/* ADR-BACKTEST-015 P5c4: a deep link still opens the research tool; this bar leads back to the workspace. */
-.strategy-research-tool-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-4);
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--surface-1);
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-}

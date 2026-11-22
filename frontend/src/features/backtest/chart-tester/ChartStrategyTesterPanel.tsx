@@ -241,7 +241,8 @@ export interface ChartStrategyTesterPanelProps {
   onClose(): void;
   onOpenAdvanced?(): void;
   onOpenBatchStudy?(): void;
-  onOpenWorkspace?(draft: StrategyDraftRecord, settings?: StrategyRunSettings): void | Promise<void>;
+  /** Hand the strategy to the research workspace; `mode` opens a field there (ADR-BACKTEST-015 P5d). */
+  onOpenWorkspace?(draft: StrategyDraftRecord, settings?: StrategyRunSettings, mode?: "precise" | "robust"): void | Promise<void>;
 }
 
 const HOST_STRATEGY_ID = "__candlescope_host__";
@@ -655,16 +656,19 @@ export function CandleScopeStrategyTesterPanel({
   }
 
   const handoffOperation = useRef<Promise<void> | null>(null);
-  const openWorkspace = useCallback((settings?: StrategyRunSettings): Promise<void> => {
+  const openWorkspace = useCallback((settings?: StrategyRunSettings, mode?: "precise" | "robust"): Promise<void> => {
     if (handoffOperation.current) return handoffOperation.current;
     if (!activeDraft || !onOpenWorkspace) return Promise.reject(new Error("DRAFT_UNAVAILABLE"));
-    const operation = persistCurrentDraft().then((saved) => onOpenWorkspace(saved, settings));
+    const operation = persistCurrentDraft().then((saved) => onOpenWorkspace(saved, settings, mode));
     handoffOperation.current = operation;
     void operation.catch(() => setSaveState("ERROR")).finally(() => {
       if (handoffOperation.current === operation) handoffOperation.current = null;
     });
     return operation;
   }, [activeDraft, onOpenWorkspace, persistCurrentDraft]);
+  // Research opens in the workspace with this strategy and its result (ADR-BACKTEST-015 P5d); the research tool is gone.
+  const openAdvanced = onOpenWorkspace && activeDraft ? () => { void openWorkspace(undefined, "precise").catch(() => undefined); } : onOpenAdvanced;
+  const openBatchStudy = onOpenWorkspace && activeDraft ? () => { void openWorkspace(undefined, "robust").catch(() => undefined); } : onOpenBatchStudy;
 
   const beginResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -724,8 +728,8 @@ export function CandleScopeStrategyTesterPanel({
       command("prepare", "Confirm preparation for the current matching missing-data draft.", empty, onPrepareData, { available: () => pendingDataMatchesSource && active }),
       command("stopObserving", "Stop observing a server run through the UI lifecycle action.", empty, onStopObserving, { interrupt: true }),
       command("resumeObserving", "Resume server-run observation.", empty, onResumeObserving),
-      command("openAdvanced", "Open the existing advanced-research workflow.", empty, () => onOpenAdvanced?.(), { available: () => !!onOpenAdvanced }),
-      command("openBatchStudy", "Open the existing batch study workflow.", empty, () => onOpenBatchStudy?.(), { available: () => !!onOpenBatchStudy }),
+      command("openAdvanced", "Open this strategy in the research workspace (run settings and details).", empty, () => openAdvanced?.(), { available: () => !!openAdvanced }),
+      command("openBatchStudy", "Open this strategy's robustness check in the research workspace.", empty, () => openBatchStudy?.(), { available: () => !!openBatchStudy }),
       command("openWorkspace", "Save the current code and open an independent research experiment.", empty, () => openWorkspace(), { available: () => runMode === "HISTORY" && !!onOpenWorkspace && !!activeDraft && active }),
       command("forward", "Open forward tracking from a past date (HISTORY_LIVE) or from now (LIVE_ONLY), or go back to the chart (null).", object({ start: nullable(choice(["HISTORY_LIVE", "LIVE_ONLY"])) }), ({ start }) => chooseRunMode(start ?? "HISTORY"), { available: () => liveFollow && !!activeDraft && active }),
       command("close", "Close the host strategy panel.", empty, onClose),
@@ -887,7 +891,7 @@ export function CandleScopeStrategyTesterPanel({
                 items={[
                   ...(onOpenWorkspace ? [{ id: "workspace", label: t("ux.openWorkspace"), disabled: !activeDraft || !active,
                     onSelect: () => { void openWorkspace().catch(() => undefined); } }] : []),
-                  ...(onOpenAdvanced ? [{ id: "advanced", label: t("chartTester.openAdvanced"), onSelect: onOpenAdvanced }] : []),
+                  ...(openAdvanced ? [{ id: "advanced", label: t("chartTester.openAdvanced"), onSelect: openAdvanced }] : []),
                   // Forward tracking keeps its own record from its start; the chart itself follows live bars.
                   ...(liveFollow ? [{ id: "forward", label: t("strategyForward.title"), disabled: activeDraft?.language !== "python" || !active,
                     onSelect: () => chooseRunMode(runModePreference.forwardStart ?? "HISTORY_LIVE") }] : []),
@@ -960,8 +964,8 @@ export function CandleScopeStrategyTesterPanel({
                 {t("chartTester.start.paste")}
               </Button>
               <p className="chart-strategy-privacy">{t("chartTester.privacy")}</p>
-              {onOpenAdvanced ? (
-                <Button size="sm" variant="ghost" onClick={onOpenAdvanced}>{t("chartTester.openAdvanced")}</Button>
+              {openAdvanced ? (
+                <Button size="sm" variant="ghost" onClick={openAdvanced}>{t("chartTester.openAdvanced")}</Button>
               ) : (
                 <a href={strategyResearchModeHref("precise")} className={buttonClassName({ variant: "ghost", size: "sm" })}>{t("chartTester.openAdvanced")}</a>
               )}
@@ -1041,14 +1045,14 @@ export function CandleScopeStrategyTesterPanel({
                 result={result}
                 locale={locale}
                 stale={stale}
-                {...(onOpenAdvanced ? { onOpenAdvanced } : {})}
+                {...(openAdvanced ? { onOpenAdvanced: openAdvanced } : {})}
               />
               <ChartStrategyResultOverview
                 result={result}
                 stale={stale}
                 comparison={comparison}
                 onOpenTrades={() => setActiveTab("trades")}
-                {...(onOpenAdvanced ? { onOpenAdvanced } : {})}
+                {...(openAdvanced ? { onOpenAdvanced: openAdvanced } : {})}
               />
             </>
           ) : (
@@ -1131,8 +1135,8 @@ export function CandleScopeStrategyTesterPanel({
                   ? t("chartTester.settings.fast")
                   : t("chartTester.settings.precise")}</dd></div>
               </dl>
-              {onOpenBatchStudy && (
-                <Button size="sm" variant="ghost" onClick={onOpenBatchStudy}>
+              {openBatchStudy && (
+                <Button size="sm" variant="ghost" onClick={openBatchStudy}>
                   {t("chartTester.settings.batchStudy")}
                 </Button>
               )}

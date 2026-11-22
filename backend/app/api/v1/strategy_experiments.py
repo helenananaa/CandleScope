@@ -196,6 +196,16 @@ async def list_experiments(request: Request, limit: int = Query(20, ge=1, le=50)
         return _error(failure)
 
 
+@router.post("/studies/{study_id}")
+async def adopt_study(request: Request, study_id: str):
+    """A study made by the research tool as a robustness experiment (its link opens in the workspace)."""
+    try:
+        port = ServicesPort(request)
+        return _reply(await port.strategy.experiments().adopt_study(study_id, port))
+    except WIRE_ERRORS as failure:
+        return _error(failure)
+
+
 @router.get("/{experiment_id}")
 async def get_experiment(request: Request, experiment_id: str):
     try:

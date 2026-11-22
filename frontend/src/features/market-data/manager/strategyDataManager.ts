@@ -43,7 +43,8 @@ export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "str
     | "getStrategyReference" | "listStrategyReferences" | "putStrategyReference" | "removeStrategyReference" | "importStrategyReferences"
     | "holdStrategyFollow" | "renewStrategyFollow" | "releaseStrategyFollow"
     | "createStrategyExperiment" | "getStrategyExperiment" | "listStrategyExperiments" | "cancelStrategyExperiment"
-    | "retryStrategyExperimentMember" | "watchStrategyExperiment" | "revealStrategyExperimentHoldout"
+    | "retryStrategyExperimentMember" | "watchStrategyExperiment" | "revealStrategyExperimentHoldout" | "adoptStrategyStudy"
+    | "getResearchLaunchContext"
     | "exportRun" | "getSignalTrace" | "createReviewBridge" | "revealReviewBridge" | "deriveRun"
     | "inspectPythonBundle" | "createPythonBundle" | "createPythonRevision">>;
 
@@ -395,6 +396,22 @@ export class StrategyDataManager {
           draft_content_revision: input.request.draftContentRevision, strategy_revision_id: revision.revision_id },
         study,
       }, owned));
+    });
+  }
+
+  /** A study the research tools made, as a robustness experiment (its `?study=` link opens in the workspace, P5d). */
+  adoptStudyExperiment(studyId: string, signal?: AbortSignal): Promise<StrategyExperiment> {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.adoptStrategyStudy) unavailable();
+      return parseStrategyExperiment(await this.api.adoptStrategyStudy(studyId, owned));
+    });
+  }
+
+  /** A launch context behind an older `?context=` link: the chart, draft and run it carried to research. */
+  loadResearchLaunchContext(contextId: string, signal?: AbortSignal) {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.getResearchLaunchContext) unavailable();
+      return this.api.getResearchLaunchContext(contextId, owned);
     });
   }
 

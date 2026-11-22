@@ -92,6 +92,10 @@ function parameterText(value: Record<string, unknown> | null | undefined): strin
 
 function memberLabel(member: ExperimentMember): string {
   const input = member.input;
+  if (input.role === "TRIAL") {
+    const values = parameterText(input.parameters as Record<string, unknown> | null);
+    return [t("researchRobustness.role.TRIAL", { split: String(input.split ?? "") }), values].filter(Boolean).join(" · ");
+  }
   if (input.role === "TRAIN" || input.role === "TEST" || input.role === "HOLDOUT") {
     const role = t(`researchRobustness.role.${input.role}`, { fold: String(input.fold ?? "") });
     const values = parameterText(input.parameters as Record<string, unknown> | null);

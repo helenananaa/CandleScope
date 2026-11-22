@@ -252,6 +252,7 @@ export interface BacktestApiClient {
   cancelStrategyExperiment?(experimentId: string, signal?: AbortSignal): Promise<unknown>;
   retryStrategyExperimentMember?(experimentId: string, ordinal: number, signal?: AbortSignal): Promise<unknown>;
   revealStrategyExperimentHoldout?(experimentId: string, signal?: AbortSignal): Promise<unknown>;
+  adoptStrategyStudy?(studyId: string, signal?: AbortSignal): Promise<unknown>;
   /** The experiment's commit-driven stream; reports each experiment and resolves with the first one no member is active in. */
   watchStrategyExperiment?(experimentId: string, onExperiment: (value: StrategyExperiment) => void,
     signal?: AbortSignal): Promise<StrategyExperiment>;
@@ -660,6 +661,9 @@ export function createBacktestApi(base = `${API_BASE}/backtests`, runsBase = str
     async retryStrategyExperimentMember(experimentId, ordinal, signal) {
       return readJson(await fetch(`${experimentsBase}/${encodeURIComponent(experimentId)}/members/${ordinal}/retry`,
         requestOptions({ method: "POST" }, signal)));
+    },
+    async adoptStrategyStudy(studyId, signal) {
+      return readJson(await fetch(`${experimentsBase}/studies/${encodeURIComponent(studyId)}`, requestOptions({ method: "POST" }, signal)));
     },
     async revealStrategyExperimentHoldout(experimentId, signal) {
       return readJson(await fetch(`${experimentsBase}/${encodeURIComponent(experimentId)}/reveal-holdout`,

@@ -28,11 +28,13 @@ import type { ResearchMarketInput } from "./strategyResearchBatch.js";
 import { ResearchBatchResults, ResearchBatchSources, ResearchExperimentResults } from "./ResearchBatchPanel.js";
 import { ResearchRobustness } from "./ResearchRobustnessPanel.js";
 import { ResearchSavedStrategy } from "./ResearchSavedStrategy.js";
+import { describeError } from "../../i18n/serverErrors.js";
+import { launchContextState, researchRunSource, type DatasetChoice } from "./researchLinks.js";
 import { CHART_STRATEGY_FOLLOW_ENABLED } from "../backtest/chart-tester/chartStrategyTesterFeature.js";
 import { strategyLanguageLabel } from "../backtest/chart-tester/strategyLanguageLabel.js";
 import { ResearchMarketInputForm } from "./ResearchMarketInputs.js";
 import PreparationWaiting from "../data-preparation/PreparationWaiting.js";
-import { RESEARCH_SOURCE_SCHEMA } from "../research-data/researchDataTypes.js";
+import { RESEARCH_SOURCE_SCHEMA, type ResearchSourceRefV1 } from "../research-data/researchDataTypes.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { ResearchDataDrawer } from "../research-data/ResearchDataDrawer.js";
@@ -78,8 +80,6 @@ import { loadStrategyResearchHostHealth } from "./strategyResearchHostHealth.js"
 import type { StrategyResearchNetworkDiagnostics } from "./strategyResearchHostHealth.js";
 import {
   initialStrategyResearchMode,
-  researchModeForTask,
-  researchToolTask,
   researchWorkspaceFocus,
   strategyResearchModeHref,
   STRATEGY_RESEARCH_MODES,
@@ -91,7 +91,6 @@ import { ProfileRailIcon } from "../../app/marketRailIcons.js";
 import { MarketDataWorkspaceProvider } from "../market-data/MarketDataWorkspaceProvider.js";
 import { datasetIdentityChanged } from "../backtest/native/nativeExecutionSettings.js";
 
-const BacktestResearchApp = lazy(() => import("../backtest/research/BacktestResearchApp.js"));
 const StrategyResearchLiveChart = lazy(() => import("./StrategyResearchLiveChart.js"));
 const NativeStrategyPanel = lazy(() => import("../backtest/native/NativeStrategyPanel.js"));
 const NativeStrategyReport = lazy(() => import("../backtest/native/NativeStrategyReport.js").then((module) => ({ default: module.NativeStrategyReport })));
@@ -99,7 +98,6 @@ const StrategyResultReplay = lazy(() => import("./StrategyResultReplay.js"));
 const StrategyRunHistory = lazy(() => import("./StrategyRunHistory.js"));
 const SavedContinuousAccounts = lazy(() => import("../backtest/continuous/SavedContinuousAccounts.js"));
 import {
-  strategyResearchDeepLinkSearch,
   strategyResearchLaunchActions,
   strategyResearchVisualState,
   type StrategyResearchLaunchIntent,
@@ -470,7 +468,12 @@ export default function StrategyResearchApp({
   const experimentsState = useSyncExternalStore(researchRun.experiments.subscribe, researchRun.experiments.snapshot, researchRun.experiments.snapshot);
   const batchCount = experimentsState.experiments.length + batchState.jobs.length;
   const [batchError, setBatchError] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
+  // ADR-BACKTEST-015 P5d: every research link opens here. A run with a baseline opens their comparison and a
+  // study its robustness experiment, both in the run history.
+  const link = intent.kind === "deep-link" ? intent : null;
+  const [historyCompare] = useState<readonly [string, string] | null>(() =>
+    link?.entry.kind === "run" && link.compareRunId ? [link.compareRunId, link.entry.runId] : null);
+  const [historyOpen, setHistoryOpen] = useState(() => historyCompare !== null || link?.entry.kind === "study");
   const [accountsOpen, setAccountsOpen] = useState(false);
   useEffect(() => { if (researchRun.inputStale && !state.result.stale) dispatch({ type: "result/invalidate" }); }, [dispatch, researchRun.inputStale, state.result.stale]);
   // ADR-BACKTEST-015 P5c4: one workspace. The research tools' features are its fields, and `?mode=` opens
@@ -480,7 +483,6 @@ export default function StrategyResearchApp({
     : initialStrategyResearchMode(intent, typeof window === "undefined" ? "" : window.location.search));
   const [initialFocus] = useState(() => researchWorkspaceFocus(openingMode));
   const [focus, setFocus] = useState<ResearchWorkspaceFocus & { nonce: number }>(() => ({ ...initialFocus, nonce: 0 }));
-  const [toolSearch, setToolSearch] = useState<string | null>(() => strategyResearchDeepLinkSearch(intent));
   const [batchOpen, setBatchOpen] = useState(initialFocus.batch === true);
   const [robustnessOpen, setRobustnessOpen] = useState(initialFocus.robustness === true);
   const [savedOpen, setSavedOpen] = useState(initialFocus.saved === true);
@@ -492,17 +494,58 @@ export default function StrategyResearchApp({
     if (opened.saved) setSavedOpen(true);
     // Run settings, batches, robustness and saved strategies are in the CandleScope (Python) panel.
     if (opened.pane || opened.batch || opened.robustness || opened.saved) setNativeMode(false);
-    setToolSearch(null);
     if (typeof window !== "undefined") {
       window.history.replaceState(window.history.state, "", next === "quick" ? "/strategy.html" : strategyResearchModeHref(next));
     }
   }, []);
-  const closeTool = useCallback(() => {
-    setToolSearch(null);
-    if (typeof window !== "undefined") window.history.replaceState(window.history.state, "", "/strategy.html");
-  }, []);
 
-  useControlCommands(() => ({ id: "research-panels", title: "Strategy research panels", context: () => ({ chartUiScope, settingsOpen, indicatorPanel, historyOpen }), snapshot: () => ({ settingsOpen, indicatorPanel, historyOpen, focus, toolOpen: toolSearch !== null }), commands: [
+  // The data a linked run or launch context used, selected once the library knows its datasets.
+  const [pendingSource, setPendingSource] = useState<ResearchSourceRefV1 | DatasetChoice | null>(null);
+  useEffect(() => {
+    if (pendingSource === null) return;
+    if ("kind" in pendingSource) {
+      dispatch({ type: "source/select", source: pendingSource });
+      setPendingSource(null);
+      return;
+    }
+    if (libraryLoading) return;
+    const dataset = libraryDatasets.find((item) => item.dataset_id === pendingSource.datasetId && item.data_epoch === pendingSource.dataEpoch);
+    if (dataset) {
+      setLibrarySelectedId(dataset.dataset_id);
+      onSelectDataset(dataset.dataset_id);
+    }
+    setPendingSource(null);
+  }, [dispatch, libraryDatasets, libraryLoading, onSelectDataset, pendingSource, setLibrarySelectedId]);
+  const linkedRunSource = useRef(link?.entry.kind === "run" ? link.entry.runId : null);
+  useEffect(() => {
+    const shown = researchRun.result;
+    if (!shown || linkedRunSource.current !== shown.run.run_id) return;
+    linkedRunSource.current = null;
+    if (source !== null) return;
+    setPendingSource(researchRunSource(shown.config, shown.run));
+  }, [researchRun.result, source]);
+  const linkApplied = useRef(false);
+  useEffect(() => {
+    if (!link || linkApplied.current) return;
+    linkApplied.current = true;
+    const failed = (reason: unknown) => library.setError(reason instanceof Error ? describeError(reason, reason.message) : String(reason));
+    if (link.entry.kind === "study") void researchRun.experiments.openStudy(link.entry.studyId).catch(failed);
+    if (link.entry.kind === "context") {
+      void researchRun.historyManager.loadResearchLaunchContext(link.entry.contextId).then((context) => {
+        const opened = launchContextState(context);
+        if (opened.source) setPendingSource(opened.source);
+        if (opened.draftId) dispatch({ type: "script/setDraft", draftId: opened.draftId });
+        if (opened.runId) dispatch({ type: "result/viewHistory", runId: opened.runId });
+        if (openingMode === null && opened.mode) showFocus(opened.mode);
+      }).catch(failed);
+    }
+    if (typeof window !== "undefined") {
+      window.history.replaceState(window.history.state, "", openingMode && openingMode !== "quick" ? strategyResearchModeHref(openingMode) : "/strategy.html");
+    }
+    // Applied once, when the page opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useControlCommands(() => ({ id: "research-panels", title: "Strategy research panels", context: () => ({ chartUiScope, settingsOpen, indicatorPanel, historyOpen }), snapshot: () => ({ settingsOpen, indicatorPanel, historyOpen, focus }), commands: [
     command("settings", "Open/close research settings.", object({ open: bool }), ({ open }) => setSettingsOpen(open)),
     command("indicators", "Open/close the indicator catalog for the selected chart scope.", object({ open: bool }), ({ open }) => setIndicatorPanel({ scope: chartUiScope, open })),
     command("history", "Open/close strategy run history.", object({ open: bool }), ({ open }) => setHistoryOpen(open)),
@@ -752,7 +795,7 @@ export default function StrategyResearchApp({
         <Suspense fallback={<p className="strategy-research-note">{t("reader.loading")}</p>}><SavedContinuousAccounts /></Suspense>
       </Drawer>
       <Drawer open={historyOpen} onClose={() => setHistoryOpen(false)} title={t("ux.history")} className="strategy-research-drawer">
-        <Suspense fallback={<p className="strategy-research-note">{t("research.loading")}</p>}><StrategyRunHistory manager={researchRun.historyManager} draftId={state.script.draftId} currentRunId={researchRun.result?.run.run_id ?? null} onOpen={(runId) => { dispatch({ type: "result/viewHistory", runId }); setNativeMode(false); setHistoryOpen(false); }} /></Suspense>
+        <Suspense fallback={<p className="strategy-research-note">{t("research.loading")}</p>}><StrategyRunHistory manager={researchRun.historyManager} draftId={state.script.draftId} currentRunId={researchRun.result?.run.run_id ?? null} initialCompare={historyCompare} onOpen={(runId) => { dispatch({ type: "result/viewHistory", runId }); setNativeMode(false); setHistoryOpen(false); }} /></Suspense>
         <ResearchExperimentResults experiments={experimentsState.experiments}
           onCancel={(experimentId) => { void researchRun.experiments.cancel(experimentId).catch(() => setBatchError(true)); }}
           onRetry={(experimentId, ordinal) => { void researchRun.experiments.retry(experimentId, ordinal).catch(() => setBatchError(true)); }}
@@ -863,33 +906,6 @@ export default function StrategyResearchApp({
       );
     }
 
-    if (toolSearch !== null) {
-      // A link to a run, study or launch context opens the research tool until P5d brings it into the workspace.
-      return (
-        <section className="strategy-research-advanced" data-testid="strategy-research-advanced" data-research-mode={openingMode ?? "pending"}>
-          <div className="strategy-research-tool-bar" data-testid="strategy-research-tool-bar">
-            <span>{t("researchTool.note")}</span>
-            <Button size="sm" onClick={closeTool}>{t("researchTool.back")}</Button>
-          </div>
-          <MarketDataWorkspaceProvider>
-            <Suspense fallback={<main className="research-status-page" data-state="loading" />}>
-              <BacktestResearchApp
-                search={toolSearch}
-                task={researchToolTask(openingMode)}
-                onTaskResolved={(resolved) => {
-                  if (typeof window === "undefined") return;
-                  window.history.replaceState(window.history.state, "",
-                    strategyResearchModeHref(researchModeForTask(resolved), Object.fromEntries(new URLSearchParams(toolSearch))));
-                }}
-              />
-            </Suspense>
-          </MarketDataWorkspaceProvider>
-          {(intent.page === "local" || intent.page === "backtest") && (
-            <StrategyResearchCompatNotice page={intent.page} />
-          )}
-        </section>
-      );
-    }
 
     if (importedManifest !== null && analysisStore !== null && selectedInterval !== null && scopedIndicatorPersistence && localIndicatorPersistence) {
       const analysis = (

@@ -7,7 +7,7 @@ import { importedResearchRange, importedResearchRunSource } from "./importedData
 import { RESEARCH_BATCH_MAX_INPUTS, marketInputKey, supportsBatchSource, validMarketInput, type ResearchMarketInput } from "./strategyResearchBatch.js";
 
 type ExperimentManager = Pick<StrategyDataManager, "createResearchExperiment" | "listExperiments" | "watchExperiment"
-  | "cancelExperiment" | "retryExperimentMember" | "createRobustnessExperiment" | "revealExperimentHoldout">;
+  | "cancelExperiment" | "retryExperimentMember" | "createRobustnessExperiment" | "revealExperimentHoldout" | "adoptStudyExperiment">;
 export interface ResearchExperimentsState { experiments: readonly StrategyExperiment[]; loaded: boolean; failed: boolean }
 
 /**
@@ -97,6 +97,13 @@ export class ResearchExperiments {
     fields: Parameters<ExperimentManager["createRobustnessExperiment"]>[0]["fields"]): Promise<StrategyExperiment> {
     const experiment = await this.manager.createRobustnessExperiment({ request: structuredClone(request),
       dataset: { dataset_id: dataset.dataset_id, data_epoch: dataset.data_epoch, interval: dataset.interval }, fields });
+    this.upsert(experiment);
+    return experiment;
+  }
+
+  /** Show a study the research tools made (a `?study=` link) as a robustness experiment. */
+  async openStudy(studyId: string): Promise<StrategyExperiment> {
+    const experiment = await this.manager.adoptStudyExperiment(studyId);
     this.upsert(experiment);
     return experiment;
   }

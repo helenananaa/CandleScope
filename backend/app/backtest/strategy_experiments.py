@@ -230,10 +230,18 @@ def _run_member(ordinal: int, input_: dict[str, Any], run_id: Any, run: Mapping[
 
 def study_members(study: Mapping[str, Any], runs: Mapping[str, Mapping[str, Any] | None]) -> list[dict[str, Any]]:
     """Every run a Study V2 planned, in order: each fold's candidates on its training window, its
-    selected candidate on its test window, then the holdout. ``runs`` holds the created runs by id."""
+    selected candidate on its test window, then the holdout. A V1 study (read only, ADR-BACKTEST-015
+    §3.6) lists its trials. ``runs`` holds the created runs by id."""
     stopped = STUDY_STATES.get(str(study["state"])) in ("FAILED", "CANCELLED")
     planned = "CANCELLED" if stopped else "PENDING"
     members: list[dict[str, Any]] = []
+    if not study.get("folds") and study.get("trials"):
+        for trial in study["trials"]:
+            run_id = trial.get("run_id")
+            members.append(_run_member(len(members), {
+                "role": "TRIAL", "split": trial.get("split_id"), "parameters": json.loads(str(trial["params_json"]))},
+                run_id, runs.get(str(run_id)), "CANCELLED" if str(trial.get("state")) == "CANCELLED" else planned))
+        return members
     for fold in study.get("folds") or []:
         number = int(fold["ordinal"])
         for trial in fold.get("train_trials") or []:
@@ -288,6 +296,7 @@ def study_view(study: Mapping[str, Any]) -> dict[str, Any]:
 
 def _study_run_ids(study: Mapping[str, Any]) -> list[str]:
     ids = [trial.get("run_id") for fold in study.get("folds") or [] for trial in fold.get("train_trials") or []]
+    ids += [trial.get("run_id") for trial in study.get("trials") or []]
     ids += [fold.get("test_run_id") for fold in study.get("folds") or []]
     holdout = study.get("holdout")
     if isinstance(holdout, Mapping):
@@ -463,6 +472,29 @@ class StrategyExperiments:
         if (await self._member(member, port))["state"] not in ("FAILED", "CANCELLED"):
             raise BacktestError("EXPERIMENT_MEMBER_ACTIVE", "only a failed or cancelled member is retried")
         await self._submit(experiment_id, {**member, "attempt": int(member["attempt"]) + 1}, port)
+        return await self.view(experiment_id, port)
+
+    async def adopt_study(self, study_id: str, port: ExperimentPort) -> dict[str, Any]:
+        """A study made before experiments (by the research tool, V1 or V2) as a robustness experiment, so
+        its link opens in the workspace (ADR-BACKTEST-015 P5d). Adopting again returns the same experiment."""
+        existing = await asyncio.to_thread(self.repository.strategy_experiment_for_study, study_id)
+        if existing is not None:
+            return await self.view(existing, port)
+        study = await port.study(study_id)
+        if study is None:
+            raise BacktestError("STUDY_NOT_FOUND", f"unknown study {study_id}")
+        experiment_id = f"{ID_PREFIX}{uuid.uuid4().hex}"
+        row = {"experiment_id": experiment_id, "idempotency_key": f"study:{study_id}",
+               "request_hash": canonical_hash({"adopted_study": study_id}), "name": str(study.get("name") or study_id)[:120],
+               "kind": "ROBUSTNESS", "created_at_ms": int(study.get("created_at_ms") or self.clock_ms()),
+               "strategy_json": json.dumps({"strategy_revision_id": study.get("strategy_revision_id")}, separators=(",", ":"))}
+        try:
+            await asyncio.to_thread(self.repository.insert_strategy_experiment, row, [], study_id)
+        except Exception:
+            existing = await asyncio.to_thread(self.repository.strategy_experiment_for_study, study_id)
+            if existing is None:
+                raise
+            experiment_id = existing  # adopted at the same time elsewhere
         return await self.view(experiment_id, port)
 
     async def reveal_holdout(self, experiment_id: str, port: ExperimentPort) -> dict[str, Any]:

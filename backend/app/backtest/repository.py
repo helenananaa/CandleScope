@@ -160,6 +160,12 @@ class BacktestRepository:
             raise
 
     @_locked
+    def strategy_experiment_for_study(self, study_id: str) -> str | None:
+        row = self.connection.execute(
+            "SELECT experiment_id FROM backtest_strategy_experiment_studies WHERE study_id = ?", (study_id,)).fetchone()
+        return None if row is None else str(row[0])
+
+    @_locked
     def strategy_experiment_by_key(self, idempotency_key: str) -> dict[str, Any] | None:
         row = self.connection.execute(
             "SELECT experiment_id, request_hash FROM backtest_strategy_experiments WHERE idempotency_key = ?",

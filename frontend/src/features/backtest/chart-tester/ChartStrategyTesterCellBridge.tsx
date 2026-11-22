@@ -1,6 +1,6 @@
 import type { ChartSettings } from "../../settings/chartAppearanceSettings.js";
 import { chartStrategySignalInput, withChartSignalInput } from "./chartStrategySignalInput.js";
-import { researchModeForTask, strategyResearchModeHref } from "../research/backtestResearchModes.js";
+import { strategyResearchModeHref } from "../research/backtestResearchModes.js";
 import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
 import { describeError } from "../../../i18n/serverErrors.js";
 import type { NativeStrategyCollection } from "../native/nativeStrategyCollection.js";
@@ -54,10 +54,6 @@ import { chartFollowStatus } from "./chartStrategyFollowStatus.js";
 import { resolveKlineSeriesIdentity } from "../../market-data/klineSeriesIdentity.js";
 import type { TradeExplanationSelection } from "./ChartStrategyResultViews.js";
 import type { StrategyDraftRecord } from "./StrategyDraftStore.js";
-import {
-  backtestResearchContextHref,
-  buildBacktestResearchLaunchContext,
-} from "../research/backtestResearchLaunch.js";
 import {
   CHART_STRATEGY_AUTO_RUN_DEBOUNCE_MS,
   chartStrategyAutoRunCoordinator,
@@ -133,7 +129,6 @@ export default function ChartStrategyTesterCellBridge({
   const [result, setResult] = useState<ChartStrategyResultBundle | null>(null);
   const [resultLoading, setResultLoading] = useState(false);
   const [resultError, setResultError] = useState<string | null>(null);
-  const [advancedOpening, setAdvancedOpening] = useState(false);
   const [comparison, setComparison] = useState<RecentRunCompareV1 | null>(null);
   const [selectedExplanation, setSelectedExplanation] = useState<TradeExplanationSelection | null>(null);
   const [pendingDataDraftRevision, setPendingDataDraftRevision] = useState<number | null>(null);
@@ -758,53 +753,10 @@ export default function ChartStrategyTesterCellBridge({
     inFlightRef.current = task;
   }, [cancelPendingAutoRun, cellId, strategyManager, workspaceId]);
 
-  const openResearch = useCallback((entryTask: "PRECISE_EXECUTION" | "PARAMETER_ROBUSTNESS") => {
-    if (advancedOpening) return;
-    if (!attachment) {
-      window.location.assign(strategyResearchModeHref(researchModeForTask(entryTask)));
-      return;
-    }
-    setAdvancedOpening(true);
-    setResultError(null);
-    let payload;
-    try {
-      payload = buildBacktestResearchLaunchContext({
-        workspaceId,
-        cellId,
-        session,
-        attachment,
-        result,
-        resolution,
-        activeRunId: runtimeState.activeRunId,
-        baselineRunId: runtimeState.baselineRunId,
-        entryTask,
-      });
-    } catch (reason) {
-      setResultError(reason instanceof Error ? describeError(reason, reason.message) : String(reason));
-      setAdvancedOpening(false);
-      return;
-    }
-    if (!strategyManager) { setResultError(t("chartTester.error.backend")); setAdvancedOpening(false); return; }
-    void strategyManager.createResearchLaunchContext(payload).then((context) => {
-      window.location.assign(backtestResearchContextHref(context.context_id, entryTask));
-    }).catch((reason: unknown) => {
-      setResultError(reason instanceof Error ? describeError(reason, reason.message) : String(reason));
-      setAdvancedOpening(false);
-    });
-  }, [
-    advancedOpening,
-    attachment,
-    cellId,
-    resolution,
-    result,
-    runtimeState.activeRunId,
-    runtimeState.baselineRunId,
-    session,
-    strategyManager,
-    workspaceId,
-  ]);
-  const handleOpenAdvanced = useCallback(() => openResearch("PRECISE_EXECUTION"), [openResearch]);
-  const handleOpenBatchStudy = useCallback(() => openResearch("PARAMETER_ROBUSTNESS"), [openResearch]);
+  // ADR-BACKTEST-015 P5d: research opens in the workspace. With a strategy, the panel hands it off
+  // (onOpenWorkspace with a mode); without one, the workspace opens on the field the action names.
+  const handleOpenAdvanced = useCallback(() => window.location.assign(strategyResearchModeHref("precise")), []);
+  const handleOpenBatchStudy = useCallback(() => window.location.assign(strategyResearchModeHref("robust")), []);
 
   if (!bottomPanelHost) return null;
   return createPortal(
@@ -852,12 +804,15 @@ export default function ChartStrategyTesterCellBridge({
       onResumeObserving={handleResumeObserving}
       onSourceDirty={() => setSourceDiagnostics([])}
       onOpenAdvanced={handleOpenAdvanced}
-      onOpenWorkspace={async (draft, settings) => {
+      onOpenWorkspace={async (draft, settings, mode) => {
         if (!attachment) return;
         if (!strategyManager) throw new Error(t("chartTester.error.backend"));
-        try { window.location.assign(await saveResearchHandoff({ session, workspaceId, cellId,
-          attachment: settings ? { ...attachment, ...settings } : attachment,
-          draft, runId: settings ? null : result?.run.run_id ?? null }, strategyManager)); }
+        try {
+          const href = await saveResearchHandoff({ session, workspaceId, cellId,
+            attachment: settings ? { ...attachment, ...settings } : attachment,
+            draft, runId: settings ? null : result?.run.run_id ?? null }, strategyManager);
+          window.location.assign(mode ? `${href}&mode=${mode}` : href);
+        }
         catch (reason) { setResultError(reason instanceof Error ? describeError(reason, reason.message) : String(reason)); throw reason; }
       }}
       onOpenBatchStudy={handleOpenBatchStudy}

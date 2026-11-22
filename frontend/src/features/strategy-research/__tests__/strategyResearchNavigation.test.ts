@@ -31,7 +31,7 @@ test("TopBar strategy entry is /strategy.html and not a sibling 策略回测 lin
   assert.doesNotMatch(topBar, /shell\.backtest/);
 });
 
-test("backtest.html opens the workspace; its run, study and context links still open the research tool", () => {
+test("backtest.html and its run, study and context links open in the workspace", () => {
   assert.equal(parseStrategyResearchLaunch({ pathname: "/backtest.html", search: "" }).kind, "advanced");
   const run = parseStrategyResearchLaunch({
     pathname: "/backtest.html",
@@ -39,18 +39,14 @@ test("backtest.html opens the workspace; its run, study and context links still 
   });
   assert.equal(run.kind, "deep-link");
   assert.equal(strategyResearchDeepLinkSearch(run), "?run=bt_0123456789abcdef");
-  const home = renderToStaticMarkup(
-    React.createElement(StrategyResearchApp, {
-      intent: parseStrategyResearchLaunch({ pathname: "/backtest.html", search: "" }),
-    }),
-  );
-  assert.doesNotMatch(home, /strategy-research-advanced/, "the research tools are workspace fields (ADR-BACKTEST-015 P5c4)");
-  assert.match(home, /research-data-source-bar/);
-  assert.doesNotMatch(home, /research-mode-rail/);
-  const linked = renderToStaticMarkup(React.createElement(StrategyResearchApp, { intent: run }));
-  assert.match(linked, /strategy-research-advanced/);
-  assert.match(linked, /strategy-research-tool-bar/, "a deep link into the tool leads back to the workspace");
-  assert.doesNotMatch(linked, /research-mode-rail|monaco/i);
+  for (const intent of [parseStrategyResearchLaunch({ pathname: "/backtest.html", search: "" }), run,
+    parseStrategyResearchLaunch({ pathname: "/strategy.html", search: "?study=st_0123456789abcdef" }),
+    parseStrategyResearchLaunch({ pathname: "/strategy.html", search: "?context=brc_abcdefgh" })]) {
+    const html = renderToStaticMarkup(React.createElement(StrategyResearchApp, { intent }));
+    assert.doesNotMatch(html, /strategy-research-advanced/, `${intent.kind} opens the workspace (ADR-BACKTEST-015 P5d)`);
+    assert.match(html, /strategy-research-shell/);
+    assert.doesNotMatch(html, /research-mode-rail|monaco/i);
+  }
 });
 
 test("?mode= opens the workspace field each research tool became", () => {
@@ -174,12 +170,14 @@ test("ordinary research persists edited source for remount and advanced draft lo
   assert.match(panelSource, /beforeunload/);
 });
 
-test("the unified app hosts the research tool only for its links, with no mode rail", () => {
+test("the unified app no longer hosts the research tool", () => {
   const app = readFileSync(path.resolve(here, "../StrategyResearchApp.tsx"), "utf8");
-  assert.match(app, /lazy\(\(\) => import\("\.\.\/backtest\/research\/BacktestResearchApp/);
-  assert.doesNotMatch(app, /useBacktestResearchRuntime/);
+  assert.doesNotMatch(app, /BacktestResearchApp|useBacktestResearchRuntime/);
   assert.doesNotMatch(app, /StrategyResearchModeRail|ResearchModeRailContext|createStrategyResearchContextSearch/);
-  assert.match(app, /if \(toolSearch !== null\)/);
+  assert.match(app, /loadResearchLaunchContext/);
+  assert.match(app, /experiments\.openStudy/);
   assert.match(app, /window\.history\.replaceState/);
   assert.doesNotMatch(app, /window\.location\.assign|strategy\.advancedNeedSource|strategy\.advancedNeedDraft/);
+  const bridge = readFileSync(path.resolve(here, "../../backtest/chart-tester/ChartStrategyTesterCellBridge.tsx"), "utf8");
+  assert.doesNotMatch(bridge, /buildBacktestResearchLaunchContext|createResearchLaunchContext/, "the chart hands off to the workspace");
 });
