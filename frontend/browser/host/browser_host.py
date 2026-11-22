@@ -59,6 +59,21 @@ async def browser_storage_access(request: Request):
 
 app.dependency_overrides[require_local_research_access] = browser_storage_access
 
+# A symbol that the loaded catalog lacks makes the backend read the catalog
+# again. That read asks the venue, not for the copy this start began with.
+from app.exchanges.ccxt_ext.markets import CcxtMarketTables
+from browser_io import forget_catalogs
+
+_reload_markets = CcxtMarketTables.reload
+
+
+async def reload_markets(self, exchange, *, stale_markets=None):
+    forget_catalogs()
+    return await _reload_markets(self, exchange, stale_markets=stale_markets)
+
+
+CcxtMarketTables.reload = reload_markets
+
 from library_download import ReplayLibrary, router as library_download_router
 app.state.replay_library = ReplayLibrary()
 app.include_router(library_download_router)

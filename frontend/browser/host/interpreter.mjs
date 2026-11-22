@@ -25,71 +25,153 @@ sys.path[:0] = ['/packages', '/repo', '/repo/backend', *glob.glob('/repo/package
 import browser_host
 `
 
-// Read named entries of the engine archive before Python exists.
-async function archiveEntries(archive, names) {
-  const view = new DataView(archive.buffer, archive.byteOffset, archive.byteLength)
-  let end = archive.length - 22
-  while (end >= 0 && view.getUint32(end, true) !== 0x06054b50) end--
-  if (end < 0) throw Error('The Python backend archive is damaged')
-  const wanted = new Set(names)
-  const decoder = new TextDecoder()
-  const entries = {}
-  let offset = view.getUint32(end + 16, true)
-  for (let index = view.getUint16(end + 10, true); index > 0; index--) {
-    const method = view.getUint16(offset + 10, true)
-    const size = view.getUint32(offset + 20, true)
-    const nameLength = view.getUint16(offset + 28, true)
-    const header = view.getUint32(offset + 42, true)
-    const name = decoder.decode(archive.subarray(offset + 46, offset + 46 + nameLength))
-    offset += 46 + nameLength + view.getUint16(offset + 30, true) + view.getUint16(offset + 32, true)
-    if (!wanted.has(name)) continue
-    const start = header + 30 + view.getUint16(header + 26, true) + view.getUint16(header + 28, true)
-    const data = archive.subarray(start, start + size)
-    entries[name] =
-      method === 0
-        ? data
-        : new Uint8Array(
-            await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer()
-          )
+const decoder = new TextDecoder()
+const damaged = () => Error('The Python backend archive is damaged')
+const inflate = async (data) =>
+  new Uint8Array(await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer())
+
+// Call onEntry(name, data) for each entry of a zip archive as its bytes
+// arrive. The entries' sizes are in their local headers (bundle.py writes no
+// data descriptors), so no entry waits for the central directory at the end.
+// The response is read to its end, so that the HTTP cache keeps all of it.
+async function readArchive(response, onEntry) {
+  const reader = response.body.getReader()
+  let pending = new Uint8Array(0)
+  async function take(length) {
+    const out = new Uint8Array(length)
+    for (let filled = 0; filled < length; ) {
+      if (!pending.length) {
+        const { done, value } = await reader.read()
+        if (done) throw damaged()
+        pending = value
+      }
+      const part = Math.min(length - filled, pending.length)
+      out.set(pending.subarray(0, part), filled)
+      pending = pending.subarray(part)
+      filled += part
+    }
+    return out
   }
-  for (const name of wanted) if (!entries[name]) throw Error('The Python backend archive lacks ' + name)
-  return entries
+  for (;;) {
+    const header = new DataView((await take(30)).buffer)
+    if (header.getUint32(0, true) !== 0x04034b50) break
+    const flags = header.getUint16(6, true)
+    const method = header.getUint16(8, true)
+    if (flags & 8 || (method !== 0 && method !== 8)) throw damaged()
+    const name = decoder.decode(await take(header.getUint16(26, true)))
+    await take(header.getUint16(28, true))
+    const data = await take(header.getUint32(18, true))
+    await onEntry(name, method === 8 ? await inflate(data) : data)
+  }
+  while (!(await reader.read()).done);
 }
 
-export async function loadBackend() {
-  const response = await fetch(new URL('backend.zip', here))
-  if (!response.ok) throw Error('Python backend download failed')
-  const archive = new Uint8Array(await response.arrayBuffer())
-  const { dynlibs } = JSON.parse(new TextDecoder().decode((await archiveEntries(archive, ['dynlibs.json']))['dynlibs.json']))
-  const files = await archiveEntries(archive, dynlibs.map((path) => path.slice(1)))
-  return { archive, libraries: dynlibs.map((path) => [path, files[path.slice(1)]]) }
+// The archive holds dynlibs.json, the C extensions that importing the backend
+// loads, and a zstd stream of every other file, in that order (bundle.py). It
+// is read as it arrives: the C extensions compile, and Python starts, while
+// the stream downloads. Returns { libraries, files }: promises of the
+// [path, bytes, compiled module] list in loading order, and of the stream.
+export function loadBackend() {
+  let found
+  const libraries = new Promise((resolve, reject) => (found = { resolve, reject }))
+  const files = (async () => {
+    const response = await fetch(new URL('backend.zip', here))
+    if (!response.ok) throw Error('Python backend download failed')
+    let wanted = null
+    const compiled = new Map()
+    let stream = null
+    await readArchive(response, (name, data) => {
+      if (name === 'dynlibs.json') wanted = JSON.parse(decoder.decode(data)).dynlibs
+      else if (name === 'files.zst') stream = data
+      else compiled.set('/' + name, WebAssembly.compile(data).then((module) => ['/' + name, data, module]))
+      if (found && wanted?.every((path) => compiled.has(path))) {
+        found.resolve(Promise.all(wanted.map((path) => compiled.get(path))))
+        found = null
+      }
+    })
+    if (!wanted || !stream) throw Error('The Python backend archive lacks ' + (wanted ? 'files.zst' : 'dynlibs.json'))
+    const missing = wanted.find((path) => !compiled.has(path))
+    if (missing) throw Error('The Python backend archive lacks ' + missing)
+    return stream
+  })()
+  files.catch((error) => found?.reject(error))
+  // Each start reports a failed download once, where it waits for it.
+  libraries.catch(() => {})
+  files.catch(() => {})
+  return { libraries, files }
+}
+
+// Python's own zstd unpacks the stream: a 4-byte index length, the JSON index
+// of [path, size] pairs, then the files' bytes. Only zstd's 8 MB window and
+// one file at a time pass through the interpreter's memory, which a snapshot
+// keeps. The frame's checksum rejects a damaged download.
+const UNPACK_FILES = `
+import json, os
+from compression import zstd
+made = set()
+with zstd.ZstdFile('/tmp/backend.zst') as stream:
+    size = int.from_bytes(stream.read(4), 'little')
+    for path, length in json.loads(stream.read(size)):
+        folder = path.rpartition('/')[0] or '/'
+        if folder not in made:
+            os.makedirs(folder, exist_ok=True)
+            made.add(folder)
+        data = stream.read(length)
+        if len(data) != length:
+            raise EOFError('The Python backend archive is damaged')
+        with open(path, 'wb') as target:
+            target.write(data)
+    if stream.read(1):
+        raise ValueError('The Python backend archive is damaged')
+os.remove('/tmp/backend.zst')
+`
+function unpackFiles(py, files) {
+  py.FS.writeFile('/tmp/backend.zst', files)
+  const scope = py.toPy({})
+  try {
+    py.runPython(UNPACK_FILES, { globals: scope })
+  } finally {
+    scope.destroy()
+  }
 }
 
 const libraryPaths = (module) => Object.keys(module.LDSO.loadedLibsByName).filter((name) => name !== '__main__')
 export const openFiles = (py) => py.FS.streams.filter(Boolean).map((stream) => stream.path)
 
+// libraries resolves when the C extensions have arrived and compiled. Pyodide
+// downloads and compiles its runtime meanwhile; Emscripten runs the hooks
+// below once the runtime is instantiated, and a run dependency holds Python's
+// start until the C extensions are loaded. Nothing has allocated memory before
+// them, as when they loaded at once, so their placement is the same in every
+// start.
 function moduleFactory(libraries, snapshot) {
   return async (settings) => {
+    const arrived = libraries
     settings.preRun = [
       ...[].concat(settings.preRun ?? []),
       () => {
-        for (const [path, bytes] of libraries) {
-          settings.FS.mkdirTree(path.slice(0, path.lastIndexOf('/')))
-          settings.FS.writeFile(path, bytes)
-          const exports = settings.loadWebAssemblyModule(
-            bytes,
-            { loadAsync: false, global: false, nodelete: true },
-            path,
-            {}
-          )
-          // Python's dlopen then finds the library already loaded.
-          settings.newDSO(path, undefined, exports).global = false
-        }
-        settings.preloadedTable = settings.wasmTable.length
-        libraries = null
+        settings.addRunDependency('candlescope-libraries')
+        libraries.then((list) => {
+          for (const [path, bytes, compiled] of list) {
+            settings.FS.mkdirTree(path.slice(0, path.lastIndexOf('/')))
+            settings.FS.writeFile(path, bytes)
+            const exports = settings.loadWebAssemblyModule(
+              compiled,
+              { loadAsync: false, global: false, nodelete: true },
+              path,
+              {}
+            )
+            // Python's dlopen then finds the library already loaded.
+            settings.newDSO(path, undefined, exports).global = false
+          }
+          settings.preloadedTable = settings.wasmTable.length
+          libraries = null
+          settings.removeRunDependency('candlescope-libraries')
+        }, () => {})
       },
     ]
-    const module = await createPyodideModule(settings)
+    // A failed download fails the start instead of holding it.
+    const module = await Promise.race([createPyodideModule(settings), arrived.then(() => new Promise(() => {}))])
     if (snapshot) {
       // This build defines its memory in the module and ignores INITIAL_MEMORY.
       module.growMemory(snapshot.memory.length)
@@ -134,13 +216,14 @@ function membrane(root) {
   return wrap(root)
 }
 
-// mode: 'import' starts an empty interpreter, 'snapshot' one whose memory can
-// be saved, and { snapshot } restores a saved one.
-export async function interpreter({ archive, libraries }, mode) {
+// backend is loadBackend()'s result. mode: 'import' starts an empty
+// interpreter, 'snapshot' one whose memory can be saved, and { snapshot }
+// restores a saved one.
+export async function interpreter(backend, mode) {
   const snapshot = typeof mode === 'object' ? mode.snapshot : null
   const py = await loadPyodide({
     indexURL: here.href,
-    createPyodideModule: moduleFactory(libraries, snapshot),
+    createPyodideModule: moduleFactory(backend.libraries, snapshot),
     ...(snapshot
       ? { _loadSnapshot: snapshot.memory }
       : mode === 'snapshot'
@@ -149,7 +232,7 @@ export async function interpreter({ archive, libraries }, mode) {
   })
   // The restored memory is in place; do not keep a second copy for the session.
   if (snapshot) py._api.config._loadSnapshot = null
-  py.unpackArchive(archive, 'zip', { extractDir: '/' })
+  unpackFiles(py, await backend.files)
   return py
 }
 

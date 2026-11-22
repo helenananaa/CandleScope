@@ -18,7 +18,7 @@ async function run() {
   // One tab makes the snapshot; the others find it, or find the lock taken.
   return navigator.locks.request(snapshotKey, { ifAvailable: true }, async (lock) => {
     if (!lock || (await hasSnapshot())) return 'skipped'
-    const backend = await loadBackend()
+    const backend = loadBackend()
     const py = await interpreter(backend, 'snapshot')
     const filesBefore = openFiles(py)
     await py.runPythonAsync(IMPORT_BACKEND)
@@ -31,7 +31,7 @@ import gc, importlib.metadata
 importlib.metadata.FastPath.__new__.cache_clear()
 gc.collect()
 `)
-    const layout = snapshotLayout(py, backend.libraries, filesBefore)
+    const layout = snapshotLayout(py, await backend.libraries, filesBefore)
     await storeSnapshot(py.makeMemorySnapshot(), layout)
     return 'stored'
   })

@@ -104,6 +104,12 @@ try {
       stats = await engineStats(page)
     }
     assert.deepEqual([stats.boot, stats.snapshot], ['import', 'stored'])
+    // The backend read the opening market's catalog through catalog.mjs, which
+    // downloaded it once for all of this start's readers. A second reader is
+    // not certain: it may instead join the load the first one started. The
+    // background catalog sweep reads other catalogs, which download apart.
+    assert.equal(stats.catalog.failures, 0, JSON.stringify(stats.catalog))
+    assert.ok(stats.catalog.reads >= 1 && stats.catalog.openingDownloads === 1, JSON.stringify(stats.catalog))
   })
   await visit(true, async (page, context) => {
     if (context.blocksNetwork) assert.equal(
@@ -132,7 +138,10 @@ try {
       saved.length
     )
     assert.deepEqual(signature(range.data), saved)
-    assert.equal((await engineStats(page)).boot, context.keepsSnapshots ? 'snapshot' : 'import')
+    const stats = await engineStats(page)
+    assert.equal(stats.boot, context.keepsSnapshots ? 'snapshot' : 'import')
+    // Cache Storage that keeps the snapshot keeps the catalog of the first visit.
+    if (context.keepsSnapshots) assert.ok(stats.catalog.stored >= 1, JSON.stringify(stats.catalog))
     console.log(
       'After a complete browser exit, the engine ' +
         (context.keepsSnapshots ? 'restored its snapshot' : 'started again') +

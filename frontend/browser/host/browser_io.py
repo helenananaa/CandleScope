@@ -26,14 +26,35 @@ def public_url(value):
     return str(value)
 
 
+# The engine loads these once for all of a start's readers (catalog.mjs).
+def is_catalog(url):
+    return (url.host or "").endswith((".binance.vision", ".binance.com")) and url.path.endswith("/exchangeInfo")
+
+
+async def catalog(url):
+    import js
+    reader = getattr(js, "candlescopeCatalog", None)
+    if reader is None:  # no engine: the build, or the interpreter a snapshot is made from
+        return None
+    copy = await reader.read(str(url))
+    return copy.to_bytes() if hasattr(copy, "to_bytes") else None
+
+
+def forget_catalogs():
+    import js
+    reader = getattr(js, "candlescopeCatalog", None)
+    if reader is not None:
+        reader.forget()
+
+
 class FetchResponse:
-    def __init__(self, response, headers):
+    def __init__(self, response, headers, url=None, body=None):
         self.response = response
-        self.status = response.status
-        self.reason = response.status_text
-        self.url = URL(response.url)
+        self.status = response.status if response else 200
+        self.reason = response.status_text if response else "OK"
+        self.url = URL(response.url) if response else url
         self.headers = CIMultiDictProxy(CIMultiDict(headers))
-        self._body = None
+        self._body = body
 
     async def read(self):
         if self._body is None:
@@ -70,6 +91,10 @@ async def http_request(session, method, url, **options):
     async with asyncio.timeout(total if isinstance(total, (int, float)) else 20):
         if any(str(name).lower() in {"authorization", "x-mbx-apikey", "ok-access-key"} for name in (options.get("headers") or {})):
             raise aiohttp.ClientConnectionError("Private exchange accounts require the desktop runtime")
+        if is_catalog(target):
+            body = await catalog(target)
+            if body is not None:
+                return FetchResponse(None, [("content-type", "application/json")], target, body)
         try:
             response = await pyfetch(str(target), method="GET", credentials="omit",
                                      headers={"Accept": "application/json"})

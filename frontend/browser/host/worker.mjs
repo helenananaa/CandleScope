@@ -1,5 +1,19 @@
+import { catalogStats, forgetCatalogs, prefetchCatalogs, readCatalog } from './catalog.mjs'
 import { IMPORT_BACKEND, disableSnapshot, hasSnapshot, interpreter, loadBackend, readSnapshot } from './interpreter.mjs'
 import { openStore } from './store.mjs'
+
+// The backend's first requests wait for the opening market's catalog. Load it
+// while the interpreter starts (see catalog.mjs); browser_io.py reads it here.
+// Parsing it keeps the interpreter busy for about a second, and the backend
+// asks while it starts: hand it over once the page has its first candles, or
+// has had time to ask, so that a returning visitor sees the stored ones first.
+let servePage
+const pageServed = new Promise((resolve) => (servePage = resolve))
+globalThis.candlescopeCatalog = {
+  read: (url) => pageServed.then(() => readCatalog(url)),
+  forget: forgetCatalogs,
+}
+prefetchCatalogs()
 
 let runtime
 // Pages report this to show that moving between them reused one engine.
@@ -66,8 +80,10 @@ function persist(store) {
 }
 
 async function start() {
-  const [backend, snapshot] = await Promise.all([
-    loadBackend(),
+  // The interpreter downloads its runtime while the engine archive arrives
+  // (see interpreter.mjs).
+  const backend = loadBackend()
+  const [snapshot] = await Promise.all([
     snapshots
       ? readSnapshot().catch((error) => {
           console.warn('Ignoring the interpreter snapshot', error)
@@ -84,6 +100,8 @@ async function start() {
       boot = 'snapshot'
       snapshotState = 'restored'
     } catch (error) {
+      // A failed download fails this start; it says nothing about the snapshot.
+      await Promise.all([backend.libraries, backend.files])
       console.warn('Could not restore the interpreter snapshot; importing the backend', error)
       snapshotState = 'disabled'
       await disableSnapshot().catch(() => {})
@@ -91,6 +109,8 @@ async function start() {
   }
   py ??= await interpreter(backend, 'import')
   const store = await openStore(py, '/store')
+  // Starting does not wait for the catalog; should that change, do not hold it.
+  const unheld = setTimeout(servePage, 10000)
   try {
     // The archive holds unpacked packages with bytecode for the modules that
     // starting the backend imports (see prepare_engine.mjs).
@@ -100,6 +120,8 @@ async function start() {
     if (boot === 'snapshot') await disableSnapshot().catch(() => {})
     throw error
   }
+  clearTimeout(unheld)
+  setTimeout(servePage, 1500)
   // Background backfill may commit after its HTTP request has already returned.
   let flushing = false
   setInterval(async () => {
@@ -125,10 +147,12 @@ function attach(port) {
         return send(id, { kind: 'ready', transport: 2, instance, snapshot: snapshotState, storage: storageNotice })
       if (kind === 'stats') {
         const snapshot = snapshotState === 'missing' && (await hasSnapshot()) ? 'stored' : snapshotState
-        return send(id, { kind: 'stats', instance, boot, snapshot, ...JSON.parse(host.stats()) })
+        return send(id, { kind: 'stats', instance, boot, snapshot, catalog: catalogStats(), ...JSON.parse(host.stats()) })
       }
       if (kind === 'abort') return requests.get(id)?.cancel()
       if (kind === 'http') {
+        // The request waited for the engine to start; its time limit begins now.
+        if (data.accepts) channel.postMessage({ type: 'accepted' })
         const { body, ...metadata } = data
         const task = host.http_task(JSON.stringify(metadata), new Uint8Array(body), (value) =>
           channel.postMessage(JSON.parse(value))
@@ -141,6 +165,7 @@ function attach(port) {
           const result = JSON.parse(await task)
           await persist(store)
           channel.postMessage(result)
+          if (data.path.startsWith('/api/v1/klines/')) servePage()
         } finally {
           requests.delete(id)
           task.destroy()

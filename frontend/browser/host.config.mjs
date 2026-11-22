@@ -27,6 +27,7 @@ execFileSync('python3', [resolve(here, 'host/bundle.py'), pack], {
 const engineFiles = {
   'backend.zip': pack,
   'backend-worker.mjs': resolve(here, 'host/worker.mjs'),
+  'catalog.mjs': resolve(here, 'host/catalog.mjs'),
   'interpreter.mjs': resolve(here, 'host/interpreter.mjs'),
   'snapshot-worker.mjs': resolve(here, 'host/snapshot-worker.mjs'),
   'store.mjs': resolve(here, 'host/store.mjs'),

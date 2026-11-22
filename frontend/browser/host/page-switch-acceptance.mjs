@@ -27,7 +27,9 @@ const pages = {
   replay: { path: (path) => path.endsWith('/replay.html'), ready: current('replay') },
 }
 
+// A page shows before the engine has answered it; the instance follows.
 async function engine(frame) {
+  await frame.locator('html[data-engine-instance]').waitFor({ state: 'attached', timeout: limit })
   return frame.locator('html').getAttribute('data-engine-instance')
 }
 
@@ -48,7 +50,7 @@ try {
   const started = Date.now()
   const app = await openApp(tab, url)
   await app.locator('.chart-pane canvas').first().waitFor({ timeout: 150000 })
-  await app.locator('html[data-engine-instance]').waitFor({ state: 'attached' })
+  await app.locator('html[data-engine-instance]').waitFor({ state: 'attached', timeout: 150000 })
   const instance = await engine(app)
   console.log('Cold start to the market chart:', Date.now() - started, 'ms')
   await app.waitForTimeout(5000)

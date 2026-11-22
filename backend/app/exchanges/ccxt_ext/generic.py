@@ -1059,6 +1059,15 @@ def _create_exchange(
         options["fetchMarkets"] = {"types": ["spot" if base_type == "spot" else "swap"]}
     elif entry.exchange_id == "binance" and base_type == "spot":
         options["fetchMarkets"] = {"types": ["spot"]}
+    if sys.platform == "emscripten" and websocket and entry.exchange_id == "binance":
+        # Pinned CCXT gives each of a client's first 50 subscriptions a socket
+        # of its own, and a browser opens the sockets to one host one after
+        # another. A tab with a chart beside a watchlist then spent a dozen
+        # handshakes before its first live candle. Use one socket per client;
+        # Binance carries up to 1024 streams on it.
+        families = ("spot", "margin", "future", "delivery")
+        options["streamLimits"] = dict.fromkeys(families, 1)
+        options["subscriptionLimitByStream"] = dict.fromkeys(families, 1000)
     if config.proxy_mode == "pool":
         # Catalog callers do not carry a TransportRequest. Bind their client
         # explicitly rather than accidentally opening a direct connection.

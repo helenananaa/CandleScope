@@ -34,11 +34,19 @@ async function dispatch(event, url) {
       channel.port1.close()
       resolve(response)
     }
-    const timer = setTimeout(() => {
+    const expire = () => {
       abort()
       finish(Response.json({ detail: 'Browser backend timed out' }, { status: 504 }))
-    }, 95000)
+    }
+    // A page shows before the engine has started, so its first requests wait
+    // for the start. The limit on a request counts from when the engine takes it.
+    let timer = setTimeout(expire, 250000)
     channel.port1.onmessage = ({ data }) => {
+      if (data.type === 'accepted') {
+        clearTimeout(timer)
+        timer = setTimeout(expire, 95000)
+        return
+      }
       if (stream) {
         if (data.type === 'chunk') stream.enqueue(Uint8Array.from(atob(data.body), (c) => c.charCodeAt(0)))
         else {
@@ -73,6 +81,8 @@ async function dispatch(event, url) {
     client.postMessage(
       {
         type: 'candlescope.api',
+        // This worker understands the engine's { type: 'accepted' }.
+        accepts: true,
         path: url.pathname,
         query: url.search,
         method: event.request.method,

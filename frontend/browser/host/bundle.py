@@ -2,7 +2,9 @@
 
 The archive is ready to import: wheels are unpacked, every module is compiled
 to bytecode by the Pyodide interpreter that runs it, and the pinned CCXT
-catalog is computed here instead of on each start.
+catalog is computed here instead of on each start. It holds the C extensions
+that importing loads and one zstd stream of all other files (see
+prepare_engine.mjs).
 """
 import concurrent.futures
 import hashlib
@@ -15,7 +17,7 @@ import subprocess
 import sys
 import tempfile
 from urllib.parse import urlsplit
-from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
+from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile, ZipInfo
 
 HERE = Path(__file__).resolve().parent
 BROWSER = HERE.parent
@@ -147,14 +149,25 @@ def main(output):
         wheels = list(workers.map(acquire, downloads()))
     stage(wheels)
     node = os.environ.get("CANDLESCOPE_NODE") or shutil.which("node")
-    subprocess.run([node, str(HERE / "prepare_engine.mjs"), str(STAGE)], check=True)
+    packed = CACHE / "files.zst"
+    subprocess.run([node, str(HERE / "prepare_engine.mjs"), str(STAGE), str(packed)], check=True)
+    # The browser reads the C extensions before Python exists, so they stay
+    # zip entries; the zstd stream of every other file is stored as it is.
+    # The browser reads entries as they arrive (interpreter.mjs): the C
+    # extensions come first, so that Python starts while the stream
+    # downloads, and each local header carries its sizes (a seekable output
+    # file gets no data descriptors).
+    preloaded = json.loads((STAGE / "dynlibs.json").read_text())["dynlibs"]
+    entries = [(name, (STAGE / name).read_bytes(), ZIP_DEFLATED)
+               for name in ["dynlibs.json", *(path.lstrip("/") for path in preloaded)]]
+    entries.append(("files.zst", packed.read_bytes(), ZIP_STORED))
     # Fixed timestamps and order keep the archive, and so its hash, reproducible.
-    with ZipFile(output, "w", ZIP_DEFLATED, compresslevel=6) as archive:
-        for path in sorted(p for p in STAGE.rglob("*") if p.is_file()):
-            entry = ZipInfo(path.relative_to(STAGE).as_posix(), date_time=(1980, 1, 1, 0, 0, 0))
-            entry.compress_type = ZIP_DEFLATED
+    with ZipFile(output, "w") as archive:
+        for name, data, method in entries:
+            entry = ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+            entry.compress_type = method
             entry.external_attr = 0o644 << 16
-            archive.writestr(entry, path.read_bytes())
+            archive.writestr(entry, data, compresslevel=9 if method == ZIP_DEFLATED else None)
 
 
 if __name__ == "__main__":

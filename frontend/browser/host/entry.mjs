@@ -2,7 +2,8 @@
 // shell: it owns the shared Python engine and shows the original pages in one
 // same-origin frame, so moving between pages does not restart the engine.
 // Inside that frame the module installs the transport and loads the desktop
-// entry; that is the only change before the desktop code runs.
+// entry; that is the only change before the desktop code runs. The page does
+// not wait for the engine: its requests reach the engine when that has started.
 const base = new URL('./', document.baseURI)
 const FRAME = 'candlescope-page'
 const UNCONTROLLED = 'candlescope.uncontrolled-reload'
@@ -29,21 +30,36 @@ function translator() {
   })
   return messages
 }
-const NOTICE_STYLE = 'padding:12px 16px;color:#8b909a;font:13px/1.5 system-ui,sans-serif;white-space:pre-line'
+// The application owns #root once it has loaded, so this module's notices are
+// elements of their own above it.
+const NOTICE_FONT = 'font:13px/1.5 system-ui,sans-serif;white-space:pre-line;z-index:2147483647'
+const FAILURE_STYLE = 'position:fixed;inset:0;padding:12px 16px;background:#0d0e10;color:#8b909a;' + NOTICE_FONT
+// Centred above the application's status bar, clear of its side toolbars.
+const STARTING_STYLE =
+  'position:fixed;left:50%;bottom:44px;transform:translateX(-50%);padding:8px 14px;border-radius:6px;' +
+  'pointer-events:none;text-align:center;background:rgba(22,24,28,.94);color:#c9cdd4;' +
+  'box-shadow:0 2px 12px rgba(0,0,0,.35);' +
+  NOTICE_FONT
+function notice(role, style) {
+  const element = document.createElement('div')
+  element.setAttribute('role', role)
+  element.style.cssText = style
+  document.body.append(element)
+  return element
+}
 async function startupFailure(key, values) {
   // Without its catalogs the app cannot run either; say so in English.
   const t = await translator().catch(() => (name, values) =>
     name === 'browser.desktop.download' ? 'Download the desktop app' : values?.reason ?? "CandleScope couldn't start."
   )
-  root.hidden = false
-  root.style.cssText = NOTICE_STYLE
   root.dataset.startupFailure = key
-  root.textContent = t(key, values) + ' '
+  const failure = notice('alert', FAILURE_STYLE)
+  failure.textContent = t(key, values) + ' '
   const link = document.createElement('a')
   link.href = 'https://github.com/helenananaa/CandleScope/releases'
   link.target = '_top'
   link.textContent = t('browser.desktop.download')
-  root.append(link)
+  failure.append(link)
 }
 if (!worker) {
   void startupFailure('browser.host.unsupported')
@@ -80,12 +96,14 @@ function request(kind, payload = {}, timeout = 90000) {
 // storage, and when saving to it fails. The page frame shows either.
 let storageNotice = null
 let storageBanner
+let startingNotice
 function showStorageNotice(notice) {
   storageNotice = notice ?? null
   if (notice?.state === 'waiting') {
     // Starting waits for the other tabs to close, however long that takes.
     for (const deadline of deadlines.values()) clearTimeout(deadline)
     deadlines.clear()
+    startingNotice?.end()
   }
   if (window.top === window) return
   translator().then((t) => {
@@ -306,22 +324,34 @@ function followShell() {
   })
 }
 
-async function startPage() {
-  // A running engine answers within a frame or two; only a cold start shows text.
-  // Before the page's styles load, the shell's last page colour shows through.
-  let started = false
+// While the engine starts, a page that already shows says so. A running engine
+// answers within a frame or two, and a returning visitor's starts in about two
+// seconds; only a longer start, which a first visit's download is, shows text.
+function showStarting() {
+  let element
   const t = translator()
-  const notice = setTimeout(async () => {
-    const text = await t
-    if (started) return
-    root.style.cssText = NOTICE_STYLE
-    root.textContent = text('browser.host.starting')
-  }, 400)
-  // A first visit downloads the engine; say why it takes a while.
-  const slow = setTimeout(async () => {
-    const text = await t
-    if (!started) root.textContent = text('browser.host.starting') + '\n' + text('browser.host.firstStart')
-  }, 8000)
+  const timers = [
+    setTimeout(async () => {
+      const text = await t
+      if (!timers.length) return
+      element = notice('status', STARTING_STYLE)
+      element.textContent = text('browser.host.starting')
+    }, 2500),
+    setTimeout(async () => {
+      const text = await t
+      if (element) element.textContent = text('browser.host.starting') + '\n' + text('browser.host.firstStart')
+    }, 8000),
+  ]
+  return {
+    end() {
+      for (const timer of timers.splice(0)) clearTimeout(timer)
+      element?.remove()
+      element = null
+    },
+  }
+}
+
+async function startPage() {
   forwardApplicationRequests()
   await navigator.serviceWorker.register(new URL('workspace-service.mjs', base), { scope: base.pathname })
   await navigator.serviceWorker.ready
@@ -352,22 +382,37 @@ async function startPage() {
     navigator.serviceWorker.controller.postMessage({ type: 'candlescope.transport' }, [channel.port2])
   })
   channel.port1.close()
-  const ready = serviceVersion === 2 ? await request('ready', {}, 150000) : null
-  started = true
-  clearTimeout(notice)
-  clearTimeout(slow)
-  if (ready?.transport !== 2) return startupFailure('browser.host.updated')
-  root.style.cssText = ''
-  if (ready.instance) document.documentElement.dataset.engineInstance = ready.instance
-  showStorageNotice(ready.storage)
+  if (serviceVersion !== 2) return startupFailure('browser.host.updated')
+
+  // The shell started the engine. The application loads meanwhile; what it
+  // asks for waits in the engine's queue (see worker.mjs) and is answered when
+  // the engine has started.
+  let started = false
+  startingNotice = showStarting()
+  request('ready', {}, 150000).then(
+    (ready) => {
+      started = true
+      startingNotice.end()
+      if (ready.transport !== 2) return startupFailure('browser.host.updated')
+      if (ready.instance) document.documentElement.dataset.engineInstance = ready.instance
+      showStorageNotice(ready.storage)
+    },
+    (error) => {
+      startingNotice.end()
+      void startupFailure('browser.host.startFailed', { reason: error?.message || String(error) })
+      console.error(error)
+    }
+  )
   globalThis.WebSocket = AppSocket
+  // An engine that has not started has nothing to save.
+  const flush = () => started && void request('flush').catch(console.error)
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') void request('flush').catch(console.error)
+    if (document.visibilityState === 'hidden') flush()
   })
   window.addEventListener('pagehide', () => {
     for (const id of httpRequests) worker.port.postMessage({ id, kind: 'abort' })
     for (const socket of appSockets) socket.close(1000, 'Page closed')
-    void request('flush').catch(console.error)
+    flush()
   })
   switch (document.documentElement.dataset.entry) {
     case 'replay':

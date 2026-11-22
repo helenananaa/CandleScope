@@ -28,7 +28,14 @@ export function engineStats(frame) {
         worker.port.onmessage = ({ data }) => {
           if (data.id !== id) return
           clearTimeout(timer)
-          resolve({ instance: data.instance, boot: data.boot, snapshot: data.snapshot, sockets: data.sockets, tasks: data.tasks })
+          resolve({
+            instance: data.instance,
+            boot: data.boot,
+            snapshot: data.snapshot,
+            catalog: data.catalog,
+            sockets: data.sockets,
+            tasks: data.tasks,
+          })
         }
         worker.port.postMessage({ id, kind: 'stats' })
       })
