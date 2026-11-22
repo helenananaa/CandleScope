@@ -630,14 +630,16 @@ def capabilities(request: Request):
     replay = getattr(adapter, "replay_service", None)
     bar_reason = import_unavailable_reason(replay)
     trade_ready = bool(getattr(getattr(adapter, "trades", None), "can_import_official", False))
+    library_ready = getattr(adapter, "replay_library", None) is not None
     exact_account = getattr(getattr(getattr(replay, "training", None), "account_history", None), "enabled", False)
-    return {"enabled": instance.enabled, "roles": ["BARS", *(["TRADES"] if trade_ready else [])],
-            "replay_sources": {"BAR": instance.enabled and bar_reason is None,
-                               "AGG_TRADE": instance.enabled and bar_reason is None and trade_ready},
-            "trade_providers": [{"exchange": "binance", "market_type": "futures"}] if trade_ready else [],
+    return {"enabled": instance.enabled, "roles": ["BARS", *(["TRADES"] if trade_ready or library_ready else [])],
+            "replay_sources": {"BAR": instance.enabled and (library_ready or bar_reason is None),
+                               "AGG_TRADE": instance.enabled and (library_ready or (bar_reason is None and trade_ready))},
+            "trade_providers": (adapter.replay_library.trade_providers() if library_ready else
+                                [{"exchange": "binance", "market_type": "futures"}] if trade_ready else []),
             "base_intervals": ["1m"],
             "replay_account_modes": ["APPROX_PROXY", *(["HISTORICAL_EXACT"] if exact_account else [])],
-            "progressive": instance.enabled and bar_reason is None,
+            "progressive": instance.enabled and not library_ready and bar_reason is None,
             "max_requirements": 32, "max_active_jobs": 64,
             "default_job_budget_bytes": 512 * 1024**2}
 

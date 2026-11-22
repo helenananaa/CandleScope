@@ -33,6 +33,7 @@ import { t, type LocaleId } from "../i18n/index.js";
 import { useLocale } from "../i18n/useLocale.js";
 import type { MarketRailViewDescriptor } from "./marketRailTypes.js";
 import MarketRightRailFrame from "./MarketRightRailFrame.js";
+import { browserHost } from "./browserHost.js";
 
 const ReadOnlyAccountDock = lazy(() => import("../features/readonly-accounts/ReadOnlyAccountDock.js"));
 const TradingAccountsPanel = lazy(() => import("../features/trading-accounts/TradingAccountsPanel.js"));
@@ -114,7 +115,7 @@ function builtInViews(locale: LocaleId): MarketRailViewDescriptor[] {
       defaultHeight: 520,
       minHeight: 280,
       maxHeight: MARKET_DOCK_MAX_HEIGHT,
-      collapsedSummary: t("account.scope", {}, locale),
+      collapsedSummary: t(browserHost() ? "browser.desktop.only" : "account.scope", {}, locale),
       hostOwned: true,
     },
     {

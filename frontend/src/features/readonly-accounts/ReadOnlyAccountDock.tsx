@@ -1,3 +1,4 @@
+import { BrowserDesktopLink } from "../../app/BrowserDesktopLink.js";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { ReadOnlyAccountDataManager } from "./accountDataManager.js";
 import { useMarketDataWorkspaceResources } from "../market-data/marketDataWorkspaceContext.js";
@@ -12,6 +13,7 @@ import { accountErrorHelp } from "./accountErrors.js";
 import type { LinkedNoteRequest } from "./journalDraft.js";
 import { AccountApiError, accountSession, getAccountFacts,
   record, type AccountStatus, type Fact, type FactKind, type FactPage } from "./accountApi.js";
+import { browserHost } from "../../app/browserHost.js";
 
 type Tab = "overview" | FactKind | "journal" | "reconcile" | "trades";
 const TABS: Tab[] = ["overview", "fills", "orders", "bills", "reconcile", "trades", "journal"];
@@ -35,7 +37,7 @@ export default function ReadOnlyAccountDock({ height, onRequestClose, trading }:
   const [newNoteRequest, setNewNoteRequest] = useState<LinkedNoteRequest | undefined>();
   const noteRequestHandled = useCallback(() => setNewNoteRequest(undefined), []);
   const factRequest = useRef(0);
-  const available = accountSession() !== null;
+  const available = !browserHost() && accountSession() !== null;
   const date = (ms: number | null | undefined) => typeof ms === "number" && Number.isFinite(ms) ? new Date(ms).toLocaleString(locale) : t("account.unknown", {}, locale);
 
   useEffect(() => {
@@ -99,6 +101,14 @@ export default function ReadOnlyAccountDock({ height, onRequestClose, trading }:
     : status.account.status === "syncing" ? "accent" : status.account.status === "disconnected" ? "neutral" : "danger";
   const factsTab = tab !== "overview" && tab !== "journal" && tab !== "reconcile" && tab !== "trades";
 
+  if (browserHost()) {
+    return <section className="readonly-account-dock" style={{ height }} aria-label={t("account.title")}>
+      <header className="readonly-account-heading"><strong>{t("account.title")}</strong>
+        <IconButton size="sm" label={t("account.closePanel")} icon={<Icon name="close" size={16} />} onClick={onRequestClose} />
+      </header>
+      <BrowserDesktopLink feature="account" />
+    </section>;
+  }
   return <section className="readonly-account-dock" style={{ height }} aria-label={t("account.title", {}, locale)}>
     <header className="readonly-account-header">
       <div className="readonly-account-heading">

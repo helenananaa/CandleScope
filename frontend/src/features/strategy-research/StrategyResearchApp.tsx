@@ -151,6 +151,7 @@ import { settingsCommands } from "../app-control/settingsCommands.js";
 import { libraryCommands } from "../app-control/libraryCommands.js";
 import { command } from "../app-control/commandRegistry.js";
 import { bool, choice, object, text } from "../app-control/commandSchema.js";
+import { browserHost } from "../../app/browserHost.js";
 
 export default function StrategyResearchApp({
   intent,
@@ -542,7 +543,7 @@ export default function StrategyResearchApp({
           { value: "host", label: t("native.hostMode") },
         ]}
       />
-      {!nativeMode && availability === "error" && <p className="strategy-research-note" role="status">{t("indicator.editor.runtimeUnavailableHelp")}</p>}
+      {!nativeMode && availability === "error" && <p className="strategy-research-note" role="status">{t(browserHost() ? "browser.scripts.desktopOnly" : "indicator.editor.runtimeUnavailableHelp")}</p>}
       {!nativeMode && availability === "unavailable" && <p className="strategy-research-note" role="status">{t("native.platformHelp")}</p>}
       {nativeMode ? researchRun.session ? <Suspense fallback={<p className="strategy-research-note">{t("native.loading")}</p>}>
         <NativeStrategyPanel signalChart={chartStrategySignalInput(settings)} session={researchRun.session} cellScope="strategy-research-native" onClose={() => setNativeMode(false)}
@@ -653,7 +654,8 @@ export default function StrategyResearchApp({
     </>
   );
   const header = {
-    actions: [
+    // Saved accounts and runs come from strategy runs, which the web version leaves to the desktop app.
+    actions: browserHost() ? [] : [
       { id: "saved-accounts", label: t("reader.title"), hasPopup: "dialog" as const, expanded: accountsOpen, onSelect: () => setAccountsOpen((open) => !open) },
       { id: "run-history", label: t("ux.history"), hasPopup: "dialog" as const, expanded: historyOpen, onSelect: () => setHistoryOpen((open) => !open) },
     ],

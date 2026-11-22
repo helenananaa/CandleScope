@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+import sys
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -1055,8 +1056,14 @@ async def start_data_engine() -> DataEngineRuntime:
             ingestion_factory,
         )
 
-        gap_scan_task = _start_startup_gap_scan(dm, backfill_coordinator)
-        gap_audit_task = _start_background_gap_audit(dm, backfill_coordinator)
+        # A browser library may contain isolated historical replay windows.
+        # Sweeping a saved window up to today can enqueue years of unsolicited
+        # work ahead of the next replay. Chart and replay demands still repair
+        # their own gaps through the same coordinator.
+        gap_scan_task = gap_audit_task = None
+        if sys.platform != "emscripten":
+            gap_scan_task = _start_startup_gap_scan(dm, backfill_coordinator)
+            gap_audit_task = _start_background_gap_audit(dm, backfill_coordinator)
 
         manual_history_service = attach_manual_history_service(
             data_manager=dm,
