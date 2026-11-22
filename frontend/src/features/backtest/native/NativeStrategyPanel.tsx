@@ -22,7 +22,7 @@ import "./nativeStrategy.css";
 import { NativeAdvancedInputs } from "./NativeAdvancedInputs.js";
 import { NativePreparationContexts } from "./NativePreparationContexts.js";
 import { restorePreparationContexts, restorePreparationDate, type NativePreparationContext } from "./nativePreparationInputs.js";
-import { automaticHostExecution, emptyAdvancedInputs, executionInputs, freezeAdvancedInputs, restoreAdvancedInputs, type AdvancedInputs, type InputDataset } from "./nativeInputs.js";
+import { automaticHostExecution, bookFileRequired, emptyAdvancedInputs, executionInputs, freezeAdvancedInputs, restoreAdvancedInputs, type AdvancedInputs, type InputDataset } from "./nativeInputs.js";
 import { PreparationApiError, preparationRequest, waitForPreparation, type PreparationJob, type PreparationCapabilities } from "../../data-preparation/api.js";
 import PreparationWaiting from "../../data-preparation/PreparationWaiting.js";
 import { Icon } from "../../../components/icons/Icon.js";
@@ -51,6 +51,7 @@ const NATIVE_TEMPLATES = {
 };
 const SESSION_TABS = ["overview", "trades", "script", "settings", "history"] as const;
 const ignoreCursor = () => undefined;
+
 
 type NativeStrategyPanelProps = Pick<ChartStrategyTesterPanelProps, "session" | "cellScope" | "onClose" | "onLocateTrade" | "onReviewTrade" | "active" | "nativeStrategies" | "onNativeStrategiesChange" | "overlayResult" | "continuousMarketWindow"> & {
   signalChart?: import("../../../shared/strategyRunSettings.js").ChartSignalDefinition | undefined;
@@ -527,7 +528,9 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         uploaded: executionData !== null, account: accountDraft, costSensitivityMode: language === "pine" ? costSensitivityMode : "AUTO" }, executionDataMatches, accountDataMatches))));
   const available = capabilities?.engines.find((item) => item.language === language);
   const engineReady = mode === "NATIVE" ? available?.available : available?.external_available;
-  const runDisabled = busy || !!accountError || (mode === "CANDLESCOPE" && fidelity !== "BAR_APPROX" && executionDataState !== "ready") || !engineReady;
+  const bookFileNeeded = bookFileRequired(mode, fidelity, executionData);
+  const runDisabled = busy || !!accountError || (mode === "CANDLESCOPE" && fidelity !== "BAR_APPROX" && executionDataState !== "ready")
+    || bookFileNeeded || !engineReady;
   const feedbackRun = historicalRun ?? run;
   const { status, errorDetails } = nativeRunFeedback({ current: run, historical: historicalRun,
     error, busy, preparationState: preparation?.state, needsData: !!resolution && resolution.status !== "READY" });
@@ -593,7 +596,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         if (!response.ok) throw new Error(`REPORT_EXPORT_FAILED:${response.status}`); return publishControlFile(await response.blob(), "strategy-report.json");
       }, { available: () => !!reportRun?.result }),
       command("run", "Start the existing run/preparation flow. Poll inspect for busy, error, resolution and run.state; acknowledgement does not mean completion.", empty,
-        () => { void start(); return { submitted: true }; }, { available: () => !busy && !(mode === "CANDLESCOPE" && fidelity !== "BAR_APPROX" && executionDataState !== "ready") && !!(mode === "NATIVE" ? available?.available : available?.external_available) }),
+        () => { void start(); return { submitted: true }; }, { available: () => !busy && !(mode === "CANDLESCOPE" && fidelity !== "BAR_APPROX" && executionDataState !== "ready") && !bookFileNeeded && !!(mode === "NATIVE" ? available?.available : available?.external_available) }),
       command("prepare", "Materialize the inspected missing-data resolution and start the run.", empty, () => { void start(true); return { submitted: true }; }, { available: () => !busy && !!resolution && resolution.status !== "READY" }),
       command("cancelRun", "Cancel the current strategy run.", empty, async () => receiveRun(await requireStrategyManager().cancelNativeRun(mode, run!.run_id)), { available: () => !!run && !nativeTerminal(run.state), interrupt: true }),
       command("cancelPreparation", "Cancel the current data preparation job.", empty, async () => {
@@ -733,6 +736,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
           }} />}
         </div>
         {fidelity !== "BAR_APPROX" && executionDataState === "missing" && <p role="status">{t("native.external.uploadMissing")}</p>}
+        {bookFileNeeded && executionDataState === "ready" && <p role="status" data-testid="native-book-file-required">{t("strategyExecution.bookFileRequired")}</p>}
         {fidelity !== "BAR_APPROX" && (executionData !== null || executionDataState !== "ready") && <Button size="sm" variant="ghost" className="strategy-settings-action" disabled={busy} onClick={() => {
           executionUpload.current += 1; setExecutionInputKey((key) => key + 1); setExecutionData(null); setExecutionDataState("ready"); setError(""); saveExecution({ uploaded: false });
         }}>{t("native.external.clearUpload")}</Button>}

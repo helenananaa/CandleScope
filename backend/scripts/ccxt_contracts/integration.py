@@ -68,6 +68,7 @@ def main() -> int:
         "test_strategy_drafts.py", "test_strategy_versions.py", "test_strategy_references.py",
         # ADR-BACKTEST-015 P4: FOLLOW equals FIXED; chart FOLLOW runs fed by the DataManager.
         "test_follow_session.py", "test_strategy_follows.py", "test_strategy_experiments.py", "test_strategy_run_derive.py", "test_strategy_experiment_robustness.py",
+        "test_execution_data_market.py",
     )
     files = sorted({str(path) for pattern in patterns for path in (backend / "tests").glob(pattern)})
     return pytest.main(["-q", "-p", "pytest_asyncio.plugin", "-p", "anyio.pytest_plugin",
