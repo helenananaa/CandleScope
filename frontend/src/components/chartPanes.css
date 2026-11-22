@@ -626,3 +626,11 @@
   cursor: help;
   pointer-events: auto;
 }
+
+/* Phone layout (app/phoneLayout.ts): a touch screen shows the pane controls all the time, where
+   they cover the legend of a chart this narrow. Panes are still managed from the indicator list. */
+@media (max-width: 640px) {
+  .pane-control-bar {
+    display: none;
+  }
+}

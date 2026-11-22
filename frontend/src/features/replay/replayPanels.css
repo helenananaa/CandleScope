@@ -2,9 +2,19 @@
 
 .replay-history-boundary-notice button { border: 0; color: inherit; background: transparent; font-size: var(--font-size-lg); }
 
-@media (max-width: 760px) {
-
+/* Too narrow for the rail beside the chart; a phone shows it as a bar along the bottom instead
+   (app/marketRail.css), where it sits above the replay controls. */
+@media (min-width: 641px) and (max-width: 760px) {
   .right-market-rail[data-runtime-source="replay"] { display: none; }
+}
+
+@media (max-width: 640px) {
+  .main-content-area > .replay-bottom-control-dock { order: 2; }
+  /* Clear of the rail's bar and the replay controls below the chart. */
+  .replay-history-boundary-notice { bottom: 156px; }
+}
+
+@media (max-width: 760px) {
 
   .replay-identity-readonly { max-width: 38vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .replay-launcher-overlay { padding: 8px; }
