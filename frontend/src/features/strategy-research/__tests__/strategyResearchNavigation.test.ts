@@ -126,6 +126,24 @@ test("ordinary script panel exposes advanced research without internal identity 
   assert.doesNotMatch(html.toLowerCase(), /dataset id|data epoch|snapshot hash/);
 });
 
+test("as on the chart, the Python strategy panel offers Python only when strategies are named by language", () => {
+  const panel = (languageFixed: boolean) => renderToStaticMarkup(
+    React.createElement(StrategyResearchScriptPanel, {
+      cellScope: "strategy-research",
+      session: { exchange: "local", marketType: "spot", symbol: "BTC-USDT", interval: "15m" },
+      sourceKind: "IMPORTED_DATASET", draftId: null, barOnly: true, runStatus: "READY", needsData: false,
+      onDraftId() {}, onDraftRevision() {}, onRun() {}, onConfirmNeedsData() {}, onOpenAdvanced() {}, languageFixed,
+    }),
+  );
+  const python = panel(true);
+  assert.match(python, /strategy-research-template-PYTHON_SMA/);
+  assert.doesNotMatch(python, /strategy-research-template-PINE_SAMPLED/, "Pine strategies are their own entry (ADR-BACKTEST-015 P5c4)");
+  assert.match(panel(false), /strategy-research-template-PINE_SAMPLED/);
+  const app = readFileSync(path.resolve(here, "../StrategyResearchApp.tsx"), "utf8");
+  assert.match(app, /strategyList=\{strategyList\}/);
+  assert.match(app, /languageFixed=\{strategyList\}/);
+});
+
 test("ordinary research persists edited source for remount and advanced draft lookup", async () => {
   const adapter = createMemoryStrategyDraftAdapter();
   const mountedStore = new StrategyDraftStore(adapter, () => 10);

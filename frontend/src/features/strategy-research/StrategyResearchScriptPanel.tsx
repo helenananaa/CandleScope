@@ -77,6 +77,7 @@ export function StrategyResearchScriptPanel({
   onConfigure,
   batchControls,
   robustnessControls,
+  languageFixed = false,
   batchSession,
   marketBatchAvailable,
 }: {
@@ -98,6 +99,12 @@ export function StrategyResearchScriptPanel({
   batchControls?(request: ChartStrategyRunRequest | null): ReactNode;
   /** The robustness check of this strategy, given the same request as the batch controls. */
   robustnessControls?(request: ChartStrategyRunRequest | null): ReactNode;
+  /**
+   * ADR-BACKTEST-015 P5c4: the page's strategies are named by language (as on the chart, P4c2). This panel is
+   * the Python strategy: no language switch, and its recent drafts and templates are Python. A Pine draft
+   * already open here still opens and runs.
+   */
+  languageFixed?: boolean;
   batchSession?: ChartSession | null;
   marketBatchAvailable?: boolean;
 }) {
@@ -114,9 +121,12 @@ export function StrategyResearchScriptPanel({
   const [recentDrafts, setRecentDrafts] = useState<StrategyDraftRecord[]>([]);
   useEffect(() => {
     let cancelled = false;
-    void draftStore.recent(20).then((records) => { if (!cancelled) setRecentDrafts(records); });
+    void draftStore.recent(20).then((records) => {
+      if (!cancelled) setRecentDrafts(languageFixed ? records.filter((record) => record.language === "python" || record.id === draftId) : records);
+    });
     return () => { cancelled = true; };
-  }, [draftId, draftStore]);
+  }, [draftId, draftStore, languageFixed]);
+  const templates = languageFixed ? RESEARCH_STRATEGY_TEMPLATES.filter((template) => template.language === "python") : RESEARCH_STRATEGY_TEMPLATES;
   const restoreGenerationRef = useRef(0);
   const restorePromiseRef = useRef<Promise<void> | null>(null);
   const pendingSavePromiseRef = useRef<Promise<StrategyDraftRecord> | null>(null);
@@ -299,8 +309,8 @@ export function StrategyResearchScriptPanel({
 
   const controlReady = () => !!editorSession && !["RUNNING", "QUEUED", "RESOLVING"].includes(runStatus);
   useControlCommands(() => ({ id: `host-strategy:${cellScope}`, title: "Host strategy editor and saved drafts", context: () => ({ session, sourceKind, draftId, source, configuration, runStatus }),
-    snapshot: () => ({ session, sourceKind, draft, source, configuration, runStatus, needsData, recentDrafts, templates: RESEARCH_STRATEGY_TEMPLATES, pane, openEditor }), commands: [
-      command("template", "Create a saved draft from an existing template.", object({ templateId: text(128) }), ({ templateId }) => { if (!RESEARCH_STRATEGY_TEMPLATES.some((row) => row.id === templateId)) throw new Error("TEMPLATE_UNAVAILABLE"); return startDraft(templateId); }, { available: controlReady }),
+    snapshot: () => ({ session, sourceKind, draft, source, configuration, runStatus, needsData, recentDrafts, templates, pane, openEditor }), commands: [
+      command("template", "Create a saved draft from an existing template.", object({ templateId: text(128) }), ({ templateId }) => { if (!templates.some((row) => row.id === templateId)) throw new Error("TEMPLATE_UNAVAILABLE"); return startDraft(templateId); }, { available: controlReady }),
       command("selectDraft", "Select a currently listed draft.", object({ draftId: nullable(text(128)) }), ({ draftId }) => { if (draftId && !recentDrafts.some((row) => row.id === draftId)) throw new Error("DRAFT_UNAVAILABLE"); onDraftId(draftId); }, { available: controlReady }),
       command("source", "Edit the saved strategy source; flush separately to verify persistence.", object({ source: text(48000, 0) }), ({ source }) => setSource(source), { available: () => controlReady() && !!draft }),
       command("flush", "Flush the existing strategy draft persistence workflow.", empty, () => flushPendingDraft(), { available: () => !!draft }),
@@ -333,7 +343,7 @@ export function StrategyResearchScriptPanel({
       ) : null}
       {draft === null ? (
         <div className="strategy-research-template-list" data-testid="strategy-research-templates">
-          {RESEARCH_STRATEGY_TEMPLATES.map((template) => (
+          {templates.map((template) => (
             <Button
               key={template.id}
               fullWidth
@@ -354,7 +364,7 @@ export function StrategyResearchScriptPanel({
         </div>
       ) : (
         <>
-          <StrategyLanguageControls language={draft.language} confirmed={pythonTrustedConfirmed} onConfirm={(value) => setPythonApproval(value ? approvalKey : null)} onLanguage={(language) => {
+          <StrategyLanguageControls language={draft.language} languageFixed={languageFixed} confirmed={pythonTrustedConfirmed} onConfirm={(value) => setPythonApproval(value ? approvalKey : null)} onLanguage={(language) => {
             setPythonApproval(null);
             void saveDraft({ ...draft, language, source, cursor });
           }} />

@@ -28,6 +28,8 @@ import { useResearchIndicatorScopeResults } from "./useResearchIndicatorScopeRes
 import type { ResearchMarketInput } from "./strategyResearchBatch.js";
 import { ResearchBatchResults, ResearchBatchSources, ResearchExperimentResults } from "./ResearchBatchPanel.js";
 import { ResearchRobustness } from "./ResearchRobustnessPanel.js";
+import { CHART_STRATEGY_FOLLOW_ENABLED } from "../backtest/chart-tester/chartStrategyTesterFeature.js";
+import { strategyLanguageLabel } from "../backtest/chart-tester/strategyLanguageLabel.js";
 import { ResearchMarketInputForm } from "./ResearchMarketInputs.js";
 import PreparationWaiting from "../data-preparation/PreparationWaiting.js";
 import { RESEARCH_SOURCE_SCHEMA } from "../research-data/researchDataTypes.js";
@@ -566,16 +568,22 @@ export default function StrategyResearchApp({
 
   const [externalVisited, setExternalVisited] = useState(false);
   const [externalOpen, setExternalOpen] = useState(false);
+  // ADR-BACKTEST-015 P5c4: as on the chart (P4c2), strategies are named by their language and the engine
+  // follows from it: Pine runs as the script declares or with CandleScope matching (a fills setting), Python on CandleScope.
+  const strategyList = CHART_STRATEGY_FOLLOW_ENABLED;
   const script = (
     <div data-strategy-draft={scriptDraft ?? ""}>
       <SegmentedControl
         className="strategy-research-engine-switch"
         size="sm"
         fullWidth
-        label={t("native.mode")}
+        label={t(strategyList ? "research.strategy.language" : "native.mode")}
         value={nativeMode ? "native" : "host"}
         onChange={(value) => setNativeMode(value === "native")}
-        options={[
+        options={strategyList ? [
+          { value: "native", label: strategyLanguageLabel("pine") },
+          { value: "host", label: strategyLanguageLabel("python") },
+        ] : [
           { value: "native", label: t("native.fullStrategies") },
           { value: "host", label: t("native.hostMode") },
         ]}
@@ -584,12 +592,13 @@ export default function StrategyResearchApp({
       {!nativeMode && availability === "unavailable" && <p className="strategy-research-note" role="status">{t("native.platformHelp")}</p>}
       {nativeMode ? researchRun.session ? <Suspense fallback={<p className="strategy-research-note">{t("native.loading")}</p>}>
         <NativeStrategyPanel signalChart={chartStrategySignalInput(settings)} session={researchRun.session} manager={researchRun.historyManager} cellScope="strategy-research-native" onClose={() => setNativeMode(false)}
-          onSelectPython={() => {
+          strategyList={strategyList}
+          {...(strategyList ? {} : { onSelectPython: () => {
             void openPythonStrategyDraft(getChartStrategyDraftStore(), scriptDraft).then((draft) => {
               dispatch({ type: "script/setDraft", draftId: draft.id });
               setNativeMode(false);
             });
-          }}
+          } })}
           key={`${chartUiScope}:${researchRun.session.exchange}:${researchRun.session.marketType}:${researchRun.session.symbol}:${researchRun.session.interval}`} externalReport onRunChange={setNativeRun} onStatusChange={setNativeStatus}
           dataset={importedManifest ? { datasetId: importedManifest.dataset_id, dataEpoch: importedManifest.data_epoch } : undefined}
           fixedRange={source?.kind === "EXCHANGE_SERIES" ? { startMs: source.startMs, endMs: source.endMs } : undefined}
@@ -639,6 +648,7 @@ export default function StrategyResearchApp({
         onOpenAdvanced={openAdvanced}
         configuration={state.script.configuration}
         onConfigure={(configuration) => dispatch({ type: "script/configure", configuration })}
+        languageFixed={strategyList}
       />}
       {hostReady && importedManifest && !importedManifest.market_trade_input && selectedInterval && (
         <Disclosure className="strategy-research-external" summary={t("research.external.title")} open={externalOpen} onToggle={(open) => {
@@ -955,6 +965,10 @@ export default function StrategyResearchApp({
                 runtimeMode={runtime.runtimeMode}
                 draftId={state.script.draftId}
                 saving={savingTemplate}
+                {...(CHART_STRATEGY_FOLLOW_ENABLED ? { onSelectPine: () => {
+                  setNativeMode(true);
+                  dispatch({ type: "source/libraryOpen", open: true });
+                } } : {})}
                 onSelectTemplate={selectTemplate}
                 onOpenLibrary={() => dispatch({ type: "source/libraryOpen", open: true })}
               />
