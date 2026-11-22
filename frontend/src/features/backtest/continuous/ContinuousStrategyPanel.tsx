@@ -18,6 +18,9 @@ import ContinuousAutoRepairSetting from "./ContinuousAutoRepairSetting.js";
 import ContinuousRepairPanel from "./ContinuousRepairPanel.js";
 import ContinuousAccountView from "./ContinuousAccountView.js";
 import { readContinuousAccountRows } from "./continuousAccountRows.js";
+import {
+  PRACTICE_ACCOUNT_RULES, defaultForwardLeverage, forwardAccountLeverage, forwardExecutionModel, forwardModelExecution, validForwardLeverage,
+} from "./continuousAccountRules.js";
 import type { StrategyOverlayRun } from "../runResult/useStrategyRunOverlay.js";
 import "./continuousStrategy.css";
 
@@ -76,12 +79,17 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
   const [balance, setBalance] = useState(props.initialExecution?.initialBalance ?? "10000"), [percent, setPercent] = useState(props.initialExecution?.equityPercent ?? "10");
   const [fee, setFee] = useState(props.initialExecution?.feeBps ?? "0"), [slippage, setSlippage] = useState(props.initialExecution?.slippageBps ?? "1");
   const [output, setOutput] = useState<ContinuousCreate["provider"]["output_mode"]>(props.initialization?.outputMode ?? "SIGNAL");
+  // ADR-BACKTEST-015 P6e: new forward runs trade on the practice account model (continuousAccountRules).
+  const executionModel = forwardExecutionModel(props.initialization, reference);
+  const spot = props.session.marketType === "spot";
+  const [leverage, setLeverage] = useState(() => defaultForwardLeverage(props.session.marketType, props.initialExecution));
+  const accountLeverage = forwardAccountLeverage(executionModel, props.session.marketType, leverage);
   const identity = resolveKlineSeriesIdentity(props.session.exchange, props.session);
   const scope = JSON.stringify([props.scope, props.mode, props.session.exchange, props.session.marketType,
     props.session.symbol, props.session.interval, identity]);
-  const inputRevision = useMemo(() => String(strategyDraftContentRevision(JSON.stringify([props.source, props.parameters, props.signalChart, balance, percent, fee, slippage, output, props.initialization, props.mode === "HISTORY_LIVE" ? from : null]))),
-    [props.source, props.parameters, props.signalChart, props.mode, props.initialization, balance, percent, fee, slippage, output, from]);
-  const executionModel = props.initialization ? props.initialization.executionModel ?? "V2" : "LEGACY";
+  const inputRevision = useMemo(() => String(strategyDraftContentRevision(JSON.stringify([props.source, props.parameters, props.signalChart, balance, percent, fee, slippage, output, props.initialization, props.mode === "HISTORY_LIVE" ? from : null,
+    ...(executionModel === "PRACTICE" ? [executionModel, accountLeverage] : [])]))),
+    [props.source, props.parameters, props.signalChart, props.mode, props.initialization, balance, percent, fee, slippage, output, from, executionModel, accountLeverage]);
   const hasSource = useMemo(() => props.source.trim().length > 0, [props.source]);
   const qualified = props.language === "python" && hasSource && props.session.interval === "1m"
     && (props.session.marketType === "spot" || (props.session.exchange === "binance" && props.session.marketType === "futures"))
@@ -99,6 +107,7 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
         if (saved) {
           setFrom(saved.settings.from); setBalance(saved.settings.balance); setPercent(saved.settings.percent);
           setFee(saved.settings.fee); setSlippage(saved.settings.slippage); setOutput(saved.settings.output);
+          if (saved.settings.leverage) setLeverage(saved.settings.leverage);
         }
       }
       catch { if (!cancelled) { setStorageFailed(true); setError(t("continuous.storage")); } }
@@ -150,9 +159,10 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
       const start = Date.parse(from + ":00Z");
       if (![balance, percent, fee, slippage].every((value) => value.trim() && Number.isFinite(Number(value)))
         || Number(balance) <= 0 || Number(percent) <= 0 || Number(percent) > 100 || Number(fee) < 0 || Number(slippage) < 0
+        || !validForwardLeverage(accountLeverage)
         || (props.mode === "HISTORY_LIVE" && (!Number.isSafeInteger(start) || start < 0 || start >= Date.now()))) throw new Error(t("continuous.invalid"));
       const next: ContinuousRunReference = reference && !reference.runId ? reference : matchingPending ?? { schema: 1, requestKey: "chart/" + crypto.randomUUID(), runId: null, inputRevision, createdAtMs: Date.now(),
-        settings: { from, balance, percent, fee, slippage, output } };
+        settings: { from, balance, percent, fee, slippage, output, ...(executionModel === "PRACTICE" ? { leverage: accountLeverage } : {}) } };
       if (next.inputRevision !== inputRevision) throw new Error(t("continuous.pending"));
       await props.saveDraft?.();
       if (!mounted.current) return;
@@ -175,7 +185,7 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
         provider: { language: "python", source_text: props.source, parameters: props.parameters, output_mode: output, runtime_mode: "TRUSTED_LOCAL", trusted_confirmed: true },
         execution: { ...(props.signalChart ? { signal_chart: props.signalChart } : {}), account_model: props.session.marketType === "spot" ? "SPOT_CASH_V1" : "LINEAR_PERP_ONE_WAY_V1",
           initial_balance: balance, sizing_policy: "EQUITY_PERCENT_V1", equity_percent: percent, taker_fee_bps: fee, maker_fee_bps: fee, slippage_bps: slippage,
-          ...(executionModel === "V2" ? { execution_model_revision: "EXECUTION_REALISM_V2", participation_rate: "0.1", order_end_policy: "CANCEL_AT_END" } : {}) },
+          ...forwardModelExecution(executionModel, accountLeverage) },
         ...(props.initialization ? { warmup_bars: props.initialization.warmupBars } : {}),
         ...(props.mode === "HISTORY_LIVE" ? { from_ms: start } : {}),
       });
@@ -214,7 +224,7 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
     && view.identity.event_time_ms >= start + warmupBars * 60_000 ? {
       parameters: props.parameters, fidelityPreference: "FAST", rangeMode: "CUSTOM",
       customRange: { startMs: start, endMs: view.identity.event_time_ms },
-      executionOverrides: { initialBalance: balance, equityPercent: percent, leverage: "1", feeBps: fee, slippageBps: slippage },
+      executionOverrides: { initialBalance: balance, equityPercent: percent, leverage: accountLeverage, feeBps: fee, slippageBps: slippage },
       pythonBarExecution: { outputMode: output, executionModel, warmupBars },
     } : null;
 
@@ -246,6 +256,7 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
         setCreation(null); setState(empty); setError(null);
         setFrom(selected.settings.from); setBalance(selected.settings.balance); setPercent(selected.settings.percent);
         setFee(selected.settings.fee); setSlippage(selected.settings.slippage); setOutput(selected.settings.output);
+        if (selected.settings.leverage) setLeverage(selected.settings.leverage);
       }, (failure: unknown) => setError(String(failure)));
     }}><option value="" disabled>{t("continuous.savedRuns")}</option>{savedRuns.map((saved) => <option key={saved.requestKey} value={saved.requestKey}>
       {time(saved.createdAtMs)} · {saved.runId?.slice(-8) ?? t("continuous.pendingRun")}
@@ -254,10 +265,13 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
       {props.mode === "HISTORY_LIVE" && <label>{t("continuous.from")}<input type="datetime-local" value={from} onChange={(event) => setFrom(event.target.value)} /></label>}
       {([["continuous.balance", balance, setBalance], ["continuous.percent", percent, setPercent], ["continuous.fee", fee, setFee], ["continuous.slippage", slippage, setSlippage]] as const).map(([label, value, change]) =>
         <label key={label}>{t(label)}<input type="number" min="0" step="any" value={value} onChange={(event) => change(event.target.value)} /></label>)}
+      {executionModel === "PRACTICE" && !spot && <label>{t("continuous.leverage")}<input type="number" min="1" max="125" step="1"
+        value={leverage} onChange={(event) => setLeverage(event.target.value)} /></label>}
       <label>{t("continuous.output")}<select aria-label={t("continuous.output")} value={output} onChange={(event) => setOutput(event.target.value as typeof output)}>
         <option value="SIGNAL">{t("continuous.signal")}</option><option value="TARGET_POSITION">{t("continuous.target")}</option><option value="ORDER_INTENT">{t("continuous.order")}</option>
       </select></label>
     </div>
+    {executionModel === "PRACTICE" && <p className="continuous-account-rules" data-account-rules={PRACTICE_ACCOUNT_RULES}>{t("continuous.practiceRules")}</p>}
     {props.onParameterChange && <ContinuousParameterEditor
       manager={manager} source={props.source} parameters={props.parameters}
       enabled={props.active && props.language === "python" && !!caps?.python_editor_authorized}

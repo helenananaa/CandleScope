@@ -52,3 +52,11 @@ def test_forward_runs_take_the_practice_model_with_its_leverage():
                        "participation_rate": "0.5"}):
         with pytest.raises(BacktestError):
             prepare_definition(spec(), execution, KEY)
+
+
+def test_the_http_run_contract_carries_the_practice_rules():
+    """/backtests/runs validates its body with RunCreateRequest, which forbids unknown fields."""
+    from app.backtest.request_contracts import RunCreateRequest
+
+    body = RunCreateRequest.model_validate({**PRACTICE, "strategy_revision_id": BUILTIN_SMA_REVISION}).model_dump()
+    assert body["account_rules"] == "PRACTICE_V1"

@@ -354,9 +354,11 @@ function fixedStrategyRunBody(input: {
     leverage: overrides?.leverage ?? requireString(account, "leverage"),
     sizing_policy: requireString(account, "sizing_policy"),
     equity_percent: overrides?.equityPercent ?? requireString(account, "equity_percent"),
-    ...(profile?.executionModel === "LEGACY" ? {} : {
+    ...(profile?.executionModel === "LEGACY" || profile?.executionModel === "PRACTICE" ? {} : {
       execution_model_revision: requireString(account, "execution_model_revision"), participation_rate: "0.1",
     }),
+    // ADR-BACKTEST-015 P6e: the practice account model, shared with practice accounts.
+    ...(profile?.executionModel === "PRACTICE" ? { account_rules: "PRACTICE_V1" } : {}),
     latency_ms: 0,
     latency_events: 0,
     order_end_policy: "CANCEL_AT_END",

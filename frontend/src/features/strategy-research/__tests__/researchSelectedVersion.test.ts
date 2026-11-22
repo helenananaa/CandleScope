@@ -119,3 +119,21 @@ test("return preserves legacy SIGNAL with its futures preset revision and warmup
   c.participation_rate = "0.1";
   assert.throws(() => projectSelectedVersion(selected), /participation_rate/);
 });
+
+test("a research run on the practice account model continues forward on it, with its leverage (ADR-BACKTEST-015 P6e)", () => {
+  const selected = selectedFixture();
+  const c = selected.configuration;
+  Object.assign(c, { market_type: "futures", account_model: "LINEAR_PERP_ONE_WAY_V1", output_mode: "SIGNAL",
+    quick_preset_id: "CRYPTO_PERP_STANDARD_V1", quick_preset_revision: "1", account_rules: "PRACTICE_V1", leverage: "10" });
+  delete c.execution_model_revision;
+  delete c.participation_rate;
+  delete c.order_end_policy;
+  const projected = projectSelectedVersion(selected);
+  assert.equal(projected.attachment.initialization?.executionModel, "PRACTICE");
+  assert.equal(projected.attachment.executionOverrides?.leverage, "10");
+  // Leverage belongs to the practice model; the worst-case model keeps leverage 1.
+  delete c.account_rules;
+  assert.throws(() => projectSelectedVersion(selected), /leverage/);
+  Object.assign(c, { account_rules: "PRACTICE_V1", execution_model_revision: "EXECUTION_REALISM_V2" });
+  assert.throws(() => projectSelectedVersion(selected), /execution_model_revision/);
+});

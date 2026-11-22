@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   activateContinuousReference, backendContinuousReferences, CONTINUOUS_REFERENCE_IMPORT_MARKER, continuousArchiveScope, continuousReferenceKey,
-  listContinuousReferences, readContinuousReference, saveContinuousReference, type ContinuousRunReference,
+  listContinuousReferences, parseContinuousReference, readContinuousReference, saveContinuousReference, type ContinuousRunReference,
 } from "./continuousRunReference.js";
 import { loadChartStrategyPanelPreferences, saveChartStrategyPanelPreferences } from "../chart-tester/chartStrategyPanelPreferences.js";
 function storage(): Storage {
@@ -97,4 +97,12 @@ test("until the import succeeds, browser references stay readable; selecting arc
   assert.deepEqual(server.calls.filter((call) => call.startsWith("put")), [`put:${continuousArchiveScope("cell/B", "chart/next")}`, "put:cell/B"]);
   assert.deepEqual((await store.list("cell/B")).map((value) => value.requestKey), ["chart/next", "chart/stable"]);
   assert.equal((await store.read("cell/B"))?.runId, "cs_next");
+});
+
+test("a forward run on the practice account model keeps its leverage; older references carry none (ADR-BACKTEST-015 P6e)", () => {
+  const practice = { ...reference, settings: { ...reference.settings, leverage: "10" } };
+  const saved = storage(); saveContinuousReference(saved, "cell/practice", practice);
+  assert.equal(readContinuousReference(saved, "cell/practice")!.settings.leverage, "10");
+  assert.equal(parseContinuousReference(JSON.parse(JSON.stringify(reference))).settings.leverage, undefined);
+  assert.throws(() => parseContinuousReference({ ...practice, settings: { ...practice.settings, leverage: 10 } }), /INVALID/);
 });

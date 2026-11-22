@@ -762,7 +762,7 @@ def test_storage_reservation_is_atomic_and_cannot_be_bypassed_by_retry(tmp_path)
 
 
 @async_test
-@pytest.mark.parametrize("model", ["LEGACY", "V2"])
+@pytest.mark.parametrize("model", ["LEGACY", "V2", "PRACTICE"])
 async def test_continuous_research_prepares_exact_warmup_range_and_model(tmp_path, model):
     import json
     import httpx
@@ -819,6 +819,8 @@ async def test_continuous_research_prepares_exact_warmup_range_and_model(tmp_pat
             assert config["equity_percent"] == "17"
             assert config["taker_fee_bps"] == "3"
             assert config.get("execution_model_revision") == ("EXECUTION_REALISM_V2" if model == "V2" else None)
+            # ADR-BACKTEST-015 P6e: a forward run on the practice account model researches on the same model.
+            assert config.get("account_rules") == ("PRACTICE_V1" if model == "PRACTICE" else None)
             repeated = await client.post("/data-preparations/strategy", json=body)
             assert repeated.status_code == 202
             assert repeated.json()["id"] == job["id"]

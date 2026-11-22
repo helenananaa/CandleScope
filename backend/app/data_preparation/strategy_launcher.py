@@ -67,9 +67,13 @@ def launch(runtime, intent, resolution, job_id):
         "python_runtime_mode": intent.get("python_runtime_mode"),
         "python_trusted_confirmed": intent.get("python_trusted_confirmed", False),
     }
-    if profile is not None and profile["executionModel"] == "LEGACY":
+    if profile is not None and profile["executionModel"] in {"LEGACY", "PRACTICE"}:
         body.pop("execution_model_revision")
         body.pop("participation_rate")
+    if profile is not None and profile["executionModel"] == "PRACTICE":
+        # ADR-BACKTEST-015 P6e: a forward run on the practice account model researches on the same model.
+        from app.simulation.practice_clock import PRACTICE_ACCOUNT_RULES
+        body["account_rules"] = PRACTICE_ACCOUNT_RULES
     try:
         payload = RunCreateRequest.model_validate(body)
         normalized = payload.model_dump()

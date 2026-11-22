@@ -271,6 +271,17 @@ test("freezes source/parameters and creates a stable expanded quick Run", async 
   assert.equal(body.strategy_draft_id, request.draftId);
 });
 
+test("a run on the practice account model sends its rules instead of execution realism (ADR-BACKTEST-015 P6e)", async () => {
+  const frozen = await freezeChartStrategyRunRequest(request);
+  for (const [model, rules, realism] of [["PRACTICE", "PRACTICE_V1", false], ["LEGACY", undefined, false], ["V2", undefined, true]] as const) {
+    const profiled = { ...frozen, attachment: { ...frozen.attachment,
+      pythonBarExecution: { executionModel: model, outputMode: "SIGNAL" as const, warmupBars: 0 } } };
+    const body = buildChartStrategyRunBody({ frozen: profiled, revision, resolution: resolution() });
+    assert.equal(body.account_rules, rules, model);
+    assert.equal("execution_model_revision" in body, realism, model);
+  }
+});
+
 test("freezes the market fee preset from the session, not a stale attachment", async () => {
   assert.equal(chartStrategyQuickPresetIdForMarket("spot"), "CRYPTO_SPOT_STANDARD_V1");
   assert.equal(chartStrategyQuickPresetIdForMarket("usdm"), "CRYPTO_PERP_STANDARD_V1");

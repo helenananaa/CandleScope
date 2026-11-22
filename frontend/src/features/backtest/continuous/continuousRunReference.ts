@@ -1,4 +1,8 @@
-export interface ContinuousRunSettings { from: string; balance: string; percent: string; fee: string; slippage: string; output: "SIGNAL" | "TARGET_POSITION" | "ORDER_INTENT"; }
+export interface ContinuousRunSettings {
+  from: string; balance: string; percent: string; fee: string; slippage: string; output: "SIGNAL" | "TARGET_POSITION" | "ORDER_INTENT";
+  /** The account's leverage on the practice account model (ADR-BACKTEST-015 P6e); absent on older references. */
+  leverage?: string;
+}
 export interface ContinuousRunReference { schema: 1; requestKey: string; runId: string | null; inputRevision: string; settings: ContinuousRunSettings; createdAtMs: number; }
 const PREFIX = "candlescope.continuous-run.v1:";
 export function continuousReferenceKey(scope: string): string { return PREFIX + scope; }
@@ -16,7 +20,8 @@ export function parseContinuousReference(raw: unknown): ContinuousRunReference {
     || typeof value.inputRevision !== "string" || value.inputRevision.length > 512 || !Number.isSafeInteger(value.createdAtMs) || value.createdAtMs < 0
     || !value.settings || !["from", "balance", "percent", "fee", "slippage"].every((key) => {
       const item = value.settings[key as keyof ContinuousRunSettings]; return typeof item === "string" && item.length <= 64;
-    }) || !["SIGNAL", "TARGET_POSITION", "ORDER_INTENT"].includes(value.settings.output)) throw new Error("CONTINUOUS_REFERENCE_INVALID");
+    }) || !["SIGNAL", "TARGET_POSITION", "ORDER_INTENT"].includes(value.settings.output)
+    || (value.settings.leverage !== undefined && (typeof value.settings.leverage !== "string" || value.settings.leverage.length > 64))) throw new Error("CONTINUOUS_REFERENCE_INVALID");
   return value;
 }
 export function saveContinuousReference(storage: Storage, scope: string, value: ContinuousRunReference): void {
