@@ -17,6 +17,7 @@ import { StrategyDraftStore, createMemoryStrategyDraftAdapter } from "../Strateg
 import { createChartStrategyTesterState } from "../chartStrategyTesterState.js";
 import { CHART_STRATEGY_TEMPLATES } from "../chartStrategyTesterUiModel.js";
 import { t, type MessageKey } from "../../../../i18n/index.js";
+import type { ChartStrategyAttachmentRecord } from "../../../chart-workspace/chartWorkspaceTypes.js";
 
 const attachment = {
   schemaVersion: 1 as const,
@@ -246,7 +247,7 @@ test("a selected research version defaults to history plus live in the target ch
   assert.equal(resolveChartStrategyRunMode(otherDraftPreference, { ...selected, initialization }), "LIVE_ONLY");
 });
 
-function panelProps(cellScope: string, attached: typeof attachment | null) {
+function panelProps(cellScope: string, attached: ChartStrategyAttachmentRecord | null) {
   return {
     cellScope, session, attachment: attached,
     draftStore: new StrategyDraftStore(createMemoryStrategyDraftAdapter()),
