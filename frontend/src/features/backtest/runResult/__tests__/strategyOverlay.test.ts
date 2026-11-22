@@ -20,7 +20,7 @@ const LABELS: StrategyOverlayLabels = {
 };
 
 function fill(side: "BUY" | "SELL", qty: string) {
-  return { time_ms: 0, bar_time_ms: 0, side, qty, price: "1", fee: null, order_id: null, tag: null };
+  return { time_ms: 0, bar_time_ms: 0, side, qty, price: "1", fee: null, order_id: null, tag: null, explanation: null };
 }
 
 test("fill actions follow the running position through adds, reductions and reversals", () => {
