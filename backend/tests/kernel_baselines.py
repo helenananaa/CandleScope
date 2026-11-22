@@ -28,6 +28,7 @@ from app.market_dataset.snapshot import MarketEvent
 from app.simulation.execution_realism import BAR_PATH_SCENARIO, EXECUTION_REALISM_V2, PINE_BAR_PATH_SCENARIO
 from app.simulation.kernel import SimulationKernel
 from app.simulation.ohlc_path import BAR_CLOCK, PINE_CHART, PINE_PATH, PINE_V2
+from app.simulation.practice_clock import PRACTICE
 from tests.strategy_run_oracles import UPDATE_ENV, bars, scenario
 
 SCHEMA = "candlescope.kernel-baseline/1"
@@ -51,6 +52,8 @@ CLOCKS: dict[str, tuple[str, dict[str, Any], str]] = {
     "pine-chart-bar-on-close": (PINE_CHART, {"process_orders_on_close": True}, "chart"),
     "pine-v2-path": (PINE_V2, {}, "chart"),
     "pine-v2-path-realism": (PINE_V2, {**REALISM, "bar_path_scenario": PINE_BAR_PATH_SCENARIO}, "chart"),
+    # P6e3: the practice account model (shared with practice accounts, O3).
+    "practice": (PRACTICE, {}, "bar"),
 }
 ACCOUNT_MODELS = (PERP, SPOT, PERP_V2)
 

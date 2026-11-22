@@ -7,7 +7,7 @@ from copy import deepcopy
 import hashlib
 import json
 
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields, replace
 from decimal import Decimal, InvalidOperation
 from collections.abc import Iterable
 from typing import Callable, Mapping
@@ -30,8 +30,9 @@ from app.simulation.execution_realism import (
     source_event_trace,
 )
 from app.simulation.ohlc_path import (
-    BAR_CLOCK, BAR_CLOCKS, PATH_MODEL, PINE_CHART, PINE_PATH, PINE_V2, OhlcPathClock,
+    BAR_CLOCK, BAR_CLOCKS, PATH_CLOCKS, PATH_MODEL, PINE_CHART, PINE_PATH, PINE_V2, OhlcPathClock,
 )
+from app.simulation.practice_clock import PRACTICE, PRACTICE_CONTRACT, PRACTICE_FILL_POLICY, PracticeClock
 
 DEFAULT_FILL_POLICY = "BAR_NEXT_BAR_WORST_CASE_V1"
 
@@ -106,10 +107,11 @@ StrategyFn = Callable[[tuple[MarketEvent, ...], MarketEvent], list[dict]]
 
 
 @dataclass(slots=True)
-class SimulationKernel(OhlcPathClock):
-    """The Host bar kernel. ``bar_clock`` declares how a bar is matched (ADR-BACKTEST-015 P6b):
+class SimulationKernel(OhlcPathClock, PracticeClock):
+    """The Host bar kernel. ``bar_clock`` declares how a bar is matched (ADR-BACKTEST-015 P6b, P6e3):
     ``BAR`` decides each bar once in the worst case; the Pine path clocks walk an OHLC path
-    (``ohlc_path``). The clock, like every other setting here, is fixed for the run."""
+    (``ohlc_path``); ``PRACTICE`` matches with the practice account model (``practice_clock``).
+    The clock, like every other setting here, is fixed for the run."""
     process_orders_on_close: bool = field(default=False, kw_only=True)
     account_model: str = "LINEAR_PERP_ONE_WAY_V1"
     funding_mode: str = "OFF"
@@ -197,14 +199,19 @@ class SimulationKernel(OhlcPathClock):
     _last_path_price: Decimal | None = None
     _callback: object = field(default=None, repr=False)
     _failed_bar: bool = field(default=False, repr=False)
+    # PRACTICE clock: the practice account's candle cursor and each order's placement time.
+    _practice_cursor: object = field(default=None, repr=False)
+    _practice_created: dict = field(default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:
-        if self.bar_clock not in BAR_CLOCKS:
+        if self.bar_clock not in BAR_CLOCKS and self.bar_clock != PRACTICE:
             raise MarketDatasetError("unknown bar clock", code="FIDELITY_UNSUPPORTED")
         if self.fill_policy == DEFAULT_FILL_POLICY and self.bar_clock != BAR_CLOCK:
-            self.fill_policy = PINE_BAR_FILL_POLICY if self.bar_clock == PINE_V2 else PATH_MODEL
+            self.fill_policy = (PRACTICE_FILL_POLICY if self.bar_clock == PRACTICE
+                                else PINE_BAR_FILL_POLICY if self.bar_clock == PINE_V2 else PATH_MODEL)
         self._init_account()
         self._check_path_clock()
+        self._check_practice_clock()
 
     def _init_account(self) -> None:
         if self.account_model == SPOT_ACCOUNT_MODEL and (self.leverage != 1 or self.funding_mode != "OFF" or self.funding_rate != 0):
@@ -271,6 +278,8 @@ class SimulationKernel(OhlcPathClock):
     def snapshot(self, *, history_encoder=None) -> dict:
         if self.bar_clock == BAR_CLOCK:
             return self._bar_snapshot(history_encoder)
+        if self.bar_clock == PRACTICE:
+            return self._practice_snapshot(self._bar_snapshot(history_encoder))
         self._check_path_snapshot()
         return self._path_snapshot(self._bar_snapshot(history_encoder))
 
@@ -375,12 +384,16 @@ class SimulationKernel(OhlcPathClock):
             self._restore_chart(payload)
         elif self.bar_clock == PINE_PATH:
             self._restore_path(payload)
+        elif self.bar_clock == PRACTICE:
+            self._restore_practice(payload)
         else:
             self._restore_bar(payload)
 
     def _restore_bar(self, payload: Mapping[str, object]) -> None:
-        if payload.get("pine_bar_path") is not None and self.bar_clock == BAR_CLOCK:
+        if payload.get("pine_bar_path") is not None and self.bar_clock not in PATH_CLOCKS:
             raise MarketDatasetError("Pine BAR path requires its own matcher", code="CHECKPOINT_CORRUPT")
+        if payload.get("practice_path") is not None and self.bar_clock != PRACTICE:
+            raise MarketDatasetError("a practice path checkpoint requires the practice clock", code="CHECKPOINT_CORRUPT")
         if bool(payload.get("process_orders_on_close")) != self.process_orders_on_close:
             raise MarketDatasetError("closing-tick checkpoint identity changed", code="CHECKPOINT_CORRUPT")
         if bool(payload.get("scale_stream_decisions") or False) != bool(
@@ -524,6 +537,12 @@ class SimulationKernel(OhlcPathClock):
     ) -> SimulationResult:
         if self.bar_clock == PINE_PATH:
             raise MarketDatasetError("Pine BAR path requires its explicit execution clock", code="FIDELITY_UNSUPPORTED")
+        if self.bar_clock == PRACTICE:
+            if clock_options or close_callback is not None:
+                raise TypeError("the practice clock takes no strategy callbacks or closing ticks")
+            self._run_practice(events, strategy, warmup_events=warmup_events, finalize=finalize,
+                               checkpoint_callback=checkpoint_callback)
+            return self.result()
         if self.bar_clock != BAR_CLOCK:
             # Chart clocks take strategy callbacks; a closing-tick handler is not one of them.
             if close_callback is not None:
@@ -553,8 +572,14 @@ class SimulationKernel(OhlcPathClock):
         final run((), ..., finalize=True) keeps the historical finishing contract.
         Other execution clocks must opt in through their own qualified path.
         """
-        if type(self) is not SimulationKernel or self.bar_clock != BAR_CLOCK:
+        if type(self) is not SimulationKernel or self.bar_clock not in {BAR_CLOCK, PRACTICE}:
             raise MarketDatasetError("This execution clock has no qualified BAR continuation", code="FIDELITY_UNSUPPORTED")
+        if self.bar_clock == PRACTICE:
+            if close_callback is not None:
+                raise TypeError("the practice clock takes no closing ticks")
+            self._run_practice(events, strategy, warmup_events=warmup_events, finalize=False,
+                               checkpoint_callback=checkpoint_callback, finish_batch=False)
+            return
         self._execute_bar_batch(events, strategy, warmup_events=warmup_events, finalize=False,
                                 checkpoint_callback=checkpoint_callback, close_callback=close_callback, finish_batch=False)
 
@@ -854,6 +879,9 @@ class SimulationKernel(OhlcPathClock):
             ledger=ledger,
             equity_curve=list(self.equity_curve),
         )
+        if self.bar_clock == PRACTICE:
+            return replace(result, report_hash="sha256:" + sha256_hex({
+                "parent": result.report_hash, "path_contract": PRACTICE_CONTRACT, "fill_policy": PRACTICE_FILL_POLICY}))
         return result if self.bar_clock == BAR_CLOCK else self._path_result(result)
 
     def _accept_event(self, event: MarketEvent) -> bool:
@@ -910,6 +938,9 @@ class SimulationKernel(OhlcPathClock):
             self._enqueue(intent, current_sequence=current_sequence)
 
     def _enqueue(self, intent: Mapping[str, object], *, current_sequence: int) -> None:
+        if self.bar_clock == PRACTICE:
+            self._practice_enqueue(intent, current_sequence=current_sequence)
+            return
         self._live_orders()
         current_price = (
             None
